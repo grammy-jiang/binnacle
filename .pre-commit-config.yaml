@@ -1,0 +1,48 @@
+# pre-commit configuration -- https://pre-commit.com
+#
+# Install once per clone:  pre-commit install
+# Run on everything:       pre-commit run --all-files
+# Bump pinned versions:    pre-commit autoupdate
+minimum_pre_commit_version: "4.0.0"
+
+# Never lint the ignore file itself.
+exclude: '^\.gitignore$'
+
+repos:
+  # Markdown style / lint.
+  - repo: https://github.com/DavidAnson/markdownlint-cli2
+    rev: v0.23.2
+    hooks:
+      - id: markdownlint-cli2
+
+  # Validate embedded Mermaid diagrams by actually rendering them.
+  # Local hook: runs scripts/lint-mermaid.mjs in a pre-commit-managed Node env
+  # with mermaid-cli installed. The first run downloads Chromium (one-time).
+  - repo: local
+    hooks:
+      - id: mermaid-lint
+        name: mermaid-lint
+        description: Validate fenced mermaid code blocks with mermaid-cli
+        entry: node scripts/lint-mermaid.mjs
+        language: node
+        files: '\.(md|markdown)$'
+        additional_dependencies:
+          - "@mermaid-js/mermaid-cli@11.16.0"
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+      - id: check-added-large-files
+      - id: check-merge-conflict
+      - id: mixed-line-ending
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.38.0
+    hooks:
+      - id: yamllint
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
