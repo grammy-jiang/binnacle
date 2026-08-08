@@ -1,380 +1,166 @@
 # Binnacle MCP Tool Manifest and Metadata Integrity
 
-- **Status:** Draft — mandatory metadata security contract
-- **Related contracts:** `MCP-INTERFACE`, `MCP-PROFILE`
-- **Target wire contract:** [`mcp-2026-wire-contract.md`](mcp-2026-wire-contract.md)
+- **Status:** Draft implementation contract
+- **Contract version:** `1.1.0`
+- **Source manifest:** `spec/mcp/bootstrap-tool-manifest.yaml`
+- **Canonical schemas:** `schemas/mcp/`
 - **Feature-design basis:** [`design.md`](design.md), V17
-- **Canonical bootstrap manifest:** [`../spec/mcp/bootstrap-tool-manifest.yaml`](../spec/mcp/bootstrap-tool-manifest.yaml)
-- **Last review:** 2026-08-08
 
 ## 1. Purpose
 
-This document freezes how Binnacle creates, reviews, verifies, exposes, and changes model-visible MCP Tool metadata.
+Tool names, descriptions, schemas, annotations, and catalogue membership affect model behaviour but do not authenticate themselves. Binnacle therefore derives runtime Tool metadata from one reviewed manifest and verifies it against the selected build before serving discovery.
 
-Tool names, descriptions, schemas, annotations, titles, execution hints, and catalogue membership influence model selection and owner confirmation. They are therefore security-relevant model-facing data. They are not authority, and clients must still treat them as untrusted unless the server and build are trusted.
+## 2. Source and Runtime Manifests
 
-The governing rules are:
+The checked-in source manifest contains:
 
-> Binnacle emits Tool definitions only from a reviewed canonical manifest tied to the running build and operation-contract versions.
+- manifest identity and version;
+- catalogue phase rules;
+- Tool names and contract versions;
+- contrastive descriptions;
+- repository-relative schema references;
+- annotations, information class, confirmation class, and implementation binding.
 
-> A metadata digest identifies the reviewed definition; it does not prove trust by itself. Trust comes from the validated build and supply-chain profile.
+The build creates a runtime manifest by resolving every schema reference and implementation binding. The runtime manifest contains the resolved schema digests and build artifact identity.
 
-> Runtime state may remove a Tool from the visible catalogue, but it may not rewrite that Tool's reviewed meaning.
+### 2.1 Detached digest record
 
-## 2. Canonical Manifest
+The manifest digest is not stored inside the bytes that it hashes. The release produces a detached record:
 
-### 2.1 Source of truth
+```json
+{
+  "manifest_id": "binnacle-bootstrap-tools",
+  "manifest_version": "1.1.0",
+  "manifest_sha256": "<sha256 of canonical runtime manifest bytes>",
+  "build_id": "<release build>",
+  "build_artifact_sha256": "<artifact digest>",
+  "schema_registry_sha256": "<resolved registry digest>"
+}
+```
 
-The canonical Tool manifest contains, directly or by integrity-bound reference:
-
-- manifest schema and semantic version;
-- catalogue phase;
-- server and build identity requirements;
-- Tool name and title;
-- operation-contract identity and version;
-- model-visible description;
-- when-to-use and when-not-to-use review fields;
-- contrastive distinctions from neighboring Tools;
-- input and output schema identities and digests;
-- annotations and execution hints;
-- information and risk classes;
-- result-shape summary;
-- limits and expected errors;
-- visibility phases;
-- lifecycle state;
-- provenance and review decision.
-
-The running server must not compose a Tool description from repository content, package metadata, command output, device labels, external responses, or other untrusted runtime text.
+The canonical runtime manifest excludes this detached record. Release signing and attestation sign the detached digest plus build identity. No self-referential digest or signature field is permitted.
 
 ### 2.2 Canonicalization
 
-Before hashing, the build process resolves all referenced schema objects and creates one canonical representation using:
+The build uses UTF-8, LF line endings, normalized Unicode NFC strings, deterministic key ordering, and the repository's canonical YAML-to-JSON conversion profile. The exact canonical bytes and algorithm version are recorded in the detached release evidence.
 
-- UTF-8;
-- Unicode normalization form NFC for reviewed human-readable strings;
-- LF line endings;
-- lexicographically sorted object keys;
-- Tool entries sorted by exact case-sensitive name;
-- arrays kept in contract-defined semantic order;
-- no comments;
-- no YAML anchors, aliases, merge keys, implicit timestamps, or implementation-dependent scalar tags;
-- JSON-compatible scalar values only;
-- deterministic JSON serialization with no insignificant whitespace.
+## 3. Resolvable Schema References
 
-The canonical representation is hashed with SHA-256.
-
-The manifest records:
+Every source Tool entry uses a repository-relative reference such as:
 
 ```text
-manifest_id
-manifest_version
-canonicalization_version
-manifest_sha256
-build_id
-build_artifact_sha256
+schemas/mcp/bootstrap-inputs.schema.json#/$defs/binnacle_probe.input.v1_1
 ```
 
-The manifest digest must be reproduced independently in CI and at package creation.
+The build must:
 
-### 2.3 Signing and provenance
+1. resolve the path and JSON Pointer;
+2. reject a missing or ambiguous reference;
+3. validate the schema as JSON Schema 2020-12;
+4. record the resolved file and definition digests in the runtime manifest;
+5. bind those digests into the detached manifest record.
 
-A signature produced at runtime by the same Binnacle process would not establish independent trust. Therefore:
+Startup fails closed if the runtime manifest, schema registry, implementation binding, or detached digest record does not match the installed build.
 
-- the manifest digest is mandatory for bootstrap development;
-- the digest is bound into build provenance and the release artefact;
-- supported releases require the external signature or attestation selected by the supply-chain contract;
-- Binnacle verifies the expected digest and, when promoted, the release provenance before exposing Tools;
-- a missing or invalid release signature cannot be replaced by a locally generated signature.
+## 4. Metadata Rules
 
-Supply-chain key, SBOM, signing, and rollback details are defined separately. This contract defines the metadata object that those controls bind.
+A Tool description must state:
 
-## 3. Startup and Runtime Verification
+- when to use the Tool;
+- when not to use it;
+- the closest contrasting Tool;
+- result shape and information class;
+- important limits;
+- major rejection or uncertainty outcomes.
 
-### 3.1 Startup
+Runtime filtering may remove an entire Tool. It may not rewrite:
 
-Before accepting remote Tool discovery or invocation, Binnacle must:
-
-1. load the reviewed manifest from the protected control plane;
-2. resolve the exact input and output schemas;
-3. canonicalize the complete manifest;
-4. verify its digest against the build-bound expected digest;
-5. verify every Tool contract and schema version exists in the build;
-6. verify names, descriptions, annotations, lifecycle, and phase rules;
-7. reject duplicate or confusing Tool identities;
-8. enter normal or restricted operation according to the result.
-
-A manifest mismatch, missing contract, unresolvable schema, duplicate name, invalid annotation, or unexpected Tool implementation blocks the remote Tool catalogue. It must not fall back to dynamically generated metadata.
-
-Local recovery may expose only a separately defined non-MCP break-glass path. A compromised or inconsistent manifest is not diagnosed through an unpinned remote Tool description.
-
-### 3.2 Runtime catalogue derivation
-
-The visible catalogue is the deterministic subset of the verified manifest allowed by:
-
-- catalogue phase;
-- deployed build;
-- device profile;
-- capability lifecycle;
-- authenticated controller class;
-- current local policy and trust state;
-- implemented MCP revision.
-
-Runtime filtering may remove a Tool entry. It must not change:
-
-- name;
-- title;
-- description;
+- name, title, description, or annotations;
 - input or output schema;
-- annotations;
-- execution hints;
 - contract version;
-- risk or information class.
+- maximum effect or information class;
+- confirmation class;
+- implementation binding.
 
-If a runtime condition requires different semantics, it is a different Tool contract or an invocation-time rejection, not a metadata rewrite.
+A semantic change requires a new contract version and a reviewed manifest change. Cached host metadata never changes the server-side execution contract.
 
-### 3.3 Discovery verification
+## 5. Catalogue Phases
 
-For every `tools/list` response, Binnacle must:
+| Phase | Purpose | Visible Tools |
+| --- | --- | --- |
+| `compatibility-core` | Connect and test read-only fundamentals | `binnacle_probe`, `system_inspect`, `probe_result_formats`, `probe_error`, `compatibility_report` |
+| `compatibility-write-probe` | Test exact disposable write/cleanup flow | Core plus `probe_workspace_prepare`, `probe_workspace_write`, `probe_workspace_cleanup` |
+| `v1-readonly` | Promoted read-only Binnacle use | Promoted operational read Tools; synthetic probes hidden by default |
+| `v1-operational` | Promoted bounded mutation/administration | Only promoted operational Tools |
 
-- derive entries from the verified manifest;
-- use deterministic ordering;
-- validate each serialized Tool definition against the target MCP revision;
-- calculate a canonical visible-catalogue digest;
-- record manifest and visible-catalogue digests in local audit;
-- expose non-secret version and digest evidence through `binnacle_probe` and `compatibility_report`;
-- use `cacheScope: "private"` whenever catalogue membership varies by authenticated context;
-- use the applicable TTL and revision contract.
+Synthetic compatibility Tools may be exposed during `v1-readonly` only when:
 
-A namespaced, client-hidden `_meta` digest may be emitted only when the selected host profile preserves it reliably. It is supplementary. The Tool catalogue must remain correct when the client ignores `_meta`.
+- `compatibility_test_mode` is explicitly enabled by local policy;
+- the source manifest lists the phase in `test_only_phases`;
+- discovery remains private with zero TTL;
+- the Tool remains under its original contract and cannot gain broader authority.
 
-## 4. Metadata Trust Boundary
+Filtering can only remove a manifest-authorized entry. Test mode cannot invent a Tool or expand its phases.
 
-Tool metadata is model-facing input. Binnacle must assume that:
+## 6. Bootstrap Contracts
 
-- the model may over-trust a description;
-- a client may ignore annotations;
-- another MCP server may expose colliding or misleading names;
-- stale cached metadata may be presented;
-- external content may attempt to imitate Tool instructions.
-
-Consequently:
-
-- metadata never creates authorization;
-- annotations never replace policy, confinement, or confirmation;
-- Tool invocation is validated against the server-side contract, not the model's understanding;
-- external text cannot modify the manifest;
-- server instructions and Tool descriptions cannot order Binnacle to invoke another Tool;
-- the actual server name and Tool origin must remain visible in compatibility evidence;
-- a model-visible display name is not a unique server identity.
-
-## 5. Naming, Collision, and Shadowing Rules
-
-### 5.1 Exact identity
-
-Tool names are case-sensitive stable semantic identifiers. Personal V1 uses lowercase ASCII letters, digits, and underscores.
-
-Names must:
-
-- be unique in the Binnacle manifest;
-- not differ only by case;
-- not use Unicode, invisible characters, confusables, whitespace, dots, or hyphens in Personal V1;
-- not start with another Tool name followed only by an ambiguous suffix such as `_new`, `_safe`, `_real`, or a visually confusing numeral unless the lifecycle contract explicitly defines it;
-- not impersonate ChatGPT, MCP protocol methods, the operating system, another server, or an owner message;
-- preserve the `binnacle_` prefix for Binnacle-specific compatibility and control-plane probes.
-
-Operational domain Tools may use reviewed domain prefixes such as `filesystem_`, `operation_`, `service_`, and `git_`.
-
-### 5.2 Aggregated hosts
-
-Binnacle cannot guarantee how a host disambiguates identical names from different servers. The compatibility profile must test multi-server display and selection.
-
-If the actual host obscures server origin or permits unsafe shadowing, affected Tool contracts remain unsupported in that host profile. Binnacle must not rename Tools dynamically in response to other connected servers.
-
-## 6. Description Contract
-
-Every visible Tool description must answer, concisely and explicitly:
-
-1. **Use when:** the intended owner or model situation.
-2. **Do not use when:** the most likely unsafe or incorrect alternatives.
-3. **Distinction:** how this Tool differs from neighboring Tools.
-4. **Returns:** the main result shape and whether an operation handle is created.
-5. **Limits:** material path, time, size, side-effect, network, or profile bounds.
-6. **Errors:** principal correctable rejection and uncertainty outcomes.
-
-Descriptions must:
-
-- use factual, non-promotional language;
-- never claim policy permission or owner approval;
-- never promise success based only on invocation;
-- state destructive, external, or synthetic-probe status accurately;
-- avoid secrets, device-specific protected paths, and mutable runtime text;
-- remain within the catalogue context budget.
-
-The canonical manifest stores the exact emitted description plus structured review fields. The emitted description—not hidden review prose—is the model-facing contract.
-
-## 7. Bootstrap Catalogue Phases
-
-### 7.1 Phase `compatibility-core`
-
-Visible Tools:
-
-- `binnacle_probe`;
-- `system_inspect`;
-- `probe_result_formats`;
-- `probe_error`;
-- `compatibility_report`.
-
-Purpose: establish connectivity, protocol behavior, structured results, errors, and sanitized observation.
-
-No write Tool is visible.
-
-### 7.2 Phase `compatibility-write-probe`
-
-Adds:
-
-- `probe_workspace_write`;
-- `probe_workspace_cleanup`.
-
-This phase is enabled only after the read-only core passes and the actual host profile permits controlled modification. The write root remains dedicated and disposable.
-
-### 7.3 Phase `v1-readonly`
-
-Adds promoted read-only operational Tools. Synthetic format and error probes are hidden from the normal catalogue unless the owner places the device in a locally configured compatibility-test mode.
-
-`binnacle_probe` and `compatibility_report` remain available for version and compatibility evidence.
-
-### 7.4 Phase `v1-operational`
-
-Adds promoted bounded write, command, service, and Git Tools according to the device profile and security gates.
-
-Compatibility write probes are hidden. Their old names are not reused for operational behavior.
-
-### 7.5 Bootstrap retirement
-
-A bootstrap Tool may be:
-
-- retained as a compatibility diagnostic;
-- hidden outside a test mode;
-- retired from a later manifest.
-
-Retirement must not reuse its name for a different behavior. The manifest records the retirement version and replacement, if any.
-
-A host whose cached catalogue still shows a retired Tool receives a deterministic `unsupported_operation` or `contract_retired` result; the server must not route the old name to a replacement with different semantics.
-
-## 8. Version and Digest Discovery
-
-`binnacle_probe` and `compatibility_report` return:
-
-- Binnacle build version and digest;
-- Tool manifest ID, version, and SHA-256;
-- visible catalogue phase;
-- visible catalogue digest;
-- operation-contract registry version;
-- schema-registry version;
-- MCP revision and host-profile evidence version;
-- lifecycle status of the bootstrap catalogue.
-
-These values are non-authoritative model-visible evidence. They allow ChatGPT and tests to detect change; they do not establish build trust without the external release-verification chain.
-
-Every Tool result records its Tool contract version. A status or retained-operation result also records the contract version under which the operation was admitted.
-
-## 9. Change Classification and Approval
-
-### 9.1 Semantic metadata
-
-Changes to any of these are semantic and require review:
-
-- Tool name or title;
-- description or its when-to-use/not-to-use meaning;
-- input or output schema;
-- annotations or execution hints;
-- contract, risk, information, or lifecycle classification;
-- catalogue phase membership;
-- result-shape summary;
-- limits or error claims;
-- distinctions from neighboring Tools.
-
-Formatting that does not change canonical output is not a manifest change.
-
-### 9.2 Change process
-
-A semantic change requires:
-
-1. an explicit manifest diff;
-2. owner/maintainer review of model-selection and safety effects;
-3. contract-version or Tool-name change where behavior changes;
-4. a new manifest version and digest;
-5. metadata selection and mutation tests;
-6. actual-host catalogue refresh evidence;
-7. affected security and compatibility regression;
-8. build provenance bound to the new digest.
-
-A behavior, effect, risk, idempotency, error, or schema breaking change must not remain behind the old Tool semantic identity. It requires a new Tool name or an explicitly supported versioned Tool contract proven safe by the host profile.
-
-### 9.3 Deployment and stale clients
-
-Binnacle cannot assume that ChatGPT refreshes Tool metadata immediately.
-
-Therefore:
-
-- catalogue TTL remains zero until refresh behavior is measured;
-- a changed build is not promoted until the actual host refreshes and the new visible digest is observed;
-- stale invocation of an unchanged compatible Tool continues under server-side current policy;
-- stale invocation of a retired or behaviorally changed Tool name is rejected;
-- a cached annotation or description never changes local execution semantics;
-- Binnacle does not claim that it can force a host-side reapproval UI.
-
-## 10. Context-Cost Policy
-
-The bootstrap catalogue uses these initial budgets:
-
-| Item | Bootstrap budget |
-| --- | ---: |
-| Tool description | 1,200 UTF-8 bytes maximum |
-| Tool title | 96 UTF-8 bytes maximum |
-| One resolved input schema | 8 KiB maximum |
-| One resolved output schema | 16 KiB maximum |
-| Complete visible Tool catalogue | 96 KiB serialized maximum |
-| Model-facing description text | 3,000 estimated tokens maximum for the complete bootstrap catalogue |
-
-The actual ChatGPT profile must measure catalogue bytes, estimated/observed context cost, selection accuracy, and latency. A later budget change requires evidence and cannot truncate required safety distinctions silently.
-
-When the catalogue would exceed its budget, Binnacle must:
-
-- hide unpromoted or phase-inapplicable Tools;
-- simplify schemas without weakening validation;
-- split a genuinely distinct capability into a later phase;
-- fail the profile or deployment if required metadata cannot fit truthfully.
-
-It must not omit when-not-to-use, destructive, external, limit, or error information merely to fit the budget.
-
-## 11. Validation Fixtures
-
-Machine-readable cases are defined in:
+The bootstrap manifest contains exactly eight Tool contracts:
 
 ```text
-tests/fixtures/mcp/tool-metadata-security.yaml
+binnacle_probe 1.1
+system_inspect 1.1
+probe_result_formats 1.1
+probe_error 1.1
+compatibility_report 1.1
+probe_workspace_prepare 1.1
+probe_workspace_write 1.1
+probe_workspace_cleanup 1.1
 ```
 
-Required cases include:
+`probe_workspace_cleanup` removes one exact artifact per call. Bulk cleanup or “all owned artifacts” would require a different contract version and owner-visible maximum effect.
 
-- digest reproduction;
-- manifest/build mismatch;
-- runtime description mutation;
-- schema or annotation mutation;
-- Tool addition not present in the manifest;
-- Tool removal and stale cached invocation;
-- metadata rug-pull between identical requests;
-- duplicate and confusable names;
-- cross-server shadowing in the actual host;
-- contrastive Tool selection;
-- descriptions missing use, non-use, limit, result, or error information;
-- context-budget overflow;
-- phase transition and bootstrap retirement;
-- external signing/provenance absence for a supported release.
+`binnacle_probe` `1.1` returns build, manifest, protocol, device, and catalogue identity fields defined in the versioned output schema. Earlier `1.0` result shapes are not silently emitted under the `1.1` contract.
 
-## 12. Source Basis
+## 7. Naming and Collision Controls
 
-MCP requires clients to treat Tool annotations as untrusted unless the server is trusted, and recommends stable, unique names and accurate schemas and descriptions. This contract adds Binnacle-specific build, manifest, lifecycle, and host-refresh controls around that model-facing surface.
+Binnacle rejects:
 
-The manifest digest is not an authorization token and is not placed in Tool arguments. It is evidence bound to the build and supply-chain verification process.
+- duplicate Tool names;
+- Unicode-confusable, invisible-character, case-fold, normalization, or punctuation shadowing of another Tool;
+- unmanifested runtime Tools;
+- a schema/annotation/description change without a contract-version change;
+- a runtime handler bound to a different Tool identity.
+
+Security fixtures represent invisible code points with explicit escapes such as `system_\u200Binspect`, never literal invisible characters.
+
+## 8. Discovery and Refresh
+
+Binnacle cannot force ChatGPT to refresh cached metadata. Therefore:
+
+- the runtime always enforces the current manifest and contract;
+- stale retired names fail deterministically;
+- changed builds are not promoted until the real host demonstrates refreshed discovery;
+- a changed catalogue uses private cache scope and a profile-appropriate TTL;
+- host selection tests compare contrastive Tools and record the actual chosen name/arguments.
+
+## 9. Bootstrap Retirement
+
+A synthetic Tool may be retired only after:
+
+- its compatibility purpose has completed;
+- operational replacements pass their gates;
+- the host has demonstrated catalogue refresh;
+- stale-name calls fail safely;
+- the retirement is recorded in the evaluation profile.
+
+Retirement removes discovery exposure but does not change historical audit or evidence records.
+
+## 10. Invariants
+
+1. The source manifest is reviewed; the runtime manifest is build-resolved.
+2. Manifest and schema digests are detached from the bytes they hash.
+3. Every schema reference resolves and is integrity-bound before startup.
+4. Runtime filtering may remove but never rewrite Tool semantics.
+5. Compatibility test mode exposes only manifest-declared test-only phases.
+6. One Tool name has one contract version and one implementation binding.
+7. Model-visible metadata never grants server authority.
