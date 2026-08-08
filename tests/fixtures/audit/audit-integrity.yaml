@@ -1,0 +1,500 @@
+schema_version: "1.0"
+profile: binnacle-audit-integrity
+source_contract: docs/audit-evidence.md
+schema: schemas/audit/audit-event.schema.json
+policy: spec/audit/audit-policy.yaml
+real_durability_fault_injection_required: true
+
+cases:
+  - id: valid-event-chain
+    kind: positive
+    events: 100
+    sequence_contiguous: true
+    previous_hashes_match: true
+    event_hashes_match: true
+    expect:
+      verification: passed
+
+  - id: modified-event-field
+    kind: negative
+    mutation:
+      event_sequence: 50
+      field: payload.reason_code
+    expect:
+      verification: failed
+      failure: event_hash_mismatch
+
+  - id: deleted-event
+    kind: negative
+    mutation:
+      delete_sequence: 50
+    expect:
+      verification: failed
+      failure:
+        - sequence_gap
+        - previous_hash_mismatch
+
+  - id: inserted-event
+    kind: negative
+    mutation:
+      insert_between_sequences:
+        - 50
+        - 51
+      recompute_inserted_hash_only: true
+    expect:
+      verification: failed
+
+  - id: reordered-events
+    kind: negative
+    mutation:
+      swap_sequences:
+        - 50
+        - 51
+    expect:
+      verification: failed
+
+  - id: duplicate-event-id
+    kind: negative
+    mutation:
+      duplicate_event_id: event-10
+    expect:
+      verification: failed
+      failure: duplicate_event_id
+
+  - id: truncated-active-segment
+    kind: negative
+    mutation:
+      truncate_final_bytes: 128
+    expect:
+      verification: failed
+      restricted_operation: true
+
+  - id: forked-history
+    kind: negative
+    streams:
+      - same_epoch_and_sequence_prefix: true
+        final_hash: hash-a
+      - same_epoch_and_sequence_prefix: true
+        final_hash: hash-b
+    expect:
+      verification: failed
+      failure: fork_detected
+
+  - id: valid-segment-rotation
+    kind: positive
+    first_segment:
+      state: sealed
+      event_count: 10000
+      trailer_valid: true
+    second_segment:
+      previous_trailer_hash_matches: true
+      state: open
+    expect:
+      verification: passed
+
+  - id: substituted-segment
+    kind: negative
+    second_segment:
+      previous_trailer_hash_matches: false
+    expect:
+      verification: failed
+
+  - id: wrong-audit-epoch
+    kind: negative
+    event:
+      audit_epoch: epoch-b
+    stream_expected_epoch: epoch-a
+    expect:
+      verification: failed
+
+  - id: wrong-device-build-manifest-policy
+    kind: matrix-negative
+    mutations:
+      - device_id
+      - server_build_sha256
+      - tool_manifest_sha256
+      - policy_version
+      - schema_registry_version
+    expect_for_each:
+      verification: failed
+
+  - id: local-hash-chain-no-external-anchor
+    kind: documented-limit
+    chain_valid: true
+    external_anchor: false
+    expect:
+      claim: local_chain_integrity_only
+      independent_host_rewrite_resistance_claimed: false
+
+  - id: valid-off-device-checkpoint
+    kind: positive
+    local_checkpoint_digest: digest-a
+    off_device_receipt_digest: digest-a
+    receipt_signature_valid: true
+    expect:
+      anchored_verification: passed
+
+  - id: off-device-checkpoint-mismatch
+    kind: negative
+    local_checkpoint_digest: digest-a
+    off_device_receipt_digest: digest-b
+    expect:
+      anchored_verification: failed
+      restricted_operation: true
+
+  - id: runtime-self-signature
+    kind: negative-claim
+    audit_data_and_signing_key_same_unprotected_host: true
+    expect:
+      independent_integrity_claim_allowed: false
+
+  - id: request-auth-policy-operation-correlation
+    kind: positive
+    events:
+      - event_type: request.received
+        request_id: req-1
+      - event_type: authentication.succeeded
+        request_id: req-1
+        controller_id_digest: controller-a
+      - event_type: operation.reserved
+        request_id: req-1
+        operation_id: op-1
+        idempotency_digest: idem-a
+      - event_type: policy.decision
+        request_id: req-1
+        operation_id: op-1
+      - event_type: operation.state_changed
+        operation_id: op-1
+      - event_type: operation.result_published
+        operation_id: op-1
+    expect:
+      reconstruction_complete: true
+
+  - id: missing-operation-correlation
+    kind: negative
+    event_type: effect.started
+    operation_id: null
+    contract_requires_operation: true
+    expect:
+      schema_or_semantic_validation: failed
+
+  - id: retry-correlation
+    kind: positive
+    original:
+      request_id: req-1
+      operation_id: op-1
+      idempotency_digest: idem-a
+    retry:
+      request_id: req-2
+      operation_id: op-1
+      idempotency_digest: idem-a
+      event_type: operation.retry_reconciled
+    expect:
+      new_operation_created: false
+      reconstruction_complete: true
+
+  - id: idempotency-conflict-event
+    kind: positive
+    event:
+      event_type: operation.idempotency_conflict
+      operation_id: op-1
+      idempotency_digest: idem-a
+      safe_facts:
+        conflict_fingerprint_digest: fp-b
+    expect:
+      raw_key_logged: false
+      event_valid: true
+
+  - id: effect-destination-correlation
+    kind: positive
+    events:
+      - event_type: effect.intent_recorded
+        operation_id: op-1
+        target_digest: target-a
+      - event_type: destination.resolved
+        operation_id: op-1
+        actual_destination_digest: address-a
+      - event_type: destination.redirected
+        operation_id: op-1
+        actual_destination_digest: address-b
+      - event_type: destination.connected
+        operation_id: op-1
+        actual_destination_digest: address-b
+      - event_type: effect.observed
+        operation_id: op-1
+        bytes: 512
+    expect:
+      actual_destination_reconstructable: true
+
+  - id: cancellation-not-cancelled
+    kind: positive-security-property
+    events:
+      - event_type: cancellation.requested
+        operation_id: op-1
+      - event_type: cancellation.phase_changed
+        operation_id: op-1
+        phase: forced
+    absent_event: cancellation.verified
+    expect:
+      cancelled_state_claim_allowed: false
+
+  - id: cancellation-verified
+    kind: positive
+    events:
+      - event_type: cancellation.requested
+        operation_id: op-1
+      - event_type: cancellation.phase_changed
+        operation_id: op-1
+      - event_type: cleanup.verified
+        operation_id: op-1
+      - event_type: cancellation.verified
+        operation_id: op-1
+        remaining_effects_verified: true
+    expect:
+      cancelled_state_supported: true
+
+  - id: uncertain-reconciliation
+    kind: positive
+    events:
+      - event_type: effect.uncertain
+        operation_id: op-1
+      - event_type: operation.state_changed
+        operation_id: op-1
+        new_state: uncertain
+      - event_type: reconciliation.started
+        operation_id: op-1
+      - event_type: reconciliation.completed
+        operation_id: op-1
+      - event_type: operation.state_changed
+        operation_id: op-1
+        new_state: succeeded
+    expect:
+      effect_replayed: false
+      reconstruction_complete: true
+
+  - id: access-token-in-event
+    kind: negative
+    event:
+      safe_facts:
+        authorization_header: Bearer secret
+    expect:
+      redaction_or_schema_gate: failed
+      persisted: false
+
+  - id: raw-idempotency-key-in-event
+    kind: negative
+    event:
+      safe_facts:
+        idempotency_key: key-0123456789abcdef
+    expect:
+      persisted: false
+      digest_required: true
+
+  - id: raw-command-output-in-event
+    kind: negative
+    event:
+      safe_facts:
+        stdout: unbounded-output
+    expect:
+      persisted: false
+      digest_size_and_bounded_excerpt_required: true
+
+  - id: low-entropy-secret-digest
+    kind: negative
+    source_value: four-digit-pin
+    audit_action: plain_sha256
+    expect:
+      ordinary_audit_allowed: false
+      keyed_or_omitted_required: true
+
+  - id: redaction-before-hash
+    kind: positive
+    source:
+      contains_secret: true
+    redaction:
+      applied_before_canonicalization: true
+      policy_version: "1.0"
+    persisted_event:
+      secret_present: false
+      redaction_record_present: true
+    expect:
+      event_valid: true
+
+  - id: display-only-redaction
+    kind: negative
+    persisted_event:
+      secret_present: true
+    display:
+      secret_hidden: true
+    expect:
+      contract_pass: false
+
+  - id: supplied-host-context
+    kind: positive
+    host_supplies_context: true
+    context_contract:
+      max_bytes: 1024
+      provenance: model-supplied-unknown
+      authoritative: false
+      storage: digest_and_excerpt
+    expect:
+      full_conversation_collected: false
+      context_creates_owner_intent: false
+
+  - id: silent-conversation-collection
+    kind: negative
+    host_supplies_context: false
+    binnacle_collects_full_conversation: true
+    expect:
+      contract_pass: false
+
+  - id: expired-segment-retention
+    kind: positive
+    segment_class: AR2-normal
+    age_days: 91
+    unresolved_references: false
+    deletion_event_recorded_in_retained_segment: true
+    retained_chain_verifiable: true
+    expect:
+      deletion_allowed: true
+
+  - id: premature-consequential-deletion
+    kind: negative
+    segment_class: AR3-consequential
+    age_days: 100
+    expect:
+      deletion_allowed: false
+
+  - id: unresolved-uncertain-deletion
+    kind: negative
+    segment_class: AR4-uncertain-security
+    owner_resolved: false
+    age_days: 1000
+    expect:
+      deletion_allowed: false
+
+  - id: audit-export-valid
+    kind: positive
+    bundle:
+      manifest_present: true
+      segment_hashes_present: true
+      checkpoint_receipts_present_when_claimed: true
+      file_digests_present: true
+      verification_instructions_present: true
+      exclusions_and_redactions_present: true
+      reusable_secrets_present: false
+    expect:
+      export_verification: passed
+      export_action_audited: true
+
+  - id: export-secret-leak
+    kind: negative
+    bundle:
+      access_token_present: true
+    expect:
+      export_allowed: false
+
+  - id: support-bundle-overcollection
+    kind: negative
+    incident_operation: op-1
+    bundle:
+      includes_unrelated_operations: true
+    expect:
+      support_bundle_allowed: false
+
+  - id: disk-full-before-consequential-admission
+    kind: fault-injection
+    audit_storage:
+      append_available: false
+    request:
+      consequential: true
+    expect:
+      operation_admitted: false
+      error_code: audit_unavailable
+
+  - id: fsync-failure-before-effect
+    kind: fault-injection
+    audit_storage:
+      append_written: true
+      fsync_succeeds: false
+    expect:
+      consequential_boundary_crossed: false
+      error_code: audit_unavailable
+
+  - id: storage-read-only-during-effect
+    kind: fault-injection
+    operation:
+      effect_in_progress: true
+      protective_effect_available: true
+    audit_storage:
+      ordinary_append_available: false
+      emergency_journal_available: true
+    expect:
+      new_forward_effect: false
+      retained_protective_effect_allowed: true
+      emergency_event_recorded: true
+
+  - id: emergency-journal-exhausted
+    kind: fault-injection
+    operation:
+      effect_in_progress: true
+    audit_storage:
+      ordinary_append_available: false
+      emergency_journal_available: false
+    expect:
+      result:
+        - uncertain
+        - local_recovery_required
+      clean_success_claim: false
+
+  - id: storage-pressure-evicts-unresolved
+    kind: negative
+    unresolved_security_events: true
+    implementation_action: evict_to_admit_new_work
+    expect:
+      contract_pass: false
+      new_consequential_work_blocked: true
+
+  - id: audit-verification-failure
+    kind: positive-security-property
+    verification:
+      result: failed
+      current_journal_trusted: true
+    expect:
+      integrity_event_recorded: true
+      remote_operation_restricted: true
+      automatic_history_repair: false
+
+  - id: event-schema-unknown-field
+    kind: negative
+    event:
+      attacker_field: hidden
+    expect:
+      schema_valid: false
+
+  - id: event-type-payload-family-mismatch
+    kind: negative
+    event_type: authentication.succeeded
+    payload_kind: effect.started
+    expect:
+      semantic_validation: failed
+
+  - id: exact-event-count-and-bytes
+    kind: positive
+    segment:
+      declared_event_count: 100
+      actual_event_count: 100
+      declared_canonical_bytes: 100000
+      actual_canonical_bytes: 100000
+    expect:
+      verification: passed
+
+required_oracles:
+  - JSON Schema validation
+  - canonical serialization and SHA-256
+  - segment chain verifier
+  - operation/idempotency cross-reference checker
+  - redaction leakage scanner
+  - retention policy evaluator
+  - export verifier
+  - real durability fault injection
