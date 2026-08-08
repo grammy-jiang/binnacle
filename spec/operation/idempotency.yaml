@@ -1,0 +1,162 @@
+schema_version: "1.0"
+policy_id: binnacle-operation-idempotency
+policy_version: "1.0.0"
+default_for_mutating_operation: required
+
+modes:
+  none:
+    permitted_for:
+      - strictly-read-only
+      - safely-repeatable-no-retained-effect
+  caller-key:
+    input_field: idempotency_key
+    format:
+      min_characters: 16
+      max_characters: 128
+      allowed_pattern: "^[A-Za-z0-9_.:-]+$"
+      min_entropy_bits: 128
+  prepared-nonce:
+    preparation_output_field: execution_nonce
+    execution_input_field: execution_nonce
+    bound_to_prepared_operation: true
+    authority_by_possession: false
+  derived-member-key:
+    status: deferred
+
+scope_key_fields:
+  - device_identity
+  - controller_identity_and_epoch
+  - tool_semantic_identity
+  - operation_contract_version
+  - idempotency_identity
+
+fingerprint_fields:
+  - tool_and_contract_version
+  - normalized_targets_and_arguments
+  - prepared_operation_identity_and_digest
+  - executable_arguments_working_directory_and_execution_profile
+  - file_content_or_patch_digest
+  - information_sources_transformations_recipients_and_destinations
+  - credential_broker_identity_and_audience
+  - hardware_targets_and_effect_values
+  - effect_bearing_limits
+  - external_idempotency_semantics
+  - contract_defined_effect_options
+
+fingerprint_excludes:
+  - current_policy_version
+  - current_state_observation
+  - current_authentication_token
+  - transport_connection
+  - mcp_session
+  - chatgpt_interaction_context
+
+record_creation:
+  after:
+    - transport_authentication
+    - protocol_validation
+    - tool_schema_validation
+    - canonical_normalization
+  before:
+    - local_policy_admission_result
+    - resource_reservation
+    - executor_start
+    - file_mutation
+    - service_change
+    - network_dispatch
+    - hardware_effect
+  durability_required: true
+  memory_only_fallback: false
+
+record_states:
+  - reserved
+  - rejected
+  - authorised
+  - running
+  - paused
+  - cancelling
+  - cancelled
+  - succeeded
+  - failed
+  - uncertain
+
+same_key_same_fingerprint:
+  new_operation_created: false
+  existing_operation_returned: true
+  duplicate_effect: false
+
+same_key_different_fingerprint:
+  result: idempotency_conflict
+  new_operation_created: false
+  effect: none
+
+retry_rules:
+  in_progress: return-current-lifecycle
+  succeeded: return-retained-result
+  failed: return-retained-result
+  cancelled: return-retained-cancelled
+  uncertain: return-uncertainty-and-reconciliation
+  new_attempt_after_terminal: new-key-and-fresh-confirmation-when-required
+
+concurrency:
+  atomic_create_or_find: required
+  operation_count_per_scope_key: 1
+  effect_count_per_scope_key: at-most-1
+
+external_effects:
+  allowed_contracts:
+    - remote-idempotency-key
+    - verified-idempotent-state-predicate
+    - authoritative-reconciliation-query
+    - protected-no-duplicate-design
+    - uncertain-no-auto-retry
+  downstream_key_binding_fields:
+    - operation_id
+    - local_idempotency_identity
+    - remote_target_and_operation
+    - payload_digest
+    - remote_contract_version
+
+ownership:
+  same_controller_reconnect: permitted
+  same_controller_other_conversation: permitted
+  other_controller: denied
+  automatic_controller_transfer: false
+
+cancellation:
+  lookup_identity: operation_id
+  idempotency_record_retained: true
+  same_key_after_cancel_reexecutes: false
+
+status:
+  lookup_identity: operation_id
+  operation_owner_authentication: required
+  read_only: true
+  control_plane_capacity_reserved: true
+  polling_rate_limited: true
+
+retention_classes:
+  IR1-local-reversible:
+    full_record_days_min: 7
+    tombstone_days_min: 30
+  IR2-destructive-or-self-management:
+    full_record_days_min: 30
+    tombstone_days_min: 365
+    epoch_rule: device-epoch-reset-whichever-is-later
+  IR3-external-or-uncertain:
+    full_record: until-reconciled-plus-30-days
+    tombstone_days_min: 365
+    target_contract_may_require_longer: true
+
+storage_pressure:
+  evict_security_relevant_record: false
+  block_new_mutating_operations: true
+  preserve_status_and_recovery_capacity: true
+
+error_codes:
+  - idempotency_key_required
+  - idempotency_key_invalid
+  - idempotency_conflict
+  - idempotency_unavailable
+  - idempotency_key_expired
+  - operation_reconciliation_required

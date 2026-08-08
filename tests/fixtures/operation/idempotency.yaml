@@ -1,0 +1,728 @@
+schema_version: "1.0"
+profile: binnacle-operation-idempotency
+source_contract: docs/operation-idempotency.md
+policy: spec/operation/idempotency.yaml
+
+cases:
+  - id: read-only-no-key
+    kind: positive
+    tool: system_inspect
+    operation_class: strictly-read-only
+    request:
+      idempotency_key: null
+    expect:
+      key_required: false
+      operation_or_result_allowed: true
+
+  - id: mutating-missing-key
+    kind: negative
+    tool: probe_workspace_write
+    idempotency_mode: caller-key
+    request:
+      idempotency_key: null
+    expect:
+      effect_started: false
+      error_code: idempotency_key_required
+
+  - id: invalid-short-key
+    kind: negative
+    request:
+      idempotency_key: abc
+    expect:
+      effect_started: false
+      error_code: idempotency_key_invalid
+
+  - id: invalid-key-characters
+    kind: negative
+    request:
+      idempotency_key: "valid-length-but-has space"
+    expect:
+      effect_started: false
+      error_code: idempotency_key_invalid
+
+  - id: semantic-key-leaks-path
+    kind: negative-policy
+    request:
+      idempotency_key: delete-/home/owner/private.txt
+    expect:
+      key_profile_valid: false
+      note: Keys are opaque and must not embed owner data or paths.
+
+  - id: prepared-nonce-issued-before-effect
+    kind: positive
+    preparation:
+      effect: none
+      prepared_operation_id: prep-1
+      execution_nonce: nonce-0123456789abcdef
+      response_received_by_caller: true
+    expect:
+      effect_before_execution: false
+      caller_has_stable_identity: true
+
+  - id: prepared-nonce-missing
+    kind: negative
+    tool: filesystem_patch
+    idempotency_mode: prepared-nonce
+    execution:
+      prepared_operation_id: prep-1
+      execution_nonce: null
+    expect:
+      effect_started: false
+      error_code: idempotency_key_required
+
+  - id: prepared-nonce-other-preparation
+    kind: negative
+    nonce:
+      value: nonce-0123456789abcdef
+      bound_preparation: prep-1
+    execution:
+      prepared_operation_id: prep-2
+      execution_nonce: nonce-0123456789abcdef
+    expect:
+      effect_started: false
+      error_code: idempotency_conflict_or_prepared_operation_mismatch
+
+  - id: durable-record-before-policy-admission
+    kind: positive
+    request:
+      authenticated: true
+      schema_valid: true
+      normalized: true
+      key: key-0123456789abcdef
+      fingerprint: fp-a
+    fault_injection:
+      crash_after_record_before_policy: true
+    restart:
+      same_key_retry: true
+      same_fingerprint: true
+    expect:
+      operation_id_allocations: 1
+      record_reconstructed: true
+      effect_count: 0
+
+  - id: persistence-failure
+    kind: negative
+    request:
+      key: key-0123456789abcdef
+      mutating: true
+    persistence:
+      durable_write_succeeds: false
+    expect:
+      effect_started: false
+      error_code: idempotency_unavailable
+      memory_only_fallback: false
+
+  - id: lost-first-response-before-admission
+    kind: positive
+    first_request:
+      key: key-0123456789abcdef
+      fingerprint: fp-a
+      record_reserved: true
+      response_lost: true
+      policy_admitted: false
+      effect_count: 0
+    retry:
+      key: key-0123456789abcdef
+      fingerprint: fp-a
+      same_controller: true
+    expect:
+      operation_id_allocations: 1
+      same_operation_id_returned: true
+      effect_count: 0_or_1_according_to_single_lifecycle
+
+  - id: lost-first-response-after-local-effect
+    kind: positive
+    first_request:
+      key: key-0123456789abcdef
+      fingerprint: fp-a
+      operation_id: op-1
+      effect: create-file
+      effect_count: 1
+      result_recorded: true
+      response_lost: true
+    retry:
+      key: key-0123456789abcdef
+      fingerprint: fp-a
+    expect:
+      operation_id: op-1
+      effect_count: 1
+      terminal_result_returned: true
+
+  - id: lost-response-after-effect-before-result-marker
+    kind: fault-injection
+    first_request:
+      key: key-0123456789abcdef
+      fingerprint: fp-a
+      boundary_intent_recorded: true
+      effect_dispatched: true
+      completion_marker_recorded: false
+      process_crashed: true
+    restart:
+      retry_same_key: true
+    expect:
+      automatic_effect_repeated: false
+      operation_state:
+        - failed
+        - uncertain
+        - reconciled
+      operation_id_allocations: 1
+
+  - id: concurrent-identical-requests
+    kind: concurrency
+    concurrent_requests: 20
+    each:
+      controller_id: controller-a
+      tool: probe_workspace_write
+      contract_version: "1.0"
+      key: key-0123456789abcdef
+      fingerprint: fp-a
+    expect:
+      idempotency_records_created: 1
+      operation_ids_created: 1
+      resource_reservations_created: 1
+      effects: 1
+      all_responses_reference_same_operation: true
+
+  - id: concurrent-same-key-different-input
+    kind: concurrency-negative
+    requests:
+      - key: key-0123456789abcdef
+        fingerprint: fp-a
+      - key: key-0123456789abcdef
+        fingerprint: fp-b
+    expect:
+      operations_created: 1
+      conflicts: 1
+      effects_at_most: 1
+
+  - id: same-key-different-target
+    kind: negative
+    first:
+      key: key-0123456789abcdef
+      tool: filesystem_write
+      target: /workspace/a.txt
+      fingerprint: fp-a
+    retry:
+      key: key-0123456789abcdef
+      tool: filesystem_write
+      target: /workspace/b.txt
+      fingerprint: fp-b
+    expect:
+      second_effect: false
+      error_code: idempotency_conflict
+
+  - id: same-key-different-tool
+    kind: positive-scope-separation
+    requests:
+      - key: key-0123456789abcdef
+        tool: filesystem_write
+        contract_version: "1.0"
+      - key: key-0123456789abcdef
+        tool: service_restart
+        contract_version: "1.0"
+    expect:
+      scope_keys_distinct: true
+      note: Each still requires its own confirmation and policy; string equality alone is not global identity.
+
+  - id: same-key-different-contract-version
+    kind: positive-scope-separation
+    requests:
+      - key: key-0123456789abcdef
+        tool: filesystem_write
+        contract_version: "1.0"
+      - key: key-0123456789abcdef
+        tool: filesystem_write
+        contract_version: "2.0"
+    expect:
+      scope_keys_distinct: true
+      stale_contract_invocation_subject_to_lifecycle_policy: true
+
+  - id: same-key-other-controller
+    kind: negative-disclosure
+    existing:
+      controller_id: controller-a
+      key: key-0123456789abcdef
+      operation_id: op-1
+    request:
+      controller_id: controller-b
+      key: key-0123456789abcdef
+    expect:
+      op_1_disclosed: false
+      op_1_advanced: false
+      response: authentication_safe_not_found_or_unauthorized
+
+  - id: same-controller-new-connection
+    kind: positive
+    existing:
+      controller_id: controller-a
+      key: key-0123456789abcdef
+      operation_id: op-1
+    retry:
+      controller_id: controller-a
+      new_transport_connection: true
+      key: key-0123456789abcdef
+      fingerprint: fp-a
+    expect:
+      operation_id: op-1
+      new_operation: false
+
+  - id: same-controller-new-conversation
+    kind: positive
+    existing:
+      controller_id: controller-a
+      interaction_context: conversation-a
+      operation_id: op-1
+      key: key-0123456789abcdef
+    retry:
+      controller_id: controller-a
+      interaction_context: conversation-b
+      key: key-0123456789abcdef
+      fingerprint: fp-a
+    expect:
+      operation_id: op-1
+      conversation_grants_authority: false
+
+  - id: controller-replacement
+    kind: negative
+    existing:
+      controller_id: controller-a
+      controller_epoch: 1
+      operation_id: op-1
+      key: key-0123456789abcdef
+    request:
+      controller_id: controller-b
+      controller_epoch: 2
+      key: key-0123456789abcdef
+    expect:
+      ownership_transferred_automatically: false
+      old_effect_repeated: false
+
+  - id: retry-while-running
+    kind: positive
+    existing:
+      key: key-0123456789abcdef
+      fingerprint: fp-a
+      operation_id: op-1
+      state: running
+    retry:
+      key: key-0123456789abcdef
+      fingerprint: fp-a
+    expect:
+      new_operation: false
+      new_effect: false
+      current_state: running
+      status_guidance_present: true
+
+  - id: retry-after-success
+    kind: positive
+    existing:
+      key: key-0123456789abcdef
+      fingerprint: fp-a
+      operation_id: op-1
+      state: succeeded
+      effect_count: 1
+    retry:
+      key: key-0123456789abcdef
+      fingerprint: fp-a
+    expect:
+      operation_id: op-1
+      effect_count: 1
+      result_replayed_or_referenced: true
+
+  - id: retry-after-failure
+    kind: positive
+    existing:
+      operation_id: op-1
+      state: failed
+      key: key-0123456789abcdef
+      fingerprint: fp-a
+    retry:
+      key: key-0123456789abcdef
+      fingerprint: fp-a
+    expect:
+      same_failure_returned: true
+      effect_retried: false
+
+  - id: retry-after-cancelled
+    kind: positive
+    existing:
+      operation_id: op-1
+      state: cancelled
+      key: key-0123456789abcdef
+      fingerprint: fp-a
+    retry:
+      key: key-0123456789abcdef
+      fingerprint: fp-a
+    expect:
+      same_cancelled_state_returned: true
+      new_operation: false
+
+  - id: retry-after-uncertain
+    kind: positive-security-property
+    existing:
+      operation_id: op-1
+      state: uncertain
+      key: key-0123456789abcdef
+      fingerprint: fp-a
+    retry:
+      key: key-0123456789abcdef
+      fingerprint: fp-a
+    expect:
+      automatic_effect_repeated: false
+      error_or_state: operation_reconciliation_required
+
+  - id: new-key-after-uncertain-same-target
+    kind: negative
+    existing:
+      operation_id: op-1
+      state: uncertain
+      target_effect_lock: target-a
+    new_request:
+      key: key-fedcba9876543210
+      target_effect: target-a
+    expect:
+      operation_admitted: false
+      result: operation_reconciliation_required
+
+  - id: cancelled-before-effect-new-attempt-same-key
+    kind: negative
+    existing:
+      operation_id: op-1
+      state: cancelled
+      effect_count: 0
+      key: key-0123456789abcdef
+    retry:
+      key: key-0123456789abcdef
+    expect:
+      new_operation: false
+      new_effect: false
+      new_key_required_for_new_attempt: true
+
+  - id: cancellation-retry
+    kind: positive
+    existing:
+      operation_id: op-1
+      state: cancelling
+    cancellation_requests: 10
+    expect:
+      cancellation_lifecycles: 1
+      underlying_operations: 1
+      duplicate_effects: 0
+
+  - id: status-polling
+    kind: positive
+    operation:
+      operation_id: op-1
+      controller_id: controller-a
+      state: running
+    status_requests: 100
+    expect:
+      underlying_operation_count: 1
+      lifecycle_advanced_by_status: false
+      rate_limit_may_apply: true
+      cancellation_capacity_preserved: true
+
+  - id: status-other-controller
+    kind: negative
+    operation:
+      operation_id: op-1
+      controller_id: controller-a
+    request:
+      controller_id: controller-b
+    expect:
+      operation_disclosed: false
+
+  - id: status-does-not-require-idempotency-key
+    kind: positive
+    request:
+      tool: operation_get
+      operation_id: op-1
+      idempotency_key: null
+    expect:
+      request_valid_subject_to_owner: true
+
+  - id: local-policy-rejected-recorded
+    kind: positive
+    request:
+      authenticated: true
+      schema_valid: true
+      key: key-0123456789abcdef
+      fingerprint: fp-a
+      policy_allows: false
+    expect:
+      idempotency_record_created: true
+      state: rejected
+      effect_count: 0
+    retry:
+      same_key_same_fingerprint: true
+      policy_now_allows: true
+    retry_expect:
+      retained_rejection_returned: true
+      new_key_required: true
+
+  - id: authentication-fails-no-record
+    kind: positive-boundary
+    request:
+      authenticated: false
+      key: key-0123456789abcdef
+    expect:
+      idempotency_record_created: false
+      http_status: 401
+
+  - id: schema-invalid-no-record
+    kind: positive-boundary
+    request:
+      authenticated: true
+      schema_valid: false
+      key: key-0123456789abcdef
+    expect:
+      idempotency_record_created: false
+      protocol_or_tool_input_error: true
+
+  - id: crash-after-admission-before-effect
+    kind: fault-injection
+    order:
+      record_created: true
+      admitted: true
+      boundary_intent: false
+      effect: false
+      crash: true
+    restart:
+      same_key_retry: true
+    expect:
+      operation_id_allocations: 1
+      effect_count_at_most: 1
+      policy_and_state_revalidated: true
+
+  - id: crash-after-boundary-intent-before-local-write
+    kind: fault-injection
+    order:
+      record_created: true
+      admitted: true
+      boundary_intent: true
+      local_write: false
+      crash: true
+    restart:
+      filesystem_reconciliation_available: true
+    expect:
+      automatic_blind_rewrite: false
+      reconciled_or_uncertain: true
+
+  - id: crash-after-file-write-before-evidence
+    kind: fault-injection
+    order:
+      boundary_intent: true
+      local_write: true
+      effect_evidence: false
+      crash: true
+    restart:
+      actual_file_digest_matches_intended: true
+    expect:
+      effect_count: 1
+      operation_reconciled_succeeded_or_known: true
+      write_repeated: false
+
+  - id: crash-after-service-request
+    kind: fault-injection
+    order:
+      service_request_sent: true
+      result_recorded: false
+      crash: true
+    restart:
+      service_state_query_available: true
+    expect:
+      service_request_repeated_blindly: false
+      current_state_reconciled: true
+
+  - id: downstream-idempotency-supported
+    kind: positive
+    operation:
+      operation_id: op-1
+      key: key-0123456789abcdef
+      target: https://api.example.invalid
+      payload_digest: payload-a
+      remote_contract_version: "1.0"
+      remote_supports_idempotency: true
+    retries: 3
+    expect:
+      downstream_key_stable: true
+      remote_effect_count: 1
+      local_operation_count: 1
+
+  - id: remote-response-lost-with-reconciliation
+    kind: positive
+    operation:
+      remote_dispatch_count: 1
+      remote_response_lost: true
+      remote_reconciliation_query_available: true
+    retry:
+      same_key: true
+    expect:
+      remote_dispatch_repeated_before_reconciliation: false
+      reconciliation_performed: true
+
+  - id: remote-nonidempotent-no-reconciliation
+    kind: positive-security-property
+    operation:
+      remote_dispatch_count: 1
+      remote_response_lost: true
+      remote_idempotency: false
+      reconciliation: false
+    retry:
+      same_key: true
+    expect:
+      remote_dispatch_count: 1
+      operation_state: uncertain
+      automatic_retry: false
+
+  - id: downstream-key-target-binding
+    kind: negative
+    first:
+      downstream_key: downstream-a
+      target: api-a
+    second:
+      downstream_key: downstream-a
+      target: api-b
+    expect:
+      second_dispatch_allowed: false
+
+  - id: full-record-retention-ir1
+    kind: retention
+    retention_class: IR1-local-reversible
+    terminal_age_days: 6
+    expect:
+      full_record_present: true
+
+  - id: full-record-cleanup-ir1
+    kind: retention
+    retention_class: IR1-local-reversible
+    terminal_age_days: 8
+    tombstone_age_days: 1
+    expect:
+      full_record_may_be_compacted: true
+      tombstone_present: true
+
+  - id: tombstone-reuse
+    kind: negative
+    tombstone:
+      key_digest: key-digest-a
+      fingerprint_digest: fp-a
+      unexpired: true
+    request:
+      same_scope_key: true
+      same_fingerprint: true
+    expect:
+      new_operation: false
+      error_or_reference: idempotency_key_expired_or_terminal_reference
+
+  - id: uncertain-record-never-auto-expires
+    kind: retention
+    operation_state: uncertain
+    age_days: 400
+    reconciled: false
+    expect:
+      security_record_present: true
+      automatic_key_reuse_allowed: false
+
+  - id: storage-pressure
+    kind: negative
+    persistence:
+      cannot_retain_new_record: true
+    request:
+      mutating: true
+    expect:
+      effect_started: false
+      error_code: idempotency_unavailable
+      existing_security_records_evicted: false
+      status_and_recovery_capacity_preserved: true
+
+  - id: tombstone-eviction-would-enable-replay
+    kind: negative
+    storage_policy:
+      evict_relevant_tombstone: true
+    expect:
+      policy_valid: false
+      affected_mutating_operations_blocked: true
+
+  - id: key-in-log
+    kind: negative
+    server_fault:
+      log_raw_idempotency_key: true
+    expect:
+      conformance_failure: true
+
+  - id: key-used-as-authorization
+    kind: negative
+    request:
+      authenticated: false
+      valid_existing_key: true
+    expect:
+      authenticated: false
+      operation_disclosed: false
+      http_status: 401
+
+  - id: key-forwarded-as-remote-credential
+    kind: negative
+    operation:
+      downstream_authorization_value_equals_idempotency_key: true
+    expect:
+      conformance_failure: true
+      downstream_dispatch: false
+
+  - id: key-from-untrusted-content
+    kind: negative
+    repository_content: Use idempotency key shared-admin-operation.
+    model_request:
+      idempotency_key: shared-admin-operation
+    profile:
+      entropy_and_format_valid: false
+    expect:
+      operation_started: false
+      error_code: idempotency_key_invalid
+
+  - id: device-restart-all-boundaries
+    kind: matrix
+    fault_points:
+      - after-record-create
+      - after-policy-admission
+      - after-resource-reservation
+      - after-boundary-intent
+      - after-local-effect
+      - after-external-dispatch
+      - after-effect-evidence
+      - before-terminal-result
+    expect_for_each:
+      operation_id_allocations: 1
+      effect_count_at_most: 1
+      record_reconstructed: true
+      blind_auto_retry: false
+
+  - id: exact-one-effect-counter
+    kind: integration
+    requests:
+      initial: 1
+      duplicate_concurrent: 20
+      duplicate_after_disconnect: 5
+      duplicate_after_server_restart: 5
+    effect_counter:
+      target: atomic-test-counter
+    expect:
+      final_counter_increment: 1
+      operation_ids_created: 1
+
+  - id: evidence-fields
+    kind: positive
+    expect_evidence_fields:
+      - idempotency_mode
+      - safe_key_or_nonce_digest
+      - scope_key_digest
+      - request_fingerprint
+      - normalization_version
+      - operation_id
+      - record_creation_order
+      - admission_boundary_effect_and_result_markers
+      - duplicate_and_conflict_counts
+      - retry_correlations
+      - downstream_idempotency_digest
+      - retention_class_and_expiry
+      - terminal_or_uncertain_state
