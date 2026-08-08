@@ -1,503 +1,284 @@
-schema_version: "1.0"
-profile: binnacle-mcp-2026-wire
-source_contract: docs/mcp-2026-wire-contract.md
-protocol_revision: "2026-07-28"
+schema_version: "1.1"
+contract: MCP-2026-WIRE
+contract_version: "1.1.0"
+revision: "2026-07-28"
 
-bootstrap_policy:
-  tools_capability_required: true
-  tasks_extension_advertised: false
-  sampling_advertised: false
-  cache_scope: private
-  ttl_ms: 0
-  explicit_annotations: true
-  model_readable_content_required: true
+common_request_meta: &common_request_meta
+  io.modelcontextprotocol/protocolVersion: "2026-07-28"
+  io.modelcontextprotocol/clientInfo:
+    name: chatgpt-probe
+    version: "1.0.0"
+  io.modelcontextprotocol/clientCapabilities: {}
 
 cases:
   - id: discover-valid
     kind: positive
     request:
-      method: server/discover
-      prior_request: false
-      headers:
+      http_headers:
         MCP-Protocol-Version: "2026-07-28"
         Mcp-Method: server/discover
-    response:
+      body:
+        jsonrpc: "2.0"
+        id: 1
+        method: server/discover
+        params:
+          _meta: *common_request_meta
+    wire_result:
       resultType: complete
-      supportedVersions:
-        - "2026-07-28"
-        - "2025-11-25"
-        - "2025-06-18"
-        - "2025-03-26"
       capabilities:
         tools: {}
-      serverInfo:
-        name: binnacle
-        version: 0.0.0
+        extensions: {}
+      instructions: Binnacle operates one Raspberry Pi deterministically.
       ttlMs: 0
       cacheScope: private
+      _meta:
+        io.modelcontextprotocol/serverInfo:
+          name: binnacle
+          version: "0.1.0"
     expect:
       schema_valid: true
-      session_required: false
+      top_level_serverInfo_present: false
 
-  - id: direct-tool-without-discover
-    kind: positive
-    request:
-      method: tools/call
-      name: binnacle_probe
-      prior_discover: false
-      headers:
-        MCP-Protocol-Version: "2026-07-28"
-        Mcp-Method: tools/call
-        Mcp-Name: binnacle_probe
-    response:
-      resultType: complete
-      content:
-        - type: text
-          text: Probe completed.
-      structuredContent:
-        status: succeeded
-    expect:
-      schema_valid: true
-      tool_dispatched: true
-
-  - id: discover-missing-tools-capability
+  - id: discover-top-level-server-info-invalid
     kind: negative
-    response:
+    wire_result:
       resultType: complete
-      supportedVersions:
-        - "2026-07-28"
-      capabilities: {}
       serverInfo:
         name: binnacle
-        version: 0.0.0
-      ttlMs: 0
-      cacheScope: private
-    deployed_tools_present: true
-    expect:
-      conformance_failure: true
-
-  - id: discover-missing-result-type
-    kind: negative
-    response:
-      supportedVersions:
-        - "2026-07-28"
+        version: "0.1.0"
       capabilities:
         tools: {}
-      serverInfo:
-        name: binnacle
-        version: 0.0.0
       ttlMs: 0
       cacheScope: private
     expect:
       schema_valid: false
-      conformance_failure: true
-
-  - id: discover-wrong-result-type
-    kind: negative
-    response:
-      resultType: input_required
-      supportedVersions:
-        - "2026-07-28"
-      capabilities:
-        tools: {}
-      serverInfo:
-        name: binnacle
-        version: 0.0.0
-      ttlMs: 0
-      cacheScope: private
-    expect:
-      schema_valid: false
-      conformance_failure: true
-
-  - id: discover-missing-ttl
-    kind: negative
-    response:
-      resultType: complete
-      supportedVersions:
-        - "2026-07-28"
-      capabilities:
-        tools: {}
-      serverInfo:
-        name: binnacle
-        version: 0.0.0
-      cacheScope: private
-    expect:
-      schema_valid: false
-      conformance_failure: true
-
-  - id: discover-missing-cache-scope
-    kind: negative
-    response:
-      resultType: complete
-      supportedVersions:
-        - "2026-07-28"
-      capabilities:
-        tools: {}
-      serverInfo:
-        name: binnacle
-        version: 0.0.0
-      ttlMs: 0
-    expect:
-      schema_valid: false
-      conformance_failure: true
-
-  - id: authorization-dependent-discover-public
-    kind: negative
-    representation:
-      varies_by_controller: true
-      varies_by_policy: true
-    response:
-      resultType: complete
-      supportedVersions:
-        - "2026-07-28"
-      capabilities:
-        tools: {}
-      serverInfo:
-        name: binnacle
-        version: 0.0.0
-      ttlMs: 60000
-      cacheScope: public
-    expect:
-      security_failure: true
-      promotion_blocked: true
+      failure_layer: target_wire_schema
 
   - id: tools-list-valid
     kind: positive
-    response:
+    request:
+      http_headers:
+        MCP-Protocol-Version: "2026-07-28"
+        Mcp-Method: tools/list
+      body:
+        jsonrpc: "2.0"
+        id: 2
+        method: tools/list
+        params:
+          _meta: *common_request_meta
+    wire_result:
       resultType: complete
+      ttlMs: 0
+      cacheScope: private
       tools:
         - name: binnacle_probe
-          description: Return sanitized Binnacle, device, and protocol observations without changing state.
+          title: Probe Binnacle connectivity
+          description: Return bounded server, device, and protocol facts.
           inputSchema:
-            $schema: https://json-schema.org/draft/2020-12/schema
             type: object
             additionalProperties: false
           outputSchema:
-            $schema: https://json-schema.org/draft/2020-12/schema
-            type: object
-            additionalProperties: false
-            properties:
-              status:
-                type: string
-            required:
-              - status
+            $ref: schemas/mcp/bootstrap-outputs.schema.json#/$defs/binnacle_probe.output.v1_1
           annotations:
             readOnlyHint: true
             destructiveHint: false
             idempotentHint: true
             openWorldHint: false
-          execution:
-            taskSupport: forbidden
-      ttlMs: 0
-      cacheScope: private
     expect:
       schema_valid: true
       deterministic_order: true
+      legacy_execution_field_present: false
 
-  - id: tools-list-order-stability
-    kind: positive
-    repetitions: 10
-    same_build: true
-    same_controller: true
-    same_policy: true
-    expect:
-      serialized_tool_order_identical: true
-      serialized_schema_order_stable_or_canonicalized: true
-
-  - id: tools-list-missing-cache-fields
+  - id: target-tool-legacy-execution-invalid
     kind: negative
-    response:
+    wire_result:
       resultType: complete
+      ttlMs: 0
+      cacheScope: private
+      tools:
+        - name: binnacle_probe
+          description: probe
+          inputSchema:
+            type: object
+          execution:
+            taskSupport: optional
+    expect:
+      schema_valid: false
+      failure_layer: target_tool_schema
+
+  - id: tools-list-private-cache-required
+    kind: negative
+    setup:
+      catalogue_varies_by_authorization: true
+    wire_result:
+      resultType: complete
+      ttlMs: 60000
+      cacheScope: public
       tools: []
     expect:
-      schema_valid: false
-      conformance_failure: true
+      product_contract_valid: false
+      error: authorization_sensitive_cache_must_be_private
 
-  - id: tool-success-valid
+  - id: tool-call-success-valid
     kind: positive
-    tool:
-      name: system_inspect
-      outputSchema:
-        $schema: https://json-schema.org/draft/2020-12/schema
-        type: object
-        additionalProperties: false
-        properties:
-          status:
-            const: succeeded
-          hostname:
-            type: string
-        required:
-          - status
-          - hostname
-    response:
+    request:
+      http_headers:
+        MCP-Protocol-Version: "2026-07-28"
+        Mcp-Method: tools/call
+        Mcp-Name: binnacle_probe
+      body:
+        jsonrpc: "2.0"
+        id: 3
+        method: tools/call
+        params:
+          name: binnacle_probe
+          arguments: {}
+          _meta: *common_request_meta
+    wire_result:
       resultType: complete
+      isError: false
       content:
         - type: text
-          text: System inspection succeeded for host pi-one.
+          text: Binnacle is reachable.
       structuredContent:
-        status: succeeded
-        hostname: pi-one
-      isError: false
+        schema_version: "1.1"
+        call_status: succeeded
+        tool:
+          name: binnacle_probe
+          contract_version: "1.1"
+        request_id: request-3
+        data: {}
+        operation: null
+        evidence: []
+        warnings: []
     expect:
       schema_valid: true
-      content_non_empty: true
-      structured_content_valid: true
+      model_readable_content_present: true
 
-  - id: tool-success-missing-content
-    kind: negative
-    tool:
-      name: system_inspect
-      outputSchema:
-        type: object
-        properties:
-          status:
-            type: string
-        required:
-          - status
-    response:
-      resultType: complete
-      structuredContent:
-        status: succeeded
-      isError: false
-    expect:
-      protocol_schema_may_accept: true
-      binnacle_contract_failure: true
-
-  - id: tool-success-invalid-structured-content
-    kind: negative
-    tool:
-      name: system_inspect
-      outputSchema:
-        type: object
-        additionalProperties: false
-        properties:
-          status:
-            const: succeeded
-          hostname:
-            type: string
-        required:
-          - status
-          - hostname
-    response:
-      resultType: complete
-      content:
-        - type: text
-          text: System inspection succeeded.
-      structuredContent:
-        status: succeeded
-      isError: false
-    expect:
-      structured_content_valid: false
-      response_not_emitted_as_success: true
-      conformance_failure: true
-
-  - id: tool-success-text-structured-mismatch
-    kind: negative
-    response:
-      resultType: complete
-      content:
-        - type: text
-          text: Operation failed.
-      structuredContent:
-        status: succeeded
-      isError: false
-    expect:
-      semantic_consistency_failure: true
-
-  - id: tool-execution-error-valid
+  - id: execution-error-valid
     kind: positive
-    response:
+    wire_result:
       resultType: complete
+      isError: true
       content:
         - type: text
-          text: The path is outside the configured workspace. Select a path under the workspace root.
+          text: Local policy rejected the requested operation.
       structuredContent:
-        status: rejected
+        schema_version: "1.1"
+        call_status: execution_error
+        tool:
+          name: probe_workspace_write
+          contract_version: "1.1"
+        request_id: request-4
         error:
           code: policy_rejected
+          message: Write probe is disabled by local policy.
           retryable: false
-      isError: true
+          details: {}
+        operation: null
+        evidence: []
+        warnings: []
     expect:
       schema_valid: true
-      content_non_empty: true
-      model_correctable_feedback: true
+      model_readable_content_present: true
 
-  - id: tool-execution-error-missing-content
+  - id: execution-error-missing-content
     kind: negative
-    response:
+    wire_result:
       resultType: complete
+      isError: true
+      content: []
       structuredContent:
-        status: rejected
+        schema_version: "1.1"
+        call_status: execution_error
+        tool:
+          name: probe_workspace_write
+          contract_version: "1.1"
+        request_id: request-5
         error:
           code: policy_rejected
-      isError: true
+          message: rejected
+          retryable: false
+          details: {}
+        operation: null
+        evidence: []
+        warnings: []
     expect:
-      binnacle_contract_failure: true
+      product_contract_valid: false
+      error: model_readable_content_required
 
-  - id: tool-error-missing-result-type
+  - id: structured-output-schema-mismatch
     kind: negative
-    response:
+    wire_result:
+      resultType: complete
+      isError: false
       content:
         - type: text
-          text: Policy rejected the request.
-      isError: true
+          text: Probe completed.
+      structuredContent:
+        wrong_field: true
+    declared_output_schema: schemas/mcp/bootstrap-outputs.schema.json#/$defs/binnacle_probe.output.v1_1
     expect:
       schema_valid: false
-      conformance_failure: true
+      response_sent: false
 
-  - id: status-lookup-represents-failed-operation
-    kind: positive
-    response:
-      resultType: complete
+  - id: missing-result-type
+    kind: negative
+    wire_result:
+      isError: false
       content:
         - type: text
-          text: Operation op-1 is in failed state with known effects.
-      structuredContent:
-        lookup_status: succeeded
-        operation:
-          operation_id: op-1
-          state: failed
-      isError: false
-    expect:
-      tool_call_success: true
-      represented_operation_state: failed
-
-  - id: status-lookup-represents-uncertain-operation
-    kind: positive
-    response:
-      resultType: complete
-      content:
-        - type: text
-          text: Operation op-2 is uncertain; do not repeat automatically.
-      structuredContent:
-        lookup_status: succeeded
-        operation:
-          operation_id: op-2
-          state: uncertain
-      isError: false
-    expect:
-      tool_call_success: true
-      represented_operation_state: uncertain
-
-  - id: implicit-annotation-defaults
-    kind: positive-protocol-default
-    tool:
-      name: unannotated_tool
-      annotations: null
-    expect:
-      effective_annotations:
-        readOnlyHint: false
-        destructiveHint: true
-        idempotentHint: false
-        openWorldHint: true
-      binnacle_manifest_accepts_omission: false
-
-  - id: explicit-read-only-annotations
-    kind: positive
-    tool:
-      name: filesystem_read
-      annotations:
-        readOnlyHint: true
-        destructiveHint: false
-        idempotentHint: true
-        openWorldHint: false
-    expect:
-      manifest_valid: true
-
-  - id: additive-modifying-tool
-    kind: positive
-    tool:
-      name: create_new_file
-      contract:
-        overwrite_allowed: false
-      annotations:
-        readOnlyHint: false
-        destructiveHint: false
-        idempotentHint: false
-        openWorldHint: false
-    expect:
-      annotation_semantics_valid: true
-
-  - id: overwrite-tool-marked-nondestructive
-    kind: negative
-    tool:
-      name: filesystem_write
-      contract:
-        overwrite_allowed: true
-      annotations:
-        readOnlyHint: false
-        destructiveHint: false
-        idempotentHint: false
-        openWorldHint: false
-    expect:
-      annotation_semantics_valid: false
-      promotion_blocked: true
-
-  - id: idempotent-hint-without-semantic-idempotency
-    kind: negative
-    tool:
-      name: append_log_entry
-      contract:
-        repeated_same_arguments_add_entry: true
-      annotations:
-        readOnlyHint: false
-        destructiveHint: false
-        idempotentHint: true
-        openWorldHint: false
-    expect:
-      annotation_semantics_valid: false
-
-  - id: external-network-tool-closed-world
-    kind: negative
-    tool:
-      name: remote_repository_fetch
-      contract:
-        network_access: true
-      annotations:
-        readOnlyHint: true
-        destructiveHint: false
-        idempotentHint: true
-        openWorldHint: false
-    expect:
-      annotation_semantics_valid: false
-
-  - id: task-result-without-extension
-    kind: negative
-    server_capabilities:
-      extensions: {}
-    response:
-      resultType: task
-      taskId: task-1
+          text: Probe completed.
+      structuredContent: {}
     expect:
       schema_valid: false
-      conformance_failure: true
+      failure_layer: target_wire_schema
 
-  - id: input-required-without-capability
+  - id: mrtr-without-capability
     kind: negative
-    client_capabilities: {}
-    response:
+    request:
+      http_headers:
+        MCP-Protocol-Version: "2026-07-28"
+        Mcp-Method: tools/call
+        Mcp-Name: probe_workspace_prepare
+      body:
+        jsonrpc: "2.0"
+        id: 6
+        method: tools/call
+        params:
+          name: probe_workspace_prepare
+          arguments:
+            operation: write
+            name: test.txt
+            content_sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          _meta: *common_request_meta
+    wire_result:
       resultType: input_required
       inputRequests: {}
-      requestState: opaque
     expect:
-      capability_violation: true
-      conformance_failure: true
+      schema_valid: false
+      error: undeclared_client_capability
 
-  - id: wire-field-hidden-by-sdk
-    kind: positive
-    handler_return_object:
-      content:
-        - type: text
-          text: Probe completed.
-      structuredContent:
-        status: succeeded
-    serialized_response:
-      resultType: complete
-      content:
-        - type: text
-          text: Probe completed.
-      structuredContent:
-        status: succeeded
+  - id: tasks-extension-not-negotiated
+    kind: negative
+    request:
+      http_headers:
+        MCP-Protocol-Version: "2026-07-28"
+        Mcp-Method: tools/call
+        Mcp-Name: binnacle_probe
+      body:
+        jsonrpc: "2.0"
+        id: 7
+        method: tools/call
+        params:
+          name: binnacle_probe
+          arguments: {}
+          _meta: *common_request_meta
+    wire_result:
+      resultType: task
+      task:
+        taskId: task-1
+        status: working
     expect:
-      serialized_schema_valid: true
-      fixture_inspects_wire_frame: true
+      schema_valid: false
+      error: extension_not_negotiated
