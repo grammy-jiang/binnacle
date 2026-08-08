@@ -1,0 +1,497 @@
+schema_version: "1.0"
+profile: binnacle-mcp-evaluation-reproducibility
+source_contract: docs/mcp-evaluation.md
+evaluation_policy: spec/mcp/evaluation-profile.yaml
+manifest_schema: schemas/mcp/evaluation-manifest.schema.json
+real_chatgpt_required: true
+
+cases:
+  - id: identical-profile-identical-probe
+    kind: reproducibility
+    runs: 3
+    profile_dimensions_identical: true
+    probe_digests_identical: true
+    case_manifest_identical: true
+    expect:
+      deterministic_server_case_results_identical: true
+      differing_host_results_recorded_not_hidden: true
+
+  - id: profile-plan-changed
+    kind: negative-profile-reuse
+    previous:
+      plan: Pro
+      result: supported_observed
+    current:
+      plan: Business
+    expect:
+      previous_profile_reused: false
+      rerun_required: true
+
+  - id: workspace-policy-changed
+    kind: negative-profile-reuse
+    previous_policy_digest: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    current_policy_digest: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+    expect:
+      previous_profile_current: false
+
+  - id: probe-build-changed
+    kind: negative-profile-reuse
+    previous_artifact_sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    current_artifact_sha256: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+    expect:
+      targeted_or_full_rerun_required: true
+
+  - id: sdk-changed
+    kind: regression-trigger
+    previous_sdk:
+      version: 2.0.0
+      sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    current_sdk:
+      version: 2.1.0
+      sha256: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+    expect:
+      protocol_discovery_result_error_cancellation_and_host_tests_rerun: true
+
+  - id: manifest-changed
+    kind: regression-trigger
+    previous_manifest_sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    current_manifest_sha256: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+    expect:
+      discovery_selection_and_affected_tool_cases_rerun: true
+
+  - id: documentation-only-declaration
+    kind: negative-promotion
+    axis: tasks
+    documentation_says_supported: true
+    client_declares: false
+    probe_exercised: false
+    expect:
+      status: not_declared
+      interface_dependency_allowed: false
+
+  - id: declared-but-not-exercised
+    kind: negative-promotion
+    axis: resources
+    client_declares: true
+    probe_exercised: false
+    expect:
+      status: declared_unexercised
+      interface_dependency_allowed: false
+
+  - id: probe-not-implemented
+    kind: negative-promotion
+    axis: prompts
+    client_declares: true
+    probe_implements: false
+    expect:
+      status: not_implemented_by_probe
+      client_support_conclusion_allowed: false
+
+  - id: host-policy-blocks-write
+    kind: positive-classification
+    axis: write-entitlement
+    write_tool_discovered: false
+    direct_write_attempt_blocked_by_host: true
+    server_write_behavior_reached: false
+    expect:
+      status: blocked_by_host_policy
+      protocol_support_claim: not_established
+
+  - id: write-positive-without-negative
+    kind: negative-promotion
+    axis: write-entitlement
+    controlled_write_passed: true
+    outside-root-rejection_not_run: true
+    expect:
+      status_not: supported_observed
+
+  - id: write-complete-matrix
+    kind: positive-promotion
+    axis: write-entitlement
+    cases:
+      controlled_write: passed
+      outside_root: passed
+      owned_cleanup: passed
+      unowned_cleanup: passed
+      hidden_direct_call: passed
+    repetitions_each: 5
+    expect:
+      status: supported_observed
+
+  - id: cancellation-ack-only
+    kind: negative-promotion
+    axis: cancellation
+    mcp_acknowledged: true
+    local_cancelled_verified: false
+    expect:
+      status_not: supported_observed
+
+  - id: cancellation-complete
+    kind: positive-promotion
+    axis: cancellation
+    request_passed: true
+    graceful_and_forced_cases_passed: true
+    local_cancelled_verified: true
+    duplicate_request_passed: true
+    repetitions: 5
+    expect:
+      status: supported_observed
+
+  - id: tasks-extension-not-declared
+    kind: positive-classification
+    axis: tasks
+    extension_declared: false
+    expect:
+      status: not_declared
+      task_result_emitted: false
+
+  - id: tasks-declared-but-wrong-identity
+    kind: negative-promotion
+    axis: tasks
+    extension_declared: true
+    task_handle_replaces_binnacle_operation_id: true
+    expect:
+      status: failed
+
+  - id: unstable-cache-behavior
+    kind: instability
+    axis: discovery-cache
+    repetitions: 10
+    materially_different_results: 3
+    profile_dimensions_identical: true
+    expect:
+      status: unstable
+      interface_dependency_allowed: false
+
+  - id: split-profile-explains-conflict
+    kind: positive-adjudication
+    runs:
+      - workspace_policy_digest: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+        write_status: supported_observed
+      - workspace_policy_digest: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+        write_status: blocked_by_host_policy
+    expect:
+      split_profiles: true
+      global_conflict_hidden: false
+
+  - id: unexplained-conflicting-runs
+    kind: negative-adjudication
+    profile_dimensions_identical: true
+    first_status: supported_observed
+    second_status: failed
+    expect:
+      status: unstable
+      choose_success_silently: false
+
+  - id: evidence-missing-request-trace
+    kind: negative
+    case:
+      status: passed
+      request_trace_required: true
+      request_trace_present: false
+    expect:
+      manifest_or_review_accepted: false
+
+  - id: evidence-missing-ui-for-confirmation
+    kind: negative
+    axis: host-confirmation
+    host_ui_is_subject: true
+    screenshot_recording_or_structured_observation_present: false
+    expect:
+      status_not: supported_observed
+
+  - id: owner-action-log-mismatch
+    kind: negative
+    host_ui_evidence:
+      owner_action: decline
+    server_trace:
+      tool_call_followed: true
+    expect:
+      case_status: failed
+      security_incident_or_host_profile_failure: true
+
+  - id: raw-evidence-conclusion-mismatch
+    kind: negative
+    raw_case_result: failed
+    profile_conclusion: supported_observed
+    expect:
+      review_accepted: false
+
+  - id: re-adjudication
+    kind: positive-governance
+    raw_case_result_immutable: true
+    previous_review: rejected
+    new_review: accepted_after_oracle_correction
+    expect:
+      new_review_record_created: true
+      raw_result_rewritten: false
+
+  - id: bundle-secret-token
+    kind: negative
+    evidence_bundle:
+      authorization_header_present: true
+    expect:
+      bundle_finalized: false
+
+  - id: bundle-cookie
+    kind: negative
+    evidence_bundle:
+      cookie_present: true
+    expect:
+      bundle_finalized: false
+
+  - id: bundle-production-owner-data
+    kind: negative
+    evidence_bundle:
+      production_owner_file_present: true
+    expect:
+      bundle_finalized: false
+
+  - id: bundle-full-unrelated-conversation
+    kind: negative
+    evidence_bundle:
+      unrelated_conversation_present: true
+    expect:
+      bundle_finalized: false
+
+  - id: redaction-before-finalization
+    kind: positive
+    source_trace_contains_token: true
+    redaction_applied_before_bundle_hash: true
+    final_bundle_contains_token: false
+    categories_removed_recorded: true
+    expect:
+      bundle_valid: true
+
+  - id: display-redaction-only
+    kind: negative
+    stored_bundle_contains_token: true
+    viewer_hides_token: true
+    expect:
+      bundle_valid: false
+
+  - id: bundle-digest-mismatch
+    kind: negative
+    manifest_bundle_sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    actual_bundle_sha256: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+    expect:
+      profile_accepted: false
+
+  - id: runtime-self-signature
+    kind: negative-claim
+    bundle_signature_created_by_same_probe_runtime: true
+    independent_trust_root: false
+    expect:
+      independent_evidence_integrity_claim: false
+
+  - id: case-no-oracle
+    kind: negative
+    case:
+      expected_requests: null
+      prohibited_effects: null
+      timeout: null
+      pass_fail_criteria: looks_good
+    expect:
+      case_valid: false
+
+  - id: positive-without-negative-matrix
+    kind: negative-promotion
+    axis: authentication
+    authentication_success_passed: true
+    invalid_token_case_not_run: true
+    wrong_audience_case_not_run: true
+    expect:
+      status_not: supported_observed
+
+  - id: fundamental-repeat-count
+    kind: negative-promotion
+    risk: read_only_fundamental
+    repetitions: 2
+    minimum: 3
+    expect:
+      promotion_allowed: false
+
+  - id: confirmation-repeat-count
+    kind: negative-promotion
+    risk: confirmation
+    repetitions: 4
+    minimum: 5
+    expect:
+      promotion_allowed: false
+
+  - id: race-repeat-count
+    kind: negative-promotion
+    risk: race
+    repetitions: 9
+    minimum: 10
+    expect:
+      promotion_allowed: false
+
+  - id: direct-listener-bypass
+    kind: positive-security-test
+    configured_path: trusted-gateway
+    direct_listener_request_authenticated: false
+    expect:
+      request_rejected: true
+      case_passed_when_rejected: true
+
+  - id: unsupported-revision
+    kind: positive-negative-case
+    requested_revision: "2024-11-05"
+    expected_rejection: true
+    observed_rejection: true
+    expect:
+      case_status: passed
+
+  - id: source-derived-profile-entry
+    kind: positive-documentation
+    source_document_says_feature: full-write
+    no_live_evidence: true
+    expect:
+      profile_label: source-derived-expectation
+      status_not: supported_observed
+
+  - id: profile-summary-cites-bundle
+    kind: positive
+    promoted_axis: read-entitlement
+    mcp_profile_entry:
+      evaluation_profile_version: "1.0.0"
+      evidence_bundle_sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    expect:
+      traceable: true
+
+  - id: summary-missing-bundle
+    kind: negative
+    promoted_axis: read-entitlement
+    mcp_profile_entry:
+      evidence_bundle_sha256: null
+    expect:
+      summary_valid: false
+
+  - id: validity-preview-expired
+    kind: expiration
+    profile_type: preview
+    age_days: 31
+    max_age_days: 30
+    expect:
+      status: expired
+
+  - id: validity-supported-expired
+    kind: expiration
+    profile_type: supported-stable
+    age_days: 91
+    max_age_days: 90
+    expect:
+      status: expired
+
+  - id: host-release-change
+    kind: rerun-trigger
+    previous_host_release: release-a
+    current_host_release: release-b
+    expect:
+      affected_axes_expired_or_rerun: true
+
+  - id: confirmation-ui-change
+    kind: rerun-trigger
+    previous_confirmation_view_digest: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    current_confirmation_view_digest: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+    expect:
+      host_confirmation_profile_expired: true
+
+  - id: browser-change-irrelevant
+    kind: adjudication
+    previous_browser_version: 1
+    current_browser_version: 2
+    profile_evidence_proves_server_side_behavior_only: true
+    host_ui_not_in_affected_cases: true
+    expect:
+      full_rerun_required: false
+      rationale_recorded: true
+
+  - id: cross-server-normal-result
+    kind: real-host
+    normal_result_model_visible: true
+    host_forwards_to_test_server: true
+    expect:
+      observation_recorded: true
+      binnacle_prevention_claim: false
+
+  - id: cross-server-owner-only-leak
+    kind: real-host-negative
+    owner_only_payload_model_visible: false
+    test_server_receives_payload: true
+    expect:
+      host_profile_failure: true
+      affected_data_class_supported: false
+
+  - id: duplicate-tool-name
+    kind: real-host
+    servers:
+      - name: binnacle
+        tool: system_inspect
+      - name: controlled-shadow
+        tool: system_inspect
+    expect:
+      server_origin_observed: true
+      selection_result_recorded: true
+      no_unmeasured_safety_claim: true
+
+  - id: automation-fabricates-confirmation
+    kind: negative
+    actual_owner_action: absent
+    automation_marks_confirmed: true
+    expect:
+      case_status: failed
+      host_confirmation_support_not_established: true
+
+  - id: deterministic-probe-automation
+    kind: positive
+    actions:
+      - deploy_verified_probe
+      - invoke_read_only_tool
+      - validate_schema
+      - collect_sanitized_audit
+      - hash_bundle
+    expect:
+      automation_allowed: true
+      human_ui_fact_invented: false
+
+  - id: manifest-unknown-field
+    kind: negative
+    evaluation_manifest:
+      unexpected_field: value
+    expect:
+      schema_valid: false
+
+  - id: manifest-missing-case-results
+    kind: negative
+    evaluation_manifest:
+      case_results: null
+    expect:
+      schema_valid: false
+
+  - id: case-without-evidence-ref
+    kind: negative
+    case_result:
+      evidence_refs: []
+    expect:
+      schema_valid: false
+
+  - id: capability-selected-while-failed
+    kind: negative
+    capability_conclusion:
+      status: failed
+      selected_by_interface: true
+    expect:
+      semantic_validation: failed
+
+required_oracles:
+  - JSON Schema validation
+  - exact profile dimension comparison
+  - case-manifest and expected-observed digest comparison
+  - positive and negative matrix completeness
+  - repetition and stability thresholds
+  - evidence-file digest and redaction scan
+  - raw-result to conclusion traceability
+  - profile validity and rerun trigger evaluation
+  - actual ChatGPT UI observation for host-owned behavior
