@@ -1,373 +1,255 @@
-schema_version: "1.0"
-profile: binnacle-canonical-schema-validation
-source_contract: docs/mcp-schemas.md
-schema_documents:
+schema_version: "1.1"
+contract: MCP-SCHEMAS
+contract_version: "1.1.0"
+
+schema_registry:
   common: schemas/mcp/binnacle-common.schema.json
   inputs: schemas/mcp/bootstrap-inputs.schema.json
   outputs: schemas/mcp/bootstrap-outputs.schema.json
 
-test_dialect: https://json-schema.org/draft/2020-12/schema
-format_assertion_required:
-  - date-time
-  - contentEncoding-base64-where-validator-supports-it
+cases:
+  - id: all-bootstrap-definitions-present
+    kind: positive
+    expected_inputs:
+      - binnacle_probe.input.v1_1
+      - system_inspect.input.v1_1
+      - probe_result_formats.input.v1_1
+      - probe_error.input.v1_1
+      - compatibility_report.input.v1_1
+      - probe_workspace_prepare.input.v1_1
+      - probe_workspace_write.input.v1_1
+      - probe_workspace_cleanup.input.v1_1
+    expected_outputs:
+      - binnacle_probe.output.v1_1
+      - system_inspect.output.v1_1
+      - probe_result_formats.output.v1_1
+      - probe_error.output.v1_1
+      - compatibility_report.output.v1_1
+      - probe_workspace_prepare.output.v1_1
+      - probe_workspace_write.output.v1_1
+      - probe_workspace_cleanup.output.v1_1
+    expect:
+      all_present: true
 
-constants:
-  sha256_zero: "0000000000000000000000000000000000000000000000000000000000000000"
-  timestamp: "2026-08-08T00:00:00Z"
+  - id: empty-probe-valid
+    kind: positive
+    schema: binnacle_probe.input.v1_1
+    instance: {}
+    expect:
+      valid: true
 
-positive_inputs:
-  - id: binnacle-probe-empty
-    schema: binnacle_probe.input.v1
-    instance: {}
-  - id: compatibility-report-empty
-    schema: compatibility_report.input.v1
-    instance: {}
-  - id: system-inspect-default
-    schema: system_inspect.input.v1
-    instance: {}
-  - id: system-inspect-sections
-    schema: system_inspect.input.v1
+  - id: empty-probe-additional-property
+    kind: negative
+    schema: binnacle_probe.input.v1_1
     instance:
-      sections:
-        - os
-        - memory
-        - binnacle_service
-  - id: result-formats-default
-    schema: probe_result_formats.input.v1
-    instance: {}
-  - id: result-formats-bounded
-    schema: probe_result_formats.input.v1
-    instance:
-      include_warning: true
-      nullable_value: null
-      array_length: 16
-  - id: error-bounded-delay
-    schema: probe_error.input.v1
+      unexpected: true
+    expect:
+      valid: false
+
+  - id: bounded-delay-requires-delay
+    kind: negative
+    schema: probe_error.input.v1_1
     instance:
       case: bounded_delay
-      delay_ms: 1000
-  - id: error-no-delay
-    schema: probe_error.input.v1
+    expect:
+      valid: false
+
+  - id: non-delay-rejects-delay
+    kind: negative
+    schema: probe_error.input.v1_1
     instance:
       case: policy_rejection
-  - id: write-text
-    schema: probe_workspace_write.input.v1
+      delay_ms: 100
+    expect:
+      valid: false
+
+  - id: prepare-write-valid
+    kind: positive
+    schema: probe_workspace_prepare.input.v1_1
+    instance:
+      operation: write
+      relative_path: nested/test.txt
+      content_sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+      byte_count: 4
+    expect:
+      valid: true
+
+  - id: prepare-cleanup-valid
+    kind: positive
+    schema: probe_workspace_prepare.input.v1_1
+    instance:
+      operation: cleanup
+      relative_path: nested/test.txt
+      content_sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+      artifact_id: artifact-1
+    expect:
+      valid: true
+
+  - id: prepare-write-artifact-invalid
+    kind: negative
+    schema: probe_workspace_prepare.input.v1_1
+    instance:
+      operation: write
+      relative_path: test.txt
+      content_sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+      byte_count: 4
+      artifact_id: artifact-1
+    expect:
+      valid: false
+
+  - id: write-valid-text
+    kind: positive
+    schema: probe_workspace_write.input.v1_1
     instance:
       prepared_operation_id: prep-1
-      execution_nonce: nonce-0123456789abcdef
-      relative_path: nested/probe.txt
-      text: hello
+      execution_nonce: AAAAAAAAAAAAAAAAAAAAAA
+      idempotency_key: 00112233445566778899aabbccddeeff
+      relative_path: test.txt
+      text: test
       overwrite: false
-  - id: write-base64
-    schema: probe_workspace_write.input.v1
+    expect:
+      valid: true
+
+  - id: write-requires-preparation
+    kind: negative
+    schema: probe_workspace_write.input.v1_1
+    instance:
+      idempotency_key: 00112233445566778899aabbccddeeff
+      relative_path: test.txt
+      text: test
+      overwrite: false
+    expect:
+      valid: false
+
+  - id: write-text-and-base64-exclusive
+    kind: negative
+    schema: probe_workspace_write.input.v1_1
+    instance:
+      prepared_operation_id: prep-1
+      execution_nonce: AAAAAAAAAAAAAAAAAAAAAA
+      idempotency_key: 00112233445566778899aabbccddeeff
+      relative_path: test.txt
+      text: test
+      base64: dGVzdA==
+      overwrite: false
+    expect:
+      valid: false
+
+  - id: absolute-path-invalid
+    kind: negative
+    schema: probe_workspace_write.input.v1_1
+    instance:
+      prepared_operation_id: prep-1
+      execution_nonce: AAAAAAAAAAAAAAAAAAAAAA
+      idempotency_key: 00112233445566778899aabbccddeeff
+      relative_path: /etc/passwd
+      text: test
+      overwrite: false
+    expect:
+      valid: false
+
+  - id: traversal-path-invalid
+    kind: negative
+    schema: probe_workspace_write.input.v1_1
+    instance:
+      prepared_operation_id: prep-1
+      execution_nonce: AAAAAAAAAAAAAAAAAAAAAA
+      idempotency_key: 00112233445566778899aabbccddeeff
+      relative_path: ../escape
+      text: test
+      overwrite: false
+    expect:
+      valid: false
+
+  - id: backslash-path-invalid
+    kind: negative
+    schema: probe_workspace_write.input.v1_1
+    instance:
+      prepared_operation_id: prep-1
+      execution_nonce: AAAAAAAAAAAAAAAAAAAAAA
+      idempotency_key: 00112233445566778899aabbccddeeff
+      relative_path: "..\\escape"
+      text: test
+      overwrite: false
+    expect:
+      valid: false
+
+  - id: drive-path-invalid
+    kind: negative
+    schema: probe_workspace_write.input.v1_1
+    instance:
+      prepared_operation_id: prep-1
+      execution_nonce: AAAAAAAAAAAAAAAAAAAAAA
+      idempotency_key: 00112233445566778899aabbccddeeff
+      relative_path: "C:\\temp\\file"
+      text: test
+      overwrite: false
+    expect:
+      valid: false
+
+  - id: cleanup-single-artifact-valid
+    kind: positive
+    schema: probe_workspace_cleanup.input.v1_1
     instance:
       prepared_operation_id: prep-2
-      execution_nonce: nonce-fedcba9876543210
-      relative_path: probe.bin
-      base64: AAEC
-      overwrite: false
-  - id: cleanup-list
-    schema: probe_workspace_cleanup.input.v1
-    instance:
-      prepared_operation_id: prep-3
-      execution_nonce: nonce-0123456789abcdef
-      artifact_ids:
-        - artifact-1
-        - artifact-2
-  - id: cleanup-all-owned
-    schema: probe_workspace_cleanup.input.v1
-    instance:
-      prepared_operation_id: prep-4
-      execution_nonce: nonce-fedcba9876543210
-      all_owned: true
+      execution_nonce: BBBBBBBBBBBBBBBBBBBBBB
+      idempotency_key: ffeeddccbbaa99887766554433221100
+      relative_path: test.txt
+      artifact_id: artifact-1
+      content_sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    expect:
+      valid: true
 
-invalid_inputs:
-  - id: no-arg-unknown-field
-    schema: binnacle_probe.input.v1
+  - id: success-envelope-requires-operation-field
+    kind: negative
+    schema: binnacle_probe.output.v1_1
     instance:
-      surprise: true
-    expected_keyword: additionalProperties
-  - id: inspect-empty-sections
-    schema: system_inspect.input.v1
-    instance:
-      sections: []
-    expected_keyword: minItems
-  - id: inspect-duplicate-section
-    schema: system_inspect.input.v1
-    instance:
-      sections:
-        - os
-        - os
-    expected_keyword: uniqueItems
-  - id: inspect-unknown-section
-    schema: system_inspect.input.v1
-    instance:
-      sections:
-        - secrets
-    expected_keyword: enum
-  - id: format-array-too-large
-    schema: probe_result_formats.input.v1
-    instance:
-      array_length: 17
-    expected_keyword: maximum
-  - id: delay-missing
-    schema: probe_error.input.v1
-    instance:
-      case: bounded_delay
-    expected_keyword: required
-  - id: delay-forbidden-for-other-case
-    schema: probe_error.input.v1
-    instance:
-      case: policy_rejection
-      delay_ms: 10
-    expected_keyword: not
-  - id: delay-zero
-    schema: probe_error.input.v1
-    instance:
-      case: bounded_delay
-      delay_ms: 0
-    expected_keyword: minimum
-  - id: delay-over-limit
-    schema: probe_error.input.v1
-    instance:
-      case: bounded_delay
-      delay_ms: 10001
-    expected_keyword: maximum
-  - id: write-missing-content
-    schema: probe_workspace_write.input.v1
-    instance:
-      prepared_operation_id: prep-1
-      execution_nonce: nonce-0123456789abcdef
-      relative_path: probe.txt
-      overwrite: false
-    expected_keyword: oneOf
-  - id: write-both-content-forms
-    schema: probe_workspace_write.input.v1
-    instance:
-      prepared_operation_id: prep-1
-      execution_nonce: nonce-0123456789abcdef
-      relative_path: probe.txt
-      text: hello
-      base64: aGVsbG8=
-      overwrite: false
-    expected_keyword: oneOf
-  - id: write-absolute-path
-    schema: probe_workspace_write.input.v1
-    instance:
-      prepared_operation_id: prep-1
-      execution_nonce: nonce-0123456789abcdef
-      relative_path: /etc/shadow
-      text: hello
-      overwrite: false
-    expected_keyword: pattern
-  - id: write-parent-traversal
-    schema: probe_workspace_write.input.v1
-    instance:
-      prepared_operation_id: prep-1
-      execution_nonce: nonce-0123456789abcdef
-      relative_path: ../outside.txt
-      text: hello
-      overwrite: false
-    expected_keyword: pattern
-  - id: write-overwrite-true
-    schema: probe_workspace_write.input.v1
-    instance:
-      prepared_operation_id: prep-1
-      execution_nonce: nonce-0123456789abcdef
-      relative_path: probe.txt
-      text: hello
-      overwrite: true
-    expected_keyword: const
-  - id: write-short-nonce
-    schema: probe_workspace_write.input.v1
-    instance:
-      prepared_operation_id: prep-1
-      execution_nonce: short
-      relative_path: probe.txt
-      text: hello
-      overwrite: false
-    expected_keyword: minLength
-  - id: cleanup-neither-selector
-    schema: probe_workspace_cleanup.input.v1
-    instance:
-      prepared_operation_id: prep-1
-      execution_nonce: nonce-0123456789abcdef
-    expected_keyword: oneOf
-  - id: cleanup-both-selectors
-    schema: probe_workspace_cleanup.input.v1
-    instance:
-      prepared_operation_id: prep-1
-      execution_nonce: nonce-0123456789abcdef
-      artifact_ids:
-        - artifact-1
-      all_owned: true
-    expected_keyword: oneOf
-  - id: cleanup-empty-list
-    schema: probe_workspace_cleanup.input.v1
-    instance:
-      prepared_operation_id: prep-1
-      execution_nonce: nonce-0123456789abcdef
-      artifact_ids: []
-    expected_keyword: minItems
-  - id: cleanup-duplicate-id
-    schema: probe_workspace_cleanup.input.v1
-    instance:
-      prepared_operation_id: prep-1
-      execution_nonce: nonce-0123456789abcdef
-      artifact_ids:
-        - artifact-1
-        - artifact-1
-    expected_keyword: uniqueItems
+      schema_version: "1.1"
+      call_status: succeeded
+      tool:
+        name: binnacle_probe
+        contract_version: "1.1"
+      request_id: request-1
+      data: {}
+      evidence: []
+      warnings: []
+    expect:
+      valid: false
 
-base_templates:
-  evidence:
-    evidence_id: ev-1
-    recorded_at: "2026-08-08T00:00:00Z"
-    server_build:
-      version: "0.0.0"
-      sha256: "0000000000000000000000000000000000000000000000000000000000000000"
-    device:
-      device_id: pi-one
-      profile_version: "1.0"
-    controller_id_digest: "1111111111111111111111111111111111111111111111111111111111111111"
-    tool:
-      name: replace-per-case
-      version: "1.0"
-    policy:
-      version: "1.0"
-      decision: allowed
-    freshness:
-      observed_at: "2026-08-08T00:00:00Z"
-      max_age_ms: 1000
-      current: true
-    effect_knowledge: none
-    operation_id: null
-    audit_ref: audit-1
-    source_digests: []
-    destination_digests: []
-  operation_succeeded:
-    operation_id: op-1
-    state: succeeded
-    terminality: terminal
-    state_version: 3
-    effect_knowledge: known_effect
-    timestamps:
-      created_at: "2026-08-08T00:00:00Z"
-      updated_at: "2026-08-08T00:00:03Z"
-      authorised_at: "2026-08-08T00:00:01Z"
-      started_at: "2026-08-08T00:00:02Z"
-      paused_at: null
-      cancelling_at: null
-      terminal_or_reconciled_at: "2026-08-08T00:00:03Z"
-    progress:
-      known: true
-      completed: 1
-      total: 1
-      unit: effect
-    retry:
-      idempotency_mode: prepared-nonce
-      key_digest: "2222222222222222222222222222222222222222222222222222222222222222"
-      fingerprint: "3333333333333333333333333333333333333333333333333333333333333333"
-      duplicate_count: 0
-      conflict_count: 0
-      automatic_retry_allowed: false
-    cancellation:
-      requested: false
-      requested_at: null
-      phase: none
-      remaining_effects_verified: false
-    verification:
-      status: verified
-      verified_at: "2026-08-08T00:00:03Z"
-      evidence_refs:
-        - ev-1
-    retention:
-      class: IR1-local-reversible
-      result_expires_at: "2026-08-15T00:00:03Z"
-      record_expires_at: "2026-08-15T00:00:03Z"
-      tombstone_expires_at: "2026-09-07T00:00:03Z"
-    error: null
-  execution_error:
-    code: policy_rejected
-    message: The request is outside local policy.
-    retryable: false
-    retry_action: new_request
-    operation_id: null
-    details: []
+  - id: success-envelope-requires-warnings-field
+    kind: negative
+    schema: binnacle_probe.output.v1_1
+    instance:
+      schema_version: "1.1"
+      call_status: succeeded
+      tool:
+        name: binnacle_probe
+        contract_version: "1.1"
+      request_id: request-1
+      data: {}
+      operation: null
+      evidence: []
+    expect:
+      valid: false
 
-output_bindings:
-  - tool: binnacle_probe
-    schema: binnacle_probe.output.v1
-    operation_required_on_success: false
-  - tool: system_inspect
-    schema: system_inspect.output.v1
-    operation_required_on_success: false
-  - tool: probe_result_formats
-    schema: probe_result_formats.output.v1
-    operation_required_on_success: false
-  - tool: probe_error
-    schema: probe_error.output.v1
-    operation_required_on_success: false
-  - tool: compatibility_report
-    schema: compatibility_report.output.v1
-    operation_required_on_success: false
-  - tool: probe_workspace_write
-    schema: probe_workspace_write.output.v1
-    operation_required_on_success: true
-  - tool: probe_workspace_cleanup
-    schema: probe_workspace_cleanup.output.v1
-    operation_required_on_success: true
-
-required_generated_output_cases:
-  for_each_output_binding:
-    - schema_valid_success_with_exact_tool_identity
-    - schema_valid_execution_error_with_exact_tool_identity
-    - missing_required_field_rejected
-    - unknown_top_level_field_rejected
-    - unknown_data_field_rejected
-    - wrong_tool_name_rejected
-    - wrong_call_status_rejected
-    - evidence_missing_rejected
-    - evidence_secret_field_rejected
-    - wrong_data_type_rejected
-    - output_schema_digest_matches_tool_manifest
-
-specific_output_cases:
-  - id: write-success-without-operation
-    schema: probe_workspace_write.output.v1
-    mutation: remove-operation
-    expected_valid: false
-  - id: cleanup-success-without-operation
-    schema: probe_workspace_cleanup.output.v1
-    mutation: remove-operation
-    expected_valid: false
-  - id: status-call-success-representing-failed-operation
-    common_schema: success-envelope-with-tool-specific-data
-    mcp_is_error: false
-    represented_operation:
-      state: failed
-      terminality: terminal
-      effect_knowledge: partial
-    expected_valid: true
-  - id: status-call-success-representing-uncertain-operation
-    common_schema: success-envelope-with-tool-specific-data
-    mcp_is_error: false
-    represented_operation:
+  - id: uncertain-auto-retry-invalid
+    kind: negative
+    schema: common.operationSnapshot
+    instance_overrides:
       state: uncertain
       terminality: effect_terminal_reconcilable
       effect_knowledge: uncertain
-    expected_valid: true
-  - id: execution-error-mapped-to-is-error
-    call_status: execution_error
-    mcp_is_error: true
-    expected_valid: true
-  - id: succeeded-call-mapped-to-is-error
-    call_status: succeeded
-    mcp_is_error: true
-    expected_valid: false
+      retry:
+        automatic_retry_allowed: true
+    expect:
+      valid: false
 
-validator_requirements:
-  resolve_absolute_schema_ids: true
-  reject_unknown_format_when_profile_requires_assertion: true
-  validate_before_response_serialization: true
-  inspect_serialized_mcp_frame_separately: true
+  - id: failed-status-call-is-success
+    kind: positive
+    tool_call:
+      isError: false
+      call_status: succeeded
+    represented_operation:
+      state: failed
+    expect:
+      valid: true
