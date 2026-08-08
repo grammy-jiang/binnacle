@@ -1,918 +1,211 @@
-schema_version: "1.0"
-profile: binnacle-command-isolation
-source_contract: docs/security/command-execution.md
-profile_spec: spec/policy/command-profiles.yaml
-claimed_command_profile: workspace-general-v1
-real_kernel_required: true
+schema_version: "1.1"
+contract: COMMAND-EXECUTION-ISOLATION
+policy_version: "1.1.0"
+
+canonical_ticket: &canonical_ticket
+  ticket_id: ticket-1
+  operation_id: op-1
+  controller_id_digest: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  device_id: pi-a
+  command_profile_id: workspace-general-v1
+  executable_identity: /usr/bin/python3
+  argv_sha256: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  stdin_sha256: null
+  stdin_reference_sha256: null
+  workspace_script_sha256: null
+  workspace_root_identity: workspace-1
+  mount_plan_sha256: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+  environment_sha256: dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+  policy_sha256: eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+  resource_plan_sha256: ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+  sandbox_plan_sha256: 1111111111111111111111111111111111111111111111111111111111111111
+  workspace_write_bytes_max: 134217728
+  workspace_inode_count_max: 4096
+  expires_at: "2026-08-08T16:00:00Z"
+  admission_record_id: admission-1
+  single_use_nonce: nonce-1
 
 cases:
-  - id: separate-process-boundary
+  - id: canonical-ticket-valid
     kind: positive
-    architecture:
-      mcp_server_pid: 100
-      broker_pid: 200
-      executor_pid: 300
-      address_spaces_distinct: true
-      executor_uid_distinct: true
+    broker_ticket: *canonical_ticket
     expect:
-      boundary_pass: true
+      ticket_schema_valid: true
+      broker_accepts_once: true
 
-  - id: server-process-executes-command
+  - id: ticket-replay
     kind: negative
-    architecture:
-      mcp_server_pid: 100
-      executor_pid: 100
+    broker_ticket: *canonical_ticket
+    setup:
+      nonce_already_consumed: true
     expect:
-      profile_pass: false
+      result: rejected
+      error: execution_ticket_replayed
 
-  - id: executor-runs-as-binnacle-user
-    kind: negative
-    identities:
-      binnacle_uid: 1000
-      executor_uid: 1000
-    expect:
-      profile_pass: false
-
-  - id: executor-runs-as-owner-login
-    kind: negative
-    identities:
-      owner_uid: 1000
-      executor_uid: 1000
-    expect:
-      profile_pass: false
-
-  - id: broker-general-shell-api
-    kind: negative
-    broker_interface:
-      accepts_arbitrary_shell: true
-      ticket_required: false
-    expect:
-      profile_pass: false
-
-  - id: broker-ticket-valid
+  - id: inline-stdin-digest-bound
     kind: positive
-    ticket:
-      operation_id: op-1
-      controller_id: controller-a
-      profile: workspace-general-v1
-      executable_argv_digest: digest-a
-      mount_plan_digest: mount-a
-      environment_descriptor_digest: env-a
-      policy_digest: policy-a
-      expires_in_seconds: 30
-      admission_id: admission-1
-      used: false
-    broker_observation:
-      all_digests_match: true
+    broker_ticket:
+      <<: *canonical_ticket
+      stdin_sha256: 2222222222222222222222222222222222222222222222222222222222222222
+    admission_input:
+      stdin_sha256: 2222222222222222222222222222222222222222222222222222222222222222
     expect:
-      sandbox_admission_allowed: true
-      ticket_consumed_once: true
+      result: allowed
 
-  - id: broker-ticket-replay
+  - id: inline-stdin-substitution
     kind: negative
-    ticket:
-      admission_id: admission-1
-      used: true
+    broker_ticket:
+      <<: *canonical_ticket
+      stdin_sha256: 2222222222222222222222222222222222222222222222222222222222222222
+    admission_input:
+      stdin_sha256: 3333333333333333333333333333333333333333333333333333333333333333
     expect:
-      sandbox_started: false
+      result: rejected
+      error: execution_input_digest_mismatch
 
-  - id: broker-ticket-expired
+  - id: stdin-reference-substitution
     kind: negative
-    ticket:
-      expires_in_seconds: -1
+    broker_ticket:
+      <<: *canonical_ticket
+      stdin_reference_sha256: 4444444444444444444444444444444444444444444444444444444444444444
+    admission_input:
+      stdin_reference_sha256: 5555555555555555555555555555555555555555555555555555555555555555
     expect:
-      sandbox_started: false
+      result: rejected
+      error: execution_input_digest_mismatch
 
-  - id: broker-ticket-command-mismatch
+  - id: workspace-script-substitution
     kind: negative
-    ticket:
-      executable_argv_digest: digest-a
-    requested_execution:
-      executable_argv_digest: digest-b
+    broker_ticket:
+      <<: *canonical_ticket
+      workspace_script_sha256: 6666666666666666666666666666666666666666666666666666666666666666
+    admission_input:
+      workspace_script_sha256: 7777777777777777777777777777777777777777777777777777777777777777
     expect:
-      sandbox_started: false
+      result: rejected
+      error: execution_input_digest_mismatch
 
-  - id: executor-cannot-read-ticket
+  - id: workspace-check-profile-consistent
     kind: positive
-    executor:
-      ticket_visible_in_environment: false
-      ticket_visible_in_filesystem: false
-      broker_socket_visible: false
+    profile: workspace-check-v1
     expect:
-      boundary_pass: true
+      command_run_visible: true
+      command_run_allowed: true
+      network_default: denied
+      device_default: denied
+      raw_credentials: denied
 
-  - id: argv-no-shell-interpolation
+  - id: self-management-hidden
     kind: positive
-    request:
-      executable: /usr/bin/printf
-      argv:
-        - "%s"
-        - "$(touch /workspace/pwned)"
+    profile: self-management
     expect:
-      shell_spawned: false
-      pwned_file_created: false
-      literal_text_printed: true
+      command_run_visible: false
+      command_run_allowed: false
+      dedicated_self_management_tools_required: true
 
-  - id: shell-metacharacters-literal
+  - id: per-file-limit-not-aggregate-quota
+    kind: negative
+    setup:
+      per_file_size_max: 16777216
+      workspace_write_bytes_max: null
+      workspace_inode_count_max: null
+    workload:
+      files_created: 10000
+      bytes_per_file: 1048576
+    expect:
+      profile_valid: false
+      error: aggregate_workspace_quota_missing
+
+  - id: aggregate-workspace-byte-limit
     kind: positive
-    request:
-      executable: /usr/bin/printf
-      argv:
-        - "%s"
-        - "a; rm -rf /"
+    limits:
+      workspace_write_bytes_max: 134217728
+      workspace_inode_count_max: 4096
+    workload:
+      attempted_total_bytes: 134217729
     expect:
-      second_command_executed: false
+      process_tree_stopped_or_write_rejected: true
+      host_filesystem_limit_exceeded: false
 
-  - id: shell-c-option-rejected
+  - id: aggregate-workspace-inode-limit
+    kind: positive
+    limits:
+      workspace_inode_count_max: 4096
+    workload:
+      attempted_file_count: 4097
+    expect:
+      process_tree_stopped_or_create_rejected: true
+
+  - id: control-plane-read
     kind: negative
     request:
-      executable: /bin/sh
-      argv:
-        - -c
-        - make test
-    profile:
-      shell_language: denied
+      path: /var/lib/binnacle/policy
     expect:
-      operation_started: false
-      result: policy_rejected
+      result: denied
+      data_disclosed: false
 
-  - id: path-search-attacker-cwd
+  - id: inherited-local-socket
     kind: negative
-    workspace:
-      contains_executable_named_make: true
-    request:
-      executable: make
-    profile:
-      fixed_path_excludes_dot: true
-    expect:
-      workspace_executable_selected: false
-
-  - id: working-directory-parent-escape
-    kind: negative
-    request:
-      working_directory: ../../etc
-    expect:
-      operation_started: false
-      result: invalid_argument_or_policy_rejected
-
-  - id: workspace-root-symlink
-    kind: negative
-    configured_workspace: /workspace/link
-    filesystem:
-      /workspace/link: symlink-to-/etc
-    expect:
-      workspace_accepted: false
-
-  - id: workspace-root-replaced-after-prepare
-    kind: negative
-    prepared_workspace_identity: inode-a
-    current_workspace_identity: inode-b
-    expect:
-      sandbox_started: false
-      result: stale_state
-
-  - id: workspace-mount-changed-after-prepare
-    kind: negative
-    prepared_mount_id: mount-a
-    current_mount_id: mount-b
-    expect:
-      sandbox_started: false
-      result: stale_state
-
-  - id: symlink-race-inside-workspace
-    kind: negative
-    attack:
-      replace_valid_file_with_symlink_during_open: true
-      symlink_target: /etc/shadow
-    expect:
-      outside_content_read: false
-      outside_content_written: false
-      operation_failed_or_rejected: true
-
-  - id: hardlink-outside-workspace
-    kind: negative
-    attack:
-      create_hardlink_to_outside_object: true
-    expect:
-      link_creation_or_access_allowed: false
-
-  - id: proc-self-fd-escape
-    kind: negative
-    attack:
-      path: /proc/self/fd/9
-      fd_9_points_outside_sandbox: true
-    expect:
-      fd_9_inherited: false
-      outside_access: false
-
-  - id: proc-other-root-escape
-    kind: negative
-    attack:
-      path: /proc/1/root/etc/shadow
-    expect:
-      host_pid_visible: false
-      outside_access: false
-
-  - id: mount-escape
-    kind: negative
-    command:
-      syscall: mount
-    expect:
-      syscall_allowed: false
-      new_mount_created: false
-
-  - id: bind-mount-escape
-    kind: negative
-    command:
-      syscall: mount-bind
-      source: /host
-      target: /workspace/host
-    expect:
-      syscall_allowed: false
-
-  - id: unshare-mount-namespace
-    kind: negative
-    command:
-      syscall: unshare
-      flags: CLONE_NEWNS
-    expect:
-      syscall_allowed: false
-
-  - id: setns-host-namespace
-    kind: negative
-    command:
-      syscall: setns
-    expect:
-      syscall_allowed: false
-
-  - id: chroot-pivot-root
-    kind: negative
-    command:
-      syscalls:
-        - chroot
-        - pivot_root
-    expect:
-      syscalls_allowed: false
-
-  - id: host-root-not-visible
-    kind: positive
-    executor_paths:
-      - /etc
-      - /workspace
-      - /tmp
-      - /proc
-    host_root_mount_visible: false
-    expect:
-      boundary_pass: true
-
-  - id: owner-home-read
-    kind: negative
-    command:
-      read: /home/owner/.ssh/id_rsa
-    expect:
-      path_visible: false
-      data_returned: false
-
-  - id: root-home-read
-    kind: negative
-    command:
-      read: /root/.ssh/id_rsa
-    expect:
-      path_visible: false
-
-  - id: binnacle-policy-read
-    kind: negative
-    command:
-      read: /var/lib/binnacle/policy
-    expect:
-      path_visible: false
-
-  - id: binnacle-operation-db-read
-    kind: negative
-    command:
-      read: /var/lib/binnacle/operations.db
-    expect:
-      path_visible: false
-
-  - id: binnacle-audit-write
-    kind: negative
-    command:
-      write: /var/log/binnacle/audit.log
-    expect:
-      path_visible: false
-      audit_modified: false
-
-  - id: binnacle-executable-write
-    kind: negative
-    command:
-      write: /usr/bin/binnacle
-    expect:
-      path_visible_or_writable: false
-
-  - id: binnacle-service-socket
-    kind: negative
-    command:
-      connect_unix: /run/binnacle/control.sock
-    expect:
-      socket_visible: false
-      connection_established: false
-
-  - id: docker-socket
-    kind: negative
-    command:
-      connect_unix: /var/run/docker.sock
-    expect:
-      socket_visible: false
-
-  - id: systemd-private-socket
-    kind: negative
-    command:
-      connect_unix: /run/systemd/private
-    expect:
-      socket_visible: false
-
-  - id: ssh-agent-socket
-    kind: negative
-    environment:
-      SSH_AUTH_SOCK: /run/user/1000/ssh-agent.sock
-    expect:
-      variable_present: false
-      socket_visible: false
-
-  - id: dbus-socket
-    kind: negative
-    environment:
-      DBUS_SESSION_BUS_ADDRESS: unix:path=/run/user/1000/bus
-    expect:
-      variable_present: false
-      socket_visible: false
-
-  - id: inherited-listener-fd
-    kind: negative
-    parent:
-      open_listening_socket_fd: 7
+    setup:
+      parent_has_unix_socket: true
     executor:
-      inspect_fd: 7
+      inherited_descriptors: []
     expect:
-      fd_present: false
-
-  - id: inherited-policy-fd
-    kind: negative
-    parent:
-      open_policy_file_fd: 8
-    executor:
-      inspect_fd: 8
-    expect:
-      fd_present: false
-
-  - id: inherited-directory-fd
-    kind: negative
-    parent:
-      open_directory_fd: 9
-      target: /etc
-    executor:
-      inspect_fd: 9
-    expect:
-      fd_present: false
-
-  - id: inherited-shared-memory-secret
-    kind: negative
-    parent:
-      shared_memory_contains_secret: true
-    executor:
-      inherited_shared_memory: false
-    expect:
-      secret_visible: false
-
-  - id: inherited-access-token-env
-    kind: negative
-    parent_environment:
-      GITHUB_TOKEN: secret
-    executor:
-      inspect_environment: true
-    expect:
-      GITHUB_TOKEN_present: false
-
-  - id: inherited-proxy-env
-    kind: negative
-    parent_environment:
-      HTTPS_PROXY: http://proxy.example.invalid
-    executor:
-      inspect_environment: true
-    expect:
-      HTTPS_PROXY_present: false
-
-  - id: inherited-loader-env
-    kind: negative
-    parent_environment:
-      LD_PRELOAD: /workspace/evil.so
-      PYTHONPATH: /workspace/evil
-      NODE_OPTIONS: --require=/workspace/evil.js
-    executor:
-      inspect_environment: true
-    expect:
-      LD_PRELOAD_present: false
-      PYTHONPATH_present: false
-      NODE_OPTIONS_present: false
-
-  - id: host-home-env
-    kind: negative
-    parent_environment:
-      HOME: /home/owner
-    expect:
-      executor_HOME_is_sandbox: true
-      host_HOME_present: false
+      socket_available: false
 
   - id: ipv4-egress
     kind: negative
     command:
-      socket_family: AF_INET
-      target: 203.0.113.10:443
+      argv: [python3, -c, "import socket; socket.create_connection(('203.0.113.1',443))"]
     expect:
-      socket_or_connect_allowed: false
+      network_connection_established: false
 
   - id: ipv6-egress
     kind: negative
     command:
-      socket_family: AF_INET6
-      target: "[2001:db8::1]:443"
+      argv: [python3, -c, "import socket; socket.socket(socket.AF_INET6)"]
     expect:
-      socket_or_connect_allowed: false
+      network_connection_established: false
 
-  - id: dns-egress
+  - id: device-node-access
     kind: negative
-    command:
-      operation: getaddrinfo
-      hostname: example.invalid
+    request:
+      path: /dev/gpiomem
     expect:
-      external_dns_request_sent: false
-      resolution_succeeds_from_host_network: false
+      result: denied
 
-  - id: loopback-service
+  - id: fork-bomb-contained
     kind: negative
-    command:
-      connect: 127.0.0.1:8000
-    expect:
-      connection_established: false
-
-  - id: unix-abstract-socket
-    kind: negative
-    command:
-      connect_unix_abstract: binnacle-control
-    expect:
-      connection_established: false
-
-  - id: raw-packet-socket
-    kind: negative
-    command:
-      socket_family: AF_PACKET
-    expect:
-      socket_created: false
-
-  - id: netlink-socket
-    kind: negative
-    command:
-      socket_family: AF_NETLINK
-      purpose: route-inspection
-    profile:
-      netlink_proven_harmless: false
-    expect:
-      socket_created: false
-
-  - id: bluetooth-socket
-    kind: negative
-    command:
-      socket_family: AF_BLUETOOTH
-    expect:
-      socket_created: false
-
-  - id: block-device-read
-    kind: negative
-    command:
-      read: /dev/mmcblk0
-    expect:
-      path_visible: false
-
-  - id: gpio-device
-    kind: negative
-    command:
-      open: /dev/gpiochip0
-    expect:
-      path_visible: false
-
-  - id: i2c-device
-    kind: negative
-    command:
-      open: /dev/i2c-1
-    expect:
-      path_visible: false
-
-  - id: tty-device
-    kind: negative
-    command:
-      open: /dev/ttyAMA0
-    expect:
-      path_visible: false
-
-  - id: fuse-device
-    kind: negative
-    command:
-      open: /dev/fuse
-    expect:
-      path_visible: false
-
-  - id: pseudo-device-list
-    kind: positive
-    expected_visible:
-      - /dev/null
-      - /dev/zero
-      - /dev/urandom
-    expect:
-      only_profile_devices_visible: true
-
-  - id: setuid-binary
-    kind: negative
-    command:
-      execute_setuid_binary: true
-    expect:
-      privilege_gained: false
-      no_new_privileges_effective: true
-
-  - id: file-capability-binary
-    kind: negative
-    command:
-      execute_file_with_capabilities: true
-    expect:
-      capability_gained: false
-
-  - id: ambient-capability
-    kind: negative
-    executor:
-      request_ambient_capability: CAP_NET_ADMIN
-    expect:
-      capability_present: false
-
-  - id: sudo
-    kind: negative
-    command:
-      executable: /usr/bin/sudo
-      argv:
-        - id
-    expect:
-      executable_unavailable_or_privilege_denied: true
-
-  - id: polkit
-    kind: negative
-    command:
-      invoke_polkit: true
-    expect:
-      host_bus_visible: false
-      privilege_gained: false
-
-  - id: ptrace-host-process
-    kind: negative
-    command:
-      syscall: ptrace
-      target_pid: host-process
-    expect:
-      syscall_allowed: false
-
-  - id: process-vm-read
-    kind: negative
-    command:
-      syscall: process_vm_readv
-      target_pid: host-process
-    expect:
-      syscall_allowed: false
-
-  - id: bpf-load
-    kind: negative
-    command:
-      syscall: bpf
-    expect:
-      syscall_allowed: false
-
-  - id: perf-event
-    kind: negative
-    command:
-      syscall: perf_event_open
-    expect:
-      syscall_allowed: false
-
-  - id: keyctl
-    kind: negative
-    command:
-      syscall: keyctl
-    expect:
-      syscall_allowed: false
-
-  - id: reboot
-    kind: negative
-    command:
-      syscall: reboot
-    expect:
-      syscall_allowed: false
-      host_rebooted: false
-
-  - id: set-time
-    kind: negative
-    command:
-      syscall: clock_settime
-    expect:
-      syscall_allowed: false
-
-  - id: device-node-create
-    kind: negative
-    command:
-      syscall: mknod
-    expect:
-      syscall_allowed: false
-
-  - id: io-uring-unreviewed
-    kind: negative
-    command:
-      syscall: io_uring_setup
-    profile:
-      syscall_reviewed: false
-    expect:
-      syscall_allowed: false
-
-  - id: unknown-syscall
-    kind: negative
-    command:
-      syscall: architecture_unknown_syscall
-    expect:
-      syscall_allowed: false
-
-  - id: fork-bomb
-    kind: negative
-    command:
-      behavior: exponential-fork
+    workload:
+      descendant_count_attempted: 10000
     limits:
-      pids_max: 64
+      pids_max: 256
     expect:
-      descendants_never_exceed_limit: true
-      host_binnacle_responsive: true
-      operation_failed_or_cancelled: true
+      maximum_descendants: 256
+      cleanup_verifies_all_descendants: true
 
-  - id: thread-bomb
+  - id: daemonization-does-not-escape
     kind: negative
-    command:
-      behavior: create-unbounded-threads
-    limits:
-      pids_max: 64
+    workload:
+      double_fork: true
+      new_process_group: true
     expect:
-      threads_bounded: true
+      descendant_remains_accounted: true
+      cleanup_verifies_all_descendants: true
 
-  - id: memory-exhaustion
+  - id: cleanup-failure-not-cancelled
     kind: negative
-    command:
-      behavior: allocate-unbounded-memory
-    limits:
-      memory_max_bytes: 134217728
-      swap_max_bytes: 0
-    expect:
-      operation_domain_bounded: true
-      host_binnacle_responsive: true
-
-  - id: cpu-exhaustion
-    kind: negative
-    command:
-      behavior: busy-loop
-    limits:
-      cpu_quota: bounded
-      wall_timeout_seconds: 5
-    expect:
-      cpu_bounded: true
-      operation_terminated_by_timeout: true
-
-  - id: file-size-exhaustion
-    kind: negative
-    command:
-      behavior: write-unbounded-file
-    limits:
-      file_size_max_bytes: 10485760
-    expect:
-      workspace_growth_bounded: true
-
-  - id: tmpfs-exhaustion
-    kind: negative
-    command:
-      behavior: fill-temp
-    limits:
-      temporary_storage_max_bytes: 10485760
-    expect:
-      host_storage_unaffected: true
-
-  - id: descriptor-exhaustion
-    kind: negative
-    command:
-      behavior: open-unbounded-files
-    limits:
-      open_files_max: 128
-    expect:
-      executor_bounded: true
-      server_descriptors_unaffected: true
-
-  - id: stdout-flood
-    kind: negative
-    command:
-      behavior: infinite-stdout
-    limits:
-      stdout_max_bytes: 1048576
-    expect:
-      memory_and_storage_bounded: true
-      truncation_flag: true
-      child_stopped_or_output_drained_per_contract: true
-
-  - id: stderr-flood
-    kind: negative
-    command:
-      behavior: infinite-stderr
-    limits:
-      stderr_max_bytes: 1048576
-    expect:
-      memory_and_storage_bounded: true
-      truncation_flag: true
-
-  - id: binary-output
-    kind: positive
-    command:
-      output: invalid-utf8
-    expect:
-      model_result_valid_utf8_or_bounded_binary_representation: true
-      output_provenance: local-untrusted
-
-  - id: terminal-escape-output
-    kind: negative
-    command:
-      output_contains_terminal_control_sequences: true
-    expect:
-      unsafe_terminal_effect: false
-      sanitized_or_escaped_representation: true
-
-  - id: core-dump
-    kind: negative
-    command:
-      behavior: crash-and-core
-    expect:
-      host_core_dump_created: false
-
-  - id: double-fork-daemon
-    kind: negative
-    command:
-      behavior: double-fork-setsid-and-sleep
-    expect:
-      descendant_remains_in_operation_domain: true
-      descendant_removed_before_terminal_success: true
-
-  - id: reparent-to-init
-    kind: negative
-    command:
-      behavior: orphan-child
-    expect:
-      child_remains_in_operation_domain: true
-      cleanup_tracks_child: true
-
-  - id: cgroup-migration
-    kind: negative
-    command:
-      behavior: write_other_cgroup_procs
-    expect:
-      operation_allowed: false
-      descendant_escapes: false
-
-  - id: ignore-sigterm
-    kind: positive-cancellation
-    command:
-      behavior: ignore-SIGTERM
     cancellation:
-      grace_seconds: 1
-      forced_signal: SIGKILL
-    expect:
-      all_descendants_terminated: true
-      cancelled_only_after_cleanup_verified: true
-
-  - id: change-process-group-before-cancel
-    kind: positive-cancellation
-    command:
-      behavior: create-new-process-group-and-session
-    expect:
-      cancellation_reaches_all_descendants: true
-
-  - id: leader-exits-child-remains
-    kind: negative
-    command:
-      behavior: leader-exits-child-sleeps
-    expect:
-      operation_succeeded_on_leader_exit: false
-      child_terminated_or_waited: true
-
-  - id: cleanup-unmount-failure
-    kind: negative
-    cleanup:
-      unmount_succeeds: false
-    expect:
-      operation_state:
-        - failed
-        - uncertain
-      conflicting_command_profiles_quarantined: true
-      automatic_retry: false
-
-  - id: surviving-descendant-unobservable
-    kind: negative
-    cleanup:
-      domain_empty_proven: false
+      requested: true
+      descendants_remaining: 1
     expect:
       operation_state: uncertain
-      new_conflicting_command_allowed: false
+      verified_cancelled: false
 
-  - id: command-self-restart-binnacle
+  - id: direct-subprocess-fallback-forbidden
     kind: negative
-    command:
-      action: signal-binnacle-service
+    setup:
+      sandbox_control_unavailable: true
     expect:
-      binnacle_process_visible_or_signalable: false
-      effect: false
-
-  - id: command-modify-service-unit
-    kind: negative
-    command:
-      write: /etc/systemd/system/binnacle.service
-    expect:
-      path_visible_or_writable: false
-
-  - id: command-call-broker-socket
-    kind: negative
-    command:
-      connect_unix: /run/binnacle/executor-broker.sock
-    expect:
-      socket_visible: false
-
-  - id: source-workspace-separated-from-installed-control-plane
-    kind: positive
-    workspace: /workspace/binnacle-source
-    installed_control_plane: /opt/binnacle
-    executor:
-      workspace_write: true
-      installed_control_plane_visible: false
-    expect:
-      source_edit_possible: true
-      current_server_modified_directly: false
-
-  - id: required-kernel-control-missing
-    kind: negative
-    kernel_features:
-      descendant_cgroup: false
-    expect:
-      command_run_visible: false
-      command_run_allowed: false
-      fallback_direct_subprocess: false
-
-  - id: syscall-policy-missing
-    kind: negative
-    kernel_features:
-      syscall_policy: false
-    expect:
-      command_run_allowed: false
-
-  - id: network-isolation-test-unavailable
-    kind: negative
-    validation:
-      network_escape_test_executed: false
-    expect:
-      profile_promoted: false
-
-  - id: architecture-change
-    kind: regression-trigger
-    old_architecture: aarch64
-    new_architecture: armv7l
-    expect:
-      syscall_and_isolation_profile_revalidation_required: true
-
-  - id: kernel-update
-    kind: regression-trigger
-    old_kernel: kernel-a
-    new_kernel: kernel-b
-    expect:
-      escape_and_cleanup_regression_required: true
-
-  - id: final-evidence
-    kind: positive
-    expect_evidence_fields:
-      - command_profile_and_version
-      - executable_and_argv_digest
-      - workspace_identity_and_mount_plan_digest
-      - environment_and_descriptor_plan_digest
-      - sandbox_backend_and_feature_results
-      - uid_gid_and_capabilities
-      - syscall_and_mac_policy
-      - resource_domain_identity
-      - start_and_end_times
-      - exit_code_signal_timeout_or_cancellation
-      - descendant_and_cleanup_verification
-      - resource_usage
-      - stdout_stderr_digests_sizes_and_truncation
-      - workspace_effect_digest
-      - network_device_and_credential_authority
-      - terminal_operation_state
+      command_run_supported: false
+      subprocess_started: false
