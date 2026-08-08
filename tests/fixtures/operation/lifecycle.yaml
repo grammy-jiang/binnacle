@@ -1,0 +1,457 @@
+schema_version: "1.0"
+profile: binnacle-operation-lifecycle
+source_contract: docs/mcp-schemas.md
+lifecycle_spec: spec/operation/lifecycle.yaml
+operation_schema: schemas/mcp/binnacle-common.schema.json#/$defs/operationSnapshot
+
+states:
+  - received
+  - rejected
+  - authorised
+  - running
+  - paused
+  - cancelling
+  - cancelled
+  - succeeded
+  - failed
+  - uncertain
+
+allowed_transition_cases:
+  - id: received-rejected
+    from: received
+    to: rejected
+    conditions:
+      effect_count: 0
+      error_present: true
+  - id: received-authorised
+    from: received
+    to: authorised
+    conditions:
+      admission_evidence_present: true
+  - id: authorised-running
+    from: authorised
+    to: running
+    conditions:
+      execution_start_recorded: true
+  - id: authorised-cancelling
+    from: authorised
+    to: cancelling
+    conditions:
+      cancellation_requested: true
+  - id: authorised-cancelled-no-effect
+    from: authorised
+    to: cancelled
+    conditions:
+      verified_no_effect: true
+      cancellation_phase: verified
+  - id: authorised-failed
+    from: authorised
+    to: failed
+    conditions:
+      error_present: true
+      effect_knowledge: known_no_effect
+  - id: authorised-uncertain
+    from: authorised
+    to: uncertain
+    conditions:
+      error_present: true
+      effect_knowledge: uncertain
+  - id: running-paused
+    from: running
+    to: paused
+    conditions:
+      safe_boundary_recorded: true
+  - id: running-cancelling
+    from: running
+    to: cancelling
+    conditions:
+      cancellation_requested: true
+  - id: running-succeeded
+    from: running
+    to: succeeded
+    conditions:
+      verification_status: verified
+  - id: running-failed
+    from: running
+    to: failed
+    conditions:
+      error_present: true
+      remaining_effects_known: true
+  - id: running-uncertain
+    from: running
+    to: uncertain
+    conditions:
+      error_present: true
+      effect_knowledge: uncertain
+  - id: paused-running
+    from: paused
+    to: running
+    conditions:
+      same_operation: true
+      policy_revalidated: true
+      state_revalidated: true
+      contract_permits_resume: true
+  - id: paused-cancelling
+    from: paused
+    to: cancelling
+    conditions:
+      cancellation_requested: true
+  - id: paused-failed
+    from: paused
+    to: failed
+    conditions:
+      error_present: true
+  - id: paused-uncertain
+    from: paused
+    to: uncertain
+    conditions:
+      error_present: true
+      effect_knowledge: uncertain
+  - id: cancelling-cancelled
+    from: cancelling
+    to: cancelled
+    conditions:
+      cancellation_phase: verified
+      remaining_effects_verified: true
+  - id: cancelling-succeeded
+    from: cancelling
+    to: succeeded
+    conditions:
+      effect_completed_before_stop: true
+      verification_status: verified
+  - id: cancelling-failed
+    from: cancelling
+    to: failed
+    conditions:
+      error_present: true
+      remaining_effects_known: true
+  - id: cancelling-uncertain
+    from: cancelling
+    to: uncertain
+    conditions:
+      error_present: true
+      effect_knowledge: uncertain
+  - id: uncertain-succeeded
+    from: uncertain
+    to: succeeded
+    conditions:
+      reconciliation_only: true
+      effect_replayed: false
+      verification_status: verified
+  - id: uncertain-failed
+    from: uncertain
+    to: failed
+    conditions:
+      reconciliation_only: true
+      effect_replayed: false
+      remaining_effects_known: true
+  - id: uncertain-cancelled
+    from: uncertain
+    to: cancelled
+    conditions:
+      reconciliation_only: true
+      effect_replayed: false
+      cancellation_result_verified: true
+
+forbidden_transition_cases:
+  - id: received-running
+    from: received
+    to: running
+  - id: received-succeeded
+    from: received
+    to: succeeded
+  - id: rejected-authorised
+    from: rejected
+    to: authorised
+  - id: rejected-running
+    from: rejected
+    to: running
+  - id: authorised-succeeded-direct
+    from: authorised
+    to: succeeded
+  - id: running-authorised
+    from: running
+    to: authorised
+  - id: running-received
+    from: running
+    to: received
+  - id: paused-authorised
+    from: paused
+    to: authorised
+  - id: cancelling-running
+    from: cancelling
+    to: running
+  - id: cancelled-running
+    from: cancelled
+    to: running
+  - id: succeeded-running
+    from: succeeded
+    to: running
+  - id: failed-running
+    from: failed
+    to: running
+  - id: uncertain-running
+    from: uncertain
+    to: running
+  - id: uncertain-authorised
+    from: uncertain
+    to: authorised
+
+state_consistency_cases:
+  - id: received-non-terminal
+    state: received
+    terminality: non_terminal
+    effect_knowledge: none
+    expected_valid: true
+  - id: received-terminal-invalid
+    state: received
+    terminality: terminal
+    effect_knowledge: none
+    expected_valid: false
+  - id: rejected-known-effect-invalid
+    state: rejected
+    terminality: terminal
+    effect_knowledge: known_effect
+    error_present: true
+    expected_valid: false
+  - id: rejected-missing-error
+    state: rejected
+    terminality: terminal
+    effect_knowledge: known_no_effect
+    error_present: false
+    expected_valid: false
+  - id: running-partial
+    state: running
+    terminality: non_terminal
+    effect_knowledge: partial
+    expected_valid: true
+  - id: succeeded-verification-pending
+    state: succeeded
+    terminality: terminal
+    effect_knowledge: known_effect
+    verification_status: pending
+    expected_valid: false
+  - id: succeeded-verified
+    state: succeeded
+    terminality: terminal
+    effect_knowledge: known_effect
+    verification_status: verified
+    expected_valid: true
+  - id: failed-missing-error
+    state: failed
+    terminality: terminal
+    effect_knowledge: partial
+    error_present: false
+    expected_valid: false
+  - id: uncertain-terminal-invalid
+    state: uncertain
+    terminality: terminal
+    effect_knowledge: uncertain
+    error_present: true
+    expected_valid: false
+  - id: uncertain-reconcilable
+    state: uncertain
+    terminality: effect_terminal_reconcilable
+    effect_knowledge: uncertain
+    error_present: true
+    automatic_retry_allowed: false
+    expected_valid: true
+  - id: uncertain-known-effect-invalid
+    state: uncertain
+    terminality: effect_terminal_reconcilable
+    effect_knowledge: known_effect
+    error_present: true
+    expected_valid: false
+  - id: cancelled-unverified
+    state: cancelled
+    terminality: terminal
+    effect_knowledge: partial
+    cancellation_phase: forced
+    remaining_effects_verified: false
+    expected_valid: false
+  - id: cancelled-verified
+    state: cancelled
+    terminality: terminal
+    effect_knowledge: partial
+    cancellation_phase: verified
+    remaining_effects_verified: true
+    expected_valid: true
+
+creation_boundary_cases:
+  - id: authentication-failure
+    event: authentication_failure
+    operation_created: false
+  - id: protocol-failure
+    event: protocol_failure
+    operation_created: false
+  - id: unknown-tool
+    event: unknown_tool
+    operation_created: false
+  - id: input-schema-failure
+    event: input_schema_failure
+    operation_created: false
+  - id: authenticated-mutating-request
+    event: authenticated_schema_valid_mutating_request_after_idempotency_reservation
+    operation_created: true
+    initial_state: received
+  - id: retained-long-running-read
+    event: explicitly_retained_read_or_long_running_request
+    operation_created: true
+    initial_state: received
+
+state_version_cases:
+  - id: version-starts-one
+    new_operation_state_version: 1
+    expected_valid: true
+  - id: state-change-increments
+    old_version: 3
+    new_version: 4
+    state_changed: true
+    expected_valid: true
+  - id: state-change-same-version
+    old_version: 3
+    new_version: 3
+    state_changed: true
+    expected_valid: false
+  - id: stale-snapshot-overwrite
+    current_version: 5
+    incoming_version: 4
+    overwrite_attempted: true
+    expected_allowed: false
+  - id: duplicate-identical-snapshot
+    current_version: 5
+    incoming_version: 5
+    content_identical: true
+    expected_action: reconcile_no_change
+  - id: equal-version-different-content
+    current_version: 5
+    incoming_version: 5
+    content_identical: false
+    expected_action: integrity_failure
+
+progress_cases:
+  - id: unknown-progress
+    progress:
+      known: false
+      completed: 0
+      total: null
+      unit: null
+    expected_valid: true
+  - id: completed-greater-than-total
+    progress:
+      known: true
+      completed: 11
+      total: 10
+      unit: items
+    expected_valid: false
+  - id: known-without-total
+    progress:
+      known: true
+      completed: 1
+      total: null
+      unit: items
+    expected_valid: false
+  - id: known-without-unit
+    progress:
+      known: true
+      completed: 1
+      total: 10
+      unit: null
+    expected_valid: false
+
+retry_cases:
+  - id: same-key-same-fingerprint
+    same_operation_identity: true
+    same_fingerprint: true
+    expected_action: return_or_advance_retained_lifecycle
+    duplicate_effect: false
+  - id: same-key-different-fingerprint
+    same_operation_identity: true
+    same_fingerprint: false
+    expected_error: idempotency_conflict
+  - id: uncertain-auto-retry
+    state: uncertain
+    automatic_retry_attempted: true
+    expected_allowed: false
+  - id: uncertain-new-identity-same-target
+    state: uncertain
+    new_operation_identity: true
+    same_target_effect: true
+    expected_error: operation_reconciliation_required
+
+cancellation_cases:
+  - id: cancellation-request-not-terminal
+    state_before: running
+    cancellation_request_accepted: true
+    allowed_state_after:
+      - cancelling
+      - running
+      - uncertain
+    direct_cancelled_without_verification: false
+  - id: mcp-cancel-ack-not-operation-cancelled
+    mcp_acknowledged: true
+    local_cancellation_verified: false
+    expected_operation_state_not: cancelled
+  - id: repeated-cancellation-request
+    requests: 10
+    underlying_operation_count: 1
+    cancellation_lifecycle_count: 1
+
+retention_cases:
+  - id: running-auto-expiry
+    state: running
+    record_expired_automatically: true
+    expected_allowed: false
+  - id: uncertain-auto-expiry
+    state: uncertain
+    reconciled: false
+    record_expired_automatically: true
+    expected_allowed: false
+  - id: terminal-result-compaction
+    state: succeeded
+    minimum_retention_satisfied: true
+    tombstone_preserved: true
+    expected_allowed: true
+  - id: tombstone-removal-enables-replay
+    security_relevant: true
+    removed: true
+    expected_allowed: false
+  - id: persistence-failure
+    new_mutating_operation: true
+    durable_record_available: false
+    expected_error: idempotency_unavailable
+    effect_count: 0
+
+call_vs_operation_cases:
+  - id: successful-status-failed-operation
+    call_status: succeeded
+    mcp_is_error: false
+    represented_state: failed
+    expected_valid: true
+  - id: successful-status-cancelled-operation
+    call_status: succeeded
+    mcp_is_error: false
+    represented_state: cancelled
+    expected_valid: true
+  - id: successful-status-uncertain-operation
+    call_status: succeeded
+    mcp_is_error: false
+    represented_state: uncertain
+    expected_valid: true
+  - id: execution-error-current-call
+    call_status: execution_error
+    mcp_is_error: true
+    represented_operation_may_exist: true
+    expected_valid: true
+  - id: protocol-error-wrapped-as-structured-error
+    protocol_error: true
+    structured_tool_result_returned: true
+    expected_valid: false
+
+required_test_oracle:
+  validate_json_schema: true
+  validate_transition_graph: true
+  validate_state_specific_fields: true
+  validate_state_version_order: true
+  validate_call_status_to_is_error_mapping: true
+  validate_no_duplicate_effect_on_retry: true
