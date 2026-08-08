@@ -1,224 +1,143 @@
-schema_version: "1.0"
-policy_id: binnacle-capability-zones
-policy_version: "1.0.0"
-default_composition: deny
+schema_version: "1.1"
+policy_id: capability-composition
+policy_version: "1.1.0"
 
 zones:
-  Z0-control-plane:
-    purpose: Binnacle executable state, identities, policy, operation registry, audit integrity, recovery, and credential storage.
+  control-plane:
     model_visible: false
-    ordinary_tool_access: none
-    network_default: deny
-    credential_default: deny
-
-  Z1-local-observation:
-    purpose: Bounded local facts produced by reviewed observers without arbitrary content ingestion.
-    allowed_information_classes:
-      - normal-result
-      - restricted-result
-    network_default: deny
-    credential_default: deny
-
-  Z2-untrusted-content:
-    purpose: Repository, file, log, package, command, peripheral, or external content treated as data, not instructions.
-    provenance_outputs:
-      - local-untrusted
-      - external-untrusted
-    network_default: deny
-    credential_default: deny
-
-  Z3-protected-data:
-    purpose: Owner data and configuration with restricted disclosure.
-    allowed_information_classes:
-      - restricted-result
-      - never-disclosable
-    model_disclosure_default: deny
-    network_default: deny
-    credential_default: deny
-
-  Z4-local-mutation:
-    purpose: Workspace file changes, local commands, service changes, and controlled development work.
-    filesystem_default: approved-workspace-only
-    network_default: deny
-    credential_default: deny
-    device_default: deny
-    control_plane_access: deny
-
-  Z5-credential-broker:
-    purpose: Non-exportable use of one credential for one reviewed target action.
-    raw_secret_readable: false
-    destination_required: true
-    action_allowlist_required: true
-
-  Z6-mediated-egress:
-    purpose: Dedicated reviewed network communication with exact destination and data contract.
-    default: deny
-    effective_target_validation: required
-    dlp: required
-    arbitrary_command_access: false
-
-  Z7-hardware-effect:
-    purpose: GPIO, buses, devices, and peripherals under a separate hardware profile.
-    default: deny
-    reservation_required: true
-    physical_effect_contract_required: true
-
-provenance_classes:
-  server-fact:
-    authority_from_content: none
-  owner-configured:
-    authority_from_content: none
-  local-untrusted:
-    authority_from_content: none
-  external-untrusted:
-    authority_from_content: none
-  protected-owner-data:
-    authority_from_content: none
-  credential-material:
-    information_class: never-disclosable
-    authority_from_content: none
-  model-supplied-unknown:
-    authority_from_content: none
-  derived:
-    preserve_input_links: true
-    default_class_rule: no-less-restrictive
+  observation:
+    model_visible: true
+  untrusted-content:
+    model_visible: conditionally
+  protected-data:
+    model_visible: false
+  local-mutation:
+    model_visible: false
+  credential-broker:
+    model_visible: false
+  mediated-egress:
+    model_visible: false
+  hardware-effect:
+    model_visible: false
+  model-visible-result:
+    model_visible: true
+    authority_source: explicit_information_contract
 
 forbidden_edges:
-  - from: Z2-untrusted-content
-    to: Z5-credential-broker
-    reason: Untrusted content cannot select or use credentials.
-  - from: Z2-untrusted-content
-    to: Z6-mediated-egress
-    condition: content-controls-target-or-payload
-    reason: Requires an exact prepared composition and reviewed egress contract.
-  - from: Z3-protected-data
+  - from: untrusted-content
+    to: control-plane
+  - from: protected-data
     to: model-visible-result
-    condition: no-exact-disclosure-contract
-    reason: Protected information requires an exact recipient and surface.
-  - from: Z3-protected-data
-    to: Z6-mediated-egress
-    condition: no-dedicated-transfer-contract
-    reason: Generic protected-data upload is outside Personal V1.
-  - from: Z4-local-mutation
-    to: Z6-mediated-egress
-    reason: General commands and child processes have no direct egress.
-  - from: Z4-local-mutation
-    to: Z5-credential-broker
-    condition: arbitrary-command
-    reason: Commands cannot read or select credential material.
-  - from: any
-    to: Z0-control-plane
-    condition: ordinary-operation
-    reason: Dedicated self-management contracts are required.
-  - from: content
-    to: Z7-hardware-effect
-    condition: embedded-instruction
-    reason: Content cannot create a physical effect authority.
+  - from: protected-data
+    to: mediated-egress
+  - from: credential-broker
+    to: untrusted-content
+  - from: credential-broker
+    to: model-visible-result
+  - from: untrusted-content
+    to: hardware-effect
+  - from: untrusted-content
+    to: local-mutation
+    unless: exact_prepared_operation
+  - from: untrusted-content
+    to: mediated-egress
+    unless: exact_prepared_operation
 
-reviewed_flows:
-  local-development-edit:
-    inputs:
-      - zone: Z2-untrusted-content
-        provenance: local-untrusted
-      - zone: controller-input
-        provenance: model-supplied-unknown
-    effects:
-      - zone: Z4-local-mutation
-        contract: exact-workspace-patch
-      - zone: Z4-local-mutation
-        contract: bounded-no-network-test-command
-    constraints:
-      network: deny
-      credentials: deny
-      devices: deny
-      control_plane: deny
-      prepared_operation_for_consequential_step: true
+server_data_reference:
+  required_fields:
+    - reference_id
+    - source_type
+    - source_identity
+    - source_sha256
+    - integrity_status
+    - provenance
+    - information_class
+    - transformations
+    - controller_id_digest
+    - device_id
+    - created_at
+    - expires_at
+    - allowed_recipient
+    - allowed_surface
+  possession_grants_authority: false
 
-  inbound-fetch:
-    effects:
-      - zone: Z6-mediated-egress
-        direction: inbound
-      - zone: Z2-untrusted-content
-        provenance: external-untrusted
-    constraints:
-      protected_outbound_payload: none
-      target_allowlist: required
-      redirect_policy: required
-      response_byte_limit: required
+prepared_operation:
+  required_fields:
+    - prepared_operation_id
+    - execution_nonce_digest
+    - controller_id_digest
+    - device_id
+    - tool_name
+    - contract_version
+    - source_reference_ids
+    - source_digests
+    - transformation
+    - effective_destination
+    - information_class
+    - maximum_bytes
+    - policy_version
+    - profile_version
+    - created_at
+    - expires_at
+  exact_match_required: true
+  current_state_revalidation_required: true
+  semantic_intent_is_not_a_field: true
 
-  non-exportable-target-action:
-    inputs:
-      - zone: Z5-credential-broker
-    effects:
-      - zone: Z6-mediated-egress
-    constraints:
-      raw_secret_visible: false
-      exact_audience: required
-      exact_action: required
-      exact_destination: required
-      payload_contract: required
+command_run:
+  network_available: false
+  raw_credentials_available: false
+  credential_helpers_available: false
+  device_access_available: false
+  local_control_sockets_available: false
+  mediated_egress_only: true
 
-unsupported_flows:
-  - generic-protected-data-upload
-  - arbitrary-command-network-egress
-  - arbitrary-command-credential-use
-  - content-selected-hardware-effect
-  - model-visible-never-disclosable-data
-  - implicit-cross-server-transfer
+credential_broker:
+  raw_secret_export: false
+  required_bindings:
+    - credential_identity
+    - audience
+    - action
+    - effective_destination
+    - source_data_digest
+    - maximum_effect
+    - expiry
 
-prepared_composition_required_fields:
-  - prepared_operation_id
-  - controller_id
-  - operation_contract_version
-  - input_data_refs_and_digests
-  - literal_payload_digest
-  - transformation_contract
-  - information_class
-  - destination_contract
-  - method_or_operation
-  - redirect_proxy_resolution_policy
-  - byte_item_request_duration_limits
-  - credential_broker_action
-  - policy_and_profile_versions
-  - consequential_boundaries
-  - idempotency_identity_when_required
-
-command_default:
-  filesystem: approved-workspace-only
-  network: deny
-  raw_credentials: deny
-  credential_helpers: deny
-  devices: deny
-  control_plane: deny
-  inherited_descriptors: deny
-  descendant_resource_control: required
-
-egress_default:
-  mediator_required: true
-  validate_each_application_visible_transition: true
-  allowlisted_dimensions:
+mediated_egress:
+  destination_dimensions:
     - scheme
-    - host_or_service_identity
+    - normalized_host
+    - resolved_ip_ranges
     - port
-    - selected_address
-    - tls_identity
-    - proxy
-    - redirects
     - method
-    - path_template
-    - repository_and_ref
-    - headers
-    - content_type
-    - request_and_response_bytes
-    - information_class_and_direction
-    - credential_audience
-    - rate_and_concurrency
-  dlp_controls:
-    - source_information_class
-    - never_disclosable_exclusion
-    - data_ref_and_digest_binding
-    - structured_field_allowlist
-    - byte_and_item_limit
-    - credential_and_control_plane_marker_detection
-    - actual_destination_audit
-  pattern_scanning_is_authority: false
+    - normalized_path
+    - query_parameter_names
+    - query_parameter_value_constraints
+    - redirect_policy
+    - proxy_policy
+    - maximum_request_bytes
+    - maximum_response_bytes
+  reject_unlisted_query_parameters: true
+  reject_userinfo: true
+  reject_fragments: true
+  revalidate_after_redirect: true
+  detect_dns_rebinding: true
+  dlp_required_for_restricted_result: true
+  record_actual_destination: true
+
+information_classes:
+  never-disclosable:
+    model_visible: false
+    egress: false
+  restricted-result:
+    model_visible_only_with_exact_contract: true
+    egress_only_with_exact_contract: true
+  normal-result:
+    model_visible_with_policy: true
+
+policy_change:
+  version_type: semver-string
+  affected_preparations_invalidated: true
+
+host_boundary:
+  cross_server_after_normal_model_disclosure: not_locally_enforceable
+  restricted_data_requires_owner_only_or_validated_host_contract: true
