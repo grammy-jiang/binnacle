@@ -1,0 +1,225 @@
+schema_version: "1.0"
+policy_id: binnacle-audit
+policy_version: "1.0.0"
+event_schema: schemas/audit/audit-event.schema.json
+
+integrity:
+  canonicalization_version: "1.0"
+  encoding: utf-8-json
+  unicode_normalization: NFC
+  line_endings: LF
+  object_key_order: lexical
+  duplicate_json_keys: reject
+  non_json_numbers: reject
+  event_hash: sha256
+  event_hash_excludes:
+    - event_hash
+    - external_signature
+    - external_receipt
+  event_hash_includes_previous_event_hash: true
+  segment_chain_required: true
+  audit_epoch_required: true
+
+claims:
+  local_chain_integrity:
+    mandatory: true
+    detects:
+      - corruption
+      - deletion
+      - insertion
+      - reordering
+      - truncation
+      - partial_tampering
+    does_not_claim_resistance_to_full_host_rewrite: true
+  anchored_integrity:
+    mandatory_for_high_assurance_claim: true
+    acceptable_anchors:
+      - separately_protected_local_key
+      - hardware_backed_key
+      - owner_controlled_off_device_signer
+      - external_append_only_receipt
+
+segments:
+  max_events: 10000
+  max_bytes: 67108864
+  max_age_seconds: 86400
+  states:
+    - open
+    - sealing
+    - sealed
+    - failed
+  one_open_segment_per_stream: true
+  sealed_immutable_to_binnacle: true
+  next_segment_binds_previous_trailer: true
+
+ordering:
+  durable_before_consequential_effect_intent: true
+  cross_reference_operation_state: true
+  required_sequence:
+    - request_and_authentication
+    - idempotency_and_operation_creation
+    - policy_and_state_decision
+    - consequential_boundary_intent
+    - effect_dispatch_or_commit
+    - effect_observation
+    - operation_state_transition
+    - result_publication
+    - cancellation_reconciliation_cleanup_and_recovery
+
+required_event_families:
+  request_auth_protocol:
+    - request.received
+    - authentication.succeeded
+    - authentication.failed
+    - authorization.scope_denied
+    - protocol.rejected
+    - request.rate_limited
+  discovery_metadata:
+    - catalogue.served
+    - catalogue.integrity_failed
+    - manifest.verified
+    - manifest.rejected
+    - compatibility.probe_recorded
+  policy_admission:
+    - policy.decision
+    - operation.reserved
+    - operation.rejected
+    - operation.authorised
+    - resource.reserved
+    - resource.rejected
+  operation:
+    - operation.state_changed
+    - operation.progress
+    - operation.retry_reconciled
+    - operation.idempotency_conflict
+    - operation.result_published
+    - operation.retention_changed
+  effect_destination:
+    - effect.intent_recorded
+    - effect.started
+    - effect.observed
+    - effect.failed
+    - effect.uncertain
+    - destination.resolved
+    - destination.connected
+    - destination.redirected
+    - credential.used_non_exportably
+  cancellation_recovery:
+    - cancellation.requested
+    - cancellation.phase_changed
+    - cancellation.verified
+    - cleanup.started
+    - cleanup.verified
+    - cleanup.failed
+    - reconciliation.started
+    - reconciliation.completed
+    - recovery.required
+    - recovery.completed
+  audit_integrity:
+    - audit.segment_opened
+    - audit.segment_sealed
+    - audit.checkpoint_created
+    - audit.checkpoint_exported
+    - audit.verification_passed
+    - audit.verification_failed
+    - audit.storage_degraded
+    - audit.retention_applied
+
+never_log:
+  - access_tokens
+  - refresh_tokens
+  - authorization_codes
+  - authorization_headers
+  - cookies
+  - gateway_assertions
+  - private_keys
+  - passwords
+  - raw_credentials
+  - credential_helper_data
+  - raw_authority_material
+  - protected_control_plane_references
+  - raw_idempotency_keys
+  - never_disclosable_payloads
+  - unbounded_stdout_or_stderr
+  - unbounded_file_repository_prompt_or_network_payload
+  - raw_environment_or_descriptor_contents
+
+redaction:
+  before_hash_and_persistence: true
+  policy_version_required: true
+  record_categories_removed_or_transformed: true
+  record_truncation_and_safe_original_counts: true
+  low_entropy_secret_digest_default: forbidden
+
+prompt_context:
+  default_collection: none
+  accepted_only_when_explicitly_supplied: true
+  provenance:
+    - local-untrusted
+    - model-supplied-unknown
+  authoritative_for_intent_or_approval: false
+  preferred_storage: digest_and_bounded_excerpt
+  full_conversation_collection: forbidden
+
+retention_classes:
+  AR1-bootstrap:
+    minimum_days: 30
+  AR2-normal:
+    minimum_days: 90
+  AR3-consequential:
+    minimum_days: 365
+  AR4-uncertain-security:
+    minimum: until-owner-resolved-plus-365-days
+  longest_applicable_rule_wins: true
+
+access:
+  dedicated_contract_required: true
+  read_only: true
+  controller_authentication_required: true
+  scope_dimensions:
+    - device
+    - event_class
+    - time
+    - operation
+    - information_class
+  pagination_required: true
+  access_is_audited: true
+  never_disclosable_returned: false
+
+export:
+  manifest_required: true
+  include_segment_and_checkpoint_hashes: true
+  include_external_receipts_when_available: true
+  include_file_digests_and_byte_counts: true
+  include_verification_instructions: true
+  include_exclusions_and_redactions: true
+  reusable_secrets: forbidden
+  export_action_audited: true
+
+storage_failure:
+  block_new_consequential_operations: true
+  block_unrecordable_boundaries: true
+  preserve_status_cancel_safe_stop_recovery_capacity: true
+  ordinary_text_log_fallback: false
+  emergency_journal_required_for_protective_effect_claim: true
+  if_emergency_journal_unavailable:
+    outcome:
+      - uncertain
+      - local_recovery_required
+  evict_unresolved_security_records: false
+
+verification:
+  validate:
+    - schema
+    - canonicalization
+    - sequence_continuity
+    - event_hash_chain
+    - segment_hash_chain
+    - timestamp_and_monotonic_order
+    - build_policy_manifest_and_schema_identity
+    - checkpoint_or_receipt_when_claimed
+    - retention_and_deletion_events
+    - operation_and_idempotency_cross_references
+    - truncation_duplicate_ids_and_forks
+  automatic_history_repair: false
+  verification_failure_restricts_remote_operation: true
