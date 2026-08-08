@@ -1,0 +1,287 @@
+schema_version: "1.0"
+manifest_id: binnacle-bootstrap-tools
+manifest_version: "1.0.0"
+canonicalization_version: "1.0"
+digest_record: external-build-provenance
+server_name: binnacle
+
+catalogue_phases:
+  - compatibility-core
+  - compatibility-write-probe
+  - v1-readonly
+  - v1-operational
+
+context_budgets:
+  tool_description_max_utf8_bytes: 1200
+  tool_title_max_utf8_bytes: 96
+  input_schema_max_bytes: 8192
+  output_schema_max_bytes: 16384
+  visible_catalogue_max_bytes: 98304
+  visible_description_estimated_tokens_max: 3000
+
+tools:
+  - name: binnacle_probe
+    title: Binnacle connection probe
+    contract:
+      name: binnacle_probe
+      version: "1.0"
+    lifecycle: active
+    risk_class: observation
+    information_class: normal-result
+    visible_in_phases:
+      - compatibility-core
+      - compatibility-write-probe
+      - v1-readonly
+      - v1-operational
+    description: >-
+      Use when you need to verify the Binnacle connection, server build, enrolled device reference, Tool-manifest version, and sanitized MCP protocol observation. Do not use for detailed system health, file content, service diagnosis, or any state change; use system_inspect or a domain Tool instead. Returns a bounded read-only summary with build and manifest digests and creates no retained operation. Limits: no credentials, raw headers, exhaustive inventory, or private file data. Errors report authentication, profile, or server-integrity failure.
+    review:
+      use_when: Verify connection, identity evidence, build, manifest, and protocol observation.
+      do_not_use_when: Detailed system inspection, diagnosis, file access, or modification is required.
+      distinguishes_from:
+        - system_inspect returns operational host facts rather than compatibility identity evidence.
+        - compatibility_report returns accumulated probe evidence rather than one current connection observation.
+      result_shape: Sanitized server, device, protocol, build, manifest, and correlation fields.
+      limits:
+        - No reusable authentication or raw transport headers.
+        - No detailed host inventory.
+      errors:
+        - authentication_required
+        - authentication_failed
+        - unsupported_profile
+        - server_integrity_failure
+    input_schema_contract: binnacle_probe.input.v1
+    output_schema_contract: binnacle_probe.output.v1
+    annotations:
+      readOnlyHint: true
+      destructiveHint: false
+      idempotentHint: true
+      openWorldHint: false
+    execution:
+      taskSupport: forbidden
+
+  - name: system_inspect
+    title: Inspect Raspberry Pi system facts
+    contract:
+      name: system_inspect
+      version: "1.0"
+    lifecycle: active
+    risk_class: observation
+    information_class: normal-result
+    visible_in_phases:
+      - compatibility-core
+      - compatibility-write-probe
+      - v1-readonly
+      - v1-operational
+    description: >-
+      Use when you need a current bounded read-only summary of this Raspberry Pi's operating system, kernel, architecture, uptime, CPU, memory, filesystems, and Binnacle service state. Do not use to read arbitrary files or logs, inspect a Git repository, or change services. Returns current structured host facts and creates no retained operation. Limits: profile-approved fields only, bounded filesystem summaries, and no credentials or protected configuration. Errors report unsupported facts, stale collection, policy denial, or partial observation.
+    review:
+      use_when: Obtain current general host facts before planning or validating another operation.
+      do_not_use_when: The request targets file contents, logs, repository state, or a state change.
+      distinguishes_from:
+        - binnacle_probe verifies connection and compatibility identity rather than detailed host facts.
+        - service_inspect targets one service when that operational Tool is promoted.
+      result_shape: Structured OS, hardware-summary, resource-summary, filesystem-summary, and service-state fields.
+      limits:
+        - No arbitrary file or log content.
+        - Profile-approved and size-bounded observations only.
+      errors:
+        - policy_rejected
+        - unsupported_profile
+        - stale_state
+        - execution_failed
+    input_schema_contract: system_inspect.input.v1
+    output_schema_contract: system_inspect.output.v1
+    annotations:
+      readOnlyHint: true
+      destructiveHint: false
+      idempotentHint: true
+      openWorldHint: false
+    execution:
+      taskSupport: forbidden
+
+  - name: probe_result_formats
+    title: Probe MCP result formats
+    contract:
+      name: probe_result_formats
+      version: "1.0"
+    lifecycle: bootstrap-only
+    risk_class: synthetic-observation
+    information_class: normal-result
+    visible_in_phases:
+      - compatibility-core
+      - compatibility-write-probe
+    description: >-
+      Use only during MCP compatibility testing to check how ChatGPT receives a synthetic text result, structured object, arrays, nullable values, and warnings. Do not use for Raspberry Pi facts, diagnosis, or real work; every returned value is synthetic. Returns one bounded schema-valid result and creates no retained operation. Limits: no device, network, file, process, or service access. Errors are limited to invalid probe arguments or server result-schema failure.
+    review:
+      use_when: Exercise model-readable and structured MCP result handling.
+      do_not_use_when: Any real device information or operation is required.
+      distinguishes_from:
+        - compatibility_report returns accumulated empirical evidence rather than synthetic format values.
+        - probe_error exercises failure handling rather than successful result shapes.
+      result_shape: Synthetic scalar, array, nested object, nullable field, stable identifier, and optional warning.
+      limits:
+        - No device or external access.
+        - Synthetic data only.
+      errors:
+        - invalid_argument
+        - server_schema_failure
+    input_schema_contract: probe_result_formats.input.v1
+    output_schema_contract: probe_result_formats.output.v1
+    annotations:
+      readOnlyHint: true
+      destructiveHint: false
+      idempotentHint: true
+      openWorldHint: false
+    execution:
+      taskSupport: forbidden
+
+  - name: probe_error
+    title: Probe MCP error handling
+    contract:
+      name: probe_error
+      version: "1.0"
+    lifecycle: bootstrap-only
+    risk_class: synthetic-observation
+    information_class: normal-result
+    visible_in_phases:
+      - compatibility-core
+      - compatibility-write-probe
+    description: >-
+      Use only during MCP compatibility testing to request one named synthetic execution error or a side-effect-free bounded delay. Do not use to diagnose a real Binnacle, system, command, or policy failure. Returns the selected revision-valid Tool result or error and creates no device effect; a delay is at most 10 seconds. Limits: closed enum cases, no file, process, service, network, or hardware access. Invalid cases or delay values return invalid_argument.
+    review:
+      use_when: Verify ChatGPT presentation and recovery behavior for known Tool execution errors and bounded delay.
+      do_not_use_when: Investigating or causing a real operational failure.
+      distinguishes_from:
+        - probe_result_formats tests successful result shapes.
+        - operation_get reports a real retained operation after that Tool is promoted.
+      result_shape: Selected synthetic error code, model-readable content, structured error, or bounded-delay success.
+      limits:
+        - Delay maximum is 10 seconds.
+        - No real device or external effect.
+      errors:
+        - invalid_argument
+    input_schema_contract: probe_error.input.v1
+    output_schema_contract: probe_error.output.v1
+    annotations:
+      readOnlyHint: true
+      destructiveHint: false
+      idempotentHint: true
+      openWorldHint: false
+    execution:
+      taskSupport: forbidden
+
+  - name: compatibility_report
+    title: Read ChatGPT MCP compatibility evidence
+    contract:
+      name: compatibility_report
+      version: "1.0"
+    lifecycle: active
+    risk_class: observation
+    information_class: restricted-result
+    visible_in_phases:
+      - compatibility-core
+      - compatibility-write-probe
+      - v1-readonly
+      - v1-operational
+    description: >-
+      Use when you need the sanitized empirical record of this Binnacle build's tests with the actual ChatGPT host, including observed revision, capabilities, entitlement, probes, limits, and evidence digests. Do not use for current Raspberry Pi health, operation status, or undocumented host assumptions. Returns a bounded read-only compatibility report and creates no retained operation. Limits: no tokens, cookies, raw headers, private keys, or unrelated personal data. Errors report missing, expired, incompatible, or policy-restricted evidence.
+    review:
+      use_when: Inspect recorded host/MCP compatibility evidence and promotion status.
+      do_not_use_when: Current host facts, operation status, or speculative capability inference is required.
+      distinguishes_from:
+        - binnacle_probe returns one current sanitized connection observation.
+        - system_inspect returns Raspberry Pi operational facts.
+      result_shape: Profile version, observation axes, probe outcomes, evidence links/digests, limitations, and product disposition.
+      limits:
+        - Sanitized and retention-bounded evidence only.
+        - No reusable authentication data.
+      errors:
+        - result_expired
+        - unsupported_profile
+        - policy_rejected
+        - execution_failed
+    input_schema_contract: compatibility_report.input.v1
+    output_schema_contract: compatibility_report.output.v1
+    annotations:
+      readOnlyHint: true
+      destructiveHint: false
+      idempotentHint: true
+      openWorldHint: false
+    execution:
+      taskSupport: forbidden
+
+  - name: probe_workspace_write
+    title: Probe controlled workspace write
+    contract:
+      name: probe_workspace_write
+      version: "1.0"
+    lifecycle: bootstrap-only
+    risk_class: bounded-modification
+    information_class: normal-result
+    visible_in_phases:
+      - compatibility-write-probe
+    description: >-
+      Use only to test whether the actual ChatGPT profile can perform a controlled write inside Binnacle's disposable probe workspace. Do not use for the Binnacle repository, arbitrary paths, commands, services, credentials, or persistent application data. Writes one exact bounded file after path and policy validation and returns its normalized relative path, byte count, and digest; no long-running operation is created. Limits: dedicated probe root, no symlink traversal or overwrite unless the closed contract permits it, bounded content size, no network. Errors report host-policy blocking, invalid path, conflict, policy rejection, or write failure.
+    review:
+      use_when: Test write/modify entitlement and Tool invocation on a disposable dedicated root.
+      do_not_use_when: Editing source code, system configuration, arbitrary files, or running commands.
+      distinguishes_from:
+        - filesystem_write is the later operational file contract and is not implied by this probe.
+        - probe_workspace_cleanup removes only artifacts created by this probe.
+      result_shape: Normalized probe-relative path, bytes written, content digest, and cleanup ownership evidence.
+      limits:
+        - Dedicated disposable root only.
+        - No symlinks, device files, network, commands, or arbitrary overwrite.
+      errors:
+        - host_policy_blocked
+        - invalid_argument
+        - policy_rejected
+        - conflict
+        - execution_failed
+    input_schema_contract: probe_workspace_write.input.v1
+    output_schema_contract: probe_workspace_write.output.v1
+    annotations:
+      readOnlyHint: false
+      destructiveHint: false
+      idempotentHint: false
+      openWorldHint: false
+    execution:
+      taskSupport: forbidden
+
+  - name: probe_workspace_cleanup
+    title: Clean controlled workspace probe artifacts
+    contract:
+      name: probe_workspace_cleanup
+      version: "1.0"
+    lifecycle: bootstrap-only
+    risk_class: destructive-modification
+    information_class: normal-result
+    visible_in_phases:
+      - compatibility-write-probe
+    description: >-
+      Use only to delete artifacts that Binnacle previously recorded as owned by the controlled probe_workspace_write test. Do not use for arbitrary files, the Binnacle repository, directories with unowned content, or general cleanup. Removes only manifest-owned probe artifacts and returns removed, already-missing, and rejected entries; no long-running operation is created. Limits: dedicated probe root, exact ownership record, bounded item count, no symlink following. Errors report ownership mismatch, conflict, policy rejection, or cleanup failure.
+    review:
+      use_when: Restore the disposable compatibility-write workspace after its controlled probe.
+      do_not_use_when: General file deletion or cleanup outside recorded probe artifacts is required.
+      distinguishes_from:
+        - probe_workspace_write creates the only artifacts this Tool may remove.
+        - a future filesystem deletion Tool has a different, higher-risk contract.
+      result_shape: Removed, already-missing, and rejected artifact lists plus retained ownership evidence.
+      limits:
+        - Only exact recorded probe artifacts.
+        - Bounded item count and no symlink following.
+      errors:
+        - invalid_argument
+        - policy_rejected
+        - conflict
+        - execution_failed
+    input_schema_contract: probe_workspace_cleanup.input.v1
+    output_schema_contract: probe_workspace_cleanup.output.v1
+    annotations:
+      readOnlyHint: false
+      destructiveHint: true
+      idempotentHint: true
+      openWorldHint: false
+    execution:
+      taskSupport: forbidden
