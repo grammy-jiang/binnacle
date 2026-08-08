@@ -1,0 +1,403 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://binnacle.dev/schemas/supply-chain/release-manifest.schema.json",
+  "title": "Binnacle signed release manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "release_id": { "$ref": "#/$defs/identifier" },
+    "product": { "const": "binnacle" },
+    "version": { "$ref": "#/$defs/version" },
+    "release_state": {
+      "enum": [
+        "development-unverified",
+        "preview-verified",
+        "release-candidate",
+        "supported-release",
+        "restricted",
+        "retired"
+      ]
+    },
+    "created_at": { "$ref": "#/$defs/timestamp" },
+    "support": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "starts_at": { "$ref": "#/$defs/timestamp" },
+        "ends_at": { "$ref": "#/$defs/timestamp" },
+        "retirement_state": {
+          "enum": ["active", "block_new_install", "restricted", "retired"]
+        },
+        "retirement_decision_digest": {
+          "anyOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }]
+        }
+      },
+      "required": ["starts_at", "ends_at", "retirement_state", "retirement_decision_digest"]
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "repository": { "type": "string", "format": "uri", "maxLength": 2048 },
+        "commit_sha": { "type": "string", "pattern": "^[a-f0-9]{40,64}$" },
+        "tree_sha256": { "$ref": "#/$defs/sha256" },
+        "descriptive_ref": { "type": ["string", "null"], "maxLength": 256 },
+        "signature_verified": { "type": "boolean" },
+        "submodules": {
+          "type": "array",
+          "maxItems": 64,
+          "items": { "$ref": "#/$defs/sourceMaterial" }
+        }
+      },
+      "required": ["repository", "commit_sha", "tree_sha256", "descriptive_ref", "signature_verified", "submodules"]
+    },
+    "target_profiles": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "profile_id": { "$ref": "#/$defs/identifier" },
+          "architecture": { "$ref": "#/$defs/identifier" },
+          "os_id": { "$ref": "#/$defs/identifier" },
+          "os_version_range": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "kernel_constraints": { "type": "string", "minLength": 1, "maxLength": 256 }
+        },
+        "required": ["profile_id", "architecture", "os_id", "os_version_range", "kernel_constraints"]
+      }
+    },
+    "component_lock": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "lock_id": { "$ref": "#/$defs/identifier" },
+        "version": { "$ref": "#/$defs/version" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "component_count": { "type": "integer", "minimum": 1 },
+        "all_release_components_pinned": { "const": true }
+      },
+      "required": ["lock_id", "version", "sha256", "component_count", "all_release_components_pinned"]
+    },
+    "components": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 4096,
+      "items": { "$ref": "#/$defs/component" }
+    },
+    "artifacts": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 128,
+      "items": { "$ref": "#/$defs/artifact" }
+    },
+    "contracts": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tool_manifest_sha256": { "$ref": "#/$defs/sha256" },
+        "schema_registry_sha256": { "$ref": "#/$defs/sha256" },
+        "operation_contract_registry_sha256": { "$ref": "#/$defs/sha256" },
+        "release_policy_sha256": { "$ref": "#/$defs/sha256" },
+        "audit_schema_sha256": { "$ref": "#/$defs/sha256" },
+        "device_profile_schema_sha256": { "$ref": "#/$defs/sha256" },
+        "migration_set_sha256": { "$ref": "#/$defs/sha256" }
+      },
+      "required": [
+        "tool_manifest_sha256",
+        "schema_registry_sha256",
+        "operation_contract_registry_sha256",
+        "release_policy_sha256",
+        "audit_schema_sha256",
+        "device_profile_schema_sha256",
+        "migration_set_sha256"
+      ]
+    },
+    "sbom": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "source_build": { "$ref": "#/$defs/documentRef" },
+        "runtime": { "$ref": "#/$defs/documentRef" },
+        "format": { "enum": ["SPDX", "CycloneDX"] }
+      },
+      "required": ["source_build", "runtime", "format"]
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "statement": { "$ref": "#/$defs/documentRef" },
+        "builder_id": { "$ref": "#/$defs/identifier" },
+        "build_definition_sha256": { "$ref": "#/$defs/sha256" },
+        "materials_complete": { "const": true },
+        "network_policy": { "enum": ["denied", "fetch-only-recorded", "recorded-unrestricted"] },
+        "reproducibility_level": {
+          "enum": ["RB0-unassessed", "RB1-resolved-inputs", "RB2-deterministic-package", "RB3-independent-rebuild"]
+        },
+        "rebuild_evidence_sha256": {
+          "anyOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }]
+        }
+      },
+      "required": [
+        "statement",
+        "builder_id",
+        "build_definition_sha256",
+        "materials_complete",
+        "network_policy",
+        "reproducibility_level",
+        "rebuild_evidence_sha256"
+      ]
+    },
+    "security_gates": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "scan_completed_at": { "$ref": "#/$defs/timestamp" },
+        "vulnerability_database_age_seconds": { "type": "integer", "minimum": 0 },
+        "source_scan": { "$ref": "#/$defs/gateResult" },
+        "dependency_scan": { "$ref": "#/$defs/gateResult" },
+        "sbom_scan": { "$ref": "#/$defs/gateResult" },
+        "secret_scan": { "$ref": "#/$defs/gateResult" },
+        "malware_integrity_scan": { "$ref": "#/$defs/gateResult" },
+        "license_scan": { "$ref": "#/$defs/gateResult" },
+        "eol_scan": { "$ref": "#/$defs/gateResult" },
+        "exceptions": {
+          "type": "array",
+          "maxItems": 128,
+          "items": { "$ref": "#/$defs/securityException" }
+        }
+      },
+      "required": [
+        "scan_completed_at",
+        "vulnerability_database_age_seconds",
+        "source_scan",
+        "dependency_scan",
+        "sbom_scan",
+        "secret_scan",
+        "malware_integrity_scan",
+        "license_scan",
+        "eol_scan",
+        "exceptions"
+      ]
+    },
+    "test_evidence": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "gate_id": { "$ref": "#/$defs/identifier" },
+          "status": { "enum": ["passed", "failed", "not_applicable"] },
+          "evidence_sha256": { "$ref": "#/$defs/sha256" },
+          "profile_id": { "$ref": "#/$defs/identifier" },
+          "recorded_at": { "$ref": "#/$defs/timestamp" }
+        },
+        "required": ["gate_id", "status", "evidence_sha256", "profile_id", "recorded_at"]
+      }
+    },
+    "signing": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mechanism": { "enum": ["key-backed", "identity-backed", "other-reviewed"] },
+        "issuer": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "subject": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "key_or_identity_id": { "$ref": "#/$defs/identifier" },
+        "algorithm": { "$ref": "#/$defs/identifier" },
+        "signature_or_attestation_sha256": { "$ref": "#/$defs/sha256" },
+        "transparency_or_receipt_sha256": {
+          "anyOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }]
+        }
+      },
+      "required": [
+        "mechanism",
+        "issuer",
+        "subject",
+        "key_or_identity_id",
+        "algorithm",
+        "signature_or_attestation_sha256",
+        "transparency_or_receipt_sha256"
+      ]
+    },
+    "installation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "minimum_installer_version": { "$ref": "#/$defs/version" },
+        "startup_verification_profile": { "$ref": "#/$defs/identifier" },
+        "required_free_bytes": { "type": "integer", "minimum": 0 },
+        "previous_safe_release_id": {
+          "anyOf": [{ "$ref": "#/$defs/identifier" }, { "type": "null" }]
+        },
+        "rollback_compatible": { "type": "boolean" },
+        "non_reversible_migration": { "type": "boolean" },
+        "migration_plan_sha256": { "$ref": "#/$defs/sha256" }
+      },
+      "required": [
+        "minimum_installer_version",
+        "startup_verification_profile",
+        "required_free_bytes",
+        "previous_safe_release_id",
+        "rollback_compatible",
+        "non_reversible_migration",
+        "migration_plan_sha256"
+      ]
+    },
+    "manifest_sha256": { "$ref": "#/$defs/sha256" }
+  },
+  "required": [
+    "schema_version",
+    "release_id",
+    "product",
+    "version",
+    "release_state",
+    "created_at",
+    "support",
+    "source",
+    "target_profiles",
+    "component_lock",
+    "components",
+    "artifacts",
+    "contracts",
+    "sbom",
+    "provenance",
+    "security_gates",
+    "test_evidence",
+    "signing",
+    "installation",
+    "manifest_sha256"
+  ],
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
+    },
+    "version": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "sourceMaterial": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "$ref": "#/$defs/identifier" },
+        "repository": { "type": "string", "format": "uri", "maxLength": 2048 },
+        "commit_sha": { "type": "string", "pattern": "^[a-f0-9]{40,64}$" },
+        "tree_sha256": { "$ref": "#/$defs/sha256" }
+      },
+      "required": ["name", "repository", "commit_sha", "tree_sha256"]
+    },
+    "component": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "component_id": { "$ref": "#/$defs/identifier" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "version": { "$ref": "#/$defs/version" },
+        "type": { "enum": ["source", "build", "runtime", "test", "development", "tunnel-agent", "system", "security"] },
+        "purl": { "type": ["string", "null"], "maxLength": 2048 },
+        "source_uri": { "type": "string", "format": "uri", "maxLength": 2048 },
+        "artifact_name": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "platform": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "license": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "modified": { "type": "boolean" },
+        "patch_sha256": { "anyOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }] },
+        "security_critical": { "type": "boolean" },
+        "end_of_life": { "type": "boolean" },
+        "approved": { "const": true }
+      },
+      "required": [
+        "component_id",
+        "name",
+        "version",
+        "type",
+        "purl",
+        "source_uri",
+        "artifact_name",
+        "sha256",
+        "platform",
+        "license",
+        "modified",
+        "patch_sha256",
+        "security_critical",
+        "end_of_life",
+        "approved"
+      ]
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "media_type": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "architecture": { "$ref": "#/$defs/identifier" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "size_bytes": { "type": "integer", "minimum": 1 },
+        "reproducible_payload": { "type": "boolean" }
+      },
+      "required": ["name", "media_type", "architecture", "sha256", "size_bytes", "reproducible_payload"]
+    },
+    "documentRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "uri": { "type": "string", "format": "uri", "maxLength": 2048 },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "media_type": { "type": "string", "minLength": 1, "maxLength": 256 }
+      },
+      "required": ["uri", "sha256", "media_type"]
+    },
+    "gateResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "status": { "enum": ["passed", "failed", "exception"] },
+        "report_sha256": { "$ref": "#/$defs/sha256" },
+        "critical": { "type": "integer", "minimum": 0 },
+        "high": { "type": "integer", "minimum": 0 },
+        "medium": { "type": "integer", "minimum": 0 },
+        "low": { "type": "integer", "minimum": 0 }
+      },
+      "required": ["status", "report_sha256", "critical", "high", "medium", "low"]
+    },
+    "securityException": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "exception_id": { "$ref": "#/$defs/identifier" },
+        "component_id": { "$ref": "#/$defs/identifier" },
+        "finding_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "rationale": { "type": "string", "minLength": 1, "maxLength": 4000 },
+        "compensating_controls": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "items": { "type": "string", "minLength": 1, "maxLength": 1000 }
+        },
+        "approved_by": { "$ref": "#/$defs/identifier" },
+        "approved_at": { "$ref": "#/$defs/timestamp" },
+        "expires_at": { "$ref": "#/$defs/timestamp" },
+        "remediation_target": { "$ref": "#/$defs/timestamp" }
+      },
+      "required": [
+        "exception_id",
+        "component_id",
+        "finding_id",
+        "rationale",
+        "compensating_controls",
+        "approved_by",
+        "approved_at",
+        "expires_at",
+        "remediation_target"
+      ]
+    }
+  }
+}
