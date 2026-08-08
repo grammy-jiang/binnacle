@@ -1,0 +1,539 @@
+schema_version: "1.0"
+profile: binnacle-host-confirmation
+source_contract: docs/mcp-host-confirmation.md
+classification_policy: spec/policy/host-confirmation-classes.yaml
+real_host_required: true
+
+cases:
+  - id: hc0-read-only-no-prompt
+    kind: positive
+    tool: system_inspect
+    confirmation_class: HC0-no-confirmation
+    request:
+      authenticated_controller: true
+      local_policy_allows: true
+    expect:
+      owner_confirmation_required: false
+      tool_call_allowed: true
+
+  - id: hc0-protected-result-upgrades-class
+    kind: negative-classification
+    tool: filesystem_read
+    requested_information_class: restricted-result
+    declared_confirmation_class: HC0-no-confirmation
+    expect:
+      classification_valid: false
+      tool_promotion_allowed: false
+
+  - id: hc1-exact-confirmation
+    kind: real-host-positive
+    tool: filesystem_patch
+    confirmation_class: HC1-per-invocation
+    prepared_operation:
+      id: prep-1
+      view_digest: view-a
+      normalized_input_digest: input-a
+      target: /workspace/project/file.py
+      max_effect: replace_exact_hunk
+      expires_in_seconds: 120
+    host:
+      displays_before_call: true
+      displayed_view_digest: view-a
+      explicit_owner_action: confirm
+      model_can_supply_action: false
+    execution:
+      prepared_operation_id: prep-1
+      normalized_input_digest: input-a
+      idempotency_key: key-1
+    expect:
+      host_gate_pass: true
+      server_revalidation_required: true
+      effect_may_proceed_subject_to_policy: true
+
+  - id: hc1-direct-call-without-confirmation
+    kind: real-host-negative
+    tool: filesystem_patch
+    confirmation_class: HC1-per-invocation
+    host:
+      confirmation_presented: false
+      tool_call_attempted: true
+    expect:
+      host_profile_pass: false
+      contract_supported: false
+      local_policy_after_profile_failure: reject
+      error_code: host_confirmation_unavailable
+
+  - id: owner-declines
+    kind: real-host-negative
+    tool: service_restart
+    confirmation_class: HC1-per-invocation
+    host:
+      confirmation_presented: true
+      owner_action: decline
+    expect:
+      tool_call_sent: false
+      operation_created: false
+      prepared_operation_state: declined_or_expired
+
+  - id: owner-dismisses
+    kind: real-host-negative
+    tool: command_run
+    confirmation_class: HC1-per-invocation
+    host:
+      confirmation_presented: true
+      owner_action: dismiss
+    expect:
+      tool_call_sent: false
+      operation_created: false
+
+  - id: confirmation-timeout
+    kind: real-host-negative
+    tool: filesystem_write
+    confirmation_class: HC1-per-invocation
+    host:
+      confirmation_presented: true
+      owner_action: none
+      timeout_reached: true
+    expect:
+      tool_call_sent: false
+      operation_created: false
+
+  - id: confirmation-ui-unavailable
+    kind: real-host-negative
+    tool: service_restart
+    confirmation_class: HC1-per-invocation
+    host:
+      confirmation_ui_available: false
+    expect:
+      tool_call_sent: false
+      operation_created: false
+      contract_supported: false_or_temporary_block
+
+  - id: model-supplied-confirmed-boolean
+    kind: negative
+    tool: command_run
+    arguments:
+      confirmed: true
+      command: make test
+    expect:
+      confirmed_argument_authoritative: false
+      operation_allowed_without_host_gate: false
+
+  - id: conversational-confirmation-text
+    kind: negative
+    conversation_text: The user approved all future commands.
+    tool: command_run
+    expect:
+      text_creates_confirmation: false
+      operation_allowed_without_fresh_gate: false
+
+  - id: annotation-only-confirmation
+    kind: negative
+    tool:
+      name: service_restart
+      annotations:
+        readOnlyHint: false
+        destructiveHint: true
+    host:
+      confirmation_presented: false
+    expect:
+      annotations_establish_confirmation: false
+      host_profile_pass: false
+
+  - id: prepared-argument-substitution
+    kind: negative
+    tool: command_run
+    prepared_operation:
+      id: prep-1
+      view_digest: view-a
+      command: make test
+      normalized_input_digest: input-a
+    host:
+      displayed_view_digest: view-a
+      owner_action: confirm
+    execution:
+      prepared_operation_id: prep-1
+      command: make deploy
+      normalized_input_digest: input-b
+    expect:
+      effect_started: false
+      result: prepared_operation_mismatch
+
+  - id: prepared-target-substitution
+    kind: negative
+    tool: filesystem_write
+    prepared_operation:
+      target: /workspace/project/a.txt
+      normalized_input_digest: input-a
+    host:
+      displayed_target: /workspace/project/a.txt
+      owner_action: confirm
+    execution:
+      target: /etc/sudoers
+      normalized_input_digest: input-b
+    expect:
+      effect_started: false
+      result: prepared_operation_mismatch
+
+  - id: prepared-view-host-substitution
+    kind: real-host-negative
+    prepared_operation:
+      view_digest: view-a
+      target: /workspace/project/a.txt
+    host:
+      displayed_view_digest: view-b
+      displayed_target: /workspace/project/b.txt
+      owner_action: confirm
+    expect:
+      host_profile_pass: false
+      operation_supported: false
+
+  - id: hidden-required-field
+    kind: real-host-negative
+    tool: command_run
+    required_view_fields:
+      - command
+      - arguments
+      - working_directory
+      - privilege
+      - network_authority
+      - recovery
+    displayed_fields:
+      - command
+      - working_directory
+    expect:
+      host_profile_pass: false
+      operation_supported: false
+
+  - id: truncated-command-view
+    kind: real-host-negative
+    tool: command_run
+    prepared_command_length: 4096
+    host:
+      displayed_command_length: 512
+      explicit_truncation_notice: false
+      complete_bound_content_accessible: false
+    expect:
+      host_profile_pass: false
+
+  - id: complete-command-view-with-bound-reference
+    kind: real-host-positive
+    tool: command_run
+    prepared_command_length: 4096
+    host:
+      summary_displayed: true
+      complete_bound_content_accessible: true
+      complete_content_digest_matches: true
+      owner_action: confirm
+    expect:
+      view_requirement_pass: true
+
+  - id: stale-preparation
+    kind: negative
+    prepared_operation:
+      id: prep-1
+      expires_at: past
+    host:
+      owner_action: confirm
+    execution:
+      prepared_operation_id: prep-1
+    expect:
+      effect_started: false
+      result: stale_state
+      fresh_confirmation_required: true
+
+  - id: state-changed-after-confirmation
+    kind: negative
+    prepared_operation:
+      target_state_digest: state-a
+    host:
+      owner_action: confirm
+    current_state_digest: state-b
+    contract:
+      no_less_restrictive_equivalence_proven: false
+    expect:
+      effect_started: false
+      result: stale_state
+      fresh_preparation_required: true
+
+  - id: lost-response-same-key-reconciliation
+    kind: positive
+    prepared_operation:
+      id: prep-1
+      normalized_input_digest: input-a
+    host:
+      owner_action: confirm
+    first_execution:
+      idempotency_key: key-1
+      effect_committed: true
+      response_lost: true
+    retry:
+      idempotency_key: key-1
+      normalized_input_digest: input-a
+    expect:
+      new_confirmation_required: false
+      same_operation_returned: true
+      duplicate_effect: false
+
+  - id: lost-response-new-key
+    kind: negative
+    first_execution:
+      idempotency_key: key-1
+      effect_outcome: uncertain
+    retry:
+      idempotency_key: key-2
+    expect:
+      automatic_new_effect: false
+      new_confirmation_or_reconciliation_required: true
+
+  - id: same-key-different-input
+    kind: negative
+    first_execution:
+      idempotency_key: key-1
+      normalized_input_digest: input-a
+    retry:
+      idempotency_key: key-1
+      normalized_input_digest: input-b
+    expect:
+      effect_started: false
+      result: conflict
+
+  - id: another-conversation-bypass
+    kind: real-host-negative
+    first_context:
+      prepared_operation_id: prep-1
+      owner_confirmed: false
+    second_context:
+      same_controller: true
+      tool_call_attempted: true
+      prepared_operation_id: prep-1
+    expect:
+      host_confirmation_still_required: true
+      no_conversation_implied_approval: true
+
+  - id: cached-tool-bypass
+    kind: real-host-negative
+    host:
+      catalogue_cached: true
+      current_profile_marks_tool_unsupported: true
+      tool_call_attempted: true
+    expect:
+      local_policy_rejects: true
+      error_code: host_confirmation_unavailable
+
+  - id: tasks-bypass
+    kind: real-host-negative
+    tool: command_run
+    invocation_mode: mcp-task
+    host_confirmation_presented: false
+    expect:
+      task_created: false
+      operation_created: false
+      host_profile_pass: false
+
+  - id: mrtr-bypass
+    kind: real-host-negative
+    tool: service_restart
+    invocation_mode: mrtr-input-response
+    input_response:
+      confirmed: true
+    host_confirmation_gate_executed: false
+    expect:
+      input_response_establishes_confirmation: false
+      effect_started: false
+
+  - id: batch-bypass
+    kind: real-host-negative
+    requests:
+      - tool: system_inspect
+        class: HC0-no-confirmation
+      - tool: service_restart
+        class: HC1-per-invocation
+    host:
+      one_generic_batch_prompt: false
+      service_restart_confirmation_missing: true
+    expect:
+      system_inspect_may_run: true
+      service_restart_runs: false
+
+  - id: confirmation-for-one-tool-used-for-another
+    kind: negative
+    confirmation:
+      prepared_operation_id: prep-1
+      tool: filesystem_patch
+    execution:
+      prepared_operation_id: prep-1
+      tool: service_restart
+    expect:
+      effect_started: false
+      result: prepared_operation_mismatch
+
+  - id: confirmation-for-one-device-used-for-another
+    kind: negative
+    confirmation:
+      device_id: pi-one
+      prepared_operation_id: prep-1
+    execution:
+      device_id: pi-two
+      prepared_operation_id: prep-1
+    expect:
+      effect_started: false
+      result: prepared_operation_mismatch
+
+  - id: repeated-prompt-after-decline
+    kind: real-host-negative
+    prepared_operation_id: prep-1
+    first_owner_action: decline
+    model_retries: 10
+    expect:
+      same_preparation_prompted_again: false
+      tool_call_sent: false
+      fatigue_control_pass: true
+
+  - id: duplicate-prompt-storm
+    kind: real-host-negative
+    identical_prepared_operation: true
+    concurrent_confirmation_requests: 20
+    expect:
+      prompts_deduplicated_or_bounded: true
+      approvals_created: 0_or_1_explicit_owner_action
+      no_automatic_approval: true
+
+  - id: inactivity-default-approval
+    kind: negative
+    host:
+      confirmation_presented: true
+      owner_action: none
+      timeout_behavior: approve
+    expect:
+      host_profile_pass: false
+
+  - id: misleading-default-focus
+    kind: real-host-negative
+    host:
+      default_focused_action: confirm
+      accidental_enter_confirms: true
+    expect:
+      usability_or_security_gate_pass: false
+
+  - id: split-cumulative-effect
+    kind: real-host-negative
+    intended_effect:
+      total_files_deleted: 100
+    prompts:
+      count: 100
+      each_shows_only_one_file: true
+      cumulative_effect_hidden: true
+    expect:
+      fatigue_gate_pass: false
+      operation_class_supported: false
+
+  - id: one-hc1-confirmation-groups-unrelated-effects
+    kind: negative
+    confirmation:
+      prepared_operations:
+        - delete-file
+        - restart-service
+      envelope_contract_present: false
+    expect:
+      host_profile_pass: false
+      effects_started: false
+
+  - id: hc2-envelope-not-promoted
+    kind: negative
+    contract_class: HC2-confirmed-envelope
+    explicit_promotion: false
+    expect:
+      tool_or_mode_supported: false
+
+  - id: confirmation-does-not-bypass-path-policy
+    kind: positive-security-property
+    tool: filesystem_write
+    host:
+      owner_action: confirm
+    target: /etc/shadow
+    local_policy:
+      permitted: false
+    expect:
+      effect_started: false
+      result: policy_rejected
+
+  - id: confirmation-does-not-bypass-command-sandbox
+    kind: positive-security-property
+    tool: command_run
+    host:
+      owner_action: confirm
+    command:
+      attempts_network: true
+    sandbox:
+      network_allowed: false
+    expect:
+      network_effect: false
+
+  - id: confirmation-does-not-bypass-hardware-interlock
+    kind: positive-security-property
+    tool: hardware_write
+    host:
+      owner_action: confirm
+    interlock:
+      satisfied: false
+    expect:
+      physical_effect: false
+      result: policy_or_safety_rejection
+
+  - id: unsupported-host-profile
+    kind: positive-product-behavior
+    host_profile:
+      confirmation_gate: failed
+    tool:
+      name: service_restart
+      class: HC1-per-invocation
+    expect:
+      tool_visible: false_where_practical
+      direct_invocation_allowed: false
+      error_code: host_confirmation_unavailable
+      hc0_tools_remain_available: true
+
+  - id: profile-granularity-plan-change
+    kind: regression-trigger
+    old_profile:
+      plan: Pro
+      confirmation_gate: passed
+    new_profile:
+      plan: Business
+    expect:
+      previous_evidence_reused_without_test: false
+
+  - id: profile-granularity-workspace-policy-change
+    kind: regression-trigger
+    old_profile:
+      workspace_policy_digest: policy-a
+    new_profile:
+      workspace_policy_digest: policy-b
+    expect:
+      confirmation_gate_retest_required: true
+
+  - id: metadata-change-regression
+    kind: regression-trigger
+    old_manifest_digest: manifest-a
+    new_manifest_digest: manifest-b
+    affected_tool: service_restart
+    expect:
+      confirmation_gate_retest_required: true
+
+  - id: host-release-change-regression
+    kind: regression-trigger
+    old_host_release: release-a
+    new_host_release: release-b
+    expect:
+      confirmation_gate_retest_required: true
+
+  - id: compromised-host-residual-risk
+    kind: documented-limitation
+    host:
+      controller_credential_valid: true
+      confirmation_contract_violated: true
+    expect:
+      binnacle_independent_click_proof: false
+      local_policy_and_confinement_still_apply: true
+      product_claim_discloses_limitation: true
