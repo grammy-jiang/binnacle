@@ -1,210 +1,127 @@
-schema_version: "1.0"
-policy_id: binnacle-command-profiles
-policy_version: "1.0.0"
-default_profile: unsupported
+schema_version: "1.1"
+policy_id: command-execution
+policy_version: "1.1.0"
 
-common_required_properties:
-  separate_broker_process: true
-  separate_unprivileged_executor_process: true
-  server_process_executes_user_command: false
-  broker_single_operation_ticket: true
-  shell_interpolation_default: false
-  no_new_privileges: true
-  executor_capabilities: none
-  supplementary_groups: none
-  network_default: deny
-  raw_credentials: deny
-  credential_helpers: deny
-  device_default: deny
-  host_ipc: deny
-  inherited_descriptors: deny
-  control_plane_access: deny
-  descendant_resource_domain: required
-  descendant_cleanup_verification: required
-  fail_closed_on_missing_control: true
-
-profiles:
-  unsupported:
-    lifecycle: default
-    command_run_visible: false
-    command_run_allowed: false
-
-  workspace-general-v1:
-    lifecycle: candidate
-    confirmation_class: HC1-per-invocation
-    input:
-      execution_form: execve-argv
-      shell_language: denied
-      executable_resolution: exact-or-fixed-profile-path
-      working_directory: validated-workspace-relative
-      inline_stdin_max_bytes: 65536
-      environment_mode: empty-plus-allowlist
-    identity:
-      dedicated_uid_gid: required
-      distinct_from_binnacle: true
-      distinct_from_owner_login: true
-      capabilities: none
-      no_new_privileges: true
-      setuid_setgid_gain: denied
-      sudo_su_polkit: denied
-    filesystem:
-      runtime: minimal-read-only
-      workspace: explicit-profile-mode
-      temporary: operation-private-size-bounded
-      proc: isolated-minimal
-      sys: absent
-      host_root: absent
-      owner_homes: absent
-      binnacle_control_plane: absent
-      host_run_and_service_sockets: absent
-      nested_mounts: default-deny
-      symlink_escape: denied
-      hardlink_escape: denied
-      magiclink_escape: denied
-      special_files: denied
-    environment:
-      inherited_base: empty
-      fixed_keys:
-        - HOME
-        - PATH
-        - LANG
-        - LC_ALL
-        - TZ
-        - TMPDIR
-      denied_keys:
-        - SSH_AUTH_SOCK
-        - HTTP_PROXY
-        - HTTPS_PROXY
-        - ALL_PROXY
-        - NO_PROXY
-        - DBUS_SESSION_BUS_ADDRESS
-        - DOCKER_HOST
-        - KUBECONFIG
-        - AWS_ACCESS_KEY_ID
-        - AWS_SECRET_ACCESS_KEY
-        - GITHUB_TOKEN
-        - GIT_ASKPASS
-        - PYTHONPATH
-        - NODE_OPTIONS
-        - LD_PRELOAD
-        - LD_LIBRARY_PATH
-    file_descriptors:
-      inherit_only:
-        - stdin
-        - stdout
-        - stderr
-      close_range_or_equivalent: required
-      verification: required-where-platform-supports
-    network:
-      ipv4: deny
-      ipv6: deny
-      dns: deny
-      loopback: deny
-      raw_packet: deny
-      netlink: deny-unless-proven-harmless
-      unix_host_sockets: deny
-      proxy: deny
-    devices:
-      allowed_pseudo_devices:
-        - /dev/null
-        - /dev/zero
-        - /dev/urandom
-      block_devices: deny
-      tty: deny
-      gpio_i2c_spi_uart: deny
-      camera_input_audio_gpu: deny
-      fuse_kvm_tpm_watchdog: deny
-    syscalls:
-      policy: architecture-specific-allowlist
-      denied_classes:
-        - mount-and-root-change
-        - namespace-change
-        - ptrace-and-process-memory
-        - bpf-perf-and-kernel-keyring
-        - module-kexec-reboot-swap-and-time
-        - device-node-and-privileged-io
-        - capability-and-securebits-change
-        - network-and-host-ipc
-        - cgroup-escape
-        - unreviewed-io_uring-userfault-fanotify
-    resources:
-      cgroup_or_equivalent: required
-      cpu_quota: required
-      cpu_time: required
-      wall_time: required
-      memory_max: required
-      swap_max: required
-      pids_max: required
-      open_files_max: required
-      file_size_max: required
-      temporary_storage_max: required
-      output_bytes_max: required
-      io_limit: required-where-supported
-      core_dumps: deny
-    cleanup:
-      operation_domain: required
-      graceful_signal: SIGTERM
-      grace_seconds_max: 10
-      forced_signal: SIGKILL
-      kill_all_descendants: required
-      verify_empty_domain: required
-      verify_unmount_and_temp_cleanup: required
-      cleanup_failure_state: uncertain-or-failed-and-quarantine
-    output:
-      stdout_stderr_separate: true
-      byte_limits: required
-      rate_limits: required
-      truncation_explicit: true
-      binary_safe_representation: required
-      terminal_escape_handling: required
-      provenance: local-untrusted
-
-  workspace-check-v1:
-    lifecycle: deferred-promotion
-    inherits: workspace-general-v1
-    purpose: Frozen formatting, lint, test, or build command allowlist.
-    confirmation_class: to-be-decided-after-host-and-sandbox-evidence
-    executable_allowlist: required
-    argument_grammar: closed
-    script_and_config_inputs: reviewed-workspace-only
-    network: deny
-    credentials: deny
-    devices: deny
-
-  self-management:
-    lifecycle: separate-contract
-    command_run_profile: false
-    dedicated_tool_required: true
-    dedicated_broker_action_required: true
-    confirmation_class: HC1-per-invocation
-    rollback_and_recovery_required: true
+architecture:
+  policy_process_separate: true
+  narrow_execution_broker_separate: true
+  unprivileged_executor_separate: true
+  direct_subprocess_fallback: false
 
 broker_ticket:
+  single_use: true
   required_fields:
+    - ticket_id
     - operation_id
-    - controller_id
-    - command_profile_id_and_version
-    - executable_and_argv_digest
-    - workspace_identity_and_mount_plan_digest
-    - environment_and_descriptor_plan_digest
-    - network_device_credential_and_syscall_policy_digests
-    - resource_limits
-    - timeout_and_cancellation_contract
-    - information_and_output_limits
-    - policy_and_device_profile_versions
-    - created_at
+    - controller_id_digest
+    - device_id
+    - command_profile_id
+    - executable_identity
+    - argv_sha256
+    - stdin_sha256
+    - stdin_reference_sha256
+    - workspace_script_sha256
+    - workspace_root_identity
+    - mount_plan_sha256
+    - environment_sha256
+    - policy_sha256
+    - resource_plan_sha256
+    - sandbox_plan_sha256
+    - workspace_write_bytes_max
+    - workspace_inode_count_max
     - expires_at
-    - single_use_admission_id
-  model_visible: false
-  child_visible: false
-  stored_in_workspace: false
+    - admission_record_id
+    - single_use_nonce
+  optional_input_digest_fields_use_null_when_absent: true
+  revalidate_all_input_digests_at_admission: true
 
-terminal_state_rules:
-  leader_exit_is_completion: false
-  cleanup_verified_required_for_success_or_cancelled: true
-  unknown_descendant_or_mount:
-    operation_state:
-      - failed
-      - uncertain
-    quarantine_conflicting_commands: true
-    automatic_retry: false
+filesystem:
+  canonical_workspace_root_required: true
+  fail_closed_on_path_or_mount_ambiguity: true
+  control_plane_visible: false
+  credentials_visible: false
+  audit_and_recovery_visible: false
+  binnacle_executable_state_visible: false
+  arbitrary_host_mounts_visible: false
+  per_file_size_max: 16777216
+  workspace_write_bytes_max: 134217728
+  workspace_inode_count_max: 4096
+  private_tmp_bytes_max: 67108864
+
+network:
+  default: denied
+  ipv4: denied
+  ipv6: denied
+  dns: denied
+  unix_sockets: denied
+  inherited_sockets: denied
+  mediated_egress_only: true
+
+devices:
+  default: denied
+  arbitrary_device_nodes: denied
+
+credentials:
+  raw_credentials: denied
+  credential_helpers: denied
+  inherited_agents: denied
+
+privilege:
+  dedicated_unprivileged_identity: true
+  no_new_privileges: true
+  ambient_capabilities: none
+  inheritable_capabilities: none
+  setuid_setgid_gain: denied
+  ptrace_outside_sandbox: denied
+  bpf: denied
+  kernel_keyring: denied
+  syscall_policy_required: true
+  mandatory_access_control_required: true
+
+resources:
+  descendant_wide: true
+  cpu_time_seconds_max: 600
+  wall_time_seconds_max: 900
+  memory_bytes_max: 1073741824
+  swap_bytes_max: 0
+  pids_max: 256
+  open_files_max: 1024
+  stdout_stderr_bytes_max: 16777216
+  retained_result_bytes_max: 33554432
+
+cleanup:
+  graceful_then_forced: true
+  descendants_verified: true
+  mounts_and_namespaces_verified: true
+  temporary_resources_verified_or_quarantined: true
+  cleanup_failure_is_not_cancelled: true
+
+profiles:
+  workspace-general-v1:
+    command_run_visible: true
+    command_run_allowed: true
+    structured_argv_only: true
+    inherits_global_network: true
+    inherits_global_devices: true
+    inherits_global_credentials: true
+    workspace_write_bytes_max: 134217728
+    workspace_inode_count_max: 4096
+
+  workspace-check-v1:
+    inherits: workspace-general-v1
+    command_run_visible: true
+    command_run_allowed: true
+    allowed_executables:
+      - python
+      - pytest
+      - ruff
+      - mypy
+      - git
+    workspace_write_bytes_max: 33554432
+    workspace_inode_count_max: 1024
+    wall_time_seconds_max: 300
+
+  self-management:
+    command_run_visible: false
+    command_run_allowed: false
+    dedicated_self_management_tools_required: true
