@@ -1,0 +1,350 @@
+schema_version: "1.0"
+policy_id: binnacle-supply-chain-release
+policy_version: "1.0.0"
+release_manifest_schema: schemas/supply-chain/release-manifest.schema.json
+
+assurance_states:
+  development-unverified:
+    remote_supported_operation: false
+  preview-verified:
+    permitted_profiles:
+      - frozen-private-engineering-preview
+  release-candidate:
+    permitted_deployment:
+      - named-canary
+  supported-release:
+    all_required_gates_pass: true
+    independent_signature_or_attestation: true
+  restricted:
+    permitted_functions:
+      - identity_and_release_evidence
+      - bounded_status
+      - audit_and_integrity_evidence
+      - cancellation_and_safe_stop
+      - verified_update_or_rollback
+      - local_recovery
+  retired:
+    permitted_functions:
+      - identity_and_release_evidence
+      - migration_or_update
+      - local_recovery
+
+approved_sources:
+  exact_source_commit_required: true
+  source_tree_digest_required: true
+  mutable_branch_is_pin: false
+  tag_alone_is_pin: false
+  submodules_pinned: true
+  generated_source_recorded: true
+  unapproved_fork_allowed: false
+
+component_lock:
+  direct_dependencies: required
+  transitive_dependencies: required
+  exact_versions: required
+  artifact_sha256: required
+  approved_source_uri: required
+  package_identity: required
+  platform_selector: required
+  license: required
+  vulnerability_status: required
+  eol_status: required
+  floating_ranges_during_release: forbidden
+  lock_drift: release_failure
+
+security_critical_components:
+  - mcp-sdk
+  - tunnel-or-gateway-agent
+  - binnacle-server
+  - execution-broker
+  - sandbox-or-mac-components
+  - authentication-and-crypto-libraries
+  - installer-and-updater
+  - runtime-interpreter-and-native-extensions
+
+external_services:
+  local_agent_digest_required: true
+  remote_service_artifact_digest:
+    require_when_exposed: true
+    invent_when_unavailable: false
+  required_record:
+    - provider_identity
+    - account_and_workspace
+    - security_configuration_digest
+    - observed_service_release_identity
+    - vendor_attestation_when_available
+    - compatibility_evidence
+    - incident_and_replacement_path
+  unsupported_when_required_assurance_unavailable: true
+
+sbom:
+  accepted_formats:
+    - SPDX
+    - CycloneDX
+  required_documents:
+    - source-build
+    - runtime
+    - deployed-inventory
+  component_hashes_required: true
+  dependency_relationships_required: true
+  licenses_required: true
+  unknown_components:
+    supported_release: forbidden
+    preview: explicit_exception_required
+  retention: release_lifetime_plus_longest_security_requirement
+
+provenance:
+  signed_statement_required_for_supported_release: true
+  required_fields:
+    - source_repository_and_commit
+    - source_tree_digest
+    - component_lock_digest
+    - builder_identity
+    - build_definition_digest
+    - invocation_and_parameters
+    - build_environment_identity
+    - network_policy
+    - materials_and_digests
+    - outputs_and_digests
+    - start_and_end_time
+    - isolation_hermeticity_and_reproducibility_claim
+    - test_and_scan_evidence
+    - signer_or_attester_identity
+  builder_requirements:
+    clean_approved_environment: true
+    unrecorded_dependency_resolution: forbidden
+    untrusted_pr_signing_context: forbidden
+    build_and_release_signing_separated: true
+    secrets_in_output: forbidden
+
+reproducibility:
+  levels:
+    RB0-unassessed:
+      claim: none
+    RB1-resolved-inputs:
+      requirement: source_and_component_lock_identical
+    RB2-deterministic-package:
+      requirement: repeated_reviewed_builder_payload_digest_identical
+    RB3-independent-rebuild:
+      requirement: independent_builder_payload_digest_identical
+  preview_minimum: RB1-resolved-inputs
+  supported_target: RB2-deterministic-package
+  independent_rebuild_claim_without_evidence: forbidden
+
+signing:
+  supported_release_required: true
+  accepted_mechanisms:
+    - key-backed
+    - identity-backed
+    - other-reviewed
+  signer_separate_from_installed_runtime: true
+  signer_separate_from_untrusted_pr_execution: true
+  unapproved_valid_signature: reject
+  release_manifest_signed_or_attested: true
+  artifact_binding_required: true
+  trust_root_change:
+    owner_governed: true
+    general_remote_tool_allowed: false
+
+vulnerability_policy:
+  scan_scope:
+    - source
+    - direct_and_transitive_dependencies
+    - native_libraries_and_bundled_binaries
+    - container_or_base_image_when_used
+    - tunnel_and_gateway_agents
+    - relevant_os_and_runtime_components
+    - sbom
+    - secrets
+    - malware_and_integrity
+    - licenses_and_notices
+    - end_of_life
+  maximum_database_age_seconds: 86400
+  blockers:
+    actively_exploited_affecting_deployment: true
+    unmitigated_critical: true
+    exploitable_high_across_trust_boundary: exception_required
+    unknown_security_critical_component: true
+    unapproved_source_or_artifact: true
+    prohibited_license_or_missing_notice: true
+    secret_malware_signature_provenance_integrity_failure: true
+  severity_alone_complete_decision: false
+
+exceptions:
+  required_fields:
+    - component_and_finding
+    - affected_builds_and_profiles
+    - exploitability_and_exposure
+    - compensating_controls
+    - owner_or_security_decision
+    - expiry
+    - remediation_owner_and_date
+    - monitoring_and_forced_retirement_trigger
+  expired_exception:
+    new_install: block
+    release_promotion: block
+  indefinite_exception: forbidden
+
+release_gates:
+  - clean_source_state
+  - component_lock_and_hashes
+  - approved_sources
+  - sbom
+  - provenance
+  - release_manifest
+  - schemas_and_contracts
+  - vulnerability_and_license_policy
+  - secret_and_malware_scan
+  - unit_integration_and_fault_injection_tests
+  - mcp_revision_and_wire_conformance
+  - controller_and_transport_security
+  - tool_metadata_integrity
+  - capability_composition
+  - host_confirmation
+  - command_isolation_when_enabled
+  - idempotency_and_lifecycle
+  - audit_and_recovery
+  - target_device_profiles
+  - installation_startup_update_and_rollback
+  - signature_or_attestation
+  skipped_required_gate: failure
+
+installation:
+  content_addressed_staging: true
+  verify_before_effect:
+    - release_manifest_schema
+    - release_signature_or_attestation
+    - approved_signer_or_identity_claims
+    - artifact_digest_and_size
+    - component_lock
+    - sbom_and_provenance
+    - target_profile
+    - support_and_retirement_state
+    - migration_and_rollback
+    - local_policy
+    - capacity_and_recovery
+  execute_from_mutable_download_location: false
+
+startup_verification:
+  required:
+    - release_manifest_identity_and_authenticity
+    - server_artifact_digest
+    - tool_manifest_digest
+    - schema_registry_digest
+    - policy_and_audit_schema_digests
+    - critical_helper_and_agent_identity
+    - configuration_and_device_profile_compatibility
+    - support_retirement_and_revocation_state
+    - migration_state
+    - installed_inventory
+  mismatch_state: restricted
+  auto_bless_observed_files: false
+  deep_verification:
+    periodic_or_on_demand: required
+    startup_full_scan_required_when_immutable_root_absent: true
+
+update:
+  dedicated_self_manage_operation: true
+  command_run_allowed: false
+  confirmation_class: HC1-per-invocation
+  idempotency_and_audit_required: true
+  states:
+    - available
+    - downloaded
+    - verified
+    - staged
+    - preflight_passed
+    - activated
+    - health_verifying
+    - accepted
+    - rollback_pending
+    - rolled_back
+    - recovery_required
+  preactivation_checks:
+    - release_and_component_evidence
+    - current_target_version_path
+    - storage_and_resource_capacity
+    - configuration_and_migration
+    - protocol_and_tool_compatibility
+    - security_and_sandbox_compatibility
+    - rollback_artifact
+    - unresolved_operations
+    - audit_and_idempotency_durability
+  canary_required_before_multi_device_rollout: true
+  instances_coordinate_rollout: false
+
+migration:
+  required_fields:
+    - source_and_target_versions
+    - preconditions
+    - backup_or_snapshot
+    - forward_transform_and_verification
+    - rollback_or_non_reversible_boundary
+    - downtime_and_storage
+    - crash_and_restart
+    - evidence_and_recovery
+  non_reversible:
+    owner_confirmation_required: true
+    tested_forward_recovery_required: true
+    automatic_rollback_claim: forbidden
+
+rollback:
+  last_known_safe_artifact_retained_before_activation: true
+  target: exact_recorded_previous_release
+  download_latest_during_incident: forbidden
+  retired_revoked_incompatible_or_unverifiable_target: forbidden
+  automatic_triggers:
+    - target_startup_failure
+    - target_integrity_failure
+    - bounded_health_check_failure
+    - mcp_endpoint_reconnect_failure
+    - migration_failure_before_non_reversible_boundary
+  success_verification:
+    - old_manifest_and_artifact
+    - service_health
+    - data_and_configuration_compatibility
+    - controller_authentication_and_mcp_probe
+    - audit_and_operation_store_integrity
+    - no_partial_target_components
+    - current_vulnerability_and_retirement_policy
+  unverifiable_result: restricted_and_local_recovery
+
+retirement:
+  dispositions:
+    - monitor
+    - mitigate
+    - block_new_install
+    - restricted
+    - retired
+    - emergency_isolate
+  decision_authentication_required: true
+  exact_release_manifest_digests_required: true
+  model_or_advisory_text_authoritative: false
+  offline_immediate_retirement_claim: false
+  latency_recorded: true
+  minimum_functions:
+    - identity_and_release_evidence
+    - audit_and_integrity_evidence
+    - bounded_status
+    - cancellation_and_safe_stop
+    - verified_update_or_rollback
+    - local_recovery
+
+inventory:
+  required_fields:
+    - device_and_profile
+    - release_and_artifact
+    - signer_or_attester
+    - source_commit_and_component_lock
+    - mcp_sdk_tunnel_runtime_broker_sandbox_security_components
+    - sbom_and_provenance
+    - tool_manifest_and_visible_catalogue
+    - schemas_policy_audit_and_migrations
+    - vulnerability_exception_and_support_state
+    - install_update_rollback_and_verification_results
+  expose_sanitized_in:
+    - binnacle_probe
+    - compatibility_report
+    - operation_evidence
+    - audit
+  expose_secrets: false

@@ -1,0 +1,838 @@
+schema_version: "1.0"
+profile: binnacle-release-security
+source_contract: docs/supply-chain.md
+manifest_schema: schemas/supply-chain/release-manifest.schema.json
+policy: spec/supply-chain/release-policy.yaml
+
+cases:
+  - id: exact-source-commit
+    kind: positive
+    source:
+      repository: https://github.com/grammy-jiang/binnacle
+      commit_sha: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+      tree_sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+      descriptive_ref: refs/tags/v0.1.0
+    expect:
+      immutable_source_identity: true
+
+  - id: branch-only-source
+    kind: negative
+    source:
+      repository: https://github.com/grammy-jiang/binnacle
+      branch: master
+      commit_sha: null
+    expect:
+      release_allowed: false
+
+  - id: tag-points-to-unexpected-commit
+    kind: negative
+    source:
+      tag: v0.1.0
+      expected_commit: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+      actual_commit: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+    expect:
+      release_allowed: false
+
+  - id: unapproved-fork
+    kind: negative
+    source:
+      repository: https://github.com/attacker/binnacle
+      commit_sha: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    expect:
+      release_allowed: false
+
+  - id: dirty-release-source
+    kind: negative
+    source:
+      uncommitted_changes: true
+      untracked_release_inputs: true
+    expect:
+      release_allowed: false
+
+  - id: submodule-unpinned
+    kind: negative
+    source:
+      submodule_url: https://example.invalid/dependency.git
+      submodule_ref: main
+      submodule_commit: null
+    expect:
+      release_allowed: false
+
+  - id: direct-dependency-pinned
+    kind: positive
+    component:
+      name: mcp-sdk
+      version: 2.0.0
+      artifact: mcp_sdk-2.0.0-py3-none-any.whl
+      sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+      source_uri: https://registry.example.invalid/mcp-sdk
+      approved: true
+    expect:
+      component_valid: true
+
+  - id: floating-dependency-range
+    kind: negative
+    component:
+      name: mcp-sdk
+      version: ">=2"
+      sha256: null
+    expect:
+      release_allowed: false
+
+  - id: transitive-dependency-missing
+    kind: negative
+    lock:
+      direct_components:
+        - mcp-sdk
+      transitive_components_complete: false
+    expect:
+      release_allowed: false
+
+  - id: artifact-hash-missing
+    kind: negative
+    component:
+      name: runtime-library
+      version: 1.0.0
+      sha256: null
+    expect:
+      release_allowed: false
+
+  - id: lock-drift
+    kind: negative
+    committed_lock_sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    resolved_lock_sha256: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+    expect:
+      release_allowed: false
+
+  - id: package-substitution
+    kind: negative
+    lock:
+      artifact_sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    downloaded:
+      artifact_sha256: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+    expect:
+      artifact_executed: false
+      install_allowed: false
+
+  - id: mcp-sdk-version-mismatch
+    kind: negative
+    release_manifest:
+      mcp_sdk_version: 2.0.0
+      mcp_sdk_sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    installed:
+      mcp_sdk_version: 2.1.0
+      mcp_sdk_sha256: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+    expect:
+      startup_state: restricted
+
+  - id: sdk-update-reopens-contracts
+    kind: regression-trigger
+    old_sdk:
+      version: 2.0.0
+      sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    new_sdk:
+      version: 2.1.0
+      sha256: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+    expect_retest:
+      - mcp_revision_support
+      - mcp_2026_wire
+      - controller_transport_security
+      - tool_metadata_integrity
+      - cancellation
+      - host_compatibility
+
+  - id: tunnel-agent-valid
+    kind: positive
+    component:
+      type: tunnel-agent
+      version: 1.2.3
+      sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+      publisher_signature_valid: true
+    expect:
+      component_valid: true
+
+  - id: tunnel-agent-latest-tag
+    kind: negative
+    component:
+      version: latest
+      sha256: null
+    expect:
+      deployment_allowed: false
+
+  - id: remote-service-no-artifact-digest
+    kind: documented-external-dependency
+    service:
+      artifact_digest_exposed: false
+      provider_identity_recorded: true
+      local_agent_digest_recorded: true
+      security_configuration_digest_recorded: true
+      observed_release_identity_recorded: true
+      compatibility_evidence_recorded: true
+    policy:
+      remote_service_artifact_digest_mandatory: false
+    expect:
+      digest_invented: false
+      residual_risk_recorded: true
+      profile_may_continue_subject_to_policy: true
+
+  - id: remote-service-assurance-requires-digest
+    kind: negative
+    service:
+      artifact_digest_exposed: false
+    policy:
+      remote_service_artifact_digest_mandatory: true
+    expect:
+      supported_profile_allowed: false
+
+  - id: source-build-sbom-complete
+    kind: positive
+    sbom:
+      direct_components_complete: true
+      transitive_components_complete: true
+      build_tools_complete: true
+      hashes_complete: true
+      licenses_complete: true
+      relationships_complete: true
+    expect:
+      sbom_gate: passed
+
+  - id: runtime-sbom-missing-native-library
+    kind: negative
+    sbom:
+      runtime_components:
+        - binnacle
+        - mcp-sdk
+      loaded_native_libraries:
+        - lib-a
+      listed_native_libraries: []
+    expect:
+      sbom_gate: failed
+
+  - id: unknown-component-preview
+    kind: negative
+    release_state: preview-verified
+    component:
+      identity: unknown
+      exception_present: false
+    expect:
+      preview_allowed: false
+
+  - id: unknown-component-supported
+    kind: negative
+    release_state: supported-release
+    component:
+      identity: unknown
+    expect:
+      release_allowed: false
+
+  - id: deployed-inventory-drift
+    kind: negative
+    release_runtime_sbom_sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    deployed_inventory_sha256: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+    drift_explained_by_profile: false
+    expect:
+      startup_state: restricted
+
+  - id: provenance-complete
+    kind: positive
+    provenance:
+      source_present: true
+      lock_present: true
+      builder_identity_present: true
+      build_definition_digest_present: true
+      materials_complete: true
+      outputs_complete: true
+      signed: true
+    expect:
+      provenance_gate: passed
+
+  - id: provenance-missing-material
+    kind: negative
+    provenance:
+      materials_complete: false
+    expect:
+      release_allowed: false
+
+  - id: builder-network-unrecorded
+    kind: negative
+    build:
+      network_access: unrestricted
+      requests_recorded: false
+    expect:
+      supported_release_allowed: false
+
+  - id: untrusted-pr-signing-context
+    kind: negative
+    workflow:
+      executes_untrusted_pull_request_code: true
+      release_signing_credentials_available: true
+    expect:
+      release_allowed: false
+
+  - id: build-secret-in-artifact
+    kind: negative
+    build:
+      secret_available: true
+      output_contains_secret: true
+    expect:
+      release_allowed: false
+
+  - id: rb1-resolved-inputs
+    kind: positive-claim
+    builds:
+      source_and_lock_identical: true
+      output_digest_identical: false
+    expect:
+      maximum_claim: RB1-resolved-inputs
+
+  - id: rb2-deterministic-package
+    kind: positive-claim
+    builds:
+      builder_identity_same: true
+      repetitions: 3
+      payload_digests:
+        - aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+        - aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+        - aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    expect:
+      maximum_claim: RB2-deterministic-package
+
+  - id: rb2-digest-mismatch
+    kind: negative-claim
+    builds:
+      builder_identity_same: true
+      payload_digests:
+        - aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+        - bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+    expect:
+      rb2_claim_allowed: false
+
+  - id: rb3-independent-rebuild
+    kind: positive-claim
+    builds:
+      independent_builders: 2
+      payload_digests:
+        - aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+        - aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    expect:
+      maximum_claim: RB3-independent-rebuild
+
+  - id: false-independent-rebuild-claim
+    kind: negative-claim
+    builds:
+      independent_builders: 1
+      payload_digests:
+        - aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    expect:
+      rb3_claim_allowed: false
+
+  - id: signature-valid-approved-identity
+    kind: positive
+    signature:
+      cryptographically_valid: true
+      issuer: https://issuer.example.invalid
+      subject: approved-release-workflow
+      approved: true
+      artifact_digest_matches: true
+    expect:
+      signature_gate: passed
+
+  - id: signature-valid-unapproved-identity
+    kind: negative
+    signature:
+      cryptographically_valid: true
+      issuer: https://attacker.example.invalid
+      subject: attacker
+      approved: false
+      artifact_digest_matches: true
+    expect:
+      release_allowed: false
+
+  - id: signature-artifact-mismatch
+    kind: negative
+    signature:
+      cryptographically_valid: true
+      signed_artifact_digest: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    artifact:
+      sha256: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+    expect:
+      install_allowed: false
+
+  - id: runtime-self-signature-only
+    kind: negative
+    signature:
+      created_by_installed_binnacle: true
+      independent_trust_root: false
+    expect:
+      supported_release_trust_established: false
+
+  - id: missing-transparency-receipt-when-required
+    kind: negative
+    policy:
+      transparency_receipt_required: true
+    signing:
+      signature_valid: true
+      receipt_present: false
+    expect:
+      release_allowed: false
+
+  - id: vulnerability-db-current
+    kind: positive
+    scan:
+      database_age_seconds: 3600
+    policy:
+      maximum_age_seconds: 86400
+    expect:
+      freshness_gate: passed
+
+  - id: vulnerability-db-stale
+    kind: negative
+    scan:
+      database_age_seconds: 172800
+    policy:
+      maximum_age_seconds: 86400
+    expect:
+      release_allowed: false
+
+  - id: actively-exploited-vulnerability
+    kind: negative
+    finding:
+      actively_exploited: true
+      deployed_configuration_affected: true
+    expect:
+      release_allowed: false
+
+  - id: critical-unmitigated
+    kind: negative
+    finding:
+      severity: critical
+      mitigated: false
+    expect:
+      release_allowed: false
+
+  - id: high-unreachable
+    kind: positive-policy-evaluation
+    finding:
+      severity: high
+      reachable: false
+      deployed_configuration_affected: false
+      analysis_recorded: true
+    expect:
+      severity_alone_blocks: false
+      disposition_recorded: true
+
+  - id: high-exploitable-no-exception
+    kind: negative
+    finding:
+      severity: high
+      reachable: true
+      crosses_trust_boundary: true
+      exception_present: false
+    expect:
+      release_allowed: false
+
+  - id: valid-time-bounded-exception
+    kind: positive
+    exception:
+      rationale_present: true
+      compensating_controls_present: true
+      approved: true
+      expiry_in_future: true
+      remediation_owner_present: true
+      remediation_date_present: true
+    expect:
+      finding_gate: exception
+
+  - id: expired-exception
+    kind: negative
+    exception:
+      expired: true
+    expect:
+      new_install_allowed: false
+      release_promotion_allowed: false
+
+  - id: indefinite-exception
+    kind: negative
+    exception:
+      expires_at: null
+    expect:
+      exception_valid: false
+
+  - id: prohibited-license
+    kind: negative
+    component:
+      license: prohibited-license
+    expect:
+      release_allowed: false
+
+  - id: missing-required-notice
+    kind: negative
+    component:
+      license_requires_notice: true
+      notice_present: false
+    expect:
+      release_allowed: false
+
+  - id: secret-scan-failure
+    kind: negative
+    scan:
+      secret_found: true
+      false_positive_approved: false
+    expect:
+      release_allowed: false
+
+  - id: malware-integrity-failure
+    kind: negative
+    downloaded_artifact:
+      malware_or_integrity_check: failed
+    expect:
+      release_allowed: false
+
+  - id: eol-security-critical-component
+    kind: negative
+    component:
+      security_critical: true
+      end_of_life: true
+      exception_present: false
+    expect:
+      release_allowed: false
+
+  - id: skipped-required-gate
+    kind: negative
+    gate:
+      id: command-isolation
+      required: true
+      status: skipped
+    expect:
+      release_allowed: false
+
+  - id: install-valid-release
+    kind: positive
+    verification:
+      manifest_schema: passed
+      signature: passed
+      artifact_digest: passed
+      component_lock: passed
+      sbom_provenance: passed
+      target_profile: passed
+      support_state: passed
+      migration_rollback: passed
+      local_policy: passed
+      capacity_recovery: passed
+    expect:
+      install_effect_allowed: true
+
+  - id: install-unverified-manifest
+    kind: negative
+    verification:
+      manifest_signature: failed
+    expect:
+      install_effect_allowed: false
+
+  - id: execute-from-mutable-download
+    kind: negative
+    installer:
+      download_path_mutable_by_untrusted_user: true
+      executes_directly: true
+    expect:
+      installation_valid: false
+
+  - id: wrong-architecture
+    kind: negative
+    release:
+      architecture: aarch64
+    device:
+      architecture: armv7l
+    expect:
+      install_allowed: false
+
+  - id: insufficient-recovery-storage
+    kind: negative
+    required_free_bytes: 1000000000
+    available_free_bytes: 100000000
+    expect:
+      install_allowed: false
+
+  - id: startup-artifact-drift
+    kind: negative
+    release_artifact_sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    installed_artifact_sha256: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+    expect:
+      remote_catalogue_exposed: false
+      startup_state: restricted
+
+  - id: startup-tool-manifest-drift
+    kind: negative
+    release_tool_manifest_sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    installed_tool_manifest_sha256: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+    expect:
+      remote_catalogue_exposed: false
+      startup_state: restricted
+
+  - id: startup-auto-bless-drift
+    kind: negative
+    installed_drift_detected: true
+    implementation_action: rewrite-release-manifest-to-observed
+    expect:
+      contract_pass: false
+
+  - id: protected-immutable-runtime-root
+    kind: positive
+    installation:
+      immutable_runtime_root: true
+      root_digest_verified_at_startup: true
+      periodic_deep_verification: true
+    expect:
+      full_file_scan_every_startup_required: false
+
+  - id: mutable-runtime-no-deep-startup-verification
+    kind: negative
+    installation:
+      immutable_runtime_root: false
+      full_startup_verification: false
+    expect:
+      supported_startup_allowed: false
+
+  - id: dedicated-update-operation
+    kind: positive
+    update:
+      invoked_via: self-manage-tool
+      command_run_used: false
+      hc1_confirmation: passed
+      idempotency: passed
+      audit: passed
+    expect:
+      update_may_proceed: true
+
+  - id: update-via-command-run
+    kind: negative
+    update:
+      invoked_via: command_run
+    expect:
+      update_allowed: false
+
+  - id: update-crash-matrix
+    kind: matrix
+    fault_points:
+      - after-download
+      - after-verification
+      - after-staging
+      - after-preflight
+      - after-activation-before-health
+      - during-health
+      - during-rollback
+    expect_for_each:
+      state_reconstructable: true
+      active_release_unambiguous_or_recovery_required: true
+      unsigned_artifact_never_executed: true
+      audit_and_idempotency_preserved: true
+
+  - id: canary-required-multi-device
+    kind: negative
+    deployment:
+      devices: 3
+      canary_completed: false
+    expect:
+      non_canary_updates_allowed: false
+
+  - id: canary-pass
+    kind: positive
+    canary:
+      install_startup_integrity: passed
+      mcp_and_host_probes: passed
+      tool_and_schema_validation: passed
+      controller_authentication: passed
+      read_and_write_probes: passed
+      command_sandbox_when_enabled: passed
+      idempotency_audit_recovery: passed
+      restart_reconnect: passed
+      resource_latency_budgets: passed
+      owner_accepted: true
+    expect:
+      other_devices_may_be_considered: true
+
+  - id: unresolved-operation-blocks-update
+    kind: negative
+    operation:
+      state: uncertain
+      would_be_orphaned: true
+    expect:
+      activation_allowed: false
+
+  - id: reversible-migration-rollback
+    kind: positive
+    migration:
+      reversible: true
+      backup_verified: true
+      forward_verification: passed
+      rollback_test: passed
+    expect:
+      automatic_rollback_may_be_allowed: true
+
+  - id: non-reversible-migration-no-confirmation
+    kind: negative
+    migration:
+      reversible: false
+      owner_confirmation: false
+      forward_recovery_test: passed
+    expect:
+      activation_allowed: false
+
+  - id: non-reversible-migration-no-forward-recovery
+    kind: negative
+    migration:
+      reversible: false
+      owner_confirmation: true
+      forward_recovery_test: failed
+    expect:
+      activation_allowed: false
+
+  - id: rollback-valid
+    kind: positive
+    rollback:
+      exact_previous_artifact: true
+      artifact_verified: true
+      not_retired: true
+      data_compatible: true
+      startup_health: passed
+      mcp_probe: passed
+      audit_operation_store: passed
+      no_partial_target_components: true
+    expect:
+      rollback_state: rolled_back
+
+  - id: rollback-download-latest
+    kind: negative
+    rollback:
+      downloads_channel: latest
+      exact_previous_artifact: false
+    expect:
+      rollback_allowed: false
+
+  - id: rollback-to-retired-build
+    kind: negative
+    rollback:
+      target_retired: true
+    expect:
+      rollback_allowed: false
+
+  - id: rollback-data-incompatible
+    kind: negative
+    rollback:
+      artifact_verified: true
+      data_compatible: false
+    expect:
+      rollback_allowed: false
+      state: recovery_required
+
+  - id: automatic-rollback-unlisted-trigger
+    kind: negative
+    trigger: owner_changed_mind
+    expect:
+      automatic_rollback_allowed: false
+
+  - id: retirement-decision-valid
+    kind: positive
+    decision:
+      authenticated: true
+      exact_release_manifest_sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+      disposition: restricted
+    expect:
+      policy_may_apply: true
+
+  - id: advisory-text-retirement
+    kind: negative
+    source:
+      type: github_issue_or_model_message
+      says_retire_build: true
+      authenticated_policy_decision: false
+    expect:
+      build_remotely_disabled: false
+
+  - id: offline-retirement-latency
+    kind: documented-limit
+    device:
+      offline: true
+      last_accepted_policy: active
+      support_expiry_in_future: true
+    expect:
+      immediate_remote_retirement_claimed: false
+      maximum_latency_recorded: true
+
+  - id: restricted-minimum-functions
+    kind: positive
+    release_state: restricted
+    requested_functions:
+      - identity_and_release_evidence
+      - audit_and_integrity_evidence
+      - bounded_status
+      - cancellation_and_safe_stop
+      - verified_update_or_rollback
+      - local_recovery
+    expect:
+      permitted_subject_to_local_safety: true
+
+  - id: restricted-normal-command
+    kind: negative
+    release_state: restricted
+    requested_function: command_run
+    expect:
+      permitted: false
+
+  - id: compromised-rebuild-no-auto-trust
+    kind: positive-security-property
+    recovery:
+      files_restored: true
+      fresh_device_trust_decision: false
+    expect:
+      normal_remote_operation_allowed: false
+
+  - id: release-manifest-unknown-field
+    kind: negative
+    manifest:
+      unexpected_field: value
+    expect:
+      schema_valid: false
+
+  - id: release-manifest-missing-sbom
+    kind: negative
+    manifest:
+      sbom: null
+    expect:
+      schema_valid: false
+
+  - id: release-manifest-component-unapproved
+    kind: negative
+    component:
+      approved: false
+    expect:
+      schema_valid: false
+
+  - id: evidence-binding
+    kind: positive
+    expect_runtime_evidence_fields:
+      - release_id
+      - version
+      - release_manifest_sha256
+      - artifact_sha256
+      - signer_or_attester_result
+      - source_commit
+      - component_lock_sha256
+      - mcp_sdk_identity
+      - tunnel_or_gateway_identity
+      - sbom_and_provenance_digests
+      - tool_manifest_and_catalogue_digests
+      - schema_policy_audit_and_migration_versions
+      - vulnerability_exception_and_support_state
+      - install_update_rollback_and_verification_results
+
+required_oracles:
+  - JSON Schema validation
+  - component-lock and downloaded-artifact hash verification
+  - SBOM completeness and dependency relationship validation
+  - provenance and signature/attestation verification
+  - vulnerability, license, secret, malware, and EOL policy evaluation
+  - repeated and independent build comparison
+  - installation and startup drift verification
+  - staged update and rollback fault injection
+  - retirement and restricted-mode policy checks
