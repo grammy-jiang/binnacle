@@ -1,0 +1,141 @@
+schema_version: "1.0"
+policy_id: binnacle-host-confirmation-classes
+policy_version: "1.0.0"
+default_class: HC3-unsupported
+
+classes:
+  HC0-no-confirmation:
+    description: Bounded low-risk operation may be invoked without a fresh per-invocation owner prompt.
+    host_profile_gate: basic-tool-invocation
+    prepared_operation_required: false
+    local_policy_required: true
+
+  HC1-per-invocation:
+    description: Every new consequential effect requires one fresh exact owner confirmation in the validated ChatGPT host.
+    host_profile_gate: exact-non-bypassable-per-invocation-confirmation
+    prepared_operation_required: true
+    new_effect_per_confirmation: 1
+    model_supplied_confirmation_argument_allowed: false
+
+  HC2-confirmed-envelope:
+    description: One owner-confirmed deterministic envelope may admit bounded member operations with durable accounting.
+    status: deferred
+    host_profile_gate: envelope-display-and-exhaustion
+    prepared_envelope_required: true
+
+  HC3-unsupported:
+    description: Host confirmation is insufficient or the operation is outside Personal V1 risk scope.
+    tool_exposed: false
+    invocation_allowed: false
+
+initial_contract_classification:
+  binnacle_probe: HC0-no-confirmation
+  system_inspect: HC0-no-confirmation
+  probe_result_formats: HC0-no-confirmation
+  probe_error: HC0-no-confirmation
+  compatibility_report: HC0-no-confirmation
+  probe_workspace_write: HC1-per-invocation
+  probe_workspace_cleanup: HC1-per-invocation
+  device_inspect: HC0-no-confirmation
+  device_profile_get: HC0-no-confirmation
+  filesystem_list: HC0-no-confirmation
+  filesystem_read_normal_result: HC0-no-confirmation
+  filesystem_read_restricted_result: HC1-per-invocation
+  filesystem_search_normal_result: HC0-no-confirmation
+  filesystem_write: HC1-per-invocation
+  filesystem_patch: HC1-per-invocation
+  filesystem_delete: HC1-per-invocation
+  command_run_general: HC1-per-invocation
+  command_run_frozen_safe_allowlist: HC3-unsupported
+  operation_get: HC0-no-confirmation
+  operation_cancel_reductive_only: HC0-no-confirmation
+  service_inspect: HC0-no-confirmation
+  service_restart: HC1-per-invocation
+  git_status: HC0-no-confirmation
+  git_diff: HC0-no-confirmation
+  git_commit: HC1-per-invocation
+  git_push: HC1-per-invocation
+  package_install_remove_update: HC1-per-invocation
+  host_reboot_shutdown: HC1-per-invocation
+  user_permission_change: HC1-per-invocation
+  network_configuration_change: HC1-per-invocation
+  credential_use: HC1-per-invocation
+  managed_workload_create_or_change: HC1-per-invocation
+  binnacle_self_management: HC1-per-invocation
+  hardware_read_only: HC0-no-confirmation
+  hardware_reversible_actuation: HC1-per-invocation
+  safety_critical_actuation: HC3-unsupported
+  raw_secret_disclosure: HC3-unsupported
+  generic_arbitrary_upload: HC3-unsupported
+
+mandatory_confirmation_view_fields:
+  - server_identity
+  - enrolled_device_identity
+  - tool_name
+  - tool_title
+  - operation_contract_version
+  - prepared_operation_id
+  - prepared_operation_expiry
+  - normalized_arguments
+  - normalized_input_digest
+  - targets
+  - executable_and_arguments_when_applicable
+  - working_directory_and_environment_authority_when_applicable
+  - execution_identity_and_privilege
+  - maximum_effects
+  - information_sources_classes_recipients_and_limits
+  - network_destination_method_path_redirect_proxy_and_credential_when_applicable
+  - destructive_additive_idempotent_retry_and_uncertainty_semantics
+  - success_and_non_success_conditions
+  - cancellation_safe_stop_rollback_and_recovery
+  - retained_risk_and_manual_intervention
+  - one_effect_or_reconciliation_semantics
+
+host_profile_key_fields:
+  - chatgpt_product
+  - surface
+  - plan
+  - workspace_type
+  - account_or_policy_configuration
+  - authentication_profile
+  - mcp_revision
+  - tool_name
+  - operation_contract_version
+  - tool_manifest_digest
+  - test_date
+  - host_release_evidence
+
+promotion_requirements:
+  HC0-no-confirmation:
+    - authentication_and_local_policy_pass
+    - correct_tool_selection_and_arguments
+  HC1-per-invocation:
+    - confirmation_precedes_every_new_effect
+    - exact_required_fields_visible
+    - decline_dismiss_timeout_and_ui_failure_create_no_call
+    - changed_arguments_create_new_confirmation
+    - no_alternate_bypass_route
+    - retries_reconcile_only_same_idempotency_identity
+    - tasks_mrtr_batch_reconnect_and_conversation_do_not_bypass
+    - annotation_change_does_not_remove_gate
+    - fatigue_controls_pass
+    - server_policy_and_preparation_still_enforced
+  HC2-confirmed-envelope:
+    - explicit_future_promotion
+  HC3-unsupported:
+    - never_promoted
+
+unsupported_profile_behavior:
+  omit_tool_where_practical: true
+  direct_invocation_rejected: true
+  error_code: host_confirmation_unavailable
+  cached_tool_grants_authority: false
+
+fatigue_controls:
+  decline_terminal_for_preparation: true
+  duplicate_confirmation_deduplication: required
+  repeated_prompt_rate_limit: required
+  inactivity_is_approval: false
+  hc1_grouping_allowed: false
+  cumulative_effect_display_when_applicable: required
+  confirmation_text_silent_truncation: forbidden
