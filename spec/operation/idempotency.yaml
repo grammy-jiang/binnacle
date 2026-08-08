@@ -1,162 +1,96 @@
-schema_version: "1.0"
-policy_id: binnacle-operation-idempotency
-policy_version: "1.0.0"
-default_for_mutating_operation: required
+schema_version: "1.1"
+contract: OPERATION-IDEMPOTENCY
+contract_version: "1.1.0"
 
-modes:
-  none:
-    permitted_for:
-      - strictly-read-only
-      - safely-repeatable-no-retained-effect
-  caller-key:
-    input_field: idempotency_key
-    format:
-      min_characters: 16
-      max_characters: 128
-      allowed_pattern: "^[A-Za-z0-9_.:-]+$"
-      min_entropy_bits: 128
-  prepared-nonce:
-    preparation_output_field: execution_nonce
-    execution_input_field: execution_nonce
-    bound_to_prepared_operation: true
-    authority_by_possession: false
-  derived-member-key:
-    status: deferred
+key_formats:
+  caller_key:
+    minimum_random_bits: 128
+    accepted_encodings:
+      - lowercase-hex
+      - base64url-no-padding
+    uuid_v4_alone_compliant: false
+  prepared_execution_nonce:
+    server_generated: true
+    minimum_random_bits: 128
+  derived_member_key:
+    requires_declared_parent_contract: true
 
-scope_key_fields:
-  - device_identity
-  - controller_identity_and_epoch
-  - tool_semantic_identity
-  - operation_contract_version
-  - idempotency_identity
+raw_key_handling:
+  persist_raw_key: false
+  log_raw_key: false
+  metrics_label_raw_key: false
+  digest_algorithm: sha256
 
-fingerprint_fields:
-  - tool_and_contract_version
-  - normalized_targets_and_arguments
-  - prepared_operation_identity_and_digest
-  - executable_arguments_working_directory_and_execution_profile
-  - file_content_or_patch_digest
-  - information_sources_transformations_recipients_and_destinations
-  - credential_broker_identity_and_audience
-  - hardware_targets_and_effect_values
-  - effect_bearing_limits
-  - external_idempotency_semantics
-  - contract_defined_effect_options
+lookup:
+  global_duplicate_prevention_scope:
+    - device_id
+    - device_epoch
+    - tool_name
+    - contract_version
+    - key_digest
+  owner_scope:
+    - controller_id
+    - controller_epoch
+  global_lookup_precedes_owner_disclosure: true
+  controller_replacement_cannot_create_duplicate: true
+  automatic_owner_transfer: false
 
-fingerprint_excludes:
-  - current_policy_version
-  - current_state_observation
-  - current_authentication_token
-  - transport_connection
-  - mcp_session
-  - chatgpt_interaction_context
+request_fingerprint:
+  include:
+    - tool_name
+    - contract_version
+    - normalized_effect_inputs
+    - prepared_operation_id
+    - prepared_input_sha256
+    - target_identity
+    - maximum_effect
+  exclude:
+    - current_policy_decision
+    - current_observation_freshness
+    - mutable_resource_availability
+  hash_algorithm: sha256
 
-record_creation:
-  after:
-    - transport_authentication
-    - protocol_validation
-    - tool_schema_validation
-    - canonical_normalization
-  before:
-    - local_policy_admission_result
-    - resource_reservation
-    - executor_start
-    - file_mutation
-    - service_change
-    - network_dispatch
-    - hardware_effect
-  durability_required: true
-  memory_only_fallback: false
+ordering:
+  - authenticate
+  - validate_key_syntax
+  - create_or_find_global_key_record
+  - verify_owner_and_fingerprint
+  - policy_and_admission
+  - persist_operation_and_reservations
+  - consequential_effect
+  - persist_effect_knowledge
+  - return_response
 
-record_states:
-  - reserved
-  - rejected
-  - authorised
-  - running
-  - paused
-  - cancelling
-  - cancelled
-  - succeeded
-  - failed
-  - uncertain
+outcomes:
+  same_owner_same_key_same_input: retained_operation
+  same_owner_same_key_different_input: idempotency_conflict
+  different_controller_matching_key: idempotency_owner_mismatch
+  expired_but_tombstoned: idempotency_key_retired
+  uncertain_existing_operation: return_uncertain_no_auto_retry
+  terminal_existing_operation: return_retained_terminal_result
 
-same_key_same_fingerprint:
-  new_operation_created: false
-  existing_operation_returned: true
-  duplicate_effect: false
-
-same_key_different_fingerprint:
-  result: idempotency_conflict
-  new_operation_created: false
-  effect: none
-
-retry_rules:
-  in_progress: return-current-lifecycle
-  succeeded: return-retained-result
-  failed: return-retained-result
-  cancelled: return-retained-cancelled
-  uncertain: return-uncertainty-and-reconciliation
-  new_attempt_after_terminal: new-key-and-fresh-confirmation-when-required
-
-concurrency:
-  atomic_create_or_find: required
-  operation_count_per_scope_key: 1
-  effect_count_per_scope_key: at-most-1
-
-external_effects:
-  allowed_contracts:
-    - remote-idempotency-key
-    - verified-idempotent-state-predicate
-    - authoritative-reconciliation-query
-    - protected-no-duplicate-design
-    - uncertain-no-auto-retry
-  downstream_key_binding_fields:
-    - operation_id
-    - local_idempotency_identity
-    - remote_target_and_operation
-    - payload_digest
-    - remote_contract_version
-
-ownership:
-  same_controller_reconnect: permitted
-  same_controller_other_conversation: permitted
-  other_controller: denied
-  automatic_controller_transfer: false
-
-cancellation:
-  lookup_identity: operation_id
-  idempotency_record_retained: true
-  same_key_after_cancel_reexecutes: false
+retention:
+  full_record_minimum: maximum_retry_and_reconciliation_window
+  tombstone_required: true
+  tombstone_fields:
+    - key_digest
+    - tool_name
+    - contract_version
+    - owner_controller_digest
+    - request_fingerprint
+    - terminal_class
+    - retired_at
+  storage_failure_behavior: reject_new_mutating_work
 
 status:
-  lookup_identity: operation_id
-  operation_owner_authentication: required
-  read_only: true
-  control_plane_capacity_reserved: true
-  polling_rate_limited: true
-
-retention_classes:
-  IR1-local-reversible:
-    full_record_days_min: 7
-    tombstone_days_min: 30
-  IR2-destructive-or-self-management:
-    full_record_days_min: 30
-    tombstone_days_min: 365
-    epoch_rule: device-epoch-reset-whichever-is-later
-  IR3-external-or-uncertain:
-    full_record: until-reconciled-plus-30-days
-    tombstone_days_min: 365
-    target_contract_may_require_longer: true
-
-storage_pressure:
-  evict_security_relevant_record: false
-  block_new_mutating_operations: true
-  preserve_status_and_recovery_capacity: true
+  owner_authenticated: true
+  rate_limited: true
+  cross_controller_non_disclosing: true
 
 error_codes:
-  - idempotency_key_required
-  - idempotency_key_invalid
   - idempotency_conflict
-  - idempotency_unavailable
-  - idempotency_key_expired
-  - operation_reconciliation_required
+  - idempotency_owner_mismatch
+  - idempotency_key_retired
+  - idempotency_storage_unavailable
+  - prepared_operation_mismatch
+  - prepared_operation_expired
