@@ -1,0 +1,318 @@
+schema_version: "1.0"
+profile: binnacle-mcp-revision-support
+source_contract: docs/mcp-revision-support.md
+target_revision: "2026-07-28"
+supported_revisions:
+  - "2026-07-28"
+  - "2025-11-25"
+  - "2025-06-18"
+  - "2025-03-26"
+unsupported_revisions:
+  - "2024-11-05"
+  - "2024-10-07"
+
+common_oracles:
+  no_cross_era_fallback: true
+  no_user_agent_dispatch: true
+  no_session_as_controller_identity: true
+  preserve_binnacle_operation_id: true
+  tasks_advertised: false
+  sampling_advertised: false
+
+cases:
+  - id: modern-discover
+    revision: "2026-07-28"
+    kind: positive
+    request:
+      method: server/discover
+      http_headers:
+        MCP-Protocol-Version: "2026-07-28"
+        Mcp-Method: server/discover
+      per_request_capabilities: true
+    expect:
+      dispatch: modern
+      protocol_session_created: false
+      result: success
+      supported_versions_include:
+        - "2026-07-28"
+        - "2025-11-25"
+        - "2025-06-18"
+        - "2025-03-26"
+
+  - id: modern-tool-without-discover
+    revision: "2026-07-28"
+    kind: positive
+    request:
+      method: tools/call
+      tool: binnacle_probe
+      prior_discover: false
+      http_headers:
+        MCP-Protocol-Version: "2026-07-28"
+        Mcp-Method: tools/call
+        Mcp-Name: binnacle_probe
+      per_request_capabilities: true
+    expect:
+      dispatch: modern
+      result: success
+      result_type: complete
+      protocol_session_created: false
+
+  - id: modern-header-body-mismatch
+    revision: "2026-07-28"
+    kind: negative
+    request:
+      method: tools/call
+      tool: binnacle_probe
+      http_headers:
+        MCP-Protocol-Version: "2026-07-28"
+        Mcp-Method: tools/list
+        Mcp-Name: wrong_name
+      per_request_capabilities: true
+    expect:
+      dispatch: rejected_before_tool
+      http_status: 400
+      jsonrpc_error_code: -32020
+      operation_created: false
+
+  - id: modern-unsupported-version
+    revision: "2099-01-01"
+    kind: negative
+    request:
+      method: tools/list
+      http_headers:
+        MCP-Protocol-Version: "2099-01-01"
+        Mcp-Method: tools/list
+      per_request_capabilities: true
+    expect:
+      dispatch: rejected_before_tool
+      jsonrpc_error_code: -32022
+      operation_created: false
+
+  - id: modern-session-header-does-not-select-authority
+    revision: "2026-07-28"
+    kind: negative
+    request:
+      method: tools/call
+      tool: binnacle_probe
+      http_headers:
+        MCP-Protocol-Version: "2026-07-28"
+        Mcp-Method: tools/call
+        Mcp-Name: binnacle_probe
+        Mcp-Session-Id: attacker-controlled
+      per_request_capabilities: true
+    expect:
+      dispatch: modern
+      session_header_authoritative: false
+      result: success_or_policy_rejection
+
+  - id: legacy-2025-11-25-initialize
+    revision: "2025-11-25"
+    kind: positive
+    request:
+      method: initialize
+      body_protocol_version: "2025-11-25"
+    expect:
+      dispatch: legacy
+      negotiated_revision: "2025-11-25"
+      initialized_notification_required: true
+      result: success
+
+  - id: legacy-2025-11-25-subsequent-request
+    revision: "2025-11-25"
+    kind: positive
+    request:
+      method: tools/list
+      initialized: true
+      http_headers:
+        MCP-Protocol-Version: "2025-11-25"
+    expect:
+      dispatch: legacy
+      result: success
+      legacy_result_shape: true
+
+  - id: legacy-2025-11-25-missing-version-header
+    revision: "2025-11-25"
+    kind: negative
+    request:
+      method: tools/list
+      initialized: true
+      http_headers: {}
+    expect:
+      dispatch: rejected_or_explicit_sdk_recovery
+      recovery_must_be_recorded: true
+      operation_created: false
+
+  - id: legacy-2025-11-25-tasks-not-advertised
+    revision: "2025-11-25"
+    kind: negative
+    request:
+      method: tasks/list
+      initialized: true
+      http_headers:
+        MCP-Protocol-Version: "2025-11-25"
+    expect:
+      result: method_not_supported
+      task_created: false
+
+  - id: legacy-2025-06-18-initialize
+    revision: "2025-06-18"
+    kind: positive
+    request:
+      method: initialize
+      body_protocol_version: "2025-06-18"
+    expect:
+      dispatch: legacy
+      negotiated_revision: "2025-06-18"
+      initialized_notification_required: true
+      result: success
+
+  - id: legacy-2025-06-18-version-header
+    revision: "2025-06-18"
+    kind: positive
+    request:
+      method: tools/call
+      tool: probe_result_formats
+      initialized: true
+      http_headers:
+        MCP-Protocol-Version: "2025-06-18"
+    expect:
+      dispatch: legacy
+      structured_content_allowed: true
+      result: success
+
+  - id: legacy-2025-06-18-cross-version-header
+    revision: "2025-06-18"
+    kind: negative
+    request:
+      method: tools/list
+      initialized: true
+      negotiated_revision: "2025-06-18"
+      http_headers:
+        MCP-Protocol-Version: "2025-11-25"
+    expect:
+      dispatch: rejected_before_tool
+      http_status: 400
+      operation_created: false
+
+  - id: legacy-2025-03-26-initialize
+    revision: "2025-03-26"
+    kind: positive
+    request:
+      method: initialize
+      body_protocol_version: "2025-03-26"
+    expect:
+      dispatch: legacy
+      negotiated_revision: "2025-03-26"
+      initialized_notification_required: true
+      result: success
+
+  - id: legacy-2025-03-26-no-version-header
+    revision: "2025-03-26"
+    kind: positive
+    request:
+      method: tools/list
+      initialized: true
+      http_headers: {}
+    expect:
+      dispatch: legacy
+      result: success
+
+  - id: legacy-2025-03-26-batch-receive
+    revision: "2025-03-26"
+    kind: positive
+    request:
+      jsonrpc_batch:
+        - method: tools/list
+        - method: tools/call
+          tool: binnacle_probe
+      initialized: true
+    expect:
+      dispatch: legacy
+      responses: 2
+      operation_identity_preserved: true
+
+  - id: legacy-2025-03-26-modern-result-rejected
+    revision: "2025-03-26"
+    kind: negative
+    server_fault:
+      return_result_type_complete: true
+    request:
+      method: tools/call
+      tool: binnacle_probe
+      initialized: true
+    expect:
+      conformance_failure: true
+
+  - id: unsupported-2024-11-05-initialize
+    revision: "2024-11-05"
+    kind: negative
+    request:
+      method: initialize
+      body_protocol_version: "2024-11-05"
+    expect:
+      dispatch: legacy_negotiation
+      server_selected_revision: "2025-11-25"
+      old_http_sse_endpoint_available: false
+      no_silent_2024_execution: true
+
+  - id: invalid-version-string
+    revision: invalid-version
+    kind: negative
+    request:
+      method: tools/list
+      http_headers:
+        MCP-Protocol-Version: invalid-version
+    expect:
+      dispatch: rejected_before_tool
+      operation_created: false
+
+  - id: legacy-initialize-header-body-conflict
+    revision: "2025-11-25"
+    kind: negative
+    request:
+      method: initialize
+      body_protocol_version: "2025-11-25"
+      http_headers:
+        MCP-Protocol-Version: "2025-03-26"
+    expect:
+      dispatch: rejected_before_tool
+      http_status: 400
+      operation_created: false
+
+  - id: task-shape-cross-era
+    revision: "2026-07-28"
+    kind: negative
+    server_fault:
+      return_2025_experimental_task_shape: true
+    request:
+      method: tools/call
+      tool: probe_error
+      per_request_capabilities:
+        extensions:
+          io.modelcontextprotocol/tasks: {}
+    expect:
+      conformance_failure: true
+      binnacle_operation_state_unchanged: true
+
+  - id: transport-disconnect-cancellation-modern
+    revision: "2026-07-28"
+    kind: positive
+    request:
+      method: tools/call
+      tool: probe_error
+      case: bounded_delay
+      close_response_stream: true
+    expect:
+      core_request_cancellation_observed: true
+      binnacle_cancelled_state_not_assumed: true
+
+  - id: cancellation-notification-legacy
+    revision: "2025-11-25"
+    kind: positive
+    request:
+      method: notifications/cancelled
+      initialized: true
+      target_request_in_progress: true
+    expect:
+      cancellation_signal_observed: true
+      binnacle_cancelled_state_not_assumed: true
