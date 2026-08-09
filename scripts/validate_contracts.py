@@ -15,17 +15,22 @@ from jsonschema import Draft202012Validator
 
 ROOT = Path(__file__).resolve().parents[1]
 ERRORS: list[str] = []
+MERGE_TAG = "tag:yaml.org,2002:merge"
 
 
 class UniqueKeyLoader(yaml.SafeLoader):
-    """SafeLoader that rejects duplicate mapping keys."""
+    """SafeLoader that rejects ordinary duplicate keys and supports YAML merges."""
 
 
 def _construct_mapping(loader: UniqueKeyLoader, node: yaml.MappingNode, deep: bool = False) -> dict[Any, Any]:
+    has_merge = any(key_node.tag == MERGE_TAG for key_node, _ in node.value)
+    if has_merge:
+        loader.flatten_mapping(node)
+
     mapping: dict[Any, Any] = {}
     for key_node, value_node in node.value:
         key = loader.construct_object(key_node, deep=deep)
-        if key in mapping:
+        if key in mapping and not has_merge:
             raise yaml.constructor.ConstructorError(
                 "while constructing a mapping",
                 node.start_mark,
