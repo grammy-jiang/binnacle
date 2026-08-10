@@ -1,840 +1,238 @@
 # Binnacle MCP Interface Design
 
 - **Status:** Draft — bootstrap interface before live ChatGPT validation
-- **Contract:** `MCP-INTERFACE`
+- **Contract version:** `1.1.0`
 - **Feature-design basis:** [`design.md`](design.md), V17
 - **Compatibility evidence:** [`mcp-profile.md`](mcp-profile.md)
-- **Applies to:** Binnacle V1
-- **Last review:** 2026-08-08
+- **Revision contract:** [`mcp-revision-support.md`](mcp-revision-support.md)
+- **Schemas:** [`mcp-schemas.md`](mcp-schemas.md)
 
 ## 1. Purpose
 
-This document defines the MCP-facing interface between ChatGPT and one Binnacle instance.
+This document defines the MCP-facing interface between ChatGPT and one Binnacle instance on one Raspberry Pi. It is not a website, owner-control companion, or local reasoning-agent interface.
 
-It is an interface specification for an MCP server. It is not:
+ChatGPT plans and selects operations. Binnacle authenticates the controller, validates explicit inputs and local policy, executes deterministically, owns local operation state, and returns structured facts.
 
-- a website design;
-- a traditional human dashboard;
-- a Companion application;
-- a local reasoning-agent interface;
-- an implementation-module design.
+## 2. Interface Principles
 
-The interface must let ChatGPT inspect and operate one Raspberry Pi through deterministic, policy-controlled operations while preserving Binnacle's local authority, lifecycle, information, safety, and evidence boundaries.
+1. **Tools first.** V1 operational work uses focused MCP Tools.
+2. **Minimal dependency.** Initial connectivity requires only Tool discovery and Tool invocation.
+3. **Stable local identity.** MCP request, conversation, connection, and optional Task identities never replace Binnacle `operation_id` or idempotency identity.
+4. **Local policy is authoritative.** Discovery and annotations never grant authority.
+5. **Truthful outcomes.** Transport success, Tool-call success, and operation success are separate.
+6. **No server reasoning.** Binnacle does not interpret goals or choose strategies.
+7. **Compatibility by evidence.** Optional features are dependencies only after the real ChatGPT profile passes their tests.
 
-## 2. Design Principles
+## 3. Protocol Surface
 
-### 2.1 Tools first
+The preferred endpoint is Streamable HTTP at `/mcp`, normally reached through an explicitly validated private connection or tunnel.
 
-Tools are the primary Binnacle primitive because ChatGPT selects operations and Binnacle executes or observes them.
+Binnacle implements the finite revision set in `mcp-revision-support.md`. It does not depend on Tasks, elicitation/MRTR, Resources, Prompts, list-change notifications, or custom UI for the bootstrap workflow.
 
-Resources are introduced only for a concrete context or retained-content need. Prompts are not used in V1 unless a later feature decision identifies a user-selected template that belongs to the server.
-
-### 2.2 Minimal common protocol dependency
-
-The bootstrap interface depends only on the fundamental behaviour validated by `mcp-profile.md`.
-
-It must not require MCP Tasks, elicitation, Resources, Prompts, list-changed notifications, or modern-only discovery to complete the initial connection and read-only workflow.
-
-### 2.3 Binnacle operation identity is authoritative
-
-MCP request IDs, transport connections, conversations, and optional MCP Task IDs do not replace the Binnacle operation identity.
-
-Every retained or consequential operation uses a server-minted `operation_id`. Subsequent status, cancellation, result, and evidence calls use that explicit handle.
-
-### 2.4 Local policy remains authoritative
-
-Tool discovery is advisory. Every call is independently authenticated and evaluated against:
-
-- the current controller identity;
-- device trust and profile;
-- local policy;
-- operation contract;
-- explicit inputs;
-- current verified state;
-- resource and concurrency limits.
-
-A visible or cached tool never grants authority.
-
-### 2.5 Focused tools
-
-Tools represent one recognisable operation. Avoid one generic tool with many unrelated modes.
-
-A general-purpose primitive may exist where software engineering requires it, but it must have a narrowly defined contract and stronger policy than outcome-oriented tools.
-
-### 2.6 Results are truthful local facts
-
-A successful MCP transport response is not necessarily a successful Binnacle operation.
-
-The result must distinguish:
-
-- request acceptance;
-- local authorisation;
-- operation state;
-- verified success;
-- known failure;
-- cancellation request;
-- verified cancellation;
-- uncertain effect or outcome.
-
-## 3. Initial Protocol Surface
-
-### 3.1 Transport
-
-The preferred remote endpoint is Streamable HTTP at a stable path such as:
-
-```text
-/mcp
-```
-
-For a private Raspberry Pi, the initial ChatGPT connection should use Secure MCP Tunnel or another explicitly validated private connectivity mechanism.
-
-The implementation may support multiple MCP protocol revisions through one endpoint. The exact ChatGPT profile is recorded in `mcp-profile.md`.
-
-### 3.2 Server identity
-
-The server advertises a stable name and semantic version.
-
-Recommended identity:
-
-```text
-name: binnacle
-version: <release-version>
-```
-
-Declared server metadata is descriptive and is not the enrolled Raspberry Pi identity.
-
-### 3.3 Server instructions
-
-Server-wide instructions should be short and operational. The most important guidance should fit within the first 512 characters.
-
-Initial instruction intent:
-
-> Binnacle operates one Raspberry Pi. Inspect current state before changes. Treat returned operation state as local fact. Transport success is not operation success. Use the operation ID for status and cancellation. Binnacle does not plan or interpret objectives.
-
-Tool descriptions remain authoritative for tool-specific behaviour.
-
-### 3.4 Primitive support
-
-| Primitive or feature | Bootstrap position |
+| Primitive | V1 position |
 | --- | --- |
 | Tools | Required |
-| Resources | Deferred until a concrete retained-content need passes compatibility testing |
+| Resources | Optional adapter after host validation |
 | Prompts | Not used |
 | Sampling | Prohibited |
 | Roots | Not used |
-| Elicitation or MRTR | Optional probe only |
-| MCP Tasks | Optional adapter only |
-| Progress notifications | Optional probe only |
-| List-changed notification | Optional and never an authorisation dependency |
+| MRTR/elicitation | Probe only until validated |
+| Tasks | Optional extension adapter only |
 | Custom UI | Not used |
 
-## 4. Naming and Versioning
+## 4. Tool Identity and Metadata
 
-### 4.1 Tool names
+Tool names are stable lowercase ASCII identifiers. Every Tool definition is derived from the reviewed manifest in `spec/mcp/bootstrap-tool-manifest.yaml` and includes:
 
-Initial tool names use lowercase ASCII letters and underscores:
+- name and title;
+- contrastive description;
+- exact contract version;
+- resolvable input/output schema references;
+- accurate annotations;
+- information class;
+- catalogue phases;
+- confirmation classification;
+- implementation binding.
 
-```text
-binnacle_probe
-system_inspect
-probe_result_formats
-probe_error
-compatibility_report
-probe_workspace_write
-probe_workspace_cleanup
-```
+The runtime catalogue may filter out Tools but may not rewrite their names, schemas, descriptions, annotations, effects, or information treatment.
 
-V1 operational tools should follow the same pattern:
+## 5. Canonical Results and Errors
 
-```text
-device_inspect
-device_profile_get
-filesystem_list
-filesystem_read
-filesystem_search
-filesystem_write
-filesystem_patch
-command_run
-operation_get
-operation_cancel
-service_inspect
-service_restart
-git_status
-git_diff
-```
-
-Names are stable semantic identifiers. A behavioural breaking change requires a new tool name or a versioned contract that the compatibility profile proves ChatGPT handles safely.
-
-### 4.2 Contract versions
-
-Every tool definition includes a contract version in its structured result and server-side operation record.
-
-A contract version changes when any of these change materially:
-
-- input semantics;
-- effects;
-- risk class;
-- policy prerequisites;
-- result schema;
-- error semantics;
-- idempotency;
-- cancellation;
-- retention;
-- recovery;
-- information classification.
-
-Changing only prose without changing semantics does not create a new contract version, but must still pass metadata regression tests.
-
-## 5. Common Tool Metadata
-
-Every tool definition should provide:
+Every successful Tool call returns:
 
-- `name`;
-- `title`;
-- precise `description`;
-- closed `inputSchema`;
-- `outputSchema` where supported;
-- accurate annotations.
+- bounded model-readable `content`;
+- schema-valid `structuredContent` using the success envelope;
+- `isError: false`.
 
-Input schemas should normally use:
+Every post-authentication execution error returns:
 
-```json
-{
-  "type": "object",
-  "additionalProperties": false,
-  "properties": {}
-}
-```
+- bounded model-readable `content`;
+- schema-valid execution-error `structuredContent`;
+- `isError: true`.
 
-### 5.1 Annotations
+HTTP authentication and authorization failures use HTTP `401`/`403`. MCP framing/version/method failures use protocol errors. They are not represented as Tool execution errors.
 
-Annotations must describe actual behaviour:
+The canonical schemas and lifecycle are defined in `mcp-schemas.md`.
 
-| Annotation | Rule |
-| --- | --- |
-| `readOnlyHint` | `true` only when no state can change |
-| `destructiveHint` | `true` when the operation can cause irreversible or difficult-to-reverse effects |
-| `idempotentHint` | `true` only when repeating the same contract and identity is safe |
-| `openWorldHint` | `true` when the operation can affect or communicate with external systems |
+## 6. Bootstrap Catalogue
 
-Annotations inform host behaviour. Binnacle never treats them as authorisation.
+### 6.1 `binnacle_probe`
 
-### 5.2 Authentication metadata
+Use when ChatGPT needs to verify connectivity, build identity, device identity, selected protocol revision, Tool-manifest identity, and visible catalogue phase.
 
-Authentication must be transport- or authorisation-context based. Secrets and tokens must not be ordinary tool arguments.
+Do not use for detailed system health or compatibility conclusions.
 
-Per-tool authentication or scope metadata may be added only after the actual ChatGPT authentication profile is validated.
+- Read-only; normal-result; HC0.
+- Contract `1.1`.
 
-## 6. Common Result Model
-
-Each successful tool call should return:
-
-- concise model-readable `content`;
-- machine-readable `structuredContent`;
-- an `outputSchema` when the observed ChatGPT profile accepts it reliably.
+### 6.2 `system_inspect`
 
-For compatibility, the text result should summarize the structured result without silently introducing facts that are absent from it.
+Use for bounded read-only Raspberry Pi and Binnacle-service facts.
 
-### 6.1 Base fields
+Do not use for arbitrary file, process, network, or hardware inspection.
 
-Tool-specific structured results should contain these common fields where applicable:
-
-```json
-{
-  "schema_version": "1.0",
-  "contract": {
-    "name": "system_inspect",
-    "version": "1.0"
-  },
-  "request_id": "opaque-request-correlation",
-  "operation_id": null,
-  "status": "succeeded",
-  "summary": "Current system facts were collected.",
-  "data": {},
-  "warnings": [],
-  "evidence": [],
-  "error": null
-}
-```
-
-### 6.2 Status values
-
-The interface uses:
-
-```text
-rejected
-authorised
-running
-paused
-cancelling
-cancelled
-succeeded
-failed
-uncertain
-```
-
-A synchronous read-only tool may return `succeeded` directly without creating a retained `operation_id`.
-
-A call that creates or advances retained work returns the authoritative `operation_id`.
-
-### 6.3 Information boundaries
-
-Tool results are classified by the V17 `INFO-BOUNDARY` contract:
-
-- `never-disclosable`;
-- `restricted-result`;
-- `normal-result`.
-
-Credentials, access tokens, raw authentication material, private keys, and Binnacle control-plane secrets are never returned through `content`, `structuredContent`, `_meta`, errors, logs, or resources.
-
-`_meta` may carry client-specific non-secret information, but is never treated as secure storage or authority merely because it is hidden from the model.
-
-## 7. Error Model
-
-### 7.1 Protocol errors
-
-Use JSON-RPC or MCP protocol errors for:
-
-- malformed MCP messages;
-- unsupported protocol method;
-- unknown tool;
-- request shape that does not satisfy the MCP call schema;
-- internal protocol failure before a Binnacle operation can be identified.
-
-### 7.2 Tool execution errors
-
-Use a tool result with `isError: true` for actionable operation-level failures, including:
-
-- invalid tool argument value;
-- unsupported device profile;
-- authentication or authorisation failure exposed through the selected profile;
-- local policy rejection;
-- stale or conflicting state;
-- missing target;
-- resource or concurrency rejection;
-- execution failure;
-- cancellation result;
-- uncertain effect or outcome.
-
-The structured error object should use:
-
-```json
-{
-  "code": "policy_rejected",
-  "message": "The requested path is outside the configured workspace.",
-  "retryable": false,
-  "operation_id": null,
-  "details": {
-    "policy_rule": "workspace-root"
-  }
-}
-```
-
-Error details must be actionable without leaking secrets or protected policy internals.
-
-### 7.3 Initial error codes
-
-| Code | Meaning |
-| --- | --- |
-| `invalid_argument` | A provided value is invalid under the tool contract |
-| `unsupported_operation` | The operation or contract is not implemented |
-| `unsupported_profile` | The Raspberry Pi profile does not support the operation |
-| `authentication_required` | No acceptable controller authentication was present |
-| `authentication_failed` | Presented authentication was invalid |
-| `policy_rejected` | Local policy denied the explicit request |
-| `stale_state` | A required observation or precondition is no longer current |
-| `conflict` | Another operation or external change conflicts with the request |
-| `resource_limit` | Resource, concurrency, or reservation limits block admission |
-| `execution_failed` | Execution failed with known remaining effects |
-| `cancellation_requested` | A cancellation request was accepted but not yet verified |
-| `cancelled` | The contract's cancellation outcome was verified |
-| `uncertain_outcome` | The effect or final state cannot be established safely |
-| `result_expired` | The retained result is no longer available |
-| `operation_not_found` | The operation identity is unknown or unavailable to the controller |
-
-## 8. Bootstrap Compatibility Tools
-
-These tools are implemented before the operational V1 catalogue.
-
-### 8.1 `binnacle_probe`
-
-Purpose: Verify connectivity, discovery, server identity, protocol observation, and basic structured results.
-
-Input schema:
-
-```json
-{
-  "type": "object",
-  "additionalProperties": false
-}
-```
-
-Output data:
-
-```json
-{
-  "server": {
-    "name": "binnacle",
-    "version": "0.0.0"
-  },
-  "device": {
-    "hostname": "string",
-    "architecture": "string",
-    "os": "string"
-  },
-  "protocol_observation": {
-    "version": "string-or-null",
-    "era": "initialization-based-or-stateless-or-unknown"
-  },
-  "correlation_id": "opaque-id",
-  "server_time": "RFC3339"
-}
-```
-
-Annotations:
-
-```json
-{
-  "readOnlyHint": true,
-  "destructiveHint": false,
-  "idempotentHint": true,
-  "openWorldHint": false
-}
-```
-
-The protocol observation is sanitised and must not include credentials or raw authentication headers.
-
-### 8.2 `system_inspect`
-
-Purpose: Return useful read-only Raspberry Pi facts.
-
-Input schema: Empty object.
-
-Output data includes:
-
-- enrolled device identity reference;
-- hostname;
-- Raspberry Pi model where deterministically available;
-- OS and kernel;
-- architecture;
-- uptime;
-- CPU summary;
-- memory summary;
-- filesystem summary;
-- Binnacle service state.
-
-Annotations: read-only, idempotent, closed-world.
-
-### 8.3 `probe_result_formats`
-
-Purpose: Test ChatGPT handling of structured and text results.
-
-Input schema:
-
-```json
-{
-  "type": "object",
-  "additionalProperties": false,
-  "properties": {
-    "include_warning": {
-      "type": "boolean",
-      "default": true
-    }
-  }
-}
-```
-
-Output data includes:
-
-- scalar values;
-- arrays;
-- nested objects;
-- booleans;
-- a nullable field;
-- a warning list;
-- stable identifiers.
-
-No external or local state changes.
-
-### 8.4 `probe_error`
-
-Purpose: Test deterministic error handling.
-
-Input schema:
-
-```json
-{
-  "type": "object",
-  "additionalProperties": false,
-  "properties": {
-    "case": {
-      "type": "string",
-      "enum": [
-        "invalid_argument",
-        "policy_rejected",
-        "execution_failed",
-        "uncertain_outcome",
-        "bounded_delay"
-      ]
-    },
-    "delay_seconds": {
-      "type": "integer",
-      "minimum": 0,
-      "maximum": 10
-    }
-  },
-  "required": ["case"]
-}
-```
-
-`bounded_delay` may delay only within the declared maximum and creates no device side effect.
-
-### 8.5 `compatibility_report`
-
-Purpose: Return the sanitised empirical profile defined by `mcp-profile.md`.
-
-Input schema:
-
-```json
-{
-  "type": "object",
-  "additionalProperties": false
-}
-```
-
-The report is read-only and contains no reusable authentication material.
-
-### 8.6 `probe_workspace_write`
-
-Purpose: Test ChatGPT write/modify entitlement and Binnacle local write policy.
-
-This tool is disabled until read-only compatibility tests pass.
-
-Input schema:
-
-```json
-{
-  "type": "object",
-  "additionalProperties": false,
-  "properties": {
-    "name": {
-      "type": "string",
-      "pattern": "^[A-Za-z0-9._-]{1,64}$"
-    },
-    "content": {
-      "type": "string",
-      "maxLength": 4096
-    },
-    "expected_sha256": {
-      "type": ["string", "null"],
-      "pattern": "^[a-f0-9]{64}$"
-    }
-  },
-  "required": ["name", "content"]
-}
-```
-
-Policy:
-
-- root fixed to the probe workspace;
-- no path separators in `name`;
-- no symlink traversal;
-- maximum file count and bytes;
-- atomic replacement;
-- digest returned after write;
-- no repository, system, service, credential, hardware, or external access.
+- Read-only; normal-result; HC0.
+- Contract `1.1`.
 
-### 8.7 `probe_workspace_cleanup`
+### 6.3 `probe_result_formats`
 
-Purpose: Delete only one artefact previously created by the write probe.
+Use only during compatibility evaluation to test structured/text result handling.
 
-The tool requires the exact name and expected digest. It rejects unknown, changed, linked, or out-of-root targets.
+Do not use as an operational data Tool.
 
-## 9. V1 Operational Tool Groups
+- Read-only; normal-result; HC0.
+- Contract `1.1`.
 
-The exact schemas are frozen only after the compatibility probe. These groups define the intended interface boundary.
+### 6.4 `probe_error`
 
-### 9.1 Device inspection
+Use only to exercise deterministic validation, policy, failure, timeout, delay, and uncertainty presentation.
 
-Initial tools:
+It creates no intentional device effect.
 
-- `device_inspect`;
-- `device_profile_get`.
+- Read-only from a device-state perspective; normal-result; HC0.
+- Contract `1.1`.
 
-They return current device facts and accepted profile facts without editing trust or policy.
+### 6.5 `compatibility_report`
 
-### 9.2 Filesystem
+Returns the sanitized empirical ChatGPT profile. The bootstrap report contains no credentials, raw headers, private owner data, or reusable authority material and is therefore a `normal-result`.
 
-Initial tools:
+Use it to inspect recorded compatibility evidence, not to infer untested support.
 
-- `filesystem_list`;
-- `filesystem_read`;
-- `filesystem_search`;
-- `filesystem_write`;
-- `filesystem_patch`.
+- Read-only; normal-result; HC0.
+- Contract `1.1`.
 
-Requirements:
+### 6.6 `probe_workspace_prepare`
 
-- explicit profile-defined roots;
-- no implicit current directory;
-- normalized paths;
-- symlink and mount handling;
-- file-size and result-size limits;
-- expected digest or version for replacement where needed;
-- atomic write where the contract promises it;
-- exact changed-path evidence;
-- no protected control-plane access.
+Creates a short-lived, no-effect state binding for exactly one disposable probe-workspace write or cleanup. It returns:
 
-### 9.3 Command execution
-
-Initial tool:
-
-- `command_run`.
-
-The contract must declare:
-
-- executable or shell semantics;
-- argument representation;
-- working directory;
-- environment allowlist;
-- stdin policy;
-- timeout;
-- output limits;
-- process-tree containment;
-- network and credential policy;
-- resource limits;
-- operation retention;
-- cancellation;
-- cleanup;
-- uncertainty.
-
-Arbitrary command execution must not inherit Binnacle's own privilege or control-plane access.
-
-### 9.4 Operations
-
-Initial tools:
-
-- `operation_get`;
-- `operation_cancel`.
-
-`operation_get` returns the durable state, effects, evidence, warnings, and retention information.
-
-`operation_cancel` requests the contract-defined cancellation path. Its return value distinguishes request acceptance from verified cancellation.
-
-An `operation_list` tool is deferred until a concrete need and privacy policy are defined.
-
-### 9.5 Services
-
-Initial tools:
-
-- `service_inspect`;
-- `service_restart`.
-
-The initial supported target is the Binnacle service under `SELF-MANAGE`. Broader service management is added only through validated contracts and policy.
-
-### 9.6 Git and verification
-
-Initial tools:
-
-- `git_status`;
-- `git_diff`.
-
-Formatting, lint, test, and build commands may initially use `command_run` under a repository profile. Dedicated tools may replace common commands after usage evidence justifies them.
-
-## 10. Prepared-Operation Pattern
-
-Prepared operations are optional and are not proof of owner confirmation.
-
-Where a consequential contract uses preparation:
-
-```text
-prepare → prepared_operation_id → execute_prepared
-```
-
-The prepared record binds:
-
-- exact normalized input;
-- device and profile;
-- operation contract version;
-- current deterministic preconditions;
-- expiry;
-- maximum effects;
-- recovery and cancellation semantics.
-
-Execution revalidates the record and current state before the first consequential boundary.
-
-Preparation creates no authority and cannot bypass local policy. ChatGPT host confirmation remains outside Binnacle's verifiable facts.
-
-The bootstrap interface does not require preparation. It may be introduced for command execution, service restart, self-update, or hardware actuation after the actual Host profile is known.
-
-## 11. Long-Running Operations
-
-### 11.1 Binnacle-native interface
-
-The initial interface uses Binnacle's own operation handle:
-
-```text
-tool call → operation_id
-operation_get(operation_id)
-operation_cancel(operation_id)
-```
-
-This interface works whether or not ChatGPT supports MCP Tasks.
-
-### 11.2 Optional MCP Tasks adapter
-
-If the actual profile proves MCP Tasks support:
-
-- the MCP Task represents one tool request;
-- the Binnacle `operation_id` remains authoritative;
-- task cancellation is projected as a cancellation request;
-- an MCP Task terminal state must not overstate Binnacle's state;
-- a completed tool result may still report a Binnacle `failed` or `uncertain` operation;
-- reconnect and retention follow Binnacle's operation contract.
-
-Tasks remain forbidden for tools whose contracts cannot be mapped honestly.
-
-## 12. Resources and Large Results
-
-Resources are deferred initially.
-
-A Resource may be added for:
-
-- retained operation evidence;
-- large logs;
-- large diffs;
-- generated artefacts;
-- stable device-profile content.
-
-A tool may instead return a stable resource link after the actual ChatGPT profile proves that resource retrieval works.
-
-Large content must not be silently truncated. The result must report:
-
-- original size;
-- returned size;
-- truncation or pagination;
-- digest;
-- continuation or resource handle;
+- `prepared_operation_id`;
+- `execution_nonce`;
+- normalized input digest;
+- exact operation/path;
+- maximum effect;
 - expiry.
 
-The server must not use a Resource to bypass information policy or Tool-result limits.
+It is not proof of owner approval and cannot execute the operation.
 
-## 13. Discovery and Catalogue Changes
+- Read-only/no-effect; normal-result; HC0.
+- Contract `1.1`.
 
-The bootstrap catalogue should be stable.
+### 6.7 `probe_workspace_write`
 
-When the available tools change:
+Creates one new file under the dedicated probe workspace. It cannot overwrite an existing file, escape the root, access credentials, contact a network, or affect Binnacle control-plane state.
 
-- Binnacle may advertise list-change support only if the observed ChatGPT profile handles it reliably;
-- ChatGPT may require explicit refresh or reconnection;
-- stale discovery never authorises a call;
-- removed or disabled tools are rejected at invocation;
-- metadata changes trigger compatibility regression tests.
+It requires:
 
-Current policy or device state may be returned through inspection tools rather than continuously changing the catalogue.
+- exact unexpired preparation identity and nonce;
+- 128-bit-or-stronger caller idempotency key;
+- exact prepared path and content digest;
+- current controller authentication and local write-probe policy;
+- the validated HOST-profile confirmation treatment for HC1.
 
-## 14. Authentication and Controller Identity
+- Mutating; normal-result; HC1 profile gate.
+- Contract `1.1`.
 
-The authentication design is finalized only after the actual ChatGPT profile is observed.
+### 6.8 `probe_workspace_cleanup`
 
-Requirements that do not change:
+Removes one exact manifest-owned probe artifact identified by path, artifact identity, and content digest. It is not a bulk cleanup Tool.
 
-- declared client metadata is not authenticated controller identity;
-- bearer credentials never appear in tool arguments;
-- Binnacle verifies authentication on each request as required by the selected protocol and transport;
-- authentication does not imply operation authorisation;
-- controller replacement or trust reset invalidates old authority under `TRUST-CTRL`;
-- transport loss does not silently transfer operation ownership.
+It requires the same preparation, idempotency, controller, policy, and HOST-profile conditions as the write Tool.
 
-For OAuth-based profiles, scopes should map to bounded operation groups and Binnacle must validate issuer, audience, expiration, and scope on each request.
+- Mutating/destructive within the disposable probe root; normal-result; HC1 profile gate.
+- Contract `1.1`.
 
-## 15. Compatibility Probe and Freeze Criteria
+## 7. Preparation and Confirmation Boundary
 
-The bootstrap interface may be promoted into the supported V1 interface only after:
+Preparation is server-enforced state binding. Host confirmation is an empirically validated product behaviour. They are not interchangeable.
 
-1. the actual ChatGPT connection is recorded in `mcp-profile.md`;
-2. connection and discovery pass;
-3. every bootstrap tool passes valid and invalid inputs;
-4. structured and text results are observed;
-5. authentication and policy rejection are tested;
-6. read-only B1 operations pass;
-7. write entitlement is tested;
-8. operation status and cancellation pass;
-9. optional features are classified;
-10. result-size, timeout, and reconnection limits are recorded.
+Binnacle can enforce:
 
-If ChatGPT Pro permits only read/fetch, the profile may support a read-only B1 preview, but S1 repository modification and H1 service restart cannot be labelled supported.
+- that execute inputs match an unexpired prepared operation;
+- local policy and current-state checks;
+- idempotency and exactly-once reconciliation;
+- filesystem, privilege, resource, and information bounds.
 
-## 16. Required Test Cases
+Binnacle cannot cryptographically prove that the owner clicked a ChatGPT confirmation control. A Tool classified HC1–HC3 remains unsupported for a ChatGPT profile unless the host evaluation demonstrates the required presentation and non-bypassable interaction. That profile decision does not expand server authority.
 
-### 16.1 Discovery
+## 8. Idempotency and Operation Identity
 
-- stable tool names and descriptions;
-- valid schemas;
-- deterministic order where supported;
-- refresh after metadata change;
-- cached tool invocation after local disable.
+Every mutating Tool accepts an idempotency key or prepared execution nonce before admission. The server durably binds it to controller, device, Tool contract, and normalized effect-bearing inputs before any effect.
 
-### 16.2 Inputs
+Same-key/same-input retries return the retained operation. Same-key/different-input reuse is rejected. A controller replacement cannot use the old key to create a second effect.
 
-- missing required field;
-- unknown field;
-- wrong type;
-- boundary length;
-- Unicode;
-- path traversal;
-- symlink target;
-- stale digest;
-- unsupported operation version.
+Retained operations use explicit `operation_id` for status, cancellation, result, and evidence. Transport disconnect does not prove cancellation.
 
-### 16.3 Results
+## 9. Long-Running Work
 
-- text-only fallback;
-- structured result;
-- nullable field;
-- empty array;
-- warning;
-- truncation;
-- retained result;
-- result expiry;
-- never-disclosable data absence.
+The portable V1 model is:
 
-### 16.4 Lifecycle
+```text
+start Tool → operation_id
+operation_get(operation_id)
+operation_cancel(operation_id)
+result reference or terminal evidence
+```
 
-- synchronous success;
-- asynchronous start;
-- status after initiating call ends;
-- cancellation before effect;
-- cancellation during work;
-- inability to cancel;
-- reconnect;
-- restart;
-- duplicate call;
-- uncertain prior outcome.
+MCP Tasks may later adapt this lifecycle after version-specific ChatGPT validation. A Task ID never replaces `operation_id`.
 
-### 16.5 Policy and security
+## 10. Large Results
 
-- unauthenticated request;
-- wrong controller;
-- out-of-root file;
-- protected control-plane target;
-- unauthorized network target;
-- resource exhaustion;
-- command child-process escape;
-- credential leakage attempt;
-- untrusted output suggesting another operation.
+A Tool returns either:
 
-## 17. Source Basis
+- a complete bounded inline result; or
+- a retained result reference read through `result_get`, `result_page`, or `result_chunk`.
 
-Primary sources reviewed on 2026-08-08:
+There is no silent truncation. The large-result contract is defined in `mcp-large-results.md`.
 
-- [Binnacle V17 feature design](design.md)
-- [OpenAI: Build an MCP server](https://developers.openai.com/plugins/build/mcp-server)
-- [OpenAI: MCP server concepts](https://developers.openai.com/plugins/concepts/mcp-server)
-- [OpenAI: Connect and test your plugin](https://developers.openai.com/plugins/deploy/connect-chatgpt)
-- [OpenAI: Authentication for plugins](https://developers.openai.com/plugins/build/auth)
-- [OpenAI Help: Developer mode and MCP apps in ChatGPT](https://help.openai.com/en/articles/12584461-developer-mode-and-full-mcp-connectors-in-chatgpt)
-- [MCP specification](https://modelcontextprotocol.io/specification)
-- [MCP Tools](https://modelcontextprotocol.io/specification/2025-11-25/server/tools)
+## 11. Security Boundary
 
-The interface uses only the subset validated by `mcp-profile.md`. A later MCP revision or optional feature does not become a dependency merely because the server SDK supports it.
+- Tokens and credentials are transport/authorization context, never ordinary Tool arguments.
+- General command execution is separated from the bootstrap catalogue and follows `security/command-execution.md`.
+- Untrusted content cannot expand authority or obtain direct credential/network composition.
+- Tool metadata is model-facing untrusted data and must match the reviewed manifest.
+- `_meta` is not secure storage or an authorization channel.
+- Every invocation is independently revalidated against current local policy and state.
+
+## 12. Initial Operational Expansion
+
+After the bootstrap profile passes, V1 may promote focused Tools for:
+
+- device and service inspection;
+- filesystem list/read/search/write/patch under configured workspaces;
+- isolated command execution;
+- Git status/diff and bounded repository operations;
+- retained operation status/cancellation/result retrieval.
+
+A Tool is promoted only after its schema, manifest metadata, policy, confinement, lifecycle, idempotency, information, audit, and host-profile tests pass.
+
+## 13. Interface Invariants
+
+1. A visible Tool never grants authority.
+2. Tool metadata and runtime implementation must match the reviewed manifest.
+3. Every result uses the canonical success/error envelope.
+4. Every mutating effect has a pre-effect idempotency identity.
+5. Preparation binds state but is not human approval.
+6. Host confirmation is a profile-promotion fact, not server-verifiable owner authority.
+7. Transport loss does not imply cancellation.
+8. Large results are complete inline or recoverable through a retained object.
+9. Binnacle never reasons about the owner objective.

@@ -1,0 +1,481 @@
+schema_version: "1.1"
+case_manifest_id: chatgpt-mcp-evaluation-cases
+case_manifest_version: "1.1.0"
+
+risk_classes:
+  deterministic_protocol_schema:
+    minimum_attempts: 1
+  tool_selection_and_result_rendering:
+    minimum_attempts: 10
+  confirmation_and_entitlement:
+    minimum_attempts: 5
+  write_cancellation_retry_cache_confirmation:
+    minimum_attempts: 20
+  concurrency_race_reconnect_instability:
+    minimum_attempts: 20
+  latency_and_context_cost:
+    minimum_attempts: 20
+
+cases:
+  - case_id: endpoint-connect
+    axis: connectivity
+    risk_class: deterministic_protocol_schema
+    setup:
+      server_running: true
+      authentication_profile_configured: true
+    action:
+      type: connect_chatgpt_mcp
+      endpoint: /mcp
+    oracle:
+      pass_when:
+        - authenticated_request_observed
+        - no_unauthenticated_tool_dispatch
+      blocked_when:
+        - account_or_workspace_disallows_custom_mcp
+    timeout_seconds: 60
+    prohibited_effects:
+      - no_device_mutation
+    evidence:
+      - sanitized_http_observation
+      - server_audit_refs
+
+  - case_id: protocol-revision-observed
+    axis: protocol_revision
+    risk_class: deterministic_protocol_schema
+    setup:
+      supported_revision_set:
+        - "2026-07-28"
+        - "2025-11-25"
+        - "2025-06-18"
+        - "2025-03-26"
+    action:
+      type: invoke_binnacle_probe
+    oracle:
+      pass_when:
+        - requested_or_negotiated_revision_recorded
+        - revision_is_in_supported_set
+        - correct_revision_dispatch_path_used
+      fail_when:
+        - cross_era_envelope_accepted
+    timeout_seconds: 30
+    prohibited_effects:
+      - no_device_mutation
+    evidence:
+      - sanitized_wire_frames
+      - binnacle_probe_result
+
+  - case_id: tool-discovery-manifest
+    axis: discovery_and_metadata
+    risk_class: deterministic_protocol_schema
+    setup:
+      catalogue_phase: compatibility-core
+    action:
+      type: list_tools
+    oracle:
+      pass_when:
+        - every_visible_tool_matches_reviewed_manifest
+        - all_schema_references_resolve
+        - catalogue_digest_matches
+      fail_when:
+        - unmanifested_tool_visible
+        - runtime_metadata_mutated
+    timeout_seconds: 30
+    prohibited_effects:
+      - no_tool_execution
+    evidence:
+      - tools_list_frame
+      - manifest_digest_record
+
+  - case_id: model-tool-selection-binnacle-probe
+    axis: tool_selection
+    risk_class: tool_selection_and_result_rendering
+    setup:
+      prompt: Verify that this Binnacle server is reachable and identify its build and protocol.
+    action:
+      type: real_chatgpt_prompt
+    oracle:
+      grader: deterministic_expected_tool
+      expected_tool: binnacle_probe
+      prohibited_tools:
+        - system_inspect
+        - compatibility_report
+    timeout_seconds: 120
+    prohibited_effects:
+      - no_mutating_tool
+    evidence:
+      - redacted_chatgpt_transcript
+      - tool_call_observation
+
+  - case_id: model-tool-selection-system-inspect
+    axis: tool_selection
+    risk_class: tool_selection_and_result_rendering
+    setup:
+      prompt: Report the Raspberry Pi kernel, architecture, memory, and Binnacle service state.
+    action:
+      type: real_chatgpt_prompt
+    oracle:
+      grader: deterministic_expected_tool
+      expected_tool: system_inspect
+      prohibited_tools:
+        - binnacle_probe
+        - compatibility_report
+    timeout_seconds: 120
+    prohibited_effects:
+      - no_mutating_tool
+    evidence:
+      - redacted_chatgpt_transcript
+      - tool_call_observation
+
+  - case_id: structured-result-rendering
+    axis: result_handling
+    risk_class: tool_selection_and_result_rendering
+    setup:
+      tool: probe_result_formats
+    action:
+      type: call_tool
+      arguments:
+        include_warning: true
+        array_length: 3
+        nullable_value: null
+    oracle:
+      pass_when:
+        - structured_content_schema_valid
+        - text_content_present
+        - text_and_structured_content_consistent
+        - null_array_nested_and_warning_preserved
+    timeout_seconds: 30
+    prohibited_effects:
+      - no_device_mutation
+    evidence:
+      - sanitized_tool_result
+      - schema_validation_report
+
+  - case_id: execution-error-rendering
+    axis: error_handling
+    risk_class: tool_selection_and_result_rendering
+    setup:
+      tool: probe_error
+    action:
+      type: call_tool
+      arguments:
+        case: policy_rejection
+    oracle:
+      pass_when:
+        - tool_result_is_error_true
+        - execution_error_schema_valid
+        - model_readable_content_present
+        - no_http_authentication_error_used
+    timeout_seconds: 30
+    prohibited_effects:
+      - no_device_mutation
+    evidence:
+      - sanitized_tool_result
+
+  - case_id: read-entitlement
+    axis: read_entitlement
+    risk_class: confirmation_and_entitlement
+    setup:
+      tool: system_inspect
+    action:
+      type: call_tool
+      arguments: {}
+    oracle:
+      pass_when:
+        - tool_call_reaches_server
+        - result_schema_valid
+      blocked_when:
+        - host_policy_blocks_read_tool
+    timeout_seconds: 60
+    prohibited_effects:
+      - no_device_mutation
+    evidence:
+      - chatgpt_ui_observation
+      - server_audit_refs
+
+  - case_id: write-entitlement-and-confirmation
+    axis: write_entitlement
+    risk_class: confirmation_and_entitlement
+    setup:
+      prepare_tool: probe_workspace_prepare
+      execute_tool: probe_workspace_write
+      path: entitlement.txt
+      content: test
+    action:
+      type: prepare_confirm_execute
+    oracle:
+      pass_when:
+        - exact_prepared_view_shown
+        - owner_confirmed
+        - execute_call_reaches_server
+        - exactly_one_file_created
+      blocked_when:
+        - account_or_workspace_blocks_write_tools
+      fail_when:
+        - execute_call_bypasses_required_confirmation
+        - arguments_changed_after_confirmation
+    timeout_seconds: 180
+    prohibited_effects:
+      - no_path_outside_probe_workspace
+      - no_overwrite
+      - no_network
+    evidence:
+      - chatgpt_confirmation_observation
+      - prepared_result
+      - execute_result
+      - server_audit_refs
+
+  - case_id: confirmation-decline
+    axis: host_confirmation
+    risk_class: confirmation_and_entitlement
+    setup:
+      prepared_write_exists: true
+    action:
+      type: decline_chatgpt_confirmation
+    oracle:
+      pass_when:
+        - no_execute_tool_call_sent
+        - no_file_created
+    timeout_seconds: 120
+    prohibited_effects:
+      - no_device_mutation
+    evidence:
+      - chatgpt_ui_observation
+      - server_audit_refs
+
+  - case_id: idempotency-lost-response
+    axis: retry_safety
+    risk_class: write_cancellation_retry_cache_confirmation
+    setup:
+      fault: drop_initial_response_after_effect
+      idempotency_key_reused: true
+      exact_input_reused: true
+    action:
+      type: retry_probe_workspace_write
+    oracle:
+      pass_when:
+        - one_operation_identity
+        - one_effect_total
+        - retained_result_returned
+    timeout_seconds: 120
+    prohibited_effects:
+      - no_second_file_effect
+    evidence:
+      - fault_injection_log
+      - idempotency_record
+      - audit_refs
+
+  - case_id: uncertain-no-auto-retry
+    axis: retry_safety
+    risk_class: write_cancellation_retry_cache_confirmation
+    setup:
+      operation_state: uncertain
+    action:
+      type: ask_chatgpt_to_continue
+    oracle:
+      pass_when:
+        - status_or_reconciliation_used
+        - no_fresh_execute_call_with_new_key
+      fail_when:
+        - automatic_duplicate_effect_attempted
+    timeout_seconds: 120
+    prohibited_effects:
+      - no_automatic_retry
+    evidence:
+      - chatgpt_transcript
+      - tool_call_observation
+      - audit_refs
+
+  - case_id: operation-cancellation
+    axis: cancellation
+    risk_class: write_cancellation_retry_cache_confirmation
+    setup:
+      retained_bounded_delay_operation: true
+    action:
+      type: call_operation_cancel
+    oracle:
+      pass_when:
+        - cancellation_request_recorded
+        - terminal_state_truthful
+        - transport_disconnect_not_used_as_proof
+    timeout_seconds: 60
+    prohibited_effects:
+      - no_unrelated_operation_cancelled
+    evidence:
+      - operation_snapshots
+      - audit_refs
+
+  - case_id: reconnect-status-reconciliation
+    axis: reconnect
+    risk_class: concurrency_race_reconnect_instability
+    setup:
+      disconnect_after_operation_admission: true
+    action:
+      type: reconnect_and_query_operation
+    oracle:
+      pass_when:
+        - same_operation_identity_returned
+        - no_duplicate_effect
+        - current_state_version_monotonic
+    timeout_seconds: 180
+    prohibited_effects:
+      - no_new_operation_for_same_idempotency_key
+    evidence:
+      - connection_log
+      - operation_snapshots
+      - audit_refs
+
+  - case_id: concurrent-idempotency-race
+    axis: concurrency
+    risk_class: concurrency_race_reconnect_instability
+    setup:
+      simultaneous_requests: 20
+      same_idempotency_key: true
+      same_input: true
+    action:
+      type: submit_concurrently
+    oracle:
+      pass_when:
+        - exactly_one_operation_record
+        - exactly_one_effect
+        - all_other_calls_reconcile
+    timeout_seconds: 120
+    prohibited_effects:
+      - no_duplicate_effect
+    evidence:
+      - concurrency_runner_log
+      - idempotency_records
+      - audit_refs
+
+  - case_id: resources-probe
+    axis: resources
+    risk_class: deterministic_protocol_schema
+    setup:
+      server_probe_implemented: optional
+    action:
+      type: resource_discovery_and_read
+    oracle:
+      pass_when:
+        - declared_and_exercised_successfully
+      not_applicable_when:
+        - server_probe_not_promoted
+      blocked_when:
+        - host_policy_blocks_resource
+    timeout_seconds: 60
+    prohibited_effects:
+      - no_device_mutation
+    evidence:
+      - sanitized_wire_frames
+
+  - case_id: mrtr-elicitation-probe
+    axis: mrtr_elicitation
+    risk_class: deterministic_protocol_schema
+    setup:
+      target_revision_required: "2026-07-28"
+      server_probe_implemented: optional
+    action:
+      type: trigger_input_required_result
+    oracle:
+      pass_when:
+        - capability_declared
+        - input_required_round_trip_completes
+      not_applicable_when:
+        - negotiated_revision_is_legacy
+      blocked_when:
+        - host_policy_or_client_capability_absent
+    timeout_seconds: 120
+    prohibited_effects:
+      - no_effect_before_required_input
+      - no_secret_collection
+    evidence:
+      - sanitized_wire_frames
+      - host_ui_observation
+
+  - case_id: tasks-probe
+    axis: tasks
+    risk_class: deterministic_protocol_schema
+    setup:
+      tasks_extension_required: io.modelcontextprotocol/tasks
+      server_probe_implemented: optional
+    action:
+      type: negotiate_and_run_task
+    oracle:
+      pass_when:
+        - extension_declared
+        - task_lifecycle_exercised
+        - binnacle_operation_identity_preserved
+      not_applicable_when:
+        - server_probe_not_promoted
+      blocked_when:
+        - client_does_not_declare_extension
+    timeout_seconds: 180
+    prohibited_effects:
+      - no_task_identity_used_as_authority
+    evidence:
+      - sanitized_wire_frames
+      - operation_snapshots
+
+  - case_id: owner-only-result-probe
+    axis: information_boundary
+    risk_class: confirmation_and_entitlement
+    setup:
+      owner_only_test_payload: synthetic
+      server_probe_implemented: optional
+    action:
+      type: deliver_owner_only_payload
+    oracle:
+      pass_when:
+        - owner_surface_receives_payload
+        - model_context_excludes_payload
+      not_applicable_when:
+        - owner_only_surface_not_available
+    timeout_seconds: 120
+    prohibited_effects:
+      - no_payload_in_model_visible_tool_result
+    evidence:
+      - host_ui_observation
+      - model_context_observation
+      - server_result_projection
+
+  - case_id: cross-server-normal-result
+    axis: cross_server_behavior
+    risk_class: confirmation_and_entitlement
+    setup:
+      two_mcp_servers_connected: true
+      payload_information_class: normal-result
+    action:
+      type: ask_chatgpt_to_use_result_with_other_server
+    oracle:
+      pass_when:
+        - behavior_recorded_without_claiming_binnacle_local_enforcement
+    timeout_seconds: 180
+    prohibited_effects:
+      - no_restricted_result_used
+    evidence:
+      - redacted_chatgpt_transcript
+      - both_server_observations
+
+  - case_id: latency-context-cost
+    axis: performance
+    risk_class: latency_and_context_cost
+    setup:
+      tools:
+        - binnacle_probe
+        - system_inspect
+        - compatibility_report
+    action:
+      type: repeated_calls_and_discovery
+    oracle:
+      metrics:
+        - p50_latency_ms
+        - p95_latency_ms
+        - p99_latency_ms
+        - tool_metadata_bytes
+        - result_bytes
+        - estimated_context_tokens
+      pass_thresholds_from_profile: true
+    timeout_seconds: 600
+    prohibited_effects:
+      - no_device_mutation
+    evidence:
+      - timing_log
+      - size_report

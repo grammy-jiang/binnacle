@@ -1,265 +1,174 @@
-schema_version: "1.0"
-profile_id: binnacle-chatgpt-mcp-evaluation
-profile_version: "1.0.0"
-evaluation_manifest_schema: schemas/mcp/evaluation-manifest.schema.json
+schema_version: "1.1"
+profile_id: chatgpt-web-personal-binnacle-bootstrap
+profile_version: "1.1.0"
+manifest_schema: schemas/mcp/evaluation-manifest.schema.json
+case_manifest:
+  path: spec/mcp/evaluation-cases.yaml
+  version: "1.1.0"
+  sha256: 72e10e0446e57879191155305d40a489279472706f6bda930c62cb24fe2c2d17
 
 profile_dimensions:
-  required:
-    - chatgpt_product
-    - surface
-    - plan
-    - workspace_type
-    - account_reference_digest
-    - workspace_policy_digest
-    - connection_method
-    - authentication_profile
-    - probe_release_manifest_sha256
-    - probe_artifact_sha256
-    - mcp_sdk_version_and_sha256
-    - tool_manifest_sha256
-    - visible_catalogue_sha256
-    - schema_registry_sha256
-    - configuration_sha256
-    - device_os_kernel_architecture_profile
-  conditional:
-    - host_release_evidence
-    - browser_or_app_version
-    - region
-    - tunnel_or_gateway_release_digest
+  chatgpt_product: /profile/chatgpt_product
+  chatgpt_surface: /profile/chatgpt_surface
+  account_plan: /profile/account_plan
+  workspace_type: /profile/workspace_type
+  workspace_policy_sha256: /profile/workspace_policy_sha256
+  connection_method: /profile/connection_method
+  authentication_profile: /profile/authentication_profile
+  binnacle_build_sha256: /profile/binnacle_build_sha256
+  binnacle_config_sha256: /profile/binnacle_config_sha256
+  mcp_sdk_name: /profile/mcp_sdk_name
+  mcp_sdk_version: /profile/mcp_sdk_version
+  mcp_sdk_artifact_sha256: /profile/mcp_sdk_artifact_sha256
+  tunnel_or_gateway_identity: /profile/tunnel_or_gateway_identity
+  tunnel_or_gateway_artifact_sha256: /profile/tunnel_or_gateway_artifact_sha256
+  tool_manifest_sha256: /profile/tool_manifest_sha256
+  schema_registry_sha256: /profile/schema_registry_sha256
+  policy_bundle_sha256: /profile/policy_bundle_sha256
+  evaluation_profile_sha256: /profile/evaluation_profile_sha256
+  evaluation_cases_sha256: /profile/evaluation_cases_sha256
+  device_model: /profile/device_model
+  device_os: /profile/device_os
+  device_kernel: /profile/device_kernel
+  device_architecture: /profile/device_architecture
+  device_profile: /profile/device_profile
+  intended_revision_set: /profile/intended_revision_set
+  requested_revision: /profile/requested_revision
+  negotiated_revision: /profile/negotiated_revision
+  observed_client_capabilities_sha256: /profile/observed_client_capabilities_sha256
 
-status_vocabulary:
-  supported_observed:
-    may_be_interface_dependency: true
-    requirement: all_required_positive_and_negative_cases_pass
-  declared_unexercised:
-    may_be_interface_dependency: false
-  failed:
-    may_be_interface_dependency: false
-  unstable:
-    may_be_interface_dependency: false
-  not_declared:
-    may_be_interface_dependency: false
-  blocked_by_host_policy:
-    may_be_interface_dependency: false
-  not_implemented_by_probe:
-    may_be_interface_dependency: false
-  not_applicable:
-    may_be_interface_dependency: false
-    rationale_required: true
-  expired:
-    may_be_interface_dependency: false
+canonical_statuses:
+  - observed-supported
+  - observed-limited
+  - declared-unexercised
+  - not-declared
+  - test-failed
+  - host-policy-blocked
+  - server-not-implemented
+  - not-tested
+  - unsupported-by-design
+  - unstable
+  - expired
+  - not-applicable
 
-phases:
-  - connectivity
-  - read-only-core
-  - structured-results-and-errors
-  - controlled-write-entitlement
-  - long-running-and-cancellation
-  - optional-primitives-and-extensions
-  - high-impact-confirmation
-  - multi-server-and-cross-server
-  - regression-and-stability
+risk_classes:
+  deterministic_protocol_schema:
+    minimum_attempts: 1
+    target_pass_rate: 1.0
+  tool_selection_and_result_rendering:
+    minimum_attempts: 10
+    target_pass_rate: 0.9
+  confirmation_and_entitlement:
+    minimum_attempts: 5
+    target_pass_rate: 1.0
+  write_cancellation_retry_cache_confirmation:
+    minimum_attempts: 20
+    target_pass_rate: 1.0
+  concurrency_race_reconnect_instability:
+    minimum_attempts: 20
+    target_pass_rate: 1.0
+  latency_and_context_cost:
+    minimum_attempts: 20
+    target_pass_rate: 0.95
 
-axes:
-  connectivity:
-    required_cases:
-      - endpoint-connect
-      - authentication-success
-      - authentication-failure
-      - stable-controller-identity
-      - reconnect-same-controller
-      - direct-listener-bypass
-      - token-expiry-and-revocation
-      - credential-leakage
-  protocol-revision:
-    required_cases:
-      - revision-observation
-      - selected-revision-valid-request
-      - unsupported-revision
-      - cross-era-header
-      - result-shape
-  discovery:
-    required_cases:
-      - tool-discovery
-      - deterministic-order
-      - private-cache
-      - refresh
-      - stale-catalogue
-      - metadata-digest
-      - server-origin
-  structured-results:
-    required_cases:
-      - scalar-nested-array-nullable
-      - model-readable-content
-      - output-schema-valid
-      - output-schema-invalid
-      - warning
-      - tool-execution-error
-      - protocol-error-separation
-  input-schema:
-    required_cases:
-      - required-field
-      - optional-field
-      - enum
-      - array
-      - unknown-field
-      - conditional-field
-      - mutually-exclusive-field
-  read-entitlement:
-    required_cases:
-      - system-inspect
-      - profile-observable-result
-      - unauthorized-read
-  write-entitlement:
-    required_cases:
-      - controlled-write
-      - write-outside-probe-root
-      - owned-cleanup
-      - unowned-cleanup
-      - hidden-write-direct-call
-  long-running:
-    required_cases:
-      - bounded-delay
-      - operation-handle
-      - status-poll
-      - reconnect-result
-      - cancellation-request
-      - cancellation-verified
-      - timeout
-      - uncertain-outcome
-      - duplicate-retry
-  resources:
-    required_cases:
-      - resources-declaration
-      - resources-list-read
-      - unsupported-or-hidden-direct-call
-  prompts:
-    required_cases:
-      - prompts-declaration
-      - prompts-list-get
-      - unsupported-or-hidden-direct-call
-  mrtr-elicitation:
-    required_cases:
-      - client-capability-declaration
-      - valid-input-required
-      - unsupported-request-type
-      - secret-request-rejected
-      - request-state-tamper
-  tasks:
-    required_cases:
-      - extension-declaration
-      - task-create
-      - task-status
-      - task-cancel
-      - disconnect-and-reconnect
-      - task-versus-operation-identity
-  host-confirmation:
-    required_case_manifest: tests/fixtures/mcp/host-confirmation.yaml
-  cross-server:
-    required_cases:
-      - server-origin-display
-      - duplicate-tool-name
-      - normal-result-forwarding
-      - owner-only-exclusion
-      - second-server-confirmation
-      - untrusted-content-tool-selection
+metrics:
+  tool_selection_correct_rate:
+    minimum: 0.9
+  request_schema_valid_rate:
+    minimum: 1.0
+  result_schema_valid_rate:
+    minimum: 1.0
+  confirmation_bypass_rate:
+    maximum: 0.0
+  exactly_one_effect_rate:
+    minimum: 1.0
+  cancellation_truthful_rate:
+    minimum: 1.0
+  reconnect_reconciliation_rate:
+    minimum: 1.0
+  p95_latency_ms:
+    bootstrap_read_maximum: 10000
+  model_visible_tool_metadata_bytes:
+    record_only_until_live_baseline: true
+  estimated_context_tokens:
+    record_only_until_live_baseline: true
 
-minimum_repetitions:
-  read_only_fundamental: 3
-  write_cancellation_retry_cache_confirmation: 5
-  concurrency_race_reconnect_instability: 10
+fault_taxonomy:
+  - protocol
+  - authentication
+  - authorization
+  - schema
+  - host-policy
+  - host-ui
+  - selection
+  - timeout
+  - latency
+  - retry
+  - cancellation
+  - reconnect
+  - race
+  - privacy
+  - server
+  - unknown
 
-case_outcomes:
-  - passed
-  - failed
-  - blocked
-  - inconclusive
-  - not_applicable
-
-promotion:
-  requires_server_implementation: true
-  requires_client_declaration_when_protocol_requires: true
-  requires_all_positive_and_negative_cases: true
-  requires_stability_threshold: true
-  requires_security_privacy_confirmation_and_entitlement: true
-  requires_complete_current_evidence: true
-  requires_interface_selection: true
-  documentation_only_evidence_sufficient: false
-  success_on_other_profile_sufficient: false
-
-conflicting_runs:
-  preserve_all_bundles: true
-  split_profile_when_dimension_explains_difference: true
-  otherwise_status: unstable
-  choose_convenient_result: false
-
-validity:
-  preview_max_age_days: 30
-  supported_stable_max_age_days: 90
-  rerun_triggers:
-    - chatgpt_product_surface_plan_account_workspace_or_policy_change
-    - host_release_or_ui_change
-    - connection_tunnel_gateway_or_authentication_change
-    - mcp_revision_or_client_capability_change
-    - binnacle_source_build_sdk_manifest_schema_tool_policy_or_configuration_change
-    - device_os_kernel_architecture_or_relevant_network_change
-    - confirmation_behavior_change
-    - result_cache_pagination_timeout_limit_change
-    - entitlement_change
-    - validity_period_expiry
-    - security_incident_or_regression
-
-probe_environment:
-  dedicated_or_isolated_preview: true
-  disposable_workspace: true
-  production_owner_data: forbidden
-  production_credentials: forbidden
-  synthetic_or_approved_test_data: true
-  audit_enabled: true
-  hidden_unrecorded_feature_flags: forbidden
+conclusion_rules:
+  documentation_only_is_not_observed_support: true
+  declared_without_exercise: declared-unexercised
+  account_or_workspace_block: host-policy-blocked
+  probe_missing: server-not-implemented
+  conflicting_passing_and_failing_runs: unstable
+  expired_evidence: expired
+  optional_feature_not_promoted: not-applicable
+  unsupported_by_v1: unsupported-by-design
+  required_case_missing: not-tested
 
 bundle:
-  required_files:
-    - evaluation-manifest.json
-    - probe-release-manifest.json
-    - deployed-inventory.json
-    - test-profile.yaml
-    - case-manifest.yaml
-    - machine-readable-case-results
-    - sanitized-server-audit-or-projection
-    - sanitized-request-response-traces
-    - tool-catalogue-and-schema-snapshots
-    - host-ui-evidence-when-tested
-    - tester-action-log
-    - limitations
-    - file-manifest-with-digests
-  redaction_before_finalization: true
-  forbidden_content:
-    - access_or_refresh_tokens
-    - authorization_headers
-    - cookies
-    - gateway_assertions
-    - private_keys
-    - passwords
-    - production_owner_data
-    - raw_controller_or_credential_material
-    - never_disclosable_binnacle_fields
-    - full_unrelated_conversations
-    - unbounded_logs_or_payloads
-  raw_evidence_separate_from_conclusions: true
-  runtime_self_signature_independent_integrity: false
+  manifest_does_not_contain_bundle_digest: true
+  detached_receipt_required: true
+  detached_receipt_schema: evaluation-manifest.schema.json#/$defs/bundleReceipt
+  evidence_files_include_manifest: true
+  evidence_files_exclude_detached_receipt: true
 
-oracles:
-  require_setup_and_preconditions: true
-  require_expected_requests_and_order: true
-  require_expected_tool_and_arguments: true
-  require_confirmation_expectation: true
-  require_expected_result_and_audit: true
-  require_prohibited_effects: true
-  require_timeout_and_repetition: true
-  human_impression_only: forbidden
+human_observation_required:
+  - tool_selection
+  - host_confirmation
+  - write_entitlement
+  - owner_only_result_handling
+  - cross_server_behavior
 
-profile_summary:
-  human_readable_file: docs/mcp-profile.md
-  every_promoted_feature_cites_evaluation_profile_and_bundle_digest: true
-  documentation_expectations_labeled_source_derived: true
+automation_required:
+  - protocol_revision
+  - discovery_and_metadata
+  - result_schema
+  - error_schema
+  - idempotency
+  - cancellation
+  - reconnect
+  - concurrency
+  - latency_and_size
+
+promotion:
+  all_required_case_ids_present: true
+  attempts_meet_risk_class_minimum: true
+  case_manifest_digest_matches: true
+  profile_dimensions_complete: true
+  evidence_complete_and_redacted: true
+  unresolved_conflicting_run_forbidden: true
+  reviewer_approval_required: true
+
+validity:
+  maximum_days: 30
+  rerun_triggers:
+    - chatgpt_product_or_plan_changed
+    - workspace_policy_changed
+    - connection_or_authentication_changed
+    - requested_or_negotiated_revision_changed
+    - client_capabilities_changed
+    - binnacle_build_or_config_changed
+    - mcp_sdk_changed
+    - tunnel_or_gateway_changed
+    - tool_manifest_changed
+    - schemas_or_policy_changed
+    - evaluation_profile_or_cases_changed
+    - device_os_kernel_or_profile_changed
+    - material_regression_observed

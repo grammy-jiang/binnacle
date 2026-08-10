@@ -1,274 +1,96 @@
-schema_version: "1.0"
-contract_id: binnacle-operation-lifecycle
-contract_version: "1.0.0"
-operation_schema: schemas/mcp/binnacle-common.schema.json#/$defs/operationSnapshot
-
-creation_boundary:
-  creates_operation:
-    - authenticated_schema_valid_mutating_request_after_idempotency_reservation
-    - explicitly_retained_read_or_long_running_request
-  does_not_create_operation:
-    - transport_failure
-    - authentication_failure
-    - protocol_failure
-    - unknown_tool
-    - input_schema_failure
+schema_version: "1.1"
+contract: OPERATION-LIFECYCLE
+contract_version: "1.1.0"
 
 states:
   received:
     terminality: non_terminal
-    effect_knowledge:
-      - none
-      - known_no_effect
-    required_timestamps:
-      - created_at
-      - updated_at
+    effect_knowledge: [none, known_no_effect]
     error_required: false
-    forward_effect_allowed: false
-
   rejected:
     terminality: terminal
-    effect_knowledge:
-      - none
-      - known_no_effect
-    required_timestamps:
-      - created_at
-      - updated_at
-      - terminal_or_reconciled_at
+    effect_knowledge: [none, known_no_effect]
     error_required: true
-    forward_effect_allowed: false
-
   authorised:
     terminality: non_terminal
-    effect_knowledge:
-      - none
-      - known_no_effect
-    required_timestamps:
-      - created_at
-      - updated_at
-      - authorised_at
+    effect_knowledge: [none, known_no_effect]
     error_required: false
-    forward_effect_allowed: true
-
   running:
     terminality: non_terminal
-    effect_knowledge:
-      - none
-      - known_no_effect
-      - known_effect
-      - partial
-    required_timestamps:
-      - created_at
-      - updated_at
-      - authorised_at
-      - started_at
+    effect_knowledge: [none, known_no_effect, known_effect, partial]
     error_required: false
-    forward_effect_allowed: true
-
   paused:
     terminality: non_terminal
-    effect_knowledge:
-      - none
-      - known_no_effect
-      - known_effect
-      - partial
-    required_timestamps:
-      - created_at
-      - updated_at
-      - authorised_at
-      - paused_at
+    effect_knowledge: [none, known_no_effect, known_effect, partial]
     error_required: false
-    forward_effect_allowed: false
-    resume_requires:
-      - same_operation_identity
-      - current_controller_authority
-      - current_policy_and_state_revalidation
-      - contract_permits_resume
-
   cancelling:
     terminality: non_terminal
-    effect_knowledge:
-      - none
-      - known_no_effect
-      - known_effect
-      - partial
-      - uncertain
-    required_timestamps:
-      - created_at
-      - updated_at
-      - cancelling_at
-    cancellation_phase:
-      - requested
-      - graceful
-      - forced
-      - unable_to_stop
-    forward_effect_allowed: protective_only
-
+    effect_knowledge: [none, known_no_effect, known_effect, partial]
+    error_required: false
   cancelled:
     terminality: terminal
-    effect_knowledge:
-      - known_no_effect
-      - known_effect
-      - partial
-    required_timestamps:
-      - created_at
-      - updated_at
-      - terminal_or_reconciled_at
-    cancellation_phase:
-      - verified
-    remaining_effects_verified: true
+    effect_knowledge: [known_no_effect, known_effect, partial]
     error_required: false
-    forward_effect_allowed: false
-
+    cancellation_phase: verified
+    remaining_effects_verified: true
   succeeded:
     terminality: terminal
-    effect_knowledge:
-      - known_no_effect
-      - known_effect
-    required_timestamps:
-      - created_at
-      - updated_at
-      - terminal_or_reconciled_at
-    verification_status: verified
+    effect_knowledge: [known_effect]
     error_required: false
-    forward_effect_allowed: false
-
+    verification_status: verified
   failed:
     terminality: terminal
-    effect_knowledge:
-      - known_no_effect
-      - known_effect
-      - partial
-    required_timestamps:
-      - created_at
-      - updated_at
-      - terminal_or_reconciled_at
+    effect_knowledge: [known_no_effect, known_effect, partial]
     error_required: true
-    forward_effect_allowed: false
-
   uncertain:
     terminality: effect_terminal_reconcilable
-    effect_knowledge:
-      - uncertain
-    required_timestamps:
-      - created_at
-      - updated_at
-      - terminal_or_reconciled_at
+    effect_knowledge: [uncertain]
     error_required: true
-    automatic_retry_allowed: false
-    forward_effect_allowed: false
-    permitted_actions:
-      - status
-      - evidence
-      - reconcile
-      - cleanup
-      - retained_protective_effect
 
 allowed_transitions:
-  received:
-    - rejected
-    - authorised
+  received: [rejected, authorised]
   rejected: []
-  authorised:
-    - running
-    - cancelling
-    - cancelled
-    - failed
-    - uncertain
-  running:
-    - paused
-    - cancelling
-    - succeeded
-    - failed
-    - uncertain
-  paused:
-    - running
-    - cancelling
-    - failed
-    - uncertain
-  cancelling:
-    - cancelled
-    - succeeded
-    - failed
-    - uncertain
+  authorised: [running, cancelling, cancelled, failed]
+  running: [paused, cancelling, succeeded, failed, uncertain]
+  paused: [running, cancelling, failed, uncertain]
+  cancelling: [cancelled, succeeded, failed, uncertain]
   cancelled: []
   succeeded: []
   failed: []
-  uncertain:
-    - succeeded
-    - failed
-    - cancelled
-
-transition_requirements:
-  received_to_rejected:
-    consequential_effect_count: 0
-    error_required: true
-  received_to_authorised:
-    admission_evidence_required: true
-  authorised_to_running:
-    first_boundary_or_execution_start_recorded: true
-  authorised_to_cancelled:
-    verified_no_effect: true
-  running_to_succeeded:
-    success_verification_required: true
-  running_to_failed:
-    remaining_effects_known: true
-  any_to_uncertain:
-    reason_and_reconciliation_contract_required: true
-  uncertain_to_succeeded:
-    no_effect_replay: true
-    reconciliation_evidence_required: true
-  uncertain_to_failed:
-    no_effect_replay: true
-    reconciliation_evidence_required: true
-  uncertain_to_cancelled:
-    no_effect_replay: true
-    cancellation_result_verified: true
+  uncertain: [succeeded, failed, cancelled]
 
 state_version:
-  starts_at: 1
-  increment_on:
-    - state_change
-    - effect_knowledge_change
-    - cancellation_phase_change
-    - verification_change
-    - progress_change
-    - retention_change
-    - error_change
-  stale_snapshot_may_overwrite: false
+  minimum: 1
+  strictly_increases_on_transition: true
+  duplicate_observation_may_repeat_same_version: true
 
 progress:
   unknown:
     known: false
-    completed: 0
-    total: null
+    millionths: null
     unit: null
   known:
     known: true
-    completed_min: 0
-    total_required: true
-    completed_must_not_exceed_total: true
-    unit_required_when_total_present: true
+    millionths_range: [0, 1000000]
+    unit_required: true
+  exact_counts_belong_in_tool_data: true
 
 retry:
-  same_identity_same_fingerprint: return_or_advance_retained_lifecycle_only
-  same_identity_different_fingerprint: idempotency_conflict
-  new_identity_after_uncertain_same_effect: reconciliation_required
-  automatic_non_idempotent_repeat: false
+  automatic_retry_allowed_for_retained_operation_states: false
+  retry_uses_idempotency_contract: true
+  uncertain_requires_status_or_reconciliation: true
 
-cancellation:
-  request_is_terminal_result: false
-  acknowledgement_is_cancelled_state: false
-  cancelled_requires_verified_remaining_effects: true
-  cancellation_request_retry_is_idempotent: true
-
-verification:
-  success_requires_verified: true
-  failure_may_be_verified_or_unavailable_with_known_effects: true
-  uncertain_may_not_claim_verified_effect: true
+call_outcome_mapping:
+  operation_get_of_failed_operation:
+    tool_call_is_error: false
+    represented_operation_state: failed
+  operation_get_of_uncertain_operation:
+    tool_call_is_error: false
+    represented_operation_state: uncertain
+  malformed_operation_get:
+    tool_call_is_error: true
 
 retention:
-  non_terminal_and_uncertain_auto_expiry: forbidden
-  terminal_result_compaction: allowed_under_retention_contract
-  tombstone_must_prevent_replay: true
-  storage_failure_blocks_new_affected_mutation: true
+  terminal_record_required: true
+  uncertain_record_protected_until_reconciled: true
+  result_expiry_does_not_delete_security_tombstone: true

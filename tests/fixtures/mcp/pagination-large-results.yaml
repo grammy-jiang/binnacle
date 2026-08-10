@@ -1,808 +1,330 @@
-schema_version: "1.0"
-profile: binnacle-pagination-large-results
-source_contract: docs/mcp-large-results.md
-schema: schemas/mcp/result-reference.schema.json
-policy: spec/mcp/result-limits.yaml
-real_host_required_for_host_limit_and_resources_cases: true
+schema_version: "1.1"
+contract: MCP-LARGE-RESULTS
+contract_version: "1.1.0"
 
 cases:
-  - id: inline-under-all-limits
+  - id: inline-complete-valid
     kind: positive
-    result:
-      model_content_bytes: 1024
-      structured_content_bytes: 8192
-      serialized_tool_result_bytes: 16384
-      complete: true
-    effective_limits:
-      model_content_bytes: 8192
-      structured_content_bytes: 65536
-      serialized_tool_result_bytes: 131072
-    expect:
+    metadata:
+      result_ref: null
+      lifecycle: complete
       delivery_mode: inline
-      retained_result_created: false
-      truncated: false
-
-  - id: inline-exact-limit
-    kind: positive
-    result:
-      model_content_bytes: 8192
-      structured_content_bytes: 65536
-      serialized_tool_result_bytes: 131072
-      complete: true
+      payload_available: true
+      materialization_complete: true
+      continuation_supported: false
+      media_type: application/json
+      encoding: json-items
+      item_count: 2
+      decoded_byte_count: 100
+      result_sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+      created_at: "2026-08-08T15:00:00Z"
+      completed_at: "2026-08-08T15:00:00Z"
+      expires_at: "2026-08-08T16:00:00Z"
+      information_class: normal-result
     expect:
-      delivery_mode: inline_or_smaller_contract_limit
-      silent_truncation: false
+      schema_valid: true
 
-  - id: inline-over-host-limit
-    kind: positive-product-behavior
-    server_limit_bytes: 131072
-    validated_host_limit_bytes: 65536
-    result_bytes: 70000
-    expect:
-      effective_limit_bytes: 65536
-      inline_delivery: false
-      retained_reference_or_explicit_error: true
-
-  - id: one-large-success-does-not-raise-limit
-    kind: negative-policy
-    observed_one_time_success_bytes: 1000000
-    current_validated_limit_bytes: 131072
-    expect:
-      current_limit_automatically_raised: false
-      repeated_evaluation_required: true
-
-  - id: silent-truncation
+  - id: inline-with-result-ref-invalid
     kind: negative
-    source_items: 1000
-    returned_items: 100
-    result_claims_complete: true
-    continuation_present: false
-    expect:
-      contract_pass: false
-
-  - id: explicit-truncation-with-reference
-    kind: positive
-    source_items: 1000
-    inline_summary_items: 10
-    truncation:
-      truncated: true
-      total_known: true
-      total_items: 1000
-      omitted_known: true
-      continuation_available: true
-    retained_result:
+    metadata:
+      result_ref: retained-result-ref-123456
       lifecycle: complete
+      delivery_mode: inline
+      payload_available: true
+      materialization_complete: true
+      continuation_supported: false
     expect:
-      contract_pass: true
+      schema_valid: false
 
-  - id: result-reference-before-persistence
-    kind: negative
-    result:
-      persistence_complete: false
-      digest_verified: false
-      reference_returned: true
-    expect:
-      contract_pass: false
-      reference_readable: false
-
-  - id: result-storage-failure
-    kind: negative
-    result:
-      persistence_available: false
-      source_exceeds_inline_limit: true
-    expect:
-      readable_reference_returned: false
-      error_code: result_storage_unavailable
-      partial_claimed_complete: false
-
-  - id: result-building
+  - id: retained-building-page-not-ready
     kind: positive
-    result:
+    metadata:
+      result_ref: retained-result-ref-123456
       lifecycle: building
+      delivery_mode: item-page
+      payload_available: false
+      materialization_complete: false
+      continuation_supported: true
     request:
-      tool: result_get
+      tool: result_page
     expect:
+      tool_is_error: true
       error_code: result_not_ready
-      retry_after_present: true
-      payload_readable: false
 
-  - id: result-complete-immutable
+  - id: item-page-complete-envelope-valid
     kind: positive
-    result:
-      lifecycle: complete
-      full_sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-    attempted_mutation:
-      change_item: true
+    tool_result:
+      schema_version: "1.1"
+      call_status: succeeded
+      tool:
+        name: result_page
+        contract_version: "1.1"
+      request_id: request-page-1
+      data:
+        result:
+          result_ref: retained-result-ref-123456
+          lifecycle: complete
+          delivery_mode: item-page
+          payload_available: true
+          materialization_complete: true
+          continuation_supported: true
+          media_type: application/json
+          encoding: json-items
+          item_count: 3
+          decoded_byte_count: 300
+          result_sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          created_at: "2026-08-08T15:00:00Z"
+          completed_at: "2026-08-08T15:00:01Z"
+          expires_at: "2026-08-09T15:00:00Z"
+          information_class: normal-result
+        snapshot_sha256: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+        page_sha256: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+        items:
+          - id: 1
+          - id: 2
+        returned_count: 2
+        total_count: 3
+        next_cursor: next-cursor-1234567890123456
+        end_of_results: false
+      operation: null
+      evidence: []
+      warnings: []
     expect:
-      mutation_allowed: false
-      new_result_required: true
+      output_schema: resultPageOutput
+      schema_valid: true
 
-  - id: result-failed-not-readable
-    kind: positive-security-property
-    result:
-      lifecycle: failed
-      partial_storage_present: true
-    expect:
-      ordinary_read_allowed: false
-      error_code: result_failed
-
-  - id: result-expired
-    kind: positive
-    result:
-      lifecycle: expired
-    expect:
-      payload_returned: false
-      error_code: result_expired
-      automatic_rebuild: false
-
-  - id: result-deleted
-    kind: positive
-    result:
-      lifecycle: deleted
-    expect:
-      payload_returned: false
-      response: non_disclosing_not_found_or_expired
-
-  - id: page-traversal-complete
-    kind: positive
-    snapshot:
-      item_count: 1003
-      immutable: true
-      deterministic_order: true
-    request:
-      page_size: 100
-    expect:
-      pages: 11
-      logical_items_returned: 1003
-      duplicate_item_ids: 0
-      omitted_item_ids: 0
-      final_next_cursor: null
-      final_end_of_results: true
-
-  - id: stable-repeated-cursor
-    kind: positive
-    cursor: cursor-aaaaaaaaaaaaaaaaaaaaaaaa
-    requests: 5
-    same_controller: true
-    same_result: true
-    expect:
-      page_digest_identical: true
-      page_index_identical: true
-      global_pointer_advanced: false
-
-  - id: concurrent-page-readers
-    kind: positive
-    cursor: cursor-aaaaaaaaaaaaaaaaaaaaaaaa
-    concurrent_requests: 20
-    expect:
-      identical_page_digest: true
-      cursor_consumed_once_only: false
-      traversal_corrupted: false
-
-  - id: source-mutates-after-snapshot
-    kind: positive
-    snapshot:
-      item_ids:
-        - item-1
-        - item-2
-        - item-3
-    source_after_snapshot:
-      item_ids:
-        - item-1
-        - item-3
-        - item-4
-    expect:
-      page_items_follow_snapshot: true
-      item_2_still_present_in_snapshot: true
-      item_4_not_inserted_into_snapshot: true
-
-  - id: live-unstable-security-traversal
-    kind: negative-promotion
-    consistency: live_unstable
-    use_case: complete-security-sensitive-audit-export
-    expect:
-      supported_v1: false
-      immutable_snapshot_required: true
-
-  - id: live-unstable-warning
-    kind: positive-limited
-    consistency: live_unstable
-    use_case: non-authoritative-live-tail
-    contract_explicitly_permits: true
-    expect:
-      duplication_omission_warning_present: true
-      complete_traversal_claim: false
-
-  - id: cursor-forged
+  - id: page-output-inner-data-only-invalid
     kind: negative
-    cursor: attacker-created-value-xxxxxxxx
+    tool_result:
+      result:
+        lifecycle: complete
+        delivery_mode: item-page
+      items: []
     expect:
-      page_returned: false
-      error_code: cursor_invalid
+      output_schema_valid: false
+      error: canonical_tool_envelope_required
 
-  - id: cursor-expired
-    kind: negative
-    cursor:
-      expires_at: past
-    expect:
-      page_returned: false
-      error_code: cursor_expired
-
-  - id: cursor-other-controller
-    kind: negative-disclosure
-    cursor:
-      controller_id: controller-a
-      result_id: result-1
-    request:
-      controller_id: controller-b
-    expect:
-      page_returned: false
-      result_existence_disclosed: false
-
-  - id: cursor-other-device
-    kind: negative
-    cursor:
-      device_id: pi-one
-    request:
-      device_id: pi-two
-    expect:
-      page_returned: false
-      error_code: cursor_invalid_or_not_found
-
-  - id: cursor-other-tool
-    kind: negative
-    cursor:
-      tool: filesystem_search
-      contract_version: "1.0"
-    request:
-      tool: audit_query
-      contract_version: "1.0"
-    expect:
-      page_returned: false
-
-  - id: cursor-other-contract-version
-    kind: negative
-    cursor:
-      tool: filesystem_search
-      contract_version: "1.0"
-    request:
-      tool: filesystem_search
-      contract_version: "2.0"
-    expect:
-      page_returned: false
-      new_snapshot_required: true
-
-  - id: cursor-query-substitution
-    kind: negative
-    cursor:
-      query_fingerprint: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-    request:
-      query_fingerprint: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-    expect:
-      page_returned: false
-      error_code: cursor_invalid
-
-  - id: cursor-order-substitution
-    kind: negative
-    cursor:
-      order: path-ascending
-    request:
-      order: modified-descending
-    expect:
-      page_returned: false
-
-  - id: cursor-page-size-substitution
-    kind: negative
-    cursor:
-      page_size: 100
-    request:
-      page_size: 500
-    expect:
-      page_returned: false
-      new_initial_request_required: true
-
-  - id: cursor-projection-substitution
-    kind: negative
-    cursor:
-      fields:
-        - path
-        - size
-    request:
-      fields:
-        - path
-        - content
-    expect:
-      page_returned: false
-      protected_content_disclosed: false
-
-  - id: cursor-possession-is-authority
-    kind: negative
-    request:
-      authenticated: false
-      valid_cursor_copied: true
-    expect:
-      authentication_succeeds: false
-      page_returned: false
-
-  - id: cursor-in-log
-    kind: negative
-    implementation:
-      ordinary_log_contains_raw_cursor: true
-    expect:
-      conformance_failure: true
-
-  - id: result-ref-possession-is-authority
-    kind: negative
-    request:
-      authenticated_controller: controller-b
-      result_ref_owned_by: controller-a
-    expect:
-      result_returned: false
-      result_metadata_disclosed: false
-
-  - id: page-item-id-not-stable
-    kind: negative
-    snapshot:
-      same_logical_item_different_id_across_pages: true
-    expect:
-      pagination_contract_pass: false
-
-  - id: duplicate-sort-key-without-tiebreaker
-    kind: negative
-    snapshot:
-      sort_key: modified_time
-      duplicate_sort_keys: true
-      stable_tiebreaker: false
-    expect:
-      pagination_contract_pass: false
-
-  - id: total-count-unknown
+  - id: final-page-next-cursor-null
     kind: positive
     page:
-      total_known: false
-      total_items: null
-      omitted_known: false
-      continuation_available: true
+      end_of_results: true
+      next_cursor: null
     expect:
-      schema_and_contract_valid: true
-      total_count_invented: false
+      schema_valid: true
 
-  - id: text-chunk-utf8-boundary
+  - id: nonfinal-page-needs-cursor
+    kind: negative
+    page:
+      end_of_results: false
+      next_cursor: null
+    expect:
+      schema_valid: false
+
+  - id: reconstruct-pages-no-overlap-or-omission
     kind: positive
-    result:
-      content: "alpha-😀-omega"
-      encoding: utf-8
-    request:
-      offset_would_split_multibyte: true
-      length: 4
+    snapshot_items: [1, 2, 3, 4, 5]
+    pages:
+      - cursor: start
+        items: [1, 2]
+        next_cursor: cursor-2-1234567890123456
+      - cursor: cursor-2-1234567890123456
+        items: [3, 4]
+        next_cursor: cursor-4-1234567890123456
+      - cursor: cursor-4-1234567890123456
+        items: [5]
+        next_cursor: null
+    expect:
+      reconstructed_items: [1, 2, 3, 4, 5]
+      duplicates: []
+      omissions: []
+
+  - id: same-cursor-same-page
+    kind: positive
+    cursor: cursor-2-1234567890123456
+    requests: 2
+    expect:
+      page_sha256_identical: true
+      global_cursor_advanced: false
+
+  - id: concurrent-source-mutation-does-not-change-snapshot
+    kind: positive
+    snapshot_created: true
+    source_mutation_after_snapshot: true
+    expect:
+      pagination_uses_original_snapshot: true
+      snapshot_sha256_unchanged: true
+
+  - id: cross-controller-cursor
+    kind: negative
+    cursor_owner: controller-a
+    requesting_controller: controller-b
+    expect:
+      tool_is_error: true
+      error_code: result_not_found
+      result_existence_disclosed: false
+
+  - id: expired-cursor
+    kind: negative
+    cursor_expires_at: "2026-08-08T15:00:00Z"
+    request_time: "2026-08-08T15:00:01Z"
+    expect:
+      error_code: cursor_expired
+
+  - id: byte-chunk-complete-envelope-valid
+    kind: positive
+    tool_result:
+      schema_version: "1.1"
+      call_status: succeeded
+      tool:
+        name: result_chunk
+        contract_version: "1.1"
+      request_id: request-chunk-1
+      data:
+        result:
+          result_ref: retained-result-ref-abcdef
+          lifecycle: complete
+          delivery_mode: byte-chunk
+          payload_available: true
+          materialization_complete: true
+          continuation_supported: true
+          media_type: text/plain
+          encoding: utf-8
+          item_count: null
+          decoded_byte_count: 100
+          result_sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          created_at: "2026-08-08T15:00:00Z"
+          completed_at: "2026-08-08T15:00:01Z"
+          expires_at: "2026-08-09T15:00:00Z"
+          information_class: normal-result
+        offset: 0
+        decoded_byte_count: 5
+        representation: utf-8
+        data: hello
+        chunk_sha256: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+        next_offset: 5
+        end_of_result: false
+        utf8_boundary_adjusted: false
+      operation: null
+      evidence: []
+      warnings: []
+    expect:
+      output_schema: resultChunkOutput
+      schema_valid: true
+
+  - id: decoded-chunk-default-fits-envelope
+    kind: positive
+    decoded_chunk_bytes: 16384
+    representation: base64
+    expected_base64_chars_max: 21848
+    structured_content_bytes_max: 65536
+    expect:
+      complete_envelope_fits: true
+
+  - id: decoded-chunk-max-reduced-when-envelope-overhead-large
+    kind: positive
+    requested_decoded_bytes: 32768
+    computed_serialized_envelope_bytes: 70000
+    effective_structured_content_bytes_max: 65536
+    expect:
+      server_reduces_returned_decoded_bytes: true
+      returned_envelope_bytes_at_most: 65536
+
+  - id: decoded-chunk-over-limit
+    kind: negative
+    requested_decoded_bytes: 32769
+    expect:
+      error_code: range_invalid
+
+  - id: utf8-boundary-adjustment
+    kind: positive
+    text: "a😀b"
+    requested_offset: 1
+    requested_length: 2
     expect:
       invalid_utf8_returned: false
-      range_adjusted_for_encoding: true
-      chunk_digest_valid: true
+      utf8_boundary_adjusted: true
 
-  - id: text-chunk-silent-byte-shift
-    kind: negative
-    request:
-      offset: 10
-      length: 100
-    response:
-      returned_offset: 9
-      range_adjusted_for_encoding: false
-    expect:
-      contract_pass: false
-
-  - id: binary-chunk-base64
+  - id: binary-base64-digest
     kind: positive
-    result:
-      media_type: application/octet-stream
-      decoded_byte_count: 1000
-    request:
-      offset: 0
-      length: 1000
-      encoding: base64
-    response:
-      decoded_length: 1000
-      serialized_length_within_limit: true
-      chunk_sha256_matches_decoded: true
+    decoded_bytes_sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    encoded_representation: base64
     expect:
-      contract_pass: true
-
-  - id: base64-expansion-over-wire-limit
-    kind: negative
-    request:
-      decoded_length: 100000
-    host_effective_serialized_limit: 100000
-    encoded_and_envelope_length: 140000
-    expect:
-      response_serialized: false
-      smaller_chunk_or_error_required: true
-
-  - id: negative-chunk-offset
-    kind: negative
-    request:
-      offset: -1
-      length: 100
-    expect:
-      error_code: range_invalid
-
-  - id: zero-chunk-length
-    kind: negative
-    request:
-      offset: 0
-      length: 0
-    expect:
-      error_code: range_invalid
-
-  - id: excessive-chunk-length
-    kind: negative
-    request:
-      offset: 0
-      length: 262145
-    expect:
-      error_code: range_invalid
-
-  - id: range-integer-overflow
-    kind: negative
-    request:
-      offset: 9223372036854775800
-      length: 1000
-    expect:
-      error_code: range_invalid
-
-  - id: range-beyond-result
-    kind: negative
-    result_length: 1000
-    request:
-      offset: 900
-      length: 200
-    contract:
-      clipping_allowed: false
-    expect:
-      error_code: range_invalid
-
-  - id: offset-equals-result-length
-    kind: negative-default
-    result_length: 1000
-    request:
-      offset: 1000
-      length: 1
-    contract:
-      empty_final_read_allowed: false
-    expect:
-      error_code: range_invalid
-
-  - id: full-digest-mismatch
-    kind: negative
-    result_record:
-      full_sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-    storage_observation:
-      full_sha256: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-    expect:
-      chunk_or_page_returned: false
-      error_code: result_integrity_failed
-      profile_restricted_as_required: true
+      chunk_digest_calculated_over_decoded_bytes: true
 
   - id: chunk-digest-mismatch
     kind: negative
-    returned_chunk_sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-    recomputed_chunk_sha256: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+    expected_chunk_sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    actual_chunk_sha256: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
     expect:
-      contract_pass: false
+      error_code: result_integrity_failed
+      data_presented_as_valid: false
 
-  - id: result-restart-reconstruction
+  - id: result-get-building-envelope
     kind: positive
-    before_restart:
-      result_lifecycle: complete
-      result_digest: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-    after_restart:
-      record_reconstructed: true
-      digest_verified: true
+    tool: result_get
+    result_lifecycle: building
     expect:
-      same_result_ref_remains_valid_within_expiry: true
+      tool_call_is_error: false
+      payload_available: false
 
-  - id: building-result-server-restart
-    kind: fault-injection
-    before_restart:
-      lifecycle: building
-      producing_operation: running
-    after_restart:
-      operation_reconciled: true
-      result_state_reconstructed: true
+  - id: result-get-failed
+    kind: positive
+    tool: result_get
+    result_lifecycle: failed
     expect:
-      partial_claimed_complete: false
-      final_state:
-        - building
-        - complete
-        - failed
+      tool_is_error: true
+      error_code: result_failed
 
-  - id: cancelled-materialization-partial
+  - id: result-expired
     kind: negative
-    operation:
-      cancelled: true
-      partial_bytes_present: true
-    contract:
-      partial_result_type_defined: false
+    result_lifecycle: expired
     expect:
-      partial_readable: false
-      complete_result_ref_returned: false
+      error_code: result_expired
+      payload_disclosed: false
 
-  - id: materialization-quota-per-controller
+  - id: storage-unavailable-no-silent-truncation
     kind: negative
-    controller_usage_bytes: 268435456
-    new_result_bytes: 1
+    inline_result_fits: false
+    retained_storage_available: false
     expect:
-      materialization_started: false
       error_code: result_storage_unavailable
+      partial_payload_marked_complete: false
 
-  - id: materialization-global-quota
-    kind: negative
-    global_usage_bytes: 1073741824
-    new_result_bytes: 1
-    expect:
-      materialization_started: false
-      protected_capacity_preserved: true
-
-  - id: result-object-size-over-limit
-    kind: negative
-    expected_result_bytes: 33554433
-    separate_artifact_contract: false
-    expect:
-      materialization_started: false_or_bounded_failure
-      error_code: result_too_large
-
-  - id: simultaneous-materializations-per-controller
-    kind: negative
-    current_materializations: 4
-    requested_additional: 1
-    expect:
-      new_materialization_started: false
-      status_cancel_audit_recovery_usable: true
-
-  - id: polling-does-not-extend-forever
-    kind: positive-security-property
-    result:
-      idle_expiry_seconds: 3600
-    client:
-      polls_every_second: true
-      policy_allows_sliding_extension: false
-    expect:
-      expiry_extended_by_polling: false
-
-  - id: page-rate-limit
-    kind: positive-security-property
-    requests_per_minute: 121
-    limit: 120
-    expect:
-      one_or_more_requests_rejected: true
-      error_code: result_rate_limited
-      result_deleted_or_corrupted: false
-
-  - id: quota-evicts-expired-first
+  - id: model-readable-field-name-consistent
     kind: positive
-    objects:
-      - id: result-expired
-        state: expired
-      - id: result-active
-        state: complete
-        unexpired: true
-    quota_pressure: true
+    policy_field: model_readable_content_bytes_max
+    value: 8192
     expect:
-      result_expired_evicted_first: true
-      active_result_preserved: true
+      documentation_field_matches: true
+      fixture_field_matches: true
 
-  - id: quota-does-not-evict-uncertain
-    kind: negative
-    object:
-      retention_class: RR4-uncertain
-      reconciled: false
-    implementation_action: evict_for_ordinary_result
-    expect:
-      contract_pass: false
-      new_ordinary_result_rejected: true
-
-  - id: result-expiry-tombstone
+  - id: resources-adapter-unvalidated
     kind: positive
-    expired_result:
-      payload_deleted: true
-      tombstone:
-        reference_digest_present: true
-        source_operation_present: true
-        expiry_present: true
-        payload_present: false
+    host_profile_resources_status: not-tested
     expect:
-      access_error: result_expired
-      automatic_rebuild: false
+      canonical_retrieval_tools_required: true
+      resource_uri_emitted: false
 
-  - id: never-disclosable-materialization
+  - id: restricted-result-no-model-downgrade
     kind: negative
-    source_information_class: never-disclosable
-    requested_result_surface: model-readable
+    retained_information_class: restricted-result
+    requested_projection: normal-result
     expect:
-      result_object_created_for_model: false
-      operation_rejected_or_uses_nonmodel_protected_component: true
+      result: rejected
+      information_class_preserved: restricted-result
 
-  - id: restricted-result-page-wrong-surface
+  - id: per-controller-quota
     kind: negative
-    result_information_class: restricted-result
-    allowed_surface: owner-only
-    requested_surface: model-visible
+    retained_bytes_before: 268435456
+    requested_new_bytes: 1
     expect:
-      page_returned: false
+      error_code: result_quota_exceeded
 
-  - id: later-page-class-downgrade
-    kind: negative
-    result_information_class: restricted-result
-    first_page_class: restricted-result
-    later_page_class: normal-result
-    expect:
-      contract_pass: false
-
-  - id: result-ref-in-metric-label
-    kind: negative
-    implementation:
-      metrics_label_contains_raw_result_ref: true
-    expect:
-      conformance_failure: true
-
-  - id: protocol-list-cursor-used-as-result-cursor
-    kind: negative
-    request:
-      result_page_cursor: mcp-tools-list-cursor
-    expect:
-      page_returned: false
-      error_code: cursor_invalid
-
-  - id: result-cursor-used-for-tools-list
-    kind: negative
-    request:
-      mcp_tools_list_cursor: binnacle-result-cursor
-    expect:
-      protocol_request_rejected_or_cursor_invalid: true
-
-  - id: resources-supported-adapter
-    kind: real-host-positive
-    host_profile:
-      resources: supported_observed
-      resource_auth_revalidation: passed
-      resource_cache_behavior: passed
-    result:
-      retained_object_complete: true
-    expect:
-      resource_adapter_may_be_enabled: true
-      canonical_tool_fallback_remains_valid: true
-
-  - id: resources-not-supported-fallback
-    kind: real-host-positive
-    host_profile:
-      resources: not_declared
-    expect:
-      large_result_still_retrievable_via_tools: true
-      resources_required_for_v1: false
-
-  - id: resource-uri-possession
-    kind: negative
-    request:
-      authenticated: false
-      valid_resource_uri: true
-    expect:
-      resource_returned: false
-
-  - id: stream-close-not-cancel
-    kind: real-host
-    producing_operation:
-      state: running
-    transport:
-      response_stream_closed: true
-    operation_contract:
-      stream_close_is_supervision_loss: false
-    expect:
-      operation_auto_cancelled: false
-      result_auto_deleted: false
-
-  - id: progress-not-final-payload
-    kind: negative
-    operation:
-      progress_notifications_contain_partial_output: true
-      final_result_omitted: true
-    expect:
-      contract_pass: false
-
-  - id: live-tail-separate-operation
+  - id: uncertain-recovery-result-not-evicted
     kind: positive
-    request:
-      type: log-live-tail
-      snapshot_result_ref_reused_as_live_cursor: false
-      retained_operation_created: true
-      cancellation_defined: true
+    retention_class: RR4-uncertain
+    storage_pressure: true
+    reconciled: false
     expect:
-      contract_pass: true
-
-  - id: snapshot-tool-used-as-live-tail
-    kind: negative
-    request:
-      type: log-snapshot
-      cursor_expected_to_follow_future_appends: true
-    expect:
-      contract_pass: false
-
-  - id: host-limit-probe
-    kind: real-host-matrix
-    attempted_serialized_sizes:
-      - 16384
-      - 32768
-      - 65536
-      - 131072
-      - 262144
-    repetitions_each: 5
-    expect:
-      highest_stable_complete_size_recorded: true
-      truncation_or_failure_mode_recorded: true
-      profile_limit_not_inferred_from_single_success: true
-
-  - id: malformed-oversized-success-pre-serialization
-    kind: negative
-    structured_result_bytes: 200000
-    effective_limit_bytes: 131072
-    implementation_attempts_serialization: true
-    expect:
-      malformed_or_oversized_success_sent: false
-      retained_reference_or_execution_error: true
-
-  - id: audit-page-access
-    kind: positive
-    access:
-      result_id: result-1
-      page_index: 2
-      returned_items: 100
-      controller: controller-a
-    expect_audit_fields:
-      - result_identity_digest
-      - snapshot_identity
-      - cursor_validation_outcome
-      - page_or_range
-      - returned_items_and_bytes
-      - controller_digest
-      - policy_version
-      - information_class
-      - outcome
-
-  - id: audit-never-stores-protected-page-payload
-    kind: negative
-    result_information_class: restricted-result
-    audit_event:
-      full_page_payload_present: true
-      separate_audit_content_contract: false
-    expect:
-      conformance_failure: true
-
-  - id: page-schema-unknown-field
-    kind: negative
-    instance:
-      result_ref: opaque-reference-aaaaaaaa
-      cursor: null
-      page_size: 100
-      extra: true
-    expect:
-      schema_valid: false
-
-  - id: chunk-schema-excessive-length
-    kind: negative
-    instance:
-      result_ref: opaque-reference-aaaaaaaa
-      offset: 0
-      length: 262145
-      encoding: utf-8
-    expect:
-      schema_valid: false
-
-required_oracles:
-  - JSON Schema validation
-  - immutable snapshot traversal verifier
-  - cursor scope and replay verifier
-  - result and chunk digest verifier
-  - UTF-8 and base64 range verifier
-  - quota and retention evaluator
-  - information-class and recipient checker
-  - MCP Resource fallback evaluation
-  - real ChatGPT result-limit probe
-  - audit leakage scanner
+      evicted: false
+      new_large_result_rejected_if_needed: true

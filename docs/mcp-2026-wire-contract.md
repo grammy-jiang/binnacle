@@ -1,46 +1,45 @@
-# Binnacle MCP 2026-07-28 Wire Contract
+# Binnacle MCP `2026-07-28` Wire Contract
 
-- **Status:** Draft — target-revision wire contract
-- **Target revision:** `2026-07-28`
-- **Related contracts:** `MCP-PROFILE`, `MCP-INTERFACE`
-- **Revision support:** [`mcp-revision-support.md`](mcp-revision-support.md)
-- **Feature-design basis:** [`design.md`](design.md), V17
-- **Last protocol review:** 2026-08-08
+- **Status:** Draft target-revision contract
+- **Contract version:** `1.1.0`
+- **Revision:** `2026-07-28`
+- **Revision dispatcher:** [`mcp-revision-support.md`](mcp-revision-support.md)
 
-## 1. Purpose
+## 1. Scope
 
-This document freezes Binnacle's wire-level requirements when one request is dispatched under MCP revision `2026-07-28`.
+This document defines the serialized target-era MCP frames that Binnacle emits and accepts. Application-facing SDK types may hide wire-only fields; conformance therefore validates serialized frames as well as handler values.
 
-It does not change the legacy profiles defined in `mcp-revision-support.md`. A legacy adapter must render the same Binnacle operation facts using that legacy revision's schemas rather than copying the target-era envelope.
+## 2. Request Envelope
 
-The target-era adapter must validate the wire result before sending it. An internally valid Binnacle result that cannot be represented by the selected MCP schema is a server conformance failure and must not be emitted as malformed success.
+Every target-era HTTP request is self-contained and includes:
 
-## 2. Mandatory Modern Server Surface
+```text
+MCP-Protocol-Version: 2026-07-28
+Mcp-Method: <JSON-RPC method>
+Mcp-Name: <named target when applicable>
+```
 
-### 2.1 `server/discover`
+The JSON-RPC body carries matching method/name values and request `_meta` with protocol version, client information, and client capabilities. Header/body mismatch follows the `-32020` contract in `mcp-revision-support.md`.
 
-Binnacle must implement `server/discover` for `2026-07-28`.
+There is no `initialize`, `initialized`, or `Mcp-Session-Id` in this revision.
 
-A client may call another valid request without calling discovery first. Therefore:
+## 3. `server/discover`
 
-- discovery is mandatory server functionality but optional client behaviour;
-- Binnacle must not create a discovery-before-use session requirement;
-- every request still carries and validates its own protocol and client metadata;
-- a cached discovery result never grants controller identity or operation authority.
+Binnacle implements `server/discover`; a client is not required to call it.
 
-### 2.2 Discover result
-
-The final discovery response must contain:
+A serialized successful discovery result contains:
 
 - `resultType: "complete"`;
-- `supportedVersions` containing the exact set from `mcp-revision-support.md`;
-- `capabilities`;
-- `serverInfo`;
-- `ttlMs`;
-- `cacheScope`;
-- optional concise `instructions`.
+- declared server capabilities, including Tools;
+- current extension declarations;
+- concise server instructions where supported;
+- `ttlMs` and `cacheScope`;
+- server identity in result metadata at:
+  `_meta["io.modelcontextprotocol/serverInfo"]`.
 
-Because Binnacle discovery can vary by authenticated controller, device profile, local policy, and capability lifecycle, the bootstrap profile uses:
+`serverInfo` is not a top-level `DiscoverResult` member in the target profile. The metadata identity is descriptive and does not establish enrolled-device trust.
+
+When discovery varies by controller, authorization, device profile, or policy, Binnacle returns:
 
 ```json
 {
@@ -49,302 +48,106 @@ Because Binnacle discovery can vary by authenticated controller, device profile,
 }
 ```
 
-A later non-zero TTL requires evidence that the exact discovery representation is stable for that duration and remains private to the authenticated security context.
+A later stable profile may use a positive private TTL only after host-cache behaviour is validated.
 
-### 2.3 Capabilities
+## 4. Tools Capability and Catalogue
 
-A Binnacle server that exposes Tools must advertise a `tools` server capability in `server/discover`.
+The discovery capability advertises Tools support. `tools/list`:
 
-Binnacle must not advertise a primitive, feature, or extension merely because its SDK implements it. The advertised capabilities are the intersection of:
+- returns deterministic ordering;
+- includes `ttlMs` and `cacheScope`;
+- exposes only Tool definitions from the verified manifest and current catalogue phase;
+- never acts as authorization;
+- is revalidated on every invocation.
 
-- the target revision;
-- the deployed Binnacle build;
-- the validated device profile;
-- the authentication profile;
-- the features Binnacle has promoted and tested.
+A target-era Tool definition contains the protocol Tool fields, including name, title where supported, description, input schema, optional output schema, annotations, and protocol-defined metadata.
 
-For the bootstrap profile:
+It must not contain the legacy `execution.taskSupport` object. Target-era Tasks are represented only by the separately negotiated `io.modelcontextprotocol/tasks` extension.
 
-- `tools` is advertised;
-- `resources` and `prompts` are omitted unless separately promoted;
-- Sampling and Roots are omitted;
-- the Tasks extension is omitted;
-- optional notifications or extensions are omitted until tested.
+## 5. Tool Annotations
 
-## 3. Cacheable Results
+Binnacle applies cautious defaults:
 
-### 3.1 Required hints
+| Annotation | Default | Meaning |
+| --- | --- | --- |
+| `readOnlyHint` | `false` | `true` only when the Tool cannot intentionally change state |
+| `destructiveHint` | `true` for non-read-only Tools unless proved otherwise | Indicates destructive potential, not certainty |
+| `idempotentHint` | `false` | `true` only for the declared identity and retry contract |
+| `openWorldHint` | `true` when external systems may be contacted | Covers effective external communication, including redirects/proxies |
 
-Every target-era result whose MCP schema is cacheable must contain both:
+Annotations guide the host; they do not authenticate the controller or authorize an operation.
 
-- `ttlMs` — non-negative cache lifetime in milliseconds;
-- `cacheScope` — the protocol-defined cache scope.
+## 6. Results
 
-This includes, where implemented:
-
-- `server/discover`;
-- `tools/list`;
-- `resources/list`;
-- `resources/read`;
-- `prompts/list`;
-- other target-era results explicitly defined as cacheable.
-
-Absence of a hint is a conformance failure even when an SDK would inject a default on the wire. Tests must inspect the actual serialized response.
-
-### 3.2 Private versus public
-
-Use `cacheScope: "private"` whenever the representation can vary by:
-
-- authenticated controller;
-- scopes;
-- device identity or profile;
-- local policy;
-- trust or restricted state;
-- capability lifecycle;
-- information-disclosure permission;
-- any other authorization or owner-specific fact.
-
-Binnacle's bootstrap discovery and Tool catalogue are authorization-dependent and therefore private.
-
-A public scope is permitted only for a representation proven identical and safe across all controllers and anonymous contexts allowed by the profile. Personal V1 normally has no such remote catalogue.
-
-### 3.3 TTL policy
-
-The bootstrap default is `ttlMs: 0`.
-
-A non-zero TTL requires:
-
-- deterministic ordering;
-- a versioned manifest or representation digest;
-- a maximum-staleness analysis;
-- a policy for profile or lifecycle changes during the TTL;
-- regression evidence from the actual ChatGPT host.
-
-Even while a cached catalogue is considered fresh, every Tool invocation is independently authenticated and authorized. Cache freshness never creates authority.
-
-### 3.4 Deterministic ordering
-
-List results must use deterministic ordering under the same authenticated representation and build. Tool ordering must not vary from map iteration, process restart, instance selection, or unrelated request order.
-
-## 4. Result Discrimination
-
-### 4.1 Final result
-
-Every final `2026-07-28` success or represented Tool execution error uses the outer wire discriminator:
+Every final target-era result is serialized with:
 
 ```json
-{
-  "resultType": "complete"
-}
+{"resultType":"complete"}
 ```
 
-This applies to final results including:
+This discriminator may be consumed by an SDK before application code sees the result.
 
-- `server/discover`;
-- `tools/list`;
-- `tools/call`;
-- status and cancellation Tools;
-- any later supported Resource or Prompt request;
-- final extension results where the extension contract does not define another discriminator.
+### 6.1 Tool results
 
-SDK application types may hide this wire-only field. Conformance tests must inspect the serialized frame, not only the handler return object.
+Binnacle adopts a product rule stricter than the minimum abstract MCP shape: every Tool success and every Tool execution error includes at least one concise TextContent entry in `content`.
 
-### 4.2 Input-required result
+Where `outputSchema` is declared:
 
-`resultType: "input_required"` is used only by a request type and client capability that validly support the target-era MRTR input-required contract.
+- `structuredContent` must validate against it;
+- text and structured forms must not contradict each other;
+- credentials, authority material, and non-disclosable content remain excluded;
+- the current MCP-call outcome remains separate from any represented operation outcome.
 
-The bootstrap interface does not depend on MRTR. It must never return `input_required` merely to request authentication, owner confirmation, missing required Tool arguments, or a policy exception.
+A successful status lookup uses `isError: false` even when the represented operation is `failed`, `cancelled`, or `uncertain`.
 
-### 4.3 Tasks
+### 6.2 Execution errors
 
-The `io.modelcontextprotocol/tasks` extension is not advertised in the bootstrap profile. No target-era `task` result may be emitted.
+A post-authentication Tool execution error:
 
-A future Tasks promotion must define its own extension schemas and cannot reuse the `2025-11-25` experimental Task vocabulary.
+- uses `isError: true`;
+- includes model-readable `content`;
+- includes a schema-valid structured execution-error envelope when declared;
+- must not be used for pre-dispatch HTTP authentication or protocol-version failures.
 
-## 5. Tool Discovery Contract
+## 7. Cacheable Responses
 
-### 5.1 `tools/list` envelope
+The target profile requires `ttlMs` and `cacheScope` on all protocol operations classified as cacheable by MCP, including Tool and Resource list/read operations.
 
-A final target-era `tools/list` response must include:
+Binnacle never uses `cacheScope: "public"` for a response that can vary by authentication, authorization, policy, device state, or information class.
 
-- `resultType: "complete"`;
-- deterministic `tools` array;
-- `ttlMs`;
-- `cacheScope`;
-- pagination fields only when the selected list contract implements them.
+A cache entry never grants authority and cannot prevent fresh server-side invocation checks.
 
-The Tool catalogue is advisory. It must not expose a Tool outside the deployed profile, but omission or stale visibility is not an authorization decision.
+## 8. MRTR and Extensions
 
-### 5.2 Tool schema
+MRTR uses target-era wire discriminators such as `resultType: "input_required"` only when the request declares the required client capability and the Tool contract permits it.
 
-Each Tool definition must include:
+Tasks:
 
-- unique `name`;
-- precise `description`;
-- valid `inputSchema` object;
-- optional `title`;
-- `outputSchema` when Binnacle returns structured output under a frozen schema;
-- accurate annotations;
-- `execution.taskSupport: "forbidden"` for the bootstrap profile where the target schema exposes this field.
+- are an independent extension;
+- are absent unless the request and server negotiate `io.modelcontextprotocol/tasks`;
+- never use the removed legacy Tool `execution` member;
+- never replace Binnacle `operation_id` or idempotency identity.
 
-JSON Schema defaults to Draft 2020-12 when `$schema` is absent. Binnacle should declare the schema URI explicitly in frozen manifests and fixtures.
+Sampling, Roots, and custom UI are outside Binnacle V1.
 
-Input and output schema root types are objects unless a future protocol and interface contract explicitly permits another form.
+## 9. Schema and Fixture Rules
 
-## 6. Tool Result Contract
+Fixtures use one canonical request vocabulary:
 
-### 6.1 Model-readable content
+- `http_headers` for HTTP headers;
+- `body` for the JSON-RPC body;
+- `wire_result` for serialized results;
+- `tool` for a Tool name in fixture metadata;
+- explicit setup facts rather than ambiguous flags such as `prior_request`.
 
-Binnacle adopts a stricter product rule than the minimum abstract MCP result type:
+A positive semantic case must first pass request-envelope validation. A negative case must name the expected failure layer so an earlier generic failure cannot false-pass.
 
-> Every Binnacle `tools/call` result, including a successful result and a Tool execution error, contains at least one concise model-readable TextContent block in `content`.
+## 10. Invariants
 
-This rule ensures the model receives a bounded explanation even when it cannot use `structuredContent` reliably.
-
-The text must:
-
-- describe the same result as the structured data;
-- identify failure, cancellation, or uncertainty honestly;
-- avoid secrets and protected control-plane material;
-- avoid adding facts absent from the canonical local result;
-- be actionable for a correctable execution error.
-
-For structured data, Binnacle should include a compact serialization or summary rather than duplicating an arbitrarily large payload.
-
-### 6.2 Structured content
-
-When a Tool declares `outputSchema`:
-
-- the final result must contain `structuredContent`;
-- `structuredContent` must validate against that exact schema before serialization;
-- the schema and result use the same contract version;
-- validation failure is a server conformance failure, not a successful Tool result;
-- clients may independently validate the result.
-
-When no output schema is declared, `structuredContent` may be omitted. Binnacle may still use a frozen unstructured content contract.
-
-### 6.3 Tool execution error
-
-A post-authentication, post-protocol Tool execution error must contain:
-
-- `resultType: "complete"`;
-- `isError: true`;
-- non-empty model-readable `content`;
-- structured error data when the Tool declares an output schema that includes the error form, or when a separately frozen error schema is selected;
-- no reusable credentials or protected policy internals.
-
-A Tool execution error is distinct from:
-
-- HTTP `401` or `403` transport authorization failure;
-- JSON-RPC protocol error;
-- a successful status lookup representing an operation whose state is `failed`, `cancelled`, or `uncertain`.
-
-A status lookup that successfully returns retained operation facts remains `isError: false`, regardless of the represented operation state.
-
-## 7. Annotation Semantics
-
-Annotations are untrusted model-facing metadata and never authorize an operation. Binnacle nevertheless publishes accurate explicit values for every Tool.
-
-### 7.1 Protocol meanings
-
-| Annotation | Meaning |
-| --- | --- |
-| `readOnlyHint` | Whether invoking the Tool can modify its environment |
-| `destructiveHint` | For a modifying Tool, whether it may perform destructive rather than purely additive changes |
-| `idempotentHint` | Whether repeated calls with the same arguments have no additional effect beyond the first successful effect |
-| `openWorldHint` | Whether the Tool can interact with an open world of external entities rather than a closed local domain |
-
-### 7.2 Cautious defaults
-
-If an annotation is omitted, the effective protocol default is treated as:
-
-```json
-{
-  "readOnlyHint": false,
-  "destructiveHint": true,
-  "idempotentHint": false,
-  "openWorldHint": true
-}
-```
-
-Binnacle does not rely on implicit defaults in its reviewed Tool manifest. It states all four values explicitly.
-
-### 7.3 Destructive versus modifying
-
-`destructiveHint: false` does not mean read-only. It means a modifying Tool is intended to be additive or otherwise non-destructive.
-
-Examples:
-
-- creating a new file without overwrite may be modifying but non-destructive;
-- replacing, deleting, stopping, resetting, or truncating state is destructive;
-- a Tool that may overwrite depending on an argument is destructive unless separate Tool contracts or closed schemas make the distinction reliable.
-
-### 7.4 Idempotency
-
-`idempotentHint: true` applies to the same semantic Tool contract and same arguments. It does not by itself provide the durable retry identity required for consequential operation reconciliation.
-
-A Tool may be logically idempotent but still require controller, policy, and state revalidation on every call.
-
-### 7.5 Open-world meaning
-
-For Binnacle, the local Raspberry Pi and explicitly local kernel/filesystem/service state form the default closed domain. Network access, external repositories, package registries, remote APIs, other devices, or external identities are open-world interactions.
-
-Reading untrusted local repository content does not necessarily make the Tool open-world, but its content provenance is still untrusted and governed separately.
-
-## 8. Header and Protocol Error Boundary
-
-Target-era requests must follow `mcp-revision-support.md` for:
-
-- `MCP-Protocol-Version`;
-- `Mcp-Method`;
-- `Mcp-Name` where required;
-- header/body disagreement;
-- unsupported revision mapping;
-- no protocol-session dependency.
-
-The result contract in this document is applied only after the request passes target-era framing and transport authorization.
-
-## 9. Validation Fixtures
-
-The machine-readable cases are in:
-
-```text
-tests/fixtures/mcp/mcp-2026-wire.yaml
-```
-
-Required coverage includes:
-
-- valid discovery;
-- discovery without prior session;
-- required tools capability;
-- private zero-TTL bootstrap catalogue;
-- missing cache fields;
-- public cache leakage for authorization-dependent discovery;
-- deterministic list ordering;
-- missing final `resultType`;
-- invalid result discriminator;
-- success with model-readable content and schema-valid structured output;
-- execution error with model-readable content;
-- missing content;
-- structured output violating `outputSchema`;
-- status lookup representing failed or uncertain work without `isError`;
-- annotation defaults and explicit values;
-- destructive versus additive semantics;
-- Tasks and MRTR absence in the bootstrap profile.
-
-The oracle validates the serialized MCP wire frame after SDK processing.
-
-## 10. Source Basis
-
-This contract follows the final MCP `2026-07-28` specification and Tier 1 SDK migration guidance reviewed on 2026-08-08, including:
-
-- mandatory server implementation of `server/discover`, while client use remains optional;
-- server capability advertisement for Tools;
-- required `resultType` wire discrimination;
-- required cache hints on cacheable results;
-- private cache treatment for authorization-dependent representations;
-- output-schema validation;
-- cautious Tool annotation defaults and meanings;
-- separation of protocol errors and Tool execution errors.
-
-A later SDK convenience or hidden public type cannot weaken the wire contract.
+1. `serverInfo` is emitted in target result metadata, not as a top-level discovery field.
+2. Final target results carry `resultType: "complete"` on the wire.
+3. Target Tools do not carry legacy Task execution metadata.
+4. Cacheable responses carry explicit private/public scope and TTL.
+5. Every Binnacle Tool result includes bounded model-readable `content`.
+6. Declared output schemas are validated before serialization.
+7. Extension fields appear only after extension negotiation.

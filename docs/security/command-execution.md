@@ -1,454 +1,159 @@
 # Binnacle Command Execution Isolation
 
-- **Status:** Draft — mandatory security contract for `command_run`
-- **Related contracts:** `MCP-INTERFACE`, `LOCAL-POLICY`, `OP-PREPARE`, `OP-LIFECYCLE`, `OP-BOUNDARY`, `INFO-BOUNDARY`
+- **Status:** Draft security contract
+- **Contract version:** `1.1.0`
+- **Policy:** `spec/policy/command-profiles.yaml`
 - **Feature-design basis:** [`../design.md`](../design.md), V17
-- **Composition boundary:** [`capability-composition.md`](capability-composition.md)
-- **Host confirmation:** [`../mcp-host-confirmation.md`](../mcp-host-confirmation.md)
-- **Last review:** 2026-08-08
 
 ## 1. Purpose
 
-This document freezes the minimum isolation and acceptance boundary for Binnacle's general-purpose `command_run` capability.
+`command_run` is a controlled general-purpose primitive for software engineering and diagnosis. It is not a direct subprocess wrapper and never inherits Binnacle's control-plane privilege.
 
-A working-directory check, shell quoting, container label, dedicated Unix user, or timeout alone is not sufficient. A command and every descendant must remain inside a kernel-enforced filesystem, privilege, process, resource, network, device, descriptor, credential, and cleanup boundary.
+The Tool remains unsupported unless the selected Raspberry Pi/Linux profile proves every mandatory isolation property and adversarial case.
 
-If a device profile cannot prove the complete required boundary, `command_run` is unsupported on that profile.
+## 2. Process Separation
 
-## 2. Security Architecture Boundary
+The implementation has three logical boundaries:
 
-### 2.1 Separation of responsibilities
+1. **Binnacle policy process** — authenticates, normalizes, authorizes, prepares, and records the operation.
+2. **Narrow execution broker** — validates one signed/local execution ticket and creates the sandbox.
+3. **Unprivileged executor** — runs the exact executable/argv/input inside the sandbox.
 
-Command execution uses at least three distinct roles:
+The executor cannot call back into a general privileged broker API. The broker accepts only one single-use ticket for one operation.
 
-1. **Binnacle MCP server and policy engine**
-   - authenticates the controller;
-   - prepares and validates the exact command specification;
-   - applies local policy and host-confirmation gates;
-   - creates the durable Binnacle operation;
-   - never executes the requested program in the server process.
+## 3. Execution Ticket
 
-2. **Narrow execution broker or supervisor**
-   - accepts only a validated, single-operation execution ticket over a protected local interface;
-   - constructs the sandbox and resource boundary;
-   - starts, observes, signals, and cleans the isolated executor;
-   - exposes no general shell, file, network, device, policy, or credential API;
-   - uses only the minimum privilege required to create the selected platform boundary.
+The ticket binds:
 
-3. **Unprivileged executor**
-   - runs the requested executable and descendants;
-   - has a dedicated non-Binnacle UID/GID or an equivalently isolated identity;
-   - cannot call the broker interface or read its authentication material;
-   - cannot access the Binnacle server's memory, descriptors, environment, sockets, policy, operations, audit, credentials, executable state, or recovery files.
+- ticket and operation identity;
+- controller and device identity;
+- command-profile identity;
+- executable identity and structured argv digest;
+- inline stdin digest, server-held stdin-reference digest, and exact workspace-script digest where applicable;
+- workspace-root identity;
+- mount, environment, policy, resource, and sandbox-plan digests;
+- aggregate writable-workspace byte and inode limits;
+- expiry, admission-record identity, and single-use nonce.
 
-The broker and executor must be separate operating-system processes. Thread separation in one address space is insufficient.
+The broker revalidates every input digest at admission. A changed script, stdin, data reference, mount, environment, policy, or workspace identity invalidates the ticket.
 
-### 2.2 Local execution ticket
+Structured argv execution is the default. Shell interpolation requires a separately named contract and is not implied by `command_run`.
 
-The MCP server issues the broker a protected, single-operation ticket bound to:
+## 4. Filesystem Boundary
 
-- `operation_id`;
-- authenticated `controller_id`;
-- command-profile identity and version;
-- executable and argument digest;
-- workspace identity and mount plan digest;
-- environment and descriptor plan digest;
-- network, device, credential, and syscall policy digests;
-- resource limits;
-- timeout and cancellation behavior;
-- information and output limits;
-- local policy and device-profile versions;
-- creation time, expiry, and one-time broker admission identity.
+The executor receives the minimum filesystem view:
 
-The executor cannot mint or modify a ticket. The broker rejects reuse, expiry, digest mismatch, unsupported profile, and a ticket targeting another Binnacle instance.
+- one canonical workspace root;
+- explicitly declared read-only system files required by the profile;
+- a private temporary filesystem;
+- no Binnacle control-plane, identity, policy, credential, audit, recovery, release, or executable state;
+- no host mounts or arbitrary device nodes.
 
-The ticket is local control-plane material and is never model-visible, passed in the child environment, or written into the workspace.
+Path resolution fails closed on symlink, bind-mount, mount-namespace, hard-link, rename, or other race ambiguity.
 
-## 3. `command_run` Input Contract
+Writable workspace limits include both:
 
-The default command request uses structured execution fields:
+- per-file size;
+- aggregate bytes written/allocated and aggregate inode/file count for the full descendant tree.
+
+A per-file limit alone is not a sufficient workspace quota.
+
+## 5. Environment, Descriptors, and IPC
+
+The executor receives an allowlisted environment and no inherited secrets. Binnacle closes or explicitly maps every file descriptor.
+
+The executor has no access to:
+
+- Binnacle or system-management Unix sockets;
+- inherited network sockets;
+- credential agents or keyrings;
+- host D-Bus or container-engine sockets;
+- ptrace targets outside its sandbox;
+- BPF, kernel keyring, or arbitrary namespace-management authority.
+
+## 6. Network and Devices
+
+General command profiles default to:
 
 ```text
-executable
-argv[]
-workspace_ref
-working_directory
-explicit_environment{}
-stdin_ref or bounded inline stdin
-wall_timeout
-stdout_limit
-stderr_limit
-caller_idempotency_key
+network: denied
+devices: denied
+raw credentials: denied
+credential helpers: denied
 ```
 
-Rules:
+External communication uses a dedicated mediated-egress Tool. Hardware access uses separately promoted hardware Tools and profiles. `command_run` cannot acquire either authority through argv, environment, child processes, local sockets, or inherited descriptors.
 
-- `argv` is an array and is passed without shell interpolation;
-- Binnacle does not concatenate arguments into a shell command;
-- shell metacharacters have no special meaning;
-- the executable is resolved under the command profile, not through an attacker-controlled current directory;
-- `PATH` is fixed by the profile or the executable path is exact;
-- a script interpreter is an executable and the script is an exact prepared input;
-- `sh -c`, `bash -c`, command substitution, pipelines, redirection, and other shell-language execution are outside the default V1 contract;
-- a future shell Tool requires a separate name, contract, confirmation class, sandbox review, and tests;
-- working directory and all file inputs are relative to a validated workspace reference;
-- environment keys and values are closed and size-bounded;
-- stdin is size-bounded and classified as data, never authority.
+## 7. Privilege and Kernel Controls
 
-`command_run` is `HC1-per-invocation` until a narrower frozen allowlisted command contract is separately promoted.
+The selected profile must prove:
 
-## 4. Workspace and Filesystem Boundary
+- a dedicated unprivileged execution identity;
+- no-new-privileges;
+- no ambient or inheritable capabilities;
+- no setuid/setgid privilege gain;
+- an appropriate syscall and mandatory-access-control policy;
+- process-tree containment and descendant-wide controls;
+- inability to create a more privileged user/mount/network namespace escape;
+- bounded `/proc` visibility and ptrace behavior.
 
-### 4.1 Workspace identity
+The contract states properties, not a mandatory container engine. Namespaces, cgroups, seccomp, Landlock, AppArmor, SELinux, systemd, or another mechanism are acceptable only when the full profile passes.
 
-A workspace is not trusted from a model-supplied path string.
+## 8. Descendant-Wide Resources
 
-Before preparation and again before sandbox construction, Binnacle must establish:
+Limits apply to the entire descendant tree:
 
-- owner-configured workspace identity;
-- canonical absolute root;
-- root file type;
-- filesystem, mount, device, and stable object identity as applicable;
-- absence of an unapproved symbolic-link or mount indirection;
-- permitted read/write subtrees;
-- maximum crossing into nested mounts;
-- current policy and profile version.
-
-Ambiguity, path disappearance, replacement, mount change, symlink race, bind-mount change, or inability to prove containment blocks execution.
-
-### 4.2 Sandbox filesystem view
-
-The executor receives a constructed filesystem view containing only:
-
-- a minimal runtime and required executable/library set, read-only;
-- the approved workspace at its declared read/write mode;
-- an operation-private temporary filesystem with size limit;
-- minimal synthetic `/etc` data required by the executable, without host secrets;
-- a restricted process filesystem when required and proven safe;
-- minimal safe pseudo-devices explicitly allowed by the profile.
-
-The executor must not see or reach:
-
-- the host root filesystem;
-- `/root`, owner home directories, SSH or cloud credentials;
-- Binnacle source, executable, configuration, policy, operation database, audit, recovery, keys, or sockets unless the exact workspace intentionally contains source under a self-development profile and the control-plane installation remains separate;
-- host `/run`, system bus, Docker/container runtime sockets, SSH agent, package-manager credential sockets, or desktop/session buses;
-- host `/proc` objects outside the isolated process view;
-- `/sys`, firmware, boot partitions, block devices, GPIO, I²C, SPI, UART, cameras, input devices, FUSE, or other devices unless a separate non-general-purpose operation contract exposes them;
-- arbitrary host mounts or network filesystems not included in the profile.
-
-`chroot` or a changed working directory without mount, descriptor, and privilege isolation does not satisfy this contract.
-
-### 4.3 Path operations inside the executor
-
-The sandbox must prevent escape through:
-
-- absolute paths;
-- `..` traversal;
-- symbolic links;
-- hard links to objects outside the allowed view;
-- `/proc/self/fd` and inherited file descriptors;
-- `/proc/<pid>/root` or process-memory access;
-- mount, bind mount, pivot, namespace, or root changes;
-- race-time replacement of validated paths;
-- device nodes and special files;
-- filesystem magic links;
-- case, Unicode, or normalization confusion where the filesystem is affected.
-
-Workspace effect evidence must be collected from the sandbox's actual view, not reconstructed only from requested paths.
-
-## 5. Execution Identity and Privilege
-
-The executor must run with:
-
-- a dedicated unprivileged identity distinct from Binnacle and the owner login;
-- no supplementary groups except an explicit sandbox group with no unrelated access;
-- no Linux capabilities in the executor's effective, permitted, inheritable, ambient, or bounding sets;
-- `no_new_privs` or an equivalent kernel guarantee;
-- no setuid or setgid privilege gain;
-- no `sudo`, `su`, PolicyKit, systemd management, container runtime, or host session authority;
-- a restrictive umask;
-- no ability to change UID/GID to a more privileged identity;
-- a mandatory-access-control profile or equivalent platform policy when the validated Linux profile relies on one;
-- a syscall policy appropriate to the architecture and command profile.
-
-A command that requires host privilege is not run by relaxing `command_run`. It requires a dedicated outcome-oriented operation and narrowly authorized broker action.
-
-## 6. Environment and Descriptor Hygiene
-
-### 6.1 Environment
-
-The executor environment is created from an empty base plus an allowlist.
-
-It must not inherit:
-
-- access or refresh tokens;
-- authentication headers;
-- private keys or passwords;
-- `SSH_AUTH_SOCK`;
-- proxy variables unless the profile explicitly permits mediated egress, which general `command_run` does not;
-- cloud, Git, package, database, CI, or deployment credentials;
-- Binnacle policy or broker secrets;
-- systemd, D-Bus, desktop, Wayland/X11, container-runtime, or keyring endpoints;
-- owner shell startup variables;
-- Python, Node, Ruby, Perl, Java, dynamic-loader, or plugin variables that inject unreviewed code;
-- host `HOME`, `XDG_*`, or temporary directories.
-
-The profile defines safe values for `HOME`, `PATH`, locale, timezone, `TMPDIR`, and language/runtime cache directories inside the sandbox.
-
-### 6.2 File descriptors
-
-Before execution, the broker closes every inherited descriptor except explicitly created standard streams and reviewed operation-specific descriptors.
-
-The executor must not inherit:
-
-- MCP or HTTP sockets;
-- listening sockets;
-- tunnel/gateway connections;
-- policy, database, audit, log, credential, or key files;
-- directory descriptors outside the sandbox;
-- Binnacle operation pipes or event descriptors;
-- hardware handles;
-- pidfds or process handles for host processes;
-- anonymous memory or shared-memory objects containing protected data.
-
-The broker verifies the child descriptor set where the platform permits it. An unknown inherited descriptor blocks profile promotion.
-
-## 7. Network, IPC, and Device Boundary
-
-### 7.1 Network default
-
-General `command_run` has no network authority.
-
-The executor and descendants must be unable to use:
-
-- IPv4 or IPv6 sockets;
-- DNS;
-- loopback services;
-- raw or packet sockets;
-- Netlink or route-management interfaces except a profile-proven harmless requirement;
-- Bluetooth, CAN, NFC, or other network families;
-- a host or tunnel interface;
-- a proxy inherited through environment or configuration;
-- network namespaces or routing changes.
-
-A dedicated outcome-oriented Tool and egress mediator perform reviewed network actions outside this sandbox.
-
-### 7.2 Local IPC
-
-The executor must not reach host Unix sockets, abstract sockets, named pipes, message queues, shared-memory objects, or service buses.
-
-Operation-private IPC among descendants may be permitted inside the sandbox when it cannot reach host endpoints and remains within resource limits.
-
-### 7.3 Devices
-
-The executor receives no general device access.
-
-A minimal profile may expose only pseudo-devices such as `/dev/null`, `/dev/zero`, and a safe randomness source. It must deny block devices, TTYs, GPIO, bus devices, cameras, GPUs, input devices, sound, FUSE, KVM, TPM, watchdogs, and host-specific hardware.
-
-Hardware work uses dedicated Tools with separate reservations and safety contracts.
-
-## 8. Syscall and Kernel Attack Surface
-
-The validated command profile must use a syscall allowlist or an equivalently strong policy. It must block executor use of operations capable of escaping or materially inspecting the host, including applicable forms of:
-
-- mount, unmount, pivot-root, chroot, and filesystem namespace changes;
-- `setns`, unapproved `unshare`, and namespace creation;
-- `ptrace`, process-memory access, and cross-process inspection;
-- `bpf`, performance-event access, kernel module operations, and kernel keyrings;
-- reboot, kexec, swap management, hostname/domain changes, and system time changes;
-- device-node creation and privileged I/O;
-- capability and securebits changes;
-- arbitrary `io_uring`, userfault, fanotify, or other interfaces not proven necessary and safe for the profile;
-- creation of network or host IPC sockets;
-- movement into another cgroup or escape from the assigned resource group.
-
-The exact allowlist is architecture- and executable-profile-specific and is frozen by implementation security review. A denylist alone is insufficient when unknown syscalls or architecture variants remain available.
-
-## 9. Descendant-Wide Resource Boundary
-
-Every process, thread, child, grandchild, re-parented process, daemon, and helper created by the operation remains in one operation-owned resource and cleanup domain.
-
-The profile enforces descendant-wide limits for:
-
-- CPU quota and total CPU time;
-- wall-clock duration;
+- CPU time and scheduling budget;
 - memory and swap;
-- process and thread count;
-- open files and descriptors;
-- output bytes;
-- file size and temporary storage;
-- workspace growth where applicable;
-- I/O throughput and total I/O where supported;
-- core dumps, which are disabled or retained only through a separate protected diagnostic contract;
-- priority and scheduler policy.
+- process/PID count;
+- open files and file size;
+- aggregate writable-workspace bytes and inodes;
+- private temporary storage;
+- stdout/stderr and retained-result bytes;
+- wall-clock deadline.
 
-Limits must be kernel-enforced where a kernel facility exists. Parent-only monitoring without descendant enforcement is insufficient.
+Forking, daemonizing, double-forking, or changing process groups cannot escape accounting or cleanup.
 
-A fork bomb, daemonization, `setsid`, double fork, re-parenting, or executable replacement cannot leave the operation resource domain.
+## 9. Cancellation and Cleanup
 
-## 10. Supervision, Cancellation, and Cleanup
+Cancellation is cooperative first and forced after the declared grace period. Binnacle verifies:
 
-### 10.1 Supervision
+- all descendants stopped or are accounted as unable to stop;
+- mounts and namespaces removed;
+- temporary resources released or quarantined;
+- output finalized consistently;
+- remaining effects and workspace changes recorded.
 
-The broker or supervisor remains able to identify the operation resource domain independently of the original process PID.
+Cleanup failure yields `failed` or `uncertain`; it is never reported as verified cancellation.
 
-It records:
+## 10. Profile Separation
 
-- sandbox identity;
-- cgroup or equivalent domain;
-- leader and descendant identities;
-- start time;
-- current resource usage;
-- output state;
-- cancellation phase;
-- cleanup state.
+- `workspace-general-v1` permits bounded workspace commands under full isolation.
+- `workspace-check-v1` narrows executable set and resources; it does not redefine network/device fields with ambiguous scalar aliases.
+- `self-management` sets `command_run_visible: false` and `command_run_allowed: false`. Binnacle self-management uses dedicated staged Tools and rollback contracts.
 
-### 10.2 Normal exit
-
-After the leader exits, the supervisor:
-
-1. prevents new descendants;
-2. checks for surviving processes and jobs;
-3. waits or terminates them according to the contract;
-4. closes pipes and collects bounded output;
-5. verifies workspace and temporary effects;
-6. unmounts and removes operation-private resources;
-7. verifies no process, mount, namespace, socket, descriptor, or temporary object remains;
-8. records the terminal result.
-
-Leader exit alone is not operation completion.
-
-### 10.3 Cancellation and timeout
-
-The contract defines:
-
-1. stop accepting further input;
-2. send the configured graceful signal to the entire operation domain;
-3. wait a bounded grace period;
-4. send an uncatchable termination signal to every remaining descendant;
-5. verify the operation domain is empty;
-6. perform filesystem and namespace cleanup;
-7. classify remaining effects.
-
-A process cannot avoid cancellation by ignoring a signal, changing process groups, creating a session, double-forking, or re-parenting.
-
-### 10.4 Cleanup failure
-
-If Binnacle cannot verify complete descendant and sandbox cleanup:
-
-- the operation does not become `cancelled` or `succeeded`;
-- it becomes `failed` with known remainder or `uncertain`;
-- the affected workspace or device profile is quarantined from new conflicting command operations;
-- evidence identifies surviving or unobservable resources;
-- local or physical recovery instructions are returned;
-- automatic repetition is prohibited.
-
-## 11. Output and Evidence Boundary
-
-### 11.1 Standard streams
-
-Stdout and stderr are captured separately with:
-
-- byte limits;
-- time and rate limits;
-- explicit truncation flags and original-byte counters where known;
-- binary detection and safe bounded representation;
-- control-character and terminal-escape handling;
-- provenance `local-untrusted`;
-- no interpretation as instructions or authority.
-
-Output limits must prevent memory or disk exhaustion. Output after truncation is drained or the process is stopped according to the profile; silently blocking the child indefinitely is not acceptable.
-
-### 11.2 Exit evidence
-
-The final operation evidence includes:
-
-- command profile and version;
-- exact executable and argument digest;
-- workspace identity and mount-plan digest;
-- environment and descriptor-plan digests;
-- sandbox/backend identity and security-feature results;
-- UID/GID and capability result;
-- syscall/MAC policy identity;
-- cgroup or resource-domain identity;
-- start/end times;
-- exit code, terminating signal, timeout, or cancellation phase;
-- descendant and cleanup verification;
-- CPU, memory, process, I/O, output, and storage usage;
-- stdout/stderr digests, sizes, truncation, and permitted content;
-- actual workspace effects or effect digest;
-- network/device/credential authority, normally all `none`;
-- terminal Binnacle operation state and uncertainty.
-
-## 12. Self-Management and Privileged Actions
-
-General `command_run` cannot:
-
-- modify the installed Binnacle executable or service definition;
-- signal or restart the Binnacle service;
-- modify Binnacle policy, authentication, audit, operation, or recovery state;
-- invoke the execution broker outside its one ticket;
-- install system packages or change host services;
-- elevate privilege.
-
-Binnacle self-management and privileged host administration use dedicated Tools, separate brokers, exact prepared operations, HC1 confirmation, rollback, and recovery contracts.
-
-The Binnacle source repository may be a writable development workspace only when the installed control plane, service unit, broker, credentials, policy, audit, and current executable remain outside that workspace and inaccessible to commands.
-
-## 13. Fail-Closed Profile Promotion
-
-A device profile may advertise `command_run` only after proving:
-
-- separate broker and unprivileged executor processes;
-- workspace containment under race;
-- minimal filesystem view;
-- clean environment and descriptor set;
-- no network or host IPC;
-- no device access beyond the exact pseudo-device list;
-- no privilege gain;
-- syscall and MAC confinement;
-- descendant-wide resource control;
-- reliable cancellation and cleanup;
-- bounded output;
-- actionable evidence;
-- protected Binnacle control plane;
-- actual kernel and architecture compatibility.
-
-If one mandatory mechanism is unavailable, disabled, untestable, or fails after update, `command_run` enters restricted operation. It must not silently fall back to direct subprocess execution.
-
-## 14. Validation Fixtures
-
-The profile and adversarial cases are:
-
-```text
-spec/policy/command-profiles.yaml
-tests/fixtures/security/command-isolation.yaml
-```
-
-Tests must run on every claimed Raspberry Pi OS/kernel/architecture profile. Mock-only tests do not establish containment.
+## 11. Tests
 
 Required cases include:
 
-- workspace symlink, hard-link, mount, descriptor, and rename races;
-- host root, process, home, control-plane, audit, and credential reads;
-- inherited file descriptors, environment, and sockets;
-- Unix, IPv4, IPv6, DNS, proxy, and local-service access;
-- device and special-file access;
-- setuid, capabilities, namespace, mount, ptrace, BPF, keyring, and syscall escape;
-- fork bomb, process-tree escape, daemonization, and cgroup migration;
-- CPU, memory, swap, file, descriptor, I/O, output, process, and timeout exhaustion;
-- graceful and forced cancellation;
-- surviving descendant and cleanup failure;
-- stdout/stderr binary, escape, and flood behavior;
-- broker-ticket replay, mismatch, and executor access;
-- Binnacle self-management attempts;
-- fail-closed behavior when a required kernel control is absent.
+- host/control-plane/credential/audit reads;
+- symlink, mount, hard-link, and rename races;
+- inherited file descriptors and local sockets;
+- IPv4, IPv6, DNS, Unix-socket, proxy, and loopback egress;
+- device nodes, capabilities, setuid, namespaces, ptrace, BPF, and keyring;
+- child, grandchild, fork-bomb, daemon, output-flood, and storage-exhaustion cases;
+- per-file and aggregate workspace quota enforcement;
+- inline stdin, data-reference, and script digest substitution;
+- cancellation and cleanup failures;
+- execution-ticket replay and expiry;
+- attempted Binnacle self-management.
 
-## 15. Technology Neutrality
+## 12. Invariants
 
-This feature/security contract does not select a container engine, sandbox library, service manager, or programming language.
-
-A Linux implementation may use namespaces, cgroups v2, seccomp, Landlock, AppArmor, SELinux, systemd sandboxing, capability controls, pidfds, dedicated users, or other mechanisms. Architecture must demonstrate that the selected combination satisfies every property and test above.
-
-Brand names, container labels, or configuration claims are not evidence without the adversarial test results.
+1. There is no direct-subprocess fallback.
+2. Every command uses one exact single-use ticket.
+3. Ticket identity includes every executable input and its digest.
+4. Writable workspace growth is bounded in aggregate, not only per file.
+5. Network, credentials, devices, and control sockets are denied by default.
+6. Limits and cleanup cover the complete descendant tree.
+7. Missing or untestable isolation keeps `command_run` unsupported.

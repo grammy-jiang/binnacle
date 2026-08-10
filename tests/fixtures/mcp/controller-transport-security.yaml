@@ -1,481 +1,267 @@
-schema_version: "1.0"
-profile: binnacle-controller-transport-security
-source_contract: docs/security/controller-transport.md
-remote_access_anonymous: false
-selected_authentication_profile: to-be-observed
-candidate_profiles:
-  - oauth-resource-server
-  - trusted-gateway-assertion
+schema_version: "1.1"
+contract: CONTROLLER-TRANSPORT-SECURITY
+contract_version: "1.1.0"
 
-required_controller_binding:
-  fields:
-    - controller_profile_id
-    - issuer
-    - subject
-    - canonical_audience
-    - client_id_or_authorized_party
-    - owner_tenant_or_workspace_boundary
-    - credential_binding_identifier
-  absent_values_are_wildcards: false
-  raw_credentials_stored: false
+profiles:
+  oauth_resource_server:
+    required_claims:
+      - iss
+      - aud
+      - sub
+      - exp
+      - iat
+      - scope
+    conditional_claims:
+      - client_id
+      - workspace_id
+      - cnf
+  trusted_gateway_assertion:
+    required_claims:
+      - assertion_profile
+      - assertion_version
+      - iss
+      - aud
+      - sub
+      - client_id
+      - workspace_id
+      - scope
+      - iat
+      - exp
+      - jti
+      - kid
+      - alg
+      - transport_binding
+      - signature
 
 cases:
   - id: oauth-valid-controller
     kind: positive
-    profile: oauth-resource-server
-    credential:
+    authentication:
+      profile: oauth_resource_server
+      token_claims:
+        iss: https://auth.example.test
+        aud: https://pi.example.test/mcp
+        sub: controller-owner
+        client_id: chatgpt-client
+        workspace_id: personal-workspace
+        iat: 1786200000
+        exp: 1786200300
+        scope: "mcp:read"
+        cnf:
+          jkt: sha256-thumbprint
       signature_valid: true
-      algorithm_allowed: true
-      issuer: https://issuer.example.invalid
-      audience: https://binnacle.example.invalid/mcp
-      subject: owner-controller
-      authorized_client: chatgpt-client
-      tenant: personal
-      scopes:
-        - binnacle:connect
-        - binnacle:observe
-      not_before_valid: true
-      expires_in_seconds: 300
-      revoked: false
-    request:
-      method: tools/call
-      tool: binnacle_probe
+      issuer_metadata_current: true
+      revocation_status: active
     expect:
-      http_status: 200
-      controller_authenticated: true
-      tool_dispatched: true
-      controller_id_stable: true
+      authenticated_controller: controller-owner
+      dispatch_allowed: true
 
-  - id: missing-credential
-    kind: negative
-    request:
-      method: tools/list
-    expect:
-      http_status: 401
-      www_authenticate_present: true
-      tool_dispatched: false
-      operation_created: false
-
-  - id: invalid-signature
-    kind: negative
-    credential:
-      signature_valid: false
-      audience: https://binnacle.example.invalid/mcp
-    expect:
-      http_status: 401
-      tool_dispatched: false
-      operation_created: false
-      token_echoed: false
-
-  - id: wrong-issuer
-    kind: negative
-    credential:
+  - id: gateway-valid-controller
+    kind: positive
+    authentication:
+      profile: trusted_gateway_assertion
+      assertion:
+        assertion_profile: binnacle-gateway-assertion
+        assertion_version: "1.0"
+        iss: https://gateway.example.test
+        aud: https://pi.example.test/mcp
+        sub: controller-owner
+        client_id: chatgpt-client
+        workspace_id: personal-workspace
+        scope: "mcp:read mcp:write-probe"
+        iat: 1786200000
+        exp: 1786200060
+        jti: assertion-0001
+        kid: gateway-key-2026-08
+        alg: EdDSA
+        transport_binding: tls-exporter-sha256:abc123
+        signature: detached-signature
       signature_valid: true
-      issuer: https://attacker.example.invalid
-      audience: https://binnacle.example.invalid/mcp
-      subject: owner-controller
-      expires_in_seconds: 300
+      trusted_gateway_key: true
+      replay_cache_contains_jti: false
+    expect:
+      authenticated_controller: controller-owner
+      replay_cache_records_jti: assertion-0001
+      dispatch_allowed: true
+
+  - id: gateway-missing-profile
+    kind: negative
+    based_on: gateway-valid-controller
+    mutation:
+      remove: authentication.assertion.assertion_profile
     expect:
       http_status: 401
-      tool_dispatched: false
+      error: invalid_gateway_assertion
+      dispatch_allowed: false
+
+  - id: gateway-missing-version
+    kind: negative
+    based_on: gateway-valid-controller
+    mutation:
+      remove: authentication.assertion.assertion_version
+    expect:
+      http_status: 401
+      error: invalid_gateway_assertion
+      dispatch_allowed: false
+
+  - id: gateway-missing-issued-at
+    kind: negative
+    based_on: gateway-valid-controller
+    mutation:
+      remove: authentication.assertion.iat
+    expect:
+      http_status: 401
+      error: invalid_gateway_assertion
+      dispatch_allowed: false
+
+  - id: gateway-missing-jti
+    kind: negative
+    based_on: gateway-valid-controller
+    mutation:
+      remove: authentication.assertion.jti
+    expect:
+      http_status: 401
+      error: invalid_gateway_assertion
+      dispatch_allowed: false
+
+  - id: gateway-missing-key-id
+    kind: negative
+    based_on: gateway-valid-controller
+    mutation:
+      remove: authentication.assertion.kid
+    expect:
+      http_status: 401
+      error: invalid_gateway_assertion
+      dispatch_allowed: false
+
+  - id: gateway-missing-algorithm
+    kind: negative
+    based_on: gateway-valid-controller
+    mutation:
+      remove: authentication.assertion.alg
+    expect:
+      http_status: 401
+      error: invalid_gateway_assertion
+      dispatch_allowed: false
+
+  - id: gateway-replay
+    kind: negative
+    based_on: gateway-valid-controller
+    mutation:
+      set:
+        authentication.replay_cache_contains_jti: true
+    expect:
+      http_status: 401
+      error: replay_detected
+      dispatch_allowed: false
 
   - id: wrong-audience
     kind: negative
-    credential:
-      signature_valid: true
-      issuer: https://issuer.example.invalid
-      audience: https://other-api.example.invalid
-      subject: owner-controller
-      expires_in_seconds: 300
+    based_on: oauth-valid-controller
+    mutation:
+      set:
+        authentication.token_claims.aud: https://other.example.test/mcp
     expect:
       http_status: 401
-      tool_dispatched: false
-
-  - id: missing-subject
-    kind: negative
-    credential:
-      signature_valid: true
-      issuer: https://issuer.example.invalid
-      audience: https://binnacle.example.invalid/mcp
-      subject: null
-      expires_in_seconds: 300
-    expect:
-      http_status: 401
-      tool_dispatched: false
-
-  - id: wrong-authorized-client
-    kind: negative
-    credential:
-      signature_valid: true
-      issuer: https://issuer.example.invalid
-      audience: https://binnacle.example.invalid/mcp
-      subject: owner-controller
-      authorized_client: attacker-client
-      expires_in_seconds: 300
-    expect:
-      http_status: 401
-      tool_dispatched: false
-
-  - id: required-tenant-missing
-    kind: negative
-    authentication_profile:
-      tenant_required: true
-      expected_tenant: personal
-    credential:
-      signature_valid: true
-      issuer: https://issuer.example.invalid
-      audience: https://binnacle.example.invalid/mcp
-      subject: owner-controller
-      tenant: null
-      expires_in_seconds: 300
-    expect:
-      http_status: 401
-      tool_dispatched: false
-
-  - id: wrong-tenant
-    kind: negative
-    authentication_profile:
-      tenant_required: true
-      expected_tenant: personal
-    credential:
-      signature_valid: true
-      issuer: https://issuer.example.invalid
-      audience: https://binnacle.example.invalid/mcp
-      subject: owner-controller
-      tenant: other-workspace
-      expires_in_seconds: 300
-    expect:
-      http_status: 403
-      tool_dispatched: false
-
-  - id: expired-token
-    kind: negative
-    credential:
-      signature_valid: true
-      issuer: https://issuer.example.invalid
-      audience: https://binnacle.example.invalid/mcp
-      subject: owner-controller
-      expires_in_seconds: -1
-    expect:
-      http_status: 401
-      tool_dispatched: false
-
-  - id: not-before-future
-    kind: negative
-    credential:
-      signature_valid: true
-      issuer: https://issuer.example.invalid
-      audience: https://binnacle.example.invalid/mcp
-      subject: owner-controller
-      not_before_valid: false
-      expires_in_seconds: 300
-    expect:
-      http_status: 401
-      tool_dispatched: false
-
-  - id: revoked-token
-    kind: negative
-    credential:
-      signature_valid: true
-      issuer: https://issuer.example.invalid
-      audience: https://binnacle.example.invalid/mcp
-      subject: owner-controller
-      expires_in_seconds: 300
-      revoked: true
-    expect:
-      http_status: 401
-      tool_dispatched: false
+      challenge_present: true
+      dispatch_allowed: false
 
   - id: insufficient-scope
     kind: negative
-    credential:
-      signature_valid: true
-      issuer: https://issuer.example.invalid
-      audience: https://binnacle.example.invalid/mcp
-      subject: owner-controller
-      scopes:
-        - binnacle:observe
-      expires_in_seconds: 300
+    authentication:
+      based_on: oauth-valid-controller
     request:
-      method: tools/call
-      tool: probe_workspace_write
-      required_scope: binnacle:modify
+      required_scope: mcp:write-probe
     expect:
       http_status: 403
-      www_authenticate_error: insufficient_scope
-      www_authenticate_scope: binnacle:modify
-      tool_dispatched: false
+      challenge_present: true
+      tool_result_created: false
 
   - id: authenticated-local-policy-rejection
-    kind: positive-error-boundary
-    credential:
-      signature_valid: true
-      issuer: https://issuer.example.invalid
-      audience: https://binnacle.example.invalid/mcp
-      subject: owner-controller
-      scopes:
-        - binnacle:modify
-      expires_in_seconds: 300
+    kind: positive
+    authentication:
+      based_on: gateway-valid-controller
+    local_policy:
+      write_probe_enabled: false
     request:
-      method: tools/call
       tool: probe_workspace_write
-      path: /etc/shadow
+      arguments:
+        name: policy-check.txt
+        content: bounded
+        idempotency_key: 00112233445566778899aabbccddeeff
+        prepared_operation_id: prep-policy-check
+        execution_nonce: nonce-policy-check
     expect:
       http_status: 200
-      tool_dispatched: true
-      tool_result_is_error: true
+      tool_is_error: true
       error_code: policy_rejected
+      authentication_succeeded: true
+      schema_validation_succeeded: true
+      effect_occurred: false
 
-  - id: legacy-session-same-controller
+  - id: same-controller-retry-reconciles
     kind: positive
-    protocol_revision: "2025-11-25"
-    session:
-      controller_id: controller-a
-      protocol_revision: "2025-11-25"
-    credential:
-      resolved_controller_id: controller-a
-      valid: true
-    expect:
-      session_accepted: true
-
-  - id: legacy-session-controller-mismatch
-    kind: negative
-    protocol_revision: "2025-11-25"
-    session:
-      controller_id: controller-a
-      protocol_revision: "2025-11-25"
-    credential:
-      resolved_controller_id: controller-b
-      valid: true
-    expect:
-      http_status: 401
-      session_accepted: false
-      operation_created: false
-
-  - id: operation-other-controller
-    kind: negative
-    retained_operation:
-      operation_id: op-1
-      controller_id: controller-a
+    setup:
+      retained_operation:
+        operation_id: op-1
+        controller_identity: controller-owner
+        idempotency_key_digest: digest-key-1
+        request_fingerprint: digest-input-1
+        state: running
     request:
+      controller_identity: controller-owner
       operation_id: op-1
-      controller_id: controller-b
-      action: get_status
+      idempotency_key: 00112233445566778899aabbccddeeff
+      request_fingerprint: digest-input-1
     expect:
-      operation_disclosed: false
-      lifecycle_advanced: false
-      result: authentication_or_not_found
+      result: retained_operation
+      operation_id: op-1
+      new_effect: false
 
-  - id: tunnel-valid-signed-assertion
-    kind: positive
-    profile: trusted-gateway-assertion
-    network:
-      direct_peer: trusted-loopback-gateway
-      protected_local_hop: true
-    assertion:
-      signature_valid: true
-      gateway_identity: approved-gateway
-      issuer: https://issuer.example.invalid
-      subject: owner-controller
-      audience: https://binnacle.example.invalid/mcp
-      scopes:
-        - binnacle:connect
-        - binnacle:observe
-      expires_in_seconds: 30
-      channel_binding_valid: true
-      replayed: false
-    expect:
-      controller_authenticated: true
-      tool_dispatched: true
-
-  - id: tunnel-without-assertion
+  - id: other-controller-retry-denied-without-duplicate
     kind: negative
-    profile: trusted-gateway-assertion
-    network:
-      direct_peer: trusted-loopback-gateway
-      protected_local_hop: true
-    assertion: null
+    setup:
+      retained_operation:
+        operation_id: op-1
+        controller_identity: controller-owner
+        idempotency_key_digest: digest-key-1
+        request_fingerprint: digest-input-1
+        state: uncertain
+    request:
+      controller_identity: replacement-controller
+      operation_id: op-1
+      idempotency_key: 00112233445566778899aabbccddeeff
+      request_fingerprint: digest-input-1
+    expect:
+      result: idempotency_owner_mismatch
+      new_effect: false
+      operation_details_disclosed: false
+
+  - id: tunnel-source-ip-is-not-identity
+    kind: negative
+    authentication:
+      tunnel_connected: true
+      source_ip_allowlisted: true
+      verified_token_or_assertion: false
     expect:
       http_status: 401
-      tool_dispatched: false
+      dispatch_allowed: false
 
-  - id: plain-forwarded-user-header
+  - id: inbound-token-passthrough-forbidden
     kind: negative
-    profile: trusted-gateway-assertion
-    request_headers:
-      X-Forwarded-User: owner-controller
-    assertion: null
+    request:
+      downstream_action: true
+      proposed_downstream_credential: inbound_mcp_bearer_token
     expect:
-      http_status: 401
-      tool_dispatched: false
+      result: rejected
+      downstream_request_sent: false
 
-  - id: tunnel-bypass-direct-listener
+  - id: cross-origin-cookie-request
     kind: negative
-    profile: trusted-gateway-assertion
-    network:
-      direct_peer: untrusted-lan-client
-      protected_local_hop: false
-    assertion:
-      signature_valid: false
-    expect:
-      connection_rejected: true
-      tool_dispatched: false
-
-  - id: gateway-assertion-replay
-    kind: negative
-    profile: trusted-gateway-assertion
-    assertion:
-      signature_valid: true
-      assertion_id: assertion-1
-      replayed: true
-      expires_in_seconds: 30
-    expect:
-      http_status: 401
-      tool_dispatched: false
-
-  - id: untrusted-forwarded-proto
-    kind: negative
-    network:
-      direct_peer: untrusted-lan-client
-    request_headers:
-      X-Forwarded-Proto: https
-      X-Forwarded-For: 127.0.0.1
-    expect:
-      forwarded_headers_trusted: false
-      controller_authenticated: false
-
-  - id: wrong-host
-    kind: negative
-    request_headers:
-      Host: attacker.example.invalid
-    expect:
-      http_status: 400_or_403
-      tool_dispatched: false
-
-  - id: forbidden-origin
-    kind: negative
-    request_headers:
-      Origin: https://attacker.example.invalid
-      Host: binnacle.example.invalid
+    transport:
+      origin: https://attacker.example
+      cookies_present: true
+      cors_preflight_authorized: false
     expect:
       http_status: 403
-      cors_allow_origin_present: false
-      tool_dispatched: false
-
-  - id: missing-origin-non-browser
-    kind: positive
-    authentication_profile:
-      non_browser_missing_origin_allowed: true
-    request_headers:
-      Host: binnacle.example.invalid
-      Origin: null
-    credential:
-      valid: true
-    expect:
-      origin_alone_creates_trust: false
-      request_continues_to_authentication: true
-
-  - id: wildcard-credentialed-cors
-    kind: negative
-    server_fault:
-      access_control_allow_origin: "*"
-      access_control_allow_credentials: true
-    expect:
-      conformance_failure: true
-
-  - id: cookie-only-authentication
-    kind: negative
-    request_headers:
-      Cookie: session=ambient-browser-cookie
-    credential: null
-    expect:
-      http_status: 401
-      tool_dispatched: false
-
-  - id: oversized-body
-    kind: negative
-    request:
-      body_bytes: 104857601
-    profile_limits:
-      max_body_bytes: 1048576
-    expect:
-      http_status: 413
-      json_parsed: false
-      operation_created: false
-
-  - id: controller-rate-limit
-    kind: negative
-    request:
-      controller_id: controller-a
-      rate_above_profile_limit: true
-    expect:
-      http_status: 429
-      operation_created: false
-      cancellation_capacity_preserved: true
-
-  - id: concurrency-limit
-    kind: negative
-    request:
-      controller_id: controller-a
-      in_flight_above_profile_limit: true
-    expect:
-      http_status: 429_or_tool_resource_rejection
-      new_operation_effect: false
-      status_capacity_preserved: true
-
-  - id: inbound-token-passthrough
-    kind: negative
-    operation:
-      downstream_target: https://api.example.invalid
-      downstream_authorization_header_equals_inbound: true
-    expect:
-      conformance_failure: true
-      downstream_request_sent: false
-      secret_logged: false
-
-  - id: separate-downstream-credential
-    kind: positive
-    operation:
-      downstream_target: https://api.example.invalid
-      downstream_credential:
-        audience: https://api.example.invalid
-        source: non_exportable_store
-      inbound_credential_forwarded: false
-    expect:
-      downstream_request_allowed_subject_to_local_policy: true
-
-  - id: authentication-secret-in-log
-    kind: negative
-    server_fault:
-      log_authorization_header: true
-    expect:
-      conformance_failure: true
-
-  - id: token-bound-operation-retry
-    kind: positive
-    retained_operation:
-      operation_id: op-1
-      controller_id: controller-a
-      normalized_input_digest: digest-a
-    retry:
-      controller_id: controller-a
-      normalized_input_digest: digest-a
-      authentication_valid: true
-    expect:
-      same_operation_returned: true
-      duplicate_effect: false
-
-  - id: token-bound-operation-input-change
-    kind: negative
-    retained_operation:
-      operation_id: op-1
-      controller_id: controller-a
-      normalized_input_digest: digest-a
-    retry:
-      controller_id: controller-a
-      normalized_input_digest: digest-b
-      authentication_valid: true
-    expect:
-      lifecycle_advanced: false
-      duplicate_effect: false
-      result: conflict_or_invalid_argument
+      dispatch_allowed: false
