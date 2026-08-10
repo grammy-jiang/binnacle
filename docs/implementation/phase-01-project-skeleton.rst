@@ -86,7 +86,8 @@ environment state:
 and must be able to import and start the Binnacle MCP/application skeleton.
 
 The implementation additionally must pass the repository's existing contract/schema
-validation and the new Python CI workflow on Python 3.11, 3.12, and 3.13.
+validation, dependency-vulnerability audit, and the new Python CI workflow on Python
+3.11, 3.12, and 3.13.
 
 3. Explicit non-goals
 ---------------------
@@ -151,6 +152,7 @@ The repository is also an executable Python project:
 * configuration is parsed into an immutable typed snapshot;
 * structured logging is configured before application construction;
 * package-layer import rules are machine-checked;
+* the committed dependency graph is checked with ``pip-audit``;
 * Python 3.11/3.12/3.13 tests and the quality gate run in GitHub Actions;
 * the existing contract/schema validators remain part of normal CI.
 
@@ -355,7 +357,9 @@ Use PEP 735/``uv`` dependency groups with these responsibilities:
    added until a phase contains actual state/lifecycle invariants worth generating.
 
 ``quality``
-   ``ruff``, ``mypy``, and ``import-linter``.
+   ``ruff``, ``mypy``, ``import-linter``, and ``pip-audit``. ``pip-audit`` is a hard
+   dependency-vulnerability gate once Phase 1 creates the committed lock graph; it is not
+   merely an optional/manual utility.
 
 ``matrix``
    ``tox`` and ``tox-uv`` for developer-run Python compatibility orchestration.
@@ -874,8 +878,8 @@ Do not solve missing third-party typing by scattering ``# type: ignore``. Prefer
 typed framework APIs; if a targeted ignore is unavoidable it must include an error code
 and a short reason.
 
-19. Pytest, coverage, and tox
------------------------------
+19. Pytest, coverage, tox, and dependency audit
+-----------------------------------------------
 
 19.1 Pytest
 ~~~~~~~~~~~
@@ -911,11 +915,26 @@ Configure tox 4 + tox-uv for environments:
    py313
    quality
 
-The Python environments run pytest. ``quality`` runs Ruff, MyPy, Import Linter, and the
-contract/schema validators.
+The Python environments run pytest. ``quality`` runs Ruff, MyPy, Import Linter,
+``pip-audit``, and the contract/schema validators.
 
 Tox orchestrates an already-defined project environment; it does not replace ``uv`` as
 the dependency/lock source.
+
+19.4 Dependency vulnerability audit
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``pip-audit`` is a required Phase 1 hard gate because this phase first introduces the
+committed Python dependency graph. The authoritative command is:
+
+.. code-block:: console
+
+   uv run pip-audit
+
+A vulnerability result fails the quality gate unless a separate reviewed exception
+records the advisory identifier, affected dependency, reason the risk is not exploitable
+or cannot yet be remediated, and a follow-up condition. Do not silently ignore advisories
+or make the audit advisory-only merely to keep CI green.
 
 20. Required test cases
 -----------------------
@@ -1036,13 +1055,14 @@ Required jobs:
 
 ``quality``
    Python 3.13 lane. Run ``uv sync --frozen --python 3.13``, Ruff check/format check,
-   strict MyPy, Import Linter, ``uv run python scripts/validate_contracts.py``, and
+   strict MyPy, Import Linter, ``uv run pip-audit``,
+   ``uv run python scripts/validate_contracts.py``, and
    ``uv run python scripts/validate_schema_instances.py``.
 
 The focused existing ``Contract validation`` workflow remains enabled. The new workflow
 is additive rather than replacing the contract gate during Phase 1.
 
-CI must not mutate ``uv.lock``. A lock mismatch is a failure.
+CI must not mutate ``uv.lock``. A lock mismatch or dependency-audit failure is a failure.
 
 22. Existing validator integration
 ----------------------------------
@@ -1077,6 +1097,7 @@ Canonical local workflow:
    uv run ruff format --check .
    uv run mypy src/binnacle tests
    uv run lint-imports
+   uv run pip-audit
    uv run python scripts/validate_contracts.py
    uv run python scripts/validate_schema_instances.py
    uv run tox
@@ -1103,10 +1124,11 @@ service.
 Network
 ~~~~~~~
 
-Dependency resolution during ``uv sync`` naturally needs package-index/network access.
-Tests themselves must not depend on Internet access. The MCP server smoke path may bind
-locally only when explicitly invoked; unit/integration tests monkeypatch or use in-process
-ASGI construction rather than public network exposure.
+Dependency resolution during ``uv sync`` and vulnerability-database/advisory retrieval by
+``pip-audit`` may require outbound package/security service access in developer/CI
+environments. Tests themselves must not depend on Internet access. The MCP server smoke
+path may bind locally only when explicitly invoked; unit/integration tests monkeypatch or
+use in-process ASGI construction rather than public network exposure.
 
 Lock portability
 ~~~~~~~~~~~~~~~~
@@ -1169,7 +1191,8 @@ operational authority:
 * settings are immutable after resolution;
 * ordinary logs are not represented as audit;
 * tests never require root or weaken host permissions;
-* dependency installation remains project-local through ``uv``.
+* dependency installation remains project-local through ``uv``;
+* dependency-vulnerability scanning is an enforced quality gate once the lock exists.
 
 28. Implementation order
 ------------------------
@@ -1187,6 +1210,7 @@ The coding PR should implement Phase 1 in this order:
 #. create Typer/Rich CLI and ``__main__`` entry;
 #. add unit/integration tests;
 #. add Import Linter contracts and tox configuration;
+#. add ``pip-audit`` to the hard quality path;
 #. add ``.github/workflows/python.yml``;
 #. run the full local command set;
 #. verify the PR diff contains no operational capability implementation.
@@ -1218,6 +1242,8 @@ Phase 1 is ready to merge only when all of the following are true:
 #. ``uv run ruff check .`` passes.
 #. ``uv run ruff format --check .`` passes.
 #. ``uv run mypy src/binnacle tests`` passes in strict mode.
+#. ``uv run pip-audit`` passes or any exception is separately reviewed and explicitly
+   documented with the advisory identifier and follow-up condition.
 #. ``uv run python scripts/validate_contracts.py`` passes.
 #. ``uv run python scripts/validate_schema_instances.py`` passes.
 #. Tox can orchestrate Python 3.11, 3.12, and 3.13 where those interpreters are installed.
