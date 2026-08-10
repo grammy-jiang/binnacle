@@ -88,6 +88,7 @@ def validate_idempotency_keys() -> None:
     ref = "https://binnacle.dev/schemas/mcp/bootstrap-inputs.schema.json#/$defs/idempotencyKey"
     expect_valid("128-bit lowercase hex key", ref, "00112233445566778899aabbccddeeff")
     expect_valid("128-bit base64url key", ref, "ABCDEFGHIJKLMNOPQRSTUV")
+    expect_valid("base64url punctuation key", ref, "ABCDE_FGHIJKLMNOPQRST-")
     expect_invalid("short base64url key", ref, "short-key")
 
     write_ref = (
@@ -139,6 +140,36 @@ def validate_system_inspect_sections() -> None:
             },
         ),
     )
+    expect_valid(
+        "system_inspect selected filesystems section",
+        ref,
+        success(
+            "system_inspect",
+            {
+                "hostname": "pi-a",
+                "returned_sections": ["filesystems"],
+                "sections": {
+                    "filesystems": [
+                        {
+                            "mount_point": "/",
+                            "filesystem_type": "ext4",
+                            "source": "/dev/mmcblk0p2",
+                            "total_bytes": 67108864,
+                            "available_bytes": 33554432,
+                        }
+                    ]
+                },
+            },
+        ),
+    )
+    expect_invalid(
+        "system_inspect cannot claim a returned section without data",
+        ref,
+        success(
+            "system_inspect",
+            {"hostname": "pi-a", "returned_sections": ["filesystems"], "sections": {}},
+        ),
+    )
 
 
 def validate_cleanup_outcomes() -> None:
@@ -183,6 +214,13 @@ def validate_wire_error_fixture() -> None:
         "#/$defs/probe_workspace_write.output.v1_1"
     )
     expect_valid("positive execution-error fixture", ref, structured)
+
+    success_case = next(case for case in fixture["cases"] if case["id"] == "tool-call-success-valid")
+    expect_valid(
+        "positive Tool success fixture",
+        "https://binnacle.dev/schemas/mcp/bootstrap-outputs.schema.json#/$defs/binnacle_probe.output.v1_1",
+        success_case["wire_result"]["structuredContent"],
+    )
 
 
 def validate_uncertain_retry() -> None:
