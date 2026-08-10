@@ -147,7 +147,19 @@ cases:
           name: binnacle_probe
           contract_version: "1.1"
         request_id: request-3
-        data: {}
+        data:
+          build_version: "0.1.0"
+          build_sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          device_id: pi-a
+          protocol_revision: "2026-07-28"
+          protocol_era: modern
+          tool_manifest:
+            id: bootstrap-tools
+            version: "1.1.0"
+            sha256: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+          catalogue_phase: compatibility-core
+          catalogue_sha256: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+          request_correlation_id: correlation-3
         operation: null
         evidence: []
         warnings: []
@@ -174,7 +186,9 @@ cases:
           code: policy_rejected
           message: Write probe is disabled by local policy.
           retryable: false
-          details: {}
+          retry_action: none
+          operation_id: null
+          details: []
         operation: null
         evidence: []
         warnings: []
@@ -199,7 +213,9 @@ cases:
           code: policy_rejected
           message: rejected
           retryable: false
-          details: {}
+          retry_action: none
+          operation_id: null
+          details: []
         operation: null
         evidence: []
         warnings: []
