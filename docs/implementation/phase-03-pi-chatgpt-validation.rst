@@ -20,15 +20,15 @@ implementation, ChatGPT product support, account/workspace entitlement, private
 connectivity, and authentication are different facts. None may be substituted for
 observed evidence from the actual Bootstrap profile.
 
-Phase 3 consumes the Phase 2 ``compatibility-core`` server unchanged in authority: the
-remote catalogue remains exactly the five read-only Tools and no consequential device
-effect becomes possible. The implementation work is deployment, controller-security
-integration, evidence capture, and profile promotion.
+Phase 3 consumes the Phase 2 ``compatibility-core`` server without expanding its
+authority. The remote catalogue remains exactly the five read-only Tools and no
+consequential device effect becomes possible. The implementation work is deployment,
+controller-security integration, evidence capture, and profile promotion.
 
-The first major Bootstrap milestone is reached when real ChatGPT can reliably connect to
-the selected development Pi, authenticate as the intended controller, discover the
+The first empirical Bootstrap milestone is reached when real ChatGPT can reliably connect
+to the selected development Pi, authenticate as the intended controller, discover the
 read-only catalogue, call ``binnacle_probe`` and ``system_inspect``, and leave a complete
-sanitised evidence record of the actual requested/negotiated MCP behaviour.
+sanitized evidence record of the actual requested/negotiated MCP behavior.
 
 The ``:Status: merged`` value is the terminal status defined by
 ``docs/implementation/index.rst`` for the authoritative document after this plan PR
@@ -64,14 +64,14 @@ capabilities, or negotiated MCP revision.
 2. Planning-time product hypothesis and revalidation rule
 ---------------------------------------------------------
 
-At the time this Phase 3 plan is written, current OpenAI product documentation describes
-ChatGPT custom MCP connectivity as remote rather than direct-local connectivity, with a
-Secure MCP Tunnel path for private/on-premises/developer-machine servers and an
-application authentication configuration flow. Product availability and write/modify
-entitlement are plan/workspace dependent.
+At planning time, current OpenAI product documentation describes ChatGPT custom MCP
+connectivity as remote rather than direct-local connectivity, with a Secure MCP Tunnel
+path for private/on-premises/developer-machine servers and an application authentication
+configuration flow. Product availability and write/modify entitlement are plan/workspace
+dependent.
 
-Those facts are **planning-time hypotheses only**. The Phase 3 implementation run must
-re-read the current official OpenAI product documentation and inspect the actual ChatGPT
+Those facts are planning-time hypotheses only. The Phase 3 implementation run must
+re-read current official OpenAI product documentation and inspect the actual ChatGPT
 UI/account/workspace immediately before the live test. Evidence records what is observed
 then. A changed product UI or entitlement changes the evaluation profile rather than
 being silently normalized to this document.
@@ -86,15 +86,15 @@ In particular:
 * do not infer tenant/workspace/client/binding claims that the actual authentication path
   does not provide.
 
-3. Prerequisite and phase exit gate
-----------------------------------
+3. Prerequisite and exit gate
+-----------------------------
 
 Prerequisite
 ~~~~~~~~~~~~
 
 The Phase 2 implementation described by the merged Phase 2 plan must exist and pass its
-local exit gate before remote deployment begins. The exact candidate build deployed to
-the Pi must therefore already have:
+local exit gate before remote deployment begins. The candidate build deployed to the Pi
+must already have:
 
 * the Phase 1 project/quality foundation;
 * the five reviewed ``compatibility-core`` Tools;
@@ -114,7 +114,7 @@ evaluation profile:
 
 * the selected 64-bit Raspberry Pi runs the exact reviewed Binnacle source revision from
   the source checkout under systemd;
-* Binnacle's MCP application process runs as a dedicated non-root service identity;
+* Binnacle's MCP/application process runs as a dedicated non-root service identity;
 * the application itself remains on loopback or an equally reviewed protected local hop;
 * the selected private connectivity path reaches only the intended MCP route;
 * every remotely accepted ``/mcp`` request is authenticated before MCP Tool dispatch;
@@ -122,26 +122,27 @@ evaluation profile:
   profile;
 * unauthenticated/direct-bypass requests cannot reach Tool dispatch;
 * real ChatGPT connects through the selected app/connector profile;
-* ``endpoint-connect`` passes or is classified honestly as host-policy-blocked without
-  weakening authentication;
+* ``endpoint-connect`` passes or is classified honestly without weakening
+  authentication;
 * real ChatGPT can discover the five read-only Tools;
 * real ChatGPT can invoke ``binnacle_probe`` and ``system_inspect`` reliably;
 * the actual requested and, where applicable, negotiated MCP revision is recorded;
 * structured/text result handling and execution-error rendering are exercised through
   the real host;
-* the applicable frozen evaluation cases meet their exact minimum-attempt/oracle rules;
-* non-applicable/later-capability cases are classified without implementing them;
+* applicable frozen evaluation cases meet their exact attempt/oracle rules;
+* later/unexercised cases remain present in the evaluation manifest with statuses allowed
+  by their own frozen oracle instead of being generalized by phase scope;
 * the evidence manifest validates against the existing evaluation schema;
-* the evidence bundle is sanitised and receives a detached receipt without
-  self-reference;
-* ``docs/mcp-profile.md`` is updated from that reviewed evidence rather than from
-  expectation;
+* reviewer decision is embedded in the final manifest before its final digest/archive is
+  frozen;
+* the evidence bundle receives a detached receipt without self-reference;
+* ``docs/mcp-profile.md`` is updated from reviewed evidence rather than expectation;
 * no raw token, cookie, full authorization header, private key, reusable gateway
-  assertion, or owner-private payload is present in the retained evidence;
+  assertion, or owner-private payload is present in retained evidence;
 * the exact deployed implementation head passes its normal CI gates.
 
 If no authentication profile satisfies the mandatory controller-transport contract, the
-Phase 3 exit gate is **blocked**. Do not fall back to anonymous tunnel trust, source IP,
+Phase 3 exit gate is blocked. Do not fall back to anonymous tunnel trust, source IP,
 client display name, conversation identity, or a manually configured wildcard owner.
 
 4. Explicit non-goals
@@ -175,10 +176,12 @@ Phase 3 does **not** implement:
 * later numbered phase design.
 
 The larger frozen evaluation manifest intentionally contains cases for later write,
-idempotency, cancellation, reconnect, concurrency, and optional MCP capabilities. Phase
-3 records those as ``server-not-implemented``, ``not-applicable``, ``not-tested``, or
-another exact evidence-derived status. It does not implement them to make the manifest
-look complete.
+idempotency, cancellation, reconnect, concurrency, optional MCP capabilities,
+owner-only information handling, and cross-server behavior. Phase 3 does not implement
+those capabilities merely to make the manifest look complete. Each unexercised case is
+classified only according to that case's own frozen oracle/status rules.
+
+No Phase 4 design appears in this document.
 
 5. Before/after semantics
 -------------------------
@@ -199,6 +202,7 @@ One exact deployment has:
 * one validated controller authentication profile;
 * an in-memory authenticated controller security context on every accepted MCP request;
 * a reviewed evidence bundle for the applicable frozen cases;
+* explicit entries for every frozen case, including honest unexercised statuses;
 * an observed compatibility profile with actual product/plan/workspace/revision facts;
 * explicit residual limitations and rerun triggers.
 
@@ -210,28 +214,29 @@ No consequential-operation authority is added.
 The Phase 3 **implementation** work is expected to create or modify the following paths.
 This detailed-plan PR itself adds only this document.
 
-6.1 Existing Python files to modify
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+6.1 Existing files to modify
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 ::
 
    pyproject.toml
    uv.lock
+   .gitignore
+   .github/workflows/python.yml
    src/binnacle/application.py
    src/binnacle/composition.py
    src/binnacle/config.py
+   src/binnacle/cli.py
+   src/binnacle/domain/mcp.py
    src/binnacle/adapters/mcp.py
    src/binnacle/adapters/compatibility.py
-   src/binnacle/domain/mcp.py
-   src/binnacle/cli.py
-   .github/workflows/python.yml
-   .gitignore
+   docs/mcp-profile.md
 
-Phase 3 extends the Phase 2 server; it does not create another FastMCP/Uvicorn
-application.
+``docs/mcp-profile.md`` is changed only after the real evidence bundle has been reviewed.
+Do not replace its unknowns from planning assumptions.
 
-6.2 New controller-security modules
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+6.2 Controller-security modules
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Create:
 
@@ -245,7 +250,7 @@ Create:
      middleware.py
      profile.py
 
-Create **one** selected concrete authentication adapter after the live feasibility gate:
+Create exactly one selected concrete adapter after the live feasibility gate:
 
 ::
 
@@ -261,8 +266,8 @@ Do not implement both complete profiles speculatively. The common domain/port/mi
 seam is implemented first; the selected live profile supplies exactly one concrete
 adapter.
 
-6.3 Development-Pi deployment assets
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+6.3 Development-Pi assets
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Create:
 
@@ -273,9 +278,9 @@ Create:
    scripts/verify_dev_pi.py
    docs/operations/development-pi.rst
 
-Create this file **only if** the selected supported Secure MCP Tunnel/client actually
-runs as a customer-hosted persistent process with a documented stable CLI at
-implementation time:
+Create this file only if the selected supported Secure MCP Tunnel/client actually runs as
+a customer-hosted persistent process with a documented stable CLI at implementation
+time:
 
 ::
 
@@ -297,12 +302,12 @@ Create:
      evidence.py
      redaction.py
      cases.py
+     digests.py
      bundle.py
    scripts/mcp_evaluation.py
 
 The evaluator consumes the existing evaluation profile, case manifest, and evaluation
-manifest schema. It does not invent a new evaluation status vocabulary or a second case
-manifest.
+manifest schema. It does not invent a new status vocabulary or a second case manifest.
 
 6.5 Tests
 ~~~~~~~~~
@@ -317,6 +322,7 @@ Add at least:
      test_controller_middleware.py
      test_auth_selected_profile.py
      test_evaluation_profile.py
+     test_evaluation_digests.py
      test_evaluation_evidence.py
      test_evaluation_redaction.py
      test_evaluation_bundle.py
@@ -330,6 +336,12 @@ Add at least:
 Reuse ``tests/fixtures/mcp/controller-transport-security.yaml`` and the existing
 machine-readable evaluation cases instead of creating a parallel security/evaluation
 fixture language.
+
+The current controller fixture contains example profile/scope values such as
+``mcp:read``. Execute those cases against a fixture-specific profile that preserves their
+literal semantics. Separately test the selected deployment profile's exact scope
+vocabulary. Do not silently alias fixture scope strings to production scope strings or
+rewrite the fixture simply to make the selected profile pass.
 
 7. Development-Pi filesystem layout
 -----------------------------------
@@ -370,32 +382,35 @@ retained evidence.
 Create during privileged setup:
 
 ``binnacle``
-   Dedicated unprivileged main MCP/application service user.
+   Dedicated non-root MCP/application service user with primary group ``binnacle``.
 
 ``binnacle-dev``
-   Development group used to grant the source checkout the minimum shared read/traverse
-   access required by the service now and a stable ownership seam for later development
-   execution. Do not grant this group root or protected-controller-state authority.
+   Development group used only to grant the source checkout the minimum shared
+   read/traverse access needed by the service now and to preserve a future development
+   workspace ownership seam.
 
-If the selected tunnel uses a local customer-hosted daemon, create a separate unprivileged
+If the selected tunnel uses a local customer-hosted daemon, create a separate non-root
 ``binnacle-tunnel`` identity rather than giving the main Binnacle process tunnel
 credentials/network authority it does not need.
 
 Minimum layout expectations:
 
-* ``/srv/binnacle-dev/repo`` is not owned by root-only state and remains a real Git
-  development checkout;
-* the ``binnacle`` service can read/execute the project environment and source needed to
-  run the server;
-* ``/etc/binnacle`` is root-controlled and not writable by ``binnacle``;
-* controller-profile material is readable only by the service identity/group that
-  validates it;
+* ``/srv/binnacle-dev/repo`` remains a real Git development checkout and is accessible
+  through ``binnacle-dev``;
+* the ``binnacle`` service has ``binnacle-dev`` as a supplementary group, not as its
+  primary protected-control-plane group;
+* ``/etc/binnacle`` is owned by ``root:binnacle`` with directory mode no broader than
+  ``0750``;
+* ``dev.toml`` and ``controller-profile.toml`` are owned ``root:binnacle`` with mode no
+  broader than ``0640``;
+* future development/executor users that join ``binnacle-dev`` do **not** thereby gain
+  access to controller-profile files;
 * tunnel credentials, when present, are not readable by the Binnacle application user;
 * evaluation evidence is not world-readable;
 * no reusable authentication secret exists inside the Git repository or Tool result.
 
-Do not preconfigure later executor/broker users or sockets unless systemd/service setup
-requires only the stable identity names; their authority is deferred.
+Do not preconfigure later executor/broker users or sockets unless systemd setup needs only
+a stable unprivileged identity name; their authority is deferred.
 
 9. ``scripts/setup_dev_pi.py``
 ------------------------------
@@ -416,6 +431,8 @@ Use subcommands equivalent to:
    sudo python scripts/setup_dev_pi.py check --repo /srv/binnacle-dev/repo
    sudo python scripts/setup_dev_pi.py apply --repo /srv/binnacle-dev/repo
 
+The script is stdlib-only so root does not need the project virtual environment.
+
 ``check`` is read-only and prints a deterministic plan/result. ``apply`` performs only
 the declared Phase 3 setup.
 
@@ -427,24 +444,24 @@ Before mutation verify:
 * Linux + systemd;
 * 64-bit architecture;
 * selected Debian-family development profile or explicitly recorded equivalent;
-* compatible distribution-provided Python, minimum 3.11 and below 3.14 for the reviewed
-  Bootstrap matrix;
+* compatible distribution-provided Python, minimum 3.11 and below 3.14;
 * exact repository path exists, is a Git checkout, and is not under ``/etc``, ``/var`` or
   another protected system directory;
 * ``uv.lock`` and ``pyproject.toml`` exist;
 * the service unit source file exists;
-* required user/group names are not conflicting with an incompatible local identity;
-* no generated output path escapes the declared system directories.
+* required user/group names are not conflicting with incompatible identities;
+* no generated output path escapes declared system directories.
 
 ``apply`` may:
 
-* create the ``binnacle`` user and ``binnacle-dev`` group;
+* create the ``binnacle`` user/primary group and ``binnacle-dev`` group;
+* add ``binnacle`` to ``binnacle-dev`` as a supplementary group;
 * create/protect ``/etc/binnacle``, ``/var/lib/binnacle/evaluation``, and
-  ``/run/binnacle`` ownership/modes;
+  ``/run/binnacle``;
 * install/update the reviewed ``binnacle-dev.service`` unit atomically;
 * run ``systemctl daemon-reload``;
-* enable the service only when an explicit ``--enable`` flag is supplied;
-* report the exact manual next steps for project sync, protected config, tunnel, and live
+* enable the service only when explicit ``--enable`` is supplied;
+* report exact manual next steps for project sync, protected config, tunnel, and live
   evaluation.
 
 It must not:
@@ -480,7 +497,7 @@ The operator performs as the development checkout owner:
    uv run python scripts/validate_contracts.py
    uv run python scripts/validate_schema_instances.py
 
-Do not run a service from a checkout that has not passed the applicable exact-build
+Do not run a service from a checkout that has not passed applicable exact-build
 validation.
 
 Record before deployment:
@@ -493,8 +510,8 @@ Record before deployment:
 * ``uv`` version;
 * resolved FastMCP/MCP SDK/Uvicorn versions.
 
-The first Phase 3 supported evidence run should use a clean reviewed commit. A deliberately
-dirty source checkout is a different profile and cannot reuse the clean-build evidence.
+The first supported evidence run uses a clean reviewed commit. A deliberately dirty
+source checkout is a different profile and cannot reuse clean-build evidence.
 
 11. ``binnacle-dev.service``
 ----------------------------
@@ -513,7 +530,8 @@ Required shape is equivalent to:
    [Service]
    Type=simple
    User=binnacle
-   Group=binnacle-dev
+   Group=binnacle
+   SupplementaryGroups=binnacle-dev
    WorkingDirectory=/srv/binnacle-dev/repo
    ExecStart=/srv/binnacle-dev/repo/.venv/bin/binnacle serve --config /etc/binnacle/dev.toml
    Restart=on-failure
@@ -566,10 +584,13 @@ Phase 3 does not permit an ordinary environment variable or CLI flag to turn the
 application into an unauthenticated non-loopback server.
 
 ``/etc/binnacle/controller-profile.toml`` is a separate protected security-critical
-configuration file for the **selected** live authentication profile. It contains no raw
-private key/token unless the selected standard profile absolutely requires a local key
-reference; reusable secret bytes should be supplied through systemd credentials or a
-separate root-controlled file/reference.
+configuration file for the selected live authentication profile. It contains no raw
+private key/token unless the selected standard profile absolutely requires a protected
+local reference; reusable secret bytes should be supplied through systemd credentials or
+a separate root-controlled credential file/reference.
+
+Both config files are ``root:binnacle`` and no broader than ``0640``. Membership in
+``binnacle-dev`` alone grants no protected configuration access.
 
 13. Controller security domain
 ------------------------------
@@ -601,6 +622,9 @@ Define:
        scopes: frozenset[str]
        authentication_time: datetime
        expires_at: datetime
+       revocation_checked_at: datetime | None
+       revocation_fresh_until: datetime | None
+       connection_binding_digest: str | None
        evidence_id_digest: str | None
 
    @dataclass(frozen=True, slots=True)
@@ -644,19 +668,17 @@ port:
            request: TransportAuthenticationInput,
        ) -> ControllerSecurityContext: ...
 
-The concrete HTTP middleware owns extraction of credential/assertion bytes and must
-release references after validation. The bytes are sensitive runtime data and are never
-logged, persisted, copied into Tool arguments, or attached to the returned security
-context.
+The concrete HTTP middleware owns extraction of credential/assertion bytes and releases
+references after validation. The bytes are sensitive runtime data and are never logged,
+persisted, copied into Tool arguments, or attached to the returned security context.
 
-The implementation may replace raw ``bytes`` fields with a dedicated non-repr sensitive
-container if that makes accidental logging harder. It must not weaken the no-retention
-rule.
+A dedicated non-``repr`` sensitive container may replace raw ``bytes`` if it makes
+accidental logging harder. It must not weaken the no-retention rule.
 
-15. Phase 3 read-only transport authorisation
+15. Phase 3 read-only transport authorization
 ---------------------------------------------
 
-The selected remote profile requires at minimum:
+The deployment profile uses a minimal read-only vocabulary:
 
 ::
 
@@ -670,12 +692,12 @@ Before MCP dispatch:
 
 * missing/invalid/expired/revoked/untrusted credentials -> HTTP 401 where the selected
   profile requires it;
-* valid controller lacking ``connect``/``observe`` -> HTTP 403;
+* valid controller lacking required ``connect``/``observe`` -> HTTP 403;
 * Host/Origin/proxy/profile mismatch -> pre-dispatch transport/security rejection;
 * unsupported MCP revision -> protocol rejection;
 * valid authenticated read-only call -> MCP Tool dispatch.
 
-A tunnel connection, source IP, loopback peer, session ID, clientInfo name, or ChatGPT
+A tunnel connection, source IP, loopback peer, session ID, ``clientInfo`` name, or ChatGPT
 conversation ID never satisfies these checks alone.
 
 16. Authenticated request context
@@ -693,12 +715,12 @@ validated controller identity separately from model-supplied arguments:
        request_id: str
        controller: ControllerSecurityContext
 
-Local unit/integration tests may inject a deterministic authenticated test context. There
-is no anonymous production/Phase-3 remote context.
+Local unit/integration tests inject deterministic authenticated test contexts. There is
+no anonymous Phase 3 remote context.
 
-The five read-only Tool use cases do not use ``controller_id`` as application authority
-beyond the pre-dispatch read-only profile check, but logs/evidence may record the opaque
-controller ID for correlation.
+The five read-only use cases do not use ``controller_id`` as application authority
+beyond the pre-dispatch profile/scope check, but safe logs/evidence may record the opaque
+ID for correlation.
 
 17. Authentication-profile feasibility gate
 --------------------------------------------
@@ -714,31 +736,31 @@ Before implementing the concrete authentication adapter:
 #. revalidate current official ChatGPT custom-app/MCP and Secure MCP Tunnel guidance;
 #. inspect the selected tunnel/gateway's current documented local-hop/authentication
    behavior and CLI/configuration model;
-#. create the ChatGPT custom app/draft against the private endpoint only as far as needed
-   to establish the actual supported authentication setup;
+#. create the ChatGPT custom app/draft only as far as needed to establish the actually
+   supported authentication setup;
 #. record which stable authenticated claims/credentials can reach Binnacle;
 #. compare them field-for-field with ``controller-transport.md``;
-#. choose exactly one profile using the decision rules below;
-#. freeze ``controller-profile.toml`` schema/values and concrete adapter only after the
-   evidence is sufficient.
+#. choose exactly one profile using the rules below;
+#. freeze the protected profile schema/values and concrete adapter only after evidence is
+   sufficient.
 
-Do not run an unauthenticated five-Tool remote server simply to observe traffic.
-Pre-authentication feasibility testing must reject before MCP Tool dispatch.
+Do not run an unauthenticated five-Tool remote server merely to observe traffic.
+Pre-authentication feasibility testing rejects before MCP Tool dispatch.
 
-17.2 Prefer trusted gateway assertion only when provable
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+17.2 Trusted gateway assertion
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Select ``trusted-gateway-assertion`` only if the current tunnel/gateway provides a
 cryptographically protected assertion/channel whose Binnacle-verifiable data includes
 the mandatory selected-profile identity/audience/freshness fields and whose protected
 local hop cannot be bypassed.
 
-Plain ``X-User``/forwarded identity headers, tunnel membership, source IP, or an
-undocumented opaque connection marker do not qualify.
+Plain forwarded identity headers, tunnel membership, source IP, or an undocumented opaque
+connection marker do not qualify.
 
-If selected, the profile fixes:
+If selected, freeze:
 
-* assertion format and version;
+* assertion format/version;
 * trusted gateway identity/key/certificate;
 * exact external issuer/auth source where supplied;
 * subject;
@@ -750,20 +772,20 @@ If selected, the profile fixes:
 * assertion identifier/replay rule;
 * request/local-channel binding;
 * algorithm/key allowlist;
+* revocation/freshness evidence where supplied;
 * local peer/socket/loopback trust boundary.
 
 17.3 OAuth resource-server fallback
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 If no qualifying gateway assertion exists, select the OAuth resource-server profile only
-if current ChatGPT/app configuration and a mature OAuth/OIDC provider can issue Binnacle-
-audience credentials that Binnacle can validate according to the controller-transport
-contract.
+if current ChatGPT/app configuration and a mature OAuth/OIDC provider can issue
+Binnacle-audience credentials that Binnacle can validate according to the
+controller-transport contract.
 
-The Phase 3 implementation acts as a **resource server**, not a custom authorization
-server.
+The Phase 3 implementation acts as a resource server, not a custom authorization server.
 
-The profile fixes:
+Freeze:
 
 * canonical issuer;
 * canonical Binnacle resource/audience URI;
@@ -773,14 +795,20 @@ The profile fixes:
 * authorized client/``azp`` requirement when the real profile supplies it;
 * tenant/workspace requirement only when actually supplied and selected;
 * token expiration/not-before/issued-at policy;
-* required ``connect``/``observe`` scopes;
+* required read-only scopes;
 * revocation/freshness method;
 * credential binding when the actual profile supports it;
 * bounded clock skew;
-* residual bearer-token risk if proof-of-possession is not available.
+* residual bearer-token risk if proof-of-possession is unavailable.
 
 Opaque tokens are accepted only with authoritative introspection or equivalent verified
 validation. No token is trusted based on shape.
+
+If the selected MCP/OAuth profile requires protected-resource metadata, expose only the
+standards-defined protected-resource metadata route through the framework/standards
+adapter. It is protocol metadata, not a general REST control API. Its resource URI,
+authorization-server reference, scope information, and 401 challenge are exact for the
+selected profile.
 
 17.4 Neither profile is feasible
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -788,21 +816,17 @@ validation. No token is trusted based on shape.
 If neither profile satisfies mandatory controller identity and remote authentication:
 
 * keep Phase 2 local server behavior;
-* record ``authentication`` as ``test-failed`` or ``host-policy-blocked`` according to
-  the layer actually reached;
-* retain the evidence;
+* record the authentication failure at the exact reached fault layer;
+* retain sanitized evidence;
 * fail the Phase 3 exit gate;
-* do **not** weaken the controller contract to source-IP/tunnel trust/anonymous access.
+* do not weaken the controller contract to source-IP/tunnel/anonymous trust.
 
 18. Selected authentication adapter
 -----------------------------------
 
 Only the selected adapter becomes a runtime dependency/implementation.
 
-18.1 Gateway adapter shape
-~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-If selected:
+Gateway shape, if selected:
 
 .. code-block:: python
 
@@ -819,13 +843,10 @@ If selected:
        async def authenticate(...) -> ControllerSecurityContext: ...
 
 The replay guard may be in-memory because Phase 3 has no consequential effects and one
-server worker. A restart losing replay-cache history is recorded as a residual read-only
-limitation; no durable security claim for mutating operations is inferred.
+worker. Restart losing replay-cache history is recorded as a residual read-only
+limitation; no mutating security claim is inferred.
 
-18.2 OAuth adapter shape
-~~~~~~~~~~~~~~~~~~~~~~~~
-
-If selected:
+OAuth shape, if selected:
 
 .. code-block:: python
 
@@ -843,19 +864,10 @@ If selected:
 Use a mature maintained JOSE/OAuth library or authoritative introspection client. Do not
 implement signature algorithms/JWK parsing manually.
 
-18.3 Conditional dependency rule
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Add only the selected adapter's direct dependency to ``pyproject.toml`` and ``uv.lock``.
-The plan does not freeze a package name before the live assertion/token format is known.
-The implementation PR must document:
-
-* selected library/version compatibility line;
-* why it is needed;
-* Python 3.11--3.13 support;
-* cryptographic maintenance posture;
-* ``pip-audit`` result;
-* why an already locked dependency cannot satisfy the same verified profile.
+Add only the selected adapter's direct dependency to ``pyproject.toml``/``uv.lock``. The
+implementation PR documents the selected library/version line, Python 3.11--3.13 support,
+maintenance/security posture, ``pip-audit`` result, and why the already locked stack
+cannot satisfy the same profile without it.
 
 19. Controller-profile protected configuration
 ----------------------------------------------
@@ -863,7 +875,7 @@ The implementation PR must document:
 The exact file is security-critical and uses ``extra=forbid`` typed parsing separate
 from ordinary environment-overridable settings.
 
-Common fields:
+Common fields are equivalent to:
 
 .. code-block:: toml
 
@@ -879,9 +891,9 @@ Common fields:
 Profile-specific issuer/audience/gateway/key/revocation fields are added only for the
 selected kind.
 
-Security-critical profile values are loaded only from the protected file/systemd
-credential references. They are not overridden by ``BINNACLE_*`` environment variables
-or ``binnacle serve`` convenience flags.
+Security-critical values are loaded only from the protected file/systemd credential
+references. They are not overridden by ``BINNACLE_*`` variables or convenience CLI
+flags.
 
 The canonical external resource URI is not replaced by internal loopback/tunnel target
 addresses when validating audience.
@@ -895,22 +907,21 @@ authenticate the public ``/mcp`` route before FastMCP dispatch.
 Responsibilities:
 
 #. match only the reviewed MCP route;
-#. enforce request/header/body size limits before expensive authentication where
-   practical;
+#. enforce request/header/body limits before expensive authentication where practical;
 #. validate exact ``Host``/``:authority`` allowlist;
-#. validate ``Origin`` when present according to selected profile;
+#. validate ``Origin`` when present according to the selected profile;
 #. trust forwarded headers only on the selected validated local gateway boundary;
 #. extract the selected credential/assertion without logging it;
 #. call ``ControllerAuthenticator``;
-#. enforce ``connect``/``observe`` scopes;
+#. enforce read-only scopes;
 #. attach ``ControllerSecurityContext`` to request-local context inaccessible to model
    arguments;
 #. call FastMCP only on success;
-#. emit correct bounded 401/403 responses/challenges for the selected profile;
+#. emit correct bounded 401/403/challenge metadata for the selected profile;
 #. clear sensitive temporary references after completion.
 
-``/healthz`` and ``/readyz`` remain local diagnostics and are **not** exposed through the
-public tunnel/app route. Local unauthenticated access to these two minimal routes is
+``/healthz`` and ``/readyz`` remain local diagnostics and are not exposed through the
+public tunnel/app route. Local unauthenticated access to those two minimal routes is
 acceptable because the listener remains loopback/private and they reveal only bounded
 status.
 
@@ -919,82 +930,73 @@ There is no authentication bypass flag.
 21. Host, proxy, Origin, and local-hop rules
 --------------------------------------------
 
-21.1 Binnacle bind
-~~~~~~~~~~~~~~~~~~
+Binnacle bind
+~~~~~~~~~~~~~
 
-Keep the Binnacle application on ``127.0.0.1``/``::1`` or a reviewed restricted Unix
-socket/private local hop. Do not bind ``0.0.0.0`` or a LAN address merely because Secure
-MCP Tunnel exists.
+Keep the application on ``127.0.0.1``/``::1`` or a reviewed restricted Unix/private
+local hop. Do not bind ``0.0.0.0`` or a LAN address merely because a tunnel exists.
 
-21.2 Trusted proxy/gateway
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+Trusted proxy/gateway
+~~~~~~~~~~~~~~~~~~~~~
 
 Forwarded scheme/host/client/identity data is accepted only from the exact configured
 gateway identity or protected local socket boundary.
 
-An untrusted local process that can reach the loopback socket cannot create a controller
-identity by sending forwarded headers. It must still satisfy the selected cryptographic
-authentication profile.
+An untrusted local process that reaches loopback cannot create a controller identity by
+sending forwarded headers. It must satisfy the selected cryptographic profile.
 
-21.3 Host
-~~~~~~~~~
+Host
+~~~~
 
-The selected external ``Host``/``:authority`` allowlist is exact. Unexpected hosts and
-ambiguous absolute-form targets are rejected before MCP dispatch.
+External ``Host``/``:authority`` allowlist is exact. Unexpected hosts and ambiguous
+absolute-form targets are rejected before MCP dispatch.
 
-21.4 Origin/CORS/cookies
-~~~~~~~~~~~~~~~~~~~~~~~
+Origin/CORS/cookies
+~~~~~~~~~~~~~~~~~~~
 
-No ambient cookie authorization exists. Do not enable wildcard credentialed CORS.
-A missing ``Origin`` from the validated non-browser ChatGPT path is handled according to
+No ambient cookie authorization exists. Do not enable wildcard credentialed CORS. A
+missing ``Origin`` from a validated non-browser ChatGPT path is handled according to
 observed profile evidence; it is not automatic trust.
 
 22. Tunnel/private connectivity setup
 ------------------------------------
 
-22.1 Preferred path
-~~~~~~~~~~~~~~~~~~~
+Preferred path
+~~~~~~~~~~~~~~
 
 Use the current OpenAI-supported private MCP connectivity mechanism for a private/local
-development server when it is available to the tested profile. At the time of planning,
-Secure MCP Tunnel is the preferred candidate; implementation revalidates current support
-immediately before setup.
+development server when available to the tested profile. At planning time Secure MCP
+Tunnel is the preferred candidate; implementation revalidates current support immediately
+before setup.
 
-22.2 Manual setup is acceptable
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Manual setup is acceptable
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Phase 3 may require operator/UI actions to:
-
-* enable ChatGPT developer mode;
-* create the custom app/connector draft;
-* establish the Secure MCP Tunnel/private endpoint;
-* select/configure the supported authentication mechanism;
-* authenticate the intended owner;
-* scan/refresh the Tool catalogue;
-* select the app in a real ChatGPT conversation.
+Phase 3 may require operator/UI actions to enable developer mode, create the custom app,
+establish the private endpoint, configure authentication, authenticate the intended
+owner, scan/refresh Tools, and select the app in a real ChatGPT conversation.
 
 Do not automate ChatGPT UI or tunnel provisioning merely to make Phase 3 unattended.
-The purpose is empirical host evidence.
 
-22.3 Separate tunnel service when applicable
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Separate tunnel service when applicable
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 If the current tunnel product provides a local persistent agent binary, run it under
 ``binnacle-tunnel`` with its own systemd unit/credential budget.
 
-The concrete ``ExecStart`` is taken from the current official tunnel client/version and
-recorded in the evaluation profile. The plan deliberately does not invent CLI flags.
+The concrete ``ExecStart`` comes from the current official tunnel client/version and is
+recorded in the evaluation profile/evidence. This plan deliberately does not invent CLI
+flags.
 
-The tunnel target is the local MCP route only, not ``/healthz``/``/readyz`` or a whole
-local HTTP origin when the tunnel can restrict the path.
+The tunnel target is the local MCP route only, not health/readiness or an entire local
+HTTP origin when path restriction is supported.
 
-Tunnel service hardening must prevent its reusable credential from entering the main
-Binnacle service environment.
+Tunnel reusable credentials never enter the main Binnacle service environment.
 
 23. ``scripts/verify_dev_pi.py``
 -------------------------------
 
-Provide a read-only deployment verification utility:
+Provide a read-only deployment verifier:
 
 .. code-block:: console
 
@@ -1007,23 +1009,22 @@ It emits human/JSON output and checks:
 * architecture/Python/systemd profile;
 * exact source checkout/build/runtime-manifest identity;
 * clean/dirty Git state as observation only;
-* systemd unit enabled/active status using a fixed unit name;
+* systemd unit enabled/active status using fixed unit names;
 * service UID is non-root;
+* service primary group is ``binnacle`` and supplementary development access is
+  ``binnacle-dev``;
 * application listener is loopback/private only;
-* local ``/healthz`` and ``/readyz``;
+* local health/readiness;
 * direct unauthenticated local ``/mcp`` is rejected once Phase 3 auth is enabled;
-* expected protected config file ownership/modes;
-* tunnel-agent unit/process identity when applicable;
+* protected config ownership/modes;
+* tunnel-agent identity when applicable;
 * no tunnel credential appears in Binnacle service environment;
-* five-Tool catalogue still matches Phase 2 registry through an authenticated local test
-  credential/adapter fixture where practical.
+* five-Tool catalogue remains Phase 2-compatible through an authenticated test path.
 
 The script never prints raw credentials/assertions/tokens.
 
 24. Evidence workspace and Git safety
 ------------------------------------
-
-Raw/sanitised evaluation files must not be accidentally committed with source changes.
 
 Add to ``.gitignore``:
 
@@ -1031,27 +1032,24 @@ Add to ``.gitignore``:
 
    /artifacts/mcp-evaluation/
 
-Default evaluator output for a workstation/operator run is:
+Default operator output:
 
 ::
 
    artifacts/mcp-evaluation/<evaluation_id>/
 
-On the Pi, server-side sanitised evidence may be staged under:
+Pi-side sanitized evidence may be staged under:
 
 ::
 
    /var/lib/binnacle/evaluation/<evaluation_id>/
 
-The final bundle may combine sanitised Pi and ChatGPT-UI observations in the operator
-workspace. The evaluator records source/file digests after sanitisation.
+Raw/sanitized evaluation files are not committed by default. The authoritative
+repository may later contain a small reviewed compatibility-profile summary/digest, not
+the private evidence corpus.
 
-Do not commit screenshots, transcripts, wire frames, authentication diagnostics, or
-bundle archives by default. The authoritative repository may later contain a small
-reviewed compatibility-profile summary/digest, not the raw private evidence corpus.
-
-25. Evaluation tool interface
------------------------------
+25. Evaluation command interface
+--------------------------------
 
 ``scripts/mcp_evaluation.py`` exposes:
 
@@ -1060,137 +1058,124 @@ reviewed compatibility-profile summary/digest, not the raw private evidence corp
    uv run python scripts/mcp_evaluation.py init --output <dir>
    uv run python scripts/mcp_evaluation.py record --output <dir> --case-id <id> ...
    uv run python scripts/mcp_evaluation.py verify --output <dir>
+   uv run python scripts/mcp_evaluation.py review --output <dir> ...
    uv run python scripts/mcp_evaluation.py finalize --output <dir>
-
-The script uses ``src/binnacle/evaluation`` application code and the existing JSON
-Schema/case/profile sources.
 
 ``init``
    Snapshot exact profile dimensions/digests known before the run and create a bounded
-   working manifest state.
+   working manifest.
 
 ``record``
-   Add one sanitised attempt/evidence reference for an existing frozen ``case_id``.
-   It cannot invent a new case/risk class/status.
+   Add one sanitized attempt/evidence reference for an existing frozen ``case_id``. It
+   cannot invent a new case/risk class/status.
 
 ``verify``
    Validate case IDs, attempt counts, evidence references, profile/case digests,
-   redaction metadata, conclusions, and evaluation-manifest schema without finalizing.
+   redaction metadata, conclusions, and schema consistency. Before final review it may
+   validate a draft form whose review fields are explicitly pending in working state; the
+   final schema-valid manifest is produced only after ``review``.
+
+``review``
+   Require a human reviewer decision and write the final review object **into the working
+   manifest before any final manifest/archive digest is frozen**. It records reviewer,
+   ``reviewed_at``, and ``approved_for_promotion``. A rejection is still a valid reviewed
+   evidence outcome.
 
 ``finalize``
-   Freeze the evidence inventory, write ``evaluation-manifest.json``, create a
-   deterministic evidence archive, hash it, and write a detached
-   ``evaluation-receipt.json`` alongside the archive. The manifest never contains the
-   archive digest it is part of.
+   Refuse an unreviewed working manifest. Serialize the reviewed final
+   ``evaluation-manifest.json``, validate it against the existing schema, freeze evidence
+   inventory, build the deterministic archive, compute final manifest/archive digests,
+   and write a detached receipt. No reviewed field changes after this point without a new
+   finalization/run identity.
 
 There is no ``--force-pass`` or status-vocabulary override.
 
-26. Evaluation domain types
----------------------------
+26. Evaluation identifiers and versions
+--------------------------------------
 
-``src/binnacle/evaluation/profile.py`` owns immutable typed wrappers around the existing
-evaluation schema/profile, including:
+Use stable values so required schema fields never become ad-hoc strings.
 
-.. code-block:: python
+``evaluation_id``
+   ``eval_<UTC-compact>_<12-lowercase-hex>``.
 
-   class CompatibilityStatus(StrEnum):
-       OBSERVED_SUPPORTED = "observed-supported"
-       OBSERVED_LIMITED = "observed-limited"
-       DECLARED_UNEXERCISED = "declared-unexercised"
-       NOT_DECLARED = "not-declared"
-       TEST_FAILED = "test-failed"
-       HOST_POLICY_BLOCKED = "host-policy-blocked"
-       SERVER_NOT_IMPLEMENTED = "server-not-implemented"
-       NOT_TESTED = "not-tested"
-       UNSUPPORTED_BY_DESIGN = "unsupported-by-design"
-       UNSTABLE = "unstable"
-       EXPIRED = "expired"
-       NOT_APPLICABLE = "not-applicable"
+``profile_id``
+   Use the frozen profile ID from ``spec/mcp/evaluation-profile.yaml`` unless an actual
+   product/workspace change requires a separately reviewed profile version.
 
-   @dataclass(frozen=True, slots=True)
-   class EvaluationProfileIdentity:
-       profile_id: str
-       chatgpt_product: str
-       chatgpt_surface: str
-       account_plan: str
-       workspace_type: str
-       connection_method: str
-       authentication_profile: str
-       binnacle_build_sha256: str
-       binnacle_config_sha256: str
-       mcp_sdk_name: str
-       mcp_sdk_version: str
-       tunnel_or_gateway_identity: str | None
-       device_model: str
-       device_os: str
-       device_kernel: str
-       device_architecture: str
-       device_profile: str
-       intended_revision_set: tuple[str, ...]
-       requested_revision: str | None
-       negotiated_revision: str | None
+``probe_release``
+   ``phase3-readonly-evaluation-v1`` for this evaluator/probe set.
 
-Do not duplicate every JSON-schema field as a competing validation system. Typed objects
-support construction; final serialized objects are always validated against the existing
-``evaluation-manifest.schema.json``.
+``dispatcher_version``
+   ``mcp-revision-dispatch-v1`` plus the Phase 2 revision-contract digest in evidence.
+
+``oracle_version``
+   ``evaluation-cases/<case-manifest-version>`` from the exact frozen case source.
+
+``runner_version``
+   ``binnacle-mcp-evaluation/1.0.0`` plus the runner source/build digest in evidence.
+
+``completed_at``
+   The time the reviewed final manifest is serialized immediately before archive
+   construction.
+
+These strings identify behavior families; exact code/file digests remain separate
+profile/evidence fields.
 
 27. Profile-dimension collection
 --------------------------------
 
-The evaluator records every dimension required by
-``spec/mcp/evaluation-profile.yaml``/the evaluation manifest.
+The evaluator fills every required ``#/$defs/profile`` field from the existing evaluation
+schema.
 
-27.1 ChatGPT/user-interface dimensions
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ChatGPT/UI dimensions
+~~~~~~~~~~~~~~~~~~~~~
 
-Human-observed and recorded explicitly:
+Record actual:
 
-* ChatGPT product;
+* product;
 * surface;
-* actual account plan;
+* account plan;
 * workspace type;
-* workspace-policy digest where a stable policy export/config can be reviewed, otherwise
-  schema-valid ``null`` only where permitted;
-* developer-mode/app availability;
-* app permission/read entitlement observations.
+* workspace-policy digest when a stable export/config exists, otherwise ``null`` only
+  because the schema permits it;
+* developer-mode/app availability and observed permission behavior.
 
 Do not silently populate these from the repository's initial ``Pro`` hypothesis.
 
-27.2 Connectivity/authentication dimensions
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Connectivity/authentication dimensions
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Record:
 
-* connection method/product name;
+* connection method/product identity;
 * selected controller profile ID/version/kind;
-* canonical public MCP resource URI in sanitised/profile-safe form;
-* tunnel/gateway agent identity/version and artifact digest where applicable;
+* canonical public MCP resource URI in sanitized/profile-safe form;
+* tunnel/gateway identity/version;
+* tunnel/gateway artifact digest when a local artifact exists;
 * authentication-profile configuration digest excluding secret bytes;
-* opaque ``controller_id`` and safe identity tuple field presence/absence in server
-  evidence, not raw credentials.
+* opaque controller ID and safe identity-field presence/absence, never raw credential.
 
-27.3 Binnacle/server dimensions
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Binnacle/server dimensions
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Record:
 
 * build digest/version;
-* config digest;
+* sanitized config digest;
 * runtime Tool-manifest digest;
 * schema-registry digest;
-* policy-bundle digest or the exact existing no-policy/Phase-3 bootstrap projection
-  required by the evaluation schema;
-* MCP SDK name/version/artifact digest;
+* policy-bundle digest defined below;
+* MCP SDK name/version/installed-distribution digest;
 * evaluation profile/case digests;
-* dispatcher version;
+* probe/dispatcher/oracle/runner versions;
 * intended revision set.
 
-27.4 Pi dimensions
-~~~~~~~~~~~~~~~~~~
+Pi dimensions
+~~~~~~~~~~~~~
 
-Record bounded facts:
+Record bounded:
 
-* Pi model from an implementation-owned fixed source such as device-tree model file;
+* Pi model from a fixed implementation-owned device-tree source;
 * OS;
 * kernel;
 * architecture;
@@ -1198,52 +1183,121 @@ Record bounded facts:
 
 Raw machine ID is not evidence.
 
-27.5 Observed MCP dimensions
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Observed MCP dimensions
+~~~~~~~~~~~~~~~~~~~~~~~
 
 Record separately:
 
 * revision requested by the real client when observable;
-* legacy revision negotiated/session revision where applicable;
-* protocol dispatch path actually used;
-* observed client capabilities as a sanitised canonical object plus digest.
+* negotiated/session revision where applicable;
+* dispatch path actually used;
+* observed client capabilities as sanitized canonical JSON plus digest.
 
 Never infer one from another.
 
-28. Configuration digest
-------------------------
+28. Required digest algorithms
+------------------------------
 
-``binnacle_config_sha256`` is the SHA-256 of a canonical **sanitised resolved
-configuration projection**, not the raw TOML bytes if they can contain local paths/key
-references.
+28.1 Binnacle configuration digest
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Include behavior-relevant non-secret fields:
+``binnacle_config_sha256`` hashes canonical JSON of a sanitized resolved configuration
+projection containing behavior-relevant non-secret fields:
 
 * runtime profile;
 * server bind/port/limits;
-* logging mode where it affects evidence;
-* selected authentication profile ID/version/kind;
+* logging mode where evidence behavior depends on it;
+* authentication profile ID/version/kind;
 * canonical resource/audience URI;
 * required scopes;
-* allowed host/origin policy;
+* allowed Host/Origin policy;
 * algorithm/freshness/revocation mode names;
-* secret/key **reference identities/digests**, never secret bytes.
+* secret/key reference identities or public-key digests, never secret bytes.
 
-Canonical JSON normalization follows the repository's deterministic digest conventions.
+A material change creates a new evaluation profile/run.
 
-A material config change triggers a new evaluation profile/evidence run.
+28.2 Policy-bundle digest
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The evaluation schema requires non-null ``policy_bundle_sha256`` even though Phase 3 does
+not yet implement a general PolicyEngine.
+
+Define a conservative evaluation policy identity:
+
+.. code-block:: json
+
+   {
+     "format": "phase3-policy-bundle-v1",
+     "spec_policy_files": [
+       {"path": "<sorted repo-relative path>", "sha256": "..."}
+     ],
+     "controller_profile_sha256": "...",
+     "runtime_manifest_sha256": "...",
+     "revision_contract_sha256": "..."
+   }
+
+``spec_policy_files`` contains every regular reviewed ``*.yaml``/``*.json`` file under
+``spec/policy`` in lexicographic relative-path order. Hash exact file bytes. Hash the
+canonical JSON object above for ``policy_bundle_sha256``.
+
+This is an evaluation identity of enforced/reviewed policy inputs, not a new runtime
+policy language. Including the full policy directory is deliberately conservative: an
+unrelated policy edit may trigger extra reevaluation, but a relevant policy edit cannot
+be missed.
+
+28.3 Evaluation-profile/case digests
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``evaluation_profile_sha256`` is SHA-256 of exact bytes of
+``spec/mcp/evaluation-profile.yaml``.
+
+``evaluation_cases_sha256`` is SHA-256 of exact bytes of
+``spec/mcp/evaluation-cases.yaml`` and must equal the case-manifest digest frozen in the
+evaluation profile. ``init`` fails if they diverge.
+
+28.4 MCP SDK artifact digest
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``mcp_sdk_artifact_sha256`` identifies the **installed SDK distribution bytes actually
+executing on the Pi**, not merely the version string.
+
+Compute ``python-distribution-content-v1`` by enumerating regular files belonging to the
+installed ``mcp`` distribution through ``importlib.metadata``, excluding mutable cache
+files, hashing ``relative-path NUL file-sha256 LF`` records in sorted order, then hashing
+the canonical inventory.
+
+Record the algorithm and installed version in a sanitized evidence file referenced by the
+manifest. This avoids guessing which lock-file wheel was selected while still binding the
+actual runtime SDK code.
+
+28.5 Tunnel/gateway artifact digest
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+If a local tunnel/gateway executable/package exists, hash the exact local executable or
+installed distribution using a documented content-digest method and populate
+``tunnel_or_gateway_artifact_sha256``.
+
+If the connectivity product is entirely managed and exposes no local artifact, the field
+remains ``null`` because the evaluation schema permits null; retain the observable
+product/connection identity/version/policy evidence instead.
+
+28.6 Tool/schema/build identities
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Use Phase 2 runtime/build/catalogue/schema digests directly. Do not recompute a competing
+Tool-manifest canonicalization in the evaluator.
 
 29. Evidence file model and redaction
 -------------------------------------
 
-Every retained evidence file receives:
+Every retained evidence payload receives:
 
 * stable ``evidence_id``;
 * relative path;
 * SHA-256;
 * media type;
-* ``normal-result`` or ``restricted-result`` information class;
-* ``redacted=true`` before final bundle promotion.
+* information class;
+* ``redacted=true`` before finalization.
 
 ``src/binnacle/evaluation/redaction.py`` enforces at minimum:
 
@@ -1259,25 +1313,93 @@ Every retained evidence file receives:
 * no unbounded HTTP body/log dump.
 
 Use allowlist-first structured evidence generation wherever possible. Regex secret
-scanning is an additional check, not the sole redaction strategy.
+scanning is an additional check, not the sole strategy.
 
-Human UI screenshots/transcripts require explicit reviewer redaction before they enter the
-final inventory.
+Human UI screenshots/transcripts require explicit reviewer redaction before final
+inventory.
 
-30. Server-side evaluation observations
+30. Evidence manifest, archive, and non-self-reference
+-----------------------------------------------------
+
+The final bundle layout is:
+
+::
+
+   evaluation-manifest.json
+   evidence/
+     <sanitized evidence payload files>
+
+``evaluation-manifest.json`` inventories files under ``evidence/`` in
+``evidence_files``. It does **not** list itself as an ``evidence_files`` entry because
+that would require a self-digest. The evaluation profile's
+``evidence_files_include_manifest: true`` is satisfied by including the manifest as a
+top-level bundle member, not by making the manifest inventory/hash itself.
+
+If a future normative schema/contract explicitly requires self-inventory instead of
+bundle inclusion, stop and reconcile that contradiction before implementation; do not
+invent a recursive digest.
+
+Finalize order is exact:
+
+#. all case attempts/evidence collected;
+#. all evidence payloads sanitized and hashed;
+#. draft conclusions computed;
+#. human review performed;
+#. reviewer fields and approval/rejection written to working manifest;
+#. reviewed final manifest serialized and schema-validated;
+#. manifest SHA-256 computed;
+#. deterministic archive built containing reviewed final manifest + evidence payloads;
+#. bundle SHA-256 computed;
+#. detached receipt written **outside** the bundle.
+
+No manifest field changes after step 6 without creating a new finalization/run identity.
+
+Deterministic archive construction fixes entry order, normalized paths, owner/group
+metadata, permissions, and timestamp policy before hashing.
+
+Receipt conforms to ``#/$defs/bundleReceipt`` and contains schema version, bundle digest,
+manifest digest, profile ID, and creation time. The receipt is not inside the archive.
+
+31. Every case result requires evidence
 ---------------------------------------
 
-Phase 3 adds bounded structured **evaluation diagnostics**, not a durable audit journal.
+The evaluation schema requires at least one ``evidence_ref`` for every case result.
+Therefore even an unexercised/status-only case must reference concrete evidence supporting
+that classification.
 
-For an explicitly active evaluation run, record sanitised events containing only:
+Create one sanitized capability-scope evidence file during ``init``/deployment
+verification, for example:
+
+::
+
+   evidence/phase3-capability-scope.json
+
+It records exact build/catalogue digests and proves which capabilities are absent from the
+Phase 3 server (write probes, durable operations, Resources, Tasks, MRTR, owner-only
+surface, second Binnacle server, and so on).
+
+A case classified ``server-not-implemented`` or ``not-applicable`` may reference this
+file only when its own frozen oracle permits that status for the observed condition.
+
+A ``not-tested`` case references a sanitized test-plan/scope evidence record explaining
+why it was not exercised and must not be promoted.
+
+``record`` refuses to create a case-result entry without at least one valid evidence ID.
+
+32. Server-side evaluation diagnostics
+--------------------------------------
+
+For an explicitly active evaluation run, record sanitized structured events containing
+only:
 
 * evaluation ID;
 * timestamp;
-* local request correlation ID;
+* request correlation ID;
 * opaque controller ID;
 * authentication profile ID/version;
 * authentication result category;
 * safe issuer/audience/client/owner-boundary presence/digest values where permitted;
+* revocation/freshness/binding outcome categories;
 * MCP requested/negotiated revision;
 * Tool name/version;
 * result classification;
@@ -1287,22 +1409,20 @@ For an explicitly active evaluation run, record sanitised events containing only
 
 Never record raw authorization data.
 
-The implementation may emit these events to journald and let the evaluator collect a
-bounded cursor/time window, or write a dedicated restricted evaluation file if that is
-simpler and safer. It must not introduce SQLite solely for Phase 3 evidence.
+Use journald + bounded collection or a dedicated restricted evaluation file; do not add
+SQLite solely for Phase 3 evidence.
 
-31. Applicable frozen cases in Phase 3
---------------------------------------
+33. Frozen-case execution rules
+-------------------------------
 
-Use the existing ``spec/mcp/evaluation-cases.yaml`` exactly.
+Use ``spec/mcp/evaluation-cases.yaml`` exactly. Do not apply generic phase-level status
+rules that contradict a specific case oracle.
 
-31.1 Required Phase 3 live cases
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Run and evaluate:
+33.1 Required live read-only cases
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 ``endpoint-connect``
-   Minimum 1 deterministic attempt. Must prove authenticated request observed and no
+   Minimum 1 deterministic attempt. Prove authenticated request observed and no
    unauthenticated Tool dispatch.
 
 ``protocol-revision-observed``
@@ -1310,33 +1430,35 @@ Run and evaluate:
    and dispatch path.
 
 ``tool-discovery-manifest``
-   Minimum 1. Compare real-host Tool discovery with the reviewed runtime catalogue.
+   Minimum 1. Compare real-host discovery with reviewed runtime catalogue.
 
 ``model-tool-selection-binnacle-probe``
-   Minimum 10 attempts using the frozen prompt/oracle. The expected Tool is
-   ``binnacle_probe`` and prohibited alternatives remain prohibited.
+   Minimum 10 independent attempts using the frozen prompt/oracle.
 
 ``model-tool-selection-system-inspect``
-   Minimum 10 attempts using the frozen prompt/oracle.
+   Minimum 10 independent attempts using the frozen prompt/oracle.
 
 ``structured-result-rendering``
    Minimum 10 attempts because its risk class is
-   ``tool_selection_and_result_rendering``. Preserve null/array/nested/warning semantics.
+   ``tool_selection_and_result_rendering``.
 
 ``execution-error-rendering``
-   Minimum 10 attempts. Must remain a Tool error result, not HTTP authentication error.
+   Minimum 10 attempts; canonical Tool error result must not become HTTP auth error.
 
 ``read-entitlement``
-   Minimum 5 attempts. Distinguish server success from host-policy block.
+   Minimum **5 attempts regardless of whether the expected conclusion is supported or
+   host-policy-blocked**. A single transient UI/policy block is not enough to promote a
+   blocked read-entitlement conclusion. If fewer than five attempts are available, keep
+   the axis unpromoted/``not-tested`` with evidence of incomplete sampling.
 
 ``latency-context-cost``
-   Minimum 20 attempts. Record p50/p95/p99, metadata/result byte size, and context/token
+   Minimum 20 attempts. Record p50/p95/p99, metadata/result bytes, and context/token
    estimate where observable.
 
-31.2 Later mutating/durable cases
+33.2 Later mutating/durable cases
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Do **not** run/implement the required server capability for:
+Do not implement the required server capability for:
 
 * ``write-entitlement-and-confirmation``;
 * ``confirmation-decline``;
@@ -1346,235 +1468,202 @@ Do **not** run/implement the required server capability for:
 * ``reconnect-status-reconciliation``;
 * ``concurrent-idempotency-race``.
 
-For Phase 3, the evaluator classifies the relevant axes according to the existing rules,
-primarily ``server-not-implemented`` because the required probe/capability does not
-exist. Do not interpret absence of a write Tool as evidence that ChatGPT lacks write
-entitlement.
+Classify each only according to its exact frozen oracle/profile rules. Where the profile's
+probe-missing rule permits ``server-not-implemented``, use that with capability-scope
+evidence. Do not infer host write denial from missing Binnacle write Tools.
 
-31.3 Optional modern MCP probes
+33.3 Optional modern MCP probes
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-``resources-probe``, ``mrtr-elicitation-probe``, and ``tasks-probe`` remain
-``not-applicable``/``server-not-implemented``/host-policy classification according to the
-frozen case rules because Phase 3 does not implement those server probes.
+``resources-probe`` and ``tasks-probe`` have explicit
+``server_probe_not_promoted`` not-applicable conditions and may use ``not-applicable``
+when Phase 3 has not promoted those probes.
 
-Observed client capability declarations may still be recorded if they appear in the
-normal connection handshake. A declaration without behavioral exercise is
+``mrtr-elicitation-probe`` has a different oracle: legacy negotiation may make it
+``not-applicable``; target-era absence may instead be blocked by host/client capability.
+Follow the exact case rule rather than treating every optional feature the same.
+
+A client capability declaration without behavioral exercise is
 ``declared-unexercised``, not observed support.
 
-31.4 Owner-only and cross-server cases
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+33.4 Owner-only result probe
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Do not implement an owner-only payload surface or a second Binnacle/control server just
-to run these cases. Record the exact not-applicable/server-not-implemented status under
-the frozen oracle unless the already-selected host surface independently exposes the
-necessary safe observation without expanding Binnacle scope.
+``owner-only-result-probe`` may be ``not-applicable`` only when the frozen condition
+``owner_only_surface_not_available`` is actually observed/supported by evidence. Do not
+create a synthetic owner-only payload path in Binnacle merely to exercise it.
 
-32. Real ChatGPT execution procedure
+33.5 Cross-server case
+~~~~~~~~~~~~~~~~~~~~~~
+
+``cross-server-normal-result`` has **no** ``not_applicable_when`` or
+``server_probe_not_promoted`` oracle. Phase 3 must therefore not label it
+``not-applicable`` or ``server-not-implemented`` merely because a second server is
+outside Binnacle scope.
+
+Unless the actual test profile already has two MCP servers connected and the frozen case
+is run as specified, record the case as ``not-tested`` with scope/test-plan evidence and
+do not promote ``cross_server_behavior``.
+
+If two servers are already available without expanding Binnacle, the case may be run
+exactly as frozen. Do not connect/build a second Binnacle server solely for this phase.
+
+34. Real ChatGPT execution procedure
 -----------------------------------
 
-Execute the first live run in this order.
+Freeze candidate
+~~~~~~~~~~~~~~~~
 
-32.1 Freeze candidate
+Record exact Git/build/config/policy/SDK/tunnel/controller-profile/evaluation identities
+and confirm local service health/readiness.
+
+Verify bypass failure
 ~~~~~~~~~~~~~~~~~~~~~
 
-Record exact Git/build/config/SDK/tunnel/controller-profile/evaluation-case identities and
-confirm the Pi service is healthy/ready locally.
-
-32.2 Verify bypass failure
-~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Before connecting ChatGPT, prove:
+Before ChatGPT connection prove:
 
 * direct unauthenticated local/public MCP request cannot dispatch a Tool;
-* invalid/expired/wrong-audience/wrong-scope profile fixture is rejected at the correct
-  security layer;
-* public tunnel route cannot expose ``/healthz``/``/readyz`` when path restriction is
-  supported;
-* the main listener is not public/LAN-bound.
+* invalid/expired/wrong-audience/wrong-scope fixture is rejected at the correct layer;
+* public tunnel route does not expose health/readiness when path restriction exists;
+* main listener is not public/LAN-bound.
 
-32.3 Connect custom app
-~~~~~~~~~~~~~~~~~~~~~~~
+Connect custom app
+~~~~~~~~~~~~~~~~~~
 
 Create/select the real ChatGPT custom MCP app using the selected private endpoint and
-authentication profile. Record the actual product/plan/workspace configuration shown by
-the UI.
+authentication profile. Record actual product/plan/workspace configuration shown by UI.
 
-32.4 Authenticate
-~~~~~~~~~~~~~~~~~
+Authenticate
+~~~~~~~~~~~~
 
-Complete the normal user authentication flow. Do not copy credentials into prompts,
-Tool arguments, screenshots, or evaluation notes.
+Complete normal user authentication. Do not copy credentials into prompts, Tool
+arguments, screenshots, or notes.
 
-32.5 Discovery/protocol
-~~~~~~~~~~~~~~~~~~~~~~~
+Discovery/protocol
+~~~~~~~~~~~~~~~~~~
 
-Run connection/revision/discovery cases before free-form prompts. Capture sanitised
+Run connection/revision/discovery cases before free-form prompts. Capture sanitized
 server/wire evidence and the exact catalogue presented by ChatGPT.
 
-32.6 Read-only Tool selection
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Run the frozen model-selection prompts the required number of independent attempts.
-Record Tool selection, result, and grader outcome for each attempt.
-
-32.7 Result/error rendering
+Tool selection/result/error
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Run structured-result and execution-error cases to the frozen repetition threshold.
-Capture model-visible/UI behavior and server-side schema observations.
+Run the frozen selection, structured-result, execution-error, and read-entitlement cases
+to their exact thresholds.
 
-32.8 Read entitlement
-~~~~~~~~~~~~~~~~~~~~~
+Latency/context
+~~~~~~~~~~~~~~~
 
-Run the frozen ``system_inspect`` entitlement case. A ChatGPT/workspace policy block is
-recorded as host-policy evidence, not a Binnacle protocol defect.
+Run the 20-attempt read-only performance/context case without adding performance
+optimization during measurement.
 
-32.9 Latency/context
-~~~~~~~~~~~~~~~~~~~~
+Classify remaining cases
+~~~~~~~~~~~~~~~~~~~~~~~~
 
-Run the 20-attempt read-only performance/context case without introducing performance
-optimization during the measurement.
+Create an evidence-backed result entry for every remaining frozen case using only that
+case's allowed status/oracle semantics. In particular, cross-server remains ``not-tested``
+unless actually run.
 
-32.10 Finalize/review
-~~~~~~~~~~~~~~~~~~~~~
+Review/finalize
+~~~~~~~~~~~~~~~
 
-Redact, verify, finalize bundle/receipt, derive conclusions, update
-``docs/mcp-profile.md``, and perform an explicit human review before any axis is promoted.
+Sanitize -> verify draft -> human review -> write review fields -> serialize/validate
+final manifest -> archive -> detached receipt. Never review/approve after the final
+manifest/archive digest is frozen.
 
-33. Tool-discovery refresh observation
--------------------------------------
+35. Catalogue refresh observation
+---------------------------------
 
-Later Bootstrap phases will add new Tools. Phase 3 must observe how the current ChatGPT
-custom app handles catalogue refresh **without adding a new Tool now**.
+Observe later-promotion-relevant refresh behavior without adding a Tool:
 
-Use supported UI/app management operations only:
+* record whether UI exposes Scan/Refresh;
+* record whether re-scanning unchanged server preserves same catalogue;
+* record displayed change/review behavior for unchanged manifest;
+* do not mutate manifest solely to force a refresh experiment;
+* classify dynamic/list-change support only from actual observation.
 
-* record whether the UI exposes Scan/Refresh actions;
-* record whether re-scanning the unchanged server preserves the same catalogue;
-* record the displayed change/review behavior, if any, for the unchanged manifest;
-* do not mutate the manifest solely to force a refresh experiment;
-* classify dynamic/list-change support only from what is actually observed.
-
-This evidence informs later Tool promotion but creates no runtime capability.
-
-34. Compatibility report after evidence promotion
+36. Compatibility report after evidence promotion
 -------------------------------------------------
 
-Phase 2's ``compatibility_report`` reads a no-live-evidence baseline. Phase 3 replaces
-that adapter with a reader that can consume **only a reviewed promoted summary**, not raw
-UI evidence.
+Phase 2 ``compatibility_report`` reads a no-live-evidence baseline. Phase 3 may replace
+that adapter with a reader of **only a reviewed promoted summary**, not raw UI evidence.
 
-Use a protected generated summary such as:
+Use:
 
 ::
 
    /var/lib/binnacle/evaluation/current-profile.json
 
-The evaluator writes/promotes this file only after:
+Promotion requires:
 
-* manifest schema validation passes;
+* final schema-valid reviewed manifest;
 * bundle/receipt digests verify;
-* reviewer fields are complete;
-* profile/case manifest match is verified;
-* evidence is marked complete/redacted;
+* reviewer fields complete;
+* profile/case match verified;
+* evidence complete and sanitized;
 * ``approved_for_promotion=true``.
 
-The runtime reader validates the summary/profile digest before use. If no promoted
-summary exists, keep the Phase 2 ``not-tested`` baseline.
+Runtime reader validates summary/profile digest before use. If no promoted summary exists,
+keep Phase 2 ``not-tested`` baseline.
 
 ``compatibility_report`` never reads screenshots/transcripts/raw wire logs or credentials.
 
-35. Updating ``docs/mcp-profile.md``
+37. Updating ``docs/mcp-profile.md``
 -----------------------------------
 
-The Phase 3 **implementation/evidence** work updates the human profile only from the
-final reviewed evidence manifest.
+Update only from the reviewed final evidence manifest.
 
-Replace the initial unknown table with an observed-profile section containing:
+Observed-profile section contains:
 
 * product/surface;
 * actual plan/workspace type/policy digest where available;
 * connection method;
 * selected authentication profile ID/version;
-* Binnacle build/config/SDK/tunnel identities;
+* Binnacle build/config/policy/SDK/tunnel identities;
 * Pi profile;
 * intended/requested/negotiated revisions;
 * observed client capabilities digest;
 * per-axis canonical status;
-* evidence bundle/manifest receipt digest references;
-* validity dates and rerun triggers;
-* explicit limitations.
+* bundle/manifest/receipt digest references;
+* validity dates/rerun triggers;
+* limitations.
 
-Do not copy raw credentials, private endpoint secrets, full private transcripts, or
-restricted evidence into the human profile.
+Do not copy raw credentials, private endpoint secrets, private transcripts, or restricted
+evidence into the human profile.
 
-Do not change a status to ``observed-supported`` unless the frozen case attempts/oracles
-satisfy the existing promotion contract.
+No status becomes ``observed-supported`` without the frozen case/oracle/attempt
+requirements.
 
-36. Evidence bundle finalization
---------------------------------
-
-``src/binnacle/evaluation/bundle.py`` implements deterministic bundling.
-
-Final directory contains at least:
-
-::
-
-   evaluation-manifest.json
-   evidence/
-     <sanitised evidence files>
-
-The detached receipt is stored beside, not inside, the archive:
-
-::
-
-   <evaluation_id>.tar.gz
-   <evaluation_id>.receipt.json
-
-To avoid compression metadata nondeterminism, the finalizer fixes archive entry order,
-normalized path names, owner/group metadata, and timestamp policy before computing the
-bundle SHA.
-
-Receipt conforms to ``#/$defs/bundleReceipt`` and contains:
-
-* schema version;
-* bundle SHA-256;
-* manifest SHA-256;
-* profile ID;
-* creation time.
-
-The manifest inventories every included evidence file but does not contain the final
-bundle digest.
-
-37. Evaluation review gate
+38. Evaluation review gate
 --------------------------
 
-No automated script may self-approve the evaluation.
+Automation cannot self-approve the evaluation.
 
-Before ``approved_for_promotion=true``:
+Before ``review`` can write ``approved_for_promotion=true``:
 
-* reviewer identity/time present;
+* reviewer identity is known;
 * exact profile dimensions confirmed;
 * frozen case-manifest digest confirmed;
-* every applicable required case present;
-* attempt counts meet the risk-class threshold;
-* passes/failures/blocked totals are internally consistent;
-* evidence references resolve and digests match;
-* redaction declaration is true and independently spot-checked;
-* no contradictory valid run is unresolved;
-* conclusions use exact status vocabulary;
-* validity end is no more than the profile's configured maximum days;
-* all rerun triggers are copied from the frozen profile;
-* evidence is complete enough to support every promoted axis.
+* every frozen case ID has a case-result entry and at least one evidence reference;
+* every axis proposed for promotion meets its risk-class attempt threshold;
+* blocked conclusions meet the same minimum attempt threshold when promotion relies on a
+  repeated block (for example five read-entitlement attempts);
+* pass/fail/blocked totals are internally consistent;
+* evidence references resolve/digests match;
+* redaction declaration true and independently spot-checked;
+* no contradictory valid run unresolved;
+* conclusions use exact status vocabulary and case-specific oracles;
+* validity end is no more than configured maximum days;
+* rerun triggers match frozen profile;
+* evidence supports every promoted axis.
 
-The reviewer may reject promotion and retain the bundle as failed/blocked evidence.
+A reviewer may set ``approved_for_promotion=false`` and still finalize a valid failed or
+blocked evidence bundle.
 
-38. Controller-transport security tests
+39. Controller-transport security tests
 ---------------------------------------
 
-Reuse and execute the mandatory controller transport fixture set against the selected
-adapter.
+Reuse mandatory fixture semantics and execute selected-profile tests.
 
 At minimum prove:
 
@@ -1583,27 +1672,28 @@ At minimum prove:
 * expired credential/assertion -> no Tool dispatch;
 * wrong issuer -> rejected when selected profile uses issuer;
 * wrong audience/resource -> rejected;
-* wrong subject/authorized client/owner boundary -> rejected when those are required by
-  the selected profile;
+* wrong subject/authorized client/owner boundary -> rejected when required;
 * missing read scope -> 403;
-* replay/freshness rule enforced to the extent of the read-only selected profile;
+* replay/freshness rule enforced to selected read-only profile extent;
 * session/controller mismatch rejected;
 * tunnel/gateway direct bypass rejected;
 * untrusted forwarded identity headers rejected;
 * Host/authority mismatch rejected;
-* unexpected Origin rejected where the observed profile sends Origin/policy requires it;
+* unexpected Origin rejected where selected profile requires it;
 * oversized auth/header/body rejected before Tool dispatch;
 * raw credential never appears in logs/results/evidence;
-* inbound MCP credential is never forwarded downstream;
-* authentication failure remains 401/403 and is not converted to a Tool execution error.
+* inbound MCP credential never forwarded downstream;
+* authentication failure stays 401/403 rather than Tool execution error.
 
-The test suite uses generated/fake credentials, not production user credentials.
+Fixture literals remain literal. A fixture-specific test profile may require ``mcp:read``
+while the selected deployment profile requires ``binnacle:connect`` and
+``binnacle:observe``; both must pass their own exact expectations without hidden aliasing.
 
-39. Selected-profile integration test
--------------------------------------
+40. Selected-profile MCP integration test
+-----------------------------------------
 
 ``tests/integration/test_authenticated_mcp.py`` starts the actual Phase 3 ASGI application
-on loopback with deterministic test profile/keys or a fake standards-compliant verifier.
+on loopback with deterministic test profile/keys or a standards-compliant fake verifier.
 
 Positive path:
 
@@ -1612,38 +1702,38 @@ Positive path:
 #. call ``binnacle_probe``;
 #. call ``system_inspect``;
 #. assert opaque controller identity exists in request context;
-#. assert only ``connect``/``observe`` scope is required;
+#. assert only selected read-only scopes are required;
 #. assert response contracts remain Phase 2-compatible.
 
 Negative path proves unauthenticated/insufficient-scope/identity mismatch never invokes a
 Tool binding.
 
-The test must not require the real OpenAI tunnel or real ChatGPT in normal CI.
+Normal CI does not require real OpenAI credentials/tunnel/ChatGPT.
 
-40. Systemd/deployment tests
+41. Systemd/deployment tests
 ----------------------------
 
 Static/system tests verify:
 
-* service unit ``User`` is non-root;
-* one worker/source-checkout ExecStart path;
+* service unit ``User=binnacle`` and ``Group=binnacle``;
+* ``SupplementaryGroups=binnacle-dev`` only for source access;
+* one-worker/source-checkout ExecStart;
 * no shell wrapper in ExecStart;
 * no secret environment assignment;
 * ``NoNewPrivileges=yes``;
 * no ambient/bounding capabilities;
 * no public bind encoded in unit/config fixture;
-* protected config path outside repo;
-* setup script check/apply idempotency under a temporary root filesystem fixture where
-  possible;
-* setup script refuses unsafe repository/system paths;
+* protected config owned by ``root:binnacle``, not ``binnacle-dev``;
+* setup script idempotency under temporary-root fixture where practical;
+* setup refuses unsafe paths;
 * verification script redacts sensitive data.
 
-A real-Pi system test additionally runs ``systemd-analyze verify`` on installed unit(s).
+A real-Pi test additionally runs ``systemd-analyze verify`` on installed unit(s).
 
-41. Real-Pi deployment acceptance evidence
-------------------------------------------
+42. Real-Pi deployment evidence
+------------------------------
 
-Capture sanitised command results for:
+Capture sanitized results for:
 
 .. code-block:: console
 
@@ -1654,83 +1744,82 @@ Capture sanitised command results for:
    curl --fail http://127.0.0.1:8000/healthz
    curl --fail http://127.0.0.1:8000/readyz
 
-For listener/process evidence, sanitize unrelated host services/addresses rather than
-storing a complete unbounded host dump.
+Sanitize unrelated host services/addresses rather than retaining a complete unbounded
+host dump.
 
 Also capture:
 
 * exact repo commit/dirty state;
-* `binnacle version`;
+* ``binnacle version``;
 * build/runtime-manifest/catalogue digests;
+* config/policy digest evidence;
 * dependency/runtime versions;
-* service journal excerpt around startup with bounded/redacted fields;
-* selected tunnel/gateway identity/version without credential bytes.
+* MCP SDK installed-distribution digest;
+* bounded service journal startup excerpt;
+* tunnel/gateway identity/version/artifact digest where applicable.
 
-42. Exact ChatGPT evidence outputs
+43. Exact ChatGPT attempt evidence
 ---------------------------------
 
-For each live attempt, retain enough evidence to reconstruct:
+For each live attempt retain enough to reconstruct:
 
 * case ID;
 * timestamp;
-* prompt/action used by the frozen case;
-* whether ChatGPT selected/called the expected Tool;
+* frozen prompt/action;
+* Tool selection/call outcome;
 * sanitized Tool arguments;
 * server request correlation ID;
 * requested/negotiated revision;
-* server-side authentication outcome/controller ID;
+* authentication outcome/opaque controller ID;
 * schema-validation outcome;
 * model-visible result/error behavior;
 * latency;
 * pass/fail/blocked oracle result;
-* bounded UI observation/screenshot reference when required.
+* bounded UI observation/screenshot reference where required.
 
 Do not retain unrelated conversation history.
 
-43. Failure classification
+44. Failure classification
 --------------------------
-
-Use the existing fault taxonomy.
 
 Examples:
 
 ``account cannot create/connect custom MCP app``
-   ``host-policy`` / ``host-policy-blocked`` when the product/account/workspace actually
-   blocks the setup independently of Binnacle protocol behavior.
+   Host-policy fault when the actual product/account/workspace blocks setup independently
+   of Binnacle protocol behavior.
 
 ``tunnel cannot reach local endpoint``
-   connectivity/server/tunnel failure; do not call it MCP protocol failure without wire
+   Connectivity/server/tunnel fault; do not label protocol failure without protocol
    evidence.
 
 ``authentication cannot establish mandatory identity``
-   authentication failure; Phase 3 blocked; do not bypass.
+   Authentication failure; Phase 3 blocked; do not bypass.
 
-``wrong/unsupported MCP revision reaches server``
-   protocol failure.
+``wrong/unsupported revision reaches server``
+   Protocol failure.
 
 ``Tool visible with wrong metadata``
-   schema/server discovery failure.
+   Server/discovery/schema failure.
 
 ``ChatGPT repeatedly selects wrong Tool``
-   selection failure when the deterministic expected-tool case reaches the intended
-   layer.
+   Tool-selection failure when the intended frozen layer was reached.
 
 ``result schema valid server-side but UI drops structure``
-   host/result-handling evidence; classify per frozen oracle rather than rewriting the
-   server contract without analysis.
+   Host/result-handling evidence; classify per frozen oracle.
 
-``write case not runnable because no write probe exists``
-   ``server-not-implemented`` rather than host-policy-blocked.
+``write case lacks required write probe``
+   Use only the status allowed by that case/profile's probe-missing rule; do not infer
+   host write denial.
 
-``optional Resource/Task/MRTR probe absent by design``
-   ``not-applicable``/``server-not-implemented`` according to the frozen case/profile
-   rule.
+``cross-server case not executed because no second server``
+   ``not-tested`` with scope/test-plan evidence; do not use ``not-applicable`` or
+   ``server-not-implemented`` because the frozen case has no such oracle.
 
-44. Rerun/expiry semantics
+45. Rerun/expiry semantics
 --------------------------
 
-The first promoted evidence is valid for at most the existing profile's 30-day window and
-expires sooner on any configured rerun trigger.
+Promoted evidence is valid for at most the existing profile's 30-day window and expires
+sooner on a rerun trigger.
 
 Material triggers include:
 
@@ -1739,41 +1828,41 @@ Material triggers include:
 * connection/tunnel/authentication change;
 * requested/negotiated revision change;
 * observed client-capability change;
-* Binnacle build/config change;
+* Binnacle build/config/policy change;
 * MCP SDK/FastMCP/tunnel agent change;
-* Tool manifest/schema/policy/evaluation profile/case change;
+* Tool manifest/schema/evaluation profile/case change;
 * Pi OS/kernel/device-profile change;
 * material regression.
 
-A changed trigger creates a new evaluation ID/bundle. Do not overwrite history or extend
-the old ``valid_until``.
+A trigger creates a new evaluation ID/bundle. Do not overwrite history or extend old
+``valid_until``.
 
-45. Dependency and package impact
---------------------------------
+46. Dependency impact
+---------------------
 
-Phase 3 direct dependency changes should be minimal:
+Phase 3 dependency changes remain minimal:
 
-* the selected authentication verifier/client library, only after live profile selection;
-* any existing locked HTTP/crypto dependency should be reused when it safely satisfies
-  the selected standard;
-* no database, Git, systemd-Python, tunnel-management framework, browser automation,
-  hardware, or policy-engine library is introduced merely for Phase 3.
+* add the selected authentication verifier/client library only after live profile
+  selection;
+* reuse locked HTTP/crypto dependencies when they safely satisfy the selected standard;
+* do not add database, Git, systemd-Python, tunnel-management framework, browser
+  automation, hardware, or policy-engine libraries merely for Phase 3.
 
-Prefer native ``systemctl``/systemd configuration for setup/verification scripts over a
-large service-management library.
+Prefer native systemd/``systemctl`` for setup/verification scripts over a service
+framework.
 
 Keep ``pip-audit`` mandatory after auth/crypto dependency resolution.
 
-46. Machine-readable contract impact
+47. Machine-readable contract impact
 ------------------------------------
 
-Phase 3 does **not** change the five Tool contracts or output schemas merely because the
-server becomes remote/authenticated.
+Phase 3 does not change the five Tool contracts/output schemas merely because the server
+becomes remote/authenticated.
 
-The selected controller profile is deployment/security configuration, not a new MCP Tool
+The selected controller profile is deployment/security configuration, not a new Tool
 manifest.
 
-Existing files consumed as normative inputs remain:
+Existing normative inputs remain:
 
 ::
 
@@ -1782,69 +1871,60 @@ Existing files consumed as normative inputs remain:
    schemas/mcp/evaluation-manifest.schema.json
    tests/fixtures/mcp/controller-transport-security.yaml
 
-If live evidence exposes a true contradiction in one of those sources, reconcile it in a
-separate contract change rather than teaching the evaluator a hidden exception.
+If live evidence exposes a true contradiction, reconcile it in a separate contract
+change rather than teaching evaluator/runtime code a hidden exception.
 
-47. Import Linter updates
+48. Import Linter updates
 -------------------------
 
-Extend the Phase 2 dependency rules:
+Extend Phase 2 rules:
 
 * ``binnacle.domain.controller`` remains stdlib-only;
 * ``binnacle.ports.controller_auth`` imports domain values only;
 * ``binnacle.security.controller`` may implement profile/security logic using domain and
-  selected crypto/standards abstractions but not FastMCP Tool semantics;
-* ``binnacle.security.middleware`` is an outer ASGI/security adapter and may import the
-  authentication port plus bounded ASGI types;
+  selected standards abstractions but not FastMCP Tool semantics;
+* ``binnacle.security.middleware`` is an outer ASGI/security adapter;
 * concrete ``auth_*`` adapter may depend on selected maintained security libraries;
 * application/use-case modules receive ``ControllerSecurityContext`` but never raw
   credentials;
 * ``binnacle.evaluation`` may depend on JSON/schema/archive/hash utilities and reviewed
   evaluation sources but not ChatGPT UI automation;
-* ``composition`` wires the selected authenticator once;
+* ``composition`` wires selected authenticator once;
 * no inward module imports CLI/composition/systemd/tunnel implementation.
 
-48. Logging changes
+49. Logging changes
 -------------------
 
-Phase 3 adds security-safe fields:
+Add safe fields:
 
 * controller ID;
 * controller-profile ID/version;
-* auth success/failure **category**;
+* auth success/failure category;
 * required/provided scope names where safe;
-* credential/assertion ID digest where selected profile safely provides it;
+* credential/assertion ID digest where safe;
 * audience/issuer identity or digest where not sensitive;
+* revocation/freshness/binding outcome category;
 * request correlation;
 * MCP revision;
 * Tool name;
-* evaluation ID when an explicit evaluation run is active.
+* evaluation ID when active.
 
-Never log:
+Never log access/refresh token, authorization code, full ``Authorization`` header, cookie,
+raw gateway assertion, private key, systemd credential content, raw machine ID, arbitrary
+forwarded header values, or full owner-private conversation.
 
-* access/refresh token;
-* authorization code;
-* full ``Authorization`` header;
-* cookie;
-* raw gateway assertion;
-* private key;
-* systemd credential content;
-* raw machine ID;
-* arbitrary forwarded header values;
-* full owner-private conversation.
-
-49. CI changes
+50. CI changes
 --------------
 
-Normal GitHub CI remains self-contained and does not require OpenAI credentials or a
-real Pi.
+Normal GitHub CI remains self-contained and does not require OpenAI credentials or a real
+Pi.
 
-Extend the exact-interpreter Phase 1/2 matrix to run:
+Extend exact-interpreter Phase 1/2 matrix to run:
 
 * controller domain/profile/middleware tests;
 * selected-auth adapter fixture tests;
 * authenticated MCP integration tests;
-* evaluation manifest/redaction/bundle tests;
+* evaluation digest/manifest/redaction/bundle tests;
 * systemd/setup asset static tests;
 * existing Phase 2 local MCP/revision tests;
 * Ruff/format;
@@ -1854,13 +1934,13 @@ Extend the exact-interpreter Phase 1/2 matrix to run:
 * compiler ``--check``;
 * contract/schema validation.
 
-Real-Pi/real-ChatGPT acceptance evidence is a separate manual/empirical gate and must not
-be represented by CI mocks.
+Real-Pi/real-ChatGPT evidence is a separate manual/empirical gate and is never represented
+by CI mocks.
 
-50. Canonical local validation commands
+51. Canonical local validation commands
 --------------------------------------
 
-The Phase 3 implementation must retain/pass:
+The Phase 3 implementation retains/passes:
 
 .. code-block:: console
 
@@ -1881,169 +1961,180 @@ The Phase 3 implementation must retain/pass:
 
 CI matrix lanes retain explicit ``uv --python`` selection from Phase 1.
 
-51. Real-Pi operational commands
+52. Real-Pi operational commands
 --------------------------------
 
-A typical implementation run uses reviewed commands equivalent to:
+Typical implementation run uses reviewed commands equivalent to:
 
 .. code-block:: console
 
    sudo python scripts/setup_dev_pi.py check --repo /srv/binnacle-dev/repo
    sudo python scripts/setup_dev_pi.py apply --repo /srv/binnacle-dev/repo
-   sudo install -o root -g binnacle-dev -m 0640 <reviewed-dev-config> /etc/binnacle/dev.toml
-   sudo install -o root -g binnacle-dev -m 0640 <reviewed-controller-profile> /etc/binnacle/controller-profile.toml
+   sudo install -o root -g binnacle -m 0640 <reviewed-dev-config> /etc/binnacle/dev.toml
+   sudo install -o root -g binnacle -m 0640 <reviewed-controller-profile> /etc/binnacle/controller-profile.toml
    sudo systemctl daemon-reload
    sudo systemctl start binnacle-dev.service
    uv run python scripts/verify_dev_pi.py --config /etc/binnacle/dev.toml --controller-profile /etc/binnacle/controller-profile.toml
 
-Tunnel/app configuration follows the actual current supported product workflow and is
-recorded as evidence rather than hard-coded as speculative CLI syntax in this plan.
+Tunnel/app configuration follows the actual supported product workflow and is recorded as
+evidence rather than hard-coded as speculative CLI syntax.
 
-52. Security invariants
+53. Security invariants
 -----------------------
 
-Phase 3 must preserve all of these:
+Phase 3 must preserve:
 
-#. main Binnacle MCP/application process is non-root;
-#. Binnacle listener remains loopback/private rather than public/LAN wildcard;
+#. main MCP/application process is non-root;
+#. protected controller config uses ``root:binnacle`` and is not exposed through
+   ``binnacle-dev`` membership;
+#. listener remains loopback/private;
 #. remote connectivity is not controller authentication;
-#. anonymous remote MCP access is unsupported;
-#. every accepted remote request has one validated controller profile and stable opaque
-   controller ID before Tool dispatch;
+#. anonymous remote MCP unsupported;
+#. every accepted remote request has one validated controller profile/opaque controller
+   ID before Tool dispatch;
 #. one active ChatGPT controller profile only;
-#. only ``connect``/``observe`` transport scopes are relevant in this read-only phase;
+#. only selected read-only transport scopes apply;
 #. session/clientInfo/conversation/source address never grants authority;
 #. raw credentials/assertions/cookies/private keys never reach Tools/results/logs/evidence;
-#. inbound MCP credential is never forwarded downstream;
-#. controller security-critical config cannot be weakened by ordinary environment/CLI
-   overrides;
-#. Host/Origin/proxy rules fail closed according to the selected profile;
-#. health/readiness are not publicly exposed through the MCP tunnel route;
-#. Tool catalogue remains exactly the five read-only compatibility-core Tools;
-#. no device mutation is possible;
-#. evidence uses exact frozen cases/status vocabulary;
+#. inbound MCP credential never forwarded downstream;
+#. security-critical config cannot be weakened by ordinary environment/CLI overrides;
+#. Host/Origin/proxy rules fail closed;
+#. health/readiness not publicly exposed through tunnel route;
+#. Tool catalogue remains exactly five read-only compatibility-core Tools;
+#. no device mutation possible;
+#. evidence uses exact frozen cases/status vocabulary/oracles;
+#. blocked conclusions satisfy required attempt thresholds;
+#. cross-server case remains ``not-tested`` unless actually run as frozen;
+#. every case result has at least one evidence reference;
+#. required evaluation profile digests/version fields have deterministic sources;
+#. policy-bundle digest is non-null and reproducible;
 #. UI/account/workspace facts come from real observation;
 #. local SDK tests cannot promote host support;
-#. missing write probe is not evidence of host write denial;
+#. missing write probe is not host write denial;
 #. evidence contains no reusable authority material;
-#. bundle receipt is detached and non-self-referential;
-#. unreviewed evidence cannot become runtime ``compatibility_report`` promotion;
-#. failure to obtain a secure authentication profile blocks Phase 3 instead of weakening
-   the security boundary.
+#. human review is embedded before final manifest/archive hashing;
+#. bundle receipt is detached/non-self-referential;
+#. unreviewed evidence cannot become runtime compatibility promotion;
+#. failure to obtain secure auth blocks Phase 3 rather than weakening security.
 
-53. Implementation order
+54. Implementation order
 ------------------------
 
-The future Phase 3 implementation should proceed in this order:
+Implement in this order:
 
 #. add common controller domain/port/profile/middleware seams with fixture-only test
    authenticator;
-#. add evaluator/profile/redaction/bundle tooling using existing schemas/cases;
-#. add systemd/setup/verify development-Pi assets;
-#. deploy the unchanged Phase 2 read-only server locally on the Pi and validate it;
+#. add evaluator/profile/digest/redaction/bundle tooling using existing schemas/cases;
+#. add systemd/setup/verify development-Pi assets with protected group separation;
+#. deploy unchanged Phase 2 read-only server locally on Pi and validate it;
 #. revalidate current official ChatGPT private-connectivity/custom-app documentation and
    actual account/workspace UI;
-#. configure the selected private tunnel/connectivity path in pre-authenticated/fail-
-   closed mode;
-#. perform authentication feasibility against the two allowed controller profile kinds;
+#. configure selected private connectivity in pre-authenticated/fail-closed mode;
+#. perform auth feasibility against the two allowed controller profile kinds;
 #. select/freeze exactly one authentication profile;
-#. add only that concrete auth adapter/dependency and protected config model;
+#. add only selected concrete auth adapter/dependency and protected config model;
 #. run complete local/CI auth/security fixture tests;
-#. deploy the selected authenticated build to the Pi;
+#. deploy selected authenticated build to Pi;
 #. prove tunnel/direct/invalid-credential bypass failures before live Tool evaluation;
-#. initialize a new evaluation workspace/profile snapshot;
+#. initialize evaluation workspace/profile/digest snapshot;
 #. connect real ChatGPT;
 #. run connection/protocol/discovery deterministic cases;
-#. run model Tool-selection/read/result/error cases to exact attempt thresholds;
-#. run read entitlement and latency/context cases;
-#. classify later/optional cases without adding capabilities;
-#. redact/verify/finalize evidence bundle and detached receipt;
-#. conduct human promotion review;
-#. update ``docs/mcp-profile.md`` from the approved evidence;
-#. publish/install only the sanitised promoted compatibility summary for
-   ``compatibility_report``;
-#. rerun exact deployment verification and normal CI for the final implementation head;
+#. run Tool-selection/read/result/error cases to exact thresholds;
+#. run five read-entitlement attempts even when blocked;
+#. run latency/context case;
+#. classify every remaining frozen case according to its own oracle, with cross-server
+   kept ``not-tested`` unless actually run;
+#. sanitize/verify evidence;
+#. conduct human review and write review fields;
+#. serialize/validate final manifest;
+#. build/hash archive and write detached receipt;
+#. update ``docs/mcp-profile.md`` from reviewed evidence;
+#. publish/install only sanitized promoted compatibility summary;
+#. rerun exact deployment verification and normal CI for final implementation head;
 #. stop without adding consequential capability.
 
-54. Deterministic acceptance checklist
+55. Deterministic acceptance checklist
 --------------------------------------
 
 Phase 3 implementation is accepted only when every applicable item is true:
 
-#. Exact candidate Git/build/runtime-manifest/config identities are frozen before live
-   evaluation.
-#. Development Pi is 64-bit and uses a supported Python 3.11--3.13 interpreter.
-#. Source checkout lives outside protected Binnacle state.
-#. ``binnacle-dev.service`` runs as non-root from the project ``.venv``.
+#. Candidate Git/build/runtime-manifest/config/policy identities frozen before live run.
+#. Development Pi is 64-bit and uses Python 3.11--3.13.
+#. Source checkout lives outside protected controller state.
+#. ``binnacle-dev.service`` runs as ``User=binnacle``, ``Group=binnacle``, with
+   ``SupplementaryGroups=binnacle-dev``.
+#. Protected config is ``root:binnacle`` and not readable merely through development
+   group membership.
 #. Main service has no ambient/bounding Linux capabilities.
 #. Application listener is loopback/private only.
-#. ``/healthz`` and ``/readyz`` work locally and are not exposed through the public MCP
-   route.
-#. Private connectivity path is the current supported ChatGPT mechanism for the tested
-   profile or an explicitly reviewed equivalent.
-#. Tunnel credentials, when present, are separated from the Binnacle application user.
-#. One of the two controller-transport authentication profiles is selected from live
-   evidence and versioned.
-#. No anonymous/tunnel/source-IP fallback exists.
-#. Controller ID derives from validated identity tuple rather than client metadata.
-#. Required read-only scopes are enforced before Tool dispatch.
-#. Missing/invalid/expired/wrong-audience/wrong-scope fixtures fail at the correct layer.
-#. Direct tunnel/local bypass fixture cannot dispatch a Tool.
-#. No authentication secret appears in logs/results/evidence.
-#. Normal local/CI authenticated MCP tests pass without real production credentials.
-#. Evaluation run uses the existing profile/case manifest digests.
-#. Every evaluation-manifest profile dimension required by the schema is populated or
-   legitimately null where the schema permits null.
-#. Actual ChatGPT product/surface/plan/workspace values come from current observation.
-#. Actual connection/authentication profile is recorded.
-#. Actual Pi model/OS/kernel/architecture/device profile is recorded.
-#. Actual SDK/tunnel/build/config/manifest/schema/evaluation digests are recorded.
-#. ``endpoint-connect`` reaches authenticated MCP without unauthenticated dispatch.
-#. ``protocol-revision-observed`` records real requested/negotiated revision and dispatch
-   path.
-#. ``tool-discovery-manifest`` proves the real ChatGPT-visible catalogue matches the five
-   reviewed Tools.
-#. ``model-tool-selection-binnacle-probe`` completes at least 10 attempts and meets its
-   frozen oracle/threshold for promotion.
-#. ``model-tool-selection-system-inspect`` completes at least 10 attempts and meets its
-   frozen oracle/threshold for promotion.
-#. ``structured-result-rendering`` completes at least 10 attempts with schema-valid,
-   consistent text/structured semantics.
-#. ``execution-error-rendering`` completes at least 10 attempts and uses Tool error-result
-   semantics rather than 401/403.
-#. ``read-entitlement`` completes at least 5 attempts or is honestly classified as host-
-   policy-blocked.
-#. ``latency-context-cost`` completes at least 20 attempts with p50/p95/p99 and size/context
-   observations.
-#. No write/idempotency/cancellation/reconnect/concurrency capability is implemented to
-   satisfy later frozen cases.
-#. Optional Resources/MRTR/Tasks facts are not promoted without behavioral evidence.
-#. Catalogue refresh behavior relevant to later promotion is observed without changing
-   the Tool set.
-#. Evidence files are sanitised and individually hashed.
-#. Evaluation manifest validates against the existing schema.
-#. Bundle contains the manifest/evidence inventory and no detached receipt.
-#. Detached receipt hashes the final bundle/manifest without self-reference.
-#. Human review fields are complete before any promotion.
-#. ``docs/mcp-profile.md`` reflects the approved evidence and exact limitations.
+#. Health/readiness local-only and not public-tunnel routes.
+#. Private connectivity path is current supported ChatGPT mechanism or reviewed
+   equivalent.
+#. Tunnel credentials, when present, separated from application user.
+#. One of two controller-transport auth profiles selected from live evidence/versioned.
+#. No anonymous/tunnel/source-IP fallback.
+#. Controller ID derives from validated identity tuple.
+#. Required read-only scopes enforced before Tool dispatch.
+#. Missing/invalid/expired/wrong-audience/wrong-scope fixtures fail at correct layer.
+#. Direct tunnel/local bypass cannot dispatch Tool.
+#. No auth secret appears in logs/results/evidence.
+#. Local/CI authenticated MCP tests pass without production credentials.
+#. Evaluation uses exact frozen profile/case digests.
+#. ``policy_bundle_sha256`` is non-null and reproducibly derived from policy inventory,
+   controller profile, runtime manifest, and revision contract.
+#. ``mcp_sdk_artifact_sha256`` binds installed SDK distribution bytes.
+#. Tunnel/gateway artifact digest is recorded when a local artifact exists or legitimately
+   null when schema/product has no local artifact.
+#. Probe/dispatcher/oracle/runner versions have deterministic declared sources.
+#. Every schema-required profile dimension populated or legitimately null.
+#. Actual ChatGPT product/surface/plan/workspace values come from observation.
+#. Actual connection/auth profile recorded.
+#. Pi model/OS/kernel/architecture/device profile recorded.
+#. ``endpoint-connect`` proves authenticated MCP with no unauthenticated dispatch.
+#. ``protocol-revision-observed`` records real requested/negotiated revision/path.
+#. ``tool-discovery-manifest`` proves five reviewed ChatGPT-visible Tools.
+#. ``model-tool-selection-binnacle-probe`` >=10 attempts and frozen oracle met for
+   promotion.
+#. ``model-tool-selection-system-inspect`` >=10 attempts and frozen oracle met.
+#. ``structured-result-rendering`` >=10 attempts with schema/text consistency.
+#. ``execution-error-rendering`` >=10 attempts and Tool-error semantics.
+#. ``read-entitlement`` has >=5 attempts before either supported or host-policy-blocked
+   conclusion is promoted.
+#. ``latency-context-cost`` >=20 attempts with p50/p95/p99/size/context observations.
+#. No write/durable capability implemented to satisfy later cases.
+#. Optional Resources/MRTR/Tasks statuses follow their individual frozen oracles.
+#. Owner-only status follows its explicit frozen not-applicable condition only when true.
+#. ``cross-server-normal-result`` is ``not-tested`` unless its two-server setup/action was
+   actually exercised; it is never phase-generically relabeled.
+#. Every frozen case has a case-result entry with >=1 valid evidence reference.
+#. Catalogue refresh behavior observed without changing Tool set.
+#. Evidence payloads sanitized/individually hashed.
+#. Human reviewer decision written before final manifest digest/archive creation.
+#. Final manifest validates against existing schema.
+#. ``evidence_files`` does not self-inventory the manifest; bundle still includes final
+   manifest as top-level member.
+#. Bundle contains reviewed final manifest + evidence and no receipt.
+#. Detached receipt hashes final bundle/manifest without self-reference.
+#. ``docs/mcp-profile.md`` reflects approved evidence/limitations.
 #. Promoted runtime compatibility summary contains no raw evidence/credentials.
-#. Evidence validity/rerun triggers match the frozen evaluation profile.
+#. Validity/rerun triggers match frozen profile.
 #. Ruff/format/MyPy/Import Linter/pytest/``pip-audit``/compiler/contract/schema gates pass.
 #. Python 3.11/3.12/3.13 CI passes with explicit interpreters.
-#. GitHub Actions is green for the exact implementation head.
-#. Phase 3 exits with exactly the five read-only Tools and no consequential capability.
+#. GitHub Actions green for exact implementation head.
+#. Phase 3 exits with exactly five read-only Tools and no consequential capability.
 
-55. Planning stop rule
+56. Planning stop rule
 ----------------------
 
 This plan is complete when an implementation/evaluation agent can deploy the Phase 2
 server to one real development Pi, establish one standards-based authenticated ChatGPT
 controller path without weakening the security contract, run the applicable frozen
-read-only evaluation cases, produce a reviewable non-self-referential evidence bundle,
-and promote an honest compatibility profile without making another architectural
-decision about deployment layout, controller identity seams, auth-profile selection
-criteria, evidence structure, or Phase-3 acceptance.
+read-only evaluation cases, create evidence-backed entries for all remaining frozen
+cases, perform human review before final hashing, produce a non-self-referential evidence
+bundle/receipt, and promote an honest compatibility profile without making another
+architectural decision about deployment layout, controller identity seams, auth-profile
+selection criteria, evaluation digests, evidence structure, or Phase-3 acceptance.
 
 Stop here. Do not extend this document into durable consequential operations, write
 entitlement probing, workspace mutation, command execution, Git, privileged self-
-management, credentials for downstream effects, hardware, or any later Bootstrap phase.
+management, downstream-effect credentials, hardware, or any later Bootstrap phase.
