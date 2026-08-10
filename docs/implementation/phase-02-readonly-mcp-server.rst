@@ -12,7 +12,7 @@ Binnacle Phase 2 Detailed Implementation Plan
 Purpose
 -------
 
-Phase 2 is the first phase that exposes real Binnacle MCP Tools.  It keeps the authority
+Phase 2 is the first phase that exposes real Binnacle MCP Tools. It keeps the authority
 surface deliberately read-only and local so protocol, schema, manifest, result, error,
 and application-layer behaviour can be proven before remote deployment or consequential
 operations exist.
@@ -35,6 +35,10 @@ The implementation remains incapable of workspace mutation, command execution, G
 mutation, package/service changes, privileged operations, durable operation admission,
 credential use, or hardware control.
 
+The ``:Status: merged`` value is the terminal status defined by
+``docs/implementation/index.rst`` for the authoritative document after this plan PR
+lands. While the PR is open, the document is proposed rather than authoritative.
+
 1. Governing source order
 -------------------------
 
@@ -45,6 +49,7 @@ Implementation follows this precedence:
 #. ``docs/bootstrap-v1.rst``;
 #. ``docs/bootstrap-implementation-plan.rst``;
 #. ``docs/implementation/index.rst``;
+#. merged ``docs/implementation/phase-00-contract-reconciliation.rst``;
 #. merged ``docs/implementation/phase-01-project-skeleton.rst``;
 #. this detailed Phase 2 plan;
 #. ``docs/mcp-interface.md``;
@@ -59,8 +64,8 @@ Implementation follows this precedence:
 
 The reviewed Tool manifest and JSON Schemas are authoritative for Tool names,
 descriptions, annotations, contract versions, input/output shapes, information class,
-confirmation class, and catalogue membership.  Runtime code projects those contracts;
-it does not invent a parallel Tool contract.
+confirmation class, and catalogue membership. Runtime code projects those contracts; it
+does not invent a parallel Tool contract.
 
 2. Roadmap exit gate
 --------------------
@@ -71,8 +76,10 @@ Phase 2 implementation is complete only when all of the following are true:
 * the application starts a one-worker Streamable HTTP MCP server on loopback;
 * ``/mcp`` is the only MCP control route;
 * ``/healthz`` reports process liveness without exposing diagnostics;
-* ``/readyz`` reports ready only after the compatibility-core registry and all five
-  handlers are validated and the application lifecycle is started;
+* ``/readyz`` reports ready only after the compatibility-core registry, all five
+  handlers, build/device identity, and application lifecycle are valid;
+* security-critical registry/schema/binding integrity failures abort startup rather than
+  serving a partially trusted MCP application;
 * a local MCP client can list exactly the five compatibility-core Tools;
 * every listed Tool's name, description, annotations, input schema, output schema,
   contract version, and binding match the reviewed manifest projection;
@@ -114,7 +121,7 @@ Phase 2 does **not** implement:
 * performance tuning beyond bounded, conservative local defaults.
 
 Local read-only inspection is not permission to add a generic command runner, arbitrary
-file reader, process enumerator, network scanner, or package manager wrapper.
+file reader, process enumerator, network scanner, or package-manager wrapper.
 
 4. Before/after semantics
 -------------------------
@@ -122,26 +129,25 @@ file reader, process enumerator, network scanner, or package manager wrapper.
 Before Phase 2
 ~~~~~~~~~~~~~~
 
-The MCP process is executable but advertises no Binnacle operational Tool.  It proves
+The MCP process is executable but advertises no Binnacle operational Tool. It proves
 only that packaging, settings, logging, composition, FastMCP, ASGI, and Uvicorn can be
 assembled.
 
 After Phase 2
 ~~~~~~~~~~~~~
 
-The same process has a frozen read-only compatibility catalogue.  It can prove local MCP
+The same process has a frozen read-only compatibility catalogue. It can prove local MCP
 Tool discovery/invocation, canonical result/error rendering, contract projection,
 bounded host inspection, build/device identity, and protocol revision handling without
 creating a consequential effect.
 
-No authority is inferred from Tool visibility.  The server still has no remote
-controller trust profile and therefore Phase 2 is a loopback-only local validation
-server.
+No authority is inferred from Tool visibility. The server still has no remote controller
+trust profile and therefore Phase 2 is a loopback-only local validation server.
 
 5. Exact repository changes
 ---------------------------
 
-The Phase 2 **implementation** PR should create or modify the following paths.  This
+The Phase 2 **implementation** PR should create or modify the following paths. This
 planning PR itself adds only this document.
 
 5.1 Existing package files to modify
@@ -191,8 +197,8 @@ root, CLI, settings hierarchy, MCP process, or logging configuration path.
      compatibility_core_registry.digest.json
 
 The ``bootstrap`` package exists because the reviewed manifest already binds handlers to
-paths such as ``binnacle.bootstrap.binnacle_probe.v1_1``.  Each module therefore exports
-an async ``v1_1`` binding with exactly that import path.  These binding modules remain
+paths such as ``binnacle.bootstrap.binnacle_probe.v1_1``. Each module therefore exports
+an async ``v1_1`` binding with exactly that import path. These binding modules remain
 thin and framework-independent; FastMCP types stay in ``adapters/mcp.py``.
 
 5.3 New compiler and machine-readable revision contract
@@ -207,8 +213,8 @@ Create:
    schemas/mcp/revision-support.schema.json
 
 ``spec/mcp/revision-support.yaml`` is the machine-readable projection of the finite
-revision contract already defined by ``docs/mcp-revision-support.md``.  It does not add a
-revision.  It must encode exactly:
+revision contract already defined by ``docs/mcp-revision-support.md``. It does not add a
+revision. It encodes exactly:
 
 ::
 
@@ -220,36 +226,26 @@ revision.  It must encode exactly:
 with ``2026-07-28`` identified as the target/modern stateless profile and the three
 others as supported legacy profiles.
 
-The existing prose remains the human normative explanation.  Contract validation must
+The existing prose remains the human normative explanation. Contract validation must
 fail if the machine-readable set diverges from it or from the frozen evaluation setup.
 
-5.4 Narrow schema correction discovered by Phase 2
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+5.4 Existing identifier contract: regression coverage only
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The current common ``identifier`` definition excludes ``-`` while the reviewed manifest
-identity is ``binnacle-bootstrap-tools`` and ``binnacle_probe`` is required to return
-that manifest identity through a field referencing ``identifier``.
-
-The Phase 2 implementation must therefore make the narrow compatibility correction in:
-
-::
-
-   schemas/mcp/binnacle-common.schema.json
-   scripts/validate_contracts.py
-   tests/fixtures/mcp/schema-validation.yaml
-
-Change the identifier pattern so ASCII hyphen is explicitly permitted while retaining
-all existing length and first-character restrictions.  A suitable semantic form is:
+The existing common identifier pattern is:
 
 .. code-block:: text
 
-   ^[A-Za-z0-9][A-Za-z0-9_.:\-]*$
+   ^[A-Za-z0-9][A-Za-z0-9_.:-]*$
 
-Add a positive fixture for ``binnacle-bootstrap-tools`` and negatives for whitespace,
-slashes, control characters, leading punctuation, and Unicode-confusable forms.
+Because the hyphen is the final character in the character class, ASCII ``-`` is already
+literal and the reviewed manifest ID ``binnacle-bootstrap-tools`` is valid. Phase 2 must
+**not** rewrite this schema, validator, or related digests as a semantic no-op.
 
-Do not work around this contradiction by returning a renamed underscore manifest ID;
-that would make runtime identity disagree with the reviewed source manifest.
+Add regression coverage proving that the current schema accepts
+``binnacle-bootstrap-tools`` and continues to reject whitespace, slashes, control
+characters, leading punctuation, and Unicode-confusable/invisible variants. This test
+protects the real manifest identity without creating needless schema churn.
 
 5.5 New tests
 ~~~~~~~~~~~~~
@@ -290,13 +286,13 @@ Keep the Phase 1 constraints for:
 * ``fastmcp>=4,<5``;
 * ``mcp>=2,<3``;
 * Uvicorn;
-* Pydantic v2 / pydantic-settings;
+* Pydantic v2 / ``pydantic-settings``;
 * Typer;
 * Rich;
 * structlog.
 
 Do not loosen those compatibility lines merely because Phase 2 starts registering
-Tools.  Resolve exact versions in ``uv.lock``.
+Tools. Resolve exact versions in ``uv.lock``.
 
 6.2 New direct runtime dependencies
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -307,7 +303,7 @@ serialization.
 
 Add ``starlette`` as a direct runtime dependency only if the selected FastMCP 4.x public
 ASGI API does not provide a clean supported way to compose ``/mcp``, ``/healthz``, and
-``/readyz`` without a general-purpose wrapper.  Starlette is acceptable as a narrow ASGI
+``/readyz`` without a general-purpose wrapper. Starlette is acceptable as a narrow ASGI
 routing dependency; FastAPI is not introduced.
 
 If FastMCP exposes supported custom-route/mount facilities that satisfy the same tests,
@@ -317,13 +313,13 @@ prefer those and do not add Starlette directly.
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 ``PyYAML`` remains in the existing contract/development group and is used by
-``scripts/compile_mcp_registry.py``.  Runtime does not parse source YAML; it loads the
+``scripts/compile_mcp_registry.py``. Runtime does not parse source YAML; it loads the
 compiled JSON bundle.
 
-Add ``httpx`` to the test group if integration tests import it directly for raw HTTP/
-ASGI protocol-negative cases.
+Add ``httpx`` to the test group only if integration tests import it directly for raw
+HTTP/ASGI protocol-negative cases.
 
-No ``psutil`` dependency is required.  The Linux read adapter uses bounded standard
+No ``psutil`` dependency is required. The Linux read adapter uses bounded standard
 Linux/stdlib interfaces described below.
 
 7. Compiled compatibility-core registry
@@ -416,7 +412,7 @@ and contains:
 * compiler format/version.
 
 It does not claim to be a production release attestation and does not include a
-self-referential archive digest.  It is development/source-checkout integrity evidence
+self-referential archive digest. It is development/source-checkout integrity evidence
 sufficient for Bootstrap Phase 2.
 
 7.6 Compiler commands
@@ -430,7 +426,7 @@ Canonical commands are:
    uv run python scripts/compile_mcp_registry.py --check
 
 ``--check`` builds in memory and fails if either checked-in generated file differs byte
-for byte.  CI always uses ``--check`` and never rewrites generated files.
+for byte. CI always uses ``--check`` and never rewrites generated files.
 
 8. Runtime contract registry
 ----------------------------
@@ -475,7 +471,7 @@ Expose types equivalent to:
        def validate_output(self, tool_name: str, value: Mapping[str, object]) -> None: ...
 
 ``load()`` reads package resources through ``importlib.resources`` rather than current
-working directory paths.
+working-directory paths.
 
 Startup validation must:
 
@@ -486,7 +482,10 @@ Startup validation must:
 #. import every visible ``handler_binding`` and confirm it resolves to an async callable;
 #. verify no write-probe binding is visible;
 #. verify the finite revision set exactly matches the machine-readable contract;
-#. fail startup/readiness on any mismatch.
+#. raise ``ContractRegistryError`` and abort server startup on any mismatch.
+
+Registry/schema/binding integrity is a fail-closed startup prerequisite. It is not a
+runtime degraded mode.
 
 9. Framework-independent MCP domain types
 ----------------------------------------
@@ -565,7 +564,7 @@ Define immutable dataclasses matching the five reviewed input schemas:
    No fields.
 
 The MCP adapter first validates model-supplied arguments against the exact compiled input
-schema, then converts to these types.  Typed conversion may be explicit functions rather
+schema, then converts to these types. Typed conversion may be explicit functions rather
 than Pydantic models so application/domain layers remain independent of Pydantic.
 
 10.2 Tool-specific data
@@ -579,13 +578,13 @@ Define immutable result data types for:
 * ``ProbeErrorDelayData``;
 * ``CompatibilityReportData``.
 
-Their field names and optionality must map one-for-one to the existing output schema.
-Do not add convenient fields that the schema cannot serialize.
+Their field names and optionality map one-for-one to the existing output schema. Do not
+add convenient fields that the schema cannot serialize.
 
 11. Request correlation identity
 --------------------------------
 
-The canonical output schema requires an identifier-shaped ``request_id``.  JSON-RPC IDs
+The canonical output schema requires an identifier-shaped ``request_id``. JSON-RPC IDs
 may be numbers or arbitrary strings and therefore are not reused directly.
 
 For each Tool call, the MCP adapter creates a local correlation ID using cryptographic
@@ -626,10 +625,10 @@ set of:
 * the two generated compatibility-core registry resources.
 
 For each file, hash ``relative_posix_path + NUL + sha256(file_bytes)`` and feed the
-ordered records into one SHA-256 accumulator.  Ignore ``__pycache__``, bytecode, editor
+ordered records into one SHA-256 accumulator. Ignore ``__pycache__``, bytecode, editor
 files, and filesystem metadata.
 
-The package version remains the Phase 1 distribution version.  No Git command is run and
+The package version remains the Phase 1 distribution version. No Git command is run and
 no branch/dirty-state claim is made in Phase 2.
 
 13. Device identity
@@ -651,7 +650,7 @@ no branch/dirty-state claim is made in Phase 2.
        device_id: str
 
 ``LinuxDeviceIdentityProvider`` in ``adapters/linux.py`` uses ``/etc/machine-id`` when
-available but never returns or logs the raw machine ID.  It computes:
+available but never returns or logs the raw machine ID. It computes:
 
 .. code-block:: text
 
@@ -661,8 +660,8 @@ and returns ``device_<first 32 hex chars>``.
 
 If ``/etc/machine-id`` is unavailable, the provider may use another stable local
 machine-identity source only after normalising it through the same one-way domain-
-separated digest.  If no stable source exists, application readiness fails rather than
-fabricating a random identity that changes each process start.
+separated digest. If no stable source exists, startup fails rather than fabricating a
+random identity that changes each process start.
 
 14. Bounded Linux system inspection
 -----------------------------------
@@ -670,12 +669,16 @@ fabricating a random identity that changes each process start.
 14.1 Port
 ~~~~~~~~~
 
-``binnacle.ports.system`` defines:
+``binnacle.ports.system`` defines an asynchronous port so potentially blocking host
+queries are never performed directly on the MCP event loop:
 
 .. code-block:: python
 
    class SystemInspector(Protocol):
-       def inspect(self, sections: tuple[SystemSection, ...]) -> SystemSnapshot: ...
+       async def inspect(
+           self,
+           sections: tuple[SystemSection, ...],
+       ) -> SystemSnapshot: ...
 
 No method accepts an arbitrary command, path, process ID, interface, package, service
 name, or device node.
@@ -717,7 +720,7 @@ This keeps the default result small and deterministic.
 
 ``os``
    Parse selected public fields from ``/etc/os-release`` and return one bounded summary
-   string.  Do not return the entire file or environment.
+   string. Do not return the entire file or environment.
 
 ``kernel`` and ``architecture``
    Use ``platform.uname()`` / ``platform.machine()``.
@@ -734,18 +737,37 @@ This keeps the default result small and deterministic.
    to bytes with checked non-negative integer arithmetic.
 
 ``filesystems``
-   Parse mount points/filesystem type/source from ``/proc/self/mountinfo`` and obtain
-   total/available bytes with ``os.statvfs``.  Sort by mount point.  Return at most 128
-   entries.  If more eligible entries exist, return 128 and add the envelope warning
-   ``filesystem_list_truncated``; truncation is never silent.
+   Parse mount points/filesystem type/source from bounded ``/proc/self/mountinfo``.
+   Apply a fixed implementation-owned **known-local filesystem allowlist** before any
+   capacity query. Network, automount, userspace/FUSE, remote, and unknown filesystem
+   types are excluded from ``os.statvfs`` calls; examples include NFS, CIFS/SMB, SSHFS,
+   generic FUSE, autofs, and 9p. Eligible local types include the reference-Pi families
+   actually needed for local storage inspection (for example ext2/3/4, vfat, exfat,
+   f2fs, btrfs, xfs, tmpfs, ramfs, squashfs, and overlay where locally backed).
+
+   Capacity queries for eligible mounts run off the asyncio event loop through a bounded
+   AnyIO worker path. Each mount query has a short configured deadline and filesystem
+   inspection has a dedicated concurrency limiter so a pathological mount cannot consume
+   the general Tool worker capacity. If a capacity query exceeds its deadline, the Tool
+   returns a bounded ``InspectionError`` for the requested ``filesystems`` section rather
+   than hanging the MCP event loop or silently fabricating values. A timed-out worker is
+   abandoned from the request path; subsequent filesystem inspections remain admission-
+   bounded rather than spawning unbounded workers.
+
+   Sort returned entries by mount point and return at most 128. If eligible entries exceed
+   the result bound, return 128 and add ``filesystem_list_truncated``. If mountinfo also
+   contains excluded non-local/unbounded filesystem types, add one aggregate warning
+   ``filesystem_nonlocal_omitted`` without exposing unbounded source details. Truncation
+   or deliberate omission is never silent.
 
 ``binnacle_service``
-   Phase 2 has no systemd deployment contract.  Return ``state="unknown"`` plus warning
-   ``service_manager_not_integrated``.  Do not invoke a general subprocess solely to
-   make local tests look more complete.
+   Phase 2 has no systemd deployment contract. Return ``state="unknown"`` plus warning
+   ``service_manager_not_integrated``. Do not invoke a general subprocess solely to make
+   local tests look more complete.
 
-All file reads use explicit maximum byte budgets and fail as bounded execution errors on
-unexpected size/format rather than returning partial unlabelled data.
+All implementation-owned file reads use explicit maximum byte budgets and fail as
+bounded execution errors on unexpected size/format rather than returning partial
+unlabelled data.
 
 15. Static compatibility-profile reader
 ---------------------------------------
@@ -758,7 +780,7 @@ unexpected size/format rather than returning partial unlabelled data.
        def read(self) -> CompatibilityProfileSnapshot: ...
 
 ``CompiledCompatibilityProfileReader`` in ``adapters/compatibility.py`` reads only the
-baseline embedded in the generated registry.  Phase 2 has no live host evidence bundle
+baseline embedded in the generated registry. Phase 2 has no live host evidence bundle
 and therefore must not report any ChatGPT feature as observed-supported.
 
 The compiler derives the baseline axis list from the frozen evaluation cases and records
@@ -844,9 +866,10 @@ Return hostname using ``socket.gethostname()`` bounded to the schema limit plus 
 requested/default sections.
 
 A failure to collect one requested mandatory section is a Tool execution error for the
-call; do not silently omit it from ``returned_sections``.  The only documented degraded
+call; do not silently omit it from ``returned_sections``. The documented degraded
 section in Phase 2 is ``binnacle_service=unknown`` because service-manager integration is
-explicitly absent.
+explicitly absent. Deliberately excluded non-local filesystem mounts are represented by
+the aggregate warning defined above, not by fake capacity values.
 
 17.3 ``probe_result_formats``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -862,7 +885,7 @@ Return deterministic values:
 * ``warning_included`` equal to input.
 
 When ``include_warning=true``, add exactly one warning with code
-``synthetic_probe_warning``.  No random payload is used so result-rendering tests can use
+``synthetic_probe_warning``. No random payload is used so result-rendering tests can use
 stable expected values.
 
 17.4 ``probe_error``
@@ -873,7 +896,7 @@ stable expected values.
    The input schema limits delay to 10 seconds.
 
 ``invalid_input``
-   Return a synthetic execution error with code ``synthetic_invalid_input``.  Actual
+   Return a synthetic execution error with code ``synthetic_invalid_input``. Actual
    schema-invalid model arguments still fail at the MCP/schema validation layer before
    this handler; this case exists only to test execution-error rendering.
 
@@ -885,18 +908,18 @@ stable expected values.
 
 ``timeout``
    Return code ``synthetic_timeout`` with ``retryable=false`` and
-   ``retry_action="none"``.  Do not deliberately stall the server beyond the bounded
+   ``retry_action="none"``. Do not deliberately stall the server beyond the bounded
    probe contract.
 
 ``uncertain_outcome``
    Return code ``synthetic_uncertain_outcome`` with ``retryable=false`` and
-   ``retry_action="reconcile"``.  ``operation`` remains ``null`` because Phase 2 has no
+   ``retry_action="reconcile"``. ``operation`` remains ``null`` because Phase 2 has no
    durable operation and this synthetic probe must not fabricate one.
 
 17.5 ``compatibility_report``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Return only the compiled no-live-evidence baseline described above.  It never reads raw
+Return only the compiled no-live-evidence baseline described above. It never reads raw
 HTTP headers, credentials, cookies, owner-private data, or arbitrary files.
 
 18. Manifest binding modules
@@ -917,8 +940,8 @@ Each ``binnacle.bootstrap.<tool>.v1_1`` binding has framework-independent argume
 The function delegates once to the matching use case and contains no FastMCP decorator,
 settings lookup, global singleton, filesystem access, or protocol parsing.
 
-``ContractRegistry.load`` imports these exact paths during readiness validation.  This
-makes the reviewed ``handler_binding`` field executable rather than decorative.
+``ContractRegistry.load`` imports these exact paths during startup validation. This makes
+the reviewed ``handler_binding`` field executable rather than decorative.
 
 19. MCP adapter and Tool registration
 -------------------------------------
@@ -957,13 +980,13 @@ At server construction:
 #. fail construction if FastMCP cannot represent the reviewed schema/metadata faithfully.
 
 Do not derive the authoritative schema from Python function annotations and then compare
-loosely.  The manifest-resolved JSON Schema is the source of truth.
+loosely. The manifest-resolved JSON Schema is the source of truth.
 
 19.3 Input validation
 ~~~~~~~~~~~~~~~~~~~~~
 
 Even if FastMCP/SDK performs JSON Schema validation, the wrapper validates the received
-arguments against the compiled input schema before typed conversion.  This is defense in
+arguments against the compiled input schema before typed conversion. This is defense in
 depth and protects against framework configuration drift.
 
 Invalid inputs never invoke the application binding.
@@ -1005,10 +1028,10 @@ Tests compare the text projection with the structured result for key facts.
 21.1 Finite set
 ~~~~~~~~~~~~~~~
 
-The runtime accepts only the four repository-declared revisions.  One request is handled
+The runtime accepts only the four repository-declared revisions. One request is handled
 under exactly one revision.
 
-``2026-07-28`` maps to ``ProtocolEra.MODERN``.  The three older revisions map to
+``2026-07-28`` maps to ``ProtocolEra.MODERN``. The three older revisions map to
 ``ProtocolEra.LEGACY``.
 
 21.2 Framework-first implementation
@@ -1029,7 +1052,7 @@ than silently accepting a different wire contract.
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 A small ASGI pre-dispatch guard may enforce Binnacle-specific finite-set/header integrity
-that the framework does not enforce itself.  It may:
+that the framework does not enforce itself. It may:
 
 * reject missing/malformed/unsupported protocol versions under the documented rules;
 * reject target-era ``Mcp-Method``/``Mcp-Name`` mismatches;
@@ -1074,23 +1097,34 @@ Return HTTP 200 with a minimal JSON body equivalent to:
 
 It does not inspect the host, contracts, or external services.
 
+``/healthz`` exists only after the process has successfully constructed the trusted ASGI
+surface. A security-critical startup failure before that point terminates the process;
+there is no claim that an invalid registry must still be observable through HTTP.
+
 22.3 ``/readyz``
 ~~~~~~~~~~~~~~~~
 
 Return 200 only when:
 
 * ``BinnacleApplication`` is started;
-* contract registry digest verification passed;
+* contract registry integrity was verified successfully during startup;
 * exactly five compatibility-core bindings are loaded;
 * build identity is available;
 * device identity is available;
 * MCP adapter construction succeeded.
 
-Otherwise return 503 with a small safe code list such as:
+Return 503 only for lifecycle states in an otherwise valid, successfully constructed
+process, for example before application start is marked complete or after shutdown has
+cleared readiness. Use a small safe body such as:
 
 .. code-block:: json
 
-   {"status":"not_ready","reasons":["contract_registry_invalid"]}
+   {"status":"not_ready","reasons":["application_not_started"]}
+
+Registry digest mismatch, invalid schema, missing visible handler binding, or other
+contract-integrity failure is **fatal startup failure**, not a served degraded state.
+This avoids exposing an MCP/health surface from a process whose reviewed runtime contract
+cannot be trusted.
 
 Do not return stack traces, filesystem paths, environment values, schemas, raw digests,
 or credentials.
@@ -1101,7 +1135,7 @@ or credentials.
 Because remote controller authentication is deliberately absent in Phase 2, ``serve``
 must refuse non-loopback bind targets.
 
-Accepted canonical bind addresses are ``127.0.0.1`` and ``::1``.  Do not treat an
+Accepted canonical bind addresses are ``127.0.0.1`` and ``::1``. Do not treat an
 arbitrary hostname that happens to resolve to loopback as equivalent, and do not provide
 an ``--allow-unauthenticated-nonloopback`` escape hatch.
 
@@ -1121,6 +1155,7 @@ Extend ``ServerSettings`` only with fields Phase 2 genuinely uses:
        workers: Literal[1] = 1
        max_request_bytes: int = Field(default=1_048_576, ge=65_536, le=4_194_304)
        graceful_shutdown_seconds: float = Field(default=10.0, gt=0, le=60)
+       filesystem_stat_timeout_seconds: float = Field(default=2.0, gt=0, le=10)
 
 The supported MCP revision set, Tool catalogue phase, manifest path, schema paths,
 handler bindings, and security boundaries are **not** ordinary environment/CLI settings.
@@ -1135,15 +1170,21 @@ Phase 2 lifecycle order is:
 Startup
    #. load/validate settings;
    #. configure logging;
-   #. load/verify contract registry;
+   #. load/verify contract registry and visible binding integrity;
    #. compute build identity;
    #. initialise device and system read adapters;
+   #. require stable device identity;
    #. construct compatibility profile reader;
    #. construct ``CompatibilityUseCases``;
-   #. construct/start ``BinnacleApplication``;
+   #. construct ``BinnacleApplication``;
    #. construct FastMCP/ASGI adapter and five Tool bindings;
+   #. start ``BinnacleApplication``;
    #. mark readiness true;
    #. enter Uvicorn serving loop.
+
+Any failure in steps 1--9 exits non-zero before the server enters its serving loop.
+Contract registry/schema/binding failures are never converted into a 503-only degraded
+mode.
 
 Shutdown
    #. mark readiness false;
@@ -1172,7 +1213,7 @@ Extend ``ComposedApplication`` with explicit Phase 2 dependencies:
        logging_runtime: LoggingRuntime
 
 ``compose_application`` constructs concrete Linux/read-only adapters once and injects
-them into ``CompatibilityUseCases``.  Tests may call a narrower constructor that injects
+them into ``CompatibilityUseCases``. Tests may call a narrower constructor that injects
 fake ports directly.
 
 Do not use monkeypatching or global registries as the normal dependency-injection
@@ -1201,7 +1242,7 @@ Update Import Linter rules so:
 Define framework-independent exceptions/types for:
 
 ``ContractRegistryError``
-   Generated registry/digest/schema/binding mismatch; startup/readiness failure.
+   Generated registry/digest/schema/binding mismatch; fatal startup failure.
 
 ``InputContractError``
    Arguments fail the exact compiled Tool input schema; MCP Tool validation failure before
@@ -1212,7 +1253,8 @@ Define framework-independent exceptions/types for:
    malformed success is sent.
 
 ``InspectionError``
-   A bounded requested host fact cannot be collected truthfully.
+   A bounded requested host fact cannot be collected truthfully, including a timed-out
+   eligible local filesystem capacity query.
 
 ``ToolExecutionFailure``
    Application-level execution-error envelope information for synthetic/read failures.
@@ -1232,7 +1274,7 @@ Phase 2 logs bounded structured events for:
 * selected MCP revision/era;
 * Tool call success/execution-error/internal-error;
 * health/readiness state transitions;
-* bounded inspection warning codes.
+* bounded inspection warning/error codes.
 
 Do not log:
 
@@ -1257,13 +1299,14 @@ The command:
 
 #. loads settings;
 #. rejects non-loopback host;
-#. composes Phase 2 application dependencies;
+#. composes Phase 2 application dependencies and fails non-zero on fatal startup
+   validation errors;
 #. constructs the MCP/HTTP app;
 #. runs one Uvicorn worker in the foreground;
 #. propagates normal SIGINT/SIGTERM shutdown through the lifecycle above.
 
-``binnacle config validate`` must validate the new request-size/shutdown fields.
-``binnacle version`` remains side-effect free.
+``binnacle config validate`` validates the new request-size/shutdown/filesystem-stat
+fields. ``binnacle version`` remains side-effect free.
 
 No CLI command directly invokes ``system_inspect`` or the synthetic probes in Phase 2;
 the compatibility surface is intentionally tested through MCP.
@@ -1277,8 +1320,8 @@ the compatibility surface is intentionally tested through MCP.
 Use the official MCP Python SDK test/client primitives to connect to the local ASGI/
 loopback server through Streamable HTTP.
 
-The test must perform real MCP discovery and invocation rather than calling binding
-functions directly.
+The test performs real MCP discovery and invocation rather than calling binding functions
+directly.
 
 30.2 Discovery test
 ~~~~~~~~~~~~~~~~~~~
@@ -1323,7 +1366,7 @@ Separately send schema-invalid input and assert the handler binding was not call
 ---------------------------------------
 
 For each supported revision, include a positive local fixture reaching Tool listing and
-``binnacle_probe`` under the correct era behavior.
+``binnacle_probe`` under the correct era behaviour.
 
 Negative tests include:
 
@@ -1336,26 +1379,34 @@ Negative tests include:
 * cross-era result-shape contamination;
 * disabled Tasks/unsupported extension request.
 
-A negative passes only when it reaches the intended validation layer.  A malformed JSON
+A negative passes only when it reaches the intended validation layer. A malformed JSON
 request that fails before revision validation is not evidence that revision validation
 works.
 
-32. Health/readiness tests
---------------------------
+32. Health/readiness and startup-failure tests
+---------------------------------------------
 
 Required tests:
 
-``test_health_is_200_before_optional_subsystems``
-   Liveness is independent from Tool readiness.
+``test_health_is_200_for_started_process``
+   Liveness is minimal and independent from optional future subsystems.
 
-``test_ready_is_503_when_registry_digest_mismatches``
-   Corrupt generated registry fixture prevents readiness.
+``test_registry_digest_mismatch_aborts_startup``
+   Corrupt generated registry fixture raises ``ContractRegistryError`` and no Uvicorn
+   serving loop starts.
 
-``test_ready_is_503_when_handler_binding_missing``
-   A visible manifest binding cannot be imported.
+``test_missing_handler_binding_aborts_startup``
+   A visible manifest binding that cannot be imported fails startup before serving.
+
+``test_ready_is_503_before_application_started``
+   With valid trusted composition, the ASGI readiness state is 503 until application
+   startup/lifespan completes.
 
 ``test_ready_is_200_with_exact_five_bindings``
-   Fully composed local server is ready.
+   Fully composed and started local server is ready.
+
+``test_ready_returns_503_during_shutdown``
+   Clearing readiness at shutdown happens before the server stops accepting work.
 
 ``test_nonloopback_serve_is_rejected``
    ``0.0.0.0`` and representative LAN addresses fail before Uvicorn starts.
@@ -1375,7 +1426,8 @@ Required tests prove:
 * all five handler bindings import;
 * write-probe bindings are absent from runtime registration;
 * revision machine contract equals the finite prose/evaluation set;
-* ``binnacle-bootstrap-tools`` validates under corrected ``identifier`` schema;
+* the existing identifier schema accepts ``binnacle-bootstrap-tools`` without a schema
+  rewrite;
 * invalid/confusable identifiers remain rejected.
 
 34. Tool unit tests
@@ -1391,16 +1443,19 @@ request ID and ``request_correlation_id``.
 ~~~~~~~~~~~~~~~~~~~~~~~
 
 Test default section set, explicit section subset, canonical ordering, collection
-failure, filesystem truncation warning, and service-manager unknown warning.
+failure, filesystem truncation warning, non-local/FUSE/network mount omission warning,
+filesystem capacity timeout without event-loop stall, and service-manager unknown
+warning.
 
 Use temporary fixture files/parser inputs rather than depending on the CI runner's real
-``/proc`` content for parser unit tests.
+``/proc`` content for parser unit tests. For the timeout case, inject the stat provider so
+no test needs a genuinely hanging mount.
 
 34.3 ``probe_result_formats``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Property-style parameter cases are not required yet; table-test array lengths 0, 1, 3,
-and 16 plus null/string values and warning enabled/disabled.
+Table-test array lengths 0, 1, 3, and 16 plus null/string values and warning
+enabled/disabled.
 
 34.4 ``probe_error``
 ~~~~~~~~~~~~~~~~~~~~
@@ -1424,16 +1479,20 @@ Phase 2 implementation must preserve all of these invariants:
 #. no general command/subprocess interface is exposed;
 #. no arbitrary filesystem path comes from model input;
 #. host inspection reads only fixed implementation-owned sources;
+#. network/FUSE/autofs/unknown mounts are never passed to synchronous capacity syscalls;
+#. filesystem capacity queries cannot block the MCP event loop and are admission-bounded;
 #. raw machine identity is one-way transformed before result/log use;
 #. manifest/schema metadata comes only from the reviewed compiled registry;
 #. runtime filtering can remove but never rewrite Tool semantics;
 #. every Tool input is validated before application invocation;
 #. every structured output is validated before serialization;
 #. protocol/authentication-style failures are not mislabeled as Tool execution errors;
-#. no credential, cookie, authorization header, or private key handling is introduced;
+#. no credential, cookie, authorization header, or private-key handling is introduced;
 #. no persistent operation/audit claim is made;
 #. no local test result is presented as real ChatGPT compatibility evidence;
 #. health/readiness endpoints expose only minimal safe status;
+#. invalid registry/schema/binding integrity aborts startup instead of serving a degraded
+   untrusted MCP surface;
 #. a malformed/oversized target-era body cannot force unbounded middleware buffering;
 #. shutdown cannot leave a Phase 2 managed consequential effect because none exists.
 
@@ -1453,8 +1512,8 @@ The authoritative quality job additionally runs:
 The test matrix continues to run 3.11, 3.12, and 3.13 with explicit interpreter
 selection from the Phase 1 correction.
 
-The Python workflow must execute the new integration tests on loopback.  It must not need
-Internet access after dependencies are installed and must not require privileged ports.
+The Python workflow executes the new integration tests on loopback. It does not need
+Internet access after dependencies are installed and does not require privileged ports.
 
 Keep Ruff, strict MyPy, Import Linter, coverage, ``pip-audit``, and existing contract
 validation hard gates.
@@ -1491,23 +1550,26 @@ it with a marker, for example:
 
 Implement Phase 2 in this order:
 
-#. add the machine-readable finite revision contract/schema and narrow identifier fix;
+#. add the machine-readable finite revision contract/schema and the identifier regression
+   fixture without changing the already-correct identifier schema;
 #. implement ``compile_mcp_registry.py`` and deterministic generated bundle;
 #. add compiler/contract tests and make ``--check`` green;
 #. implement immutable MCP/system domain types;
 #. introduce the device/system/compatibility ports;
-#. implement Linux device/system read adapters;
+#. implement Linux device/system read adapters, including local-filesystem filtering and
+   bounded off-event-loop capacity queries;
 #. implement compiled compatibility-profile reader;
 #. extend build identity;
 #. implement ``CompatibilityUseCases``;
 #. implement the five exact manifest binding modules;
 #. extend MCP adapter registration/input/output projection;
 #. implement revision request context/guard using framework-first behaviour;
-#. add ``/healthz`` and ``/readyz``;
+#. add ``/healthz`` and lifecycle-only ``/readyz`` semantics;
+#. enforce fatal startup on contract/schema/binding-integrity failure;
 #. enforce loopback-only serve;
 #. extend composition/lifecycle;
 #. add local MCP discovery/invocation tests;
-#. add revision/error/health/readiness negative tests;
+#. add revision/error/startup/readiness negative tests;
 #. update import/quality/CI configuration;
 #. regenerate ``uv.lock`` only for genuine direct dependency changes;
 #. run the complete validation set;
@@ -1524,13 +1586,15 @@ A reviewer should verify:
 * Phase 1 framework/dependency decisions are consumed, not duplicated;
 * only five compatibility-core Tools are visible;
 * all Tool metadata and schemas originate from the reviewed source manifest;
-* the hyphen/identifier contradiction is corrected rather than hidden;
+* the real hyphenated manifest ID is covered by regression tests without needless schema
+  churn;
 * runtime does not parse YAML on each request;
 * generated registry is deterministic and CI-checked;
 * every visible handler binding resolves to the exact manifest path;
 * application/domain code imports no FastMCP/Uvicorn types;
 * Linux inspection accepts no arbitrary path/command target from MCP input;
-* system inspection is bounded and truncation is explicit;
+* non-local/FUSE/network mounts cannot stall filesystem capacity inspection;
+* filesystem inspection is bounded and truncation/omission is explicit;
 * build identity is deterministic and does not pretend to be Git identity;
 * device ID does not expose raw machine ID;
 * compatibility report contains no fabricated host evidence;
@@ -1538,7 +1602,9 @@ A reviewer should verify:
 * FastMCP/SDK remains the real protocol implementation;
 * input and output schemas are enforced at runtime;
 * synthetic execution errors are distinguishable from protocol errors;
-* health/readiness semantics are separate;
+* fatal contract-integrity failures abort startup rather than producing a misleading
+  served ``/readyz`` state;
+* health/readiness semantics are separate for a valid running process;
 * server cannot bind non-loopback while unauthenticated;
 * no write/durable/Git/privileged/credential/hardware capability enters the diff;
 * all exact-head CI gates pass.
@@ -1549,17 +1615,21 @@ A reviewer should verify:
 Phase 2 implementation is accepted only when every item below is true:
 
 #. ``spec/mcp/revision-support.yaml`` contains exactly the four reviewed revisions;
-#. the common identifier schema accepts the real reviewed manifest ID while retaining
-   negative identifier protections;
+#. the existing common identifier schema accepts the real reviewed manifest ID and the
+   regression negatives remain rejected without changing the schema merely for hyphens;
 #. generated compatibility-core registry and detached digest record are checked in;
 #. compiler ``--check`` passes from a clean checkout;
 #. generated registry contains exactly five Tool entries;
 #. every selected source schema reference resolves and has a recorded definition digest;
 #. every selected handler binding imports as an async callable;
 #. ``ContractRegistry.load`` fails closed on registry/digest/schema/binding drift;
+#. registry/schema/binding integrity failure aborts startup before Uvicorn serves;
 #. deterministic development ``BuildIdentity`` is available without Git commands;
 #. device identity is stable for one machine and does not reveal raw machine ID;
 #. ``system_inspect`` uses only bounded implementation-owned read sources;
+#. non-local/FUSE/network/unknown mounts are excluded from capacity syscalls;
+#. eligible local filesystem capacity queries run off-event-loop with deadline/admission
+   bounds and cannot freeze unrelated MCP/health handling;
 #. ``binnacle_service`` is truthful ``unknown`` until service integration exists;
 #. ``binnacle_probe`` validates against its exact output schema;
 #. ``system_inspect`` validates against its exact output schema;
@@ -1575,8 +1645,10 @@ Phase 2 implementation is accepted only when every item below is true:
 #. all four supported revisions have a positive local dispatch fixture at the intended
    validation layer;
 #. unsupported/cross-era/header-mismatch negatives fail at the correct layer;
-#. ``/healthz`` returns minimal HTTP 200 liveness;
-#. ``/readyz`` is 503 before/after readiness failure and 200 only for valid composition;
+#. ``/healthz`` returns minimal HTTP 200 liveness for a successfully started process;
+#. ``/readyz`` is 503 before lifecycle readiness and during shutdown, and 200 only for a
+   valid started composition;
+#. corrupt registry or missing visible handler binding fails startup rather than serving;
 #. ``serve`` refuses ``0.0.0.0`` and LAN/non-loopback bind targets;
 #. no write-probe Tool is registered or callable;
 #. no persistence, command execution, Git mutation, privileged operation, credential
@@ -1602,5 +1674,5 @@ revision context, readiness, or package ownership.
 
 Do not extend this document into remote deployment, real-host evidence collection,
 production controller authentication, write entitlement, durable operations, or
-self-hosting.  Those require later evidence/implementation gates and are outside the
+self-hosting. Those require later evidence/implementation gates and are outside the
 Phase 2 acceptance boundary.
