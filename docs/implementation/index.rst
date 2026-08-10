@@ -47,7 +47,9 @@ Plan status vocabulary
 ----------------------
 
 ``planned``
-   The phase exists in the roadmap but has no merged detailed engineering plan yet.
+   The phase exists in the roadmap but has no merged detailed engineering plan yet. A
+   planned phase whose named dependency/evidence gate is not satisfied must wait; only a
+   ``ready-to-design`` or applicable ``provisional`` phase may begin detailed drafting.
 
 ``ready-to-design``
    The preceding design/evidence dependencies are sufficient to create the detailed
@@ -73,7 +75,7 @@ Phase map
 | 0     | ``phase-00-contract-reconciliation.rst``             | ready-to-design      | Owner-approved principles and current V17    |
 |       |                                                      |                      | contracts                                    |
 +-------+------------------------------------------------------+----------------------+----------------------------------------------+
-| 1     | ``phase-01-project-skeleton.rst``                    | ready-to-design      | Phase 0 merged                               |
+| 1     | ``phase-01-project-skeleton.rst``                    | planned              | Phase 0 merged                               |
 +-------+------------------------------------------------------+----------------------+----------------------------------------------+
 | 2     | ``phase-02-readonly-mcp-server.rst``                 | planned              | Phase 1 merged                               |
 +-------+------------------------------------------------------+----------------------+----------------------------------------------+
