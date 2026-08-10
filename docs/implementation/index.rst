@@ -111,8 +111,9 @@ Phase map
 |       |                                                      |                      | implementation/promotion                     |
 +-------+------------------------------------------------------+----------------------+----------------------------------------------+
 | 6     | ``phase-06-development-workspace.rst``               | provisional          | Phase 5 plan may be merged for drafting;     |
-|       |                                                      |                      | Phase 5 implementation exit/write-confirmation|
-|       |                                                      |                      | evidence gates operational promotion         |
+|       |                                                      |                      | Phase 5 implementation exit and              |
+|       |                                                      |                      | write-confirmation evidence gate             |
+|       |                                                      |                      | operational promotion                        |
 +-------+------------------------------------------------------+----------------------+----------------------------------------------+
 | 7     | ``phase-07-execution-supervisor.rst``                | provisional          | Phase 4 plan may be merged for drafting;     |
 |       |                                                      |                      | Phase 4 implementation exit plus real Phase 3|
@@ -130,7 +131,7 @@ Phase map
 +-------+------------------------------------------------------+----------------------+----------------------------------------------+
 | 10    | ``phase-10-self-hosting-acceptance.rst``             | provisional          | All prior plans may be merged provisionally; |
 |       |                                                      |                      | acceptance requires all prior implementation |
-|       |                                                      |                      | gates and real ChatGPT                        |
+|       |                                                      |                      | gates plus real ChatGPT                      |
 +-------+------------------------------------------------------+----------------------+----------------------------------------------+
 
 Required structure of every detailed phase plan
