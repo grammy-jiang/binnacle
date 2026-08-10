@@ -491,9 +491,12 @@ claim that prevents two cleanup effects from racing on one created generation. A
 that reaches a durably proven ``known_no_effect`` terminal outcome while the exact created
 artifact remains present may release that claim only through the deterministic closure
 rules in section 20. The failed/no-effect operation remains retained in ``operations`` and
-``probe_operations``. Successful cleanup atomically records
-``removed_by_cleanup_operation_id``, moves the artifact to ``removed``, and clears the
-active claim. An ``uncertain`` cleanup never releases or supersedes its active claim.
+``probe_operations``. A successful cleanup may record
+``removed_by_cleanup_operation_id``, move the artifact to ``removed``, and clear the
+active claim only after durable ``known_effect`` classification for the exact cleanup plus
+the applicable required post-effect audit/obligation closure. On-disk absence by itself
+never authorizes that transition. An ``uncertain`` cleanup never releases or supersedes
+its active claim.
 
 No file content is stored in SQLite.
 
@@ -816,7 +819,9 @@ Every Phase 5 operation has durable operation-specific facts before effect:
 * ``probe_artifacts`` reservation/ownership or active cleanup claim.
 
 ``ProbeWorkspaceReconciler`` can therefore reconstruct a stable effect reference even if
-``EffectBoundary.start`` crashed before returning its receipt.
+``EffectBoundary.start`` crashed before returning its receipt. Reconstructing an effect
+reference does **not** reconstruct effect knowledge: Phase 4's lost-start-receipt rule
+still requires ``uncertain`` until durable evidence independently proves the outcome.
 
 For write reconciliation:
 
@@ -831,10 +836,21 @@ For write reconciliation:
 
 For cleanup reconciliation and active-claim closure:
 
-* exact retained artifact absent after a cleanup dispatch whose active claim matches the
-  operation -> requested absence is established; atomically set artifact state
+* exact retained artifact absent after cleanup may move to ``removed`` only when the exact
+  cleanup operation already has durable ``known_effect`` classification for a recoverable
+  effect reference bound to the same artifact/path generation and the applicable required
+  post-effect audit has fsynced, its audit-obligation marker has been durably cleared, and
+  any active recovery generation is closed. Then one short idempotent transaction may
+  revalidate the exact operation/artifact/generation/active claim, set artifact state
   ``removed``, record ``removed_by_cleanup_operation_id=operation_id``, clear
   ``active_cleanup_operation_id``, and converge the lifecycle truthfully;
+* exact retained artifact absent but the unlink/start receipt or durable effect
+  classification was lost, effect knowledge remains ``uncertain``, or required post-effect
+  audit/obligation/recovery closure is incomplete -> absence is only an observation, not
+  proof of a durable successful cleanup. Do not set ``removed``, do not record remover
+  provenance, and do not clear the active claim. Keep the operation/path fail restricted
+  until an explicit Phase 4 recovery/reconciliation path durably establishes truthful
+  effect knowledge; filesystem absence alone can never perform that promotion;
 * exact retained artifact still present and the operation has a durably proven
   ``known_no_effect`` outcome -> do not auto-repeat. First durably finish the operation's
   terminal/no-effect audit path and close any applicable audit obligation. Then one short
@@ -852,12 +868,13 @@ For cleanup reconciliation and active-claim closure:
 * mismatched replacement/identity ambiguity -> ``uncertain`` with the active claim
   retained.
 
-The no-effect claim-release transaction is recovery/control state, not evidence and not a
-new admission decision. It is safe to retry after crash because it is conditional on the
-exact terminal operation, exact live artifact generation/identity, exact active claim, and
-healthy audit/recovery state. A crash after operation terminalization but before release
-therefore leaves a conservative claim that fresh-process reconciliation may clear
-idempotently only after re-proving every predicate above.
+The successful-removal closure and the no-effect claim-release transaction are recovery/
+control state, not new admission decisions. Both are safe to retry after crash because
+they are conditional on the exact retained operation, exact artifact generation/identity,
+exact active claim, exact effect knowledge, and healthy audit/recovery state. A crash after
+operation terminalization but before either closure therefore leaves a conservative claim
+that fresh-process reconciliation may clear idempotently only after re-proving every
+predicate above.
 
 Reconciliation never creates a second effect and never changes idempotency identity.
 Historical ``removed``/``abandoned`` rows and every cleanup attempt remain retained so
@@ -892,6 +909,8 @@ Every effect goes through the Phase 4 coordinator in this order:
      -> terminal result/reconciliation
      -> if cleanup is durably known-no-effect and the exact artifact is unchanged,
         idempotent active-claim release under section 20 predicates
+     -> if cleanup is durably known-effect and the exact artifact is absent,
+        idempotent successful-removal closure under section 20 predicates
 
 Required audit failure trips the global consequential gate exactly as Phase 4 specifies.
 A surviving audit-obligation marker remains explicit-recovery-required across restart;
@@ -931,6 +950,11 @@ not erase or replace audit evidence. The original cleanup operation, its policy/
 effect evidence, and its ``probe_operations`` row remain retained; the claim release only
 records that this exact live artifact may be the subject of a later independently admitted
 cleanup.
+
+Likewise, an absent filesystem observation after dispatch is not an audit event that can
+upgrade ``uncertain`` to ``known_effect``. Successful-removal closure requires already-
+durable exact-effect knowledge plus the required post-effect audit/obligation/recovery
+closure; otherwise the uncertainty and active claim remain retained.
 
 23. MCP handler behavior
 ------------------------
@@ -1155,6 +1179,13 @@ Unit/property coverage includes:
 * a terminal cleanup with durably proven ``known_no_effect`` plus unchanged exact artifact
   releases its active claim only after required audit/recovery closure, retains its
   operation history, and permits a later independently admitted cleanup;
+* cleanup absence with lost/missing start receipt, ``uncertain`` effect knowledge, or
+  incomplete required post-effect audit/obligation/recovery closure never records
+  ``removed``/remover provenance and never clears the active claim; absence alone cannot
+  promote the operation to ``known_effect``;
+* cleanup absence with exact durable ``known_effect`` plus matching recoverable effect
+  reference and completed required audit/obligation/recovery closure may perform the
+  idempotent successful-removal closure exactly once;
 * an uncertain cleanup, audit/recovery-incomplete cleanup, or changed artifact never
   releases its active claim and therefore blocks a later cleanup from stealing authority;
 * cleanup never deletes mismatched/unowned content;
@@ -1206,7 +1237,10 @@ Required faults include:
   conservative and later cleanup stays blocked until reconciliation succeeds;
 * lost start receipt or any uncertain cleanup classification -> active claim remains and a
   new cleanup cannot supersede it;
-* crash after unlink before receipt/DB update;
+* crash after unlink/root-directory-fsync but before receipt/effect-knowledge persistence ->
+  even if the artifact is absent after restart, operation remains ``uncertain`` and the
+  active claim is retained until explicit recovery independently establishes exact effect
+  knowledge and required audit/obligation closure;
 * response loss after write and cleanup;
 * process restart then same-key retry;
 * controller replacement replay;
@@ -1230,6 +1264,9 @@ Close all runtimes and reconstruct a fresh application. Verify:
 * stale private staging file never becomes a visible second artifact;
 * a cleanup claim whose operation is durably terminal ``known_no_effect`` is released only
   after the exact artifact/generation/identity and audit/recovery predicates are re-proven;
+* an absent cleanup target after a lost/missing cleanup receipt remains uncertain with its
+  active claim retained; restart observation alone never records removal or enables path
+  reuse;
 * an uncertain or audit/recovery-incomplete cleanup claim survives restart and continues to
   block superseding cleanup admission;
 * mismatched on-disk state remains uncertain/fail-restricted;
@@ -1271,6 +1308,9 @@ Phase 5 must preserve all of the following:
 #. a created artifact has at most one active cleanup claim; policy admission never steals
    it, proven-no-effect release preserves the failed operation history, and uncertain or
    audit/recovery-incomplete cleanup retains the claim fail-closed;
+#. on-disk absence after cleanup dispatch is never sufficient to record ``removed`` or
+   clear the active claim; exact durable ``known_effect`` plus matching effect reference
+   and completed required post-effect audit/obligation/recovery closure are required;
 #. exact current state is revalidated immediately before the boundary;
 #. Phase 4 per-operation cancellation handoff and process-wide consequential gate remain
    the only start path;
@@ -1348,7 +1388,8 @@ Implement Phase 5 in this order after the implementation/promotion prerequisites
 #. implement secure root/staging adapter and filesystem capability verification;
 #. implement Phase 5 final boundary verifier;
 #. implement atomic create/no-overwrite effect and reconciler;
-#. implement exact cleanup effect, state-aware active-claim closure, and reconciler;
+#. implement exact cleanup effect, receipt-aware successful-removal closure,
+   state-aware active-claim closure, and reconciler;
 #. integrate both effects through Phase 4 global/per-operation gates, audit obligations,
    lifecycle, audit, and retained result semantics;
 #. bind existing MCP handlers without changing manifest/schema contracts;
@@ -1382,6 +1423,9 @@ A reviewer verifies:
 * a proven-no-effect cleanup can release only its exact active claim after terminal audit/
   recovery closure, while its operation history remains retained and uncertainty never
   permits claim supersession;
+* cleanup absence after dispatch records removal/clears the claim only with exact durable
+  ``known_effect``, matching recoverable effect reference, and completed required post-
+  effect audit/obligation/recovery closure; lost receipt/uncertainty keeps the claim;
 * final boundary revalidation uses the Phase 4 handoff/global-gate path;
 * Phase 4 audit-obligation semantics are not bypassed;
 * write cannot overwrite and cleanup cannot delete a mismatch;
@@ -1412,6 +1456,10 @@ This **planning PR** is accepted only when:
 #. state-aware cleanup claiming permits a later independent cleanup only after the prior
    claim is durably proven no-effect and safely released, while uncertain claims remain
    fail-closed and all cleanup-attempt history is retained;
+#. cleanup removal/claim release after observed absence requires exact durable
+   ``known_effect`` plus matching effect reference and completed required post-effect
+   audit/obligation/recovery closure; lost receipt/uncertainty cannot infer success from
+   absence;
 #. post-policy operation-specific reservation precedes any authorised filesystem effect;
 #. one-artifact write/cleanup algorithms and crash reconciliation are deterministic;
 #. Phase 4 operation/audit/global-gate invariants remain authoritative;
@@ -1436,6 +1484,10 @@ The implementation may become live for the selected HOST profile only when:
 #. automated tests prove known-no-effect cleanup claims release only after durable terminal
    audit/recovery closure, while uncertain/incomplete claims remain non-stealable across
    restart;
+#. automated tests prove an absent cleanup target cannot be promoted to ``removed`` after
+   a lost receipt/unknown effect outcome; exact durable ``known_effect`` plus matching
+   effect reference and completed required post-effect audit/obligation/recovery closure
+   are required before remover provenance/claim release/path reuse;
 #. all automated Phase 5 tests pass;
 #. production composition has no other new effect adapter;
 #. ``compatibility-write-probe`` is activated only through the reviewed profile path;
