@@ -91,10 +91,11 @@ The following internal architecture is concrete in Phase 4:
 * a per-operation application dispatch-handoff gate that serializes final revalidation/
   effect submission with cancellation and other pre-start lifecycle mutation;
 * one process-wide stateful ``ConsequentialBoundaryGate`` that serializes required-audit
-  fail-restriction with every not-yet-started consequential dispatch;
+  fail-restriction with every not-yet-started consequential dispatch, using revocable
+  generation-bound pre-start permits plus one gate-owned linearized start entry;
 * filesystem retained payloads with SQLite authoritative metadata;
 * protected durable pre-effect audit-obligation markers that survive a failed post-effect
-  audit **and** a failed SQLite audit-latch write until startup/recovery reconciles them;
+  audit **and** a failed SQLite audit-latch write until explicit recovery reconciles them;
 * append-only RFC 8785 JCS + SHA-256 audit hash chaining with one frozen first-store
   genesis predecessor digest;
 * one process-wide serialized audit append/tail-allocation gate, with the verified journal
@@ -169,12 +170,18 @@ Phase 4 implementation is complete only when tests prove all of the following:
   between the final lifecycle check and a stale new start;
 * every not-yet-started dispatch acquires the process-wide consequential-boundary permit
   after its per-operation handoff gate and holds that permit through final audit/recovery
-  health revalidation, all OP-BOUNDARY checks, bounded ``EffectBoundary.start``, and the
-  immediate durable receipt/reference/effect-knowledge classification;
-* a required audit failure closes the process-wide consequential-boundary gate to new
-  permits before waiting for already-entered bounded handoffs to drain; the durable audit
-  failure latch is committed/maintained only after that drain, so no new handoff enters
-  after failure detection and no ``EffectBoundary.start`` can begin after latch commit;
+  health revalidation, all OP-BOUNDARY checks, durable obligation publication, the
+  gate-owned start linearization, bounded ``EffectBoundary.start``, and immediate durable
+  receipt/reference/effect-knowledge classification;
+* each global permit is generation-bound and revocable until the gate-owned
+  ``call_start`` linearization. Required audit failure trips the same gate first, revokes
+  every already-entered permit that has not yet won start linearization, rejects all new
+  permits, and waits only for starts that had already linearized before the trip to finish
+  immediate classification;
+* the gate's trip and ``call_start`` paths share one linearized state transition, so if
+  trip wins the race no boundary call begins, and if ``call_start`` wins then that start
+  is already committed/begun before the failure trip; **no ``EffectBoundary.start`` begins
+  after required audit failure is detected/tripped**;
 * a final-boundary authority/state failure cannot call the effect adapter or overwrite a
   concurrently changed lifecycle state;
 * ``derived_member_key`` is rejected before binding/operation creation in Phase 4 because
@@ -201,16 +208,21 @@ Phase 4 implementation is complete only when tests prove all of the following:
   ``/var/lib/binnacle/state/audit-obligations`` with a unique schema-compatible
   ``obligation_id``, ``operation_id``, and durable running ``state_version``;
 * the obligation ID is correlated into the matching required post-effect schema-valid
-  audit event, and the marker is deleted plus parent-directory-fsynced only after those
-  matching audit bytes are durably fsynced; a proven no-crossing outcome closes it through
-  the same durable no-effect evidence path;
-* startup scans audit-obligation markers before readiness: matching verified audit evidence
-  permits idempotent cleanup, while an unmatched/malformed/unremovable marker keeps
-  consequential admission fail-restricted and, when SQLite is writable, establishes or
-  continues the durable audit-failure generation for explicit recovery;
+  audit event, and the marker is deleted plus parent-directory-fsynced only in the same
+  healthy process after that append reports successful durable fsync; a proven no-crossing
+  outcome uses the same required no-effect audit ordering;
+* **any audit-obligation marker that survives process restart is recovery-required even if
+  matching event bytes are present and verify**. Startup may classify the match but never
+  auto-clears the marker, because surviving bytes cannot distinguish a reported-successful
+  fsync followed by cleanup crash from a reported-failed fsync whose bytes later survived;
+* every surviving valid marker keeps consequential admission fail-restricted and, when
+  SQLite is writable, establishes or continues the durable audit-failure generation. Only
+  explicit exact-generation recovery may append/fsync closure evidence and then unlink+
+  directory-fsync the marker;
 * therefore post-effect audit failure plus SQLite latch-write failure plus process crash
-  remains durably detectable from the protected obligation marker; the marker is recovery
-  control state and never substitutes for authoritative audit evidence;
+  remains durably detectable from the protected obligation marker even when the failed-
+  fsync event bytes happen to survive and verify; the marker is recovery control state and
+  never substitutes for authoritative audit evidence;
 * a crash during dispatch before a receipt can never later be asserted as
   ``known_no_effect``;
 * ``uncertain`` is never automatically retried;
@@ -236,7 +248,7 @@ Phase 4 implementation is complete only when tests prove all of the following:
 * audit payloads use exact existing ``payload.kind`` discriminators, and pre-operation or
   tombstone idempotency abuse/conflict evidence never fabricates operation state/version
   fields solely to fit ``operation.idempotency_conflict``;
-* audit corruption, truncation, fork, storage failure, or unresolved audit obligation
+* audit corruption, truncation, fork, storage failure, or any surviving audit obligation
   blocks new effects;
 * bounded recovery/status/verification remains possible where underlying stores remain
   trustworthy;
@@ -305,7 +317,7 @@ ordering:
       -> durable authorised -> running dispatch marker
       -> fsynced effect.intent_recorded audit
       -> acquire per-operation dispatch-handoff gate shared with cancellation
-      -> acquire process-wide consequential-boundary permit
+      -> acquire generation-bound process-wide consequential-boundary permit
       -> revalidate global audit/recovery health under that permit
       -> final OP-BOUNDARY revalidation for every operation mode
            -> trusted-time/deadline guard where applicable
@@ -313,19 +325,23 @@ ordering:
            -> current controller/device trust, policy/profile, lifecycle/cancellation,
               target/freshness/reservation/recovery checks where applicable
       -> atomically publish+fsync durable audit-obligation marker
-      -> effect boundary submission/receipt handoff while holding both gates
-         (test-only in Phase 4; real adapters later)
-      -> persist returned reference/effect knowledge/result metadata
+      -> gate-owned call_start linearization against any concurrent audit-failure trip
+           -> if trip wins: revoke pre-start permit, do not call effect boundary
+           -> if start wins: bounded effect submission has begun before trip linearizes
+      -> persist returned reference/effect knowledge/result metadata while start is active
       -> release global consequential-boundary permit
       -> release per-operation dispatch-handoff gate
       -> append/fsync matching post-effect audit carrying obligation_id
       -> delete obligation marker + fsync marker directory only after matching audit fsync
       -> reconcile/recover truthfully after restart
 
-A required audit failure closes the process-wide consequential-boundary gate to new
-permits before waiting for already-entered bounded handoffs, then establishes/maintains the
-durable audit-failure generation. The kernel is ready to support future effects but grants
-none by itself.
+A required audit failure synchronously trips the process-wide gate as its first failure-
+handling action, rejects new permits, and revokes every entered permit that has not yet won
+``call_start``. It waits only for already-linearized starts to finish their bounded
+handoff/immediate classification before establishing/maintaining the durable failure
+generation. Any obligation marker surviving restart requires explicit recovery even if
+matching audit bytes verify. The kernel is ready to support future effects but grants none
+by itself.
 
 6. Exact repository changes
 ---------------------------
@@ -524,9 +540,11 @@ Use:
 ``state/audit-obligations`` contains only bounded internal recovery-control marker files.
 Each marker is implementation-owned, carries no raw idempotency key/credential/payload,
 and is published by temp-file write + file fsync + atomic rename + parent-directory fsync.
-Its presence means a required post-effect audit obligation has not yet been durably closed;
-it is not authoritative audit evidence and cannot make a missing audit event appear to
-exist.
+Its presence means a required post-effect audit obligation has not completed the full
+same-process audit-fsync-and-marker-cleanup protocol. It is not authoritative audit
+evidence and cannot make a missing audit event appear to exist. If any marker survives a
+process restart, startup treats it as explicit-recovery-required even when matching audit
+bytes are present and verify.
 
 ``/etc/binnacle`` remains protected configuration/policy; ``/run/binnacle`` remains
 runtime/ephemeral control state; source remains under ``/srv/binnacle-dev/repo``.
@@ -685,12 +703,24 @@ Rules:
 * fixed acquisition order is **per-operation ``DispatchHandoffGate`` first, then global
   ``ConsequentialBoundaryGate`` permit**; cancellation uses only the per-operation gate
   and never acquires in reverse order;
-* an audit failure atomically trips/closes the global gate to new permits, waits only for
-  already-entered bounded permits to drain, then commits/maintains the durable SQLite
-  failure latch; the gate stays closed throughout failure/recovery and startup reopens it
-  only after all durable health gates pass;
+* every permit captures the global gate generation and remains ``PRE_START``/revocable
+  while final health checks and marker publication run. The gate itself owns the only
+  ``call_start`` path that may invoke ``EffectBoundary.start``;
+* required-audit failure invokes gate trip as its first failure-handling action. Trip and
+  ``call_start`` share one linearized state transition: trip marks the gate ``TRIPPED``,
+  advances its volatile trip generation, revokes all ``PRE_START`` permits, and rejects
+  future permits; ``call_start`` may proceed only if its permit is current/open/not
+  revoked, then atomically marks it ``START_COMMITTED`` and enters the bounded adapter call;
+* if trip wins that linearization, the permit cannot start even if it entered the global
+  protected region earlier. If ``call_start`` wins, that boundary invocation is already
+  committed/begun before trip and is the only class of active start the trip handler waits
+  to drain;
+* durable SQLite failure latching follows the drain of only those already-linearized
+  starts; the gate remains closed throughout failure/recovery and startup reopens it only
+  after all durable health gates pass;
 * no SQLite write transaction remains open while final boundary verifiers,
-  audit-obligation filesystem fsyncs, or ``EffectBoundary.start`` perform external I/O;
+  audit-obligation filesystem fsyncs, ``ConsequentialBoundaryGate.call_start``, or
+  ``EffectBoundary.start`` perform external I/O;
 * audit-obligation publication/removal uses atomic filesystem ordering under the protected
   state root and is not folded into a false SQLite/filesystem ACID claim;
 * use ``BEGIN IMMEDIATE`` or an equivalently tested SQLAlchemy/SQLite strategy for the
@@ -1389,32 +1419,46 @@ Two distinct concurrency gates protect different invariants:
 
 The fixed lock order is per-operation handoff gate **then** global consequential-boundary
 permit. The coordinator acquires ``DispatchHandoffGate`` first, then requests a global
-permit. The global permit is denied while the gate is tripped/closed. Once acquired, it is
-held through a fresh audit/recovery-health revalidation, the complete OP-BOUNDARY
-revalidation, durable audit-obligation marker publication, the bounded
-``EffectBoundary.start`` attempt, and immediate durable capture/classification of the
-returned receipt/reference/effect knowledge. ``OperationService.request_cancel`` and any
-other same-operation pre-start lifecycle mutator acquire only the per-operation gate and
-therefore cannot invert this ordering.
+permit. Each permit captures the current gate generation and starts in a revocable
+``PRE_START`` state. The permit is held through fresh audit/recovery-health revalidation,
+the complete OP-BOUNDARY revalidation, durable audit-obligation publication, gate-owned
+start linearization, bounded ``EffectBoundary.start``, and immediate durable capture/
+classification of returned receipt/reference/effect knowledge. ``OperationService.
+request_cancel`` and any other same-operation pre-start lifecycle mutator acquire only the
+per-operation gate and therefore cannot invert this ordering.
+
+``ConsequentialBoundaryGate`` owns the **only** application path that may invoke
+``EffectBoundary.start``. Immediately after marker durability, the coordinator calls
+``ConsequentialBoundaryGate.call_start(permit, effect_boundary, request)``. Internally,
+``call_start`` and audit-failure ``trip`` share one small linearized state transition:
+
+* ``call_start`` verifies gate=open, permit generation=current, and permit not revoked;
+  it then marks the permit ``START_COMMITTED`` and enters the bounded adapter invocation as
+  one gate-owned handoff, with no unrelated await/control transfer between that successful
+  check and call entry;
+* ``trip`` is the first failure-handling action when required audit failure is detected. It
+  atomically marks the gate ``TRIPPED``, advances its volatile trip generation, revokes
+  every permit still ``PRE_START``, and rejects future permits/call-start attempts;
+* if ``trip`` wins, an already-entered pre-start permit is invalidated and its
+  ``call_start`` fails closed without invoking the adapter;
+* if ``call_start`` wins, that boundary invocation is already committed/begun before the
+  trip linearization; the trip handler waits only for such ``START_COMMITTED`` bounded
+  handoffs to finish immediate durable classification.
 
 The global gate starts closed on process construction. Startup opens it only after DB,
 audit chain/cache, audit-obligation scan, failure-generation recovery state, payload, time,
-and reconciliation gates permit consequential readiness. When required audit failure is
-detected, failure handling atomically trips/closes the global gate to **new** permits
-before waiting for any permits already inside a bounded handoff to drain. Only after all
-already-entered permits leave does failure handling commit or maintain the durable SQLite
-audit-failure latch. The gate remains closed. Therefore:
-
-* after failure detection, no new dispatch handoff can enter the global protected region;
-* a bounded handoff already holding a permit may finish its start/classification sequence,
-  after which the failure handler drains it;
-* after the durable audit-failure latch commits, no ``EffectBoundary.start`` can newly
-  begin because no permit remains active and the gate is still closed;
-* explicit audit recovery never reopens the gate; only a later full startup may do so.
+and reconciliation gates permit consequential readiness. A required audit failure never
+allows an already-entered but not-yet-started permit to proceed merely because it entered
+earlier. After trip linearizes, no new boundary call may begin. The gate remains closed
+through durable failure latching and explicit recovery; explicit audit recovery never
+reopens it, only a later full startup may do so.
 
 This is intentionally not a SQLite or distributed lock. Phase 4 has one authoritative
 application writer. No SQLite transaction is held while boundary verifiers,
-audit-obligation filesystem fsync, or the effect adapter perform external I/O.
+audit-obligation filesystem fsync, gate-owned bounded start, or the effect adapter perform
+external I/O. The global gate may serialize/coordinate bounded start handoffs more
+conservatively than a future optimized design; Bootstrap correctness and fail-restriction
+outrank throughput.
 
 Cancellation behavior under the per-operation gate remains exact:
 
@@ -1438,14 +1482,17 @@ adapter that cannot bound its submission handoff is not composable as a reviewed
 consequential boundary until it supplies a safe handoff/reconciliation contract.
 
 The final guard is the last revalidation work before the required audit-obligation publish
-and ``EffectBoundary.start``. After it returns success, the coordinator performs only the
-required marker publication/fsync before the call; both gates remain held across that
-sequence. Marker-publication failure suppresses ``start`` and trips fail-restricted audit
-recovery control rather than silently continuing.
+and gate-owned ``call_start``. After it returns success, the coordinator performs only the
+required marker publication/fsync before calling ``call_start``; both gates remain held.
+Marker-publication failure suppresses ``start`` and trips fail-restricted audit recovery
+control rather than silently continuing. A concurrent required-audit trip during final
+checks or marker fsync revokes the permit; the subsequent ``call_start`` therefore fails
+closed even though the permit had entered earlier.
 
 Failure behavior:
 
-* the effect boundary is never called when a final guard or marker-publication step fails;
+* the effect boundary is never called when a final guard, marker-publication, or revoked-
+  permit/start-linearization check fails;
 * if the operation is still the expected ``running`` state/version and failure proves no
   effect was attempted, transition ``running -> failed`` with ``known_no_effect`` and an
   applicable existing error (for example ``policy_rejected``,
@@ -1486,16 +1533,18 @@ Failure behavior:
    marker;
 #. append/fsync a schema-valid ``payload.kind=effect.intent_recorded`` event carrying only
    bounded/digested target/effect facts and that operation correlation;
-#. if that required intent append/fsync fails, **do not call the effect boundary**: trip
-   the global ``ConsequentialBoundaryGate`` to new permits; when existing bounded permits
-   drain, durably transition ``running -> failed`` with ``known_no_effect`` and
-   ``audit_unavailable`` where SQLite is writable, latch/maintain the current audit-failure
-   generation, and disable consequential admission; if DB terminalization/latch itself
-   cannot be committed, leave no fabricated durable terminal/recovery claim and keep the
-   global gate closed/in-memory fail-restricted for the process lifetime;
+#. if that required intent append/fsync fails, **do not call the effect boundary**: invoke
+   global-gate trip immediately as the first failure action, revoking every not-yet-
+   started permit across operations; wait only for starts already linearized before the
+   trip to finish their bounded immediate classification; then durably transition this
+   operation ``running -> failed`` with ``known_no_effect`` and ``audit_unavailable`` where
+   SQLite is writable, latch/maintain the current audit-failure generation, and disable
+   consequential admission; if DB terminalization/latch itself cannot be committed, leave
+   no fabricated durable terminal/recovery claim and keep the global gate closed/in-memory
+   fail-restricted for the process lifetime;
 #. acquire the per-operation ``DispatchHandoffGate`` shared with cancellation/pre-start
    lifecycle mutation;
-#. while holding it, acquire a permit from the process-wide
+#. while holding it, acquire a generation-bound permit from the process-wide
    ``ConsequentialBoundaryGate``; closed/tripped gate returns fail-restricted without a
    start attempt;
 #. while holding both, re-read global audit/recovery health and run the mandatory final
@@ -1509,12 +1558,16 @@ Failure behavior:
    marker under ``state/audit-obligations`` binding exactly that ``obligation_id``, the
    ``operation_id``, and durable running ``state_version``; inability to make this marker
    durable suppresses ``start`` and trips fail-restricted audit recovery control;
-#. **only after the marker durability point, while still holding both gates**, call
-   ``EffectBoundary.start`` with an ``EffectRequest`` containing operation ID/running
-   state version as stable dispatch identity;
-#. while still holding both gates, durably persist/classify the returned no-crossing/
-   crossed/reference/outcome knowledge and the bounded recoverable opaque reference when
-   one exists; a lost/exceptional receipt remains dispatch-attempted uncertainty;
+#. **only after the marker durability point**, call
+   ``ConsequentialBoundaryGate.call_start(...)`` while still holding the per-operation gate
+   and global permit. The gate revalidates permit generation/revocation in its shared
+   start/trip linearization and is the sole code allowed to invoke ``EffectBoundary.start``;
+#. if a concurrent required-audit trip won before ``call_start``, the permit is revoked,
+   no boundary is called, the marker remains for truthful no-effect/recovery closure, and
+   the operation follows fail-restricted reconciliation rather than proceeding;
+#. if ``call_start`` wins, the boundary invocation is linearized/begun before any later
+   trip; the gate keeps it accounted as ``START_COMMITTED`` through the bounded start and
+   immediate durable receipt/reference/effect-knowledge classification;
 #. release the global consequential-boundary permit, then release the per-operation handoff
    gate; a waiting cancellation re-reads current state/version and may use only the
    lifecycle-declared next edge;
@@ -1526,17 +1579,18 @@ Failure behavior:
    ``operation.state_changed`` evidence as appropriate, with ``obligation_id`` present in
    top-level ``correlation_ids`` and the durable running ``state_version`` carried as a
    bounded safe fact when needed for exact marker/evidence matching;
-#. **only after matching post-effect audit bytes are durably fsynced**, unlink the
-   obligation marker and fsync its parent directory; if the effect boundary is explicitly
-   proven not crossed, use the same schema-valid no-effect/lifecycle audit path carrying
-   the obligation correlation before clearing the marker;
+#. **only if that append reports successful durable fsync in this same process**, unlink
+   the obligation marker and fsync its parent directory. If the effect boundary is
+   explicitly proven not crossed, use the same schema-valid no-effect/lifecycle audit path
+   carrying the obligation correlation before clearing the marker;
 #. if the matching post-effect audit append/fsync fails, immediately trip the global gate
    before attempting/maintaining the SQLite audit-failure latch; leave the marker intact;
    if the latch write also fails and the process crashes, the marker remains the durable
    startup-visible unresolved audit obligation;
 #. if matching audit fsync succeeds but marker deletion/directory fsync fails, keep the
-   kernel fail-restricted; startup may idempotently clear the marker only after verifying
-   the exact matching audit evidence;
+   kernel fail-restricted and attempt/maintain the durable audit-failure generation. **A
+   marker surviving a later process restart is never auto-cleared by startup, even if the
+   matching event verifies; it requires explicit exact-generation recovery**;
 #. return the retained operation/result metadata only after this control-state outcome is
    classified.
 
@@ -1551,7 +1605,7 @@ never reached. Restart cannot prove no effect from the state marker alone, so it
 through the running/uncertain reconciliation path rather than falsely returning
 ``known_no_effect`` unless a separately durable no-effect terminalization was committed
 before the crash. A surviving audit-obligation marker further blocks consequential
-readiness until its matching audit/recovery evidence is reconciled.
+readiness until explicit generation-bound recovery truthfully closes it.
 
 There is no production effect adapter in Phase 4.
 
@@ -1581,28 +1635,53 @@ The implementation must bound gate ownership and clean up idle per-operation ent
 cancel request cannot deadlock or leak unbounded lock objects.
 
 ``ConsequentialBoundaryGate`` is a separate process-wide stateful permit gate with at
-least ``closed/open/tripped`` behavior and bounded active-permit accounting. It is rebuilt
-closed after process restart and is never treated as durable authority. Startup may move
-it to open only after durable health checks pass. ``trip(reason)`` closes admission to new
-permits atomically before waiting for existing permits to drain; after the drain, the
-caller can safely establish/maintain the durable failure latch knowing no new start can
-begin. Explicit recovery does not open it.
+least ``closed/open/tripped`` behavior, a volatile monotonic gate generation, and permit
+states ``PRE_START``/``START_COMMITTED``/``DONE``. It is rebuilt closed after process
+restart and is never treated as durable authority. Startup may move it to open only after
+durable health checks pass.
+
+Expose semantics equivalent to:
+
+.. code-block:: python
+
+   class ConsequentialBoundaryGate:
+       async def acquire(self) -> ConsequentialPermit: ...
+       async def call_start(
+           self,
+           permit: ConsequentialPermit,
+           boundary: EffectBoundary,
+           request: EffectRequest,
+       ) -> EffectStartReceipt: ...
+       def trip(self, reason: str) -> ConsequentialTrip: ...
+
+``trip`` is required to perform its state transition/revocation before any blocking wait or
+SQLite write. It and ``call_start`` share one gate-owned linearization for the start-vs-
+failure race. A permit remains revocable until ``call_start`` atomically validates the
+current open generation and changes it to ``START_COMMITTED``. The only starts allowed to
+finish after a trip are those that won this linearization **before** the trip; every
+``PRE_START`` permit is revoked regardless of how long it has been inside final checks.
+The trip handler then waits only for those already-started bounded handoffs to finish
+immediate durable classification. No ordinary application code may invoke
+``EffectBoundary.start`` outside ``call_start``.
 
 The fixed nesting contract is:
 
 ::
 
    DispatchHandoffGate(operation_id)
-       -> ConsequentialBoundaryGate permit
+       -> ConsequentialBoundaryGate generation-bound PRE_START permit
            -> final health + OP-BOUNDARY checks
            -> audit-obligation publish/fsync
-           -> bounded EffectBoundary.start
-           -> immediate durable receipt/reference/effect-knowledge classification
+           -> gate-owned call_start/start-vs-trip linearization
+               -> START_COMMITTED bounded EffectBoundary.start
+               -> immediate durable receipt/reference/effect-knowledge classification
 
-No implementation path acquires these in the opposite order. Audit failure handling that
-trips the global gate runs outside a held global permit; normal post-effect required audit
-runs after the bounded dispatch permit is released. This avoids a self-drain deadlock while
-still closing the gate before latching failure.
+No implementation path acquires these in the opposite order. Normal post-effect required
+audit runs after the bounded dispatch permit is released. Audit failure may call the
+non-blocking trip transition while other permits exist; trip revokes every pre-start
+permit first, then waits for only already-``START_COMMITTED`` handoffs. This avoids a self-
+drain deadlock while preventing stale entered permits from starting after failure
+linearizes.
 
 Crash recovery never trusts either vanished in-memory gate; it trusts durable
 state/audit/effect evidence **and** scans protected audit-obligation markers before any
@@ -1630,10 +1709,15 @@ are never silently removed.
 The matching required post-effect audit record uses the existing top-level
 ``correlation_ids`` to carry ``obligation_id`` and top-level ``operation_id`` to bind the
 operation; the marker's running state version is included as a bounded normal-result safe
-fact when needed to prove exact correspondence. A marker is clearable automatically only
-when the **verified authoritative audit chain** contains the matching schema-valid event
-with the expected operation and running-version binding. A marker itself is never evidence
-that the event occurred.
+fact when needed to prove exact correspondence. During the live healthy process, the
+marker may be deleted only after ``AuditJournal.append`` returns successful durable fsync
+for that matching event. **After process restart, marker presence is deliberately
+ambiguous and is never auto-clearable from matching journal bytes alone.** A failed fsync
+can report failure even when complete bytes later survive; therefore matching verified
+bytes are useful recovery input but do not prove the previous process observed the
+required durability point. Every surviving marker must go through explicit exact-
+generation recovery and receive schema-valid fsynced closure evidence before unlink+
+directory-fsync. A marker itself is never evidence that the event occurred.
 
 ``PreparedStateCheck`` contains only protected prepared-operation identity and bounded
 operation-specific facts required to recompute the reviewed current-state digest. It does
@@ -1699,21 +1783,27 @@ verification and before consequential-kernel availability.
 Startup/reconciliation first scans ``state/audit-obligations`` in bounded deterministic
 order. For each valid marker:
 
-* if the verified authoritative audit chain already contains the exact matching
-  obligation/operation/running-version post-effect or proven-no-effect evidence, delete the
-  marker and fsync its parent directory idempotently; deletion/fsync failure remains
-  fail-restricted;
-* if no matching audit evidence exists, do **not** infer whether the effect occurred from
-  marker presence alone. Keep the marker, block consequential readiness, and if SQLite is
-  writable establish or continue the durable audit-failure generation/reason for explicit
-  recovery;
-* if establishing/maintaining that SQLite latch fails, the marker itself remains the
+* search the verified authoritative chain for an exact matching obligation/operation/
+  running-version post-effect or proven-no-effect event and classify that fact for the
+  later recovery workflow, **but do not unlink the marker during normal startup**;
+* regardless of whether matching bytes are present, marker survival across restart means
+  the prior same-process fsync+cleanup protocol did not complete unambiguously. Keep the
+  marker, block consequential readiness, and if SQLite is writable establish or continue
+  the durable audit-failure generation/reason for explicit recovery;
+* if no matching event exists, do not infer whether the effect occurred from marker
+  presence alone; explicit recovery must reconcile retained effect truth before closure;
+* if a matching event exists, explicit recovery may use that verified event/hash as input
+  but must still append/fsync schema-valid recovery closure evidence for the obligation
+  before unlink+directory-fsync;
+* if establishing/maintaining the SQLite latch fails, the marker itself remains the
   durable reason the next startup again fails restricted;
 * malformed/tampered/unsafe marker state is ``audit_integrity_failed`` and is not
   auto-repaired.
 
-Only after this marker scan/reconciliation may ordinary bounded operation reconciliation
-continue. Scan nonterminal/effect-reconcilable operations in bounded pages.
+Only after this marker scan/classification may ordinary bounded operation reconciliation
+continue. Any surviving marker keeps the global gate closed even if operation
+reconciliation itself succeeds. Scan nonterminal/effect-reconcilable operations in
+bounded pages.
 
 Rules:
 
@@ -1747,8 +1837,9 @@ Rules:
   allowed terminal transition;
 * no startup path creates a new idempotency key or dispatches an effect automatically.
 
-An unmatched audit obligation may be resolved only by truthful reconciliation/recovery
-evidence. Explicit recovery must never fabricate the missing original post-effect event.
+A surviving audit obligation may be resolved only by explicit truthful recovery evidence.
+Startup never fabricates the missing original post-effect event and never silently treats
+matching surviving bytes as proof that the failed/successful fsync status was known.
 Phase 4 production has no external effect reference. Fault/integration tests exercise all
 branches with fakes.
 
@@ -1837,9 +1928,10 @@ trusted time cannot prove expiry, the full record is retained. Uncertain/securit
 evidence is not removed merely because ordinary result data expires.
 
 Audit-obligation markers are not ordinary retained-result data and are never age-evicted.
-They remain until exact matching verified audit/recovery evidence permits durable closure.
-Quota pressure must reserve enough bounded state for these markers or fail consequential
-admission before a boundary can start.
+They remain until explicit exact-generation recovery has durably recorded truthful
+schema-valid closure evidence and then completed unlink+directory-fsync. Quota pressure
+must reserve enough bounded state for these markers or fail consequential admission before
+a boundary can start.
 
 Quota pressure rejects new protected payload production when safe eviction is impossible.
 No broad automatic destructive cleanup is introduced.
@@ -1981,28 +2073,34 @@ Pre-effect ordering:
 #. ``policy.decision``/``operation.authorised`` audit appends/fsyncs;
 #. DB ``authorised -> running`` dispatch marker commits;
 #. ``effect.intent_recorded`` audit appends/fsyncs;
-#. if the intent append/fsync fails, trip the global consequential-boundary gate to new
-   permits; after already-entered permits drain, terminalize ``running -> failed`` with
-   ``known_no_effect``/``audit_unavailable`` and durably latch/maintain the audit-failure
-   generation where SQLite is writable;
+#. if the intent append/fsync fails, trip the global consequential-boundary gate as the
+   first failure action; revoke every ``PRE_START`` permit and reject new permits, then
+   wait only for starts already linearized as ``START_COMMITTED`` before the trip;
+#. after those already-started bounded handoffs classify, terminalize the affected
+   ``running -> failed`` with ``known_no_effect``/``audit_unavailable`` and durably latch/
+   maintain the audit-failure generation where SQLite is writable;
 #. acquire the per-operation dispatch-handoff gate shared with cancellation;
-#. acquire the process-wide consequential-boundary permit;
+#. acquire a generation-bound process-wide consequential-boundary permit;
 #. revalidate current audit/recovery health plus all OP-BOUNDARY predicates while holding
    both;
 #. atomically publish and fsync the per-dispatch audit-obligation marker;
-#. only then may the bounded effect adapter submission be called and its immediate
-   receipt/reference/uncertainty knowledge durably classified;
+#. invoke only ``ConsequentialBoundaryGate.call_start``. Its shared trip/start
+   linearization rechecks that the entered permit is current and not revoked; only a
+   ``START_COMMITTED`` winner may enter the bounded adapter submission;
+#. immediately classify/persist receipt/reference/uncertainty while that start is active;
 #. release the global permit and then per-operation gate;
 #. append/fsync matching post-effect/no-effect audit containing ``obligation_id``;
-#. only after matching audit fsync, delete the marker and fsync its directory.
+#. only when that append reports successful fsync in the same process, delete the marker
+   and fsync its directory.
 
 After a synthetic/future external effect, truthful operation persistence has priority;
 audit follows immediately and fsyncs. If audit fails after a known effect, do not roll
-back history or repeat the effect: leave the obligation marker intact, atomically trip the
-global gate to new permits, wait for already-entered bounded permits to drain, retain
-truthful state, latch the audit-failure generation where SQLite is writable, and block new
-consequential admission. If the SQLite latch write fails, the protected marker still
-makes the unresolved required-audit obligation visible after crash/restart.
+back history or repeat the effect: leave the obligation marker intact, trip the global
+start-vs-failure gate immediately, thereby revoking all entered pre-start permits across
+other operations, wait only for starts that had already linearized before that trip,
+retain truthful state, latch the audit-failure generation where SQLite is writable, and
+block new consequential admission. If the SQLite latch write fails, the protected marker
+still makes the unresolved required-audit obligation visible after crash/restart.
 
 Crash-window rules:
 
@@ -2023,25 +2121,31 @@ Crash-window rules:
 * authorization audit but still authorised -> no effect was dispatched because running
   transition is the code-level precondition;
 * running state with a known in-process effect-intent append/fsync failure -> no boundary
-  was called; trip the global gate and after existing permits drain, if DB is writable,
-  commit ``running -> failed`` ``known_no_effect`` and the audit-failure latch before
-  leaving the path, then attempt emergency evidence;
+  was called for that operation; trip globally first, revoke every pre-start permit, drain
+  only starts already committed before the trip, then if DB is writable commit
+  ``running -> failed`` ``known_no_effect`` and the audit-failure latch before leaving the
+  path, then attempt emergency evidence;
 * if that DB terminalization/latch commit fails, do not call the boundary and do not
   fabricate a durable no-effect or recovered-audit claim; the global gate stays closed in
   process and restart treats the unresolved running record conservatively;
-* audit-obligation marker fsynced but crash before ``start`` -> marker survives; because
+* audit-obligation marker fsynced but concurrent global trip wins before ``call_start`` ->
+  the permit is revoked and no effect starts; marker survives until explicit truthful no-
+  effect recovery closes it;
+* audit-obligation marker fsynced but crash before ``call_start`` -> marker survives; because
   crossing cannot be proved from marker presence alone, startup remains fail-restricted
-  until truthful no-effect/reconciliation evidence closes the obligation;
+  until explicit truthful no-effect/recovery evidence closes the obligation;
 * effect receipt/classification committed but crash before required post-effect audit ->
   marker survives and startup cannot re-enable consequential admission merely because the
   main chain is otherwise continuous;
 * required post-effect audit fails, SQLite latch write also fails, then crash -> marker
-  survives as durable unresolved control state; startup establishes/continues a failure
-  generation when DB becomes writable and requires explicit recovery;
-* matching post-effect audit fsynced but crash before marker unlink/directory fsync ->
-  startup verifies the exact matching audit event and may idempotently clear the marker;
+  survives as durable unresolved control state. If complete failed-fsync event bytes also
+  happen to survive and verify, startup still may not auto-clear the marker because those
+  bytes do not prove the previous fsync reported success;
+* matching post-effect audit fsynced successfully but crash before marker unlink/directory
+  fsync -> marker survives; startup classifies the matching bytes but remains
+  fail-restricted and requires explicit exact-generation recovery before marker closure;
 * marker unlink attempted but directory fsync fails -> assume marker state unresolved and
-  stay fail-restricted until a fresh scan proves durable absence/matching evidence;
+  stay fail-restricted; if a marker survives restart it always requires explicit recovery;
 * a terminal operation whose post-effect audit append failed does not disappear from the
   recovery problem: its unresolved marker and/or durable audit-failure generation prevents
   startup from re-enabling admission even when the surviving main journal is otherwise
@@ -2055,52 +2159,56 @@ Crash-window rules:
 -------------------------------------------
 
 ``KernelHealth`` tracks DB/audit/audit-obligation/payload separately. Required-audit
-failure handling has one ordering invariant: **close the process-wide consequential-
-boundary gate before durable latching, and keep it closed until a later healthy startup**.
+failure handling has one ordering invariant: **trip the process-wide start-vs-failure
+linearization before any durable latching, revoke every not-yet-started permit, and keep
+the gate closed until a later healthy startup**.
 
 When required audit cannot append, fsync, or verify:
 
-* atomically trip/close ``ConsequentialBoundaryGate`` to new permits immediately when the
-  failure is detected; no later dispatch may enter the protected handoff region;
-* wait for any already-entered bounded permits to finish start/immediate classification
-  and drain; because permits are bounded, this wait is bounded by the reviewed adapter
-  handoff contract, not by lifetime effect completion;
-* only after the active-permit count reaches zero, if SQLite is writable and no audit
-  failure is currently latched, one short transaction increments
+* invoke ``ConsequentialBoundaryGate.trip(reason)`` as the first failure-handling action,
+  before any wait, SQLite write, emergency append, or unrelated I/O;
+* that trip atomically closes the gate, advances its volatile trip generation, revokes all
+  already-entered ``PRE_START`` permits, and rejects all new permits/call-start attempts;
+* wait only for bounded handoffs that had already won ``call_start`` and become
+  ``START_COMMITTED`` before the trip; an entered permit still doing final checks or
+  marker publication is revoked and must not invoke the adapter afterward;
+* after those already-started handoffs finish immediate classification, if SQLite is
+  writable and no audit failure is currently latched, one short transaction increments
   ``audit_failure_generation``, sets ``audit_failure_latched=true``, stores a bounded
   ``audit_failure_reason_code``/``audit_failure_detected_at``, and sets
   ``consequential_admission_enabled=false``; if a generation is already latched, preserve
   that generation and keep admission false;
-* after that latch commit no ``EffectBoundary.start`` can begin: the global gate has no
-  active permits and remains closed;
+* because start and trip share one gate-owned linearization, no ``EffectBoundary.start``
+  begins after trip/failure detection. A start observed after the trip is a correctness
+  failure, not an allowed drain case;
 * inability to durably write the SQLite latch never permits an effect and never loses the
   outage across restart when a post-effect required audit was outstanding: the
-  pre-dispatch audit-obligation marker remains durable until matching audit/recovery
+  pre-dispatch audit-obligation marker remains durable until explicit matching recovery
   evidence exists;
 * do not cross a new effect boundary without both the per-operation gate and a live global
-  permit;
+  permit whose ``call_start`` revalidation succeeds;
 * if the failure occurs on ``effect.intent_recorded`` after the durable running marker,
   no obligation marker has yet been published and ``EffectBoundary.start`` was not called;
-  after tripping/draining the global gate, persist ``running -> failed`` with
-  ``known_no_effect``/``audit_unavailable`` when SQLite is writable and leave the audit
-  generation latched;
+  after global trip/drain, persist ``running -> failed`` with ``known_no_effect``/
+  ``audit_unavailable`` when SQLite is writable and leave the audit generation latched;
 * if failure occurs on required post-effect audit, keep the already-fsynced obligation
   marker intact while tripping/draining/latching; never remove it merely because operation
-  state is terminal;
+  state is terminal or because failed-fsync bytes later appear in a verified chain;
 * allow bounded trustworthy recovery/status reads;
 * attempt one bounded emergency audit record only when the pre-created emergency journal
   remains writable/trustworthy;
 * emergency exhaustion remains fail-restricted;
 * a successful later verification of the surviving main chain is necessary but **not
-  sufficient** to clear either an unmatched audit obligation or the durable latch.
+  sufficient** to clear any surviving audit obligation or the durable latch.
 
-The obligation protocol closes the prior latch-write crash hole. Before each start there
-is already a durable marker. If the matching post-effect audit succeeds, the marker is
-removed only after that audit's durability point. If the audit fails and the SQLite latch
-write also fails, a crash cannot erase the unresolved marker. On startup, absence of a
-matching verified event for that marker keeps the kernel fail-restricted and allows a
-fresh writable DB to establish/continue the failure generation. The marker does not
-retroactively supply the missing audit event.
+The obligation protocol closes both audit-loss crash windows. Before each start there is
+already a durable marker. If the matching post-effect audit succeeds and its fsync reports
+success, the healthy process removes the marker only after that durability point. If the
+audit reports fsync failure and the SQLite latch write also fails, the marker remains even
+when complete event bytes happen to survive the crash. Startup therefore cannot infer a
+successful durability outcome merely from those bytes; **any marker that survives restart
+forces explicit recovery**. The marker does not retroactively supply the missing audit
+event.
 
 Recovery is explicit and generation-bound. The local-only operator command from section 32
 runs only with the service stopped and the same exclusive runtime lock used by other
@@ -2110,15 +2218,21 @@ offline maintenance. For requested generation ``g`` it must:
    ``audit_recovered_generation < g``; stale/future generations fail closed;
 #. verify the surviving main journal/segment/epoch chain from genesis through its current
    tail and reconcile any trustworthy bounded emergency evidence for that outage;
-#. enumerate every remaining audit-obligation marker associated with the outage. A marker
-   already matched by verified authoritative audit evidence is durably cleared first. For
-   an unmatched marker, reconcile the retained operation/effect truth; if truth cannot be
-   proven, recovery stays fail-restricted and leaves the marker/latch active;
-#. for each truthfully reconciled unmatched obligation, append/fsync schema-valid existing
-   ``reconciliation.completed``/``recovery.completed`` evidence as applicable, carrying
-   its ``obligation_id`` correlation, operation identity, and running-version fact; only
-   then unlink+directory-fsync that marker;
-#. require the obligation directory to contain no unresolved marker for generation ``g``;
+#. enumerate every remaining audit-obligation marker associated with the outage. **No
+   surviving marker is cleared merely because matching post-effect bytes verify.** The
+   marker's match/mismatch state is classified as recovery input only;
+#. for a marker with matching verified authoritative audit bytes, append/fsync a new
+   schema-valid existing ``recovery.completed`` event carrying its ``obligation_id``,
+   operation identity, running-version fact, and a bounded digest/reference to the matched
+   event, with reason ``audit_obligation_recovered``; only after that recovery event fsync
+   may recovery unlink+directory-fsync the marker;
+#. for an unmatched marker, reconcile the retained operation/effect truth; if truth cannot
+   be proven, recovery stays fail-restricted and leaves the marker/latch active. If truth
+   can be proven, append/fsync schema-valid existing ``reconciliation.completed``/
+   ``recovery.completed`` evidence carrying the obligation correlation, then unlink+
+   directory-fsync the marker;
+#. require the obligation directory to contain no surviving/unresolved marker for
+   generation ``g``;
 #. append/fsync schema-valid recovery evidence for **that exact generation**, using
    existing ``audit.verification_passed`` and ``recovery.completed`` payloads with bounded
    safe facts/reason ``audit_failure_recovered`` rather than inventing a new payload kind;
@@ -2133,11 +2247,11 @@ offline maintenance. For requested generation ``g`` it must:
 A crash after recovery evidence fsync but before latch-clear remains safe: the latch stays
 active. Re-running recovery for the same generation first searches/verifies the already
 fsynced exact-generation recovery evidence and re-scans obligation markers; it may use the
-verified event hash to complete the idempotent SQLite clear only when no unresolved marker
+verified event hash to complete the idempotent SQLite clear only when no surviving marker
 remains. It must not treat an arbitrary verification event or an older generation as
-recovery. Startup itself never clears the latch and never manufactures this evidence.
-Only a later normal startup that verifies all stores, observes zero unresolved audit
-obligations, and observes ``audit_failure_latched=false`` with
+recovery. Startup itself never clears the latch or any surviving marker and never
+manufactures this evidence. Only a later normal startup that verifies all stores, observes
+zero audit-obligation markers, and observes ``audit_failure_latched=false`` with
 ``audit_recovered_generation == audit_failure_generation`` for a nonzero generation may
 consider consequential admission for re-enable.
 
@@ -2155,7 +2269,7 @@ sequence, and canonical byte ceiling.
 
 Local consistency checkpoints may record DB schema revision, highest operation/transition
 summary, audit epoch/sequence/final digest, trusted-time high-water/generation, active audit-
-failure/recovery generation, unresolved audit-obligation count/digest summary, and runtime
+failure/recovery generation, surviving audit-obligation count/digest summary, and runtime
 build/config/policy digests. SQLite stores only checkpoint reference/digest metadata;
 audit event bytes remain authoritative. This is not an external signed checkpoint or
 post-compromise history claim.
@@ -2197,11 +2311,12 @@ payloads or clearing a marker/audit-failure latch.
 ``audit recover --generation <n>`` is explicit fail-restricted recovery, never MCP-callable
 and never an ordinary startup side effect. It requires the service stopped, verifies and
 acquires the same protected exclusive runtime lock, follows section 30 exactly including
-truthful reconciliation/closure of every unresolved audit-obligation marker, and leaves
-consequential admission disabled for the next normal startup to reassess. It is an offline
-maintenance use of the same authoritative persistence/audit adapters, not a concurrent
-second application writer. If the runtime directory/lock, surviving audit evidence,
-obligation state, or effect truth is unsafe/unavailable, recovery fails closed.
+truthful recovery closure of **every surviving** audit-obligation marker whether or not
+matching audit bytes are already present, and leaves consequential admission disabled for
+the next normal startup to reassess. It is an offline maintenance use of the same
+authoritative persistence/audit adapters, not a concurrent second application writer. If
+the runtime directory/lock, surviving audit evidence, obligation state, or effect truth is
+unsafe/unavailable, recovery fails closed.
 
 Human/agent/JSON output follows existing CLI conventions and never exposes raw payload,
 audit, credential, idempotency-key, or raw boot/time-trust material.
@@ -2230,26 +2345,27 @@ Sequence:
    hash divergence as ``audit_integrity_failed`` and keep the kernel fail-restricted;
 #. initialize the next-append allocator only from the verified journal tail, never from the
    SQLite cache;
-#. scan/validate ``state/audit-obligations`` before readiness. For each marker, search the
-   verified authoritative chain for exact obligation/operation/running-version matching
-   post-effect or proven-no-effect evidence; idempotently unlink+directory-fsync matched
-   markers, while unmatched/malformed/unremovable markers keep the kernel fail-restricted;
-#. for every unmatched valid marker, if SQLite is writable establish or continue the
-   durable audit-failure generation/reason; failure of that latch write does not remove the
-   marker and therefore cannot make the next startup healthy;
+#. scan/validate ``state/audit-obligations`` before readiness. For each marker, classify
+   whether the verified chain contains exact obligation/operation/running-version matching
+   post-effect/no-effect bytes, but **do not unlink any marker during normal startup**;
+#. every surviving marker, matched or unmatched, keeps the kernel fail-restricted because
+   startup cannot prove whether the prior process observed successful fsync. If SQLite is
+   writable establish or continue the durable audit-failure generation/reason; failure of
+   that latch write does not remove the marker and therefore cannot make the next startup
+   healthy;
 #. read ``audit_failure_generation``, ``audit_failure_latched``, recovered generation, and
    recovery-evidence digest; **never clear or advance them during startup** merely because
    the surviving journal verifies;
-#. if any obligation remains unresolved, the audit latch is active, or a nonzero cleared
-   generation lacks exact matching recovered generation/schema-valid recovery evidence,
-   keep consequential admission disabled and report explicit audit recovery required;
-   terminal operations are not an exception to this check;
+#. if any marker survives, the audit latch is active, or a nonzero cleared generation lacks
+   exact matching recovered generation/schema-valid recovery evidence, keep consequential
+   admission disabled and report explicit audit recovery required; terminal operations and
+   matched surviving marker bytes are not exceptions;
 #. verify payload roots/metadata;
 #. load trusted-time durable high-water/boot evidence and obtain a current trust snapshot;
 #. if current time is untrusted or rolled back, mark time-dependent consequential
    predicates unavailable rather than resetting/advancing deadlines;
 #. run bounded restart reconciliation without dispatching effects;
-#. only after all required checks succeed, **zero unresolved audit obligations remain**,
+#. only after all required checks succeed, **the audit-obligation directory is empty**,
    and no audit failure generation remains latched/unrecovered, set
    ``consequential_admission_enabled=true`` and open ``ConsequentialBoundaryGate``; mark
    internal kernel available, while time-dependent operations remain fail-closed if
@@ -2268,10 +2384,10 @@ exists.
 -------------------------------
 
 Internal availability is ``available``, ``degraded``, or ``unavailable``. Consequential
-admission requires ``available``, open ``ConsequentialBoundaryGate``, zero unresolved
-audit-obligation markers, and no latched/unrecovered audit-failure generation; a time-
-dependent operation additionally requires a trusted-time state that can prove its
-deadline/freshness predicates.
+admission requires ``available``, open ``ConsequentialBoundaryGate``, an empty audit-
+obligation directory, and no latched/unrecovered audit-failure generation; a time-dependent
+operation additionally requires a trusted-time state that can prove its deadline/freshness
+predicates.
 
 Phase 4 does not change public ``/readyz`` solely to expose this kernel because current
 read-only Tools do not depend on it. The existing compatibility server may remain ready
@@ -2355,7 +2471,8 @@ Structured diagnostic logs may include DB revision/pragmas, operation ID, state/
 safe idempotency digest prefix, policy decision ID/reason code, boundary-revalidation
 result code, trusted-time health/generation (not raw trust material), reconciliation result,
 payload byte counts/digest prefix, audit sequence/status/failure generation, bounded audit-
-obligation count/status, global boundary-gate state, and kernel availability.
+obligation count/status, global boundary-gate state/generation/permit phase, and kernel
+availability.
 
 Do not log raw keys/nonces, credentials, full fingerprint inputs, payload/stdout/stderr,
 protected policy values, raw external authority material, raw machine/boot identifiers,
@@ -2404,9 +2521,12 @@ Hypothesis/state-machine tests cover:
   until the start attempt and immediate effect-knowledge/reference classification complete;
 * fixed gate ordering is always per-operation handoff -> global consequential permit;
   generated interleavings never acquire in reverse order;
-* when required audit failure trips the global gate, no later dispatch obtains a permit;
-  all already-entered permits drain before the durable latch commit, and no new
-  ``EffectBoundary.start`` begins after that commit;
+* a global permit is revocable until gate-owned ``call_start`` linearizes. When required
+  audit failure trips, every already-entered ``PRE_START`` permit is revoked and no such
+  permit may later start;
+* trip and ``call_start`` are linearizable: if trip wins, boundary count stays unchanged;
+  if start wins, that call is recorded as begun before trip. Across generated
+  interleavings, **no boundary count increments after trip detection/linearization**;
 * a concurrent state/version change is never overwritten by a stale failed transition;
 * after successful prepared admission, a same-fingerprint retry returns the retained
   operation even when the preparation expiry time has subsequently passed;
@@ -2423,14 +2543,16 @@ Hypothesis/state-machine tests cover:
 * first-store sequence 1 uses exactly the frozen genesis predecessor digest, while any
   alternate/schema-only placeholder predecessor fails chain verification;
 * every start has a durable unique obligation marker beforehand; no marker can be cleared
-  before matching verified schema-valid post-effect/no-effect audit evidence exists;
+  by the healthy path before matching schema-valid post-effect/no-effect audit append
+  reports successful fsync;
 * post-effect audit failure plus arbitrary SQLite latch-write failure/crash cannot make the
-  unresolved obligation disappear after fresh-process restart;
-* marker with matching verified audit evidence can be idempotently cleared; marker without
-  a match or with failed unlink/directory-fsync keeps admission fail-restricted;
+  unresolved obligation disappear after fresh-process restart, even if the failed-fsync
+  event bytes happen to survive and verify;
+* **any marker surviving restart requires explicit exact-generation recovery**. Matching
+  verified bytes may inform recovery but never authorize startup auto-clear;
 * once an audit-failure generation is latched, arbitrary restart/verified surviving chain/
   terminal-operation state cannot make consequential admission true until the matching
-  generation has explicit recovery evidence, no unresolved obligations remain, and the
+  generation has explicit recovery evidence, no surviving obligations remain, and the
   latch is durably cleared;
 * a pre-operation/tombstone idempotency rejection selects a schema-valid audit payload
   without fabricating an operation ID/state/version.
@@ -2481,28 +2603,36 @@ fault points include:
   blocks until ``start`` has been attempted and immediate receipt/reference/uncertainty
   knowledge is classified, then re-reads current state/version; no start begins after a
   committed ``cancelling`` transition;
-* deterministic cross-operation race where operation A has passed final health checks while
-  operation B detects required audit failure -> B atomically trips the global gate; no new
-  permit enters, A (if already permitted) finishes its bounded handoff, B waits for drain,
-  then latches failure; after latch commit counting boundaries never increase;
-* deterministic race with many queued dispatches -> those lacking a permit when failure is
-  detected are rejected before ``start``;
-* global gate starts closed and cannot open until startup verifies zero unresolved
-  obligations and no unrecovered audit generation;
+* deterministic cross-operation race where operation A already holds a global permit but
+  is still in final checks or marker publication, while operation B detects required audit
+  failure -> B's first action trips the gate and revokes A's ``PRE_START`` permit; A's
+  later ``call_start`` fails and counting boundary for A remains zero;
+* deterministic inverse cross-operation race where A's gate-owned ``call_start`` wins the
+  shared start/trip linearization before B trips -> A is classified as already started,
+  B revokes every other pre-start permit and waits only for A's bounded immediate
+  classification; no new boundary begins after B's trip;
+* many queued/entered dispatches -> all still ``PRE_START`` are revoked at trip regardless
+  of having passed earlier health checks; only starts linearized before trip can drain;
+* global gate starts closed and cannot open until startup verifies an empty obligation
+  directory and no unrecovered audit generation;
 * generic target/freshness/reservation/recovery verifier fails -> boundary=0;
 * crash after authorised commit/before authorization audit;
 * crash after authorization audit/before running transition;
 * crash after running transition/before effect-intent audit;
-* ``effect.intent_recorded`` append/fsync failure with writable DB -> global gate tripped,
-  existing permits drained, durable ``running -> failed`` known-no-effect plus a durable
-  active audit-failure generation, admission disabled, counting boundary=0 for that op;
+* ``effect.intent_recorded`` append/fsync failure with writable DB -> global gate trips and
+  revokes pre-start permits, already-started handoffs drain, durable ``running -> failed``
+  known-no-effect plus a durable active audit-failure generation, admission disabled,
+  counting boundary=0 for that op;
 * same intent-audit failure plus DB terminalization/latch failure -> no effect for that op,
   global gate stays closed and conservative restart treatment rather than fabricated
   terminal/recovery durability;
 * obligation marker publication/fsync failure -> counting boundary=0 and global
   fail-restriction;
-* crash after obligation marker fsync but before ``EffectBoundary.start`` -> marker remains
-  and startup blocks until truthful no-effect/recovery evidence closes it;
+* marker is durable, then another operation trips audit failure before this operation's
+  ``call_start`` -> permit revocation suppresses the boundary; marker remains for explicit
+  truthful no-effect recovery;
+* crash after obligation marker fsync but before gate-owned ``call_start`` -> marker
+  remains and startup blocks until explicit truthful no-effect recovery closes it;
 * crash/exception during ``EffectBoundary.start`` before receipt -> marker remains,
   operation is uncertain, and restart requires reconciliation/recovery evidence;
 * lost response after test effect -> marker remains until matching reconciled post-effect
@@ -2510,26 +2640,32 @@ fault points include:
 * post-effect audit append/fsync failure -> marker remains and global gate trips before
   durable latch handling;
 * post-effect audit failure + SQLite audit-latch write failure + crash -> fresh process
-  detects unmatched marker, stays fail-restricted, and when DB is writable establishes or
-  continues the failure generation; no silent healthy startup;
-* matching post-effect audit fsynced + crash before marker unlink -> fresh startup finds
-  exact matching obligation/operation/running-version evidence and idempotently clears the
-  marker before readiness;
+  sees the surviving marker and remains fail-restricted even if the failed-fsync event
+  bytes happen to survive and chain verification succeeds;
+* matching post-effect audit fsync reports success + crash before marker unlink -> fresh
+  startup still treats the surviving marker as recovery-required; matching bytes are
+  classified for explicit recovery but are not auto-cleaned;
+* failed post-effect fsync + complete event bytes survive + latch write fails + crash ->
+  fresh startup sees both matching bytes and surviving marker, stays fail-restricted, and
+  requires exact-generation recovery; this is the regression for failed-fsync ambiguity;
 * marker unlink succeeds but parent-dir fsync fault is injected -> readiness remains
-  conservative until subsequent scan proves durable state;
+  conservative; if a marker survives restart it requires explicit recovery;
 * malformed/symlink/wrong-owner/duplicate audit-obligation markers -> integrity failure and
   no automatic delete/effect;
 * crash after a terminal operation's required post-effect audit append fails -> fresh
-  process observes unmatched obligation and/or active failure generation and stays fail-
+  process observes surviving obligation and/or active failure generation and stays fail-
   restricted even though the surviving main chain verifies and operation itself needs no
   nonterminal reconciliation;
 * explicit recovery with wrong/stale generation -> latch/obligations remain active and
   admission false;
+* explicit recovery with a surviving marker that already has matching authoritative audit
+  bytes -> recovery appends/fsyncs a new ``recovery.completed`` closure event for that
+  obligation before unlink+directory-fsync; matching bytes alone cannot clear it;
 * explicit recovery cannot clear a generation while any unmatched obligation outcome is
   unprovable;
 * crash after exact-generation ``recovery.completed`` fsync but before SQLite latch clear ->
-  fresh process remains fail-restricted; rerun verifies/reuses that exact evidence and can
-  complete the idempotent clear only after all markers are closed;
+  fresh process remains fail-restricted; rerun verifies/reuses exact recovery evidence and
+  can complete the idempotent clear only after all markers are closed;
 * exact-generation recovery clear leaves admission/global gate closed until a later full
   startup passes all checks;
 * first-store audit writer emits sequence 1 with the frozen genesis predecessor; replacing
@@ -2624,18 +2760,21 @@ Close every runtime object and reconstruct a fresh application with the global
   of being silently repaired or used for allocation;
 * first-store genesis verification recomputes the frozen domain-separated predecessor and
   rejects a schema-valid-but-wrong predecessor;
-* every durable audit-obligation marker is scanned before readiness; an exact matching
-  verified event permits idempotent cleanup, while unmatched/malformed/unremovable state
-  keeps the global gate closed and admission false;
+* every durable audit-obligation marker is scanned and classified before readiness. **Any
+  marker surviving restart keeps the global gate closed and admission false**, regardless
+  of whether matching audit bytes verify;
 * post-effect audit failure plus failed SQLite latch write is still detected solely from
-  the surviving unmatched marker after full process reconstruction;
-* when SQLite later becomes writable, startup converts/continues that unmatched obligation
-  into the durable active audit-failure generation without deleting the marker;
+  the surviving marker after full process reconstruction, including when failed-fsync
+  bytes happen to survive and match;
+* when SQLite becomes writable, startup establishes/continues the active audit-failure
+  generation for every surviving marker but never unlinks the marker;
 * an active audit-failure generation survives reconstruction even if the surviving main
   chain verifies, and keeps admission disabled until matching explicit recovery evidence
-  has been fsynced, all obligations are closed, and the durable generation is cleared;
-* a terminal operation with a missing required post-effect audit event cannot bypass that
-  gate simply because it is absent from nonterminal reconciliation;
+  has been fsynced, all markers are explicitly closed by recovery, and the durable
+  generation is cleared;
+* a terminal operation with a missing/ambiguous required post-effect audit durability
+  outcome cannot bypass that gate simply because it is absent from nonterminal
+  reconciliation;
 * the global consequential-boundary gate opens only after every startup gate succeeds and
   never carries an in-memory permit/state across restart;
 * audit sequence/epoch chain continues;
@@ -2681,37 +2820,44 @@ when a retained operation supplies truthful required operation payload fields.
 
 Audit-obligation tests prove every synthetic start has a preceding file+directory-fsynced
 marker, the matching schema-valid post-effect/no-effect audit contains the exact
-``obligation_id`` correlation and operation/running-version binding, and deletion occurs
-only after audit fsync. A marker with matching verified event is idempotently clearable on
-restart; one without a match is not. Faults in marker publication, audit fsync, unlink, and
-directory fsync all fail restricted without fabricating evidence.
+``obligation_id`` correlation and operation/running-version binding, and live healthy
+marker deletion occurs only after the append reports successful fsync. A marker that
+survives restart is never auto-clearable by startup, even when a matching event verifies;
+it requires explicit exact-generation recovery and a new schema-valid fsynced closure
+event before unlink. Faults in marker publication, audit fsync, unlink, and directory fsync
+all fail restricted without fabricating evidence.
 
 A dedicated test injects ``effect.intent_recorded`` append/fsync failure after the durable
-running marker and proves that failure handling trips/drains the global boundary gate and a
+running marker and proves that failure handling trips the global boundary gate, revokes all
+entered ``PRE_START`` permits, drains only starts already linearized before the trip, and a
 writable DB records ``running -> failed`` with ``known_no_effect``/``audit_unavailable``
 plus an active audit-failure generation, while the affected counting boundary remains
 zero. Another test makes that DB terminalization/latch fail and proves no effect call for
 that operation and no durable terminal/recovery claim is fabricated.
 
 A post-effect fault test first fsyncs the audit-obligation marker and crosses the synthetic
-boundary, then makes the required audit append fail **and** makes the SQLite latch write
-fail. After a simulated crash, the operation may already be terminal and the surviving
-main chain may verify, but the unmatched marker must still keep startup fail-restricted;
-when SQLite is writable, startup establishes/continues the failure generation. This is the
-required regression for the latch-write-loss window.
+boundary, then makes the required audit append/fsync report failure **and** makes the
+SQLite latch write fail. The test deliberately preserves complete event bytes as one
+variant. After simulated crash, the operation may already be terminal and the main chain
+may verify with a matching event, but the surviving marker must still keep startup fail-
+restricted; matching bytes cannot auto-clear it. Exact-generation recovery must append/
+fsync new closure evidence before unlinking the marker. This is the required regression
+for failed-fsync-surviving-bytes ambiguity.
 
-A global-gate concurrency test lets one operation hold an entered permit while another
-operation detects required audit failure. The failure detector must close admission to new
-permits first, wait for the active handoff to finish, then commit/maintain the durable
-latch. The test asserts no queued/new ``start`` begins after failure detection and no start
-at all begins after latch commit.
+Global-gate concurrency tests cover both linearization orders. In the first, operation A
+holds a global permit but is still doing final checks/marker publication when operation B
+detects required audit failure; B trips first, revokes A, and A's later ``call_start`` must
+leave the boundary counter unchanged. In the second, A's ``call_start`` linearizes before
+B trips; A is already-started and may finish its bounded immediate classification, while B
+revokes all remaining pre-start permits. The test asserts no boundary invocation begins
+after the trip linearization and no queued/entered stale permit slips through.
 
-A recovery test leaves a terminal operation with its required post-effect audit append
-missing, restarts with an otherwise continuous surviving chain, and proves startup remains
-fail-restricted. It then proves only truthful obligation reconciliation plus schema-valid
-fsynced recovery evidence bound to the exact active generation permits marker/latch clear;
-stale generation, plain chain verification, unprovable effect truth, or a crash before the
-clear cannot re-enable admission.
+A recovery test leaves a terminal operation with a surviving marker, restarts with an
+otherwise continuous surviving chain, and proves startup remains fail-restricted whether
+or not matching post-effect bytes exist. It then proves only explicit truthful obligation
+closure plus schema-valid fsynced recovery evidence bound to the exact active generation
+permits marker/latch clear; stale generation, plain chain verification, unprovable effect
+truth, or a crash before the clear cannot re-enable admission.
 
 A plan/implementation that emits a top-level ``event_type`` or an unknown
 ``payload.kind`` fails.
@@ -2748,12 +2894,13 @@ Boundary tests prove an earlier ``allow`` decision is never treated as perpetual
 authority. Every applicable predicate is re-read immediately before the effect boundary;
 changed/unavailable trust, policy/profile, target/freshness, reservation, privilege/
 credential delegation, interlock, cancellation/supervision, recovery state, active audit
-failure, unresolved obligation, or closed global boundary gate suppresses the call.
-Deterministic barrier tests additionally prove cancellation and the final check-to-start
-handoff use the same per-operation dispatch gate, while cross-operation audit failure uses
-the separate process-wide gate. The fixed nesting order is per-operation gate then global
-permit; queued dispatches cannot slip through after the global gate is tripped. The fake
-boundary verifier cannot be reached from the production MCP surface.
+failure, surviving obligation, or closed/tripped global boundary gate suppresses the call.
+Deterministic barriers additionally prove cancellation and the final same-operation
+handoff use the per-operation gate, while cross-operation audit failure uses the separate
+global gate. The fixed nesting order is per-operation gate then global permit, and the
+global start/trip linearization revokes stale entered permits so none can start after
+failure is detected. The fake boundary verifier cannot be reached from the production MCP
+surface.
 
 45. Migration and deployment tests
 ----------------------------------
@@ -2821,10 +2968,13 @@ Phase 4 must preserve:
 #. final same-operation revalidation/start handoff and cancellation are serialized by the
    same bounded per-operation application gate; no stale ``start`` begins after a
    cancellation transition for that running version commits;
-#. all not-yet-started consequential handoffs additionally require the process-wide
-   ``ConsequentialBoundaryGate`` permit, acquired after the per-operation gate;
-#. required audit failure closes the global gate before durable latching; no new handoff
-   enters after detection and no start begins after the latch commits;
+#. all not-yet-started consequential handoffs additionally require a generation-bound
+   process-wide ``ConsequentialBoundaryGate`` permit acquired after the per-operation gate;
+#. required audit failure trips that global gate as its first failure action and revokes
+   every already-entered permit that has not yet linearized start. Trip and start share one
+   gate-owned linearization, so no new effect boundary begins after failure detection;
+#. only starts already ``START_COMMITTED`` before the trip may finish their bounded
+   immediate classification; they are not newly started after failure;
 #. a concurrent cancellation/state-version change suppresses dispatch and cannot be
    overwritten by stale transition logic;
 #. raw idempotency material never persists/discloses;
@@ -2843,10 +2993,13 @@ Phase 4 must preserve:
 #. durable ``running`` dispatch marker exists before effect adapter invocation;
 #. required intent-audit failure with writable DB terminalizes the running operation as a
    known-no-effect failure before any effect call for that operation;
-#. a durable audit-obligation marker exists before every synthetic/future start and is
-   cleared only after matching verified audit/recovery evidence is durably fsynced;
-#. post-effect audit failure plus failed SQLite latch write cannot be erased by crash: the
-   unresolved marker remains startup-visible and fail-restricting;
+#. a durable audit-obligation marker exists before every synthetic/future start and the
+   live healthy path clears it only after matching audit append reports durable fsync;
+#. **any marker surviving restart requires explicit exact-generation recovery**, even if
+   matching audit event bytes verify; startup never auto-clears it;
+#. post-effect audit failure plus failed SQLite latch write cannot be erased by crash even
+   when failed-fsync bytes survive: the unresolved marker remains startup-visible and
+   fail-restricting until new schema-valid recovery closure evidence is fsynced;
 #. audit-obligation marker is recovery control state only and never substitutes for audit
    evidence or proves effect occurrence;
 #. missing start receipt cannot be treated as proof of no effect;
@@ -2869,7 +3022,7 @@ Phase 4 must preserve:
    restricted;
 #. required audit failure has a durable monotonically identified latch that survives
    restart and cannot be cleared by successful chain verification alone; exact-generation
-   schema-valid fsynced recovery evidence and zero unresolved obligations are required
+   schema-valid fsynced recovery evidence and zero surviving obligations are required
    before a durable clear;
 #. pre-operation/tombstone idempotency abuse audit never fabricates operation state/version
    to fit a schema payload; schema-valid rejection evidence remains separate from DB
@@ -2951,7 +3104,7 @@ Implement Phase 4 in this order:
    generation latch fields, exact prepared tombstone checks, operation-less proven-expired
    prepared retention/compaction, and the one-way unique policy-decision FK;
 #. implement the protected audit-obligation filesystem adapter/root and its atomic
-   publish/fsync/match/unlink+directory-fsync protocol;
+   publish/fsync/live-close protocol plus restart-explicit-recovery rule;
 #. implement ``TrustedTimeSource``/guard and rollback/reboot/loss-of-trust tests;
 #. implement atomic create/find with full/tombstone exact semantics, including
    owner-digest-before-retirement disclosure, registration-time request fingerprints,
@@ -2969,20 +3122,21 @@ Implement Phase 4 in this order:
 #. implement retained payload filesystem adapter + metadata consistency;
 #. implement mandatory generic/operation-specific OP-BOUNDARY revalidation, the bounded
    per-operation dispatch-handoff gate shared with cancellation, and the separate global
-   ``ConsequentialBoundaryGate`` with fixed nesting and fail-restricted trip/drain rules;
+   ``ConsequentialBoundaryGate`` with generation-bound revocable permits and gate-owned
+   start/trip linearization;
 #. implement ``OperationCoordinator`` through durable running dispatch marker, intent
    audit, nested gated final boundary revalidation, durable obligation publication,
-   start/receipt classification, matching post-effect audit, and obligation closure, with
-   unavailable production effect boundary;
+   gate-owned start/receipt classification, matching post-effect audit, and live marker
+   closure, with unavailable production effect boundary;
 #. implement synthetic counting effect/reconciler/prepared-state/boundary verifiers only
    in tests;
-#. implement startup obligation scan/reconciliation plus operation restart reconciliation
-   and cancellation semantics;
+#. implement startup obligation scan/classification plus operation restart reconciliation
+   and cancellation semantics; startup never clears surviving obligation markers;
 #. add local DB/kernel/audit operator commands, including explicit stopped-service
-   generation-bound audit recovery that cannot clear unresolved obligations;
-#. add property, crash-window, cross-operation gate-race, obligation, trusted-time,
-   boundary, restart, audit, payload, migration, stopped-service runtime-directory
-   preservation, and systemd tests;
+   generation-bound audit recovery that truthfully closes every surviving obligation;
+#. add property, crash-window, start-vs-trip cross-operation races, failed-fsync-surviving-
+   bytes obligation tests, trusted-time, boundary, restart, audit, payload, migration,
+   stopped-service runtime-directory preservation, and systemd tests;
 #. integrate internal kernel health without changing MCP Tool surface;
 #. update CI/lock/import rules;
 #. run full exact-interpreter validation;
@@ -3019,11 +3173,13 @@ A reviewer verifies:
   nonces, and rechecks every applicable authority/state/cancellation/recovery predicate;
 * final same-operation revalidation/start handoff shares a bounded per-operation gate with
   cancellation, so a cancellation transition cannot commit in the check-to-start gap;
-* every dispatch then acquires the separate global consequential-boundary permit in fixed
-  per-operation->global order and holds it through final health/checks/start/immediate
-  classification;
-* audit failure closes the global gate to new permits before draining existing bounded
-  handoffs and latching failure; after latch commit no new start can begin;
+* every dispatch then acquires the separate generation-bound global consequential permit
+  in fixed per-operation->global order and holds it through final health/checks/marker/
+  gate-owned start/immediate classification;
+* audit failure trips the global start-vs-failure linearization first. Already-entered
+  ``PRE_START`` permits are revoked; only starts that had already become
+  ``START_COMMITTED`` before the trip may finish bounded classification; no boundary call
+  begins after failure detection;
 * a concurrent state/version change is not overwritten by stale dispatch failure logic;
 * tombstones contain exactly the required duplicate-prevention facts, verify owner digest
   before retirement disclosure, return owner mismatch cross-controller, and return retired
@@ -3043,12 +3199,13 @@ A reviewer verifies:
   that operation;
 * every effect start has a prior durable obligation marker bound to obligation/operation/
   running-version identity;
-* matching post-effect/no-effect audit correlates the obligation ID and marker deletion is
-  ordered strictly after audit fsync plus directory fsync;
+* matching post-effect/no-effect audit correlates the obligation ID and live healthy marker
+  deletion is ordered strictly after a successful reported audit fsync plus directory fsync;
+* **startup never auto-clears a surviving marker**, even with matching verified bytes. A
+  surviving marker always establishes/continues fail-restricted recovery state and requires
+  explicit exact-generation schema-valid fsynced closure evidence before unlink;
 * post-effect audit failure + failed SQLite latch write remains detectable after crash via
-  the unresolved marker; startup cannot silently enable admission;
-* a matching verified audit event permits idempotent marker cleanup, while unmatched,
-  malformed, or unremovable marker state stays fail-restricted;
+  the surviving marker even when failed-fsync event bytes survive and verify;
 * a lost start receipt becomes uncertain, not known-no-effect;
 * same-key conflict/cross-controller cases cannot create effect;
 * persisted effect reference permits restart reconciliation;
@@ -3062,9 +3219,9 @@ A reviewer verifies:
   integrity failure rather than allocation authority;
 * an audit-failure generation latch survives restart, including when the affected operation
   is already terminal; successful surviving-chain verification alone never clears it;
-* only explicit same-generation schema-valid fsynced recovery evidence **and zero unresolved
-  obligations** can clear the audit-failure latch, and that clear itself leaves admission
-  disabled/global gate closed until full startup;
+* only explicit same-generation schema-valid fsynced recovery evidence **and an empty
+  obligation directory** can clear the audit-failure latch, and that clear itself leaves
+  admission disabled/global gate closed until full startup;
 * tombstone/pre-operation idempotency abuse uses schema-valid audit evidence with no
   fabricated operation state/version and does not create a DB admission policy row;
 * DB/audit/filesystem obligation state are not falsely one transaction;
@@ -3150,13 +3307,15 @@ Phase 4 implementation is accepted only when every item is true:
    per-operation dispatch gate: cancellation-first gives boundary=0, while dispatch-first
    prevents cancellation from committing against the stale running version until the
    start attempt and immediate effect knowledge are classified;
-#. every not-yet-started dispatch also obtains the global ``ConsequentialBoundaryGate``
-   permit **after** its per-operation gate and holds it through final audit/recovery health
-   validation, all final boundary checks, durable obligation publication, bounded start,
-   and immediate receipt/reference/effect-knowledge classification;
-#. on required audit failure, the global gate rejects new permits before existing permits
-   drain; durable latch handling occurs only after drain, and no start begins after latch
-   commit;
+#. every not-yet-started dispatch also obtains a generation-bound global
+   ``ConsequentialBoundaryGate`` permit **after** its per-operation gate and holds it
+   through final audit/recovery health validation, all final boundary checks, durable
+   obligation publication, gate-owned start, and immediate receipt/reference/effect-
+   knowledge classification;
+#. on required audit failure, gate trip is the first action, revokes every entered
+   ``PRE_START`` permit, rejects future permits, and waits only for starts already
+   ``START_COMMITTED`` before the trip. The shared start/trip linearization proves no
+   ``EffectBoundary.start`` begins after failure detection;
 #. a concurrent lifecycle change cannot be overwritten by a stale no-effect failure;
 #. a later retry of an already admitted/dispatched prepared nonce returns retained work
    rather than creating or redispatching a fresh operation when preparation has expired;
@@ -3191,34 +3350,37 @@ Phase 4 implementation is accepted only when every item is true:
 #. a crash after journal fsync but before SQLite tail-cache update is recovered by journal
    verification/cache refresh and the next append uses the fsynced event as predecessor;
 #. durable ``running`` transition occurs before every effect-boundary call;
-#. pre-dispatch ``effect.intent_recorded`` audit failure with writable DB trips/drains the
-   global boundary gate, commits a ``running -> failed`` known-no-effect outcome, durably
-   latches the audit-failure generation, and calls no effect boundary for that operation;
+#. pre-dispatch ``effect.intent_recorded`` audit failure with writable DB trips the global
+   gate, revokes all pre-start permits, drains already-linearized starts, commits a
+   ``running -> failed`` known-no-effect outcome, durably latches the audit-failure
+   generation, and calls no effect boundary for that operation;
 #. inability to commit that pre-effect failure/latch still calls no boundary for that
    operation and is reconciled conservatively after restart;
 #. before every actual synthetic/future start, a unique protected audit-obligation marker
    is atomically published and file+directory-fsynced with operation ID and running state
    version;
 #. matching required post-effect/no-effect schema-valid audit carries that obligation ID,
-   and marker unlink+directory fsync occurs only after matching audit fsync;
-#. post-effect audit failure leaves the marker intact and trips the global gate before
-   durable latch handling;
+   and the live healthy process unlinks+directory-fsyncs the marker only after the append
+   reports successful durable fsync;
+#. post-effect audit failure leaves the marker intact and trips/revokes the global gate
+   before durable latch handling;
 #. post-effect audit failure plus failed SQLite latch write plus crash is still detected at
-   startup from the unmatched marker; startup remains fail-restricted and establishes/
-   continues the durable failure generation once SQLite is writable;
-#. a marker with exact matching verified audit evidence may be idempotently cleared on
-   startup; an unmatched/malformed/unremovable marker cannot be auto-cleared or ignored;
+   startup from the surviving marker, including when failed-fsync event bytes survive and
+   verify;
+#. **a marker surviving restart is never auto-cleared by startup**. Matching bytes are only
+   recovery input; explicit exact-generation recovery must append/fsync schema-valid
+   closure evidence for the obligation before unlink+directory-fsync;
 #. after any durably latched required audit failure, restart leaves admission false even
    when surviving chain verification succeeds and the affected operation is already
    terminal;
 #. only explicit recovery for the exact active generation, with truthful closure of every
-   unresolved audit obligation and schema-valid fsynced
+   surviving audit obligation and schema-valid fsynced
    ``audit.verification_passed``/``recovery.completed`` evidence, may clear the latch; a
    stale generation, verification-only run, unprovable obligation, or crash before the
    durable clear cannot;
 #. clearing the latch does not itself set admission true/open the global gate; a later
-   complete startup must verify all stores, zero unresolved markers, and matching recovery
-   generation before enabling it;
+   complete startup must verify all stores, an empty obligation directory, and matching
+   recovery generation before enabling it;
 #. crash/lost response during ``start`` cannot become a known-no-effect assertion;
 #. production composition has no real effect adapter;
 #. synthetic effect proves at most one effect under concurrency/response loss;
@@ -3266,12 +3428,13 @@ may pass its kernel tests but no host-facing consequential projection is promote
 This plan is complete when a coding agent can implement/test authoritative SQLite state,
 exact lifecycle/idempotency semantics, safe tombstones, trusted-time deadline ordering,
 mandatory consequential-boundary revalidation, per-operation cancellation-safe handoff,
-process-wide audit-failure-safe consequential dispatch gating, durable pre-effect audit-
-obligation recovery control, minimal policy, schema-valid append-only audit with frozen
-genesis and durable generation-bound recovery, retained payload/evidence storage, durable
-pre-dispatch state, reconciliation, local diagnostics, deployment permissions, migrations,
-and fault/property tests without deciding later operation-specific authority or host
-behavior.
+process-wide audit-failure-safe consequential dispatch gating with revocable pre-start
+permits and linearized start-vs-trip behavior, durable pre-effect audit-obligation recovery
+control with restart-explicit closure, minimal policy, schema-valid append-only audit with
+frozen genesis and durable generation-bound recovery, retained payload/evidence storage,
+durable pre-dispatch state, reconciliation, local diagnostics, deployment permissions,
+migrations, and fault/property tests without deciding later operation-specific authority
+or host behavior.
 
 Stop here. Do not add the disposable write-probe workflow or any later operational
 capability in this document.
