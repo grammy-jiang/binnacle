@@ -420,6 +420,11 @@ Allow ChatGPT to perform normal software-development file work on the Binnacle r
 Required work
 ~~~~~~~~~~~~~
 
+Before exposing the operational workspace or development-session Tools, define and
+review their versioned operation contracts and input/output schemas, add them to the
+reviewed Bootstrap Tool manifest, and pass schema/manifest validation. Runtime handlers
+must not be exposed before this promotion step succeeds.
+
 Implement registered-workspace operations for:
 
 * inspect;
@@ -469,6 +474,10 @@ shell or process supervisor.
 
 Required work
 ~~~~~~~~~~~~~
+
+Before exposing command-start, operation-status/output/cancel, or outstanding-operation
+Tools, define and review their contracts and schemas, add the exact entries to the
+Bootstrap Tool manifest, and pass schema/manifest validation.
 
 Implement the independent unprivileged execution supervisor.
 
@@ -527,6 +536,10 @@ Allow ChatGPT to complete the repository-side portion of normal Binnacle develop
 Required work
 ~~~~~~~~~~~~~
 
+Before exposing Git Tools, define and review the minimum Git operation contracts and
+schemas, add their entries to the Bootstrap Tool manifest, and pass schema/manifest
+validation.
+
 Use the official Git CLI behind a typed adapter.
 
 Implement semantic operations sufficient for:
@@ -575,6 +588,10 @@ moving.
 Required work
 ~~~~~~~~~~~~~
 
+Before exposing package, service, restart-preflight, or self-management Tools, define and
+review their minimum operation contracts and schemas, add the exact entries to the
+Bootstrap Tool manifest, and pass schema/manifest validation.
+
 Implement a separate root broker using a restricted Unix-domain socket and a narrow,
 versioned structured protocol.
 
@@ -592,6 +609,16 @@ Bootstrap privileged vocabulary should be limited to:
 Implement restart preflight against active durable operations.
 
 Implement lightweight control-plane checkpoints around risky changes where necessary.
+Before a self-restart, retain outside the replaceable MCP/application process the exact
+candidate revision, the last-known-good revision, relevant configuration/service
+metadata, and enough evidence to drive deterministic recovery.
+
+Implement a minimum failed-restart recovery path. If the candidate revision does not
+reach the declared readiness state within the restart timeout, the controlled
+self-management path should restore the last-known-good revision/checkpoint and restart
+Binnacle. If rollback cannot be completed or verified, leave the service in a known
+restricted/stopped state and preserve exact local recovery instructions and evidence;
+never report the failed candidate as successful.
 
 Implement runtime identity reporting including:
 
@@ -617,8 +644,12 @@ Real ChatGPT can:
 #. verify the expected Git revision is running;
 #. inspect startup diagnostics.
 
+A failed-restart test also proves that a deliberately broken candidate either rolls
+back to the last-known-good revision and becomes reachable again, or reaches a verified
+restricted/local-recovery state with evidence retained outside the failed process.
+
 13. Phase 10 -- Execute the first complete self-hosting loop
------------------------------------------------------------
+------------------------------------------------------------
 
 Objective
 ~~~~~~~~~
