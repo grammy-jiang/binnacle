@@ -79,6 +79,27 @@ Additional rules are:
 * prefer a working, observable implementation over premature completeness;
 * stop expanding Bootstrap once the self-hosting acceptance gate passes.
 
+Operational Tool promotion rule
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The reviewed MCP manifest forbids unmanifested runtime Tools. Therefore an operational
+capability is not complete merely because its Python handler exists.
+
+Before any new operational Tool becomes visible to ChatGPT, the implementation phase
+that introduces it must also:
+
+* define or reconcile the versioned operation contract;
+* add canonical input, success, and execution-error schemas;
+* add the reviewed Tool-manifest entry with name, description, contract version,
+  annotations, information class, confirmation class, catalogue phase, and
+  implementation binding;
+* validate every schema reference and implementation binding;
+* add positive and negative contract/manifest/schema fixtures appropriate to the Tool;
+* promote the Tool into the intended catalogue phase only after those checks pass.
+
+Runtime filtering may remove an unavailable Tool, but Bootstrap must never rely on an
+unmanifested handler being callable.
+
 3. Phase 0 -- Reconcile Bootstrap-blocking contracts
 ----------------------------------------------------
 
@@ -389,6 +410,10 @@ Implement:
 * ``probe_workspace_write``;
 * ``probe_workspace_cleanup``.
 
+These Tools already belong to the reviewed compatibility manifest. Keep their existing
+contract/schema/manifest identities and do not broaden them into operational workspace
+Tools.
+
 Use the dedicated disposable probe workspace only.
 
 Validate with real ChatGPT:
@@ -420,10 +445,9 @@ Allow ChatGPT to perform normal software-development file work on the Binnacle r
 Required work
 ~~~~~~~~~~~~~
 
-Before exposing the operational workspace or development-session Tools, define and
-review their versioned operation contracts and input/output schemas, add them to the
-reviewed Bootstrap Tool manifest, and pass schema/manifest validation. Runtime handlers
-must not be exposed before this promotion step succeeds.
+Define the versioned operational workspace contracts, canonical schemas, reviewed
+Tool-manifest entries, catalogue-phase membership, and fixtures before exposing their
+handlers to ChatGPT.
 
 Implement registered-workspace operations for:
 
@@ -448,6 +472,9 @@ Implement the temporary Binnacle development session:
 * inspect;
 * expire/end.
 
+Development-session operations must likewise receive explicit contracts, schemas, and
+manifest entries before they become visible.
+
 Development-session authority grants broad normal developer access to the registered
 Binnacle source workspace but does not grant:
 
@@ -460,7 +487,8 @@ Binnacle source workspace but does not grant:
 Exit gate
 ~~~~~~~~~
 
-Real ChatGPT can inspect the Binnacle repository, make a controlled source edit, inspect
+The operational workspace catalogue passes manifest/schema/contract validation, and
+real ChatGPT can inspect the Binnacle repository, make a controlled source edit, inspect
 the resulting file, and revert or replace it without affecting unrelated paths.
 
 10. Phase 7 -- Implement durable development-command execution
@@ -475,9 +503,9 @@ shell or process supervisor.
 Required work
 ~~~~~~~~~~~~~
 
-Before exposing command-start, operation-status/output/cancel, or outstanding-operation
-Tools, define and review their contracts and schemas, add the exact entries to the
-Bootstrap Tool manifest, and pass schema/manifest validation.
+Before exposure, define and validate the operational Tool contracts, schemas, manifest
+entries, and catalogue phase for ``command_run`` and the durable operation
+status/output/cancel/list surface.
 
 Implement the independent unprivileged execution supervisor.
 
@@ -521,8 +549,9 @@ Do not implement:
 Exit gate
 ~~~~~~~~~
 
-Real ChatGPT can run Binnacle tests and quality tools, inspect incremental output, cancel
-a running command, and still inspect an acknowledged operation after an MCP application
+The command/operation catalogue passes manifest/schema/contract validation, and real
+ChatGPT can run Binnacle tests and quality tools, inspect incremental output, cancel a
+running command, and still inspect an acknowledged operation after an MCP application
 restart.
 
 11. Phase 8 -- Implement the minimal Git development workflow
@@ -536,9 +565,9 @@ Allow ChatGPT to complete the repository-side portion of normal Binnacle develop
 Required work
 ~~~~~~~~~~~~~
 
-Before exposing Git Tools, define and review the minimum Git operation contracts and
-schemas, add their entries to the Bootstrap Tool manifest, and pass schema/manifest
-validation.
+Define the versioned Git operation contracts, canonical schemas, reviewed Tool-manifest
+entries, catalogue-phase membership, confirmation/information classifications, and
+fixtures before the Git Tools are exposed.
 
 Use the official Git CLI behind a typed adapter.
 
@@ -573,8 +602,9 @@ remain outside Binnacle and may use ChatGPT's GitHub integration.
 Exit gate
 ~~~~~~~~~
 
-Through Binnacle, real ChatGPT can create a feature branch, modify/test Binnacle, create
-a signed commit, and push the branch without receiving reusable credential material.
+The Git catalogue passes manifest/schema/contract validation. Through Binnacle, real
+ChatGPT can create a feature branch, modify/test Binnacle, create a signed commit, and
+push the branch without receiving reusable credential material.
 
 12. Phase 9 -- Implement the minimal privileged broker and self-management
 ---------------------------------------------------------------------------
@@ -588,9 +618,9 @@ moving.
 Required work
 ~~~~~~~~~~~~~
 
-Before exposing package, service, restart-preflight, or self-management Tools, define and
-review their minimum operation contracts and schemas, add the exact entries to the
-Bootstrap Tool manifest, and pass schema/manifest validation.
+Define the versioned package/service/self-management operation contracts, canonical
+schemas, reviewed Tool-manifest entries, catalogue-phase membership, confirmation and
+information classifications, and fixtures before those Tools are exposed.
 
 Implement a separate root broker using a restricted Unix-domain socket and a narrow,
 versioned structured protocol.
@@ -609,16 +639,21 @@ Bootstrap privileged vocabulary should be limited to:
 Implement restart preflight against active durable operations.
 
 Implement lightweight control-plane checkpoints around risky changes where necessary.
-Before a self-restart, retain outside the replaceable MCP/application process the exact
-candidate revision, the last-known-good revision, relevant configuration/service
-metadata, and enough evidence to drive deterministic recovery.
+Before a self-restart, retain outside the MCP application process enough recovery
+evidence to identify:
 
-Implement a minimum failed-restart recovery path. If the candidate revision does not
-reach the declared readiness state within the restart timeout, the controlled
-self-management path should restore the last-known-good revision/checkpoint and restart
-Binnacle. If rollback cannot be completed or verified, leave the service in a known
-restricted/stopped state and preserve exact local recovery instructions and evidence;
-never report the failed candidate as successful.
+* the previously known-good Git revision and runtime identity;
+* the intended next revision;
+* relevant configuration/service/checkpoint identity;
+* restart attempt and startup/readiness outcome evidence.
+
+Define a Bootstrap failed-start recovery path. If the new revision does not start or
+reach readiness, the known-good revision and failure evidence must remain available even
+though the MCP endpoint is down. Prefer the smallest recovery mechanism consistent with
+the principles: an explicit rollback path may be used when it can execute independently
+of the replaced MCP process; otherwise the supported break-glass path is documented
+SSH/local-console recovery that restores the known-good checkout/configuration and
+restarts the service. Bootstrap does not build a second general remote control plane.
 
 Implement runtime identity reporting including:
 
@@ -644,9 +679,10 @@ Real ChatGPT can:
 #. verify the expected Git revision is running;
 #. inspect startup diagnostics.
 
-A failed-restart test also proves that a deliberately broken candidate either rolls
-back to the last-known-good revision and becomes reachable again, or reaches a verified
-restricted/local-recovery state with evidence retained outside the failed process.
+In addition, a controlled failed-start test must demonstrate that restart evidence and
+the known-good revision survive outside the replaced process, that a failed revision is
+not reported as healthy, and that the documented rollback or SSH/local-console
+break-glass procedure can restore a connectable known-good Binnacle instance.
 
 13. Phase 10 -- Execute the first complete self-hosting loop
 ------------------------------------------------------------
