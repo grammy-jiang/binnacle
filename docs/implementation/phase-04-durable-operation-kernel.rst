@@ -120,6 +120,11 @@ Phase 4 implementation is complete only when tests prove all of the following:
 * concurrent first use of the same key creates exactly one binding and operation;
 * full-record retry, conflict, owner-mismatch, uncertainty, terminal, and tombstone
   outcomes exactly match ``spec/operation/idempotency.yaml``;
+* an unconsumed ``prepared_execution_nonce`` durably retains its prepared operation/input,
+  expiry, and exact current-state binding before any new operation can be admitted;
+* prepared-nonce expiry and prepared input/current-state mismatch remain enforceable after
+  a fresh-process restart, returning ``prepared_operation_expired`` or
+  ``prepared_operation_mismatch`` before operation creation;
 * tombstones retain the contract-required non-reversible owner digest and terminal class;
 * raw idempotency keys are never persisted, logged, audited, or used as metric labels;
 * lifecycle transitions reject every undeclared edge/cross-field combination;
@@ -615,12 +620,16 @@ Columns:
 * ``owner_controller_id`` nullable only after full-record compaction;
 * ``owner_controller_epoch`` nullable only after full-record compaction;
 * ``owner_controller_digest`` non-reversible digest retained for tombstones;
-* ``request_fingerprint_sha256``;
-* ``prepared_operation_id`` nullable;
-* ``prepared_input_sha256`` nullable;
+* ``request_fingerprint_sha256`` nullable only for an unconsumed prepared-nonce binding;
+* ``prepared_operation_id`` nullable except required for ``prepared_execution_nonce``;
+* ``prepared_input_sha256`` nullable except required for ``prepared_execution_nonce``;
+* ``prepared_expires_at`` nullable except required for ``prepared_execution_nonce``;
+* ``prepared_state_binding_sha256`` nullable except required for
+  ``prepared_execution_nonce``;
 * ``target_identity_sha256`` nullable;
 * ``maximum_effect_sha256`` nullable;
-* ``operation_id`` FK nullable only for a valid tombstone;
+* ``operation_id`` FK nullable only for a valid tombstone or an unconsumed
+  ``prepared_execution_nonce`` full binding;
 * ``terminal_class`` nullable for active/full nonterminal records and required for
   tombstones;
 * ``created_at`` / ``last_access_at``;
@@ -638,6 +647,21 @@ The exact global unique index is:
 The key columns are non-null so SQLite NULL uniqueness semantics cannot weaken global
 duplicate prevention. Internal Phase 4 synthetic tests use a reserved stable internal
 ``tool_name`` and contract version; they do not create a visible MCP Tool.
+
+An unconsumed prepared execution nonce is a durable ``record_kind=full`` binding with
+``key_mode=prepared_execution_nonce`` and ``operation_id=NULL``. It is registered through
+an internal store primitive before first execution and retains the prepared operation ID,
+exact prepared input digest, expiry timestamp, expected current-state binding digest,
+owner/device/Tool/contract scope, and nonce digest. This is persistence infrastructure
+only: Phase 4 adds no MCP/CLI preparation endpoint and no production prepare/execute
+workflow.
+
+Database checks permit a full row with ``operation_id=NULL`` only for that unconsumed
+prepared-nonce shape and require all four prepared fields. Other full rows require an
+operation ID. Prepared fields are rejected for non-prepared key modes except where a
+reviewed later migration explicitly changes the contract. Successful first admission
+atomically creates the version-1 operation, stores its request fingerprint, and attaches
+its ``operation_id`` to the existing prepared binding.
 
 The full row owns controller ID/epoch; the tombstone contract requires only the
 non-reversible owner digest. Full-to-tombstone compaction, when explicitly exercised
@@ -813,6 +837,25 @@ Caller-key validation accepts only the encodings/randomness rules in
 ``spec/operation/idempotency.yaml``. Raw key material exists only long enough to validate,
 decode, and compute the domain-separated SHA-256 digest. UUIDv4 alone is rejected.
 
+For ``prepared_execution_nonce``, Phase 4 defines only an **internal persistence seam**,
+not a host workflow. ``OperationStore.register_prepared_execution_nonce(...)`` may be
+used by tests and a later reviewed preparation use case to durably reserve the nonce
+digest with controller/device/Tool/contract scope, ``prepared_operation_id``, exact
+``prepared_input_sha256``, ``prepared_expires_at``, and
+``prepared_state_binding_sha256``. The raw nonce is never persisted.
+
+The operation-specific future caller is responsible for computing the exact current-state
+binding under its reviewed preparation contract and supplying the corresponding digest at
+first execution. The generic kernel compares digests; it does not invent filesystem,
+command, Git, or other current-state semantics. If the durable prepared binding cannot be
+loaded or verified after restart, first admission fails closed.
+
+Expiry and current-state checks are **first-admission guards**. Once a prepared nonce has
+successfully created and attached an operation, subsequent same-owner/same-fingerprint
+retries return that retained operation even if the preparation expiry time has since
+passed; they must not create a second operation or reinterpret a completed admission as a
+fresh preparation.
+
 16. Atomic create-or-find semantics
 -----------------------------------
 
@@ -822,11 +865,25 @@ Algorithm:
 
 #. begin a short write transaction;
 #. lookup/attempt the exact global unique binding scope;
-#. if absent, create the full binding + ``received`` operation + version-1 transition
-   atomically;
+#. if no binding exists and the key mode is ``prepared_execution_nonce``, return
+   ``prepared_operation_mismatch`` without creating an operation: a prepared nonce must
+   have a durable pre-admission registration;
+#. if no binding exists for another supported key mode, create the full binding +
+   ``received`` operation + version-1 transition atomically;
 #. if present and ``record_kind=tombstone`` or ``retired_at`` is set, return
    ``idempotency_key_retired`` without loading/disclosing an operation;
-#. for a present full record, verify owner and fingerprint;
+#. for a present full record, verify owner before disclosing preparation or operation
+   details; another controller returns non-disclosing ``idempotency_owner_mismatch``;
+#. if the full record is an unconsumed prepared-nonce binding with ``operation_id=NULL``,
+   validate the current time against ``prepared_expires_at``; expiry returns
+   ``prepared_operation_expired`` with no operation created;
+#. for that unconsumed prepared binding, compare the supplied prepared operation ID,
+   exact input digest, and current-state binding digest against the durable values;
+   any mismatch returns ``prepared_operation_mismatch`` with no operation created;
+#. after all prepared checks pass, atomically create the version-1 ``received`` operation,
+   persist its request fingerprint, attach its ``operation_id`` to the existing prepared
+   binding, and continue only that newly admitted operation;
+#. for a present full record already attached to an operation, verify fingerprint;
 #. same owner + same fingerprint -> return the retained operation, including terminal or
    ``uncertain`` state, with no effect;
 #. same owner + different fingerprint -> increment conflict count and return
@@ -834,11 +891,17 @@ Algorithm:
 #. different controller -> increment conflict count and return non-disclosing
    ``idempotency_owner_mismatch``;
 #. commit;
-#. only a newly created full operation proceeds to policy/admission.
+#. only a newly created/attached full operation proceeds to policy/admission.
 
 The tombstone check occurs before the same-owner/same-fingerprint retained-operation
 branch because a valid tombstone may have ``operation_id=NULL`` and the contract requires
 ``idempotency_key_retired``. No code attempts to load a retired operation from a tombstone.
+
+Prepared expiry/input/current-state checks occur only before first operation admission and
+use durable fields that survive process restart. They are not bypassed by reconstructing a
+fresh application. After an operation is attached, normal retained-operation idempotency
+semantics take precedence so a retry can reconcile the original work rather than being
+rejected merely because preparation later expires.
 
 Concurrent uniqueness races roll back, re-read, and follow the same decision table. They
 do not create a second operation.
@@ -1259,6 +1322,8 @@ Include at least:
    idempotency_owner_mismatch
    idempotency_key_retired
    idempotency_storage_unavailable
+   prepared_operation_mismatch
+   prepared_operation_expired
    policy_rejected
    audit_unavailable
    audit_integrity_failed
@@ -1324,6 +1389,14 @@ Hypothesis/state-machine tests cover:
 * same-key/different-input conflict;
 * cross-controller replay non-disclosure/no effect;
 * concurrent first request exactly one binding;
+* prepared nonce first admission requires a durable registration;
+* unconsumed prepared nonce expiry returns ``prepared_operation_expired`` with no
+  operation/effect;
+* prepared operation/input/current-state binding mismatch returns
+  ``prepared_operation_mismatch`` with no operation/effect;
+* a valid prepared binding admits exactly one operation and attaches it atomically;
+* after successful prepared admission, a same-fingerprint retry returns the retained
+  operation even when the preparation expiry time has subsequently passed;
 * uncertain never auto-retries;
 * cancellation cannot become cancelled without verification;
 * full-to-tombstone conversion retaining exact duplicate-prevention fields;
@@ -1342,6 +1415,11 @@ fault points include:
 * crash after received commit/before received audit;
 * audit failure before policy;
 * policy deny;
+* prepared binding persisted, process restarted, then first use while valid;
+* prepared binding persisted, process restarted past expiry ->
+  ``prepared_operation_expired`` and no operation;
+* prepared binding persisted, process restarted with input/current-state mismatch ->
+  ``prepared_operation_mismatch`` and no operation;
 * crash after authorised commit/before authorization audit;
 * crash after authorization audit/before running transition;
 * crash after running transition/before effect-intent audit;
@@ -1375,6 +1453,12 @@ Close every runtime object and reconstruct a fresh application. Verify:
 
 * operation identity/state/version remains resolvable;
 * idempotency binding reconciles;
+* an unconsumed prepared binding retains expiry and exact prepared input/current-state
+  digests across restart;
+* first use after restart enforces ``prepared_operation_expired`` /
+  ``prepared_operation_mismatch`` before creating an operation;
+* a still-valid matching prepared binding can attach exactly one received operation after
+  restart;
 * terminal result is stable;
 * uncertain remains uncertain without evidence;
 * authorised pre-dispatch work is never redispatched;
@@ -1440,6 +1524,8 @@ Phase 4 must preserve:
 #. no production consequential effect adapter;
 #. no new mutating MCP Tool/Resource/Task/Prompt;
 #. durable global idempotency identity before synthetic effect dispatch;
+#. prepared execution nonces retain durable expiry and exact current-state binding before
+   first admission, and restart cannot bypass those checks;
 #. raw idempotency material never persists/discloses;
 #. global duplicate prevention survives controller replacement and tombstoning;
 #. operation ownership never transfers from key possession;
@@ -1519,7 +1605,8 @@ Implement Phase 4 in this order:
 #. add persistence/JCS dependencies, Alembic skeleton, and deployment write-path changes;
 #. define domain types and lifecycle/idempotency/audit contract-parity tests;
 #. implement migration ``0001`` and SQLite runtime/pragmas/migration locking;
-#. implement atomic create/find with full/tombstone exact semantics;
+#. implement atomic create/find with full/tombstone exact semantics and durable
+   prepared-nonce pre-admission registration/expiry/current-state validation;
 #. implement state-version transition store;
 #. implement fail-closed Bootstrap policy + durable decision recording;
 #. implement JCS audit writer/verifier + storage-failure gate and exact payload-kind
@@ -1547,6 +1634,10 @@ A reviewer verifies:
 * one authoritative SQLite writer and no executor/broker DB access;
 * version-1 received creation and lifecycle edges match contracts;
 * idempotency unique scope is non-null and contract-exact;
+* prepared nonce registration durably binds prepared operation/input, expiry, and exact
+  current-state digest; first admission validates them before creating an operation;
+* prepared expiry/mismatch behavior survives fresh-process restart and uses the reviewed
+  ``prepared_operation_expired`` / ``prepared_operation_mismatch`` codes;
 * tombstones contain exactly the required duplicate-prevention facts and return retired;
 * raw keys never persist;
 * audit authorization and durable running dispatch marker precede effect invocation;
@@ -1583,6 +1674,16 @@ Phase 4 implementation is accepted only when every item is true:
 #. invalid/stale transitions are rejected;
 #. global idempotency index exactly matches contract scope with non-null key columns;
 #. raw caller key/prepared nonce never persists/logs/audits;
+#. an unconsumed prepared nonce is durably registered with owner/device/Tool/contract,
+   prepared operation/input, expiry, and exact current-state binding before first use;
+#. first use of an expired prepared nonce returns ``prepared_operation_expired`` and
+   creates no operation/effect;
+#. prepared operation/input/current-state mismatch returns
+   ``prepared_operation_mismatch`` and creates no operation/effect;
+#. fresh-process restart preserves and re-enforces prepared expiry/mismatch checks;
+#. valid prepared first admission atomically attaches exactly one version-1 operation;
+#. a later retry of an already admitted prepared nonce returns retained work rather than
+   creating a fresh operation when preparation has since expired;
 #. concurrent same-key admission creates one binding/operation;
 #. same owner + same key + same fingerprint returns retained operation;
 #. same key + different fingerprint returns conflict/no second operation;
