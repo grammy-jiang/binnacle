@@ -125,6 +125,11 @@ Phase 4 implementation is complete only when tests prove all of the following:
 * prepared-nonce expiry and prepared input/current-state mismatch remain enforceable after
   a fresh-process restart, returning ``prepared_operation_expired`` or
   ``prepared_operation_mismatch`` before operation creation;
+* a newly admitted prepared operation revalidates preparation expiry and exact current
+  state immediately before the consequential boundary, and stale/expired preparation
+  suppresses dispatch with a proven no-effect terminal outcome;
+* ``derived_member_key`` is rejected before binding/operation creation in Phase 4 because
+  no reviewed parent contract/derivation is registered yet;
 * tombstones retain the contract-required non-reversible owner digest and terminal class;
 * raw idempotency keys are never persisted, logged, audited, or used as metric labels;
 * lifecycle transitions reject every undeclared edge/cross-field combination;
@@ -199,6 +204,7 @@ ordering:
       -> fsynced policy/authorization audit
       -> durable authorised -> running dispatch marker
       -> fsynced effect.intent_recorded audit
+      -> final prepared-expiry/current-state guard when prepared mode applies
       -> effect boundary port (test-only in Phase 4; real adapters later)
       -> persist returned reference/effect knowledge/result metadata
       -> append/fsync effect/lifecycle audit
@@ -837,6 +843,15 @@ Caller-key validation accepts only the encodings/randomness rules in
 ``spec/operation/idempotency.yaml``. Raw key material exists only long enough to validate,
 decode, and compute the domain-separated SHA-256 digest. UUIDv4 alone is rejected.
 
+``derived_member_key`` is recognized for contract parity but is **not admitted in Phase
+4**. The machine-readable contract permits it only when a parent contract declares a
+deterministic member derivation from a previously durable parent. Phase 4 has no reviewed
+parent-contract registry/derivation binding, so any request using this mode fails closed
+as ``idempotency_invalid`` before a global binding or operation is created. Synthetic
+parity tests may assert this rejection; they do not introduce a parent workflow. A later
+reviewed phase must explicitly define and verify the parent contract and derivation before
+this key mode can become admissible.
+
 For ``prepared_execution_nonce``, Phase 4 defines only an **internal persistence seam**,
 not a host workflow. ``OperationStore.register_prepared_execution_nonce(...)`` may be
 used by tests and a later reviewed preparation use case to durably reserve the nonce
@@ -845,16 +860,27 @@ digest with controller/device/Tool/contract scope, ``prepared_operation_id``, ex
 ``prepared_state_binding_sha256``. The raw nonce is never persisted.
 
 The operation-specific future caller is responsible for computing the exact current-state
-binding under its reviewed preparation contract and supplying the corresponding digest at
-first execution. The generic kernel compares digests; it does not invent filesystem,
-command, Git, or other current-state semantics. If the durable prepared binding cannot be
-loaded or verified after restart, first admission fails closed.
+binding under its reviewed preparation contract. It supplies that digest at first
+admission **and** provides a narrow state-verification callback/port that can recompute the
+current digest immediately before a consequential boundary. The generic kernel compares
+digests; it does not invent filesystem, command, Git, or other current-state semantics.
+If the durable prepared binding or final verifier cannot be loaded/executed truthfully,
+the prepared operation fails closed without effect.
 
-Expiry and current-state checks are **first-admission guards**. Once a prepared nonce has
-successfully created and attached an operation, subsequent same-owner/same-fingerprint
-retries return that retained operation even if the preparation expiry time has since
-passed; they must not create a second operation or reinterpret a completed admission as a
-fresh preparation.
+Preparation expiry, exact prepared operation/input, and current-state binding are checked
+before first operation admission. For a newly admitted prepared operation that is still
+on its first dispatch path, expiry and current-state binding are checked again as the
+final pre-effect guard immediately before ``EffectBoundary.start``. No unbounded or
+operation-specific work may occur between that final verification and the boundary call;
+the only intervening kernel work is the already-required durable dispatch/audit sequence.
+A stale state or expired preparation suppresses the boundary call and terminates the
+already-admitted operation through an allowed no-effect lifecycle path using
+``prepared_operation_mismatch`` or ``prepared_operation_expired``.
+
+Once an effect has been dispatch-attempted, or when a later same-owner/same-fingerprint
+retry merely returns retained work, preparation expiry must not be reinterpreted as
+permission to create/re-dispatch a fresh operation. Retained-operation reconciliation
+remains authoritative.
 
 16. Atomic create-or-find semantics
 -----------------------------------
@@ -864,12 +890,15 @@ fresh preparation.
 Algorithm:
 
 #. begin a short write transaction;
+#. reject ``derived_member_key`` as ``idempotency_invalid`` before lookup/creation unless
+   a later reviewed implementation supplies and verifies its declared durable parent
+   contract and deterministic derivation; Phase 4 supplies none;
 #. lookup/attempt the exact global unique binding scope;
 #. if no binding exists and the key mode is ``prepared_execution_nonce``, return
    ``prepared_operation_mismatch`` without creating an operation: a prepared nonce must
    have a durable pre-admission registration;
-#. if no binding exists for another supported key mode, create the full binding +
-   ``received`` operation + version-1 transition atomically;
+#. if no binding exists for ``caller_key``, create the full binding + ``received``
+   operation + version-1 transition atomically;
 #. if present and ``record_kind=tombstone`` or ``retired_at`` is set, return
    ``idempotency_key_retired`` without loading/disclosing an operation;
 #. for a present full record, verify owner before disclosing preparation or operation
@@ -897,11 +926,12 @@ The tombstone check occurs before the same-owner/same-fingerprint retained-opera
 branch because a valid tombstone may have ``operation_id=NULL`` and the contract requires
 ``idempotency_key_retired``. No code attempts to load a retired operation from a tombstone.
 
-Prepared expiry/input/current-state checks occur only before first operation admission and
-use durable fields that survive process restart. They are not bypassed by reconstructing a
-fresh application. After an operation is attached, normal retained-operation idempotency
-semantics take precedence so a retry can reconcile the original work rather than being
-rejected merely because preparation later expires.
+Prepared expiry/input/current-state checks before first admission use durable fields that
+survive process restart. They are not bypassed by reconstructing a fresh application.
+After an operation is attached, normal retained-operation idempotency semantics take
+precedence for retries, while a *newly admitted operation on its first dispatch path*
+still performs the separate final expiry/current-state guard defined below. That final
+guard is not a second admission and cannot create another operation.
 
 Concurrent uniqueness races roll back, re-read, and follow the same decision table. They
 do not create a second operation.
@@ -935,7 +965,8 @@ kernel path. There is no hidden production ``allow_all`` switch.
 
 #. receive an already-authenticated owner, normalized ``OperationIntent``, and future
    caller idempotency input;
-#. validate key syntax and derive safe key digest;
+#. validate key syntax/mode and derive safe key digest;
+#. reject undeclared ``derived_member_key`` before durable binding/operation creation;
 #. atomically create/find global binding + version-1 ``received`` operation;
 #. for retained/conflict/owner-mismatch/retired outcomes, return without effect;
 #. append/fsync a schema-valid audit event with
@@ -955,8 +986,18 @@ kernel path. There is no hidden production ``allow_all`` switch.
    marker;
 #. append/fsync a schema-valid ``payload.kind=effect.intent_recorded`` event carrying only
    bounded/digested target/effect facts and that operation correlation;
-#. **only now** call ``EffectBoundary.start`` with an ``EffectRequest`` containing the
-   operation ID and running state version as stable dispatch identity;
+#. if the newly admitted operation uses ``prepared_execution_nonce``, immediately
+   re-check current time against durable ``prepared_expires_at`` and invoke the
+   operation-specific prepared-state verifier to recompute the exact current-state
+   digest; compare it to durable ``prepared_state_binding_sha256``;
+#. if that final prepared guard is expired, mismatched, unavailable, or cannot be proven,
+   **do not call the effect boundary**; transition ``running -> failed`` with
+   ``known_no_effect`` and the existing ``prepared_operation_expired`` or
+   ``prepared_operation_mismatch`` error, then append/fsync the schema-valid lifecycle
+   audit required for that no-effect terminal outcome;
+#. **only after the final prepared guard passes (or for non-prepared mode)** call
+   ``EffectBoundary.start`` with an ``EffectRequest`` containing the operation ID and
+   running state version as stable dispatch identity;
 #. durably persist the returned no-crossing/crossed/reference/outcome knowledge and the
    bounded recoverable opaque reference when one exists;
 #. transition from ``running`` according to the exact lifecycle contract if the result is
@@ -966,14 +1007,21 @@ kernel path. There is no hidden production ``allow_all`` switch.
    ``effect.uncertain``, and/or ``operation.state_changed`` records as appropriate;
 #. return the retained operation/result metadata.
 
-Required audit failure before the effect call blocks the call. The exact existing audit
-schema uses ``payload.kind`` as the event-type discriminator; Phase 4 does **not** invent
-an ``event_type`` or unsupported kinds such as a literal ``operation_received`` payload.
+The final prepared-state verifier is a read/compare guard only. It cannot mutate the
+target, widen authority, or substitute for the operation-specific preparation contract.
+A mismatch after admission but before dispatch is therefore a proven no-effect failure,
+not an ``uncertain`` effect outcome. Required audit failure before the effect call also
+blocks the call.
 
-A process crash after step 11 but before step 13 is deliberately conservative: durable
-state says ``running`` even if the adapter was never reached. Restart cannot prove no
-effect, so it resolves through the running/uncertain reconciliation path rather than
-falsely returning ``known_no_effect``.
+The exact existing audit schema uses ``payload.kind`` as the event-type discriminator;
+Phase 4 does **not** invent an ``event_type`` or unsupported kinds such as a literal
+``operation_received`` payload.
+
+A process crash after the durable ``running`` marker but before ``EffectBoundary.start``
+is deliberately conservative: durable state says ``running`` even if the adapter was
+never reached. Restart cannot prove no effect from the state marker alone, so it resolves
+through the running/uncertain reconciliation path rather than falsely returning
+``known_no_effect``.
 
 There is no production effect adapter in Phase 4.
 
@@ -984,11 +1032,20 @@ Define narrow framework-independent ports:
 
 .. code-block:: python
 
+   class PreparedStateVerifier(Protocol):
+       async def current_state_digest(self, request: PreparedStateCheck) -> str: ...
+
    class EffectBoundary(Protocol):
        async def start(self, request: EffectRequest) -> EffectStartReceipt: ...
 
    class EffectReconciler(Protocol):
        async def reconcile(self, reference: EffectReference) -> EffectObservation: ...
+
+``PreparedStateCheck`` contains only the protected prepared-operation identity and the
+bounded operation-specific facts required to recompute the reviewed current-state digest.
+It does not accept an arbitrary command/path interface. The verifier is required only for
+a newly admitted prepared operation before first dispatch. Phase 4 production has no
+prepared effect contract; tests provide a deterministic fake verifier.
 
 ``EffectStartReceipt`` can express only:
 
@@ -1029,8 +1086,10 @@ A duplicate observation may return the existing version only when it is semantic
 same observation; it cannot fabricate a transition.
 
 ``received`` is version 1. ``authorised -> running`` is a real version increment and is
-committed before any effect call. ``uncertain`` is effect-terminal-reconcilable and moves
-only to ``succeeded``/``failed``/``cancelled`` through explicit reconciliation evidence.
+committed before any effect call. A prepared guard failure after that marker uses the
+contract-allowed ``running -> failed`` edge with ``known_no_effect`` because the effect
+boundary was not invoked. ``uncertain`` is effect-terminal-reconcilable and moves only to
+``succeeded``/``failed``/``cancelled`` through explicit reconciliation evidence.
 
 21. Restart reconciliation
 --------------------------
@@ -1049,7 +1108,9 @@ Rules:
 * ``running``/``paused``/``cancelling`` with a durable recoverable external reference ->
   ask ``EffectReconciler``;
 * ``running`` with no external reference, including crash during ``start()`` before a
-  receipt, is **uncertain**, never ``known_no_effect``;
+  receipt **or crash after the running marker before final prepared verification**, is
+  **uncertain**, never ``known_no_effect``; restart does not replay the prepared guard or
+  redispatch automatically because it cannot prove whether the boundary was reached;
 * ``paused``/``cancelling`` without a reconcilable reference also becomes ``uncertain``
   unless the adapter can prove an allowed terminal observation through another protected
   stable dispatch identity;
@@ -1198,6 +1259,8 @@ Pre-effect ordering:
 #. ``policy.decision``/``operation.authorised`` audit appends/fsyncs;
 #. DB ``authorised -> running`` dispatch marker commits;
 #. ``effect.intent_recorded`` audit appends/fsyncs;
+#. for a newly admitted prepared operation, revalidate preparation expiry and exact
+   current-state binding as the final no-effect guard;
 #. only then may the effect adapter be called.
 
 After a synthetic/future external effect, truthful operation persistence has priority;
@@ -1215,8 +1278,11 @@ Crash-window rules:
   transition is the code-level precondition;
 * running state with missing effect-intent audit -> no **new** effect may be dispatched;
   treat operation as uncertain/recovery-required until evidence proves otherwise;
-* running + effect-intent audit with lost start receipt -> uncertain unless reconciler
-  proves an allowed terminal outcome.
+* running + effect-intent audit but crash before/during final prepared verification ->
+  uncertain on restart because the running marker alone cannot prove the boundary was not
+  reached;
+* running + effect-intent audit + passed final prepared guard with lost start receipt ->
+  uncertain unless reconciler proves an allowed terminal outcome.
 
 28. Audit failure gate and emergency journal
 -------------------------------------------
@@ -1339,7 +1405,8 @@ Include at least:
    reconciliation_unavailable
 
 These are not automatically MCP error codes. Host-facing mappings require a later
-reviewed Tool contract.
+reviewed Tool contract. In Phase 4 ``idempotency_invalid`` is also the internal fail-closed
+result for ``derived_member_key`` because no declared parent derivation is implemented.
 
 34. Controller ownership binding
 --------------------------------
@@ -1389,12 +1456,19 @@ Hypothesis/state-machine tests cover:
 * same-key/different-input conflict;
 * cross-controller replay non-disclosure/no effect;
 * concurrent first request exactly one binding;
+* ``derived_member_key`` without a declared/verified parent contract always fails closed
+  as ``idempotency_invalid`` before binding/operation creation;
 * prepared nonce first admission requires a durable registration;
 * unconsumed prepared nonce expiry returns ``prepared_operation_expired`` with no
   operation/effect;
 * prepared operation/input/current-state binding mismatch returns
   ``prepared_operation_mismatch`` with no operation/effect;
 * a valid prepared binding admits exactly one operation and attaches it atomically;
+* a target current-state change after first admission but before final dispatch guard
+  returns ``prepared_operation_mismatch`` and never calls the counting boundary;
+* preparation expiry after first admission but before final dispatch guard returns
+  ``prepared_operation_expired`` and never calls the counting boundary;
+* verifier unavailable/unprovable at the final guard fails closed with no effect;
 * after successful prepared admission, a same-fingerprint retry returns the retained
   operation even when the preparation expiry time has subsequently passed;
 * uncertain never auto-retries;
@@ -1415,15 +1489,21 @@ fault points include:
 * crash after received commit/before received audit;
 * audit failure before policy;
 * policy deny;
+* undeclared ``derived_member_key`` is rejected before any durable binding/operation;
 * prepared binding persisted, process restarted, then first use while valid;
 * prepared binding persisted, process restarted past expiry ->
   ``prepared_operation_expired`` and no operation;
 * prepared binding persisted, process restarted with input/current-state mismatch ->
   ``prepared_operation_mismatch`` and no operation;
+* prepared first admission succeeds, then target-state digest changes before final
+  pre-effect verification -> ``prepared_operation_mismatch`` and counting boundary=0;
+* prepared first admission succeeds, then preparation expires before final pre-effect
+  verification -> ``prepared_operation_expired`` and counting boundary=0;
 * crash after authorised commit/before authorization audit;
 * crash after authorization audit/before running transition;
 * crash after running transition/before effect-intent audit;
-* crash after running/effect-intent audit but before calling ``start``;
+* crash after running/effect-intent audit but before/during final prepared-state guard;
+* crash after running/effect-intent audit and passed guard but before calling ``start``;
 * crash/exception during ``EffectBoundary.start`` before receipt;
 * lost response after test effect;
 * DB failure after known test effect;
@@ -1453,12 +1533,17 @@ Close every runtime object and reconstruct a fresh application. Verify:
 
 * operation identity/state/version remains resolvable;
 * idempotency binding reconciles;
+* undeclared ``derived_member_key`` remains rejected after fresh composition and cannot
+  acquire a binding merely because in-memory registration state was lost/recreated;
 * an unconsumed prepared binding retains expiry and exact prepared input/current-state
   digests across restart;
 * first use after restart enforces ``prepared_operation_expired`` /
   ``prepared_operation_mismatch`` before creating an operation;
 * a still-valid matching prepared binding can attach exactly one received operation after
   restart;
+* after that fresh-process admission, the final pre-effect guard recomputes preparation
+  expiry/current-state again before the fake counting boundary and suppresses stale
+  dispatch;
 * terminal result is stable;
 * uncertain remains uncertain without evidence;
 * authorised pre-dispatch work is never redispatched;
@@ -1524,8 +1609,12 @@ Phase 4 must preserve:
 #. no production consequential effect adapter;
 #. no new mutating MCP Tool/Resource/Task/Prompt;
 #. durable global idempotency identity before synthetic effect dispatch;
+#. undeclared ``derived_member_key`` cannot create a binding/operation/effect; Phase 4
+   admits no derived-member mode until a reviewed parent derivation exists;
 #. prepared execution nonces retain durable expiry and exact current-state binding before
    first admission, and restart cannot bypass those checks;
+#. a newly admitted prepared operation revalidates expiry/current state as the final
+   pre-effect guard; stale/unprovable state cannot reach ``EffectBoundary.start``;
 #. raw idempotency material never persists/discloses;
 #. global duplicate prevention survives controller replacement and tombstoning;
 #. operation ownership never transfers from key possession;
@@ -1603,7 +1692,8 @@ upgrade`` -> ``kernel verify`` -> start sequence.
 Implement Phase 4 in this order:
 
 #. add persistence/JCS dependencies, Alembic skeleton, and deployment write-path changes;
-#. define domain types and lifecycle/idempotency/audit contract-parity tests;
+#. define domain types and lifecycle/idempotency/audit contract-parity tests, including
+   fail-closed undeclared-derived-member handling;
 #. implement migration ``0001`` and SQLite runtime/pragmas/migration locking;
 #. implement atomic create/find with full/tombstone exact semantics and durable
    prepared-nonce pre-admission registration/expiry/current-state validation;
@@ -1612,9 +1702,9 @@ Implement Phase 4 in this order:
 #. implement JCS audit writer/verifier + storage-failure gate and exact payload-kind
    mapping;
 #. implement retained payload filesystem adapter + metadata consistency;
-#. implement ``OperationCoordinator`` through durable running dispatch marker and
-   unavailable production effect boundary;
-#. implement synthetic counting effect/reconciler only in tests;
+#. implement ``OperationCoordinator`` through durable running dispatch marker, final
+   prepared expiry/current-state revalidation, and unavailable production effect boundary;
+#. implement synthetic counting effect/reconciler/prepared-state verifier only in tests;
 #. implement restart reconciliation and cancellation semantics;
 #. add local DB/kernel/audit operator commands;
 #. add property, crash-window, restart, audit, payload, migration, and systemd tests;
@@ -1634,10 +1724,13 @@ A reviewer verifies:
 * one authoritative SQLite writer and no executor/broker DB access;
 * version-1 received creation and lifecycle edges match contracts;
 * idempotency unique scope is non-null and contract-exact;
+* undeclared ``derived_member_key`` fails closed before binding/operation creation;
 * prepared nonce registration durably binds prepared operation/input, expiry, and exact
   current-state digest; first admission validates them before creating an operation;
 * prepared expiry/mismatch behavior survives fresh-process restart and uses the reviewed
   ``prepared_operation_expired`` / ``prepared_operation_mismatch`` codes;
+* a newly admitted prepared operation revalidates expiry/current-state immediately before
+  effect dispatch; mismatch/expiry/unverifiable state suppresses the boundary call;
 * tombstones contain exactly the required duplicate-prevention facts and return retired;
 * raw keys never persist;
 * audit authorization and durable running dispatch marker precede effect invocation;
@@ -1673,6 +1766,8 @@ Phase 4 implementation is accepted only when every item is true:
 #. version 1 is ``NULL -> received`` and every later transition increments once;
 #. invalid/stale transitions are rejected;
 #. global idempotency index exactly matches contract scope with non-null key columns;
+#. ``derived_member_key`` is rejected as ``idempotency_invalid`` before durable binding/
+   operation creation until a reviewed parent contract/derivation exists;
 #. raw caller key/prepared nonce never persists/logs/audits;
 #. an unconsumed prepared nonce is durably registered with owner/device/Tool/contract,
    prepared operation/input, expiry, and exact current-state binding before first use;
@@ -1682,8 +1777,14 @@ Phase 4 implementation is accepted only when every item is true:
    ``prepared_operation_mismatch`` and creates no operation/effect;
 #. fresh-process restart preserves and re-enforces prepared expiry/mismatch checks;
 #. valid prepared first admission atomically attaches exactly one version-1 operation;
-#. a later retry of an already admitted prepared nonce returns retained work rather than
-   creating a fresh operation when preparation has since expired;
+#. before that newly admitted prepared operation crosses an effect boundary, expiry and
+   exact current-state digest are recomputed/revalidated again;
+#. expiry after admission but before dispatch returns ``prepared_operation_expired`` with
+   a proven no-effect failure and no boundary call;
+#. current-state change/unverifiable state after admission but before dispatch returns
+   ``prepared_operation_mismatch`` with a proven no-effect failure and no boundary call;
+#. a later retry of an already admitted/dispatched prepared nonce returns retained work
+   rather than creating or redispatching a fresh operation when preparation has expired;
 #. concurrent same-key admission creates one binding/operation;
 #. same owner + same key + same fingerprint returns retained operation;
 #. same key + different fingerprint returns conflict/no second operation;
