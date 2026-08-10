@@ -417,7 +417,7 @@ Phase 4 kernel.
 11.1 ``probe_operations``
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Persist one row per Phase 5 mutating operation:
+Persist one row per Phase 5 mutating operation that has passed policy admission:
 
 * ``operation_id`` PK/FK to ``operations``;
 * ``probe_operation`` enum ``write``/``cleanup``;
@@ -430,17 +430,21 @@ Persist one row per Phase 5 mutating operation:
 * ``prepared_state_binding_sha256``;
 * ``created_at``.
 
-The row is immutable after admission except for fields explicitly required by migration
-compatibility. It is the durable relationship proving that the prepared nonce and caller
-key were admitted as one logical operation; it is not a second lifecycle table.
+The row is inserted only in the post-policy admission transaction described in section
+16. It is immutable after admission except for fields explicitly required by migration
+compatibility. It proves which operation-specific target/artifact facts were authorised;
+it is not a second lifecycle table. A rejected or interrupted pre-policy ``received``
+operation therefore has no ``probe_operations`` row and owns no probe-path reservation.
 
 11.2 ``probe_artifacts``
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
-Persist the probe-owned filesystem object:
+Persist every historical probe-owned filesystem-object generation:
 
 * ``artifact_id`` PK, schema-compatible random identifier;
-* ``relative_path`` UNIQUE NOT NULL;
+* ``relative_path`` NOT NULL;
+* ``path_generation`` integer >= 1, monotonically increasing for each normalized
+  ``relative_path`` across retained historical rows;
 * ``owner_controller_id`` / ``owner_controller_epoch``;
 * ``content_sha256``;
 * ``byte_count`` <= 65536;
@@ -451,11 +455,30 @@ Persist the probe-owned filesystem object:
 * ``file_identity_digest`` nullable protected digest of stable local stat facts after a
   created file is verified.
 
-The UNIQUE ``relative_path`` reservation means two live writes cannot claim one target.
-A row is created as ``reserved`` before the write effect. It becomes ``created`` only
-when reconciliation/receipt proves the exact published file. Pre-effect failure may mark
-it ``abandoned``. Any conflicting on-disk state becomes ``uncertain`` and fail-closed for
-that path; Binnacle never deletes a mismatch merely to repair the probe.
+Do **not** place an unconditional UNIQUE constraint on ``relative_path`` because removed
+or safely abandoned history must remain durable while the frozen evaluation reuses the
+same synthetic filename across attempts. Instead migration ``0002`` creates an exact
+partial unique index equivalent to:
+
+::
+
+   CREATE UNIQUE INDEX uq_probe_artifacts_live_relative_path
+       ON probe_artifacts(relative_path)
+       WHERE state IN ('reserved', 'created', 'uncertain');
+
+At most one live/uncertain generation can own a path. ``removed`` and proven-no-effect
+``abandoned`` rows do not block a later independent write. A new write reservation
+atomically chooses ``path_generation = max(retained generation for path) + 1`` (or 1 for
+a never-seen path) while holding the short post-policy write transaction. Preparation
+binds the current retained generation high-water value, including 0 for a never-seen path,
+so a stale preparation cannot become valid again merely because another create/cleanup
+cycle returned the target to an absent filesystem state.
+
+A row is created as ``reserved`` only after policy allows the operation. It becomes
+``created`` only when reconciliation/receipt proves the exact published file. A proven
+pre-effect failure may mark it ``abandoned``. Any conflicting on-disk state becomes
+``uncertain`` and remains live/fail-closed for that path; Binnacle never deletes a mismatch
+merely to repair the probe.
 
 No file content is stored in SQLite.
 
@@ -536,16 +559,17 @@ Algorithm for ``operation=write``:
 #. open/verify the protected probe-root identity through the adapter;
 #. prove the final target name is absent and not represented by a live conflicting
    ``probe_artifacts`` reservation;
-#. compute the current-state binding over root identity, target name, target-absent fact,
-   and applicable durable reservation generation;
+#. load the retained path-generation high-water value (0 if no historical row exists) and
+   compute the current-state binding over root identity, target name, target-absent fact,
+   and that durable generation;
 #. generate at least 128 random bits for ``execution_nonce`` and a separate random
    ``prepared_operation_id``;
 #. compute the exact prepared normalized-input/request fingerprint;
 #. register the nonce through Phase 4
    ``OperationStore.register_prepared_execution_nonce`` with Tool/contract/owner/device,
    expiry, current-state digest, boot identity, and trusted-time monotonic deadline;
-#. append/fsync schema-valid bounded reservation/audit evidence using existing payload
-   kinds; do not invent ``owner_confirmed`` audit state;
+#. append/fsync schema-valid bounded preparation/audit evidence using existing payload
+   kinds; do not invent ``owner_confirmed`` audit state or a filesystem reservation;
 #. return the existing output schema.
 
 Algorithm for ``operation=cleanup`` is identical except that it additionally requires a
@@ -577,7 +601,7 @@ Add an internal transactional primitive equivalent to:
        prepared_state: ProbeStateBinding,
    ) -> CreateOrFindResult: ...
 
-One short SQLite write transaction performs:
+One short **pre-policy** SQLite write transaction performs only durable identity work:
 
 #. digest both raw identities immediately and discard raw values after validation;
 #. load the global prepared-nonce binding and caller-key binding scopes;
@@ -591,14 +615,17 @@ One short SQLite write transaction performs:
    operation for the same admitted caller-key binding; a different fresh caller key may
    not create a new alias/effect and is rejected as ``idempotency_conflict``;
 #. if the prepared binding is unconsumed and caller binding absent, atomically create the
-   version-1 ``received`` operation, create the full caller-key binding pointing to that
-   operation, attach the prepared binding to the same operation, and insert the immutable
-   ``probe_operations`` relation;
-#. for a write, atomically reserve the unique ``probe_artifacts.relative_path`` and mint
-   ``artifact_id`` in that same admission transaction;
-#. commit; only the newly admitted operation proceeds to policy/effect.
+   minimal version-1 ``received`` operation, create the full caller-key binding pointing
+   to that operation, and attach the prepared binding to the same operation;
+#. commit; only the newly admitted ``received`` operation proceeds to policy evaluation.
 
-This transaction is the only first-admission path for Phase 5. A concurrent request cannot
+This transaction intentionally does **not** insert ``probe_operations``, mint an
+``artifact_id``, create a ``probe_artifacts`` row, or claim the path for a cleanup. Those
+are post-policy admission/reservation facts under the merged Phase 4 ordering. Therefore a
+policy-denied request, or a crash after durable ``received`` identity but before policy,
+leaves no target reservation behind.
+
+The transaction is the only first-identity path for Phase 5. A concurrent request cannot
 consume one preparation twice or bind two caller keys to two operations.
 
 Same caller key/input returns the retained operation. Same caller key/different input is
@@ -606,8 +633,8 @@ Same caller key/input returns the retained operation. Same caller key/different 
 consumption is also rejected without creating an alias/effect. ``uncertain`` never causes
 a fresh call with a new key.
 
-16. Local policy
-----------------
+16. Local policy and post-policy reservation
+--------------------------------------------
 
 Phase 4's production Bootstrap policy denies unknown consequential contracts. Phase 5
 adds only two exact consequential intents:
@@ -628,6 +655,37 @@ internal capability such as ``probe_workspace_mutate`` without treating the exte
 claim string as a filesystem path or ambient authority. Missing/mismatched scope/profile
 fails closed.
 
+Policy evaluation occurs after the minimal pre-policy transaction from section 15. The
+post-policy admission behavior is exact:
+
+* on policy deny, one short SQLite transaction persists the one durable deny decision and
+  legal ``received -> rejected`` transition; it inserts no ``probe_operations`` row and
+  creates/claims no artifact reservation;
+* on policy allow, one short SQLite write transaction revalidates the expected ``received``
+  operation/version and current prepared state, inserts the one durable allow decision,
+  inserts the immutable ``probe_operations`` row, and acquires the operation-specific
+  reservation before the operation leaves ``received``;
+* for a write, that transaction rechecks that the final path is absent, reads the retained
+  path-generation high-water value, allocates ``path_generation = high_water + 1``, mints
+  ``artifact_id``, and inserts the ``probe_artifacts`` row in ``reserved`` state under the
+  partial live-path unique index;
+* for cleanup, it revalidates the exact retained artifact/path/generation/ownership and
+  atomically assigns that artifact's nullable ``cleanup_operation_id`` to this operation;
+* only after those writes succeed does the same transaction commit the legal
+  ``received -> authorised`` transition/version row.
+
+If a concurrent operation wins the live-path reservation or changes the retained artifact
+before the allowing transaction commits, this operation must not become authorised. The
+transaction records the already-evaluated admission decision together with a legal
+``received -> rejected`` outcome/reason that truthfully reports reservation/state conflict,
+without creating a second policy decision or a partial reservation. A transaction failure
+that prevents those durable facts from committing leaves the operation ``received`` and
+Phase 4 restart recovery handles it fail closed.
+
+This preserves Phase 4's rule that pre-policy durability contains only minimal operation/
+idempotency identity, while post-policy admission/reservation facts are durable before any
+filesystem effect.
+
 17. Final OP-BOUNDARY verifier
 ------------------------------
 
@@ -643,8 +701,9 @@ Immediately before ``EffectBoundary.start``, revalidate:
 * preparation expiry/trusted-time/current-state binding;
 * probe-root identity and permissions;
 * exact single-component target path;
-* write target still absent and its durable reservation still belongs to this operation;
-  or cleanup target/artifact still has the exact retained identity/digest/ownership;
+* write target still absent and its live durable reservation/generation still belongs to
+  this operation; or cleanup target/artifact still has the exact retained
+  identity/digest/generation/ownership and cleanup claim;
 * maximum effect remains one bounded local artifact;
 * no cancellation/state-version change has occurred.
 
@@ -719,8 +778,8 @@ Every Phase 5 operation has durable operation-specific facts before effect:
 * operation ID/state version;
 * prepared/caller binding relationship;
 * artifact ID;
-* target path digest and expected content digest;
-* ``probe_artifacts`` reservation/ownership.
+* target path digest, retained path generation, and expected content digest;
+* ``probe_artifacts`` reservation/ownership or cleanup claim.
 
 ``ProbeWorkspaceReconciler`` can therefore reconstruct a stable effect reference even if
 ``EffectBoundary.start`` crashed before returning its receipt.
@@ -743,6 +802,8 @@ For cleanup reconciliation:
 * mismatched replacement/identity ambiguity -> ``uncertain``.
 
 Reconciliation never creates a second effect and never changes idempotency identity.
+Historical ``removed``/``abandoned`` rows remain retained so path-generation high-water
+state survives restart and repeated evaluation attempts.
 
 21. Phase 4 audit-obligation and global-gate integration
 --------------------------------------------------------
@@ -753,8 +814,10 @@ Every effect goes through the Phase 4 coordinator in this order:
 ::
 
    authenticated execute request
-     -> dual prepared/caller idempotency admission
+     -> minimal dual prepared/caller identity + received operation
+     -> evaluate policy
      -> one durable admission-policy decision
+     -> post-policy probe operation + artifact/cleanup reservation
      -> authorised
      -> running
      -> fsynced effect.intent_recorded
@@ -778,9 +841,9 @@ Phase 5 does not introduce an auto-clear exception for a "simple" file effect.
 
 Use only existing schema-valid audit payload kinds.
 
-Preparation may use existing policy/reservation evidence with ``operation_id=null`` and
-``prepared_operation_id`` populated where schema permits. It must not claim an owner UI
-confirmation occurred.
+Preparation may use existing policy/preparation evidence with ``operation_id=null`` and
+``prepared_operation_id`` populated where schema permits. It must not claim a filesystem
+reservation or owner UI confirmation occurred before policy admission.
 
 Execution uses the Phase 4 lifecycle/effect mappings, including:
 
@@ -791,10 +854,10 @@ Execution uses the Phase 4 lifecycle/effect mappings, including:
   ``effect.uncertain`` as truthful;
 * recovery/cancellation payloads when applicable.
 
-Record bounded digests for target path, content, maximum effect, artifact identity, Tool
-manifest, profile/policy, and operation correlation. Raw file content, execution nonce,
-idempotency key, credentials, and complete host-confirmation screenshots/transcripts are
-not audit payload.
+Record bounded digests for target path, path generation, content, maximum effect, artifact
+identity, Tool manifest, profile/policy, and operation correlation. Raw file content,
+execution nonce, idempotency key, credentials, and complete host-confirmation screenshots/
+transcripts are not audit payload.
 
 Host UI confirmation is evaluation evidence, not a server-verifiable authority fact.
 Server audit may record the selected reviewed HOST-profile digest/status used for
@@ -896,7 +959,10 @@ HOST profile:
   oracle.
 
 The frozen profile requires the risk-class attempt counts. A single successful manual
-write is not sufficient evidence for an ``observed-supported`` promotion.
+write is not sufficient evidence for an ``observed-supported`` promotion. Repeated
+attempts may reuse the frozen synthetic filename after exact cleanup: each new independent
+write obtains a new ``artifact_id``/``path_generation`` while the prior ``removed`` row is
+retained, so evidence thresholds never require deleting durable history.
 
 ``operation-cancellation`` remains unexercised/not-applicable for the immediate bounded
 probe unless the frozen case/profile independently requires a promoted cancellable test
@@ -930,6 +996,9 @@ The exact procedure is:
    retained operation/result without a duplicate effect;
 #. prepare cleanup using the returned artifact ID/path/digest;
 #. exercise required HC1 cleanup confirmation and exact deletion/absence semantics;
+#. after cleanup, verify the historical artifact row remains ``removed`` and a later
+   independent attempt on the same frozen filename allocates the next path generation
+   rather than reusing/deleting history;
 #. repeat according to the frozen risk-class attempt counts and record all blocked,
    declined, failed, unstable, and successful outcomes rather than selecting only passes;
 #. finalize the evaluation manifest, reviewer decision, evidence archive, detached receipt,
@@ -992,20 +1061,30 @@ Unit/property coverage includes:
 * path policy rejects nested/absolute/dot/backslash/reserved/non-NFC/overlong names;
 * text/base64 normalization produces identical digest only for identical decoded bytes;
 * prepare/write and prepare/cleanup fingerprints are deterministic and contract-exact;
-* prepared nonce/caller key dual admission creates one operation/binding pair relation;
+* prepared nonce/caller key dual admission creates one minimal ``received`` operation
+  before policy and no probe-path reservation;
+* policy deny leaves no ``probe_operations``/live artifact reservation and the path remains
+  available for a later independent preparation;
+* policy allow atomically persists operation-specific facts/reservation before
+  ``authorised``;
 * same caller key/input returns retained operation;
 * same caller key/different input rejects;
 * consumed preparation plus new caller key cannot create another operation/effect;
 * owner mismatch is non-disclosing;
 * expired/trusted-time-unavailable preparation cannot admit an effect;
-* target-state change between prepare/admission/final boundary suppresses effect;
-* unique artifact path reservation holds under concurrency;
+* target-state or path-generation change between prepare/admission/final boundary
+  suppresses effect;
+* partial unique live-path reservation holds under concurrency while ``removed``/
+  ``abandoned`` historical rows do not block a new generation;
+* stale preparation remains invalid after a create+cleanup cycle returns the target to
+  absence because the retained path-generation high-water changed;
 * cleanup never deletes mismatched/unowned content;
 * no automatic retry from ``uncertain``;
 * maximum file/effect bounds are invariant.
 
 Hypothesis state-machine tests should combine preparation expiry, controller replacement,
-idempotency collisions, artifact states, and crash/reconciliation transitions.
+idempotency collisions, artifact states/generations, policy decisions, and crash/
+reconciliation transitions.
 
 31. Integration and fault tests
 -------------------------------
@@ -1018,8 +1097,15 @@ Required faults include:
 * crash after prepared binding registration;
 * concurrent first execute with same nonce/key;
 * concurrent same nonce with different caller keys;
-* crash after caller/prepared bindings + artifact reservation commit, before policy;
-* policy deny;
+* crash after minimal caller/prepared binding + ``received`` commit, before policy -> no
+  ``probe_operations`` row/live artifact reservation;
+* policy deny -> no reservation and a later independent attempt can use the path;
+* concurrent policy-allowed writes for the same path -> exactly one live generation wins;
+* repeated write/cleanup cycles on frozen ``entitlement.txt`` -> retained ``removed``
+  histories plus monotonically increasing generations, no uniqueness failure;
+* stale prepared write after another complete create/cleanup cycle -> prepared-state
+  mismatch despite target being absent again;
+* crash after post-policy artifact reservation/authorisation before ``running``;
 * crash after ``running``/intent audit before final verifier;
 * audit-obligation marker failure;
 * target appears after prepare but before final boundary;
@@ -1047,8 +1133,11 @@ may "repair" uncertainty by repeating a fresh effect.
 Close all runtimes and reconstruct a fresh application. Verify:
 
 * prepared nonce/expiry/state binding remains enforceable;
-* dual caller/prepared binding relation remains intact;
-* reserved/created/removed artifact rows reconstruct correctly;
+* dual caller/prepared binding relation remains intact even when no post-policy probe row
+  exists for a rejected/interrupted pre-policy operation;
+* reserved/created/removed/abandoned artifact generations reconstruct correctly;
+* path-generation high-water survives restart and removed history does not block a later
+  safe generation;
 * exact published file is reconciled after lost start receipt;
 * stale private staging file never becomes a visible second artifact;
 * mismatched on-disk state remains uncertain/fail-restricted;
@@ -1079,9 +1168,14 @@ Phase 5 must preserve all of the following:
 #. no source-workspace or system-management authority is introduced;
 #. Tool visibility/annotation/model text/preparation output is not authority;
 #. HC1 support remains an empirical HOST-profile fact;
-#. every effect has Phase 4 durable operation/idempotency state first;
+#. pre-policy durability is limited to Phase 4 operation/idempotency identity; policy deny
+   or pre-policy crash creates no probe-path reservation;
+#. every effect has one durable policy decision plus operation-specific reservation before
+   ``authorised`` and before the Phase 4 running/effect gates;
 #. prepared nonce and caller key converge on one operation and cannot create aliases that
    produce additional effects;
+#. live path uniqueness is state-aware; removed/proven-abandoned history is retained and
+   path generations prevent stale preparation resurrection;
 #. exact current state is revalidated immediately before the boundary;
 #. Phase 4 per-operation cancellation handoff and process-wide consequential gate remain
    the only start path;
@@ -1102,8 +1196,8 @@ Phase 5 must preserve all of the following:
 ---------------------------
 
 Structured diagnostics may include safe operation/artifact IDs, state/version, relative
-probe filename when classified normal-result by the test profile, digest prefixes,
-byte counts, policy/boundary result codes, and reconciliation outcome.
+probe filename when classified normal-result by the test profile, path generation, digest
+prefixes, byte counts, policy/boundary result codes, and reconciliation outcome.
 
 Never log raw content, execution nonce, caller key, credentials, raw controller assertion,
 or full host transcript.
@@ -1148,10 +1242,13 @@ Implement Phase 5 in this order after the implementation/promotion prerequisites
 #. revalidate the exact Phase 3 profile and Phase 4 implementation exit evidence;
 #. add protected probe-root configuration/systemd/setup verification;
 #. add domain normalization/path/maximum-effect types and tests;
-#. add migration ``0002`` with ``probe_operations``/``probe_artifacts`` constraints;
+#. add migration ``0002`` with ``probe_operations``, state-aware live-path uniqueness,
+   path-generation history, and ``probe_artifacts`` constraints;
 #. implement preparation state binding and Phase 4 prepared-nonce registration;
-#. implement dual prepared-nonce + caller-key transactional admission;
+#. implement minimal dual prepared-nonce + caller-key pre-policy identity admission;
 #. implement exact Bootstrap policy entries for write/cleanup;
+#. implement post-policy ``probe_operations`` plus write/cleanup reservation transaction
+   and authorised transition;
 #. implement secure root/staging adapter and filesystem capability verification;
 #. implement Phase 5 final boundary verifier;
 #. implement atomic create/no-overwrite effect and reconciler;
@@ -1178,10 +1275,14 @@ A reviewer verifies:
 * existing three Tool contracts are consumed exactly;
 * Phase 4 implementation + real Phase 3 profile evidence remain promotion prerequisites;
 * host-confirmation behavior is never assumed or converted into server authority;
-* prepare is no-effect and binds exact input/current state/expiry;
+* prepare is no-effect and binds exact input/current state/expiry/path generation;
 * execute requires both prepared nonce and caller key and atomically binds both to one
-  operation;
-* exactly one durable artifact reservation precedes write effect;
+  minimal pre-policy operation;
+* policy deny/pre-policy crash leaves no probe-path reservation;
+* exactly one state-aware durable artifact/cleanup reservation is acquired only after
+  policy allow and before ``authorised``/write effect;
+* removed/proven-abandoned historical rows can coexist with a later live generation and
+  stale preparation cannot revive after an intervening path generation;
 * final boundary revalidation uses the Phase 4 handoff/global-gate path;
 * Phase 4 audit-obligation semantics are not bypassed;
 * write cannot overwrite and cleanup cannot delete a mismatch;
@@ -1204,7 +1305,12 @@ This **planning PR** is accepted only when:
 #. the exact reviewed Tool/schema/confirmation contracts are preserved;
 #. no new MCP Tool/Resource/Task/Prompt is designed;
 #. the disposable root is separate from repository/config/state/audit/evaluation paths;
-#. dual nonce/key idempotency has one atomic one-operation admission design;
+#. dual nonce/key idempotency has one atomic minimal pre-policy one-operation identity
+   design;
+#. policy deny/pre-policy crash cannot strand a probe-path reservation;
+#. state-aware live-path uniqueness and monotonic retained path generations allow repeated
+   frozen-case attempts without deleting history or reviving stale preparations;
+#. post-policy operation-specific reservation precedes any authorised filesystem effect;
 #. one-artifact write/cleanup algorithms and crash reconciliation are deterministic;
 #. Phase 4 operation/audit/global-gate invariants remain authoritative;
 #. all real-host catalogue/confirmation/retry choices name the evidence that resolves
@@ -1223,6 +1329,8 @@ The implementation may become live for the selected HOST profile only when:
 #. real-Pi probe-root filesystem/permission capability checks pass;
 #. protected local policy maps only the selected authenticated controller profile to the
    write-probe capability;
+#. automated tests prove denied/interrupted pre-policy operations cannot reserve paths and
+   repeated cleaned-up attempts advance retained path generations safely;
 #. all automated Phase 5 tests pass;
 #. production composition has no other new effect adapter;
 #. ``compatibility-write-probe`` is activated only through the reviewed profile path;
@@ -1244,6 +1352,8 @@ profile:
 #. response loss/same-key retry produces one operation and one effect total;
 #. reconnect/retry reconciles the same operation rather than creating a duplicate;
 #. cleanup operates only on the exact artifact and establishes absence exactly once;
+#. repeated required attempts may reuse the frozen path only by creating a new retained
+   path generation after prior exact cleanup, never by deleting/reusing historical state;
 #. no path escape/overwrite/network/credential/repository/system effect occurs;
 #. required attempt counts and stability thresholds pass;
 #. evaluation manifest validates, reviewer decision is embedded, bundle is sanitized,
