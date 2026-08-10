@@ -48,7 +48,7 @@ separate. When real host/device evidence cannot exist until an earlier planned p
 implemented, a later phase may still receive a ``provisional`` detailed plan if the plan
 freezes only evidence-independent architecture, contracts, deterministic algorithms,
 security invariants, test machinery, and evidence procedures. Host/device-dependent
-facts must remain explicit unresolved decision points or conditional branches.
+facts must remain explicit, unresolved decision points or conditional branches.
 
 A provisional detailed plan does **not** promote runtime authority, does not convert an
 unknown compatibility-profile field into support, and does not satisfy the phase's
@@ -105,21 +105,28 @@ Phase map
 | 4     | ``phase-04-durable-operation-kernel.rst``            | provisional          | Phase 3 compatibility evidence for any       |
 |       |                                                      |                      | host-facing projection                       |
 +-------+------------------------------------------------------+----------------------+----------------------------------------------+
-| 5     | ``phase-05-write-capability-probe.rst``              | provisional          | Phase 4 plan merged; real Phase 3 auth,      |
-|       |                                                      |                      | discovery, and confirmation evidence gates   |
+| 5     | ``phase-05-write-capability-probe.rst``              | provisional          | Phase 4 plan merged for drafting; Phase 4    |
+|       |                                                      |                      | implementation exit plus real Phase 3 auth,  |
+|       |                                                      |                      | discovery, and confirmation evidence gate    |
 |       |                                                      |                      | implementation/promotion                     |
 +-------+------------------------------------------------------+----------------------+----------------------------------------------+
-| 6     | ``phase-06-development-workspace.rst``               | provisional          | Phase 5 plan; real Phase 5 write/confirmation|
+| 6     | ``phase-06-development-workspace.rst``               | provisional          | Phase 5 plan may be merged for drafting;     |
+|       |                                                      |                      | Phase 5 implementation exit/write-confirmation|
 |       |                                                      |                      | evidence gates operational promotion         |
 +-------+------------------------------------------------------+----------------------+----------------------------------------------+
-| 7     | ``phase-07-execution-supervisor.rst``                | provisional          | Phase 4 durable lifecycle; real Phase 3 host |
-|       |                                                      |                      | evidence gates host-facing projection        |
+| 7     | ``phase-07-execution-supervisor.rst``                | provisional          | Phase 4 plan may be merged for drafting;     |
+|       |                                                      |                      | Phase 4 implementation exit plus real Phase 3|
+|       |                                                      |                      | host evidence gates host-facing projection   |
 +-------+------------------------------------------------------+----------------------+----------------------------------------------+
-| 8     | ``phase-08-git-development.rst``                     | provisional          | Workspace/executor plans; real predecessor   |
-|       |                                                      |                      | evidence gates operational promotion         |
+| 8     | ``phase-08-git-development.rst``                     | provisional          | Workspace/executor plans permit drafting;    |
+|       |                                                      |                      | Phase 6 workspace and Phase 7 executor       |
+|       |                                                      |                      | implementation exit gates plus their real    |
+|       |                                                      |                      | predecessor evidence gate promotion          |
 +-------+------------------------------------------------------+----------------------+----------------------------------------------+
-| 9     | ``phase-09-privileged-self-management.rst``          | provisional          | Durable-operation/Git plans; real Pi service |
-|       |                                                      |                      | evidence gates privileged promotion          |
+| 9     | ``phase-09-privileged-self-management.rst``          | provisional          | Durable-operation/Git plans permit drafting; |
+|       |                                                      |                      | Phase 4 durable-kernel and Phase 8 Git       |
+|       |                                                      |                      | implementation exit gates plus real Pi       |
+|       |                                                      |                      | service evidence gate privileged promotion   |
 +-------+------------------------------------------------------+----------------------+----------------------------------------------+
 | 10    | ``phase-10-self-hosting-acceptance.rst``             | provisional          | All prior plans may be merged provisionally; |
 |       |                                                      |                      | acceptance requires all prior implementation |
