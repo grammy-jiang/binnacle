@@ -92,6 +92,8 @@ The following internal architecture is concrete in Phase 4:
   effect submission with cancellation and other pre-start lifecycle mutation;
 * filesystem retained payloads with SQLite authoritative metadata;
 * append-only RFC 8785 JCS + SHA-256 audit hash chaining;
+* one process-wide serialized audit append/tail-allocation gate, with the verified journal
+  tail as allocator authority and SQLite tail fields only as a recoverable cache;
 * audit-before-effect gating and fail-restricted audit failure behavior;
 * a small replaceable ``PolicyEngine`` boundary with fail-closed Bootstrap policy;
 * a durable dispatch-attempt state before invoking any future effect boundary;
@@ -187,7 +189,16 @@ Phase 4 implementation is complete only when tests prove all of the following:
   dispatch-attempted ``running`` work;
 * effect references returned by a future adapter are durably recoverable, not digest-only;
 * required audit records are schema-valid, canonicalized, chained, fsynced, and verified;
-* audit payloads use exact existing ``payload.kind`` discriminators;
+* concurrent audit appenders are serialized from tail read/allocation through write/fsync,
+  segment rotation, and in-memory tail publication, so no two events can claim the same
+  sequence/predecessor;
+* the verified append-only journal tail, not ``kernel_meta.audit_last_*``, is the next-
+  event allocator authority; SQLite tail metadata is updated only after journal fsync and
+  startup safely repairs a merely-behind cache while treating an ahead/divergent cache as
+  integrity failure;
+* audit payloads use exact existing ``payload.kind`` discriminators, and pre-operation or
+  tombstone idempotency abuse/conflict evidence never fabricates operation state/version
+  fields solely to fit ``operation.idempotency_conflict``;
 * audit corruption, truncation, fork, or storage failure blocks new effects;
 * bounded recovery/status/verification remains possible where underlying stores remain
   trustworthy;
@@ -627,6 +638,16 @@ Singleton facts:
 * ``trusted_time_generation`` integer >= 1, incremented on an explicitly accepted new
   boot/trust epoch;
 * ``consequential_admission_enabled`` boolean, default false.
+
+``audit_last_sequence`` and ``audit_last_hash`` are a derived SQLite cache for diagnostics
+and consistency checks, **not** the audit allocation/source-of-truth tail. The verified
+append-only journal bytes own the authoritative tail. A cache pair may advance only after
+the corresponding journal event bytes and any required segment metadata are durably
+fsynced. Startup re-verifies the journal first and reconstructs its tail before trusting
+these fields: a cache that is merely behind is refreshed in a short SQLite transaction
+after continuity is proven; a cache that is ahead of the verified journal, or has a
+different hash for the same sequence, is ``audit_integrity_failed`` and fail-restricted.
+No append allocates its next sequence or ``previous_event_hash`` from this cache.
 
 The trusted-time fields are ordering/safety evidence, not a clock-repair mechanism.
 Within one boot, a monotonic source prevents a wall-clock rollback from extending a
@@ -1285,7 +1306,8 @@ Failure behavior:
 #. validate key syntax/mode and derive safe key digest;
 #. reject undeclared ``derived_member_key`` before durable binding/operation creation;
 #. atomically create/find global binding + version-1 ``received`` operation;
-#. for retained/conflict/owner-mismatch/retired outcomes, return without effect;
+#. for retained/conflict/owner-mismatch/retired outcomes, return without effect after any
+   required schema-valid bounded idempotency abuse/conflict audit described in section 28;
 #. append/fsync a schema-valid audit event with
    ``payload.kind=operation.state_changed``, ``old_state=null``,
    ``new_state=received``, ``state_version=1``, ``effect_knowledge=none``, and a bounded
@@ -1576,12 +1598,26 @@ It implements:
 * segment chain metadata and audit-epoch continuity;
 * event byte and safe-fact bounds from ``spec/audit/audit-policy.yaml``.
 
+Phase 4 has one application process that owns the audit journal. ``AuditJournal.append``
+must therefore use one process-wide async append gate independent from per-operation
+``DispatchHandoffGate`` instances. The append gate is acquired **before** reading the
+verified current tail and remains held through next-sequence/``previous_event_hash``
+allocation, schema validation, redaction/JCS canonicalization, hash calculation, append,
+file/segment fsync, any segment rotation metadata required for the new tail, and
+publication of the new authoritative in-memory tail. Only then is it released. Thus two
+coordinators cannot allocate the same sequence/predecessor or race a segment rotation.
+No SQLite transaction is held across the journal write/fsync. Phase 4 adds no second audit
+writer process; any future multi-process audit writer requires a separately reviewed
+cross-process serialization protocol rather than weakening this invariant.
+
 ``payload.kind`` is the **only** authoritative event type. All events validate against
 ``schemas/audit/audit-event.schema.json`` before append. Phase 4 uses only existing
 payload kinds, including as applicable:
 
 * ``operation.state_changed`` for received/running/terminal lifecycle records;
-* ``operation.idempotency_conflict`` for duplicate/conflict evidence;
+* ``operation.idempotency_conflict`` only when a retained operation exists and its
+  authoritative ``old_state``/``new_state``/``state_version``/``effect_knowledge`` can be
+  populated truthfully;
 * ``policy.decision``, ``operation.rejected``, ``operation.authorised``;
 * ``effect.intent_recorded``, ``effect.started``, ``effect.observed``,
   ``effect.failed``, ``effect.uncertain``;
@@ -1589,6 +1625,19 @@ payload kinds, including as applicable:
   ``cancellation.verified``;
 * ``reconciliation.started`` / ``reconciliation.completed`` / ``recovery.required``;
 * existing ``audit.*`` payload kinds for segment/checkpoint/integrity events.
+
+A tombstone or other pre-operation idempotency rejection has no truthful operation
+``state_version`` and must not fabricate one merely to use
+``operation.idempotency_conflict``. For the cross-controller tombstone replay/enumeration
+case required by the idempotency contract, emit the existing schema-supported
+``payload.kind=policy.decision`` with ``decision=rejected``,
+``reason_code=idempotency_owner_mismatch``, ``operation_id=null``, the protected current
+policy identity/version required by the top-level audit record, and only bounded digested
+facts allowed by the policy payload/safe-fact schema. This is **audit evidence only**; it
+does not insert, update, or count as the one durable admission row in
+``policy_decisions``. The same rule applies to any pre-operation idempotency abuse record:
+choose an existing schema-supported payload whose required facts are truthful, or fail the
+required audit path closed; never invent operation state solely for logging.
 
 Domain policy ``allow``/``deny`` maps to schema ``allowed``/``rejected``. A reason code
 may say ``operation_received`` but the payload kind remains ``operation.state_changed``.
@@ -1611,6 +1660,30 @@ publication remains deferred.
 
 SQLite and audit are two durable systems with explicit recovery; they are not one
 transaction.
+
+For every normal journal append, the durable/tail ordering is exact:
+
+#. acquire the process-wide audit append gate;
+#. derive the current tail from the already-verified authoritative journal/in-memory tail,
+   never from ``kernel_meta.audit_last_*``;
+#. allocate the next sequence and ``previous_event_hash`` and build/validate/canonicalize
+   the event;
+#. append the canonical event bytes, fsync the journal file, and fsync/publish any required
+   segment rotation metadata while the same gate is still held;
+#. publish the new authoritative in-memory journal tail;
+#. only after the journal durability point, update ``kernel_meta.audit_last_sequence`` and
+   ``audit_last_hash`` in a separate short SQLite transaction as a derived cache;
+#. release the append gate after the cache update attempt and tail publication are fully
+   classified.
+
+A crash after journal fsync but before the SQLite cache update leaves a safe **behind**
+cache. Startup verifies the journal and refreshes that cache before the next append. A
+cache-update failure never rolls back, deletes, or reuses the already-fsynced event or its
+sequence; it degrades/fail-restricts consequential readiness until DB health and the cache
+are reconciled. Writer ordering never advances the cache before journal fsync. Therefore
+startup treats a cache ahead of the verified journal, or a same-sequence different hash,
+as integrity failure rather than silently moving the cache backward. The next append is
+never allowed until authoritative journal verification and this cache comparison finish.
 
 Pre-effect ordering:
 
@@ -1635,6 +1708,11 @@ new consequential admission.
 
 Crash-window rules:
 
+* audit event fsynced but SQLite tail-cache update missing -> verify the authoritative
+  journal on restart, refresh the behind cache, and allocate the next event from that
+  verified journal tail; never reuse the fsynced sequence/hash;
+* SQLite tail cache ahead of the verified journal, or same sequence with a different hash
+  -> ``audit_integrity_failed``/fail-restricted; do not silently repair backward or append;
 * DB received but missing received audit -> never continue to effect; recovery records
   the audit gap/recovery and rejects the unadmitted operation once audit is trustworthy;
 * received audit present but no admission decision -> recovery must atomically persist the
@@ -1731,7 +1809,13 @@ Sequence:
 #. new/uninitialized or behind/ahead DB -> kernel unavailable/migration required;
 #. operator stops service and runs explicit ``binnacle db upgrade``;
 #. startup reopens and verifies revision/pragmas;
-#. verify audit continuity;
+#. under the audit append gate, verify audit event/segment/epoch continuity and reconstruct
+   the authoritative journal tail from durable journal bytes;
+#. compare that verified tail with ``kernel_meta.audit_last_sequence/hash``: refresh a
+   merely-behind cache in a short SQLite transaction; treat cache-ahead or same-sequence
+   hash divergence as ``audit_integrity_failed`` and keep the kernel fail-restricted;
+#. initialize the next-append allocator only from the verified journal tail, never from the
+   SQLite cache;
 #. verify payload roots/metadata;
 #. load trusted-time durable high-water/boot evidence and obtain a current trust snapshot;
 #. if current time is untrusted or rolled back, mark time-dependent consequential
@@ -1888,7 +1972,11 @@ Hypothesis/state-machine tests cover:
   retaining the exact contract tombstone facts and global uniqueness scope;
 * same-owner tombstone replay returns ``idempotency_key_retired`` with no operation load;
 * different-controller tombstone replay returns non-disclosing
-  ``idempotency_owner_mismatch`` with no operation load or retirement disclosure.
+  ``idempotency_owner_mismatch`` with no operation load or retirement disclosure;
+* any number of concurrent ``AuditJournal.append`` calls produce one linear strictly
+  increasing sequence/hash chain with no duplicate sequence or predecessor fork;
+* a pre-operation/tombstone idempotency rejection selects a schema-valid audit payload
+  without fabricating an operation ID/state/version.
 
 Tests consume reviewed YAML/fixtures or parity mappings so contract changes break tests
 visibly.
@@ -1960,7 +2048,15 @@ fault points include:
 * a tombstone that retains any preparation-only field is rejected by schema checks;
 * same-owner tombstone replay -> ``idempotency_key_retired`` without operation load;
 * cross-controller tombstone replay -> ``idempotency_owner_mismatch`` without operation
-  load or retirement disclosure;
+  load or retirement disclosure and a schema-valid ``policy.decision`` rejection audit
+  with ``operation_id=null`` rather than fabricated operation state/version;
+* many coordinators forced to append from the same initial audit tail still produce one
+  serialized sequence/hash chain with no fork or duplicate predecessor;
+* crash/fault after journal event fsync but before ``kernel_meta`` tail-cache update ->
+  fresh startup verifies the journal, refreshes the behind cache, and the next append uses
+  the fsynced event as predecessor with sequence+1;
+* ``kernel_meta`` audit tail ahead of the verified journal or same sequence/different hash
+  -> fail-restricted ``audit_integrity_failed`` and no new append/effect;
 * SQLite busy/lock timeout and migration lock contention;
 * DB read-only/disk-full simulation where feasible;
 * audit bit flip/delete/reorder/truncation/fork;
@@ -2014,6 +2110,11 @@ Close every runtime object and reconstruct a fresh application. Verify:
 * dispatch-attempted running work is never converted to known-no-effect merely because a
   receipt is missing;
 * persisted external reference is available to a fake reconciler after restart;
+* a journal event fsynced before a crash but missing from the SQLite tail cache remains
+  authoritative; startup refreshes the behind cache and next append continues from that
+  verified journal hash/sequence;
+* a cache-ahead or same-sequence/hash-divergent audit tail blocks startup readiness instead
+  of being silently repaired or used for allocation;
 * audit sequence/epoch chain continues;
 * finalized payload remains digest-valid;
 * incomplete/orphan payloads are detected.
@@ -2028,6 +2129,18 @@ Tests cover RFC 8785 edge cases, exact canonical bytes, event schema validity, h
 insertion/deletion/reorder/truncation/fork, segment/epoch continuity, bounded safe facts,
 secret/authority redaction, required runtime identity fields, primary storage failure,
 emergency behavior, and fail-restricted admission.
+
+Concurrency tests force multiple appenders to observe the same initial tail and prove the
+process-wide append gate serializes tail read/allocation, canonicalization/hash, write,
+fsync, segment rotation, and tail publication into one strictly monotonic chain. Crash
+window tests fsync an event and stop before the SQLite cache update, then prove fresh
+startup reconstructs the journal tail, refreshes the behind cache, and appends exactly the
+next sequence/hash; cache-ahead or same-sequence hash divergence instead fails restricted.
+
+Exact mapping tests prove a cross-controller tombstone replay audits with a schema-valid
+``policy.decision`` rejection and ``operation_id=null`` without creating a DB admission
+policy row or fabricating ``state_version``; ``operation.idempotency_conflict`` is used only
+when a retained operation supplies truthful required operation payload fields.
 
 A dedicated test injects ``effect.intent_recorded`` append/fsync failure after the durable
 running marker and proves that a writable DB records ``running -> failed`` with
@@ -2062,7 +2175,9 @@ atomically inserts the reserved fail-closed recovery deny with ``received -> rej
 a crash after decision persistence but before the received-state transition creates no
 second decision. Final OP-BOUNDARY policy revalidation is a fresh check and cannot update,
 replace, or append another admission decision row; its result is captured through
-boundary/audit evidence.
+boundary/audit evidence. A ``policy.decision`` payload used solely to audit a pre-operation
+idempotency rejection is explicitly not inserted into this table and cannot satisfy or
+alter the exactly-one admission-decision invariant.
 
 Boundary tests prove an earlier ``allow`` decision is never treated as perpetual
 authority. Every applicable predicate is re-read immediately before the effect boundary;
@@ -2154,6 +2269,14 @@ Phase 4 must preserve:
 #. SQLite durability pragmas are verified;
 #. migration cannot race the live writer;
 #. audit uses existing schema, JCS+SHA-256, and ``payload.kind`` discriminator;
+#. audit appends are process-wide serialized through tail allocation, write/fsync, segment
+   rotation, and tail publication; concurrent coordinators cannot fork the chain;
+#. verified journal bytes/tail are allocation authority; SQLite ``audit_last_*`` is only a
+   post-fsync cache whose behind state is repairable and whose ahead/divergent state fails
+   restricted;
+#. pre-operation/tombstone idempotency abuse audit never fabricates operation state/version
+   to fit a schema payload; schema-valid rejection evidence remains separate from DB
+   admission-policy persistence;
 #. audit redaction precedes persistence/hash;
 #. required audit failure blocks new effects;
 #. payload cannot claim complete before durable bytes/digest;
@@ -2237,8 +2360,10 @@ Implement Phase 4 in this order:
 #. implement fail-closed Bootstrap policy + exactly one durable admission decision for
    every operation leaving ``received``, including atomic recovery-deny+rejection after a
    crash before normal decision persistence;
-#. implement JCS audit writer/verifier + storage-failure gate and exact payload-kind
-   mapping, including no-effect terminalization on pre-dispatch intent-audit failure;
+#. implement the process-wide serialized JCS audit writer/verifier, exact schema mapping,
+   verified-journal-tail allocator, post-fsync SQLite tail cache/restart reconciliation,
+   storage-failure gate, and no-effect terminalization on pre-dispatch intent-audit
+   failure;
 #. implement retained payload filesystem adapter + metadata consistency;
 #. implement mandatory generic/operation-specific OP-BOUNDARY revalidation plus the
    bounded per-operation dispatch-handoff gate shared with cancellation;
@@ -2306,6 +2431,13 @@ A reviewer verifies:
 * same-key conflict/cross-controller cases cannot create effect;
 * persisted effect reference permits restart reconciliation;
 * audit schema ``payload.kind`` and required fields are exact;
+* ``AuditJournal.append`` serializes verified-tail read/allocation through fsync/segment
+  rotation/tail publication under one process-wide gate;
+* journal bytes own the audit tail; ``kernel_meta.audit_last_*`` is updated only post-fsync,
+  a verified behind cache is refreshed on startup, and ahead/divergent cache is an
+  integrity failure rather than allocation authority;
+* tombstone/pre-operation idempotency abuse uses schema-valid audit evidence with no
+  fabricated operation state/version and does not create a DB admission policy row;
 * DB/audit are not falsely one transaction;
 * audit failure blocks new effects;
 * payload completion is durable/digest truthful;
@@ -2333,6 +2465,9 @@ Phase 4 implementation is accepted only when every item is true:
 #. live writer and ``db upgrade`` cannot run concurrently;
 #. ``kernel_meta`` binds stable device epoch, schema-compatible audit epoch continuity,
    and durable trusted-time high-water/boot-ordering evidence;
+#. ``kernel_meta.audit_last_sequence/hash`` is cache-only: journal fsync precedes cache
+   advancement, startup reconstructs the authoritative journal tail, repairs only a
+   verified behind cache, and fails restricted on ahead/hash-divergent cache state;
 #. controller ownership rows contain no reusable credential;
 #. lifecycle state vocabulary/edges exactly match ``spec/operation/lifecycle.yaml``;
 #. version 1 is ``NULL -> received`` and every later transition increments once;
@@ -2388,6 +2523,8 @@ Phase 4 implementation is accepted only when every item is true:
    operation;
 #. different-controller tombstone replay returns non-disclosing
    ``idempotency_owner_mismatch`` without loading an operation or revealing retirement;
+#. that cross-controller tombstone replay produces schema-valid bounded rejection audit
+   evidence with ``operation_id=null`` and no fabricated operation state/version;
 #. production policy denies unknown/unreviewed consequential contracts;
 #. ``policy_decisions.operation_id`` is a ``NOT NULL UNIQUE`` FK to ``operations`` and
    ``operations`` contains no reverse policy-decision column/FK;
@@ -2400,6 +2537,12 @@ Phase 4 implementation is accepted only when every item is true:
    by final policy revalidation;
 #. received/authorization/effect-intent audit records are schema-valid and durable at the
    defined gates;
+#. every normal ``AuditJournal.append`` is process-wide serialized from verified-tail
+   selection through sequence/hash allocation, append/fsync, segment rotation, and
+   authoritative tail publication;
+#. concurrent audit appends cannot reuse one sequence/predecessor or fork the chain;
+#. a crash after journal fsync but before SQLite tail-cache update is recovered by journal
+   verification/cache refresh and the next append uses the fsynced event as predecessor;
 #. durable ``running`` transition occurs before every effect-boundary call;
 #. pre-dispatch ``effect.intent_recorded`` audit failure with writable DB commits a
    ``running -> failed`` known-no-effect outcome and calls no effect boundary;
