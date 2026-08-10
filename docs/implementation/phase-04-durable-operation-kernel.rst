@@ -8,30 +8,31 @@ Binnacle Phase 4 Detailed Implementation Plan
 :Planning status: provisional -- internal kernel design is concrete; host-facing projection remains evidence-gated
 :Depends on: merged Phase 3 Raspberry Pi/ChatGPT validation plan; actual Phase 3 evidence before any host-facing operation projection
 :Primary objective: Establish durable operation, idempotency, audit, policy, payload, and reconciliation foundations before any Binnacle capability is permitted to mutate local state
-:Implementation scope: internal operation kernel, SQLite/SQLAlchemy/Alembic persistence, append-only integrity-linked audit, minimal PolicyEngine boundary, retained payload/evidence storage, local operator diagnostics, tests, and CI only
+:Implementation scope: internal operation kernel, SQLite/SQLAlchemy/Alembic persistence, append-only integrity-linked audit, minimal PolicyEngine boundary, retained payload/evidence storage, local operator diagnostics, deployment-state permissions, tests, and CI only
 
 Purpose
 -------
 
-Phase 4 creates the reliability/security kernel that every later consequential Binnacle
-capability must use. The phase does **not** add a write Tool or execute a real device
-mutation. It proves that durable intent exists before an effect boundary, duplicate
-logical requests reconcile to one retained operation, uncertain outcomes cannot be
-blindly repeated, lifecycle state survives application restart, and required audit
-failure prevents new consequential work.
+Phase 4 creates the reliability and security kernel that every later consequential
+Binnacle capability must use. It does **not** add a write Tool and it does not execute a
+real device mutation. It proves that durable intent exists before an effect boundary,
+duplicate logical requests reconcile to one retained operation, an effect-dispatch crash
+cannot be misclassified as ``known_no_effect``, uncertain outcomes cannot be blindly
+repeated, lifecycle state survives application restart, and required audit failure blocks
+new consequential work.
 
-The durable kernel is intentionally usable without knowing which later workspace,
-executor, Git, package, service, or hardware operation will consume it. It owns generic
-operation semantics, not operation-specific effect logic.
+The kernel owns generic operation semantics, not workspace, executor, Git, package,
+service, privileged, or hardware effect logic. Production composition in Phase 4 contains
+no effect-capable adapter.
 
 ``docs/implementation/index.rst`` marks Phase 4 ``provisional`` because host-facing
-projection depends on Phase 3 real ChatGPT evidence. This plan therefore freezes the
-owner-approved **internal** boundaries now while refusing to invent or promote MCP
-operation/status/cancel/result Tools, host retry assumptions, confirmation behavior, or
-host-specific result limits without the required evidence.
+projection depends on real Phase 3 ChatGPT evidence. This plan freezes the owner-approved
+**internal** boundaries while refusing to invent or promote MCP operation/status/cancel/
+result Tools, host retry assumptions, confirmation behavior, or host-specific result
+limits without that evidence.
 
-The ``:Status: merged`` value is the terminal document status after this plan PR passes
-review/CI and lands. While the PR is open, this document is proposed rather than
+The ``:Status: merged`` value is the terminal document status after this planning PR
+passes review/CI and lands. While the PR is open, this document is proposed rather than
 authoritative.
 
 1. Governing source order
@@ -44,98 +45,105 @@ Implementation follows this precedence:
 #. ``docs/bootstrap-v1.rst``;
 #. ``docs/bootstrap-implementation-plan.rst``;
 #. ``docs/implementation/index.rst``;
+#. merged ``docs/implementation/phase-01-project-skeleton.rst``;
+#. merged ``docs/implementation/phase-02-readonly-mcp-server.rst``;
 #. merged ``docs/implementation/phase-03-pi-chatgpt-validation.rst``;
 #. this detailed Phase 4 plan;
 #. ``docs/operation-idempotency.md``;
 #. ``spec/operation/idempotency.yaml``;
 #. ``spec/operation/lifecycle.yaml``;
+#. operation lifecycle/idempotency fixtures;
 #. ``docs/audit-evidence.md``;
-#. ``spec/audit/audit-policy.yaml`` and ``schemas/audit/audit-event.schema.json``;
-#. ``docs/mcp-schemas.md`` and ``schemas/mcp/binnacle-common.schema.json`` for the
-   canonical operation snapshot vocabulary;
+#. ``spec/audit/audit-policy.yaml``;
+#. ``schemas/audit/audit-event.schema.json`` and audit fixtures;
+#. ``docs/mcp-schemas.md`` and ``schemas/mcp/binnacle-common.schema.json`` for canonical
+   operation snapshot vocabulary;
 #. ``docs/mcp-large-results.md`` and ``spec/mcp/result-limits.yaml`` where retained
    payload semantics constrain internal storage;
 #. ``docs/security/controller-transport.md`` for controller ownership/binding semantics;
 #. ``docs/deferred-decisions.rst``;
 #. ``docs/target-architecture.rst``.
 
-Machine-readable lifecycle/idempotency/audit contracts constrain the implementation but
-do not expand Phase 4 into later operational capabilities.
+Machine-readable lifecycle, idempotency, audit, and schema contracts constrain the
+implementation. They do not expand Phase 4 into later operational capabilities.
 
-2. Provisional/evidence gate
-----------------------------
+2. Provisional and evidence gate
+--------------------------------
 
 2.1 Concrete now
-~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~
 
-The following are owner-approved internal architecture and are fully specifiable now:
+The following internal architecture is concrete in Phase 4:
 
-* the main Binnacle application is the sole authoritative SQLite owner;
-* SQLAlchemy 2.x async APIs + ``aiosqlite`` + Alembic;
+* the main Binnacle application is the sole authoritative SQLite writer;
+* SQLAlchemy 2.x async APIs, ``aiosqlite``, and Alembic;
 * WAL, ``synchronous=FULL``, foreign keys, and bounded busy timeout;
-* durable operation and idempotency records before consequential effects;
-* exact lifecycle states/transitions from ``spec/operation/lifecycle.yaml``;
-* two-level idempotency ownership/duplicate-prevention semantics;
-* filesystem-backed retained payloads with SQLite authoritative metadata;
-* append-only RFC-8785-JCS + SHA-256 audit hash chaining;
-* audit failure blocks new consequential work;
+* durable operation and idempotency identity before an effect;
+* exact lifecycle states and transitions from ``spec/operation/lifecycle.yaml``;
+* two-level global duplicate prevention and controller ownership;
+* filesystem retained payloads with SQLite authoritative metadata;
+* append-only RFC 8785 JCS + SHA-256 audit hash chaining;
+* audit-before-effect gating and fail-restricted audit failure behavior;
 * a small replaceable ``PolicyEngine`` boundary with fail-closed Bootstrap policy;
-* ports-and-adapters ownership and future executor/broker separation;
+* a durable dispatch-attempt state before invoking any future effect boundary;
+* restart reconciliation that prefers uncertainty over an unprovable no-effect claim;
 * no automatic retry of ``uncertain`` work.
 
-2.2 Evidence-gated and not implemented here
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+2.2 Evidence-gated and absent here
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Until actual Phase 3 evidence exists and the relevant Tool contracts are separately
-reviewed, Phase 4 does not freeze or expose:
+Until actual Phase 3 evidence exists and the relevant host-facing contracts are reviewed,
+Phase 4 does not freeze or expose:
 
-* MCP ``operation_get``, ``operation_cancel``, result-retrieval, or status Tool names;
-* MCP Task adaptation;
-* Resources adaptation;
+* MCP ``operation_get``, ``operation_cancel``, result retrieval, or status Tool names;
+* MCP Task or Resource adaptation;
 * host retry/confirmation semantics;
-* model-visible retained-result page/chunk sizes lower than repository defaults;
+* host-visible retained-result page/chunk sizes below repository storage ceilings;
 * write/modify entitlement;
 * controller scopes for future mutation classes;
-* operation annotations/manifest entries;
+* operation annotations or manifest entries;
 * workspace/executor/Git/privileged/hardware operation contracts.
 
-Internal application interfaces may use ``get_operation``, ``request_cancel``, and
-``get_result`` semantics because those are Binnacle-owned lifecycle concepts. An MCP
-adapter for them is a later evidence/contract promotion and is absent from this phase.
+Internal application APIs may use ``get_operation``, ``request_cancel``, and result-read
+semantics. An MCP projection for them is absent in Phase 4.
 
 3. Roadmap exit gate
 --------------------
 
-Phase 4 implementation is complete only when unit/property/integration/system tests prove
-all of the following:
+Phase 4 implementation is complete only when tests prove all of the following:
 
-* the configured SQLite database is migrated explicitly to the expected Alembic head;
-* all required SQLite durability pragmas are verified on live connections;
-* operation/idempotency state survives normal application restart;
-* a logical mutating request has a durable global idempotency identity before any test
-  effect boundary can run;
-* concurrent first-use of the same key creates exactly one binding/operation;
-* same owner + same key + same fingerprint returns the existing operation;
-* same key + different fingerprint is rejected without another operation/effect;
-* matching key under another controller cannot disclose/advance the old operation and
-  cannot create a duplicate effect;
-* raw idempotency keys are never persisted/logged/audited;
-* lifecycle transitions reject edges not declared in ``spec/operation/lifecycle.yaml``;
-* ``state_version`` starts at 1 and strictly increments on every transition;
-* optimistic concurrent state updates cannot silently overwrite one another;
+* the configured SQLite DB is explicitly migrated to the expected Alembic head;
+* every live SQLite connection verifies the required durability pragmas;
+* operation/idempotency state survives a fresh-process restart;
+* the global idempotency record and version-1 ``received`` operation are durable before
+  any synthetic effect can be dispatched;
+* concurrent first use of the same key creates exactly one binding and operation;
+* full-record retry, conflict, owner-mismatch, uncertainty, terminal, and tombstone
+  outcomes exactly match ``spec/operation/idempotency.yaml``;
+* tombstones retain the contract-required non-reversible owner digest and terminal class;
+* raw idempotency keys are never persisted, logged, audited, or used as metric labels;
+* lifecycle transitions reject every undeclared edge/cross-field combination;
+* ``state_version`` starts at 1 and strictly increases exactly once per real transition;
+* stale optimistic updates cannot silently overwrite newer state;
+* an operation is durably ``running`` before ``EffectBoundary.start`` is invoked;
+* a crash during dispatch before a receipt can never later be asserted as
+  ``known_no_effect``;
 * ``uncertain`` is never automatically retried;
-* restart reconciliation distinguishes known-no-effect work from effect-uncertain work;
-* required append-only audit records are canonicalized, chained, fsynced, and verified;
-* audit corruption/truncation/fork/storage failure makes the consequential kernel
-  unavailable for new effects;
-* bounded read-only recovery/status/verification remains possible where trustworthy;
-* retained payload metadata and filesystem bytes cannot disagree silently;
-* payload writes are atomic/finalized or explicitly incomplete; there is no silent
-  truncation marked complete;
-* minimal Bootstrap policy is fail-closed and its decision is durably correlated with
-  the operation;
-* no production adapter in this phase performs a real consequential device effect;
-* no new host-facing MCP Tool/Resource/Task is added;
+* restart reconciliation distinguishes pre-dispatch ``authorised`` work from
+  dispatch-attempted ``running`` work;
+* effect references returned by a future adapter are durably recoverable, not digest-only;
+* required audit records are schema-valid, canonicalized, chained, fsynced, and verified;
+* audit payloads use exact existing ``payload.kind`` discriminators;
+* audit corruption, truncation, fork, or storage failure blocks new effects;
+* bounded recovery/status/verification remains possible where underlying stores remain
+  trustworthy;
+* retained payload metadata cannot disagree silently with filesystem bytes;
+* payload writes are atomic/finalized or explicitly incomplete;
+* Bootstrap policy is fail-closed and durably correlated with the operation;
+* systemd hardening still permits only the new declared state/result/audit write paths;
+* migration cannot run concurrently with the live authoritative DB writer;
+* no production adapter performs a real consequential effect;
+* no new host-facing MCP Tool/Resource/Task/Prompt is registered;
 * exact-head GitHub Actions passes all normal gates.
 
 4. Explicit non-goals
@@ -143,69 +151,66 @@ all of the following:
 
 Phase 4 does **not** implement:
 
-* any workspace write/read Tool;
-* ``probe_workspace_prepare``, ``probe_workspace_write``, or cleanup;
+* any workspace read/write Tool or disposable write probe;
 * real write-entitlement or host-confirmation testing;
-* command execution or the execution supervisor;
-* executor IPC/protocol;
+* command execution or an execution supervisor;
+* executor or privileged-broker IPC;
 * Git operations;
 * package-manager operations;
-* service restart/self-management;
-* privileged broker or root operation vocabulary;
+* service restart or self-management;
+* root/privileged operation vocabulary;
 * hardware operations;
-* production controller replacement/recovery UI;
-* MCP Tasks/Resources/Prompts/MRTR;
+* production owner-transfer/recovery UI;
+* MCP Tasks, Resources, Prompts, MRTR, or new MCP Tools;
 * a general long-term policy language/engine;
-* external audit checkpoint publication/anchoring;
-* database replication/high availability;
-* PostgreSQL or network database support;
-* distributed locks;
+* external audit checkpoint publication or anchoring;
+* DB replication/HA, PostgreSQL, network DBs, or distributed locks;
 * multiple authoritative application writers;
 * production backup orchestration;
-* automatic destructive retention/purge under pressure;
+* broad automatic destructive retention/purge;
 * Phase 5 design.
 
-Test doubles may cross a synthetic effect boundary to prove idempotency/reconciliation.
-Those doubles must be clearly test-only and cannot be reachable from the production MCP
-catalogue or CLI.
+Test doubles may cross a synthetic effect boundary to prove idempotency and reconciliation.
+They are test-only and cannot be reachable from the production MCP catalogue or CLI.
 
-5. Before/after semantics
--------------------------
+5. Before and after semantics
+----------------------------
 
-Before Phase 4
-~~~~~~~~~~~~~~
+Before Phase 4, Binnacle has the authenticated read-only Phase 3 architecture but no
+authoritative operation DB, durable idempotency record, general lifecycle store, retained
+result store, or append-only local audit journal.
 
-Binnacle can authenticate/read through the Phase 3 architecture but has no authoritative
-operation database, durable idempotency record, general lifecycle store, or append-only
-audit journal. No consequential capability should rely on process memory for correctness.
-
-After Phase 4
-~~~~~~~~~~~~~
-
-Binnacle has an internal durable kernel that later operation-specific use cases can call:
+After Phase 4, later operation-specific use cases can call an internal kernel with this
+ordering:
 
 ::
 
    authenticated/validated request
-      -> canonical request fingerprint + idempotency key digest
-      -> atomically create/find durable binding and operation
-      -> evaluate/durably record Bootstrap policy decision
-      -> durably authorize operation
-      -> append/fsync required audit evidence
+      -> canonical effect-bearing fingerprint + safe idempotency digest
+      -> atomically create/find global binding and version-1 received operation
+      -> schema-valid received audit
+      -> evaluate and durably persist policy decision
+      -> durable received -> authorised transition
+      -> fsynced policy/authorization audit
+      -> durable authorised -> running dispatch marker
+      -> fsynced effect.intent_recorded audit
       -> effect boundary port (test-only in Phase 4; real adapters later)
-      -> persist effect knowledge/result metadata
+      -> persist returned reference/effect knowledge/result metadata
+      -> append/fsync effect/lifecycle audit
       -> reconcile/recover truthfully after restart
 
-The kernel is ready to support future effects but does not itself grant one.
+The kernel is ready to support future effects but grants none by itself.
 
 6. Exact repository changes
 ---------------------------
 
-The Phase 4 **implementation** is expected to create/modify the following paths. This
-planning PR itself adds only this document.
+The Phase 4 **implementation** is expected to create or modify these paths. This planning
+PR itself adds only this document.
 
-6.1 Existing project/application files to modify
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+6.1 Existing project, deployment, and application files
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Modify as required:
 
 ::
 
@@ -217,11 +222,14 @@ planning PR itself adds only this document.
    src/binnacle/composition.py
    src/binnacle/config.py
    src/binnacle/cli.py
+   deploy/systemd/binnacle-dev.service
+   scripts/setup_dev_pi.py
+   docs/operations/development-pi.rst
 
 Do not alter the five Phase 3 MCP Tool contracts/manifest solely to expose the kernel.
 
-6.2 Domain/application/port modules
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+6.2 Domain, application, and port modules
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Create:
 
@@ -241,11 +249,9 @@ Create:
    src/binnacle/application/reconciliation.py
    src/binnacle/application/kernel_health.py
 
-If ``src/binnacle/application.py`` from earlier phases remains a module rather than a
-package, implementation may create ``src/binnacle/operations.py`` and
-``src/binnacle/reconciliation.py`` instead of converting package shape. Do not create two
-parallel canonical ownership paths; choose one repository-consistent shape in the first
-implementation PR and update imports atomically.
+If earlier phases still use ``src/binnacle/application.py`` as a module, implementation
+may use repository-consistent top-level modules instead of converting it to a package.
+There must be one canonical ownership path, not parallel APIs.
 
 6.3 Persistence modules
 ~~~~~~~~~~~~~~~~~~~~~~~
@@ -268,11 +274,11 @@ Create:
      versions/
        0001_durable_operation_kernel.py
 
-Alembic owns schema evolution. Runtime code never creates missing tables opportunistically
-with ``metadata.create_all()`` outside tests.
+Alembic owns schema evolution. Runtime code never opportunistically calls
+``metadata.create_all()`` outside isolated tests.
 
-6.4 Audit and payload adapters
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+6.4 Audit, payload, and policy adapters
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Create:
 
@@ -291,7 +297,7 @@ Create:
      __init__.py
      bootstrap.py
 
-6.5 Local operator scripts/tests
+6.5 Local verification and tests
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Create/update at least:
@@ -313,50 +319,45 @@ Create/update at least:
    tests/integration/test_audit_failure_gate.py
    tests/integration/test_payload_integrity.py
    tests/integration/test_alembic_migrations.py
+   tests/integration/test_phase4_systemd_state_permissions.py
    tests/property/test_operation_lifecycle_properties.py
    tests/property/test_idempotency_properties.py
 
-Use existing operation/audit fixtures and contracts rather than creating a second
-lifecycle/status vocabulary.
+Reuse existing lifecycle/idempotency/audit fixtures and status vocabulary.
 
-7. Direct dependency changes
-----------------------------
+7. Direct dependencies
+----------------------
 
-7.1 Runtime dependencies
-~~~~~~~~~~~~~~~~~~~~~~~~
+7.1 Runtime
+~~~~~~~~~~~
 
-Add the owner-approved persistence stack:
+Add:
 
-* ``SQLAlchemy`` on the 2.x line;
+* SQLAlchemy 2.x;
 * ``aiosqlite``;
-* ``Alembic``;
-* one maintained RFC 8785 JSON Canonicalization Scheme implementation for authoritative
-  audit canonical bytes.
+* Alembic;
+* one maintained RFC 8785 JSON Canonicalization Scheme implementation verified against
+  repository audit fixtures and Python 3.11/3.12/3.13.
 
-The implementation PR must verify the selected JCS package against the audit contract and
-Python 3.11/3.12/3.13 matrix before locking it. Do not write a partial home-grown JCS
-encoder or substitute ordinary ``json.dumps(sort_keys=True)``.
+Do not implement a partial home-grown JCS encoder and do not substitute
+``json.dumps(sort_keys=True)``.
 
-No database server/client, Redis, distributed-lock library, ORM framework other than
-SQLAlchemy, or general policy engine is added.
+No database server/client, Redis, distributed-lock package, second ORM, or general policy
+engine is introduced.
 
-7.2 Development/test dependencies
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+7.2 Development and lock discipline
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Reuse pytest/AnyIO/Hypothesis/coverage/tox and existing quality tools. Add no separate
-SQLite testing framework. Hypothesis is specifically required for lifecycle,
-idempotency, and state-version invariants.
+Reuse pytest, AnyIO, Hypothesis, coverage, tox, and existing quality tools. Hypothesis is
+required for lifecycle/idempotency/state-version invariants.
 
-7.3 Lock discipline
-~~~~~~~~~~~~~~~~~~~
+Exact versions remain in ``uv.lock``. CI keeps frozen sync and explicit interpreter
+selection established by prior phases.
 
-Exact direct/transitive versions remain in ``uv.lock``. CI uses frozen sync and explicit
-Python interpreter selection as established by prior phases.
+8. Runtime state layout and systemd write authority
+---------------------------------------------------
 
-8. Runtime state layout
------------------------
-
-Under the development/system profile use:
+Use:
 
 ::
 
@@ -374,15 +375,29 @@ Under the development/system profile use:
      evaluation/
        ... Phase 3 evidence remains separate ...
 
-``/etc/binnacle`` remains protected configuration/policy. ``/run/binnacle`` remains
-runtime/ephemeral IPC/control state.
+``/etc/binnacle`` remains protected configuration/policy; ``/run/binnacle`` remains
+runtime/ephemeral control state; source remains under ``/srv/binnacle-dev/repo``.
 
-The database, audit journal, retained payloads, controller security configuration, and
-source repository must not share one deletion/reset boundary.
+``scripts/setup_dev_pi.py`` must idempotently create the new ``state``, ``results``, and
+``audit`` subtrees with the dedicated ``binnacle`` application identity as owner and
+modes no broader than required for that identity. Evaluation evidence ownership from
+Phase 3 is not broadened.
 
-Directory ownership is the dedicated Binnacle application identity with restrictive
-modes. Reusable credentials are not stored anywhere under ordinary operation/result/audit
-state.
+Phase 3 uses ``ProtectSystem=strict``. Therefore Phase 4 must explicitly update
+``binnacle-dev.service`` so the service can write **only** the new declared paths. Prefer
+narrow ``ReadWritePaths=`` entries for:
+
+::
+
+   /var/lib/binnacle/state
+   /var/lib/binnacle/results
+   /var/lib/binnacle/audit
+
+rather than making all of ``/var/lib`` or all of ``/var/lib/binnacle`` writable. Do not
+weaken ``NoNewPrivileges``, capability bounds, protected config permissions, or source
+checkout separation merely to make persistence work.
+
+Reusable credentials are not stored under DB/result/audit state.
 
 9. Configuration additions
 --------------------------
@@ -407,18 +422,16 @@ Add immutable typed settings equivalent to:
        controller_bytes_max: int = Field(default=256 * 1024 * 1024, ge=1)
        append_chunk_bytes_max: int = Field(default=256 * 1024, ge=4096)
 
-Paths are structural/control-plane settings. Production/system profile paths cannot be
-redirected into the source checkout, world-writable directories, network filesystems, or
-arbitrary paths by ordinary environment variables/CLI flags. Tests may inject temporary
-paths through explicit composition constructors.
+Production/system paths are security-critical structural settings. Ordinary environment or
+CLI precedence cannot redirect them into source, world-writable, network, or arbitrary
+paths. Tests inject temporary roots through explicit composition constructors.
 
-No hot reload of database/audit/storage roots exists. Changes require controlled restart
-and, where relevant, checkpoint/migration procedure.
+No hot reload exists for DB/audit/payload roots.
 
-10. SQLite engine contract
---------------------------
+10. SQLite runtime and migration coordination
+---------------------------------------------
 
-``binnacle.adapters.sqlite.engine`` owns engine/session construction only.
+``binnacle.adapters.sqlite.engine`` owns engine/session construction.
 
 Expose equivalent APIs:
 
@@ -428,12 +441,13 @@ Expose equivalent APIs:
    class DatabaseRuntime:
        engine: AsyncEngine
        session_factory: async_sessionmaker[AsyncSession]
+       runtime_lock: object
 
    async def create_database_runtime(settings: DatabaseSettings) -> DatabaseRuntime: ...
    async def verify_database_runtime(runtime: DatabaseRuntime) -> DatabaseHealth: ...
    async def close_database_runtime(runtime: DatabaseRuntime) -> None: ...
 
-Every SQLite connection verifies/applies:
+Every SQLite connection applies and reads back:
 
 ::
 
@@ -443,90 +457,100 @@ Every SQLite connection verifies/applies:
    PRAGMA busy_timeout=<bounded milliseconds>;
    PRAGMA wal_autocheckpoint=<configured pages>;
 
-Read back effective values. Startup fails the consequential-kernel readiness gate if
-required durability values cannot be established.
+Consequential-kernel availability fails if required values cannot be established.
 
-Use local filesystem storage only. Detect and refuse obviously unsupported/non-local
-runtime locations where correctness cannot be established.
+Use local filesystem storage only. Refuse runtime locations where local durability cannot
+be established.
+
+Migration coordination is separate from normal transaction locking. The running
+application holds a process/runtime advisory lock under ``/run/binnacle`` for the DB
+lifetime. ``binnacle db upgrade`` must acquire the corresponding exclusive migration lock
+non-blockingly and refuse migration while a live application writer holds it. The
+operator runbook stops ``binnacle-dev.service`` before production/development-Pi upgrade.
+This lock prevents concurrent schema migration; it is **not** used as idempotency or
+normal DB-transaction correctness authority.
 
 11. Database transaction rules
 ------------------------------
 
-SQLite/SQLAlchemy and Linux effects are never described as one ACID transaction.
+SQLite and external Linux effects are never described as one ACID transaction.
 
 Rules:
 
 * one ``AsyncSession`` per application use-case transaction;
-* no long-running external I/O while holding a SQLite write transaction;
-* admission/idempotency create-or-find uses an explicit short write transaction;
-* use SQLite uniqueness + conflict handling as the correctness mechanism, not a Python
-  process lock;
-* use ``BEGIN IMMEDIATE`` or an equivalently verified SQLAlchemy/SQLite write-admission
-  strategy for the narrow create/find critical section where needed;
-* commit durable intent before crossing an effect boundary;
-* state updates use expected ``state_version`` optimistic concurrency checks;
-* retry ``database is locked`` only within a small bounded internal transaction retry
-  policy and never reinterpret it as permission to repeat an external effect;
-* commit/rollback exceptions after a possible effect are reconciled truthfully; they do
-  not trigger automatic effect repetition.
-
-A database outage or inability to fsync durable intent rejects new consequential
-admission.
+* no long external I/O while holding a SQLite write transaction;
+* create-or-find admission uses a short explicit write transaction;
+* SQLite uniqueness/conflict handling, not a Python process mutex, is duplicate-prevention
+  authority;
+* use ``BEGIN IMMEDIATE`` or an equivalently tested SQLAlchemy/SQLite strategy for the
+  narrow first-write critical section where needed;
+* commit durable intent before any effect dispatch;
+* state changes use expected ``state_version`` optimistic checks;
+* retry ``database is locked`` only within a bounded **internal DB transaction** retry
+  policy; it never permits repeating an external effect;
+* commit/rollback errors after a possible effect become reconciliation work, not effect
+  retry;
+* DB outage or inability to durably commit pre-effect identity rejects new consequential
+  admission.
 
 12. Initial database schema
 ---------------------------
 
 Migration ``0001_durable_operation_kernel`` creates the minimum authoritative schema.
-Names below are normative unless SQLAlchemy naming conventions require a narrow syntactic
-adjustment.
+All foreign keys use explicit names and are exercised with ``PRAGMA foreign_keys=ON`` in
+migration tests.
 
 12.1 ``kernel_meta``
 ~~~~~~~~~~~~~~~~~~~~
 
-Singleton/epoch facts:
+Singleton facts:
 
-* ``id`` integer primary key constrained to one active row;
+* ``id`` integer PK constrained to the singleton row;
 * ``schema_generation``;
 * ``device_id``;
 * ``device_epoch`` integer >= 1;
-* ``created_at``;
-* ``updated_at``;
-* ``audit_stream_id``;
-* ``audit_epoch`` integer >= 1;
-* ``audit_last_sequence`` integer >= 0;
-* ``audit_last_hash`` nullable SHA-256;
-* ``consequential_admission_enabled`` boolean.
+* ``created_at`` / ``updated_at``;
+* ``audit_stream_id`` schema-compatible identifier;
+* ``audit_epoch`` schema-compatible identifier such as ``epoch-1``;
+* ``audit_epoch_generation`` integer >= 1 for local monotonic ordering;
+* ``audit_last_sequence`` integer >= 0, where 0 means no event yet in a new store;
+* ``audit_last_hash`` nullable SHA-256 until the first event is committed;
+* ``consequential_admission_enabled`` boolean, default false.
 
-On first initialization ``device_epoch=1``. If the configured/observed device identity no
-longer matches the durable record, startup does not silently adopt a new device epoch.
-That requires explicit future recovery/owner action; Phase 4 fails consequential
-readiness.
+The audit serializer never emits an integer ``audit_epoch`` because the existing audit
+event schema requires an identifier. Initial event sequence is 1. Epoch continuity uses
+previous accepted epoch/segment digest evidence; the implementation may not use a null
+``previous_event_hash`` because the schema requires a digest. If the first-ever genesis
+sentinel/convention is not already fixed by the audit fixtures at implementation time, a
+small reviewed audit-contract fixture clarification must land before the writer is
+accepted rather than inventing a private incompatible convention in runtime code.
+
+On first initialization ``device_epoch=1``. If observed device identity no longer matches
+the durable record, startup does not silently adopt a new device epoch; consequential
+readiness fails pending explicit future recovery.
 
 12.2 ``controller_owners``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Persist only durable ownership facts, never credentials:
+Persist ownership facts, never credentials:
 
 * ``controller_id``;
 * ``controller_epoch`` integer >= 1;
 * ``controller_profile_id``;
 * ``controller_profile_version``;
-* ``first_seen_at``;
-* ``last_seen_at``;
+* ``first_seen_at`` / ``last_seen_at``;
 * ``active``.
 
-Primary key: ``(controller_id, controller_epoch)``.
-
-The active-controller rule remains owned by the controller/security layer. This table is
-the durable operation-ownership reference, not an authentication database.
+Primary key: ``(controller_id, controller_epoch)``. Authentication remains owned by the
+controller-security layer; this table is an operation ownership reference.
 
 12.3 ``operations``
 ~~~~~~~~~~~~~~~~~~~
 
 Columns:
 
-* ``operation_id`` primary key;
-* ``controller_id`` + ``controller_epoch`` foreign key;
+* ``operation_id`` PK;
+* ``controller_id`` + ``controller_epoch`` composite FK to ``controller_owners``;
 * ``device_id`` + ``device_epoch`` snapshot;
 * ``operation_contract`` / ``operation_contract_version``;
 * ``tool_name`` / ``tool_contract_version`` nullable until a host-facing Tool exists;
@@ -537,36 +561,33 @@ Columns:
 * ``terminality``;
 * ``automatic_retry_allowed`` constrained false for retained V1 operations;
 * ``effect_boundary_crossed_at`` nullable;
-* ``effect_reference_digest`` nullable;
-* ``policy_decision_id`` nullable initially;
+* ``effect_reference`` nullable bounded protected internal opaque reference;
+* ``effect_reference_digest`` nullable SHA-256;
+* ``policy_decision_id`` nullable logical current-decision reference;
 * ``error_code`` / ``error_summary`` / ``retry_action`` nullable as lifecycle permits;
-* ``runtime_build_sha256``;
-* ``runtime_config_sha256``;
+* ``runtime_build_sha256`` / ``runtime_config_sha256``;
 * ``controller_profile_version_snapshot``;
 * ``created_at`` / ``updated_at``;
-* ``authorised_at`` nullable;
-* ``started_at`` nullable;
-* ``terminal_at`` nullable;
-* ``last_reconciled_at`` nullable.
+* ``authorised_at`` / ``started_at`` / ``terminal_at`` / ``last_reconciled_at`` nullable.
 
-Checks enforce the canonical lifecycle vocabulary, effect-knowledge vocabulary, terminal
-class, non-negative versions, and no ``automatic_retry_allowed=true``.
+A stable opaque effect reference is persisted because a digest alone cannot be supplied
+to a future ``EffectReconciler`` after restart. The reference is bounded, non-secret,
+never treated as authority, and never automatically host-visible. Its digest is used in
+audit/correlation. If a future adapter's reference itself contains credential material,
+that adapter must instead persist a protected indirect reference; reusable authority
+material is forbidden in this table.
 
-Indexes:
-
-* owner + creation time;
-* state + updated time;
-* terminal time;
-* request fingerprint for diagnostics only (not duplicate-prevention authority).
+Checks enforce canonical lifecycle/effect-knowledge/terminality values and
+``automatic_retry_allowed=false``.
 
 12.4 ``operation_transitions``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Append-only lifecycle history:
 
-* ``operation_id`` foreign key;
+* ``operation_id`` FK;
 * ``state_version``;
-* ``from_state`` nullable for version 1;
+* ``from_state`` nullable only for version 1;
 * ``to_state``;
 * ``effect_knowledge``;
 * ``terminality``;
@@ -575,58 +596,66 @@ Append-only lifecycle history:
 * ``recorded_at``;
 * ``runtime_build_sha256``.
 
-Primary key ``(operation_id, state_version)``. No transition row is updated after commit.
-The ``operations`` row is the current snapshot; transition rows are authoritative state
-history inside the application database, distinct from security audit events.
+PK ``(operation_id, state_version)``. Version 1 is exactly ``NULL -> received`` and is
+inserted in the same transaction that creates the operation. No transition row is
+updated after commit.
 
 12.5 ``idempotency_bindings``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Columns follow ``spec/operation/idempotency.yaml``:
+Columns:
 
-* ``binding_id`` primary key;
+* ``binding_id`` PK;
 * ``device_id``;
 * ``device_epoch``;
 * ``key_mode``;
 * ``key_digest_sha256``;
-* ``tool_name`` / ``contract_version`` or internal operation-contract equivalents;
-* ``owner_controller_id``;
-* ``owner_controller_epoch``;
+* ``tool_name`` **NOT NULL**;
+* ``contract_version`` **NOT NULL**;
+* ``owner_controller_id`` nullable only after full-record compaction;
+* ``owner_controller_epoch`` nullable only after full-record compaction;
+* ``owner_controller_digest`` non-reversible digest retained for tombstones;
 * ``request_fingerprint_sha256``;
 * ``prepared_operation_id`` nullable;
 * ``prepared_input_sha256`` nullable;
 * ``target_identity_sha256`` nullable;
 * ``maximum_effect_sha256`` nullable;
-* ``operation_id`` foreign key nullable only after future record compaction;
-* ``created_at``;
-* ``last_access_at``;
+* ``operation_id`` FK nullable only for a valid tombstone;
+* ``terminal_class`` nullable for active/full nonterminal records and required for
+  tombstones;
+* ``created_at`` / ``last_access_at``;
 * ``terminal_at`` nullable;
-* ``retired_at`` nullable;
+* ``retired_at`` nullable and required for tombstones;
 * ``record_kind`` enum ``full``/``tombstone``;
-* ``duplicate_count``;
-* ``conflict_count``.
+* ``duplicate_count`` / ``conflict_count``.
 
-The global duplicate-prevention unique index is exactly the contract scope:
+The exact global unique index is:
 
 ::
 
    (device_id, device_epoch, tool_name, contract_version, key_digest_sha256)
 
-For internal pre-Tool tests, ``tool_name`` is a reserved stable internal contract name,
-not an invented visible MCP Tool.
+The key columns are non-null so SQLite NULL uniqueness semantics cannot weaken global
+duplicate prevention. Internal Phase 4 synthetic tests use a reserved stable internal
+``tool_name`` and contract version; they do not create a visible MCP Tool.
 
-The same durable row becomes the security tombstone; Phase 4 does not move it to another
-table and thereby lose atomic global uniqueness.
+The full row owns controller ID/epoch; the tombstone contract requires only the
+non-reversible owner digest. Full-to-tombstone compaction, when explicitly exercised
+after the required retention window, atomically verifies terminal state, writes
+``terminal_class`` and ``retired_at``, retains key/tool/contract/fingerprint/owner digest,
+clears ``operation_id`` and raw owner ID/epoch as permitted, and leaves the global unique
+row in place. Phase 4 implements only explicit operator/test compaction, not broad
+automatic purge.
 
 12.6 ``policy_decisions``
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Store bounded structured decision facts:
+Store bounded decision facts:
 
-* ``policy_decision_id`` primary key;
-* ``operation_id`` foreign key;
+* ``policy_decision_id`` PK;
+* ``operation_id`` FK;
 * ``policy_id`` / ``policy_version``;
-* ``decision`` enum ``allow``/``deny``;
+* domain ``decision`` enum ``allow``/``deny``;
 * ``controller_id`` / ``controller_epoch``;
 * ``operation_contract`` / version;
 * ``required_scope_digest`` nullable;
@@ -636,56 +665,67 @@ Store bounded structured decision facts:
 * ``decided_at``;
 * ``runtime_policy_sha256``.
 
-No raw credential or unbounded user content is stored.
+No raw credential or unbounded user content is stored. The audit projection maps domain
+``allow`` to audit-schema ``allowed`` and ``deny`` to ``rejected``; it does not emit an
+unrecognized payload value.
+
+Avoid a circular mandatory FK graph in migration ``0001``. ``policy_decisions.operation_id``
+is the authoritative FK to ``operations``. ``operations.policy_decision_id`` is either a
+nullable current-reference with an implementation-tested deferred/logical integrity
+check, or it is omitted and the current decision is selected through the operation FK.
+The implementation must choose one tested repository-consistent form; it must not create
+a migration cycle that SQLite/Alembic cannot safely upgrade/downgrade.
 
 12.7 ``payload_objects``
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
-SQLite metadata for filesystem payloads:
+SQLite metadata:
 
-* ``payload_id`` primary key;
-* ``operation_id`` nullable foreign key;
-* ``controller_id`` / ``controller_epoch``;
-* ``kind`` enum such as ``result``/``stdout``/``stderr``/``evidence``/``internal``;
+* ``payload_id`` PK;
+* ``operation_id`` nullable FK;
+* ``controller_id`` + ``controller_epoch`` ownership reference;
+* ``kind`` enum ``result``/``stdout``/``stderr``/``evidence``/``internal``;
 * ``lifecycle`` enum ``building``/``complete``/``failed``/``expired``/``deleted``;
-* ``relative_path``;
-* ``media_type``;
-* ``encoding``;
+* ``relative_path`` unique;
+* ``media_type`` / ``encoding``;
 * ``decoded_byte_count``;
 * ``sha256`` nullable until complete;
-* ``truncated`` boolean;
-* ``information_class``;
-* ``retention_class``;
-* ``created_at`` / ``completed_at`` nullable / ``expires_at`` nullable;
-* ``last_access_at`` nullable.
+* ``truncated``;
+* ``information_class`` / ``retention_class``;
+* ``created_at`` / ``completed_at`` / ``expires_at`` / ``last_access_at`` as applicable.
 
-Unique constraint on ``relative_path``. Metadata never claims ``complete`` until payload
-bytes are durably finalized and digest-verified.
+Metadata never claims ``complete`` before finalized bytes are fsynced and digest-verified.
 
 12.8 ``operation_evidence``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Bounded correlation metadata:
 
-* ``evidence_id`` primary key;
-* ``operation_id`` foreign key;
-* ``source``;
-* ``provenance``;
-* ``information_class``;
+* ``evidence_id`` PK;
+* ``operation_id`` FK;
+* ``source`` / ``provenance`` / ``information_class``;
 * ``fresh_until`` nullable;
 * ``result_sha256`` nullable;
-* ``payload_id`` nullable foreign key;
+* ``payload_id`` nullable FK;
 * ``audit_ref`` nullable;
 * ``facts_json`` bounded canonical JSON;
 * ``recorded_at``.
 
-This table does not replace the append-only audit journal and does not store credentials.
+This table is an index/projection, not authoritative security audit storage.
+
+12.9 Migration creation order and constraints
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Migration ``0001`` creates dependency roots before dependents: ``kernel_meta`` and
+``controller_owners`` first; ``operations`` next; then idempotency, policy, payload, and
+evidence/history tables in an order that satisfies the chosen FK layout. Migration tests
+inspect actual SQLite FK metadata and perform negative inserts. Do not assume ORM
+relationship declarations imply SQLite-enforced constraints.
 
 13. Domain lifecycle model
 --------------------------
 
-``binnacle.domain.operation`` owns exact values mirroring
-``spec/operation/lifecycle.yaml``:
+``binnacle.domain.operation`` mirrors exactly:
 
 .. code-block:: python
 
@@ -724,167 +764,160 @@ This table does not replace the append-only audit journal and does not store cre
        error: OperationError | None
        ...
 
-Use one table-driven transition validator generated/loaded from the reviewed lifecycle
-contract at startup or represented by a hand-maintained exact mapping protected by a
-contract-parity test. Do not maintain multiple divergent transition maps.
+Use one table-driven transition validator loaded/generated from the reviewed lifecycle
+contract or one hand-maintained exact mapping protected by parity tests. No second
+transition map may diverge.
 
-Invalid edge/effect-knowledge/error/terminality combinations fail before persistence.
+Contract edges are exactly:
+
+::
+
+   received   -> rejected | authorised
+   authorised -> running | cancelling | cancelled | failed
+   running    -> paused | cancelling | succeeded | failed | uncertain
+   paused     -> running | cancelling | failed | uncertain
+   cancelling -> cancelled | succeeded | failed | uncertain
+   uncertain  -> succeeded | failed | cancelled
+
+Terminal states have no outgoing edge. State/effect-knowledge/error/terminality
+cross-field constraints are validated before persistence.
 
 14. Operation identity and request fingerprint
 ----------------------------------------------
 
-``operation_id`` is server-generated from at least 128 random bits and rendered as a
-schema-compatible opaque identifier such as:
-
-::
-
-   op_<32 lowercase hex>
+``operation_id`` uses at least 128 random bits and a schema-compatible opaque rendering
+such as ``op_<32 lowercase hex>``.
 
 Request fingerprinting uses a closed normalized structure containing exactly the
-idempotency contract's effect-bearing fields. Canonical bytes use the same verified JCS
-implementation where values are within I-JSON constraints; SHA-256 produces
-``request_fingerprint_sha256``.
+idempotency contract's effect-bearing fields. JCS canonical bytes (within I-JSON
+constraints) are SHA-256 hashed. Fingerprinting excludes current policy decision,
+observation freshness, and mutable availability.
 
-Fingerprint excludes current policy decisions, observation freshness, and mutable
-resource availability so a retry finds/reconciles the original binding rather than
-creating a new effect.
+Normalization belongs to the operation-specific caller/use case. The generic kernel
+accepts typed normalized digests; it never guesses filesystem/Git/command semantics.
 
-Normalization belongs to the operation-specific caller/use case. The kernel accepts a
-typed ``OperationIntent`` containing normalized effect inputs and their canonical
-digests; it does not guess filesystem/Git/command semantics.
+The machine-readable ordering phrase ``persist_operation_and_reservations`` is not
+interpreted as permission to omit the pre-policy operation identity. The governing
+idempotency prose requires operation identity/state version in the durable pre-policy
+record. Phase 4 therefore creates the minimal version-1 ``received`` operation atomically
+with the global key record; post-policy admission/reservation data is persisted only
+after policy.
 
 15. Idempotency key handling
 ----------------------------
 
-``binnacle.domain.idempotency`` defines:
+``IdempotencyKeyMode`` contains exactly ``caller_key``, ``prepared_execution_nonce``, and
+``derived_member_key``.
 
-.. code-block:: python
-
-   class IdempotencyKeyMode(StrEnum):
-       CALLER_KEY = "caller_key"
-       PREPARED_EXECUTION_NONCE = "prepared_execution_nonce"
-       DERIVED_MEMBER_KEY = "derived_member_key"
-
-   @dataclass(frozen=True, slots=True)
-   class IdempotencyIdentity:
-       mode: IdempotencyKeyMode
-       digest_sha256: str
-
-``caller_key`` validation accepts only the encodings/randomness rules in
-``spec/operation/idempotency.yaml``. Raw keys exist only long enough to validate/decode
-and compute a domain-separated SHA-256 digest; they are not stored in domain snapshots,
-SQLite, logs, audit, metrics labels, or errors.
-
-UUIDv4 alone is rejected as a compliant caller key according to the existing contract.
+Caller-key validation accepts only the encodings/randomness rules in
+``spec/operation/idempotency.yaml``. Raw key material exists only long enough to validate,
+decode, and compute the domain-separated SHA-256 digest. UUIDv4 alone is rejected.
 
 16. Atomic create-or-find semantics
-----------------------------------
+-----------------------------------
 
-``OperationStore.create_or_find`` owns the critical first transaction.
+``OperationStore.create_or_find`` owns the first transaction.
 
-Port shape:
+Algorithm:
 
-.. code-block:: python
-
-   class OperationStore(Protocol):
-       async def create_or_find(
-           self,
-           *,
-           intent: OperationIntent,
-           idempotency: IdempotencyIdentity,
-           owner: OperationOwner,
-           runtime: RuntimeProvenance,
-       ) -> CreateOrFindResult: ...
-
-       async def get(self, operation_id: str, owner: OperationOwner) -> OperationSnapshot: ...
-       async def transition(self, request: TransitionRequest) -> OperationSnapshot: ...
-       async def attach_policy_decision(...): ...
-       async def attach_effect_reference(...): ...
-
-Transaction algorithm:
-
-#. begin short write transaction;
-#. attempt/select the global idempotency binding by exact unique scope;
-#. if absent, create binding + ``received`` operation + version-1 transition atomically;
-#. if present, compare owner and request fingerprint without disclosing another owner's
-   operation;
-#. same owner/same fingerprint -> return retained operation;
-#. same owner/different fingerprint -> increment conflict counter and return
+#. begin a short write transaction;
+#. lookup/attempt the exact global unique binding scope;
+#. if absent, create the full binding + ``received`` operation + version-1 transition
+   atomically;
+#. if present and ``record_kind=tombstone`` or ``retired_at`` is set, return
+   ``idempotency_key_retired`` without loading/disclosing an operation;
+#. for a present full record, verify owner and fingerprint;
+#. same owner + same fingerprint -> return the retained operation, including terminal or
+   ``uncertain`` state, with no effect;
+#. same owner + different fingerprint -> increment conflict count and return
    ``idempotency_conflict``;
-#. different controller -> increment conflict counter and return non-disclosing
+#. different controller -> increment conflict count and return non-disclosing
    ``idempotency_owner_mismatch``;
 #. commit;
-#. only a newly created operation proceeds to policy/admission.
+#. only a newly created full operation proceeds to policy/admission.
 
-Concurrent uniqueness races catch the database uniqueness conflict, roll back, re-read,
-and reconcile. They do not create a second operation.
+The tombstone check occurs before the same-owner/same-fingerprint retained-operation
+branch because a valid tombstone may have ``operation_id=NULL`` and the contract requires
+``idempotency_key_retired``. No code attempts to load a retired operation from a tombstone.
 
-17. Minimal Bootstrap ``PolicyEngine``
---------------------------------------
+Concurrent uniqueness races roll back, re-read, and follow the same decision table. They
+do not create a second operation.
 
-``binnacle.ports.policy`` defines:
+17. Minimal Bootstrap PolicyEngine
+----------------------------------
 
-.. code-block:: python
+``PolicyEngine`` receives only normalized bounded facts: authenticated controller
+identity/profile/epoch, operation contract/version, already-validated scope names,
+normalized target/effect digests, maximum-effect class, development-session flags when
+later supplied, and protected policy identity/digest.
 
-   class PolicyEngine(Protocol):
-       async def evaluate(self, request: PolicyRequest) -> PolicyDecision: ...
-
-``PolicyRequest`` contains only normalized/bounded facts:
-
-* authenticated controller ID/profile/epoch;
-* operation contract/version;
-* transport scope names already validated where available;
-* normalized target/effect digests;
-* maximum-effect classification;
-* runtime/development-session flags when later supplied;
-* current protected policy identity/digest.
-
-Phase 4 ``BootstrapPolicyEngine`` is deliberately fail-closed:
+Production ``BootstrapPolicyEngine`` is fail-closed:
 
 * unknown operation contract -> deny;
-* no authenticated owner/controller -> deny;
-* protected/control-plane targets -> deny unless a later reviewed contract explicitly
-  supplies authority;
-* no generic wildcard allow;
-* no embedded scripting/policy language;
-* no environment/CLI override that broadens security-critical policy.
+* missing authenticated controller -> deny;
+* protected/control-plane target -> deny unless a later reviewed contract supplies
+  explicit authority;
+* no wildcard allow;
+* no embedded policy scripting language;
+* no environment/CLI override that broadens security policy.
 
-Because Phase 4 exposes no real consequential operation contract, production policy does
-not need to allow one. Kernel integration tests inject a fixture/test policy and synthetic
-operation contract to exercise the full admission/effect path. Later phases extend
-reviewed operation contracts without replacing the ``PolicyEngine`` port.
+Because Phase 4 exposes no real consequential contract, production policy does not need
+to allow one. Tests inject a fixture policy and synthetic contract to exercise the full
+kernel path. There is no hidden production ``allow_all`` switch.
 
-18. Consequential admission sequence
-------------------------------------
+18. Consequential admission and dispatch sequence
+-------------------------------------------------
 
-``OperationCoordinator`` in the application layer owns the required ordering:
+``OperationCoordinator`` owns the ordering:
 
-#. receive already-authenticated owner + normalized ``OperationIntent`` + raw
-   idempotency input from a future caller;
+#. receive an already-authenticated owner, normalized ``OperationIntent``, and future
+   caller idempotency input;
 #. validate key syntax and derive safe key digest;
-#. atomically ``create_or_find`` global binding/operation;
-#. if retained/conflict/owner-mismatch, return reconciliation result without effect;
-#. append/fsync ``operation_received`` audit event for a newly created operation;
+#. atomically create/find global binding + version-1 ``received`` operation;
+#. for retained/conflict/owner-mismatch/retired outcomes, return without effect;
+#. append/fsync a schema-valid audit event with
+   ``payload.kind=operation.state_changed``, ``old_state=null``,
+   ``new_state=received``, ``state_version=1``, ``effect_knowledge=none``, and a bounded
+   reason code such as ``operation_received``;
 #. evaluate policy;
 #. durably persist policy decision;
-#. on deny, transition ``received -> rejected`` and append required rejection audit;
+#. on deny, transition ``received -> rejected`` and append/fsync schema-valid
+   ``policy.decision``/``operation.rejected`` and state-change audit as required;
 #. on allow, transition ``received -> authorised`` and commit;
-#. append/fsync authorization audit;
-#. **only now** call the ``EffectBoundary`` port;
-#. persist boundary acknowledgement/effect knowledge/result metadata;
-#. append/fsync corresponding effect/lifecycle audit;
-#. return retained operation snapshot/result metadata.
+#. append/fsync schema-valid ``policy.decision`` with ``decision=allowed`` and
+   ``operation.authorised`` audit evidence;
+#. create the dispatch ``TransitionRequest`` and durably transition
+   ``authorised -> running`` with ``effect_knowledge=none`` **before invoking the effect
+   adapter**; the resulting running ``state_version`` is the durable dispatch-attempt
+   marker;
+#. append/fsync a schema-valid ``payload.kind=effect.intent_recorded`` event carrying only
+   bounded/digested target/effect facts and that operation correlation;
+#. **only now** call ``EffectBoundary.start`` with an ``EffectRequest`` containing the
+   operation ID and running state version as stable dispatch identity;
+#. durably persist the returned no-crossing/crossed/reference/outcome knowledge and the
+   bounded recoverable opaque reference when one exists;
+#. transition from ``running`` according to the exact lifecycle contract if the result is
+   already terminal/uncertain, or remain running when an independently supervised effect
+   is genuinely in progress;
+#. append/fsync schema-valid ``effect.started``, ``effect.observed``, ``effect.failed``,
+   ``effect.uncertain``, and/or ``operation.state_changed`` records as appropriate;
+#. return the retained operation/result metadata.
 
-If required audit fails before step 10, no effect boundary is crossed and new
-consequential work becomes fail-restricted.
+Required audit failure before the effect call blocks the call. The exact existing audit
+schema uses ``payload.kind`` as the event-type discriminator; Phase 4 does **not** invent
+an ``event_type`` or unsupported kinds such as a literal ``operation_received`` payload.
 
-There is deliberately no production effect adapter in Phase 4.
+A process crash after step 11 but before step 13 is deliberately conservative: durable
+state says ``running`` even if the adapter was never reached. Restart cannot prove no
+effect, so it resolves through the running/uncertain reconciliation path rather than
+falsely returning ``known_no_effect``.
 
-19. Effect boundary/reconciliation seam
----------------------------------------
+There is no production effect adapter in Phase 4.
 
-``binnacle.ports.effect`` defines the minimum later-process seam without defining executor
-or broker IPC:
+19. Effect boundary and reconciliation seam
+-------------------------------------------
+
+Define narrow framework-independent ports:
 
 .. code-block:: python
 
@@ -896,77 +929,79 @@ or broker IPC:
 
 ``EffectStartReceipt`` can express only:
 
-* effect boundary definitely not crossed;
-* effect boundary crossed with stable opaque external reference;
+* boundary definitely not crossed;
+* boundary crossed with stable bounded opaque reference;
 * outcome already known;
 * outcome uncertain.
 
-No subprocess/Git/systemd/root vocabulary exists here.
+``EffectRequest`` carries the operation ID and the durable running state version. A future
+adapter must use that stable dispatch identity when its external mechanism supports
+idempotent submission/reconciliation. It must never infer a fresh effect identity from a
+retry.
 
-Phase 4 production composition uses ``UnavailableEffectBoundary`` which rejects start,
-proving that merely adding the kernel creates no device effect. Integration tests inject
-``CountingTestEffectBoundary`` backed by a separate test store/counter to prove one-effect
-semantics under response loss/concurrency/restart.
+A generic exception or lost ``start()`` response after the call begins is **not** proof
+that the boundary was not crossed. Unless a typed adapter result can prove no dispatch,
+the coordinator leaves/records dispatch-attempted state and restart reconciliation must
+produce or preserve ``uncertain``. Only an explicit, trustworthy “definitely not crossed”
+receipt may justify ``known_no_effect``.
 
-Later executor/broker phases implement their own adapters/IPC behind this port and must
-not open the application SQLite database directly.
+Phase 4 production composition uses ``UnavailableEffectBoundary``. Tests inject a
+separate counting boundary/reconciler. Later executor/broker processes implement their
+own adapters/IPC and never open the application SQLite DB directly.
 
 20. State transition persistence
 --------------------------------
 
-Every transition:
+Every real transition:
 
-#. loads current state/version;
-#. validates exact lifecycle edge and cross-field invariants;
-#. issues conditional update ``WHERE operation_id=? AND state_version=?``;
-#. increments version exactly once;
-#. inserts the matching append-only transition row in the same SQLite transaction;
-#. requires exactly one updated row;
-#. returns ``state_conflict`` on a stale expected version rather than overwriting.
+#. loads state/version;
+#. validates the exact lifecycle edge and cross-field invariants;
+#. conditionally updates ``WHERE operation_id=? AND state_version=?``;
+#. increments ``state_version`` exactly once;
+#. inserts the matching append-only ``operation_transitions`` row in the same transaction;
+#. requires exactly one updated current row;
+#. returns ``state_conflict`` on stale expected version.
 
-Duplicate observation may return the same existing version when it is semantically the
-same observation; it does not create a fake transition/version.
+A duplicate observation may return the existing version only when it is semantically the
+same observation; it cannot fabricate a transition.
 
-Transition-specific requirements include:
-
-* ``received`` can only become ``rejected`` or ``authorised``;
-* ``authorised`` may become ``running``, ``cancelling``, ``cancelled``, or ``failed``;
-* ``uncertain`` is ``effect_terminal_reconcilable`` and only reconciliation may move it
-  to ``succeeded``/``failed``/``cancelled``;
-* ``cancelled`` requires verified cancellation/remaining-effect truth;
-* ``succeeded`` requires verified effect knowledge and no error;
-* rejected/failed/uncertain require the contract-defined error presence.
+``received`` is version 1. ``authorised -> running`` is a real version increment and is
+committed before any effect call. ``uncertain`` is effect-terminal-reconcilable and moves
+only to ``succeeded``/``failed``/``cancelled`` through explicit reconciliation evidence.
 
 21. Restart reconciliation
 --------------------------
 
-``OperationReconciler`` runs after DB/audit/payload verification and before the
-consequential kernel is considered available.
+``OperationReconciler`` runs after DB, audit, and payload verification and before
+consequential-kernel availability.
 
 Scan nonterminal/effect-reconcilable operations in bounded pages.
 
 Rules:
 
-* ``received`` with no authorization/effect crossing -> transition to ``rejected`` with
-  ``restart_before_admission`` after required audit is available;
-* ``authorised`` with no effect-boundary reference/crossing -> ``failed`` with
-  ``known_no_effect``; never redispatch automatically;
-* ``running``/``paused``/``cancelling`` with a stable external reference -> ask the
-  configured ``EffectReconciler``;
-* if no reconciler exists or outcome cannot be proven -> ``uncertain``;
-* existing ``uncertain`` remains uncertain until an explicit reconciliation observation
-  proves a permitted terminal transition;
-* no startup path creates a fresh idempotency key or replays an effect automatically.
+* ``received`` -> ``rejected`` with ``restart_before_admission`` after required recovery
+  audit is writable; no policy/effect is resumed automatically;
+* ``authorised`` -> ``failed`` with ``known_no_effect`` because coordinator invariants
+  prohibit calling the effect adapter before the durable transition to ``running``;
+* ``running``/``paused``/``cancelling`` with a durable recoverable external reference ->
+  ask ``EffectReconciler``;
+* ``running`` with no external reference, including crash during ``start()`` before a
+  receipt, is **uncertain**, never ``known_no_effect``;
+* ``paused``/``cancelling`` without a reconcilable reference also becomes ``uncertain``
+  unless the adapter can prove an allowed terminal observation through another protected
+  stable dispatch identity;
+* if no reconciler exists or an outcome cannot be proven -> ``uncertain``;
+* existing ``uncertain`` remains uncertain until explicit reconciliation proves an
+  allowed terminal transition;
+* no startup path creates a new idempotency key or dispatches an effect automatically.
 
-Phase 4 production has no external effect references; property/integration tests exercise
-all branches with fakes.
+Phase 4 production has no external effect reference. Fault/integration tests exercise all
+branches with fakes.
 
-22. Cancellation/status/result application interfaces
+22. Cancellation, status, and result application APIs
 -----------------------------------------------------
 
-These are internal/use-case APIs only in Phase 4.
-
-Expose equivalent methods:
+These APIs are internal only:
 
 .. code-block:: python
 
@@ -976,197 +1011,181 @@ Expose equivalent methods:
        async def get_payload_metadata(self, payload_id: str, owner: OperationOwner) -> PayloadMetadata: ...
        async def read_payload_range(...): ...
 
-``get_operation`` of a failed/uncertain operation is a successful query of represented
-state; application exceptions are reserved for malformed/not-owned/not-found requests.
+Querying failed/uncertain work is a successful state query. Malformed, not-owned, and
+not-found requests are application errors.
 
-``request_cancel``:
+Cancellation:
 
 * never treats transport disconnect as cancellation;
-* validates owner/current state/state version;
-* transitions to ``cancelling`` only where lifecycle permits;
-* calls a cancellation-capable future effect adapter only when one exists;
-* never marks ``cancelled`` until cancellation is verified;
-* may become ``succeeded``/``failed``/``uncertain`` depending on truthful reconciliation.
+* validates owner/current state/expected state version;
+* follows only lifecycle-declared edges;
+* may move ``authorised`` directly to verified ``cancelled`` only when no effect was
+  dispatched and the no-effect condition is proven;
+* otherwise enters ``cancelling`` only where permitted;
+* calls a cancellation-capable future adapter only when one exists;
+* never claims ``cancelled`` until cancellation and remaining-effect truth are verified;
+* may reconcile to ``succeeded``, ``failed``, or ``uncertain`` as observations require.
 
-No MCP registration/projection is added in this phase.
+No MCP registration/projection is added.
 
-23. Payload storage contract
+23. Payload storage
+-------------------
+
+``PayloadStore`` owns bytes; SQLite owns authoritative ownership/lifecycle metadata.
+
+Required behavior:
+
+* implementation-owned relative paths only; no caller absolute path;
+* exclusive temp creation;
+* bounded append chunks;
+* incremental byte/quota tracking;
+* fsync data before finalization;
+* SHA-256 of decoded/full bytes;
+* atomic temp/part -> final rename;
+* fsync containing directory;
+* **only then** commit DB lifecycle ``complete`` and digest metadata;
+* crash after file finalize/before DB commit -> orphan, never exposed as complete;
+* DB complete but missing/wrong bytes -> integrity failure and block affected result;
+* no silent truncation marked complete.
+
+``truncated=true`` remains explicit metadata; a later Tool contract decides whether a
+truncated object is valid output or an error/reference.
+
+24. Retention and tombstones
 ----------------------------
 
-``PayloadStore`` owns bytes; SQLite owns authoritative metadata/ownership/lifecycle.
+Phase 4 establishes internal storage ceilings from existing large-result policy but not
+host-facing pagination. Host-visible limits remain evidence-gated.
 
-Port shape:
+Full idempotency records are retained through the contract's maximum retry and
+reconciliation window. Explicit compaction may then create the contract-exact tombstone
+described above. Uncertain/security-recovery evidence is not removed merely because
+ordinary result data expires.
 
-.. code-block:: python
-
-   class PayloadStore(Protocol):
-       async def create_stream(self, spec: PayloadSpec) -> PayloadHandle: ...
-       async def append(self, handle: PayloadHandle, data: bytes) -> PayloadAppendResult: ...
-       async def finalize(self, handle: PayloadHandle) -> FinalizedPayload: ...
-       async def abort(self, handle: PayloadHandle, reason: str) -> None: ...
-       async def read_range(self, payload_id: str, offset: int, length: int) -> bytes: ...
-       async def verify(self, payload_id: str) -> PayloadVerification: ...
-
-Filesystem adapter behavior:
-
-* create with exclusive names under implementation-owned root;
-* never accept caller-supplied absolute paths;
-* append using bounded chunks;
-* track byte count incrementally;
-* enforce per-object/per-controller quotas before growth;
-* fsync data before finalization;
-* compute SHA-256 of decoded/full bytes;
-* atomically rename ``tmp``/``.part`` file to finalized path;
-* fsync containing directory;
-* only then commit SQLite lifecycle ``complete``/digest metadata;
-* if crash occurs between filesystem finalize and DB commit, startup verification treats
-  the orphan as unreferenced/recoverable and never exposes it as complete;
-* if DB says complete but bytes/digest are absent/wrong, mark integrity failure and block
-  affected result use.
-
-No silent truncation is marked complete. ``truncated=true`` is explicit metadata and a
-later Tool contract must decide whether truncated data is a valid complete result or an
-error/reference.
-
-24. Retained payload/result semantics
--------------------------------------
-
-Phase 4 establishes internal storage but not host-facing pagination Tools.
-
-Use repository default maximums from ``mcp-large-results.md`` as storage ceilings unless
-the implementation profile is more restrictive. Actual host-visible effective limits
-remain Phase-3-evidence-gated.
-
-Retention classes are stored exactly as policy identifiers. Phase 4 implements safe
-expiry/tombstone metadata and explicit operator/test cleanup only; it does not introduce
-a broad automatic deletion policy that could remove uncertainty/recovery evidence.
-
-Quota pressure rejects new payload production when protected data cannot be evicted
-safely.
+Quota pressure rejects new protected payload production when safe eviction is impossible.
+No broad automatic destructive cleanup is introduced.
 
 25. Operation evidence metadata
 -------------------------------
 
-``OperationEvidence`` mirrors only bounded canonical evidence facts needed internally:
+``OperationEvidence`` stores only bounded source/provenance, information class, freshness,
+optional result digest, operation/payload/audit references, and bounded diagnostic facts.
+It is not authoritative audit storage and never contains credentials or unbounded effect
+payloads.
 
-* source/provenance;
-* information class;
-* freshness;
-* optional result digest;
-* operation/payload/audit reference;
-* bounded diagnostic facts.
+26. Append-only audit journal and exact schema mapping
+-----------------------------------------------------
 
-It is a projection/index, not security audit authority. Raw command output, repository
-content, credentials, tokens, private keys, or unbounded prompt content never enter
-``facts_json``.
+``AuditJournal`` is independent from structlog/journald and independent from SQLite as the
+authoritative event bytes.
 
-Later MCP evidence projection must revalidate information class/recipient and host
-profile before model visibility.
-
-26. Append-only audit journal
------------------------------
-
-``AuditJournal`` is independent from ordinary structlog/journald and independent from
-SQLite as the authoritative event bytes.
-
-The adapter implements the existing audit contract exactly:
+It implements:
 
 * UTF-8;
-* RFC 8785 JCS canonicalization;
+* RFC 8785 JCS;
 * I-JSON-compatible values;
-* SHA-256 with ``event_hash`` omitted from preimage;
-* ``previous_event_hash`` chain;
-* strict sequence monotonicity;
-* segment metadata with first/last sequence, count, bytes, previous segment digest and
-  final digest;
-* audit epoch continuity.
+* SHA-256 with ``event_hash`` omitted from the preimage;
+* required ``previous_event_hash`` chain;
+* strictly monotonic sequence;
+* segment chain metadata and audit-epoch continuity;
+* event byte and safe-fact bounds from ``spec/audit/audit-policy.yaml``.
 
-Redaction happens before canonicalization/persistence. Raw idempotency keys and authority
-material are prohibited.
+``payload.kind`` is the **only** authoritative event type. All events validate against
+``schemas/audit/audit-event.schema.json`` before append. Phase 4 uses only existing
+payload kinds, including as applicable:
 
-Phase 4 does not claim external-compromise-resistant history because external checkpoint
-publication is deferred.
+* ``operation.state_changed`` for received/running/terminal lifecycle records;
+* ``operation.idempotency_conflict`` for duplicate/conflict evidence;
+* ``policy.decision``, ``operation.rejected``, ``operation.authorised``;
+* ``effect.intent_recorded``, ``effect.started``, ``effect.observed``,
+  ``effect.failed``, ``effect.uncertain``;
+* ``cancellation.requested`` / ``cancellation.phase_changed`` /
+  ``cancellation.verified``;
+* ``reconciliation.started`` / ``reconciliation.completed`` / ``recovery.required``;
+* existing ``audit.*`` payload kinds for segment/checkpoint/integrity events.
 
-27. Audit persistence ordering
-------------------------------
+Domain policy ``allow``/``deny`` maps to schema ``allowed``/``rejected``. A reason code
+may say ``operation_received`` but the payload kind remains ``operation.state_changed``.
+No redundant top-level ``event_type`` is added.
 
-Required events are fsynced before their gated action continues.
+Every required event populates all non-null schema identity fields from the current
+verified runtime profile: build digest, runtime Tool-manifest digest, schema-registry
+digest, device-profile version, policy version, stream/epoch/segment IDs, boot/device IDs,
+and redaction-policy version. Absence of a required runtime identity blocks the required
+audit append rather than inventing null/default data.
 
-Admission ordering:
+Redaction happens before canonicalization and persistence. Raw idempotency keys and
+authority material are prohibited.
 
-* DB ``received`` intent commits;
-* ``operation_received`` audit appends/fsyncs;
-* policy decision commits;
-* decision/rejection or authorization audit appends/fsyncs;
-* only a successfully audited authorization may cross the effect boundary.
+Phase 4 does not claim external-compromise-resistant history; external checkpoint
+publication remains deferred.
 
-After an external/test effect, truthful state persistence takes priority; audit follows
-immediately and is fsynced. If audit fails after a known effect, do not roll back history
-or repeat the effect. Mark audit subsystem degraded, retain truthful operation state, and
-block new consequential admission until repaired.
+27. Audit persistence ordering and crash windows
+------------------------------------------------
 
-SQLite and audit are therefore deliberately two durable systems with explicit recovery,
-not falsely described as one transaction.
+SQLite and audit are two durable systems with explicit recovery; they are not one
+transaction.
+
+Pre-effect ordering:
+
+#. DB version-1 ``received`` commits;
+#. ``operation.state_changed`` received audit appends/fsyncs;
+#. policy decision commits;
+#. deny path audits rejection; allow path commits ``authorised``;
+#. ``policy.decision``/``operation.authorised`` audit appends/fsyncs;
+#. DB ``authorised -> running`` dispatch marker commits;
+#. ``effect.intent_recorded`` audit appends/fsyncs;
+#. only then may the effect adapter be called.
+
+After a synthetic/future external effect, truthful operation persistence has priority;
+audit follows immediately and fsyncs. If audit fails after a known effect, do not roll
+back history or repeat the effect: mark audit degraded, retain truthful state, and block
+new consequential admission.
+
+Crash-window rules:
+
+* DB received but missing received audit -> never continue to effect; recovery records
+  the audit gap/recovery and rejects the unadmitted operation once audit is trustworthy;
+* authorised DB state without authorization audit -> no effect; fail/recover as
+  ``known_no_effect`` only after audit recovery;
+* authorization audit but still authorised -> no effect was dispatched because running
+  transition is the code-level precondition;
+* running state with missing effect-intent audit -> no **new** effect may be dispatched;
+  treat operation as uncertain/recovery-required until evidence proves otherwise;
+* running + effect-intent audit with lost start receipt -> uncertain unless reconciler
+  proves an allowed terminal outcome.
 
 28. Audit failure gate and emergency journal
 -------------------------------------------
 
-``KernelHealth`` includes independent database/audit/payload status.
+``KernelHealth`` tracks DB/audit/payload separately. When required audit cannot append,
+fsync, or verify:
 
-When required audit cannot append/fsync/verify:
-
-* set in-memory + durable control state disabling new consequential admission where DB is
-  available;
+* durably disable new consequential admission where DB remains writable;
 * do not cross a new effect boundary;
-* allow bounded status/verification/recovery reads when their stores remain trustworthy;
-* attempt one bounded emergency audit record only if the pre-created emergency journal
+* allow bounded trustworthy recovery/status reads;
+* attempt one bounded emergency audit record only when the pre-created emergency journal
   remains writable/trustworthy;
-* emergency-journal exhaustion remains fail-restricted;
-* operator recovery must verify surviving chain continuity before re-enabling admission.
+* emergency exhaustion remains fail-restricted;
+* recovery verifies surviving continuity before re-enabling admission.
 
-No silent fallback to ordinary logs exists.
+No silent ordinary-log fallback exists.
 
-29. Audit verification
-----------------------
+29. Audit verification and checkpoints
+--------------------------------------
 
-``AuditVerifier`` checks on startup and via local operator command:
+Verifier checks event schema, JCS hash, sequence, previous-event hash, segment metadata,
+epoch continuity, truncation/fork/duplicate sequence, and canonical byte ceiling.
 
-* event schema validity;
-* JCS hash recomputation;
-* sequence monotonicity;
-* previous-event hash chain;
-* segment digest/count/byte metadata;
-* epoch continuity;
-* unexpected truncation/fork/duplicate sequence;
-* canonical event byte size <= policy maximum.
+Local consistency checkpoints may record DB schema revision, highest operation/transition
+summary, audit epoch/sequence/final digest, and runtime build/config/policy digests.
+SQLite stores only checkpoint reference/digest metadata; audit event bytes remain
+authoritative. This is not an external signed checkpoint or post-compromise history claim.
 
-Verification result reports safe sequence/hash prefixes and error codes, not sensitive
-payloads.
+30. Minimal local operator CLI and migration safety
+--------------------------------------------------
 
-30. Database/audit consistency checkpoints
-------------------------------------------
-
-Phase 4 needs a local consistency marker without pretending SQLite/audit are one
-transaction.
-
-After clean startup and at explicit verification points record a bounded checkpoint event
-containing:
-
-* database schema revision;
-* highest operation/transition sequence summary;
-* audit epoch/sequence/final digest;
-* runtime build/config/policy digests.
-
-SQLite stores only the checkpoint reference/digest metadata needed for diagnostics. The
-audit event remains authoritative audit bytes.
-
-This is a **local** consistency/checkpoint mechanism, not the optional external signed
-checkpoint defined for post-compromise history claims.
-
-31. Minimal local operator CLI
------------------------------
-
-Extend the existing CLI with local-operator commands only:
+Extend existing CLI with local-only:
 
 ::
 
@@ -1175,85 +1194,60 @@ Extend the existing CLI with local-operator commands only:
    binnacle kernel verify
    binnacle audit verify
 
-``db status``
-   Read current Alembic revision/required pragmas without mutation.
+``db status`` reads Alembic revision and pragmas.
 
-``db upgrade``
-   Explicitly run reviewed Alembic migrations to head. It is never callable through MCP
-   in Phase 4.
+``db upgrade`` is explicit, never MCP-callable, acquires the exclusive migration/runtime
+lock described above, and refuses if the live application writer is active. The
+development-Pi runbook requires stop -> upgrade -> verify -> start. It never creates a
+second writer beside the running service.
 
-``kernel verify``
-   Verify DB schema/pragmas, operation invariants, payload metadata integrity, and audit
-   continuity. It does not repair automatically.
+``kernel verify`` checks schema/pragmas, lifecycle/idempotency invariants, payload
+metadata/bytes, and audit continuity without automatic repair.
 
-``audit verify``
-   Verify the append-only audit chain.
+``audit verify`` checks the append-only chain without dumping event payloads.
 
-Human/agent/JSON output follows existing CLI conventions and never dumps raw payload/audit
-content.
+Human/agent/JSON output follows existing CLI conventions and never exposes raw payload,
+audit, credential, or idempotency-key material.
 
-32. Migration/startup behavior
-------------------------------
+31. Startup and migration behavior
+----------------------------------
 
-Application startup does **not** silently upgrade schema.
+Application startup does not silently migrate.
 
 Sequence:
 
-#. open database enough to inspect Alembic revision;
-#. if DB is new/uninitialized, readiness reports migration required;
-#. if DB revision != expected head, consequential kernel remains unavailable;
-#. operator runs explicit ``binnacle db upgrade``;
-#. startup reopens/verifies SQLite pragmas/schema;
-#. verify audit journal continuity;
-#. verify payload roots/metadata invariants;
-#. run bounded operation restart reconciliation;
-#. mark internal kernel available/degraded/unavailable.
+#. acquire runtime DB lock;
+#. inspect Alembic revision;
+#. new/uninitialized or behind/ahead DB -> kernel unavailable/migration required;
+#. operator stops service and runs explicit ``binnacle db upgrade``;
+#. startup reopens and verifies revision/pragmas;
+#. verify audit continuity;
+#. verify payload roots/metadata;
+#. run bounded restart reconciliation;
+#. only after all required checks succeed set
+   ``consequential_admission_enabled=true`` and mark internal kernel available.
 
-Migration failure never deletes/recreates the database.
+Migration failure never deletes/recreates DB. Migration ``0001`` rejects incompatible
+unmanaged tables rather than silently taking ownership.
 
-33. Alembic migration rules
----------------------------
+Migration tests cover fresh upgrade, FK/check/index presence, unknown revision refusal,
+exclusive migration coordination, and safe downgrade/round-trip where downgrade exists.
 
-Migration ``0001`` must:
+32. Kernel health and readiness
+-------------------------------
 
-* create all Phase 4 tables/indexes/check constraints in one reviewed migration;
-* be deterministic on an empty local SQLite DB;
-* reject incompatible pre-existing unmanaged tables instead of taking ownership
-  silently;
-* record schema revision normally through Alembic;
-* not import the running application/composition graph;
-* not access network/auth credentials;
-* have upgrade tests from empty and downgrade/round-trip tests where downgrade is safe.
+Internal availability is ``available``, ``degraded``, or ``unavailable``. Consequential
+admission requires ``available``.
 
-Future destructive migrations require checkpointing/recovery design; Phase 4 has no
-production destructive migration yet.
+Phase 4 does not change public ``/readyz`` solely to expose this kernel because current
+read-only Tools do not depend on it. The existing compatibility server may remain ready
+while the internal kernel is unavailable. A later mutating Tool promotion makes kernel
+availability part of that capability's readiness.
 
-34. Kernel health/readiness semantics
--------------------------------------
+33. Stable internal error codes
+-------------------------------
 
-Define internal:
-
-.. code-block:: python
-
-   class KernelAvailability(StrEnum):
-       AVAILABLE = "available"
-       DEGRADED = "degraded"
-       UNAVAILABLE = "unavailable"
-
-Consequential admission requires ``AVAILABLE``.
-
-Phase 4 does not change public/MCP ``/readyz`` response shape solely to expose kernel
-status because no current read-only Tool depends on the kernel. Existing compatibility
-server may remain ready while internal kernel is degraded, but logs/local ``kernel
-verify`` must report it. A later phase that promotes mutating Tools makes kernel
-availability part of readiness for those capabilities.
-
-This avoids host-facing contract drift before Phase 3 evidence/Tool promotion.
-
-35. Errors
-----------
-
-Define stable internal/application error codes including:
+Include at least:
 
 ::
 
@@ -1279,248 +1273,201 @@ Define stable internal/application error codes including:
    cancellation_not_supported
    reconciliation_unavailable
 
-These are not automatically MCP execution-error codes until a later reviewed Tool
-contract explicitly maps them.
+These are not automatically MCP error codes. Host-facing mappings require a later
+reviewed Tool contract.
 
-Cross-controller not-found/owner-mismatch results are non-disclosing at host-facing
-boundaries later; internal logs/audit use safe digests only.
-
-36. Controller ownership binding
+34. Controller ownership binding
 --------------------------------
 
-Phase 4 does not authenticate requests itself; it consumes the validated controller
-identity produced by the selected Phase 3 controller profile when that implementation
-exists.
+Phase 4 consumes a validated controller identity from the selected Phase 3 profile; it
+does not authenticate requests itself. Durable operation ownership stores opaque
+controller ID/profile/version/epoch only, never reusable credential material.
 
-Durable operation ownership stores only:
+A replacement controller cannot automatically read/advance old operations and cannot use
+an old key to create a duplicate. Deliberate ownership transfer remains a separate future
+contract.
 
-* opaque ``controller_id``;
-* controller profile/version;
-* controller epoch;
-* no reusable credential.
-
-A successor/replacement controller cannot automatically read/advance old operations and
-cannot reuse an old key to create a duplicate. Explicit owner transfer/recovery remains a
-separate future contract.
-
-If Phase 3 evidence changes the exact selected auth-profile fields, only the adapter that
-constructs ``OperationOwner`` changes; the durable kernel schema does not invent missing
-tenant/client/binding values.
-
-37. Process-boundary ownership
+35. Process-boundary ownership
 ------------------------------
 
-The main MCP/application process is the sole owner that opens authoritative
-``binnacle.db`` for normal application writes.
+The main MCP/application process is the sole authoritative ``binnacle.db`` writer.
+Future executor/privileged-broker processes:
 
-Future executor and privileged-broker processes:
-
-* do not open this SQLite database directly;
-* retain only minimum independent execution/broker evidence;
+* never open the application SQLite DB directly;
+* retain minimum independent execution/broker evidence;
 * reconcile through typed IPC/application ports;
-* return stable external execution/reference identities to the application process.
+* return stable bounded external reference identity to the application.
 
-Phase 4 defines ``EffectBoundary``/``EffectReconciler`` semantics only. It does not define
-or implement Unix-socket message schemas for a process that does not yet exist.
+Phase 4 defines only effect/reconciliation semantics, not future IPC wire schemas.
+Audit/payload adapters run in the application process in Phase 4.
 
-Audit/payload filesystem adapters execute in the application process in Phase 4.
-
-38. Logging and diagnostics
+36. Logging and diagnostics
 ---------------------------
 
-Add structured safe events for:
+Structured diagnostic logs may include DB revision/pragmas, operation ID, state/version,
+safe idempotency digest prefix, policy decision ID/reason code, reconciliation result,
+payload byte counts/digest prefix, audit sequence/status, and kernel availability.
 
-* database open/close/pragmas/migration revision;
-* operation create/find/transition by operation ID;
-* idempotency outcome using digest prefix only, never raw key;
-* policy decision ID/result/reason code;
-* reconciliation decision;
-* payload lifecycle/byte counts/digest prefix;
-* audit append/segment/verification status;
-* kernel availability transitions.
+Do not log raw keys/nonces, credentials, full fingerprint inputs, payload/stdout/stderr,
+protected policy values, raw external authority material, or full audit event bodies.
+Audit and ordinary diagnostics remain separate systems.
 
-Do not log:
-
-* raw idempotency key/nonces;
-* credentials/controller security tokens;
-* full request fingerprint inputs;
-* complete operation payloads/stdout/stderr;
-* raw policy protected values;
-* full audit event bodies by default.
-
-Audit and diagnostic logs remain separate systems.
-
-39. Property tests
+37. Property tests
 ------------------
 
-Hypothesis state machines/property tests must cover:
+Hypothesis/state-machine tests cover:
 
-* every allowed lifecycle edge and every forbidden edge;
-* state-version monotonicity;
+* every allowed and forbidden lifecycle edge;
+* state-version monotonicity and duplicate observation behavior;
 * valid state/effect-knowledge/terminality/error combinations;
-* duplicate observation not creating an artificial version;
-* same key/same normalized input reconciliation;
-* same key/different input conflict;
-* cross-controller key replay non-disclosure/no effect;
-* concurrent first request exactly-one binding;
-* ``uncertain`` never auto-retries;
+* same-key/same-input reconciliation;
+* same-key/different-input conflict;
+* cross-controller replay non-disclosure/no effect;
+* concurrent first request exactly one binding;
+* uncertain never auto-retries;
 * cancellation cannot become cancelled without verification;
-* retention/tombstone record retains duplicate-prevention authority.
+* full-to-tombstone conversion retaining exact duplicate-prevention fields;
+* tombstone replay returns ``idempotency_key_retired`` and never attempts operation load.
 
-Tests consume the reviewed YAML contracts or parity fixtures so contract changes fail
-property assumptions visibly.
+Tests consume reviewed YAML/fixtures or parity mappings so contract changes break tests
+visibly.
 
-40. Integration/fault tests
----------------------------
+38. Integration and fault tests
+-------------------------------
 
-Use temporary local SQLite/filesystem roots and a separate counting effect fixture.
+Use temporary SQLite/filesystem roots plus a separate counting effect fixture. Required
+fault points include:
 
-Required fault points include:
-
-* crash before idempotency transaction commit;
-* crash after ``received`` commit/before audit;
+* crash before create/find commit;
+* crash after received commit/before received audit;
 * audit failure before policy;
 * policy deny;
-* crash after ``authorised`` commit/before audit;
-* crash after authorization audit/before effect boundary;
+* crash after authorised commit/before authorization audit;
+* crash after authorization audit/before running transition;
+* crash after running transition/before effect-intent audit;
+* crash after running/effect-intent audit but before calling ``start``;
+* crash/exception during ``EffectBoundary.start`` before receipt;
 * lost response after test effect;
-* DB write failure after known test effect;
+* DB failure after known test effect;
 * audit failure after known test effect;
-* restart with running/cancelling/uncertain state;
-* concurrent duplicate requests from one owner;
+* restart with authorised/running/paused/cancelling/uncertain states;
+* running with no external reference must become uncertain;
+* concurrent duplicates from same owner;
 * matching key from another owner;
 * same key/different fingerprint;
-* SQLite busy/lock timeout;
-* database read-only/disk-full simulation where feasible;
-* audit event bit flip/delete/reorder/truncation/fork;
+* tombstone replay;
+* SQLite busy/lock timeout and migration lock contention;
+* DB read-only/disk-full simulation where feasible;
+* audit bit flip/delete/reorder/truncation/fork;
 * emergency-journal exhaustion;
-* payload temp-file crash/finalize-before-DB-commit orphan;
-* DB-complete/payload-missing/digest-mismatch;
-* payload quota pressure.
+* payload temp crash/finalize-before-DB orphan;
+* DB-complete/payload-missing/digest mismatch;
+* payload quota pressure;
+* systemd unit permits only declared Phase 4 state/result/audit write roots.
 
 The synthetic counter proves at most one effect for one logical idempotency identity.
-Tests never mutate the real repository/system.
+Tests never mutate real repository/system state.
 
-41. Restart tests
------------------
+39. Fresh-process restart tests
+------------------------------
 
-Integration tests compose application, admit synthetic operations, close all runtime
-objects, reconstruct a fresh application/runtime, and verify:
+Close every runtime object and reconstruct a fresh application. Verify:
 
-* retained operation identity/state/version remains resolvable;
-* idempotency binding still reconciles;
-* terminal results remain stable;
-* uncertain remains uncertain;
-* known-no-effect pre-boundary work is not redispatched;
-* audit sequence continues without reset/fork;
-* payload finalized objects remain digest-valid;
-* incomplete/orphan payloads are detected safely.
+* operation identity/state/version remains resolvable;
+* idempotency binding reconciles;
+* terminal result is stable;
+* uncertain remains uncertain without evidence;
+* authorised pre-dispatch work is never redispatched;
+* dispatch-attempted running work is never converted to known-no-effect merely because a
+  receipt is missing;
+* persisted external reference is available to a fake reconciler after restart;
+* audit sequence/epoch chain continues;
+* finalized payload remains digest-valid;
+* incomplete/orphan payloads are detected.
 
-Do not simulate restart by reusing in-memory repositories/singletons.
+Do not reuse in-memory repositories/singletons to simulate restart.
 
-42. Audit contract tests
+40. Audit contract tests
 ------------------------
 
-Required tests include existing audit-contract cases:
+Reuse existing audit cases and add Phase 4 event fixtures for exact payload-kind mapping.
+Tests cover RFC 8785 edge cases, exact canonical bytes, event schema validity, hash changes,
+insertion/deletion/reorder/truncation/fork, segment/epoch continuity, bounded safe facts,
+secret/authority redaction, required runtime identity fields, primary storage failure,
+emergency behavior, and fail-restricted admission.
 
-* RFC 8785 edge cases and exact canonical bytes;
-* hash changes on bit modification;
-* insertion/deletion/reorder/truncation detection;
-* duplicate sequence/fork detection;
-* segment rotation and epoch continuity;
-* payload ``kind``/schema mismatch;
-* bounded safe facts/event bytes;
-* secret/authority-material redaction before hash;
-* primary audit storage failure;
-* emergency journal behavior;
-* fail-restricted new consequential work.
+A plan/implementation that emits a top-level ``event_type`` or an unknown
+``payload.kind`` fails.
 
-External checkpoint/non-equivocation service integration is deferred, but local verifier
-must not claim protection from full-host compromise.
-
-43. Payload tests
+41. Payload tests
 -----------------
 
-Cover:
+Cover zero-length/max objects, bounded append chunks, finalize idempotency, append after
+finalize rejection, quota overflow before growth, atomic rename/fsync failures, orphan
+recovery, complete metadata with missing/corrupt bytes, byte-exact UTF-8/binary content,
+information-class preservation, and invalid range requests.
 
-* zero-length object;
-* boundary/max object size;
-* append chunks and byte counts;
-* duplicate/finalize calls idempotently returning same finalized metadata;
-* append after finalize rejected;
-* quota overflow before write;
-* atomic temp/final rename;
-* fsync/rename failure;
-* orphan recovery;
-* complete metadata with missing/corrupt bytes;
-* UTF-8/binary bytes remain byte-exact;
-* restricted information class is never downgraded by storage/retrieval;
-* range overflow/negative lengths rejected.
-
-Host-facing page/cursor semantics remain later projection work.
-
-44. Policy tests
+42. Policy tests
 ----------------
 
-Test production Bootstrap policy:
+Production policy tests prove unknown contract, missing controller, protected target, and
+broad/unrecognized scopes cannot create allow. Environment/CLI cannot enable wildcard
+authority. Fixture policy for synthetic effects is separately composed and cannot ship as
+a production bypass.
 
-* unknown operation denied;
-* missing controller denied;
-* protected target denied;
-* broad/unrecognized scope cannot create allow;
-* environment/CLI cannot enable wildcard authority;
-* decision output is bounded/deterministic/versioned.
+43. Migration and deployment tests
+----------------------------------
 
-Test fixture policy separately for synthetic kernel effect tests. Never ship a hidden
-``allow_all`` production switch.
-
-45. Migration tests
--------------------
-
-For Python 3.11/3.12/3.13 and SQLite available on CI:
+On Python 3.11/3.12/3.13 where applicable:
 
 * fresh ``alembic upgrade head``;
-* expected tables/indexes/checks/FKs exist;
-* foreign key enforcement actually fails invalid inserts;
-* WAL and synchronous FULL verified;
-* application refuses behind/ahead unknown revision;
-* migration is not rerun concurrently by application workers;
-* downgrade round-trip where implemented;
-* migration failure leaves original DB intact/recoverable.
+* exact tables/indexes/checks/FKs exist;
+* invalid FK inserts fail with foreign keys enabled;
+* WAL and synchronous FULL are read back;
+* app refuses behind/ahead/unknown revision;
+* concurrent live-writer vs migration is rejected;
+* downgrade round-trip where safe;
+* migration failure leaves original DB recoverable;
+* Phase 3 ``ProtectSystem=strict`` remains active;
+* only ``/var/lib/binnacle/state``, ``results``, and ``audit`` are writable additions;
+* protected controller config and evaluation evidence permissions are not broadened.
 
-46. Security invariants
+44. Security invariants
 -----------------------
 
-Phase 4 preserves all of these:
+Phase 4 must preserve:
 
-#. no production consequential effect adapter exists;
-#. no new mutating MCP Tool/Resource/Task exists;
-#. durable idempotency record exists before any synthetic/test effect boundary;
-#. raw idempotency keys are never persisted/disclosed;
-#. global duplicate-prevention survives controller replacement;
-#. operation ownership does not transfer from key possession;
-#. same key/different fingerprint never executes;
-#. ``uncertain`` never triggers automatic retry;
-#. lifecycle transitions are contract-exact and state-versioned;
-#. main application process solely owns authoritative SQLite writes;
-#. SQLite durability pragmas are verified, not assumed;
-#. migration mismatch prevents consequential-kernel availability;
-#. audit is authoritative append-only security evidence, not ordinary logs;
+#. no production consequential effect adapter;
+#. no new mutating MCP Tool/Resource/Task/Prompt;
+#. durable global idempotency identity before synthetic effect dispatch;
+#. raw idempotency material never persists/discloses;
+#. global duplicate prevention survives controller replacement and tombstoning;
+#. operation ownership never transfers from key possession;
+#. same key/different input never executes;
+#. tombstone replay cannot load/revive an old operation;
+#. durable ``running`` dispatch marker exists before effect adapter invocation;
+#. missing start receipt cannot be treated as proof of no effect;
+#. ``uncertain`` never auto-retries;
+#. lifecycle/state-version rules are contract-exact;
+#. main app process solely owns authoritative SQLite writes;
+#. SQLite durability pragmas are verified;
+#. migration cannot race the live writer;
+#. audit uses existing schema, JCS+SHA-256, and ``payload.kind`` discriminator;
 #. audit redaction precedes persistence/hash;
-#. required audit failure blocks new consequential work;
-#. payload metadata cannot claim complete before durable bytes/digest exist;
-#. payload/result storage never contains reusable credentials;
-#. security-critical database/audit/payload roots are not ordinary env/CLI-overridable;
-#. policy is fail-closed and has no general script/wildcard authority;
-#. later executor/broker does not gain DB access through this phase;
+#. required audit failure blocks new effects;
+#. payload cannot claim complete before durable bytes/digest;
+#. result/audit state contains no reusable credential;
+#. DB/audit/payload roots are not ordinary env/CLI-overridable;
+#. systemd grants only narrow declared write paths;
+#. policy is fail-closed with no general script/wildcard authority;
+#. future executor/broker gets no DB access here;
 #. host-facing operation projection remains evidence/contract gated.
 
-47. Quality/CI changes
-----------------------
+45. Quality and CI changes
+--------------------------
 
-Extend the existing Python workflow; do not create a competing Phase 4 workflow.
-
-Keep all previous gates and add:
+Extend the existing Python workflow; do not create a competing Phase 4 workflow. Keep all
+prior gates and add commands equivalent to:
 
 .. code-block:: console
 
@@ -1529,20 +1476,20 @@ Keep all previous gates and add:
    uv run pytest tests/property
    uv run pytest tests/integration/test_sqlite_operation_store.py
    uv run pytest tests/integration/test_idempotency_concurrency.py
+   uv run pytest tests/integration/test_operation_restart_reconciliation.py
    uv run pytest tests/integration/test_audit_failure_gate.py
    uv run pytest tests/integration/test_payload_integrity.py
+   uv run pytest tests/integration/test_phase4_systemd_state_permissions.py
 
-Run migrations/tests in isolated temporary directories/DBs. Never write CI state into
-repository paths.
+Use isolated temporary roots. CI never writes state into repository paths.
 
-Keep ``pip-audit`` after new persistence/JCS dependencies, strict MyPy, Ruff/format,
-Import Linter, coverage, contract/schema validation, compiler checks, and explicit
-3.11/3.12/3.13 interpreter lanes.
+Keep ``pip-audit``, strict MyPy, Ruff/format, Import Linter, branch coverage,
+contract/schema validation, registry compiler checks, and explicit 3.11/3.12/3.13 lanes.
 
-48. Canonical local validation commands
+46. Canonical local validation commands
 ---------------------------------------
 
-The implementation PR documents/passes at least:
+The implementation PR documents and passes at least:
 
 .. code-block:: console
 
@@ -1561,135 +1508,137 @@ The implementation PR documents/passes at least:
    uv run alembic upgrade head
    uv run python scripts/verify_operation_kernel.py --temporary
 
-The operator/system profile separately runs ``binnacle db status``, reviewed explicit
-``binnacle db upgrade``, and ``binnacle kernel verify`` against the development-Pi state.
+On the development Pi, the operator separately performs the reviewed stop -> ``db
+upgrade`` -> ``kernel verify`` -> start sequence.
 
-49. Implementation order
+47. Implementation order
 ------------------------
 
 Implement Phase 4 in this order:
 
-#. add persistence/JCS dependencies and Alembic skeleton;
-#. define operation/idempotency/policy/audit/payload domain types and contract parity
-   tests;
-#. implement migration ``0001`` and SQLite engine/pragmas/health checks;
-#. implement atomic operation/idempotency store and state-version transition store;
-#. implement fail-closed Bootstrap ``PolicyEngine`` + durable decision recording;
-#. implement JCS audit writer/verifier + storage-failure gate;
-#. implement retained payload filesystem adapter + metadata consistency checks;
-#. implement ``OperationCoordinator`` ordering up to the unavailable production effect
-   boundary;
-#. implement synthetic counting effect/reconciler only under tests;
-#. implement startup reconciliation;
-#. add local operator DB/kernel/audit commands;
-#. add property/fault/restart/audit/payload/migration tests;
-#. integrate internal kernel health into composition/logging without changing MCP Tool
-   surface;
+#. add persistence/JCS dependencies, Alembic skeleton, and deployment write-path changes;
+#. define domain types and lifecycle/idempotency/audit contract-parity tests;
+#. implement migration ``0001`` and SQLite runtime/pragmas/migration locking;
+#. implement atomic create/find with full/tombstone exact semantics;
+#. implement state-version transition store;
+#. implement fail-closed Bootstrap policy + durable decision recording;
+#. implement JCS audit writer/verifier + storage-failure gate and exact payload-kind
+   mapping;
+#. implement retained payload filesystem adapter + metadata consistency;
+#. implement ``OperationCoordinator`` through durable running dispatch marker and
+   unavailable production effect boundary;
+#. implement synthetic counting effect/reconciler only in tests;
+#. implement restart reconciliation and cancellation semantics;
+#. add local DB/kernel/audit operator commands;
+#. add property, crash-window, restart, audit, payload, migration, and systemd tests;
+#. integrate internal kernel health without changing MCP Tool surface;
 #. update CI/lock/import rules;
 #. run full exact-interpreter validation;
-#. stop before any host-facing write/status/cancel/result Tool promotion.
+#. stop before any host-facing write/status/cancel/result promotion.
 
-50. Review checklist
+48. Review checklist
 --------------------
 
-A reviewer should verify:
+A reviewer verifies:
 
-* plan/implementation remains Phase 4 only;
-* host-facing operation projection is explicitly provisional/evidence-gated;
-* no Phase 5 write probe appears;
-* SQLAlchemy 2.x/aiosqlite/Alembic match Bootstrap baseline;
-* SQLite main-application ownership is preserved;
-* no executor/broker directly accesses DB;
-* lifecycle state vocabulary/edges match machine-readable contract exactly;
-* idempotency global unique scope matches machine-readable contract;
-* two-level duplicate prevention vs operation ownership is preserved;
+* Phase 4 only; no Phase 5 design or Tool promotion;
+* host-facing projection remains provisional/evidence-gated;
+* persistence stack matches Bootstrap baseline;
+* one authoritative SQLite writer and no executor/broker DB access;
+* version-1 received creation and lifecycle edges match contracts;
+* idempotency unique scope is non-null and contract-exact;
+* tombstones contain exactly the required duplicate-prevention facts and return retired;
 * raw keys never persist;
-* durable intent/audit authorization precede test effect boundary;
-* same-key/different-input and cross-controller cases create no effect;
-* ``uncertain`` never auto-retries;
-* database and audit are not falsely treated as one transaction;
-* audit uses RFC 8785 JCS + SHA-256 and chain verification;
-* audit failure blocks new consequential work;
-* payload completion is durability/digest truthful;
-* Bootstrap policy remains minimal/fail-closed;
-* migrations are explicit/no runtime ``create_all``;
-* current five read-only MCP Tools are unchanged;
-* all exact-head quality/CI gates pass.
+* audit authorization and durable running dispatch marker precede effect invocation;
+* a lost start receipt becomes uncertain, not known-no-effect;
+* same-key conflict/cross-controller cases cannot create effect;
+* persisted effect reference permits restart reconciliation;
+* audit schema ``payload.kind`` and required fields are exact;
+* DB/audit are not falsely one transaction;
+* audit failure blocks new effects;
+* payload completion is durable/digest truthful;
+* Bootstrap policy is minimal/fail-closed;
+* migrations are explicit and cannot race live service;
+* systemd write authority is narrow under ``ProtectSystem=strict``;
+* current five read-only MCP Tools remain unchanged;
+* exact-head quality/CI passes.
 
-51. Deterministic acceptance checklist
+49. Deterministic acceptance checklist
 --------------------------------------
 
-Phase 4 implementation is accepted only when every item below is true:
+Phase 4 implementation is accepted only when every item is true:
 
-#. Direct persistence dependencies are locked and support Python 3.11--3.13.
-#. Alembic ``0001`` creates exactly the Phase 4 authoritative schema.
-#. Runtime never silently creates/migrates tables.
-#. Database path is local/protected and separated from source/config/evaluation evidence.
-#. Every connection verifies foreign keys/WAL/``synchronous=FULL``/busy timeout.
-#. Migration mismatch makes consequential kernel unavailable.
-#. ``kernel_meta`` binds stable device ID/epoch and audit continuity metadata.
-#. Controller ownership records contain no reusable credential.
-#. Operation lifecycle states exactly match ``spec/operation/lifecycle.yaml``.
-#. Every state transition increments version once and records append-only history.
-#. Invalid/stale transition is rejected.
-#. Idempotency global unique index exactly matches contract scope.
-#. Raw caller key/prepared nonce never persists/logs/audits.
-#. Concurrent same-key admission produces one binding/operation.
-#. Same owner + same key + same fingerprint returns retained operation.
-#. Same key + different fingerprint returns conflict/no second operation.
-#. Different controller + matching key reveals no old operation and creates no effect.
-#. Tombstone form retains duplicate-prevention authority.
-#. Production ``PolicyEngine`` denies unknown/unreviewed consequential contracts.
-#. Policy decision is durable/correlated before authorization/effect.
-#. Required authorization audit is durable before effect boundary.
-#. Production composition has no real effect adapter.
-#. Synthetic test effect proves at most one effect under concurrency/lost response.
-#. Restart reconciliation never redispatches an effect automatically.
-#. ``uncertain`` persists/reconciles only through explicit observation.
-#. Cancellation cannot claim ``cancelled`` without verification.
-#. Audit event canonicalization is RFC-8785-JCS + SHA-256 contract exact.
-#. Audit chain detects modification/deletion/reordering/truncation/fork.
-#. Required audit failure disables new consequential admission.
-#. Emergency journal is bounded and failure remains fail-restricted.
-#. Payload bytes are atomically finalized/fsynced/digest-verified before complete metadata.
-#. Payload orphan/corruption/quota pressure are detected without silent completeness.
-#. Operation evidence metadata is bounded and not authoritative audit storage.
-#. Application restart reconstructs DB/idempotency/audit/payload truth from fresh runtime.
-#. ``binnacle db status``/``db upgrade``/``kernel verify``/``audit verify`` are local-only
-   operator paths and emit no secrets/raw payloads.
-#. Existing Phase 3 authenticated read-only MCP behavior remains regression-tested.
-#. No MCP Tool/Resource/Task/manifest change exposes Phase 4 operation APIs.
-#. No workspace/command/Git/package/service/privileged/hardware effect capability exists.
-#. Ruff/format/strict MyPy/Import Linter/coverage/``pip-audit`` pass.
-#. Property/fault/migration/integration tests pass on explicit 3.11/3.12/3.13 lanes.
-#. Contract/schema/compiler validation passes.
+#. persistence/JCS dependencies are locked and support Python 3.11--3.13;
+#. Alembic ``0001`` creates exactly the Phase 4 authoritative schema;
+#. runtime never silently creates/migrates tables;
+#. DB path is local/protected/separate from source/config/evaluation evidence;
+#. systemd setup creates and grants only state/results/audit write roots;
+#. every DB connection verifies foreign keys, WAL, FULL synchronous, and busy timeout;
+#. migration mismatch/unavailable audit keeps consequential kernel unavailable;
+#. live writer and ``db upgrade`` cannot run concurrently;
+#. ``kernel_meta`` binds stable device epoch and schema-compatible audit epoch continuity;
+#. controller ownership rows contain no reusable credential;
+#. lifecycle state vocabulary/edges exactly match ``spec/operation/lifecycle.yaml``;
+#. version 1 is ``NULL -> received`` and every later transition increments once;
+#. invalid/stale transitions are rejected;
+#. global idempotency index exactly matches contract scope with non-null key columns;
+#. raw caller key/prepared nonce never persists/logs/audits;
+#. concurrent same-key admission creates one binding/operation;
+#. same owner + same key + same fingerprint returns retained operation;
+#. same key + different fingerprint returns conflict/no second operation;
+#. different controller + matching key reveals no old operation and creates no effect;
+#. tombstone retains key/tool/contract/owner digest/fingerprint/terminal class/retired time;
+#. tombstone replay returns ``idempotency_key_retired`` without loading an operation;
+#. production policy denies unknown/unreviewed consequential contracts;
+#. policy decision is durable before authorization/effect;
+#. received/authorization/effect-intent audit records are schema-valid and durable at the
+   defined gates;
+#. durable ``running`` transition occurs before every effect-boundary call;
+#. crash/lost response during ``start`` cannot become a known-no-effect assertion;
+#. production composition has no real effect adapter;
+#. synthetic effect proves at most one effect under concurrency/response loss;
+#. restart never redispatches automatically;
+#. running-without-receipt/reference becomes or remains uncertain;
+#. persisted opaque external reference can be reconciled after restart;
+#. cancellation cannot claim cancelled without verification;
+#. audit canonicalization is exact RFC 8785 JCS + SHA-256;
+#. audit uses only schema-supported ``payload.kind`` values and all required fields;
+#. audit chain detects modification/deletion/reorder/truncation/fork;
+#. audit failure disables new consequential admission;
+#. emergency journal is bounded/fail-restricted;
+#. payload bytes are atomically finalized/fsynced/digest-verified before complete metadata;
+#. payload orphan/corruption/quota pressure is detected without silent completeness;
+#. operation evidence is bounded and not authoritative audit storage;
+#. fresh-process restart reconstructs DB/idempotency/audit/payload truth;
+#. local DB/kernel/audit commands expose no secrets/raw payloads and migration is safe;
+#. existing Phase 3 authenticated read-only MCP behavior remains regression-tested;
+#. no MCP Tool/Resource/Task/Prompt/manifest change exposes Phase 4 APIs;
+#. no workspace/command/Git/package/service/privileged/hardware effect capability exists;
+#. Ruff/format/strict MyPy/Import Linter/coverage/``pip-audit`` pass;
+#. property/fault/migration/integration/systemd tests pass on explicit interpreter lanes;
+#. contract/schema/compiler validation passes;
 #. GitHub Actions is green for the exact implementation head.
 
-52. Provisional freeze points after Phase 3 evidence
+50. Provisional freeze points after Phase 3 evidence
 ----------------------------------------------------
 
-Before a later phase exposes this kernel through ChatGPT, re-check the reviewed Phase 3
-evidence and freeze only the host-dependent projection items it supports:
+Before a later phase exposes the kernel through ChatGPT, re-check real Phase 3 evidence
+and freeze only host-dependent projection items actually supported by it: status/result
+interaction, effective result limits, authenticated scope/profile mapping, confirmation
+requirements, optional Tasks/Resources, catalogue refresh, and host retry/reconnect
+behavior.
 
-* which status/result lifecycle interactions ChatGPT can use reliably;
-* actual supported result-size/effective page limits;
-* authenticated scope/profile mapping for the promoted operation class;
-* whether host confirmation is required/observed for that risk class;
-* whether MCP Tasks/Resources remain unavailable or can be optional adapters;
-* catalogue refresh behavior for new operation Tools;
-* retry/reconnect behavior that must be handled as host behavior rather than assumed.
+If Phase 3 evidence is absent, expired, or contradictory, internal Phase 4 implementation
+may pass its kernel tests but no host-facing consequential projection is promoted.
 
-If Phase 3 evidence is absent/expired/contradictory, internal Phase 4 implementation may
-still pass its kernel tests, but no host-facing consequential projection is promoted.
-
-53. Planning stop rule
+51. Planning stop rule
 ----------------------
 
-This plan is complete when a coding agent can build and test the durable operation kernel
-without deciding any later operation-specific authority or host behavior: authoritative
-SQLite state, exact lifecycle/idempotency semantics, minimal policy, append-only audit,
-retained payload/evidence storage, reconciliation seams, local diagnostics, migrations,
-and fault/property tests are all specified.
+This plan is complete when a coding agent can implement/test authoritative SQLite state,
+exact lifecycle/idempotency semantics, safe tombstones, minimal policy, schema-valid
+append-only audit, retained payload/evidence storage, durable pre-dispatch state,
+reconciliation, local diagnostics, deployment permissions, migrations, and fault/property
+tests without deciding later operation-specific authority or host behavior.
 
 Stop here. Do not add the disposable write-probe workflow or any later operational
 capability in this document.
