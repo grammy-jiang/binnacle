@@ -3,7 +3,34 @@ Binnacle Design Principles
 
 :Status: Owner-approved design principles
 :Applies to: Bootstrap development and later Binnacle evolution
-:Primary objective: Enable ChatGPT to develop and improve Binnacle through Binnacle itself
+:Primary objective: Enable ChatGPT to develop and improve Binnacle through Binnacle
+                    itself
+
+Relationship to prior V17 contracts
+-----------------------------------
+
+These principles record owner-approved decisions made after the current V17 feature and
+security contracts were written. Where an older V17 statement conflicts with a principle
+below, this document is the governing product-direction correction and the older contract
+must be reconciled before that capability is implemented or promoted.
+
+Two deliberate corrections are especially important for Bootstrap:
+
+* the authorised development-command profile may use ordinary outbound Internet and LAN
+  application networking, including normal IPv4/IPv6 and DNS. This is not a
+  mediated-egress-only profile. It still receives no Binnacle credentials, credential
+  agents, privileged/control-plane IPC, inherited Binnacle sockets, raw/packet network
+  administration authority, or protected control-plane access. Dedicated
+  outcome-oriented credential operations remain preferred for effects such as Git push;
+* the self-hosting threshold includes the minimum Git workflow needed to create signed
+  commits and push development branches, plus the minimum privileged package, service,
+  and Binnacle-restart operations needed to keep self-development moving. Older V17
+  milestone text that defers all repository push or package/update capability until
+  post-V1 is superseded for this narrow Bootstrap purpose.
+
+This precedence statement removes ambiguity for Bootstrap; the affected machine-readable
+command profiles and detailed security/feature contracts must be updated consistently
+before their implementation is treated as a supported contract.
 
 Purpose
 -------
@@ -90,8 +117,8 @@ Examples include:
 The purpose of an abstraction is replaceability at a real boundary, not architecture
 for its own sake.
 
-4. Prefer standards, native mechanisms, and mature open source
---------------------------------------------------------------
+4. Prefer standards, native mechanisms, and mature open-source software
+------------------------------------------------------------------------
 
 Binnacle should not reimplement mature generic infrastructure without a Binnacle-
 specific reason.
@@ -192,8 +219,9 @@ Credential-bearing operations should use credential references and brokers/agent
 ChatGPT and general-purpose child processes do not receive raw private keys, tokens, or
 passwords.
 
-Development commands may have normal Internet/LAN access, but network access does not
-imply credential, privileged-IPC, or control-plane access.
+Development commands may have normal outbound Internet/LAN application access, but that
+network authority is explicit and does not imply credential access, privileged/control-
+plane IPC, raw/packet network administration, or protected control-plane access.
 
 10. Long-running work is durable and jointly supervised
 -------------------------------------------------------
