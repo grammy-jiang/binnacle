@@ -205,9 +205,12 @@ Phase 4 implementation is complete only when tests prove all of the following:
 * retained payload metadata cannot disagree silently with filesystem bytes;
 * payload writes are atomic/finalized or explicitly incomplete;
 * Bootstrap policy is fail-closed and durably correlated with the operation;
-* systemd hardening still permits only the new declared state/result/audit write paths and
-  recreates the application-owned ephemeral ``/run/binnacle`` lock directory on every
-  service start/boot;
+* systemd hardening still permits only the new declared state/result/audit write paths,
+  recreates the application-owned ephemeral ``/run/binnacle`` lock directory on service
+  start/boot, and preserves that protected runtime directory across the ordinary service
+  stop used by the offline migration runbook;
+* the stopped-service ``binnacle db upgrade`` path can acquire the same protected
+  runtime/migration lock without privileged recreation or a fallback lock location;
 * migration cannot run concurrently with the live authoritative DB writer;
 * no production adapter performs a real consequential effect;
 * no new host-facing MCP Tool/Resource/Task/Prompt is registered;
@@ -476,12 +479,20 @@ Phase 3 is not broadened.
 
 ``/run`` is tmpfs/ephemeral and the Phase 3 setup-time creation of ``/run/binnacle`` does
 not survive a normal reboot. Phase 4 therefore updates ``binnacle-dev.service`` to use
-``RuntimeDirectory=binnacle`` and ``RuntimeDirectoryMode=0750`` (or an exactly equivalent
-systemd-managed runtime-directory declaration) so systemd recreates the directory before
-the service starts and owns it as the configured non-root service identity/group. The
-runtime directory contains only ephemeral locks/control state; it is not durable evidence
-and is never used as correctness authority after process restart. Do not solve this with a
-broad writable ``/run`` exception or a privileged pre-start shell command.
+``RuntimeDirectory=binnacle``, ``RuntimeDirectoryMode=0750``, and
+``RuntimeDirectoryPreserve=yes`` (or an exactly equivalent systemd-managed declaration)
+so systemd recreates the directory before the service starts and owns it as the configured
+non-root service identity/group. ``RuntimeDirectoryPreserve=yes`` is required rather than
+``restart`` because the reviewed offline-migration runbook performs an ordinary service
+stop: that stop must leave the protected runtime directory in place so the same non-root
+operator identity can acquire the migration lock. The directory may still disappear with
+``/run`` on reboot; the next service start recreates it before application startup.
+
+The runtime directory contains only ephemeral locks/control state; preservation across a
+normal stop does not make it durable evidence and it is never used as correctness
+authority after process restart. Do not solve stopped-service migration with a broad
+writable ``/run`` exception, a privileged pre-start shell command, or an alternate lock
+path.
 
 Phase 3 uses ``ProtectSystem=strict``. Therefore Phase 4 must explicitly update
 ``binnacle-dev.service`` so the service can write **only** the new declared durable paths.
@@ -573,12 +584,22 @@ application holds a process/runtime advisory lock under ``/run/binnacle`` for th
 lifetime. ``binnacle db upgrade`` must acquire the corresponding exclusive migration lock
 non-blockingly and refuse migration while a live application writer holds it. On a
 systemd service start, ``RuntimeDirectory=binnacle`` guarantees this parent exists with the
-service identity's narrow write permission even after reboot; local operator migration
-commands executed while the service is stopped must use the same protected setup/runtime
-path contract rather than silently falling back to another lock location. The operator
-runbook stops ``binnacle-dev.service`` before production/development-Pi upgrade. This lock
-prevents concurrent schema migration; it is **not** used as idempotency or normal
-DB-transaction correctness authority.
+service identity's narrow write permission even after reboot. The same unit also requires
+``RuntimeDirectoryPreserve=yes``, so the normal ``systemctl stop binnacle-dev.service`` in
+the reviewed offline-upgrade sequence does not remove that parent before the non-root
+migration command runs. ``RuntimeDirectoryPreserve=restart`` is insufficient because the
+runbook uses an explicit stop, not only a restart.
+
+The stopped-service ``binnacle db upgrade`` command verifies that the protected runtime
+directory exists with the expected owner/group/mode and acquires the same lock there. If
+the directory is absent or ownership/mode is unsafe, upgrade fails closed with an
+operator-facing setup/start instruction; it never creates a privileged runtime directory,
+silently falls back to another lock location, or weakens ``/run`` permissions. After a
+reboot the first service start recreates ``/run/binnacle`` before application startup; if
+that startup reports migration-required, the subsequent stop preserves the directory for
+the offline upgrade. The operator runbook stops ``binnacle-dev.service`` before
+production/development-Pi upgrade. This lock prevents concurrent schema migration; it is
+**not** used as idempotency or normal DB-transaction correctness authority.
 
 11. Database transaction rules
 ------------------------------
@@ -1786,8 +1807,13 @@ Extend existing CLI with local-only:
 
 ``db upgrade`` is explicit, never MCP-callable, acquires the exclusive migration/runtime
 lock described above, and refuses if the live application writer is active. The
-development-Pi runbook requires stop -> upgrade -> verify -> start. It never creates a
-second writer beside the running service.
+development-Pi runbook requires stop -> upgrade -> verify -> start. The service unit's
+``RuntimeDirectoryPreserve=yes`` keeps the already systemd-created ``/run/binnacle``
+parent present across that ordinary stop; the stopped-service command verifies its
+protected owner/group/mode and acquires the same lock as the running application would.
+If the parent is absent or unsafe, the command fails closed rather than creating it with
+privilege or falling back to another lock. The sequence never creates a second writer
+beside the running service.
 
 ``kernel verify`` checks schema/pragmas, lifecycle/idempotency invariants, trusted-time
 ordering state, payload metadata/bytes, and audit continuity without automatic repair.
@@ -1807,7 +1833,9 @@ Sequence:
 #. acquire runtime DB lock;
 #. inspect Alembic revision;
 #. new/uninitialized or behind/ahead DB -> kernel unavailable/migration required;
-#. operator stops service and runs explicit ``binnacle db upgrade``;
+#. operator stops service; ``RuntimeDirectoryPreserve=yes`` leaves the systemd-created
+   protected runtime-lock parent in place, and the non-root ``binnacle db upgrade``
+   verifies/acquires the same exclusive migration lock before upgrading;
 #. startup reopens and verifies revision/pragmas;
 #. under the audit append gate, verify audit event/segment/epoch continuity and reconstruct
    the authoritative journal tail from durable journal bytes;
@@ -1829,7 +1857,8 @@ Migration failure never deletes/recreates DB. Migration ``0001`` rejects incompa
 unmanaged tables rather than silently taking ownership.
 
 Migration tests cover fresh upgrade, FK/check/index presence, unknown revision refusal,
-exclusive migration coordination, and safe downgrade/round-trip where downgrade exists.
+exclusive migration coordination, stopped-service runtime-directory preservation/safe
+lock acquisition, and safe downgrade/round-trip where downgrade exists.
 
 34. Kernel health and readiness
 -------------------------------
@@ -2067,6 +2096,12 @@ fault points include:
 * systemd unit starts with ``/run/binnacle`` absent, recreates it through
   ``RuntimeDirectory=binnacle`` with the expected owner/mode, and can acquire the runtime
   advisory lock without broadening durable write roots;
+* an ordinary stop of ``binnacle-dev.service`` preserves that protected runtime directory
+  through ``RuntimeDirectoryPreserve=yes``; while the service is stopped, the non-root
+  ``binnacle db upgrade`` path verifies it and can acquire/release the same exclusive
+  migration lock without privileged recreation or a fallback lock path;
+* a reboot-like removal of ``/run/binnacle`` is still recovered by the next systemd start,
+  after which a migration-required stop preserves the recreated directory for upgrade;
 * systemd unit permits only declared Phase 4 state/result/audit durable write roots.
 
 The synthetic counter proves at most one effect for one logical idempotency identity.
@@ -2213,8 +2248,14 @@ On Python 3.11/3.12/3.13 where applicable:
 * trusted-time durable fields survive upgrade/restart and cannot be reset by ordinary
   startup to bypass rollback detection;
 * Phase 3 ``ProtectSystem=strict`` remains active;
-* ``RuntimeDirectory=binnacle`` (or exact equivalent) recreates ``/run/binnacle`` with the
-  expected service owner/group and mode after an absent/reboot-like runtime tree;
+* ``RuntimeDirectory=binnacle`` plus ``RuntimeDirectoryMode=0750`` (or exact equivalent)
+  recreates ``/run/binnacle`` with the expected service owner/group and mode after an
+  absent/reboot-like runtime tree;
+* ``RuntimeDirectoryPreserve=yes`` (not ``restart``) keeps that protected directory across
+  the ordinary service stop used by the runbook, and a stopped-service non-root
+  ``binnacle db upgrade`` can verify/acquire the same exclusive migration lock; missing or
+  unsafe runtime-directory state fails closed rather than being recreated with privilege
+  or redirected to another path;
 * only ``/var/lib/binnacle/state``, ``results``, and ``audit`` are durable writable
   additions; protected controller config and evaluation evidence permissions are not
   broadened.
@@ -2268,6 +2309,9 @@ Phase 4 must preserve:
 #. main app process solely owns authoritative SQLite writes;
 #. SQLite durability pragmas are verified;
 #. migration cannot race the live writer;
+#. the same systemd-managed ``/run/binnacle`` lock parent is preserved across the explicit
+   stopped-service migration window with ``RuntimeDirectoryPreserve=yes`` and remains
+   reboot-ephemeral/recreated on the next service start;
 #. audit uses existing schema, JCS+SHA-256, and ``payload.kind`` discriminator;
 #. audit appends are process-wide serialized through tail allocation, write/fsync, segment
    rotation, and tail publication; concurrent coordinators cannot fork the chain;
@@ -2344,7 +2388,8 @@ upgrade`` -> ``kernel verify`` -> start sequence.
 Implement Phase 4 in this order:
 
 #. add persistence/JCS dependencies, Alembic skeleton, systemd durable write-path changes,
-   and systemd-managed ``RuntimeDirectory=binnacle`` for the runtime/migration lock;
+   and systemd-managed ``RuntimeDirectory=binnacle`` / ``RuntimeDirectoryPreserve=yes``
+   for the runtime/migration lock;
 #. define domain types and lifecycle/idempotency/audit contract-parity tests, including
    fail-closed undeclared-derived-member handling;
 #. implement migration ``0001`` and SQLite runtime/pragmas/migration locking, including
@@ -2375,7 +2420,7 @@ Implement Phase 4 in this order:
 #. implement restart reconciliation and cancellation semantics using the same handoff gate;
 #. add local DB/kernel/audit operator commands;
 #. add property, crash-window, trusted-time, boundary, restart, audit, payload, migration,
-   and systemd tests;
+   stopped-service runtime-directory preservation, and systemd tests;
 #. integrate internal kernel health without changing MCP Tool surface;
 #. update CI/lock/import rules;
 #. run full exact-interpreter validation;
@@ -2443,8 +2488,10 @@ A reviewer verifies:
 * payload completion is durable/digest truthful;
 * Bootstrap policy is minimal/fail-closed;
 * migrations are explicit and cannot race live service;
-* systemd write authority is narrow under ``ProtectSystem=strict`` and the unit itself
-  recreates ``/run/binnacle`` with ``RuntimeDirectory=binnacle`` after reboot;
+* systemd write authority is narrow under ``ProtectSystem=strict``; the unit recreates
+  ``/run/binnacle`` with ``RuntimeDirectory=binnacle`` after reboot and preserves it with
+  ``RuntimeDirectoryPreserve=yes`` across the ordinary stop required by the offline
+  migration runbook, allowing the same non-root migration lock path without fallback;
 * current five read-only MCP Tools remain unchanged;
 * exact-head quality/CI passes.
 
@@ -2459,10 +2506,14 @@ Phase 4 implementation is accepted only when every item is true:
 #. DB path is local/protected/separate from source/config/evaluation evidence;
 #. systemd setup creates and grants only state/results/audit durable write roots, while
    ``RuntimeDirectory=binnacle`` recreates the narrow service-owned ``/run/binnacle``
-   ephemeral lock directory when absent after reboot;
+   ephemeral lock directory when absent after reboot and
+   ``RuntimeDirectoryPreserve=yes`` keeps it present across the ordinary stopped-service
+   offline-migration window;
 #. every DB connection verifies foreign keys, WAL, FULL synchronous, and busy timeout;
 #. migration mismatch/unavailable audit keeps consequential kernel unavailable;
-#. live writer and ``db upgrade`` cannot run concurrently;
+#. live writer and ``db upgrade`` cannot run concurrently, and after the required service
+   stop the non-root upgrade can verify and acquire the same protected ``/run/binnacle``
+   lock without privileged recreation or an alternate path;
 #. ``kernel_meta`` binds stable device epoch, schema-compatible audit epoch continuity,
    and durable trusted-time high-water/boot-ordering evidence;
 #. ``kernel_meta.audit_last_sequence/hash`` is cache-only: journal fsync precedes cache
