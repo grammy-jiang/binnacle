@@ -88,6 +88,8 @@ The following internal architecture is concrete in Phase 4:
 * trusted wall-time, same-boot monotonic ordering, boot identity, and durable ordering
   sufficient to prevent rollback/reboot from extending preparation deadlines;
 * a mandatory final consequential-boundary revalidation step for every operation mode;
+* a per-operation application dispatch-handoff gate that serializes final revalidation/
+  effect submission with cancellation and other pre-start lifecycle mutation;
 * filesystem retained payloads with SQLite authoritative metadata;
 * append-only RFC 8785 JCS + SHA-256 audit hash chaining;
 * audit-before-effect gating and fail-restricted audit failure behavior;
@@ -127,6 +129,10 @@ Phase 4 implementation is complete only when tests prove all of the following:
 * concurrent first use of the same key creates exactly one binding and operation;
 * full-record retry, conflict, owner-mismatch, uncertainty, terminal, and tombstone
   outcomes exactly match ``spec/operation/idempotency.yaml``;
+* a tombstone lookup verifies the authenticated owner against its retained owner digest
+  before revealing retirement: another controller receives non-disclosing
+  ``idempotency_owner_mismatch`` while the matching owner receives
+  ``idempotency_key_retired`` without loading an operation;
 * an unconsumed ``prepared_execution_nonce`` durably retains its prepared operation/input,
   expiry, exact current-state binding, registration boot identity, and same-boot monotonic
   deadline evidence before any new operation can be admitted;
@@ -143,6 +149,9 @@ Phase 4 implementation is complete only when tests prove all of the following:
   ``EffectBoundary.start``, including applicable controller/device trust, policy/profile,
   state/version, freshness/target, cancellation/supervision, reservation, privilege/
   credential delegation, interlock, and recovery predicates;
+* final revalidation and the call/receipt handoff to ``EffectBoundary.start`` are
+  serialized with cancellation so a ``running -> cancelling`` transition cannot commit
+  between the final lifecycle check and a stale new start;
 * a final-boundary authority/state failure cannot call the effect adapter or overwrite a
   concurrently changed lifecycle state;
 * ``derived_member_key`` is rejected before binding/operation creation in Phase 4 because
@@ -227,13 +236,16 @@ ordering:
       -> fsynced policy/authorization audit
       -> durable authorised -> running dispatch marker
       -> fsynced effect.intent_recorded audit
+      -> acquire per-operation dispatch-handoff gate shared with cancellation
       -> final OP-BOUNDARY revalidation for every operation mode
            -> trusted-time/deadline guard where applicable
            -> prepared expiry/current-state guard where applicable
            -> current controller/device trust, policy/profile, lifecycle/cancellation,
               target/freshness/reservation/recovery checks where applicable
-      -> effect boundary port (test-only in Phase 4; real adapters later)
+      -> effect boundary submission/receipt handoff while still holding that gate
+         (test-only in Phase 4; real adapters later)
       -> persist returned reference/effect knowledge/result metadata
+      -> release dispatch-handoff gate
       -> append/fsync effect/lifecycle audit
       -> reconcile/recover truthfully after restart
 
@@ -538,6 +550,11 @@ Rules:
 * create-or-find admission uses a short explicit write transaction;
 * SQLite uniqueness/conflict handling, not a Python process mutex, is duplicate-prevention
   authority;
+* the narrow per-operation ``DispatchHandoffGate`` is application concurrency control for
+  lifecycle/cancellation versus the final effect handoff only; it is not idempotency,
+  authorization, or cross-process durability authority;
+* no SQLite write transaction remains open while final boundary verifiers or
+  ``EffectBoundary.start`` perform external I/O;
 * use ``BEGIN IMMEDIATE`` or an equivalently tested SQLAlchemy/SQLite strategy for the
   narrow first-write critical section where needed;
 * commit durable intent before any effect dispatch;
@@ -1004,7 +1021,11 @@ Algorithm:
    have a durable pre-admission registration;
 #. if no binding exists for ``caller_key``, create the full binding + ``received``
    operation + version-1 transition atomically;
-#. if present and ``record_kind=tombstone`` or ``retired_at`` is set, return
+#. if present and ``record_kind=tombstone`` or ``retired_at`` is set, compare the
+   authenticated controller/epoch through the same domain-separated owner digest retained
+   by compaction **before** disclosing retirement or loading any operation; a digest
+   mismatch increments only bounded conflict/abuse evidence and returns non-disclosing
+   ``idempotency_owner_mismatch``; a matching digest returns
    ``idempotency_key_retired`` without loading/disclosing an operation;
 #. for a present full record, verify owner before disclosing preparation or operation
    details; another controller returns non-disclosing ``idempotency_owner_mismatch``;
@@ -1028,9 +1049,12 @@ Algorithm:
 #. commit;
 #. only a newly created/attached full operation proceeds to policy/admission.
 
-The tombstone check occurs before the same-owner/same-fingerprint retained-operation
-branch because a valid tombstone may have ``operation_id=NULL`` and the contract requires
-``idempotency_key_retired``. No code attempts to load a retired operation from a tombstone.
+The tombstone branch still occurs before any retained-operation load because a valid
+tombstone may have ``operation_id=NULL``. Within that branch, however, owner-digest
+verification occurs before the retirement outcome: cross-controller matching keys return
+``idempotency_owner_mismatch`` and only the matching owner receives
+``idempotency_key_retired``. No code attempts to load or disclose a retired operation from
+a tombstone.
 
 Prepared expiry/input/current-state/trusted-time checks before first admission use durable
 fields that survive process restart. They are not bypassed by reconstructing a fresh
@@ -1095,9 +1119,39 @@ For ``prepared_execution_nonce``, the prepared expiry/current-state verifier is 
 of this same final boundary revalidation. It does not replace the general authority/
 lifecycle checks.
 
+The final guard and the actual submission handoff are serialized with cancellation by a
+small application-layer ``DispatchHandoffGate`` keyed by ``operation_id``. The coordinator
+acquires that gate **before** the final OP-BOUNDARY revalidation and retains it through the
+``EffectBoundary.start`` attempt and immediate durable capture/classification of the
+returned receipt/reference/effect knowledge. ``OperationService.request_cancel`` and any
+other application path allowed to move that same pre-start ``running`` operation away from
+the expected version must acquire the same gate before committing its lifecycle change.
+
+This is intentionally not a SQLite or distributed lock. Phase 4 has one authoritative
+application writer. No SQLite transaction is held while boundary verifiers or the effect
+adapter perform external I/O. The gate only removes the in-process check-then-start race:
+
+* if cancellation acquires the gate first and commits ``running -> cancelling``, the later
+  coordinator revalidation observes the changed state/version and suppresses ``start``;
+* if the coordinator acquires the gate first, cancellation waits until the bounded start
+  handoff has been attempted and its immediate receipt/uncertainty/reference knowledge has
+  been durably classified; cancellation then re-reads current state/version and follows
+  only the lifecycle edges that remain legal;
+* therefore no ``EffectBoundary.start`` invocation may begin **after** a cancellation
+  transition for that expected running version has committed;
+* process crash drops the in-memory gate but cannot erase the durable running marker,
+  intent audit, or effect knowledge already committed; startup therefore follows the
+  conservative reconciliation rules rather than redispatching.
+
+``EffectBoundary.start`` is a bounded submission/handoff operation, not the lifetime of a
+long-running effect. Independently supervised work continues outside this gate. An adapter
+that cannot bound its submission handoff is not composable as a reviewed consequential
+boundary until it supplies a safe handoff/reconciliation contract.
+
 The final guard is the last potentially blocking/revalidating work before
 ``EffectBoundary.start``. After it returns success, the coordinator performs no unrelated
-I/O or policy work before the call.
+I/O or policy work before the call; the shared dispatch gate remains held across that
+check-to-call handoff.
 
 Failure behavior:
 
@@ -1147,15 +1201,22 @@ Failure behavior:
    record emergency/recovery evidence where the existing audit contract permits; if the
    DB terminalization itself cannot be committed, leave no in-memory claim of a durable
    terminal state and let restart use the conservative running/recovery path;
-#. run the mandatory final OP-BOUNDARY revalidation from section 19 for **every** operation
-   mode, including trusted-time and prepared expiry/current-state checks where applicable;
-#. on final-guard failure, suppress the boundary call and follow the no-effect/concurrent-
-   state behavior defined in section 19;
-#. **only after all applicable final boundary checks pass** call
-   ``EffectBoundary.start`` with an ``EffectRequest`` containing the operation ID and
-   running state version as stable dispatch identity;
-#. durably persist the returned no-crossing/crossed/reference/outcome knowledge and the
-   bounded recoverable opaque reference when one exists;
+#. acquire the per-operation ``DispatchHandoffGate`` shared with cancellation/pre-start
+   lifecycle mutation;
+#. while holding the gate, run the mandatory final OP-BOUNDARY revalidation from section
+   19 for **every** operation mode, including trusted-time and prepared expiry/current-
+   state checks where applicable;
+#. on final-guard failure, suppress the boundary call, follow the no-effect/concurrent-
+   state behavior defined in section 19, and release the gate only after that result is
+   durably classified as far as the stores permit;
+#. **only after all applicable final boundary checks pass and while still holding the
+   gate** call ``EffectBoundary.start`` with an ``EffectRequest`` containing the operation
+   ID and running state version as stable dispatch identity;
+#. while still holding the gate, durably persist/classify the returned no-crossing/
+   crossed/reference/outcome knowledge and the bounded recoverable opaque reference when
+   one exists; a lost/exceptional receipt remains dispatch-attempted uncertainty;
+#. release the dispatch-handoff gate; a waiting cancellation then re-reads current
+   state/version and may use only the lifecycle-declared next edge;
 #. transition from ``running`` according to the exact lifecycle contract if the result is
    already terminal/uncertain, or remain running when an independently supervised effect
    is genuinely in progress;
@@ -1194,6 +1255,13 @@ Define narrow framework-independent ports:
 
    class EffectReconciler(Protocol):
        async def reconcile(self, reference: EffectReference) -> EffectObservation: ...
+
+``DispatchHandoffGate`` is an application-only keyed async mutual-exclusion primitive,
+not an effect/DB port and not durable authority. Both the coordinator's final
+revalidate/start/receipt-classification handoff and ``request_cancel`` use the same key.
+The implementation must bound gate ownership and clean up idle per-operation entries so a
+cancel request cannot deadlock or leak unbounded lock objects. Crash recovery never trusts
+the vanished in-memory gate; it trusts only durable state/audit/effect evidence.
 
 ``PreparedStateCheck`` contains only protected prepared-operation identity and bounded
 operation-specific facts required to recompute the reviewed current-state digest. It does
@@ -1307,8 +1375,17 @@ Cancellation:
 * never treats transport disconnect as cancellation;
 * validates owner/current state/expected state version;
 * follows only lifecycle-declared edges;
+* ``request_cancel`` acquires the same per-operation ``DispatchHandoffGate`` as the final
+  revalidation/start handoff before it commits a transition that could invalidate a new
+  start;
+* if cancellation owns the gate first, its legal state/version transition commits before
+  dispatch revalidation and the later start is suppressed;
+* if dispatch owns the gate first, cancellation waits until the bounded start attempt and
+  immediate receipt/reference/uncertainty classification complete, then re-reads the
+  retained state/version rather than committing against the stale pre-start version;
 * a cancellation or state-version change observed by final boundary revalidation always
-  suppresses a new ``start`` call;
+  suppresses a new ``start`` call, and the gate ensures such a transition cannot commit in
+  the check-to-call gap;
 * may move ``authorised`` directly to verified ``cancelled`` only when no effect was
   dispatched and the no-effect condition is proven;
 * otherwise enters ``cancelling`` only where permitted;
@@ -1427,8 +1504,10 @@ Pre-effect ordering:
 #. ``effect.intent_recorded`` audit appends/fsyncs;
 #. if the intent append/fsync fails and DB is writable, terminalize ``running -> failed``
    with ``known_no_effect``/``audit_unavailable`` before entering the audit-failure gate;
-#. perform final OP-BOUNDARY revalidation for every operation mode;
-#. only then may the effect adapter be called.
+#. acquire the per-operation dispatch-handoff gate shared with cancellation;
+#. perform final OP-BOUNDARY revalidation for every operation mode while holding the gate;
+#. only then, still holding the gate, may the effect adapter submission be called and its
+   immediate receipt/reference/uncertainty knowledge durably classified.
 
 After a synthetic/future external effect, truthful operation persistence has priority;
 audit follows immediately and fsyncs. If audit fails after a known effect, do not roll
@@ -1668,13 +1747,18 @@ Hypothesis/state-machine tests cover:
 * controller/device trust, policy/profile, state version, cancellation, reservation,
   target/freshness, or recovery predicate change between authorisation and dispatch
   suppresses ``EffectBoundary.start``;
+* if cancellation wins the shared dispatch gate and commits first, no later start occurs;
+  if dispatch wins, cancellation cannot commit against that running version until the
+  start attempt and immediate effect-knowledge/reference classification complete;
 * a concurrent state/version change is never overwritten by a stale failed transition;
 * after successful prepared admission, a same-fingerprint retry returns the retained
   operation even when the preparation expiry time has subsequently passed;
 * uncertain never auto-retries;
 * cancellation cannot become cancelled without verification;
 * full-to-tombstone conversion retaining exact duplicate-prevention fields;
-* tombstone replay returns ``idempotency_key_retired`` and never attempts operation load.
+* same-owner tombstone replay returns ``idempotency_key_retired`` with no operation load;
+* different-controller tombstone replay returns non-disclosing
+  ``idempotency_owner_mismatch`` with no operation load or retirement disclosure.
 
 Tests consume reviewed YAML/fixtures or parity mappings so contract changes break tests
 visibly.
@@ -1706,8 +1790,12 @@ fault points include:
 * controller trust/profile changes after authorisation before start -> boundary=0;
 * device trust/profile changes after authorisation before start -> boundary=0;
 * policy/profile digest changes after authorisation before start -> boundary=0;
-* cancellation/state-version changes after running marker before start -> boundary=0 and
-  no stale overwrite;
+* deterministic cancellation race where ``request_cancel`` acquires the shared handoff
+  gate first -> legal cancellation transition commits and counting boundary=0;
+* deterministic inverse race where dispatch owns the gate first -> cancellation blocks
+  until ``start`` has been attempted and immediate receipt/reference/uncertainty knowledge
+  is classified, then re-reads current state/version; no start begins after a committed
+  ``cancelling`` transition;
 * generic target/freshness/reservation/recovery verifier fails -> boundary=0;
 * crash after authorised commit/before authorization audit;
 * crash after authorization audit/before running transition;
@@ -1726,9 +1814,11 @@ fault points include:
 * running with no external reference must become uncertain unless a separately durable
   no-effect terminalization exists;
 * concurrent duplicates from same owner;
-* matching key from another owner;
+* matching full-record key from another owner;
 * same key/different fingerprint;
-* tombstone replay;
+* same-owner tombstone replay -> ``idempotency_key_retired`` without operation load;
+* cross-controller tombstone replay -> ``idempotency_owner_mismatch`` without operation
+  load or retirement disclosure;
 * SQLite busy/lock timeout and migration lock contention;
 * DB read-only/disk-full simulation where feasible;
 * audit bit flip/delete/reorder/truncation/fork;
@@ -1813,7 +1903,10 @@ Boundary tests prove an earlier ``allow`` decision is never treated as perpetual
 authority. Every applicable predicate is re-read immediately before the effect boundary;
 changed/unavailable trust, policy/profile, target/freshness, reservation, privilege/
 credential delegation, interlock, cancellation/supervision, or recovery state suppresses
-the call. The fake boundary verifier cannot be reached from the production MCP surface.
+the call. Deterministic barrier tests additionally prove cancellation and the final
+check-to-start handoff use the same per-operation dispatch gate, so no cancellation
+transition can commit in the gap and then be followed by a stale new ``start``. The fake
+boundary verifier cannot be reached from the production MCP surface.
 
 45. Migration and deployment tests
 ----------------------------------
@@ -1851,12 +1944,18 @@ Phase 4 must preserve:
    final OP-BOUNDARY guard; stale/unprovable state cannot reach ``EffectBoundary.start``;
 #. every operation mode revalidates all applicable OP-BOUNDARY authority/state predicates
    immediately before effect dispatch;
+#. final revalidation/start handoff and cancellation are serialized by the same bounded
+   per-operation application gate; no stale ``start`` begins after a cancellation
+   transition for that running version commits;
 #. a concurrent cancellation/state-version change suppresses dispatch and cannot be
    overwritten by stale transition logic;
 #. raw idempotency material never persists/discloses;
 #. global duplicate prevention survives controller replacement and tombstoning;
 #. operation ownership never transfers from key possession;
 #. same key/different input never executes;
+#. a tombstone verifies owner digest before retirement disclosure: cross-controller replay
+   returns ``idempotency_owner_mismatch`` and same-owner replay returns
+   ``idempotency_key_retired`` without operation load;
 #. tombstone replay cannot load/revive an old operation;
 #. durable ``running`` dispatch marker exists before effect adapter invocation;
 #. required intent-audit failure with writable DB terminalizes the running operation as a
@@ -1939,19 +2038,22 @@ Implement Phase 4 in this order:
 #. implement migration ``0001`` and SQLite runtime/pragmas/migration locking, including
    trusted-time durable high-water/boot-ordering fields;
 #. implement ``TrustedTimeSource``/guard and rollback/reboot/loss-of-trust tests;
-#. implement atomic create/find with full/tombstone exact semantics and durable
-   prepared-nonce pre-admission registration/expiry/current-state validation;
+#. implement atomic create/find with full/tombstone exact semantics, including
+   owner-digest-before-retirement disclosure, and durable prepared-nonce pre-admission
+   registration/expiry/current-state validation;
 #. implement state-version transition store;
 #. implement fail-closed Bootstrap policy + durable decision recording;
 #. implement JCS audit writer/verifier + storage-failure gate and exact payload-kind
    mapping, including no-effect terminalization on pre-dispatch intent-audit failure;
 #. implement retained payload filesystem adapter + metadata consistency;
-#. implement mandatory generic/operation-specific OP-BOUNDARY revalidation;
+#. implement mandatory generic/operation-specific OP-BOUNDARY revalidation plus the
+   bounded per-operation dispatch-handoff gate shared with cancellation;
 #. implement ``OperationCoordinator`` through durable running dispatch marker, intent
-   audit, final boundary revalidation, and unavailable production effect boundary;
+   audit, gated final boundary revalidation/start/receipt classification, and unavailable
+   production effect boundary;
 #. implement synthetic counting effect/reconciler/prepared-state/boundary verifiers only
    in tests;
-#. implement restart reconciliation and cancellation semantics;
+#. implement restart reconciliation and cancellation semantics using the same handoff gate;
 #. add local DB/kernel/audit operator commands;
 #. add property, crash-window, trusted-time, boundary, restart, audit, payload, migration,
    and systemd tests;
@@ -1982,8 +2084,12 @@ A reviewer verifies:
 * loss of trusted time fails closed rather than pretending a nonce remains valid;
 * final OP-BOUNDARY revalidation applies to **all** operation modes, not only prepared
   nonces, and rechecks every applicable authority/state/cancellation/recovery predicate;
+* final boundary revalidation/start handoff shares a bounded per-operation gate with
+  cancellation, so a cancellation transition cannot commit in the check-to-start gap;
 * a concurrent state/version change is not overwritten by stale dispatch failure logic;
-* tombstones contain exactly the required duplicate-prevention facts and return retired;
+* tombstones contain exactly the required duplicate-prevention facts, verify owner digest
+  before retirement disclosure, return owner mismatch cross-controller, and return retired
+  only to the matching owner without loading an operation;
 * raw keys never persist;
 * audit authorization and durable running dispatch marker precede effect invocation;
 * ``effect.intent_recorded`` audit failure before dispatch terminalizes running work as
@@ -2044,15 +2150,23 @@ Phase 4 implementation is accepted only when every item is true:
 #. changed controller/device trust, policy/profile, state version/cancellation,
    target/freshness/reservation/privilege/interlock/recovery state suppresses the effect
    call when applicable;
+#. cancellation and final revalidation/start are serialized by the same bounded
+   per-operation dispatch gate: cancellation-first gives boundary=0, while dispatch-first
+   prevents cancellation from committing against the stale running version until the
+   start attempt and immediate effect knowledge are classified;
 #. a concurrent lifecycle change cannot be overwritten by a stale no-effect failure;
 #. a later retry of an already admitted/dispatched prepared nonce returns retained work
    rather than creating or redispatching a fresh operation when preparation has expired;
 #. concurrent same-key admission creates one binding/operation;
 #. same owner + same key + same fingerprint returns retained operation;
 #. same key + different fingerprint returns conflict/no second operation;
-#. different controller + matching key reveals no old operation and creates no effect;
+#. different controller + matching full-record key reveals no old operation and creates no
+   effect;
 #. tombstone retains key/tool/contract/owner digest/fingerprint/terminal class/retired time;
-#. tombstone replay returns ``idempotency_key_retired`` without loading an operation;
+#. same-owner tombstone replay returns ``idempotency_key_retired`` without loading an
+   operation;
+#. different-controller tombstone replay returns non-disclosing
+   ``idempotency_owner_mismatch`` without loading an operation or revealing retirement;
 #. production policy denies unknown/unreviewed consequential contracts;
 #. policy decision is durable before authorization/effect;
 #. received/authorization/effect-intent audit records are schema-valid and durable at the
