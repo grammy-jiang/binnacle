@@ -2,7 +2,7 @@ Binnacle Phase 0 Detailed Implementation Plan
 =============================================
 
 :Phase: 0 -- Reconcile Bootstrap-blocking contracts
-:Status: Ready for implementation
+:Status: merged
 :Roadmap: ``../bootstrap-implementation-plan.rst``
 :Index: ``index.rst``
 :Primary objective: Remove contract contradictions that would block the Bootstrap self-hosting path
@@ -19,18 +19,22 @@ The phase is intentionally narrow. It does not weaken the permanent Binnacle bou
 around credentials, protected control-plane state, privileged operations, devices, or
 self-management. It changes two Bootstrap-blocking assumptions only:
 
-#. authorised development commands may use ordinary outbound Internet and LAN
-   application networking, including normal IPv4, IPv6, and DNS;
+#. authorised development commands may use ordinary Internet and LAN application
+   networking, including normal IPv4, IPv6, DNS, and loopback listeners used by local
+   development servers;
 #. the Bootstrap self-hosting threshold includes the minimum signed Git/push and
    package/service/restart capabilities required to keep Binnacle self-development
    moving.
 
 The phase also removes the older requirement that advanced kernel sandbox controls must
 be completely proven before ``command_run`` can be considered usable for Bootstrap.
-Those controls remain target hardening work; Bootstrap still requires a separate
+Those controls remain target hardening work. Bootstrap still requires a separate
 unprivileged execution identity, process-tree/resource supervision, workspace
-containment, and strict exclusion of Binnacle credentials and protected control-plane
-IPC.
+containment, explicit authority boundaries, and strict exclusion of Binnacle credentials
+and protected control-plane IPC.
+
+This document describes the implementation work for Phase 0. It does not implement the
+runtime application, executor, broker, Git service, or package/service operations.
 
 1. Governing source order
 -------------------------
@@ -46,17 +50,31 @@ Implementation follows this precedence:
 #. ``docs/target-architecture.rst``.
 
 The Phase 0 implementation must not reinterpret the owner-approved principles. It must
-make the older detailed contracts consistent with them.
+make older detailed contracts consistent with them.
+
+Two governing corrections are especially important:
+
+* authorised Bootstrap development commands may use ordinary application networking;
+* Bootstrap includes the minimum Git push, package, service, and controlled-restart
+  capabilities required to reach the first self-hosting loop.
+
+The Bootstrap baseline additionally requires development servers to bind to loopback by
+default. Non-loopback/LAN exposure is a separate, explicit authority and must not be
+inferred merely because application networking is allowed.
 
 2. Roadmap exit gate
 --------------------
 
 Phase 0 is complete only when:
 
-* the machine-readable command/capability policies no longer declare that Bootstrap
+* machine-readable command/capability policies no longer declare that Bootstrap
   development commands have no application-network access;
 * the corresponding prose contracts describe the same profile-sensitive network model;
-* the command-isolation and capability-composition fixtures test the new model;
+* the loopback-default/explicit-exposure rule is represented consistently in the
+  relevant policy, prose, fixtures, and validator requirements;
+* command-isolation and capability-composition fixtures test the new model;
+* validator code checks the semantic content of required fixture cases, not only their
+  identifiers;
 * validator code rejects regression to the superseded Bootstrap assumptions;
 * older prose that would prohibit the minimum Git push, package, service, or controlled
   restart path is reconciled where such contradictions actually exist;
@@ -75,6 +93,7 @@ Phase 0 does **not** implement:
 * the execution supervisor;
 * a privileged broker;
 * real command execution;
+* runtime socket binding or network filtering;
 * Git handlers or credential brokers;
 * package/service/restart handlers;
 * runtime policy evaluation;
@@ -99,47 +118,44 @@ The current ``docs/security/command-execution.md`` states that general command p
 have denied IPv4, IPv6, and DNS and that external communication must use mediated
 egress.
 
-The current ``spec/policy/command-profiles.yaml`` encodes the same assumption:
-
-::
-
-   network:
-     default: denied
-     ipv4: denied
-     ipv6: denied
-     dns: denied
-     unix_sockets: denied
-     inherited_sockets: denied
-     mediated_egress_only: true
-
-and ``workspace-general-v1`` inherits that global network policy.
+The current ``spec/policy/command-profiles.yaml`` encodes the same assumption through a
+global deny policy that ``workspace-general-v1`` inherits.
 
 That conflicts with the owner-approved Bootstrap rule that an authorised development
 command needs normal application networking for ordinary software-engineering work.
 
-The replacement model is **profile-sensitive**:
+The replacement model is profile-sensitive:
 
 * global/default command execution remains network-denied;
-* ``workspace-general-v1`` explicitly opts into ordinary outbound application
-  networking;
+* ``workspace-general-v1`` explicitly opts into ordinary application networking;
 * ``workspace-check-v1`` inherits that normal development-network authority unless a
   later profile deliberately narrows it;
+* IPv4, IPv6, and DNS are allowed for the authorised development profile;
+* loopback listener/server binds are allowed by default for development servers;
+* wildcard or non-loopback listener exposure is denied by default and requires an
+  explicit request/authority;
 * Unix-domain control sockets and inherited sockets remain unavailable;
 * raw/packet networking and network-administration capability remain denied;
 * Binnacle credentials/credential agents remain unavailable;
 * dedicated outcome-oriented credential operations remain preferred for credentialed
   effects such as repository push.
 
+The distinction between **network use** and **network exposure** is normative. Permission
+to use normal Internet/LAN application networking does not automatically authorise a
+command to expose a listener on ``0.0.0.0``, ``::``, or another non-loopback address.
+
 4.2 Capability-composition model
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The current ``docs/security/capability-composition.md`` and
-``spec/policy/capability-zones.yaml`` treat **all** ``command_run`` network access as
+``spec/policy/capability-zones.yaml`` treat all ``command_run`` network access as
 forbidden and mediated-egress-only.
 
 That must be narrowed. The corrected distinction is:
 
 * ordinary application-network access by an authorised development process is allowed;
+* loopback listeners are normal development authority;
+* non-loopback/LAN listener exposure requires explicit authority;
 * Binnacle-managed protected/restricted data does not become available to that process;
 * reusable credentials or credential-agent authority do not become available to that
   process;
@@ -170,7 +186,9 @@ For Bootstrap this is superseded. The minimum Bootstrap execution boundary requi
 * bounded CPU/memory/PID/output/time resources;
 * durable operation/reconciliation integration when Phase 7 is implemented;
 * no raw/packet or network-administration privilege;
-* no arbitrary device authority.
+* no arbitrary device authority;
+* loopback-only development-server binding by default unless an explicit exposure
+  request grants broader bind authority.
 
 Seccomp/MAC/namespace hardening remains a target-security workstream and must not be a
 Bootstrap ``command_run`` promotion prerequisite.
@@ -183,7 +201,7 @@ operations are categorically post-V1, reconcile it to the narrow Bootstrap rule:
 
 * signed commit and feature-branch push are required;
 * one specifically requested development OS-package installation operation is allowed
-  when it is genuinely required to unblock development;
+  when genuinely required to unblock development;
 * Binnacle service inspection/restart is required;
 * controlled Binnacle restart is required;
 * a generic root shell, arbitrary package-management shell, production rollout system,
@@ -202,39 +220,41 @@ The implementation PR is expected to modify the following existing files.
 ~~~~~~~~~~~~~~~~~~
 
 ``docs/security/command-execution.md``
-   Reconcile command-network semantics and Bootstrap sandbox gating. Bump the semantic
-   contract version from ``1.1.0`` to ``1.2.0``.
+   Reconcile command-network semantics, listener-binding semantics, and Bootstrap
+   sandbox gating. Bump the semantic contract version from ``1.1.0`` to ``1.2.0``.
 
 ``docs/security/capability-composition.md``
    Replace the universal "general command execution has no direct egress" statement
-   with the profile-sensitive Bootstrap model. Bump the semantic contract version from
-   ``1.1.0`` to ``1.2.0``.
+   with the profile-sensitive Bootstrap model. Distinguish application networking from
+   non-loopback listener exposure. Bump the semantic contract version from ``1.1.0`` to
+   ``1.2.0``.
 
 ``spec/policy/command-profiles.yaml``
-   Encode global deny plus explicit development-profile application-network authority;
-   encode the distinction between required Bootstrap isolation and deferred advanced
-   hardening. Bump ``policy_version`` from ``1.1.0`` to ``1.2.0``. Keep
-   ``schema_version`` at ``1.1`` unless implementation discovers an existing consumer
-   that treats the serialization shape as version-locked.
+   Encode global deny plus explicit development-profile application-network authority,
+   loopback-default binding, explicit non-loopback exposure authority, and the
+   distinction between required Bootstrap isolation and deferred advanced hardening.
+   Bump ``policy_version`` from ``1.1.0`` to ``1.2.0``. Keep ``schema_version`` at
+   ``1.1`` unless implementation discovers an existing consumer that treats the
+   serialization shape as version-locked.
 
 ``spec/policy/capability-zones.yaml``
    Make ``command_run`` network authority profile-sensitive while preserving protected
-   data, credential, control-plane, and device restrictions. Bump ``policy_version``
-   from ``1.1.0`` to ``1.2.0``.
+   data, credential, control-plane, listener-exposure, and device restrictions. Bump
+   ``policy_version`` from ``1.1.0`` to ``1.2.0``.
 
 ``tests/fixtures/security/command-isolation.yaml``
-   Replace network-denial fixture expectations for development profiles and add
-   regression cases for the permanent denied boundaries. Update ``policy_version`` to
-   ``1.2.0``.
+   Replace network-denial fixture expectations for development profiles, add the
+   loopback-default/non-loopback-explicit-exposure cases, and add regression cases for
+   the permanent denied boundaries. Update ``policy_version`` to ``1.2.0``.
 
 ``tests/fixtures/security/capability-composition.yaml``
    Replace the ``command-network-default-deny`` assumption with explicit default-profile
-   deny plus development-profile application networking. Add composition-regression
-   cases. Update ``policy_version`` to ``1.2.0``.
+   deny plus development-profile application networking. Add listener-exposure and
+   composition-regression cases. Update ``policy_version`` to ``1.2.0``.
 
 ``scripts/validate_contracts.py``
-   Add explicit cross-file Bootstrap invariants so future edits cannot silently restore
-   the superseded assumptions.
+   Add explicit cross-file Bootstrap invariants, including fixture-content assertions,
+   so future edits cannot silently restore the superseded assumptions.
 
 5.2 Conditional files
 ~~~~~~~~~~~~~~~~~~~~~
@@ -243,6 +263,8 @@ The implementer must search the repository for contradictory statements about:
 
 * ``command_run`` having no network authority;
 * ``mediated_egress_only`` applying universally to development commands;
+* application networking implying unrestricted listener exposure;
+* development servers being allowed to bind non-loopback without explicit exposure;
 * syscall/MAC hardening being a Bootstrap support prerequisite;
 * Git push being categorically deferred beyond Bootstrap;
 * all package/service/restart operations being categorically deferred beyond Bootstrap.
@@ -279,6 +301,10 @@ The policy should retain a global form equivalent to:
      raw_packet: denied
      network_admin: denied
      mediated_egress_only: true
+     listener_bind:
+       loopback: denied
+       non_loopback: denied
+       explicit_exposure_required: true
 
 The exact field names may differ only if an existing schema/consumer requires a
 compatible spelling. Do not represent permission through an ambiguous scalar such as
@@ -309,6 +335,10 @@ Preferred shape:
          raw_packet: denied
          network_admin: denied
          mediated_egress_only: false
+         listener_bind:
+           loopback: allowed
+           non_loopback: explicit
+           explicit_exposure_required: true
        inherits_global_devices: true
        inherits_global_credentials: true
 
@@ -318,6 +348,15 @@ unless a test-specific reason requires narrower networking.
 The implementation must choose either a nested ``network`` override or an equally
 explicit profile field set. It must not rely on hidden Python logic because the policy
 source is intended to be human/ChatGPT-reviewable.
+
+The policy vocabulary must make these two cases distinguishable:
+
+* ordinary local development server: loopback bind, no separate exposure authority;
+* intentionally exposed development server: non-loopback bind only after an explicit
+  operation/request grants the exposure.
+
+Phase 0 defines the contract representation only. Runtime enforcement belongs to the
+later command/executor phase.
 
 6.3 Credential and control-plane invariants
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -371,7 +410,7 @@ Preferred representation is explicit rather than deletion. For example:
        bootstrap_required: false
        target_hardening: true
 
-If retaining the existing ``syscall_policy_required`` and
+If retaining existing ``syscall_policy_required`` and
 ``mandatory_access_control_required`` keys for compatibility, they must not remain
 ``true`` in a way that validator/runtime semantics interpret as a Bootstrap gate.
 
@@ -381,22 +420,16 @@ If retaining the existing ``syscall_policy_required`` and
 7.1 Correct ``command_run`` representation
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Replace the current unconditional block:
-
-.. code-block:: yaml
-
-   command_run:
-     network_available: false
-     ...
-     mediated_egress_only: true
-
-with a profile-sensitive form. Preferred semantics:
+Replace the current unconditional network prohibition with a profile-sensitive form.
+Preferred semantics:
 
 .. code-block:: yaml
 
    command_run:
      network_authority: profile-defined
      bootstrap_development_application_network: allowed
+     listener_bind_default: loopback
+     non_loopback_listener_requires_explicit_exposure: true
      raw_credentials_available: false
      credential_helpers_available: false
      device_access_available: false
@@ -420,7 +453,8 @@ Do not remove the existing protections for:
 * credential broker -> raw secret disclosure;
 * untrusted content -> privileged/system/self-management effect without exact prepared
   authority;
-* cross-controller/cross-destination reference reuse.
+* cross-controller/cross-destination reference reuse;
+* general development-network permission -> implicit non-loopback listener exposure.
 
 If the current ``mediated-egress`` zone is retained, clarify that it represents
 Binnacle-mediated protected/outcome-oriented egress, not all TCP/UDP application traffic
@@ -450,9 +484,10 @@ The implementation should make the following section-level changes.
 ``Network and Devices``
    Replace the universal network-denied block with default-deny plus explicit
    ``workspace-general-v1``/``workspace-check-v1`` application-network permission.
-   Define allowed application networking as normal IPv4/IPv6/DNS client/server behaviour
-   required for development, subject to explicit bind/exposure policy in later runtime
-   phases. Keep devices denied.
+   Define allowed application networking as normal IPv4/IPv6/DNS client/server
+   behaviour required for development. State normatively that development servers bind
+   to loopback by default and that non-loopback/LAN exposure requires an explicit
+   request/authority. Keep devices denied.
 
 ``Privilege and Kernel Controls``
    Split Bootstrap-required controls from target hardening. No text may imply that
@@ -463,12 +498,14 @@ The implementation should make the following section-level changes.
    ``command_run``.
 
 ``Tests``
-   Replace IPv4/IPv6/DNS denial tests for development profiles with connectivity-allowed
-   tests while keeping socket/credential/device/control-plane escape tests.
+   Replace IPv4/IPv6/DNS denial tests for development profiles with
+   connectivity-allowed tests while keeping socket/credential/device/control-plane
+   escape tests. Add loopback-default and explicit-non-loopback-exposure cases.
 
 ``Invariants``
    Replace "network denied" with the more precise invariant that development networking
-   grants no credential/control-plane/device/raw-network authority.
+   grants no credential/control-plane/device/raw-network authority and no implicit
+   non-loopback listener exposure.
 
 8.2 ``docs/security/capability-composition.md``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -478,8 +515,8 @@ The implementation should make the following section-level changes.
 
 ``Default-Denied Compositions``
    Remove the universal "general command execution to network" prohibition. Replace it
-   with prohibitions on credential-bearing, protected-data, control-plane, device, and
-   privileged composition.
+   with prohibitions on credential-bearing, protected-data, control-plane, device,
+   privileged, and implicit listener-exposure composition.
 
 ``Mediated Egress``
    Clarify that the mediator is required for exact Binnacle-controlled egress contracts
@@ -490,9 +527,13 @@ The implementation should make the following section-level changes.
    Preserve all raw-credential prohibitions and state explicitly that direct development
    networking does not grant a credential broker.
 
+``Listener Exposure``
+   State that loopback listeners belong to ordinary development authority while a
+   non-loopback/LAN listener requires an explicit exposure request/authority.
+
 ``Tests`` and ``Invariants``
-   Replace universal network denial with profile-sensitive network cases and permanent
-   authority-separation cases.
+   Replace universal network denial with profile-sensitive network cases, listener-bind
+   cases, and permanent authority-separation cases.
 
 9. Fixture changes
 ------------------
@@ -500,10 +541,11 @@ The implementation should make the following section-level changes.
 9.1 ``tests/fixtures/security/command-isolation.yaml``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Retain the canonical execution-ticket and digest-substitution cases unchanged except for
-policy-version updates.
+Retain canonical execution-ticket, digest-substitution, device-node,
+fork/process-tree, aggregate-quota, cleanup-failure, replay, digest-binding, and
+direct-subprocess-fallback cases unless their policy-version metadata must change.
 
-Replace or rename ``workspace-check-profile-consistent`` so that it expects:
+The development-profile consistency case must assert content equivalent to:
 
 .. code-block:: yaml
 
@@ -513,13 +555,13 @@ Replace or rename ``workspace-check-profile-consistent`` so that it expects:
      ipv4: allowed
      ipv6: allowed
      dns: allowed
+     loopback_listener: allowed
+     non_loopback_listener: explicit
+     explicit_exposure_required: true
      unix_sockets: denied
      inherited_sockets: denied
      raw_credentials: denied
      device_default: denied
-
-Replace the current negative ``ipv4-egress`` and ``ipv6-egress`` cases with positive
-cases for the development profile. Add a DNS case.
 
 Required positive cases:
 
@@ -532,10 +574,18 @@ Required positive cases:
 ``development-dns-resolution``
    A development profile may perform normal resolver access.
 
-Required negative cases:
+``development-loopback-listener-allowed``
+   A development server may bind to ``127.0.0.1`` or ``::1`` without requesting broader
+   exposure.
+
+Required negative/conditional cases:
 
 ``default-profile-network-denied``
    A profile with no explicit development-network override remains denied.
+
+``development-non-loopback-listener-requires-explicit-exposure``
+   A bind to ``0.0.0.0``, ``::``, or a specific non-loopback/LAN address is not ordinary
+   ambient development authority; it requires the explicit exposure request/authority.
 
 ``development-unix-control-socket-denied``
    Ordinary development networking does not expose protected Unix-domain sockets.
@@ -550,13 +600,12 @@ Required negative cases:
    SSH/GPG/other credential agents are unavailable to general commands unless a future
    dedicated operation explicitly provides an outcome-oriented authority.
 
-Keep the existing device-node, fork/process-tree, aggregate-quota, cleanup-failure,
-execution-ticket replay, digest-binding, and direct-subprocess-fallback cases.
-
 9.2 ``tests/fixtures/security/capability-composition.yaml``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Replace ``command-network-default-deny`` with two cases:
+Replace ``command-network-default-deny`` with explicit default and development cases.
+
+Required cases:
 
 ``command-default-profile-network-deny``
    Confirms fail-closed default policy.
@@ -565,7 +614,12 @@ Replace ``command-network-default-deny`` with two cases:
    Confirms the authorised development profile permits normal application networking
    while credential helpers, device access, and local control sockets remain false.
 
-Add:
+``development-loopback-listener-default``
+   Confirms the development profile may bind a local development listener to loopback.
+
+``development-non-loopback-listener-needs-explicit-exposure``
+   Confirms application-network authority alone is insufficient for non-loopback/LAN
+   listener exposure.
 
 ``development-network-does-not-grant-credential-broker``
    A network-capable development child cannot obtain or invoke reusable credential
@@ -585,8 +639,8 @@ mediated protected-data path.
 Phase 0 must add explicit semantic checks to ``scripts/validate_contracts.py`` rather
 than relying only on humans to notice future contradictions.
 
-10.1 New function: ``validate_bootstrap_command_profile_alignment``
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+10.1 ``validate_bootstrap_command_profile_alignment``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Add a top-level validator with signature:
 
@@ -605,47 +659,133 @@ It loads:
 The function appends errors through the existing ``fail(message: str) -> None`` helper.
 It must not raise for ordinary validation failures.
 
-Required invariants:
+Required policy invariants:
 
 #. ``workspace-general-v1`` exists and is visible/allowed;
 #. its effective network policy explicitly allows IPv4, IPv6, and DNS;
+#. its listener policy allows loopback by default and requires explicit authority for
+   non-loopback exposure;
 #. its effective policy explicitly denies Unix/control sockets, inherited sockets,
    raw-packet/network-admin authority, devices, raw credentials, helpers, and inherited
    credential agents;
-#. ``workspace-check-v1`` inherits or explicitly preserves the same authority boundaries;
+#. ``workspace-check-v1`` inherits or explicitly preserves the same authority
+   boundaries;
 #. ``self-management`` keeps ``command_run_visible: false`` and
    ``command_run_allowed: false``;
 #. capability composition declares command network authority as profile-sensitive rather
    than universally unavailable;
+#. capability composition encodes loopback-default/non-loopback-explicit exposure;
 #. capability composition still denies raw credentials, credential helpers, devices,
-   local control sockets, raw packet authority, and network-admin authority;
-#. the command-isolation fixture contains the required positive and negative network
-   regression cases;
-#. the capability-composition fixture contains both default-deny and development-network
-   cases.
+   local control sockets, raw packet authority, and network-admin authority.
 
-10.2 Helper functions
-~~~~~~~~~~~~~~~~~~~~~
+10.2 Fixture case lookup and content validation
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Do not introduce a generic policy framework in the validator. Add only small pure helpers
-if they reduce ambiguity, for example:
+The validator must not treat fixture case IDs as sufficient evidence. A required case
+with the right ID but the wrong ``profile``, ``kind``, or ``expect`` values must fail
+validation.
+
+Use small pure helpers rather than a generic fixture framework. Preferred signatures:
 
 .. code-block:: python
 
    def _mapping(value: Any, *, context: str) -> dict[str, Any] | None:
        ...
 
-   def _fixture_case_ids(document: Any) -> set[str]:
+   def _fixture_cases_by_id(document: Any, *, context: str) -> dict[str, dict[str, Any]]:
        ...
 
-   def _profile_network_policy(policy: dict[str, Any], profile_id: str) -> dict[str, Any] | None:
+   def _require_fixture_case(
+       cases: dict[str, dict[str, Any]],
+       case_id: str,
+       *,
+       kind: str | None = None,
+       profile: str | None = None,
+       expected: Mapping[str, Any] | None = None,
+   ) -> None:
        ...
 
-If profile inheritance must be interpreted, support only the simple single-parent
-inheritance shape already used by ``workspace-check-v1``. Do not build a runtime policy
-resolver in Phase 0.
+   def _profile_network_policy(
+       policy: dict[str, Any],
+       profile_id: str,
+   ) -> dict[str, Any] | None:
+       ...
 
-10.3 Self-hosting scope validator
+``_fixture_cases_by_id`` must reject malformed/duplicate IDs rather than silently
+letting the last item win.
+
+``_require_fixture_case`` must:
+
+* verify that the case exists;
+* compare ``kind`` when supplied;
+* compare ``profile`` when supplied;
+* require an ``expect`` mapping when ``expected`` is supplied;
+* compare every required expected authority field and fail if a field is missing or has
+  the wrong value;
+* ignore unrelated extra expectation fields so the validator remains focused on
+  Bootstrap invariants.
+
+If profile inheritance must be interpreted, support only the simple single-parent shape
+already used by ``workspace-check-v1``. Do not build a runtime policy resolver in Phase
+0.
+
+10.3 Required command-isolation fixture assertions
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The validator must assert semantic content for at least these cases:
+
+``development-ipv4-application-network``
+   Correct development profile/kind and ``ipv4: allowed``.
+
+``development-ipv6-application-network``
+   Correct development profile/kind and ``ipv6: allowed``.
+
+``development-dns-resolution``
+   Correct development profile/kind and ``dns: allowed``.
+
+``development-loopback-listener-allowed``
+   Correct development profile/kind and ``loopback_listener: allowed``.
+
+``development-non-loopback-listener-requires-explicit-exposure``
+   Correct development profile/kind and expectation equivalent to
+   ``non_loopback_listener: explicit`` plus ``explicit_exposure_required: true``.
+
+``default-profile-network-denied``
+   Correct default/non-development profile or explicit profile absence and expectations
+   showing application networking denied.
+
+``development-unix-control-socket-denied``
+   ``unix_sockets: denied``.
+
+``development-inherited-socket-denied``
+   ``inherited_sockets: denied``.
+
+``development-raw-packet-denied``
+   raw packet and network-admin authority denied.
+
+``development-credential-agent-denied``
+   raw credentials/helpers/inherited-agent authority denied.
+
+The profile-consistency case must additionally assert the combined effective authority
+set: allowed IPv4/IPv6/DNS and loopback listener; explicit non-loopback exposure; denied
+control/inherited/raw/credential/device authority.
+
+10.4 Required capability-composition fixture assertions
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The validator must assert semantic content for at least:
+
+* ``command-default-profile-network-deny``;
+* ``development-command-application-network-allowed``;
+* ``development-loopback-listener-default``;
+* ``development-non-loopback-listener-needs-explicit-exposure``;
+* ``development-network-does-not-grant-credential-broker``;
+* ``development-network-does-not-grant-protected-data``.
+
+For these cases it must compare their relevant ``kind``, ``profile`` where present, and
+``expect`` fields so a changed expectation cannot pass merely because the ID remains.
+
+10.5 Self-hosting scope validator
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Add:
@@ -670,7 +810,7 @@ If no machine-readable Phase 0 source yet represents those capabilities, do not 
 new operational manifest in Phase 0. Prose consistency remains review-enforced until the
 later Git/self-management phases create their reviewed contracts.
 
-10.4 ``main`` integration
+10.6 ``main`` integration
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Call both new validators from ``main()`` after YAML/JSON parse validation and before the
@@ -678,143 +818,122 @@ final error report:
 
 .. code-block:: python
 
-   validate_parse_and_schemas()
    validate_bootstrap_command_profile_alignment()
    validate_bootstrap_self_hosting_scope_alignment()
-   validate_tool_manifest()
-   ...
 
-The exact ordering may differ if needed, but parse validation must occur before semantic
-checks.
+The existing validator remains a deterministic repository check. Do not add network
+access, subprocess-based runtime probing, or environment-dependent behaviour.
 
-11. Schema-instance validator impact
-------------------------------------
-
-``scripts/validate_schema_instances.py`` should remain unchanged unless one of the policy
-or fixture files is directly validated against a JSON Schema there.
-
-The implementer must inspect it before editing. Do not add a new schema merely to make
-Phase 0 look more formal if the current policy files intentionally use validator-enforced
-shape.
-
-If a relevant existing schema is found, update that schema and representative instances
-as part of Phase 0 and document the reason in the implementation PR.
-
-12. Versioning rules
+11. Versioning rules
 --------------------
 
-Phase 0 changes policy semantics, so use a minor semantic-version bump:
+The Phase 0 implementation should use semantic contract/policy version bumps because
+behavioural meaning changes.
+
+Expected bumps:
 
 * ``docs/security/command-execution.md``: ``1.1.0`` -> ``1.2.0``;
 * ``docs/security/capability-composition.md``: ``1.1.0`` -> ``1.2.0``;
-* ``spec/policy/command-profiles.yaml``: ``policy_version 1.1.0`` -> ``1.2.0``;
-* ``spec/policy/capability-zones.yaml``: ``policy_version 1.1.0`` -> ``1.2.0``;
-* corresponding fixture ``policy_version`` values -> ``1.2.0``.
+* ``spec/policy/command-profiles.yaml`` policy version: ``1.1.0`` -> ``1.2.0``;
+* ``spec/policy/capability-zones.yaml`` policy version: ``1.1.0`` -> ``1.2.0``;
+* related fixture policy version metadata: ``1.1.0`` -> ``1.2.0``.
 
-Do not bump unrelated MCP, audit, release, schema, or Tool-manifest versions.
+Do not bump a serialization/schema version solely because policy values changed. If new
+fields such as listener-bind semantics are not accepted by an existing schema, update
+the smallest relevant schema/version as required and document that discovery in the
+implementation PR.
 
-13. Dependency impact
----------------------
-
-Phase 0 adds **no runtime, build, or project dependency**.
-
-The existing contract-validation workflow already installs:
-
-* ``PyYAML==6.0.3``;
-* ``jsonschema==4.26.0``.
-
-The Phase 0 validator changes use only:
-
-* the Python standard library;
-* existing ``yaml`` loading infrastructure;
-* existing ``jsonschema`` infrastructure if an existing schema is relevant.
-
-Do not add Pydantic, pytest, Hypothesis, FastMCP, SQLAlchemy, or ``uv`` project metadata in
-this phase. Those belong to later phases.
-
-14. Implementation sequence
+12. Repository search audit
 ---------------------------
 
-The Phase 0 implementation PR should be executed in this order:
-
-#. search the current tree for all superseded network/sandbox/self-hosting statements;
-#. record the exact contradictory files in the PR description;
-#. update ``spec/policy/command-profiles.yaml`` first;
-#. update ``spec/policy/capability-zones.yaml`` to the same authority model;
-#. update both security prose contracts to match the machine-readable semantics;
-#. update command-isolation fixtures;
-#. update capability-composition fixtures;
-#. reconcile any additional directly contradictory V17 prose found by the search;
-#. add the two validator functions and minimal helpers;
-#. run contract validation locally;
-#. run representative schema-instance validation;
-#. inspect the diff specifically for accidental weakening of credential/control-plane,
-   device, privileged, or protected-data restrictions;
-#. open the Phase 0 implementation PR and require review/CI before Phase 1 implementation
-   work begins.
-
-15. Exact search audit before editing
--------------------------------------
-
-Before making contract changes, search at least these tokens/phrases across ``docs/``,
-``spec/``, ``schemas/``, and ``tests/fixtures/``:
+Before editing, run repository searches that cover both prose and machine-readable
+sources. At minimum search for:
 
 ::
 
+   command_run
    mediated_egress_only
    network_available
-   network: denied
    ipv4: denied
    ipv6: denied
    dns: denied
    syscall_policy_required
    mandatory_access_control_required
-   command_run_supported
-   command_run
-   Git push
    push
    package
    service restart
-   self-management
+   self-update
+   0.0.0.0
+   loopback
+   listener
 
-For each hit, classify it as one of:
+Review every directly relevant hit. Record in the implementation PR description which
+additional contradictory files, if any, were changed and why.
 
-``must-change``
-   Directly contradicts the Bootstrap governing principles.
+The search is an audit aid, not a license to rewrite historical or post-Bootstrap design
+material that is not contradictory.
 
-``target-valid``
-   Describes a future hardening/production target and remains valid once labelled as such.
+13. Dependency impact
+---------------------
 
-``unrelated``
-   Uses the term in another contract and needs no change.
+Phase 0 introduces **no runtime or development dependency**.
 
-The implementation PR description should summarize this audit so reviewers can verify
-that Phase 0 did not over-edit unrelated contracts.
+Do not create ``pyproject.toml`` or ``uv.lock`` in this phase. Existing repository
+validation runs using the current scripts and their current CI dependencies.
 
-16. Security invariants after reconciliation
---------------------------------------------
+If the existing validator already depends on PyYAML/jsonschema or other libraries, reuse
+those dependencies. Do not add a policy or RST-processing framework merely for this
+phase.
 
-The following invariants are mandatory after Phase 0.
+14. Implementation boundaries and interfaces
+---------------------------------------------
 
-Development-network invariant
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Phase 0 contains no runtime application interfaces. The only new Python interfaces are
+private validation helpers in ``scripts/validate_contracts.py``.
 
-An authorised Bootstrap development command may use ordinary application networking,
-but that permission alone grants no additional local authority.
+The planned helper signatures are intentionally narrow and may remain module-private:
+
+.. code-block:: python
+
+   def validate_bootstrap_command_profile_alignment() -> None: ...
+   def validate_bootstrap_self_hosting_scope_alignment() -> None: ...
+   def _fixture_cases_by_id(
+       document: Any,
+       *,
+       context: str,
+   ) -> dict[str, dict[str, Any]]: ...
+   def _require_fixture_case(
+       cases: dict[str, dict[str, Any]],
+       case_id: str,
+       *,
+       kind: str | None = None,
+       profile: str | None = None,
+       expected: Mapping[str, Any] | None = None,
+   ) -> None: ...
+
+These are repository-validation implementation details and must not become application
+ports, domain types, or a general policy library.
+
+15. Security invariants
+-----------------------
 
 Credential invariant
 ~~~~~~~~~~~~~~~~~~~~
 
-General development commands receive no reusable Binnacle credentials, Git private-key
-material, GPG private-key material, bearer tokens, password material, or credential-agent
-authority.
+Normal application networking never makes reusable Binnacle, Git, SSH, GPG, or other
+credentials model-visible or available to general development commands.
 
 Control-plane invariant
 ~~~~~~~~~~~~~~~~~~~~~~~
 
-General development commands cannot reach Binnacle authentication, policy, audit,
-recovery, privileged-broker, executor-control, or protected management IPC merely
-because network access is enabled.
+Normal networking never grants the privileged-broker socket, executor control socket,
+Binnacle protected IPC, inherited descriptors, or other protected local sockets.
+
+Listener-exposure invariant
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Development servers bind to loopback by default. Non-loopback/LAN exposure requires an
+explicit request/authority. Ordinary network permission alone is insufficient.
 
 Device invariant
 ~~~~~~~~~~~~~~~~
@@ -850,131 +969,154 @@ Deferring advanced seccomp/MAC/namespace hardening does not create a direct-subp
 fallback in the MCP application process. Phase 7 must still use the independent
 unprivileged executor boundary.
 
-17. Test/fixture acceptance matrix
+16. Test/fixture acceptance matrix
 ----------------------------------
 
-+--------------------------------------------------+----------+-----------------------------------------------+
-| Case                                             | Expected | Contract                                      |
-+==================================================+==========+===============================================+
-| Default command profile IPv4                    | denied   | fail-closed default                           |
-+--------------------------------------------------+----------+-----------------------------------------------+
-| Development profile IPv4                        | allowed  | Bootstrap development networking              |
-+--------------------------------------------------+----------+-----------------------------------------------+
-| Development profile IPv6                        | allowed  | Bootstrap development networking              |
-+--------------------------------------------------+----------+-----------------------------------------------+
-| Development profile DNS                         | allowed  | Bootstrap development networking              |
-+--------------------------------------------------+----------+-----------------------------------------------+
-| Development profile protected Unix socket       | denied   | control-plane separation                      |
-+--------------------------------------------------+----------+-----------------------------------------------+
-| Inherited network/control socket                 | denied   | descriptor separation                         |
-+--------------------------------------------------+----------+-----------------------------------------------+
-| Raw packet / network-admin capability            | denied   | privilege separation                          |
-+--------------------------------------------------+----------+-----------------------------------------------+
-| Raw credential material                         | denied   | credential separation                         |
-+--------------------------------------------------+----------+-----------------------------------------------+
-| Inherited SSH/GPG credential agent               | denied   | credential separation                         |
-+--------------------------------------------------+----------+-----------------------------------------------+
-| Arbitrary device node                            | denied   | hardware separation                           |
-+--------------------------------------------------+----------+-----------------------------------------------+
-| Self-management through ``command_run``          | denied   | dedicated privileged path                     |
-+--------------------------------------------------+----------+-----------------------------------------------+
-| Development process -> ordinary Internet/LAN API | allowed  | normal software-development authority         |
-+--------------------------------------------------+----------+-----------------------------------------------+
-| Development networking -> protected-data export  | denied   | capability-composition/information boundary   |
-+--------------------------------------------------+----------+-----------------------------------------------+
-| Development networking -> credential broker      | denied   | outcome-oriented credential operation required|
-+--------------------------------------------------+----------+-----------------------------------------------+
+.. list-table:: Phase 0 network and authority acceptance matrix
+   :header-rows: 1
+   :widths: 48 14 38
 
-18. Local validation commands
+   * - Case
+     - Expected
+     - Contract
+   * - Default command profile IPv4
+     - denied
+     - fail-closed default
+   * - Development profile IPv4
+     - allowed
+     - Bootstrap development networking
+   * - Development profile IPv6
+     - allowed
+     - Bootstrap development networking
+   * - Development profile DNS
+     - allowed
+     - Bootstrap development networking
+   * - Development loopback listener
+     - allowed
+     - local development-server default
+   * - Development non-loopback/LAN listener without explicit exposure
+     - denied/explicit-required
+     - exposure is separate authority
+   * - Development non-loopback/LAN listener with explicit exposure
+     - allowed by explicit contract
+     - deliberate development exposure
+   * - Development profile protected Unix socket
+     - denied
+     - control-plane separation
+   * - Inherited network/control socket
+     - denied
+     - descriptor separation
+   * - Raw packet / network-admin capability
+     - denied
+     - privilege separation
+   * - Raw credential material
+     - denied
+     - credential separation
+   * - Inherited SSH/GPG credential agent
+     - denied
+     - credential separation
+   * - Arbitrary device node
+     - denied
+     - hardware separation
+   * - Self-management through ``command_run``
+     - denied
+     - dedicated privileged path
+   * - Development process -> ordinary Internet/LAN API
+     - allowed
+     - normal software-development authority
+   * - Development networking -> protected-data export
+     - denied
+     - capability-composition/information boundary
+   * - Development networking -> credential broker
+     - denied
+     - outcome-oriented credential operation required
+
+17. Local validation commands
 -----------------------------
 
-The Phase 0 implementation must run the existing repository validation commands directly:
+The implementation PR must run, at minimum:
 
-.. code-block:: console
+::
 
    python scripts/validate_contracts.py
    python scripts/validate_schema_instances.py
 
-If the repository pre-commit configuration is available and its dependencies can be
-installed without introducing project metadata, also run the relevant existing hooks.
-Do not create ``pyproject.toml`` or ``uv.lock`` in Phase 0 merely to run validation; those
-belong to Phase 1.
+If repository-local lint/documentation checks exist for reStructuredText or YAML, run
+them as well. Do not add a new documentation framework solely to validate this phase.
 
-19. Review checklist
+The authoritative remote gate is the repository ``Contract validation`` GitHub Actions
+workflow for the exact implementation commit.
+
+18. Review checklist
 --------------------
 
-Reviewers should verify all of the following before approving the Phase 0 implementation
-PR:
+A reviewer should verify all of the following:
 
-#. global/default command network remains fail-closed;
-#. only explicit development profiles receive ordinary application networking;
-#. IPv4, IPv6, and DNS are all represented, not an ambiguous single network boolean;
-#. Unix/control sockets remain denied;
-#. inherited sockets remain denied;
-#. raw packet and network-admin authority remain denied;
-#. raw credentials and inherited credential agents remain denied;
-#. arbitrary devices remain denied;
-#. ``self-management`` still cannot use ``command_run``;
-#. protected/restricted-data rules remain intact;
-#. mediated egress is narrowed, not deleted;
-#. advanced sandbox hardening is deferred only for Bootstrap and not falsely described as
-   permanently unnecessary;
-#. minimum Git/package/service/restart self-hosting scope is not contradicted elsewhere;
-#. policy/contract versions are coherent;
-#. validator checks prevent regression;
-#. fixtures cover both allowed networking and still-denied authority composition;
-#. no runtime/application code is added.
+* global/default command networking is still fail-closed;
+* authorised development profiles explicitly allow IPv4/IPv6/DNS application
+  networking;
+* loopback listener binding is the default for development servers;
+* non-loopback/LAN listener exposure requires explicit authority;
+* no raw credential/helper/agent authority leaks into general commands;
+* no protected Unix/control sockets or inherited descriptors leak into commands;
+* no raw packet/network-admin capability is granted;
+* no arbitrary device authority is granted;
+* ``self-management`` still cannot use ``command_run``;
+* advanced syscall/MAC/namespace controls are no longer Bootstrap promotion blockers;
+* mediated protected-data/credential-bearing egress semantics remain intact;
+* fixture cases verify their semantic assertions, not only their IDs;
+* self-hosting Git/package/service/restart exceptions remain narrow;
+* no runtime implementation or Phase 1 work entered the change.
 
-20. Acceptance checklist
-------------------------
+19. Deterministic acceptance checklist
+--------------------------------------
 
-Phase 0 planning is considered implemented when the subsequent contract-reconciliation
-PR demonstrates:
+Phase 0 implementation is accepted only when every item below is true:
 
-.. code-block:: text
+#. required prose contracts describe the profile-sensitive network model;
+#. required policy files encode default deny and explicit development-network authority;
+#. loopback-default/non-loopback-explicit listener semantics are encoded;
+#. fixture files contain positive development-network cases and permanent-boundary
+   negative cases;
+#. validator helpers check required fixture ``kind``, ``profile``, and relevant
+   ``expect`` values;
+#. malformed or duplicate fixture IDs fail validation;
+#. a case with the correct ID but a wrong/missing expected authority fails validation;
+#. current governing documents still declare the narrow signed-push/package/restart
+   self-hosting requirements;
+#. advanced sandbox hardening is clearly deferred without weakening the independent
+   executor requirement;
+#. contract and fixture version metadata are internally consistent;
+#. repository search has no un-reconciled Bootstrap-blocking contradiction;
+#. ``python scripts/validate_contracts.py`` passes;
+#. ``python scripts/validate_schema_instances.py`` passes;
+#. GitHub Actions ``Contract validation`` passes for the exact implementation head;
+#. the implementation PR contains no Phase 1/runtime application work.
 
-   [ ] Current-tree contradiction audit completed
-   [ ] command-execution.md reconciled and versioned
-   [ ] capability-composition.md reconciled and versioned
-   [ ] command-profiles.yaml reconciled and versioned
-   [ ] capability-zones.yaml reconciled and versioned
-   [ ] command-isolation fixture reconciled
-   [ ] capability-composition fixture reconciled
-   [ ] validator regression checks added
-   [ ] minimum Git/package/service/restart scope has no remaining direct contradiction
-   [ ] permanent credential/control-plane/device/protected-data boundaries preserved
-   [ ] validate_contracts.py passes
-   [ ] validate_schema_instances.py passes
-   [ ] GitHub Contract validation passes
-   [ ] AI/human review comments addressed and resolved
+20. Failure and rollback guidance
+---------------------------------
+
+Because Phase 0 changes only contracts, policy declarations, fixtures, and validators,
+rollback is a normal Git revert of the implementation commit.
+
+Do not partially merge policy semantics. If the prose, machine-readable policy,
+fixtures, and validator disagree, the Phase 0 exit gate has not passed.
+
+If an existing consumer prevents an intended policy-shape change, preserve the governing
+semantics using the smallest compatible representation and document the compatibility
+constraint in the implementation PR. Do not silently retain the old behavioural
+meaning merely to avoid a schema/version change.
 
 21. Handoff to Phase 1
 ----------------------
 
-Phase 1 detailed planning may become ``ready-to-design`` only after this Phase 0 detailed
-plan is merged, as required by ``index.rst``.
+Phase 1 detailed planning may begin only after this Phase 0 detailed plan has passed
+review/CI and merged, as required by ``docs/implementation/index.rst``.
 
-Phase 1 implementation must not start on top of unreconciled command/security contracts.
-The contract implementation produced from this plan is a prerequisite for later runtime
-promotion of ``command_run`` and self-hosting operations, but Phase 1 itself remains the
-project-skeleton phase and must not prematurely implement those operational capabilities.
+The actual Phase 0 implementation must then reconcile the contracts described here
+before affected runtime capability is promoted. Phase 1 remains the executable project
+skeleton phase and must not consume this plan as permission to implement later executor,
+Git, or privileged functionality early.
 
-22. Deferred decisions retained
--------------------------------
-
-Phase 0 deliberately leaves these decisions for later evidence/phases:
-
-* exact Phase 7 executor mechanism (for example systemd transient units versus another
-  systemd-backed supervisor implementation);
-* exact seccomp/MAC/namespace hardening profile;
-* exact network bind/exposure policy for development servers;
-* dedicated mediated HTTP implementation;
-* Git credential-broker implementation;
-* package-manager adapter implementation;
-* privileged-broker IPC messages;
-* host-confirmation behaviour for operational Tools;
-* production update/rollback architecture;
-* fleet or multi-device policy.
-
-None of these is needed to make the current contracts internally consistent enough to
-start Bootstrap implementation.
+Phase 0 intentionally establishes no runtime Python package or dependency. Its output is
+a coherent, reviewable contract baseline that later implementation phases can trust.
