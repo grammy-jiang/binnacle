@@ -35,3 +35,6 @@ jobs:
 
       - name: Validate contracts
         run: python scripts/validate_contracts.py
+
+      - name: Validate representative schema instances
+        run: python scripts/validate_schema_instances.py
