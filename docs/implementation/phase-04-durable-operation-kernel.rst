@@ -133,6 +133,9 @@ Phase 4 implementation is complete only when tests prove all of the following:
   before revealing retirement: another controller receives non-disclosing
   ``idempotency_owner_mismatch`` while the matching owner receives
   ``idempotency_key_retired`` without loading an operation;
+* prepared-nonce full-record compaction clears every preparation-only field while
+  retaining the exact tombstone duplicate-prevention facts required by the idempotency
+  contract, and database checks reject prepared-only state on a tombstone;
 * an unconsumed ``prepared_execution_nonce`` durably retains its prepared operation/input,
   expiry, exact current-state binding, registration boot identity, and same-boot monotonic
   deadline evidence before any new operation can be admitted;
@@ -161,6 +164,11 @@ Phase 4 implementation is complete only when tests prove all of the following:
 * lifecycle transitions reject every undeclared edge/cross-field combination;
 * ``state_version`` starts at 1 and strictly increases exactly once per real transition;
 * stale optimistic updates cannot silently overwrite newer state;
+* the Phase 4 policy schema has one exact non-circular layout: ``policy_decisions`` owns a
+  ``NOT NULL UNIQUE`` FK to ``operations`` and ``operations`` has no reverse policy FK or
+  current-decision column;
+* exactly one durable admission policy decision exists per operation; final OP-BOUNDARY
+  policy revalidation does not mutate or replace that admission record;
 * an operation is durably ``running`` before ``EffectBoundary.start`` is invoked;
 * required ``effect.intent_recorded`` audit failure before dispatch terminalizes the
   already-running operation as a proven no-effect failure when SQLite is still writable;
@@ -650,7 +658,6 @@ Columns:
 * ``effect_boundary_crossed_at`` nullable;
 * ``effect_reference`` nullable bounded protected internal opaque reference;
 * ``effect_reference_digest`` nullable SHA-256;
-* ``policy_decision_id`` nullable logical current-decision reference;
 * ``error_code`` / ``error_summary`` / ``retry_action`` nullable as lifecycle permits;
 * ``runtime_build_sha256`` / ``runtime_config_sha256``;
 * ``controller_profile_version_snapshot``;
@@ -703,15 +710,18 @@ Columns:
 * ``owner_controller_epoch`` nullable only after full-record compaction;
 * ``owner_controller_digest`` non-reversible digest retained for tombstones;
 * ``request_fingerprint_sha256`` nullable only for an unconsumed prepared-nonce binding;
-* ``prepared_operation_id`` nullable except required for ``prepared_execution_nonce``;
-* ``prepared_input_sha256`` nullable except required for ``prepared_execution_nonce``;
-* ``prepared_expires_at`` nullable except required for ``prepared_execution_nonce``;
-* ``prepared_state_binding_sha256`` nullable except required for
-  ``prepared_execution_nonce``;
-* ``prepared_registered_boot_id_digest`` nullable except required for an unconsumed
-  ``prepared_execution_nonce``;
-* ``prepared_monotonic_deadline_ns`` nullable except required for a prepared nonce created
-  in the current boot; it is meaningful only when boot IDs match;
+* ``prepared_operation_id`` required only when
+  ``record_kind=full`` and ``key_mode=prepared_execution_nonce``;
+* ``prepared_input_sha256`` required only when
+  ``record_kind=full`` and ``key_mode=prepared_execution_nonce``;
+* ``prepared_expires_at`` required only when
+  ``record_kind=full`` and ``key_mode=prepared_execution_nonce``;
+* ``prepared_state_binding_sha256`` required only when
+  ``record_kind=full`` and ``key_mode=prepared_execution_nonce``;
+* ``prepared_registered_boot_id_digest`` required only when
+  ``record_kind=full`` and ``key_mode=prepared_execution_nonce``;
+* ``prepared_monotonic_deadline_ns`` required for a full prepared nonce created in the
+  current boot; it is meaningful only when boot IDs match;
 * ``target_identity_sha256`` nullable;
 * ``maximum_effect_sha256`` nullable;
 * ``operation_id`` FK nullable only for a valid tombstone or an unconsumed
@@ -744,27 +754,32 @@ nonce. This is persistence infrastructure only: Phase 4 adds no MCP/CLI preparat
 endpoint and no production prepare/execute workflow.
 
 Database checks permit a full row with ``operation_id=NULL`` only for that unconsumed
-prepared-nonce shape and require all prepared semantic fields. Other full rows require an
-operation ID. Prepared fields are rejected for non-prepared key modes except where a
-reviewed later migration explicitly changes the contract. Successful first admission
-atomically creates the version-1 operation, stores its request fingerprint, and attaches
-its ``operation_id`` to the existing prepared binding.
+prepared-nonce shape and require all prepared semantic fields for a full prepared record.
+Other full rows require an operation ID. Prepared fields are rejected for non-prepared key
+modes. Every tombstone, including one whose historical ``key_mode`` is
+``prepared_execution_nonce``, requires all preparation-only fields to be NULL; tombstone
+checks therefore depend on ``record_kind`` rather than key mode alone. Successful first
+admission atomically creates the version-1 operation, stores its request fingerprint, and
+attaches its ``operation_id`` to the existing prepared binding.
 
 The full row owns controller ID/epoch; the tombstone contract requires only the
 non-reversible owner digest. Full-to-tombstone compaction, when explicitly exercised
 after the required retention window, atomically verifies terminal state, writes
-``terminal_class`` and ``retired_at``, retains key/tool/contract/fingerprint/owner digest,
-clears ``operation_id`` and raw owner ID/epoch as permitted, and leaves the global unique
-row in place. Phase 4 implements only explicit operator/test compaction, not broad
-automatic purge.
+``terminal_class`` and ``retired_at``, retains the contract-required key digest,
+``tool_name``, ``contract_version``, owner digest, request fingerprint and terminal class
+plus the table's device/epoch uniqueness scope, clears ``operation_id`` and raw owner
+ID/epoch, and clears every preparation-only field. It must not retain prepared operation,
+input, expiry, current-state, boot, or monotonic-deadline data in a tombstone. Phase 4
+implements only explicit operator/test compaction, not broad automatic purge.
 
 12.6 ``policy_decisions``
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Store bounded decision facts:
+Store exactly one durable admission decision per operation:
 
 * ``policy_decision_id`` PK;
-* ``operation_id`` FK;
+* ``operation_id`` **NOT NULL** FK to ``operations(operation_id)`` with a named
+  ``UNIQUE(operation_id)`` constraint;
 * ``policy_id`` / ``policy_version``;
 * domain ``decision`` enum ``allow``/``deny``;
 * ``controller_id`` / ``controller_epoch``;
@@ -780,12 +795,20 @@ No raw credential or unbounded user content is stored. The audit projection maps
 ``allow`` to audit-schema ``allowed`` and ``deny`` to ``rejected``; it does not emit an
 unrecognized payload value.
 
-Avoid a circular mandatory FK graph in migration ``0001``. ``policy_decisions.operation_id``
-is the authoritative FK to ``operations``. ``operations.policy_decision_id`` is either a
-nullable current-reference with an implementation-tested deferred/logical integrity
-check, or it is omitted and the current decision is selected through the operation FK.
-The implementation must choose one tested repository-consistent form; it must not create
-a migration cycle that SQLite/Alembic cannot safely upgrade/downgrade.
+The Phase 4 layout is fixed: ``policy_decisions.operation_id`` is the sole relational
+reference between these tables. ``operations`` has **no** ``policy_decision_id`` column
+and no reverse policy FK. The one-to-one admission decision is inserted after the
+version-1 operation exists and before ``received -> authorised`` or ``received ->
+rejected``; it is retrieved by joining/querying ``policy_decisions`` on ``operation_id``.
+The unique constraint rejects a second admission decision for the same operation and the
+FK rejects an orphan decision.
+
+Final OP-BOUNDARY policy revalidation is a fresh current-policy check, not a second
+admission decision and not an update/replacement of this row. Its current result is
+represented by the boundary outcome and schema-valid audit/evidence. If a later reviewed
+phase needs policy-decision history or multiple persisted revalidation decisions, that
+phase must introduce an explicit migration and semantics; migration ``0001`` does not
+leave that choice to the implementer.
 
 12.7 ``payload_objects``
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -828,9 +851,12 @@ This table is an index/projection, not authoritative security audit storage.
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Migration ``0001`` creates dependency roots before dependents: ``kernel_meta`` and
-``controller_owners`` first; ``operations`` next; then idempotency, policy, payload, and
-evidence/history tables in an order that satisfies the chosen FK layout. Migration tests
-inspect actual SQLite FK metadata and perform negative inserts. Do not assume ORM
+``controller_owners`` first; ``operations`` next; then ``operation_transitions``,
+``idempotency_bindings``, ``policy_decisions``, ``payload_objects``, and
+``operation_evidence``. ``policy_decisions`` has the one-way ``NOT NULL`` FK to
+``operations`` plus ``UNIQUE(operation_id)``; there is no reverse operations-to-policy
+reference and therefore no circular policy FK graph. Migration tests inspect actual
+SQLite FK/unique/check metadata and perform negative inserts. Do not assume ORM
 relationship declarations imply SQLite-enforced constraints.
 
 13. Domain lifecycle model
@@ -1183,7 +1209,7 @@ Failure behavior:
    ``new_state=received``, ``state_version=1``, ``effect_knowledge=none``, and a bounded
    reason code such as ``operation_received``;
 #. evaluate policy;
-#. durably persist policy decision;
+#. durably persist the operation's one admission policy decision;
 #. on deny, transition ``received -> rejected`` and append/fsync schema-valid
    ``policy.decision``/``operation.rejected`` and state-change audit as required;
 #. on allow, transition ``received -> authorised`` and commit;
@@ -1426,8 +1452,9 @@ host-facing pagination. Host-visible limits remain evidence-gated.
 
 Full idempotency records are retained through the contract's maximum retry and
 reconciliation window. Explicit compaction may then create the contract-exact tombstone
-described above. Uncertain/security-recovery evidence is not removed merely because
-ordinary result data expires.
+described above. Prepared-nonce compaction removes preparation-only fields; those facts
+are not part of the tombstone contract. Uncertain/security-recovery evidence is not
+removed merely because ordinary result data expires.
 
 Quota pressure rejects new protected payload production when safe eviction is impossible.
 No broad automatic destructive cleanup is introduced.
@@ -1756,6 +1783,8 @@ Hypothesis/state-machine tests cover:
 * uncertain never auto-retries;
 * cancellation cannot become cancelled without verification;
 * full-to-tombstone conversion retaining exact duplicate-prevention fields;
+* prepared-nonce full-to-tombstone conversion clears every preparation-only field while
+  retaining the exact contract tombstone facts and global uniqueness scope;
 * same-owner tombstone replay returns ``idempotency_key_retired`` with no operation load;
 * different-controller tombstone replay returns non-disclosing
   ``idempotency_owner_mismatch`` with no operation load or retirement disclosure.
@@ -1773,6 +1802,8 @@ fault points include:
 * crash after received commit/before received audit;
 * audit failure before policy;
 * policy deny;
+* duplicate admission policy decision for one operation is rejected by the unique
+  constraint and an orphan decision is rejected by the FK;
 * undeclared ``derived_member_key`` is rejected before any durable binding/operation;
 * prepared binding persisted, process restarted, then first use while valid;
 * prepared binding persisted, process restarted past expiry ->
@@ -1816,6 +1847,8 @@ fault points include:
 * concurrent duplicates from same owner;
 * matching full-record key from another owner;
 * same key/different fingerprint;
+* prepared-nonce full record compacts to a tombstone with preparation-only fields NULL;
+* a tombstone that retains any preparation-only field is rejected by schema checks;
 * same-owner tombstone replay -> ``idempotency_key_retired`` without operation load;
 * cross-controller tombstone replay -> ``idempotency_owner_mismatch`` without operation
   load or retirement disclosure;
@@ -1838,6 +1871,8 @@ Close every runtime object and reconstruct a fresh application. Verify:
 
 * operation identity/state/version remains resolvable;
 * idempotency binding reconciles;
+* exactly one persisted admission policy decision is retrievable by ``operation_id`` and
+  no reverse operation-to-policy pointer is required to reconstruct it;
 * undeclared ``derived_member_key`` remains rejected after fresh composition and cannot
   acquire a binding merely because in-memory registration state was lost/recreated;
 * an unconsumed prepared binding retains expiry, boot/monotonic ordering evidence, and
@@ -1899,6 +1934,12 @@ broad/unrecognized scopes cannot create allow. Environment/CLI cannot enable wil
 authority. Fixture policy for synthetic effects is separately composed and cannot ship as
 a production bypass.
 
+Persistence tests prove each operation may have exactly one admission policy row, the row
+cannot precede/orphan its operation, and it is queried by ``operation_id`` without a
+reverse ``operations.policy_decision_id`` reference. Final OP-BOUNDARY policy revalidation
+is a fresh check and cannot update, replace, or append another admission decision row; its
+result is captured through boundary/audit evidence.
+
 Boundary tests prove an earlier ``allow`` decision is never treated as perpetual
 authority. Every applicable predicate is re-read immediately before the effect boundary;
 changed/unavailable trust, policy/profile, target/freshness, reservation, privilege/
@@ -1915,6 +1956,11 @@ On Python 3.11/3.12/3.13 where applicable:
 
 * fresh ``alembic upgrade head``;
 * exact tables/indexes/checks/FKs exist;
+* ``policy_decisions.operation_id`` is ``NOT NULL``, FK-enforced and unique while
+  ``operations`` has no ``policy_decision_id`` column/reverse policy FK;
+* duplicate policy rows for one operation and orphan policy rows fail;
+* prepared full-record checks require preparation fields, prepared-nonce tombstones permit
+  those fields to be cleared, and tombstones retaining preparation-only fields fail;
 * invalid FK inserts fail with foreign keys enabled;
 * WAL and synchronous FULL are read back;
 * app refuses behind/ahead/unknown revision;
@@ -1939,6 +1985,8 @@ Phase 4 must preserve:
    admits no derived-member mode until a reviewed parent derivation exists;
 #. prepared execution nonces retain durable expiry, boot/monotonic ordering evidence, and
    exact current-state binding before first admission;
+#. prepared-nonce tombstones clear preparation-only state and retain only the contract
+   tombstone facts plus fields required for the global uniqueness scope;
 #. wall-clock rollback/reboot/loss of trusted time cannot extend operation deadlines;
 #. a newly admitted prepared operation revalidates expiry/current state as part of the
    final OP-BOUNDARY guard; stale/unprovable state cannot reach ``EffectBoundary.start``;
@@ -1957,6 +2005,8 @@ Phase 4 must preserve:
    returns ``idempotency_owner_mismatch`` and same-owner replay returns
    ``idempotency_key_retired`` without operation load;
 #. tombstone replay cannot load/revive an old operation;
+#. policy persistence has one non-circular one-to-one admission-decision FK layout;
+#. final policy revalidation cannot rewrite the historical admission decision;
 #. durable ``running`` dispatch marker exists before effect adapter invocation;
 #. required intent-audit failure with writable DB terminalizes the running operation as a
    known-no-effect failure before the audit failure gate; no effect call occurs;
@@ -2036,13 +2086,15 @@ Implement Phase 4 in this order:
 #. define domain types and lifecycle/idempotency/audit contract-parity tests, including
    fail-closed undeclared-derived-member handling;
 #. implement migration ``0001`` and SQLite runtime/pragmas/migration locking, including
-   trusted-time durable high-water/boot-ordering fields;
+   trusted-time durable high-water/boot-ordering fields, exact prepared tombstone checks,
+   and the one-way unique policy-decision FK;
 #. implement ``TrustedTimeSource``/guard and rollback/reboot/loss-of-trust tests;
 #. implement atomic create/find with full/tombstone exact semantics, including
-   owner-digest-before-retirement disclosure, and durable prepared-nonce pre-admission
-   registration/expiry/current-state validation;
+   owner-digest-before-retirement disclosure, contract-exact prepared-nonce compaction,
+   and durable prepared-nonce pre-admission registration/expiry/current-state validation;
 #. implement state-version transition store;
-#. implement fail-closed Bootstrap policy + durable decision recording;
+#. implement fail-closed Bootstrap policy + exactly one durable admission decision per
+   operation;
 #. implement JCS audit writer/verifier + storage-failure gate and exact payload-kind
    mapping, including no-effect terminalization on pre-dispatch intent-audit failure;
 #. implement retained payload filesystem adapter + metadata consistency;
@@ -2076,6 +2128,8 @@ A reviewer verifies:
 * undeclared ``derived_member_key`` fails closed before binding/operation creation;
 * prepared nonce registration durably binds prepared operation/input, expiry, exact
   current-state digest, boot identity, and monotonic deadline ordering;
+* prepared-nonce compaction clears every preparation-only field and leaves a
+  contract-exact tombstone that still enforces the global unique scope;
 * same-boot rollback and cross-boot untrusted/rolled-back wall time cannot extend the
   prepared lifetime;
 * prepared expiry/mismatch behavior survives fresh-process restart and uses the reviewed
@@ -2091,6 +2145,11 @@ A reviewer verifies:
   before retirement disclosure, return owner mismatch cross-controller, and return retired
   only to the matching owner without loading an operation;
 * raw keys never persist;
+* ``policy_decisions.operation_id`` is the sole ``NOT NULL UNIQUE`` policy FK,
+  ``operations`` has no reverse policy pointer, and exactly one admission decision is
+  persisted per operation;
+* final policy revalidation is fresh authority checking and does not overwrite the durable
+  admission decision;
 * audit authorization and durable running dispatch marker precede effect invocation;
 * ``effect.intent_recorded`` audit failure before dispatch terminalizes running work as
   known-no-effect when DB durability remains available and never calls the boundary;
@@ -2143,6 +2202,11 @@ Phase 4 implementation is accepted only when every item is true:
 #. fresh-process restart preserves and re-enforces prepared expiry/mismatch/time-ordering
    checks;
 #. valid prepared first admission atomically attaches exactly one version-1 operation;
+#. consumed prepared-nonce full records compact to tombstones with preparation-only fields
+   NULL while retaining key/tool/contract/owner digest/fingerprint/terminal class/retired
+   time and the table's device/epoch uniqueness scope;
+#. schema checks reject tombstones that retain prepared operation/input/expiry/state/boot/
+   monotonic-deadline fields;
 #. before that newly admitted prepared operation crosses an effect boundary, expiry and
    exact current-state digest are recomputed/revalidated again;
 #. every non-prepared operation also performs the complete applicable OP-BOUNDARY
@@ -2168,7 +2232,12 @@ Phase 4 implementation is accepted only when every item is true:
 #. different-controller tombstone replay returns non-disclosing
    ``idempotency_owner_mismatch`` without loading an operation or revealing retirement;
 #. production policy denies unknown/unreviewed consequential contracts;
-#. policy decision is durable before authorization/effect;
+#. ``policy_decisions.operation_id`` is a ``NOT NULL UNIQUE`` FK to ``operations`` and
+   ``operations`` contains no reverse policy-decision column/FK;
+#. orphan policy decisions and a second admission decision for one operation are rejected;
+#. exactly one admission policy decision is durable before authorization/rejection, is
+   retrievable by operation ID after restart, and is not rewritten by final policy
+   revalidation;
 #. received/authorization/effect-intent audit records are schema-valid and durable at the
    defined gates;
 #. durable ``running`` transition occurs before every effect-boundary call;
