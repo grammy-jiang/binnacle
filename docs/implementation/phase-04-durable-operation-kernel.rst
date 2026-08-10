@@ -1847,268 +1847,268 @@ Phase 4 must preserve:
 #. prepared execution nonces retain durable expiry, boot/monotonic ordering evidence, and
    exact current-state binding before first admission;
 #. wall-clock rollback/reboot/loss of trusted time cannot extend operation deadlines;
-+#. a newly admitted prepared operation revalidates expiry/current state as part of the
-+   final OP-BOUNDARY guard; stale/unprovable state cannot reach ``EffectBoundary.start``;
-+#. every operation mode revalidates all applicable OP-BOUNDARY authority/state predicates
-+   immediately before effect dispatch;
-+#. a concurrent cancellation/state-version change suppresses dispatch and cannot be
-+   overwritten by stale transition logic;
-+#. raw idempotency material never persists/discloses;
-+#. global duplicate prevention survives controller replacement and tombstoning;
-+#. operation ownership never transfers from key possession;
-+#. same key/different input never executes;
-+#. tombstone replay cannot load/revive an old operation;
-+#. durable ``running`` dispatch marker exists before effect adapter invocation;
-+#. required intent-audit failure with writable DB terminalizes the running operation as a
-+   known-no-effect failure before the audit failure gate; no effect call occurs;
-+#. missing start receipt cannot be treated as proof of no effect;
-+#. ``uncertain`` never auto-retries;
-+#. lifecycle/state-version rules are contract-exact;
-+#. main app process solely owns authoritative SQLite writes;
-+#. SQLite durability pragmas are verified;
-+#. migration cannot race the live writer;
-+#. audit uses existing schema, JCS+SHA-256, and ``payload.kind`` discriminator;
-+#. audit redaction precedes persistence/hash;
-+#. required audit failure blocks new effects;
-+#. payload cannot claim complete before durable bytes/digest;
-+#. result/audit state contains no reusable credential;
-+#. DB/audit/payload roots are not ordinary env/CLI-overridable;
-+#. systemd grants only narrow declared write paths;
-+#. policy is fail-closed with no general script/wildcard authority;
-+#. future executor/broker gets no DB access here;
-+#. host-facing operation projection remains evidence/contract gated.
-+
-+47. Quality and CI changes
-+--------------------------
-+
-+Extend the existing Python workflow; do not create a competing Phase 4 workflow. Keep all
-+prior gates and add commands equivalent to:
-+
-+.. code-block:: console
-+
-+   uv run alembic upgrade head
-+   uv run python scripts/verify_operation_kernel.py --temporary
-+   uv run pytest tests/property
-+   uv run pytest tests/integration/test_sqlite_operation_store.py
-+   uv run pytest tests/integration/test_idempotency_concurrency.py
-+   uv run pytest tests/integration/test_operation_restart_reconciliation.py
-+   uv run pytest tests/integration/test_audit_failure_gate.py
-+   uv run pytest tests/integration/test_boundary_revalidation.py
-+   uv run pytest tests/integration/test_trusted_time_restart.py
-+   uv run pytest tests/integration/test_payload_integrity.py
-+   uv run pytest tests/integration/test_phase4_systemd_state_permissions.py
-+
-+Use isolated temporary roots. CI never writes state into repository paths.
-+
-+Keep ``pip-audit``, strict MyPy, Ruff/format, Import Linter, branch coverage,
-+contract/schema validation, registry compiler checks, and explicit 3.11/3.12/3.13 lanes.
-+
-+48. Canonical local validation commands
-+---------------------------------------
-+
-+The implementation PR documents and passes at least:
-+
-+.. code-block:: console
-+
-+   uv sync --frozen
-+   uv run python scripts/compile_mcp_registry.py --check
-+   uv run ruff check .
-+   uv run ruff format --check .
-+   uv run mypy src/binnacle tests
-+   uv run lint-imports
-+   uv run pip-audit
-+   uv run coverage run -m pytest
-+   uv run coverage report
-+   uv run tox -e py311,py312,py313,quality
-+   uv run python scripts/validate_contracts.py
-+   uv run python scripts/validate_schema_instances.py
-+   uv run alembic upgrade head
-+   uv run python scripts/verify_operation_kernel.py --temporary
-+
-+On the development Pi, the operator separately performs the reviewed stop -> ``db
-+upgrade`` -> ``kernel verify`` -> start sequence.
-+
-+49. Implementation order
-+------------------------
-+
-+Implement Phase 4 in this order:
-+
-+#. add persistence/JCS dependencies, Alembic skeleton, and deployment write-path changes;
-+#. define domain types and lifecycle/idempotency/audit contract-parity tests, including
-+   fail-closed undeclared-derived-member handling;
-+#. implement migration ``0001`` and SQLite runtime/pragmas/migration locking, including
-+   trusted-time durable high-water/boot-ordering fields;
-+#. implement ``TrustedTimeSource``/guard and rollback/reboot/loss-of-trust tests;
-+#. implement atomic create/find with full/tombstone exact semantics and durable
-+   prepared-nonce pre-admission registration/expiry/current-state validation;
-+#. implement state-version transition store;
-+#. implement fail-closed Bootstrap policy + durable decision recording;
-+#. implement JCS audit writer/verifier + storage-failure gate and exact payload-kind
-+   mapping, including no-effect terminalization on pre-dispatch intent-audit failure;
-+#. implement retained payload filesystem adapter + metadata consistency;
-+#. implement mandatory generic/operation-specific OP-BOUNDARY revalidation;
-+#. implement ``OperationCoordinator`` through durable running dispatch marker, intent
-+   audit, final boundary revalidation, and unavailable production effect boundary;
-+#. implement synthetic counting effect/reconciler/prepared-state/boundary verifiers only
-+   in tests;
-+#. implement restart reconciliation and cancellation semantics;
-+#. add local DB/kernel/audit operator commands;
-+#. add property, crash-window, trusted-time, boundary, restart, audit, payload, migration,
-+   and systemd tests;
-+#. integrate internal kernel health without changing MCP Tool surface;
-+#. update CI/lock/import rules;
-+#. run full exact-interpreter validation;
-+#. stop before any host-facing write/status/cancel/result promotion.
-+
-+50. Review checklist
-+--------------------
-+
-+A reviewer verifies:
-+
-+* Phase 4 only; no Phase 5 design or Tool promotion;
-+* host-facing projection remains provisional/evidence-gated;
-+* persistence stack matches Bootstrap baseline;
-+* one authoritative SQLite writer and no executor/broker DB access;
-+* version-1 received creation and lifecycle edges match contracts;
-+* idempotency unique scope is non-null and contract-exact;
-+* undeclared ``derived_member_key`` fails closed before binding/operation creation;
-+* prepared nonce registration durably binds prepared operation/input, expiry, exact
-+  current-state digest, boot identity, and monotonic deadline ordering;
-+* same-boot rollback and cross-boot untrusted/rolled-back wall time cannot extend the
-+  prepared lifetime;
-+* prepared expiry/mismatch behavior survives fresh-process restart and uses the reviewed
-+  ``prepared_operation_expired`` / ``prepared_operation_mismatch`` codes when those facts
-+  are provable;
-+* loss of trusted time fails closed rather than pretending a nonce remains valid;
-+* final OP-BOUNDARY revalidation applies to **all** operation modes, not only prepared
-+  nonces, and rechecks every applicable authority/state/cancellation/recovery predicate;
-+* a concurrent state/version change is not overwritten by stale dispatch failure logic;
-+* tombstones contain exactly the required duplicate-prevention facts and return retired;
-+* raw keys never persist;
-+* audit authorization and durable running dispatch marker precede effect invocation;
-+* ``effect.intent_recorded`` audit failure before dispatch terminalizes running work as
-+  known-no-effect when DB durability remains available and never calls the boundary;
-+* a lost start receipt becomes uncertain, not known-no-effect;
-+* same-key conflict/cross-controller cases cannot create effect;
-+* persisted effect reference permits restart reconciliation;
-+* audit schema ``payload.kind`` and required fields are exact;
-+* DB/audit are not falsely one transaction;
-+* audit failure blocks new effects;
-+* payload completion is durable/digest truthful;
-+* Bootstrap policy is minimal/fail-closed;
-+* migrations are explicit and cannot race live service;
-+* systemd write authority is narrow under ``ProtectSystem=strict``;
-+* current five read-only MCP Tools remain unchanged;
-+* exact-head quality/CI passes.
-+
-+51. Deterministic acceptance checklist
-+--------------------------------------
-+
-+Phase 4 implementation is accepted only when every item is true:
-+
-+#. persistence/JCS dependencies are locked and support Python 3.11--3.13;
-+#. Alembic ``0001`` creates exactly the Phase 4 authoritative schema;
-+#. runtime never silently creates/migrates tables;
-+#. DB path is local/protected/separate from source/config/evaluation evidence;
-+#. systemd setup creates and grants only state/results/audit write roots;
-+#. every DB connection verifies foreign keys, WAL, FULL synchronous, and busy timeout;
-+#. migration mismatch/unavailable audit keeps consequential kernel unavailable;
-+#. live writer and ``db upgrade`` cannot run concurrently;
-+#. ``kernel_meta`` binds stable device epoch, schema-compatible audit epoch continuity,
-+   and durable trusted-time high-water/boot-ordering evidence;
-+#. controller ownership rows contain no reusable credential;
-+#. lifecycle state vocabulary/edges exactly match ``spec/operation/lifecycle.yaml``;
-+#. version 1 is ``NULL -> received`` and every later transition increments once;
-+#. invalid/stale transitions are rejected;
-+#. global idempotency index exactly matches contract scope with non-null key columns;
-+#. ``derived_member_key`` is rejected as ``idempotency_invalid`` before durable binding/
-+   operation creation until a reviewed parent contract/derivation exists;
-+#. raw caller key/prepared nonce never persists/logs/audits;
-+#. an unconsumed prepared nonce is durably registered with owner/device/Tool/contract,
-+   prepared operation/input, expiry, exact current-state binding, boot identity, and
-+   same-boot monotonic deadline before first use;
-+#. first use of an expired prepared nonce returns ``prepared_operation_expired`` and
-+   creates no operation/effect;
-+#. prepared operation/input/current-state mismatch returns
-+   ``prepared_operation_mismatch`` and creates no operation/effect;
-+#. same-boot wall-clock rollback cannot extend a prepared lifetime;
-+#. reboot/loss of trusted wall time or a wall time behind durable high-water fails closed
-+   without creating/crossing an effect;
-+#. fresh-process restart preserves and re-enforces prepared expiry/mismatch/time-ordering
-+   checks;
-+#. valid prepared first admission atomically attaches exactly one version-1 operation;
-+#. before that newly admitted prepared operation crosses an effect boundary, expiry and
-+   exact current-state digest are recomputed/revalidated again;
-+#. every non-prepared operation also performs the complete applicable OP-BOUNDARY
-+   revalidation immediately before ``EffectBoundary.start``;
-+#. changed controller/device trust, policy/profile, state version/cancellation,
-+   target/freshness/reservation/privilege/interlock/recovery state suppresses the effect
-+   call when applicable;
-+#. a concurrent lifecycle change cannot be overwritten by a stale no-effect failure;
-+#. a later retry of an already admitted/dispatched prepared nonce returns retained work
-+   rather than creating or redispatching a fresh operation when preparation has expired;
-+#. concurrent same-key admission creates one binding/operation;
-+#. same owner + same key + same fingerprint returns retained operation;
-+#. same key + different fingerprint returns conflict/no second operation;
-+#. different controller + matching key reveals no old operation and creates no effect;
-+#. tombstone retains key/tool/contract/owner digest/fingerprint/terminal class/retired time;
-+#. tombstone replay returns ``idempotency_key_retired`` without loading an operation;
-+#. production policy denies unknown/unreviewed consequential contracts;
-+#. policy decision is durable before authorization/effect;
-+#. received/authorization/effect-intent audit records are schema-valid and durable at the
-+   defined gates;
-+#. durable ``running`` transition occurs before every effect-boundary call;
-+#. pre-dispatch ``effect.intent_recorded`` audit failure with writable DB commits a
-+   ``running -> failed`` known-no-effect outcome and calls no effect boundary;
-+#. inability to commit that failure still calls no boundary and is reconciled
-+   conservatively after restart;
-+#. crash/lost response during ``start`` cannot become a known-no-effect assertion;
-+#. production composition has no real effect adapter;
-+#. synthetic effect proves at most one effect under concurrency/response loss;
-+#. restart never redispatches automatically;
-+#. running-without-receipt/reference becomes or remains uncertain unless separate durable
-+   no-effect evidence exists;
-+#. persisted opaque external reference can be reconciled after restart;
-+#. cancellation cannot claim cancelled without verification;
-+#. audit canonicalization is exact RFC 8785 JCS + SHA-256;
-+#. audit uses only schema-supported ``payload.kind`` values and all required fields;
-+#. audit chain detects modification/deletion/reorder/truncation/fork;
-+#. audit failure disables new consequential admission;
-+#. emergency journal is bounded/fail-restricted;
-+#. payload bytes are atomically finalized/fsynced/digest-verified before complete metadata;
-+#. payload orphan/corruption/quota pressure is detected without silent completeness;
-+#. operation evidence is bounded and not authoritative audit storage;
-+#. fresh-process restart reconstructs DB/idempotency/audit/payload/trusted-time truth;
-+#. local DB/kernel/audit commands expose no secrets/raw payloads and migration is safe;
-+#. existing Phase 3 authenticated read-only MCP behavior remains regression-tested;
-+#. no MCP Tool/Resource/Task/Prompt/manifest change exposes Phase 4 APIs;
-+#. no workspace/command/Git/package/service/privileged/hardware effect capability exists;
-+#. Ruff/format/strict MyPy/Import Linter/coverage/``pip-audit`` pass;
-+#. property/fault/migration/integration/systemd tests pass on explicit interpreter lanes;
-+#. contract/schema/compiler validation passes;
-+#. GitHub Actions is green for the exact implementation head.
-+
-+52. Provisional freeze points after Phase 3 evidence
-+----------------------------------------------------
-+
-+Before a later phase exposes the kernel through ChatGPT, re-check real Phase 3 evidence
-+and freeze only host-dependent projection items actually supported by it: status/result
-+interaction, effective result limits, authenticated scope/profile mapping, confirmation
-+requirements, optional Tasks/Resources, catalogue refresh, and host retry/reconnect
-+behavior.
-+
-+If Phase 3 evidence is absent, expired, or contradictory, internal Phase 4 implementation
-+may pass its kernel tests but no host-facing consequential projection is promoted.
-+
-+53. Planning stop rule
-+----------------------
-+
-+This plan is complete when a coding agent can implement/test authoritative SQLite state,
-+exact lifecycle/idempotency semantics, safe tombstones, trusted-time deadline ordering,
-+mandatory consequential-boundary revalidation, minimal policy, schema-valid append-only
-+audit, retained payload/evidence storage, durable pre-dispatch state, reconciliation,
-+local diagnostics, deployment permissions, migrations, and fault/property tests without
-+deciding later operation-specific authority or host behavior.
-+
-+Stop here. Do not add the disposable write-probe workflow or any later operational
-+capability in this document.
+#. a newly admitted prepared operation revalidates expiry/current state as part of the
+   final OP-BOUNDARY guard; stale/unprovable state cannot reach ``EffectBoundary.start``;
+#. every operation mode revalidates all applicable OP-BOUNDARY authority/state predicates
+   immediately before effect dispatch;
+#. a concurrent cancellation/state-version change suppresses dispatch and cannot be
+   overwritten by stale transition logic;
+#. raw idempotency material never persists/discloses;
+#. global duplicate prevention survives controller replacement and tombstoning;
+#. operation ownership never transfers from key possession;
+#. same key/different input never executes;
+#. tombstone replay cannot load/revive an old operation;
+#. durable ``running`` dispatch marker exists before effect adapter invocation;
+#. required intent-audit failure with writable DB terminalizes the running operation as a
+   known-no-effect failure before the audit failure gate; no effect call occurs;
+#. missing start receipt cannot be treated as proof of no effect;
+#. ``uncertain`` never auto-retries;
+#. lifecycle/state-version rules are contract-exact;
+#. main app process solely owns authoritative SQLite writes;
+#. SQLite durability pragmas are verified;
+#. migration cannot race the live writer;
+#. audit uses existing schema, JCS+SHA-256, and ``payload.kind`` discriminator;
+#. audit redaction precedes persistence/hash;
+#. required audit failure blocks new effects;
+#. payload cannot claim complete before durable bytes/digest;
+#. result/audit state contains no reusable credential;
+#. DB/audit/payload roots are not ordinary env/CLI-overridable;
+#. systemd grants only narrow declared write paths;
+#. policy is fail-closed with no general script/wildcard authority;
+#. future executor/broker gets no DB access here;
+#. host-facing operation projection remains evidence/contract gated.
+
+47. Quality and CI changes
+--------------------------
+
+Extend the existing Python workflow; do not create a competing Phase 4 workflow. Keep all
+prior gates and add commands equivalent to:
+
+.. code-block:: console
+
+   uv run alembic upgrade head
+   uv run python scripts/verify_operation_kernel.py --temporary
+   uv run pytest tests/property
+   uv run pytest tests/integration/test_sqlite_operation_store.py
+   uv run pytest tests/integration/test_idempotency_concurrency.py
+   uv run pytest tests/integration/test_operation_restart_reconciliation.py
+   uv run pytest tests/integration/test_audit_failure_gate.py
+   uv run pytest tests/integration/test_boundary_revalidation.py
+   uv run pytest tests/integration/test_trusted_time_restart.py
+   uv run pytest tests/integration/test_payload_integrity.py
+   uv run pytest tests/integration/test_phase4_systemd_state_permissions.py
+
+Use isolated temporary roots. CI never writes state into repository paths.
+
+Keep ``pip-audit``, strict MyPy, Ruff/format, Import Linter, branch coverage,
+contract/schema validation, registry compiler checks, and explicit 3.11/3.12/3.13 lanes.
+
+48. Canonical local validation commands
+---------------------------------------
+
+The implementation PR documents and passes at least:
+
+.. code-block:: console
+
+   uv sync --frozen
+   uv run python scripts/compile_mcp_registry.py --check
+   uv run ruff check .
+   uv run ruff format --check .
+   uv run mypy src/binnacle tests
+   uv run lint-imports
+   uv run pip-audit
+   uv run coverage run -m pytest
+   uv run coverage report
+   uv run tox -e py311,py312,py313,quality
+   uv run python scripts/validate_contracts.py
+   uv run python scripts/validate_schema_instances.py
+   uv run alembic upgrade head
+   uv run python scripts/verify_operation_kernel.py --temporary
+
+On the development Pi, the operator separately performs the reviewed stop -> ``db
+upgrade`` -> ``kernel verify`` -> start sequence.
+
+49. Implementation order
+------------------------
+
+Implement Phase 4 in this order:
+
+#. add persistence/JCS dependencies, Alembic skeleton, and deployment write-path changes;
+#. define domain types and lifecycle/idempotency/audit contract-parity tests, including
+   fail-closed undeclared-derived-member handling;
+#. implement migration ``0001`` and SQLite runtime/pragmas/migration locking, including
+   trusted-time durable high-water/boot-ordering fields;
+#. implement ``TrustedTimeSource``/guard and rollback/reboot/loss-of-trust tests;
+#. implement atomic create/find with full/tombstone exact semantics and durable
+   prepared-nonce pre-admission registration/expiry/current-state validation;
+#. implement state-version transition store;
+#. implement fail-closed Bootstrap policy + durable decision recording;
+#. implement JCS audit writer/verifier + storage-failure gate and exact payload-kind
+   mapping, including no-effect terminalization on pre-dispatch intent-audit failure;
+#. implement retained payload filesystem adapter + metadata consistency;
+#. implement mandatory generic/operation-specific OP-BOUNDARY revalidation;
+#. implement ``OperationCoordinator`` through durable running dispatch marker, intent
+   audit, final boundary revalidation, and unavailable production effect boundary;
+#. implement synthetic counting effect/reconciler/prepared-state/boundary verifiers only
+   in tests;
+#. implement restart reconciliation and cancellation semantics;
+#. add local DB/kernel/audit operator commands;
+#. add property, crash-window, trusted-time, boundary, restart, audit, payload, migration,
+   and systemd tests;
+#. integrate internal kernel health without changing MCP Tool surface;
+#. update CI/lock/import rules;
+#. run full exact-interpreter validation;
+#. stop before any host-facing write/status/cancel/result promotion.
+
+50. Review checklist
+--------------------
+
+A reviewer verifies:
+
+* Phase 4 only; no Phase 5 design or Tool promotion;
+* host-facing projection remains provisional/evidence-gated;
+* persistence stack matches Bootstrap baseline;
+* one authoritative SQLite writer and no executor/broker DB access;
+* version-1 received creation and lifecycle edges match contracts;
+* idempotency unique scope is non-null and contract-exact;
+* undeclared ``derived_member_key`` fails closed before binding/operation creation;
+* prepared nonce registration durably binds prepared operation/input, expiry, exact
+  current-state digest, boot identity, and monotonic deadline ordering;
+* same-boot rollback and cross-boot untrusted/rolled-back wall time cannot extend the
+  prepared lifetime;
+* prepared expiry/mismatch behavior survives fresh-process restart and uses the reviewed
+  ``prepared_operation_expired`` / ``prepared_operation_mismatch`` codes when those facts
+  are provable;
+* loss of trusted time fails closed rather than pretending a nonce remains valid;
+* final OP-BOUNDARY revalidation applies to **all** operation modes, not only prepared
+  nonces, and rechecks every applicable authority/state/cancellation/recovery predicate;
+* a concurrent state/version change is not overwritten by stale dispatch failure logic;
+* tombstones contain exactly the required duplicate-prevention facts and return retired;
+* raw keys never persist;
+* audit authorization and durable running dispatch marker precede effect invocation;
+* ``effect.intent_recorded`` audit failure before dispatch terminalizes running work as
+  known-no-effect when DB durability remains available and never calls the boundary;
+* a lost start receipt becomes uncertain, not known-no-effect;
+* same-key conflict/cross-controller cases cannot create effect;
+* persisted effect reference permits restart reconciliation;
+* audit schema ``payload.kind`` and required fields are exact;
+* DB/audit are not falsely one transaction;
+* audit failure blocks new effects;
+* payload completion is durable/digest truthful;
+* Bootstrap policy is minimal/fail-closed;
+* migrations are explicit and cannot race live service;
+* systemd write authority is narrow under ``ProtectSystem=strict``;
+* current five read-only MCP Tools remain unchanged;
+* exact-head quality/CI passes.
+
+51. Deterministic acceptance checklist
+--------------------------------------
+
+Phase 4 implementation is accepted only when every item is true:
+
+#. persistence/JCS dependencies are locked and support Python 3.11--3.13;
+#. Alembic ``0001`` creates exactly the Phase 4 authoritative schema;
+#. runtime never silently creates/migrates tables;
+#. DB path is local/protected/separate from source/config/evaluation evidence;
+#. systemd setup creates and grants only state/results/audit write roots;
+#. every DB connection verifies foreign keys, WAL, FULL synchronous, and busy timeout;
+#. migration mismatch/unavailable audit keeps consequential kernel unavailable;
+#. live writer and ``db upgrade`` cannot run concurrently;
+#. ``kernel_meta`` binds stable device epoch, schema-compatible audit epoch continuity,
+   and durable trusted-time high-water/boot-ordering evidence;
+#. controller ownership rows contain no reusable credential;
+#. lifecycle state vocabulary/edges exactly match ``spec/operation/lifecycle.yaml``;
+#. version 1 is ``NULL -> received`` and every later transition increments once;
+#. invalid/stale transitions are rejected;
+#. global idempotency index exactly matches contract scope with non-null key columns;
+#. ``derived_member_key`` is rejected as ``idempotency_invalid`` before durable binding/
+   operation creation until a reviewed parent contract/derivation exists;
+#. raw caller key/prepared nonce never persists/logs/audits;
+#. an unconsumed prepared nonce is durably registered with owner/device/Tool/contract,
+   prepared operation/input, expiry, exact current-state binding, boot identity, and
+   same-boot monotonic deadline before first use;
+#. first use of an expired prepared nonce returns ``prepared_operation_expired`` and
+   creates no operation/effect;
+#. prepared operation/input/current-state mismatch returns
+   ``prepared_operation_mismatch`` and creates no operation/effect;
+#. same-boot wall-clock rollback cannot extend a prepared lifetime;
+#. reboot/loss of trusted wall time or a wall time behind durable high-water fails closed
+   without creating/crossing an effect;
+#. fresh-process restart preserves and re-enforces prepared expiry/mismatch/time-ordering
+   checks;
+#. valid prepared first admission atomically attaches exactly one version-1 operation;
+#. before that newly admitted prepared operation crosses an effect boundary, expiry and
+   exact current-state digest are recomputed/revalidated again;
+#. every non-prepared operation also performs the complete applicable OP-BOUNDARY
+   revalidation immediately before ``EffectBoundary.start``;
+#. changed controller/device trust, policy/profile, state version/cancellation,
+   target/freshness/reservation/privilege/interlock/recovery state suppresses the effect
+   call when applicable;
+#. a concurrent lifecycle change cannot be overwritten by a stale no-effect failure;
+#. a later retry of an already admitted/dispatched prepared nonce returns retained work
+   rather than creating or redispatching a fresh operation when preparation has expired;
+#. concurrent same-key admission creates one binding/operation;
+#. same owner + same key + same fingerprint returns retained operation;
+#. same key + different fingerprint returns conflict/no second operation;
+#. different controller + matching key reveals no old operation and creates no effect;
+#. tombstone retains key/tool/contract/owner digest/fingerprint/terminal class/retired time;
+#. tombstone replay returns ``idempotency_key_retired`` without loading an operation;
+#. production policy denies unknown/unreviewed consequential contracts;
+#. policy decision is durable before authorization/effect;
+#. received/authorization/effect-intent audit records are schema-valid and durable at the
+   defined gates;
+#. durable ``running`` transition occurs before every effect-boundary call;
+#. pre-dispatch ``effect.intent_recorded`` audit failure with writable DB commits a
+   ``running -> failed`` known-no-effect outcome and calls no effect boundary;
+#. inability to commit that failure still calls no boundary and is reconciled
+   conservatively after restart;
+#. crash/lost response during ``start`` cannot become a known-no-effect assertion;
+#. production composition has no real effect adapter;
+#. synthetic effect proves at most one effect under concurrency/response loss;
+#. restart never redispatches automatically;
+#. running-without-receipt/reference becomes or remains uncertain unless separate durable
+   no-effect evidence exists;
+#. persisted opaque external reference can be reconciled after restart;
+#. cancellation cannot claim cancelled without verification;
+#. audit canonicalization is exact RFC 8785 JCS + SHA-256;
+#. audit uses only schema-supported ``payload.kind`` values and all required fields;
+#. audit chain detects modification/deletion/reorder/truncation/fork;
+#. audit failure disables new consequential admission;
+#. emergency journal is bounded/fail-restricted;
+#. payload bytes are atomically finalized/fsynced/digest-verified before complete metadata;
+#. payload orphan/corruption/quota pressure is detected without silent completeness;
+#. operation evidence is bounded and not authoritative audit storage;
+#. fresh-process restart reconstructs DB/idempotency/audit/payload/trusted-time truth;
+#. local DB/kernel/audit commands expose no secrets/raw payloads and migration is safe;
+#. existing Phase 3 authenticated read-only MCP behavior remains regression-tested;
+#. no MCP Tool/Resource/Task/Prompt/manifest change exposes Phase 4 APIs;
+#. no workspace/command/Git/package/service/privileged/hardware effect capability exists;
+#. Ruff/format/strict MyPy/Import Linter/coverage/``pip-audit`` pass;
+#. property/fault/migration/integration/systemd tests pass on explicit interpreter lanes;
+#. contract/schema/compiler validation passes;
+#. GitHub Actions is green for the exact implementation head.
+
+52. Provisional freeze points after Phase 3 evidence
+----------------------------------------------------
+
+Before a later phase exposes the kernel through ChatGPT, re-check real Phase 3 evidence
+and freeze only host-dependent projection items actually supported by it: status/result
+interaction, effective result limits, authenticated scope/profile mapping, confirmation
+requirements, optional Tasks/Resources, catalogue refresh, and host retry/reconnect
+behavior.
+
+If Phase 3 evidence is absent, expired, or contradictory, internal Phase 4 implementation
+may pass its kernel tests but no host-facing consequential projection is promoted.
+
+53. Planning stop rule
+----------------------
+
+This plan is complete when a coding agent can implement/test authoritative SQLite state,
+exact lifecycle/idempotency semantics, safe tombstones, trusted-time deadline ordering,
+mandatory consequential-boundary revalidation, minimal policy, schema-valid append-only
+audit, retained payload/evidence storage, durable pre-dispatch state, reconciliation,
+local diagnostics, deployment permissions, migrations, and fault/property tests without
+deciding later operation-specific authority or host behavior.
+
+Stop here. Do not add the disposable write-probe workflow or any later operational
+capability in this document.
