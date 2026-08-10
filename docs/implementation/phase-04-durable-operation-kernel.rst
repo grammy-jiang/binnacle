@@ -136,11 +136,15 @@ Phase 4 implementation is complete only when tests prove all of the following:
 * prepared-nonce full-record compaction clears every preparation-only field while
   retaining the exact tombstone duplicate-prevention facts required by the idempotency
   contract, and database checks reject prepared-only state on a tombstone;
+* an expired unconsumed prepared nonce already has its contract request fingerprint
+  durably bound, is durably classified ``prepared_operation_expired`` without creating an
+  operation, and can later compact to a contract-exact tombstone after the required
+  retention window;
 * an unconsumed ``prepared_execution_nonce`` durably retains its prepared operation/input,
-  expiry, exact current-state binding, registration boot identity, and same-boot monotonic
-  deadline evidence before any new operation can be admitted;
-* prepared-nonce expiry and prepared input/current-state mismatch remain enforceable after
-  a fresh-process restart, returning ``prepared_operation_expired`` or
+  request fingerprint, expiry, exact current-state binding, registration boot identity,
+  and same-boot monotonic deadline evidence before any new operation can be admitted;
+* prepared-nonce expiry and prepared input/current-state/fingerprint mismatch remain
+  enforceable after a fresh-process restart, returning ``prepared_operation_expired`` or
   ``prepared_operation_mismatch`` before operation creation;
 * wall-clock rollback, reboot with untrusted time, or loss of trusted wall time cannot
   extend a prepared nonce lifetime; the kernel fails closed without operation/effect when
@@ -167,8 +171,10 @@ Phase 4 implementation is complete only when tests prove all of the following:
 * the Phase 4 policy schema has one exact non-circular layout: ``policy_decisions`` owns a
   ``NOT NULL UNIQUE`` FK to ``operations`` and ``operations`` has no reverse policy FK or
   current-decision column;
-* exactly one durable admission policy decision exists per operation; final OP-BOUNDARY
-  policy revalidation does not mutate or replace that admission record;
+* every operation that leaves ``received`` has exactly one durable admission decision;
+  restart recovery creates an explicit fail-closed recovery deny atomically with rejection
+  when a crash left a received operation without one;
+* final OP-BOUNDARY policy revalidation does not mutate or replace the admission record;
 * an operation is durably ``running`` before ``EffectBoundary.start`` is invoked;
 * required ``effect.intent_recorded`` audit failure before dispatch terminalizes the
   already-running operation as a proven no-effect failure when SQLite is still writable;
@@ -188,7 +194,9 @@ Phase 4 implementation is complete only when tests prove all of the following:
 * retained payload metadata cannot disagree silently with filesystem bytes;
 * payload writes are atomic/finalized or explicitly incomplete;
 * Bootstrap policy is fail-closed and durably correlated with the operation;
-* systemd hardening still permits only the new declared state/result/audit write paths;
+* systemd hardening still permits only the new declared state/result/audit write paths and
+  recreates the application-owned ephemeral ``/run/binnacle`` lock directory on every
+  service start/boot;
 * migration cannot run concurrently with the live authoritative DB writer;
 * no production adapter performs a real consequential effect;
 * no new host-facing MCP Tool/Resource/Task/Prompt is registered;
@@ -455,9 +463,18 @@ runtime/ephemeral control state; source remains under ``/srv/binnacle-dev/repo``
 modes no broader than required for that identity. Evaluation evidence ownership from
 Phase 3 is not broadened.
 
+``/run`` is tmpfs/ephemeral and the Phase 3 setup-time creation of ``/run/binnacle`` does
+not survive a normal reboot. Phase 4 therefore updates ``binnacle-dev.service`` to use
+``RuntimeDirectory=binnacle`` and ``RuntimeDirectoryMode=0750`` (or an exactly equivalent
+systemd-managed runtime-directory declaration) so systemd recreates the directory before
+the service starts and owns it as the configured non-root service identity/group. The
+runtime directory contains only ephemeral locks/control state; it is not durable evidence
+and is never used as correctness authority after process restart. Do not solve this with a
+broad writable ``/run`` exception or a privileged pre-start shell command.
+
 Phase 3 uses ``ProtectSystem=strict``. Therefore Phase 4 must explicitly update
-``binnacle-dev.service`` so the service can write **only** the new declared paths. Prefer
-narrow ``ReadWritePaths=`` entries for:
+``binnacle-dev.service`` so the service can write **only** the new declared durable paths.
+Prefer narrow ``ReadWritePaths=`` entries for:
 
 ::
 
@@ -465,9 +482,11 @@ narrow ``ReadWritePaths=`` entries for:
    /var/lib/binnacle/results
    /var/lib/binnacle/audit
 
-rather than making all of ``/var/lib`` or all of ``/var/lib/binnacle`` writable. Do not
-weaken ``NoNewPrivileges``, capability bounds, protected config permissions, or source
-checkout separation merely to make persistence work.
+rather than making all of ``/var/lib`` or all of ``/var/lib/binnacle`` writable. The
+systemd-managed ``/run/binnacle`` directory supplies the separate narrow ephemeral write
+location required by the runtime/migration lock. Do not weaken ``NoNewPrivileges``,
+capability bounds, protected config permissions, or source checkout separation merely to
+make persistence work.
 
 Reusable credentials are not stored under DB/result/audit state.
 
@@ -541,10 +560,14 @@ be established.
 Migration coordination is separate from normal transaction locking. The running
 application holds a process/runtime advisory lock under ``/run/binnacle`` for the DB
 lifetime. ``binnacle db upgrade`` must acquire the corresponding exclusive migration lock
-non-blockingly and refuse migration while a live application writer holds it. The
-operator runbook stops ``binnacle-dev.service`` before production/development-Pi upgrade.
-This lock prevents concurrent schema migration; it is **not** used as idempotency or
-normal DB-transaction correctness authority.
+non-blockingly and refuse migration while a live application writer holds it. On a
+systemd service start, ``RuntimeDirectory=binnacle`` guarantees this parent exists with the
+service identity's narrow write permission even after reboot; local operator migration
+commands executed while the service is stopped must use the same protected setup/runtime
+path contract rather than silently falling back to another lock location. The operator
+runbook stops ``binnacle-dev.service`` before production/development-Pi upgrade. This lock
+prevents concurrent schema migration; it is **not** used as idempotency or normal
+DB-transaction correctness authority.
 
 11. Database transaction rules
 ------------------------------
@@ -709,27 +732,36 @@ Columns:
 * ``owner_controller_id`` nullable only after full-record compaction;
 * ``owner_controller_epoch`` nullable only after full-record compaction;
 * ``owner_controller_digest`` non-reversible digest retained for tombstones;
-* ``request_fingerprint_sha256`` nullable only for an unconsumed prepared-nonce binding;
+* ``request_fingerprint_sha256`` **NOT NULL** for every full or tombstone binding,
+  including an unconsumed prepared nonce; prepared registration computes/binds it before
+  first execution;
 * ``prepared_operation_id`` required only when
-  ``record_kind=full`` and ``key_mode=prepared_execution_nonce``;
+  ``record_kind=full`` and ``key_mode=prepared_execution_nonce`` and the record has not
+  yet been compacted;
 * ``prepared_input_sha256`` required only when
-  ``record_kind=full`` and ``key_mode=prepared_execution_nonce``;
+  ``record_kind=full`` and ``key_mode=prepared_execution_nonce`` and the record has not
+  yet been compacted;
 * ``prepared_expires_at`` required only when
-  ``record_kind=full`` and ``key_mode=prepared_execution_nonce``;
+  ``record_kind=full`` and ``key_mode=prepared_execution_nonce`` and the record has not
+  yet been compacted;
 * ``prepared_state_binding_sha256`` required only when
-  ``record_kind=full`` and ``key_mode=prepared_execution_nonce``;
+  ``record_kind=full`` and ``key_mode=prepared_execution_nonce`` and the record has not
+  yet been compacted;
 * ``prepared_registered_boot_id_digest`` required only when
-  ``record_kind=full`` and ``key_mode=prepared_execution_nonce``;
+  ``record_kind=full`` and ``key_mode=prepared_execution_nonce`` and the record has not
+  yet been compacted;
 * ``prepared_monotonic_deadline_ns`` required for a full prepared nonce created in the
   current boot; it is meaningful only when boot IDs match;
 * ``target_identity_sha256`` nullable;
 * ``maximum_effect_sha256`` nullable;
 * ``operation_id`` FK nullable only for a valid tombstone or an unconsumed
   ``prepared_execution_nonce`` full binding;
-* ``terminal_class`` nullable for active/full nonterminal records and required for
-  tombstones;
+* ``terminal_class`` nullable for an active full record; for an unconsumed prepared nonce
+  whose expiry has been durably proven it is the existing reviewed
+  ``prepared_operation_expired`` class, and it is required for every tombstone;
 * ``created_at`` / ``last_access_at``;
-* ``terminal_at`` nullable;
+* ``terminal_at`` nullable for active full records; for a proven-expired unconsumed
+  prepared nonce it records the protected expiry/terminal fact used for retention;
 * ``retired_at`` nullable and required for tombstones;
 * ``record_kind`` enum ``full``/``tombstone``;
 * ``duplicate_count`` / ``conflict_count``.
@@ -747,35 +779,55 @@ duplicate prevention. Internal Phase 4 synthetic tests use a reserved stable int
 An unconsumed prepared execution nonce is a durable ``record_kind=full`` binding with
 ``key_mode=prepared_execution_nonce`` and ``operation_id=NULL``. It is registered through
 an internal store primitive before first execution and retains the prepared operation ID,
-exact prepared input digest, expiry timestamp, expected current-state binding digest,
-owner/device/Tool/contract scope, nonce digest, registration boot identity, and the
+exact prepared input digest, the canonical effect-bearing request fingerprint required by
+``spec/operation/idempotency.yaml``, expiry timestamp, expected current-state binding
+digest, owner/device/Tool/contract scope, nonce digest, registration boot identity, and the
 same-boot monotonic deadline needed to prevent wall-clock rollback from extending the
-nonce. This is persistence infrastructure only: Phase 4 adds no MCP/CLI preparation
-endpoint and no production prepare/execute workflow.
+nonce. The fingerprint is computed from the reviewed normalized effect inputs including
+prepared operation/input and target/maximum-effect facts; mutable current observations and
+policy results remain excluded exactly as the contract requires. This is persistence
+infrastructure only: Phase 4 adds no MCP/CLI preparation endpoint and no production
+prepare/execute workflow.
 
 Database checks permit a full row with ``operation_id=NULL`` only for that unconsumed
-prepared-nonce shape and require all prepared semantic fields for a full prepared record.
-Other full rows require an operation ID. Prepared fields are rejected for non-prepared key
-modes. Every tombstone, including one whose historical ``key_mode`` is
+prepared-nonce shape and require all prepared semantic fields plus the request fingerprint
+for a full prepared record. Other full rows require an operation ID. Prepared fields are
+rejected for non-prepared key modes. A proven-expired unconsumed prepared full record may
+retain ``operation_id=NULL`` with ``terminal_class=prepared_operation_expired`` and its
+protected ``terminal_at`` fact until the full-record retention window permits explicit
+compaction. Every tombstone, including one whose historical ``key_mode`` is
 ``prepared_execution_nonce``, requires all preparation-only fields to be NULL; tombstone
 checks therefore depend on ``record_kind`` rather than key mode alone. Successful first
-admission atomically creates the version-1 operation, stores its request fingerprint, and
-attaches its ``operation_id`` to the existing prepared binding.
+admission atomically creates the version-1 operation and attaches its ``operation_id`` to
+the existing prepared binding without rewriting the registration fingerprint.
+
+When trusted-time checks prove an unconsumed prepared nonce has expired, the same short
+binding transaction durably records ``terminal_class=prepared_operation_expired`` and the
+protected terminal/expiry fact before returning ``prepared_operation_expired``; no
+operation is created. Repeated first-use attempts during full retention return the same
+prepared-expired outcome. A retention/compaction pass may also prove expiry for a never-
+retried unused nonce; if trusted time cannot prove it, compaction fails closed and retains
+the full record rather than guessing.
 
 The full row owns controller ID/epoch; the tombstone contract requires only the
 non-reversible owner digest. Full-to-tombstone compaction, when explicitly exercised
-after the required retention window, atomically verifies terminal state, writes
-``terminal_class`` and ``retired_at``, retains the contract-required key digest,
+after the required retention window, has two contract-safe sources. For an attached
+operation it atomically verifies terminal operation state; for an unconsumed prepared
+nonce it requires the durable/proven ``prepared_operation_expired`` terminal class and no
+operation. Both paths write ``retired_at``, retain the contract-required key digest,
 ``tool_name``, ``contract_version``, owner digest, request fingerprint and terminal class
-plus the table's device/epoch uniqueness scope, clears ``operation_id`` and raw owner
-ID/epoch, and clears every preparation-only field. It must not retain prepared operation,
-input, expiry, current-state, boot, or monotonic-deadline data in a tombstone. Phase 4
+plus the table's device/epoch uniqueness scope, clear ``operation_id`` and raw owner
+ID/epoch, and clear every preparation-only field. They must not retain prepared operation,
+input, expiry, current-state, boot, or monotonic-deadline data in a tombstone. Once
+compacted, same-owner replay follows the machine-readable tombstone outcome
+``idempotency_key_retired`` rather than exposing the former preparation detail. Phase 4
 implements only explicit operator/test compaction, not broad automatic purge.
 
 12.6 ``policy_decisions``
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Store exactly one durable admission decision per operation:
+Store exactly one durable admission decision for every operation before it leaves
+``received``:
 
 * ``policy_decision_id`` PK;
 * ``operation_id`` **NOT NULL** FK to ``operations(operation_id)`` with a named
@@ -797,11 +849,27 @@ unrecognized payload value.
 
 The Phase 4 layout is fixed: ``policy_decisions.operation_id`` is the sole relational
 reference between these tables. ``operations`` has **no** ``policy_decision_id`` column
-and no reverse policy FK. The one-to-one admission decision is inserted after the
-version-1 operation exists and before ``received -> authorised`` or ``received ->
-rejected``; it is retrieved by joining/querying ``policy_decisions`` on ``operation_id``.
-The unique constraint rejects a second admission decision for the same operation and the
-FK rejects an orphan decision.
+and no reverse policy FK. During normal admission, the one-to-one decision is inserted
+after the version-1 operation exists and before ``received -> authorised`` or ``received
+-> rejected``; it is retrieved by joining/querying ``policy_decisions`` on
+``operation_id``. A just-created ``received`` operation may therefore transiently have no
+decision while its policy evaluation is in progress, but no transaction may move it out
+of ``received`` without a durable decision. The unique constraint rejects a second
+admission decision for the same operation and the FK rejects an orphan decision.
+
+Restart is the fail-closed completion of that invariant, not an exception to it. If
+reconciliation finds ``received`` with no admission decision after audit recovery is
+writable, one short SQLite transaction inserts a reserved internal recovery decision with
+``decision=deny`` and reason ``restart_before_admission`` and commits the legal
+``received -> rejected`` transition/version row atomically. The row uses the protected
+current Bootstrap recovery-policy identity/digest and retained normalized input facts; it
+does not pretend the interrupted original policy evaluation completed and it does not
+resume external effect/admission work. If a decision row already exists, reconciliation
+must not insert a second one; it rejects the still-``received`` interrupted operation using
+that retained admission evidence plus the separate ``restart_before_admission`` recovery
+reason. Failure to commit the required decision/transition leaves the operation
+``received`` and consequential readiness blocked rather than producing a terminal record
+with zero decisions.
 
 Final OP-BOUNDARY policy revalidation is a fresh current-policy check, not a second
 admission decision and not an update/replacement of this row. Its current result is
@@ -1007,10 +1075,18 @@ For ``prepared_execution_nonce``, Phase 4 defines only an **internal persistence
 not a host workflow. ``OperationStore.register_prepared_execution_nonce(...)`` may be
 used by tests and a later reviewed preparation use case to durably reserve the nonce
 digest with controller/device/Tool/contract scope, ``prepared_operation_id``, exact
-``prepared_input_sha256``, ``prepared_expires_at``,
-``prepared_state_binding_sha256``, registration boot identity, and same-boot monotonic
-deadline. Registration itself requires a trusted-time snapshot; if that cannot be
-established, no prepared binding is created. The raw nonce is never persisted.
+``prepared_input_sha256``, the canonical ``request_fingerprint_sha256`` for the prepared
+effect-bearing request, ``prepared_expires_at``, ``prepared_state_binding_sha256``,
+registration boot identity, and same-boot monotonic deadline. Registration itself
+requires a trusted-time snapshot; if that cannot be established, no prepared binding is
+created. The raw nonce is never persisted.
+
+The registration fingerprint is computed by the same reviewed operation-specific
+normalizer that will be used at first execution. It includes the contract fields from
+``spec/operation/idempotency.yaml`` and excludes mutable current observations/policy
+results. The generic store never reconstructs or guesses it later. This lets an unused
+prepared nonce retain the request-fingerprint fact required by a future tombstone even if
+no operation is ever created.
 
 The operation-specific future caller is responsible for computing the exact current-state
 binding under its reviewed preparation contract. It supplies that digest at first
@@ -1020,10 +1096,11 @@ digests; it does not invent filesystem, command, Git, or other current-state sem
 If the durable prepared binding or final verifier cannot be loaded/executed truthfully,
 the prepared operation fails closed without effect.
 
-Preparation expiry, exact prepared operation/input, current-state binding, and trusted
-time ordering are checked before first operation admission. For a newly admitted prepared
-operation that is still on its first dispatch path, they are checked again as part of the
-final OP-BOUNDARY guard immediately before ``EffectBoundary.start``.
+Preparation expiry, exact prepared operation/input, request fingerprint, current-state
+binding, and trusted time ordering are checked before first operation admission. For a
+newly admitted prepared operation that is still on its first dispatch path, expiry and
+current state are checked again as part of the final OP-BOUNDARY guard immediately before
+``EffectBoundary.start``.
 
 Once an effect has been dispatch-attempted, or when a later same-owner/same-fingerprint
 retry merely returns retained work, preparation expiry must not be reinterpreted as
@@ -1055,16 +1132,21 @@ Algorithm:
    ``idempotency_key_retired`` without loading/disclosing an operation;
 #. for a present full record, verify owner before disclosing preparation or operation
    details; another controller returns non-disclosing ``idempotency_owner_mismatch``;
-#. if the full record is an unconsumed prepared-nonce binding with ``operation_id=NULL``,
-   obtain a ``TrustedTimeGuard`` decision; inability to prove safe time ordering returns
-   ``trusted_time_unavailable`` with no operation created; a proven elapsed deadline
-   returns ``prepared_operation_expired`` with no operation created;
-#. for that unconsumed prepared binding, compare the supplied prepared operation ID,
-   exact input digest, and current-state binding digest against the durable values;
-   any mismatch returns ``prepared_operation_mismatch`` with no operation created;
-#. after all prepared checks pass, atomically create the version-1 ``received`` operation,
-   persist its request fingerprint, attach its ``operation_id`` to the existing prepared
-   binding, and continue only that newly admitted operation;
+#. if the full record is an unconsumed prepared-nonce binding with ``operation_id=NULL``
+   and is already durably marked ``terminal_class=prepared_operation_expired``, return
+   ``prepared_operation_expired`` with no operation/effect;
+#. if the full record is an active unconsumed prepared-nonce binding with
+   ``operation_id=NULL``, obtain a ``TrustedTimeGuard`` decision; inability to prove safe
+   time ordering returns ``trusted_time_unavailable`` with no operation created; a proven
+   elapsed deadline durably marks the binding ``prepared_operation_expired`` in the same
+   short transaction and returns ``prepared_operation_expired`` with no operation;
+#. for that active unconsumed prepared binding, compare the supplied prepared operation
+   ID, exact input digest, canonical request fingerprint, and current-state binding digest
+   against the durable values; any mismatch returns ``prepared_operation_mismatch`` with
+   no operation created;
+#. after all prepared checks pass, atomically create the version-1 ``received`` operation
+   and attach its ``operation_id`` to the existing prepared binding without rewriting its
+   request fingerprint, then continue only that newly admitted operation;
 #. for a present full record already attached to an operation, verify fingerprint;
 #. same owner + same fingerprint -> return the retained operation, including terminal or
    ``uncertain`` state, with no effect;
@@ -1082,9 +1164,9 @@ verification occurs before the retirement outcome: cross-controller matching key
 ``idempotency_key_retired``. No code attempts to load or disclose a retired operation from
 a tombstone.
 
-Prepared expiry/input/current-state/trusted-time checks before first admission use durable
-fields that survive process restart. They are not bypassed by reconstructing a fresh
-application. After an operation is attached, normal retained-operation idempotency
+Prepared expiry/input/fingerprint/current-state/trusted-time checks before first admission
+use durable fields that survive process restart. They are not bypassed by reconstructing a
+fresh application. After an operation is attached, normal retained-operation idempotency
 semantics take precedence for retries, while a *newly admitted operation on its first
 dispatch path* still performs final OP-BOUNDARY checks. That final guard is not a second
 admission and cannot create another operation.
@@ -1353,8 +1435,13 @@ Scan nonterminal/effect-reconcilable operations in bounded pages.
 
 Rules:
 
-* ``received`` -> ``rejected`` with ``restart_before_admission`` after required recovery
-  audit is writable; no policy/effect is resumed automatically;
+* ``received`` with no admission decision -> after required recovery audit is writable,
+  atomically insert the reserved fail-closed recovery ``deny`` decision with
+  ``restart_before_admission`` and commit ``received -> rejected``; if either write cannot
+  commit, leave it received and keep consequential readiness blocked;
+* ``received`` with its one durable admission decision already present -> do not create a
+  second decision; reject the interrupted operation with ``restart_before_admission``
+  using the retained decision plus recovery evidence, and never resume admission/effect;
 * ``authorised`` -> ``failed`` with ``known_no_effect`` because coordinator invariants
   prohibit calling the effect adapter before the durable transition to ``running``;
 * ``running``/``paused``/``cancelling`` with a durable recoverable external reference ->
@@ -1452,9 +1539,14 @@ host-facing pagination. Host-visible limits remain evidence-gated.
 
 Full idempotency records are retained through the contract's maximum retry and
 reconciliation window. Explicit compaction may then create the contract-exact tombstone
-described above. Prepared-nonce compaction removes preparation-only fields; those facts
-are not part of the tombstone contract. Uncertain/security-recovery evidence is not
-removed merely because ordinary result data expires.
+described above. Prepared registration binds the request fingerprint before first use, so
+a prepared nonce that expires unused is not an uncompactable special case: once trusted
+time proves expiry it is durably marked ``prepared_operation_expired`` without an
+operation, retained for the required full-record window, then may compact using that
+fingerprint/owner digest/terminal class/retirement fact. Prepared-nonce compaction removes
+all preparation-only fields; those facts are not part of the tombstone contract. If
+trusted time cannot prove expiry, the full record is retained. Uncertain/security-recovery
+evidence is not removed merely because ordinary result data expires.
 
 Quota pressure rejects new protected payload production when safe eviction is impossible.
 No broad automatic destructive cleanup is introduced.
@@ -1545,6 +1637,11 @@ Crash-window rules:
 
 * DB received but missing received audit -> never continue to effect; recovery records
   the audit gap/recovery and rejects the unadmitted operation once audit is trustworthy;
+* received audit present but no admission decision -> recovery must atomically persist the
+  reserved fail-closed ``restart_before_admission`` deny decision with
+  ``received -> rejected``; a failed DB commit leaves the operation received/unavailable;
+* an admission decision present while state is still ``received`` -> recovery never
+  inserts a second decision and rejects the interrupted operation without resuming effect;
 * authorised DB state without authorization audit -> no effect; fail/recover as
   ``known_no_effect`` only after audit recovery;
 * authorization audit but still authorised -> no effect was dispatched because running
@@ -1755,10 +1852,14 @@ Hypothesis/state-machine tests cover:
 * concurrent first request exactly one binding;
 * ``derived_member_key`` without a declared/verified parent contract always fails closed
   as ``idempotency_invalid`` before binding/operation creation;
+* prepared nonce registration always persists the contract request fingerprint before
+  first use, including for a nonce that is never consumed;
 * prepared nonce first admission requires a durable registration;
-* unconsumed prepared nonce expiry returns ``prepared_operation_expired`` with no
-  operation/effect;
-* prepared operation/input/current-state binding mismatch returns
+* unconsumed prepared nonce expiry durably classifies the binding
+  ``prepared_operation_expired`` and returns that code with no operation/effect;
+* an expired unconsumed prepared full record can compact after retention to an exact
+  tombstone without inventing an operation, while unprovable expiry cannot be compacted;
+* prepared operation/input/request-fingerprint/current-state binding mismatch returns
   ``prepared_operation_mismatch`` with no operation/effect;
 * same-boot wall-clock rollback cannot extend a prepared deadline because monotonic
   deadline ordering remains authoritative;
@@ -1801,15 +1902,23 @@ fault points include:
 * crash before create/find commit;
 * crash after received commit/before received audit;
 * audit failure before policy;
+* crash after received audit/before admission decision -> restart atomically writes one
+  fail-closed recovery deny plus ``received -> rejected``; no zero-decision terminal row;
+* crash after admission decision/before received transition -> restart creates no second
+  policy decision and rejects the interrupted received operation;
 * policy deny;
 * duplicate admission policy decision for one operation is rejected by the unique
   constraint and an orphan decision is rejected by the FK;
 * undeclared ``derived_member_key`` is rejected before any durable binding/operation;
+* prepared binding registration persists request fingerprint even when never consumed;
 * prepared binding persisted, process restarted, then first use while valid;
-* prepared binding persisted, process restarted past expiry ->
-  ``prepared_operation_expired`` and no operation;
-* prepared binding persisted, process restarted with input/current-state mismatch ->
-  ``prepared_operation_mismatch`` and no operation;
+* prepared binding persisted, process restarted past expiry -> durable
+  ``prepared_operation_expired`` classification and no operation;
+* expired unconsumed prepared binding survives full retention then compacts to a tombstone
+  retaining fingerprint/owner digest/terminal class and clearing preparation-only fields;
+* compaction with untrusted/unprovable expiry retains the full prepared binding;
+* prepared binding persisted, process restarted with input/fingerprint/current-state
+  mismatch -> ``prepared_operation_mismatch`` and no operation;
 * same-boot wall clock rolls backward while monotonic time advances -> no lifetime
   extension/no effect;
 * reboot/boot-ID change with untrusted wall clock -> ``trusted_time_unavailable``/no effect;
@@ -1859,7 +1968,10 @@ fault points include:
 * payload temp crash/finalize-before-DB orphan;
 * DB-complete/payload-missing/digest mismatch;
 * payload quota pressure;
-* systemd unit permits only declared Phase 4 state/result/audit write roots.
+* systemd unit starts with ``/run/binnacle`` absent, recreates it through
+  ``RuntimeDirectory=binnacle`` with the expected owner/mode, and can acquire the runtime
+  advisory lock without broadening durable write roots;
+* systemd unit permits only declared Phase 4 state/result/audit durable write roots.
 
 The synthetic counter proves at most one effect for one logical idempotency identity.
 Tests never mutate real repository/system state.
@@ -1871,12 +1983,20 @@ Close every runtime object and reconstruct a fresh application. Verify:
 
 * operation identity/state/version remains resolvable;
 * idempotency binding reconciles;
-* exactly one persisted admission policy decision is retrievable by ``operation_id`` and
-  no reverse operation-to-policy pointer is required to reconstruct it;
+* a received operation that crashed before policy persistence gains exactly one explicit
+  recovery-deny admission decision atomically with restart rejection; an already-present
+  decision is never duplicated;
+* exactly one persisted admission policy decision is retrievable by ``operation_id`` for
+  every operation that leaves ``received`` and no reverse operation-to-policy pointer is
+  required to reconstruct it;
 * undeclared ``derived_member_key`` remains rejected after fresh composition and cannot
   acquire a binding merely because in-memory registration state was lost/recreated;
-* an unconsumed prepared binding retains expiry, boot/monotonic ordering evidence, and
-  exact prepared input/current-state digests across restart;
+* an unconsumed prepared binding retains its request fingerprint, expiry,
+  boot/monotonic-ordering evidence, and exact prepared input/current-state digests across
+  restart;
+* a prepared binding that expires unused remains durably ``prepared_operation_expired``
+  with no operation and can later compact after retention without losing required
+  tombstone facts;
 * same-boot restart still enforces monotonic deadline expiry if wall time rolls backward;
 * cross-boot restart requires newly trusted wall time not behind the durable high-water
   mark before an absolute deadline can be treated as still valid;
@@ -1934,11 +2054,15 @@ broad/unrecognized scopes cannot create allow. Environment/CLI cannot enable wil
 authority. Fixture policy for synthetic effects is separately composed and cannot ship as
 a production bypass.
 
-Persistence tests prove each operation may have exactly one admission policy row, the row
-cannot precede/orphan its operation, and it is queried by ``operation_id`` without a
-reverse ``operations.policy_decision_id`` reference. Final OP-BOUNDARY policy revalidation
-is a fresh check and cannot update, replace, or append another admission decision row; its
-result is captured through boundary/audit evidence.
+Persistence tests prove each operation that leaves ``received`` has exactly one admission
+policy row, the row cannot precede/orphan its operation, and it is queried by
+``operation_id`` without a reverse ``operations.policy_decision_id`` reference. A crash
+between version-1 creation and normal decision persistence is covered explicitly: restart
+atomically inserts the reserved fail-closed recovery deny with ``received -> rejected``;
+a crash after decision persistence but before the received-state transition creates no
+second decision. Final OP-BOUNDARY policy revalidation is a fresh check and cannot update,
+replace, or append another admission decision row; its result is captured through
+boundary/audit evidence.
 
 Boundary tests prove an earlier ``allow`` decision is never treated as perpetual
 authority. Every applicable predicate is re-read immediately before the effect boundary;
@@ -1959,8 +2083,12 @@ On Python 3.11/3.12/3.13 where applicable:
 * ``policy_decisions.operation_id`` is ``NOT NULL``, FK-enforced and unique while
   ``operations`` has no ``policy_decision_id`` column/reverse policy FK;
 * duplicate policy rows for one operation and orphan policy rows fail;
-* prepared full-record checks require preparation fields, prepared-nonce tombstones permit
-  those fields to be cleared, and tombstones retaining preparation-only fields fail;
+* prepared full-record checks require preparation fields and non-null request fingerprint,
+  prepared-nonce tombstones permit those fields to be cleared, and tombstones retaining
+  preparation-only fields fail;
+* a proven-expired unconsumed prepared full record with ``operation_id=NULL`` and
+  ``terminal_class=prepared_operation_expired`` is valid during retention and can compact
+  to the contract tombstone; an active/unproven arbitrary operation-less full row cannot;
 * invalid FK inserts fail with foreign keys enabled;
 * WAL and synchronous FULL are read back;
 * app refuses behind/ahead/unknown revision;
@@ -1970,8 +2098,11 @@ On Python 3.11/3.12/3.13 where applicable:
 * trusted-time durable fields survive upgrade/restart and cannot be reset by ordinary
   startup to bypass rollback detection;
 * Phase 3 ``ProtectSystem=strict`` remains active;
-* only ``/var/lib/binnacle/state``, ``results``, and ``audit`` are writable additions;
-* protected controller config and evaluation evidence permissions are not broadened.
+* ``RuntimeDirectory=binnacle`` (or exact equivalent) recreates ``/run/binnacle`` with the
+  expected service owner/group and mode after an absent/reboot-like runtime tree;
+* only ``/var/lib/binnacle/state``, ``results``, and ``audit`` are durable writable
+  additions; protected controller config and evaluation evidence permissions are not
+  broadened.
 
 46. Security invariants
 -----------------------
@@ -1983,8 +2114,11 @@ Phase 4 must preserve:
 #. durable global idempotency identity before synthetic effect dispatch;
 #. undeclared ``derived_member_key`` cannot create a binding/operation/effect; Phase 4
    admits no derived-member mode until a reviewed parent derivation exists;
-#. prepared execution nonces retain durable expiry, boot/monotonic ordering evidence, and
-   exact current-state binding before first admission;
+#. prepared execution nonces retain durable request fingerprint, expiry,
+   boot/monotonic-ordering evidence, and exact current-state binding before first
+   admission;
+#. expired unconsumed prepared nonces cannot be revived: proven expiry is durably
+   classified and eventually compacts to a tombstone without inventing an operation;
 #. prepared-nonce tombstones clear preparation-only state and retain only the contract
    tombstone facts plus fields required for the global uniqueness scope;
 #. wall-clock rollback/reboot/loss of trusted time cannot extend operation deadlines;
@@ -2006,6 +2140,9 @@ Phase 4 must preserve:
    ``idempotency_key_retired`` without operation load;
 #. tombstone replay cannot load/revive an old operation;
 #. policy persistence has one non-circular one-to-one admission-decision FK layout;
+#. every operation leaving ``received`` has exactly one durable admission decision;
+   recovery of an interrupted pre-decision received operation atomically writes a
+   fail-closed deny with rejection rather than creating a zero-decision terminal row;
 #. final policy revalidation cannot rewrite the historical admission decision;
 #. durable ``running`` dispatch marker exists before effect adapter invocation;
 #. required intent-audit failure with writable DB terminalizes the running operation as a
@@ -2022,7 +2159,8 @@ Phase 4 must preserve:
 #. payload cannot claim complete before durable bytes/digest;
 #. result/audit state contains no reusable credential;
 #. DB/audit/payload roots are not ordinary env/CLI-overridable;
-#. systemd grants only narrow declared write paths;
+#. systemd grants only narrow declared durable write paths and a systemd-managed
+   ``/run/binnacle`` ephemeral runtime directory;
 #. policy is fail-closed with no general script/wildcard authority;
 #. future executor/broker gets no DB access here;
 #. host-facing operation projection remains evidence/contract gated.
@@ -2082,19 +2220,23 @@ upgrade`` -> ``kernel verify`` -> start sequence.
 
 Implement Phase 4 in this order:
 
-#. add persistence/JCS dependencies, Alembic skeleton, and deployment write-path changes;
+#. add persistence/JCS dependencies, Alembic skeleton, systemd durable write-path changes,
+   and systemd-managed ``RuntimeDirectory=binnacle`` for the runtime/migration lock;
 #. define domain types and lifecycle/idempotency/audit contract-parity tests, including
    fail-closed undeclared-derived-member handling;
 #. implement migration ``0001`` and SQLite runtime/pragmas/migration locking, including
    trusted-time durable high-water/boot-ordering fields, exact prepared tombstone checks,
-   and the one-way unique policy-decision FK;
+   operation-less proven-expired prepared retention/compaction, and the one-way unique
+   policy-decision FK;
 #. implement ``TrustedTimeSource``/guard and rollback/reboot/loss-of-trust tests;
 #. implement atomic create/find with full/tombstone exact semantics, including
-   owner-digest-before-retirement disclosure, contract-exact prepared-nonce compaction,
-   and durable prepared-nonce pre-admission registration/expiry/current-state validation;
+   owner-digest-before-retirement disclosure, registration-time request fingerprints,
+   contract-exact prepared-nonce compaction, and durable prepared-nonce pre-admission
+   registration/expiry/current-state validation;
 #. implement state-version transition store;
-#. implement fail-closed Bootstrap policy + exactly one durable admission decision per
-   operation;
+#. implement fail-closed Bootstrap policy + exactly one durable admission decision for
+   every operation leaving ``received``, including atomic recovery-deny+rejection after a
+   crash before normal decision persistence;
 #. implement JCS audit writer/verifier + storage-failure gate and exact payload-kind
    mapping, including no-effect terminalization on pre-dispatch intent-audit failure;
 #. implement retained payload filesystem adapter + metadata consistency;
@@ -2126,8 +2268,12 @@ A reviewer verifies:
 * version-1 received creation and lifecycle edges match contracts;
 * idempotency unique scope is non-null and contract-exact;
 * undeclared ``derived_member_key`` fails closed before binding/operation creation;
-* prepared nonce registration durably binds prepared operation/input, expiry, exact
-  current-state digest, boot identity, and monotonic deadline ordering;
+* prepared nonce registration durably binds prepared operation/input, canonical request
+  fingerprint, expiry, exact current-state digest, boot identity, and monotonic deadline
+  ordering;
+* an expired unconsumed prepared nonce is durably classified without creating an
+  operation, remains replay-blocking during full retention, and later compacts to a
+  contract-exact tombstone retaining fingerprint/owner digest/terminal class;
 * prepared-nonce compaction clears every preparation-only field and leaves a
   contract-exact tombstone that still enforces the global unique scope;
 * same-boot rollback and cross-boot untrusted/rolled-back wall time cannot extend the
@@ -2146,8 +2292,11 @@ A reviewer verifies:
   only to the matching owner without loading an operation;
 * raw keys never persist;
 * ``policy_decisions.operation_id`` is the sole ``NOT NULL UNIQUE`` policy FK,
-  ``operations`` has no reverse policy pointer, and exactly one admission decision is
-  persisted per operation;
+  ``operations`` has no reverse policy pointer, and every operation leaving ``received``
+  has exactly one admission decision;
+* restart after received creation but before policy persistence atomically records an
+  explicit fail-closed recovery deny with ``received -> rejected``; restart never leaves a
+  terminal zero-decision operation or creates a second decision;
 * final policy revalidation is fresh authority checking and does not overwrite the durable
   admission decision;
 * audit authorization and durable running dispatch marker precede effect invocation;
@@ -2162,7 +2311,8 @@ A reviewer verifies:
 * payload completion is durable/digest truthful;
 * Bootstrap policy is minimal/fail-closed;
 * migrations are explicit and cannot race live service;
-* systemd write authority is narrow under ``ProtectSystem=strict``;
+* systemd write authority is narrow under ``ProtectSystem=strict`` and the unit itself
+  recreates ``/run/binnacle`` with ``RuntimeDirectory=binnacle`` after reboot;
 * current five read-only MCP Tools remain unchanged;
 * exact-head quality/CI passes.
 
@@ -2175,7 +2325,9 @@ Phase 4 implementation is accepted only when every item is true:
 #. Alembic ``0001`` creates exactly the Phase 4 authoritative schema;
 #. runtime never silently creates/migrates tables;
 #. DB path is local/protected/separate from source/config/evaluation evidence;
-#. systemd setup creates and grants only state/results/audit write roots;
+#. systemd setup creates and grants only state/results/audit durable write roots, while
+   ``RuntimeDirectory=binnacle`` recreates the narrow service-owned ``/run/binnacle``
+   ephemeral lock directory when absent after reboot;
 #. every DB connection verifies foreign keys, WAL, FULL synchronous, and busy timeout;
 #. migration mismatch/unavailable audit keeps consequential kernel unavailable;
 #. live writer and ``db upgrade`` cannot run concurrently;
@@ -2190,11 +2342,16 @@ Phase 4 implementation is accepted only when every item is true:
    operation creation until a reviewed parent contract/derivation exists;
 #. raw caller key/prepared nonce never persists/logs/audits;
 #. an unconsumed prepared nonce is durably registered with owner/device/Tool/contract,
-   prepared operation/input, expiry, exact current-state binding, boot identity, and
-   same-boot monotonic deadline before first use;
-#. first use of an expired prepared nonce returns ``prepared_operation_expired`` and
-   creates no operation/effect;
-#. prepared operation/input/current-state mismatch returns
+   prepared operation/input, canonical request fingerprint, expiry, exact current-state
+   binding, boot identity, and same-boot monotonic deadline before first use;
+#. first use of an expired prepared nonce durably classifies the operation-less binding as
+   ``prepared_operation_expired``, returns that error, and creates no operation/effect;
+#. after the required full-record retention window, an expired unconsumed prepared binding
+   can compact to a tombstone retaining key/tool/contract/owner digest/request fingerprint/
+   ``prepared_operation_expired`` terminal class/retired time and device/epoch uniqueness
+   scope while clearing all preparation-only fields;
+#. untrusted/unprovable time cannot be used to expire/compact an unused prepared binding;
+#. prepared operation/input/request-fingerprint/current-state mismatch returns
    ``prepared_operation_mismatch`` and creates no operation/effect;
 #. same-boot wall-clock rollback cannot extend a prepared lifetime;
 #. reboot/loss of trusted wall time or a wall time behind durable high-water fails closed
@@ -2235,9 +2392,12 @@ Phase 4 implementation is accepted only when every item is true:
 #. ``policy_decisions.operation_id`` is a ``NOT NULL UNIQUE`` FK to ``operations`` and
    ``operations`` contains no reverse policy-decision column/FK;
 #. orphan policy decisions and a second admission decision for one operation are rejected;
-#. exactly one admission policy decision is durable before authorization/rejection, is
-   retrievable by operation ID after restart, and is not rewritten by final policy
-   revalidation;
+#. every operation leaving ``received`` has exactly one durable admission decision;
+   a restart before normal decision persistence atomically records the reserved fail-closed
+   recovery deny with ``received -> rejected``, and a restart after decision persistence
+   creates no second decision;
+#. the admission decision is retrievable by operation ID after restart and is not rewritten
+   by final policy revalidation;
 #. received/authorization/effect-intent audit records are schema-valid and durable at the
    defined gates;
 #. durable ``running`` transition occurs before every effect-boundary call;
