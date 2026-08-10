@@ -79,6 +79,56 @@ Additional rules are:
 * prefer a working, observable implementation over premature completeness;
 * stop expanding Bootstrap once the self-hosting acceptance gate passes.
 
+Bootstrap V1 technology baseline
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The detailed phase plans in ``docs/implementation/`` use the following owner-approved
+Bootstrap technology baseline unless real Raspberry Pi or ChatGPT evidence requires an
+explicit revision:
+
+* **language/runtime:** Python, with the reference Pi requiring Python 3.11 or newer;
+  the compatibility target remains Python 3.11, 3.12, and 3.13;
+* **dependency/environment tooling:** ``uv`` with exact resolved versions pinned in
+  ``uv.lock``;
+* **build backend:** ``setuptools`` / ``setuptools.build_meta``;
+* **MCP framework:** FastMCP 4.x over the official MCP Python SDK 2.x line;
+* **remote transport/server:** Streamable HTTP served by Uvicorn with one worker for
+  Bootstrap compatibility;
+* **async runtime:** asyncio/AnyIO; ``uvloop`` is preferred when available and the
+  standard asyncio loop remains the fallback;
+* **HTTP parser:** ``httptools`` is preferred when available, without making parser
+  performance a Bootstrap gate;
+* **typed models/configuration:** Pydantic v2 + ``pydantic-settings`` with TOML
+  configuration and immutable resolved settings snapshots;
+* **persistence:** SQLite owned by the main application process, SQLAlchemy 2 async,
+  ``aiosqlite``, and Alembic migrations;
+* **CLI:** Typer + Rich as a thin local adapter over the same application services;
+* **logging:** ``structlog`` integrated with Python logging and journald under systemd;
+* **service management:** systemd;
+* **internal IPC:** restricted Unix-domain sockets using an explicitly versioned,
+  schema-defined, language-neutral framed JSON protocol;
+* **Git:** the official Git CLI behind a typed adapter;
+* **repository search:** ``ripgrep`` or an equivalent mature native search mechanism
+  behind a small adapter;
+* **application architecture:** lightweight ports and adapters, explicit constructor
+  composition, and typed ``Protocol``/ABC-style boundaries without a dependency-
+  injection framework;
+* **tests:** pytest, AnyIO pytest support, Hypothesis for state/lifecycle invariants,
+  coverage.py, tox 4 + tox-uv, and GitHub Actions as the remote gate;
+* **quality/security tooling:** Ruff, strict MyPy, Import Linter, and the agreed
+  development-only security/schema/documentation checks from ``bootstrap-v1.rst``.
+
+Dependencies are introduced by the first phase that genuinely implements their use.
+Bootstrap does not add every future dependency to ``pyproject.toml`` on day one. Native
+mechanisms such as Git, systemd/journald, distro package managers, OpenSSH/GPG, SQLite,
+and ``ripgrep`` remain preferred over custom Python replacements unless a concrete
+Binnacle-specific requirement justifies otherwise.
+
+The roadmap remains the phase-order document. ``docs/implementation/index.rst`` indexes
+the detailed phase engineering plans that specify concrete repository paths, modules,
+classes, functions, interfaces, schemas, dependencies, scripts, configuration, tests,
+and evidence requirements.
+
 3. Phase 0 -- Reconcile Bootstrap-blocking contracts
 ----------------------------------------------------
 
