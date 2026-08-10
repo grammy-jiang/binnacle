@@ -91,10 +91,12 @@ The following internal architecture is concrete in Phase 4:
 * a per-operation application dispatch-handoff gate that serializes final revalidation/
   effect submission with cancellation and other pre-start lifecycle mutation;
 * filesystem retained payloads with SQLite authoritative metadata;
-* append-only RFC 8785 JCS + SHA-256 audit hash chaining;
+* append-only RFC 8785 JCS + SHA-256 audit hash chaining with one frozen first-store
+  genesis predecessor digest;
 * one process-wide serialized audit append/tail-allocation gate, with the verified journal
   tail as allocator authority and SQLite tail fields only as a recoverable cache;
-* audit-before-effect gating and fail-restricted audit failure behavior;
+* audit-before-effect gating and fail-restricted audit failure behavior with a durable
+  failure-generation latch that survives restart until explicit verified recovery;
 * a small replaceable ``PolicyEngine`` boundary with fail-closed Bootstrap policy;
 * a durable dispatch-attempt state before invoking any future effect boundary;
 * restart reconciliation that prefers uncertainty over an unprovable no-effect claim;
@@ -189,6 +191,9 @@ Phase 4 implementation is complete only when tests prove all of the following:
   dispatch-attempted ``running`` work;
 * effect references returned by a future adapter are durably recoverable, not digest-only;
 * required audit records are schema-valid, canonicalized, chained, fsynced, and verified;
+* the first event of a brand-new store uses sequence 1 and the exact Phase 4 genesis
+  ``previous_event_hash`` derived from the domain-separated preimage in section 12.1;
+  schema-valid placeholder digests are not accepted as store-genesis continuity;
 * concurrent audit appenders are serialized from tail read/allocation through write/fsync,
   segment rotation, and in-memory tail publication, so no two events can claim the same
   sequence/predecessor;
@@ -196,6 +201,11 @@ Phase 4 implementation is complete only when tests prove all of the following:
   event allocator authority; SQLite tail metadata is updated only after journal fsync and
   startup safely repairs a merely-behind cache while treating an ahead/divergent cache as
   integrity failure;
+* a required audit failure durably latches a monotonically identified failure generation
+  whenever SQLite is writable; fresh-process startup never clears that latch merely
+  because surviving journal bytes verify, and consequential admission remains disabled
+  until explicit recovery for that exact generation has schema-valid fsynced recovery
+  evidence and the durable latch is cleared;
 * audit payloads use exact existing ``payload.kind`` discriminators, and pre-operation or
   tombstone idempotency abuse/conflict evidence never fabricates operation state/version
   fields solely to fit ``operation.idempotency_conflict``;
@@ -651,6 +661,15 @@ Singleton facts:
 * ``audit_epoch_generation`` integer >= 1 for local monotonic ordering;
 * ``audit_last_sequence`` integer >= 0, where 0 means no event yet in a new store;
 * ``audit_last_hash`` nullable SHA-256 until the first event is committed;
+* ``audit_failure_generation`` integer >= 0, default 0;
+* ``audit_failure_latched`` boolean, default false;
+* ``audit_failure_reason_code`` nullable bounded identifier, required while the latch is
+  active;
+* ``audit_failure_detected_at`` nullable UTC timestamp, required while the latch is active;
+* ``audit_recovered_generation`` integer >= 0, default 0 and never greater than
+  ``audit_failure_generation``;
+* ``audit_recovery_evidence_sha256`` nullable SHA-256 of the fsynced schema-valid recovery
+  event that cleared the latest recovered generation;
 * ``trusted_wall_time_high_watermark`` nullable UTC timestamp until trusted time is first
   established;
 * ``trusted_time_boot_id_digest`` nullable SHA-256;
@@ -659,6 +678,16 @@ Singleton facts:
 * ``trusted_time_generation`` integer >= 1, incremented on an explicitly accepted new
   boot/trust epoch;
 * ``consequential_admission_enabled`` boolean, default false.
+
+The audit-failure fields form a durable fail-restricted latch, not a diagnostic cache.
+Database checks require ``audit_failure_latched=true`` to imply
+``audit_failure_generation > audit_recovered_generation`` plus non-null reason/time. A
+cleared nonzero generation requires ``audit_recovered_generation =
+audit_failure_generation`` and non-null ``audit_recovery_evidence_sha256``. A fresh store
+has generation/recovered-generation 0, latch false, and no recovery digest. A new required
+audit failure after a prior recovery increments ``audit_failure_generation`` before it can
+be treated as a new latched outage; while an outage is already latched, additional failures
+remain in that generation rather than manufacturing recovery progress.
 
 ``audit_last_sequence`` and ``audit_last_hash`` are a derived SQLite cache for diagnostics
 and consistency checks, **not** the audit allocation/source-of-truth tail. The verified
@@ -678,12 +707,26 @@ wall-time high-water mark. If trust or ordering cannot be established, time-depe
 consequential predicates fail closed.
 
 The audit serializer never emits an integer ``audit_epoch`` because the existing audit
-event schema requires an identifier. Initial event sequence is 1. Epoch continuity uses
-previous accepted epoch/segment digest evidence; the implementation may not use a null
-``previous_event_hash`` because the schema requires a digest. If the first-ever genesis
-sentinel/convention is not already fixed by the audit fixtures at implementation time, a
-small reviewed audit-contract fixture clarification must land before the writer is
-accepted rather than inventing a private incompatible convention in runtime code.
+event schema requires an identifier. Initial event sequence is 1. The first event in the
+first audit epoch of a brand-new store has no real predecessor but the schema requires a
+64-hex ``previous_event_hash``. Phase 4 therefore freezes this exact domain-separated
+store-genesis convention:
+
+::
+
+   preimage bytes:  ASCII/UTF-8 "binnacle.audit.genesis.v1" followed by one 0x00 byte
+   preimage hex:    62696e6e61636c652e61756469742e67656e657369732e763100
+   SHA-256:         a3be2bea4d6491d8c23e9de679e5b99da91b43cf7bc76728069cc5514d921632
+
+For exactly ``audit_epoch_generation=1`` / sequence 1 with no accepted predecessor, the
+writer sets ``previous_event_hash`` to that SHA-256 value and the verifier requires it.
+The genesis digest is not an event hash and is never reused merely because of restart,
+segment rotation, or a later audit epoch. Every later event uses its real predecessor; a
+later epoch transition follows the reviewed accepted epoch/segment continuity evidence.
+The existing audit-integrity fixture's all-``f`` predecessor is a schema-valid placeholder,
+not the Phase 4 genesis protocol value: schema validation may accept that fixture shape,
+but a Phase 4 chain verifier must reject it as first-store genesis. Writer/verifier tests
+share this exact vector so independent implementations cannot choose private sentinels.
 
 On first initialization ``device_epoch=1``. If observed device identity no longer matches
 the durable record, startup does not silently adopt a new device epoch; consequential
@@ -1348,10 +1391,11 @@ Failure behavior:
    bounded/digested target/effect facts and that operation correlation;
 #. if that required intent append/fsync fails while SQLite remains writable, **do not call
    the effect boundary**: durably transition ``running -> failed`` with
-   ``known_no_effect`` and ``audit_unavailable``, disable consequential admission, and
-   record emergency/recovery evidence where the existing audit contract permits; if the
-   DB terminalization itself cannot be committed, leave no in-memory claim of a durable
-   terminal state and let restart use the conservative running/recovery path;
+   ``known_no_effect`` and ``audit_unavailable``, latch the current audit-failure generation
+   and disable consequential admission, then record emergency/recovery evidence where the
+   existing audit contract permits; if the DB terminalization/latch itself cannot be
+   committed, leave no in-memory claim of a durable terminal/recovery state and let restart
+   use the conservative running/fail-restricted path;
 #. acquire the per-operation ``DispatchHandoffGate`` shared with cancellation/pre-start
    lifecycle mutation;
 #. while holding the gate, run the mandatory final OP-BOUNDARY revalidation from section
@@ -1491,7 +1535,8 @@ Rules:
   ask ``EffectReconciler``;
 * a process that failed ``effect.intent_recorded`` and successfully committed
   ``running -> failed`` before exit is already terminal and is not reclassified as
-  uncertain;
+  uncertain, but its independently durable audit-failure latch still blocks consequential
+  admission until same-generation recovery evidence clears it;
 * ``running`` with missing effect-intent audit and no durable no-effect terminalization is
   recovery-required/uncertain: startup must not infer from absence of the audit event that
   the boundary was definitely never reached;
@@ -1615,9 +1660,18 @@ It implements:
 * I-JSON-compatible values;
 * SHA-256 with ``event_hash`` omitted from the preimage;
 * required ``previous_event_hash`` chain;
+* the exact first-store genesis predecessor vector frozen in section 12.1;
 * strictly monotonic sequence;
 * segment chain metadata and audit-epoch continuity;
 * event byte and safe-fact bounds from ``spec/audit/audit-policy.yaml``.
+
+For the first-ever event only, the allocator emits sequence 1 and
+``previous_event_hash=a3be2bea4d6491d8c23e9de679e5b99da91b43cf7bc76728069cc5514d921632``.
+The verifier independently recomputes SHA-256 over the 26-byte genesis preimage in section
+12.1 and requires exact equality before accepting that first event. Sequence 1 with any
+other predecessor may still be JSON-schema-valid but is not a valid Phase 4 store genesis.
+Sequence >1 may never use the genesis predecessor in place of a real predecessor. This is
+a writer/verifier protocol invariant, not a mutable setting.
 
 Phase 4 has one application process that owns the audit journal. ``AuditJournal.append``
 must therefore use one process-wide async append gate independent from per-operation
@@ -1644,7 +1698,8 @@ payload kinds, including as applicable:
   ``effect.failed``, ``effect.uncertain``;
 * ``cancellation.requested`` / ``cancellation.phase_changed`` /
   ``cancellation.verified``;
-* ``reconciliation.started`` / ``reconciliation.completed`` / ``recovery.required``;
+* ``reconciliation.started`` / ``reconciliation.completed`` / ``recovery.required`` /
+  ``recovery.completed``;
 * existing ``audit.*`` payload kinds for segment/checkpoint/integrity events.
 
 A tombstone or other pre-operation idempotency rejection has no truthful operation
@@ -1716,7 +1771,8 @@ Pre-effect ordering:
 #. DB ``authorised -> running`` dispatch marker commits;
 #. ``effect.intent_recorded`` audit appends/fsyncs;
 #. if the intent append/fsync fails and DB is writable, terminalize ``running -> failed``
-   with ``known_no_effect``/``audit_unavailable`` before entering the audit-failure gate;
+   with ``known_no_effect``/``audit_unavailable`` and durably latch the current audit
+   failure generation before entering fail-restricted recovery;
 #. acquire the per-operation dispatch-handoff gate shared with cancellation;
 #. perform final OP-BOUNDARY revalidation for every operation mode while holding the gate;
 #. only then, still holding the gate, may the effect adapter submission be called and its
@@ -1724,8 +1780,8 @@ Pre-effect ordering:
 
 After a synthetic/future external effect, truthful operation persistence has priority;
 audit follows immediately and fsyncs. If audit fails after a known effect, do not roll
-back history or repeat the effect: mark audit degraded, retain truthful state, and block
-new consequential admission.
+back history or repeat the effect: mark audit degraded, retain truthful state, latch the
+audit-failure generation where SQLite is writable, and block new consequential admission.
 
 Crash-window rules:
 
@@ -1746,11 +1802,14 @@ Crash-window rules:
 * authorization audit but still authorised -> no effect was dispatched because running
   transition is the code-level precondition;
 * running state with a known in-process effect-intent append/fsync failure -> no boundary
-  was called; if DB is writable, commit ``running -> failed`` ``known_no_effect`` before
-  leaving the path and attempt emergency evidence;
-* if that DB terminalization fails, do not call the boundary and do not fabricate a
-  durable no-effect terminal state; restart treats the unresolved running record
-  conservatively;
+  was called; if DB is writable, commit ``running -> failed`` ``known_no_effect`` and the
+  audit-failure latch before leaving the path, then attempt emergency evidence;
+* if that DB terminalization/latch commit fails, do not call the boundary and do not
+  fabricate a durable no-effect or recovered-audit claim; restart treats the unresolved
+  running record conservatively and required audit readiness stays fail-restricted;
+* a terminal operation whose post-effect audit append failed does not disappear from the
+  recovery problem: its durable audit-failure generation still prevents startup from
+  re-enabling admission even when the surviving main journal is otherwise continuous;
 * running + effect-intent audit but crash before/during final boundary revalidation ->
   uncertain on restart unless separate durable evidence proves no boundary call;
 * running + effect-intent audit + passed final boundary guard with lost start receipt ->
@@ -1762,34 +1821,70 @@ Crash-window rules:
 ``KernelHealth`` tracks DB/audit/payload separately. When required audit cannot append,
 fsync, or verify:
 
-* durably disable new consequential admission where DB remains writable;
+* if SQLite is writable and no audit failure is currently latched, one short transaction
+  increments ``audit_failure_generation``, sets ``audit_failure_latched=true``, stores a
+  bounded ``audit_failure_reason_code``/``audit_failure_detected_at``, and sets
+  ``consequential_admission_enabled=false``; if a generation is already latched, preserve
+  that generation and keep admission false;
+* inability to durably write the latch never permits an effect: the process remains
+  fail-restricted in memory and a subsequent startup must independently prove all recovery
+  requirements rather than assuming the failed latch write means healthy audit;
 * do not cross a new effect boundary;
 * if the failure occurs on ``effect.intent_recorded`` after the durable running marker,
   first persist ``running -> failed`` with ``known_no_effect``/``audit_unavailable`` when
   SQLite is still writable because this process knows ``EffectBoundary.start`` was not
-  called;
+  called; the same short failure handling path also leaves the audit generation latched;
 * allow bounded trustworthy recovery/status reads;
 * attempt one bounded emergency audit record only when the pre-created emergency journal
   remains writable/trustworthy;
 * emergency exhaustion remains fail-restricted;
-* recovery verifies surviving continuity before re-enabling admission.
+* a successful later verification of the surviving main chain is necessary but **not
+  sufficient** to clear the durable latch.
 
-If SQLite cannot persist that known-no-effect failure, no effect is called but the kernel
-must not claim the terminal transition survived; recovery remains conservative.
+Recovery is explicit and generation-bound. The local-only operator command from section 32
+runs only with the service stopped and the same exclusive runtime lock used by other
+offline maintenance. For requested generation ``g`` it must:
 
-No silent ordinary-log fallback exists.
+#. require ``audit_failure_latched=true`` and ``g == audit_failure_generation`` while
+   ``audit_recovered_generation < g``; stale/future generations fail closed;
+#. verify the surviving main journal/segment/epoch chain from genesis through its current
+   tail and reconcile any trustworthy bounded emergency evidence for that outage;
+#. append/fsync schema-valid recovery evidence for **that exact generation**, using
+   existing ``audit.verification_passed`` and ``recovery.completed`` payloads with bounded
+   safe facts/reason ``audit_failure_recovered`` rather than inventing a new payload kind;
+#. retain the fsynced ``recovery.completed`` event hash as the recovery-evidence digest;
+#. only after those event bytes are durable, commit a short SQLite transaction setting
+   ``audit_recovered_generation=g``, ``audit_recovery_evidence_sha256`` to that event hash,
+   ``audit_failure_latched=false``, clearing the active reason/time, and leaving
+   ``consequential_admission_enabled=false``;
+#. release the offline lock without starting or dispatching any operation.
+
+A crash after recovery evidence fsync but before latch-clear remains safe: the latch stays
+active. Re-running recovery for the same generation first searches/verifies the already
+fsynced exact-generation recovery evidence and may use its hash to complete the idempotent
+SQLite clear; it must not treat an arbitrary verification event or an older generation as
+recovery. Startup itself never clears the latch and never manufactures this evidence.
+Only a later normal startup that verifies all stores **and** observes
+``audit_failure_latched=false`` with ``audit_recovered_generation ==
+audit_failure_generation`` for a nonzero generation may consider consequential admission
+for re-enable.
+
+If SQLite cannot persist a known-no-effect failure, the audit latch, or a recovery clear,
+no effect is called and the kernel must not claim the corresponding durable state survived;
+recovery remains conservative. No silent ordinary-log fallback exists.
 
 31. Audit verification and checkpoints
 --------------------------------------
 
-Verifier checks event schema, JCS hash, sequence, previous-event hash, segment metadata,
-epoch continuity, truncation/fork/duplicate sequence, and canonical byte ceiling.
+Verifier checks event schema, JCS hash, sequence, previous-event hash, the exact store-
+genesis predecessor vector, segment metadata, epoch continuity, truncation/fork/duplicate
+sequence, and canonical byte ceiling.
 
 Local consistency checkpoints may record DB schema revision, highest operation/transition
-summary, audit epoch/sequence/final digest, trusted-time high-water/generation, and runtime
-build/config/policy digests. SQLite stores only checkpoint reference/digest metadata;
-audit event bytes remain authoritative. This is not an external signed checkpoint or
-post-compromise history claim.
+summary, audit epoch/sequence/final digest, trusted-time high-water/generation, active audit-
+failure/recovery generation, and runtime build/config/policy digests. SQLite stores only
+checkpoint reference/digest metadata; audit event bytes remain authoritative. This is not
+an external signed checkpoint or post-compromise history claim.
 
 32. Minimal local operator CLI and migration safety
 --------------------------------------------------
@@ -1802,6 +1897,7 @@ Extend existing CLI with local-only:
    binnacle db upgrade
    binnacle kernel verify
    binnacle audit verify
+   binnacle audit recover --generation <n>
 
 ``db status`` reads Alembic revision and pragmas.
 
@@ -1816,9 +1912,19 @@ privilege or falling back to another lock. The sequence never creates a second w
 beside the running service.
 
 ``kernel verify`` checks schema/pragmas, lifecycle/idempotency invariants, trusted-time
-ordering state, payload metadata/bytes, and audit continuity without automatic repair.
+ordering state, payload metadata/bytes, audit continuity, and audit-failure latch/recovery
+generation without automatic repair.
 
-``audit verify`` checks the append-only chain without dumping event payloads.
+``audit verify`` checks the append-only chain, including the exact first-store genesis
+vector, without dumping event payloads or clearing an audit-failure latch.
+
+``audit recover --generation <n>`` is explicit fail-restricted recovery, never MCP-callable
+and never an ordinary startup side effect. It requires the service stopped, verifies and
+acquires the same protected exclusive runtime lock, follows section 30 exactly, and leaves
+consequential admission disabled for the next normal startup to reassess. It is an offline
+maintenance use of the same authoritative persistence/audit adapters, not a concurrent
+second application writer. If the runtime directory/lock or surviving audit evidence is
+unsafe/unavailable, recovery fails closed.
 
 Human/agent/JSON output follows existing CLI conventions and never exposes raw payload,
 audit, credential, idempotency-key, or raw boot/time-trust material.
@@ -1826,7 +1932,7 @@ audit, credential, idempotency-key, or raw boot/time-trust material.
 33. Startup and migration behavior
 ----------------------------------
 
-Application startup does not silently migrate.
+Application startup does not silently migrate or silently recover an audit outage.
 
 Sequence:
 
@@ -1837,35 +1943,46 @@ Sequence:
    protected runtime-lock parent in place, and the non-root ``binnacle db upgrade``
    verifies/acquires the same exclusive migration lock before upgrading;
 #. startup reopens and verifies revision/pragmas;
-#. under the audit append gate, verify audit event/segment/epoch continuity and reconstruct
-   the authoritative journal tail from durable journal bytes;
+#. under the audit append gate, verify audit event/segment/epoch continuity from the exact
+   genesis convention and reconstruct the authoritative journal tail from durable journal
+   bytes;
 #. compare that verified tail with ``kernel_meta.audit_last_sequence/hash``: refresh a
    merely-behind cache in a short SQLite transaction; treat cache-ahead or same-sequence
    hash divergence as ``audit_integrity_failed`` and keep the kernel fail-restricted;
 #. initialize the next-append allocator only from the verified journal tail, never from the
    SQLite cache;
+#. read ``audit_failure_generation``, ``audit_failure_latched``, recovered generation, and
+   recovery-evidence digest; **never clear or advance them during startup** merely because
+   the surviving journal verifies;
+#. if the audit latch is active, or a nonzero cleared generation lacks exact matching
+   recovered generation/schema-valid recovery evidence, keep consequential admission
+   disabled and report explicit audit recovery required; terminal operations are not an
+   exception to this check;
 #. verify payload roots/metadata;
 #. load trusted-time durable high-water/boot evidence and obtain a current trust snapshot;
 #. if current time is untrusted or rolled back, mark time-dependent consequential
    predicates unavailable rather than resetting/advancing deadlines;
-#. run bounded restart reconciliation;
-#. only after all required checks succeed set
-   ``consequential_admission_enabled=true`` and mark internal kernel available, while
-   time-dependent operations remain fail-closed if trusted time is unavailable.
+#. run bounded restart reconciliation without dispatching effects;
+#. only after all required checks succeed **and no audit failure generation remains
+   latched/unrecovered** set ``consequential_admission_enabled=true`` and mark internal
+   kernel available, while time-dependent operations remain fail-closed if trusted time is
+   unavailable.
 
 Migration failure never deletes/recreates DB. Migration ``0001`` rejects incompatible
 unmanaged tables rather than silently taking ownership.
 
 Migration tests cover fresh upgrade, FK/check/index presence, unknown revision refusal,
 exclusive migration coordination, stopped-service runtime-directory preservation/safe
-lock acquisition, and safe downgrade/round-trip where downgrade exists.
+lock acquisition, durable audit-failure latch constraints/generation persistence, and safe
+downgrade/round-trip where downgrade exists.
 
 34. Kernel health and readiness
 -------------------------------
 
 Internal availability is ``available``, ``degraded``, or ``unavailable``. Consequential
-admission requires ``available``; a time-dependent operation additionally requires a
-trusted-time state that can prove its deadline/freshness predicates.
+admission requires ``available`` and no latched/unrecovered audit-failure generation; a
+time-dependent operation additionally requires a trusted-time state that can prove its
+deadline/freshness predicates.
 
 Phase 4 does not change public ``/readyz`` solely to expose this kernel because current
 read-only Tools do not depend on it. The existing compatibility server may remain ready
@@ -1928,8 +2045,10 @@ matter to the operation are still current immediately before dispatch.
 37. Process-boundary ownership
 ------------------------------
 
-The main MCP/application process is the sole authoritative ``binnacle.db`` writer.
-Future executor/privileged-broker processes:
+The main MCP/application process is the sole live authoritative ``binnacle.db`` writer.
+The explicit stopped-service ``db upgrade`` and ``audit recover`` maintenance commands are
+serialized by the same exclusive runtime lock and never coexist with that writer. Future
+executor/privileged-broker processes:
 
 * never open the application SQLite DB directly;
 * retain minimum independent execution/broker evidence;
@@ -1937,7 +2056,8 @@ Future executor/privileged-broker processes:
 * return stable bounded external reference identity to the application.
 
 Phase 4 defines only effect/reconciliation semantics, not future IPC wire schemas.
-Audit/payload/trusted-time adapters run in the application process in Phase 4.
+Audit/payload/trusted-time adapters run in the application process in Phase 4 except for
+the explicitly stopped-service maintenance composition described above.
 
 38. Logging and diagnostics
 ---------------------------
@@ -1945,7 +2065,8 @@ Audit/payload/trusted-time adapters run in the application process in Phase 4.
 Structured diagnostic logs may include DB revision/pragmas, operation ID, state/version,
 safe idempotency digest prefix, policy decision ID/reason code, boundary-revalidation
 result code, trusted-time health/generation (not raw trust material), reconciliation result,
-payload byte counts/digest prefix, audit sequence/status, and kernel availability.
+payload byte counts/digest prefix, audit sequence/status/failure generation, and kernel
+availability.
 
 Do not log raw keys/nonces, credentials, full fingerprint inputs, payload/stdout/stderr,
 protected policy values, raw external authority material, raw machine/boot identifiers,
@@ -2004,6 +2125,11 @@ Hypothesis/state-machine tests cover:
   ``idempotency_owner_mismatch`` with no operation load or retirement disclosure;
 * any number of concurrent ``AuditJournal.append`` calls produce one linear strictly
   increasing sequence/hash chain with no duplicate sequence or predecessor fork;
+* first-store sequence 1 uses exactly the frozen genesis predecessor digest, while any
+  alternate/schema-only placeholder predecessor fails chain verification;
+* once an audit-failure generation is latched, arbitrary restart/verified surviving chain/
+  terminal-operation state cannot make consequential admission true until the matching
+  generation has explicit recovery evidence and is durably cleared;
 * a pre-operation/tombstone idempotency rejection selects a schema-valid audit payload
   without fabricating an operation ID/state/version.
 
@@ -2058,9 +2184,21 @@ fault points include:
 * crash after authorization audit/before running transition;
 * crash after running transition/before effect-intent audit;
 * ``effect.intent_recorded`` append/fsync failure with writable DB -> durable
-  ``running -> failed`` known-no-effect, admission disabled, counting boundary=0;
-* same audit failure plus DB terminalization failure -> boundary=0 and conservative
-  restart treatment rather than fabricated terminal durability;
+  ``running -> failed`` known-no-effect plus a durable active audit-failure generation,
+  admission disabled, counting boundary=0;
+* same audit failure plus DB terminalization/latch failure -> boundary=0 and conservative
+  restart treatment rather than fabricated terminal/recovery durability;
+* crash after a terminal operation's required post-effect audit append fails -> fresh
+  process observes the active failure generation and stays fail-restricted even though the
+  surviving main chain verifies and the operation itself needs no nonterminal reconciliation;
+* explicit recovery with wrong/stale generation -> latch remains active/admission false;
+* crash after exact-generation ``recovery.completed`` fsync but before SQLite latch clear ->
+  fresh process remains fail-restricted; rerun verifies/reuses that exact evidence and can
+  complete the idempotent clear without fabricating another generation;
+* exact-generation recovery clear leaves admission false until a later full startup passes
+  all checks;
+* first-store audit writer emits sequence 1 with the frozen genesis predecessor; replacing
+  it with the schema-only all-``f`` fixture placeholder fails chain verification;
 * crash after running/effect-intent audit but before/during final boundary guard;
 * crash after running/effect-intent audit and passed guard but before calling ``start``;
 * crash/exception during ``EffectBoundary.start`` before receipt;
@@ -2098,10 +2236,11 @@ fault points include:
   advisory lock without broadening durable write roots;
 * an ordinary stop of ``binnacle-dev.service`` preserves that protected runtime directory
   through ``RuntimeDirectoryPreserve=yes``; while the service is stopped, the non-root
-  ``binnacle db upgrade`` path verifies it and can acquire/release the same exclusive
-  migration lock without privileged recreation or a fallback lock path;
+  ``binnacle db upgrade``/``binnacle audit recover`` paths verify it and can acquire/release
+  the same exclusive maintenance lock without privileged recreation or a fallback path;
 * a reboot-like removal of ``/run/binnacle`` is still recovered by the next systemd start,
-  after which a migration-required stop preserves the recreated directory for upgrade;
+  after which a migration/recovery-required stop preserves the recreated directory for
+  offline maintenance;
 * systemd unit permits only declared Phase 4 state/result/audit durable write roots.
 
 The synthetic counter proves at most one effect for one logical idempotency identity.
@@ -2150,6 +2289,13 @@ Close every runtime object and reconstruct a fresh application. Verify:
   verified journal hash/sequence;
 * a cache-ahead or same-sequence/hash-divergent audit tail blocks startup readiness instead
   of being silently repaired or used for allocation;
+* first-store genesis verification recomputes the frozen domain-separated predecessor and
+  rejects a schema-valid-but-wrong predecessor;
+* an active audit-failure generation survives reconstruction even if the surviving main
+  chain verifies, and keeps admission disabled until matching explicit recovery evidence
+  has been fsynced and the durable generation is cleared;
+* a terminal operation with a missing required post-effect audit event cannot bypass that
+  latch simply because it is absent from nonterminal reconciliation;
 * audit sequence/epoch chain continues;
 * finalized payload remains digest-valid;
 * incomplete/orphan payloads are detected.
@@ -2165,6 +2311,20 @@ insertion/deletion/reorder/truncation/fork, segment/epoch continuity, bounded sa
 secret/authority redaction, required runtime identity fields, primary storage failure,
 emergency behavior, and fail-restricted admission.
 
+Add an explicit writer/verifier genesis test vector with exactly:
+
+::
+
+   preimage_hex = 62696e6e61636c652e61756469742e67656e657369732e763100
+   sha256       = a3be2bea4d6491d8c23e9de679e5b99da91b43cf7bc76728069cc5514d921632
+   first_event_sequence = 1
+   first_event_previous_event_hash = a3be2bea4d6491d8c23e9de679e5b99da91b43cf7bc76728069cc5514d921632
+
+The writer must produce that predecessor for a brand-new store and the verifier must
+independently derive/require it. A fixture/event with sequence 1 and the existing all-``f``
+schema placeholder remains useful for schema validation but must fail Phase 4 chain-
+genesis verification. Later events cannot reuse the sentinel.
+
 Concurrency tests force multiple appenders to observe the same initial tail and prove the
 process-wide append gate serializes tail read/allocation, canonicalization/hash, write,
 fsync, segment rotation, and tail publication into one strictly monotonic chain. Crash
@@ -2179,9 +2339,16 @@ when a retained operation supplies truthful required operation payload fields.
 
 A dedicated test injects ``effect.intent_recorded`` append/fsync failure after the durable
 running marker and proves that a writable DB records ``running -> failed`` with
-``known_no_effect``/``audit_unavailable`` before the coordinator leaves the path, while the
-counting effect boundary remains zero. Another test makes that DB terminalization fail and
-proves no effect call occurs and no durable terminal claim is fabricated.
+``known_no_effect``/``audit_unavailable`` plus an active audit-failure generation before
+the coordinator leaves the path, while the counting effect boundary remains zero. Another
+test makes that DB terminalization/latch fail and proves no effect call occurs and no
+durable terminal/recovery claim is fabricated.
+
+A recovery test leaves a terminal operation with its required post-effect audit append
+missing, restarts with an otherwise continuous surviving chain, and proves startup remains
+fail-restricted. It then proves only schema-valid fsynced recovery evidence bound to the
+exact active generation permits the durable latch to clear; stale generation, plain chain
+verification, or a crash before the clear cannot re-enable admission.
 
 A plan/implementation that emits a top-level ``event_type`` or an unknown
 ``payload.kind`` fails.
@@ -2242,20 +2409,22 @@ On Python 3.11/3.12/3.13 where applicable:
 * invalid FK inserts fail with foreign keys enabled;
 * WAL and synchronous FULL are read back;
 * app refuses behind/ahead/unknown revision;
-* concurrent live-writer vs migration is rejected;
+* concurrent live-writer vs migration/recovery maintenance is rejected;
 * downgrade round-trip where safe;
 * migration failure leaves original DB recoverable;
 * trusted-time durable fields survive upgrade/restart and cannot be reset by ordinary
   startup to bypass rollback detection;
+* audit-failure generation/latch/recovered-generation constraints survive upgrade/restart
+  and cannot be reset by ordinary startup;
 * Phase 3 ``ProtectSystem=strict`` remains active;
 * ``RuntimeDirectory=binnacle`` plus ``RuntimeDirectoryMode=0750`` (or exact equivalent)
   recreates ``/run/binnacle`` with the expected service owner/group and mode after an
   absent/reboot-like runtime tree;
 * ``RuntimeDirectoryPreserve=yes`` (not ``restart``) keeps that protected directory across
-  the ordinary service stop used by the runbook, and a stopped-service non-root
-  ``binnacle db upgrade`` can verify/acquire the same exclusive migration lock; missing or
-  unsafe runtime-directory state fails closed rather than being recreated with privilege
-  or redirected to another path;
+  the ordinary service stop used by the runbook, and stopped-service non-root
+  ``binnacle db upgrade``/``audit recover`` can verify/acquire the same exclusive lock;
+  missing or unsafe runtime-directory state fails closed rather than being recreated with
+  privilege or redirected to another path;
 * only ``/var/lib/binnacle/state``, ``results``, and ``audit`` are durable writable
   additions; protected controller config and evaluation evidence permissions are not
   broadened.
@@ -2306,18 +2475,24 @@ Phase 4 must preserve:
 #. missing start receipt cannot be treated as proof of no effect;
 #. ``uncertain`` never auto-retries;
 #. lifecycle/state-version rules are contract-exact;
-#. main app process solely owns authoritative SQLite writes;
+#. main app process solely owns live authoritative SQLite writes; explicit stopped-service
+   migration/audit-recovery maintenance uses the same exclusive lock and never overlaps it;
 #. SQLite durability pragmas are verified;
-#. migration cannot race the live writer;
+#. migration/recovery maintenance cannot race the live writer;
 #. the same systemd-managed ``/run/binnacle`` lock parent is preserved across the explicit
-   stopped-service migration window with ``RuntimeDirectoryPreserve=yes`` and remains
+   stopped-service maintenance window with ``RuntimeDirectoryPreserve=yes`` and remains
    reboot-ephemeral/recreated on the next service start;
 #. audit uses existing schema, JCS+SHA-256, and ``payload.kind`` discriminator;
+#. the first-store audit predecessor is exactly the frozen domain-separated genesis digest;
+   restart/rotation/later epochs do not invent or reuse another sentinel;
 #. audit appends are process-wide serialized through tail allocation, write/fsync, segment
    rotation, and tail publication; concurrent coordinators cannot fork the chain;
 #. verified journal bytes/tail are allocation authority; SQLite ``audit_last_*`` is only a
    post-fsync cache whose behind state is repairable and whose ahead/divergent state fails
    restricted;
+#. required audit failure has a durable monotonically identified latch that survives
+   restart and cannot be cleared by successful chain verification alone; exact-generation
+   schema-valid fsynced recovery evidence is required before a durable clear;
 #. pre-operation/tombstone idempotency abuse audit never fabricates operation state/version
    to fit a schema payload; schema-valid rejection evidence remains separate from DB
    admission-policy persistence;
@@ -2380,7 +2555,8 @@ The implementation PR documents and passes at least:
    uv run python scripts/verify_operation_kernel.py --temporary
 
 On the development Pi, the operator separately performs the reviewed stop -> ``db
-upgrade`` -> ``kernel verify`` -> start sequence.
+upgrade`` -> ``kernel verify`` -> start sequence; explicit audit recovery, when required,
+is a separate stopped-service command and is never implied by ``verify`` or startup.
 
 49. Implementation order
 ------------------------
@@ -2391,11 +2567,11 @@ Implement Phase 4 in this order:
    and systemd-managed ``RuntimeDirectory=binnacle`` / ``RuntimeDirectoryPreserve=yes``
    for the runtime/migration lock;
 #. define domain types and lifecycle/idempotency/audit contract-parity tests, including
-   fail-closed undeclared-derived-member handling;
+   fail-closed undeclared-derived-member handling and the exact genesis vector;
 #. implement migration ``0001`` and SQLite runtime/pragmas/migration locking, including
-   trusted-time durable high-water/boot-ordering fields, exact prepared tombstone checks,
-   operation-less proven-expired prepared retention/compaction, and the one-way unique
-   policy-decision FK;
+   trusted-time durable high-water/boot-ordering fields, durable audit-failure/recovery
+   generation latch fields, exact prepared tombstone checks, operation-less proven-expired
+   prepared retention/compaction, and the one-way unique policy-decision FK;
 #. implement ``TrustedTimeSource``/guard and rollback/reboot/loss-of-trust tests;
 #. implement atomic create/find with full/tombstone exact semantics, including
    owner-digest-before-retirement disclosure, registration-time request fingerprints,
@@ -2405,10 +2581,11 @@ Implement Phase 4 in this order:
 #. implement fail-closed Bootstrap policy + exactly one durable admission decision for
    every operation leaving ``received``, including atomic recovery-deny+rejection after a
    crash before normal decision persistence;
-#. implement the process-wide serialized JCS audit writer/verifier, exact schema mapping,
-   verified-journal-tail allocator, post-fsync SQLite tail cache/restart reconciliation,
-   storage-failure gate, and no-effect terminalization on pre-dispatch intent-audit
-   failure;
+#. implement the process-wide serialized JCS audit writer/verifier, frozen genesis
+   predecessor, exact schema mapping, verified-journal-tail allocator, post-fsync SQLite
+   tail cache/restart reconciliation, durable audit-failure generation latch, explicit
+   same-generation recovery evidence/clear path, and no-effect terminalization on pre-
+   dispatch intent-audit failure;
 #. implement retained payload filesystem adapter + metadata consistency;
 #. implement mandatory generic/operation-specific OP-BOUNDARY revalidation plus the
    bounded per-operation dispatch-handoff gate shared with cancellation;
@@ -2418,7 +2595,8 @@ Implement Phase 4 in this order:
 #. implement synthetic counting effect/reconciler/prepared-state/boundary verifiers only
    in tests;
 #. implement restart reconciliation and cancellation semantics using the same handoff gate;
-#. add local DB/kernel/audit operator commands;
+#. add local DB/kernel/audit operator commands, including explicit stopped-service
+   generation-bound audit recovery;
 #. add property, crash-window, trusted-time, boundary, restart, audit, payload, migration,
    stopped-service runtime-directory preservation, and systemd tests;
 #. integrate internal kernel health without changing MCP Tool surface;
@@ -2434,7 +2612,8 @@ A reviewer verifies:
 * Phase 4 only; no Phase 5 design or Tool promotion;
 * host-facing projection remains provisional/evidence-gated;
 * persistence stack matches Bootstrap baseline;
-* one authoritative SQLite writer and no executor/broker DB access;
+* one live authoritative SQLite writer and no executor/broker DB access; stopped-service
+  maintenance is serialized by the same exclusive runtime lock;
 * version-1 received creation and lifecycle edges match contracts;
 * idempotency unique scope is non-null and contract-exact;
 * undeclared ``derived_member_key`` fails closed before binding/operation creation;
@@ -2476,11 +2655,17 @@ A reviewer verifies:
 * same-key conflict/cross-controller cases cannot create effect;
 * persisted effect reference permits restart reconciliation;
 * audit schema ``payload.kind`` and required fields are exact;
+* first-store sequence 1 uses the exact domain-separated genesis predecessor vector and
+  the verifier rejects schema-valid placeholder/alternate genesis digests;
 * ``AuditJournal.append`` serializes verified-tail read/allocation through fsync/segment
   rotation/tail publication under one process-wide gate;
 * journal bytes own the audit tail; ``kernel_meta.audit_last_*`` is updated only post-fsync,
   a verified behind cache is refreshed on startup, and ahead/divergent cache is an
   integrity failure rather than allocation authority;
+* an audit-failure generation latch survives restart, including when the affected operation
+  is already terminal; successful surviving-chain verification alone never clears it;
+* only explicit same-generation schema-valid fsynced recovery evidence can clear the
+  audit-failure latch, and that clear itself leaves admission disabled until full startup;
 * tombstone/pre-operation idempotency abuse uses schema-valid audit evidence with no
   fabricated operation state/version and does not create a DB admission policy row;
 * DB/audit are not falsely one transaction;
@@ -2490,8 +2675,8 @@ A reviewer verifies:
 * migrations are explicit and cannot race live service;
 * systemd write authority is narrow under ``ProtectSystem=strict``; the unit recreates
   ``/run/binnacle`` with ``RuntimeDirectory=binnacle`` after reboot and preserves it with
-  ``RuntimeDirectoryPreserve=yes`` across the ordinary stop required by the offline
-  migration runbook, allowing the same non-root migration lock path without fallback;
+  ``RuntimeDirectoryPreserve=yes`` across the ordinary stop required by offline
+  migration/recovery, allowing the same non-root maintenance lock path without fallback;
 * current five read-only MCP Tools remain unchanged;
 * exact-head quality/CI passes.
 
@@ -2508,17 +2693,22 @@ Phase 4 implementation is accepted only when every item is true:
    ``RuntimeDirectory=binnacle`` recreates the narrow service-owned ``/run/binnacle``
    ephemeral lock directory when absent after reboot and
    ``RuntimeDirectoryPreserve=yes`` keeps it present across the ordinary stopped-service
-   offline-migration window;
+   offline-maintenance window;
 #. every DB connection verifies foreign keys, WAL, FULL synchronous, and busy timeout;
 #. migration mismatch/unavailable audit keeps consequential kernel unavailable;
-#. live writer and ``db upgrade`` cannot run concurrently, and after the required service
-   stop the non-root upgrade can verify and acquire the same protected ``/run/binnacle``
-   lock without privileged recreation or an alternate path;
+#. live writer and stopped-service ``db upgrade``/``audit recover`` cannot run concurrently,
+   and after the required service stop the non-root command can verify and acquire the same
+   protected ``/run/binnacle`` lock without privileged recreation or an alternate path;
 #. ``kernel_meta`` binds stable device epoch, schema-compatible audit epoch continuity,
-   and durable trusted-time high-water/boot-ordering evidence;
+   durable trusted-time high-water/boot-ordering evidence, and the durable audit-failure/
+   recovery generation latch;
 #. ``kernel_meta.audit_last_sequence/hash`` is cache-only: journal fsync precedes cache
    advancement, startup reconstructs the authoritative journal tail, repairs only a
    verified behind cache, and fails restricted on ahead/hash-divergent cache state;
+#. first-store audit sequence 1 sets
+   ``previous_event_hash=a3be2bea4d6491d8c23e9de679e5b99da91b43cf7bc76728069cc5514d921632``
+   derived from the exact section-12.1 preimage, and the verifier independently requires
+   that value rather than accepting a private/schema-only sentinel;
 #. controller ownership rows contain no reusable credential;
 #. lifecycle state vocabulary/edges exactly match ``spec/operation/lifecycle.yaml``;
 #. version 1 is ``NULL -> received`` and every later transition increments once;
@@ -2596,9 +2786,18 @@ Phase 4 implementation is accepted only when every item is true:
    verification/cache refresh and the next append uses the fsynced event as predecessor;
 #. durable ``running`` transition occurs before every effect-boundary call;
 #. pre-dispatch ``effect.intent_recorded`` audit failure with writable DB commits a
-   ``running -> failed`` known-no-effect outcome and calls no effect boundary;
-#. inability to commit that failure still calls no boundary and is reconciled
+   ``running -> failed`` known-no-effect outcome, durably latches the audit-failure
+   generation, and calls no effect boundary;
+#. inability to commit that failure/latch still calls no boundary and is reconciled
    conservatively after restart;
+#. after any durably latched required audit failure, restart leaves admission false even
+   when surviving chain verification succeeds and the affected operation is already
+   terminal;
+#. only explicit recovery for the exact active generation, with schema-valid fsynced
+   ``audit.verification_passed``/``recovery.completed`` evidence, may clear the latch; a
+   stale generation, verification-only run, or crash before the durable clear cannot;
+#. clearing the latch does not itself set admission true; a later complete startup must
+   verify all stores and matching recovery generation before enabling it;
 #. crash/lost response during ``start`` cannot become a known-no-effect assertion;
 #. production composition has no real effect adapter;
 #. synthetic effect proves at most one effect under concurrency/response loss;
@@ -2610,13 +2809,14 @@ Phase 4 implementation is accepted only when every item is true:
 #. audit canonicalization is exact RFC 8785 JCS + SHA-256;
 #. audit uses only schema-supported ``payload.kind`` values and all required fields;
 #. audit chain detects modification/deletion/reorder/truncation/fork;
-#. audit failure disables new consequential admission;
+#. audit failure disables new consequential admission durably across restart;
 #. emergency journal is bounded/fail-restricted;
 #. payload bytes are atomically finalized/fsynced/digest-verified before complete metadata;
 #. payload orphan/corruption/quota pressure is detected without silent completeness;
 #. operation evidence is bounded and not authoritative audit storage;
 #. fresh-process restart reconstructs DB/idempotency/audit/payload/trusted-time truth;
-#. local DB/kernel/audit commands expose no secrets/raw payloads and migration is safe;
+#. local DB/kernel/audit commands expose no secrets/raw payloads and migration/recovery is
+   safe under the stopped-service exclusive lock;
 #. existing Phase 3 authenticated read-only MCP behavior remains regression-tested;
 #. no MCP Tool/Resource/Task/Prompt/manifest change exposes Phase 4 APIs;
 #. no workspace/command/Git/package/service/privileged/hardware effect capability exists;
@@ -2643,9 +2843,10 @@ may pass its kernel tests but no host-facing consequential projection is promote
 This plan is complete when a coding agent can implement/test authoritative SQLite state,
 exact lifecycle/idempotency semantics, safe tombstones, trusted-time deadline ordering,
 mandatory consequential-boundary revalidation, minimal policy, schema-valid append-only
-audit, retained payload/evidence storage, durable pre-dispatch state, reconciliation,
-local diagnostics, deployment permissions, migrations, and fault/property tests without
-deciding later operation-specific authority or host behavior.
+audit with frozen genesis and durable generation-bound recovery, retained payload/evidence
+storage, durable pre-dispatch state, reconciliation, local diagnostics, deployment
+permissions, migrations, and fault/property tests without deciding later operation-specific
+authority or host behavior.
 
 Stop here. Do not add the disposable write-probe workflow or any later operational
 capability in this document.
