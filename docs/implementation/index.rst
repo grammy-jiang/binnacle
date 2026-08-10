@@ -43,28 +43,49 @@ The shared foundation documents may be updated separately when they affect every
 Implementation code should likewise prefer small vertical pull requests rather than one
 large Bootstrap implementation change.
 
+Detailed-plan readiness and implementation/promotion readiness are intentionally
+separate. When real host/device evidence cannot exist until an earlier planned phase is
+implemented, a later phase may still receive a ``provisional`` detailed plan if the plan
+freezes only evidence-independent architecture, contracts, deterministic algorithms,
+security invariants, test machinery, and evidence procedures. Host/device-dependent
+facts must remain explicit unresolved decision points or conditional branches.
+
+A provisional detailed plan does **not** promote runtime authority, does not convert an
+unknown compatibility-profile field into support, and does not satisfy the phase's
+implementation exit gate. The implementation or host-facing promotion remains blocked
+until the named real evidence exists. This distinction allows the detailed planning
+sequence to complete without fabricating observations that only a future implementation
+run can produce.
+
 Plan status vocabulary
 ----------------------
 
 ``planned``
    The phase exists in the roadmap but has no merged detailed engineering plan yet. A
-   planned phase whose named dependency/evidence gate is not satisfied must wait; only a
-   ``ready-to-design`` or applicable ``provisional`` phase may begin detailed drafting.
+   planned phase whose named dependency/evidence gate is not satisfied must wait unless
+   the phase can legitimately be treated as ``provisional`` under the rule above.
 
 ``ready-to-design``
    The preceding design/evidence dependencies are sufficient to create the detailed
-   engineering plan.
+   engineering plan with no material host/device-dependent branch left open.
 
 ``provisional``
-   Internal design can be specified, but one or more host/device-dependent details must
-   be frozen after an earlier real-evidence phase.
+   A detailed plan may be created and merged before one or more named real evidence items
+   exist, but only evidence-independent decisions may be frozen. Every host/device-
+   dependent choice must be visibly conditional, must name the evidence that resolves it,
+   and must fail closed at implementation/promotion time if that evidence is absent,
+   expired, incomplete, or contradictory.
 
 ``evidence-blocked``
-   The plan must not be frozen until named Raspberry Pi or ChatGPT evidence exists.
+   Even an evidence-independent detailed plan would be materially misleading or unsafe;
+   no numbered plan may be frozen until the named evidence exists. Use this status
+   narrowly. Prefer ``provisional`` when a deterministic safe plan can be written without
+   claiming the missing observation.
 
 ``merged``
    The detailed implementation plan has passed review and CI and is authoritative for
-   implementation, subject to the normal pre-1.0 evidence-driven revision process.
+   the decisions it actually freezes, subject to explicit provisional evidence gates and
+   the normal pre-1.0 evidence-driven revision process.
 
 Phase map
 ---------
@@ -84,21 +105,25 @@ Phase map
 | 4     | ``phase-04-durable-operation-kernel.rst``            | provisional          | Phase 3 compatibility evidence for any       |
 |       |                                                      |                      | host-facing projection                       |
 +-------+------------------------------------------------------+----------------------+----------------------------------------------+
-| 5     | ``phase-05-write-capability-probe.rst``              | evidence-blocked     | Phase 3 authentication/discovery/confirmation|
-|       |                                                      |                      | evidence                                     |
+| 5     | ``phase-05-write-capability-probe.rst``              | provisional          | Phase 4 plan merged; real Phase 3 auth,      |
+|       |                                                      |                      | discovery, and confirmation evidence gates   |
+|       |                                                      |                      | implementation/promotion                     |
 +-------+------------------------------------------------------+----------------------+----------------------------------------------+
-| 6     | ``phase-06-development-workspace.rst``               | provisional          | Phase 5 write/confirmation evidence          |
+| 6     | ``phase-06-development-workspace.rst``               | provisional          | Phase 5 plan; real Phase 5 write/confirmation|
+|       |                                                      |                      | evidence gates operational promotion         |
 +-------+------------------------------------------------------+----------------------+----------------------------------------------+
-| 7     | ``phase-07-execution-supervisor.rst``                | provisional          | Phase 4 durable lifecycle + Phase 3 host     |
-|       |                                                      |                      | evidence                                     |
+| 7     | ``phase-07-execution-supervisor.rst``                | provisional          | Phase 4 durable lifecycle; real Phase 3 host |
+|       |                                                      |                      | evidence gates host-facing projection        |
 +-------+------------------------------------------------------+----------------------+----------------------------------------------+
-| 8     | ``phase-08-git-development.rst``                     | provisional          | Workspace/executor foundation                |
+| 8     | ``phase-08-git-development.rst``                     | provisional          | Workspace/executor plans; real predecessor   |
+|       |                                                      |                      | evidence gates operational promotion         |
 +-------+------------------------------------------------------+----------------------+----------------------------------------------+
-| 9     | ``phase-09-privileged-self-management.rst``          | provisional          | Durable operations, Git workflow, real Pi    |
-|       |                                                      |                      | service evidence                             |
+| 9     | ``phase-09-privileged-self-management.rst``          | provisional          | Durable-operation/Git plans; real Pi service |
+|       |                                                      |                      | evidence gates privileged promotion          |
 +-------+------------------------------------------------------+----------------------+----------------------------------------------+
-| 10    | ``phase-10-self-hosting-acceptance.rst``             | evidence-blocked     | All prior Bootstrap phases implemented and   |
-|       |                                                      |                      | real ChatGPT connected                       |
+| 10    | ``phase-10-self-hosting-acceptance.rst``             | provisional          | All prior plans may be merged provisionally; |
+|       |                                                      |                      | acceptance requires all prior implementation |
+|       |                                                      |                      | gates and real ChatGPT                        |
 +-------+------------------------------------------------------+----------------------+----------------------------------------------+
 
 Required structure of every detailed phase plan
@@ -125,6 +150,14 @@ Each detailed phase document should contain, where applicable:
 #. unit, property, integration, system, real-Pi, and real-ChatGPT tests as applicable;
 #. deterministic phase acceptance checklist;
 #. unresolved/provisional items and the evidence required to freeze them.
+
+For every ``provisional`` plan, the acceptance section must distinguish:
+
+* plan acceptance -- review/CI proves the evidence-independent engineering specification
+  is coherent and implementable;
+* implementation promotion -- the named real evidence is present and current before any
+  host-dependent capability or authority is exposed;
+* phase exit -- the roadmap's real implementation/evidence gate passes.
 
 Interface ownership
 -------------------
@@ -159,6 +192,12 @@ Planning stop rule
 
 Detailed planning is complete enough when the next phase can be implemented and tested
 without making unresolved architectural decisions that block its roadmap exit gate.
+
+Missing real host/device evidence does not by itself stop the **planning** sequence when
+the next phase can be specified safely and provisionally. In that case, freeze the
+invariant implementation structure, leave evidence-dependent choices explicit, and
+continue to the next numbered plan. Stop only when even a provisional plan would require
+inventing a host/device fact or making an unsafe architectural commitment.
 
 Do not freeze post-Bootstrap architecture merely to make these documents exhaustive.
 Once the real self-hosting loop works, future detailed design should preferentially be
