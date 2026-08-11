@@ -21,7 +21,7 @@ Binnacle Phase 6 Detailed Implementation Plan
                        services, descriptor-relative Linux containment, descriptor-pinned
                        ``ripgrep`` search, shared content/change coordination, durable
                        Phase 4 consequential-operation integration for mutations,
-                       session/start linearization, bounded MCP
+                       session/start and content-admission linearization, bounded MCP
                        contract/schema/manifest promotion, tests, deployment permissions,
                        and evidence gates only
 
@@ -374,26 +374,50 @@ reasoning agent.
 Phase 6 adds one application-level authority gate per current development session. It is
 a correctness primitive, not a cache and not a substitute for durable session state.
 
-The gate serializes exactly these competing events:
+The gate serializes these competing events:
 
+* a content-returning read/search that is about to establish its one process-local
+  content-admission permit;
 * a member mutation that is about to cross ``EffectBoundary.start``;
 * explicit session end/revocation;
 * trusted-time expiry becoming effective for new work;
 * startup/recovery transition that marks the session ineffective because controller,
   device, workspace/profile, policy, or trusted-time continuity changed.
 
-The fixed acquisition order for a member mutation is:
+The global application lock order is fixed as:
 
 ::
 
-   Phase 4 per-operation dispatch handoff
+   WorkspaceAccessGate
+     -> Phase 4 per-operation dispatch handoff, when the path is consequential
      -> DevelopmentSessionAuthorityGate
-     -> Phase 4 process-wide ConsequentialBoundaryGate
+     -> Phase 4 process-wide ConsequentialBoundaryGate, when the path is consequential
 
-No code path acquires those gates in reverse order. Session end/revocation uses the same
-session gate before any session authority-state transition and, when it needs the generic
-Phase 4 consequential gate for its own durable effect, acquires it only after the session
-gate. Tests fail on lock-order inversion.
+A content-returning read/search uses only ``WorkspaceAccessGate CONTENT_READ ->
+DevelopmentSessionAuthorityGate`` from that chain. A workspace mutation already owns the
+exclusive ``CHANGE`` side before it later enters the Phase 4 handoff/session/process gates.
+Session end/revocation acquires the session gate directly and **never** reaches back to
+acquire ``WorkspaceAccessGate``. Recovery/access-gate transitions likewise never acquire a
+session gate while holding a later gate in reverse order. Tests fail on any inversion.
+
+For a content-returning read/search, initial session checks performed before waiting for
+``CONTENT_READ`` are advisory freshness checks only. After the shared content guard has
+actually been acquired, the application acquires the exact session authority gate and
+re-samples trusted time plus controller/device/workspace/profile/policy and
+``activation_closure``. Only an exact still-effective session may create a bounded
+process-local ``ContentReadPermit`` bound to the exact session state/version, workspace
+profile/root identity, request digest, and current content-guard epoch. No source bytes are
+opened/returned and no ``rg`` child is spawned before that permit exists.
+
+The content-read admission point is the successful permit creation while both the content
+guard and session gate are held. The session gate may then be released while the shared
+content guard remains held for the full file-read or search-child traversal. If end,
+revocation, expiry, or recovery reduction wins the session gate first, the waiting reader
+releases its content guard and returns no source content. If content admission wins first,
+a later authority reduction does not retroactively interrupt or reclassify that already-
+admitted no-effect read/search; it blocks every later content admission. The permit is not
+durable authority, cannot be reused for another request, and dies with its exact access
+guard/runtime.
 
 For a member mutation, the session gate is held from the final trusted-time/session
 predicate through final Phase 4 revalidation, durable audit-obligation publication, and
@@ -401,10 +425,11 @@ the process-wide gate-owned ``call_start`` linearization. It is released only af
 bounded start handoff has either definitely not occurred or has linearized and immediate
 effect-receipt/knowledge classification has completed.
 
-This closes the former race in which end/expiry could commit while audit-obligation bytes
-were being fsynced and a stale member could still start afterward.
+This closes both stale-authority windows: session reduction cannot commit while a stale
+mutation is between final verification and start, and a content reader that waited behind
+a changer cannot use an earlier session proof after the session has ended.
 
-The outcome is binary at the start boundary:
+The mutation outcome is binary at the start boundary:
 
 * end/revocation/expiry wins the session-gate linearization -> the member cannot call
   ``EffectBoundary.start`` and closes with proven no effect after required recovery/audit;
@@ -412,10 +437,11 @@ The outcome is binary at the start boundary:
   the effect is already started/committed-to-start before later authority reduction, and
   later end/revocation cannot rewrite its effect truth.
 
-Expiry is not a best-effort timer callback. Every gate entry samples the Phase 4 trusted-
-time source under the same critical section; a deadline already reached or unverifiable
-causes ``effective_for_new_work=false`` before a new member may start. A reconciler may
-persist ``EXPIRED`` afterward, but persistence delay cannot extend authority.
+Expiry is not a best-effort timer callback. Every session-gate entry samples the Phase 4
+trusted-time source under the same critical section; a deadline already reached or
+unverifiable causes ``effective_for_new_work=false`` before a new mutation or content
+admission may linearize. A reconciler may persist ``EXPIRED`` afterward, but persistence
+delay cannot extend authority.
 
 7.2 Trusted-time binding
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -435,7 +461,7 @@ model-controlled input beyond the reviewed hard maximum.
 
 Clock rollback, reboot with untrusted wall time, or lost trusted-time continuity never
 extends a session. If expiry cannot be proven safely, ``effective_for_new_work=false`` and
-new workspace mutations fail closed.
+new workspace mutations **and new content-returning read/search admissions** fail closed.
 
 7.3 Ordinary Binnacle restart
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -457,17 +483,23 @@ with incomplete activation closure into effective authority.
 
 Session end/expiry/revocation has two separate meanings:
 
-* it prevents **new** member admission and any not-yet-started consequential member from
-  crossing its final effect boundary;
-* it does not rewrite, erase, duplicate, or blindly cancel the truth of an effect whose
-  ``call_start`` already linearized.
+* it prevents **new** member admission, including content-returning read/search admission,
+  and any not-yet-started consequential member from crossing its final effect boundary;
+* it does not rewrite, erase, duplicate, or blindly cancel an already-linearized mutation
+  effect or an already-admitted bounded no-effect content read/search.
 
-Every member mutation therefore uses the exact session-gate sequence in section 7.1. If
-session authority reduction wins before start, the mutation closes as proven no-effect and
-releases its workspace mutation fence only after the normal Phase 4 audit/recovery closure.
-If effect start wins, later session end does not manufacture ``known_no_effect``. The
-retained operation proceeds through truthful receipt/effect classification and restart
-reconciliation.
+Every member mutation therefore uses the exact session-gate sequence in section 7.1. Every
+content-returning read/search acquires ``CONTENT_READ`` first, then uses the same session
+gate to establish its one non-reusable admission permit. If session authority reduction
+wins before content admission, no source bytes are returned and no search child starts. If
+content admission wins first, the read/search may complete under its retained content guard
+while the ended session rejects subsequent admissions.
+
+If session authority reduction wins before mutation start, the mutation closes as proven
+no-effect and releases its workspace mutation fence only after the normal Phase 4 audit/
+recovery closure. If effect start wins, later session end does not manufacture
+``known_no_effect``. The retained operation proceeds through truthful receipt/effect
+classification and restart reconciliation.
 
 Same-key retry after session end returns the retained operation/result/uncertainty before
 mutable session checks and never requires a now-expired session to create a second effect.
@@ -522,10 +554,10 @@ promoted equivalent), while the database unique index remains the final concurre
 arbiter. It never waits for the competing activation and then silently attaches to that
 other session.
 
-The session authority gate remains closed to member starts for the entire activation
-operation until the final closure CAS succeeds. This eliminates any window where a newly
-``ACTIVE`` row could authorize a member before required activation audit/obligation
-closure.
+The session authority gate remains closed to member starts and content admissions for the
+entire activation operation until the final closure CAS succeeds. This eliminates any
+window where a newly ``ACTIVE`` row could authorize a member before required activation
+audit/obligation closure.
 
 If post-effect audit, obligation cleanup, or the final closure CAS fails, the session is
 not effective for new work. Restart reconciliation may complete activation only from the
@@ -554,7 +586,7 @@ credential, policy body, protected path, raw audit bytes, or source content.
 
 End is an authority-reducing operation. It acquires the exact session authority gate before
 changing the durable session authority state. Once the terminal transition wins that gate,
-no later member ``call_start`` can begin.
+no later member mutation ``call_start`` or content-read permit can begin.
 
 The authority reduction is fail-safe: a failure to append the required end audit must never
 cause authority to remain active merely so the audit can succeed first. The durable
@@ -564,10 +596,11 @@ the session remains reduced. This asymmetry is intentional: activation fails clo
 withholding effectiveness until audit closure, while revocation fails safe by removing
 authority first.
 
-If a member already won ``call_start`` before end acquired the session gate, end records
-that the member is retained/in-flight but does not alter its effect knowledge. A same-key
-end retry returns the retained end operation. A new request against an already terminal
-session may return bounded already-ended state with no new effect.
+If a member mutation already won ``call_start`` or a content-returning read/search already
+won its permit before end acquired the session gate, end records that the member is already
+in-flight/admitted but does not rewrite effect/disclosure truth. A same-key end retry
+returns the retained end operation. A new request against an already terminal session may
+return bounded already-ended state with no new effect.
 
 9. Registered workspace profile and protected configuration
 -----------------------------------------------------------
@@ -755,23 +788,42 @@ request bounds, session/workspace authority, information classification, protect
 exclusion, redaction, rate/resource limits, and audit/diagnostic policy applicable to
 reads.
 
-Content-returning operations additionally use the shared workspace access coordinator.
-``workspace_read`` and ``workspace_search`` acquire a shared ``CONTENT_READ`` guard only
-after proving the durable mutation fence is free and the exact workspace/session/profile
-is valid; they hold it until the exact file read completes or the ``ripgrep`` child is
-proven terminated/reaped and its bounded output is drained. A Binnacle-managed changer
-must acquire the exclusive ``CHANGE`` side before it can acquire the durable mutation
-fence, so protected objects cannot be relabelled by a coordinated rename while content is
-being returned.
+For metadata-only ``workspace_inspect``/``workspace_list`` that actually depend on session
+authority rather than a promoted smaller exception, the application performs a final
+session/profile/trusted-time freshness check immediately before constructing the protected
+result projection. They do not return source bytes and therefore do not acquire the
+content guard solely for this purpose.
 
-The guard is an application/process coordination primitive, not durable authority and not
-a substitute for the mutation fence. In-process ``workspace_read`` dies with the owning
-application runtime. ``workspace_search`` additionally uses the service-cgroup child
-lifecycle and startup barrier in sections 15 and 16 so an ``rg`` child from a failed prior
-runtime cannot retain a pinned descriptor while a replacement process opens the gate.
-Every new application runtime initializes workspace access in ``RECOVERY_CLOSED`` and does
-not admit either ``CONTENT_READ`` or ``CHANGE`` until that barrier and durable-fence
-reconciliation are complete.
+Content-returning operations have a stricter admission sequence. An early session check
+may reject obvious stale requests, but it is never the authority proof after waiting for
+workspace coordination. ``workspace_read`` and ``workspace_search`` first acquire a shared
+``CONTENT_READ`` guard only after the durable mutation fence is free and startup recovery
+is complete. **While that guard is held**, they then acquire
+``DevelopmentSessionAuthorityGate`` in the fixed order from section 7.1 and re-prove the
+exact effective session, trusted time, controller/device, workspace/profile/root identity,
+request binding, and protected-content policy. Only that successful gate-owned check may
+mint the one process-local ``ContentReadPermit``. If session reduction already won, the
+content guard is released and the operation returns no source bytes and starts no search
+child.
+
+After permit creation the session gate is released; the shared content guard remains held
+until the exact file read completes or the ``ripgrep`` child is proven terminated/reaped
+and its bounded output is drained. Thus session end cannot be bypassed by a reader that was
+queued behind a changer, while an already-admitted bounded no-effect content operation is
+allowed to finish without treating later end as retroactive revocation. A Binnacle-managed
+changer must acquire the exclusive ``CHANGE`` side before it can acquire the durable
+mutation fence, so protected objects cannot be relabelled by a coordinated rename while
+content is being returned.
+
+The guard and permit are application/process coordination facts, not durable authority and
+not substitutes for the mutation fence. ``ContentReadPermit`` is bound to one exact
+request/session state/access-guard epoch and is not transferable or reusable. In-process
+``workspace_read`` dies with the owning application runtime. ``workspace_search``
+additionally uses the service-cgroup child lifecycle and startup barrier in sections 15
+and 16 so an ``rg`` child from a failed prior runtime cannot retain a pinned descriptor
+while a replacement process opens the gate. Every new application runtime initializes
+workspace access in ``RECOVERY_CLOSED`` and does not admit either ``CONTENT_READ`` or
+``CHANGE`` until that barrier and durable-fence reconciliation are complete.
 
 14.1 ``workspace_inspect``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -792,9 +844,10 @@ only if the promoted information contract permits it.
 ~~~~~~~~~~~~~~~~~~~~~~~
 
 Reads one exact non-protected regular file with bounded byte range/chunk semantics. It
-returns the object version, full content digest when available, exact returned range,
-encoding/media facts, and truncation/continuation information. Binary content is never
-silently decoded as text.
+must not open the target for content before the section 14 ``ContentReadPermit``
+linearization succeeds. It returns the object version, full content digest when available,
+exact returned range, encoding/media facts, and truncation/continuation information.
+Binary content is never silently decoded as text.
 
 15. Descriptor-pinned typed ``ripgrep`` search adapter
 ------------------------------------------------------
@@ -816,8 +869,16 @@ rename could relabel a protected directory. The launch sequence is:
    ``SearchChildRecoveryBarrier`` described below;
 #. acquire the shared ``WorkspaceAccessGate`` ``CONTENT_READ`` guard and, atomically with
    that admission, require the durable workspace mutation fence to be free;
-#. open/pin the exact registered workspace root descriptor and verify the session-bound
-   root identity;
+#. while the content guard is held, acquire ``DevelopmentSessionAuthorityGate`` and
+   re-sample trusted time plus exact controller/device/session state+version,
+   ``activation_closure``, workspace/profile/root identity, request binding, and
+   protected-content policy; if any predicate is stale or authority reduction already won,
+   release the content guard and return no matches without spawning a child;
+#. mint one non-reusable process-local ``ContentReadPermit`` bound to those exact facts and
+   the current content-guard epoch, then release the session gate while retaining the
+   content guard;
+#. open/pin the exact registered workspace root descriptor and verify the permit-bound
+   session/root identity;
 #. descriptor-walk and pin the exact search-directory descriptor; Bootstrap search scopes
    are directories, while exact-file content search may be implemented separately only if
    its descriptor binding is reviewed;
@@ -886,8 +947,9 @@ The reviewed adapter additionally binds:
 Search is read-only. A timeout or output ceiling never becomes a partial-success claim
 without explicit ``truncated``/``timed_out`` metadata. Root/subdirectory replacement
 races at launch, protected-directory rename/exchange while traversal is active, application
-crash/restart while ``rg`` holds a pinned descriptor, and content-search admission while a
-durable changer fence exists are mandatory Linux/concurrency integration tests.
+crash/restart while ``rg`` holds a pinned descriptor, content-search admission while a
+durable changer fence exists, and session end/expiry while a search waits for
+``CONTENT_READ`` are mandatory Linux/concurrency integration tests.
 
 16. Shared workspace access/change coordination seam
 ------------------------------------------------------
@@ -901,13 +963,20 @@ not with a Binnacle-managed workspace changer.
 One per-workspace ``WorkspaceAccessGate`` supplies that read/write linearization:
 
 * ``CONTENT_READ`` is shared and may be acquired only while the durable mutation fence is
-  free and startup search-child recovery is complete; ``workspace_read`` holds it for the
-  exact descriptor read and ``workspace_search`` for the entire child traversal/output-
-  drain/termination lifetime;
+  free and startup search-child recovery is complete. Acquisition alone does **not** grant
+  content authority: while holding the guard the caller must next acquire
+  ``DevelopmentSessionAuthorityGate``, revalidate the exact effective session and mint the
+  one request-bound ``ContentReadPermit`` before opening/returning source bytes or spawning
+  ``rg``. ``workspace_read`` retains the content guard for the exact descriptor read and
+  ``workspace_search`` for the entire child traversal/output-drain/termination lifetime;
 * ``CHANGE`` is exclusive. A new mutation acquires it **after policy allow but before**
   acquiring the durable workspace mutation fence and retains it until the durable fence is
   truthfully released. If effect truth is ``uncertain``, the durable fence remains owned
   and the access gate remains/recovers change-closed;
+* the application-wide lock order is
+  ``WorkspaceAccessGate -> per-operation dispatch handoff (if consequential) ->
+  DevelopmentSessionAuthorityGate -> ConsequentialBoundaryGate (if consequential)``.
+  Session reduction never acquires ``WorkspaceAccessGate`` after taking the session gate;
 * acquisition/release is ordered by one application coordinator so a content reader cannot
   observe ``fence free`` while a changer concurrently crosses into ownership, and a
   changer cannot acquire its durable fence while a content guard is active;
@@ -920,9 +989,11 @@ One per-workspace ``WorkspaceAccessGate`` supplies that read/write linearization
   closed.
 
 The access gate is not a second authority source and does not make out-of-band writers
-cooperate. Content-returning operations therefore require the reviewed no-uncoordinated-
-writer profile or a stronger protected-object confinement mechanism as described in
-sections 9, 10, and 15.
+cooperate. ``ContentReadPermit`` is likewise only an ephemeral proof that a particular
+content request won session-admission linearization while its exact access guard was held;
+it cannot be used after that guard/runtime ends. Content-returning operations therefore
+require the reviewed no-uncoordinated-writer profile or a stronger protected-object
+confinement mechanism as described in sections 9, 10, and 15.
 
 The word **changing** is deliberate. The same authoritative seam must later be consumed by
 Phase 7 development commands and Phase 8 Git operations whenever their reviewed contract
@@ -1272,6 +1343,10 @@ Required behaviour:
   ``workspace_search`` child is never assumed gone merely because its parent PID exited;
 * the application service cgroup/lifecycle profile is verified before search promotion and
   startup never opens the gate by pathname/cgroup emptiness guess alone;
+* no replacement runtime may treat access-gate recovery completion as session authority:
+  every new content admission still acquires the rebuilt
+  ``DevelopmentSessionAuthorityGate`` after ``CONTENT_READ`` and revalidates the exact
+  current session before bytes/child start;
 * ``received`` without completed admission follows Phase 4 fail-closed recovery deny;
 * ``authorised`` that never entered dispatch does not start automatically after restart;
 * ``running`` with no durable exact effect receipt is not classified
@@ -1414,8 +1489,20 @@ Representative boundaries:
        async def release_change(self, operation_id: str) -> None: ...
 
    class DevelopmentSessionAuthorityGate(Protocol):
+       async def admit_content_read(
+           self,
+           session_id: str,
+           workspace_id: str,
+           request_digest: str,
+           content_guard_epoch: int,
+       ) -> ContentReadPermit: ...
        async def member_start(self, session_id: str, operation_id: str) -> StartPermit: ...
        async def reduce_authority(self, session_id: str, reason: str) -> None: ...
+
+``admit_content_read`` is called only while the exact ``ContentReadGuard`` is already held.
+It revalidates the authoritative session/trusted-time/profile predicates under the session
+gate and returns a permit bound to that guard/request; the permit itself does not acquire
+workspace access or persist authority.
 
 ``workspace_patch`` belongs in the application layer: it computes deterministic new bytes
 from exact base content and delegates the final replacement to ``WorkspaceMutator.write``.
@@ -1467,8 +1554,8 @@ idempotency key, credential, or never-disclosable state.
 
 Structured diagnostics may include workspace ID, operation/session IDs, mutation kind,
 normalized-path digest, result byte counts, truncation, search duration, fence state,
-reason codes, primitive/profile version, session-gate outcome, search-child recovery state,
-and effect-reference digest.
+reason codes, primitive/profile version, session-gate outcome, content-admission outcome,
+search-child recovery state, and effect-reference digest.
 
 Do not log:
 
@@ -1480,10 +1567,10 @@ Do not log:
 * inherited procfd numbers as stable identifiers.
 
 Useful metrics include bounded counters/histograms for workspace reads/searches/mutations,
-search timeout/truncation, stale-version rejections, fence contention, uncertain mutation
-outcomes, session starts/ends/expiry, session-start race outcomes, stale-search-child
-recovery blocking, and disabled primitive profiles. Path names and operation keys are never
-unbounded metric labels.
+search timeout/truncation, stale-version rejections, fence contention, content-admission
+session-race rejection, uncertain mutation outcomes, session starts/ends/expiry,
+session-start race outcomes, stale-search-child recovery blocking, and disabled primitive
+profiles. Path names and operation keys are never unbounded metric labels.
 
 31. Security invariants
 -----------------------
@@ -1503,7 +1590,16 @@ The implementation and review must prove at least:
    uncertain/incomplete activation retains the slot fail-closed.
 #. Session end/revocation/expiry and member effect start share one authority-gate
    linearization; no member starts after an authority reduction that won before start.
-#. Session end after ``call_start`` never rewrites already-started effect truth.
+#. Content-returning read/search admission also shares that session-authority
+   linearization **after** acquiring ``CONTENT_READ``. A stale pre-wait session proof cannot
+   authorize content; authority reduction that wins before permit creation yields zero
+   source-content disclosure and zero search-child start.
+#. The global lock order is ``WorkspaceAccessGate -> Phase 4 per-operation handoff when
+   applicable -> DevelopmentSessionAuthorityGate -> Phase 4 process-wide consequential
+   gate when applicable``; session reduction never acquires workspace access in reverse.
+#. Session end after mutation ``call_start`` never rewrites already-started effect truth,
+   and session end after a content-read permit does not retroactively reclassify that
+   already-admitted bounded read/search while subsequent admission is denied.
 #. Same-key retained retry resolves before mutable session/filesystem checks and can never
    create a second effect.
 #. Every new mutation has Phase 4 durable caller identity before policy/effect.
@@ -1523,6 +1619,9 @@ The implementation and review must prove at least:
    entire descriptor read/recursive traversal; all Binnacle-managed changers hold the
    exclusive side, and a profile permitting uncoordinated writers cannot promote content
    access without stronger protected-object confinement.
+#. No source file is opened for content and no ``rg`` child is spawned until an exact
+   request-bound ``ContentReadPermit`` has been created under the session gate while the
+   content guard is held.
 #. Every application runtime starts the workspace access coordinator ``RECOVERY_CLOSED``;
    neither content access nor a workspace-changing effect is admitted until the verified
    service-cgroup search-child barrier proves no prior runtime can still traverse a pinned
@@ -1561,6 +1660,8 @@ Cover:
 * live-session-slot partial uniqueness, same-key retention, distinct-key concurrent begin,
   and fail-closed slot retention during incomplete/uncertain activation;
 * session-authority gate lock order and start-vs-reduction outcomes;
+* content-read admission lock order: ``CONTENT_READ`` first, session gate second, no
+  reverse acquisition, exact permit binding, and no content access before permit;
 * ``WorkspaceAccessGate`` shared-content/exclusive-change acquisition, unconditional
   startup ``RECOVERY_CLOSED`` state, and transition only after search-child recovery plus
   durable-fence reconciliation;
@@ -1584,10 +1685,17 @@ Use Hypothesis for:
 * same key/same fingerprint producing one operation/effect counter;
 * same key/different fingerprint producing zero additional effects;
 * no legal transition releasing a fence from ``uncertain`` without reconciliation;
-* session end/expiry winning the authority gate before start producing zero effect;
+* session end/expiry winning the authority gate before mutation start producing zero
+  effect;
+* session end/expiry winning the authority gate after a content caller acquired
+  ``CONTENT_READ`` but before permit creation producing zero source bytes and zero search
+  child;
+* content admission winning the session gate before later end creating at most one exact
+  request-bound permit while all later content admissions fail;
 * member start winning before end never converting durable/uncertain effect truth to
   no-effect;
-* incomplete activation closure never permitting a member start;
+* incomplete activation closure never permitting a member mutation start or content
+  admission;
 * arbitrary concurrent distinct begin operations yielding at most one live
   ``PENDING``/``ACTIVE`` session slot;
 * incomplete/uncertain activation never freeing the live slot for a second begin;
@@ -1612,6 +1720,10 @@ On Linux temp workspaces test:
   skip, timeout, output truncation, and process failure;
 * ``rg`` remains in the owning application service cgroup/no delegated scope and normal
   completion proves termination/reaping before ``CONTENT_READ`` release;
+* a changer holds ``CHANGE`` while a content search request first validates a session;
+  session end/expiry then wins before ``CONTENT_READ`` becomes available, and after the
+  changer releases the queued search must revalidate under the session gate and return no
+  matches without spawning ``rg``;
 * Binnacle-managed rename/exchange of ``.git`` or another protected directory beneath an
   allowed name while ``rg`` is active: the changer cannot acquire the exclusive access
   guard until search ends and no protected bytes are returned;
@@ -1656,6 +1768,8 @@ Inject crashes/failures at least at:
 * DB failure during terminal/fence release;
 * after ``PENDING -> ACTIVE`` before activation post-effect audit;
 * after activation audit before activation-closure CAS;
+* after ``CONTENT_READ`` acquisition but before session-gate permit creation, with session
+  end/expiry winning and no content disclosure;
 * application main-process ``SIGKILL`` while ``rg`` holds the pinned search descriptor:
   systemd must remove all prior-invocation search descendants before the replacement
   runtime can pass ``SearchChildRecoveryBarrier``; until then ``CHANGE`` and
@@ -1666,8 +1780,9 @@ Inject crashes/failures at least at:
 * process restart with retained ``uncertain`` mutation.
 
 Expected results prefer conservative retained truth. In particular, pathname presence or
-absence after a lost receipt never manufactures ``known_effect``/``known_no_effect``, and
-parent process death never proves a search child is gone.
+absence after a lost receipt never manufactures ``known_effect``/``known_no_effect``, parent
+process death never proves a search child is gone, and stale pre-wait session validation
+never authorizes source disclosure after session reduction.
 
 32.5 Concurrency tests
 ~~~~~~~~~~~~~~~~~~~~~~
@@ -1678,10 +1793,17 @@ Prove:
 * two distinct first session-begin operations cannot both create live ``PENDING`` rows or
   later become effective; same-key concurrent begin converges to one retained operation;
 * same-key concurrent first mutation calls converge to one operation;
-* session end/revocation racing a member start either wins the shared authority gate before
-  ``call_start`` (zero effect) or loses to the already-linearized start;
+* session end/revocation racing a member mutation start either wins the shared authority
+  gate before ``call_start`` (zero effect) or loses to the already-linearized start;
+* a content request that validated the session before waiting on ``CONTENT_READ`` cannot
+  disclose after session end/expiry wins while it waits; after the access guard becomes
+  available it must acquire the session gate, observe reduction, release the guard, and
+  return zero content/zero ``rg`` start;
+* a content request whose permit linearizes before session end may complete exactly that
+  bounded request under its retained content guard, while every later content admission
+  fails;
 * trusted-time expiry discovered while the member holds/requests the session gate blocks
-  start even if an earlier pre-gate check was valid;
+  both mutation start and content admission even if an earlier check was valid;
 * audit-obligation fsync cannot create a stale-start window because the session gate
   remains held through ``call_start``;
 * required audit failure racing dispatch obeys the process-wide Phase 4 gate;
@@ -1703,6 +1825,8 @@ Before runtime exposure prove:
 * manifest/handler/contract versions agree;
 * information/host-confirmation classes match reviewed session semantics;
 * protected content exclusions are represented consistently across read/search/mutation;
+* content-returning read/search contracts require gate-owned session revalidation after
+  acquiring the content guard and cannot project source bytes from a stale pre-wait proof;
 * a content-read/search profile that permits uncoordinated writers cannot expose those
   Tools unless the promoted contract names a stronger protected-object confinement
   mechanism;
@@ -1737,6 +1861,8 @@ Real Pi evidence should verify:
   behaviour when stale-member absence cannot be proven;
 * ``WorkspaceAccessGate`` protected-directory rename/exchange coordination and restart
   blocking from a retained durable mutation fence;
+* content-read/session-end linearization under real event-loop contention: a reader queued
+  behind ``CHANGE`` must not use a stale session proof after end/expiry;
 * the accepted writer model for content-returning read/search, or the exact stronger
   protected-object confinement mechanism if uncoordinated writers are allowed;
 * ``ripgrep`` availability/version and bounded execution;
@@ -1750,6 +1876,7 @@ Real ChatGPT evidence should verify:
 * no redundant per-member confirmation if the reviewed HOST profile claims session
   semantics;
 * bounded source read/search presentation;
+* content-returning read/search after session end/expiry is rejected for new admission;
 * create/write/patch/move/delete entitlement only for operations actually promoted;
 * same-key retry and lost-response behaviour;
 * session reconnect/restart continuity;
@@ -1763,8 +1890,30 @@ fall back to ambient HC0 mutation authority.
 34. Holistic invariant pass before review
 -----------------------------------------
 
-Before every external review of a new Phase 6 head, inspect the design as one continuous
-consequential-operation pipeline rather than waiting for serial comments:
+Before every external review of a new Phase 6 head, inspect the design as continuous
+pipelines rather than waiting for serial comments.
+
+Content-returning read/search admission is:
+
+::
+
+   normalize/authenticate exact request/session/workspace state
+     -> early advisory session/profile check
+     -> WorkspaceAccessGate CONTENT_READ acquisition
+     -> DevelopmentSessionAuthorityGate acquisition
+     -> exact trusted-time/session/controller/device/profile/root/protected-policy recheck
+     -> one request/guard-bound ContentReadPermit
+     -> release session gate while retaining content guard
+     -> descriptor read OR descriptor-pinned rg child traversal
+     -> proven read completion / child termination+output drain
+     -> content-guard release
+
+If session reduction wins before ``ContentReadPermit`` creation, the path returns zero
+source content and spawns no child. A permit that wins first authorizes only that already-
+admitted bounded no-effect request; it does not survive its guard/runtime or authorize a
+later request.
+
+Consequential mutation remains:
 
 ::
 
@@ -1790,11 +1939,13 @@ consequential-operation pipeline rather than waiting for serial comments:
      -> crash/restart reconciliation
      -> caller-binding-first retained retry
 
-The review must additionally walk each mutation kind through:
+The review must additionally walk each mutation/content kind through:
 
 * normal success;
 * stale source/target before start;
-* session end/revocation/expiry before and during the final start handoff;
+* session end/revocation/expiry while a content request waits behind ``CHANGE`` and before
+  its final session-gate admission;
+* session end/revocation/expiry before and during the final mutation start handoff;
 * activation incomplete/audit failure and concurrent distinct session begin while the
   first live slot is ``PENDING``;
 * audit failure before start;
@@ -1824,7 +1975,13 @@ The Phase 6 detailed plan is acceptable when review/CI confirms:
 * session activation cannot authorize member work before audit/obligation closure;
 * the live-session-slot uniqueness constraint covers both ``PENDING`` and ``ACTIVE`` so
   concurrent distinct begin operations cannot create overlapping authority domains;
-* session end/revocation/expiry and member start have one implementable linearization;
+* session end/revocation/expiry and member mutation start have one implementable
+  linearization;
+* content-returning read/search waits for ``CONTENT_READ`` first and then revalidates under
+  the same session authority gate before any source bytes/``rg`` start, so queued readers
+  cannot use stale session proof after end/expiry;
+* the fixed cross-gate lock order is explicit and session reduction never acquires access
+  coordination in reverse;
 * all proposed operational Tools are absent until reviewed contracts/schemas/manifest and
   host-profile reconciliation pass;
 * read/search operations are bounded, protected-path aware, symlink-safe, descriptor-
@@ -1845,7 +2002,9 @@ The Phase 6 detailed plan is acceptable when review/CI confirms:
 * operation-owned staging cleanup is exact/non-recursive;
 * Phase 4 audit/idempotency/final-boundary ordering is preserved exactly;
 * retained same-key retry is evaluated before mutable session/filesystem freshness checks;
-* session loss before start produces no effect while post-start loss never rewrites truth;
+* session loss before mutation start produces no effect, session loss before content
+  admission produces no disclosure, and post-linearization loss never rewrites already-
+  started/admitted truth;
 * create/write/patch/move/delete effect/no-effect/uncertain outcomes are representable and
   restart-reconcilable;
 * no Raspberry Pi or ChatGPT support fact is fabricated.
@@ -1861,10 +2020,11 @@ Implementation/promotion remains blocked until:
 * the exact Phase 6 operation contracts/schemas/manifest are promoted and validated;
 * migration ``0003`` and all persistence constraints pass fresh/upgrade tests, including
   the one-live-session partial unique index across ``PENDING``/``ACTIVE``;
-* session authority-gate/access-gate/fence/idempotency/audit/final-boundary fault tests
-  pass;
-* descriptor-pinned search launch, protected-directory rename/exchange coordination, and
-  application-crash/search-child cgroup cleanup/readiness-barrier tests pass;
+* session authority-gate/access-gate/content-admission/fence/idempotency/audit/final-
+  boundary fault tests pass;
+* descriptor-pinned search launch, protected-directory rename/exchange coordination,
+  session-end-while-content-waits, and application-crash/search-child cgroup cleanup/
+  readiness-barrier tests pass;
 * candidate-Pi systemd service lifecycle proves no prior search child can survive into a
   reopened workspace access/change gate;
 * the content-read/search writer model is accepted, or a stronger reviewed protected-
@@ -1882,10 +2042,13 @@ Do not mark Phase 6 implementation complete until real evidence proves at least:
 
 #. the owner-authorised development session is started and visible to real ChatGPT under
    the reviewed HOST profile;
-#. activation closure is complete before any member workspace effect is allowed;
+#. activation closure is complete before any member workspace effect or content admission
+   is allowed;
 #. ChatGPT inspects/lists/reads/searches the exact registered Binnacle workspace without
    protected-content disclosure, with content access enabled only under the reviewed
    stable protected-object writer/confinement model;
+#. a new content-returning request after session end/expiry is rejected even if it had
+   previously waited behind a workspace changer before obtaining the content guard;
 #. ChatGPT performs one controlled source edit with the promoted mutation contract;
 #. the new file/object version and content digest are inspected truthfully;
 #. ChatGPT reverts/replaces the edit with exactly one admitted effect;
@@ -1914,18 +2077,20 @@ When the evidence gate permits implementation, use this order:
    shared workspace mutation fence;
 #. implement domain types and persistence repositories plus live-slot conflict/restart
    integrity tests;
-#. implement ``DevelopmentSessionAuthorityGate`` and lock-order tests before member
-   mutation adapters;
+#. implement ``DevelopmentSessionAuthorityGate`` and global lock-order tests before member
+   mutation or content-returning adapters;
 #. implement registered workspace profile/root identity/protected-content verification;
 #. implement the shared ``WorkspaceAccessGate`` + durable change-fence coordinator with
    unconditional startup ``RECOVERY_CLOSED`` posture;
+#. integrate ``CONTENT_READ -> DevelopmentSessionAuthorityGate`` admission and
+   request/guard-bound ``ContentReadPermit`` tests before any content-returning handler;
 #. implement and verify the application-service search-child cgroup lifecycle plus
    ``SearchChildRecoveryBarrier`` before allowing the access gate to open after restart;
-#. implement descriptor-relative inspect/list/read primitives, with content-read guard
-   coverage;
+#. implement descriptor-relative inspect/list/read primitives, with content-read guard +
+   session-permit coverage;
 #. implement descriptor-pinned typed ``ripgrep`` search, full-lifetime content guard,
-   child termination/reaping proof, and launch/protected-directory-rename/restart race
-   tests;
+   session-permit-before-spawn, child termination/reaping proof, and launch/protected-
+   directory-rename/restart/session-end-wait race tests;
 #. implement development-session begin/inspect/end orchestration including atomic
    ``PENDING`` slot reservation, activation closure, and fail-safe revocation;
 #. implement the mutation final-binding callback on the shared access/change seam;
@@ -1970,8 +2135,9 @@ The following remain provisional/evidence-gated after this plan merges:
 
 Those items may change host/profile-specific implementation choices or limits. They must
 not change the frozen local authority boundary, durable-operation ordering, truthful
-uncertainty rule, session/start linearization, protected-content boundary, or prohibition
-on workspace escape without a separately reviewed design revision.
+uncertainty rule, mutation start or content-admission session linearization, protected-
+content boundary, or prohibition on workspace escape without a separately reviewed design
+revision.
 
 40. Deferred work
 -----------------
