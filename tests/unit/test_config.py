@@ -18,6 +18,10 @@ def test_default_settings_are_development_loopback() -> None:
     assert settings.server.session_idle_timeout_seconds == 300.0
     assert settings.server.graceful_shutdown_seconds == 10.0
     assert settings.server.filesystem_stat_timeout_seconds == 2.0
+    assert settings.probe_workspace.enabled is False
+    assert settings.probe_workspace.root == Path("/var/lib/binnacle/probe-workspace")
+    assert settings.probe_workspace.max_file_bytes == 65_536
+    assert settings.probe_workspace.preparation_ttl_seconds == 300
 
 
 def test_toml_overrides_defaults(tmp_path: Path) -> None:
@@ -182,6 +186,16 @@ def test_model_rejects_unknown_nested_key() -> None:
             "payload",
             {"object_bytes_max": 9, "controller_bytes_max": 8},
             "per-object payload limit",
+        ),
+        (
+            "probe_workspace",
+            {"root": "/tmp/redirected-probe"},
+            "probe workspace root is fixed",
+        ),
+        (
+            "probe_workspace",
+            {"max_file_bytes": 65_537},
+            "less than or equal to 65536",
         ),
     ],
 )

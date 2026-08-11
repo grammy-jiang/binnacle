@@ -39,6 +39,14 @@ class ReconciliationStore(OperationStore, Protocol):
     async def clear_audit_failure(self, generation: int, evidence_sha256: str) -> None: ...
 
 
+class SpecializedOperationReconciler(Protocol):
+    """Optional phase-specific closure before generic lifecycle fallback."""
+
+    async def reconcile(self, operation: OperationSnapshot) -> OperationSnapshot | None: ...
+
+    async def reconcile_terminal_closures(self) -> tuple[OperationSnapshot, ...]: ...
+
+
 @dataclass(frozen=True, slots=True)
 class AuditObligationClosure:
     obligation_id: str
@@ -336,11 +344,13 @@ class OperationReconciler:
         obligations: AuditObligationStore,
         gate: ConsequentialBoundaryGate,
         effect_reconciler: EffectReconciler | None = None,
+        specialized_reconciler: SpecializedOperationReconciler | None = None,
     ) -> None:
         self._store = store
         self._obligations = obligations
         self._gate = gate
         self._effect_reconciler = effect_reconciler
+        self._specialized_reconciler = specialized_reconciler
 
     async def reconcile_startup(
         self, *, open_when_healthy: bool = True
@@ -359,12 +369,18 @@ class OperationReconciler:
                 break
             last = page[-1]
             cursor = ReconciliationCursor(last.created_at, last.operation_id)
+        if self._specialized_reconciler is not None:
+            reconciled.extend(await self._specialized_reconciler.reconcile_terminal_closures())
         latched, generation, recovered = await self._store.audit_failure_state()
         if open_when_healthy and not obligations and not latched and generation == recovered:
             await self._gate.open()
         return tuple(reconciled)
 
     async def _reconcile(self, operation: OperationSnapshot) -> OperationSnapshot:
+        if self._specialized_reconciler is not None:
+            specialized = await self._specialized_reconciler.reconcile(operation)
+            if specialized is not None:
+                return specialized
         if operation.state is OperationState.RECEIVED:
             existing = await self._store.get_policy_decision(operation.operation_id)
             decision = existing or self._recovery_decision(operation)

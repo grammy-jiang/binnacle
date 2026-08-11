@@ -410,6 +410,46 @@ class FileAuditJournal:
                     return str(event["event_hash"])
             return None
 
+    async def find_operation_state_evidence(
+        self,
+        *,
+        operation_id: str,
+        state_version: int,
+        state: str,
+        effect_knowledge: str,
+    ) -> str | None:
+        """Find the exact fsynced lifecycle fact required before phase-specific closure."""
+
+        async with self._append_lock:
+            for event in reversed(self._read_verified_events()):
+                payload = event["payload"]
+                assert isinstance(payload, dict)
+                safe_facts = event["safe_facts"]
+                assert isinstance(safe_facts, list)
+                running_version_matches = any(
+                    isinstance(item, dict)
+                    and item.get("name") == "running_state_version"
+                    and item.get("value") == state_version
+                    for item in safe_facts
+                )
+                lifecycle_matches = (
+                    payload.get("kind") == "operation.state_changed"
+                    and payload.get("state_version") == state_version
+                    and payload.get("new_state") == state
+                    and payload.get("effect_knowledge") == effect_knowledge
+                )
+                started_effect_matches = (
+                    state == "running"
+                    and payload.get("kind") == "effect.started"
+                    and payload.get("effect_knowledge") == effect_knowledge
+                    and running_version_matches
+                )
+                if event["operation_id"] == operation_id and (
+                    lifecycle_matches or started_effect_matches
+                ):
+                    return str(event["event_hash"])
+            return None
+
     async def find_generation_recovery(self, generation: int) -> str | None:
         async with self._append_lock:
             events = self._read_verified_events()

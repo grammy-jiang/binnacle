@@ -27,6 +27,32 @@ from binnacle.evaluation.cases import load_evaluation_cases
 from binnacle.evaluation.evidence import EvidenceFile, EvidenceStore
 from binnacle.evaluation.profile import load_evaluation_profile
 
+_CORE_LIVE_CASE_IDS = frozenset(
+    {
+        "endpoint-connect",
+        "protocol-revision-observed",
+        "tool-discovery-manifest",
+        "model-tool-selection-binnacle-probe",
+        "model-tool-selection-system-inspect",
+        "structured-result-rendering",
+        "execution-error-rendering",
+        "read-entitlement",
+        "latency-context-cost",
+    }
+)
+_WRITE_PROBE_LIVE_CASE_IDS = _CORE_LIVE_CASE_IDS | {
+    "write-tool-discovery-manifest",
+    "write-entitlement-and-confirmation",
+    "confirmation-decline",
+    "idempotency-lost-response",
+    "write-retained-after-state-and-expiry",
+    "cleanup-lost-response-after-state-and-expiry",
+    "uncertain-no-auto-retry",
+    "write-reconnect-retained",
+    "cleanup-exact-artifact",
+    "probe-ledger-history-integrity",
+}
+
 
 def _complete_manifest(repo_root: Path, workspace: Path) -> dict[str, Any]:
     profile = load_evaluation_profile(repo_root)
@@ -153,6 +179,33 @@ def _complete_manifest(repo_root: Path, workspace: Path) -> dict[str, Any]:
     }
 
 
+def _approved_manifest(
+    repo_root: Path,
+    workspace: Path,
+    *,
+    probe_release: str,
+    live_case_ids: frozenset[str],
+) -> dict[str, Any]:
+    manifest = _complete_manifest(repo_root, workspace)
+    manifest["probe"]["probe_release"] = probe_release
+    manifest["review"]["approved_for_promotion"] = True
+    for result in manifest["case_results"]:
+        if result["case_id"] not in live_case_ids:
+            continue
+        required = result["attempts_required"]
+        result.update(
+            {
+                "attempts_completed": required,
+                "passes": required,
+                "status": "observed-supported",
+            }
+        )
+    for conclusion in manifest["conclusions"]:
+        if live_case_ids.intersection(conclusion["case_ids"]):
+            conclusion["status"] = "observed-supported"
+    return manifest
+
+
 def test_complete_unpromoted_manifest_verifies(
     repo_root: Path,
     tmp_path: Path,
@@ -165,10 +218,170 @@ def test_complete_unpromoted_manifest_verifies(
         repo_root=repo_root,
     )
 
-    assert report.case_count == 21
+    assert report.case_count == 27
     assert report.evidence_count == 1
     assert report.reviewed is True
     assert report.approved_for_promotion is False
+
+
+def test_core_promotion_is_scoped_to_the_readonly_probe_release(
+    repo_root: Path,
+    tmp_path: Path,
+) -> None:
+    manifest = _approved_manifest(
+        repo_root,
+        tmp_path,
+        probe_release="phase3-readonly-evaluation-v1",
+        live_case_ids=_CORE_LIVE_CASE_IDS,
+    )
+
+    report = verify_evaluation_manifest(manifest, workspace=tmp_path, repo_root=repo_root)
+
+    assert report.approved_for_promotion
+    write_discovery = next(
+        result
+        for result in manifest["case_results"]
+        if result["case_id"] == "write-tool-discovery-manifest"
+    )
+    assert write_discovery["status"] == "not-tested"
+
+
+def test_write_probe_promotion_requires_and_accepts_exact_live_case_set(
+    repo_root: Path,
+    tmp_path: Path,
+) -> None:
+    manifest = _approved_manifest(
+        repo_root,
+        tmp_path,
+        probe_release="phase5-write-probe-evaluation-v1",
+        live_case_ids=frozenset(_WRITE_PROBE_LIVE_CASE_IDS),
+    )
+
+    report = verify_evaluation_manifest(manifest, workspace=tmp_path, repo_root=repo_root)
+
+    assert report.approved_for_promotion
+
+
+@pytest.mark.parametrize(
+    "missing_case_id", sorted(_WRITE_PROBE_LIVE_CASE_IDS - _CORE_LIVE_CASE_IDS)
+)
+def test_write_probe_promotion_rejects_each_missing_consequential_case(
+    repo_root: Path,
+    tmp_path: Path,
+    missing_case_id: str,
+) -> None:
+    manifest = _approved_manifest(
+        repo_root,
+        tmp_path,
+        probe_release="phase5-write-probe-evaluation-v1",
+        live_case_ids=frozenset(_WRITE_PROBE_LIVE_CASE_IDS),
+    )
+    result = next(
+        result for result in manifest["case_results"] if result["case_id"] == missing_case_id
+    )
+    result.update(
+        {
+            "attempts_completed": 0,
+            "passes": 0,
+            "status": "not-tested",
+        }
+    )
+    conclusion = next(
+        conclusion for conclusion in manifest["conclusions"] if conclusion["axis"] == result["axis"]
+    )
+    conclusion["status"] = "not-tested"
+
+    with pytest.raises(EvaluationVerificationError, match="required live evidence"):
+        verify_evaluation_manifest(manifest, workspace=tmp_path, repo_root=repo_root)
+
+
+def test_promotion_rejects_an_unreviewed_probe_release(
+    repo_root: Path,
+    tmp_path: Path,
+) -> None:
+    manifest = _approved_manifest(
+        repo_root,
+        tmp_path,
+        probe_release="phase3-readonly-evaluation-v1",
+        live_case_ids=_CORE_LIVE_CASE_IDS,
+    )
+    manifest["probe"]["probe_release"] = "invented-evaluation-release"
+
+    with pytest.raises(EvaluationVerificationError, match="unsupported probe release"):
+        verify_evaluation_manifest(manifest, workspace=tmp_path, repo_root=repo_root)
+
+
+@pytest.mark.parametrize("status", ("test-failed", "unstable"))
+@pytest.mark.parametrize(
+    ("probe_release", "live_case_ids", "case_id"),
+    (
+        (
+            "phase3-readonly-evaluation-v1",
+            _CORE_LIVE_CASE_IDS,
+            "write-tool-discovery-manifest",
+        ),
+        (
+            "phase5-write-probe-evaluation-v1",
+            _WRITE_PROBE_LIVE_CASE_IDS,
+            "uncertain-no-auto-retry",
+        ),
+        (
+            "phase5-write-probe-evaluation-v1",
+            _WRITE_PROBE_LIVE_CASE_IDS,
+            "reconnect-status-reconciliation",
+        ),
+    ),
+)
+def test_approved_conclusion_never_ignores_failed_or_unstable_case(
+    repo_root: Path,
+    tmp_path: Path,
+    probe_release: str,
+    live_case_ids: frozenset[str],
+    case_id: str,
+    status: str,
+) -> None:
+    manifest = _approved_manifest(
+        repo_root,
+        tmp_path,
+        probe_release=probe_release,
+        live_case_ids=live_case_ids,
+    )
+    result = next(result for result in manifest["case_results"] if result["case_id"] == case_id)
+    required = result["attempts_required"]
+    result.update(
+        {
+            "attempts_completed": required,
+            "passes": 0,
+            "failures": required,
+            "status": status,
+        }
+    )
+
+    with pytest.raises(EvaluationVerificationError, match="conclusion contradicts"):
+        verify_evaluation_manifest(manifest, workspace=tmp_path, repo_root=repo_root)
+
+
+@pytest.mark.parametrize("status", ("test-failed", "unstable"))
+def test_unapproved_conclusion_never_ignores_failed_or_unstable_case(
+    repo_root: Path,
+    tmp_path: Path,
+    status: str,
+) -> None:
+    manifest = _complete_manifest(repo_root, tmp_path)
+    result = next(
+        result for result in manifest["case_results"] if result["case_id"] == "endpoint-connect"
+    )
+    result.update(
+        {
+            "attempts_completed": 1,
+            "passes": 0,
+            "failures": 1,
+            "status": status,
+        }
+    )
+
+    with pytest.raises(EvaluationVerificationError, match="conclusion contradicts"):
+        verify_evaluation_manifest(manifest, workspace=tmp_path, repo_root=repo_root)
 
 
 def test_promoted_case_must_meet_frozen_attempt_threshold(

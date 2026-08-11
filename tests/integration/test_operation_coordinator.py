@@ -190,6 +190,21 @@ class FaultJournal:
             running_state_version=running_state_version,
         )
 
+    async def find_operation_state_evidence(
+        self,
+        *,
+        operation_id: str,
+        state_version: int,
+        state: str,
+        effect_knowledge: str,
+    ) -> str | None:
+        return await self.delegate.find_operation_state_evidence(
+            operation_id=operation_id,
+            state_version=state_version,
+            state=state,
+            effect_knowledge=effect_knowledge,
+        )
+
     async def find_generation_recovery(self, generation: int) -> str | None:
         return await self.delegate.find_generation_recovery(generation)
 

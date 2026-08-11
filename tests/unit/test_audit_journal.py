@@ -78,6 +78,102 @@ async def test_concurrent_appends_form_one_strict_chain(tmp_path: Path, repo_roo
 
 
 @pytest.mark.anyio
+async def test_operation_state_evidence_requires_exact_lifecycle_fact(
+    tmp_path: Path, repo_root: Path
+) -> None:
+    journal = FileAuditJournal(
+        directory=tmp_path / "audit",
+        identity=audit_identity(),
+        schema=audit_schema(repo_root),
+    )
+    await journal.open()
+    appended = await journal.append(_draft(1))
+
+    assert (
+        await journal.find_operation_state_evidence(
+            operation_id="op-1",
+            state_version=1,
+            state="received",
+            effect_knowledge="none",
+        )
+        == appended.event_hash
+    )
+    for operation_id, state_version, state, effect_knowledge in (
+        ("op-2", 1, "received", "none"),
+        ("op-1", 2, "received", "none"),
+        ("op-1", 1, "failed", "none"),
+        ("op-1", 1, "received", "known_no_effect"),
+    ):
+        assert (
+            await journal.find_operation_state_evidence(
+                operation_id=operation_id,
+                state_version=state_version,
+                state=state,
+                effect_knowledge=effect_knowledge,
+            )
+            is None
+        )
+
+    effect = await journal.append(
+        AuditEventDraft(
+            event_id="effect-event",
+            recorded_at=datetime(2026, 8, 11, 0, 1, tzinfo=UTC),
+            monotonic_ns=2,
+            severity="info",
+            source="binnacle_system",
+            operation_id="op-effect",
+            correlation_ids=("obl-effect",),
+            safe_facts=(
+                {
+                    "name": "running_state_version",
+                    "value": 3,
+                    "classification": "normal-result",
+                },
+            ),
+            payload={
+                "kind": "effect.started",
+                "effect_type": "probe_workspace_write",
+                "target_digest": "a" * 64,
+                "payload_digest": None,
+                "actual_destination_digest": None,
+                "credential_audience_digest": None,
+                "bytes": 0,
+                "items": 0,
+                "effect_knowledge": "known_effect",
+                "reason_code": "probe_write_effect_recorded",
+            },
+        )
+    )
+    assert (
+        await journal.find_operation_state_evidence(
+            operation_id="op-effect",
+            state_version=3,
+            state="running",
+            effect_knowledge="known_effect",
+        )
+        == effect.event_hash
+    )
+    assert (
+        await journal.find_operation_state_evidence(
+            operation_id="op-effect",
+            state_version=4,
+            state="running",
+            effect_knowledge="known_effect",
+        )
+        is None
+    )
+    assert (
+        await journal.find_operation_state_evidence(
+            operation_id="op-effect",
+            state_version=3,
+            state="failed",
+            effect_knowledge="known_effect",
+        )
+        is None
+    )
+
+
+@pytest.mark.anyio
 async def test_wrong_genesis_and_hash_corruption_are_rejected(
     tmp_path: Path, repo_root: Path
 ) -> None:

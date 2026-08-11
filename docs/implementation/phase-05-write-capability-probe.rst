@@ -114,6 +114,22 @@ Do not begin or promote the live Phase 5 capability until:
 Missing, expired, contradictory, or unavailable evidence fails closed. Planning text is
 never substituted for an observation.
 
+The default-disabled repository implementation may merge before the live gate selects a
+concrete authentication adapter and external mutation scope. In that state the production
+``binnacle serve`` path remains the exact five-Tool core even when the structural probe
+setting is enabled; dependency-injected test composition is not production promotion.
+
+The later evidence-selected activation change must construct one immutable protected
+activation record and pass that same record to controller authentication middleware,
+application catalogue selection, and operation-kernel composition. It binds the exact
+profile ID/version/audience, stable controller epoch rule, one non-wildcard external scope
+to literal internal ``probe_workspace_mutate``, catalogue/manifest identity, policy/mapping
+version, and a canonical activation digest. Every consequential admission persists the
+mapped scope digest in its policy input, and the activation digest contributes to runtime
+configuration identity. Missing authentication middleware/authenticator, unsafe or stale
+profile/mapping, or any digest disagreement keeps the five-Tool core; it never exposes a
+catalogue that the production boundary cannot authenticate and authorize.
+
 2.3 Phase exit gate
 ~~~~~~~~~~~~~~~~~~~
 
@@ -803,14 +819,37 @@ reaches exact ``created``.
 
 ``LinuxProbeWorkspace.start_cleanup`` is callable only after section 12.2 succeeds. It
 accepts the exact claimed active ``created`` artifact and performs a second adapter-local
-identity/type/content check using protected root directory fds. It then unlinks exact name,
-fsyncs the root directory, and returns a stable effect reference.
+identity/type/content check using protected root directory fds. Cleanup then:
 
-If target becomes absent after ``call_start`` linearization but before unlink, the adapter
-performs no unlink and may return an explicit no-effect receipt correlated to exact
-operation/artifact/path generation. Only a durably retained/classified receipt proves no
-unlink was attempted. Receipt loss leaves post-dispatch absence ``uncertain``; absence
-alone cannot reconstruct either no-effect or known-effect.
+#. atomically moves the current root entry to a unique, operation-correlated private
+   ``.staging`` tomb using same-filesystem no-replace semantics;
+#. opens that tomb read-only with no-follow defenses and re-verifies the exact held
+   inode/type/owner/mode/size/content identity;
+#. on mismatch, restores the quarantined entry to the root with no-replace semantics and
+   fsyncs both directories, or retains it and reports uncertainty if safe restoration is
+   impossible;
+#. rejects any observation whose link count is not exactly one and, after quarantine,
+   restores it without overwrite or reports uncertainty if safe restoration is impossible;
+#. on an exact match, fsyncs both directories, requires the public root name to remain
+   absent, and returns a stable effect reference;
+#. retains the recognizable verified full-content private tomb for stopped-service
+   accounting and never mutates the held inode.
+
+Linux has no unlink-by-open-file-descriptor primitive. Pathname-unlinking the quarantine
+after verification would recreate the same substitution race inside ``.staging`` and could
+delete an unrelated replacement. Truncating the held inode could corrupt a hard-link alias.
+Runtime cleanup therefore never unlinks the mutable tomb pathname or mutates the held inode.
+A future cleanup/retention procedure may remove a tomb only under a separately reviewed
+stopped-service proof; unknown or identity-unbound staging entries are never deleted
+automatically.
+
+If target becomes absent after ``call_start`` linearization but before the quarantine move,
+the adapter performs no filesystem mutation and may return an explicit no-effect receipt
+correlated to exact operation/artifact/path generation. Only a durably retained/classified
+receipt proves no move was attempted. Receipt loss leaves post-dispatch absence
+``uncertain``; absence alone cannot reconstruct either no-effect or known-effect. A
+replacement appearing after quarantine is preserved and forces uncertainty; it is never
+deleted as though it were the prepared artifact.
 
 Mismatched/symlink/directory/unowned content is never deleted automatically.
 
@@ -1120,10 +1159,21 @@ Required faults include:
 * target absent before cleanup preparation while artifact remains ``created`` ->
   observed-absent preparation, exact claim, no-start known-no-effect closure only after
   full ledger/history verification and required audit/recovery closure;
-* target absent after ``call_start`` but before unlink with durable explicit no-effect
-  receipt -> no unlink and exact no-effect closure;
+* target absent after ``call_start`` but before quarantine with durable explicit no-effect
+  receipt -> no move and exact no-effect closure;
+* target is renamed/replaced before quarantine -> replacement is restored without
+  overwrite, neither the original nor replacement is deleted, and cleanup is known no
+  effect only after exact durable classification;
+* target is replaced after exact quarantine verification -> the replacement and verified
+  full-content tomb both survive, and cleanup remains uncertain because the public target
+  is occupied;
+* a hard-link alias observed before or after quarantine -> no inode mutation, safe
+  no-overwrite restoration or retained uncertainty, and no successful cleanup receipt;
+* successful cleanup retains one recognizable verified full-content private tomb; no
+  runtime path unlinks that mutable tomb name or mutates its inode;
 * same race with receipt loss -> uncertain, claim/ledger active retained;
-* crash after unlink/root-fsync before receipt -> uncertain until explicit recovery proves
+* crash after quarantine/directory fsync before receipt -> uncertain until explicit
+  recovery proves
   effect; absence alone cannot close ledger;
 * crash during ledger terminalization -> atomic old or new state only;
 * DB failure during cleanup claim/ledger closure -> conservative active state;
@@ -1380,7 +1430,8 @@ The capability may become live only when:
 * lost cleanup receipts cannot infer success/no-effect from absence;
 * all Phase 5 automated tests and existing quality/contract validation pass;
 * production composition adds no other effect adapter;
-* HOST catalogue is activated only through reviewed evidence-selected profile;
+* HOST catalogue is activated only through one reviewed evidence-selected activation
+  record shared by authentication, catalogue, and kernel composition; and
 * no HC1 support axis is promoted before live evaluation passes.
 
 29. Real Phase 5 exit checklist

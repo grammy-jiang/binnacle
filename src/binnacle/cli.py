@@ -239,7 +239,7 @@ def database_upgrade_command(
     except Exception as exc:
         typer.echo(f"Database upgrade failed: {type(exc).__name__}", err=True)
         raise typer.Exit(code=1) from exc
-    typer.echo("Database upgraded to 0001_durable_operation_kernel")
+    typer.echo("Database upgraded to 0002_write_probe_state")
 
 
 @database_app.command("status")

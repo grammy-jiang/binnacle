@@ -284,6 +284,184 @@ class IdempotencyBindingModel(Base):
     conflict_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
 
+class ProbePathLedgerModel(Base):
+    __tablename__ = "probe_path_ledger"
+    __table_args__ = (
+        CheckConstraint("generation_high_water >= 0", name="ck_probe_ledger_generation_high_water"),
+        CheckConstraint(
+            "terminal_history_count >= 0 AND terminal_history_count <= generation_high_water",
+            name="ck_probe_ledger_terminal_count",
+        ),
+        CheckConstraint("ledger_version >= 1", name="ck_probe_ledger_version"),
+        CheckConstraint(
+            "length(terminal_history_sha256) = 64", name="ck_probe_ledger_history_digest"
+        ),
+        CheckConstraint(
+            "(active_artifact_id IS NULL AND active_generation IS NULL AND "
+            "active_create_operation_id IS NULL AND terminal_history_count = "
+            "generation_high_water) OR (active_artifact_id IS NOT NULL AND "
+            "active_generation IS NOT NULL AND active_create_operation_id IS NOT NULL AND "
+            "active_generation = generation_high_water AND "
+            "terminal_history_count = active_generation - 1)",
+            name="ck_probe_ledger_active_shape",
+        ),
+        ForeignKeyConstraint(
+            ["active_artifact_id"],
+            ["probe_artifacts.artifact_id"],
+            name="fk_probe_ledger_active_artifact",
+            deferrable=True,
+            initially="DEFERRED",
+        ),
+        UniqueConstraint("active_artifact_id", name="uq_probe_ledger_active_artifact"),
+    )
+
+    relative_path: Mapped[str] = mapped_column(String(255), primary_key=True)
+    generation_high_water: Mapped[int] = mapped_column(Integer, nullable=False)
+    terminal_history_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    terminal_history_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    active_artifact_id: Mapped[str | None] = mapped_column(String(160))
+    active_generation: Mapped[int | None] = mapped_column(Integer)
+    active_create_operation_id: Mapped[str | None] = mapped_column(
+        String(160),
+        ForeignKey("operations.operation_id", name="fk_probe_ledger_active_create_operation"),
+    )
+    ledger_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class ProbeArtifactModel(Base):
+    __tablename__ = "probe_artifacts"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["relative_path"],
+            ["probe_path_ledger.relative_path"],
+            name="fk_probe_artifacts_ledger",
+            deferrable=True,
+            initially="DEFERRED",
+        ),
+        ForeignKeyConstraint(
+            ["owner_controller_id", "owner_controller_epoch"],
+            ["controller_owners.controller_id", "controller_owners.controller_epoch"],
+            name="fk_probe_artifacts_owner",
+        ),
+        UniqueConstraint(
+            "relative_path", "path_generation", name="uq_probe_artifacts_path_generation"
+        ),
+        UniqueConstraint("create_operation_id", name="uq_probe_artifacts_create_operation"),
+        UniqueConstraint("active_cleanup_operation_id", name="uq_probe_artifacts_active_cleanup"),
+        UniqueConstraint(
+            "removed_by_cleanup_operation_id", name="uq_probe_artifacts_removed_by_cleanup"
+        ),
+        CheckConstraint("path_generation >= 1", name="ck_probe_artifacts_generation"),
+        CheckConstraint("owner_controller_epoch >= 1", name="ck_probe_artifacts_owner_epoch"),
+        CheckConstraint("byte_count >= 0 AND byte_count <= 65536", name="ck_probe_artifacts_bytes"),
+        CheckConstraint(
+            "state IN ('reserved','created','removed','abandoned','uncertain')",
+            name="ck_probe_artifacts_state",
+        ),
+        CheckConstraint(
+            "length(content_sha256) = 64 AND "
+            "(file_identity_digest IS NULL OR length(file_identity_digest) = 64)",
+            name="ck_probe_artifacts_digests",
+        ),
+        CheckConstraint(
+            "(state IN ('reserved','uncertain') AND file_identity_digest IS NULL AND "
+            "active_cleanup_operation_id IS NULL AND removed_at IS NULL AND "
+            "removed_by_cleanup_operation_id IS NULL) OR "
+            "(state = 'created' AND file_identity_digest IS NOT NULL AND removed_at IS NULL "
+            "AND removed_by_cleanup_operation_id IS NULL) OR "
+            "(state = 'removed' AND file_identity_digest IS NOT NULL AND "
+            "removed_at IS NOT NULL AND "
+            "active_cleanup_operation_id IS NULL) OR "
+            "(state = 'abandoned' AND removed_at IS NOT NULL AND "
+            "file_identity_digest IS NULL AND active_cleanup_operation_id IS NULL AND "
+            "removed_by_cleanup_operation_id IS NULL)",
+            name="ck_probe_artifacts_state_shape",
+        ),
+    )
+
+    artifact_id: Mapped[str] = mapped_column(String(160), primary_key=True)
+    relative_path: Mapped[str] = mapped_column(String(255), nullable=False)
+    path_generation: Mapped[int] = mapped_column(Integer, nullable=False)
+    owner_controller_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    owner_controller_epoch: Mapped[int] = mapped_column(Integer, nullable=False)
+    content_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    byte_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    state: Mapped[str] = mapped_column(String(16), nullable=False)
+    create_operation_id: Mapped[str] = mapped_column(
+        String(160),
+        ForeignKey("operations.operation_id", name="fk_probe_artifacts_create_operation"),
+        nullable=False,
+    )
+    active_cleanup_operation_id: Mapped[str | None] = mapped_column(
+        String(160),
+        ForeignKey("operations.operation_id", name="fk_probe_artifacts_active_cleanup"),
+    )
+    removed_by_cleanup_operation_id: Mapped[str | None] = mapped_column(
+        String(160),
+        ForeignKey("operations.operation_id", name="fk_probe_artifacts_removed_by_cleanup"),
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    removed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    file_identity_digest: Mapped[str | None] = mapped_column(String(64))
+
+
+class ProbeOperationModel(Base):
+    __tablename__ = "probe_operations"
+    __table_args__ = (
+        CheckConstraint("probe_operation IN ('write','cleanup')", name="ck_probe_operations_kind"),
+        CheckConstraint(
+            "length(expected_content_sha256) = 64 AND length(prepared_state_binding_sha256) = 64",
+            name="ck_probe_operations_digests",
+        ),
+        CheckConstraint(
+            "(probe_operation = 'write' AND expected_byte_count IS NOT NULL AND "
+            "expected_byte_count >= 0 AND expected_byte_count <= 65536) OR "
+            "(probe_operation = 'cleanup' AND expected_byte_count IS NULL)",
+            name="ck_probe_operations_byte_shape",
+        ),
+        ForeignKeyConstraint(
+            ["artifact_id"],
+            ["probe_artifacts.artifact_id"],
+            name="fk_probe_operations_artifact",
+            deferrable=True,
+            initially="DEFERRED",
+        ),
+        UniqueConstraint("prepared_binding_id", name="uq_probe_operations_prepared_binding"),
+        UniqueConstraint("caller_binding_id", name="uq_probe_operations_caller_binding"),
+    )
+
+    operation_id: Mapped[str] = mapped_column(
+        String(160),
+        ForeignKey("operations.operation_id", name="fk_probe_operations_operation"),
+        primary_key=True,
+    )
+    probe_operation: Mapped[str] = mapped_column(String(16), nullable=False)
+    prepared_binding_id: Mapped[str] = mapped_column(
+        String(160),
+        ForeignKey(
+            "idempotency_bindings.binding_id",
+            name="fk_probe_operations_prepared_binding",
+        ),
+        nullable=False,
+    )
+    caller_binding_id: Mapped[str] = mapped_column(
+        String(160),
+        ForeignKey(
+            "idempotency_bindings.binding_id",
+            name="fk_probe_operations_caller_binding",
+        ),
+        nullable=False,
+    )
+    artifact_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    relative_path: Mapped[str] = mapped_column(String(255), nullable=False)
+    expected_content_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    expected_byte_count: Mapped[int | None] = mapped_column(Integer)
+    prepared_state_binding_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class PolicyDecisionModel(Base):
     __tablename__ = "policy_decisions"
     __table_args__ = (
@@ -383,3 +561,9 @@ class OperationEvidenceModel(Base):
 Index("ix_operations_state", OperationModel.state, OperationModel.updated_at)
 Index("ix_bindings_operation", IdempotencyBindingModel.operation_id)
 Index("ix_payload_owner", PayloadObjectModel.controller_id, PayloadObjectModel.controller_epoch)
+Index(
+    "uq_probe_artifacts_live_relative_path",
+    ProbeArtifactModel.relative_path,
+    unique=True,
+    sqlite_where=ProbeArtifactModel.state.in_(("reserved", "created", "uncertain")),
+)

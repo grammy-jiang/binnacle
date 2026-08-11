@@ -1,7 +1,7 @@
 schema_version: "1.1"
 contract: MCP-EVALUATION
 contract_version: "1.1.0"
-case_manifest_sha256: 72e10e0446e57879191155305d40a489279472706f6bda930c62cb24fe2c2d17
+case_manifest_sha256: 1748a8374a0faf6e44d33e8c5a861e07f32a69be6725d13d048e67b9e0e05e23
 
 cases:
   - id: profile-dimension-paths-resolve
@@ -25,7 +25,7 @@ cases:
       schema_registry_sha256: ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
       policy_bundle_sha256: 1111111111111111111111111111111111111111111111111111111111111111
       evaluation_profile_sha256: 2222222222222222222222222222222222222222222222222222222222222222
-      evaluation_cases_sha256: 72e10e0446e57879191155305d40a489279472706f6bda930c62cb24fe2c2d17
+      evaluation_cases_sha256: 1748a8374a0faf6e44d33e8c5a861e07f32a69be6725d13d048e67b9e0e05e23
       device_model: Raspberry Pi 4 Model B
       device_os: Raspberry Pi OS Bookworm
       device_kernel: 6.12.0-rpi
@@ -56,7 +56,7 @@ cases:
 
   - id: case-manifest-digest-mismatch
     kind: negative
-    profile_expected_sha256: 72e10e0446e57879191155305d40a489279472706f6bda930c62cb24fe2c2d17
+    profile_expected_sha256: 1748a8374a0faf6e44d33e8c5a861e07f32a69be6725d13d048e67b9e0e05e23
     observed_case_manifest_sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
     expect:
       promotion_allowed: false

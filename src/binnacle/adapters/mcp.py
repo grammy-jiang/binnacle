@@ -43,6 +43,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
 from binnacle.application import BinnacleApplication, CompatibilityUseCases
+from binnacle.application.probe_workspace import ProbeWorkspaceUseCases
 from binnacle.contracts import (
     EXPECTED_REVISIONS,
     ContractRegistry,
@@ -59,11 +60,15 @@ from binnacle.domain.mcp import (
     ProbeErrorCase,
     ProbeErrorRequest,
     ProbeResultFormatsRequest,
+    ProbeWorkspaceCleanupRequest,
+    ProbeWorkspacePrepareRequest,
+    ProbeWorkspaceWriteRequest,
     ProtocolEra,
     SuccessEnvelope,
     SystemInspectRequest,
     envelope_to_mapping,
 )
+from binnacle.domain.probe_workspace import ProbeOperationKind, decode_probe_content
 from binnacle.domain.system import SystemSection
 from binnacle.security.controller import get_controller_context
 
@@ -180,7 +185,7 @@ class ManifestHandler(Protocol):
     async def __call__(
         self,
         *,
-        use_cases: CompatibilityUseCases,
+        use_cases: CompatibilityUseCases | ProbeWorkspaceUseCases,
         request: object,
         context: McpCallContext,
     ) -> ToolEnvelope: ...
@@ -784,14 +789,15 @@ def create_mcp_server(
     *,
     operation_kernel_factory: OperationKernelFactory | None = None,
 ) -> FastMCP[None]:
-    """Create the exact five-Tool compatibility-core FastMCP server."""
+    """Create one exact compiled catalogue with write Tools fail-closed."""
 
-    contracts = application.contracts
-    tool_count = len(contracts.tools)
+    contracts = application.available_contracts
+    write_tool_keys: set[str] = set()
 
     @asynccontextmanager
     async def lifespan(_server: FastMCP[None]) -> AsyncIterator[None]:
         operation_kernel: AsyncCloseable | None = None
+        application.set_probe_workspace(None)
         if operation_kernel_factory is not None:
             try:
                 operation_kernel = await operation_kernel_factory()
@@ -804,12 +810,28 @@ def create_mcp_server(
                 )
             else:
                 _LOGGER.info("operation_kernel_started")
+                probe_workspace = getattr(operation_kernel, "probe_workspace", None)
+                write_available = getattr(
+                    operation_kernel,
+                    "write_catalogue_available",
+                    False,
+                )
+                if (
+                    contracts.catalogue_phase == "compatibility-write-probe"
+                    and write_available is True
+                    and isinstance(probe_workspace, ProbeWorkspaceUseCases)
+                ):
+                    application.set_probe_workspace(probe_workspace)
+                    server.enable(keys=write_tool_keys)
+        tool_count = len(application.contracts.tools)
         application.set_registered_tool_count(tool_count)
         _LOGGER.info("application_starting", registered_tool_count=tool_count)
         try:
             await application.start()
         except Exception as exc:
             application.set_registered_tool_count(0)
+            server.disable(keys=write_tool_keys)
+            application.set_probe_workspace(None)
             _LOGGER.error(
                 "application_start_failed",
                 error_type=type(exc).__name__,
@@ -827,6 +849,8 @@ def create_mcp_server(
                 await application.stop()
                 _LOGGER.info("application_stopped")
             finally:
+                server.disable(keys=write_tool_keys)
+                application.set_probe_workspace(None)
                 if operation_kernel is not None:
                     await operation_kernel.close()
                     _LOGGER.info("operation_kernel_stopped")
@@ -840,8 +864,12 @@ def create_mcp_server(
     )
 
     for contract in contracts.tools.values():
-        server.add_tool(_create_function_tool(application, contracts, contract))
-    application.set_registered_tool_count(tool_count)
+        tool = _create_function_tool(application, contracts, contract)
+        if contract.name.startswith("probe_workspace_"):
+            write_tool_keys.add(tool.key)
+        server.add_tool(tool)
+    server.disable(keys=write_tool_keys)
+    application.set_registered_tool_count(len(application.contracts.tools))
 
     @server.custom_route("/healthz", methods=["GET"], include_in_schema=False)
     async def health(_request: Request) -> Response:
@@ -913,8 +941,13 @@ def _create_function_tool(
         )
         call_logger.info("mcp_tool_call_started")
         try:
+            use_cases: CompatibilityUseCases | ProbeWorkspaceUseCases
+            if contract.name.startswith("probe_workspace_"):
+                use_cases = application.probe_workspace
+            else:
+                use_cases = application.compatibility
             result = await handler(
-                use_cases=application.compatibility,
+                use_cases=use_cases,
                 request=request,
                 context=context,
             )
@@ -1002,6 +1035,35 @@ def _request_from_arguments(tool_name: str, arguments: Mapping[str, Any]) -> obj
         )
     if tool_name == "compatibility_report":
         return CompatibilityReportRequest()
+    if tool_name == "probe_workspace_prepare":
+        return ProbeWorkspacePrepareRequest(
+            operation=ProbeOperationKind(arguments["operation"]),
+            relative_path=arguments["relative_path"],
+            content_sha256=arguments["content_sha256"],
+            byte_count=arguments.get("byte_count"),
+            artifact_id=arguments.get("artifact_id"),
+        )
+    if tool_name == "probe_workspace_write":
+        return ProbeWorkspaceWriteRequest(
+            prepared_operation_id=arguments["prepared_operation_id"],
+            execution_nonce=arguments["execution_nonce"],
+            idempotency_key=arguments["idempotency_key"],
+            relative_path=arguments["relative_path"],
+            content=decode_probe_content(
+                text=arguments.get("text"),
+                encoded_base64=arguments.get("base64"),
+            ),
+            overwrite=arguments["overwrite"],
+        )
+    if tool_name == "probe_workspace_cleanup":
+        return ProbeWorkspaceCleanupRequest(
+            prepared_operation_id=arguments["prepared_operation_id"],
+            execution_nonce=arguments["execution_nonce"],
+            idempotency_key=arguments["idempotency_key"],
+            relative_path=arguments["relative_path"],
+            artifact_id=arguments["artifact_id"],
+            content_sha256=arguments["content_sha256"],
+        )
     raise InputContractError(f"unknown Tool contract: {tool_name}")
 
 

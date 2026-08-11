@@ -1,6 +1,6 @@
 schema_version: "1.1"
 case_manifest_id: chatgpt-mcp-evaluation-cases
-case_manifest_version: "1.1.0"
+case_manifest_version: "1.2.0"
 
 risk_classes:
   deterministic_protocol_schema:
@@ -85,6 +85,30 @@ cases:
     evidence:
       - tools_list_frame
       - manifest_digest_record
+
+  - case_id: write-tool-discovery-manifest
+    axis: write_discovery_and_metadata
+    risk_class: deterministic_protocol_schema
+    setup:
+      catalogue_phase: compatibility-write-probe
+      local_promotion_prerequisites_passed: true
+    action:
+      type: list_tools
+    oracle:
+      pass_when:
+        - exactly_eight_reviewed_tools_visible
+        - write_tools_match_reviewed_manifest
+        - catalogue_digest_matches
+      blocked_when:
+        - local_or_host_promotion_prerequisite_missing
+    timeout_seconds: 30
+    prohibited_effects:
+      - no_tool_execution
+      - no_catalogue_semantic_rewrite
+    evidence:
+      - tools_list_frame
+      - manifest_digest_record
+      - local_promotion_record
 
   - case_id: model-tool-selection-binnacle-probe
     axis: tool_selection
@@ -263,6 +287,148 @@ cases:
       - fault_injection_log
       - idempotency_record
       - audit_refs
+
+  - case_id: write-retained-after-state-and-expiry
+    axis: retry_safety
+    risk_class: write_cancellation_retry_cache_confirmation
+    setup:
+      fault: drop_initial_response_after_effect
+      filesystem_state_changed_by_initial_effect: true
+      original_preparation_expired: true
+      idempotency_key_reused: true
+      exact_input_reused: true
+    action:
+      type: retry_probe_workspace_write
+    oracle:
+      pass_when:
+        - caller_binding_resolved_before_preparation_validation
+        - same_operation_identity_returned
+        - one_path_generation_total
+        - one_effect_total
+        - retained_result_returned
+      fail_when:
+        - expired_preparation_creates_fresh_operation
+        - changed_filesystem_state_rejects_retained_work
+    timeout_seconds: 180
+    prohibited_effects:
+      - no_second_file_effect
+      - no_second_path_reservation
+    evidence:
+      - fault_injection_log
+      - retained_operation_snapshots
+      - probe_ledger_snapshot
+      - audit_refs
+
+  - case_id: write-reconnect-retained
+    axis: write_reconnect
+    risk_class: concurrency_race_reconnect_instability
+    setup:
+      disconnect_after_write_effect: true
+      idempotency_key_reused: true
+      exact_input_reused: true
+    action:
+      type: reconnect_and_retry_probe_workspace_write
+    oracle:
+      pass_when:
+        - same_operation_identity_returned
+        - one_effect_total
+        - one_path_generation_total
+        - current_state_version_monotonic
+    timeout_seconds: 180
+    prohibited_effects:
+      - no_new_operation_for_same_idempotency_key
+      - no_second_file_effect
+    evidence:
+      - connection_log
+      - operation_snapshots
+      - probe_ledger_snapshot
+      - audit_refs
+
+  - case_id: cleanup-exact-artifact
+    axis: probe_workspace_integrity
+    risk_class: write_cancellation_retry_cache_confirmation
+    setup:
+      exact_created_artifact_exists: true
+      cleanup_prepared_from_current_ledger: true
+    action:
+      type: prepare_confirm_execute_probe_workspace_cleanup
+    oracle:
+      pass_when:
+        - exact_active_artifact_claimed
+        - full_terminal_history_revalidated_before_unlink
+        - exact_file_identity_revalidated
+        - exactly_one_artifact_removed
+        - ledger_high_water_unchanged
+      fail_when:
+        - reserved_uncertain_or_terminal_artifact_admitted
+        - unrelated_path_removed
+    timeout_seconds: 180
+    prohibited_effects:
+      - no_path_outside_probe_workspace
+      - no_unknown_entry_removed
+      - no_network
+    evidence:
+      - prepared_result
+      - execute_result
+      - probe_ledger_snapshot
+      - server_audit_refs
+
+  - case_id: cleanup-lost-response-after-state-and-expiry
+    axis: retry_safety
+    risk_class: write_cancellation_retry_cache_confirmation
+    setup:
+      fault: drop_initial_cleanup_response_after_effect
+      artifact_state_changed_by_initial_effect: true
+      original_preparation_expired: true
+      idempotency_key_reused: true
+      exact_input_reused: true
+    action:
+      type: retry_probe_workspace_cleanup
+    oracle:
+      pass_when:
+        - caller_binding_resolved_before_preparation_validation
+        - same_operation_identity_returned
+        - one_cleanup_claim_total
+        - one_unlink_effect_total
+        - retained_result_returned
+      fail_when:
+        - expired_preparation_creates_fresh_cleanup
+        - absent_path_is_used_as_unlink_proof
+    timeout_seconds: 180
+    prohibited_effects:
+      - no_second_cleanup_claim
+      - no_second_unlink_effect
+    evidence:
+      - fault_injection_log
+      - retained_operation_snapshots
+      - probe_ledger_snapshot
+      - audit_refs
+
+  - case_id: probe-ledger-history-integrity
+    axis: probe_workspace_integrity
+    risk_class: deterministic_protocol_schema
+    setup:
+      write_and_cleanup_completed: true
+      stopped_service_verification: true
+    action:
+      type: verify_probe_ledger_and_terminal_history
+    oracle:
+      pass_when:
+        - generations_are_contiguous
+        - terminal_history_count_and_digest_match
+        - ledger_high_water_is_monotonic
+        - active_ownership_and_provenance_match
+        - no_orphan_probe_operation_exists
+      fail_when:
+        - ledger_reconstructed_from_surviving_rows
+        - pathname_presence_used_as_effect_truth
+    timeout_seconds: 60
+    prohibited_effects:
+      - no_automatic_repair
+      - no_unknown_entry_removed
+    evidence:
+      - kernel_verification_report
+      - probe_ledger_snapshot
 
   - case_id: uncertain-no-auto-retry
     axis: retry_safety

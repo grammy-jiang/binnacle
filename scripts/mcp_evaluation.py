@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create, record, verify, review, and finalize Phase 3 MCP evidence."""
+"""Create, record, verify, review, and finalize reviewed Phase 3/5 MCP evidence."""
 
 from __future__ import annotations
 
@@ -20,6 +20,7 @@ from jsonschema import Draft202012Validator  # type: ignore[import-untyped]
 
 from binnacle.evaluation.bundle import (
     FINAL_MANIFEST_NAME,
+    REVIEWED_PROMOTION_RELEASES,
     WORKING_MANIFEST_NAME,
     EvaluationVerificationError,
     finalize_evaluation,
@@ -32,6 +33,11 @@ from binnacle.evaluation.profile import EvaluationSourceError, load_evaluation_p
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _MAX_JSON_INPUT_BYTES = 1_048_576
+_DEFAULT_PROBE_RELEASE = "phase3-readonly-evaluation-v1"
+_CAPABILITY_SCOPE_EVIDENCE_BY_CATALOGUE = {
+    "compatibility-core": "phase3-capability-scope",
+    "compatibility-write-probe": "phase5-capability-scope",
+}
 _TEXT_EVIDENCE_MEDIA_TYPES = frozenset(
     {"application/json", "application/x-ndjson", "text/plain", "text/markdown"}
 )
@@ -79,8 +85,12 @@ def _evaluation_id(now: datetime | None = None) -> str:
 
 
 def _read_json_object(path: Path) -> dict[str, Any]:
+    return _decode_json_object(_read_bounded_payload(path))
+
+
+def _decode_json_object(payload: bytes) -> dict[str, Any]:
     try:
-        value = json.loads(_read_bounded_payload(path))
+        value = json.loads(payload)
     except (json.JSONDecodeError, RecursionError, ValueError) as exc:
         raise ValueError("JSON input is invalid") from exc
     if not isinstance(value, dict):
@@ -136,6 +146,7 @@ def initialize_workspace(
     output: Path,
     profile_json: Path,
     capability_scope_json: Path,
+    probe_release: str = _DEFAULT_PROBE_RELEASE,
 ) -> dict[str, Any]:
     """Create a write-once draft covering every frozen case with initial evidence."""
 
@@ -146,12 +157,21 @@ def initialize_workspace(
         raise ValueError("evaluation output may not be a symbolic link")
     profile_value = _read_json_object(profile_json)
     _validate_profile_snapshot(profile_value)
+    catalogue_phase = REVIEWED_PROMOTION_RELEASES.get(probe_release)
+    if catalogue_phase is None:
+        raise ValueError("probe release is not a reviewed evaluation release")
     frozen = load_evaluation_profile(_REPO_ROOT)
     cases = load_evaluation_cases(_REPO_ROOT, profile=frozen)
     capability_bytes = _read_bounded_payload(capability_scope_json)
+    capability_scope = _decode_json_object(capability_bytes)
+    if capability_scope.get("catalogue_phase") != catalogue_phase:
+        raise ValueError(
+            "capability scope catalogue_phase does not match the selected probe release"
+        )
+    evidence_id = _CAPABILITY_SCOPE_EVIDENCE_BY_CATALOGUE[catalogue_phase]
     evidence = EvidenceStore(output).add_bytes(
-        evidence_id="phase3-capability-scope",
-        relative_path="phase3-capability-scope.json",
+        evidence_id=evidence_id,
+        relative_path=f"{evidence_id}.json",
         data=capability_bytes,
         media_type="application/json",
         information_class="normal-result",
@@ -185,7 +205,7 @@ def initialize_workspace(
         "evaluation_id": _evaluation_id(current),
         "profile": profile_value,
         "probe": {
-            "probe_release": "phase3-readonly-evaluation-v1",
+            "probe_release": probe_release,
             "dispatcher_version": "mcp-revision-dispatch-v1",
             "oracle_version": f"evaluation-cases/{cases.version}",
             "runner_version": "binnacle-mcp-evaluation/1.0.0",
@@ -442,6 +462,12 @@ def _parser() -> argparse.ArgumentParser:
     initialize.add_argument("--output", type=Path, required=True)
     initialize.add_argument("--profile-json", type=Path, required=True)
     initialize.add_argument("--capability-scope-json", type=Path, required=True)
+    initialize.add_argument(
+        "--probe-release",
+        choices=tuple(REVIEWED_PROMOTION_RELEASES),
+        default=_DEFAULT_PROBE_RELEASE,
+        help="reviewed evaluation release/catalogue (default: Phase 3 read-only)",
+    )
 
     record = commands.add_parser("record", help="record one frozen-case observation")
     record.add_argument("--output", type=Path, required=True)
@@ -497,6 +523,7 @@ def _run(arguments: argparse.Namespace) -> dict[str, object]:
             output=arguments.output,
             profile_json=arguments.profile_json,
             capability_scope_json=arguments.capability_scope_json,
+            probe_release=arguments.probe_release,
         )
         return {"evaluation_id": manifest["evaluation_id"], "status": "initialized"}
     if command == "record":

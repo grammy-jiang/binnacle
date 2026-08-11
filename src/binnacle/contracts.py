@@ -24,6 +24,24 @@ EXPECTED_TOOL_NAMES = (
     "probe_error",
     "compatibility_report",
 )
+EXPECTED_WRITE_PROBE_TOOL_NAMES = (
+    *EXPECTED_TOOL_NAMES,
+    "probe_workspace_prepare",
+    "probe_workspace_write",
+    "probe_workspace_cleanup",
+)
+EXPECTED_TOOL_NAMES_BY_PHASE = MappingProxyType(
+    {
+        "compatibility-core": EXPECTED_TOOL_NAMES,
+        "compatibility-write-probe": EXPECTED_WRITE_PROBE_TOOL_NAMES,
+    }
+)
+REGISTRY_FORMAT_BY_PHASE = MappingProxyType(
+    {
+        "compatibility-core": "binnacle-compatibility-core-v1",
+        "compatibility-write-probe": "binnacle-compatibility-write-probe-v1",
+    }
+)
 EXPECTED_REVISIONS = (
     "2026-07-28",
     "2025-11-25",
@@ -101,12 +119,15 @@ BASELINE_KEYS = frozenset(
 OBSERVATION_KEYS = frozenset({"axis", "status", "summary"})
 PHASE2_SERVER_NOT_IMPLEMENTED_AXES = frozenset(
     {
+        "write_discovery_and_metadata",
         "write_entitlement",
         "host_confirmation",
         "retry_safety",
         "cancellation",
         "reconnect",
+        "write_reconnect",
         "concurrency",
+        "probe_workspace_integrity",
     }
 )
 PHASE2_NOT_APPLICABLE_AXES = frozenset(
@@ -130,10 +151,16 @@ PHASE2_BASELINE_SUMMARIES = MappingProxyType(
         "not-applicable": "The optional probe is not promoted in the Phase 2 catalogue.",
     }
 )
+PHASE5_BASELINE_LIMITATIONS = (
+    "Only local compatibility-write-probe server evidence exists.",
+    "No real ChatGPT account, workspace, transport, or UI behavior has been observed.",
+)
+PHASE5_DECLARED_SUMMARY = "The Phase 5 probe is implemented but has no real host evidence."
 PHASE2_OBSERVATION_AXES = (
     "connectivity",
     "protocol_revision",
     "discovery_and_metadata",
+    "write_discovery_and_metadata",
     "tool_selection",
     "result_handling",
     "error_handling",
@@ -141,6 +168,8 @@ PHASE2_OBSERVATION_AXES = (
     "write_entitlement",
     "host_confirmation",
     "retry_safety",
+    "write_reconnect",
+    "probe_workspace_integrity",
     "cancellation",
     "reconnect",
     "concurrency",
@@ -158,6 +187,9 @@ EXPECTED_HANDLER_BINDINGS = MappingProxyType(
         "probe_result_formats": "binnacle.bootstrap.probe_result_formats.v1_1",
         "probe_error": "binnacle.bootstrap.probe_error.v1_1",
         "compatibility_report": "binnacle.bootstrap.compatibility_report.v1_1",
+        "probe_workspace_prepare": "binnacle.bootstrap.probe_workspace_prepare.v1_1",
+        "probe_workspace_write": "binnacle.bootstrap.probe_workspace_write.v1_1",
+        "probe_workspace_cleanup": "binnacle.bootstrap.probe_workspace_cleanup.v1_1",
     }
 )
 EXPECTED_TOOL_METADATA_SHA256 = MappingProxyType(
@@ -170,6 +202,15 @@ EXPECTED_TOOL_METADATA_SHA256 = MappingProxyType(
         "probe_error": "d45e3c32bcb22ac1dfce6c74c72e1e9ff41e2e8ac2b8b6e81dc21da8a93356d2",
         "compatibility_report": (
             "b87c22a3ac4370b27830ad867e3684fffb1b1944cf52cce2d826f98b0d87c493"
+        ),
+        "probe_workspace_prepare": (
+            "6e84252492f772e002e60233d003019529bce3b9a419b426022b6c045e3152f9"
+        ),
+        "probe_workspace_write": (
+            "57fc81147e89cf1dd5db4fd41ef64e359261f8a996dfd91fb75a4dcbb8f450af"
+        ),
+        "probe_workspace_cleanup": (
+            "2164bd38e8ff04d79d56e1cbb2674fb1399ff30858880a3557028fb8da0c8f9f"
         ),
     }
 )
@@ -188,8 +229,16 @@ EXPECTED_REGISTRY_IDENTITIES = MappingProxyType(
         "revision_contract_sha256": (
             "8207b7e9ea90aec37ec3bd6f2c0e688fcc0a928d234c4fee1f22a270ae787bd0"
         ),
-        "evaluation_profile_version": "1.1.0",
+        "evaluation_profile_version": "1.2.0",
         "catalogue_sha256": ("9ecb9823da48b65bd168930e2c3a6650eaf0d0af149ef98fd3a6d36fd873194a"),
+    }
+)
+EXPECTED_CATALOGUE_SHA256_BY_PHASE = MappingProxyType(
+    {
+        "compatibility-core": EXPECTED_REGISTRY_IDENTITIES["catalogue_sha256"],
+        "compatibility-write-probe": (
+            "0bbf9aa4144cf683f8d0693253595aef55061d28ec97af5d1e17a7ea7f531172"
+        ),
     }
 )
 
@@ -229,6 +278,7 @@ class ToolContract:
 
 @dataclass(frozen=True, slots=True)
 class ContractRegistry:
+    catalogue_phase: str
     manifest_id: str
     manifest_version: str
     manifest_sha256: str
@@ -245,9 +295,16 @@ class ContractRegistry:
 
     @classmethod
     def load(cls) -> ContractRegistry:
+        return cls.load_phase("compatibility-core")
+
+    @classmethod
+    def load_phase(cls, phase: str) -> ContractRegistry:
+        if phase not in EXPECTED_TOOL_NAMES_BY_PHASE:
+            raise ContractRegistryError("unknown reviewed catalogue phase")
         generated = resources.files("binnacle._generated")
-        registry_bytes = generated.joinpath("compatibility_core_registry.json").read_bytes()
-        digest_bytes = generated.joinpath("compatibility_core_registry.digest.json").read_bytes()
+        stem = phase.replace("-", "_")
+        registry_bytes = generated.joinpath(f"{stem}_registry.json").read_bytes()
+        digest_bytes = generated.joinpath(f"{stem}_registry.digest.json").read_bytes()
         return cls.from_bytes(registry_bytes=registry_bytes, digest_bytes=digest_bytes)
 
     @classmethod
@@ -270,8 +327,13 @@ class ContractRegistry:
         actual_registry_digest = hashlib.sha256(registry_bytes).hexdigest()
         if digest.get("registry_sha256") != actual_registry_digest:
             raise ContractRegistryError("generated registry digest mismatch")
-        if registry.get("registry_format") != "binnacle-compatibility-core-v1":
+        registry_format = registry.get("registry_format")
+        phases = [
+            phase for phase, value in REGISTRY_FORMAT_BY_PHASE.items() if value == registry_format
+        ]
+        if len(phases) != 1:
             raise ContractRegistryError("unsupported generated registry format")
+        phase = phases[0]
         if digest.get("compiler_format") != registry.get("registry_format"):
             raise ContractRegistryError("detached compiler format mismatch")
         if digest.get("compiler_version") != "1.0.0":
@@ -309,10 +371,16 @@ class ContractRegistry:
         raw_tools = registry.get("tools")
         if not isinstance(raw_tools, list):
             raise ContractRegistryError("generated tools must be an array")
-        if tuple(tool.get("name") for tool in raw_tools if isinstance(tool, dict)) != (
-            EXPECTED_TOOL_NAMES
+        if (
+            tuple(tool.get("name") for tool in raw_tools if isinstance(tool, dict))
+            != EXPECTED_TOOL_NAMES_BY_PHASE[phase]
         ):
-            raise ContractRegistryError("generated catalogue is not exactly compatibility-core")
+            detail = (
+                "exactly compatibility-core"
+                if phase == "compatibility-core"
+                else "exactly compatibility-write-probe"
+            )
+            raise ContractRegistryError(f"generated catalogue is not {detail}")
         if _canonical_sha256(raw_tools) != registry.get("catalogue_sha256"):
             raise ContractRegistryError("compiled catalogue digest mismatch")
 
@@ -321,7 +389,7 @@ class ContractRegistry:
         output_validators: dict[str, Draft202012Validator] = {}
         for raw_tool in raw_tools:
             tool = _parse_tool(_require_mapping(raw_tool, "tool"), schemas=schemas)
-            if "probe_workspace" in tool.handler_binding:
+            if phase == "compatibility-core" and "probe_workspace" in tool.handler_binding:
                 raise ContractRegistryError("write-probe binding is visible")
             _validate_handler_binding(tool.handler_binding)
             if tool.handler_binding != EXPECTED_HANDLER_BINDINGS[tool.name]:
@@ -344,6 +412,7 @@ class ContractRegistry:
         )
         _validate_compatibility_baseline(
             baseline,
+            phase=phase,
             evaluation_profile_version=_require_string(
                 registry,
                 "evaluation_profile_version",
@@ -354,11 +423,14 @@ class ContractRegistry:
                 "generated source manifest does not match the reviewed Phase 2 identity"
             )
         for key, expected_value in EXPECTED_REGISTRY_IDENTITIES.items():
+            if key == "catalogue_sha256":
+                expected_value = EXPECTED_CATALOGUE_SHA256_BY_PHASE[phase]
             if registry.get(key) != expected_value:
                 raise ContractRegistryError(
                     f"generated {key} does not match the reviewed Phase 2 identity"
                 )
         return cls(
+            catalogue_phase=phase,
             manifest_id=_require_string(source_manifest, "id"),
             manifest_version=_require_string(source_manifest, "version"),
             manifest_sha256=_require_string(source_manifest, "sha256"),
@@ -690,6 +762,7 @@ def _json_pointer_get(document: Any, pointer: str) -> Any:
 def _validate_compatibility_baseline(
     baseline: dict[str, Any],
     *,
+    phase: str,
     evaluation_profile_version: str,
 ) -> None:
     _require_exact_keys(baseline, BASELINE_KEYS, "compatibility_baseline")
@@ -706,7 +779,12 @@ def _validate_compatibility_baseline(
         or not all(isinstance(value, str) and value for value in limitations)
     ):
         raise ContractRegistryError("generated compatibility limitations are invalid")
-    if tuple(limitations) != PHASE2_BASELINE_LIMITATIONS:
+    expected_limitations = (
+        PHASE2_BASELINE_LIMITATIONS
+        if phase == "compatibility-core"
+        else PHASE5_BASELINE_LIMITATIONS
+    )
+    if tuple(limitations) != expected_limitations:
         raise ContractRegistryError(
             "generated compatibility limitations do not match the Phase 2 baseline"
         )
@@ -721,8 +799,10 @@ def _validate_compatibility_baseline(
         axis = _require_string(observation, "axis")
         status = _require_string(observation, "status")
         summary = _require_string(observation, "summary")
-        if axis in PHASE2_SERVER_NOT_IMPLEMENTED_AXES:
+        if axis in PHASE2_SERVER_NOT_IMPLEMENTED_AXES and phase == "compatibility-core":
             expected_status = "server-not-implemented"
+        elif axis in PHASE2_SERVER_NOT_IMPLEMENTED_AXES:
+            expected_status = "declared-unexercised"
         elif axis in PHASE2_NOT_APPLICABLE_AXES:
             expected_status = "not-applicable"
         else:
@@ -731,7 +811,12 @@ def _validate_compatibility_baseline(
             raise ContractRegistryError(
                 "generated compatibility observation violates the Phase 2 status classification"
             )
-        if summary != PHASE2_BASELINE_SUMMARIES[expected_status]:
+        expected_summary = (
+            PHASE5_DECLARED_SUMMARY
+            if expected_status == "declared-unexercised"
+            else PHASE2_BASELINE_SUMMARIES[expected_status]
+        )
+        if summary != expected_summary:
             raise ContractRegistryError(
                 "generated compatibility observation summary does not match the Phase 2 baseline"
             )

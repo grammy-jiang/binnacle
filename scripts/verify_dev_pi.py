@@ -24,6 +24,17 @@ SERVICE_NAME = "binnacle-dev.service"
 CANONICAL_REPO = Path("/srv/binnacle-dev/repo")
 _MAX_CONFIG_BYTES = 65_536
 _FULL_GIT_SHA = re.compile(r"[0-9a-f]{40}")
+PROBE_ROOT = Path("/var/lib/binnacle/probe-workspace")
+PROBE_STAGING = PROBE_ROOT / ".staging"
+SUPPORTED_PROBE_FILESYSTEM_TYPES = frozenset({"ext4"})
+EXPECTED_READ_WRITE_PATHS = frozenset(
+    {
+        "/var/lib/binnacle/state",
+        "/var/lib/binnacle/results",
+        "/var/lib/binnacle/audit",
+        str(PROBE_ROOT),
+    }
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,6 +44,15 @@ class VerificationCheck:
     name: str
     status: str
     summary: str
+
+
+@dataclass(frozen=True, slots=True)
+class _ProbeMountFacts:
+    target: Path
+    source: str
+    filesystem_type: str
+    options: frozenset[str]
+    filesystem_root: str
 
 
 def verify_deployment(
@@ -69,6 +89,30 @@ def verify_deployment(
         )
         return tuple(checks + _pending_live_checks())
     host, port, workers = server
+    probe_settings = _safe_probe_settings(config_path)
+    if probe_settings is None:
+        checks.append(
+            VerificationCheck(
+                "probe-workspace-config",
+                "fail",
+                "probe workspace settings could not be validated",
+            )
+        )
+    else:
+        enabled, maximum_file_bytes, ttl_seconds = probe_settings
+        checks.append(
+            VerificationCheck(
+                "probe-workspace-config",
+                "pass",
+                (
+                    "bounded fixed probe profile is enabled"
+                    if enabled
+                    else "bounded fixed probe profile remains disabled"
+                )
+                + f" (max={maximum_file_bytes}, ttl={ttl_seconds})",
+            )
+        )
+    checks.extend(_probe_workspace_checks(repo))
     if host not in {"127.0.0.1", "::1"} or workers != 1:
         checks.append(
             VerificationCheck(
@@ -292,6 +336,191 @@ def _safe_server_settings(path: Path) -> tuple[str, int, int] | None:
         return None
 
 
+def _safe_probe_settings(path: Path) -> tuple[bool, int, int] | None:
+    try:
+        values = tomllib.loads(_read_bounded_regular_file(path).decode("utf-8"))
+        raw = values.get("probe_workspace", {})
+        if not isinstance(raw, dict):
+            return None
+        if set(raw) - {"enabled", "root", "max_file_bytes", "preparation_ttl_seconds"}:
+            return None
+        enabled = raw.get("enabled", False)
+        root = raw.get("root", str(PROBE_ROOT))
+        maximum = raw.get("max_file_bytes", 65_536)
+        ttl = raw.get("preparation_ttl_seconds", 300)
+        if (
+            not isinstance(enabled, bool)
+            or root != str(PROBE_ROOT)
+            or isinstance(maximum, bool)
+            or not isinstance(maximum, int)
+            or not 1 <= maximum <= 65_536
+            or isinstance(ttl, bool)
+            or not isinstance(ttl, int)
+            or not 30 <= ttl <= 900
+        ):
+            return None
+        return enabled, maximum, ttl
+    except (OSError, UnicodeDecodeError, ValueError):
+        return None
+
+
+def _probe_workspace_checks(repo: Path) -> list[VerificationCheck]:
+    checks: list[VerificationCheck] = []
+    try:
+        service = pwd.getpwnam("binnacle")
+        group = grp.getgrnam("binnacle")
+        root_metadata = PROBE_ROOT.stat(follow_symlinks=False)
+        staging_metadata = PROBE_STAGING.stat(follow_symlinks=False)
+    except (KeyError, OSError):
+        return [
+            VerificationCheck(
+                "probe-workspace-layout",
+                "fail",
+                "probe root, staging directory, or service identity is missing",
+            )
+        ]
+    exact_layout = all(
+        stat.S_ISDIR(item.st_mode)
+        and not stat.S_ISLNK(item.st_mode)
+        and item.st_uid == service.pw_uid
+        and item.st_gid == group.gr_gid
+        and stat.S_IMODE(item.st_mode) == 0o700
+        for item in (root_metadata, staging_metadata)
+    )
+    checks.append(
+        VerificationCheck(
+            "probe-workspace-layout",
+            "pass" if exact_layout else "fail",
+            "service-owned root and staging are exact mode 0700"
+            if exact_layout
+            else "probe root or staging ownership/type/mode differs",
+        )
+    )
+    separated = (
+        root_metadata.st_dev == staging_metadata.st_dev
+        and root_metadata.st_ino != staging_metadata.st_ino
+    )
+    protected_devices: set[int] = set()
+    protected = (
+        repo,
+        Path("/etc/binnacle"),
+        Path("/var/lib/binnacle/state"),
+        Path("/var/lib/binnacle/results"),
+        Path("/var/lib/binnacle/audit"),
+        Path("/var/lib/binnacle/evaluation"),
+    )
+    for path in protected:
+        try:
+            metadata = path.stat(follow_symlinks=False)
+        except OSError:
+            continue
+        protected_devices.add(metadata.st_dev)
+        if (metadata.st_dev, metadata.st_ino) == (root_metadata.st_dev, root_metadata.st_ino):
+            separated = False
+    try:
+        mount = _parse_probe_mount_facts(
+            _run_bounded(
+                [
+                    "findmnt",
+                    "--json",
+                    "--output",
+                    "TARGET,SOURCE,FSTYPE,OPTIONS,FSROOT",
+                    "--target",
+                    str(PROBE_ROOT),
+                ]
+            )
+        )
+    except (OSError, subprocess.CalledProcessError, ValueError):
+        mount = None
+    local_filesystem = mount is not None and _probe_mount_is_supported(
+        mount,
+        root_device=root_metadata.st_dev,
+        protected_devices=frozenset(protected_devices),
+    )
+    checks.append(
+        VerificationCheck(
+            "probe-workspace-separation",
+            "pass" if separated and local_filesystem else "fail",
+            "probe root uses reviewed block-backed ext4 without a source alias"
+            if separated and local_filesystem
+            else "probe root separation or reviewed filesystem identity is unavailable",
+        )
+    )
+    return checks
+
+
+def _parse_probe_mount_facts(value: str) -> _ProbeMountFacts:
+    document = json.loads(value)
+    if not isinstance(document, dict):
+        raise ValueError("findmnt output is not an object")
+    filesystems = document.get("filesystems")
+    if not isinstance(filesystems, list) or len(filesystems) != 1:
+        raise ValueError("findmnt did not return exactly one filesystem")
+    raw = filesystems[0]
+    if not isinstance(raw, dict):
+        raise ValueError("findmnt filesystem entry is not an object")
+    target = raw.get("target")
+    source = raw.get("source")
+    filesystem_type = raw.get("fstype")
+    options = raw.get("options")
+    filesystem_root = raw.get("fsroot")
+    if (
+        not isinstance(target, str)
+        or not target
+        or len(target) > 4096
+        or not isinstance(source, str)
+        or not source
+        or len(source) > 4096
+        or not isinstance(filesystem_type, str)
+        or not filesystem_type
+        or len(filesystem_type) > 4096
+        or not isinstance(options, str)
+        or not options
+        or len(options) > 4096
+        or not isinstance(filesystem_root, str)
+        or not filesystem_root
+        or len(filesystem_root) > 4096
+    ):
+        raise ValueError("findmnt filesystem fields are invalid")
+    target_path = Path(target)
+    if not target_path.is_absolute() or target_path != Path(os.path.normpath(target)):
+        raise ValueError("findmnt target is not a canonical absolute path")
+    return _ProbeMountFacts(
+        target=target_path,
+        source=source,
+        filesystem_type=filesystem_type.casefold(),
+        options=frozenset(item.casefold() for item in options.split(",") if item),
+        filesystem_root=filesystem_root,
+    )
+
+
+def _probe_mount_is_supported(
+    mount: _ProbeMountFacts,
+    *,
+    root_device: int,
+    protected_devices: frozenset[int],
+) -> bool:
+    target_contains_root = mount.target == PROBE_ROOT or PROBE_ROOT.is_relative_to(mount.target)
+    block_source = mount.source.startswith("/dev/") or mount.source.startswith(
+        ("UUID=", "LABEL=", "PARTUUID=", "PARTLABEL=")
+    )
+    if (
+        not target_contains_root
+        or mount.filesystem_type not in SUPPORTED_PROBE_FILESYSTEM_TYPES
+        or "rw" not in mount.options
+        or {"ro", "bind", "rbind"} & mount.options
+        or mount.filesystem_root != "/"
+        or "[" in mount.source
+        or "]" in mount.source
+        or not block_source
+    ):
+        return False
+    # An exact mount backed by the same device as a protected tree is an alias,
+    # even when util-linux cannot distinguish a whole-filesystem bind from a
+    # second mount of that filesystem root.
+    return not (mount.target == PROBE_ROOT and root_device in protected_devices)
+
+
 def _read_bounded_regular_file(path: Path) -> bytes:
     descriptor: int | None = None
     try:
@@ -330,6 +559,10 @@ def _systemd_service_checks() -> list[VerificationCheck]:
                 "SupplementaryGroups",
                 "Environment",
                 "EnvironmentFiles",
+                "ReadWritePaths",
+                "ProtectSystem",
+                "FragmentPath",
+                "DropInPaths",
             )
         )
     except (OSError, subprocess.CalledProcessError, ValueError):
@@ -376,6 +609,21 @@ def _systemd_service_checks() -> list[VerificationCheck]:
             "no service environment credentials configured"
             if environment_ok
             else "service environment is non-empty and requires security review",
+        )
+    )
+    paths_ok = (
+        frozenset(properties["ReadWritePaths"].split()) == EXPECTED_READ_WRITE_PATHS
+        and properties["ProtectSystem"] == "strict"
+        and properties["FragmentPath"] == "/etc/systemd/system/binnacle-dev.service"
+        and not properties["DropInPaths"]
+    )
+    checks.append(
+        VerificationCheck(
+            "service-write-boundary",
+            "pass" if paths_ok else "fail",
+            "exact four-path strict write boundary has no drop-ins"
+            if paths_ok
+            else "effective service write boundary differs or has drop-ins",
         )
     )
     return checks
@@ -486,6 +734,16 @@ def _pending_live_checks() -> list[VerificationCheck]:
             "tunnel-identity",
             "blocked",
             "requires the actual supported private-connectivity mechanism",
+        ),
+        VerificationCheck(
+            "probe-filesystem-primitives",
+            "blocked",
+            "requires live no-replace, fsync, crash-window, and containment evidence",
+        ),
+        VerificationCheck(
+            "write-probe-catalogue",
+            "blocked",
+            "requires selected authentication/scope mapping plus real ChatGPT evidence",
         ),
     ]
 

@@ -71,7 +71,7 @@ class FakeCompatibilityProfileReader:
 
     def read(self) -> CompatibilityProfileSnapshot:
         return CompatibilityProfileSnapshot(
-            profile_version="1.1.0",
+            profile_version="1.2.0",
             observed_protocol_revision=None,
             observations=(
                 CompatibilityObservation(

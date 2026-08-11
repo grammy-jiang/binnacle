@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compile the reviewed compatibility-core MCP registry deterministically."""
+"""Compile the reviewed compatibility MCP projections deterministically."""
 
 from __future__ import annotations
 
@@ -17,10 +17,25 @@ import yaml  # type: ignore[import-untyped]
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT_DIR = ROOT / "src/binnacle/_generated"
-REGISTRY_PATH = OUTPUT_DIR / "compatibility_core_registry.json"
-DIGEST_PATH = OUTPUT_DIR / "compatibility_core_registry.digest.json"
-REGISTRY_FORMAT = "binnacle-compatibility-core-v1"
 COMPILER_VERSION = "1.0.0"
+PROJECTIONS = {
+    "compatibility-core": (
+        OUTPUT_DIR / "compatibility_core_registry.json",
+        OUTPUT_DIR / "compatibility_core_registry.digest.json",
+        "binnacle-compatibility-core-v1",
+        5,
+    ),
+    "compatibility-write-probe": (
+        OUTPUT_DIR / "compatibility_write_probe_registry.json",
+        OUTPUT_DIR / "compatibility_write_probe_registry.digest.json",
+        "binnacle-compatibility-write-probe-v1",
+        8,
+    ),
+}
+# Backward-compatible names identify the default core projection.
+REGISTRY_PATH = PROJECTIONS["compatibility-core"][0]
+DIGEST_PATH = PROJECTIONS["compatibility-core"][1]
+REGISTRY_FORMAT = PROJECTIONS["compatibility-core"][2]
 
 MANIFEST_PATH = ROOT / "spec/mcp/bootstrap-tool-manifest.yaml"
 REVISION_PATH = ROOT / "spec/mcp/revision-support.yaml"
@@ -33,12 +48,15 @@ SCHEMA_PATHS = (
 )
 
 SERVER_NOT_IMPLEMENTED_AXES = {
+    "write_discovery_and_metadata",
     "write_entitlement",
     "host_confirmation",
     "retry_safety",
     "cancellation",
     "reconnect",
+    "write_reconnect",
     "concurrency",
+    "probe_workspace_integrity",
 }
 NOT_APPLICABLE_AXES = {
     "resources",
@@ -184,7 +202,9 @@ class SchemaResolver:
         return path, fragment if separator else ""
 
 
-def _compatibility_baseline(profile: dict[str, Any], cases: dict[str, Any]) -> dict[str, Any]:
+def _compatibility_baseline(
+    profile: dict[str, Any], cases: dict[str, Any], *, phase: str
+) -> dict[str, Any]:
     seen: set[str] = set()
     observations: list[dict[str, str]] = []
     for case in cases.get("cases", []):
@@ -194,9 +214,12 @@ def _compatibility_baseline(profile: dict[str, Any], cases: dict[str, Any]) -> d
         if not isinstance(axis, str) or axis in seen:
             continue
         seen.add(axis)
-        if axis in SERVER_NOT_IMPLEMENTED_AXES:
+        if axis in SERVER_NOT_IMPLEMENTED_AXES and phase == "compatibility-core":
             status = "server-not-implemented"
             summary = "The required consequential server capability is absent in Phase 2."
+        elif axis in SERVER_NOT_IMPLEMENTED_AXES:
+            status = "declared-unexercised"
+            summary = "The Phase 5 probe is implemented but has no real host evidence."
         elif axis in NOT_APPLICABLE_AXES:
             status = "not-applicable"
             summary = "The optional probe is not promoted in the Phase 2 catalogue."
@@ -211,13 +234,17 @@ def _compatibility_baseline(profile: dict[str, Any], cases: dict[str, Any]) -> d
         "observations": observations,
         "evidence_bundle_sha256": None,
         "limitations": [
-            "Only local compatibility-core server evidence exists.",
+            f"Only local {phase} server evidence exists.",
             "No real ChatGPT account, workspace, transport, or UI behavior has been observed.",
         ],
     }
 
 
-def compile_registry() -> tuple[bytes, bytes]:
+def compile_registry(phase: str = "compatibility-core") -> tuple[bytes, bytes]:
+    try:
+        _, _, registry_format, expected_count = PROJECTIONS[phase]
+    except KeyError as exc:
+        raise ValueError(f"unknown catalogue projection: {phase}") from exc
     manifest = _load_yaml(MANIFEST_PATH)
     revision = _load_yaml(REVISION_PATH)
     evaluation_profile = _load_yaml(EVALUATION_PROFILE_PATH)
@@ -229,7 +256,7 @@ def compile_registry() -> tuple[bytes, bytes]:
         if not isinstance(raw_tool, dict):
             raise ValueError("Tool manifest contains a non-object Tool")
         phases = raw_tool.get("phases", [])
-        if "compatibility-core" not in phases:
+        if phase not in phases:
             continue
         input_schema, input_digest = resolver.from_manifest_ref(raw_tool["input_schema_ref"])
         output_schema, output_digest = resolver.from_manifest_ref(raw_tool["output_schema_ref"])
@@ -256,8 +283,8 @@ def compile_registry() -> tuple[bytes, bytes]:
             }
         )
 
-    if len(selected_tools) != 5:
-        raise ValueError(f"expected five compatibility-core Tools, found {len(selected_tools)}")
+    if len(selected_tools) != expected_count:
+        raise ValueError(f"expected {expected_count} {phase} Tools, found {len(selected_tools)}")
 
     revisions = revision.get("revisions")
     if not isinstance(revisions, list):
@@ -279,7 +306,7 @@ def compile_registry() -> tuple[bytes, bytes]:
     revision_digest = _sha256_bytes(REVISION_PATH.read_bytes())
 
     registry = {
-        "registry_format": REGISTRY_FORMAT,
+        "registry_format": registry_format,
         "source_manifest": {
             "id": manifest["manifest_id"],
             "version": manifest["manifest_version"],
@@ -295,12 +322,14 @@ def compile_registry() -> tuple[bytes, bytes]:
             str(path.relative_to(ROOT)): document
             for path, document in sorted(resolver.documents.items(), key=lambda item: str(item[0]))
         },
-        "compatibility_baseline": _compatibility_baseline(evaluation_profile, evaluation_cases),
+        "compatibility_baseline": _compatibility_baseline(
+            evaluation_profile, evaluation_cases, phase=phase
+        ),
         "catalogue_sha256": catalogue_digest,
     }
     registry_bytes = _pretty_bytes(registry)
     digest_record = {
-        "compiler_format": REGISTRY_FORMAT,
+        "compiler_format": registry_format,
         "compiler_version": COMPILER_VERSION,
         "registry_sha256": _sha256_bytes(registry_bytes),
         "source_manifest_sha256": manifest_digest,
@@ -313,12 +342,24 @@ def compile_registry() -> tuple[bytes, bytes]:
 
 def _write_or_check(*, check: bool) -> int:
     try:
-        registry_bytes, digest_bytes = compile_registry()
+        compiled = {phase: compile_registry(phase) for phase in PROJECTIONS}
     except (KeyError, OSError, ValueError, yaml.YAMLError, json.JSONDecodeError) as exc:
         print(f"Registry compilation failed: {exc}", file=sys.stderr)
         return 1
 
-    expected = ((REGISTRY_PATH, registry_bytes), (DIGEST_PATH, digest_bytes))
+    expected = tuple(
+        (path, content)
+        for phase, (registry_bytes, digest_bytes) in compiled.items()
+        for path, content in zip(
+            (
+                (REGISTRY_PATH, DIGEST_PATH)
+                if phase == "compatibility-core"
+                else PROJECTIONS[phase][:2]
+            ),
+            (registry_bytes, digest_bytes),
+            strict=True,
+        )
+    )
     if check:
         failures = []
         for path, content in expected:
@@ -341,7 +382,7 @@ def _write_or_check(*, check: bool) -> int:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     for path, content in expected:
         path.write_bytes(content)
-    print("Generated compatibility-core MCP registry.")
+    print("Generated compatibility-core and compatibility-write-probe MCP registries.")
     return 0
 
 
