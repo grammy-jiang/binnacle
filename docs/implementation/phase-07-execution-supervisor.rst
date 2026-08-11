@@ -158,6 +158,13 @@ Do not expose a command-start or command-operation Tool until all of the followi
   exact durable Phase 4/supervisor evidence must prove ``no_accept_proven``; otherwise the
   application persists and replays cancellation through the supervisor until exact
   acceptance/no-accept/terminal truth is established;
+* any ``no_accept_proven`` conclusion after a supervisor start frame could have been queued
+  is backed by a supervisor **gate-owned durable no-accept seal/tombstone** for the exact
+  operation+ticket/digest (or an equivalent retained terminal acceptance record) that
+  future ``accept_once`` must reject. Point-in-time absence of an accepted execution row,
+  ticket expiry observed outside that serialization, or application belief that no
+  ``call_start`` remains is insufficient because a queued/concurrently validating start
+  handler may still reach acceptance;
 * the production main app has no direct-subprocess fallback and no access path that bypasses
   the execution supervisor;
 * missing, stale, contradictory, or unverifiable prerequisite makes the relevant command
@@ -324,23 +331,36 @@ Representative tables:
    in the **same** serialized acceptance transaction. Contradictory ticket digest/operation
    identity fails closed.
 
+``no_accept_tombstones``
+   Exact operation ID + ticket ID/digest; terminal no-accept reason; ticket expiry/boot
+   scope; highest cancellation generation closed by the seal when applicable; evidence
+   generation; ``sealed_at`` and retention horizon. This row is created only by the
+   gate-owned ``seal_no_accept`` primitive in section 18. It is a terminal acceptance-state
+   record: while retained, future ``accept_once`` for the exact ticket must return the
+   retained no-accept outcome and may never create an execution. An accepted execution row
+   and a matching no-accept tombstone are mutually exclusive.
+
 ``ticket_tombstones`` or retained terminal execution rows
    Preserve enough non-secret ticket/operation identity for the full duplicate/replay
    window so an old consumed ticket can never spawn again after output or detailed evidence
-   expires.
+   expires. A no-accept tombstone is retained at least as long as the exact ticket could
+   otherwise be replayed or a delayed/queued start handler could still attempt acceptance.
 
 One supervisor-local ``ExecutorAcceptanceGate`` (or an exact FULL-durability keyed
 serialization/CAS equivalent) is keyed by exact ``(operation_id, ticket_id,
-ticket_sha256)``. Both first ticket acceptance and cancellation routing use this same gate
-and one executor-evidence transaction boundary before any ``ExecutorLaunchGate`` action.
-The fixed lock order is **acceptance gate/evidence transaction -> release -> execution
-launch gate**. The acceptance gate is never held across backend create, signal, termination,
-or another blocking process-control operation.
+ticket_sha256)``. First ticket acceptance, cancellation routing, **and terminal no-accept
+sealing** use this same gate and one executor-evidence transaction boundary before any
+``ExecutorLaunchGate`` action. The fixed lock order is **acceptance gate/evidence transaction
+-> release -> execution launch gate**. The acceptance gate is never held across backend
+create, signal, termination, or another blocking process-control operation.
 
-The security invariant is that the highest cancellation generation for one exact ticket has
-exactly one durable home: either the bounded pre-accept row or the accepted execution row.
-There is no lookup-then-insert gap in which acceptance can slip between a cancellation
-existence check and pending-intent persistence.
+The security invariant is that one exact ticket has exactly one durable acceptance home:
+accepted execution, pending pre-accept cancellation, or terminal no-accept tombstone. The
+highest cancellation generation for a nonterminal ticket has exactly one durable home:
+either the bounded pre-accept row or the accepted execution row. There is no lookup-then-
+insert gap in which acceptance can slip between a cancellation existence check and pending-
+intent persistence, and no point-in-time empty-store observation can later be promoted to
+``no_accept_proven`` without first sealing the ticket against future acceptance.
 
 Raw caller idempotency keys, host bearer credentials, SSH/GPG keys, source content, and
 unbounded argv/stdin/output do not belong in this database. Exact command argv/input may be
@@ -385,6 +405,9 @@ linearization:
    accepted | launch_preparing | launch_committed | running | cancelling | cleanup_pending
      -> executor_uncertain
 
+   ticket_seen
+     -> no_accept_sealed    # gate-owned terminal acceptance state; future accept forbidden
+
 ``launch_committed`` is an executor-local fact: the launch path won the executor
 launch-versus-cancel gate and is permitted to cross the exact backend process/domain-create
 boundary once. It is **not** a second Binnacle effect boundary and it does not permit a
@@ -393,7 +416,8 @@ second process on retry.
 The exact persisted representation may combine states/facts, but it must distinguish at
 least:
 
-* ticket never durably accepted;
+* ticket never durably accepted and **not yet sealed** against future acceptance;
+* terminal gate-owned no-accept seal/tombstone that makes future acceptance impossible;
 * a pre-accept cancellation intent for exact operation+ticket/digest;
 * ticket durably accepted/consumed -- **Phase 4 command commit-to-supervisor exists**;
 * application-requested cancellation generation versus supervisor effective/acknowledged
@@ -416,13 +440,16 @@ least:
 * evidence uncertain/corrupt/unverifiable.
 
 Once a ticket is durably ``accepted``, replay can return the same ``execution_id`` but can
-never allocate another execution. A supervisor crash after acceptance but before actual
-``exec`` is recovery of one committed execution, not permission to create a second one.
-Durable cancellation discovered before executor launch commit suppresses that launch. A
-matching pre-accept cancel intent is attached atomically during acceptance so the launch
-worker cannot outrun it. If launch commit won or process creation is ambiguous, recovery
-must reconcile/terminate the same exact execution; it never synthesizes a fresh ticket or
-assumes process absence from a missing PID alone.
+never allocate another execution. Once a ticket is durably ``no_accept_sealed``, replay can
+return the retained no-accept result but can never allocate an execution. The two terminal
+acceptance outcomes are mutually exclusive because both pass through
+``ExecutorAcceptanceGate``. A supervisor crash after acceptance but before actual ``exec`` is
+recovery of one committed execution, not permission to create a second one. Durable
+cancellation discovered before executor launch commit suppresses that launch. A matching
+pre-accept cancel intent is attached atomically during acceptance so the launch worker cannot
+outrun it. If launch commit won or process creation is ambiguous, recovery must reconcile/
+terminate the same exact execution; it never synthesizes a fresh ticket or assumes process
+absence from a missing PID alone.
 
 9. Local execution ticket
 -------------------------
@@ -715,6 +742,7 @@ Representative messages:
    get_execution / execution_snapshot
    read_output / output_chunk
    request_cancel / cancel_result
+   seal_no_accept / no_accept_result
    list_executions / execution_list
    reconcile_execution / reconcile_result
 
@@ -738,6 +766,14 @@ one durable ``cancel_or_attach`` decision: either a pending intent is committed 
 accepted execution exists, or the accepted execution is atomically found and its effective
 cancel generation is advanced. Matching first acceptance uses the same serialization and
 atomically attaches/consumes the highest pending generation.
+
+``no_accept_proven`` has a stronger meaning than "no execution row currently exists". A
+supervisor ``seal_no_accept`` request uses the same exact ticket-scoped acceptance
+serialization and returns a durable terminal receipt only if it records a no-accept
+tombstone before first acceptance. Future delayed/queued/replayed start handlers for that
+exact ticket must observe the tombstone and return retained no-accept. If acceptance wins
+the gate first, sealing cannot claim no-accept and the caller must reconcile/cancel the
+accepted execution instead.
 
 17. Start linearization across Phase 4 and supervisor
 -----------------------------------------------------
@@ -783,14 +819,15 @@ For a new ``command_run`` first admission:
    operation+ticket/digest cancellation while this start RPC is still in flight;
 #. supervisor validates peer+ticket and uses the exact ticket-scoped
    ``ExecutorAcceptanceGate``/FULL evidence transaction. Exact first acceptance atomically
-   attaches and consumes any matching pre-accept cancellation generation before launch
-   preparation; concurrent cancel either wins the pending slot or sees the accepted row and
-   advances that row -- it cannot fall between lookup and persistence;
+   rejects a retained no-accept tombstone, otherwise attaches and consumes any matching
+   pre-accept cancellation generation before launch preparation; concurrent cancel either
+   wins the pending slot or sees the accepted row and advances that row -- it cannot fall
+   between lookup and persistence;
 #. supervisor applies ``ExecutorLaunchGate`` only after the acceptance gate is released;
    concurrently dispatched cancellation can suppress launch before ``launch_committed`` or
    wait for the same launch gate and terminate the exact created/possibly-created domain;
 #. bounded start response returns either exact durable accepted execution reference,
-   explicit durable no-accept result, or transport/receipt ambiguity;
+   explicit durable **sealed** no-accept result, or transport/receipt ambiguity;
 #. application immediately persists effect reference/effect knowledge with an optimistic
    field-aware update that **never overwrites a newer Phase 7 cancellation generation,
    supervisor acknowledgement generation, or legal ``cancelling`` lifecycle transition**.
@@ -812,13 +849,13 @@ truth. While the runtime that owns it is alive, it distinguishes ``PRE_COMMIT`` 
 fact is **lost** and the replacement runtime initializes the affected in-flight operation's
 ``DispatchCommitKnowledge`` as ``UNKNOWN_AFTER_RUNTIME_LOSS`` rather than recreating a
 ``PRE_COMMIT`` latch. Restart derives durable truth only from Phase 4 dispatch/effect state,
-the authoritative Phase 7 cancel generation, and exact supervisor evidence. Until those
-stores prove ``no_accept_proven``, ``UNKNOWN_AFTER_RUNTIME_LOSS`` is handled as possibly
-committed for cancellation delivery and cannot enter the no-supervisor pre-commit branch.
-The post-commit cancel path does not weaken the Phase 4 rule that cancellation winning
-**before** ``call_start`` in the current runtime must suppress supervisor dispatch; it only
-prevents an already-committed or possibly-committed start from blocking/lossily routing
-cancellation.
+the authoritative Phase 7 cancel generation, and exact supervisor evidence. Until the
+supervisor gate has durably sealed ``no_accept_proven`` or returned accepted/terminal truth,
+``UNKNOWN_AFTER_RUNTIME_LOSS`` is handled as possibly committed for cancellation delivery
+and cannot enter the no-supervisor pre-commit branch. The post-commit cancel path does not
+weaken the Phase 4 rule that cancellation winning **before** ``call_start`` in the current
+runtime must suppress supervisor dispatch; it only prevents an already-committed or
+possibly-committed start from blocking/lossily routing cancellation.
 
 18. Supervisor atomic acceptance/cancel routing and executor-local launch gate
 -----------------------------------------------------------------------------
@@ -828,34 +865,52 @@ cancellation.
 
 Every exact ``(operation_id, ticket_id, ticket_sha256)`` has one supervisor-local
 ``ExecutorAcceptanceGate`` or an equivalent keyed FULL-durability serialization/CAS
-primitive. Both ``start_execution`` first acceptance and ``request_cancel`` routing enter
-this same serialization before any launch-gate action. The gate owns only the bounded
-executor-evidence decision and is released before backend create, signal or termination.
+primitive. ``start_execution`` first acceptance, ``request_cancel`` routing, and terminal
+``seal_no_accept`` all enter this same serialization before any launch-gate action. The
+gate owns only the bounded executor-evidence decision and is released before backend create,
+signal or termination.
 
-The supervisor evidence store exposes two security-relevant atomic primitives:
+The supervisor evidence store exposes three security-relevant atomic primitives:
 
 ``accept_once(validated_ticket)``
-   Under the acceptance gate and one FULL transaction, perform replay/conflict checks. If
-   the ticket is first-use, read the exact pending cancel row, insert the single accepted
-   execution, attach ``max(pending_generation, 0)`` as its effective/acknowledged cancel
-   generation, and consume/mark the pending row attached in the same transaction. Same
-   exact already-consumed ticket returns the retained execution; conflicting digest/nonce/
-   operation fails closed. Only after commit may launch preparation begin.
+   Under the acceptance gate and one FULL transaction, perform replay/conflict checks. First
+   check for an exact retained no-accept tombstone; if present, return its terminal no-accept
+   receipt and create no execution. Otherwise, if the ticket is first-use, read the exact
+   pending cancel row, insert the single accepted execution, attach
+   ``max(pending_generation, 0)`` as its effective/acknowledged cancel generation, and
+   consume/mark the pending row attached in the same transaction. Same exact already-
+   consumed ticket returns the retained execution; conflicting digest/nonce/operation fails
+   closed. Only after commit may launch preparation begin.
 
 ``cancel_or_attach(operation_id, ticket_id, ticket_sha256, incoming_generation)``
    Under the same acceptance gate and one FULL transaction, verify exact identity/digest.
-   If an accepted execution exists, atomically set its effective/acknowledged cancellation
-   generation to ``max(current, incoming)`` and return ``accepted_execution`` plus the
-   retained snapshot/evidence generation. If no accepted execution exists, atomically
-   create/update the bounded pending row with ``max(current, incoming)`` and return
-   ``pending_preaccept``. A contradictory identity/digest fails closed. The existence
+   If a no-accept tombstone exists, atomically advance/retain its closed cancellation
+   generation to ``max(current, incoming)`` as applicable and return
+   ``no_accept_proven``. If an accepted execution exists, atomically set its effective/
+   acknowledged cancellation generation to ``max(current, incoming)`` and return
+   ``accepted_execution`` plus the retained snapshot/evidence generation. If neither exists,
+   atomically create/update the bounded pending row with ``max(current, incoming)`` and
+   return ``pending_preaccept``. A contradictory identity/digest fails closed. The existence
    decision and generation persistence are never separate operations.
 
-Therefore every interleaving has one result: if cancellation wins serialization first,
-acceptance must observe and attach it; if acceptance wins first, later cancellation must
-observe the accepted row and advance it. There is no orphan pending intent inserted after
-acceptance and no accepted execution that can miss a cancel generation committed before its
-launch check.
+``seal_no_accept(operation_id, ticket_id, ticket_sha256, reason, close_generation)``
+   Under the same acceptance gate and one FULL transaction, verify exact ticket identity,
+   digest, boot/expiry facts and the caller's reconciliation proof class. If an accepted
+   execution already exists, return ``accepted_execution`` and **do not** create a no-accept
+   record. If a no-accept tombstone already exists, return it idempotently while closing any
+   same/lower cancellation generation. Otherwise atomically create the retained terminal
+   no-accept tombstone and consume/close any matching pending cancellation row in the same
+   transaction. The tombstone is retained for the full ticket replay/queued-handler window.
+   Once this transaction commits, every later or already-queued ``accept_once`` that has not
+   itself won acceptance serialization must observe the tombstone and return no-accept.
+
+Therefore every interleaving has one durable result: cancellation-before-acceptance resides
+in pending and is attached if acceptance wins; acceptance-before-cancel resides in the
+accepted row; terminal no-accept sealing-before-acceptance permanently closes the ticket;
+and acceptance winning before sealing prevents a false no-effect claim. There is no orphan
+pending intent inserted after acceptance, no accepted execution that can miss a cancel
+generation committed before its launch check, and no point-in-time empty supervisor store
+that can be mistaken for a proof that a queued start will never accept.
 
 On ``start_execution`` the supervisor otherwise:
 
@@ -864,15 +919,22 @@ On ``start_execution`` the supervisor otherwise:
    boot deadline, profile, executable, cwd/root/mount, process-isolation, environment/
    resource/network/sandbox plan, and all supplied input bytes/digests;
 #. invokes ``accept_once`` under the exact acceptance gate;
-#. returns retained exact execution on same-ticket replay, conflict/no-start on contradictory
-   identity, or the new accepted execution carrying any attached cancellation generation;
+#. returns retained exact execution on same-ticket replay, retained sealed no-accept on a
+   closed ticket, conflict/no-start on contradictory identity, or the new accepted execution
+   carrying any attached cancellation generation;
 #. only after acceptance-gate release may ``ExecutorLaunchGate`` be entered.
 
-This acceptance is single-use even if the UDS response is lost, the application reconnects,
-the command later exits, output expires, or the supervisor restarts. Retention/tombstone
-outlives every allowed replay window. Matching pre-accept cancellation is durable across
-response loss/restart and cannot be discarded merely because the start frame won the
-network race.
+Ticket expiry alone is not a durable no-accept proof while a previously received handler
+may still be queued/validating. Expiry may become ``no_accept_proven`` only after the
+supervisor has serialized the exact ticket through ``seal_no_accept`` (or an equivalent
+acceptance-gate-owned expiry closure) so future acceptance is impossible. This rule applies
+even when the application believes no new ``call_start`` will be issued.
+
+Acceptance or no-accept sealing is single-use even if the UDS response is lost, the
+application reconnects, the command later exits, output expires, or the supervisor
+restarts. Retention/tombstone outlives every allowed replay and delayed-handler window.
+Matching pre-accept cancellation is durable across response loss/restart and cannot be
+discarded merely because the start frame won the network race.
 
 Supervisor never invents a second Binnacle operation and never accepts a fresh ticket for
 an already-bound operation merely because application state is ``uncertain``.
@@ -925,7 +987,8 @@ The cancellation path after ``cancel_or_attach`` returns ``accepted_execution``:
 
 If ``cancel_or_attach`` returns ``pending_preaccept``, no launch gate exists yet and no
 process control is attempted. Matching first acceptance will attach that generation before
-launch preparation.
+launch preparation. If it returns ``no_accept_proven``, no launch gate/process control is
+needed because the ticket is terminally sealed against future acceptance.
 
 The launch gate is held only in the unprivileged supervisor and never while the application
 owns a SQLite transaction. It may cover the bounded backend-create/receipt handoff because
@@ -935,12 +998,13 @@ request handling must remain concurrent enough that a cancellation control reque
 complete its acceptance-gate transaction while the original start handler is waiting on a
 bounded backend handoff and then contend for the launch gate.
 
-A supervisor crash is recovered from the durable acceptance/pending/launch/cancel facts.
-``cancel_requested`` or an attached matching pre-accept cancellation before
-``launch_committed`` can never later spawn. ``launch_committed`` without a trustworthy
-create receipt is **not** permission to start a second domain: recovery uses the exact
-execution/backend identity and returns uncertainty unless the backend independently proves
-the one committed domain/no-domain outcome.
+A supervisor crash is recovered from the durable acceptance/pending/no-accept/launch/cancel
+facts. ``cancel_requested`` or an attached matching pre-accept cancellation before
+``launch_committed`` can never later spawn. A retained no-accept tombstone can never later
+accept. ``launch_committed`` without a trustworthy create receipt is **not** permission to
+start a second domain: recovery uses the exact execution/backend identity and returns
+uncertainty unless the backend independently proves the one committed domain/no-domain
+outcome.
 
 This is the required executor-side counterpart to Phase 4's application-side
 ``DispatchHandoffGate`` and ``ConsequentialBoundaryGate``. It closes the later
@@ -959,11 +1023,13 @@ user authority source.
    supervisor execution, not proof that the Phase 4 effect never occurred.
 
 ``known_no_effect``
-   Allowed only when exact pre-start/Phase4-gate failure or an explicit supervisor proof
-   establishes that the ticket itself was not accepted/consumed and no execution was
-   committed to the supervisor. A cancellation that suppresses child spawn **after durable
-   supervisor acceptance remains ``known_effect``** for the command operation. A simple
-   socket error is not enough.
+   Allowed only when exact current-runtime pre-``call_start`` Phase 4 gate failure proves no
+   supervisor dispatch occurred, **or** the supervisor returns a gate-owned durable
+   ``no_accept_proven`` seal/tombstone for the exact ticket that future ``accept_once`` must
+   reject. A point-in-time empty supervisor store, expired ticket observed outside the
+   acceptance gate, missing volatile dispatch latch, missing PID, or simple socket error is
+   not enough. A cancellation that suppresses child spawn **after durable supervisor
+   acceptance remains ``known_effect``** for the command operation.
 
 ``uncertain``
    Lost/ambiguous UDS delivery/receipt, supervisor evidence-store unavailability,
@@ -1097,7 +1163,7 @@ A normal accepted command closes only after supervisor evidence proves:
 * workspace resource accounting finalized;
 * every authoritative application ``phase7_cancel_generation`` is durably acknowledged by
   the supervisor at the same-or-higher generation, or exact ``terminal_already_won`` /
-  ``no_accept_proven`` evidence closes that generation without signalling;
+  gate-owned ``no_accept_proven`` seal evidence closes that generation without signalling;
 * no unresolved executor evidence-store/integrity contradiction;
 * required application post-effect/terminal audit/recovery obligations complete.
 
@@ -1114,15 +1180,15 @@ Then Phase 4 lifecycle mapping is:
   ``terminal_already_won`` and does not retroactively force ``cancelled``;
 * ambiguity after accepted/possible start -> ``uncertain`` unless lifecycle already
   uncertain and awaiting later terminal proof;
-* explicit supervisor no-accept before any execution commit -> failed/cancelled
-  ``known_no_effect`` only when Phase 4 mapping permits and exact proof exists.
+* explicit supervisor gate-owned no-accept seal before any execution commit -> failed/
+  cancelled ``known_no_effect`` only when Phase 4 mapping permits and exact proof exists.
 
 Workspace durable mutation fence and exclusive CHANGE guard release only after truthful
 terminal/effect/audit/cleanup/cancel-delivery closure. If process might still run,
 descendants are unknown, workspace cleanup is unresolved, output/process evidence
 contradicts, executor state is uncertain, the application has lost its current-runtime
-commit discriminator without exact no-accept proof, or the highest application cancellation
-generation is not reconciled, fence stays owned.
+commit discriminator without a gate-owned no-accept seal, or the highest application
+cancellation generation is not reconciled, fence stays owned.
 
 25. Cancellation model
 ----------------------
@@ -1154,12 +1220,15 @@ one restart-only **unknown dispatch-knowledge** branch:
   trustworthy ``PRE_COMMIT`` latch to read. The replacement runtime represents the dispatch
   discriminator as ``UNKNOWN_AFTER_RUNTIME_LOSS`` until exact durable Phase 4/supervisor
   evidence resolves it. Owner cancellation in this state must use the same persist-before-
-  send/replay-safe supervisor path as a committed start unless exact durable evidence already
-  proves ``no_accept_proven``. A missing latch, missing start response or missing PID is
+  send/replay-safe supervisor path as a committed start unless the supervisor has already
+  durably sealed ``no_accept_proven`` for that exact ticket. A missing latch, missing start
+  response, empty supervisor execution table, expired wall-clock deadline or missing PID is
   never permission to take the pre-commit-only branch;
 * **supervisor acceptance race** -- ``ExecutorAcceptanceGate`` atomically routes each
   incoming cancel generation either into the pre-accept pending row or the already-accepted
-  execution row, so acceptance cannot slip between a missing-row check and pending insert;
+  execution row, while ``seal_no_accept`` may terminally close an unaccepted ticket under
+  the same serialization, so acceptance cannot slip between an absence check and a later
+  cancellation/no-accept record;
 * **executor launch race** -- after acceptance serialization is released,
   ``ExecutorLaunchGate`` decides cancellation versus backend process/domain creation.
   Cancellation winning here suppresses child spawn but does not erase the already-known
@@ -1184,7 +1253,7 @@ that owns the in-flight first start. Conceptually:
 can recheck it under the Phase 4 handoff. ``UNKNOWN_AFTER_RUNTIME_LOSS`` is the default for
 an unresolved in-flight first start loaded by a replacement runtime; it cannot be converted
 to pre-commit by absence of supervisor evidence. It becomes exact no-accept/accepted/
-terminal truth only through durable Phase 4 and supervisor reconciliation.
+terminal truth only through durable Phase 4 and supervisor acceptance-state reconciliation.
 
 Application ordering:
 
@@ -1192,9 +1261,11 @@ Application ordering:
 #. derive ``DispatchCommitKnowledge``. In the current start-owning runtime, read its live
    process-local ``DispatchCommitLatch``. After runtime loss, initialize unresolved in-flight
    start as ``UNKNOWN_AFTER_RUNTIME_LOSS`` and query durable Phase 4/supervisor evidence;
-#. if exact durable evidence already proves ``no_accept_proven`` and no Phase 4 call-start
-   could still be outstanding, close the cancellation request under the existing no-effect
-   reconciliation rules; do not manufacture a pending supervisor cancellation;
+#. if the current runtime still owns a live pre-commit latch and exact Phase 4 gate state
+   proves ``call_start`` never won, use the ordinary pre-commit cancellation path. After
+   runtime loss, **do not** close locally from a point-in-time empty supervisor store. A
+   no-effect/no-supervisor closure requires an already-retained supervisor no-accept
+   tombstone or an explicit ``seal_no_accept`` attempt under ``ExecutorAcceptanceGate``;
 #. if knowledge is ``PRE_COMMIT_CURRENT_RUNTIME``, acquire the Phase 4 per-operation
    dispatch handoff and **recheck the same live latch** under that handoff;
 #. if still ``PRE_COMMIT_CURRENT_RUNTIME``, record durable application cancellation intent/
@@ -1212,11 +1283,11 @@ Application ordering:
    do not require start response receipt. For ``UNKNOWN_AFTER_RUNTIME_LOSS``, this send is
    intentionally conservative: the supervisor atomically latches pre-accept cancellation if
    the ticket has not yet been accepted, attaches to an accepted execution if it has, or
-   returns exact no-accept/terminal evidence when available;
+   returns an already-retained gate-owned no-accept/terminal result when available;
 #. supervisor invokes atomic ``cancel_or_attach`` under ``ExecutorAcceptanceGate``. It
-   returns either ``pending_preaccept`` or an accepted execution with the same-or-higher
-   durably acknowledged generation. There is no separate accepted-row lookup followed by a
-   later pending-intent insert;
+   returns ``pending_preaccept``, ``no_accept_proven``, or an accepted execution with the
+   same-or-higher durably acknowledged generation. There is no separate accepted-row lookup
+   followed by a later pending-intent insert;
 #. for an accepted execution, release the acceptance gate and apply the generation under
    ``ExecutorLaunchGate``;
 #. if cancel wins while executor state is ``accepted``/``launch_preparing`` and no
@@ -1236,6 +1307,18 @@ Application ordering:
 #. lost signal/cleanup/supervisor receipt => remain ``cancelling`` or move ``uncertain`` as
    lifecycle/evidence permits, never falsely ``cancelled``.
 
+When reconciliation is trying to prove **known no effect** rather than conservatively
+cancel possibly committed work, it uses a separate gate-owned closure step. The application
+may request ``seal_no_accept`` only for the exact already-bound ticket and only after its
+authoritative Phase 4 state proves that this replacement runtime will never originate a new
+``call_start`` for that operation. The supervisor then linearizes sealing against any
+queued/concurrently validating ``accept_once``. If sealing wins, the returned durable
+tombstone proves future acceptance impossible and can support ``no_accept_proven``. If a
+queued/active handler already won acceptance, sealing returns the accepted execution and the
+application must reconcile/cancel it; it may not claim no effect. This prevents a dead
+application plus point-in-time empty executor store from releasing the fence before a
+queued start handler accepts.
+
 The start-response classification path is cancellation-aware: it re-reads the latest Phase
 7 application cancel generation/lifecycle and supervisor acknowledgement and writes exact
 effect reference/knowledge without forcing a stale ``running`` state over ``cancelling``.
@@ -1248,7 +1331,7 @@ A supervisor cancel receipt is not considered delivery-complete unless its
 transport error, lost response, lower generation or supervisor unavailability leaves the
 application delivery obligation outstanding. The same is true when dispatch knowledge is
 ``UNKNOWN_AFTER_RUNTIME_LOSS``: uncertainty remains until durable reconciliation establishes
-accepted/terminal/no-accept truth and closes the cancellation generation.
+accepted/terminal/gate-owned-no-accept truth and closes the cancellation generation.
 
 For an authoritative Phase 4 ``uncertain`` start whose supervisor evidence later shows a
 possibly running/launch-committed execution, cancellation may be sent as reconciliation
@@ -1258,8 +1341,9 @@ proof permits the allowed ``uncertain -> cancelled`` transition.
 A supervisor restart that sees durable cancellation before launch commit **must not spawn**.
 A restart that sees launch commit with ambiguous create evidence must reconcile the exact
 committed execution and must not create a replacement process. A matching pre-accept cancel
-intent also survives restart until matching acceptance/expiry/reconciliation. These cases
-are mandatory fault tests.
+intent also survives restart until matching acceptance/expiry/reconciliation. A retained
+no-accept tombstone survives restart and permanently rejects matching acceptance. These
+cases are mandatory fault tests.
 
 26. Timeout/resource termination
 --------------------------------
@@ -1292,47 +1376,52 @@ The supervisor remains an independent systemd service/process role. Application 
    ``DispatchCommitKnowledge=UNKNOWN_AFTER_RUNTIME_LOSS``. It never manufactures a new
    ``PRE_COMMIT`` latch from the absence of the old one;
 #. queries supervisor by exact operation/ticket/execution reference, including retained
-   pending/attached/effective/acknowledged cancel generation;
+   pending/accepted/no-accept/effective/acknowledged cancel generation;
 #. validates executor evidence generation, ticket digest, workspace/root/mount/profile and
    command identity;
-#. if exact Phase 4/supervisor evidence proves ticket no-accept and no outstanding call-start
-   can still commit, record/retain exact no-effect truth and close any cancellation request
-   under ``no_accept_proven``. Otherwise an unresolved lost-latch start remains possibly
-   committed and must not use the pre-commit-only cancellation path;
+#. never classifies no effect merely because the queried supervisor store currently has no
+   accepted row. For a lost-latch in-flight start, exact ``no_accept_proven`` means a
+   retained supervisor no-accept tombstone/seal for the exact ticket. If that seal is not
+   already present and authoritative Phase 4 recovery proves this runtime will never issue a
+   new call-start for the operation, reconciliation may request ``seal_no_accept``; the
+   supervisor serializes it against any queued/concurrent ``accept_once``. Seal-win returns
+   durable no-accept; accept-win returns accepted execution and no-effect classification is
+   forbidden;
 #. for every operation with application generation ``A`` and supervisor acknowledged/
    effective generation ``S`` where ``A > S``, idempotently re-forwards the exact original
    operation+ticket/digest+generation ``A`` through ``request_cancel``. Repeat during
    reconciliation until the supervisor durably acknowledges ``>= A``, or exact retained
-   supervisor evidence proves ``terminal_already_won``/``no_accept_proven`` for generation
-   ``A``;
+   supervisor evidence proves ``terminal_already_won``/gate-owned ``no_accept_proven`` for
+   generation ``A``;
 #. if an owner requests cancellation while dispatch knowledge is
-   ``UNKNOWN_AFTER_RUNTIME_LOSS`` and exact no-accept proof is absent, first persist the next
-   authoritative cancel generation and route/replay it through the supervisor exactly as a
-   possibly committed start, even if the supervisor currently has no accepted row. Atomic
-   ``cancel_or_attach`` then safely latches it pre-accept or attaches it to the accepted
-   execution;
-#. if supervisor is unavailable, contradictory, or cannot acknowledge ``A``, retain
-   ``cancelling``/``uncertain`` as lifecycle/evidence permits and retain the Phase 6
-   workspace fence. Never silently declare the cancel delivered and never admit fresh work
-   behind that unresolved fence;
-#. reconciles not-accepted/accepted/launching/running/cancelling/terminal/uncertain evidence
-   without creating a new ticket/process and without dropping a durable cancellation;
+   ``UNKNOWN_AFTER_RUNTIME_LOSS`` and exact sealed no-accept proof is absent, first persist
+   the next authoritative cancel generation and route/replay it through the supervisor
+   exactly as a possibly committed start, even if the supervisor currently has no accepted
+   row. Atomic ``cancel_or_attach`` then safely latches it pre-accept, attaches it to the
+   accepted execution, or returns a retained no-accept tombstone;
+#. if supervisor is unavailable, contradictory, cannot seal/resolve acceptance, or cannot
+   acknowledge ``A``, retain ``cancelling``/``uncertain`` as lifecycle/evidence permits and
+   retain the Phase 6 workspace fence. Never silently declare the cancel delivered and never
+   admit fresh work behind that unresolved fence;
+#. reconciles not-accepted/unsealed, sealed-no-accept, accepted/launching/running/cancelling/
+   terminal/uncertain evidence without creating a new ticket/process and without dropping a
+   durable cancellation;
 #. restores operation/status/output projection;
 #. retains workspace fence until truthful terminal/cancel-delivery closure.
 
 A naturally terminal execution may acknowledge a replayed higher generation with
 ``terminal_already_won`` and no signal; application preserves natural ``succeeded``/
-``failed`` truth. Exact durable no-accept/expiry evidence may acknowledge
+``failed`` truth. Exact gate-owned no-accept/expiry-seal evidence may acknowledge
 ``no_accept_proven`` under the existing Phase 4 no-effect rules. Absence, timeout, missing
-PID or missing process-local latch alone cannot manufacture either disposition.
+PID, expired wall clock or missing process-local latch alone cannot manufacture that
+disposition.
 
 An app restart does not require session renewal solely to inspect/reconcile the already
 acknowledged or possibly committed command. A still-valid session is required for a **new**
 command admission. Session ending during app downtime prevents new starts but does not
 rewrite a start whose Phase 4 ``call_start`` may already have linearized. If the supervisor
-and Phase 4 durable evidence prove the ticket never accepted and no start remains possible,
-the ordinary no-effect reconciliation rules apply; otherwise retained execution/
-cancellation truth governs.
+gate durably seals the ticket no-accept before any acceptance wins, the ordinary no-effect
+reconciliation rules apply; otherwise retained execution/cancellation truth governs.
 
 28. Supervisor restart/crash
 ----------------------------
@@ -1341,16 +1430,17 @@ Supervisor restart is a different fault from app restart and is not silently tre
 normal success.
 
 On supervisor startup it verifies its own database/schema/integrity, scans retained
-nonterminal execution evidence and pending cancel intents, and queries the selected backend
-using exact execution-domain identity. PID absence alone is not no-effect because a process
-may have run and modified workspace before disappearing.
+nonterminal execution evidence, pending cancel intents, and no-accept tombstones, and queries
+the selected backend using exact execution-domain identity. PID absence alone is not no-
+effect because a process may have run and modified workspace before disappearing.
 
 Before any accepted execution is allowed to continue launch recovery, startup verifies the
-acceptance/pending invariant: no matching accepted row may coexist with an unattached
-pending cancel row. If such a contradiction exists, executor readiness fails closed rather
-than choosing one. A valid pending row remains the durable home of the highest generation
-until exact first acceptance attaches/consumes it through ``ExecutorAcceptanceGate``; a
-valid accepted row owns all later generations.
+acceptance-state invariant: no matching accepted row may coexist with an unattached pending
+cancel row **or** a no-accept tombstone. If such a contradiction exists, executor readiness
+fails closed rather than choosing one. A valid pending row remains the durable home of the
+highest generation until exact first acceptance attaches/consumes it through
+``ExecutorAcceptanceGate``; a valid accepted row owns all later generations; a valid no-
+accept tombstone permanently rejects future matching acceptance.
 
 Startup then replays the executor launch/cancel invariant: durable attached/effective
 cancellation before ``launch_committed`` suppresses spawn; a retained
@@ -1366,8 +1456,8 @@ Phase 4 uncertainty/fence.
 
 Bootstrap Phase 7 exit requires survival across **MCP application restart**, not necessarily
 transparent supervisor crash. Supervisor-crash recovery is nevertheless fault-tested and
-must never duplicate execution, orphan a pending cancellation, ignore an attached durable
-cancellation, or falsely release workspace authority.
+must never duplicate execution, orphan a pending cancellation, accept a sealed ticket,
+ignore an attached durable cancellation, or falsely release workspace authority.
 
 29. Start/cancel-response loss and retained retry
 -------------------------------------------------
@@ -1381,18 +1471,23 @@ session/ticket as first admission and do not allocate another fence.
 
 If application must query supervisor after ambiguous start, it uses exact original ticket/
 operation identity. Supervisor returns retained accepted execution if present and includes
-retained cancel state and acknowledged generation. If its healthy durable store proves exact
-ticket never accepted **and** durable Phase 4 state proves no in-flight call-start can still
-reach it, reconciliation may establish known-no-effect. If that joint proof is unavailable,
-remain uncertain/possibly committed; a missing volatile latch never supplies the proof.
+retained cancel state and acknowledged generation, or returns a retained no-accept tombstone
+if the ticket has been terminally sealed. A healthy executor store with **no accepted row
+and no tombstone is not no-effect proof**, because a queued/concurrently validating start
+handler may still enter ``accept_once``. To establish known-no-effect after runtime loss, the
+application must obtain a gate-owned ``seal_no_accept`` result (or an equivalent retained
+terminal acceptance record); if acceptance wins before sealing, reconcile the accepted
+execution instead. Until one of those durable outcomes exists, remain uncertain/possibly
+committed and retain the fence.
 
 Cancellation does not depend on having received ``execution_id`` from the lost start
 response. In the current start-owning runtime, once application ``call_start`` is committed,
 the post-commit control path can persist and forward exact operation+ticket/digest
 cancellation while the start response is still in flight. After runtime loss, an unresolved
 start uses ``UNKNOWN_AFTER_RUNTIME_LOSS`` and the same conservative persist/replay path until
-exact no-accept/accepted/terminal evidence resolves it. Supervisor atomically either
-attaches cancellation to the existing execution or latches it for matching first acceptance.
+exact sealed-no-accept/accepted/terminal evidence resolves it. Supervisor atomically either
+attaches cancellation to the existing execution, latches it for matching first acceptance,
+or returns a retained no-accept tombstone.
 
 If the application crashes or loses the UDS response after committing cancel generation
 ``A``, retained retry/restart compares ``A`` with supervisor acknowledged generation ``S``.
@@ -1468,7 +1563,7 @@ Exact names remain proposals until promotion. A minimal set is:
    commitment, must not be head-of-line blocked by the still-running start RPC. After
    application runtime loss, missing ``DispatchCommitLatch`` is treated as
    ``UNKNOWN_AFTER_RUNTIME_LOSS``/possibly committed, so cancellation persists/replays to
-   the supervisor unless exact durable ``no_accept_proven`` evidence exists. Its durable
+   the supervisor unless a gate-owned durable ``no_accept_proven`` seal exists. Its durable
    application cancel generation is replayed until supervisor acknowledgement closes the
    delivery obligation.
 
@@ -1492,21 +1587,23 @@ Before runtime handler registration:
 #. reconcile the section 5 mapping of policy process / narrow broker-supervisor / command
    executor process with ``command-profiles.yaml`` and validators if required;
 #. add trusted ticket deadline, workspace fence/root-mount, process-introspection/ptrace,
-   network exposure, output, executor acceptance/cancel routing, launch/cancel,
+   network exposure, output, executor acceptance/cancel/no-accept routing, launch/cancel,
    application cancel-generation/acknowledgement replay, current-runtime dispatch commit
    discriminator plus ``UNKNOWN_AFTER_RUNTIME_LOSS`` cancellation routing,
    post-commit cancel-forwarding and execution-evidence fields needed by this plan;
 #. define exact ``cancel_result``/snapshot fields for acknowledged generation, closed
-   disposition and executor evidence generation;
+   disposition and executor evidence generation, plus a bounded internal reconciliation
+   ``no_accept_result`` that proves a retained gate-owned terminal no-accept seal;
 #. define exact input/output JSON schemas and bounded errors/result limits;
 #. assign information/confirmation/session-host profile requirements;
 #. add exact manifest entries and bump manifest version;
 #. update security/evaluation fixtures for single-use replay, UDS loss, app restart,
    cancellation-before-start, post-commit cancellation while start response is in flight,
    cancellation after runtime loss with unresolved call-start, atomic pre-accept cancel/
-   accept routing, application crash after cancel-generation commit before send,
-   cancellation-before-spawn, cancellation-during-launch, output cursors, listener exposure,
-   process-introspection isolation, protected-state access, and workspace coordination;
+   accept routing, queued start handler versus no-accept sealing, application crash after
+   cancel-generation commit before send, cancellation-before-spawn, cancellation-during-
+   launch, output cursors, listener exposure, process-introspection isolation, protected-
+   state access, and workspace coordination;
 #. validate all schema pointers, handler bindings, versions, annotations, profile digests,
    and current compatibility profiles;
 #. only then compose handlers.
@@ -1602,10 +1699,18 @@ Representative contracts:
 
    @dataclass(frozen=True, slots=True)
    class CancelRoutingResult:
-       disposition: Literal["pending_preaccept", "accepted_execution"]
+       disposition: Literal["pending_preaccept", "accepted_execution", "no_accept_proven"]
        acknowledged_cancel_generation: int
        snapshot: ExecutorSnapshot | None
        evidence_generation: int
+
+   @dataclass(frozen=True, slots=True)
+   class NoAcceptSealResult:
+       disposition: Literal["no_accept_proven", "accepted_execution"]
+       acknowledged_cancel_generation: int
+       snapshot: ExecutorSnapshot | None
+       evidence_generation: int
+       seal_reference: str | None
 
    class ExecutionSupervisorPort(Protocol):
        async def start(self, ticket: ExecutionTicket) -> ExecutionStartReceipt: ...
@@ -1621,6 +1726,14 @@ Representative contracts:
            cancel_generation: int,
            execution_id: str | None = None,
        ) -> ExecutorCancelReceipt: ...
+       async def seal_no_accept(
+           self,
+           operation_id: str,
+           ticket_id: str,
+           ticket_sha256: str,
+           reason: str,
+           close_generation: int,
+       ) -> NoAcceptSealResult: ...
        async def list(self, operation_ids: tuple[str, ...]) -> tuple[ExecutorSnapshot, ...]: ...
 
    class ExecutionDomainBackend(Protocol):
@@ -1639,13 +1752,22 @@ Representative contracts:
            ticket_sha256: str,
            cancel_generation: int,
        ) -> CancelRoutingResult: ...
+       async def seal_no_accept(
+           self,
+           operation_id: str,
+           ticket_id: str,
+           ticket_sha256: str,
+           reason: str,
+           close_generation: int,
+       ) -> NoAcceptSealResult: ...
        async def transition(self, event: ExecutorEvidenceEvent) -> ExecutorSnapshot: ...
        async def lookup_ticket(self, ticket_id: str) -> ExecutorSnapshot | None: ...
 
-``accept_once`` and ``cancel_or_attach`` are serialized by the exact ticket-scoped
-``ExecutorAcceptanceGate``/FULL evidence transaction. Callers never implement the
-security-relevant existence decision as ``lookup_ticket`` followed by a separate pending
-insert. ``lookup_ticket`` is retained only for bounded read/reconciliation paths.
+``accept_once``, ``cancel_or_attach`` and ``seal_no_accept`` are serialized by the exact
+ticket-scoped ``ExecutorAcceptanceGate``/FULL evidence transaction. Callers never implement
+the security-relevant existence decision as ``lookup_ticket`` followed by a separate
+pending insert or no-accept claim. ``lookup_ticket`` is retained only for bounded read/
+reconciliation paths and cannot by itself establish ``no_accept_proven``.
 
 Application service consumes Phase 4 operation store/audit/policy + Phase 6
 ``WorkspaceAccessCoordinator``/``DevelopmentSessionAuthorityGate`` + supervisor port. The
@@ -1694,9 +1816,10 @@ host path, environment secret, or root-broker detail.
 
 Structured diagnostics may include operation/execution IDs, command profile, safe executable
 identity/name, workspace ID, state/evidence/launch/application-cancel/supervisor-ack
-cancel generations, dispatch-commit knowledge, cancellation disposition, resource/output
-counters, cgroup/backend class, reason codes, protocol/build/profile digests and
-reconciliation state. Command argv/output/path content is not routine log labels.
+cancel generations, dispatch-commit knowledge, acceptance state including sealed-no-accept,
+cancellation disposition, resource/output counters, cgroup/backend class, reason codes,
+protocol/build/profile digests and reconciliation state. Command argv/output/path content is
+not routine log labels.
 
 37. Test strategy and real evidence
 -----------------------------------
@@ -1715,9 +1838,13 @@ Prove:
   creates/advances pending and acceptance attaches it; accept-first causes later cancel to
   advance the accepted row; concurrent first accept/cancel cannot leave an orphan pending
   intent or lose the highest generation;
-* supervisor crash/restart at pending/attach transaction boundaries either sees the durable
-  pending row or the accepted row with attached generation, never a valid accepted row plus
-  an unattached matching pending row;
+* exact ticket-scoped ``accept_once`` versus ``seal_no_accept`` serialization: if sealing
+  wins, a delayed/queued/replayed start handler later entering ``accept_once`` receives the
+  retained no-accept tombstone and cannot create an execution; if acceptance wins first,
+  sealing returns accepted and cannot produce a false no-effect proof;
+* supervisor crash/restart at pending/attach/no-accept-seal transaction boundaries sees one
+  valid durable acceptance home only -- pending, accepted, or no-accept -- never accepted+
+  unattached pending or accepted+no-accept;
 * fixed Phase 6 CHANGE/fence ownership from post-policy admission through terminal cleanup;
 * exact Phase 4 start gate/order and audit-failure-before-call_start => zero supervisor
   start request;
@@ -1730,15 +1857,21 @@ Prove:
 * application SIGKILL after gate-owned ``call_start`` wins but before start classification
   or any cancel generation is persisted -> replacement runtime marks dispatch knowledge
   ``UNKNOWN_AFTER_RUNTIME_LOSS``; a subsequent owner cancel never takes the pre-commit-only
-  branch and is forwarded/replayed until exact supervisor/no-accept/terminal truth closes it;
-* exact durable no-accept proof after such a crash may close cancellation without creating
-  a pending supervisor intent, but missing latch/start response/PID alone never supplies
-  that proof;
+  branch and is forwarded/replayed until exact supervisor/terminal/gate-owned-no-accept
+  truth closes it;
+* application dies after writing a start frame but before classification while the
+  supervisor handler is queued or paused before ``accept_once`` -> a replacement runtime
+  cannot infer no-effect from store absence; ``seal_no_accept`` racing that handler either
+  wins first and permanently rejects later acceptance or loses to acceptance, in which case
+  no-effect closure is forbidden and cancellation/reconciliation targets the accepted
+  execution;
+* ticket expiry while a start handler is queued is not no-accept proof until expiry is
+  sealed under ``ExecutorAcceptanceGate``; queued handler cannot accept after the seal;
 * cancellation racing before supervisor acceptance is retained as one pre-accept intent and
   atomically attached by matching acceptance;
 * application SIGKILL after ``phase7_cancel_generation=A`` commit but before/during UDS send
   -> replacement app sees supervisor ``S<A`` and idempotently re-forwards until ``S>=A`` or
-  exact terminal/no-accept acknowledgement closes generation A;
+  exact terminal/gate-owned-no-accept acknowledgement closes generation A;
 * natural terminal completion before replayed cancellation preserves natural succeeded/
   failed truth while supervisor acknowledges ``terminal_already_won`` for the higher
   generation without signalling;
@@ -1776,8 +1909,12 @@ Test:
 * cancellation by exact operation+ticket while the start response/execution ID is lost;
 * application crash after ``call_start`` linearization but before classification, followed
   by owner cancellation after restart: if supervisor accepted, cancel reaches exact retained
-  execution; if supervisor has not yet accepted, cancel is latched pre-accept; only exact
-  joint no-accept proof suppresses supervisor delivery;
+  execution; if supervisor has not yet accepted, cancel is latched pre-accept; only a
+  retained gate-owned no-accept seal suppresses supervisor delivery/known-effect mapping;
+* application crash after start-frame write while supervisor handler is deliberately queued
+  before ``accept_once``; concurrent recovery ``seal_no_accept`` must linearize with that
+  queued handler so either one accepted execution survives or one terminal no-accept seal
+  survives, never store-absence-based known-no-effect followed by later acceptance;
 * cancel decision before acceptance, acceptance before cancel, and fully concurrent first
   accept/cancel; highest generation always lands in pending or accepted row atomically;
 * cancellation arriving just before first acceptance -> durable pending cancel -> matching
@@ -1790,10 +1927,11 @@ Test:
   app reconnects and resolves retained cancellation/effect state;
 * supervisor unavailable -> no direct-subprocess fallback;
 * supervisor DB WAL/FULL/schema/integrity failure -> new starts fail closed;
-* supervisor crash after pre-accept cancel, while acceptance attaches pending, accept before
-  launch, after durable cancel-before-launch, after launch commit before create receipt,
-  during launch, while running, during output, cancellation, cleanup; never duplicate,
-  never orphan/ignore durable cancellation and never false fence release;
+* supervisor crash after pre-accept cancel, while acceptance attaches pending, while no-
+  accept sealing races queued acceptance, accept before launch, after durable cancel-before-
+  launch, after launch commit before create receipt, during launch, while running, during
+  output, cancellation, cleanup; never duplicate, never accept sealed ticket, never orphan/
+  ignore durable cancellation and never false fence release;
 * UDS output chunk bounds/backpressure;
 * application and executor DB files never opened by the other process.
 
@@ -1841,12 +1979,13 @@ Real candidate Pi evidence records:
 * root mount/no-submount handling;
 * process-tree accounting across daemon/fork patterns;
 * UDS peer credentials/frame/concurrent-control behavior;
-* executor evidence SQLite durability, atomic accept/cancel routing, pending-cancel retention,
-  cancellation acknowledgement and response-loss recovery;
+* executor evidence SQLite durability, atomic accept/cancel/no-accept routing, pending-cancel
+  retention, cancellation acknowledgement and response-loss recovery;
 * application post-commit cancel forwarding/replay plus executor launch/cancel gate behavior
   and crash recovery;
 * application restart after call_start linearization with lost volatile latch, proving
-  ``UNKNOWN_AFTER_RUNTIME_LOSS`` routing and exact no-accept-vs-possibly-accepted handling;
+  ``UNKNOWN_AFTER_RUNTIME_LOSS`` routing, queued-start-vs-gate-owned-no-accept sealing, and
+  exact no-accept-vs-accepted handling;
 * output spool fsync/limits/performance;
 * app restart after durable cancel-generation commit before send, and while a command runs;
 * supervisor crash behavior;
@@ -1892,8 +2031,10 @@ New command start::
      -> gate-owned call_start + process-local DispatchCommitLatch=COMMITTED
      -> concurrent post-commit cancel forwarding becomes eligible
      -> supervisor peer/ticket validation
-     -> ExecutorAcceptanceGate: exact first accept OR atomic cancel_or_attach
-        (pending-first attaches during accept; accept-first cancel advances accepted row)
+     -> ExecutorAcceptanceGate: exact first accept OR atomic cancel_or_attach OR
+        terminal seal_no_accept
+        (pending-first attaches during accept; accept-first cancel advances accepted row;
+         seal-first permanently rejects delayed/queued acceptance)
      -> acceptance-gate release
      -> ExecutorLaunchGate: cancel-before-launch OR one bounded launch commit/create receipt
      -> immediate application effect-reference/effect-knowledge classification without
@@ -1905,7 +2046,7 @@ New command start::
      -> restart/reconciliation
      -> same-key retained retry
 
-Cancellation::
+Cancellation / runtime-loss reconciliation::
 
    same-owner retained operation lookup
      -> derive DispatchCommitKnowledge
@@ -1917,12 +2058,14 @@ Cancellation::
         -> authoritative durable Phase7 cancel generation A (persist-before-send)
         -> exact operation+ticket/digest supervisor cancellation concurrently with start RPC
      -> UNKNOWN_AFTER_RUNTIME_LOSS:
-        no conversion to PRE_COMMIT from missing latch
-        -> exact no_accept_proven may close locally
-        -> otherwise persist authoritative cancel generation A and use same supervisor
-           cancel/replay path as possibly committed work
-     -> ExecutorAcceptanceGate atomic cancel_or_attach
-        -> pending_preaccept OR accepted row with acknowledged generation >= A
+        no conversion to PRE_COMMIT from missing latch or empty supervisor store
+        -> ordinary cancellation: persist A and use same supervisor cancel/replay path as
+           possibly committed work
+        -> known-no-effect reconciliation: gate-owned seal_no_accept races every queued/
+           concurrent accept_once; seal-win closes ticket, accept-win forbids no-effect
+     -> ExecutorAcceptanceGate atomic cancel_or_attach / seal_no_accept
+        -> pending_preaccept OR accepted row with acknowledged generation >= A OR retained
+           no_accept_proven tombstone
      -> if accepted: ExecutorLaunchGate
         -> cancel-before-launch suppresses process creation OR launch-first targets one domain
      -> start/reconciliation classification preserves newer cancel/ack state
@@ -1930,7 +2073,7 @@ Cancellation::
      -> output/private-domain cleanup proof
      -> cancelled OR natural succeeded/failed + terminal_already_won ack OR uncertain
      -> app/restart compares A with supervisor S and re-forwards while A>S
-     -> fence release only after truthful terminal + cancel-delivery closure
+     -> fence release only after truthful terminal + cancel-delivery/no-accept closure
 
 Process isolation::
 
@@ -1951,14 +2094,15 @@ Output/status::
 Review explicitly stresses: audit trip/start race; session end/start race; application
 pre-commit cancel/start race; post-commit cancel while start RPC/handoff still active;
 application crash after call_start before classification with later cancellation and lost
-volatile dispatch latch; pre-accept cancel/accept serialization; app crash after cancel
-generation commit before UDS send; executor cancel/launch race; executor accept/response-
-loss; app crash; supervisor crash at pending/attach/pre-accept/accepted/cancelled/launch-
-committed/create-receipt states; ticket replay after terminal; workspace root/mount
-replacement; out-of-band source write; process daemon escape; same-UID ptrace/proc/process-
-vm escape; output flood; resource/cancel cleanup; network listener authority; protected-
-state/credential access; executor/application DB ownership; uncertain fence retention;
-same-key retry after session end; and every accepted/no-accept/ambiguous outcome.
+volatile dispatch latch; queued start frame/handler versus gate-owned no-accept sealing;
+pre-accept cancel/accept serialization; app crash after cancel generation commit before UDS
+send; executor cancel/launch race; executor accept/response-loss; app crash; supervisor crash
+at pending/attach/no-accept/accepted/cancelled/launch-committed/create-receipt states; ticket
+replay after terminal; workspace root/mount replacement; out-of-band source write; process
+daemon escape; same-UID ptrace/proc/process-vm escape; output flood; resource/cancel cleanup;
+network listener authority; protected-state/credential access; executor/application DB
+ownership; uncertain fence retention; same-key retry after session end; and every accepted/
+sealed-no-accept/ambiguous outcome.
 
 39. Plan acceptance checklist
 -----------------------------
@@ -1980,17 +2124,21 @@ Accept this plan only when:
 * gate-owned call_start publishes a runtime post-commit discriminator so cancellation after
   commit cannot be blocked behind the still-running pre-start handoff/start RPC;
 * lost runtime discriminator is represented as ``UNKNOWN_AFTER_RUNTIME_LOSS``/possibly
-  committed; only exact durable no-accept proof permits the pre-commit/no-supervisor
-  cancellation closure after restart;
+  committed; missing latch or point-in-time empty executor store can never manufacture no-
+  accept truth after restart;
+* any runtime-loss ``no_accept_proven`` conclusion is a retained gate-owned no-accept
+  seal/tombstone (or exact equivalent terminal acceptance record) that future/queued
+  ``accept_once`` must reject; if acceptance wins serialization first, no-effect closure is
+  forbidden;
 * application cancel generation is authoritative, monotonic, persisted before UDS send and
   replayed after crash until supervisor acknowledgement reaches the same-or-higher
-  generation or exact terminal/no-accept evidence closes it;
+  generation or exact terminal/gate-owned-no-accept evidence closes it;
 * post-commit or possibly-committed cancellation has a concurrent supervisor control path
   and exact ``ExecutorAcceptanceGate``/atomic ``cancel_or_attach`` decision, so acceptance
   can never slip between a missing-row check and pending-intent persistence;
 * pending-first acceptance attaches/consumes the highest generation atomically; accept-first
-  cancellation advances the accepted row atomically; an accepted execution cannot coexist
-  with an unattached matching pending intent;
+  cancellation advances the accepted row atomically; seal-first acceptance is permanently
+  rejected; accepted execution cannot coexist with unattached pending or no-accept tombstone;
 * start-effect classification is field-aware and never overwrites a newer application
   cancellation generation, supervisor acknowledgement or legal lifecycle state;
 * executor accept-once precedes launch and survives lost response;
@@ -2002,16 +2150,17 @@ Accept this plan only when:
   spawn after supervisor acceptance remaining ``known_effect``;
 * lifecycle handles uncertain-running evidence without inventing ``uncertain -> running``;
 * application current-runtime pre-commit/start, current-runtime post-commit delivery,
-  runtime-loss possibly-committed routing, supervisor acceptance/cancel routing, session/
-  audit, and executor launch/cancel races each have one explicit linearization;
+  runtime-loss possibly-committed/no-accept sealing, supervisor acceptance/cancel/seal
+  routing, session/audit, and executor launch/cancel races each have one explicit
+  linearization;
 * output is independent/bounded/cursor-correct and never process truth;
 * all descendants/resources/output/private state and cancellation-delivery obligation close
   before verified cancellation/fence release;
 * ordinary app restart preserves acknowledged execution visibility, never treats the lost
-  process-local dispatch latch as pre-commit truth, and replays any persisted-but-
-  unacknowledged cancellation;
-* supervisor crash never implies no-effect, duplicate start, orphan pending cancellation,
-  or ignored durable cancellation;
+  process-local dispatch latch as pre-commit truth, never trusts point-in-time executor
+  absence as no-effect, and replays any persisted-but-unacknowledged cancellation;
+* supervisor crash never implies no-effect, duplicate start, acceptance after a sealed no-
+  accept ticket, orphan pending cancellation, or ignored durable cancellation;
 * development networking and non-loopback exposure remain distinct/enforceable profile
   properties;
 * credentials/control-plane/root broker/devices remain unavailable;
@@ -2027,25 +2176,27 @@ When predecessor evidence permits implementation:
 #. promote/reconcile command contracts, schemas, manifest and logical broker/executor
    mapping, including process-introspection, post-commit/possibly-committed cancel-forwarding,
    dispatch-commit-knowledge routing, application-cancel/supervisor-ack fields, atomic
-   accept/cancel routing and executor launch/cancel fields;
+   accept/cancel/no-accept routing and executor launch/cancel fields;
 #. add application command metadata migration ``0004`` with monotonic Phase 7 cancel
    generation, supervisor-ack generation/evidence and fence correlation fields;
 #. create separate executor evidence migration/setup and executor state directory,
-   including bounded pending-cancel storage, accepted-row acknowledged generation and
-   closed cancellation disposition;
+   including bounded pending-cancel storage, gate-owned no-accept tombstones, accepted-row
+   acknowledged generation and closed cancellation disposition;
 #. implement versioned framed JSON UDS protocol + peer auth + frame/schema ceilings +
    concurrent start/control dispatch;
 #. implement ticket-scoped ``ExecutorAcceptanceGate``/FULL serialization plus
-   ``accept_once`` and atomic ``cancel_or_attach`` before any launch worker exists;
-#. implement supervisor evidence store/tombstones and concurrent accept/cancel/replay/crash
-   tests, including no accepted-row+orphan-pending state;
+   ``accept_once``, atomic ``cancel_or_attach`` and gate-owned ``seal_no_accept`` before any
+   launch worker exists;
+#. implement supervisor evidence store/tombstones and concurrent accept/cancel/seal/replay/
+   crash tests, including no accepted-row+orphan-pending/no-accept contradiction and queued
+   handler rejection after a seal;
 #. implement per-execution ``ExecutorLaunchGate`` + durable cancel-generation/launch-state
    recovery before any backend process creation;
 #. implement application executor client with persist-before-send cancellation,
    supervisor-ack generation tracking and restart/reconciliation re-forwarding;
 #. implement process-local ``DispatchCommitLatch`` plus replacement-runtime
-   ``UNKNOWN_AFTER_RUNTIME_LOSS`` routing and field-aware committed/possibly-committed cancel
-   forwarding before backend launch is enabled in tests;
+   ``UNKNOWN_AFTER_RUNTIME_LOSS`` routing, gate-owned no-accept sealing, and field-aware
+   committed/possibly-committed cancel forwarding before backend launch is enabled in tests;
 #. implement exact executable/cwd/workspace/root/mount/ticket normalization;
 #. integrate Phase 6 CHANGE + durable mutation fence into command post-policy admission;
 #. implement Phase 4 received/policy/authorised/running/effect-intent + per-op/session/
@@ -2056,11 +2207,11 @@ When predecessor evidence permits implementation:
 #. implement output spool/drain/digest/truncation/retention;
 #. implement status/output/outstanding application projection;
 #. implement application pre/post-commit/runtime-loss cancellation + supervisor acceptance/
-   cancel + executor launch/cancel linearization + descendant cleanup;
-#. implement app restart reconciliation including lost-latch possibly-committed routing and
-   ``A>S`` cancel re-forwarding;
-#. implement supervisor restart/fault reconciliation including pending/attach/accepted/
-   cancel/launch-commit recovery;
+   cancel/seal + executor launch/cancel linearization + descendant cleanup;
+#. implement app restart reconciliation including lost-latch possibly-committed routing,
+   queued-start-vs-no-accept sealing and ``A>S`` cancel re-forwarding;
+#. implement supervisor restart/fault reconciliation including pending/no-accept/attach/
+   accepted/cancel/launch-commit recovery;
 #. add filesystem/credential/FD/process-introspection/network/listener/process/resource
    adversarial tests;
 #. validate contract/schema/manifest/profile parity;
@@ -2086,13 +2237,13 @@ Remain evidence-gated after plan acceptance:
 * exact concurrent UDS request-handling mechanism and latency budget needed so cancellation
   control is not head-of-line blocked by an in-flight start/backend-create call;
 * exact ticket-scoped ``ExecutorAcceptanceGate`` implementation mechanism so long as it
-  proves the one-durable-home and no-orphan-pending invariants;
+  proves the one-durable-home, no-orphan-pending and no-accept-sealing invariants;
 * exact cancellation re-forward retry/backoff/diagnostic cadence; the correctness rule
   ``application A > supervisor S => delivery unresolved and idempotent re-forward`` is
   fixed even though timing is profile-specific;
-* exact durable reconciliation mechanism that proves ``no_accept_proven`` for a lost-latch
-  start; until exact proof exists, ``UNKNOWN_AFTER_RUNTIME_LOSS`` remains possibly committed
-  and cancellation is routed/replayed conservatively;
+* exact retained no-accept seal/tombstone representation and retention horizon; the
+  correctness rule that ``no_accept_proven`` must make future queued/replayed acceptance
+  impossible is fixed even though schema/mechanism details are implementation-specific;
 * exact pending-cancel retention ceiling tied to ticket expiry/replay window;
 * exact inline stdin/control-frame/result chunk maxima within reviewed upper bounds;
 * exact set of allowed executables/profile limits;
@@ -2101,11 +2252,12 @@ Remain evidence-gated after plan acceptance:
 * actual catalogue refresh and result-size behavior.
 
 Those items may change profile-specific mechanism/limits. They do not change the mandatory
-process separation, single-use acceptance, atomic acceptance/cancel routing, application
-durable cancellation replay/acknowledgement, runtime-loss possibly-committed routing,
-executor launch/cancel serialization, durable idempotency, Phase4 gated start, Phase6
-workspace coordination, protected-state/process-introspection exclusions, truthful
-uncertainty, or no-direct-subprocess invariants without a separately reviewed revision.
+process separation, single-use acceptance, atomic acceptance/cancel/no-accept routing,
+application durable cancellation replay/acknowledgement, runtime-loss possibly-committed
+routing, gate-owned no-accept proof, executor launch/cancel serialization, durable
+idempotency, Phase4 gated start, Phase6 workspace coordination, protected-state/process-
+introspection exclusions, truthful uncertainty, or no-direct-subprocess invariants without
+a separately reviewed revision.
 
 42. Deferred work
 -----------------
