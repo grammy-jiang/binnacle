@@ -725,6 +725,13 @@ def validate_bootstrap_command_profile_alignment() -> None:
         capability_policy.get("command_run"),
         context="capability policy: command_run",
     )
+    if command_composition is not None:
+        for legacy_field in ("network_available", "mediated_egress_only"):
+            if legacy_field in command_composition:
+                fail(
+                    "capability policy: command_run must not retain universal legacy field "
+                    f"{legacy_field}"
+                )
     _require_values(
         command_composition,
         {
@@ -836,6 +843,16 @@ def validate_bootstrap_command_profile_alignment() -> None:
                 "raw_credentials": "denied",
                 "credential_helpers": "denied",
                 "inherited_agents": "denied",
+            },
+        ),
+        (
+            "self-management-hidden",
+            "positive",
+            "self-management",
+            {
+                "command_run_visible": False,
+                "command_run_allowed": False,
+                "dedicated_self_management_tools_required": True,
             },
         ),
     )
