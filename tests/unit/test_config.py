@@ -166,3 +166,27 @@ def test_settings_snapshot_is_immutable() -> None:
 def test_model_rejects_unknown_nested_key() -> None:
     with pytest.raises(ValidationError, match="extra_forbidden"):
         BinnacleSettings.model_validate({"server": {"unknown": True}})
+
+
+@pytest.mark.parametrize(
+    ("section", "values", "message"),
+    [
+        ("database", {"path": "/tmp/redirected.db"}, "database path is fixed"),
+        ("audit", {"directory": "/tmp/redirected-audit"}, "audit directory is fixed"),
+        (
+            "payload",
+            {"directory": "/tmp/redirected-results"},
+            "payload directory is fixed",
+        ),
+        (
+            "payload",
+            {"object_bytes_max": 9, "controller_bytes_max": 8},
+            "per-object payload limit",
+        ),
+    ],
+)
+def test_protected_kernel_paths_and_quota_relationships_cannot_be_redirected(
+    section: str, values: dict[str, object], message: str
+) -> None:
+    with pytest.raises(ValidationError, match=message):
+        BinnacleSettings.model_validate({section: values})

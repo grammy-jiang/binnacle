@@ -8,7 +8,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic_settings import (
     BaseSettings,
     EnvSettingsSource,
@@ -40,6 +40,57 @@ class LoggingSettings(BaseModel):
     format: Literal["console", "json"] = "console"
 
 
+class DatabaseSettings(BaseModel):
+    """Protected authoritative-state settings."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    path: Path = Path("/var/lib/binnacle/state/binnacle.db")
+    busy_timeout_ms: int = Field(default=5000, ge=100, le=60_000)
+    wal_autocheckpoint_pages: int = Field(default=1000, ge=100, le=100_000)
+
+    @model_validator(mode="after")
+    def _fixed_path(self) -> DatabaseSettings:
+        if self.path != Path("/var/lib/binnacle/state/binnacle.db"):
+            raise ValueError("database path is fixed by the protected deployment profile")
+        return self
+
+
+class AuditSettings(BaseModel):
+    """Protected append-only audit settings."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    directory: Path = Path("/var/lib/binnacle/audit")
+    segment_bytes_max: int = Field(default=16 * 1024 * 1024, ge=1024 * 1024)
+    emergency_bytes_max: int = Field(default=1024 * 1024, ge=64 * 1024)
+
+    @model_validator(mode="after")
+    def _fixed_directory(self) -> AuditSettings:
+        if self.directory != Path("/var/lib/binnacle/audit"):
+            raise ValueError("audit directory is fixed by the protected deployment profile")
+        return self
+
+
+class PayloadSettings(BaseModel):
+    """Protected retained-payload settings."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    directory: Path = Path("/var/lib/binnacle/results")
+    object_bytes_max: int = Field(default=32 * 1024 * 1024, ge=1)
+    controller_bytes_max: int = Field(default=256 * 1024 * 1024, ge=1)
+    append_chunk_bytes_max: int = Field(default=256 * 1024, ge=4096)
+
+    @model_validator(mode="after")
+    def _fixed_directory(self) -> PayloadSettings:
+        if self.directory != Path("/var/lib/binnacle/results"):
+            raise ValueError("payload directory is fixed by the protected deployment profile")
+        if self.object_bytes_max > self.controller_bytes_max:
+            raise ValueError("per-object payload limit exceeds per-controller limit")
+        return self
+
+
 class BinnacleSettings(BaseSettings):
     """Immutable settings snapshot for the executable skeleton."""
 
@@ -53,6 +104,9 @@ class BinnacleSettings(BaseSettings):
     runtime_profile: Literal["development"] = "development"
     server: ServerSettings = Field(default_factory=ServerSettings)
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
+    database: DatabaseSettings = Field(default_factory=DatabaseSettings)
+    audit: AuditSettings = Field(default_factory=AuditSettings)
+    payload: PayloadSettings = Field(default_factory=PayloadSettings)
 
     @classmethod
     def settings_customise_sources(

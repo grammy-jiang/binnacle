@@ -8,6 +8,8 @@ version = "0.1.0.dev0"
 description = "Deterministic MCP execution and observation boundary for a Raspberry Pi/Linux device"
 requires-python = ">=3.11,<3.14"
 dependencies = [
+  "aiosqlite>=0.22,<1",
+  "alembic>=1.18,<2",
   "anyio>=4,<5",
   "fastmcp==4.0.0b2",
   "fastmcp-slim[client,server]==4.0.0b2",
@@ -15,7 +17,9 @@ dependencies = [
   "mcp>=2,<3",
   "pydantic>=2,<3",
   "pydantic-settings>=2,<3",
+  "rfc8785>=0.1,<1",
   "rich>=15,<16",
+  "sqlalchemy[asyncio]>=2.0.46,<3",
   "structlog>=26,<27",
   "starlette>=1,<2",
   "typer>=0.27,<1",
@@ -28,6 +32,7 @@ binnacle = "binnacle.cli:main"
 [dependency-groups]
 test = [
   "coverage[toml]>=7,<8",
+  "hypothesis>=6.150,<7",
   "httpx2>=2,<3",
   "pytest>=9,<10",
   "pytest-cov>=7,<8",
@@ -88,6 +93,7 @@ files = [
   "scripts/mcp_evaluation.py",
   "scripts/setup_dev_pi.py",
   "scripts/verify_dev_pi.py",
+  "scripts/verify_operation_kernel.py",
 ]
 
 [tool.pytest.ini_options]
@@ -325,9 +331,9 @@ dependency_groups = test, quality, contracts
 commands =
     ruff check .
     ruff format --check .
-    mypy src/binnacle tests scripts/mcp_evaluation.py scripts/setup_dev_pi.py scripts/verify_dev_pi.py
+    mypy src/binnacle tests scripts/mcp_evaluation.py scripts/setup_dev_pi.py scripts/verify_dev_pi.py scripts/verify_operation_kernel.py
     lint-imports
-    pip-audit
+    pip-audit --cache-dir={envtmpdir}/pip-audit-cache
     rstcheck --recursive docs
     python scripts/compile_mcp_registry.py --check
     python scripts/validate_contracts.py
@@ -335,4 +341,9 @@ commands =
     python scripts/mcp_evaluation.py --help
     python scripts/setup_dev_pi.py --help
     python scripts/verify_dev_pi.py --help
+    python scripts/verify_operation_kernel.py --help
+    python scripts/verify_operation_kernel.py --temporary --output json
+    binnacle db --help
+    binnacle kernel --help
+    binnacle audit --help
 """

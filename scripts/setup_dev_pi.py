@@ -10,6 +10,7 @@ import os
 import platform
 import pwd
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -22,11 +23,23 @@ SERVICE_NAME = "binnacle-dev.service"
 SERVICE_USER = "binnacle"
 SERVICE_GROUP = "binnacle"
 DEVELOPMENT_GROUP = "binnacle-dev"
-SYSTEM_PATHS = (
+ROOT_PROTECTED_PATHS = (
     (Path("/etc/binnacle"), 0o750),
     (Path("/var/lib/binnacle/evaluation"), 0o750),
-    (Path("/run/binnacle"), 0o700),
 )
+SERVICE_STATE_PATHS = (
+    (Path("/var/lib/binnacle/state"), 0o750),
+    (Path("/var/lib/binnacle/state/checkpoints"), 0o750),
+    (Path("/var/lib/binnacle/state/audit-obligations"), 0o750),
+    (Path("/var/lib/binnacle/results"), 0o750),
+    (Path("/var/lib/binnacle/results/objects"), 0o750),
+    (Path("/var/lib/binnacle/results/streams"), 0o750),
+    (Path("/var/lib/binnacle/results/tmp"), 0o750),
+    (Path("/var/lib/binnacle/audit"), 0o750),
+    (Path("/var/lib/binnacle/audit/epochs"), 0o750),
+    (Path("/var/lib/binnacle/audit/emergency"), 0o750),
+)
+SYSTEM_PATHS = (*ROOT_PROTECTED_PATHS, *SERVICE_STATE_PATHS)
 
 
 class SetupError(RuntimeError):
@@ -65,12 +78,13 @@ def build_setup_plan(repo: Path) -> SetupPlan:
         _check_systemd(),
         _check_repository(repo),
         _check_identity_compatibility(),
+        _check_system_path_safety(),
     )
     actions = (
         "ensure system groups binnacle and binnacle-dev",
         "ensure non-root service user binnacle with primary group binnacle",
         "ensure binnacle has supplementary source-read group binnacle-dev",
-        "protect /etc/binnacle and /var/lib/binnacle/evaluation",
+        "protect configuration/evaluation and create narrow application-owned kernel state",
         "install binnacle-dev.service atomically",
         "run systemctl daemon-reload",
     )
@@ -94,10 +108,11 @@ def apply_setup(repo: Path, *, enable: bool) -> SetupPlan:
         check=True,
     )
     service_gid = grp.getgrnam(SERVICE_GROUP).gr_gid
-    for path, mode in SYSTEM_PATHS:
-        path.mkdir(parents=True, exist_ok=True)
-        os.chown(path, 0, service_gid)
-        path.chmod(mode)
+    service_uid = pwd.getpwnam(SERVICE_USER).pw_uid
+    for path, mode in ROOT_PROTECTED_PATHS:
+        _ensure_protected_directory(path, uid=0, gid=service_gid, mode=mode)
+    for path, mode in SERVICE_STATE_PATHS:
+        _ensure_protected_directory(path, uid=service_uid, gid=service_gid, mode=mode)
 
     source = repo / "deploy/systemd" / SERVICE_NAME
     destination = Path("/etc/systemd/system") / SERVICE_NAME
@@ -198,6 +213,50 @@ def _check_identity_compatibility() -> Check:
         if service_group is None or user.pw_gid != service_group.gr_gid:
             return Check("identities", "fail", "binnacle primary group is incompatible")
     return Check("identities", "pass", "existing identities are compatible or absent")
+
+
+def _check_system_path_safety() -> Check:
+    for path, _ in SYSTEM_PATHS:
+        current = Path(path.anchor)
+        for part in path.parts[1:]:
+            current /= part
+            try:
+                info = current.lstat()
+            except FileNotFoundError:
+                break
+            except OSError:
+                return Check("system-paths", "fail", "system path metadata is unavailable")
+            if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
+                return Check(
+                    "system-paths",
+                    "fail",
+                    "a protected system path component is unsafe",
+                )
+    return Check("system-paths", "pass", "protected system path components are safe")
+
+
+def _ensure_protected_directory(path: Path, *, uid: int, gid: int, mode: int) -> None:
+    """Create one fixed absolute directory without following any path-component symlink."""
+
+    if not path.is_absolute() or any(part in {"", ".", ".."} for part in path.parts[1:]):
+        raise SetupError("protected directory path is not canonical and absolute")
+    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(path.anchor, flags)
+    try:
+        for part in path.parts[1:]:
+            try:
+                child = os.open(part, flags, dir_fd=descriptor)
+            except FileNotFoundError:
+                os.mkdir(part, mode=0o750, dir_fd=descriptor)
+                child = os.open(part, flags, dir_fd=descriptor)
+            except OSError as exc:
+                raise SetupError("protected directory path contains an unsafe component") from exc
+            os.close(descriptor)
+            descriptor = child
+        os.fchown(descriptor, uid, gid)
+        os.fchmod(descriptor, mode)
+    finally:
+        os.close(descriptor)
 
 
 def _ensure_group(name: str) -> None:
