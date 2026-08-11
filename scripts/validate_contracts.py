@@ -633,10 +633,26 @@ def validate_bootstrap_command_profile_alignment() -> None:
             "dns": "denied",
             "unix_sockets": "denied",
             "inherited_sockets": "denied",
+            "protected_control_plane_ipc": "denied",
             "raw_packet": "denied",
             "network_admin": "denied",
         },
         context="default command network",
+    )
+    default_listener = None
+    if default_network is not None:
+        default_listener = _mapping(
+            default_network.get("listener_bind"),
+            context="default command network: listener_bind",
+        )
+    _require_values(
+        default_listener,
+        {
+            "loopback": "denied",
+            "non_loopback": "denied",
+            "explicit_exposure_required": True,
+        },
+        context="default command listener policy",
     )
     devices = _mapping(command_policy.get("devices"), context="command policy: devices")
     credentials = _mapping(
