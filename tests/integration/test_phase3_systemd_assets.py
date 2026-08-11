@@ -25,6 +25,9 @@ def test_systemd_unit_has_exact_unprivileged_source_checkout_shape(repo_root: Pa
         ),
         "NoNewPrivileges=yes",
         "ProtectSystem=strict",
+        "RuntimeDirectory=binnacle",
+        "RuntimeDirectoryMode=0750",
+        "RuntimeDirectoryPreserve=yes",
         "CapabilityBoundingSet=",
         "AmbientCapabilities=",
     }

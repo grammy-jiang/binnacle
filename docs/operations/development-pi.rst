@@ -35,6 +35,9 @@ The development profile uses these fixed paths and identities:
    /etc/binnacle/dev.toml
    /etc/binnacle/controller-profile.toml
    /var/lib/binnacle/evaluation
+   /var/lib/binnacle/state
+   /var/lib/binnacle/results
+   /var/lib/binnacle/audit
    /run/binnacle
 
    service user and primary group: binnacle
@@ -60,7 +63,8 @@ the exact clean candidate:
    uv run pytest
    uv run ruff check .
    uv run ruff format --check .
-   uv run mypy src/binnacle tests scripts/mcp_evaluation.py scripts/setup_dev_pi.py scripts/verify_dev_pi.py
+   uv run mypy src/binnacle tests scripts/mcp_evaluation.py scripts/setup_dev_pi.py \
+     scripts/verify_dev_pi.py scripts/verify_operation_kernel.py
    uv run lint-imports
    uv run pip-audit
    uv run python scripts/validate_contracts.py
@@ -79,10 +83,17 @@ Inspect the deterministic plan before applying it:
    sudo python scripts/setup_dev_pi.py check --repo /srv/binnacle-dev/repo
    sudo python scripts/setup_dev_pi.py apply --repo /srv/binnacle-dev/repo
 
-Add ``--enable`` to ``apply`` only when the protected configuration is ready.  The
-script creates the two Binnacle groups, the non-root service user, protected directories,
-and the reviewed systemd unit.  It does not install packages, pull/reset Git, create
-secrets, configure a firewall or tunnel, or start a ChatGPT evaluation.
+Add ``--enable`` to ``apply`` only when the protected configuration is ready.  The script
+creates the two Binnacle groups, the non-root service user, protected configuration and
+evaluation directories, application-owned state/result/audit subtrees, and the reviewed
+systemd unit.  It does not install packages, pull/reset Git, create secrets, configure a
+firewall or tunnel, or start a ChatGPT evaluation.
+
+The systemd unit, not the setup script, creates ``/run/binnacle`` on service start with
+``RuntimeDirectory=binnacle``.  ``RuntimeDirectoryPreserve=yes`` keeps that protected
+ephemeral lock directory across an ordinary service stop so the same unprivileged
+``binnacle`` identity can perform stopped-service migration or audit recovery.  A reboot
+still removes ``/run``; the next service start recreates it.
 
 After setup creates ``binnacle-dev``, grant that group read/traverse access to the exact
 checkout and execute access only where an executable bit already exists.  Remove group
@@ -121,6 +132,22 @@ Phase 2 bounded defaults explicit:
    level = "INFO"
    format = "json"
 
+   [database]
+   path = "/var/lib/binnacle/state/binnacle.db"
+   busy_timeout_ms = 5000
+   wal_autocheckpoint_pages = 1000
+
+   [audit]
+   directory = "/var/lib/binnacle/audit"
+   segment_bytes_max = 16777216
+   emergency_bytes_max = 1048576
+
+   [payload]
+   directory = "/var/lib/binnacle/results"
+   object_bytes_max = 33554432
+   controller_bytes_max = 268435456
+   append_chunk_bytes_max = 262144
+
 After the feasibility gate, create ``/etc/binnacle/controller-profile.toml`` as
 ``root:binnacle`` with mode ``0640``.  Freeze the selected profile ID/version, exact
 external HTTPS ``/mcp`` resource URI, exact Host/Origin policy, and only these read-only
@@ -134,6 +161,56 @@ deployment scopes:
 Profile-specific issuer, audience, gateway, algorithm, freshness, key, and revocation
 fields come only from the selected live profile.  Environment variables and convenience
 CLI flags do not override this protected file.
+
+Offline kernel migration and verification
+-----------------------------------------
+
+The Phase 4 schema is never created or upgraded opportunistically by ``serve``.  For a
+new installation, first let systemd create the protected runtime directory, then stop the
+service.  The ordinary stop preserves that directory for the non-root maintenance lock:
+
+.. code-block:: console
+
+   sudo systemctl start binnacle-dev.service
+   sudo systemctl stop binnacle-dev.service
+   sudo -u binnacle -- \
+     /srv/binnacle-dev/repo/.venv/bin/binnacle db upgrade \
+     --config /etc/binnacle/dev.toml
+   sudo -u binnacle -- \
+     /srv/binnacle-dev/repo/.venv/bin/binnacle db status \
+     --config /etc/binnacle/dev.toml --output agent
+   sudo -u binnacle -- \
+     /srv/binnacle-dev/repo/.venv/bin/binnacle kernel verify \
+     --config /etc/binnacle/dev.toml --output agent
+
+The maintenance command acquires the same exclusive ``/run/binnacle`` writer lock as the
+live kernel.  It refuses to run concurrently with a live writer, refuses an absent or
+unsafe runtime directory, and never falls back to a source or world-writable lock path.
+After a reboot, start then stop the service again before offline maintenance so systemd
+recreates and preserves the runtime directory.
+
+The verifier checks the exact Alembic revision, SQLite foreign keys/WAL/FULL synchronous
+pragmas, audit chain/cache continuity, durable audit-failure generation, obligation
+markers, payload roots, and consequential-boundary gate state.  It performs no migration
+or automatic recovery.
+
+If audit recovery is required, keep the service stopped.  A human must reconcile every
+surviving obligation and prepare a protected closure JSON containing the exact active
+generation plus one ``obligation_id``, truthful ``effect_outcome``, and evidence SHA-256
+for every marker.  Then run:
+
+.. code-block:: console
+
+   sudo -u binnacle -- \
+     /srv/binnacle-dev/repo/.venv/bin/binnacle audit recover \
+     --generation <active-audit-failure-generation> \
+     --config /etc/binnacle/dev.toml \
+     --closure-file /etc/binnacle/audit-recovery.json
+
+Recovery appends and fsyncs schema-valid closure evidence before removing each marker,
+then clears only that exact failure generation.  It leaves admission closed until a
+later full ``kernel verify`` or startup passes.  Chain verification alone never clears a
+surviving marker or failure generation.
 
 Local service validation
 ------------------------

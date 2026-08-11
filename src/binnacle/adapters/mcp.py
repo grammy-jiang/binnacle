@@ -90,6 +90,16 @@ class _ControllerSessionMismatch(Exception):
     """A valid legacy session is being presented by a different controller."""
 
 
+class AsyncCloseable(Protocol):
+    """Resource composed and closed inside the server event-loop lifespan."""
+
+    async def close(self) -> None:
+        """Release the resource."""
+
+
+OperationKernelFactory: TypeAlias = Callable[[], Awaitable[AsyncCloseable]]
+
+
 class _SessionRevisionCodec:
     """Bind an SDK-owned session ID to its revision and authenticated controller."""
 
@@ -769,7 +779,11 @@ class RevisionGuardMiddleware(Middleware):
             )
 
 
-def create_mcp_server(application: BinnacleApplication) -> FastMCP[None]:
+def create_mcp_server(
+    application: BinnacleApplication,
+    *,
+    operation_kernel_factory: OperationKernelFactory | None = None,
+) -> FastMCP[None]:
     """Create the exact five-Tool compatibility-core FastMCP server."""
 
     contracts = application.contracts
@@ -777,6 +791,19 @@ def create_mcp_server(application: BinnacleApplication) -> FastMCP[None]:
 
     @asynccontextmanager
     async def lifespan(_server: FastMCP[None]) -> AsyncIterator[None]:
+        operation_kernel: AsyncCloseable | None = None
+        if operation_kernel_factory is not None:
+            try:
+                operation_kernel = await operation_kernel_factory()
+            except Exception as exc:  # noqa: BLE001 - read-only Tools remain independent.
+                # Phase 4 kernel failure keeps consequential admission unavailable, but
+                # does not make the existing read-only compatibility surface unavailable.
+                _LOGGER.error(
+                    "operation_kernel_startup_failed",
+                    error_type=type(exc).__name__,
+                )
+            else:
+                _LOGGER.info("operation_kernel_started")
         application.set_registered_tool_count(tool_count)
         _LOGGER.info("application_starting", registered_tool_count=tool_count)
         try:
@@ -787,6 +814,8 @@ def create_mcp_server(application: BinnacleApplication) -> FastMCP[None]:
                 "application_start_failed",
                 error_type=type(exc).__name__,
             )
+            if operation_kernel is not None:
+                await operation_kernel.close()
             raise
         _LOGGER.info("application_started", registered_tool_count=tool_count)
         try:
@@ -794,8 +823,13 @@ def create_mcp_server(application: BinnacleApplication) -> FastMCP[None]:
         finally:
             application.set_registered_tool_count(0)
             _LOGGER.info("application_stopping")
-            await application.stop()
-            _LOGGER.info("application_stopped")
+            try:
+                await application.stop()
+                _LOGGER.info("application_stopped")
+            finally:
+                if operation_kernel is not None:
+                    await operation_kernel.close()
+                    _LOGGER.info("operation_kernel_stopped")
 
     server = FastMCP[None](
         name="Binnacle",
@@ -1018,6 +1052,7 @@ def create_http_app(
     *,
     max_request_bytes: int = 1_048_576,
     session_idle_timeout_seconds: float = 300.0,
+    operation_kernel_factory: OperationKernelFactory | None = None,
 ) -> ASGIApp:
     """Return FastMCP's revision-aware Streamable HTTP application at ``/mcp``."""
 
@@ -1029,7 +1064,10 @@ def create_http_app(
     ):
         raise ValueError("session_idle_timeout_seconds is outside the reviewed range")
 
-    server = create_mcp_server(application)
+    server = create_mcp_server(
+        application,
+        operation_kernel_factory=operation_kernel_factory,
+    )
     # The SDK routes 2026-era requests to its sessionless modern path while
     # retaining negotiated sessions for the three reviewed legacy revisions.
     app = cast(
@@ -1047,6 +1085,7 @@ def run_http_server(
     *,
     application: BinnacleApplication,
     settings: ServerConfiguration,
+    operation_kernel_factory: OperationKernelFactory | None = None,
 ) -> None:
     """Run the unauthenticated Phase 2 server on a canonical loopback address."""
 
@@ -1060,6 +1099,7 @@ def run_http_server(
             application,
             max_request_bytes=settings.max_request_bytes,
             session_idle_timeout_seconds=settings.session_idle_timeout_seconds,
+            operation_kernel_factory=operation_kernel_factory,
         ),
         host=settings.host,
         port=settings.port,

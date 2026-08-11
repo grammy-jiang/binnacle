@@ -86,6 +86,7 @@ jobs:
           scripts/mcp_evaluation.py
           scripts/setup_dev_pi.py
           scripts/verify_dev_pi.py
+          scripts/verify_operation_kernel.py
 
       - name: Enforce import boundaries
         run: uv run lint-imports
@@ -110,6 +111,13 @@ jobs:
           uv run python scripts/mcp_evaluation.py --help
           uv run python scripts/setup_dev_pi.py --help
           uv run python scripts/verify_dev_pi.py --help
+          uv run python scripts/verify_operation_kernel.py --help
+          uv run binnacle db --help
+          uv run binnacle kernel --help
+          uv run binnacle audit --help
+
+      - name: Exercise isolated Phase 4 migration and read-only verification
+        run: uv run python scripts/verify_operation_kernel.py --temporary --output json
 
       - name: Validate repository and documentation hygiene
         run: uv run pre-commit run --all-files

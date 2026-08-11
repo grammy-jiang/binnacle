@@ -1,4 +1,4 @@
-"""Bounded read-only Linux device and system adapters."""
+"""Bounded Linux device, system, and trusted-time adapters."""
 
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ from typing import TypeVar
 
 import anyio
 
+from binnacle.adapters.linux.trusted_time import LinuxTrustedTimeSource as LinuxTrustedTimeSource
 from binnacle.domain.system import (
     BinnacleServiceInfo,
     CpuInfo,

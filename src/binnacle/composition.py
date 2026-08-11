@@ -3,20 +3,51 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import structlog
 
 from binnacle import distribution_version
+from binnacle.adapters.audit.journal import FileAuditJournal
+from binnacle.adapters.audit.obligations import FileAuditObligationStore
 from binnacle.adapters.compatibility import (
     CompiledCompatibilityProfileReader,
     compute_build_identity,
 )
-from binnacle.adapters.linux import LinuxDeviceIdentityProvider, LinuxSystemInspector
+from binnacle.adapters.linux import (
+    LinuxDeviceIdentityProvider,
+    LinuxSystemInspector,
+    LinuxTrustedTimeSource,
+)
+from binnacle.adapters.payload.filesystem import FilesystemPayloadStore
+from binnacle.adapters.policy.bootstrap import BootstrapPolicyEngine
+from binnacle.adapters.sqlite.engine import (
+    DatabaseRuntime,
+    DatabaseRuntimeSettings,
+    close_database_runtime,
+    create_database_runtime,
+    verify_database_runtime,
+)
+from binnacle.adapters.sqlite.operation_store import SqliteOperationStore
+from binnacle.adapters.sqlite.payload import SqlitePayloadMetadataRepository
 from binnacle.application import BinnacleApplication, CompatibilityUseCases
+from binnacle.application.boundary import (
+    ConsequentialBoundaryGate,
+    DispatchHandoffGate,
+    FinalBoundaryService,
+    UnavailableOperationBoundaryVerifier,
+    UnavailablePreparedStateVerifier,
+)
+from binnacle.application.kernel_health import KernelAvailability, KernelHealth
+from binnacle.application.operations import OperationCoordinator
+from binnacle.application.reconciliation import OperationReconciler
+from binnacle.application.trusted_time import TrustedTimeGuard
 from binnacle.config import BinnacleSettings
 from binnacle.contracts import ContractRegistry
+from binnacle.domain.audit import AuditRuntimeIdentity
 from binnacle.domain.runtime import PackageIdentity
 from binnacle.logging import LoggingRuntime, configure_logging
+from binnacle.ports.effect import UnavailableEffectBoundary
 
 _LOGGER = structlog.get_logger(__name__)
 
@@ -94,4 +125,226 @@ def compose_application(*, settings: BinnacleSettings) -> ComposedApplication:
         )
     except Exception:
         logging_runtime.close()
+        raise
+
+
+@dataclass(frozen=True, slots=True)
+class KernelCompositionPaths:
+    """Explicit test seam; production uses only fixed protected settings roots."""
+
+    database: Path
+    audit: Path
+    payload: Path
+    runtime: Path
+    verify_runtime_directory: bool = True
+
+
+@dataclass(slots=True)
+class ComposedOperationKernel:
+    database: DatabaseRuntime
+    store: SqliteOperationStore
+    audit: FileAuditJournal
+    obligations: FileAuditObligationStore
+    payloads: FilesystemPayloadStore
+    gate: ConsequentialBoundaryGate
+    health: KernelHealth
+    trusted_time_guard: TrustedTimeGuard
+    trusted_time_available: bool
+    reconciler: OperationReconciler
+    coordinator: OperationCoordinator
+    effect_boundary: UnavailableEffectBoundary
+    _closed: bool = field(default=False, init=False, repr=False)
+
+    async def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        await self.gate.close()
+        try:
+            await self.store.set_consequential_admission_enabled(False)
+        finally:
+            await close_database_runtime(self.database)
+
+
+async def compose_operation_kernel(
+    *,
+    settings: BinnacleSettings,
+    project_root: Path,
+    paths: KernelCompositionPaths | None = None,
+) -> ComposedOperationKernel:
+    """Verify and compose the internal kernel without exposing an MCP capability."""
+
+    selected_paths = paths or KernelCompositionPaths(
+        database=settings.database.path,
+        audit=settings.audit.directory,
+        payload=settings.payload.directory,
+        runtime=Path("/run/binnacle"),
+    )
+    database = await create_database_runtime(
+        DatabaseRuntimeSettings(
+            path=selected_paths.database,
+            runtime_directory=selected_paths.runtime,
+            busy_timeout_ms=settings.database.busy_timeout_ms,
+            wal_autocheckpoint_pages=settings.database.wal_autocheckpoint_pages,
+            verify_runtime_directory=selected_paths.verify_runtime_directory,
+        )
+    )
+    try:
+        database_health = await verify_database_runtime(database)
+        if not database_health.healthy:
+            raise RuntimeError("database revision or durability pragmas do not match")
+        contracts = ContractRegistry.load()
+        device = LinuxDeviceIdentityProvider().get_device_identity()
+        build = compute_build_identity(version=distribution_version())
+        trusted_time_source = LinuxTrustedTimeSource()
+        trusted_time = await trusted_time_source.snapshot()
+        store = SqliteOperationStore(database)
+        await store.initialize_kernel(
+            device_id=device.device_id,
+            audit_stream_id=f"stream-{device.device_id}",
+        )
+        audit_identity = AuditRuntimeIdentity(
+            stream_id=f"stream-{device.device_id}",
+            audit_epoch="epoch-1",
+            segment_id="segment-1",
+            boot_id=trusted_time.boot_id_digest,
+            device_id=device.device_id,
+            server_build_sha256=build.build_sha256,
+            tool_manifest_sha256=contracts.manifest_sha256,
+            schema_registry_sha256=contracts.schema_registry_sha256,
+            device_profile_version="phase4-internal-1",
+            policy_version="bootstrap-1.0.0",
+            redaction_policy_version="1.0.0",
+        )
+        import json
+
+        schema = json.loads(
+            (project_root / "schemas/audit/audit-event.schema.json").read_text(encoding="utf-8")
+        )
+        audit = FileAuditJournal(
+            directory=selected_paths.audit,
+            identity=audit_identity,
+            schema=schema,
+            segment_bytes_max=settings.audit.segment_bytes_max,
+            emergency_bytes_max=settings.audit.emergency_bytes_max,
+        )
+        journal_tail = await audit.open()
+        cache_tail = await store.audit_tail_cache()
+        if cache_tail.sequence > journal_tail.sequence or (
+            cache_tail.sequence == journal_tail.sequence
+            and cache_tail.event_hash != journal_tail.event_hash
+        ):
+            raise RuntimeError("audit tail cache is ahead of or divergent from journal")
+        if cache_tail != journal_tail:
+            await store.update_audit_tail_cache(journal_tail)
+        obligations = FileAuditObligationStore(selected_paths.database.parent / "audit-obligations")
+        await obligations.initialize()
+        surviving = await obligations.scan()
+        if surviving:
+            await store.latch_audit_failure("surviving_audit_obligation")
+        metadata = SqlitePayloadMetadataRepository(database)
+        payloads = FilesystemPayloadStore(
+            directory=selected_paths.payload,
+            repository=metadata,
+            object_bytes_max=settings.payload.object_bytes_max,
+            controller_bytes_max=settings.payload.controller_bytes_max,
+            append_chunk_bytes_max=settings.payload.append_chunk_bytes_max,
+        )
+        await payloads.initialize()
+        await payloads.verify_all()
+        gate = ConsequentialBoundaryGate()
+        trusted_time_guard = TrustedTimeGuard(source=trusted_time_source, store=store)
+        trusted_time_available = await trusted_time_guard.accept_startup_snapshot(trusted_time)
+        reconciler = OperationReconciler(store=store, obligations=obligations, gate=gate)
+        await reconciler.reconcile_startup(open_when_healthy=False)
+        surviving = await obligations.scan()
+        latched, generation, recovered = await store.audit_failure_state()
+        stored_recovery_evidence = await store.audit_recovery_evidence_sha256()
+        verified_recovery_evidence = (
+            await audit.find_generation_recovery(recovered) if recovered else None
+        )
+        recovery_evidence_valid = (
+            generation == recovered == 0
+            and stored_recovery_evidence is None
+            and verified_recovery_evidence is None
+        ) or (
+            generation == recovered
+            and generation > 0
+            and stored_recovery_evidence is not None
+            and stored_recovery_evidence == verified_recovery_evidence
+        )
+        audit_available = (
+            not surviving and not latched and generation == recovered and recovery_evidence_valid
+        )
+        reason_values: list[str] = []
+        if not audit_available:
+            reason_values.append(
+                "audit_recovery_evidence_invalid"
+                if not latched
+                and not surviving
+                and generation == recovered
+                and not recovery_evidence_valid
+                else "audit_recovery_required"
+            )
+        if not trusted_time_available:
+            reason_values.append("trusted_time_unavailable")
+        kernel_available = audit_available and trusted_time_available
+        availability = (
+            KernelAvailability.AVAILABLE if kernel_available else KernelAvailability.UNAVAILABLE
+        )
+        reasons = tuple(reason_values)
+        if not kernel_available:
+            await store.set_consequential_admission_enabled(False)
+        else:
+            await store.set_consequential_admission_enabled(True)
+            await gate.open()
+        health = KernelHealth(
+            availability=availability,
+            database_healthy=True,
+            audit_healthy=audit_available,
+            payload_healthy=True,
+            obligation_count=len(surviving),
+            audit_failure_latched=latched,
+            reason_codes=reasons,
+        )
+        policy = BootstrapPolicyEngine()
+        handoff_gate = DispatchHandoffGate()
+        effect_boundary = UnavailableEffectBoundary()
+        prepared_state_verifier = UnavailablePreparedStateVerifier()
+
+        async def read_health() -> KernelHealth:
+            return health
+
+        final_boundary = FinalBoundaryService(
+            health_reader=read_health,
+            verifier=UnavailableOperationBoundaryVerifier(),
+        )
+        coordinator = OperationCoordinator(
+            store=store,
+            policy=policy,
+            audit=audit,
+            obligations=obligations,
+            handoff_gate=handoff_gate,
+            consequential_gate=gate,
+            final_boundary=final_boundary,
+            effect_boundary=effect_boundary,
+            trusted_time_guard=trusted_time_guard,
+            prepared_state_verifier=prepared_state_verifier,
+        )
+        return ComposedOperationKernel(
+            database=database,
+            store=store,
+            audit=audit,
+            obligations=obligations,
+            payloads=payloads,
+            gate=gate,
+            health=health,
+            trusted_time_guard=trusted_time_guard,
+            trusted_time_available=trusted_time_available,
+            reconciler=reconciler,
+            coordinator=coordinator,
+            effect_boundary=effect_boundary,
+        )
+    except Exception:
+        await close_database_runtime(database)
         raise

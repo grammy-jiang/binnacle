@@ -582,3 +582,6 @@ $RECYCLE.BIN/
 
 # Local or Pi-staged MCP evaluation evidence is reviewed and distributed separately.
 /artifacts/mcp-evaluation/
+
+# Local-only durable-kernel diagnostics and fault-injection workspaces.
+/artifacts/operation-kernel/

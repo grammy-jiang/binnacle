@@ -1,9 +1,15 @@
 """Regression tests for the executable MCP server boundary."""
 
+from typing import Any, cast
+
 import pytest
 from fastmcp import FastMCP
 
-from binnacle.adapters.mcp import create_http_app, create_mcp_server
+from binnacle.adapters.mcp import (
+    RequestBodyLimitMiddleware,
+    create_http_app,
+    create_mcp_server,
+)
 from binnacle.application import BinnacleApplication
 
 
@@ -63,6 +69,61 @@ async def test_phase2_registers_exact_compatibility_core(
     ]
 
 
+@pytest.mark.anyio
+async def test_http_lifespan_owns_internal_operation_kernel(
+    phase2_application: BinnacleApplication,
+) -> None:
+    class KernelResource:
+        closed = False
+
+        async def close(self) -> None:
+            self.closed = True
+
+    kernel = KernelResource()
+    starts = 0
+
+    async def compose_kernel() -> KernelResource:
+        nonlocal starts
+        starts += 1
+        return kernel
+
+    app = create_http_app(
+        phase2_application,
+        operation_kernel_factory=compose_kernel,
+    )
+    assert isinstance(app, RequestBodyLimitMiddleware)
+    inner_app = cast(Any, app.app)
+
+    async with inner_app.router.lifespan_context(inner_app):
+        assert starts == 1
+        assert phase2_application.is_ready
+        assert not kernel.closed
+
+    assert kernel.closed
+
+
+@pytest.mark.anyio
+async def test_read_only_http_lifespan_survives_unavailable_internal_kernel(
+    phase2_application: BinnacleApplication,
+) -> None:
+    class KernelResource:
+        async def close(self) -> None:
+            raise AssertionError("uncomposed kernel must not be closed")
+
+    async def unavailable_kernel() -> KernelResource:
+        raise RuntimeError("injected unavailable kernel")
+
+    app = create_http_app(
+        phase2_application,
+        operation_kernel_factory=unavailable_kernel,
+    )
+    assert isinstance(app, RequestBodyLimitMiddleware)
+    inner_app = cast(Any, app.app)
+
+    async with inner_app.router.lifespan_context(inner_app):
+        assert phase2_application.is_ready
+
+
 def test_http_runner_preserves_configured_logging(
     phase2_application: BinnacleApplication,
     monkeypatch: pytest.MonkeyPatch,
@@ -100,11 +161,13 @@ def test_http_runner_forwards_session_idle_timeout(
         *,
         max_request_bytes: int,
         session_idle_timeout_seconds: float,
+        operation_kernel_factory: object,
     ) -> object:
         observed.update(
             application=application,
             max_request_bytes=max_request_bytes,
             session_idle_timeout_seconds=session_idle_timeout_seconds,
+            operation_kernel_factory=operation_kernel_factory,
         )
         return object()
 
@@ -123,6 +186,7 @@ def test_http_runner_forwards_session_idle_timeout(
         "application": phase2_application,
         "max_request_bytes": 1_048_576,
         "session_idle_timeout_seconds": 42.0,
+        "operation_kernel_factory": None,
     }
 
 
