@@ -422,6 +422,19 @@ def test_invalid_handler_binding_aborts_registry_load(
         )
 
 
+def test_handler_binding_must_match_the_reviewed_tool_projection() -> None:
+    registry, digest = _documents()
+    registry["tools"][0]["handler_binding"] = "binnacle.bootstrap.compatibility_report.v1_1"
+    _refresh_catalogue_digest(registry, digest)
+    registry_bytes, digest_bytes = _encoded(registry, digest)
+
+    with pytest.raises(ContractRegistryError, match="reviewed projection"):
+        ContractRegistry.from_bytes(
+            registry_bytes=registry_bytes,
+            digest_bytes=digest_bytes,
+        )
+
+
 def test_invalid_compiled_schema_aborts_registry_load() -> None:
     registry, digest = _documents()
     invalid_schema = {"type": "not-a-type"}

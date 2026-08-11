@@ -286,7 +286,6 @@ async def test_non_post_mcp_transport_with_reviewed_revision_is_forwarded(
         method=method,
         headers=[
             (b"mcp-protocol-version", b"2025-11-25"),
-            (b"mcp-session-id", b"session-fixture"),
         ],
     )
 
@@ -403,6 +402,9 @@ async def test_legacy_initialize_is_forwarded_without_binnacle_session_storage()
     assert downstream.calls == 1
     assert not hasattr(middleware, "_legacy_session_revisions")
     assert sent[0]["status"] == 200
+    response_headers = dict(sent[0]["headers"])
+    assert response_headers[b"mcp-session-id"] != b"session-fixture"
+    assert response_headers[b"mcp-session-id"].startswith(b"b1.")
 
 
 def test_revision_guard_accepts_only_configured_revisions() -> None:

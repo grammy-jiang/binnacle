@@ -360,10 +360,14 @@ async def test_legacy_session_rejects_wrong_post_initialize_version(
             },
         )
 
-    assert response.status_code == 200
+    assert response.status_code == 400
     assert _jsonrpc(response)["error"] == {
         "code": -32020,
         "message": "MCP-Protocol-Version does not match the negotiated legacy session.",
+        "data": {
+            "code": "protocol_header_mismatch",
+            "supported": list(EXPECTED_REVISIONS),
+        },
     }
 
 
@@ -412,6 +416,84 @@ async def test_legacy_non_post_transport_rejects_missing_or_unsupported_revision
     assert _jsonrpc(response)["error"]["data"]["code"] == ("unsupported_protocol_version")
     assert follow_up.status_code == 200
     assert len(_jsonrpc(follow_up)["result"]["tools"]) == 5
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("method", ["GET", "DELETE"])
+async def test_legacy_non_post_transport_rejects_wrong_supported_session_revision(
+    phase2_application: BinnacleApplication,
+    method: str,
+) -> None:
+    negotiated_revision = EXPECTED_REVISIONS[1]
+    wrong_revision = EXPECTED_REVISIONS[2]
+    async with running_raw_http_client(phase2_application) as client:
+        session_id = await _legacy_session(client, negotiated_revision)
+        response = await client.request(
+            method,
+            "/mcp",
+            headers={
+                "accept": ACCEPT,
+                "MCP-Protocol-Version": wrong_revision,
+                "Mcp-Session-Id": session_id,
+            },
+        )
+        follow_up = await client.post(
+            "/mcp",
+            json={"jsonrpc": "2.0", "id": 5, "method": "tools/list", "params": {}},
+            headers={
+                "accept": ACCEPT,
+                "MCP-Protocol-Version": negotiated_revision,
+                "Mcp-Session-Id": session_id,
+            },
+        )
+
+    assert response.status_code == 400
+    assert _jsonrpc(response)["error"] == {
+        "code": -32020,
+        "message": "MCP-Protocol-Version does not match the negotiated legacy session.",
+        "data": {
+            "code": "protocol_header_mismatch",
+            "supported": list(EXPECTED_REVISIONS),
+        },
+    }
+    assert follow_up.status_code == 200
+    assert len(_jsonrpc(follow_up)["result"]["tools"]) == 5
+
+
+@pytest.mark.anyio
+async def test_legacy_session_revision_binding_rejects_token_tampering(
+    phase2_application: BinnacleApplication,
+) -> None:
+    revision = EXPECTED_REVISIONS[1]
+    async with running_raw_http_client(phase2_application) as client:
+        session_id = await _legacy_session(client, revision)
+        prefix, payload, signature = session_id.split(".")
+        tampered_signature = ("A" if signature[0] != "A" else "B") + signature[1:]
+        tampered_session_id = ".".join((prefix, payload, tampered_signature))
+        rejected = await client.post(
+            "/mcp",
+            json={"jsonrpc": "2.0", "id": 6, "method": "tools/list", "params": {}},
+            headers={
+                "accept": ACCEPT,
+                "MCP-Protocol-Version": revision,
+                "Mcp-Session-Id": tampered_session_id,
+            },
+        )
+        follow_up = await client.post(
+            "/mcp",
+            json={"jsonrpc": "2.0", "id": 7, "method": "tools/list", "params": {}},
+            headers={
+                "accept": ACCEPT,
+                "MCP-Protocol-Version": revision,
+                "Mcp-Session-Id": session_id,
+            },
+        )
+
+    assert rejected.status_code == 400
+    assert _jsonrpc(rejected)["error"]["message"] == (
+        "Mcp-Session-Id is not bound to a reviewed legacy session."
+    )
+    assert follow_up.status_code == 200
 
 
 @pytest.mark.anyio

@@ -1082,6 +1082,14 @@ Target-era body inspection, if required for header/body integrity, buffers at mo
 configured request-body limit and faithfully replays the bytes to FastMCP after
 validation.
 
+Legacy session/revision integrity must also cover bodyless ``GET`` and ``DELETE``
+transport requests. The adapter wraps each framework-owned legacy session identifier in
+a process-scoped authenticated token containing its negotiated revision. It verifies
+and unwraps that token before forwarding the raw identifier to FastMCP. This is a
+stateless integrity binding, not a parallel session table: FastMCP remains the sole owner
+of session creation, lookup, lifetime, and termination, and a process restart already
+invalidates the corresponding framework sessions.
+
 22. HTTP/ASGI surface
 ---------------------
 

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import hmac
 import importlib
 import json
 import math
@@ -77,6 +79,53 @@ MAX_BODY_CHUNKS = 1024
 _LOGGER = structlog.get_logger(__name__)
 
 
+class _SessionRevisionCodec:
+    """Bind an SDK-owned session ID to its revision without shadow session state."""
+
+    def __init__(self, secret: bytes) -> None:
+        if len(secret) < 32:
+            raise ValueError("session binding secret must contain at least 32 bytes")
+        self._secret = secret
+
+    def encode(self, session_id: str, revision: str) -> str:
+        payload = f"{revision}\n{session_id}".encode("ascii")
+        encoded_payload = base64.urlsafe_b64encode(payload).rstrip(b"=").decode("ascii")
+        signature = hmac.digest(self._secret, payload, "sha256")
+        encoded_signature = base64.urlsafe_b64encode(signature).rstrip(b"=").decode("ascii")
+        return f"b1.{encoded_payload}.{encoded_signature}"
+
+    def decode(self, token: str) -> tuple[str, str] | None:
+        if len(token) > 512:
+            return None
+        prefix, separator, remainder = token.partition(".")
+        encoded_payload, second_separator, encoded_signature = remainder.partition(".")
+        if prefix != "b1" or not separator or not second_separator:
+            return None
+        try:
+            payload = self._decode_base64(encoded_payload)
+            signature = self._decode_base64(encoded_signature)
+            decoded = payload.decode("ascii")
+        except (UnicodeDecodeError, ValueError):
+            return None
+        if not hmac.compare_digest(signature, hmac.digest(self._secret, payload, "sha256")):
+            return None
+        revision, revision_separator, session_id = decoded.partition("\n")
+        if (
+            not revision_separator
+            or revision not in LEGACY_REVISIONS
+            or not session_id
+            or len(session_id) > 256
+            or any(not 0x21 <= ord(character) <= 0x7E for character in session_id)
+        ):
+            return None
+        return session_id, revision
+
+    @staticmethod
+    def _decode_base64(value: str) -> bytes:
+        padding = "=" * ((4 - len(value) % 4) % 4)
+        return base64.b64decode(value + padding, altchars=b"-_", validate=True)
+
+
 class ServerConfiguration(Protocol):
     @property
     def host(self) -> str: ...
@@ -112,6 +161,7 @@ class RequestBodyLimitMiddleware:
             raise ValueError("max_request_bytes must be positive")
         self.app = app
         self.max_request_bytes = max_request_bytes
+        self._session_codec = _SessionRevisionCodec(secrets.token_bytes(32))
 
     async def __call__(
         self,
@@ -125,6 +175,9 @@ class RequestBodyLimitMiddleware:
 
         if scope.get("method") != "POST":
             rejection = self._validate_transport_revision(scope)
+            bound_revision: str | None = None
+            if rejection is None:
+                bound_revision, rejection = self._unwrap_legacy_session(scope)
             if rejection is not None:
                 code, data_code, error_message = rejection
                 await _send_jsonrpc_error(
@@ -135,7 +188,11 @@ class RequestBodyLimitMiddleware:
                     message=error_message,
                 )
                 return
-            await self.app(scope, receive, send)
+            await self.app(
+                scope,
+                receive,
+                self._bound_session_sender(send, bound_revision),
+            )
             return
 
         headers = scope.get("headers", ())
@@ -224,7 +281,112 @@ class RequestBodyLimitMiddleware:
                 )
                 return
 
-        await self.app(scope, replay, send)
+        bound_revision, rejection = self._unwrap_legacy_session(scope)
+        if rejection is not None:
+            code, data_code, error_message = rejection
+            await _send_jsonrpc_error(
+                send,
+                request_id=parsed.get("id") if isinstance(parsed, dict) else None,
+                code=code,
+                data_code=data_code,
+                message=error_message,
+            )
+            return
+        response_revision = bound_revision or self._legacy_initialize_revision(parsed)
+        await self.app(
+            scope,
+            replay,
+            self._bound_session_sender(send, response_revision),
+        )
+
+    @staticmethod
+    def _legacy_initialize_revision(parsed: object) -> str | None:
+        if not isinstance(parsed, Mapping) or parsed.get("method") != "initialize":
+            return None
+        params = parsed.get("params")
+        requested = params.get("protocolVersion") if isinstance(params, Mapping) else None
+        return requested if isinstance(requested, str) and requested in LEGACY_REVISIONS else None
+
+    def _unwrap_legacy_session(
+        self,
+        scope: MutableMapping[str, Any],
+    ) -> tuple[str | None, RevisionRejection | None]:
+        raw_headers = scope.get("headers", ())
+        session_values = [
+            value
+            for name, value in raw_headers
+            if isinstance(name, bytes)
+            and isinstance(value, bytes)
+            and name.lower() == MCP_SESSION_ID_HEADER.encode("ascii")
+        ]
+        if not session_values:
+            return None, None
+        if len(session_values) != 1:
+            return None, (
+                -32020,
+                "protocol_header_mismatch",
+                "Duplicate routing header: Mcp-Session-Id",
+            )
+
+        headers = {
+            name.decode("latin-1").lower(): value.decode("latin-1")
+            for name, value in raw_headers
+            if isinstance(name, bytes) and isinstance(value, bytes)
+        }
+        header_version = headers.get(MCP_PROTOCOL_VERSION_HEADER)
+        if header_version not in LEGACY_REVISIONS:
+            return None, None
+        decoded = self._session_codec.decode(session_values[0].decode("latin-1"))
+        if decoded is None:
+            return None, (
+                -32020,
+                "protocol_header_mismatch",
+                "Mcp-Session-Id is not bound to a reviewed legacy session.",
+            )
+        raw_session_id, bound_revision = decoded
+        if header_version != bound_revision:
+            return None, (
+                -32020,
+                "protocol_header_mismatch",
+                "MCP-Protocol-Version does not match the negotiated legacy session.",
+            )
+        raw_session_bytes = raw_session_id.encode("ascii")
+        scope["headers"] = [
+            (name, raw_session_bytes)
+            if isinstance(name, bytes) and name.lower() == MCP_SESSION_ID_HEADER.encode("ascii")
+            else (name, value)
+            for name, value in raw_headers
+        ]
+        return bound_revision, None
+
+    def _bound_session_sender(
+        self,
+        send: ASGISend,
+        revision: str | None,
+    ) -> ASGISend:
+        if revision is None:
+            return send
+
+        async def send_bound(message: ASGIMessage) -> None:
+            if message.get("type") == "http.response.start":
+                response_headers = message.get("headers", [])
+                message = dict(message)
+                message["headers"] = [
+                    (
+                        name,
+                        self._session_codec.encode(value.decode("latin-1"), revision).encode(
+                            "ascii"
+                        ),
+                    )
+                    if isinstance(name, bytes)
+                    and isinstance(value, bytes)
+                    and name.lower() == MCP_SESSION_ID_HEADER.encode("ascii")
+                    else (name, value)
+                    for name, value in response_headers
+                ]
+            await send(message)
+
+        return send_bound
 
     def _validate_transport_revision(
         self,

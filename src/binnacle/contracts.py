@@ -142,6 +142,15 @@ PHASE2_OBSERVATION_AXES = (
     "cross_server_behavior",
     "performance",
 )
+EXPECTED_HANDLER_BINDINGS = MappingProxyType(
+    {
+        "binnacle_probe": "binnacle.bootstrap.binnacle_probe.v1_1",
+        "system_inspect": "binnacle.bootstrap.system_inspect.v1_1",
+        "probe_result_formats": "binnacle.bootstrap.probe_result_formats.v1_1",
+        "probe_error": "binnacle.bootstrap.probe_error.v1_1",
+        "compatibility_report": "binnacle.bootstrap.compatibility_report.v1_1",
+    }
+)
 
 
 class ContractRegistryError(RuntimeError):
@@ -274,6 +283,10 @@ class ContractRegistry:
             if "probe_workspace" in tool.handler_binding:
                 raise ContractRegistryError("write-probe binding is visible")
             _validate_handler_binding(tool.handler_binding)
+            if tool.handler_binding != EXPECTED_HANDLER_BINDINGS[tool.name]:
+                raise ContractRegistryError(
+                    f"handler binding does not match reviewed projection: {tool.name}"
+                )
             input_schema = mutable_json_object(tool.input_schema.schema)
             output_schema = mutable_json_object(tool.output_schema.schema)
             try:
