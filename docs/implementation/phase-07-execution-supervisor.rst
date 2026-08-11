@@ -746,6 +746,13 @@ Representative messages:
    list_executions / execution_list
    reconcile_execution / reconcile_result
 
+``start_result`` is a closed discriminated result. ``accepted_execution`` requires a
+non-null stable ``execution_id``, non-null ``accepted_at`` and executor evidence/reference.
+``no_accept_proven`` requires ``execution_id=null`` and ``accepted_at=null`` plus the exact
+retained no-accept seal/reference and evidence generation. The two shapes are mutually
+exclusive and a no-accept result never fabricates an execution identity merely to satisfy a
+response schema.
+
 Large stdout/stderr/stdin are never unbounded control frames. Bootstrap inline stdin has a
 small reviewed ceiling; larger server-held input is either bounded into the same start
 frame after exact digest verification or uses a separately reviewed bounded transfer
@@ -826,8 +833,10 @@ For a new ``command_run`` first admission:
 #. supervisor applies ``ExecutorLaunchGate`` only after the acceptance gate is released;
    concurrently dispatched cancellation can suppress launch before ``launch_committed`` or
    wait for the same launch gate and terminate the exact created/possibly-created domain;
-#. bounded start response returns either exact durable accepted execution reference,
-   explicit durable **sealed** no-accept result, or transport/receipt ambiguity;
+#. bounded ``start_result`` returns one of the two section-16 shapes: exact durable
+   ``accepted_execution`` with a non-null execution identity, explicit durable sealed
+   ``no_accept_proven`` with no execution identity, or transport/receipt ambiguity outside
+   the successful result union;
 #. application immediately persists effect reference/effect knowledge with an optimistic
    field-aware update that **never overwrites a newer Phase 7 cancellation generation,
    supervisor acknowledgement generation, or legal ``cancelling`` lifecycle transition**.
@@ -921,7 +930,8 @@ On ``start_execution`` the supervisor otherwise:
 #. invokes ``accept_once`` under the exact acceptance gate;
 #. returns retained exact execution on same-ticket replay, retained sealed no-accept on a
    closed ticket, conflict/no-start on contradictory identity, or the new accepted execution
-   carrying any attached cancellation generation;
+   carrying any attached cancellation generation. Retained sealed no-accept uses the
+   ``no_accept_proven`` start-result variant and carries **no** ``execution_id``;
 #. only after acceptance-gate release may ``ExecutorLaunchGate`` be entered.
 
 Ticket expiry alone is not a durable no-accept proof while a previously received handler
@@ -1026,10 +1036,11 @@ user authority source.
    Allowed only when exact current-runtime pre-``call_start`` Phase 4 gate failure proves no
    supervisor dispatch occurred, **or** the supervisor returns a gate-owned durable
    ``no_accept_proven`` seal/tombstone for the exact ticket that future ``accept_once`` must
-   reject. A point-in-time empty supervisor store, expired ticket observed outside the
-   acceptance gate, missing volatile dispatch latch, missing PID, or simple socket error is
-   not enough. A cancellation that suppresses child spawn **after durable supervisor
-   acceptance remains ``known_effect``** for the command operation.
+   reject. The corresponding successful ``start_result`` carries no execution identity. A
+   point-in-time empty supervisor store, expired ticket observed outside the acceptance
+   gate, missing volatile dispatch latch, missing PID, or simple socket error is not enough.
+   A cancellation that suppresses child spawn **after durable supervisor acceptance remains
+   ``known_effect``** for the command operation.
 
 ``uncertain``
    Lost/ambiguous UDS delivery/receipt, supervisor evidence-store unavailability,
@@ -1591,6 +1602,9 @@ Before runtime handler registration:
    application cancel-generation/acknowledgement replay, current-runtime dispatch commit
    discriminator plus ``UNKNOWN_AFTER_RUNTIME_LOSS`` cancellation routing,
    post-commit cancel-forwarding and execution-evidence fields needed by this plan;
+#. define exact discriminated ``start_result`` variants: ``accepted_execution`` requires a
+   stable non-null execution ID/reference, while ``no_accept_proven`` requires no execution
+   ID and carries the retained gate-owned seal/reference; reject contradictory shapes;
 #. define exact ``cancel_result``/snapshot fields for acknowledged generation, closed
    disposition and executor evidence generation, plus a bounded internal reconciliation
    ``no_accept_result`` that proves a retained gate-owned terminal no-accept seal;
@@ -1682,11 +1696,12 @@ Representative contracts:
 
    @dataclass(frozen=True, slots=True)
    class ExecutionStartReceipt:
-       execution_id: str
+       disposition: Literal["accepted_execution", "no_accept_proven"]
+       execution_id: str | None
        evidence_generation: int
-       accepted: bool
        accepted_at: datetime | None
        executor_reference: str | None
+       no_accept_reference: str | None
        receipt_sha256: str
 
    @dataclass(frozen=True, slots=True)
@@ -1763,6 +1778,14 @@ Representative contracts:
        async def transition(self, event: ExecutorEvidenceEvent) -> ExecutorSnapshot: ...
        async def lookup_ticket(self, ticket_id: str) -> ExecutorSnapshot | None: ...
 
+``ExecutionStartReceipt`` has strict cross-field invariants. For
+``disposition="accepted_execution"``, ``execution_id``, ``accepted_at`` and
+``executor_reference`` are non-null and ``no_accept_reference`` is null. For
+``disposition="no_accept_proven"``, ``execution_id``, ``accepted_at`` and
+``executor_reference`` are null and ``no_accept_reference`` is the non-null retained seal
+reference. Schema/constructor validation rejects any other combination; the application
+never fabricates an execution ID for a sealed no-accept outcome.
+
 ``accept_once``, ``cancel_or_attach`` and ``seal_no_accept`` are serialized by the exact
 ticket-scoped ``ExecutorAcceptanceGate``/FULL evidence transaction. Callers never implement
 the security-relevant existence decision as ``lookup_ticket`` followed by a separate
@@ -1834,6 +1857,9 @@ Prove:
 * ticket digest/expiry/boot/nonce validation;
 * executor accept-once under concurrent duplicate start frames;
 * same ticket returns one execution; changed digest never launches;
+* start-result schema/constructor invariants: accepted result requires one stable non-null
+  execution ID/reference; sealed no-accept result requires ``execution_id=null`` and exact
+  retained no-accept reference; contradictory or fabricated-ID shapes are rejected;
 * exact ticket-scoped ``accept_once`` versus ``cancel_or_attach`` serialization: cancel-first
   creates/advances pending and acceptance attaches it; accept-first causes later cancel to
   advance the accepted row; concurrent first accept/cancel cannot leave an orphan pending
@@ -1901,6 +1927,9 @@ Test:
 
 * wrong peer UID/GID, socket mode, stale version, malformed/oversize/truncated frame;
 * duplicate request/correlation IDs and ticket replay;
+* accepted and gate-owned sealed-no-accept ``start_result`` round trips use distinct valid
+  shapes; sealed no-accept has no execution ID and cannot be mistaken for an accepted
+  execution by application effect classification;
 * start/control request concurrency: deliberately hold backend create while a post-commit
   cancellation request is processed, completes its acceptance-gate transaction and reaches
   ``ExecutorLaunchGate`` rather than being head-of-line blocked behind ``start_execution``;
@@ -2035,6 +2064,8 @@ New command start::
         terminal seal_no_accept
         (pending-first attaches during accept; accept-first cancel advances accepted row;
          seal-first permanently rejects delayed/queued acceptance)
+     -> start_result discriminator: accepted_execution with exact execution ID/reference OR
+        no_accept_proven with exact seal/reference and no execution ID
      -> acceptance-gate release
      -> ExecutorLaunchGate: cancel-before-launch OR one bounded launch commit/create receipt
      -> immediate application effect-reference/effect-knowledge classification without
@@ -2130,6 +2161,9 @@ Accept this plan only when:
   seal/tombstone (or exact equivalent terminal acceptance record) that future/queued
   ``accept_once`` must reject; if acceptance wins serialization first, no-effect closure is
   forbidden;
+* ``start_result`` cannot fabricate execution identity: accepted shape requires an exact
+  non-null execution ID/reference; sealed no-accept shape requires no execution ID and an
+  exact retained seal/reference;
 * application cancel generation is authoritative, monotonic, persisted before UDS send and
   replayed after crash until supervisor acknowledgement reaches the same-or-higher
   generation or exact terminal/gate-owned-no-accept evidence closes it;
@@ -2176,7 +2210,8 @@ When predecessor evidence permits implementation:
 #. promote/reconcile command contracts, schemas, manifest and logical broker/executor
    mapping, including process-introspection, post-commit/possibly-committed cancel-forwarding,
    dispatch-commit-knowledge routing, application-cancel/supervisor-ack fields, atomic
-   accept/cancel/no-accept routing and executor launch/cancel fields;
+   accept/cancel/no-accept routing, discriminated accepted-vs-no-accept ``start_result``, and
+   executor launch/cancel fields;
 #. add application command metadata migration ``0004`` with monotonic Phase 7 cancel
    generation, supervisor-ack generation/evidence and fence correlation fields;
 #. create separate executor evidence migration/setup and executor state directory,
