@@ -463,8 +463,9 @@ Persist every historical probe-owned filesystem-object generation:
 
 Do **not** place an unconditional UNIQUE constraint on ``relative_path`` because removed
 or safely abandoned history must remain durable while the frozen evaluation reuses the
-same synthetic filename across attempts. Instead migration ``0002`` creates an exact
-partial unique index equivalent to:
+same synthetic filename across attempts. Migration ``0002`` does, however, enforce
+``UNIQUE(relative_path, path_generation)`` across all retained generations and creates an
+exact partial unique index equivalent to:
 
 ::
 
@@ -475,10 +476,54 @@ partial unique index equivalent to:
 At most one live/uncertain generation can own a path. ``removed`` and proven-no-effect
 ``abandoned`` rows do not block a later independent write. A new write reservation
 atomically chooses ``path_generation = max(retained generation for path) + 1`` (or 1 for
-a never-seen path) while holding the short post-policy write transaction. Preparation
-binds the current retained generation high-water value, including 0 for a never-seen path,
-so a stale preparation cannot become valid again merely because another create/cleanup
-cycle returned the target to an absent filesystem state.
+a never-seen path) while holding the short post-policy write transaction.
+
+High-water alone is not a sufficient prepared-state commitment. Before a write preparation
+may bind an absent path, every retained prior generation for that normalized path must be
+in a terminal/stable historical state (``removed`` or a durably proven-no-effect
+``abandoned`` state). ``reserved``, ``created``, ``uncertain``, integrity-invalid, or
+otherwise legitimately mutable rows reject preparation rather than being hidden inside a
+history digest.
+
+For the stable prior rows, construct a deterministic retained-history commitment in
+strict ascending ``path_generation`` order. Each canonical JCS record includes at least:
+
+::
+
+   relative_path
+   path_generation
+   artifact_id
+   state
+   create_operation_id
+   owner_controller_id
+   owner_controller_epoch
+   content_sha256
+   byte_count
+   file_identity_digest
+   active_cleanup_operation_id     # required NULL for terminal history
+   removed_by_cleanup_operation_id
+   created_at
+   removed_at
+
+The application treats those history-commitment fields as immutable once the row enters a
+terminal historical state. It never silently repairs or rewrites a committed historical
+row while an outstanding preparation exists. A reviewed migration or recovery repair that
+must change any committed field necessarily invalidates outstanding preparations and
+requires a new preparation before another filesystem start.
+
+Preparation binds all three retained-history facts: generation high-water ``N`` (0 for a
+never-seen path), exact ``retained_history_count=C``, and
+``retained_history_sha256=H`` where ``H`` is SHA-256 of the canonical JCS array above (the
+empty array has its deterministic canonical hash). A deletion changes ``C``/``H``; an
+insertion changes ``C``/``H`` and usually ``N``; mutation/corruption changes ``H`` even
+when the maximum generation remains ``N``. Reads or canonicalization that cannot prove the
+complete stable set fail closed.
+
+A row created by the current admitted write is not part of its prepared prior-history
+commitment. Final verification recomputes ``N/C/H`` over all rows for the normalized path
+**excluding only the exact current operation's self-owned reserved generation ``N+1``**.
+No other row may be excluded. This gives the Phase 4 final prepared/current-state digest a
+complete retained-history commitment instead of only a generation maximum.
 
 A row is created as ``reserved`` only after policy allows the operation. It becomes
 ``created`` only when reconciliation/receipt proves the exact published file. A proven
@@ -551,7 +596,7 @@ Write normalized effect input contains exactly:
    prepared_operation_id
    prepared_input_sha256
 
-Cleanup normalized effect input contains:
+Cleanup normalized effect input contains exactly:
 
 ::
 
@@ -586,10 +631,12 @@ Algorithm for ``operation=write``:
 #. open/verify the protected probe-root identity through the adapter;
 #. prove the final target name is absent and not represented by a live conflicting
    ``probe_artifacts`` reservation;
-#. load the retained path-generation high-water value ``N`` (0 if no historical row
-   exists) and compute the current-state binding over root identity, target name,
-   target-absent fact, ``prepared_path_generation_high_water=N``, and the deterministic
-   semantic component
+#. load the complete stable retained history for the path, prove it contains only terminal
+   historical rows, and compute exact high-water ``N`` (0 if empty),
+   ``retained_history_count=C``, and ``retained_history_sha256=H`` using section 11.2;
+#. compute the current-state binding over root identity, target name, target-absent fact,
+   ``prepared_path_generation_high_water=N``, ``retained_history_count=C``,
+   ``retained_history_sha256=H``, and the deterministic semantic component
    ``write_reservation_transition=absent_generation_N_then_exact_self_reserved_generation_N_plus_1``;
 #. generate at least 128 random bits for ``execution_nonce`` and a separate random
    ``prepared_operation_id``;
@@ -602,12 +649,13 @@ Algorithm for ``operation=write``:
 #. return the existing output schema.
 
 For a write preparation, the phase-stable reservation component above represents exactly
-one reviewed internal admission transition; it is not an omission of path ownership:
+one reviewed internal admission transition; it is not an omission of path ownership or
+retained-history integrity:
 
 * at preparation, pre-policy execute validation, and post-policy pre-insert admission
   revalidation, the component is valid only while secure lookup proves the target absent,
-  the partial live-path index has no live row for that normalized path, and retained
-  history has exact high-water ``N``;
+  the partial live-path index has no live row for that normalized path, every prior row is
+  still terminal/stable, and retained history has exact ``N/C/H`` from the preparation;
 * after policy allows the exact operation, section 16 may create exactly one ``reserved``
   artifact row owned by that same operation at generation ``N + 1``;
 * at final OP-BOUNDARY revalidation, the same semantic component is valid only after
@@ -615,17 +663,18 @@ one reviewed internal admission transition; it is not an omission of path owners
   ``create_operation_id`` equals the exact current ``running`` operation, its generation
   is exactly ``N + 1``, root/path/content/owner/controller facts are unchanged,
   ``probe_operations.prepared_binding_id`` names the consumed prepared binding carrying
-  the stored digest, and retained history **excluding this exact self reservation** still
-  has high-water ``N``;
+  the stored digest, and retained history **excluding only this exact self reservation**
+  recomputes to exact high-water ``N``, count ``C``, and digest ``H``;
 * a missing/foreign/changed reservation, generation other than ``N + 1``, a different
-  prepared-binding relationship, changed retained high-water, target appearance, or any
-  unrelated current-state change fails closed.
+  prepared-binding relationship, any deleted/inserted/mutated/corrupt prior historical
+  row, changed ``N/C/H``, target appearance, or any unrelated current-state change fails
+  closed.
 
 The write canonicalizer is deterministic from durable state and the exact operation/
 prepared-binding relationship. It lets Phase 4 compare the exact same prepared/current-
-state digest across only the expected absent/high-water ``N`` -> exact-self reserved
-``N + 1`` transition. It never treats an arbitrary reservation as equivalent to absence
-and does not itself authorize an effect.
+state digest across only the expected absent/retained-history ``N/C/H`` -> exact-self
+reserved ``N + 1`` transition. It never treats an arbitrary reservation as equivalent to
+absence and does not itself authorize an effect.
 
 Algorithm for ``operation=cleanup`` is identical except that it additionally requires a
 retained ``probe_artifacts`` record owned by the current controller and exact
@@ -830,14 +879,15 @@ The post-policy admission behavior is exact:
   inserts the immutable ``probe_operations`` row, and acquires the operation-specific
   reservation before the operation leaves ``received``;
 * for a write, that transaction first re-proves the **pre-reservation** prepared state:
-  secure target absence, no live-path row, and exact retained high-water ``N``. It must
-  recompute the stored digest using
+  secure target absence, no live-path row, all prior rows still terminal/stable, and exact
+  retained ``N/C/H``. It must recompute the stored digest using
   ``write_reservation_transition=absent_generation_N_then_exact_self_reserved_generation_N_plus_1``
   before inserting anything. Only after that exact check may it allocate
   ``path_generation=N+1``, mint ``artifact_id``, and insert the one ``reserved``
   ``probe_artifacts`` row with ``create_operation_id`` equal to this operation under the
-  partial live-path unique index. No other generation or pre-existing live row may be
-  absorbed by the transition;
+  partial live-path unique index and ``UNIQUE(relative_path, path_generation)``. No other
+  generation, changed historical commitment, or pre-existing live row may be absorbed by
+  the transition;
 * for cleanup of a still-created artifact, it revalidates exact
   artifact/path/generation/ownership and the exact prepared filesystem observation. A
   present-bound preparation must still match the protected file identity/digest; a
@@ -866,11 +916,11 @@ The post-policy admission behavior is exact:
 The post-reservation/current state is therefore not a blanket exception to Phase 4
 current-state binding. At final verification, the write reservation may canonicalize back
 to its prepared token only for the exact operation that consumed the exact prepared
-binding and only while retained history excluding that exact self reservation still has
-high-water ``N``. Likewise, a cleanup claim may canonicalize back to the same prepared
-claim token only for the exact operation that consumed the exact prepared binding. Raw
-reservation/claim ownership and those durable relationships are checked before digest
-comparison as section 17 defines.
+binding and only while retained history excluding that exact self reservation recomputes
+to the exact prepared ``N/C/H``. Likewise, a cleanup claim may canonicalize back to the
+same prepared claim token only for the exact operation that consumed the exact prepared
+binding. Raw reservation/claim ownership and those durable relationships are checked
+before digest comparison as section 17 defines.
 
 If a prepared filesystem observation changes before admission -- including a file
 appearing for an observed-absent cleanup preparation or a present-bound file disappearing,
@@ -914,13 +964,16 @@ digest with ``operation.prepared_current_state_digest``, the verifier must prove
 * its generation is exactly prepared high-water ``N + 1``;
 * its artifact/path/content/owner/controller/root facts match the admitted operation;
 * ``probe_operations.prepared_binding_id`` equals the consumed prepared binding carrying
-  the stored digest; and
-* retained history for the path **excluding this exact self reservation** still has
-  high-water ``N`` while secure lookup proves the final target name remains absent.
+  the stored digest;
+* secure lookup proves the final target name remains absent; and
+* the complete retained history for the path **excluding only this exact self
+  reservation** is still terminal/stable and recomputes to the exact prepared high-water
+  ``N``, ``retained_history_count=C``, and ``retained_history_sha256=H``.
 
 Only then may the callback canonicalize that durable state as
 ``write_reservation_transition=absent_generation_N_then_exact_self_reserved_generation_N_plus_1``.
-A foreign/missing/non-reserved row, changed generation/history, target appearance,
+A foreign/missing/non-reserved row, changed generation, deleted/inserted/mutated/corrupt
+prior generation (even one below the maximum), changed ``N/C/H``, target appearance,
 prepared-binding mismatch, or any unrelated state change is a digest mismatch and blocks
 start. The reservation is never omitted from the security state; it is represented by the
 one reviewed phase-stable transition.
@@ -956,12 +1009,13 @@ a later appearing file is never normalized into the present-bound transition and
 prepared state stale.
 
 These operation-specific canonical forms preserve Phase 4's exact-digest rule. The write
-digest computed while the path is absent/high-water ``N`` and the final digest computed
-with the exact self reservation at ``N + 1`` are identical only for that reviewed
-transition. The cleanup digest computed before admission while the claim is NULL and the
-final digest after the exact operation has acquired its own claim are identical only for
-that reviewed transition; a present-bound cleanup additionally permits the one exact
-secure present->absent pre-start target transition. No transition hides unrelated state.
+digest computed while the path is absent with complete prior-history ``N/C/H`` and the
+final digest computed with the exact self reservation at ``N + 1`` are identical only for
+that reviewed transition and unchanged complete prior history. The cleanup digest computed
+before admission while the claim is NULL and the final digest after the exact operation
+has acquired its own claim are identical only for that reviewed transition; a present-
+bound cleanup additionally permits the one exact secure present->absent pre-start target
+transition. No transition hides unrelated state.
 
 Immediately before ``EffectBoundary.start``, revalidate:
 
@@ -973,11 +1027,12 @@ Immediately before ``EffectBoundary.start``, revalidate:
 * probe-root identity and permissions;
 * exact single-component target path;
 * for write, target still absent and the exact self live reservation/generation/binding
-  relation satisfies the write transition; or for cleanup, the artifact still has the
-  exact retained identity/digest/generation/ownership and self claim. A present-bound
-  cleanup may instead produce the exact typed secure-absence no-start branch above. A
-  cleanup prepared with ``created_target_observed_absent`` must still prove absence; no
-  nonexistent file identity is fabricated;
+  relation plus complete prior-history ``N/C/H`` satisfy the write transition; or for
+  cleanup, the artifact still has the exact retained identity/digest/generation/ownership
+  and self claim. A present-bound cleanup may instead produce the exact typed secure-
+  absence no-start branch above. A cleanup prepared with
+  ``created_target_observed_absent`` must still prove absence; no nonexistent file identity
+  is fabricated;
 * maximum effect remains one bounded local artifact;
 * no cancellation/state-version change has occurred.
 
@@ -1171,7 +1226,8 @@ idempotently only after re-proving every predicate above.
 Reconciliation never creates a second effect and never changes idempotency identity.
 Historical ``removed``/``abandoned`` rows and every cleanup attempt remain retained so
 path-generation high-water and operation history survive restart and repeated evaluation
-attempts.
+attempts. The security-relevant fields of terminal historical artifact rows remain
+immutable so the section 11.2 retained-history commitment remains reproducible.
 
 21. Phase 4 audit-obligation and global-gate integration
 --------------------------------------------------------
@@ -1197,7 +1253,8 @@ mandatory pre-dispatch audit gates:
      -> global ConsequentialBoundaryGate PRE_START permit
      -> final Phase 5 OP-BOUNDARY verifier
         -> write: exact self-reservation N+1 may canonicalize only to its prepared
-           absent/high-water-N transition after all exact-self/binding/history checks
+           absent/complete-history N/C/H transition after all exact-self/binding/history
+           checks, with all prior generations excluding self unchanged
         -> cleanup present-bound exact target may either remain exact-present or become
            the typed secure present->absent no-start transition
         -> if exact cleanup target is already missing pre-start:
@@ -1241,12 +1298,14 @@ Use only existing schema-valid audit payload kinds.
 Preparation may use existing policy/preparation evidence with ``operation_id=null`` and
 ``prepared_operation_id`` populated where schema permits. It must not claim a filesystem
 reservation or owner UI confirmation occurred before policy admission. A write preparation
-may include only bounded digest/code facts for its absent/high-water ``N`` state and the
-phase-stable write-reservation transition; it must not claim the ``N+1`` reservation exists
-before admission. A cleanup preparation may include only bounded digest/code facts for its
-exact prepared identity/target-transition or typed ``created_target_observed_absent`` fact;
-it must not emit effect/lifecycle evidence, set effect knowledge, or claim removal merely
-because a target is or later becomes absent before start.
+may include only bounded digest/code facts for its absent/high-water ``N`` state, exact
+``retained_history_count=C``/``retained_history_sha256=H``, and the phase-stable write-
+reservation transition; it never emits the raw retained-history records and must not claim
+the ``N+1`` reservation exists before admission. A cleanup preparation may include only
+bounded digest/code facts for its exact prepared identity/target-transition or typed
+``created_target_observed_absent`` fact; it must not emit effect/lifecycle evidence, set
+effect knowledge, or claim removal merely because a target is or later becomes absent
+before start.
 
 Execution keeps the Phase 4 lifecycle/effect mapping and ordering exactly:
 
@@ -1272,10 +1331,10 @@ may record that the boundary was entered but no unlink was attempted only when t
 receipt was durably obtained; if the receipt is lost, audit records uncertainty instead
 of reconstructing no-effect from absence.
 
-Record bounded digests for target path, path generation, content, maximum effect, artifact
-identity, Tool manifest, profile/policy, and operation correlation. Raw file content,
-execution nonce, idempotency key, credentials, and complete host-confirmation screenshots/
-transcripts are not audit payload.
+Record bounded digests for target path, path generation, retained-history count/digest,
+content, maximum effect, artifact identity, Tool manifest, profile/policy, and operation
+correlation. Raw retained-history rows, file content, execution nonce, idempotency key,
+credentials, and complete host-confirmation screenshots/transcripts are not audit payload.
 
 Host UI confirmation is evaluation evidence, not a server-verifiable authority fact.
 Server audit may record the selected reviewed HOST-profile digest/status used for
@@ -1509,14 +1568,23 @@ Unit/property coverage includes:
 * path policy rejects nested/absolute/dot/backslash/reserved/non-NFC/overlong names;
 * text/base64 normalization produces identical digest only for identical decoded bytes;
 * prepare/write and prepare/cleanup fingerprints are deterministic and contract-exact;
-* write preparation binds exact secure absence, retained high-water ``N``, and
+* write preparation binds exact secure absence, retained high-water ``N``, exact
+  ``retained_history_count=C``/``retained_history_sha256=H``, and
   ``write_reservation_transition=absent_generation_N_then_exact_self_reserved_generation_N_plus_1``;
-  preparation itself creates no reservation;
+  preparation itself creates no reservation and rejects any nonterminal/unstable prior
+  history row;
 * phase-aware write-reservation canonicalization produces the same current-state digest
-  across only the expected absence/high-water ``N`` -> exact consuming operation's
-  ``reserved`` generation ``N+1`` admission transition; a foreign/missing/non-reserved
-  row, wrong generation, changed target/history, or missing/mismatched
+  across only the expected absence/complete-history ``N/C/H`` -> exact consuming
+  operation's ``reserved`` generation ``N+1`` admission transition; a foreign/missing/non-
+  reserved row, wrong generation, changed target, changed ``N/C/H``, or missing/mismatched
   ``prepared_binding_id`` invalidates the binding;
+* deleting or mutating a retained **non-maximum** historical generation while preserving
+  maximum ``N`` necessarily changes ``C`` or ``H`` and causes final prepared-state
+  mismatch/no start; inserting any extra historical row likewise changes ``C/H`` (and may
+  also change ``N``) and cannot be hidden by the exact-self reservation exclusion;
+* terminal retained-history commitment fields are immutable to normal runtime code;
+  preparation fails closed if prior history is nonterminal, integrity-invalid, incomplete,
+  or cannot be canonically read;
 * cleanup preparation for a durable ``created`` artifact whose exact target is already
   absent succeeds only with the typed ``created_target_observed_absent`` binding over the
   exact artifact/generation/owner/content/root/path and the phase-stable cleanup-claim
@@ -1551,13 +1619,14 @@ Unit/property coverage includes:
 * consumed preparation plus new caller key cannot create another operation/effect;
 * owner mismatch is non-disclosing;
 * expired/trusted-time-unavailable preparation cannot admit an effect;
-* target-state or path-generation change between prepare/admission/final boundary
-  suppresses effect except for the two explicitly reviewed exact-self/no-start semantic
-  transitions above;
-* partial unique live-path reservation holds under concurrency while ``removed``/
-  ``abandoned`` historical rows do not block a new generation;
+* target-state or path-generation/history-commitment change between prepare/admission/final
+  boundary suppresses effect except for the two explicitly reviewed exact-self/no-start
+  semantic transitions above;
+* partial unique live-path reservation and ``UNIQUE(relative_path, path_generation)`` hold
+  under concurrency while ``removed``/``abandoned`` historical rows do not block a new
+  generation;
 * stale preparation remains invalid after a create+cleanup cycle returns the target to
-  absence because the retained path-generation high-water changed;
+  absence because the retained path-generation/high-history commitment changed;
 * at most one ``active_cleanup_operation_id`` may own a created artifact at a time;
 * a terminal cleanup with durably proven ``known_no_effect`` plus unchanged exact artifact
   still present releases its active claim only after required audit/recovery closure,
@@ -1583,8 +1652,9 @@ Unit/property coverage includes:
 * maximum file/effect bounds are invariant.
 
 Hypothesis state-machine tests should combine preparation expiry, controller replacement,
-idempotency collisions, artifact states/generations, active cleanup claims, mandatory audit
-gates, policy decisions, and crash/reconciliation transitions.
+idempotency collisions, artifact states/generations, retained-history commitment changes,
+active cleanup claims, mandatory audit gates, policy decisions, and crash/reconciliation
+transitions.
 
 31. Integration and fault tests
 -------------------------------
@@ -1605,9 +1675,15 @@ Required faults include:
   required deny audit closure;
 * concurrent policy-allowed writes for the same path -> exactly one live generation wins;
 * admitted write exact self ``reserved`` generation ``N+1`` -> final verifier reconstructs
-  the prepared absent/high-water-``N`` digest through the write reservation token;
-  deleting/rebinding/changing that row, changing retained history, or creating the target
-  before final verification yields mismatch/no start;
+  the prepared absent/complete-history ``N/C/H`` digest through the write reservation
+  token; deleting/rebinding/changing that row, changing retained history, or creating the
+  target before final verification yields mismatch/no start;
+* after preparation/admission, mutate or delete a retained **non-maximum** historical
+  generation while keeping maximum generation ``N`` unchanged -> recomputed ``C/H`` differs
+  and final OP-BOUNDARY returns prepared-state mismatch with zero filesystem start;
+* after preparation/admission, insert or corrupt any prior-history row while preserving
+  the self reservation -> recomputed ``C/H`` differs (or integrity/uniqueness validation
+  fails) and final OP-BOUNDARY returns mismatch/no start;
 * required allowed/authorised audit fsync failure after durable reservation/authorisation ->
   no ``authorised -> running`` and no filesystem start; retained reservation remains
   conservative until Phase 4 recovery resolves it;
@@ -1676,10 +1752,12 @@ may "repair" uncertainty by repeating a fresh effect.
 Close all runtimes and reconstruct a fresh application. Verify:
 
 * prepared nonce/expiry/state binding remains enforceable;
-* a prepared write reconstructs exact high-water ``N`` plus the write reservation token;
-  if already admitted, the exact self ``reserved`` row at ``N+1`` plus durable prepared-
-  binding relation and history-excluding-self high-water ``N`` reproduces the same digest,
-  while foreign/missing/changed reservation state fails closed without in-memory state;
+* a prepared write reconstructs exact high-water ``N``, retained-history count ``C`` and
+  digest ``H``, plus the write reservation token; if already admitted, the exact self
+  ``reserved`` row at ``N+1`` plus durable prepared-binding relation and complete history
+  excluding self must recompute the same ``N/C/H`` and digest, while foreign/missing/
+  changed reservation or any changed/deleted/inserted prior generation fails closed
+  without in-memory state;
 * a retained cleanup preparation with ``created_target_observed_absent`` reconstructs its
   exact no-effect-neutral current-state digest after restart; continued absence may proceed
   through normal admission/final verification, while reappearance or any generation/owner
@@ -1698,8 +1776,9 @@ Close all runtimes and reconstruct a fresh application. Verify:
 * an ``authorised`` operation whose required allow/authorised audit never fsynced does not
   proceed to ``running`` or filesystem start after restart;
 * reserved/created/removed/abandoned artifact generations reconstruct correctly;
-* path-generation high-water survives restart and removed history does not block a later
-  safe generation;
+* path-generation high-water and the complete stable retained-history ``C/H`` survive
+  restart; removed/proven-abandoned history does not block a later safe generation and is
+  never silently rewritten to make an outstanding preparation pass;
 * exact published file is reconciled after lost start receipt;
 * stale private staging file never becomes a visible second artifact;
 * a cleanup claim whose operation is durably terminal ``known_no_effect`` and whose target
@@ -1752,12 +1831,16 @@ Phase 5 must preserve all of the following:
    recovery;
 #. prepared nonce and caller key converge on one operation and cannot create aliases that
    produce additional effects;
-#. write prepared/current-state binding normalizes only the reviewed absent/high-water
-   ``N`` -> exact consuming operation's self-owned ``reserved`` generation ``N+1``
-   transition. Pre-admission requires actual absence/no-live-row/high-water ``N``; final
-   verification requires the exact self row, exact prepared-binding relationship, unchanged
-   target and history-excluding-self high-water ``N``. Foreign/missing/changed reservation
-   state is never normalized;
+#. write prepared/current-state binding normalizes only the reviewed absent/complete-
+   history ``N/C/H`` -> exact consuming operation's self-owned ``reserved`` generation
+   ``N+1`` transition. Pre-admission requires actual absence/no-live-row and exact stable
+   prior-history ``N/C/H``; final verification requires the exact self row, exact prepared-
+   binding relationship, unchanged target, and complete history excluding self with exact
+   ``N/C/H``. Deleting, inserting, mutating, or corrupting any prior generation—including
+   a non-maximum row that leaves ``N`` unchanged—is never normalized;
+#. terminal historical artifact security/provenance fields used by the history commitment
+   are immutable to normal runtime code; a nonterminal or unverifiable prior row blocks
+   new write preparation rather than being omitted;
 #. cleanup preparation may bind a secure current observation that the exact retained
    ``created`` generation is absent, but that observation is never effect knowledge,
    removal provenance, or permission to mutate durable artifact state before independent
@@ -1771,8 +1854,8 @@ Phase 5 must preserve all of the following:
    ``NULL -> exact self`` active-claim transition through one deterministic semantic token;
    every phase separately verifies raw claim ownership/prepared-binding relation as
    applicable, and no unrelated state change can be hidden by those canonicalizations;
-#. live path uniqueness is state-aware; removed/proven-abandoned history is retained and
-   path generations prevent stale preparation resurrection;
+#. live path uniqueness is state-aware; ``UNIQUE(relative_path, path_generation)`` plus
+   retained history and path generations prevent stale preparation resurrection;
 #. a created artifact has at most one active cleanup claim; policy admission never steals
    it, proven-no-effect closure preserves the operation history, and uncertain or audit/
    recovery-incomplete cleanup retains the claim fail-closed;
@@ -1803,11 +1886,12 @@ Phase 5 must preserve all of the following:
 ---------------------------
 
 Structured diagnostics may include safe operation/artifact IDs, state/version, relative
-probe filename when classified normal-result by the test profile, path generation, digest
-prefixes, byte counts, policy/boundary result codes, and reconciliation outcome.
+probe filename when classified normal-result by the test profile, path generation,
+retained-history count/digest prefix, digest prefixes, byte counts, policy/boundary result
+codes, and reconciliation outcome.
 
-Never log raw content, execution nonce, caller key, credentials, raw controller assertion,
-or full host transcript.
+Never log raw retained-history rows, content, execution nonce, caller key, credentials, raw
+controller assertion, or full host transcript.
 
 ``verify_dev_pi``/local kernel diagnostics may report probe-root availability and
 filesystem capability checks without exposing protected data.
@@ -1850,10 +1934,14 @@ Implement Phase 5 in this order after the implementation/promotion prerequisites
 #. add protected probe-root configuration/systemd/setup verification;
 #. add domain normalization/path/maximum-effect types and tests;
 #. add migration ``0002`` with ``probe_operations``, state-aware live-path uniqueness,
-   path-generation history, state-aware active cleanup claims, successful-cleanup
-   provenance, and ``probe_artifacts`` constraints;
-#. implement preparation state binding -- including the exact write
-   absent/high-water-``N`` plus phase-stable self-reservation transition, the exact
+   ``UNIQUE(relative_path, path_generation)``, path-generation history, terminal-history
+   immutability rules, state-aware active cleanup claims, successful-cleanup provenance,
+   and ``probe_artifacts`` constraints;
+#. implement deterministic retained-history canonicalization for write preparation:
+   terminal/stable prior rows only, exact high-water ``N``, count ``C``, SHA-256 ``H`` over
+   the full ordered immutable provenance/state record set, and fail-closed integrity reads;
+#. implement preparation state binding -- including the exact write absent/complete-history
+   ``N/C/H`` plus phase-stable self-reservation transition, the exact
    ``created_target_observed_absent`` cleanup variant, the present-bound
    ``exact_prepared_identity_or_absent_no_start`` target transition, and the phase-stable
    ``unclaimed_then_exact_self`` cleanup-claim component -- and Phase 4 prepared-nonce
@@ -1863,15 +1951,17 @@ Implement Phase 5 in this order after the implementation/promotion prerequisites
    after first durable identity and before any policy evaluation;
 #. implement exact Bootstrap policy entries for write/cleanup;
 #. implement post-policy ``probe_operations`` plus exact-self write/active-cleanup
-   reservation, admission decision, pre-reservation write digest revalidation,
-   exact prepared-state revalidation for present/observed-absent cleanup variants, exact
-   NULL-to-self cleanup-claim CAS, and ``received -> authorised`` transaction;
+   reservation, admission decision, pre-reservation write digest revalidation over exact
+   ``N/C/H``, exact prepared-state revalidation for present/observed-absent cleanup
+   variants, exact NULL-to-self cleanup-claim CAS, and ``received -> authorised``
+   transaction;
 #. integrate mandatory fsynced allowed ``policy.decision`` + ``operation.authorised``
    evidence before any ``authorised -> running`` transition;
 #. implement secure root/staging adapter and filesystem capability verification;
 #. implement Phase 5 final boundary verifier including exact prepared-binding/self-write-
-   reservation canonical reconstruction, exact cleanup self-claim reconstruction, and the
-   present-bound/observed-absent pre-start already-missing no-effect branches;
+   reservation canonical reconstruction with complete history-excluding-self ``N/C/H``,
+   exact cleanup self-claim reconstruction, and the present-bound/observed-absent pre-start
+   already-missing no-effect branches;
 #. implement atomic create/no-overwrite effect and reconciler;
 #. implement exact cleanup effect, explicit adapter no-effect receipt, receipt-aware
    successful-removal closure, special no-effect absence closure, state-aware still-present
@@ -1879,7 +1969,8 @@ Implement Phase 5 in this order after the implementation/promotion prerequisites
 #. integrate both effects through Phase 4 global/per-operation gates, audit obligations,
    lifecycle, audit, and retained result semantics;
 #. bind existing MCP handlers without changing manifest/schema contracts;
-#. add unit/property/integration/fault/restart/systemd tests;
+#. add unit/property/integration/fault/restart/systemd tests, including non-maximum retained-
+   history mutation/deletion with unchanged maximum ``N`` -> mismatch/no start;
 #. extend real-Pi verification;
 #. run full candidate validation;
 #. promote ``compatibility-write-probe`` only through the evidence-selected host
@@ -1900,9 +1991,12 @@ A reviewer verifies:
 * host-confirmation behavior is never assumed or converted into server authority;
 * prepare is no-effect and binds exact input/current state/expiry/path generation;
 * write prepared/current-state binding survives only the expected exact-self reservation
-  transition from absent/high-water ``N`` to the exact consuming operation's ``reserved``
-  ``N+1`` row; final verification re-proves exact binding relation and history excluding
-  self remains ``N``;
+  transition from absent/complete prior-history ``N/C/H`` to the exact consuming
+  operation's ``reserved`` ``N+1`` row; final verification re-proves exact binding relation
+  and recomputes complete history excluding self to exact ``N/C/H``;
+* any deletion/insertion/mutation/corruption of a prior retained generation—including a
+  non-maximum row that leaves maximum ``N`` unchanged—changes the history commitment or
+  fails integrity validation and suppresses start; nonterminal history rejects preparation;
 * cleanup preparation can truthfully bind an exact retained ``created`` generation plus
   secure observed absence without requiring an on-disk identity and without creating
   effect knowledge, remover provenance, or an artifact-state transition;
@@ -1960,10 +2054,15 @@ This **planning PR** is accepted only when:
 #. dual nonce/key idempotency has one atomic minimal pre-policy one-operation identity
    design;
 #. write prepared/current-state digests remain exact while permitting only the one
-   deterministic absent/high-water ``N`` -> exact consuming operation's ``reserved``
-   generation ``N+1`` transition via a phase-stable semantic component; target presence,
-   foreign/missing reservation, changed history/generation, or binding mismatch fails
-   closed;
+   deterministic absent/complete-history ``N/C/H`` -> exact consuming operation's
+   ``reserved`` generation ``N+1`` transition via a phase-stable semantic component;
+   target presence, foreign/missing reservation, any changed prior-history ``C/H`` or
+   generation, or binding mismatch fails closed—even when a non-maximum mutation leaves
+   high-water ``N`` unchanged;
+#. retained historical artifact generations used by write preparation are terminal/stable,
+   canonically ordered and committed by exact count/hash; normal runtime cannot mutate the
+   commitment fields after terminalization, and unverifiable/nonterminal history blocks
+   preparation;
 #. cleanup preparation supports exact created-but-observed-absent current-state binding
    without requiring a nonexistent file identity and without mutating durable artifact or
    effect state;
@@ -1978,8 +2077,9 @@ This **planning PR** is accepted only when:
 #. required ``received`` audit precedes policy and required allowed/authorised audit
    precedes ``running``; failure of either gate cannot reach filesystem start;
 #. policy deny/pre-policy crash cannot strand a probe-path reservation;
-#. state-aware live-path uniqueness and monotonic retained path generations allow repeated
-   frozen-case attempts without deleting history or reviving stale preparations;
+#. state-aware live-path uniqueness, unique path generations, and retained complete-history
+   commitments allow repeated frozen-case attempts without deleting history or reviving
+   stale preparations;
 #. state-aware cleanup claiming permits a later independent cleanup only after the prior
    claim is durably proven no-effect and safely released/closed, while uncertain claims
    remain fail-closed and all cleanup-attempt history is retained;
@@ -2014,9 +2114,14 @@ The implementation may become live for the selected HOST profile only when:
 #. automated tests prove denied/interrupted pre-policy operations cannot reserve paths and
    repeated cleaned-up attempts advance retained path generations safely;
 #. automated tests prove exact-self write reservation canonicalization preserves the exact
-   prepared digest only across absent/high-water ``N`` -> consuming operation's reserved
-   ``N+1`` transition, while foreign/missing/changed reservations, target appearance,
-   changed retained history, or prepared-binding mismatch suppress final start;
+   prepared digest only across absent/complete-history ``N/C/H`` -> consuming operation's
+   reserved ``N+1`` transition, while foreign/missing/changed reservations, target
+   appearance, any deleted/inserted/mutated/corrupt prior generation, changed ``N/C/H``, or
+   prepared-binding mismatch suppresses final start;
+#. automated tests explicitly mutate/delete a non-maximum prior generation while maximum
+   ``N`` remains unchanged and prove the recomputed count/hash mismatches with zero
+   filesystem start; insertion/corruption and fresh-process reconstruction receive the same
+   fail-closed coverage;
 #. automated tests prove cleanup preparation can bind exact secure absence for a retained
    ``created`` generation without fabricating identity/effect knowledge, and any state
    change before admission invalidates that preparation fail closed;
