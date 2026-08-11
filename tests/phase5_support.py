@@ -70,6 +70,7 @@ async def phase5_kernel(
     repo_root: Path,
     *,
     entitled: bool = True,
+    max_file_bytes: int = 65_536,
 ) -> AsyncIterator[tuple[ComposedOperationKernel, Path, MutableTrustedTime]]:
     probe_root = root / "probe"
     (probe_root / ".staging").mkdir(parents=True)
@@ -102,7 +103,10 @@ async def phase5_kernel(
 
     kernel = await compose_operation_kernel(
         settings=BinnacleSettings(
-            probe_workspace=ProbeWorkspaceSettings(enabled=True),
+            probe_workspace=ProbeWorkspaceSettings(
+                enabled=True,
+                max_file_bytes=max_file_bytes,
+            ),
         ),
         project_root=repo_root,
         paths=paths,

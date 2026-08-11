@@ -137,6 +137,33 @@ async def test_preparation_rejects_unsafe_shapes_and_existing_target(
 
 
 @pytest.mark.anyio
+async def test_preparation_rejects_write_above_configured_byte_limit(
+    tmp_path: Path, repo_root: Path
+) -> None:
+    async with phase5_kernel(tmp_path, repo_root, max_file_bytes=4) as (
+        kernel,
+        _probe_root,
+        _time,
+    ):
+        use_cases = kernel.probe_workspace
+        assert use_cases is not None
+
+        result = await use_cases.prepare(
+            ProbeWorkspacePrepareRequest(
+                ProbeOperationKind.WRITE,
+                "probe.txt",
+                CONTENT_SHA256,
+                len(CONTENT),
+            ),
+            controller_context(),
+        )
+
+        assert isinstance(result, ExecutionErrorEnvelope)
+        assert result.error.code == "probe_preparation_rejected"
+        assert "configured maximum" in result.error.message
+
+
+@pytest.mark.anyio
 async def test_cleanup_missing_before_start_is_known_no_effect_and_retained(
     tmp_path: Path,
     repo_root: Path,

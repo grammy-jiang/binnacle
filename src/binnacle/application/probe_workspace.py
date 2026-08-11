@@ -492,6 +492,12 @@ class ProbeWorkspaceService:
         owner: OperationOwner,
     ) -> ProbePreparation:
         normalized = _validated_prepare_request(request)
+        if (
+            normalized.operation is ProbeOperationKind.WRITE
+            and normalized.byte_count is not None
+            and normalized.byte_count > self._maximum_file_bytes
+        ):
+            raise ProbeWorkspaceError("write preparation byte count exceeds configured maximum")
         state, root = await self._state_verifier.preparation_state(normalized, owner)
         if root.digest_sha256 != self._root_identity.digest_sha256:
             raise ProbeWorkspaceError("probe root changed since capability composition")
