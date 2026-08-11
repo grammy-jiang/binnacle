@@ -54,6 +54,7 @@ the exact clean candidate:
 
    cd /srv/binnacle-dev/repo
    git status --short
+   git rev-parse --verify HEAD
    uv sync --frozen --python 3.13
    uv run python scripts/compile_mcp_registry.py --check
    uv run pytest
@@ -82,6 +83,20 @@ Add ``--enable`` to ``apply`` only when the protected configuration is ready.  T
 script creates the two Binnacle groups, the non-root service user, protected directories,
 and the reviewed systemd unit.  It does not install packages, pull/reset Git, create
 secrets, configure a firewall or tunnel, or start a ChatGPT evaluation.
+
+After setup creates ``binnacle-dev``, grant that group read/traverse access to the exact
+checkout and execute access only where an executable bit already exists.  Remove group
+write rather than making the service a development user:
+
+.. code-block:: console
+
+   sudo chgrp --recursive binnacle-dev /srv/binnacle-dev/repo
+   sudo chmod --recursive g+rX,g-w /srv/binnacle-dev/repo
+
+Repeat these two commands after a checkout update or ``uv sync`` creates new paths.  The
+checkout owner retains normal owner permissions; the ``binnacle`` service receives only
+the read/traverse/execute access needed to import the source and start the locked virtual
+environment.  Never grant ``binnacle`` or ``binnacle-dev`` source write access.
 
 Protected application configuration
 -----------------------------------
@@ -139,9 +154,17 @@ Run the read-only verifier after the selected authentication adapter is deployed
 
 .. code-block:: console
 
-   uv run python scripts/verify_dev_pi.py \
+   sudo -u binnacle -- \
+     /srv/binnacle-dev/repo/.venv/bin/python \
+     /srv/binnacle-dev/repo/scripts/verify_dev_pi.py \
      --config /etc/binnacle/dev.toml \
-     --controller-profile /etc/binnacle/controller-profile.toml
+     --controller-profile /etc/binnacle/controller-profile.toml \
+     --expected-commit <full-reviewed-commit-sha>
+
+Running under ``binnacle`` lets the verifier read ``root:binnacle`` configuration while
+proving the service's real checkout access.  It does not execute the mutable checkout as
+root.  Supply the complete reviewed SHA printed by ``git rev-parse --verify HEAD``; an
+abbreviated SHA is rejected.
 
 A non-zero result is expected while the live profile, authenticated five-Tool probe, or
 tunnel identity remains blocked.  Do not relabel a blocked check as passed.

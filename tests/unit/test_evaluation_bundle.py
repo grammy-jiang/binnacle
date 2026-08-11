@@ -182,6 +182,66 @@ def test_promoted_case_must_meet_frozen_attempt_threshold(
         verify_evaluation_manifest(manifest, workspace=tmp_path, repo_root=repo_root)
 
 
+def test_observed_limited_case_must_meet_frozen_pass_rate(
+    repo_root: Path,
+    tmp_path: Path,
+) -> None:
+    manifest = _complete_manifest(repo_root, tmp_path)
+    result = next(
+        item
+        for item in manifest["case_results"]
+        if item["case_id"] == "model-tool-selection-binnacle-probe"
+    )
+    result.update(
+        {
+            "attempts_completed": 10,
+            "passes": 0,
+            "failures": 10,
+            "status": "observed-limited",
+        }
+    )
+
+    with pytest.raises(EvaluationVerificationError, match="passing rate"):
+        verify_evaluation_manifest(manifest, workspace=tmp_path, repo_root=repo_root)
+
+
+def test_multi_case_conclusion_cannot_promote_unimplemented_cases(
+    repo_root: Path,
+    tmp_path: Path,
+) -> None:
+    manifest = _complete_manifest(repo_root, tmp_path)
+    for result in manifest["case_results"]:
+        if result["axis"] == "retry_safety":
+            result["status"] = "server-not-implemented"
+    conclusion = next(item for item in manifest["conclusions"] if item["axis"] == "retry_safety")
+    conclusion["status"] = "observed-supported"
+
+    with pytest.raises(EvaluationVerificationError, match="conclusion contradicts"):
+        verify_evaluation_manifest(manifest, workspace=tmp_path, repo_root=repo_root)
+
+
+def test_mrtr_not_applicable_requires_legacy_negotiation(
+    repo_root: Path,
+    tmp_path: Path,
+) -> None:
+    manifest = _complete_manifest(repo_root, tmp_path)
+    result = next(
+        item for item in manifest["case_results"] if item["case_id"] == "mrtr-elicitation-probe"
+    )
+    result["status"] = "not-applicable"
+    conclusion = next(
+        item for item in manifest["conclusions"] if item["axis"] == "mrtr_elicitation"
+    )
+    conclusion["status"] = "not-applicable"
+    manifest["profile"]["negotiated_revision"] = "2026-07-28"
+
+    with pytest.raises(EvaluationVerificationError, match="frozen oracle"):
+        verify_evaluation_manifest(manifest, workspace=tmp_path, repo_root=repo_root)
+
+    manifest["profile"]["negotiated_revision"] = "2025-11-25"
+    verify_evaluation_manifest(manifest, workspace=tmp_path, repo_root=repo_root)
+
+
 def test_every_frozen_case_and_exact_evidence_digest_are_required(
     repo_root: Path,
     tmp_path: Path,

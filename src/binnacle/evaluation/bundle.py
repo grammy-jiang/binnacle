@@ -31,6 +31,7 @@ FINAL_MANIFEST_NAME = "evaluation-manifest.json"
 BUNDLE_NAME = "evaluation-bundle.tar.gz"
 RECEIPT_NAME = "evaluation-bundle.receipt.json"
 _PROMOTED_STATUSES = frozenset({"observed-supported", "observed-limited", "host-policy-blocked"})
+_PASS_RATE_STATUSES = frozenset({"observed-supported", "observed-limited"})
 _PENDING_MARKERS = frozenset({"pending", "unknown", "tbd", "unobserved"})
 _MAX_MANIFEST_BYTES = 1_048_576
 _REQUIRED_LIVE_CASE_STATUSES = {
@@ -158,7 +159,14 @@ def verify_evaluation_manifest(
             )
         _verify_case_attempts(result, frozen_case.risk_class, profile, case_id)
         result_statuses[case_id] = _required_string(result, "status")
-        if not frozen_case.allows_status(result_statuses[case_id]):
+        if not frozen_case.status_matches_profile(
+            result_statuses[case_id],
+            negotiated_revision=_optional_string(manifest_profile, "negotiated_revision"),
+            intended_revision_set=_required_string_set(
+                manifest_profile,
+                "intended_revision_set",
+            ),
+        ):
             raise EvaluationVerificationError(
                 f"case status is not permitted by its frozen oracle: {case_id}"
             )
@@ -192,10 +200,8 @@ def verify_evaluation_manifest(
                 f"conclusion does not cover the exact cases for axis: {axis}"
             )
         case_statuses = {result_statuses[case_id] for case_id in conclusion_case_ids}
-        if require_review and len(case_statuses) == 1 and status != next(iter(case_statuses)):
-            raise EvaluationVerificationError(
-                f"single-case conclusion contradicts its case result: {axis}"
-            )
+        if require_review:
+            _verify_conclusion_status(axis, status, case_statuses)
     if conclusion_axes != set(axis_cases):
         raise EvaluationVerificationError("conclusions must cover every frozen case axis")
 
@@ -369,7 +375,7 @@ def _verify_case_attempts(
     profile.requires_status(status)
     if status in _PROMOTED_STATUSES and completed < required:
         raise EvaluationVerificationError(f"promoted case lacks minimum attempts: {case_id}")
-    if status == "observed-supported" and (
+    if status in _PASS_RATE_STATUSES and (
         completed == 0 or passes / completed < risk.target_pass_rate
     ):
         raise EvaluationVerificationError(f"passing rate is below frozen target: {case_id}")
@@ -377,6 +383,22 @@ def _verify_case_attempts(
         raise EvaluationVerificationError(f"blocked case lacks repeated evidence: {case_id}")
     if status == "test-failed" and failures == 0:
         raise EvaluationVerificationError(f"failed case has no failed attempt: {case_id}")
+
+
+def _verify_conclusion_status(axis: str, status: str, case_statuses: set[str]) -> None:
+    """Require an axis conclusion to be a truthful aggregate of its case results."""
+
+    if len(case_statuses) == 1:
+        expected = next(iter(case_statuses))
+        if status == expected:
+            return
+    elif (
+        status == "observed-limited"
+        and case_statuses <= _PASS_RATE_STATUSES
+        and "observed-limited" in case_statuses
+    ) or status not in _PROMOTED_STATUSES:
+        return
+    raise EvaluationVerificationError(f"conclusion contradicts its case results: {axis}")
 
 
 def _verify_validity(
@@ -467,6 +489,26 @@ def _required_string(values: Mapping[str, Any], name: str) -> str:
     if not isinstance(value, str) or not value:
         raise EvaluationVerificationError(f"{name} must be a non-empty string")
     return value
+
+
+def _optional_string(values: Mapping[str, Any], name: str) -> str | None:
+    value = values.get(name)
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value:
+        raise EvaluationVerificationError(f"{name} must be null or a non-empty string")
+    return value
+
+
+def _required_string_set(values: Mapping[str, Any], name: str) -> frozenset[str]:
+    value = values.get(name)
+    if (
+        not isinstance(value, list)
+        or not value
+        or any(not isinstance(item, str) or not item for item in value)
+    ):
+        raise EvaluationVerificationError(f"{name} must be a non-empty string array")
+    return frozenset(cast(list[str], value))
 
 
 def _required_integer(values: Mapping[str, Any], name: str) -> int:

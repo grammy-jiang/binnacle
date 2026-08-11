@@ -42,6 +42,13 @@ _SECRET_PATTERNS = (
             r'["\']\s*:\s*["\'][^"\']+["\']'
         ),
     ),
+    (
+        "token-form-field",
+        re.compile(
+            r"(?im)(?:^|[?&;])\s*(?:access_token|refresh_token|authorization_code)"
+            r"\s*=\s*[^&;\s]+"
+        ),
+    ),
     ("raw-machine-id", re.compile(r"(?i)machine[-_ ]?id\s*[:=]\s*[a-f0-9]{32}\b")),
 )
 

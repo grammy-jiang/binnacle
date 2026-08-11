@@ -182,12 +182,21 @@ def _check_identity_compatibility() -> Check:
         user = pwd.getpwnam(SERVICE_USER)
     except KeyError:
         user = None
+    if (
+        service_group is not None
+        and development_group is not None
+        and service_group.gr_gid == development_group.gr_gid
+    ):
+        return Check(
+            "identities",
+            "fail",
+            "binnacle and binnacle-dev must have distinct group IDs",
+        )
     if user is not None:
         if user.pw_uid == 0:
             return Check("identities", "fail", "binnacle user may not be root")
         if service_group is None or user.pw_gid != service_group.gr_gid:
             return Check("identities", "fail", "binnacle primary group is incompatible")
-    del development_group
     return Check("identities", "pass", "existing identities are compatible or absent")
 
 

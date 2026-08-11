@@ -25,6 +25,8 @@ class FrozenEvaluationCase:
     axis: str
     risk_class: str
     oracle_keys: frozenset[str]
+    not_applicable_when: frozenset[str]
+    target_revision_required: str | None
 
     def allows_status(self, status: str) -> bool:
         """Apply this case's frozen oracle plus Phase 3 probe-missing rules."""
@@ -50,6 +52,28 @@ class FrozenEvaluationCase:
                 "concurrency_race_reconnect_instability",
             }
         return False
+
+    def status_matches_profile(
+        self,
+        status: str,
+        *,
+        negotiated_revision: str | None,
+        intended_revision_set: frozenset[str],
+    ) -> bool:
+        """Enforce oracle predicates that are decidable from the profile snapshot."""
+
+        if not self.allows_status(status):
+            return False
+        if status != "not-applicable":
+            return True
+        if "negotiated_revision_is_legacy" not in self.not_applicable_when:
+            return True
+        return (
+            self.target_revision_required is not None
+            and negotiated_revision is not None
+            and negotiated_revision in intended_revision_set
+            and negotiated_revision != self.target_revision_required
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -108,6 +132,14 @@ def load_evaluation_cases(
         oracle = _mapping(case_values.get("oracle"), f"oracle for {case_id}")
         if not oracle:
             raise EvaluationSourceError(f"evaluation case {case_id} has no oracle")
+        setup = _mapping(case_values.get("setup"), f"setup for {case_id}")
+        target_revision = setup.get("target_revision_required")
+        if target_revision is not None and (
+            not isinstance(target_revision, str) or not target_revision
+        ):
+            raise EvaluationSourceError(
+                f"target_revision_required for {case_id} must be a non-empty string"
+            )
         if case_id in cases:
             raise EvaluationSourceError(f"duplicate evaluation case: {case_id}")
         cases[case_id] = FrozenEvaluationCase(
@@ -115,6 +147,11 @@ def load_evaluation_cases(
             axis=axis,
             risk_class=risk_class,
             oracle_keys=frozenset(oracle),
+            not_applicable_when=_condition_set(
+                oracle.get("not_applicable_when"),
+                f"not_applicable_when for {case_id}",
+            ),
+            target_revision_required=target_revision,
         )
     return FrozenCaseSet(
         manifest_id=_string(values, "case_manifest_id"),
@@ -134,6 +171,16 @@ def _string(values: Mapping[str, Any], name: str) -> str:
     if not isinstance(value, str) or not value or len(value) > 160:
         raise EvaluationSourceError(f"{name} must be a bounded non-empty string")
     return value
+
+
+def _condition_set(value: object, name: str) -> frozenset[str]:
+    if value is None:
+        return frozenset()
+    if not isinstance(value, list) or any(
+        not isinstance(item, str) or not item or len(item) > 160 for item in value
+    ):
+        raise EvaluationSourceError(f"{name} must be an array of bounded identifiers")
+    return frozenset(cast(list[str], value))
 
 
 __all__ = ["FrozenCaseSet", "FrozenEvaluationCase", "load_evaluation_cases"]

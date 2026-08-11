@@ -19,6 +19,10 @@ from binnacle.evaluation.redaction import (
         (b"Cookie: session=private-value", "cookie-header"),
         (b"-----BEGIN PRIVATE KEY-----", "private-key"),
         (b'{"refresh_token":"private-value"}', "token-field"),
+        (b"refresh_token=private-value", "token-form-field"),
+        (b"  refresh_token=private-value", "token-form-field"),
+        (b"grant_type=authorization_code&access_token=private-value", "token-form-field"),
+        (b"https://example.test/callback?authorization_code=private-value", "token-form-field"),
         (b"machine-id=0123456789abcdef0123456789abcdef", "raw-machine-id"),
     ],
 )

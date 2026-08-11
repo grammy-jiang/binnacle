@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import MutableMapping
+from collections.abc import Callable, MutableMapping
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -120,6 +120,9 @@ async def _exercise(
     reject: bool = False,
     profile: ControllerBoundaryProfile | None = None,
     extraction: CredentialExtraction | None = None,
+    trusted_forwarded_headers: frozenset[str] = frozenset(),
+    trusted_forwarded_peer: Callable[[MutableMapping[str, Any]], bool] | None = None,
+    client: tuple[str, int] = ("127.0.0.1", 12345),
 ) -> tuple[RecordingApp, FixtureAuthenticator, list[ASGIMessage]]:
     downstream = RecordingApp()
     authenticator = FixtureAuthenticator(context or _context(), reject=reject)
@@ -130,6 +133,8 @@ async def _exercise(
         extraction=extraction or CredentialExtraction(authorization_scheme="Bearer"),
         authentication_challenge='Bearer realm="binnacle"',
         insufficient_scope_challenge=('Bearer error="insufficient_scope", scope="mcp:read"'),
+        trusted_forwarded_headers=trusted_forwarded_headers,
+        trusted_forwarded_peer=trusted_forwarded_peer,
     )
     sent: list[ASGIMessage] = []
 
@@ -145,7 +150,7 @@ async def _exercise(
             "method": "POST",
             "path": path,
             "headers": headers,
-            "client": ("127.0.0.1", 12345),
+            "client": client,
         },
         receive,
         send,
@@ -278,11 +283,54 @@ async def test_untrusted_returned_context_fails_closed(
 
 
 @pytest.mark.anyio
+async def test_controller_identity_must_match_validated_identity_tuple() -> None:
+    context = replace(_context(), subject="different-controller")
+
+    downstream, _authenticator, sent = await _exercise(
+        headers=_valid_headers(),
+        context=context,
+    )
+
+    assert sent[0]["status"] == 401
+    assert downstream.calls == 0
+
+
+@pytest.mark.anyio
+async def test_forwarded_identity_requires_bound_peer_and_is_consumed() -> None:
+    headers = [(b"host", b"pi.example.test"), (b"x-forwarded-user", b"assertion")]
+    extraction = CredentialExtraction(assertion_header="x-forwarded-user")
+
+    def peer_validator(scope: MutableMapping[str, Any]) -> bool:
+        return scope.get("client") == ("127.0.0.1", 12345)
+
+    rejected, _authenticator, rejected_sent = await _exercise(
+        headers=headers,
+        extraction=extraction,
+        trusted_forwarded_headers=frozenset({"x-forwarded-user"}),
+        trusted_forwarded_peer=peer_validator,
+        client=("127.0.0.2", 12345),
+    )
+    accepted, authenticator, accepted_sent = await _exercise(
+        headers=headers,
+        extraction=extraction,
+        trusted_forwarded_headers=frozenset({"x-forwarded-user"}),
+        trusted_forwarded_peer=peer_validator,
+    )
+
+    assert rejected_sent[0]["status"] == 403
+    assert rejected.calls == 0
+    assert accepted_sent[0]["status"] == 204
+    assert authenticator.requests[0].forwarded_assertion_bytes == b"assertion"
+    assert all(name != b"x-forwarded-user" for name, _value in accepted.headers)
+
+
+@pytest.mark.anyio
 async def test_selected_assertion_header_is_consumed_without_forwarding() -> None:
     headers = [(b"host", b"pi.example.test"), (b"x-binnacle-assertion", b"assertion")]
     downstream, authenticator, sent = await _exercise(
         headers=headers,
         extraction=CredentialExtraction(assertion_header="x-binnacle-assertion"),
+        trusted_forwarded_peer=lambda _scope: True,
     )
 
     assert sent[0]["status"] == 204
@@ -334,6 +382,14 @@ def test_credential_source_configuration_is_exactly_one_and_canonical(
         ({"max_header_bytes": 100}, "max_header_bytes"),
         ({"max_credential_bytes": 100}, "max_credential_bytes"),
         ({"trusted_forwarded_headers": frozenset({"x-invented"})}, "unknown header"),
+        (
+            {"trusted_forwarded_headers": frozenset({"x-forwarded-user"})},
+            "explicit peer validator",
+        ),
+        (
+            {"extraction": CredentialExtraction(assertion_header="x-binnacle-assertion")},
+            "explicit peer validator",
+        ),
     ],
 )
 def test_middleware_configuration_limits_are_bounded(

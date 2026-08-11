@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import grp
+import os
+import pwd
 from pathlib import Path
 
 import pytest
@@ -75,10 +78,34 @@ def test_setup_refuses_mutation_when_any_preflight_fails(
     assert invoked is False
 
 
+def test_setup_rejects_service_and_development_group_gid_alias(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    groups = {
+        "binnacle": grp.struct_group(("binnacle", "x", 1200, [])),
+        "binnacle-dev": grp.struct_group(("binnacle-dev", "x", 1200, [])),
+    }
+
+    def group_by_name(name: str) -> grp.struct_group:
+        return groups[name]
+
+    def missing_user(_name: str) -> pwd.struct_passwd:
+        raise KeyError
+
+    monkeypatch.setattr(grp, "getgrnam", group_by_name)
+    monkeypatch.setattr(pwd, "getpwnam", missing_user)
+
+    check = setup_dev_pi._check_identity_compatibility()
+
+    assert check.status == "fail"
+    assert "distinct group IDs" in check.summary
+
+
 def test_verifier_keeps_external_live_gates_explicitly_blocked(tmp_path: Path) -> None:
     checks = verify_dev_pi.verify_deployment(
         config_path=tmp_path / "missing-dev.toml",
         controller_profile_path=tmp_path / "missing-controller.toml",
+        expected_commit="0" * 40,
         repo=tmp_path / "missing-repo",
     )
     by_name = {check.name: check for check in checks}
@@ -87,6 +114,59 @@ def test_verifier_keeps_external_live_gates_explicitly_blocked(tmp_path: Path) -
     assert by_name["selected-auth-profile"].status == "blocked"
     assert by_name["authenticated-catalogue"].status == "blocked"
     assert by_name["tunnel-identity"].status == "blocked"
+
+
+def test_verifier_rejects_a_clean_but_unreviewed_commit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    (tmp_path / ".git").mkdir()
+    monkeypatch.setattr(verify_dev_pi, "CANONICAL_REPO", tmp_path)
+
+    def git_output(command: list[str], *, cwd: Path | None = None) -> str:
+        del cwd
+        return "a" * 40 if "rev-parse" in command else ""
+
+    monkeypatch.setattr(verify_dev_pi, "_run_bounded", git_output)
+
+    check = verify_dev_pi._repository_check(tmp_path, "b" * 40)
+
+    assert check.status == "fail"
+    assert "expected reviewed commit" in check.summary
+
+
+def test_verifier_requires_service_identity_read_only_checkout_access(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service_user = pwd.struct_passwd(
+        ("binnacle", "x", os.geteuid(), os.getegid(), "", "/nonexistent", "/usr/sbin/nologin")
+    )
+    monkeypatch.setattr(pwd, "getpwnam", lambda _name: service_user)
+
+    def read_only_access(_path: Path, mode: int) -> bool:
+        return mode != os.W_OK
+
+    monkeypatch.setattr(os, "access", read_only_access)
+
+    check = verify_dev_pi._checkout_access_check(tmp_path)
+
+    assert check.status == "pass"
+    assert "without source write access" in check.summary
+
+
+def test_verifier_rejects_broader_protected_directory_mode(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    tmp_path.chmod(0o770)
+    expected_group = grp.struct_group(("binnacle", "x", tmp_path.stat().st_gid, []))
+    monkeypatch.setattr(grp, "getgrnam", lambda _name: expected_group)
+
+    check = verify_dev_pi._protected_directory_check(tmp_path, "protected-config-directory")
+
+    assert check.status == "fail"
+    assert "root:binnacle 0750" in check.summary
 
 
 def test_verifier_reads_only_bounded_non_secret_server_fields(tmp_path: Path) -> None:

@@ -14,7 +14,7 @@ from binnacle.ports.controller_auth import (
     ControllerAuthenticator,
     TransportAuthenticationInput,
 )
-from binnacle.security.controller import controller_context
+from binnacle.security.controller import controller_context, derive_controller_identity
 from binnacle.security.profile import ControllerBoundaryProfile
 
 ASGIMessage: TypeAlias = MutableMapping[str, Any]
@@ -24,6 +24,7 @@ ASGIApp: TypeAlias = Callable[
     [MutableMapping[str, Any], ASGIReceive, ASGISend],
     Awaitable[None],
 ]
+ForwardedPeerValidator: TypeAlias = Callable[[MutableMapping[str, Any]], bool]
 
 _SAFE_ERROR_CODE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 _SAFE_CONTROLLER_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,159}$")
@@ -87,6 +88,7 @@ class ControllerAuthenticationMiddleware:
         authentication_challenge: str,
         insufficient_scope_challenge: str | None = None,
         trusted_forwarded_headers: frozenset[str] = frozenset(),
+        trusted_forwarded_peer: ForwardedPeerValidator | None = None,
         max_header_count: int = 64,
         max_header_bytes: int = 32_768,
         max_credential_bytes: int = 8_192,
@@ -105,6 +107,10 @@ class ControllerAuthenticationMiddleware:
             raise ValueError("max_credential_bytes is outside the reviewed range")
         if not trusted_forwarded_headers <= _FORWARDED_HEADERS:
             raise ValueError("trusted_forwarded_headers contains an unknown header")
+        if (
+            trusted_forwarded_headers or extraction.assertion_header is not None
+        ) and trusted_forwarded_peer is None:
+            raise ValueError("forwarded assertions and headers require an explicit peer validator")
         self.app = app
         self.profile = profile
         self.authenticator = authenticator
@@ -112,6 +118,7 @@ class ControllerAuthenticationMiddleware:
         self.authentication_challenge = authentication_challenge
         self.insufficient_scope_challenge = insufficient_scope_challenge
         self.trusted_forwarded_headers = trusted_forwarded_headers
+        self.trusted_forwarded_peer = trusted_forwarded_peer
         self.max_header_count = max_header_count
         self.max_header_bytes = max_header_bytes
         self.max_credential_bytes = max_credential_bytes
@@ -138,7 +145,7 @@ class ControllerAuthenticationMiddleware:
         if not self._origin_allowed(origin, headers):
             await _send_error(send, status=403, code="origin_rejected")
             return
-        if self._has_untrusted_forwarded_header(headers):
+        if self._has_untrusted_forwarded_header(headers, scope):
             await _send_error(send, status=403, code="forwarded_header_rejected")
             return
 
@@ -188,7 +195,7 @@ class ControllerAuthenticationMiddleware:
             return
 
         sanitized_scope = dict(scope)
-        sensitive_names = {"authorization", "cookie"}
+        sensitive_names = {"authorization", "cookie", *_FORWARDED_HEADERS}
         if self.extraction.assertion_header is not None:
             sensitive_names.add(self.extraction.assertion_header)
         sanitized_scope["headers"] = [
@@ -260,14 +267,26 @@ class ControllerAuthenticationMiddleware:
             return origin_count == 0 and self.profile.allow_missing_origin
         return origin.casefold() in self.profile.allowed_origins
 
-    def _has_untrusted_forwarded_header(self, headers: list[tuple[str, bytes]]) -> bool:
+    def _has_untrusted_forwarded_header(
+        self,
+        headers: list[tuple[str, bytes]],
+        scope: MutableMapping[str, Any],
+    ) -> bool:
         assertion_header = self.extraction.assertion_header
-        return any(
-            name in _FORWARDED_HEADERS
-            and name not in self.trusted_forwarded_headers
-            and name != assertion_header
+        forwarded_names = {
+            name
             for name, _value in headers
+            if name in _FORWARDED_HEADERS or name == assertion_header
+        }
+        if not forwarded_names:
+            return False
+        permitted = self.trusted_forwarded_headers | (
+            frozenset({assertion_header}) if assertion_header is not None else frozenset()
         )
+        if not forwarded_names <= permitted:
+            return True
+        validator = self.trusted_forwarded_peer
+        return validator is None or not validator(scope)
 
     def _extract_credential(
         self,
@@ -301,8 +320,18 @@ class ControllerAuthenticationMiddleware:
     def _context_rejection(self, context: ControllerSecurityContext) -> str | None:
         now = datetime.now(UTC)
         skew = timedelta(seconds=self.profile.clock_skew_seconds)
+        expected_identity = derive_controller_identity(
+            profile_id=context.identity.profile_id,
+            issuer=context.issuer,
+            subject=context.subject,
+            canonical_audience=context.canonical_audience,
+            authorized_client=context.authorized_client,
+            owner_boundary=context.owner_boundary,
+            credential_binding_id=context.credential_binding_id,
+        )
         if (
             context.identity.profile_id != self.profile.profile_id
+            or context.identity != expected_identity
             or context.profile_version != self.profile.profile_version
             or context.canonical_audience != self.profile.canonical_resource_uri
             or _SAFE_CONTROLLER_ID.fullmatch(context.identity.controller_id) is None
@@ -393,4 +422,8 @@ async def _send_error(
     await send({"type": "http.response.body", "body": body})
 
 
-__all__ = ["ControllerAuthenticationMiddleware", "CredentialExtraction"]
+__all__ = [
+    "ControllerAuthenticationMiddleware",
+    "CredentialExtraction",
+    "ForwardedPeerValidator",
+]

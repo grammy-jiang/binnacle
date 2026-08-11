@@ -1000,9 +1000,11 @@ Provide a read-only deployment verifier:
 
 .. code-block:: console
 
-   uv run python scripts/verify_dev_pi.py \
+   sudo -u binnacle -- /srv/binnacle-dev/repo/.venv/bin/python \
+     /srv/binnacle-dev/repo/scripts/verify_dev_pi.py \
      --config /etc/binnacle/dev.toml \
-     --controller-profile /etc/binnacle/controller-profile.toml
+     --controller-profile /etc/binnacle/controller-profile.toml \
+     --expected-commit <full-reviewed-commit-sha>
 
 It emits human/JSON output and checks:
 
@@ -1974,7 +1976,11 @@ Typical implementation run uses reviewed commands equivalent to:
    sudo install -o root -g binnacle -m 0640 <reviewed-controller-profile> /etc/binnacle/controller-profile.toml
    sudo systemctl daemon-reload
    sudo systemctl start binnacle-dev.service
-   uv run python scripts/verify_dev_pi.py --config /etc/binnacle/dev.toml --controller-profile /etc/binnacle/controller-profile.toml
+   sudo -u binnacle -- /srv/binnacle-dev/repo/.venv/bin/python \
+     /srv/binnacle-dev/repo/scripts/verify_dev_pi.py \
+     --config /etc/binnacle/dev.toml \
+     --controller-profile /etc/binnacle/controller-profile.toml \
+     --expected-commit <full-reviewed-commit-sha>
 
 Tunnel/app configuration follows the actual supported product workflow and is recorded as
 evidence rather than hard-coded as speculative CLI syntax.

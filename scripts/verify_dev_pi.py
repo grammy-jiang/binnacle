@@ -10,6 +10,7 @@ import json
 import os
 import platform
 import pwd
+import re
 import socket
 import stat
 import subprocess
@@ -22,6 +23,7 @@ from pathlib import Path
 SERVICE_NAME = "binnacle-dev.service"
 CANONICAL_REPO = Path("/srv/binnacle-dev/repo")
 _MAX_CONFIG_BYTES = 65_536
+_FULL_GIT_SHA = re.compile(r"[0-9a-f]{40}")
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,6 +39,7 @@ def verify_deployment(
     *,
     config_path: Path,
     controller_profile_path: Path,
+    expected_commit: str,
     repo: Path = CANONICAL_REPO,
 ) -> tuple[VerificationCheck, ...]:
     """Run finite read-only checks without rendering protected configuration values."""
@@ -45,10 +48,20 @@ def verify_deployment(
         _architecture_check(),
         _python_check(),
         _systemd_profile_check(),
-        _repository_check(repo),
+        _repository_check(repo, expected_commit),
+        _checkout_access_check(repo),
+        _protected_directory_check(config_path.parent, "protected-config-directory"),
         _protected_file_check(config_path, "application-config"),
         _protected_file_check(controller_profile_path, "controller-profile"),
     ]
+    if controller_profile_path.parent != config_path.parent:
+        checks.append(
+            VerificationCheck(
+                "controller-profile-directory",
+                "fail",
+                "protected configuration files must share one reviewed directory",
+            )
+        )
     server = _safe_server_settings(config_path)
     if server is None:
         checks.append(
@@ -103,7 +116,13 @@ def _systemd_profile_check() -> VerificationCheck:
     return VerificationCheck("systemd", "pass", "running systemd manager observed")
 
 
-def _repository_check(repo: Path) -> VerificationCheck:
+def _repository_check(repo: Path, expected_commit: str) -> VerificationCheck:
+    if _FULL_GIT_SHA.fullmatch(expected_commit) is None:
+        return VerificationCheck(
+            "repository",
+            "fail",
+            "expected commit must be a full lowercase 40-character Git SHA",
+        )
     try:
         canonical = repo.resolve(strict=True)
     except OSError:
@@ -111,16 +130,119 @@ def _repository_check(repo: Path) -> VerificationCheck:
     if canonical != CANONICAL_REPO or not (canonical / ".git").exists():
         return VerificationCheck("repository", "fail", "canonical Git checkout not observed")
     try:
-        commit = _run_bounded(["git", "rev-parse", "--verify", "HEAD"], cwd=canonical)
-        dirty = bool(_run_bounded(["git", "status", "--porcelain"], cwd=canonical))
+        safe_directory = f"safe.directory={canonical}"
+        commit = _run_bounded(
+            ["git", "-c", safe_directory, "rev-parse", "--verify", "HEAD"],
+            cwd=canonical,
+        )
+        dirty = bool(
+            _run_bounded(
+                ["git", "-c", safe_directory, "status", "--porcelain"],
+                cwd=canonical,
+            )
+        )
     except (OSError, subprocess.CalledProcessError):
         return VerificationCheck("repository", "fail", "Git identity could not be read")
+    if commit != expected_commit:
+        return VerificationCheck(
+            "repository",
+            "fail",
+            "checkout HEAD does not match the expected reviewed commit",
+        )
     state = "dirty" if dirty else "clean"
     return VerificationCheck(
         "repository",
         "pass" if not dirty else "fail",
         f"{state} checkout at {commit[:12]}",
     )
+
+
+def _checkout_access_check(repo: Path) -> VerificationCheck:
+    try:
+        service_user = pwd.getpwnam("binnacle")
+        canonical = repo.resolve(strict=True)
+    except (KeyError, OSError):
+        return VerificationCheck(
+            "checkout-access",
+            "fail",
+            "service identity or source checkout is missing",
+        )
+    if os.geteuid() != service_user.pw_uid:
+        return VerificationCheck(
+            "checkout-access",
+            "fail",
+            "run the verifier as the unprivileged binnacle service identity",
+        )
+
+    traverse_paths = (
+        canonical,
+        canonical / "src",
+        canonical / "src/binnacle",
+        canonical / ".venv",
+        canonical / ".venv/bin",
+    )
+    readable_paths = (
+        canonical / "pyproject.toml",
+        canonical / "uv.lock",
+        canonical / "src/binnacle/__init__.py",
+    )
+    entry_point = canonical / ".venv/bin/binnacle"
+    if any(not os.access(path, os.R_OK | os.X_OK) for path in traverse_paths):
+        return VerificationCheck(
+            "checkout-access",
+            "fail",
+            "binnacle cannot read and traverse the source checkout",
+        )
+    if any(not os.access(path, os.R_OK) for path in readable_paths) or not os.access(
+        entry_point,
+        os.R_OK | os.X_OK,
+    ):
+        return VerificationCheck(
+            "checkout-access",
+            "fail",
+            "binnacle cannot read tracked inputs or execute the locked entry point",
+        )
+    writable_paths = (
+        canonical,
+        canonical / ".git",
+        canonical / ".venv",
+        canonical / "src",
+        entry_point,
+        *readable_paths,
+    )
+    if any(os.access(path, os.W_OK) for path in writable_paths):
+        return VerificationCheck(
+            "checkout-access",
+            "fail",
+            "binnacle has prohibited source-checkout write access",
+        )
+    return VerificationCheck(
+        "checkout-access",
+        "pass",
+        "service identity has read/execute access without source write access",
+    )
+
+
+def _protected_directory_check(path: Path, name: str) -> VerificationCheck:
+    try:
+        metadata = path.stat(follow_symlinks=False)
+        expected_group = grp.getgrnam("binnacle").gr_gid
+    except (KeyError, OSError):
+        return VerificationCheck(name, "fail", "protected directory or binnacle group is missing")
+    mode = stat.S_IMODE(metadata.st_mode)
+    if (
+        stat.S_ISLNK(metadata.st_mode)
+        or not stat.S_ISDIR(metadata.st_mode)
+        or metadata.st_uid != 0
+        or metadata.st_gid != expected_group
+        or mode & ~0o750
+    ):
+        return VerificationCheck(
+            name,
+            "fail",
+            "ownership or mode is broader than root:binnacle 0750",
+        )
+    return VerificationCheck(name, "pass", "protected root:binnacle directory observed")
 
 
 def _protected_file_check(path: Path, name: str) -> VerificationCheck:
@@ -404,6 +526,7 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--controller-profile", type=Path, required=True)
+    parser.add_argument("--expected-commit", required=True)
     parser.add_argument("--repo", type=Path, default=CANONICAL_REPO)
     parser.add_argument("--output", choices=("human", "json"), default="human")
     return parser
@@ -416,6 +539,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     checks = verify_deployment(
         config_path=arguments.config,
         controller_profile_path=arguments.controller_profile,
+        expected_commit=arguments.expected_commit,
         repo=arguments.repo,
     )
     _render(checks, output=arguments.output)
