@@ -45,8 +45,8 @@ This document freezes evidence-independent implementation semantics only. It doe
 claim that ChatGPT currently exposes these Tools, presents HC1 confirmation, grants write
 entitlement, refreshes catalogue metadata in a particular way, retries in a particular
 way, or reconnects in a particular way. Those remain real-host observations. The
-``:Status: merged`` value is the terminal document status after this planning PR lands;
-while the PR is open this document is proposed rather than authoritative.
+``:Status: merged`` value denotes the terminal authoritative state of this numbered plan
+after its planning review is accepted; prior to that acceptance the document is proposed.
 
 1. Governing source order
 -------------------------
@@ -136,12 +136,15 @@ Phase 5 implements/exposes only the existing ``compatibility-write-probe`` addit
 ``probe_workspace_write``
    Contract ``1.1``; HC1; creates one new file under the disposable probe root. It requires
    an exact unexpired preparation, execution nonce, caller idempotency key, exact relative
-   path, ``overwrite=false``, and exactly one text/base64 content representation.
+   path, ``overwrite=false``, and exactly one text/base64 content representation for the
+   **first admission**. A retained same-key retry is resolved from durable idempotency state
+   and does not re-authorize work by re-validating a now-consumed preparation.
 
 ``probe_workspace_cleanup``
    Contract ``1.1``; HC1; establishes absence of one exact manifest-owned live probe
    artifact, deleting only while path/artifact/preparation/controller/content/history
-   facts remain exact.
+   facts remain exact for first admission. A retained same-key retry resolves the already
+   admitted cleanup operation rather than treating the preparation as fresh authority.
 
 The five ``compatibility-core`` Tools remain as already declared. Phase 5 adds no other
 Tool, Resource, Task, Prompt, operation-status surface, cancellation surface, or custom
@@ -255,7 +258,9 @@ Write effect fingerprinting binds Tool/contract/operation, normalized path, deco
 content SHA-256/byte count, ``overwrite=false``, target identity, maximum-effect digest,
 prepared operation ID, and prepared input digest. Cleanup fingerprinting additionally
 binds exact artifact ID and expected content digest. JCS + SHA-256 is used exactly as in
-Phase 4. Raw content is not duplicated into SQLite/audit.
+Phase 4. Raw content is not duplicated into SQLite/audit. Mutable observations such as
+current filesystem state or preparation expiry are not retroactively folded into the
+caller-key fingerprint; they gate first admission only.
 
 8. Persistence and independent path-history integrity
 -----------------------------------------------------
@@ -460,9 +465,11 @@ For ``operation=write``:
 #. return the existing output schema without claiming policy allow, confirmation,
    reservation, or filesystem effect.
 
-Execute pre-policy validation and post-policy pre-reservation admission recompute this
-exact pre-reservation state. Changed ledger/history/target/root/controller/prepared binding
-is stale/mismatch and cannot be absorbed.
+For **first admission only**, execute validation and post-policy pre-reservation admission
+recompute this exact pre-reservation state. Changed ledger/history/target/root/controller/
+prepared binding is stale/mismatch and cannot be absorbed. Once a caller key is durably
+attached to an operation, later same-key retries use section 10 retained-work resolution
+and do not require this mutable preparation state to remain current.
 
 9.2 Cleanup preparation
 ~~~~~~~~~~~~~~~~~~~~~~~
@@ -514,23 +521,50 @@ artifact/ledger state by itself.
 10. Dual execution identity and minimal pre-policy durability
 ------------------------------------------------------------
 
-Execute schemas require both ``execution_nonce`` and ``idempotency_key``. One internal
-transaction binds them to one Phase 4 operation:
+Execute schemas require both ``execution_nonce`` and ``idempotency_key``. The two identities
+converge on one Phase 4 operation, but retained-work resolution has strict precedence over
+mutable preparation validation.
 
-#. digest raw identities and discard raw material;
-#. load prepared and caller-key bindings with Phase 4 owner/tombstone rules;
-#. require exact unexpired preparation/owner/device/Tool/contract/input/fingerprint/current
-   state;
-#. if caller binding exists, require same owner/fingerprint and same attached operation;
-#. if prepared binding is already attached, only the same admitted caller key may obtain
-   retained work; a fresh key conflicts;
+For every execute request:
+
+#. authenticate the selected controller/profile and validate caller-key syntax;
+#. digest raw nonce/key material and discard raw values;
+#. compute/validate the immutable caller operation fingerprint and apply Phase 4 owner,
+   tombstone, and retired-key rules;
+#. resolve the durable caller-key/global duplicate-prevention binding **before** checking
+   prepared nonce expiry or current-state observations;
+#. if a caller binding already exists, require same owner and same immutable fingerprint,
+   require its exact attached operation, and return/reconcile that retained operation:
+
+   * terminal state returns the retained canonical result/effect reference;
+   * ``uncertain`` returns the retained uncertainty/reconciliation guidance;
+   * nonterminal retained work follows Phase 4 retained-operation/recovery semantics;
+   * no new operation, prepared attachment, reservation, cleanup claim, policy decision,
+     or filesystem effect is created;
+
+#. same caller key with different fingerprint is an idempotency conflict; a different owner
+   receives the Phase 4 non-disclosing owner-mismatch result; a retired/tombstoned key is
+   handled exactly by Phase 4 retired-key semantics;
+#. only if **no caller binding/operation exists** may the request load the prepared binding
+   as first-use authority and require exact unexpired nonce, unconsumed prepared state,
+   owner/device/Tool/contract/input/fingerprint, trusted-time facts, and exact current-state
+   binding;
+#. if that prepared binding is already attached to any operation, a fresh/different caller
+   key conflicts; only the exact already-bound caller key may reach retained-work resolution
+   above;
 #. otherwise atomically create only the minimal version-1 ``received`` operation, caller
-   binding, and prepared-binding attachment;
-#. commit.
+   binding, and prepared-binding attachment, then commit.
 
-This transaction does **not** insert ``probe_operations``, create an artifact, advance a
-ledger, reserve a path, or claim cleanup. Policy deny, received-audit failure, or crash
-before policy therefore cannot strand probe authority.
+A consumed or expired preparation is never reusable to seed new work. Expiry/current-state
+validation remains mandatory for first use, but it is **not** a prerequisite for returning
+an operation that was already durably admitted under the same owner/key/fingerprint. This
+is the Phase 5 specialization of ``docs/operation-idempotency.md``: mutable observations
+may gate admission but cannot rewrite the identity or retrievability of already-admitted
+work.
+
+The minimal first-admission transaction does **not** insert ``probe_operations``, create an
+artifact, advance a ledger, reserve a path, or claim cleanup. Policy deny,
+received-audit failure, or crash before policy therefore cannot strand probe authority.
 
 11. Policy, mandatory audit gates, and post-policy admission
 ------------------------------------------------------------
@@ -543,6 +577,11 @@ Phase 5 adds only two local consequential intents:
 External auth claim names remain evidence-selected. They map to one internal capability
 such as ``probe_workspace_mutate``; no wildcard filesystem grant exists.
 
+A request resolved in section 10 to an already-bound operation returns/reconciles retained
+work and does **not** re-enter policy, admission, reservation/claim acquisition, or the
+effect path. The ordering below applies only to the newly created first-admission
+``received`` operation.
+
 Phase 4 ordering remains exact:
 
 #. after minimal durable ``received``, append/fsync schema-valid
@@ -550,9 +589,9 @@ Phase 4 ordering remains exact:
 #. evaluate and durably retain one policy decision;
 #. deny -> ``received -> rejected`` with required deny/rejected audit, no probe row, no
    ledger/reservation/claim transition;
-#. allow -> one short transaction revalidates exact prepared state, persists allow,
-   inserts immutable ``probe_operations``, acquires the exact operation-specific
-   reservation/claim, and commits ``received -> authorised``;
+#. allow -> one short transaction revalidates the exact **first-admission** prepared state,
+   persists allow, inserts immutable ``probe_operations``, acquires the exact
+   operation-specific reservation/claim, and commits ``received -> authorised``;
 #. append/fsync required ``policy.decision(allowed)`` + ``operation.authorised`` evidence;
 #. only then may ``authorised -> running`` occur.
 
@@ -575,8 +614,9 @@ atomically inserts ``probe_operations``, CASes
 A new cleanup against an already durably ``removed``/``abandoned`` artifact is rejected
 **before post-policy admission/authorisation** as a stale/non-live preparation target. It
 never creates an authorised mutating cleanup without a claim and never needs a special
-final-boundary exception. Same-key retry of the actual prior cleanup returns retained
-result/effect knowledge through Phase 4 idempotency.
+final-boundary exception. Same-key retry of the actual prior cleanup is resolved before
+this first-admission path and returns retained result/effect knowledge through Phase 4
+idempotency.
 
 12. Final all-mode OP-BOUNDARY verifier
 --------------------------------------
@@ -795,17 +835,29 @@ Never log raw history rows/content/keys/nonces/credentials/controller assertions
 
 MCP adapters remain thin: schema validate, obtain authenticated controller context, call
 application service/Phase 4 coordinator, and return the existing envelope plus canonical
-retained operation metadata. Same-key retry returns retained state/result rather than
-executing again.
+retained operation metadata.
+
+Before interpreting ``execution_nonce`` as fresh preparation authority, the application
+service performs section 10 caller-key lookup. An existing same-owner/same-key/
+same-fingerprint operation is returned or reconciled from durable state even if the
+prepared nonce has since expired or the successful/uncertain operation changed the
+filesystem facts that were originally bound. Mutable preparation observations therefore
+cannot make already-admitted work disappear.
 
 Retry rules:
 
-* same key/same input -> retained operation/result;
-* same key/different input -> conflict;
+* same key/same immutable fingerprint -> retained operation/result, without preparation
+  expiry/current-state revalidation;
+* same key/different input/fingerprint -> conflict;
+* same key owned by another controller -> non-disclosing owner mismatch;
+* retired/tombstoned key -> Phase 4 retired-key result;
 * consumed preparation/new caller key -> conflict;
-* expired preparation before admission -> deliberate new preparation only after proving no
-  earlier operation was admitted;
-* ``uncertain`` -> reconciliation/status semantics only, never automatic fresh effect;
+* expired **unconsumed** preparation before admission -> deliberate new preparation only
+  after proving no earlier operation was admitted;
+* ``uncertain`` same-key retry -> retained uncertainty/reconciliation semantics only,
+  never automatic fresh effect;
+* successful write/cleanup same-key retry after response loss, reconnect, state change, or
+  preparation expiry -> retained terminal operation/result with zero new effect;
 * cleanup of an already terminal artifact is not a new preparation/admission path; retry
   the actual prior cleanup with its original logical identity to obtain retained result;
 * terminal known-no-effect cleanup does not silently reacquire a released claim; a later
@@ -838,9 +890,14 @@ bundle:
 #. prepare the frozen synthetic path/content and capture sanitized preparation facts;
 #. exercise required decline attempts and prove no execute/effect;
 #. approved execute must reach exact normalized request and produce exactly one artifact;
-#. exercise lost response/same-key retry and prove one operation/one effect;
-#. reconnect and prove exact retry returns retained work without duplicate effect;
+#. deliberately lose/withhold the response, then retry the **same caller key** after the
+   mutation changed prepared current state and prove one retained operation/one effect;
+#. repeat the same-key retained retry after the original prepared nonce expiry and prove it
+   still returns/reconciles the retained operation without creating new work;
+#. reconnect and prove exact same-key retry returns retained work without duplicate effect;
 #. prepare/execute exact cleanup and prove only exact artifact reaches absent state;
+#. repeat lost-response/same-key cleanup retry after state change/nonce expiry and prove
+   retained cleanup result with zero additional claim/effect;
 #. verify retained history + independent ledger remain coherent and high-water monotonic;
 #. repeat exact frozen risk-class attempt counts, retaining blocked/failed/unstable results;
 #. validate/freeze manifest, reviewer decision, evidence archive, and detached receipt;
@@ -889,6 +946,17 @@ Coverage includes at least:
 * policy deny/pre-policy crash creates no probe reservation/ledger advance;
 * allowed/authorised audit precedes ``running``;
 * same nonce/key races converge on one operation/effect;
+* same-owner same-key same-fingerprint lookup is resolved before preparation expiry/current
+  state and returns retained work;
+* successful write same-key retry after filesystem state change and after nonce expiry
+  returns retained result with zero new operation/reservation/effect;
+* successful/no-effect cleanup same-key retry after artifact state change and nonce expiry
+  returns retained result with zero new cleanup claim/effect;
+* ``uncertain`` same-key retry returns retained uncertainty/reconciliation guidance and
+  never seeds a fresh effect;
+* same key/different input/fingerprint conflicts;
+* fresh caller key against an already consumed/attached preparation conflicts;
+* expired unconsumed preparation rejects first admission;
 * lost receipts never infer effect/no-effect from final absence;
 * known-no-effect and known-effect cleanup closure obey exact audit/recovery/ledger
   predicates;
@@ -898,7 +966,9 @@ Coverage includes at least:
 
 Property state machines combine preparation expiry, controller replacement, idempotency
 collisions, ledger versions/high-water/history digests, artifact generations/states,
-cleanup claims, policy/audit failures, and restart/reconciliation.
+cleanup claims, policy/audit failures, and restart/reconciliation. They distinguish
+first-use preparation validity from retained-work retrievability so expiry/current-state
+changes cannot erase an existing same-key operation.
 
 22. Required integration and fault tests
 ----------------------------------------
@@ -947,7 +1017,16 @@ Required faults include:
   effect; absence alone cannot close ledger;
 * crash during ledger terminalization -> atomic old or new state only;
 * DB failure during cleanup claim/ledger closure -> conservative active state;
-* response loss/restart/same-key retry;
+* successful write response loss followed by same-key retry after target creation and after
+  prepared nonce expiry -> exact retained result, zero new operation/reservation/effect;
+* successful/no-effect cleanup response loss followed by same-key retry after artifact
+  state transition and after prepared nonce expiry -> exact retained result, zero new
+  operation/claim/effect;
+* uncertain write/cleanup same-key retry after restart/nonce expiry -> same retained
+  uncertainty/reconciliation state, no fresh effect;
+* same caller key with different input/fingerprint -> conflict without effect;
+* fresh caller key against consumed prepared binding -> conflict without effect;
+* expired but unconsumed prepared binding -> first admission rejected with no effect;
 * controller replacement replay;
 * probe-root capability/permission failure.
 
@@ -959,7 +1038,12 @@ Every fault asserts zero effect or exactly one logical effect as appropriate. No
 
 A fresh process reconstructs all decisions from durable state. Verify:
 
-* prepared nonce/expiry/current-state binding remains enforceable;
+* prepared nonce/expiry/current-state binding remains enforceable for **first use of an
+  unconsumed preparation**;
+* an existing same-owner/same-key/same-fingerprint binding is resolved before preparation
+  expiry/current-state checks and returns/reconciles retained work after restart;
+* an expired consumed preparation cannot seed a fresh operation/key, but its already-bound
+  operation remains retrievable through the exact caller key;
 * ledger versions/high-water/terminal count/digest survive restart and are compared against
   complete retained history before preparation/admission/**every final effect boundary**;
 * missing/corrupt ledger or missing/mutated history never gets auto-rebuilt;
@@ -978,7 +1062,8 @@ A fresh process reconstructs all decisions from durable state. Verify:
 * no-effect/successful cleanup closures update terminal history only after exact predicates;
 * uncertain cleanup remains active;
 * stale staging never becomes a second visible artifact;
-* same-key retry returns retained work;
+* same-key retry returns retained work even after response loss, state change, and original
+  prepared nonce expiry;
 * surviving audit-obligation marker remains recovery-required;
 * capability remains unavailable until kernel/root/profile/integrity checks pass.
 
@@ -1003,6 +1088,12 @@ Phase 5 preserves all of the following:
 #. pre-policy durability is Phase 4 minimal identity only;
 #. required received audit precedes policy and allowed/authorised audit precedes running;
 #. prepared nonce + caller key converge on one operation;
+#. **existing same-owner/same-key/same-fingerprint caller binding is resolved before any
+   mutable preparation expiry/current-state validation**;
+#. retained terminal/uncertain work remains retrievable after response loss/reconnect/state
+   change/nonce expiry without creating a second operation or effect;
+#. an unbound caller still requires exact unexpired/current first-use preparation, and a
+   consumed preparation cannot authorize a fresh key;
 #. path generation high-water is independently anchored and monotonically increasing;
 #. preparation never trusts a digest computed only from whatever rows survive;
 #. deleting maximum/lower history cannot lower high-water, permit generation reuse, or
@@ -1049,8 +1140,12 @@ After implementation/promotion prerequisites are met:
 #. implement preparation binding for exact write ledger transition and cleanup
    ledger/active-artifact/target/self-claim state;
 #. explicitly reject new cleanup preparation/admission for terminal artifacts;
-#. implement dual prepared-nonce/caller-key minimal pre-policy identity;
-#. integrate mandatory received audit before policy;
+#. implement dual prepared-nonce/caller-key identity with **caller-binding-first retained
+   retry resolution**, then first-use prepared-state validation only when no caller binding
+   exists;
+#. test consumed-preparation/fresh-key conflict and same-key retained retry after
+   state-change/nonce-expiry before adding effect adapters;
+#. integrate mandatory received audit before policy for newly created first-admission work;
 #. implement exact write/cleanup policy entries;
 #. implement post-policy exact write reservation and cleanup self-claim admission;
 #. integrate required allowed/authorised audit before ``running``;
@@ -1063,7 +1158,8 @@ After implementation/promotion prerequisites are met:
 #. integrate Phase 4 audit obligations, gates, lifecycle, and retained-result semantics;
 #. bind existing MCP handlers without changing contracts;
 #. add all unit/property/integration/fault/restart/systemd tests, especially corruption
-   between cleanup admission and final boundary;
+   between cleanup admission and final boundary plus response-loss/same-key retry after
+   mutation and nonce expiry;
 #. extend real-Pi verification;
 #. run full candidate validation;
 #. activate write-probe only through evidence-selected host path;
@@ -1080,8 +1176,14 @@ This planning PR is accepted only when a reviewer can establish all of the follo
 * Phase 4 implementation exit + real Phase 3 evidence remain runtime prerequisites;
 * existing MCP Tool/schema/confirmation contracts are unchanged;
 * disposable root is separated from repository/config/state/audit/evidence paths;
-* dual nonce/key design creates one minimal pre-policy operation and no pre-policy path
-  reservation;
+* caller-key lookup precedes mutable preparation validation for already-bound work;
+* same-owner/same-key/same-fingerprint retained retries survive response loss, current-state
+  changes, reconnect, and original prepared nonce expiry without a duplicate operation or
+  effect;
+* different fingerprint/owner/retired-key and consumed-preparation/fresh-key cases follow
+  Phase 4 conflict/non-disclosure/retired semantics;
+* first admission from an unbound caller key still requires exact unexpired/current
+  preparation and creates only one minimal pre-policy operation with no path reservation;
 * mandatory Phase 4 audit gates retain exact ordering;
 * ``probe_path_ledger`` is an independent integrity anchor, not a cache derived from
   current rows;
@@ -1118,6 +1220,11 @@ The capability may become live only when:
 * real-Pi root/filesystem/systemd checks pass;
 * protected local policy grants only the selected controller profile;
 * automated tests prove no denied/pre-policy/audit-failed request can reserve/advance path;
+* automated tests prove caller-binding-first retained retries after response loss,
+  filesystem/artifact state change, reconnect, and prepared nonce expiry create zero new
+  operation/reservation/claim/effect;
+* automated tests prove expired unconsumed preparation rejects, consumed preparation with a
+  fresh key conflicts, and same-key/different-fingerprint conflicts;
 * automated tests prove independent ledger integrity before preparation, admission,
   **every final write/cleanup effect boundary**, terminalization, and restart;
 * tests cover maximum/lower history corruption before preparation and after admission,
@@ -1141,9 +1248,12 @@ Exit requires reviewed evidence showing, for the exact tested profile:
 * host presentation/confirmation is observed or honestly classified;
 * decline produces no execute/effect;
 * approved write produces exactly one artifact inside probe root;
-* lost response/same-key retry produces one operation/effect;
-* reconnect reconciles same operation;
+* lost response/same-key retry after mutation and after original preparation expiry returns
+  the retained operation/result and produces one operation/effect total;
+* reconnect reconciles the same operation through the same caller key;
 * cleanup establishes exact artifact absence exactly once;
+* lost response/same-key cleanup retry after cleanup state change/preparation expiry returns
+  the retained cleanup result with zero second claim/effect;
 * repeated frozen-path attempts retain history and monotonically advance ledger generation;
 * no path escape/overwrite/network/credential/repository/system effect occurs;
 * required attempt counts/stability thresholds pass;
@@ -1169,8 +1279,9 @@ None changes local maximum effect or permits broader authority.
 
 This plan is complete when a coding agent can implement the disposable write probe,
 integrate it with Phase 4, preserve independent path-history integrity across crash/restart,
-revalidate that integrity immediately before **every** consequential filesystem start, test
-exact idempotency/audit/current-state/effect semantics, and execute the real-host evidence
+resolve retained same-key work before mutable preparation validation, revalidate effect
+state immediately before **every** consequential filesystem start, test exact
+idempotency/audit/current-state/effect semantics, and execute the real-host evidence
 procedure without inventing unresolved host/device facts.
 
 Stop here. Do not add Phase 6 development-workspace operations, repository mutation,
