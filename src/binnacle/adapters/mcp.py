@@ -63,9 +63,14 @@ def run_http_server(
 ) -> None:
     """Run one Uvicorn worker for the native FastMCP ASGI application."""
 
+    if settings.workers != 1:
+        msg = "Binnacle's application-object server requires exactly one worker"
+        raise ValueError(msg)
+
     uvicorn.run(
         create_http_app(application),
         host=settings.host,
         port=settings.port,
         workers=settings.workers,
+        log_config=None,
     )

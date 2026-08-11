@@ -34,3 +34,53 @@ async def test_phase1_registers_no_binnacle_operational_tools(
     server = create_mcp_server(_application(package_identity))
 
     assert await server.list_tools() == []
+
+
+def test_http_runner_preserves_configured_logging(
+    package_identity: PackageIdentity,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observed: dict[str, object] = {}
+
+    def fake_run(app: object, **kwargs: object) -> None:
+        observed["app"] = app
+        observed.update(kwargs)
+
+    monkeypatch.setattr("binnacle.adapters.mcp.uvicorn.run", fake_run)
+
+    from binnacle.adapters.mcp import run_http_server
+    from binnacle.config import ServerSettings
+
+    run_http_server(
+        application=_application(package_identity),
+        settings=ServerSettings(),
+    )
+
+    assert callable(observed["app"])
+    assert observed["workers"] == 1
+    assert observed["log_config"] is None
+
+
+def test_http_runner_rejects_multiple_workers(
+    package_identity: PackageIdentity,
+) -> None:
+    class MultipleWorkers:
+        @property
+        def host(self) -> str:
+            return "127.0.0.1"
+
+        @property
+        def port(self) -> int:
+            return 8000
+
+        @property
+        def workers(self) -> int:
+            return 2
+
+    from binnacle.adapters.mcp import run_http_server
+
+    with pytest.raises(ValueError, match="exactly one worker"):
+        run_http_server(
+            application=_application(package_identity),
+            settings=MultipleWorkers(),
+        )

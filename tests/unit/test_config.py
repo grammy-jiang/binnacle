@@ -71,6 +71,16 @@ def test_cli_override_wins_for_ordinary_server_field(
     assert settings.server.port == 9200
 
 
+def test_cli_override_replaces_invalid_lower_priority_value(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("BINNACLE_SERVER__PORT", "invalid")
+
+    settings = load_settings(cli_overrides={"server": {"port": 9200}})
+
+    assert settings.server.port == 9200
+
+
 def test_unknown_toml_key_is_rejected(tmp_path: Path) -> None:
     config_path = tmp_path / "binnacle.toml"
     config_path.write_text("unknown = true\n", encoding="utf-8")

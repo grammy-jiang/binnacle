@@ -8,7 +8,12 @@ from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
-from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
+from pydantic_settings import (
+    BaseSettings,
+    EnvSettingsSource,
+    PydanticBaseSettingsSource,
+    SettingsConfigDict,
+)
 
 
 class ServerSettings(BaseModel):
@@ -100,13 +105,13 @@ def load_settings(
         with config_path.open("rb") as config_file:
             toml_values = tomllib.load(config_file)
 
-    resolved = BinnacleSettings(
-        **toml_values  # type: ignore[arg-type]  # Pydantic validates dynamic TOML keys.
-    )
-    if not cli_overrides:
-        return resolved
-
-    values = _merge_mappings(resolved.model_dump(mode="python"), cli_overrides)
+    # Collect every source as raw input first.  Validating an intermediate TOML/env
+    # snapshot would incorrectly reject a lower-priority invalid value even when an
+    # explicit CLI value replaces it.
+    environment_values = EnvSettingsSource(BinnacleSettings)()
+    values = _merge_mappings(toml_values, environment_values)
+    if cli_overrides:
+        values = _merge_mappings(values, cli_overrides)
     return _ExplicitSettings(
         **values  # type: ignore[arg-type]  # Pydantic validates the merged snapshot.
     )

@@ -3,6 +3,7 @@
 import json
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from binnacle.application import BinnacleApplication
@@ -52,7 +53,9 @@ def test_config_validate_invalid_file_exits_nonzero(tmp_path: Path) -> None:
     assert "Configuration error" in result.stderr
 
 
-def test_serve_defaults_to_loopback_one_worker(monkeypatch: object) -> None:
+def test_serve_defaults_to_loopback_one_worker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     observed: dict[str, object] = {}
 
     def fake_run_http_server(
@@ -65,7 +68,7 @@ def test_serve_defaults_to_loopback_one_worker(monkeypatch: object) -> None:
         observed["port"] = settings.port
         observed["workers"] = settings.workers
 
-    monkeypatch.setattr(  # type: ignore[attr-defined]
+    monkeypatch.setattr(
         "binnacle.cli.run_http_server",
         fake_run_http_server,
     )
@@ -81,7 +84,7 @@ def test_serve_defaults_to_loopback_one_worker(monkeypatch: object) -> None:
     }
 
 
-def test_serve_cli_bind_overrides(monkeypatch: object) -> None:
+def test_serve_cli_bind_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
     observed: dict[str, object] = {}
 
     def fake_run_http_server(
@@ -92,7 +95,7 @@ def test_serve_cli_bind_overrides(monkeypatch: object) -> None:
         del application
         observed.update(host=settings.host, port=settings.port)
 
-    monkeypatch.setattr(  # type: ignore[attr-defined]
+    monkeypatch.setattr(
         "binnacle.cli.run_http_server",
         fake_run_http_server,
     )

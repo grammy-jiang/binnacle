@@ -64,6 +64,7 @@ def configure_logging(settings: LoggingSettings) -> LoggingRuntime:
     root_logger = stdlib_logging.getLogger()
     for existing_handler in tuple(root_logger.handlers):
         root_logger.removeHandler(existing_handler)
+        existing_handler.close()
     root_logger.addHandler(handler)
     root_logger.setLevel(settings.level)
 
