@@ -623,6 +623,32 @@ async def test_malformed_initialize_without_version_header_cannot_allocate_sessi
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize("body", [b"{", b"[]", b""])
+async def test_unsupported_handshake_revision_is_rejected_before_sdk_allocation(
+    phase2_application: BinnacleApplication,
+    body: bytes,
+) -> None:
+    async with running_raw_http_client(phase2_application) as client:
+        responses = [
+            await client.post(
+                "/mcp",
+                content=body,
+                headers={
+                    "accept": ACCEPT,
+                    "content-type": "application/json",
+                    "MCP-Protocol-Version": "2024-11-05",
+                },
+            )
+            for _ in range(3)
+        ]
+
+    for response in responses:
+        assert response.status_code == 400
+        assert "mcp-session-id" not in response.headers
+        assert _jsonrpc(response)["error"]["data"]["code"] == ("unsupported_protocol_version")
+
+
+@pytest.mark.anyio
 async def test_disabled_tasks_request_reaches_method_dispatch(
     phase2_application: BinnacleApplication,
 ) -> None:

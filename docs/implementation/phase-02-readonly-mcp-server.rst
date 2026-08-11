@@ -1095,6 +1095,11 @@ token. The adapter rejects missing, invalid, or revision-mismatched tokens befor
 session manager runs, including malformed POST bodies, so invalid traffic cannot allocate
 or hold orphan framework transports.
 
+The finite revision allowlist and duplicate routing-header checks run before POST body
+parsing. This is required because some revisions outside Binnacle's reviewed set remain
+handshake revisions in the locked SDK and would otherwise enter its stateful allocation
+path before malformed JSON is rejected.
+
 22. HTTP/ASGI surface
 ---------------------
 

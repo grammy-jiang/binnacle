@@ -198,6 +198,18 @@ class RequestBodyLimitMiddleware:
             )
             return
 
+        rejection = self._validate_post_transport_headers(scope)
+        if rejection is not None:
+            code, data_code, error_message = rejection
+            await _send_jsonrpc_error(
+                send,
+                request_id=None,
+                code=code,
+                data_code=data_code,
+                message=error_message,
+            )
+            return
+
         headers = scope.get("headers", ())
         content_lengths = [
             value
@@ -305,6 +317,38 @@ class RequestBodyLimitMiddleware:
             replay,
             self._bound_session_sender(send, response_revision),
         )
+
+    @staticmethod
+    def _validate_post_transport_headers(
+        scope: MutableMapping[str, Any],
+    ) -> RevisionRejection | None:
+        raw_headers = [
+            (name.decode("latin-1"), value.decode("latin-1"))
+            for name, value in scope.get("headers", ())
+            if isinstance(name, bytes) and isinstance(value, bytes)
+        ]
+        headers = {name.lower(): value for name, value in raw_headers}
+        duplicate = find_duplicated_routing_header(raw_headers)
+        if duplicate is not None:
+            return (
+                -32020,
+                "protocol_header_mismatch",
+                f"Duplicate routing header: {duplicate}",
+            )
+        header_version = headers.get(MCP_PROTOCOL_VERSION_HEADER)
+        if header_version is not None and header_version not in EXPECTED_REVISIONS:
+            return (
+                -32021,
+                "unsupported_protocol_version",
+                "The request does not declare a reviewed protocol revision.",
+            )
+        if header_version == TARGET_REVISION and MCP_SESSION_ID_HEADER in headers:
+            return (
+                -32020,
+                "protocol_header_mismatch",
+                "The target revision prohibits Mcp-Session-Id.",
+            )
+        return None
 
     @staticmethod
     def _legacy_initialize_revision(parsed: object) -> str | None:

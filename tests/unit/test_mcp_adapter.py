@@ -338,6 +338,18 @@ async def test_chunked_body_is_bounded_without_content_length() -> None:
 
 
 @pytest.mark.anyio
+async def test_unsupported_handshake_revision_is_rejected_before_body_parsing() -> None:
+    downstream, sent = await _exercise_middleware(
+        headers=[(b"mcp-protocol-version", b"2024-11-05")],
+        messages=[{"type": "http.request", "body": b"{"}],
+    )
+
+    assert downstream.calls == 0
+    assert sent[0]["status"] == 400
+    assert _response_json(sent)["error"]["data"]["code"] == ("unsupported_protocol_version")
+
+
+@pytest.mark.anyio
 async def test_valid_chunked_body_is_coalesced_for_constant_message_replay() -> None:
     body = json.dumps(
         {
