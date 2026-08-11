@@ -43,6 +43,13 @@ def test_config_validate_json() -> None:
     assert json.loads(result.stdout)["status"] == "valid"
 
 
+def test_config_validate_agent_is_plain_text() -> None:
+    result = runner.invoke(app, ["config", "validate", "--output", "agent"])
+
+    assert result.exit_code == 0
+    assert result.stdout.startswith("status=valid runtime_profile=development")
+
+
 def test_config_validate_invalid_file_exits_nonzero(tmp_path: Path) -> None:
     config_path = tmp_path / "invalid.toml"
     config_path.write_text("unknown = true\n", encoding="utf-8")
@@ -51,6 +58,38 @@ def test_config_validate_invalid_file_exits_nonzero(tmp_path: Path) -> None:
 
     assert result.exit_code == 2
     assert "Configuration error" in result.stderr
+
+
+def test_config_validate_invalid_toml_is_sanitized(tmp_path: Path) -> None:
+    config_path = tmp_path / "invalid.toml"
+    config_path.write_text("port = [", encoding="utf-8")
+
+    result = runner.invoke(app, ["config", "validate", "--config", str(config_path)])
+
+    assert result.exit_code == 2
+    assert result.stderr == "Configuration error: invalid TOML syntax\n"
+
+
+def test_config_validate_unreadable_file_is_sanitized(tmp_path: Path) -> None:
+    config_path = tmp_path / "missing.toml"
+
+    result = runner.invoke(app, ["config", "validate", "--config", str(config_path)])
+
+    assert result.exit_code == 2
+    assert result.stderr == "Configuration error: configuration file could not be read\n"
+
+
+def test_config_validation_redacts_invalid_environment_value(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    secret_value = "accidental-secret-value"
+    monkeypatch.setenv("BINNACLE_LOGGING__LEVEL", secret_value)
+
+    result = runner.invoke(app, ["config", "validate"])
+
+    assert result.exit_code == 2
+    assert "logging.level" in result.stderr
+    assert secret_value not in result.stderr
 
 
 def test_serve_defaults_to_loopback_one_worker(

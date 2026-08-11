@@ -90,9 +90,29 @@ def _load_or_exit(
 ) -> BinnacleSettings:
     try:
         return load_settings(config_path=config_path, cli_overrides=cli_overrides)
-    except (OSError, tomllib.TOMLDecodeError, ValidationError) as exc:
-        typer.echo(f"Configuration error: {exc}", err=True)
+    except ValidationError as exc:
+        typer.echo(f"Configuration error: {_safe_validation_summary(exc)}", err=True)
         raise typer.Exit(code=2) from exc
+    except tomllib.TOMLDecodeError as exc:
+        typer.echo("Configuration error: invalid TOML syntax", err=True)
+        raise typer.Exit(code=2) from exc
+    except OSError as exc:
+        typer.echo("Configuration error: configuration file could not be read", err=True)
+        raise typer.Exit(code=2) from exc
+
+
+def _safe_validation_summary(error: ValidationError) -> str:
+    """Render locations and reasons without echoing untrusted input values."""
+
+    summaries: list[str] = []
+    for detail in error.errors(
+        include_url=False,
+        include_context=False,
+        include_input=False,
+    ):
+        location = ".".join(str(part) for part in detail["loc"]) or "configuration"
+        summaries.append(f"{location}: {detail['msg']}")
+    return "; ".join(summaries)
 
 
 @app.command("version")
