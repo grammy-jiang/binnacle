@@ -1,0 +1,2167 @@
+Binnacle Phase 6 Detailed Implementation Plan
+=============================================
+
+:Phase: 6 -- Implement the Binnacle development workspace
+:Status: merged
+:Planning status: provisional -- evidence-independent workspace and development-session
+                  semantics are concrete; implementation/promotion remains gated by the
+                  real Phase 5 implementation exit, write-confirmation evidence, and a
+                  reviewed session-scoped host-authority profile
+:Roadmap: ``../bootstrap-implementation-plan.rst``
+:Index: ``index.rst``
+:Depends on: merged Phase 5 disposable write-capability-probe plan; real Phase 5 exit
+             before Phase 6 implementation/promotion; reviewed/current host-authority
+             evidence before operational workspace mutation is exposed
+:Primary objective: Give the authenticated owner/controller normal bounded software-
+                    development file authority over one registered Binnacle source
+                    workspace, inside a temporary auditable development session, without
+                    granting ambient filesystem, credential, policy, broker, or system
+                    authority
+:Implementation scope: development-session state, registered-workspace read/search/file
+                       services, descriptor-relative Linux containment with an exact
+                       no-submount/mount-identity boundary, descriptor-enumerated exact-file
+                       snapshot search using process-pure ``ripgrep`` as a stdin matcher,
+                       protected-object alias rejection, shared content/change
+                       coordination, durable Phase 4 consequential-operation integration
+                       for mutations and session activation, session/start and
+                       content-admission linearization, bounded MCP contract/schema/
+                       manifest promotion, tests, deployment permissions, and evidence
+                       gates only
+
+Purpose
+-------
+
+Phase 6 crosses from the disposable Phase 5 probe into the first real source-development
+capability. It lets ChatGPT inspect and modify the registered Binnacle repository through
+semantic workspace operations while keeping the network-facing Binnacle application
+unprivileged and preserving permanent boundaries around credentials, protected
+configuration, policy, privileged state, and arbitrary host administration.
+
+The phase separates three facts:
+
+* an owner-authorised development session grants broad normal developer authority inside
+  the registered Binnacle source workspace;
+* every consequential file mutation **and the authority-granting session activation
+  transition itself** consumes the Phase 4 durable operation, idempotency, audit, policy,
+  final-boundary, effect-knowledge, and reconciliation kernel;
+* whether the selected real ChatGPT host can represent the owner-visible bounded session
+  semantics without redundant per-file confirmations remains empirical HOST-profile
+  evidence and is not guessed here.
+
+This document freezes evidence-independent local architecture and algorithms only. It does
+not claim that the current ChatGPT product exposes the proposed Phase 6 Tools, that a
+particular host confirmation UI exists, that the development Pi already satisfies the
+required filesystem/mount/process primitives, that ``ripgrep`` supports a particular
+option or stdin-matching performance on the candidate Pi, or that real Phase 5 write
+evidence has passed.
+
+``:Status: merged`` denotes the terminal authoritative state of this numbered plan after
+planning review and CI acceptance. Before that acceptance the document is proposed.
+
+1. Governing source order
+-------------------------
+
+Implementation follows this precedence:
+
+#. ``docs/design-principles.rst``;
+#. ``docs/design.md``;
+#. ``docs/bootstrap-v1.rst``;
+#. ``docs/bootstrap-implementation-plan.rst``;
+#. ``docs/implementation/index.rst``;
+#. merged ``docs/implementation/phase-04-durable-operation-kernel.rst``;
+#. merged ``docs/implementation/phase-05-write-capability-probe.rst``;
+#. this detailed Phase 6 plan;
+#. ``docs/operation-idempotency.md`` and ``spec/operation/idempotency.yaml``;
+#. ``spec/operation/lifecycle.yaml`` and operation fixtures;
+#. ``docs/audit-evidence.md``, ``spec/audit/audit-policy.yaml``, and audit schemas;
+#. ``docs/mcp-host-confirmation.md`` and
+   ``spec/policy/host-confirmation-classes.yaml``;
+#. ``spec/mcp/bootstrap-tool-manifest.yaml`` and MCP schemas;
+#. ``docs/security/controller-transport.md`` and the reviewed controller profile;
+#. ``docs/mcp-evaluation.md`` and evaluation contracts;
+#. ``docs/deferred-decisions.rst``;
+#. ``docs/target-architecture.rst``.
+
+``docs/design-principles.rst`` supersedes conflicting older V17 detail. Its owner-approved
+development-session decision governs over older text that would require a separate owner
+approval for every ordinary source-development step.
+
+2. Three independent gates
+---------------------------
+
+2.1 Plan acceptance
+~~~~~~~~~~~~~~~~~~~
+
+The Phase 6 plan may merge when review and repository CI show that the evidence-independent
+workspace/session specification is coherent, bounded, compatible with merged Phase 4/5
+invariants, and does not invent real host/device behaviour.
+
+Plan acceptance grants no runtime source-workspace authority.
+
+2.2 Implementation and promotion gate
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Do not expose operational Phase 6 workspace/session handlers until all of the following
+are true:
+
+* the Phase 4 durable-operation kernel implementation exit is current on the candidate;
+* the real Phase 5 write-capability exit is reviewed/current for the selected Pi and
+  ChatGPT HOST profile;
+* exact real Phase 5 write-confirmation/retry/reconnect evidence is available;
+* a reviewed session-scoped host-authority contract/profile has reconciled the current
+  HC0/HC1 per-invocation model with owner-approved development-session semantics;
+* the registered workspace profile/root identity are configured outside the source
+  workspace and pass local filesystem verification;
+* the selected Pi/runtime proves every required descriptor-relative, no-overwrite,
+  hard-link/link-count, **mount-identity/no-submount**, process-lifecycle, and search
+  primitive used by an exposed operation;
+* the selected Linux profile proves the exact ``openat2`` ``RESOLVE_NO_XDEV`` semantics or
+  an equivalent descriptor-visible mount-ID verifier for every fallback traversal; a
+  profile that cannot prove mount-boundary identity keeps affected content and mutation
+  capabilities disabled;
+* content-returning read/search is promoted only under the reviewed coordinated-writer
+  model plus the shared access gate, or a stronger reviewed protected-object confinement
+  mechanism; link-count semantics must be reliable enough to enforce the conservative
+  no-hard-link content rule in sections 10, 14, and 15;
+* the candidate ``ripgrep`` binary proves the exact stdin/JSON matching and
+  configuration/preprocessor/archive disabling semantics used by the typed adapter, and
+  the child receives only the reviewed sanitized environment and **no workspace path or
+  workspace descriptor**; otherwise ``workspace_search`` remains disabled;
+* the candidate systemd deployment proves the search-child lifecycle/readiness barrier in
+  sections 15, 16, and 25, including that application death closes matcher input and no
+  prior matcher/helper can regain workspace-discovery authority after restart;
+* mutations whose required primitive, mount-boundary proof, or writer assumption is
+  unavailable stay disabled rather than silently degrading;
+* the proposed Phase 6 operation contracts, JSON schemas, Tool-manifest entries,
+  descriptions, annotations, information classes, and host-confirmation metadata have
+  passed contract/schema/manifest validation;
+* runtime composition keeps all Phase 6 Tools invisible/disabled whenever those
+  prerequisites are absent, stale, contradictory, or unsupported.
+
+Planning text never substitutes for those observations.
+
+2.3 Phase exit gate
+~~~~~~~~~~~~~~~~~~~
+
+The roadmap exit remains empirical. Real ChatGPT must inspect the registered Binnacle
+repository, make one controlled source edit, inspect the resulting file, and revert or
+replace it without affecting unrelated paths.
+
+Reviewed evidence must additionally demonstrate development-session begin/inspect/end or
+expiry semantics, no workspace escape **including no unregistered mount crossing**,
+bounded read/search behaviour, exact mutation idempotency, reconnect behaviour, and
+truthful failure/uncertainty handling.
+
+3. Exact Phase 6 authority boundary
+-----------------------------------
+
+Phase 6 grants normal developer file authority only inside one reviewed registered
+Binnacle source workspace. Conceptually the Bootstrap workspace is:
+
+::
+
+   /srv/binnacle-dev/repo
+
+The exact path is owner configuration, not model-controlled input.
+
+Phase 6 may expose semantic capability for:
+
+* workspace inspect;
+* bounded directory listing;
+* bounded file read;
+* bounded text/regex search;
+* regular-file and explicit directory creation;
+* exact regular-file replacement;
+* exact text patch;
+* same-workspace move;
+* exact regular-file deletion;
+* explicit empty-directory deletion;
+* development-session begin, inspect, and end/expiry.
+
+Phase 6 does **not** grant or implement:
+
+* unrestricted absolute-path filesystem authority;
+* root filesystem access;
+* implicit access through a bind mount/submount nested below the registered workspace;
+* arbitrary recursive delete or recursive move effects;
+* symlink-following content access or mutation;
+* hard-link creation or content access through multiply-linked regular files;
+* direct ``.git`` database/object/reference content access or mutation through workspace
+  Tools;
+* Git commit/fetch/pull/push credentials or signing;
+* command/process execution;
+* package or service mutation;
+* privileged-broker access;
+* Binnacle policy mutation;
+* access to protected configuration, audit storage, SQLite state, controller credentials,
+  SSH/GPG private keys, credential agents, or broker/control-plane sockets;
+* hardware authority;
+* implicit parent-directory tree creation;
+* a proprietary remote filesystem protocol outside the reviewed MCP Tool surface.
+
+Phase 7 owns development-command execution, Phase 8 owns semantic Git operations and
+credential use, and Phase 9 owns privileged self-management. Any Phase 7 or Phase 8 effect
+that can mutate this workspace must coordinate with the authoritative access/change seam in
+section 16, preserve the exact registered mount boundary in section 12, and preserve the
+protected-content/non-alias information boundary before content readiness can reopen. Later
+phases may extend the contract but must not create an independent writer lane or implicit
+submount lane.
+
+4. Contract, schema, manifest, and host-profile promotion barrier
+-----------------------------------------------------------------
+
+The current Bootstrap Tool manifest contains the eight Phase 0--5 Tools only. Phase 6
+runtime handlers must not be registered before a reviewed promotion step creates exact
+versioned contracts and schema references for the operational workspace/session surface.
+
+The proposed semantic Tool names are:
+
+::
+
+   workspace_inspect
+   workspace_list
+   workspace_read
+   workspace_search
+   workspace_create
+   workspace_write
+   workspace_patch
+   workspace_move
+   workspace_delete
+   development_session_begin
+   development_session_inspect
+   development_session_end
+
+Those names are proposals until the Phase 6 contract/schema/manifest promotion itself is
+reviewed. The implementation should normally keep the existing schema family where
+compatible and bump ``manifest_version`` because the reviewed catalogue changes. If all
+12 proposed Tools are accepted, the Bootstrap manifest grows from 8 to 20 exact entries.
+
+Before any handler exposure, implementation promotion is:
+
+#. reconcile ``docs/mcp-host-confirmation.md`` and
+   ``spec/policy/host-confirmation-classes.yaml`` with the bounded development-session
+   authority semantics in section 5;
+#. define/review the 12 operation contracts and exact input/output schema definitions;
+#. define information classes, annotations, result limits, errors, and capability/profile
+   requirements;
+#. update ``spec/mcp/bootstrap-tool-manifest.yaml`` and manifest documentation;
+#. update evaluation fixtures and contract parity tests;
+#. validate every JSON Pointer, handler binding, Tool name, contract version, annotation,
+   host-confirmation classification, and schema digest;
+#. only then compose/register runtime handlers.
+
+An unmanifested or schema-mismatched handler fails startup exactly as the current manifest
+contract requires.
+
+5. Session-scoped host-authority reconciliation
+------------------------------------------------
+
+5.1 Governing semantic decision
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+An explicit owner request to develop or improve Binnacle authorises a bounded Binnacle
+development session for the same development objective. Once that session is active and
+**effective**, ChatGPT may perform ordinary source-development work inside the registered
+source workspace without asking the owner to repeat the same approval for each read,
+write, patch, move, or delete.
+
+The current host-confirmation v1.1 contract does not yet represent that decision cleanly:
+HC0 is limited to bounded no-effect observation/evidence, while HC1+ requires exact
+per-invocation prepared confirmation and explicitly rejects open-ended future-command
+approval.
+
+Phase 6 therefore requires an explicit reviewed **session-scoped host-authority profile**
+before operational promotion. The semantics are frozen here; the final machine-readable
+identifier is promoted with the host-confirmation contract. A proposed identifier such as
+``HCS1`` is acceptable if review retains the following meaning:
+
+* the owner-visible authority boundary is session begin, not each member file operation;
+* the session is bounded to one exact device/controller/workspace/profile and a finite
+  trusted-time lifetime;
+* only the reviewed workspace capability family is included;
+* credential, policy, control-plane, privileged, arbitrary-system, and hardware authority
+  remain excluded;
+* each member call still requires authenticated controller identity, exact current session
+  validity, local policy, exact Tool contract, exact input, and current verified state;
+* host metadata, Tool annotation, model prose, or possession of a session identifier never
+  creates local authority;
+* the selected real ChatGPT HOST profile remains unsupported for Phase 6 if it cannot
+  safely express/demonstrate the bounded session model.
+
+The actual ChatGPT interaction may be a one-time owner-visible confirmation, an explicit
+session-start interaction derived from the owner request, or another host-native mechanism.
+That mechanism is empirical and is not invented here.
+
+5.2 Information-class consequence
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Workspace metadata can normally be ``normal-result``. Source file contents and search
+matches are conservatively ``restricted-result`` unless the reviewed workspace profile
+explicitly proves a narrower public-information classification.
+
+The session-scoped host profile must therefore cover ordinary source-workspace mutation
+authority and bounded source-content disclosure without repeated per-file owner prompts.
+Reusable credentials and protected state remain ``never-disclosable`` and are outside the
+workspace profile rather than relying on content scanning.
+
+6. Development-session domain model
+------------------------------------
+
+Phase 6 introduces one durable/auditable development-session model owned by the main
+Binnacle application.
+
+Representative domain types:
+
+.. code-block:: python
+
+   class DevelopmentSessionState(StrEnum):
+       PENDING = "pending"
+       ACTIVE = "active"
+       ENDED = "ended"
+       EXPIRED = "expired"
+       REVOKED = "revoked"
+
+   class ActivationClosure(StrEnum):
+       PENDING = "pending"
+       COMPLETE = "complete"
+
+   @dataclass(frozen=True, slots=True)
+   class DevelopmentSessionSnapshot:
+       session_id: str
+       state: DevelopmentSessionState
+       state_version: int
+       activation_closure: ActivationClosure
+       controller_id: str
+       controller_epoch: int
+       device_id: str
+       device_epoch: int
+       workspace_id: str
+       workspace_profile_sha256: str
+       workspace_root_identity_sha256: str
+       workspace_mount_identity_sha256: str
+       policy_version: str
+       contract_profile_sha256: str
+       objective_sha256: str
+       started_at: datetime | None
+       expires_at: datetime
+       effective_for_new_work: bool
+       ineffective_reason: str | None
+
+``session_id`` is opaque and contains at least 128 random bits. It is an identifier, not a
+bearer credential.
+
+``effective_for_new_work`` is derived, not merely ``state == ACTIVE``. It is true only when
+the exact session is ``ACTIVE``, ``activation_closure == COMPLETE``, trusted time is valid
+and before deadline, controller/device/workspace/profile/policy facts remain exact, the
+registered root/mount identity and no-submount invariant remain exact, no explicit
+end/revocation won the session gate, and global consequential readiness is healthy.
+
+One **live session slot** per exact device epoch + registered workspace is sufficient for
+Bootstrap. ``PENDING`` and ``ACTIVE`` both occupy that slot, regardless of activation-
+closure state. Migration ``0003`` enforces this independently in SQLite with a partial
+unique index equivalent to::
+
+   CREATE UNIQUE INDEX uq_development_sessions_live_workspace
+       ON development_sessions(device_id, device_epoch, workspace_id)
+       WHERE state IN ('pending', 'active');
+
+The constraint is the durable overlap-prevention invariant, not an application pre-check.
+A concurrent distinct begin request cannot create a second ``PENDING`` row while the first
+activation is in flight. Same-key retry resolves the retained begin operation before
+slot/current-state checks; a distinct key that loses the slot race receives a bounded
+non-disclosing ``development_session_slot_busy``/already-pending-or-active outcome and
+creates no second authority-state effect. A different controller also cannot create an
+overlapping live session for the same device/workspace merely because ownership changed.
+
+The slot is released only by a truthful terminal session transition to ``ENDED``,
+``EXPIRED``, or ``REVOKED``. Ambiguous/incomplete activation keeps the ``PENDING``/``ACTIVE``
+row live and the slot reserved fail-closed. Startup treats multiple live rows for one slot
+as integrity failure; it never picks one or rebuilds slot ownership from mutable source
+state.
+
+The free-form owner objective is not executable policy. The implementation stores a
+bounded safe label where useful plus a canonical digest for provenance. Binnacle does not
+try to decide whether every later source edit is semantically part of the objective; the
+session grants the reviewed broad workspace capability and ChatGPT remains the reasoning
+agent.
+
+7. Session authority gate, lifetime, restart, and revocation
+------------------------------------------------------------
+
+7.1 ``DevelopmentSessionAuthorityGate``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Phase 6 adds one application-level authority gate per current development session. It is a
+correctness primitive, not a cache and not a substitute for durable session state.
+
+The gate serializes:
+
+* a content-returning read/search about to establish its one process-local content permit;
+* the session-begin operation about to cross its authority-granting activation
+  ``EffectBoundary.start``;
+* a member mutation about to cross ``EffectBoundary.start``;
+* explicit session end/revocation;
+* trusted-time expiry becoming effective for new work;
+* startup/recovery reduction caused by controller/device/workspace/profile/policy/time or
+  root/mount-identity discontinuity.
+
+The global application lock order is fixed as:
+
+::
+
+   WorkspaceAccessGate
+     -> Phase 4 per-operation dispatch handoff, when consequential
+     -> DevelopmentSessionAuthorityGate
+     -> Phase 4 process-wide ConsequentialBoundaryGate, when consequential
+
+Content read/search uses only ``WorkspaceAccessGate CONTENT_READ ->
+DevelopmentSessionAuthorityGate`` from that chain. A mutation already owns exclusive
+``CHANGE`` before it later enters Phase 4 handoff/session/process gates. Session activation
+has no workspace change guard because it grants authority but does not change source bytes;
+it uses ``Phase 4 per-operation dispatch handoff -> DevelopmentSessionAuthorityGate ->
+Phase 4 ConsequentialBoundaryGate``. Session end/revocation acquires the session gate
+directly and **never** reaches back to acquire ``WorkspaceAccessGate``. Recovery/access-
+gate transitions likewise never acquire a session gate while holding a later gate in
+reverse order. Tests fail on any inversion.
+
+For content read/search, initial session checks before waiting for ``CONTENT_READ`` are
+advisory freshness checks only. After the shared content guard is acquired, the application
+acquires the exact session gate and re-samples trusted time plus controller/device/session
+state+version/activation closure/workspace/profile/root/**mount identity**/protected-content
+policy. Only an exact still-effective session may create a bounded process-local
+``ContentReadPermit`` bound to exact session state/version, profile/root/mount identity,
+request digest, and current content-guard epoch. No source bytes are opened/returned and no
+``rg`` matcher is spawned before that permit exists.
+
+Permit creation while content guard + session gate are held is the content-admission
+linearization point. The session gate may then be released while the shared content guard
+remains held for the full file read or search enumeration/pinned-file matching. If
+end/revocation/expiry/recovery reduction wins first, the reader releases its content guard
+and returns no source content. If content admission wins first, later reduction blocks new
+admission but does not retroactively interrupt/reclassify the already-admitted bounded
+no-effect request. The permit is non-durable, non-transferable, non-reusable, and dies with
+its exact guard/runtime.
+
+For session activation, after the begin operation is already durably ``running`` and its
+``effect.intent_recorded`` audit is fsynced, the application acquires the Phase 4
+per-operation handoff, then the exact session gate, then the Phase 4 process-wide
+consequential gate. While those gates are held it final-revalidates the exact still-self-
+owned ``PENDING`` slot plus controller/device/workspace/profile/policy/time/root/mount and
+all Phase 4 audit/recovery predicates, publishes the durable audit obligation, and only
+then lets the process-wide gate own the activation ``call_start`` linearization. The gated
+activation effect is one short exact ``PENDING -> ACTIVE`` CAS with
+``activation_closure=PENDING`` and a durable activation effect reference. Immediate
+receipt/reference/effect-knowledge classification completes before the session gate or
+process permit is released.
+
+Thus a required-audit failure trip that wins before activation ``call_start`` produces
+zero authority-state effect; activation cannot mutate the session while the Phase 4
+consequential gate is fail-restricted. If activation ``call_start`` wins first, the
+``ACTIVE``/incomplete state is already a started/known-or-potential effect and later audit
+failure or authority reduction cannot relabel it ``known_no_effect``. The session remains
+ineffective until the separate closure CAS proves required post-effect audit/obligation
+closure.
+
+For a member mutation, the session gate is held from final trusted-time/session predicates
+through final Phase 4 revalidation, durable audit-obligation publication, and process-wide
+gate-owned ``call_start``. It is released only after bounded start handoff either definitely
+did not occur or linearized and immediate effect-receipt/knowledge classification completed.
+
+Thus:
+
+* authority reduction wins session gate before start -> no ``EffectBoundary.start``;
+* member ``call_start`` wins while gate still proves exact effectiveness -> effect is
+  already started/committed-to-start before later reduction, which cannot rewrite effect
+  truth.
+
+Expiry is not a timer callback. Every session-gate entry samples Phase 4 trusted time under
+the same critical section. Reached or unverifiable deadline makes
+``effective_for_new_work=false`` before a new mutation/content admission may linearize.
+
+7.2 Trusted-time binding
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Session lifetime uses the Phase 4 trusted-time model. Store enough evidence to enforce
+expiry across ordinary restart:
+
+* ``expires_at``;
+* trusted-time generation at activation;
+* activation boot identity digest;
+* same-boot monotonic deadline where available;
+* controller/device/workspace/profile/policy/root/mount-identity snapshots.
+
+A reasonable Bootstrap configuration is a one-hour default with a hard maximum of four
+hours. Exact schema limits are frozen during contract promotion and cannot be enlarged by
+model-controlled input beyond the reviewed maximum.
+
+Clock rollback, reboot with untrusted wall time, or lost trusted-time continuity never
+extends a session. If expiry cannot be proved safely, the session is ineffective for new
+mutations and new content-returning admissions.
+
+7.3 Ordinary Binnacle restart
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+An ordinary MCP/application restart does not by itself end a session. Startup may restore
+a session effective only when all exact identity/profile/policy/time/root/mount predicates
+verify and activation closure is durably complete.
+
+This supports the Bootstrap self-hosting loop without forcing the owner to repeat the same
+session approval solely because the MCP process restarted.
+
+The in-memory session gate is reconstructed from authoritative session rows plus current
+trusted predicates. It never converts an ``ACTIVE`` row with incomplete activation closure
+or mismatched/unverifiable mount identity into authority. A begin operation that was
+``running`` across restart is reconciled against its exact durable activation effect
+reference/receipt and Phase 4 dispatch-attempt/audit-obligation evidence. ``PENDING`` alone
+never proves no effect; ``ACTIVE`` row presence alone never substitutes for the operation's
+effect classification. Missing or contradictory activation evidence remains conservative
+and keeps the session ineffective/live-slot reserved until exact reconciliation or
+explicit authority reduction.
+
+7.4 End, expiry, and revocation
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+End/expiry/revocation:
+
+* prevents new member admission, including content read/search, and any not-yet-started
+  consequential member from crossing its final effect boundary;
+* never rewrites, erases, duplicates, or blindly cancels an already-linearized mutation or
+  already-admitted bounded no-effect content request.
+
+If reduction wins before mutation start, the mutation closes proven-no-effect and releases
+its workspace fence only after normal Phase 4 audit/recovery closure. If start wins, later
+end never manufactures ``known_no_effect``. Same-key retry after session end returns the
+retained operation/result/uncertainty before mutable session checks and never creates a
+second effect.
+
+8. Session begin/inspect/end application semantics
+--------------------------------------------------
+
+8.1 ``development_session_begin``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Session begin is consequential authority-state mutation even though it writes no source
+file. Its ``PENDING -> ACTIVE`` transition is a real Phase 4 effect boundary; no code path
+may perform that transition merely after an application-level final check.
+
+First-use ordering is:
+
+#. authenticate owner/controller and normalize workspace/objective/duration;
+#. resolve existing caller-key binding before mutable session/current-state checks;
+#. create minimal Phase 4 ``received`` identity and required received audit;
+#. evaluate policy against exact observed no-live-slot/current-state facts;
+#. after allow, in one short post-policy transaction re-prove operation/controller/device/
+   workspace/profile/time/root/mount identity and live-slot freedom;
+#. atomically insert exact self-owned ``PENDING`` session row with ``begin_operation_id`` +
+   trusted deadline, persist one current allow decision, and commit
+   ``received -> authorised``; the partial unique index is final race arbiter;
+#. bind expected self transition as
+   ``session_slot_transition=free_then_exact_self_pending``;
+#. fsync required allowed/authorised audit and move operation to ``running``;
+#. fsync ``effect.intent_recorded`` for the exact activation effect;
+#. acquire Phase 4 per-operation dispatch handoff;
+#. acquire exact ``DevelopmentSessionAuthorityGate`` for this still-self-owned PENDING
+   session;
+#. acquire Phase 4 process-wide ``ConsequentialBoundaryGate`` permit;
+#. under those gates final-revalidate operation/controller/device/workspace/profile/
+   policy/time/root/mount identity, exact PENDING/live-slot ownership, cancellation,
+   audit/recovery health, and the consumed phase-stable session-slot binding;
+#. publish/fsync the exact Phase 4 audit obligation while the session/process gates are
+   held;
+#. recheck the same exact predicates and let the process-wide gate own
+   ``call_start`` for a narrow internal ``SessionActivationEffectBoundary``;
+#. that bounded start performs only the exact ``PENDING -> ACTIVE`` CAS with
+   ``activation_closure=PENDING`` and records a recoverable activation effect reference;
+#. immediately classify/persist the activation receipt/reference/effect knowledge before
+   releasing the process permit, session gate, or per-operation handoff;
+#. fsync required post-effect activation audit and close the matching obligation;
+#. only after audit success, obligation closure, and exact identity/effect revalidation may
+   a short CAS set ``activation_closure=COMPLETE``;
+#. only ``ACTIVE`` + ``COMPLETE`` makes session gate effective for member work.
+
+The Phase 4 process-wide gate is the sole activation-start-vs-required-audit-failure
+linearization point. If the audit-failure trip wins before ``call_start``, no
+``PENDING -> ACTIVE`` transition occurs; the operation follows the normal proven-no-effect
+closure and the PENDING slot is terminalized/released only after its required audit/recovery
+proof. If ``call_start`` wins, a later audit failure cannot pretend activation never
+started. Lost/ambiguous activation start/receipt becomes ``uncertain`` and leaves the live
+slot and session authority fail-closed; ``ACTIVE`` with incomplete closure never grants
+member authority.
+
+A distinct begin losing the slot race creates no second ``PENDING`` or authority effect;
+it follows a bounded non-disclosing no-effect busy/rejection path. It never waits and
+attaches to another session.
+
+The session gate remains closed to member starts/content admission throughout activation
+until the closure CAS succeeds. Post-effect audit/obligation/CAS failure leaves session
+ineffective. Restart may complete activation only from exact retained operation/effect/audit
+and obligation evidence, never from host UI/model text or ``ACTIVE`` row presence alone.
+
+A pre-effect activation failure frees the slot only after durable ``known_no_effect`` plus
+required audit/recovery truthfully terminalizes the exact ``PENDING`` row. Once authority
+state may have started or is known to have occurred, incomplete/uncertain closure keeps the
+slot fail-closed until exact reconciliation or explicit authority reduction.
+
+8.2 ``development_session_inspect``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Inspect is bounded/read-only. Owner may inspect current/terminal session metadata,
+effective/closure/expiry/trusted-time status, workspace ID/profile digest, bounded root/
+mount-identity status, and bounded reason codes. It reveals no credential, policy body,
+protected path, raw audit bytes, or source content.
+
+8.3 ``development_session_end``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+End is authority reducing. It acquires exact session gate before changing durable authority
+state. Once terminal reduction wins, no later member mutation start or content permit can
+begin.
+
+Reduction is fail-safe: inability to append the required end audit must not leave authority
+active merely to make audit ordering convenient. Durable ``ACTIVE -> ENDED``/``REVOKED``
+reduction takes effect under the gate; subsequent audit failure places global
+consequential admission into Phase 4 fail-restricted recovery while the session remains
+reduced. Activation and revocation are intentionally asymmetric: activation withholds
+authority until **Phase 4 gated start plus** audit closure; revocation removes authority
+first.
+
+A member whose mutation ``call_start`` or content permit already won before end remains
+in-flight/admitted and is not reclassified. Same-key end retry returns retained end work.
+A new request against an already terminal session may return bounded already-ended state
+with no new effect.
+
+9. Registered workspace profile and protected configuration
+-----------------------------------------------------------
+
+Workspace registration is protected configuration/control-plane state. Phase 6 Tools may
+consume but never create/change/broaden/delete a workspace registration.
+
+Representative resolved settings:
+
+.. code-block:: python
+
+   class WorkspaceProfile(BaseModel):
+       workspace_id: str
+       root: Path
+       enabled: bool = False
+       max_path_bytes: int = 4096
+       max_path_depth: int = 64
+       max_file_mutation_bytes: int = 4 * 1024 * 1024
+       max_read_chunk_bytes: int = 1024 * 1024
+       max_list_entries: int = 4096
+       max_search_files: int = 4096
+       max_search_open_fds: int = 4096
+       max_search_preflight_bytes: int = 64 * 1024 * 1024
+       max_search_matches: int = 2000
+       max_search_output_bytes: int = 1024 * 1024
+       search_timeout_seconds: float = 5.0
+       search_preflight_timeout_seconds: float = 5.0
+       allow_out_of_band_writers: bool = False
+       allow_submounts: bool = False
+       require_mount_id_verification: bool = True
+       move_enabled: bool = False
+       delete_enabled: bool = False
+
+Exact production profile lives under protected configuration such as ``/etc/binnacle``
+and loads into an immutable resolved settings snapshot. Model input selects a registered
+``workspace_id`` only; it cannot redirect root or weaken safety settings.
+
+The Bootstrap source-workspace profile fixes ``allow_submounts=false``. A future
+separately reviewed nested registered workspace/mount contract may define another authority
+boundary; Phase 6 never treats a pre-existing bind mount or later mount insertion as an
+implicit extension of the parent workspace.
+
+``require_mount_id_verification`` is a security requirement, not an optimization. The
+registered profile pins exact descriptor-visible root mount identity plus filesystem/device
+identity at registration/startup. Linux ``statx(..., STATX_MNT_ID)`` or a reviewed exact
+equivalent is preferred because ``st_dev`` alone cannot distinguish a bind mount on the
+same underlying filesystem. If reliable per-descriptor mount identity is unavailable,
+content-returning and mutation capabilities that traverse descendants remain disabled.
+
+``allow_out_of_band_writers`` records a reviewed deployment assumption; it never turns
+pathname operations into inode CAS. When true, content read/search stays disabled unless a
+stronger reviewed mechanism preserves protected-object exclusion throughout traversal.
+When false, ``WorkspaceAccessGate`` coordinates Binnacle-managed changers and the reviewed
+deployment must establish that other writers do not bypass the model.
+
+Content promotion also requires reliable regular-file link-count semantics. Binnacle
+conservatively rejects content-bearing access/mutation for a regular file whose descriptor
+reports ``st_nlink != 1``. If the candidate filesystem cannot supply trustworthy link-count
+facts, content-returning read/search and affected mutations stay disabled rather than
+assuming hard-link aliases cannot exist.
+
+At session activation Binnacle opens/verifies root and records a protected root-identity
+digest from exact descriptor-visible filesystem/directory identity, **mount identity**, and
+workspace/profile digest. Every later operation reopens configured root and proves the same
+root and mount identity before metadata projection, content return, or mutation. Root path
+replacement, symlink substitution, mount/profile change, or unverifiable root/mount
+identity makes session ineffective; Binnacle never silently rebases the session onto a
+newly observed tree.
+
+10. Workspace-internal protected boundaries, aliases, and mount boundary
+------------------------------------------------------------------------
+
+The source checkout includes normal source plus internal/protected objects. Phase 6 must
+not turn every byte below the root string into identical authority.
+
+At minimum, the reviewed profile excludes **content-returning access and mutation** for:
+
+* ``.git/`` -- Phase 8 semantic Git owns repository metadata/credential use;
+* explicitly registered project-local credential/private-key material;
+* paths mapped to protected Binnacle config/state/audit/control-plane storage;
+* deployment-specific protected paths added by owner profile.
+
+``workspace_read``/``workspace_search`` reject those paths; path-prefix filtering is not
+sufficient by itself. A regular file can be a hard-link alias of another pathname. Phase 6
+therefore adopts the conservative rule:
+
+* no content-bearing Phase 6 operation reads, searches, replaces, moves, or deletes a
+  regular file whose descriptor-visible ``st_nlink`` is not exactly 1;
+* direct read checks the opened target descriptor after the content permit and before any
+  bytes are returned;
+* search performs a bounded descriptor-relative enumeration of the exact admitted scope
+  while ``CONTENT_READ`` is held; every search-eligible regular file must pass protected-
+  prefix, ordinary-file, exact registered-mount, reliable ``st_nlink == 1`` checks and is
+  opened/pinned before matching begins;
+* the enumeration is bounded by reviewed entry/file/open-FD/byte/time ceilings; exceeding
+  any ceiling is an explicit incomplete/scope-too-large result **before matcher spawn**, not
+  permission to skip alias or mount checks or report a complete negative search;
+* Phase 6 exposes no hard-link creation operation;
+* every Phase 6 mutation revalidates single-link status for an existing regular-file
+  source and the exact registered mount identity of source/target/parents/staging
+  immediately before its effect boundary;
+* future Phase 7/8 workspace changers consuming the shared ``CHANGE`` seam must preserve
+  the same information and mount boundary. A future contract that can access protected
+  content or another mount may not declassify it into the content-visible namespace,
+  create an alias bypass, or silently reopen parent-workspace content readiness without
+  its own reviewed boundary proof.
+
+The no-uncoordinated-writer profile plus shared access gate makes the parent-owned exact-file
+snapshot stable for that admitted read/search with respect to Binnacle-managed namespace
+changes. Mount identity remains an independent containment predicate during enumeration;
+a profile permitting uncoordinated writers cannot promote content access merely by checking
+``st_nlink`` or mount state once and requires a stronger reviewed confinement mechanism.
+
+Protection must remain stable for the **entire** content operation. A Binnacle-managed
+changer cannot rename/exchange protected directories beneath allowed names because content
+operations hold shared ``WorkspaceAccessGate`` and every changer holds exclusive
+``CHANGE``. The search matcher receives neither a workspace pathname nor workspace/search-
+directory descriptor, so it cannot discover a directory, hard-link alias, or mount that
+was not already admitted and opened by the parent. A bind mount/submount encountered during
+parent enumeration is rejected independently even when path filters, link count, and
+``st_dev`` look benign.
+
+``workspace_inspect``/``workspace_list`` may expose bounded non-sensitive metadata for a
+protected or rejected mount entry only when the promoted contract explicitly permits it;
+they never descend across an unregistered mount, expose protected bytes, sensitive link
+targets, or reusable authority material. A conservative mount-boundary reason may be
+returned without revealing protected source path.
+
+``.github/``, ``docs/``, source, tests, ``pyproject.toml``, ``uv.lock``, lint/test config,
+and ordinary repository files are normal source content subject to the alias and mount
+rules.
+
+The implementation never relies on heuristic secret scanning as the security boundary.
+Reusable secrets belong outside workspace or explicit protected exclusions. Source content
+returned to ChatGPT remains conservatively classified as section 5.2 specifies.
+
+11. Canonical workspace path model
+----------------------------------
+
+One normalizer owns all path-bearing workspace contracts. Canonical input is a
+workspace-relative POSIX-style path with:
+
+* UTF-8 and NFC normalization;
+* no leading ``/`` or drive/UNC prefix;
+* ``/`` only; backslash rejected rather than reinterpreted;
+* no empty/``.``/``..`` component, NUL, CR, LF;
+* Linux component limit, reviewed full-path and depth limits;
+* reserved Binnacle staging names/prefixes rejected;
+* protected-prefix policy checked before content return or mutation;
+* semantic target established only after descriptor-relative resolution and exact mount-
+  boundary verification.
+
+String normalization never proves containment.
+
+12. Descriptor-relative Linux containment and mount boundary
+------------------------------------------------------------
+
+Security uses Linux descriptor-relative operations rather than ``Path.resolve()`` or
+string-prefix checks.
+
+The Bootstrap source-workspace authority is one **registered mount domain**. Ordinary
+Phase 6 operations may not cross a mount point beneath the registered root. A bind mount
+from another host path, a nested filesystem, or a later mount insertion is not workspace
+authority even when it shares ``st_dev`` with the root.
+
+Preferred Linux resolution uses ``openat2`` with exact ``RESOLVE_BENEATH`` /
+``RESOLVE_NO_MAGICLINKS`` / ``RESOLVE_NO_SYMLINKS`` / **``RESOLVE_NO_XDEV``** semantics for
+every descendant walk/open that can return metadata/content or participate in a mutation.
+The exact root descriptor is opened/pinned separately and its root mount identity is bound
+to the registered profile/session.
+
+Fallback component-by-component descriptor walking is allowed only when it can prove the
+same boundary. It must:
+
+* open/pin registered root descriptor and compare exact session/profile/root **and mount**
+  identity;
+* walk directory components relative to open descriptors using ``dir_fd``,
+  ``O_DIRECTORY`` and ``O_NOFOLLOW``;
+* after each opened component/final object, obtain reliable descriptor-visible mount
+  identity using ``statx(..., STATX_MNT_ID)`` or an exactly reviewed equivalent and require
+  equality with the registered root mount ID; ``st_dev`` alone is insufficient because
+  bind mounts can share the device;
+* metadata checks use ``follow_symlinks=False`` and never follow a mount crossing merely
+  because the object type/path otherwise looks valid;
+* final open/link/rename/unlink/mkdir/rmdir through pinned parent descriptors that have
+  themselves passed the same mount-ID boundary;
+* content-bearing regular-file opens additionally require exact ordinary-file type,
+  ``st_nlink == 1``, and exact registered mount identity under the reviewed filesystem
+  profile;
+* never follow a workspace symlink or cross an unregistered submount during metadata
+  traversal, content read/search enumeration, staging, or mutation;
+* close descriptors deterministically.
+
+If ``openat2 RESOLVE_NO_XDEV`` or the selected fallback mount-ID primitive is unavailable,
+unreliable, or contradicted on the candidate Pi/filesystem, affected descendant metadata,
+content, search, and mutation capability stays disabled. There is no silent ``O_NOFOLLOW``-
+only fallback.
+
+Mount topology is revalidated at admission as applicable and again at the final
+OP-BOUNDARY for every mutation. A mount insertion/replacement after preparation/admission
+but before start is a stale/containment failure and produces zero effect. During a search,
+mount identity is enforced on every parent-owned descriptor open used to build the exact
+file snapshot; after a file descriptor is pinned, a later mount insertion cannot redirect
+that descriptor. The matcher performs no child-side recursive workspace lookup. If a
+mount-topology or receipt question becomes ambiguous only after a mutation effect may have
+started, the operation becomes ``uncertain``; final pathname state cannot reconstruct the
+answer.
+
+A narrowly reviewed internal ``/proc/self/fd/<n>`` reference may be used **only inside the
+Binnacle application** for descriptor bookkeeping where required. Phase 6 never hands
+``ripgrep`` a workspace directory descriptor or procfd path from which it can recursively
+traverse the workspace. This internal mechanism is not a model path and does not relax
+workspace magic-link, symlink, or mount-crossing rejection.
+
+Inspect/list may report symlink or rejected-mount metadata where explicitly reviewed, but
+read/search enumeration and all Phase 6 mutations reject symlink-as-content/effect targets
+and mount-crossing targets.
+
+13. Stable object/version identity
+----------------------------------
+
+Read/inspect output returns bounded opaque ``object_version`` for regular files and
+explicit directories. Token binds at least:
+
+* workspace/profile/root identity;
+* registered root mount identity and observed object mount identity;
+* normalized path;
+* object type;
+* descriptor-observed filesystem/inode identity;
+* relevant mode/size/time/link-count facts;
+* for mutable regular files, exact full content SHA-256 within mutation ceiling.
+
+Token is not authority. Replacement/delete/move inputs supply exact expected token and
+where required content SHA-256. Stale/changed/multiply-linked/**mount-changed** existing
+regular file fails before effect start.
+
+Files exceeding mutation/hash ceiling may remain readable in bounded chunks only when
+mount/content gates are otherwise satisfied; they are not directly mutable until a
+separately reviewed larger-file contract exists.
+
+Object identity is exact evidence at observation, not inode-conditional syscall CAS.
+Section 23 scopes residual out-of-band-writer race.
+
+14. Read-only workspace operations
+----------------------------------
+
+All read-only operations require authenticated owner/controller, exact registered
+workspace, and effective development session unless promoted contract explicitly defines a
+smaller safe metadata exception.
+
+They create no consequential Phase 4 operation merely for bookkeeping but enforce bounds,
+session/workspace authority, information class, protected paths/aliases, **registered mount
+boundary**, redaction, rate/resource limits, and read-audit/diagnostic policy.
+
+Metadata-only inspect/list that depends on session performs a final session/profile/time/
+root/mount freshness check immediately before protected result projection. It returns no
+source bytes and never descends through an unregistered mount. It need not acquire content
+guard solely for metadata.
+
+Content-returning operations are stricter:
+
+#. an early session check may reject obvious stale calls but is advisory only;
+#. acquire shared ``WorkspaceAccessGate.CONTENT_READ`` only after durable mutation fence is
+   free and startup recovery is complete;
+#. while guard is held acquire ``DevelopmentSessionAuthorityGate`` and re-prove exact
+   effective session, trusted time, controller/device, workspace/profile/root/mount
+   identity, request binding, protected-content policy;
+#. mint one process-local request/guard-bound ``ContentReadPermit`` that includes exact
+   mount identity;
+#. only after the permit exists open candidate source content using the section 12 no-XDEV/
+   mount-ID boundary;
+#. for each directly opened regular file require descriptor-visible ``st_nlink == 1`` and
+   exact registered mount identity;
+#. retain content guard until direct read finishes or search exact-file enumeration,
+   pinned-descriptor streaming/matching, output drain, and matcher process termination fully
+   complete.
+
+If session reduction wins before permit, release guard and return no source content/no
+search matcher. Permit winning first authorizes only that already-admitted bounded no-effect
+request; later end blocks later admission but does not retroactively reclassify it. A mount
+boundary failure at any point returns no protected/arbitrary mounted bytes.
+
+``workspace_read`` opens one exact non-protected regular file after permit, checks exact
+single-link ordinary-file identity **and mount identity**, and returns bounded range/chunk
+plus object version, content digest where available, encoding/media and continuation/
+truncation facts. Binary content is never silently decoded as text.
+
+``workspace_list`` traversal is descriptor-relative/no-follow/**no-XDEV**, bounded by
+ depth/entries/output, never descends into an unregistered submount, and truthfully marks
+truncation or mount-boundary rejection. Protected metadata is exposed only if contract
+allows it.
+
+15. Descriptor-enumerated exact-file-set ``ripgrep`` matcher
+------------------------------------------------------------
+
+``workspace_search`` uses mature ``ripgrep`` for text/regex matching, but **Binnacle owns
+all workspace traversal**. Ripgrep is not a workspace directory walker in Phase 6. The
+previous design of giving ``rg`` a pinned search-directory descriptor and recursively
+searching ``.`` is rejected because a mount can be attached beneath that directory after
+preflight while the child is performing fresh pathname lookups.
+
+The security invariant is an exact parent-owned file set:
+
+* while exact ``CONTENT_READ`` and ``ContentReadPermit`` are held, Binnacle performs the
+  bounded descriptor-relative enumeration itself using section 12 no-XDEV/mount-ID,
+  protected-prefix, type and reliable ``st_nlink == 1`` checks;
+* every search-eligible regular file is opened and pinned by descriptor **before any
+  matcher child is allowed to consume its bytes**;
+* a mount inserted while enumeration is in progress is rejected when a later component or
+  candidate is opened; a mount inserted after a candidate FD is pinned cannot redirect that
+  already-open FD;
+* the resulting exact set is represented by bounded immutable application data such as::
+
+     @dataclass(frozen=True, slots=True)
+     class SearchFileSnapshot:
+         relative_path: str
+         read_handle: SearchReadHandle
+         object_version: str
+         object_identity_sha256: str
+         mount_identity_sha256: str
+         byte_count: int
+
+  ``SearchReadHandle`` is operation/request-local and cannot be serialized as authority or
+  reused after guard/runtime lifetime;
+* the snapshot operation has exact file-count, open-FD, aggregate preflight-byte, per-file,
+  path-depth and elapsed-time ceilings. If the complete admitted scope cannot be snapshotted
+  within those reviewed ceilings, search terminates **before spawning a matcher** with an
+  explicit ``scope_too_large``/``preflight_incomplete``-class result. An incomplete
+  enumeration is never reported as a complete negative search;
+* deterministic include/exclude/hidden/ignore policy is applied by the parent enumerator.
+  Protected ``.git`` is excluded before open, normal ``.github`` remains eligible, and
+  ignore policy cannot reintroduce a protected/mount-crossing object. Bootstrap does not
+  hand an arbitrary ignore/config file to a child. If later full Git-ignore semantics need
+  a helper, use a mature pure path matcher behind a narrow parent-side adapter; do not
+  reintroduce recursive child workspace traversal or a persistent repository index.
+
+15.1 Matcher process purity and stdin-only input
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The exact ``rg`` executable is owner-profile-resolved absolute path. Explicit argv alone is
+not enough because ripgrep can load configuration and optional modes can invoke helpers.
+Child environment is therefore a minimal closed allowlist for deterministic locale/runtime;
+it excludes ``RIPGREP_CONFIG_PATH``, ``HOME``, credential/helper variables, Python/runtime
+injection variables, proxy/agent variables not required by no-network matching, and every
+Binnacle control-plane value.
+
+The adapter supplies and candidate binary must prove non-negatable semantics equivalent to:
+
+* ``--no-config``;
+* ``--no-pre``;
+* ``--no-search-zip``;
+* ``--no-follow``;
+* ``--json``.
+
+No shell, PCRE2 helper, preprocessor, archive search, external pager, or other helper-
+spawning mode is enabled in Bootstrap.
+
+Matching is one exact pinned file per child by default. A future bounded batch is permitted
+only when it preserves the same property that the child can open/discover **no** workspace
+file beyond the already pinned set. For each file:
+
+#. parent validates the snapshot is still bound to the active request/guard;
+#. spawn absolute ``rg`` with ``close_fds=True`` from a fixed non-workspace/private safe cwd;
+#. child receives no workspace path, no workspace/search-directory FD, no procfd path, and
+   no inherited descriptor other than stdin/stdout/stderr plus narrowly required process-
+   control plumbing;
+#. parent streams bytes only from the already-open candidate descriptor to ``rg`` stdin;
+#. matcher consumes stdin and emits bounded JSON; any child-supplied path/filename text is
+   non-authoritative and is ignored/replaced by the exact parent-bound ``relative_path``;
+#. line/match offsets/results are correlated to that one snapshot; aggregate match/output/
+   timeout ceilings span all children in the logical search;
+#. parent closes/terminates/reaps child before advancing/finishing as required by the
+   configured bounded concurrency model.
+
+The child has no recursively traversable workspace capability. Mount insertion while
+matching cannot expand the file set because the only source bytes arrive over stdin from a
+previously pinned descriptor. Under the reviewed coordinated/no-out-of-band-writer model,
+CHANGE exclusion stabilizes Binnacle-managed namespace/content changes for the admitted
+search. If uncoordinated same-inode writers are permitted, search remains disabled without a
+stronger reviewed content-snapshot/confinement mechanism; the fact that a file FD is pinned
+does not pretend hostile same-inode writes are impossible.
+
+15.2 Search lifecycle, restart and bounds
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Matcher children remain in the exact Binnacle application systemd service cgroup with
+``KillMode=control-group`` + ``SendSIGKILL=yes`` or reviewed stronger lifecycle and no
+``Delegate`` escape. Parent-death signalling is defense in depth.
+
+Every fresh application invocation starts ``SearchChildRecoveryBarrier`` before
+``WorkspaceAccessGate`` may leave ``RECOVERY_CLOSED``. Barrier proves prior invocation
+matcher/helper trees quiesced and durable fence/root-mount recovery predicates pass. Unlike
+the rejected directory-walking design, an old matcher has **no workspace FD/path** from
+which to discover new files. Application death closes its stdin pipe; even before systemd
+cleanup completes, the old child cannot reopen/traverse the source workspace. The barrier
+is retained for resource/output/process-lifecycle assurance and prevents stale output/process
+state from being mistaken for a current search.
+
+Additional typed bounds include closed pattern/case/fixed-string options, Rust regex/default
+engine only, file/match/output/per-file byte ceilings, aggregate search/preflight timeout,
+binary policy, bounded stdout/stderr, and truthful truncation/timeout/incomplete-scope
+projection. File-snapshot exhaustion is distinct from result truncation: if enumeration is
+incomplete, the response must say the search scope was not completely evaluated rather than
+returning a misleading complete result.
+
+Mandatory adversarial tests include:
+
+* bind mount inserted after some/all files are pinned but before/during matcher execution:
+  zero bytes from the mounted tree and no expansion of the snapshot;
+* child FD/cwd inspection proves zero workspace/search-directory FDs and zero workspace
+  pathname/procfd argument;
+* hostile ``RIPGREP_CONFIG_PATH``/``--pre`` sentinel produces zero helper execution or
+  unexpected descendant;
+* SIGKILL application while matcher is active closes stdin; surviving child cannot discover
+  any new workspace file and replacement runtime remains recovery-closed until process
+  quiescence/fence/root-mount predicates pass;
+* file/open-FD/preflight-byte/time ceiling yields explicit incomplete/scope-too-large
+  outcome before any matcher child starts;
+* forged/odd stdin-origin path fields in ``rg`` JSON cannot change parent-bound logical path;
+* configured root/subpath rename/replacement or mount insertion during enumeration is
+  rejected by descriptor/mount checks, while changes after a candidate FD is pinned cannot
+  redirect that FD.
+
+Candidate-Pi evidence must prove the exact stdin JSON behaviour, process-purity flags,
+resource ceilings and performance envelope before ``workspace_search`` promotion. Missing
+or contradictory evidence keeps search disabled; the plan never infers support from a local
+development machine.
+
+16. Shared workspace access/change coordination seam
+----------------------------------------------------
+
+Phase 6 deliberately chooses conservative concurrency. At most one consequential
+Binnacle-managed workspace-changing effect owns registered workspace fence at a time.
+Metadata-only inspect/list may remain concurrent; content read/search may share with other
+content readers but not a Binnacle-managed changer.
+
+One per-workspace ``WorkspaceAccessGate`` supplies linearization:
+
+* ``CONTENT_READ`` is shared, available only while durable mutation fence is free and
+  startup matcher/mount-identity recovery complete. Acquisition is not authority: while
+  guard held, caller next acquires session gate, revalidates exact effective session,
+  root/mount identity, mints request-bound ``ContentReadPermit``, and then performs direct
+  single-link/mount check or builds the bounded exact-file search snapshot before source
+  bytes/matcher output;
+* ``CHANGE`` is exclusive. New mutation acquires it **after policy allow but before**
+  durable workspace fence and retains until fence truthfully released. ``uncertain`` keeps
+  durable fence owned and access gate/recovery change-closed;
+* lock order is ``WorkspaceAccessGate -> per-operation dispatch handoff (if
+  consequential) -> DevelopmentSessionAuthorityGate -> ConsequentialBoundaryGate (if
+  consequential)``. Session activation follows the consequential suffix without
+  ``WorkspaceAccessGate``; session reduction never acquires workspace access after session
+  gate;
+* one coordinator orders acquire/release so no reader sees fence free while changer enters
+  ownership and no changer acquires durable fence while content guard active;
+* every application invocation initializes ``RECOVERY_CLOSED`` and opens only after exact
+  search-child recovery + durable-fence reconciliation + registered root/mount identity
+  revalidation. Retained fence owner keeps change closed. Unknown prior search child or
+  mount topology keeps both modes closed.
+
+Gate is not authority and cannot make out-of-band writers cooperate **or prove mount
+stability**. ``ContentReadPermit`` is only ephemeral proof of exact request/session
+admission while exact guard is held. Content operations therefore require coordinated
+writer profile or stronger confinement **plus** the independent registered mount boundary.
+Search additionally eliminates child-side workspace traversal by matching only parent-
+enumerated pinned file bytes.
+
+The word **changing** includes later Phase 7 commands and Phase 8 Git operations whenever
+their contract may change workspace. Those phases must consume this seam and additionally
+preserve the protected-content/non-alias/mount information boundary. A future changer with
+access to protected content or another mount cannot copy/link/declassify it into normal
+content and simply release CHANGE; its own contract must prove the required boundary
+closure or leave content readiness closed.
+
+Migration ``0003`` introduces authoritative row conceptually:
+
+::
+
+   workspace_mutation_fences(
+       workspace_id PRIMARY KEY,
+       fence_version INTEGER NOT NULL,
+       active_operation_id NULLABLE UNIQUE,
+       active_contract NULLABLE,
+       acquired_at NULLABLE
+   )
+
+Missing/corrupt row for configured/initialized workspace fails consequential readiness.
+Access-gate restart posture derives from row + search-child + mount-identity barriers, but
+never reconstructs or clears durable ownership.
+
+Post-policy admission, while exact operation owns exclusive CHANGE, may acquire only:
+
+::
+
+   free fence version N
+       -> exact current operation owns fence version N+1
+
+Operation-specific binding represents expected self transition semantically. Final
+OP-BOUNDARY accepts only exact self-owned fence + consumed operation binding + exact
+registered mount identity. Foreign/missing owner, changed profile/mount topology,
+unexpected version fails closed.
+
+Fence release requires truthful terminal/no-effect/effect classification plus required
+post-effect audit/obligation/recovery closure. Exclusive access guard releases only after
+durable fence release commits. ``uncertain`` retains fence, blocking changing operations
+and content until explicit reconciliation. Filesystem appearance/absence never rebuilds or
+steals ownership.
+
+17. Mutation first-use ordering and retained retry
+-------------------------------------------------
+
+Existing caller-key/global duplicate binding wins first: same owner/key/fingerprint
+returns/reconciles retained operation without requiring current session active and with
+zero new fence/effect. Different fingerprint conflicts; other owner gets non-disclosing
+mismatch; current tombstone gets retired-key outcome.
+
+Only unbound caller first-use continues:
+
+#. authenticate/normalize exact session/workspace/path/content/expected-version;
+#. compute effect-bearing fingerprint including session ID and contract inputs, excluding
+   mutable observations/policy;
+#. atomically create/find global caller record + minimal version-1 ``received`` operation;
+#. fsync required ``operation.state_changed(NULL -> received)`` audit before policy;
+#. revalidate exact effective session, profile/root/**mount identity**, expected source/
+   target and policy inputs;
+#. policy evaluate;
+#. deny -> one decision + ``received -> rejected`` with no fence/effect;
+#. allow -> acquire exclusive CHANGE, then short post-policy transaction re-proves exact
+   predicates, acquires free durable workspace fence for current op, stores workspace
+   binding + one allow decision + ``received -> authorised``; fence failure releases CHANGE
+   with zero filesystem effect;
+#. fsync required allowed policy + authorised audit;
+#. commit ``authorised -> running``;
+#. fsync ``effect.intent_recorded``;
+#. acquire Phase 4 per-operation handoff;
+#. acquire exact session gate;
+#. acquire Phase 4 process-wide consequential gate;
+#. under gates re-sample time and final all-mode OP-BOUNDARY including exact session/
+   closure/controller/device/profile/policy/root/**mount identity/no-submount**/fence/
+   source/target/cancel/audit/recovery;
+#. publish/fsync durable audit obligation while session gate held;
+#. recheck session/time/root/mount identity and process-gate ``call_start`` exact workspace
+   effect;
+#. immediately persist bounded receipt/reference/effect knowledge before session gate
+   releases;
+#. complete post-effect audit/domain closure/obligation cleanup/durable fence release, then
+   access-guard release where truthfully safe.
+
+No SQLite transaction spans filesystem effect I/O. Session reduction cannot commit between
+final session predicate and later stale start because it shares session gate. Mount-topology
+change before ``call_start`` cannot be normalized away; it is a zero-start containment
+failure.
+
+18. Phase-stable mutation current-state binding
+-----------------------------------------------
+
+Binding digest includes immutable/request facts + exact current state + only narrow
+expected self admission transition:
+
+* session ID/state/version/activation closure expected at admission;
+* controller/device identity+epoch;
+* workspace/profile/root identity + registered mount identity/no-submount policy;
+* Tool/contract;
+* normalized source/target;
+* expected source object/content/type/link-count/**mount identity** as applicable;
+* expected target absence/object/parent mount identity as applicable;
+* proposed content digest/bytes as applicable;
+* semantic ``workspace_fence_transition=free_N_then_exact_self_N_plus_1``;
+* policy/profile facts required by contract.
+
+Final callback reproduces fence component only after raw owner equals exact running op,
+version ``N+1``, immutable op/binding matches. Every traversed source/target/parent/staging
+descriptor must still prove the registered mount boundary; existing regular-file source
+must remain single-linked where contract bears content. Session gate proves expected
+session still effective at start. No unrelated state normalized away.
+
+19. ``workspace_create``
+------------------------
+
+Create kind is explicit ``file`` or ``directory``. No implicit parents; parent exists and
+passes descriptor + registered-mount verification. A parent on a nested/unregistered mount
+is rejected even when it shares ``st_dev`` with root.
+
+File:
+
+* final target absent at admission/final boundary;
+* bounded content;
+* reviewed closed mode such as ordinary ``0644``/``0755``;
+* stage complete bytes under exact operation-owned reserved name in the exact verified
+  target directory **on the registered mount**; no staging directory on a nested mount;
+* fsync staged file;
+* publish atomic target-no-replace; same-filesystem descriptor-relative hard-link from the
+  **staging inode to a previously absent final pathname** may be an implementation
+  primitive only when verified, but Phase 6 never exposes user-requested hard-link
+  semantics and post-publication the final file must be normalized to the single-link
+  contract before content readiness. An implementation may instead use another reviewed
+  no-replace primitive that directly preserves single-link state;
+* never substitute overwriting rename;
+* fsync parent after publication;
+* remove/fsync exact operation-owned staging entry only after truthful handling;
+* before declaring normal content-ready success, verify final ordinary-file identity,
+  registered mount identity, and ``st_nlink == 1`` after staging link removal. If link/
+  mount cleanup or verification is ambiguous, operation remains conservative/uncertain and
+  workspace content readiness stays closed as required.
+
+Staging recovery never broad-globs/prefix-guesses/recursively deletes. Operation retains
+exact staging identity/reference + mount identity. Unknown staging content preserved/
+reported.
+
+Target appears before no-replace -> proven no-effect conflict. Mount topology changes
+before publication -> proven no-start containment failure. Required primitive/mount proof
+absent -> create-file disabled. Publication/fsync receipt or post-start mount proof lost ->
+path presence alone cannot establish known effect; remains ``uncertain``.
+
+Directory create uses exact descriptor-relative ``mkdir`` + parent fsync on the registered
+mount; no parent broadening. Receipt ambiguity conservative.
+
+20. ``workspace_write``
+-----------------------
+
+Write is full replacement of one existing **single-linked** regular file on the registered
+mount, not create-if-missing or overwrite-without-version.
+
+First input includes exact path, object version, current content SHA-256, bounded text/base64
+new content, caller key and session ID. Admission/final boundary require same regular file
+identity/content, ``st_nlink == 1``, and exact registered mount identity for target/parent.
+
+Algorithm:
+
+#. create restrictive operation-owned temp regular file in the same verified target
+   directory and registered mount;
+#. write bounded bytes, verify count/digest, fsync temp;
+#. re-stat/read/hash exact target through pinned parent immediately before replacement and
+   require expected object/content/single-link/mount status;
+#. atomically rename/replace temp inode onto exact target path;
+#. fsync parent;
+#. retain bounded effect reference with verified new object/content/mount facts.
+
+Preserve reviewed ordinary executable/non-executable mode where safe. Reject special,
+setuid/setgid/capability-bearing, unsupported ACL/xattr, wrong ownership, multiply-linked,
+or mount-crossing targets.
+
+Linux pathname replacement is not inode CAS against uncooperative external writer between
+check and rename. Exact serialization guarantee is for Binnacle-coordinated writers via
+shared fence. Immediate revalidation narrows race; pre-start mount mismatch blocks start;
+post-syscall mismatch/lost receipt/mount ambiguity is ``uncertain``. Profile must accept
+writer model and mount boundary or replacement remains disabled.
+
+21. ``workspace_patch``
+-----------------------
+
+Patch is deterministic UTF-8 transformation against exact single-linked base on the
+registered mount. Input binds base object/content/mount identity + bounded ordered exact-
+match replacements. Each match occurs exactly once against original base and spans do not
+overlap. Zero/duplicate/overlap/invalid UTF-8/stale/multiply-linked/mount-changed base
+rejects no-effect.
+
+Application computes complete new bytes then uses exact ``workspace_write`` adapter path,
+inheriting writer/race/mount semantics. Never shells out to ``patch`` and never fuzzy-
+applies.
+
+22. ``workspace_move``
+----------------------
+
+Bootstrap move supports one exact single-linked regular file or one exact empty directory.
+Non-empty tree move deferred.
+
+Input binds source object/content/link-count/mount identity where applicable + exact target
+absence/parent mount identity. Both must remain inside the same registered mount domain.
+A mount crossing is rejected **before effect** even if source and target report the same
+``st_dev``; generic cross-device also rejects, never copy+delete.
+
+Immediately before syscall final boundary/adapter require exact source, absent target, and
+registered mount identity for source/target parents. Target no-overwrite is atomic via
+reviewed descriptor-relative primitive such as ``renameat2(..., RENAME_NOREPLACE)``.
+Normal overwriting rename is never fallback. Required primitive or mount proof absent ->
+move disabled.
+
+Linux cannot atomically require source pathname still names inode X against uncooperative
+writer. Fence serializes Binnacle writers; immediate descriptor revalidation narrows race.
+Profile accepts cooperative writer model or move disabled. Detected/unprovable mismatch/
+lost receipt/post-start mount ambiguity -> ``uncertain``; target appearance/source absence
+alone never proves intended object moved. Fsync distinct verified source/target parents
+after proven rename.
+
+23. ``workspace_delete`` and external-writer safety
+---------------------------------------------------
+
+Delete supports one existing single-linked regular file with expected object/content or one
+exact empty directory with expected object. No recursive/glob/wildcard/implicit cleanup/
+delete-through-symlink or delete-through-mount-crossing.
+
+Final descriptor identity, registered mount identity, and regular-file ``st_nlink == 1``
+revalidation immediately precedes ``unlink``/``rmdir``. Parent fsync is successful
+completion. Mount change before syscall -> zero-start containment failure. Lost receipt +
+absence or post-start mount ambiguity remains ``uncertain`` unless independent durable
+effect evidence proves deletion.
+
+``unlinkat``/``rmdir`` are pathname operations, not inode CAS. Uncooperative writer can
+race final verification. Shared fence prevents Binnacle-managed overlap only. Thus delete
+exposes only under reviewed cooperative/exclusive writer model + exact mount boundary or
+stronger primitive; else disabled.
+
+Security claim is no symlink follow, **no mount crossing**, no broadening, all Binnacle
+writers serialized, identity checked immediately, multiply-linked regular sources rejected,
+move target never overwritten, detected/unprovable race never overclaimed. It is not a
+claim Linux pathname syscalls prevent hostile same-UID writer race.
+
+24. Effect knowledge and domain closure
+---------------------------------------
+
+Every consequential Phase 6 boundary returns or retains enough exact evidence for Phase 4
+to classify effect truth without guessing.
+
+For workspace mutations, each adapter returns a bounded typed receipt only after the
+required filesystem durability point. Internal effect reference includes workspace/profile,
+registered root/object mount identity, operation ID, kind, source/target digests, staging
+ID if any, verified post-effect object/content/link-count/mount where applicable, exact
+durability step, primitive/profile version, receipt digest/version.
+
+For session activation, the narrow ``SessionActivationEffectBoundary`` is also an effect
+adapter even though its real-world effect is authority state rather than a source-file
+syscall. Gate-owned ``call_start`` precedes the exact session CAS. The activation effect
+reference binds operation/session IDs, prior/new session state+version,
+``activation_closure=PENDING``, controller/device/workspace/profile/root/mount/policy facts,
+and the exact CAS/receipt version. The application persists immediate Phase 4
+receipt/reference/effect knowledge before releasing the start/session/process gates.
+
+A crash after activation ``call_start`` but before complete operation classification never
+permits a blind second activation or a ``known_no_effect`` inference. Restart uses the
+recoverable activation reference plus exact session row/version, dispatch-attempt and audit-
+obligation evidence to converge if proof is sufficient; otherwise the begin operation is
+``uncertain`` and the live session slot stays fail-closed. ``ACTIVE`` presence by itself is
+not authority and is not enough to manufacture effect truth.
+
+Phase 4 operation owns authoritative lifecycle/effect knowledge; Phase 6 rows cannot invent
+parallel enum.
+
+* complete exact durability/activation receipt + expected identity/mount proof -> eligible
+  ``known_effect``;
+* explicit pre-start/no-call exact receipt, including rejected mount crossing or process-
+  gate denial before activation/workspace ``call_start`` -> eligible ``known_no_effect``;
+* lost syscall/activation-start/fsync receipt, incomplete reference, identity/link-count/
+  mount mismatch, detected out-of-band race, or otherwise unprovable -> ``uncertain``;
+* final filesystem/path/mount/session-state appearance alone never upgrades uncertainty;
+* terminal domain/fence/activation closure only after required audit obligation/
+  reconciliation;
+* session end after a member or activation ``call_start`` never downgrades effect truth.
+
+25. Restart and reconciliation
+------------------------------
+
+Startup loads Phase 4 operations + Phase 6 session/workspace state.
+
+Required behaviour:
+
+* before access coordinator admits CONTENT_READ/CHANGE, new runtime is ``RECOVERY_CLOSED``
+  and ``SearchChildRecoveryBarrier`` proves systemd cleanup of every prior-invocation rg or
+  operation-attributable helper/descendant; stale/foreign/unverifiable member keeps
+  readiness closed. Search children have no workspace descriptor/path authority, and app
+  death closes their stdin, but process quiescence is still required for lifecycle/output
+  correctness;
+* startup opens/pins configured registered root, verifies exact stored root filesystem/
+  directory identity **and registered mount identity**, and establishes the reviewed
+  no-submount/mount-ID verifier before access readiness; changed/unverifiable mount
+  topology keeps both content and change closed;
+* old in-process read cannot survive app death; old matcher child/descendant is never
+  assumed gone because parent PID exited and cannot discover new workspace files because
+  it has no workspace path/FD and its parent-provided stdin closes on app death;
+* service cgroup/lifecycle profile verified before search promotion; startup never opens by
+  pathname/cgroup-emptiness or ``st_dev`` guess alone;
+* access-gate recovery never equals session authority: each new content admission still
+  takes rebuilt session gate after CONTENT_READ;
+* received without completed admission follows Phase 4 recovery deny;
+* authorised never auto-starts after restart;
+* a running session-begin without exact activation-start/receipt proof never retries
+  activation blindly and never infers no effect merely from ``PENDING``; exact retained
+  activation reference/session-version evidence may reconcile, otherwise it remains
+  uncertain/ineffective and holds the live slot;
+* a required-audit fail-restriction found before an unstarted activation is reconciled as
+  zero-start only when Phase 4 dispatch/obligation evidence proves ``call_start`` did not
+  win;
+* running workspace mutation without exact receipt is not known-no-effect from filesystem;
+* retained mutation fence reconciles before new changer/content; startup reconstructs
+  change-closed from owner;
+* exact receipt/reference + independently verifiable identity/mount evidence may converge
+  per adapter;
+* ambiguous receipt/mount/activation evidence remains uncertain and retains fence/live
+  slot as applicable;
+* session end/expiry does not block same-key retained reconciliation;
+* live-session-slot invariant verified; multiple PENDING/ACTIVE rows integrity failure;
+* active session restored effective only after activation closure + exact profile/root/
+  mount/policy/time and reconciled begin-operation effect truth;
+* incomplete activation remains ineffective;
+* session gate rebuilt closed until predicates proven;
+* no integrity record rebuilt from mutable source tree, newly observed mount topology, or
+  session-state appearance;
+* unknown staging never heuristically removed.
+
+26. Persistence and migration
+-----------------------------
+
+Expected Alembic ``0003_development_workspace.py`` after Phase 5 migration.
+
+``development_sessions``
+   Durable session identity, begin operation, owner/device/workspace/profile/**root mount
+   identity**/policy/objective/time deadline, state/version, recoverable activation effect
+   reference/digest, activation closure state/version, terminal times/reasons. Partial
+   unique index over device+epoch+workspace for PENDING or ACTIVE reserves one live slot.
+
+``workspace_operations``
+   One-to-one Phase 4 operation metadata: session/workspace/kind/source-target digests,
+   expected object/content/link-count/**mount** bindings, proposed content, canonical state
+   binding, exact staging reference, primitive/profile version.
+
+``workspace_mutation_fences``
+   One row per workspace, monotonic version + nullable active operation owner; authoritative
+   restart signal for WorkspaceAccessGate. Phase 7/8 consume through same coordination
+   service, never independent fence.
+
+Foreign keys point toward Phase 4 authoritative ownership records. Database checks reject
+impossible combinations. Runtime never creates schema opportunistically.
+
+27. Expected implementation file set
+------------------------------------
+
+Representative paths:
+
+::
+
+   src/binnacle/domain/development_session.py
+   src/binnacle/domain/workspace.py
+   src/binnacle/ports/workspace.py
+   src/binnacle/application/development_session.py
+   src/binnacle/application/workspace.py
+   src/binnacle/application/workspace_coordination.py
+   src/binnacle/adapters/workspace/__init__.py
+   src/binnacle/adapters/workspace/linux.py
+   src/binnacle/adapters/workspace/ripgrep.py
+   src/binnacle/adapters/workspace/search_process.py
+   src/binnacle/adapters/workspace/reconcile.py
+   migrations/versions/0003_development_workspace.py
+   tests/unit/domain/test_development_session.py
+   tests/unit/domain/test_workspace.py
+   tests/unit/application/test_workspace.py
+   tests/integration/test_workspace_linux.py
+   tests/integration/test_workspace_reconciliation.py
+   tests/property/test_workspace_lifecycle.py
+
+Contract promotion also expected to update:
+
+::
+
+   docs/mcp-host-confirmation.md
+   spec/policy/host-confirmation-classes.yaml
+   spec/mcp/bootstrap-tool-manifest.yaml
+   schemas/mcp/bootstrap-inputs.schema.json
+   schemas/mcp/bootstrap-outputs.schema.json
+   docs/mcp-tool-manifest.md
+   docs/mcp-schemas.md
+   docs/mcp-evaluation.md
+   spec/mcp/evaluation-cases.yaml
+
+No alternate parallel contracts for convenience.
+
+28. Ports and adapter responsibilities
+--------------------------------------
+
+Representative boundaries:
+
+.. code-block:: python
+
+   @dataclass(frozen=True, slots=True)
+   class SearchFileSnapshot:
+       relative_path: str
+       read_handle: SearchReadHandle
+       object_version: str
+       object_identity_sha256: str
+       mount_identity_sha256: str
+       byte_count: int
+
+   class WorkspaceReader(Protocol):
+       async def inspect(self, request: InspectRequest) -> WorkspaceEntry: ...
+       async def list(self, request: ListRequest) -> WorkspaceListing: ...
+       async def read(self, request: ReadRequest) -> WorkspaceReadResult: ...
+
+   class WorkspaceSearchEnumerator(Protocol):
+       async def snapshot(
+           self,
+           request: SearchRequest,
+           permit: ContentReadPermit,
+       ) -> tuple[SearchFileSnapshot, ...]: ...
+
+   class WorkspaceSearch(Protocol):
+       async def search(self, request: SearchRequest) -> WorkspaceSearchResult: ...
+
+   class WorkspaceSearchProcessSupervisor(Protocol):
+       async def verify_previous_runtime_quiesced(self, workspace_id: str) -> None: ...
+       async def spawn_stdin_matcher(
+           self, request: SearchMatcherRequest
+       ) -> SearchProcessHandle: ...
+       async def wait_tree_terminated(self, handle: SearchProcessHandle) -> None: ...
+
+   class WorkspaceMountBoundaryVerifier(Protocol):
+       async def pin_root_mount(self, root_fd: int) -> MountIdentity: ...
+       async def verify_fd_on_registered_mount(
+           self, fd: int, expected: MountIdentity
+       ) -> None: ...
+       async def verify_scope_no_submounts(
+           self, root_fd: int, relative_scope: str, expected: MountIdentity
+       ) -> MountPreflightResult: ...
+
+   class WorkspaceAliasVerifier(Protocol):
+       async def verify_single_link_file(self, fd: int) -> None: ...
+
+   class WorkspaceMutator(Protocol):
+       async def create(self, intent: CreateIntent) -> WorkspaceEffectReceipt: ...
+       async def write(self, intent: WriteIntent) -> WorkspaceEffectReceipt: ...
+       async def move(self, intent: MoveIntent) -> WorkspaceEffectReceipt: ...
+       async def delete(self, intent: DeleteIntent) -> WorkspaceEffectReceipt: ...
+
+   class SessionActivationEffectBoundary(Protocol):
+       async def start(
+           self, session_id: str, operation_id: str, expected_state_version: int
+       ) -> SessionActivationReceipt: ...
+
+   class WorkspaceAccessCoordinator(Protocol):
+       async def content_read(self, workspace_id: str) -> ContentReadGuard: ...
+       async def acquire_change(
+           self, operation_id: str, workspace_id: str
+       ) -> FenceLease: ...
+       async def reconcile_change(self, operation_id: str) -> FenceLease: ...
+       async def release_change(self, operation_id: str) -> None: ...
+
+   class DevelopmentSessionAuthorityGate(Protocol):
+       async def admit_content_read(
+           self,
+           session_id: str,
+           workspace_id: str,
+           request_digest: str,
+           content_guard_epoch: int,
+       ) -> ContentReadPermit: ...
+       async def activation_start(
+           self, session_id: str, operation_id: str
+       ) -> StartPermit: ...
+       async def member_start(self, session_id: str, operation_id: str) -> StartPermit: ...
+       async def reduce_authority(self, session_id: str, reason: str) -> None: ...
+
+``admit_content_read`` is called only while exact ContentReadGuard is held. It revalidates
+authoritative session/time/profile/root/mount state and returns permit bound to guard/
+request. Permit itself neither acquires workspace access nor persists authority.
+
+``activation_start`` is an application coordination seam used only after the Phase 4
+per-operation handoff and before the process-wide consequential gate. It does not itself
+mutate session state. The actual authority-state effect occurs only through the process-
+gate-owned ``SessionActivationEffectBoundary.start``/``call_start`` path.
+
+``WorkspaceSearchEnumerator`` owns all recursive workspace discovery and must open/pin the
+exact candidate file set under the reviewed no-XDEV/mount/link/protected-path rules before
+matching. ``WorkspaceSearchProcessSupervisor`` receives matcher requests with stdin bytes
+or a parent-side stream reference only; it never receives a workspace path/search-directory
+FD or authority to enumerate additional files.
+
+``WorkspaceMountBoundaryVerifier`` is a security boundary shared by metadata traversal,
+content/search enumeration, staging and mutation. ``WorkspaceAccessGate`` never substitutes
+for it. The verifier must use the reviewed Linux no-XDEV/mount-ID profile and fail closed
+when mount identity is unavailable or changes.
+
+``workspace_patch`` computes deterministic bytes in application layer and delegates final
+replacement to ``WorkspaceMutator.write``.
+
+Linux adapter never performs policy/auth/host confirmation/lifecycle/session/fence
+decisions. Application never implements raw pathname containment or shell search.
+
+29. Error projection
+--------------------
+
+Use closed machine-readable codes/bounded safe summaries. Representative errors:
+
+* ``development_session_required``;
+* ``development_session_expired``;
+* ``development_session_not_effective``;
+* ``development_session_activation_incomplete``;
+* ``development_session_already_active``;
+* ``development_session_slot_busy``;
+* ``workspace_not_registered``;
+* ``workspace_profile_mismatch``;
+* ``workspace_root_identity_mismatch``;
+* ``workspace_mount_boundary_violation``;
+* ``workspace_mount_identity_unverifiable``;
+* ``workspace_path_invalid``;
+* ``workspace_path_protected``;
+* ``workspace_symlink_forbidden``;
+* ``workspace_hardlink_forbidden``;
+* ``workspace_alias_preflight_limit``;
+* ``workspace_search_scope_too_large``;
+* ``workspace_search_preflight_incomplete``;
+* ``workspace_object_type_unsupported``;
+* ``workspace_object_stale``;
+* ``workspace_target_exists``;
+* ``workspace_target_missing``;
+* ``workspace_patch_mismatch``;
+* ``workspace_no_replace_unsupported``;
+* ``workspace_external_writer_model_unsupported``;
+* ``workspace_cross_device_move_unsupported``;
+* ``workspace_directory_not_empty``;
+* ``workspace_busy``;
+* ``workspace_effect_uncertain``;
+* ``workspace_output_truncated``;
+* ``workspace_search_timeout``;
+* ``workspace_search_root_unavailable``;
+* ``workspace_search_recovery_pending``;
+* ``workspace_search_configuration_unsafe``;
+* ``workspace_content_access_writer_model_unsupported``.
+
+These names remain plan-level representative vocabulary until the Phase 6 contracts/
+schemas are promoted. Errors do not reveal protected absolute path, another controller's
+session/operation, raw key/nonce, credential, mounted source path, or never-disclosable
+state.
+
+30. Logging, metrics, and diagnostics
+------------------------------------
+
+Structured diagnostics may include workspace ID, operation/session IDs, kind, normalized-
+path digest, result bytes/truncation/search duration/fence state/reason codes/primitive
+profile/session-gate outcome/content-admission/search-snapshot file+byte counts/mount-
+rejections/search-child recovery/effect-reference digest.
+
+Never log raw keys/nonces, source/search matches by default, credentials, protected
+absolute or mounted-source paths where relative identity suffices, controller auth
+material, inherited procfd numbers as stable IDs, or inherited environment/config content.
+
+Metrics may cover bounded reads/searches/mutations, search snapshot/scope-too-large/
+timeout/truncation, alias/mount rejections, stale versions, fence contention, session-race
+rejection, **activation-gate no-start/uncertain outcomes**, uncertain effects, session
+starts/ends, stale-search-child recovery, unsafe search config, and disabled primitives.
+Path names/keys/mount source names are not unbounded labels.
+
+31. Security invariants
+-----------------------
+
+Implementation/review proves at least:
+
+#. MCP/application process remains unprivileged.
+#. Workspace root is owner config, never model absolute-path input.
+#. Development session never grants credential/policy/broker/control-plane/arbitrary-system/
+   hardware authority.
+#. Session ID is not bearer authority.
+#. Session activation uses the exact Phase 4 per-operation handoff + process-wide
+   ConsequentialBoundaryGate and cannot perform ``PENDING -> ACTIVE`` before gate-owned
+   ``call_start``; required-audit fail restriction winning first yields zero activation.
+#. Activation ineffective until exact gated start effect is truthfully classified and
+   post-effect audit/obligation closure is complete.
+#. Exactly one live PENDING/ACTIVE session row per device-epoch/workspace.
+#. Session reduction and mutation start share authority-gate linearization.
+#. Content admission shares session linearization **after** CONTENT_READ; stale pre-wait
+   proof cannot disclose.
+#. Lock order is WorkspaceAccessGate -> Phase4 handoff when applicable -> session gate ->
+   process gate when applicable; activation uses the consequential suffix and no reverse
+   session-reduction acquisition exists.
+#. Same-key retained retry precedes mutable session/filesystem checks.
+#. Every new mutation and session activation has Phase4 durable identity + required
+   received/authorised/effect-intent audit ordering before any effect start.
+#. Change fence is post-policy exact-self and ``uncertain`` retains it.
+#. Phase7/8 changers consume same coordination seam and preserve protected-content + mount
+   boundary.
+#. Final OP-BOUNDARY revalidates session/closure/controller/device/profile/root/**mount**/
+   policy/audit/op/fence/source/target immediately before workspace start; activation final
+   OP-BOUNDARY revalidates exact PENDING slot + controller/device/profile/root/mount/policy/
+   audit/op state before activation start.
+#. No symlink, string-prefix, or same-``st_dev`` check alone decides authority.
+#. No content/metadata traversal or mutation crosses an unregistered mount below root;
+   preferred openat2 uses ``RESOLVE_NO_XDEV`` and fallback proves exact mount ID on every
+   descriptor component/object. Unverifiable mount identity disables capability.
+#. WorkspaceAccessGate/change fence is never treated as mount-topology evidence.
+#. Protected content cannot be exposed through path prefix, rename/exchange, hard-link
+   alias, **or bind/submount**; content-bearing regular files require reliable
+   ``st_nlink == 1`` and search parent-enumerates/pins the exact admitted file set under the
+   shared guard + mount verifier.
+#. A profile with uncoordinated writers cannot promote content access from one-time alias/
+   pathname/mount checks; stronger confinement required.
+#. No source bytes/no matcher child before exact ContentReadPermit + successful bounded
+   parent enumeration/snapshot checks.
+#. Search matcher has no workspace pathname, workspace/search-directory FD, or recursive
+   child-side discovery authority; it receives only parent-streamed bytes from exact pinned
+   candidate descriptors.
+#. Mount insertion during matching cannot expand exact file set; insertion during parent
+   enumeration is rejected by the next no-XDEV/mount-ID checked open.
+#. Every runtime starts RECOVERY_CLOSED until prior matcher/helper children are proven gone,
+   durable fence reconciled, and root/mount identity re-pinned.
+#. Ripgrep matcher stays in exact service cgroup; guard release proves process tree
+   quiescence; app death closes matcher stdin.
+#. Ripgrep child environment is closed/sanitized, configuration is explicitly disabled,
+   preprocessors/archive helpers are explicitly disabled, no mandatory disabling flag is
+   caller-negatable, and unexpected descendants are a failure.
+#. Matcher-returned path text is never authority; result path comes from parent snapshot.
+#. Create cannot overwrite and staging cleanup exact/non-recursive/on registered mount;
+   final content-ready regular file is single-linked.
+#. Move target no-replace never degrades; move rejects mount crossing even same device;
+   delete no recursion; move no copy+delete.
+#. Linux external-writer races are explicit limitations, not fake inode CAS.
+#. Required unavailable primitive/writer/link-count/mount-ID/search-purity keeps capability
+   disabled.
+#. Pre-start mount topology change yields no mutation effect; post-start ambiguity is
+   ``uncertain``.
+#. Post-syscall path or mount appearance alone never proves effect.
+#. Source content bounded/classified; reusable secrets excluded.
+#. Integrity state never rebuilt from mutable source or observed mount topology after
+   corruption.
+
+32. Test strategy
+-----------------
+
+32.1 Unit/property tests
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Cover:
+
+* path/protected-prefix normalizer;
+* session state/expiry/effective/activation closure;
+* live-session-slot uniqueness and same-key convergence;
+* session activation uses Phase4 handoff/process gate and audit-failure trip before
+  activation ``call_start`` yields zero PENDING->ACTIVE transition;
+* session gate lock order/start-vs-reduction;
+* CONTENT_READ then session gate, exact permit, no content before permit;
+* WorkspaceAccessGate shared/exclusive + RECOVERY_CLOSED startup;
+* root/mount identity binding + mount-ID verifier + no-submount policy;
+* search exact-file snapshot ceilings and matcher zero-workspace-FD/path contract;
+* search process identity/no-release-before-tree-quiescence;
+* direct regular-file ``st_nlink==1`` enforcement and bounded parent enumeration outcomes;
+* same-key retry before mutable state;
+* object-version including link-count/mount facts;
+* exact patch transformation;
+* fence free/self/foreign/version;
+* policy deny before fence;
+* final exact-self fence canonicalization;
+* create/write/patch/move/delete primitive/link-count/mount/error mapping;
+* bounded read/list/search projection.
+
+Property tests prove normalized paths never escape; symlink trees and mount crossings never
+become valid; protected hard-link aliases/multiply-linked files never enter search snapshot;
+same key creates at most one effect; different fingerprint adds zero effects; uncertain
+never releases fence; **audit failure/process-gate trip before session activation start
+creates zero authority effect**; lost activation receipt never permits blind retry or
+ACTIVE-as-authority inference; session reduction before mutation start yields zero effect;
+reduction after CONTENT_READ but before permit yields zero source/matcher; permit-first
+admits at most one exact request while later admission fails; incomplete activation never
+admits; distinct begins yield one live slot; content and change guards never overlap;
+RECOVERY_CLOSED never opens without child quiescence + mount-root verification; patch
+deterministic or no-effect; fence version monotonic.
+
+32.2 Linux integration/adversarial tests
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+On Linux temp workspaces test:
+
+* descriptor nested traversal and symlink inside/outside rejection;
+* root replacement/mismatch;
+* root mount identity pinning using ``statx`` mount ID or the exact selected equivalent;
+* ``openat2 RESOLVE_NO_XDEV`` support/semantics where selected;
+* bind-mount a readable/protected host tree beneath an allowed workspace directory and
+  require inspect/list not to descend, direct read zero mounted bytes, search snapshot
+  excludes/rejects mount, and mutations zero start;
+* insert/replace a mount during parent search enumeration and require fail-closed zero
+  mounted bytes; insert a mount after enumeration but before/during matching and prove the
+  exact pinned file set cannot expand;
+* simulate same-``st_dev`` bind mount and prove mount-ID check, not device number, rejects;
+* hard-link ``.git/config`` or another protected regular file into an allowed filename:
+  direct read rejects before bytes and search rejects before matcher spawn;
+* multiply link an ordinary file: Phase 6 content-bearing operations reject
+  conservatively; remove alias and verify exact single-link recovery;
+* link-count/mount-ID-unreliable/unsupported profile keeps affected capability disabled;
+* configured root/subdir renamed/replaced during parent enumeration cannot redirect already
+  pinned candidate FDs;
+* child FD/cwd inspection proves rg receives zero workspace descriptors/path/procfd;
+* rg stdin JSON, logical parent path mapping, binary skip, timeout/truncation/failure;
+* set service ``RIPGREP_CONFIG_PATH`` to a config that requests ``--pre`` sentinel or
+  helper/archive behavior: sanitized environment + ``--no-config``/``--no-pre``/
+  ``--no-search-zip`` prevent sentinel execution and no unexpected descendant appears;
+* attempt caller options that negate mandatory process-purity flags and verify schema/
+  adapter rejection;
+* scope file/open-FD/preflight-byte/time ceiling returns explicit incomplete/scope-too-large
+  outcome before matcher spawn and never a misleading complete negative;
+* rg matcher stays owning service cgroup and normal completion proves process tree quiescence
+  before CONTENT_READ release;
+* changer holds CHANGE, content caller early-validates session, end/expiry wins before guard
+  available: queued content revalidates after guard and returns zero bytes/zero matcher;
+* Binnacle rename/exchange protected dir while search active cannot acquire exclusive guard
+  until search ends;
+* uncoordinated-writer profile without stronger confinement disables content access;
+* create no-overwrite + unavailable primitive, exact staging recovery, final single-link/
+  registered-mount publication;
+* replacement durability, empty dir create/delete, non-empty dir move/delete rejection;
+* RENAME_NOREPLACE/new target, generic cross-device **and same-device bind-mount crossing**
+  rejection, external source replacement for write/move/delete, unsupported metadata
+  rejection.
+
+Adversarial move/delete tests do not assert impossible inode CAS. They assert limitations,
+no-overwrite/no-mount-crossing, detected/unprovable -> uncertain, and capability disabled
+when safety profile not accepted.
+
+32.3 Fault/restart/concurrency tests
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Inject failures/crashes:
+
+* after received before policy;
+* after policy allow before live-session slot;
+* after PENDING slot before activation intent/audit;
+* failure terminalizing no-effect PENDING keeps slot until exact recovery;
+* **required-audit/global-gate trip after activation final revalidation or obligation
+  publication but before activation ``call_start``: zero PENDING->ACTIVE effect**;
+* crash immediately after activation ``call_start``/PENDING->ACTIVE but before application
+  effect classification: restart never retries blindly or infers no effect; reconcile from
+  exact activation reference or remain uncertain/incomplete;
+* after allow before fence; after fence before authorised audit;
+* after running/effect intent before final boundary;
+* session gate held before obligation; after obligation before syscall;
+* mount topology replacement/insertion after admission and immediately before ``call_start``;
+* after create/write/move/delete syscall before durable receipt;
+* after adapter receipt before effect classification;
+* after known-effect before post-effect audit/fence release;
+* DB failure during closure/fence release;
+* after PENDING->ACTIVE known activation effect before activation audit; after audit before
+  closure CAS;
+* after CONTENT_READ before permit while session end wins;
+* app SIGKILL while rg matcher is active: stdin closes, old child can discover no new
+  workspace file, systemd removes matcher/helper tree, and replacement runtime cannot open
+  access modes until SearchChildRecoveryBarrier + root/fence recovery pass;
+* app restart with changed/unverifiable root mount topology keeps access/session ineffective;
+* app restart active/effective, active/incomplete, expired/untrusted, uncertain mutation.
+
+Concurrency proves two mutations cannot own fence; two begins cannot create two live slots;
+same-key first mutation converges; **activation ``call_start`` vs required-audit gate trip
+is binary**; session end vs member call_start binary; content queued behind changer cannot
+disclose after end; permit-first request may finish while later rejects; trusted-time expiry
+blocks both start/content admission; audit-failure dispatch follows Phase4 global gate;
+content cannot start while durable fence owner exists; changer cannot acquire during
+content; replacement runtime cannot change while old matcher/helper may survive; protected
+rename/exchange cannot race active search; mount topology change never inherits authority
+from access guard/fence and cannot expand a completed exact-file snapshot.
+
+32.4 Contract/schema tests
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Before exposure prove proposed Tool uniqueness, JSON Pointers, versions, information/host
+classes, protected path+alias+mount rules, content gate-owned session revalidation,
+coordinated-writer/strong-confinement requirement, **session activation Phase4 gated-start
+ordering**, search exact-file snapshot ceilings, matcher zero-workspace-path/FD and process-
+purity flags/environment, service-cgroup recovery barrier, live session slot non-disclosure,
+mount-ID/no-XDEV and primitive degradation, no Phase6 Tool when prereq absent, existing
+eight-tool profiles unchanged until promotion, and catalogue digest changes only through
+reviewed manifest bump.
+
+33. Real-Pi and real-ChatGPT evidence procedure
+-----------------------------------------------
+
+Evidence is for implementation promotion/exit, not plan acceptance.
+
+Real Pi evidence verifies root ownership/identity; descriptor filesystem behavior; exact
+root mount identity and ``statx`` mount-ID (or selected equivalent) reliability;
+``openat2 RESOLVE_NO_XDEV`` semantics where selected; bind-mount attack below an allowed
+path; mount insertion/replacement during parent enumeration and after file snapshot;
+restart with changed mount topology; reliable ``st_nlink`` semantics and protected-hard-
+link rejection; no-replace create; RENAME_NOREPLACE if move enabled; accepted writer
+profile; rename/fsync; exact-file enumeration/open-FD ceilings; rg stdin JSON/path mapping;
+rg zero workspace FD/path authority; exact rg configuration/preprocessor/archive disabling
+options; sanitized environment; service KillMode/control-group lifecycle, non-delegated
+search-child membership, app-death stdin closure, crash/restart child cleanup,
+SearchChildRecoveryBarrier, WorkspaceAccessGate protected-rename and retained-fence
+behavior, queued-content/session-end linearization, **session activation process-gate/audit-
+trip linearization**, writer/confinement model, rg version/stdin performance limits, and
+systemd permissions limited to registered source workspace without protected state. Every
+rejected/unverifiable mount case must demonstrate zero mounted-content disclosure and zero
+workspace effect start.
+
+Real ChatGPT evidence verifies exact promoted catalogue; actual session-start host
+interaction; no redundant member confirmation if HOST profile claims it; bounded source
+read/search; new content request after session end rejected; promoted mutation entitlement;
+same-key/lost-response; reconnect/restart continuity; end/expiry; no protected/unregistered
+escape **including no nested mount escape**. If host cannot express bounded session
+authority, operational Phase6 remains unsupported; never weaken local policy or silently
+use ambient HC0 mutation.
+
+34. Holistic invariant pass before review
+-----------------------------------------
+
+Every new head is reviewed as continuous pipelines.
+
+Session activation:
+
+::
+
+   authenticate/normalize + caller-binding-first retained lookup
+     -> minimal received identity + required received audit
+     -> policy
+     -> post-policy exact self PENDING live-slot reservation
+     -> allowed/authorised audit -> running -> effect.intent_recorded
+     -> Phase4 per-operation handoff
+     -> DevelopmentSessionAuthorityGate
+     -> Phase4 ConsequentialBoundaryGate
+     -> final exact PENDING/controller/device/profile/policy/root/mount/audit/recovery check
+     -> durable audit obligation
+     -> process-gate-owned SessionActivationEffectBoundary.call_start
+     -> exact PENDING->ACTIVE / activation_closure=PENDING effect + recoverable receipt
+     -> immediate durable effect-knowledge classification
+     -> post-effect activation audit + obligation closure
+     -> exact closure CAS to COMPLETE
+     -> only then member authority effective
+
+Required-audit trip before activation ``call_start`` -> zero activation effect. Lost receipt
+after start -> no blind retry/no ``known_no_effect`` inference; ACTIVE/incomplete remains
+authority-off until exact reconciliation.
+
+Content read/search:
+
+::
+
+   normalize/authenticate
+     -> advisory early session/profile check
+     -> CONTENT_READ acquisition
+     -> session-authority gate
+     -> exact time/session/controller/device/profile/root/mount/protected-policy recheck
+     -> request/guard-bound ContentReadPermit
+     -> direct opened-file single-link+mount check OR bounded descriptor enumeration
+     -> exact SearchFileSnapshot set (protected/link/mount checks + pinned file handles)
+     -> parent streams one exact pinned file to process-pure rg stdin matcher
+     -> parent maps JSON matches to snapshot-bound logical path
+     -> proven read/matcher completion / process-tree termination+output drain
+     -> content-guard release
+
+Reduction before permit -> zero content/matcher. Permit-first authorizes only that bounded
+request. Multiply-linked/mount-crossing/unverifiable candidate -> no snapshot/matcher.
+Incomplete scope -> explicit incomplete result before matcher. Mount insertion after a file
+is pinned cannot redirect that descriptor; matcher has no workspace traversal authority.
+Search configuration/helper ambiguity -> zero matcher.
+
+Mutation:
+
+::
+
+   normalize exact request/session/workspace state
+     -> caller-key retained lookup or minimal pre-policy identity
+     -> required received audit
+     -> policy
+     -> exclusive CHANGE
+     -> post-policy exact-self durable fence + operation binding
+     -> authorised audit
+     -> running/effect intent
+     -> phase-stable expected self transition
+     -> per-operation handoff
+     -> session gate
+     -> process gate
+     -> final session/profile/root/mount/source/target/link-count revalidation
+     -> durable audit obligation while session gate held
+     -> gate-owned EffectBoundary.start
+     -> immediate durable receipt/effect knowledge
+     -> operation-specific domain closure
+     -> post-effect audit/obligation closure
+     -> fence release or conservative retention
+     -> crash/restart
+     -> caller-binding-first retained retry
+
+Review walks normal success; stale source/target; session reduction while content waits and
+before/during mutation start; **activation process-gate/audit-failure race and lost
+activation receipt**; activation incomplete/audit failure/concurrent begin; root
+replacement; bind/submount insertion/replacement during enumeration and after snapshot;
+protected rename/exchange; hard-link alias; hostile rg config/preprocessor attempt; app
+crash with matcher; lost filesystem receipt; out-of-band source replacement; durable known
+effect then DB/audit closure failure; same-key retry after session expiry; uncertain restart
++ unrelated mutation attempt.
+
+Shared abstraction defect is fixed at foundation rather than patching each Tool.
+
+35. Plan acceptance checklist
+-----------------------------
+
+Accept when review/CI confirms:
+
+* scope exactly registered source workspace + development session;
+* no ambient absolute/system/credential/policy/broker authority;
+* session semantics owner-approved and HC0/HC1 mismatch named promotion prerequisite;
+* **activation authority transition is a Phase4 gated effect: per-operation handoff +
+  process-wide gate + gate-owned call_start + immediate effect classification**;
+* activation cannot authorize before audit closure; one live PENDING/ACTIVE slot;
+* session reduction vs mutation start one linearization;
+* content waits for CONTENT_READ then revalidates under session gate before bytes/matcher;
+* fixed cross-gate order/no reverse reduction;
+* Tools absent until reviewed contracts/schemas/manifest/host reconciliation;
+* read/search bounded, protected-path/alias aware, symlink safe and stable against
+  coordinated rename/exchange;
+* no operation traverses an unregistered submount; root/object mount identity is bound,
+  openat2 no-XDEV or exact mount-ID fallback is fail-closed, and same-device bind mounts do
+  not bypass containment;
+* search traversal is parent-owned and every eligible file is descriptor-opened/pinned
+  before matching; rg receives no workspace path/directory FD and cannot discover a mount
+  inserted after enumeration;
+* content-bearing regular files reject multiply-linked aliases and search enumeration has
+  explicit file/open-FD/byte/time ceilings; incomplete scope is never a complete negative;
+* rg uses sanitized environment + mandatory no-config/no-pre/no-search-zip/no-follow
+  process-purity settings and no unreviewed helper subprocess;
+* search child lifecycle bound to service cgroup, process-tree quiescence proven, app death
+  closes stdin, startup recovery closed until prior matcher absent and mount identity
+  reverified;
+* content fails closed if writer/link-count/mount/confinement model insufficient;
+* mutations exact version/descriptor/mount containment + durable shared change fence
+  reusable by Phase7/8;
+* create/move no-overwrite no silent degrade; external-writer limitations truthful;
+* staging exact/non-recursive/on registered mount and final created regular file single-
+  linked;
+* Phase4 audit/idempotency/final-boundary ordering exact for session activation and
+  workspace mutations;
+* retained retry before mutable checks;
+* pre-linearization session/mount-authority loss -> no effect/disclosure; post-linearization
+  ambiguity never rewrites started/admitted truth;
+* all mutation/activation outcomes representable/restart-reconcilable;
+* no Pi/ChatGPT support fact fabricated.
+
+36. Implementation/promotion checklist
+--------------------------------------
+
+Blocked until real Phase5 exit/write-confirmation; session host profile reviewed/passed;
+Phase6 contracts/schemas/manifest promoted; migration + one-live-slot pass; session/access/
+alias/**mount**/fence/idempotency/audit/boundary tests pass; **session activation gated-start
+and audit-trip/lost-receipt tests pass**; parent-owned exact-file search snapshot + rg zero-
+workspace-FD/path + config-disabled stdin matching + protected rename + hardlink alias +
+bind-mount insertion-during-enumeration/after-snapshot + mount topology change + session-
+end-while-waiting + application-crash/stdin-close/child cleanup barrier pass; candidate
+service proves no prior rg/helper survives readiness; candidate kernel/filesystem proves no-
+XDEV or exact mount-ID fallback semantics; content writer/confinement and link-count/mount
+model accepted; no-overwrite primitives verified; local writer profile permits each
+mutation; Linux tests pass; production exposes nothing when prerequisite fails.
+
+37. Real Phase 6 exit criteria
+------------------------------
+
+Do not mark implementation complete until real evidence proves:
+
+#. owner-authorised session visible to real ChatGPT under reviewed HOST profile;
+#. activation uses the reviewed Phase4 gated start and closure is complete before member
+   effect/content admission;
+#. ChatGPT inspect/list/read/search exact registered workspace without protected path,
+   hard-link-alias, or unregistered-mount disclosure under reviewed writer/confinement/
+   mount model;
+#. new content request after session end/expiry rejected even if it waited behind changer;
+#. one controlled source edit;
+#. new object version/content digest inspected truthfully;
+#. revert/replace with exactly one admitted effect;
+#. same-key retry no duplicate;
+#. no workspace/protected/mount escape;
+#. session end/expiry blocks new/not-yet-started mutation;
+#. restart preserves or truthfully rejects session, and active search cannot admit changer
+   until prior rg/helper process proven terminated + root mount identity reverified;
+#. evidence captured from real Pi/ChatGPT, not inferred.
+
+Move/delete/content access may remain truthfully disabled when their independent promotion
+gates are not met.
+
+38. Implementation order
+------------------------
+
+When evidence permits implementation:
+
+#. reconcile/promote session-scoped host profile;
+#. define/review Phase6 operation contracts/schemas;
+#. update manifest/docs/evaluation, validate;
+#. migration ``0003`` sessions/closure/live-slot/workspace metadata/shared fence + persisted
+   registered root/mount identity snapshot + activation effect reference fields;
+#. domain/persistence + live-slot integrity tests;
+#. DevelopmentSessionAuthorityGate + global lock-order tests;
+#. implement session begin's Phase4 running/effect-intent -> per-operation handoff -> session
+   gate -> process-wide consequential gate -> audit obligation -> gated
+   ``SessionActivationEffectBoundary.call_start`` -> immediate effect classification ->
+   post-effect audit/closure path, including audit-trip and lost-receipt fault tests;
+#. workspace profile/root + **mount-ID/no-submount verifier** + protected-path + link-count/
+   alias verifier;
+#. WorkspaceAccessGate + durable fence with startup RECOVERY_CLOSED;
+#. CONTENT_READ -> session gate -> ContentReadPermit with root/mount binding;
+#. application service child lifecycle + SearchChildRecoveryBarrier + mount readiness;
+#. descriptor inspect/list/read with permit + single-link + no-XDEV/mount checks;
+#. parent-owned bounded search enumerator that opens/pins exact eligible file set and enforces
+   file/open-FD/byte/time ceilings before any matcher spawn;
+#. process-pure ``ripgrep`` stdin matcher with sanitized env, mandatory no-config/no-pre/
+   no-search-zip/no-follow/json, zero workspace path/FD authority, parent logical-path
+   mapping, full guard and process-tree quiescence; run mount-insertion/config-injection/
+   app-death/scope-limit tests;
+#. session inspect/end with fail-safe revocation; session begin activation path already
+   implemented above and remains authority-off until closure COMPLETE;
+#. mutation final-binding callback/shared change seam with final mount revalidation;
+#. create exact staging/no-replace/final single-link registered-mount closure;
+#. write replacement + alias/external-race/mount tests;
+#. deterministic patch;
+#. move only verified no-replace + accepted writer/mount profile;
+#. delete only explicit writer/mount profile;
+#. Phase4 audit/idempotency/boundary/effect integration parity checks;
+#. expose coordination/mount seam for Phase7/8 without their authority;
+#. wire MCP only after registry parity;
+#. unit/property/Linux/fault/restart/security tests;
+#. deploy candidate Pi only after local/CI gates;
+#. collect real ChatGPT evidence without converting missing observation into support.
+
+39. Explicit provisional items
+------------------------------
+
+Remain evidence-gated after plan merges:
+
+* exact ChatGPT session-start UI/interaction and whether HOST supports session semantics;
+* exact host-profile identifier if ``HCS1`` name changes while semantics remain;
+* Pi filesystem/kernel no-replace/durability/link-count/**mount-ID/no-XDEV** behavior;
+* exact-file search enumeration/open-FD ceilings and candidate resource limits;
+* exact candidate rg version, stdin JSON/path semantics/performance and support/semantics for
+  mandatory configuration, preprocessor and archive-helper disabling options;
+* systemd proof that service cgroup + stdin closure + startup barrier prevents prior rg/
+  helper process from interfering with current readiness;
+* whether deployment enforces coordinated/no-out-of-band writer model or stronger
+  protected-object confinement;
+* whether move/delete cooperative writer assumption can be accepted;
+* real-host result size/catalogue refresh where promoted schemas depend on it.
+
+These may change profile-specific choices/limits but not local authority, durable ordering,
+truthful uncertainty, **Phase4 gated session activation**, session start/content-admission
+linearization, protected-content path+alias+mount boundary, exact-file search containment,
+or no workspace escape without reviewed revision.
+
+40. Deferred work
+-----------------
+
+Phase 6 defers arbitrary workspace registration by ChatGPT; separately reviewed nested
+workspace/submount authority; multiple simultaneous changers; recursive delete/non-empty
+tree move; symlink-following; user-visible hard-link operations; generic chmod/chown/xattr/
+ACL; very-large-file streaming mutation; repository index/vector search; shell command
+execution; Git credentials/signing; privileged host changes; advanced namespace/seccomp/
+MAC/container hardening; hostile same-UID writer prevention beyond explicit model; post-
+Bootstrap multi-user/project policy.
+
+Add them only when they block self-hosting or later evidence justifies separately reviewed
+capability.
