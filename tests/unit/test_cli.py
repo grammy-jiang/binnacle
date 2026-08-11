@@ -92,6 +92,20 @@ def test_config_validation_redacts_invalid_environment_value(
     assert secret_value not in result.stderr
 
 
+def test_config_validation_sanitizes_environment_source_parse_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    secret_value = "not-json-accidental-secret"
+    monkeypatch.setenv("BINNACLE_SERVER", secret_value)
+
+    result = runner.invoke(app, ["config", "validate"])
+
+    assert result.exit_code == 2
+    assert result.stderr == "Configuration error: server: invalid environment value\n"
+    assert secret_value not in result.stderr
+    assert result.exception is not None
+
+
 def test_serve_defaults_to_loopback_one_worker(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
