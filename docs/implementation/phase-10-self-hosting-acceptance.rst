@@ -41,13 +41,15 @@ The acceptance loop is:
        -> push the exact branch/ref with protected repository credentials
        -> use ChatGPT GitHub integration for PR/review/Actions/merge
        -> if review changes the head, repeat the complete local Phase 6/7/8 candidate chain
-       -> independently bind the exact hosted merge result
+       -> bind exact protected-base + candidate integration evidence
+       -> independently prove the hosted merge tree is that reviewed/tested integration
        -> update the development checkout through Phase 8 semantics
+       -> rerun required local integration checks on the exact merged tree
        -> run Phase 9 restart preflight
        -> perform one controlled Binnacle restart
        -> reconnect after expected connection loss
        -> reconcile the retained restart operation
-       -> verify exact merged runtime identity
+       -> verify exact merged runtime identity/tree
        -> verify the selected changed MCP behaviour
        -> close the evidence bundle and declare PASS or FAIL/INCOMPLETE
 
@@ -152,12 +154,58 @@ A moved PR head can continue in the same acceptance run only by creating a new m
    remediation content;
 #. push/reconcile that exact signed commit through the protected Phase 8 push operation;
 #. prove the hosted PR head equals that exact newly signed/pushed OID;
-#. only then collect exact-head review and CI evidence for the new generation.
+#. only then collect exact-head review and integration-CI evidence for the new generation.
 
 A remotely authored, unsigned, locally untested, or otherwise non-Binnacle-proven commit
 can never be the final PASS candidate. If it cannot be superseded by a complete locally
 proven signed candidate, the run is ``INCOMPLETE``. Review/CI on a moved head never inherits
 local evidence from the previous head merely because the diff is small.
+
+2.9 The deployed merge tree is the reviewed and tested integration
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Candidate-head equality is necessary but insufficient. The code actually restarted after
+hosted merge may be a merge commit, squash commit or rebased result whose content depends
+on the protected base at integration time. PASS therefore binds an immutable
+``integration_generation`` to the exact tuple:
+
+``(candidate_generation, candidate_oid, protected_base_oid, merge_policy_digest,
+expected_integration_tree_oid)``.
+
+The final substantive review is correlated to both the exact candidate OID and exact base
+OID. Required CI must prove what integration object/tree it actually checked; a workflow's
+reported PR head SHA alone is not accepted as proof that ``actions/checkout`` or another
+checkout step tested that same object. The evidence records the event candidate/base OIDs,
+actual checked-out commit OID, checked-out tree OID and, when a synthetic merge object is
+used, its parent OIDs.
+
+If the protected base changes after the final candidate review/integration evidence, the
+candidate's local Phase 6/7/8 provenance remains valid only while its candidate OID is
+unchanged, but the old ``integration_generation`` is stale. A new integration generation
+must bind the new base and obtain fresh review/diff context plus checks covering the exact
+new integration tree. If updating/rebasing the feature branch changes the candidate head,
+section 2.8 applies and a new **candidate** generation with the complete local chain is
+required as well.
+
+Immediately before hosted merge, the protected base must still equal the base OID bound to
+the accepted integration generation. A race after that observation is detected after
+merge by exact result-tree/parent verification. The resulting hosted merge tree must equal
+the reviewed/tested ``expected_integration_tree_oid`` and satisfy the allowed
+merge-method-specific base/candidate relationship. A result that cannot prove those facts
+is never a restart candidate.
+
+For an allowed merge-commit policy, evidence normally requires the resulting merge parents
+to bind the exact protected base and final candidate and the merge tree to equal the tested
+integration tree. For an allowed squash policy, evidence requires the result parent/base
+relationship and exact tree equality plus hosted PR/candidate provenance. A rebase policy
+is supported only if the promoted repository profile can independently prove the rewritten
+series/result is the exact reviewed candidate integration over the bound base; tree
+identity alone is not used to invent that provenance. Unsupported merge methods make the
+run ``INCOMPLETE``.
+
+A trusted merge queue may satisfy the same rule if its exact queued base, candidate,
+integration object/tree and completed checks are independently retained. Phase 10 does not
+assume such a queue exists.
 
 3. Source-of-truth composition
 ------------------------------
@@ -216,6 +264,12 @@ required predecessor capabilities are implemented and promoted. At minimum:
 * Phase 9 service/runtime inspection, restart preflight and controlled restart are
   promoted for the exact selected candidate class;
 * the current manifest/contracts/schemas/host classifications match the real runtime;
+* repository review/CI evidence can bind the exact candidate/base integration and actual
+  checked-out commit/tree used by required checks; if current workflows do not retain that
+  bounded attestation, acceptance readiness is ``INCOMPLETE`` until the repository's
+  normal reviewed CI path provides it;
+* the repository merge-method profile has a reviewed proof rule for relating the hosted
+  result to the bound base/candidate and tested integration tree;
 * no predecessor evidence is stale relative to the runtime/config/policy/device epoch used
   for this run.
 
@@ -246,13 +300,21 @@ record conceptually contains:
 * for every generation, exact locally proven source-content/change-scope digest, local
   checks evidence set, status/diff evidence, signed commit OID+signer and push effect;
 * explicit invalidation reason/reference for every superseded generation;
+* monotonic ``integration_generation`` records bound to exact candidate generation/OID,
+  protected-base OID, merge-policy digest, review-base evidence, actual CI checkout
+  commit/tree/parents and expected integration tree OID;
+* explicit invalidation reason/reference for every stale integration generation, including
+  protected-base movement;
 * every Phase 4 operation ID/idempotency key reference used by the run;
 * Phase 6 workspace-session/fence references;
-* Phase 7 execution IDs/output evidence used for tests/failure exercise;
+* Phase 7 execution IDs/output evidence used for candidate checks, post-merge integration
+  checks and failure exercise;
 * Phase 8 branch/ref/index/worktree/commit/push evidence;
-* hosted GitHub repository/PR/review/CI/merge identifiers bound to the final generation;
+* hosted GitHub repository/PR/review/CI/merge identifiers bound to the final candidate and
+  integration generations;
+* hosted merge result OID/tree/parents/method proof;
 * Phase 9 restart preflight/checkpoint/broker/runtime-slot/recovery evidence;
-* post-reconnect exact runtime identity and changed-behaviour evidence;
+* post-reconnect exact runtime identity/tree and changed-behaviour evidence;
 * security/non-disclosure checks;
 * terminal ``PASS | FAIL | INCOMPLETE`` plus exact failed invariant/evidence references.
 
@@ -262,6 +324,10 @@ The run record is correlation evidence, not an authority token. Possessing
 A candidate generation is immutable once its signed commit is recorded. A later head
 movement creates a new generation rather than overwriting the old commit/evidence fields.
 This prevents stale local evidence from being rebound to a new hosted head.
+
+An integration generation is separately immutable once its base/candidate/tree tuple is
+recorded. Base movement creates a new integration generation even when the locally signed
+candidate OID does not change.
 
 6. Evidence collection model
 -----------------------------
@@ -273,7 +339,8 @@ be implemented as a test/helper/report component that:
 * records external GitHub identifiers supplied/read through ChatGPT's connected GitHub
   workflow;
 * canonicalizes exact references/digests;
-* evaluates candidate-generation validity and the pass/fail matrix;
+* evaluates candidate-generation and integration-generation validity and the pass/fail
+  matrix;
 * emits a bounded machine-readable acceptance report and a human-readable summary.
 
 It must not:
@@ -283,7 +350,9 @@ It must not:
 * hold SSH/GPG/root credentials;
 * create a second operation lifecycle;
 * infer success from transcript text when an authoritative source exists;
-* relabel review/CI evidence from one candidate generation as evidence for another.
+* relabel review/CI evidence from one candidate/integration generation as evidence for
+  another;
+* infer the CI checkout tree from a workflow status label or PR head alone.
 
 If no new evidence-assembler code is required, the run may be evaluated from existing
 operation snapshots plus a reviewed acceptance fixture/report procedure. Phase 10 should
@@ -330,9 +399,13 @@ The evidence-level run state is monotonic and may use names equivalent to:
    candidate_pushed
    hosted_review_in_progress
    candidate_superseded
+   integration_verifying
+   integration_stale
    hosted_merge_ready
    hosted_merged
    local_update_ready
+   merged_checks_in_progress
+   merged_checks_ready
    restart_preflight_ready
    restart_in_progress
    reconnecting
@@ -346,6 +419,12 @@ The evidence-level run state is monotonic and may use names equivalent to:
 ``candidate_superseded`` creates a new ``candidate_generation`` and routes back through
 ``change_in_progress`` / ``local_checks_in_progress``. It never jumps directly from a
 remotely moved PR head to ``hosted_review_in_progress`` with inherited local evidence.
+
+``integration_stale`` creates a new ``integration_generation`` when the protected base or
+reviewed merge policy changes while the candidate OID remains identical. It routes through
+fresh base-aware review/integration checks. If making the candidate compatible with the new
+base changes its head/content, the candidate-generation rule wins and the complete local
+chain is repeated.
 
 This state machine does not replace Phase 4 operations. Each transition references the
 underlying authoritative operation/evidence. A run may be ``incomplete`` while an
@@ -370,7 +449,8 @@ Before branch creation, collect an exact baseline:
 * no unresolved Phase 8 credential/Git effect;
 * no unresolved Phase 9 package/restart/recovery effect;
 * current verified LKG/runtime-control evidence required for the selected restart class;
-* exact CI/review policy expected for the hosted PR.
+* exact CI/review/merge policy expected for the hosted PR, including how required workflows
+  expose candidate/base/actual-checkout/tree evidence and which merge methods are accepted.
 
 The baseline must be internally coherent. Repository HEAD used to create the feature
 branch must equal the baseline commit bound into the run. Runtime revision may differ only
@@ -609,14 +689,15 @@ Record:
 * candidate generation;
 * exact head branch/ref and commit OID observed by GitHub;
 * exact base protected branch and base OID at PR creation;
+* repository merge-policy digest/method set;
 * PR creation time/evidence source;
 * run correlation note/reference if repository process permits one.
 
 The hosted PR head must equal the exact signed/pushed commit of the current candidate
 generation. If it differs, stop and reconcile before review.
 
-22. Hosted review policy and head movement
------------------------------------------
+22. Hosted review policy, base binding and head movement
+-------------------------------------------------------
 
 Use the repository's current review process, including the bounded AI-review policy that
 applies to development workflow at execution time. Phase 10 acceptance requires that the
@@ -627,12 +708,14 @@ policy.
 Record:
 
 * candidate generation;
-* exact reviewed head commit;
+* integration generation;
+* exact reviewed candidate/head commit;
+* exact protected-base OID against which the review/diff was evaluated;
 * required reviewer identities/types;
 * actionable findings;
 * remediation decisions;
 * proof each actionable thread is resolved or explicitly accepted under owner policy;
-* final exact-head clean review evidence.
+* final exact-head/base clean review evidence.
 
 **Any remediation that changes PR content/head invalidates the current candidate
 generation for PASS.** The workflow must not use a GitHub-side edit or reviewer-authored
@@ -648,68 +731,129 @@ as one closed chain. In particular:
 #. create a new independently verified signed Phase 8 commit;
 #. push/reconcile exactly that commit;
 #. prove GitHub PR head equals that signed/pushed OID;
-#. then rerun exact-head substantive review and Actions for the new head.
+#. then create a fresh integration generation and rerun base-aware substantive review and
+   integration checks.
+
+If the protected base moves while the PR candidate OID remains unchanged, do not relabel
+the existing review as current. Create a new integration generation for the new base and
+obtain fresh review/diff context plus integration checks for the exact candidate/base pair.
+If branch update/rebase changes the candidate OID, create a new candidate generation and
+repeat the complete local chain first.
 
 If a hosted reviewer/automation has already authored a commit, it is historical input, not
 final acceptance provenance. Its desired changes must be represented in a new locally
 proven signed candidate before PASS. If repository policy cannot preserve this closed
 local provenance, the acceptance run is ``INCOMPLETE`` rather than weakening the gate.
 
-No local check, diff, signature, push, review or CI evidence from a superseded generation
-can satisfy the final generation's corresponding requirement.
+No local check, diff, signature, push, review or CI evidence from a superseded candidate or
+integration generation can satisfy the final generation's corresponding requirement.
 
-23. GitHub Actions gate
------------------------
+23. GitHub Actions integration gate
+-----------------------------------
 
-Record the exact required workflow runs/checks for the **final locally proven candidate
-generation and exact PR head**:
+Required GitHub checks must cover the exact **integration** that can become the hosted
+result, not merely report green for a status associated with the PR head.
+
+For the final integration generation record:
 
 * workflow name/ID and run ID;
-* exact commit SHA;
-* candidate generation;
-* trigger/source;
-* terminal conclusion;
-* required job/check conclusions;
+* candidate generation and exact candidate/PR-head OID;
+* exact protected-base OID/event base identity;
+* integration generation and merge-policy digest;
+* trigger/source/event identity;
+* actual commit OID checked out by the job;
+* actual ``HEAD^{tree}``/equivalent tree OID checked by the job;
+* when the checked-out object is a synthetic merge/integration object, its exact parent
+  OIDs and proof they bind the recorded base/candidate;
+* expected integration tree OID derived/accepted from that exact checked integration;
+* terminal conclusion and required job/check conclusions;
 * retry/attempt identity when a transient infrastructure failure is rerun.
 
+Do **not** assume a workflow API ``head_sha`` or PR-head field equals the commit actually
+checked out by ``actions/checkout``. Required workflows need bounded attestation/log/artifact
+or an equivalent authoritative source that proves the checked commit/tree/base/candidate.
+If the current repository workflow cannot expose that evidence, the real Phase 10 run is
+``INCOMPLETE`` until the normal reviewed CI path is upgraded; Phase 10 does not fabricate
+it from GitHub labels.
+
 A rerun is acceptable when repository policy permits it and evidence shows the original
-failure was infrastructure/transient rather than a hidden code change. Final PASS requires
-that the exact GitHub Actions head equals the generation's locally signed/pushed OID.
-Green CI on any prior generation is stale and cannot be reused.
+failure was infrastructure/transient rather than a hidden code change. Green CI on a
+prior candidate or integration generation is stale and cannot be reused.
 
-24. Hosted merge binding
-------------------------
+If the CI profile tests only the candidate head and never the candidate integrated with the
+bound protected base, it is insufficient for PASS unless another reviewed integration
+check proves the exact expected integration tree before hosted merge. Post-merge local
+checks in section 25 are additionally required and do not erase this pre-merge integration
+gate.
 
-Merge through ChatGPT GitHub integration only after exact-head review and CI are clean.
+24. Hosted merge binding and result-tree proof
+----------------------------------------------
+
+Merge through ChatGPT GitHub integration only after exact candidate review and integration
+CI are clean.
+
 Immediately before merge, re-read and bind:
 
 * PR number;
-* current candidate generation;
-* exact expected PR head;
+* current candidate generation and integration generation;
+* exact expected PR head/candidate OID;
 * exact locally signed commit OID for that generation;
 * exact pushed remote-ref OID;
-* final review head;
-* final CI head;
-* merge method;
-* protected base branch/current expected base state as required by repository policy.
+* final review candidate/head and reviewed base OID;
+* final CI candidate/base and actual checked integration tree OID;
+* ``expected_integration_tree_oid``;
+* merge method and reviewed merge-policy digest;
+* exact protected base branch and current base OID.
 
-The four candidate identities -- locally signed OID, pushed ref OID, current PR head, and
-review/CI head -- must be exactly equal before merge. A last-second head movement returns
-to section 22; it never proceeds with mixed-generation evidence.
+The locally signed OID, pushed ref OID, current PR head, reviewed candidate OID and CI event
+candidate OID must be exactly equal. The current protected-base OID must equal the base OID
+bound to both the final review and integration generation. A last-second candidate movement
+returns to section 22 as a new candidate generation. A base movement marks the integration
+generation stale and returns to fresh base-aware review/integration checks.
 
-Record the exact resulting merged commit OID and hosted merge timestamp/evidence. Read the
-hosted result independently after merge. The merge OID becomes the only allowed local
-update/restart candidate for the remainder of the run.
+The merge invocation may lack an atomic expected-base guard. Therefore, after merge, read
+the hosted result independently and record:
 
-25. Local checkout update after hosted merge
---------------------------------------------
+* resulting merged/ref OID;
+* exact resulting tree OID;
+* exact parent OID(s)/ancestry facts required by the selected merge method;
+* hosted PR/source candidate identity and bound base identity;
+* merge method/policy evidence and merge timestamp;
+* exact equality ``result_tree_oid == expected_integration_tree_oid``.
+
+The merge-method-specific proof is fail closed:
+
+* merge-commit profile: resulting parents must bind the exact accepted base and final
+  candidate according to the reviewed repository policy, and its tree must equal the
+  tested integration tree;
+* squash profile: resulting commit must have the accepted base relationship required by
+  policy, hosted evidence must bind the exact PR/candidate as source, and its tree must
+  equal the tested integration tree;
+* rebase profile: accept only when the repository profile can independently prove the
+  rewritten commit/series is the exact reviewed candidate integration over the accepted
+  base and the resulting tree equals the tested integration tree; otherwise rebase is
+  unsupported for Phase 10 acceptance;
+* merge-queue profile: bind the queue's exact base/candidate/integration object, completed
+  checks and final result/tree under its reviewed semantics.
+
+A hosted merge result whose base/parents/provenance or tree differs from the accepted
+integration generation is ``FAIL/INCOMPLETE`` according to whether the mismatch is proven
+or merely unavailable. It must **not** be updated locally or restarted as the Phase 10
+candidate. The merge OID is allowed to differ from the locally signed candidate OID only
+under an accepted merge-method proof whose result tree is exactly the reviewed/tested
+integration tree.
+
+25. Local checkout update and exact merged-tree checks
+------------------------------------------------------
 
 Updating the real development checkout is an explicit Phase 8 semantic operation. Do not
 substitute a manual ``git pull``.
 
 Before update, prove:
 
-* final-generation signed commit was pushed/merged as expected;
+* final candidate-generation signed commit was pushed/merged as expected;
+* final integration generation is current for the exact accepted base/candidate;
+* hosted merge result passed section 24 tree/parent/provenance proof;
 * local index/worktree state matches the exact allowed transition;
 * no uncommitted acceptance artifacts or unrelated edits exist;
 * no conflicting Phase 6/7/8 workspace changer is active;
@@ -722,21 +866,35 @@ exact branch update as defined by Phase 8, not arbitrary merge/rebase/stash.
 After update record:
 
 * local protected branch/ref;
-* local HEAD OID;
+* local HEAD OID and ``HEAD^{tree}``/equivalent tree OID;
 * index/worktree cleanliness/expected state;
-* exact equality to hosted merged commit;
+* exact equality to hosted merged commit OID;
+* exact equality ``local_tree_oid == hosted_result_tree_oid ==
+  expected_integration_tree_oid``;
 * repository safety-profile digest;
 * Phase 8 operation/effect evidence.
 
-If local HEAD != hosted merged OID, restart is prohibited.
+If local HEAD != hosted merged OID or any tree equality fails, restart is prohibited.
+
+Before constructing the Phase 9 restart candidate, rerun the complete required Phase 7
+focused tests/quality gate on the exact **merged OID/tree in the real development
+checkout**. Record execution/output/source/tree bindings just as for section 14, under a
+separate ``post_merge_local_check_refs`` evidence set. These checks prove the exact object
+that will be restarted works on the selected Pi; they do not substitute for the pre-merge
+base-aware review/integration-CI proof. Any red/uncertain merged-tree check blocks restart.
 
 26. Runtime-candidate binding
 -----------------------------
 
-Construct the Phase 9 candidate identity only after local update is exact. Bind:
+Construct the Phase 9 candidate identity only after local update and post-merge checks are
+exact. Bind:
 
 * final candidate-generation signed/pushed/PR-head evidence;
+* final integration generation, accepted protected-base OID and tested integration tree;
+* hosted merge result OID/tree/parent/provenance proof;
 * hosted merged OID == local HEAD;
+* local tree == hosted result tree == expected integration tree;
+* exact post-merge Phase 7 local-check evidence set for that OID/tree;
 * exact branch/dirty expectation;
 * source/workspace/root/mount identity;
 * environment/lock/package identity;
@@ -760,7 +918,7 @@ Call Phase 9 ``restart_preflight`` and record:
 * Phase 8 Git/credential effects;
 * prior Phase 9 privileged/recovery state;
 * current exact runtime identity;
-* exact candidate/LKG compatibility;
+* exact candidate/integration-tree/LKG compatibility;
 * predicted restart impact/blockers;
 * manager-reload/database compatibility facts when applicable.
 
@@ -779,8 +937,8 @@ Request exactly one Phase 9 controlled restart with a stable idempotency key bou
 * restart-owned Phase 6 workspace fence ID/generation;
 * Phase 9 broker acceptance evidence;
 * exact restart checkpoint ID/digest;
-* exact hosted merged candidate OID;
-* final candidate-generation provenance reference;
+* exact hosted merged candidate OID and result-tree OID;
+* final candidate/integration-generation provenance reference;
 * retained LKG ``VerifiedRuntimeSlot`` identity;
 * restart deadline/profile;
 * any manager-reload/database-compatibility plan required by candidate class.
@@ -809,10 +967,10 @@ Reconnect attempts use the same registered endpoint/controller profile. On recon
 ---------------------------------------------
 
 For the normal Phase 10 acceptance case, expected success is the exact hosted merged
-candidate. Acceptance recognizes Phase 9 truth if a failure occurs:
+candidate/tree. Acceptance recognizes Phase 9 truth if a failure occurs:
 
-* ``candidate_ready`` at exact merged revision and expected runtime identity can proceed to
-  behaviour verification;
+* ``candidate_ready`` at exact merged revision/result tree and expected runtime identity can
+  proceed to behaviour verification;
 * candidate failure with proven LKG rollback is a truthful recovered Phase 9 result but
   **fails this Phase 10 run**, because the merged change is not running;
 * restricted recovery is ``FAIL/INCOMPLETE`` and requires operator/recovery work outside
@@ -828,8 +986,8 @@ deployment.
 Before probing changed behaviour, prove at minimum:
 
 * exact runtime Git revision == hosted merged OID;
-* hosted merged OID descends from/includes the final candidate-generation signed commit as
-  expected for the repository merge method;
+* exact runtime/source tree OID == hosted result tree OID == tested integration tree OID;
+* hosted result satisfies the final merge-method-specific base/candidate provenance proof;
 * exact protected branch/detached expectation;
 * clean/expected source state;
 * exact source/workspace/root/mount identity;
@@ -857,7 +1015,7 @@ surface and records:
 * actual structured result/evidence;
 * runtime/catalogue generation used;
 * proof result comes from post-restart candidate runtime;
-* final candidate-generation/merged-OID evidence reference;
+* final candidate/integration-generation/merged-OID/tree evidence reference;
 * no consequential side effect unless selected probe contract explicitly requires one.
 
 The probe must distinguish the merged change from old runtime. Merely seeing commit OID is
@@ -907,18 +1065,24 @@ PASS requires **all** of:
    required Phase 7 local test/quality evidence, Phase 8 status/diff evidence, independently
    verified signed commit and exact protected push evidence;
 #. one safe recoverable failure/cancellation is truthfully reconciled;
-#. no superseded candidate generation contributes local/review/CI evidence to the final
-   generation's required fields;
+#. no superseded candidate or integration generation contributes stale evidence to the
+   final required fields;
 #. final locally signed commit OID == exact pushed feature-branch OID == exact final hosted
-   PR head == exact substantive-review head == exact GitHub Actions head;
-#. required substantive review is clean for that exact final head;
-#. required GitHub Actions checks are green on that exact final head;
-#. PR is merged and exact merged OID independently recorded;
-#. local development checkout reaches exactly that merged OID through Phase 8 semantics;
-#. Phase 9 restart preflight and controlled restart use exactly that merged candidate;
+   PR head == exact substantive-review candidate/head == CI event candidate/head;
+#. final substantive review is clean for that exact candidate against the exact protected
+   base bound to the final integration generation;
+#. required GitHub Actions checks are green and attest the exact candidate/base integration
+   object/tree actually checked;
+#. final protected base at merge equals the reviewed/tested integration base;
+#. hosted merge result independently proves an allowed merge-method relationship to that
+   base/candidate and ``result_tree_oid == expected_integration_tree_oid``;
+#. local development checkout reaches exactly that merged OID through Phase 8 semantics and
+   its tree equals the tested integration tree;
+#. complete required post-merge Phase 7 checks are green on that exact local merged OID/tree;
+#. Phase 9 restart preflight and controlled restart use exactly that merged OID/tree;
 #. reconnect reconciles the same retained restart rather than a second attempt;
-#. post-reconnect runtime identity equals exact merged OID and expected runtime/control
-   composition;
+#. post-reconnect runtime revision/tree equals exact merged OID/tested integration tree and
+   expected runtime/control composition;
 #. selected changed behaviour is observed through real MCP on that runtime;
 #. no unresolved ``uncertain`` operation, audit obligation, workspace fence, credential
    effect or broker recovery remains;
@@ -930,11 +1094,13 @@ PASS requires **all** of:
 
 FAIL is a terminal evidence-backed negative result, for example:
 
-* hosted review/CI rejects final candidate and run is deliberately ended;
+* hosted review/CI rejects final candidate/integration and run is deliberately ended;
 * protected repository/security policy violation occurs;
 * wrong signer/remote/branch/merge/runtime identity is proven;
 * final PR head cannot be traced to a complete locally tested/signed/pushed candidate
   generation;
+* hosted merge result tree or required parent/base provenance is proven different from the
+  reviewed/tested integration generation;
 * candidate restart truthfully rolls back instead of running merged candidate;
 * changed behaviour is definitively absent on exact candidate runtime;
 * credential or privilege boundary is breached.
@@ -952,6 +1118,9 @@ INCOMPLETE means acceptance truth cannot yet be decided safely, for example:
 * GitHub/executor/broker evidence needed for correlation is unavailable;
 * PR head moved and the complete local Phase 6/7/8 candidate chain has not yet been
   repeated for the new head;
+* protected base moved and fresh base-aware review/integration evidence is not complete;
+* required CI does not expose authoritative candidate/base/actual-checkout/tree evidence;
+* merge-method-specific provenance cannot be independently proven;
 * selected change unexpectedly requires unpromoted environment/DB/root capability;
 * restricted recovery requires local operator work;
 * external service outage prevents completion without proving candidate failure.
@@ -977,6 +1146,15 @@ For acceptance candidate generations:
 * a new generation must rebuild the complete local source/check/sign/push provenance;
 * only evidence explicitly bound to final generation can satisfy PASS fields.
 
+For integration generations:
+
+* protected-base or merge-policy movement never mutates prior integration evidence in place;
+* a new generation must obtain fresh base-aware review and exact integration checks;
+* a base-only movement does not fabricate a new candidate OID or relabel old CI as current;
+* a branch update that changes the candidate OID also triggers the full candidate-generation
+  chain;
+* post-merge result-tree mismatch is never repaired by merely updating local checkout.
+
 The acceptance-run record may gain new evidence, but it cannot rewrite authoritative effect
 results to make the matrix pass.
 
@@ -998,9 +1176,17 @@ Before real exit, walk or exercise as appropriate:
 * PR review remediation moves head after original local checks/signing;
 * reviewer/GitHub automation creates an unsigned or locally untested commit;
 * old-generation local checks are accidentally offered with new-generation review/CI;
+* protected base moves after clean candidate review while PR head remains unchanged;
+* required workflow reports candidate head but actually checks out a different synthetic
+  integration commit/tree;
+* synthetic integration check was green for old base then base moves;
 * transient GitHub Actions infrastructure failure is rerun under repository policy;
-* hosted merge response lost but GitHub later proves exact merged OID;
+* hosted merge races base movement after the pre-merge observation;
+* hosted merge method rewrites/composes commits but result tree differs from the tested
+  integration tree;
+* hosted merge response lost but GitHub later proves exact merged OID/tree/parents;
 * local update response lost after ref/worktree effect;
+* post-merge local checks fail on the exact merged tree despite earlier candidate checks;
 * restart preflight clean but competing Phase 7/8 changer races final admission -- shared
   Phase 6 fence gives one winner;
 * application connection disappears after Phase 9 broker acceptance;
@@ -1008,7 +1194,7 @@ Before real exit, walk or exercise as appropriate:
 * candidate readiness delayed until near deadline;
 * candidate fails and exact LKG rollback succeeds;
 * candidate/recovery ends restricted;
-* post-reconnect runtime revision differs from hosted merge;
+* post-reconnect runtime revision/tree differs from hosted merge/integration tree;
 * runtime revision matches but changed behaviour is absent;
 * audit/credential/fence closure fails after otherwise successful deployment.
 
@@ -1041,16 +1227,32 @@ representative shape is:
        signer_ref
        push_effect_ref
        hosted_head_ref
-       review_refs[]
-       ci_refs[]
        superseded_reason_ref
      final_candidate_generation
+     integration_generations[]:
+       generation
+       candidate_generation
+       candidate_oid
+       protected_base_oid
+       merge_policy_digest
+       review_refs[]
+       ci_refs[]
+       ci_checkout_oid
+       ci_checkout_tree_oid
+       ci_parent_oids[]
+       expected_integration_tree_oid
+       superseded_reason_ref
+     final_integration_generation
      operation_refs[]
      command_execution_refs[]
      failure_exercise_ref
      github_pr_ref
      github_merge_oid
+     github_merge_tree_oid
+     github_merge_parent_oids[]
+     github_merge_method_ref
      local_update_ref
+     post_merge_local_check_refs[]
      restart_operation_ref
      restart_checkpoint_ref
      post_restart_runtime_ref
@@ -1070,16 +1272,22 @@ The final evidence package should allow an owner/reviewer to answer quickly:
 
 * What exact real Pi/runtime did ChatGPT start from?
 * What exact change was selected and why was it safe for this acceptance profile?
-* Which candidate generations were superseded and why?
+* Which candidate/integration generations were superseded and why?
 * Does the final PR head equal the final locally tested/signed/pushed commit?
-* What files changed in that final generation?
-* What local tests ran against that exact content and what failure/cancel was exercised?
+* What exact protected base OID was the final review/integration checked against?
+* What commit/tree did each required CI job actually check out, and how does it bind the
+  final candidate/base?
+* What files changed in that final candidate generation?
+* What local tests ran against that exact candidate content and what failure/cancel was
+  exercised?
 * What exact signer and protected remote were used?
-* What PR/review/CI/merge evidence corresponds to exact final head?
-* What exact merged OID was installed locally?
+* What PR/review/CI evidence corresponds to the exact final candidate/base integration?
+* What exact merged OID/tree/parents were produced and why does that prove the allowed
+  merge method integrated the reviewed candidate over the reviewed base?
+* What exact merged OID/tree was installed locally and retested before restart?
 * What Phase 9 checkpoint/LKG/broker operation performed restart?
 * Did candidate run or rollback occur?
-* What exact post-restart runtime identity was observed?
+* What exact post-restart runtime identity/tree was observed?
 * What semantic MCP probe proves changed behaviour is live?
 * Were all audit/fence/credential/broker states closed?
 * Was any reusable credential or privileged authority exposed?
@@ -1095,21 +1303,33 @@ Any implementation of evidence assembler/evaluator should have deterministic tes
 * missing required evidence -> INCOMPLETE;
 * wrong branch/base/head relationship -> FAIL;
 * wrong signer -> FAIL;
-* review on old head -> INCOMPLETE/FAIL according to repository policy, never PASS;
-* CI green on old head only -> INCOMPLETE;
+* review on old candidate head -> INCOMPLETE/FAIL according to repository policy, never PASS;
+* review bound to old protected base after base movement -> INCOMPLETE;
+* CI green on old candidate/integration generation only -> INCOMPLETE;
+* workflow status names final candidate but actual checkout/tree is unbound/unavailable ->
+  INCOMPLETE;
+* CI checks candidate head only while required integration tree is untested -> INCOMPLETE;
 * final PR head differs from final locally signed/pushed OID -> FAIL/INCOMPLETE, never PASS;
 * new PR head reuses old generation's Phase 6/7/8 local evidence -> INCOMPLETE;
 * remotely authored remediation commit lacks new local test/sign/push generation ->
   INCOMPLETE;
+* protected base moves after review/CI and old integration generation is reused ->
+  INCOMPLETE;
+* hosted merge result tree differs from tested integration tree -> FAIL;
+* hosted merge parent/base/candidate relationship contradicts allowed merge method -> FAIL;
+* merge provenance unavailable for selected merge method -> INCOMPLETE;
 * merged OID != local update target -> FAIL;
+* local tree != hosted result tree/tested integration tree -> FAIL;
+* post-merge local checks absent/red/uncertain -> INCOMPLETE/FAIL, never PASS;
 * local update target != post-restart runtime revision -> FAIL;
+* runtime tree != hosted/tested integration tree -> FAIL;
 * candidate rollback despite hosted merge -> FAIL for Phase 10 candidate success;
 * runtime revision correct but behaviour probe absent -> INCOMPLETE;
 * runtime revision correct but behaviour definitively old/wrong -> FAIL;
 * unresolved Phase 4/7/8/9 uncertain state -> INCOMPLETE;
 * deliberate cancellation not truthfully reconciled -> INCOMPLETE;
 * leaked credential/security invariant -> FAIL;
-* every final-generation identity/evidence exact and closed -> PASS.
+* every final candidate/integration identity/evidence exact and closed -> PASS.
 
 Use property tests for evidence-reference permutation/omission so evaluator cannot pass
 because a similarly named but different operation/commit/run/generation was supplied.
@@ -1125,14 +1345,18 @@ The real acceptance campaign records, rather than assumes:
 * real Phase 7 process/cancel survival behaviour;
 * real Phase 8 SSH/signing/push evidence without raw-secret disclosure;
 * real GitHub connected integration PR/review/Actions/merge behaviour;
+* actual PR-event candidate/base identities and actual CI checkout commit/tree/parent
+  evidence rather than assumptions about checkout defaults;
+* actual hosted merge method/result tree/parent evidence;
 * real Phase 9 broker/systemd/checkpoint/recovery behaviour;
 * exact restart downtime/reconnect timing;
-* exact post-restart runtime identity/readiness evidence;
+* exact post-restart runtime identity/readiness/tree evidence;
 * actual changed Tool behaviour.
 
 Unknown facts stay unknown until this campaign runs. The plan does not claim ChatGPT will
-automatically rediscover a changed catalogue, that Pi can materialize an LKG slot, or that
-a particular Git/GPG/systemd mechanism works merely because design names it.
+automatically rediscover a changed catalogue, that Pi can materialize an LKG slot, that a
+particular Git/GPG/systemd mechanism works, or that current GitHub workflows expose the
+required integration attestation merely because design names it.
 
 41. No manual fallback inside the acceptance chain
 --------------------------------------------------
@@ -1146,7 +1370,9 @@ interfaces, record missing capability and stop run INCOMPLETE. Do not patch over
 * manual ``systemctl``/``sudo``;
 * direct credential copying;
 * local database edits;
-* hidden repository force updates.
+* hidden repository force updates;
+* manually constructing an unreviewed merge commit/tree merely to satisfy integration
+  evidence.
 
 This also applies to review remediation: a GitHub-side edit may be useful collaboration
 input, but it cannot become final PASS head unless its content is superseded by a complete
@@ -1166,7 +1392,10 @@ scope. Phase 10 verifies composition:
 * ChatGPT can use its separate connected GitHub authority for hosted collaboration;
 * hosted collaboration may suggest changes but cannot replace the required local final-head
   provenance;
-* exact hosted result can be brought back into Binnacle local/restart evidence.
+* hosted review/CI/merge evidence binds the exact protected base and actual integration
+  tree, not just a PR-head label;
+* exact hosted result can be brought back into Binnacle local/restart evidence only after
+  merge-tree/parent/provenance verification.
 
 This is not considered a local Binnacle authority leak and does not justify exposing
 GitHub credentials to the Pi.
@@ -1224,22 +1453,32 @@ Cleanup cannot retroactively rewrite a failed/uncertain effect.
 
 Phase 10 implementation/execution should proceed in this order:
 
-#. Freeze/review Phase 10 evidence schema, candidate-generation rules and pass/fail matrix.
+#. Freeze/review Phase 10 evidence schema, candidate/integration-generation rules and
+   pass/fail matrix.
 #. Implement only the small evidence assembler/evaluator if existing retained snapshots are
    insufficient for reliable review; do not add a new authority surface.
-#. Add evaluator fixtures/property tests including moved-head/stale-generation cases.
+#. Add evaluator fixtures/property tests including moved-head, moved-base, checkout-tree and
+   stale-generation cases.
+#. Ensure the normal reviewed GitHub CI path can attest exact candidate/base/actual-checkout
+   commit/tree/parents required for Phase 10; if not, acceptance readiness remains
+   ``INCOMPLETE`` until that support is added through ordinary repository development.
 #. Add an acceptance-run operator/reviewer procedure referencing existing semantic Tools.
 #. Verify Phase 3-9 implementation/promotion exits on real selected Pi.
 #. Choose one real safe acceptance change at execution time.
-#. Capture exact baseline and create ``AcceptanceRun`` generation 1.
+#. Capture exact baseline and create ``AcceptanceRun`` candidate generation 1.
 #. Execute branch/read/edit/test/failure-exercise/diff/commit/push through Binnacle.
-#. Complete hosted PR/review; for every head-changing remediation, create next generation
-   and repeat the complete local Phase 6/7/8 candidate chain before further review/CI.
-#. Complete exact-head hosted CI/merge through ChatGPT GitHub integration.
-#. Bind exact merged OID and update development checkout through Phase 8.
-#. Execute Phase 9 restart preflight + controlled restart.
+#. Complete hosted PR/review; for every head-changing remediation, create next candidate
+   generation and repeat the complete local Phase 6/7/8 candidate chain.
+#. Create/freeze an integration generation for exact candidate + protected base, then obtain
+   base-aware review and exact integration CI. Base movement repeats this integration gate;
+   candidate movement repeats the full local candidate chain.
+#. Merge through ChatGPT GitHub integration only while the final candidate/integration gate
+   is current; independently prove result tree/parents/provenance against that gate.
+#. Update development checkout through Phase 8 to the exact merged OID/tree and rerun the
+   complete required Phase 7 checks on that exact merged tree.
+#. Execute Phase 9 restart preflight + controlled restart using that exact OID/tree.
 #. Reconnect and reconcile same restart.
-#. Verify exact runtime identity and changed behaviour.
+#. Verify exact runtime identity/tree and changed behaviour.
 #. Close security/audit/fence/credential/broker evidence.
 #. Evaluate PASS/FAIL/INCOMPLETE and submit evidence bundle for owner/reviewer acceptance.
 #. On accepted PASS, mark Bootstrap milestone complete and stop Bootstrap feature expansion.
@@ -1253,26 +1492,35 @@ Before asking bot reviewers to accept this plan, walk the complete chain:
 Phase 6 development session -> Phase 8 feature branch -> Phase 6 inspect/search/read ->
 Phase 6 mutation -> Phase 7 tests/quality -> one recoverable failure/cancel -> exact local
 checks -> Phase 8 status/diff -> locally created signed commit -> exact push/reconciliation
--> ChatGPT GitHub PR -> if head changes: NEW GENERATION + repeat Phase 6/7/8 local
-content/check/diff/sign/push chain -> final PR head == final signed/pushed OID -> exact-head
-substantive review -> exact-head Actions -> hosted merge -> exact merged OID -> Phase 8 local
-checkout update -> Phase 9 candidate binding -> restart preflight -> shared Phase 6 CHANGE
+-> ChatGPT GitHub PR -> if head changes: NEW CANDIDATE GENERATION + repeat Phase 6/7/8 local
+content/check/diff/sign/push chain -> final PR head == final signed/pushed OID -> freeze exact
+protected base + integration generation -> exact candidate/base substantive review -> exact
+CI attestation of actual checked integration commit/tree/parents -> if base changes: NEW
+INTEGRATION GENERATION + repeat base-aware review/integration checks -> hosted merge -> prove
+merge result tree == tested integration tree + allowed parent/base/candidate provenance ->
+Phase 8 local checkout update to exact merged OID/tree -> complete Phase 7 checks on exact
+merged tree -> Phase 9 candidate binding -> restart preflight -> shared Phase 6 CHANGE
 fence -> broker accept/checkpoint -> service stop/candidate start / optional manager
 reload/recovery -> expected connection loss -> reconnect -> same retained restart
-reconciliation -> exact merged runtime identity -> changed MCP behaviour probe ->
+reconciliation -> exact merged runtime identity/tree -> changed MCP behaviour probe ->
 security/audit/fence/credential closure -> PASS/FAIL/INCOMPLETE``.
 
 Scrutinize especially:
 
-* stale evidence from an old candidate generation/commit/head/run being reused;
-* review/CI on pre-remediation head;
+* stale evidence from an old candidate/integration generation/commit/base/run being reused;
+* review on a pre-remediation head or old protected base;
+* CI status associated with candidate head while actual checkout/tree is different or
+  unproved;
 * hosted-authored remediation becoming final head without complete local retest/sign/push;
+* protected base moving after review/CI without a fresh integration generation;
+* merge method rewriting/composing a result tree not covered by integration checks;
 * push or merge response loss;
-* local checkout update not equal to hosted merge OID;
+* local checkout update not equal to hosted merge OID/tree;
+* exact merged tree not rerun through required local Phase 7 checks before restart;
 * manual ``git pull`` or shell restart sneaking into loop;
 * second restart issued after connection loss;
 * candidate rollback mislabeled candidate success;
-* runtime HEAD matching while wrong environment/config/service/DB state runs;
+* runtime HEAD matching while wrong tree/environment/config/service/DB state runs;
 * behaviour probe coming from stale connection/catalogue/runtime;
 * deliberate failure/cancel not truthfully reconciled;
 * unresolved uncertainty hidden by later success;
@@ -1288,7 +1536,8 @@ This planning PR may merge when:
 * branch starts from exact merged Phase 9 ``master``;
 * it adds exactly ``docs/implementation/phase-10-self-hosting-acceptance.rst``;
 * it changes no runtime implementation, contracts, manifest or prior numbered plan;
-* holistic pre-review has checked full evidence chain and candidate-generation provenance;
+* holistic pre-review has checked full evidence chain plus candidate/integration-generation
+  provenance and merge-result tree binding;
 * exact-head Contract Validation and Python CI are green;
 * mandatory exact-head Codex substantive review is clean;
 * actionable threads are resolved;
@@ -1315,16 +1564,21 @@ The decisive identity/provenance chain is:
       -> locally created signed commit OID
       -> pushed remote ref at same OID
       -> exact hosted PR final head at same OID
-      -> exact review/CI head at same OID
-      -> exact hosted merged OID
-      -> exact local update target
-      -> exact Phase 9 restart candidate
-      -> exact post-restart runtime revision
+      -> final integration generation(candidate OID + protected base OID)
+      -> exact candidate/base substantive review
+      -> exact checked integration commit/tree/parents + green Actions
+      -> hosted merge result with allowed base/candidate provenance
+      -> hosted merge result tree == tested integration tree
+      -> exact local update target OID/tree
+      -> complete local checks on that exact merged tree
+      -> exact Phase 9 restart candidate OID/tree
+      -> exact post-restart runtime revision/tree
       -> exact changed behaviour
 
 Every equality/transition is independently evidenced. Any head-changing remediation
-creates a new locally proven candidate generation; there is no shortcut from hosted edit to
-accepted final head. Any gap is not a partial pass.
+creates a new locally proven candidate generation; any protected-base movement creates a
+new integration generation. There is no shortcut from hosted edit, stale base, status-label
+CI or unproved merge result to an accepted restart candidate. Any gap is not a partial pass.
 
 The run must additionally prove one safe recoverable failure/cancellation and no reusable
 credential/root/workspace-boundary disclosure.
