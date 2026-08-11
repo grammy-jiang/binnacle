@@ -12,6 +12,7 @@ from typing import Annotated
 
 import typer
 from pydantic import ValidationError
+from pydantic_settings import SettingsError
 from rich.console import Console
 
 from binnacle import distribution_version
@@ -90,6 +91,9 @@ def _load_or_exit(
 ) -> BinnacleSettings:
     try:
         return load_settings(config_path=config_path, cli_overrides=cli_overrides)
+    except SettingsError as exc:
+        typer.echo(f"Configuration error: {_safe_settings_error_summary(exc)}", err=True)
+        raise typer.Exit(code=2) from exc
     except ValidationError as exc:
         typer.echo(f"Configuration error: {_safe_validation_summary(exc)}", err=True)
         raise typer.Exit(code=2) from exc
@@ -113,6 +117,16 @@ def _safe_validation_summary(error: ValidationError) -> str:
         location = ".".join(str(part) for part in detail["loc"]) or "configuration"
         summaries.append(f"{location}: {detail['msg']}")
     return "; ".join(summaries)
+
+
+def _safe_settings_error_summary(error: SettingsError) -> str:
+    """Identify a known field without echoing source data from parse errors."""
+
+    message = str(error)
+    for field_name in BinnacleSettings.model_fields:
+        if f'field "{field_name}"' in message:
+            return f"{field_name}: invalid environment value"
+    return "invalid environment value"
 
 
 @app.command("version")
