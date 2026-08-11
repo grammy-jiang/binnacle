@@ -23,9 +23,10 @@ Binnacle Phase 6 Detailed Implementation Plan
                        snapshot search using process-pure ``ripgrep`` as a stdin matcher,
                        protected-object alias rejection, shared content/change
                        coordination, durable Phase 4 consequential-operation integration
-                       for mutations, session/start and content-admission linearization,
-                       bounded MCP contract/schema/manifest promotion, tests, deployment
-                       permissions, and evidence gates only
+                       for mutations and session activation, session/start and
+                       content-admission linearization, bounded MCP contract/schema/
+                       manifest promotion, tests, deployment permissions, and evidence
+                       gates only
 
 Purpose
 -------
@@ -40,8 +41,9 @@ The phase separates three facts:
 
 * an owner-authorised development session grants broad normal developer authority inside
   the registered Binnacle source workspace;
-* every consequential file mutation still consumes the Phase 4 durable operation,
-  idempotency, audit, policy, final-boundary, effect-knowledge, and reconciliation kernel;
+* every consequential file mutation **and the authority-granting session activation
+  transition itself** consumes the Phase 4 durable operation, idempotency, audit, policy,
+  final-boundary, effect-knowledge, and reconciliation kernel;
 * whether the selected real ChatGPT host can represent the owner-visible bounded session
   semantics without redundant per-file confirmations remains empirical HOST-profile
   evidence and is not guessed here.
@@ -395,6 +397,8 @@ correctness primitive, not a cache and not a substitute for durable session stat
 The gate serializes:
 
 * a content-returning read/search about to establish its one process-local content permit;
+* the session-begin operation about to cross its authority-granting activation
+  ``EffectBoundary.start``;
 * a member mutation about to cross ``EffectBoundary.start``;
 * explicit session end/revocation;
 * trusted-time expiry becoming effective for new work;
@@ -412,10 +416,13 @@ The global application lock order is fixed as:
 
 Content read/search uses only ``WorkspaceAccessGate CONTENT_READ ->
 DevelopmentSessionAuthorityGate`` from that chain. A mutation already owns exclusive
-``CHANGE`` before it later enters Phase 4 handoff/session/process gates. Session
-end/revocation acquires the session gate directly and **never** reaches back to acquire
-``WorkspaceAccessGate``. Recovery/access-gate transitions likewise never acquire a session
-gate while holding a later gate in reverse order. Tests fail on any inversion.
+``CHANGE`` before it later enters Phase 4 handoff/session/process gates. Session activation
+has no workspace change guard because it grants authority but does not change source bytes;
+it uses ``Phase 4 per-operation dispatch handoff -> DevelopmentSessionAuthorityGate ->
+Phase 4 ConsequentialBoundaryGate``. Session end/revocation acquires the session gate
+directly and **never** reaches back to acquire ``WorkspaceAccessGate``. Recovery/access-
+gate transitions likewise never acquire a session gate while holding a later gate in
+reverse order. Tests fail on any inversion.
 
 For content read/search, initial session checks before waiting for ``CONTENT_READ`` are
 advisory freshness checks only. After the shared content guard is acquired, the application
@@ -434,6 +441,26 @@ and returns no source content. If content admission wins first, later reduction 
 admission but does not retroactively interrupt/reclassify the already-admitted bounded
 no-effect request. The permit is non-durable, non-transferable, non-reusable, and dies with
 its exact guard/runtime.
+
+For session activation, after the begin operation is already durably ``running`` and its
+``effect.intent_recorded`` audit is fsynced, the application acquires the Phase 4
+per-operation handoff, then the exact session gate, then the Phase 4 process-wide
+consequential gate. While those gates are held it final-revalidates the exact still-self-
+owned ``PENDING`` slot plus controller/device/workspace/profile/policy/time/root/mount and
+all Phase 4 audit/recovery predicates, publishes the durable audit obligation, and only
+then lets the process-wide gate own the activation ``call_start`` linearization. The gated
+activation effect is one short exact ``PENDING -> ACTIVE`` CAS with
+``activation_closure=PENDING`` and a durable activation effect reference. Immediate
+receipt/reference/effect-knowledge classification completes before the session gate or
+process permit is released.
+
+Thus a required-audit failure trip that wins before activation ``call_start`` produces
+zero authority-state effect; activation cannot mutate the session while the Phase 4
+consequential gate is fail-restricted. If activation ``call_start`` wins first, the
+``ACTIVE``/incomplete state is already a started/known-or-potential effect and later audit
+failure or authority reduction cannot relabel it ``known_no_effect``. The session remains
+ineffective until the separate closure CAS proves required post-effect audit/obligation
+closure.
 
 For a member mutation, the session gate is held from final trusted-time/session predicates
 through final Phase 4 revalidation, durable audit-obligation publication, and process-wide
@@ -483,7 +510,13 @@ session approval solely because the MCP process restarted.
 
 The in-memory session gate is reconstructed from authoritative session rows plus current
 trusted predicates. It never converts an ``ACTIVE`` row with incomplete activation closure
-or mismatched/unverifiable mount identity into authority.
+or mismatched/unverifiable mount identity into authority. A begin operation that was
+``running`` across restart is reconciled against its exact durable activation effect
+reference/receipt and Phase 4 dispatch-attempt/audit-obligation evidence. ``PENDING`` alone
+never proves no effect; ``ACTIVE`` row presence alone never substitutes for the operation's
+effect classification. Missing or contradictory activation evidence remains conservative
+and keeps the session ineffective/live-slot reserved until exact reconciliation or
+explicit authority reduction.
 
 7.4 End, expiry, and revocation
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -508,7 +541,8 @@ second effect.
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Session begin is consequential authority-state mutation even though it writes no source
-file.
+file. Its ``PENDING -> ACTIVE`` transition is a real Phase 4 effect boundary; no code path
+may perform that transition merely after an application-level final check.
 
 First-use ordering is:
 
@@ -524,14 +558,35 @@ First-use ordering is:
 #. bind expected self transition as
    ``session_slot_transition=free_then_exact_self_pending``;
 #. fsync required allowed/authorised audit and move operation to ``running``;
-#. record activation intent and final-revalidate controller/device/workspace/profile/
-   policy/time/root/mount identity/slot;
-#. publish Phase 4 audit obligation and perform exact ``PENDING -> ACTIVE`` with
-   ``activation_closure=PENDING``;
-#. retain effect knowledge/reference and fsync required post-effect activation audit;
-#. only after audit success, obligation closure, and exact identity revalidation may a
-   short CAS set ``activation_closure=COMPLETE``;
+#. fsync ``effect.intent_recorded`` for the exact activation effect;
+#. acquire Phase 4 per-operation dispatch handoff;
+#. acquire exact ``DevelopmentSessionAuthorityGate`` for this still-self-owned PENDING
+   session;
+#. acquire Phase 4 process-wide ``ConsequentialBoundaryGate`` permit;
+#. under those gates final-revalidate operation/controller/device/workspace/profile/
+   policy/time/root/mount identity, exact PENDING/live-slot ownership, cancellation,
+   audit/recovery health, and the consumed phase-stable session-slot binding;
+#. publish/fsync the exact Phase 4 audit obligation while the session/process gates are
+   held;
+#. recheck the same exact predicates and let the process-wide gate own
+   ``call_start`` for a narrow internal ``SessionActivationEffectBoundary``;
+#. that bounded start performs only the exact ``PENDING -> ACTIVE`` CAS with
+   ``activation_closure=PENDING`` and records a recoverable activation effect reference;
+#. immediately classify/persist the activation receipt/reference/effect knowledge before
+   releasing the process permit, session gate, or per-operation handoff;
+#. fsync required post-effect activation audit and close the matching obligation;
+#. only after audit success, obligation closure, and exact identity/effect revalidation may
+   a short CAS set ``activation_closure=COMPLETE``;
 #. only ``ACTIVE`` + ``COMPLETE`` makes session gate effective for member work.
+
+The Phase 4 process-wide gate is the sole activation-start-vs-required-audit-failure
+linearization point. If the audit-failure trip wins before ``call_start``, no
+``PENDING -> ACTIVE`` transition occurs; the operation follows the normal proven-no-effect
+closure and the PENDING slot is terminalized/released only after its required audit/recovery
+proof. If ``call_start`` wins, a later audit failure cannot pretend activation never
+started. Lost/ambiguous activation start/receipt becomes ``uncertain`` and leaves the live
+slot and session authority fail-closed; ``ACTIVE`` with incomplete closure never grants
+member authority.
 
 A distinct begin losing the slot race creates no second ``PENDING`` or authority effect;
 it follows a bounded non-disclosing no-effect busy/rejection path. It never waits and
@@ -567,7 +622,8 @@ active merely to make audit ordering convenient. Durable ``ACTIVE -> ENDED``/``R
 reduction takes effect under the gate; subsequent audit failure places global
 consequential admission into Phase 4 fail-restricted recovery while the session remains
 reduced. Activation and revocation are intentionally asymmetric: activation withholds
-authority until audit closure; revocation removes authority first.
+authority until **Phase 4 gated start plus** audit closure; revocation removes authority
+first.
 
 A member whose mutation ``call_start`` or content permit already won before end remains
 in-flight/admitted and is not reclassified. Same-key end retry returns retained end work.
@@ -1022,7 +1078,9 @@ One per-workspace ``WorkspaceAccessGate`` supplies linearization:
   durable fence owned and access gate/recovery change-closed;
 * lock order is ``WorkspaceAccessGate -> per-operation dispatch handoff (if
   consequential) -> DevelopmentSessionAuthorityGate -> ConsequentialBoundaryGate (if
-  consequential)``. Session reduction never acquires workspace access after session gate;
+  consequential)``. Session activation follows the consequential suffix without
+  ``WorkspaceAccessGate``; session reduction never acquires workspace access after session
+  gate;
 * one coordinator orders acquire/release so no reader sees fence free while changer enters
   ownership and no changer acquires durable fence while content guard active;
 * every application invocation initializes ``RECOVERY_CLOSED`` and opens only after exact
@@ -1281,25 +1339,43 @@ claim Linux pathname syscalls prevent hostile same-UID writer race.
 24. Effect knowledge and domain closure
 ---------------------------------------
 
-Each mutation adapter returns bounded typed receipt only after required filesystem
-durability point.
+Every consequential Phase 6 boundary returns or retains enough exact evidence for Phase 4
+to classify effect truth without guessing.
 
-Internal effect reference includes workspace/profile, registered root/object mount identity,
-operation ID, kind, source/target digests, staging ID if any, verified post-effect object/
-content/link-count/mount where applicable, exact durability step, primitive/profile version,
-receipt digest/version.
+For workspace mutations, each adapter returns a bounded typed receipt only after the
+required filesystem durability point. Internal effect reference includes workspace/profile,
+registered root/object mount identity, operation ID, kind, source/target digests, staging
+ID if any, verified post-effect object/content/link-count/mount where applicable, exact
+durability step, primitive/profile version, receipt digest/version.
+
+For session activation, the narrow ``SessionActivationEffectBoundary`` is also an effect
+adapter even though its real-world effect is authority state rather than a source-file
+syscall. Gate-owned ``call_start`` precedes the exact session CAS. The activation effect
+reference binds operation/session IDs, prior/new session state+version,
+``activation_closure=PENDING``, controller/device/workspace/profile/root/mount/policy facts,
+and the exact CAS/receipt version. The application persists immediate Phase 4
+receipt/reference/effect knowledge before releasing the start/session/process gates.
+
+A crash after activation ``call_start`` but before complete operation classification never
+permits a blind second activation or a ``known_no_effect`` inference. Restart uses the
+recoverable activation reference plus exact session row/version, dispatch-attempt and audit-
+obligation evidence to converge if proof is sufficient; otherwise the begin operation is
+``uncertain`` and the live session slot stays fail-closed. ``ACTIVE`` presence by itself is
+not authority and is not enough to manufacture effect truth.
 
 Phase 4 operation owns authoritative lifecycle/effect knowledge; Phase 6 rows cannot invent
 parallel enum.
 
-* complete exact durability receipt + expected mount proof -> eligible ``known_effect``;
-* explicit pre-start/no-syscall exact receipt, including rejected mount crossing -> eligible
-  ``known_no_effect``;
-* lost syscall/fsync receipt, incomplete reference, identity/link-count/mount mismatch,
-  detected out-of-band race, or otherwise unprovable -> ``uncertain``;
-* final filesystem/path/mount appearance alone never upgrades uncertainty;
-* terminal domain/fence closure only after required audit obligation/reconciliation;
-* session end after ``call_start`` never downgrades effect truth.
+* complete exact durability/activation receipt + expected identity/mount proof -> eligible
+  ``known_effect``;
+* explicit pre-start/no-call exact receipt, including rejected mount crossing or process-
+  gate denial before activation/workspace ``call_start`` -> eligible ``known_no_effect``;
+* lost syscall/activation-start/fsync receipt, incomplete reference, identity/link-count/
+  mount mismatch, detected out-of-band race, or otherwise unprovable -> ``uncertain``;
+* final filesystem/path/mount/session-state appearance alone never upgrades uncertainty;
+* terminal domain/fence/activation closure only after required audit obligation/
+  reconciliation;
+* session end after a member or activation ``call_start`` never downgrades effect truth.
 
 25. Restart and reconciliation
 ------------------------------
@@ -1327,19 +1403,28 @@ Required behaviour:
   takes rebuilt session gate after CONTENT_READ;
 * received without completed admission follows Phase 4 recovery deny;
 * authorised never auto-starts after restart;
-* running without exact receipt is not known-no-effect from filesystem;
+* a running session-begin without exact activation-start/receipt proof never retries
+  activation blindly and never infers no effect merely from ``PENDING``; exact retained
+  activation reference/session-version evidence may reconcile, otherwise it remains
+  uncertain/ineffective and holds the live slot;
+* a required-audit fail-restriction found before an unstarted activation is reconciled as
+  zero-start only when Phase 4 dispatch/obligation evidence proves ``call_start`` did not
+  win;
+* running workspace mutation without exact receipt is not known-no-effect from filesystem;
 * retained mutation fence reconciles before new changer/content; startup reconstructs
   change-closed from owner;
 * exact receipt/reference + independently verifiable identity/mount evidence may converge
   per adapter;
-* ambiguous receipt/mount evidence remains uncertain and retains fence;
+* ambiguous receipt/mount/activation evidence remains uncertain and retains fence/live
+  slot as applicable;
 * session end/expiry does not block same-key retained reconciliation;
 * live-session-slot invariant verified; multiple PENDING/ACTIVE rows integrity failure;
 * active session restored effective only after activation closure + exact profile/root/
-  mount/policy/time;
+  mount/policy/time and reconciled begin-operation effect truth;
 * incomplete activation remains ineffective;
 * session gate rebuilt closed until predicates proven;
-* no integrity record rebuilt from mutable source tree or newly observed mount topology;
+* no integrity record rebuilt from mutable source tree, newly observed mount topology, or
+  session-state appearance;
 * unknown staging never heuristically removed.
 
 26. Persistence and migration
@@ -1349,9 +1434,9 @@ Expected Alembic ``0003_development_workspace.py`` after Phase 5 migration.
 
 ``development_sessions``
    Durable session identity, begin operation, owner/device/workspace/profile/**root mount
-   identity**/policy/objective/time deadline, state/version, activation operation, closure
-   state/version, terminal times/reasons. Partial unique index over device+epoch+workspace
-   for PENDING or ACTIVE reserves one live slot.
+   identity**/policy/objective/time deadline, state/version, recoverable activation effect
+   reference/digest, activation closure state/version, terminal times/reasons. Partial
+   unique index over device+epoch+workspace for PENDING or ACTIVE reserves one live slot.
 
 ``workspace_operations``
    One-to-one Phase 4 operation metadata: session/workspace/kind/source-target digests,
@@ -1464,6 +1549,11 @@ Representative boundaries:
        async def move(self, intent: MoveIntent) -> WorkspaceEffectReceipt: ...
        async def delete(self, intent: DeleteIntent) -> WorkspaceEffectReceipt: ...
 
+   class SessionActivationEffectBoundary(Protocol):
+       async def start(
+           self, session_id: str, operation_id: str, expected_state_version: int
+       ) -> SessionActivationReceipt: ...
+
    class WorkspaceAccessCoordinator(Protocol):
        async def content_read(self, workspace_id: str) -> ContentReadGuard: ...
        async def acquire_change(
@@ -1480,12 +1570,20 @@ Representative boundaries:
            request_digest: str,
            content_guard_epoch: int,
        ) -> ContentReadPermit: ...
+       async def activation_start(
+           self, session_id: str, operation_id: str
+       ) -> StartPermit: ...
        async def member_start(self, session_id: str, operation_id: str) -> StartPermit: ...
        async def reduce_authority(self, session_id: str, reason: str) -> None: ...
 
 ``admit_content_read`` is called only while exact ContentReadGuard is held. It revalidates
 authoritative session/time/profile/root/mount state and returns permit bound to guard/
 request. Permit itself neither acquires workspace access nor persists authority.
+
+``activation_start`` is an application coordination seam used only after the Phase 4
+per-operation handoff and before the process-wide consequential gate. It does not itself
+mutate session state. The actual authority-state effect occurs only through the process-
+gate-owned ``SessionActivationEffectBoundary.start``/``call_start`` path.
 
 ``WorkspaceSearchEnumerator`` owns all recursive workspace discovery and must open/pin the
 exact candidate file set under the reviewed no-XDEV/mount/link/protected-path rules before
@@ -1564,9 +1662,9 @@ material, inherited procfd numbers as stable IDs, or inherited environment/confi
 
 Metrics may cover bounded reads/searches/mutations, search snapshot/scope-too-large/
 timeout/truncation, alias/mount rejections, stale versions, fence contention, session-race
-rejection, uncertain effects, session starts/ends, stale-search-child recovery, unsafe
-search config, and disabled primitives. Path names/keys/mount source names are not unbounded
-labels.
+rejection, **activation-gate no-start/uncertain outcomes**, uncertain effects, session
+starts/ends, stale-search-child recovery, unsafe search config, and disabled primitives.
+Path names/keys/mount source names are not unbounded labels.
 
 31. Security invariants
 -----------------------
@@ -1578,20 +1676,28 @@ Implementation/review proves at least:
 #. Development session never grants credential/policy/broker/control-plane/arbitrary-system/
    hardware authority.
 #. Session ID is not bearer authority.
-#. Activation ineffective until exact post-effect audit/obligation closure.
+#. Session activation uses the exact Phase 4 per-operation handoff + process-wide
+   ConsequentialBoundaryGate and cannot perform ``PENDING -> ACTIVE`` before gate-owned
+   ``call_start``; required-audit fail restriction winning first yields zero activation.
+#. Activation ineffective until exact gated start effect is truthfully classified and
+   post-effect audit/obligation closure is complete.
 #. Exactly one live PENDING/ACTIVE session row per device-epoch/workspace.
 #. Session reduction and mutation start share authority-gate linearization.
 #. Content admission shares session linearization **after** CONTENT_READ; stale pre-wait
    proof cannot disclose.
 #. Lock order is WorkspaceAccessGate -> Phase4 handoff when applicable -> session gate ->
-   process gate when applicable; no reverse session-reduction acquisition.
+   process gate when applicable; activation uses the consequential suffix and no reverse
+   session-reduction acquisition exists.
 #. Same-key retained retry precedes mutable session/filesystem checks.
-#. Every new mutation has Phase4 durable identity + required received audit before policy.
+#. Every new mutation and session activation has Phase4 durable identity + required
+   received/authorised/effect-intent audit ordering before any effect start.
 #. Change fence is post-policy exact-self and ``uncertain`` retains it.
 #. Phase7/8 changers consume same coordination seam and preserve protected-content + mount
    boundary.
 #. Final OP-BOUNDARY revalidates session/closure/controller/device/profile/root/**mount**/
-   policy/audit/op/fence/source/target immediately before start.
+   policy/audit/op/fence/source/target immediately before workspace start; activation final
+   OP-BOUNDARY revalidates exact PENDING slot + controller/device/profile/root/mount/policy/
+   audit/op state before activation start.
 #. No symlink, string-prefix, or same-``st_dev`` check alone decides authority.
 #. No content/metadata traversal or mutation crosses an unregistered mount below root;
    preferred openat2 uses ``RESOLVE_NO_XDEV`` and fallback proves exact mount ID on every
@@ -1643,6 +1749,8 @@ Cover:
 * path/protected-prefix normalizer;
 * session state/expiry/effective/activation closure;
 * live-session-slot uniqueness and same-key convergence;
+* session activation uses Phase4 handoff/process gate and audit-failure trip before
+  activation ``call_start`` yields zero PENDING->ACTIVE transition;
 * session gate lock order/start-vs-reduction;
 * CONTENT_READ then session gate, exact permit, no content before permit;
 * WorkspaceAccessGate shared/exclusive + RECOVERY_CLOSED startup;
@@ -1662,12 +1770,14 @@ Cover:
 Property tests prove normalized paths never escape; symlink trees and mount crossings never
 become valid; protected hard-link aliases/multiply-linked files never enter search snapshot;
 same key creates at most one effect; different fingerprint adds zero effects; uncertain
-never releases fence; session reduction before mutation start yields zero effect; reduction
-after CONTENT_READ but before permit yields zero source/matcher; permit-first admits at most
-one exact request while later admission fails; incomplete activation never admits; distinct
-begins yield one live slot; content and change guards never overlap; RECOVERY_CLOSED never
-opens without child quiescence + mount-root verification; patch deterministic or no-effect;
-fence version monotonic.
+never releases fence; **audit failure/process-gate trip before session activation start
+creates zero authority effect**; lost activation receipt never permits blind retry or
+ACTIVE-as-authority inference; session reduction before mutation start yields zero effect;
+reduction after CONTENT_READ but before permit yields zero source/matcher; permit-first
+admits at most one exact request while later admission fails; incomplete activation never
+admits; distinct begins yield one live slot; content and change guards never overlap;
+RECOVERY_CLOSED never opens without child quiescence + mount-root verification; patch
+deterministic or no-effect; fence version monotonic.
 
 32.2 Linux integration/adversarial tests
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1728,6 +1838,11 @@ Inject failures/crashes:
 * after policy allow before live-session slot;
 * after PENDING slot before activation intent/audit;
 * failure terminalizing no-effect PENDING keeps slot until exact recovery;
+* **required-audit/global-gate trip after activation final revalidation or obligation
+  publication but before activation ``call_start``: zero PENDING->ACTIVE effect**;
+* crash immediately after activation ``call_start``/PENDING->ACTIVE but before application
+  effect classification: restart never retries blindly or infers no effect; reconcile from
+  exact activation reference or remain uncertain/incomplete;
 * after allow before fence; after fence before authorised audit;
 * after running/effect intent before final boundary;
 * session gate held before obligation; after obligation before syscall;
@@ -1736,7 +1851,8 @@ Inject failures/crashes:
 * after adapter receipt before effect classification;
 * after known-effect before post-effect audit/fence release;
 * DB failure during closure/fence release;
-* after PENDING->ACTIVE before activation audit; after audit before closure CAS;
+* after PENDING->ACTIVE known activation effect before activation audit; after audit before
+  closure CAS;
 * after CONTENT_READ before permit while session end wins;
 * app SIGKILL while rg matcher is active: stdin closes, old child can discover no new
   workspace file, systemd removes matcher/helper tree, and replacement runtime cannot open
@@ -1745,25 +1861,26 @@ Inject failures/crashes:
 * app restart active/effective, active/incomplete, expired/untrusted, uncertain mutation.
 
 Concurrency proves two mutations cannot own fence; two begins cannot create two live slots;
-same-key first mutation converges; session end vs call_start binary; content queued behind
-changer cannot disclose after end; permit-first request may finish while later rejects;
-trusted-time expiry blocks both start/content admission; audit-failure dispatch follows
-Phase4 global gate; content cannot start while durable fence owner exists; changer cannot
-acquire during content; replacement runtime cannot change while old matcher/helper may
-survive; protected rename/exchange cannot race active search; mount topology change never
-inherits authority from access guard/fence and cannot expand a completed exact-file
-snapshot.
+same-key first mutation converges; **activation ``call_start`` vs required-audit gate trip
+is binary**; session end vs member call_start binary; content queued behind changer cannot
+disclose after end; permit-first request may finish while later rejects; trusted-time expiry
+blocks both start/content admission; audit-failure dispatch follows Phase4 global gate;
+content cannot start while durable fence owner exists; changer cannot acquire during
+content; replacement runtime cannot change while old matcher/helper may survive; protected
+rename/exchange cannot race active search; mount topology change never inherits authority
+from access guard/fence and cannot expand a completed exact-file snapshot.
 
 32.4 Contract/schema tests
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Before exposure prove proposed Tool uniqueness, JSON Pointers, versions, information/host
 classes, protected path+alias+mount rules, content gate-owned session revalidation,
-coordinated-writer/strong-confinement requirement, search exact-file snapshot ceilings,
-matcher zero-workspace-path/FD and process-purity flags/environment, service-cgroup recovery
-barrier, live session slot non-disclosure, mount-ID/no-XDEV and primitive degradation, no
-Phase6 Tool when prereq absent, existing eight-tool profiles unchanged until promotion, and
-catalogue digest changes only through reviewed manifest bump.
+coordinated-writer/strong-confinement requirement, **session activation Phase4 gated-start
+ordering**, search exact-file snapshot ceilings, matcher zero-workspace-path/FD and process-
+purity flags/environment, service-cgroup recovery barrier, live session slot non-disclosure,
+mount-ID/no-XDEV and primitive degradation, no Phase6 Tool when prereq absent, existing
+eight-tool profiles unchanged until promotion, and catalogue digest changes only through
+reviewed manifest bump.
 
 33. Real-Pi and real-ChatGPT evidence procedure
 -----------------------------------------------
@@ -1781,10 +1898,11 @@ rg zero workspace FD/path authority; exact rg configuration/preprocessor/archive
 options; sanitized environment; service KillMode/control-group lifecycle, non-delegated
 search-child membership, app-death stdin closure, crash/restart child cleanup,
 SearchChildRecoveryBarrier, WorkspaceAccessGate protected-rename and retained-fence
-behavior, queued-content/session-end linearization, writer/confinement model, rg version/
-stdin performance limits, and systemd permissions limited to registered source workspace
-without protected state. Every rejected/unverifiable mount case must demonstrate zero
-mounted-content disclosure and zero workspace effect start.
+behavior, queued-content/session-end linearization, **session activation process-gate/audit-
+trip linearization**, writer/confinement model, rg version/stdin performance limits, and
+systemd permissions limited to registered source workspace without protected state. Every
+rejected/unverifiable mount case must demonstrate zero mounted-content disclosure and zero
+workspace effect start.
 
 Real ChatGPT evidence verifies exact promoted catalogue; actual session-start host
 interaction; no redundant member confirmation if HOST profile claims it; bounded source
@@ -1798,6 +1916,31 @@ use ambient HC0 mutation.
 -----------------------------------------
 
 Every new head is reviewed as continuous pipelines.
+
+Session activation:
+
+::
+
+   authenticate/normalize + caller-binding-first retained lookup
+     -> minimal received identity + required received audit
+     -> policy
+     -> post-policy exact self PENDING live-slot reservation
+     -> allowed/authorised audit -> running -> effect.intent_recorded
+     -> Phase4 per-operation handoff
+     -> DevelopmentSessionAuthorityGate
+     -> Phase4 ConsequentialBoundaryGate
+     -> final exact PENDING/controller/device/profile/policy/root/mount/audit/recovery check
+     -> durable audit obligation
+     -> process-gate-owned SessionActivationEffectBoundary.call_start
+     -> exact PENDING->ACTIVE / activation_closure=PENDING effect + recoverable receipt
+     -> immediate durable effect-knowledge classification
+     -> post-effect activation audit + obligation closure
+     -> exact closure CAS to COMPLETE
+     -> only then member authority effective
+
+Required-audit trip before activation ``call_start`` -> zero activation effect. Lost receipt
+after start -> no blind retry/no ``known_no_effect`` inference; ACTIVE/incomplete remains
+authority-off until exact reconciliation.
 
 Content read/search:
 
@@ -1849,12 +1992,13 @@ Mutation:
      -> caller-binding-first retained retry
 
 Review walks normal success; stale source/target; session reduction while content waits and
-before/during mutation start; activation incomplete/audit failure/concurrent begin; audit
-failure; root replacement; bind/submount insertion/replacement during enumeration and after
-snapshot; protected rename/exchange; hard-link alias; hostile rg config/preprocessor
-attempt; app crash with matcher; lost filesystem receipt; out-of-band source replacement;
-durable known effect then DB/audit closure failure; same-key retry after session expiry;
-uncertain restart + unrelated mutation attempt.
+before/during mutation start; **activation process-gate/audit-failure race and lost
+activation receipt**; activation incomplete/audit failure/concurrent begin; root
+replacement; bind/submount insertion/replacement during enumeration and after snapshot;
+protected rename/exchange; hard-link alias; hostile rg config/preprocessor attempt; app
+crash with matcher; lost filesystem receipt; out-of-band source replacement; durable known
+effect then DB/audit closure failure; same-key retry after session expiry; uncertain restart
++ unrelated mutation attempt.
 
 Shared abstraction defect is fixed at foundation rather than patching each Tool.
 
@@ -1866,6 +2010,8 @@ Accept when review/CI confirms:
 * scope exactly registered source workspace + development session;
 * no ambient absolute/system/credential/policy/broker authority;
 * session semantics owner-approved and HC0/HC1 mismatch named promotion prerequisite;
+* **activation authority transition is a Phase4 gated effect: per-operation handoff +
+  process-wide gate + gate-owned call_start + immediate effect classification**;
 * activation cannot authorize before audit closure; one live PENDING/ACTIVE slot;
 * session reduction vs mutation start one linearization;
 * content waits for CONTENT_READ then revalidates under session gate before bytes/matcher;
@@ -1892,11 +2038,12 @@ Accept when review/CI confirms:
 * create/move no-overwrite no silent degrade; external-writer limitations truthful;
 * staging exact/non-recursive/on registered mount and final created regular file single-
   linked;
-* Phase4 audit/idempotency/final-boundary ordering exact;
+* Phase4 audit/idempotency/final-boundary ordering exact for session activation and
+  workspace mutations;
 * retained retry before mutable checks;
 * pre-linearization session/mount-authority loss -> no effect/disclosure; post-linearization
   ambiguity never rewrites started/admitted truth;
-* all mutation outcomes representable/restart-reconcilable;
+* all mutation/activation outcomes representable/restart-reconcilable;
 * no Pi/ChatGPT support fact fabricated.
 
 36. Implementation/promotion checklist
@@ -1904,14 +2051,15 @@ Accept when review/CI confirms:
 
 Blocked until real Phase5 exit/write-confirmation; session host profile reviewed/passed;
 Phase6 contracts/schemas/manifest promoted; migration + one-live-slot pass; session/access/
-alias/**mount**/fence/idempotency/audit/boundary tests pass; parent-owned exact-file search
-snapshot + rg zero-workspace-FD/path + config-disabled stdin matching + protected rename +
-hardlink alias + bind-mount insertion-during-enumeration/after-snapshot + mount topology
-change + session-end-while-waiting + application-crash/stdin-close/child cleanup barrier
-pass; candidate service proves no prior rg/helper survives readiness; candidate kernel/
-filesystem proves no-XDEV or exact mount-ID fallback semantics; content writer/confinement
-and link-count/mount model accepted; no-overwrite primitives verified; local writer profile
-permits each mutation; Linux tests pass; production exposes nothing when prerequisite fails.
+alias/**mount**/fence/idempotency/audit/boundary tests pass; **session activation gated-start
+and audit-trip/lost-receipt tests pass**; parent-owned exact-file search snapshot + rg zero-
+workspace-FD/path + config-disabled stdin matching + protected rename + hardlink alias +
+bind-mount insertion-during-enumeration/after-snapshot + mount topology change + session-
+end-while-waiting + application-crash/stdin-close/child cleanup barrier pass; candidate
+service proves no prior rg/helper survives readiness; candidate kernel/filesystem proves no-
+XDEV or exact mount-ID fallback semantics; content writer/confinement and link-count/mount
+model accepted; no-overwrite primitives verified; local writer profile permits each
+mutation; Linux tests pass; production exposes nothing when prerequisite fails.
 
 37. Real Phase 6 exit criteria
 ------------------------------
@@ -1919,7 +2067,8 @@ permits each mutation; Linux tests pass; production exposes nothing when prerequ
 Do not mark implementation complete until real evidence proves:
 
 #. owner-authorised session visible to real ChatGPT under reviewed HOST profile;
-#. activation closure complete before member effect/content admission;
+#. activation uses the reviewed Phase4 gated start and closure is complete before member
+   effect/content admission;
 #. ChatGPT inspect/list/read/search exact registered workspace without protected path,
    hard-link-alias, or unregistered-mount disclosure under reviewed writer/confinement/
    mount model;
@@ -1946,9 +2095,13 @@ When evidence permits implementation:
 #. define/review Phase6 operation contracts/schemas;
 #. update manifest/docs/evaluation, validate;
 #. migration ``0003`` sessions/closure/live-slot/workspace metadata/shared fence + persisted
-   registered root/mount identity snapshot fields;
+   registered root/mount identity snapshot + activation effect reference fields;
 #. domain/persistence + live-slot integrity tests;
 #. DevelopmentSessionAuthorityGate + global lock-order tests;
+#. implement session begin's Phase4 running/effect-intent -> per-operation handoff -> session
+   gate -> process-wide consequential gate -> audit obligation -> gated
+   ``SessionActivationEffectBoundary.call_start`` -> immediate effect classification ->
+   post-effect audit/closure path, including audit-trip and lost-receipt fault tests;
 #. workspace profile/root + **mount-ID/no-submount verifier** + protected-path + link-count/
    alias verifier;
 #. WorkspaceAccessGate + durable fence with startup RECOVERY_CLOSED;
@@ -1961,14 +2114,15 @@ When evidence permits implementation:
    no-search-zip/no-follow/json, zero workspace path/FD authority, parent logical-path
    mapping, full guard and process-tree quiescence; run mount-insertion/config-injection/
    app-death/scope-limit tests;
-#. session begin/inspect/end with atomic PENDING slot, closure, fail-safe revocation;
+#. session inspect/end with fail-safe revocation; session begin activation path already
+   implemented above and remains authority-off until closure COMPLETE;
 #. mutation final-binding callback/shared change seam with final mount revalidation;
 #. create exact staging/no-replace/final single-link registered-mount closure;
 #. write replacement + alias/external-race/mount tests;
 #. deterministic patch;
 #. move only verified no-replace + accepted writer/mount profile;
 #. delete only explicit writer/mount profile;
-#. Phase4 audit/idempotency/boundary/effect integration;
+#. Phase4 audit/idempotency/boundary/effect integration parity checks;
 #. expose coordination/mount seam for Phase7/8 without their authority;
 #. wire MCP only after registry parity;
 #. unit/property/Linux/fault/restart/security tests;
@@ -1994,9 +2148,9 @@ Remain evidence-gated after plan merges:
 * real-host result size/catalogue refresh where promoted schemas depend on it.
 
 These may change profile-specific choices/limits but not local authority, durable ordering,
-truthful uncertainty, session start/content-admission linearization, protected-content
-path+alias+mount boundary, exact-file search containment, or no workspace escape without
-reviewed revision.
+truthful uncertainty, **Phase4 gated session activation**, session start/content-admission
+linearization, protected-content path+alias+mount boundary, exact-file search containment,
+or no workspace escape without reviewed revision.
 
 40. Deferred work
 -----------------
