@@ -1,0 +1,190 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "binnacle"
+version = "0.1.0.dev0"
+description = "Deterministic MCP execution and observation boundary for a Raspberry Pi/Linux device"
+requires-python = ">=3.11,<3.14"
+dependencies = [
+  "fastmcp==4.0.0b2",
+  "fastmcp-slim[client,server]==4.0.0b2",
+  "mcp>=2,<3",
+  "pydantic>=2,<3",
+  "pydantic-settings>=2,<3",
+  "rich>=15,<16",
+  "structlog>=26,<27",
+  "typer>=0.27,<1",
+  "uvicorn>=0.40,<1",
+]
+
+[project.scripts]
+binnacle = "binnacle.cli:main"
+
+[dependency-groups]
+test = [
+  "anyio>=4,<5",
+  "coverage[toml]>=7,<8",
+  "pytest>=9,<10",
+  "pytest-cov>=7,<8",
+]
+quality = [
+  "import-linter>=2,<3",
+  "mypy>=1.19,<2",
+  "pip-audit>=2.10,<3",
+  "pre-commit>=4,<5",
+  "ruff>=0.15,<1",
+]
+matrix = [
+  "tox>=4.47,<5",
+  "tox-uv>=1.33,<2",
+]
+contracts = [
+  "jsonschema>=4.26,<5",
+  "PyYAML>=6.0.3,<7",
+]
+dev = [
+  { include-group = "test" },
+  { include-group = "quality" },
+  { include-group = "matrix" },
+  { include-group = "contracts" },
+]
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+namespaces = false
+
+[tool.uv]
+default-groups = ["dev"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["B", "BLE", "E", "F", "I", "RUF", "SIM", "UP"]
+
+[tool.ruff.format]
+line-ending = "lf"
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["src/binnacle", "tests"]
+
+[tool.pytest.ini_options]
+addopts = [
+  "--cov=binnacle",
+  "--cov-branch",
+  "--cov-report=term-missing",
+  "--cov-fail-under=90",
+]
+testpaths = ["tests"]
+strict_config = true
+strict_markers = true
+filterwarnings = ["error"]
+
+[tool.coverage.run]
+branch = true
+source = ["binnacle"]
+
+[tool.coverage.report]
+fail_under = 90
+show_missing = true
+
+[tool.importlinter]
+root_package = "binnacle"
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "Domain is framework independent"
+type = "forbidden"
+source_modules = ["binnacle.domain"]
+forbidden_modules = [
+  "binnacle.adapters",
+  "binnacle.application",
+  "binnacle.cli",
+  "binnacle.composition",
+  "binnacle.config",
+  "binnacle.logging",
+  "fastmcp",
+  "mcp",
+  "pydantic",
+  "pydantic_settings",
+  "rich",
+  "structlog",
+  "typer",
+  "uvicorn",
+]
+
+[[tool.importlinter.contracts]]
+name = "Application depends inward only"
+type = "forbidden"
+source_modules = ["binnacle.application"]
+forbidden_modules = [
+  "binnacle.adapters",
+  "binnacle.cli",
+  "binnacle.composition",
+  "binnacle.config",
+  "binnacle.logging",
+  "fastmcp",
+  "mcp",
+  "pydantic",
+  "pydantic_settings",
+  "rich",
+  "structlog",
+  "typer",
+  "uvicorn",
+]
+
+[[tool.importlinter.contracts]]
+name = "Adapters do not depend on delivery or composition"
+type = "forbidden"
+source_modules = ["binnacle.adapters"]
+forbidden_modules = [
+  "binnacle.cli",
+  "binnacle.composition",
+  "binnacle.config",
+  "binnacle.logging",
+]
+
+[[tool.importlinter.contracts]]
+name = "CLI is not an inward dependency"
+type = "forbidden"
+source_modules = [
+  "binnacle.adapters",
+  "binnacle.application",
+  "binnacle.composition",
+  "binnacle.config",
+  "binnacle.domain",
+  "binnacle.logging",
+]
+forbidden_modules = ["binnacle.cli"]
+
+[tool.tox]
+legacy_tox_ini = """
+[tox]
+env_list = py311, py312, py313, quality
+
+[testenv]
+runner = uv-venv-lock-runner
+dependency_groups = test
+commands = pytest
+
+[testenv:quality]
+runner = uv-venv-lock-runner
+dependency_groups = test, quality, contracts
+commands =
+    ruff check .
+    ruff format --check .
+    mypy src/binnacle tests
+    lint-imports
+    pip-audit
+    python scripts/validate_contracts.py
+    python scripts/validate_schema_instances.py
+"""

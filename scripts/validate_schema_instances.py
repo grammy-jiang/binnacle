@@ -134,9 +134,7 @@ def validate_system_inspect_sections() -> None:
             {
                 "hostname": "pi-a",
                 "returned_sections": ["memory"],
-                "sections": {
-                    "memory": {"total_bytes": 8589934592, "available_bytes": 4294967296}
-                },
+                "sections": {"memory": {"total_bytes": 8589934592, "available_bytes": 4294967296}},
             },
         ),
     )
@@ -215,7 +213,9 @@ def validate_wire_error_fixture() -> None:
     )
     expect_valid("positive execution-error fixture", ref, structured)
 
-    success_case = next(case for case in fixture["cases"] if case["id"] == "tool-call-success-valid")
+    success_case = next(
+        case for case in fixture["cases"] if case["id"] == "tool-call-success-valid"
+    )
     expect_valid(
         "positive Tool success fixture",
         "https://binnacle.dev/schemas/mcp/bootstrap-outputs.schema.json#/$defs/binnacle_probe.output.v1_1",
@@ -224,10 +224,7 @@ def validate_wire_error_fixture() -> None:
 
 
 def validate_uncertain_retry() -> None:
-    ref = (
-        "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json"
-        "#/$defs/operationSnapshot"
-    )
+    ref = "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/operationSnapshot"
     error = {
         "code": "uncertain_outcome",
         "message": "Effect could not be verified.",

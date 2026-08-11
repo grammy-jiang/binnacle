@@ -15,7 +15,7 @@ A tunnel, TCP connection, TLS connection, MCP session, client display name, sour
 The governing rules are:
 
 > Every accepted remote request is bound to one validated controller security profile and one stable controller identity.
-
+>
 > Transport authentication is evaluated before MCP tool execution. Local Binnacle policy is evaluated after authentication and cannot be bypassed by transport success.
 
 ## 2. Scope and Deferred Facts

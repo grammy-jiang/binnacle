@@ -326,7 +326,8 @@ Define one application console script:
 The runtime dependency set is limited to packages imported by the Phase 1 skeleton or
 required to hold the owner-approved framework line:
 
-* ``fastmcp>=4,<5``;
+* ``fastmcp==4.0.0b2`` and ``fastmcp-slim[client,server]==4.0.0b2`` while FastMCP 4
+  remains a prerelease;
 * ``mcp>=2,<3`` to keep the official SDK on the reviewed compatibility line even when
   FastMCP could resolve a broader transitive range;
 * ``uvicorn``;
@@ -335,6 +336,14 @@ required to hold the owner-approved framework line:
 * ``typer``;
 * ``rich``;
 * ``structlog``.
+
+Implementation evidence recorded on 2026-08-11 found that FastMCP 4 was available only
+as the ``4.0.0b2`` prerelease. A ``fastmcp>=4,<5`` requirement therefore has no
+resolvable release, and enabling prereleases globally also admits unrelated prerelease
+dependencies. The implementation pins both the FastMCP distribution and its split
+client/server distribution exactly, while leaving the rest of the graph on stable
+releases. Replace these two exact beta pins with a reviewed 4.x stable range when one is
+available; do not silently float between FastMCP prereleases.
 
 For dependencies whose governing documents freeze only the technology rather than a
 specific major/minor line, the implementation must resolve the current stable release
