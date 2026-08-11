@@ -2,7 +2,7 @@ Binnacle Phase 8 Detailed Implementation Plan
 =============================================
 
 :Phase: 8 -- Implement the minimal Git development workflow
-:Status: proposed
+:Status: merged
 :Planning status: provisional -- evidence-independent Git operation, repository-profile,
                   ref/update, credential-use, signing, network, reconciliation, and
                   workspace-coordination semantics are concrete; implementation/promotion
@@ -213,8 +213,10 @@ Phase 8 does not implement or promote:
 5. Process and authority topology
 ---------------------------------
 
-The Phase 8 path composes existing process boundaries rather than adding another long-lived
-service:
+The Phase 8 path composes the existing application/executor boundaries with a protected
+credential boundary selected during implementation. A selected software broker is a
+separate unprivileged service identity; a hardware-backed equivalent must prove the same
+peer/action/audience isolation:
 
 .. code-block:: text
 
@@ -225,9 +227,10 @@ service:
       -> protected Git-metadata authority + repository validator
       -> GitOperationTicketBuilder
       -> Phase 7 execution supervisor
-      -> dedicated semantic Git process profile
+      -> dedicated internal semantic Git process profile
       -> official Git CLI
-      -> optional exact operation-owned ssh/gpg child through protected brokered authority
+      -> optional exact operation-owned ssh/gpg child
+      -> protected credential broker or equivalent non-exportable boundary
 
 The application owns semantic admission, authoritative operation state, repository/profile
 policy, exact target/effect binding, and effect reconciliation. The Phase 7 supervisor owns
@@ -235,8 +238,8 @@ process acceptance/lifecycle/output evidence. The Git/credential adapter maps on
 semantic operations into fixed executable/argv/environment/file-descriptor/network plans.
 
 A credential broker/agent may perform one exact SSH/signing action without exporting the
-secret. It is **not** a generic shell endpoint and is not reachable by ordinary
-``command_run``.
+secret. It is **not** a generic shell endpoint, does not open application or executor
+SQLite, and is not reachable by ordinary ``command_run``.
 
 5.1 Protected Git-metadata authority is not Phase 6 content authority
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -325,6 +328,38 @@ Mutable current observations are not idempotency authority by themselves. Operat
 specific request fingerprints bind the exact effect-bearing expected state required by the
 operation contract.
 
+7.1 Git object identity and repository-state binding
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Git object IDs are algorithm-tagged values, not Binnacle state digests:
+
+.. code-block:: text
+
+   GitObjectId {
+       algorithm: sha1 | sha256
+       hex: exact lowercase algorithm-sized hexadecimal value
+   }
+
+Bootstrap accepts only full object IDs in the registered repository's object format. It
+does not hard-code forty hexadecimal characters, accept abbreviations, or accept revision
+expressions where an object ID is required. Binnacle request, evidence, profile, and state
+digests remain JCS + SHA-256 and use names ending in ``_sha256``; Git object IDs do not.
+
+The inspector canonicalizes the snapshot into
+``repository_state_binding_sha256``. That stale-state token covers the registered
+repository/workspace/root/mount/common-directory identity; symbolic HEAD/detached state;
+HEAD and relevant ref ``GitObjectId`` values; logical index/tree state; bounded worktree,
+untracked, conflict, lock, and in-progress-operation facts; object format; remote/profile/
+config/helper-surface digests; and capture provenance. It is request state, never authority,
+and every consequential stage re-reads the exact facts it depends on before crossing.
+
+Bootstrap binds one normal primary worktree/common-directory identity one-to-one with one
+registered Phase 6 workspace. Linked worktrees, an external common directory, or reuse of
+one common directory by another registered workspace are rejected. Therefore the existing
+per-workspace gate and durable fence also serialize the supported common directory; Phase 8
+does not invent a parallel durable Git lock. A future multiple-worktree profile must add a
+reviewed common-directory coordinator before promotion.
+
 8. Repository-local configuration is untrusted data
 ----------------------------------------------------
 
@@ -344,8 +379,12 @@ The supported Bootstrap repository profile rejects or explicitly neutralizes at 
 * repository-selected remote destination for credential-bearing operations;
 * ``url.*.insteadOf`` / ``pushInsteadOf``;
 * ``core.sshCommand``;
+* repository-selected ``gpg.program``, signing key, SSH variant, upload-pack, or
+  receive-pack command;
 * protocol/proxy/helper settings that can execute commands or redirect the protected
   destination;
+* aliases, ``core.gitProxy``, ``core.alternateRefsCommand``, ``core.fsmonitor`` or an
+  fsmonitor hook, and any ``submodule.*.update=!command`` form;
 * ``diff.external`` and diff-driver textconv helpers;
 * pager/editor/sequence-editor settings;
 * repository-selected hooks path or executable hooks;
@@ -355,6 +394,10 @@ The supported Bootstrap repository profile rejects or explicitly neutralizes at 
 * Git LFS/custom external extensions;
 * unsupported alternates/object-store indirection that escapes the reviewed repository
   storage profile;
+* replacement refs, grafts, shallow/partial-clone/promisor/sparse state, or lazy object
+  fetching outside an explicitly reviewed repository profile;
+* unexpected ``core.worktree``/Git-dir/common-dir indirection, repository-owned proxy/TLS/
+  HTTP configuration, or protocol allowlist changes;
 * unsafe ownership/safe-directory ambiguity;
 * any config form whose security effect cannot be classified under the reviewed profile.
 
@@ -387,17 +430,24 @@ binds values such as:
 
 * ``GIT_CONFIG_SYSTEM=/dev/null`` and ``GIT_CONFIG_GLOBAL=/dev/null`` or reviewed exact
   protected files;
+* ``GIT_CONFIG_NOSYSTEM=1`` and no caller/repository-provided ``GIT_CONFIG_COUNT`` or
+  ``GIT_CONFIG_KEY_*``/``GIT_CONFIG_VALUE_*``;
 * closed ``HOME``/``XDG_CONFIG_HOME`` appropriate to the Git operation profile;
+* ``LC_ALL=C`` and fixed protected ``GIT_EXEC_PATH``/helper search path;
 * ``GIT_TERMINAL_PROMPT=0``;
 * closed/disabled ``GIT_ASKPASS`` / ``SSH_ASKPASS`` unless a specific protected brokered
   mechanism requires an operation-owned helper;
 * ``GIT_PAGER=cat`` / no interactive pager;
 * no model-provided ``GIT_SSH_COMMAND``;
+* ``GIT_NO_REPLACE_OBJECTS=1``, fixed discovery/ceiling boundaries, and
+  ``GIT_PROTOCOL_FROM_USER=0`` where the reviewed Git version supports the required
+  semantics;
+* literal pathspec handling with no model-provided pathspec magic/revision expression;
 * explicit protocol allowlist;
 * command-scope configuration used only to neutralize/force reviewed behavior and itself
   included in the ticket digest;
-* a fixed no-hook profile such as command-scope ``core.hooksPath=/dev/null`` when the exact
-  Git version proves the intended behavior.
+* a protected read-only empty hooks directory; ``--no-verify`` or a magic path alone is not
+  a sufficient hook boundary.
 
 Repository-local config is still validated separately because ordinary repository Git
 commands may consume it despite system/global isolation.
@@ -412,12 +462,16 @@ name.
 Phase 8 consumes the same ``WorkspaceAccessGate`` and durable workspace mutation fence as
 Phases 6 and 7. Git does not create a bypass writer path.
 
-Coordination modes are:
+Coordination paths are:
 
-``GIT_READ``
-   Read-only Git inspection. It maps to the Phase 6 shared content/read coordination seam
-   or an exact reviewed Git-read projection that excludes concurrent Binnacle-managed
-   changers for the full traversal/process lifetime.
+``CONTENT_READ`` plus ``GitReadPermit``
+   Read-only Git inspection uses the **existing** Phase 6 shared ``CONTENT_READ`` mode; it
+   does not add a ``GIT_READ`` enum/state or a second access coordinator. After acquiring
+   that guard, Phase 8 acquires the exact development-session authority gate, revalidates
+   repository/root/mount/profile/safety facts, and mints a request-bound
+   ``GitReadPermit``. This permit is distinct from Phase 6 ``ContentReadPermit`` because it
+   grants the typed Git adapter narrow protected Git-metadata inspection under the same
+   shared guard.
 
 ``CHANGE``
    Any Git operation that may modify refs, index, worktree, Git metadata relevant to later
@@ -427,13 +481,66 @@ Coordination modes are:
 
 Bootstrap defaults conservatively:
 
-* ``git_status`` and bounded ``git_diff`` are ``GIT_READ``;
+* ``git_status`` and bounded ``git_diff`` use ``CONTENT_READ`` + ``GitReadPermit``;
 * branch creation, switch, commit, fetch, pull, and push use ``CHANGE`` unless a later
   reviewed contract proves a narrower coordination mode without creating races.
 
-The guard/fence remains held until process descendants, Git lock files/temporary files,
-index/ref/worktree effect knowledge, credential-child lifecycle, output/evidence, and audit
-obligations are truthfully closed. ``uncertain`` retains the fence.
+The exact read ordering is:
+
+.. code-block:: text
+
+   authenticate/normalize
+   -> WorkspaceAccessGate.CONTENT_READ
+   -> DevelopmentSessionAuthorityGate
+   -> repository/root/mount/profile/safety revalidation
+   -> request-bound GitReadPermit
+   -> discriminated read-only Phase7 GitReadExecutionTicket
+   -> complete immutable result materialization
+   -> process-tree quiescence
+   -> release
+
+The fixed consequential lock order is ``WorkspaceAccessGate -> Phase 4 per-operation
+handoff -> DevelopmentSessionAuthorityGate -> ConsequentialBoundaryGate -> Phase 7
+supervisor acceptance``. The applicable guard/fence remains held until process descendants,
+Git lock files/temporary files, index/ref/worktree effect knowledge, credential-child
+lifecycle, output/evidence, and audit obligations are truthfully closed. ``uncertain``
+retains the fence. If the selected Git/profile cannot prove status/diff are helper-,
+network-, credential-, and repository-write-free under an OS-read-only worktree/``.git``
+view, those Tools use the full CHANGE/fence path or remain disabled.
+
+The read ticket is an explicit Phase 8 extension to Phase 7, not a malformed command
+ticket. It binds a server request/member identity, session/version, repository/root/mount/
+profile, content-guard epoch and ``GitReadPermit`` digest; its schema requires
+``operation_id=null`` and mutation-fence fields null. It is accepted only by the internal
+read-only Git profile and cannot enter ``command_run`` or an effect adapter. The existing
+consequential command ticket continues to require a non-null Phase 4 operation and Phase 6
+fence; the two shapes are a closed discriminated union.
+
+Read start is linearized under an executor ``GitReadAcceptanceGate`` after the guard/session/
+permit sequence above. The supervisor durably records request/member/ticket identity and
+accepted/no-accept/launch/terminal/process-tree evidence before returning, but this no-effect
+record is not a fabricated Phase 4 operation. Every read connection/ticket also binds the
+application runtime generation negotiated with the executor.
+
+Application death closes the read member's input/control channel and the supervisor
+terminates its exact domain, but channel closure alone is not no-accept proof for a queued
+handler. On every application startup, ``GitReadRecoveryBarrier`` requests one executor-
+wide ``close_and_drain_read_generation`` transition. Under the **same**
+``GitReadAcceptanceGate`` used by registration/acceptance, the executor:
+
+#. durably seals every earlier application generation against new acceptance;
+#. makes every handler, including one received/queued but not yet registered, atomically
+   observe that seal before it can insert/accept, and persist a matching no-accept tombstone;
+#. waits for every handler reference in the closed generation to drain and every accepted
+   domain/process/output resource to become terminal/quiescent;
+#. persists and returns a generation/high-water/boot/evidence-bound quiescence receipt.
+
+If acceptance wins before the seal, the barrier sees that accepted member and waits for
+cleanup; if sealing wins, the delayed handler cannot launch. A newer application opens
+CONTENT_READ/CHANGE only after validating that durable receipt. Missing/contradictory
+generation evidence, executor restart ambiguity, an undrained queued handler, or unknown
+cleanup keeps both modes ``RECOVERY_CLOSED``. This is the Git equivalent of Phase 6's
+bounded search-child recovery lane, not a relaxation of consequential ticket validation.
 
 The promoted repository profile also requires the accepted cooperative/local-writer model
 needed by Phase 6. An uncoordinated external writer that can mutate the main index,
@@ -464,6 +571,29 @@ required by the information policy. Mutating/network Git operations consume Phas
 operation semantics and the exact development-session/host authority profile selected by
 the promoted contract.
 
+11.1 Prepared credential/signing composition
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Commit signing and every credential-bearing fetch/pull/push are high-risk compositions
+under ``docs/security/capability-composition.md``. They require a short-lived no-effect
+preparation before execution, even inside an already-authorised development session. The
+contract review may promote one closed ``git_prepare`` Tool with an action discriminator or
+separate per-action preparation names; an execute Tool is never promoted without one exact
+preparation path.
+
+Preparation binds controller/device/session, repository/workspace/root/mount/profile,
+semantic action, exact change set or tree/parent/message and source/destination refs/OIDs,
+protected normalized remote scheme/host/port/path and permitted effective-IP class,
+known-host policy, credential/signing reference and broker action, information/resource
+ceilings, policy/profile versions, expiry, and one execution nonce. It returns only the
+prepared operation identity, nonce, expiry, and normalized digest. Preparation performs no
+Git, signing, credential, DNS, network, ref, index, worktree, or object-store effect.
+
+Execution must match every prepared field, consume the nonce at most once, and revalidate
+current repository, remote, DNS/effective target, credential, policy, and session facts at
+the final boundary. Caller-key and prepared-nonce identities converge on one retained Phase
+4 operation; fresh keys cannot reuse consumed preparation or bypass uncertainty.
+
 12. Common operation request identity
 -------------------------------------
 
@@ -475,9 +605,11 @@ Every consequential Git operation request fingerprint includes at least:
 * development-session identity/version where required;
 * semantic action;
 * exact protected branch/ref/remote target as applicable;
-* exact expected current OIDs or absence predicates;
+* exact ``repository_state_binding_sha256`` plus algorithm-tagged expected current OIDs or
+  absence predicates;
 * relevant index/worktree/config/attributes safety digests;
 * exact commit path-selection/message/content/tree/parent digest as applicable;
+* exact remote profile/refspec/expected-old/outbound-closure bindings for network effects;
 * credential/signing capability profile identities where applicable;
 * maximum effect;
 * policy/profile versions;
@@ -495,28 +627,35 @@ repository happens to look similar.
 
 ``git_status`` is bounded and read-only.
 
-The preferred adapter uses a machine-readable status form with a closed argv, no pager,
-no hooks/helpers, and ``GIT_OPTIONAL_LOCKS=0`` so the read path does not intentionally take
-optional repository locks or refresh mutable metadata.
+The preferred adapter uses porcelain v2 with NUL-delimited paths and a closed argv, no
+color/control-sequence interpretation, no pager, no hooks/helpers, and
+``GIT_OPTIONAL_LOCKS=0``. Both the worktree and protected Git-metadata view are OS-read-only;
+the environment disables external diff/textconv, filters, fsmonitor, maintenance,
+credential/remote helpers, networking, and every credential endpoint.
 
 The result is a normalized bounded projection, not raw unbounded porcelain text. It may
 include:
 
 * current branch/HEAD state;
 * staged/unstaged/untracked/conflict state within configured item/byte ceilings;
+* ignored, assume-unchanged, skip-worktree, sparse/index-extension, lock, and sequencer state
+  needed to distinguish a complete snapshot from unsupported/hidden state;
 * ahead/behind only when the exact local refs required for that computation are already
   available and no network effect is triggered;
-* truncation/incomplete flags;
+* explicit truncation/incomplete flags that can never mean clean;
 * repository/profile identity and snapshot digest.
 
 Status never auto-fetches, refreshes credentials, writes an index, runs maintenance, or
 executes repository helpers. If the selected Git version/repository shape cannot prove that
-profile, the Tool remains disabled.
+profile, the Tool uses ``CHANGE`` with the normal fence or remains disabled. A complete
+collection is materialized while the guard is held and returned inline or through stable
+retained item pages; later paging never re-reads the live repository.
 
 14. ``git_diff``
 ----------------
 
-``git_diff`` returns a bounded repository diff under ``GIT_READ``.
+``git_diff`` returns a bounded repository diff under ``CONTENT_READ`` plus a
+``GitReadPermit``.
 
 The contract requires an explicit diff mode, for example:
 
@@ -524,14 +663,22 @@ The contract requires an explicit diff mode, for example:
 * index vs exact HEAD;
 * exact commit/tree A vs exact commit/tree B.
 
-No arbitrary revision expression is accepted when a closed OID/ref input can be used.
-Output has file-count, hunk, line, byte, and timeout ceilings and truthful truncation.
+No arbitrary revision expression or pathspec magic is accepted when a closed full
+``GitObjectId``/ref and literal bounded path set can be used. Output has file-count, hunk,
+line, byte, binary-metadata, and timeout ceilings.
 
 The adapter uses exact helper-suppression switches/configuration such as ``--no-ext-diff``
 and disabled textconv where supported by the reviewed Git version. It does not invoke
 pagers or repository helpers. Attributes/config that would require a custom driver/filter
 cause the repository profile or requested diff mode to be rejected rather than executing
-the helper.
+the helper. Rename/copy heuristics, color, and control-sequence interpretation are disabled
+by default.
+
+The complete semantic diff is materialized into an immutable retained result while the read
+guard is held, then the process tree is proven quiescent before release. It follows the
+common large-result byte-chunk/cursor contract. A prefix is explicitly incomplete and never
+marked as a complete diff; ``operation_output`` contains only bounded sanitized process
+diagnostics and is not the semantic diff result.
 
 Diff content is untrusted/model-visible only under the normal repository-content information
 policy; it is never authority for a later credential/system action.
@@ -543,8 +690,8 @@ Branch creation is a consequential local-ref effect under ``CHANGE``.
 
 Input binds:
 
-* exact normalized new branch name within the allowed feature/fix namespace;
-* exact source commit OID;
+* exact bounded ASCII-normalized new branch name within the allowed feature/fix namespace;
+* exact full source commit ``GitObjectId``;
 * required target-ref absence;
 * repository/profile/session state;
 * exact current branch/HEAD constraints if the contract cares about them.
@@ -591,10 +738,13 @@ If the current worktree/index differs from the bound expected snapshot at final 
 return stale-state with no switch effect.
 
 The implementation may use a reviewed official porcelain/plumbing sequence that preserves
-ordinary checkout semantics without helper/hook execution. The exact Git version/profile
-must be proven on the candidate Pi. The plan does not freeze a fragile hand-written
-worktree algorithm before that evidence; it freezes the no-loss/no-stash/no-force semantics
-and the Phase 4/6/7 ordering.
+ordinary checkout semantics without helper/hook execution. Before a tree-changing switch
+it materializes and validates a bounded affected-path manifest and rejects symlink/gitlink/
+submodule entries, protected names, path collisions, unsupported modes, unregistered
+mounts, and out-of-profile paths. Publication is journaled and parent-directory durability
+is verified; multi-file checkout is never described as atomic. Bootstrap may initially
+promote only create-then-switch where target/current trees are equal. The exact broader Git
+version/profile and materialization behavior must be proven on the candidate Pi.
 
 A lost response after worktree/index mutation is not classified solely from current HEAD.
 Index/worktree effect evidence and Git process receipt must be reconciled; ambiguous partial
@@ -639,7 +789,8 @@ porcelain:
 #. persist the expected main-index identity/tree/digest, selected-path digest, exact parent,
    worktree snapshot, repository safety digest, protected author/committer profile, commit
    message digest, and signing profile;
-#. create an operation-owned temporary index initialized from the exact expected HEAD tree;
+#. create an operation-owned temporary index and, where supported, an operation-private
+   quarantine object store initialized from the exact expected HEAD tree;
 #. update that temporary index only for the exact selected path actions using reviewed Git
    plumbing that does not invoke repository clean/smudge/process filters, LFS, submodules,
    or hooks;
@@ -649,7 +800,8 @@ porcelain:
    capability;
 #. independently verify the created commit object: tree, parent set, author/committer
    identity, message digest, signature presence/status, signer fingerprint, and object OID;
-#. update the exact current feature branch using ``update-ref`` CAS from old parent OID to
+#. durably import the exact verified object closure from quarantine when applicable, then
+   update the exact current feature branch using ``update-ref`` CAS from old parent OID to
    the verified new commit OID;
 #. publish/reconcile the normal main index through the explicit state machine in section
    17.5; selected worktree files are not rewritten merely to make status look clean;
@@ -672,7 +824,9 @@ semantics cannot be faithfully represented within this supported profile, ``git_
 disabled rather than invoking repository-selected executable behavior.
 
 Temporary-index identity, tree OID, lifecycle, and cleanup obligation are retained as
-operation evidence. Temporary-index cleanup failure does not erase commit/ref effects.
+operation evidence. Temporary-index/quarantine cleanup failure does not erase commit/ref
+effects. Automatic GC/prune/reflog expiry is disabled while retained recovery objects may
+be needed; unknown locks, pack temporaries, and objects are never heuristically removed.
 
 17.3 Commit message and protected identity
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -684,6 +838,10 @@ Author and committer name/email come from the protected owner/device Git profile
 may not substitute an arbitrary identity in Bootstrap. Author/committer timestamps follow
 the reviewed time policy and are recorded as effect-bearing facts when required for exact
 reconciliation.
+
+Exact author/committer timestamps are allocated once and durably bound before commit
+creation. A same-key retry reuses them and never creates a second commit because wall time
+advanced.
 
 17.4 Signing
 ~~~~~~~~~~~~
@@ -699,6 +857,11 @@ The signing request binds:
 * expiry/one-action authority;
 * output/evidence limits.
 
+After the exact tree OID and one-time timestamps are durable, the application derives and
+persists the exact unsigned commit-preimage digest and issues one signing sub-capability for
+that digest. Changed tree, parent, message, identity, timestamp, algorithm, or payload is
+rejected rather than signed.
+
 Raw private key material is never put in argv, environment, stdin, output, audit, SQLite,
 or model-visible data. A protected operation-owned signing agent/socket/helper may be mapped
 only into the exact Git signing process tree and removed when the operation ends.
@@ -706,6 +869,9 @@ only into the exact Git signing process tree and removed when the operation ends
 After ``commit-tree -S`` or the exact reviewed official equivalent, Binnacle independently
 verifies that the resulting commit has the expected signature and signer fingerprint before
 allowing branch-ref CAS. Signing failure or wrong signer produces no branch-ref update.
+There is no unsigned fallback. A retained signing response is reused for the same frozen
+preimage; retry never requests a fresh nondeterministic signature that would create a
+different commit object.
 
 17.5 Branch CAS and main-index publication state machine
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -771,7 +937,9 @@ The protected remote profile owns:
 
 * exact transport scheme;
 * host and port;
-* repository path/identity;
+* strictly normalized repository path/identity and remote service user;
+* permitted effective-IP class/ranges with loopback, link-local, private/control-plane,
+  device-management, and rebinding pivots denied unless separately approved;
 * SSH credential reference and public fingerprint;
 * expected server host-key/known-host policy;
 * allowed action (fetch/pull/push as applicable);
@@ -785,7 +953,11 @@ destination.
 
 SSH config is closed/protected. ``ProxyCommand``, arbitrary identity files, arbitrary
 known-host bypass, agent forwarding, port forwarding, and user-provided ssh options are not
-part of Bootstrap.
+part of Bootstrap. The fixed wrapper uses an exact reviewed SSH executable/argv, protected
+known-host file, no proxy or environment forwarding, and only the normalized upload-pack/
+receive-pack repository command implied by the semantic action. Redirected schemes,
+userinfo, fragments, arbitrary remote shell text, and repository-selected transport
+commands are rejected.
 
 19. Credential-broker composition
 ---------------------------------
@@ -808,6 +980,25 @@ Credential authority is represented by opaque protected references/digests. Oper
 results may report public key fingerprint, signing verification status, and credential-
 profile identity where safe, but never raw secret material.
 
+The selected software implementation is a separate unprivileged credential identity/
+process, distinct from application, supervisor, command, and Phase 9 broker identities. It
+alone reads/uses the protected SSH/signing keys. Its control/state boundary is outside every
+workspace and general command view; both peers validate exact local identity, protocol/
+build, operation/member/ticket digest, action, audience, expiry, and generation.
+
+An operation-owned wrapper/connected FD is visible only to the exact supervised Git member.
+The broker binds a request to the prepared upload-pack/receive-pack action or commit
+preimage and rejects arbitrary signing, remote shell, extra authentication sessions,
+stale/replayed tickets, and another operation/domain. A generic long-lived agent socket
+available to any same-UID process is unsupported. Signing and transport authorities are
+never simultaneously visible: status/diff/branch/switch receive neither, commit gets only
+signing with network denied, and fetch/pull/push get only repository transport authority.
+
+Credential-use acceptance, completion, retained response, revocation/cleanup, and
+uncertainty are durable. A broker/application/supervisor crash never causes automatic
+reissue; ambiguity retains the audit obligation and workspace fence until exact
+reconciliation or explicit recovery.
+
 20. ``git_fetch``
 -----------------
 
@@ -818,7 +1009,8 @@ The request binds:
 
 * protected remote profile;
 * exact remote source ref(s), normally one branch;
-* exact local destination ref namespace/OID preconditions;
+* one operation-owned private destination ref required absent, plus any exact shared local
+  destination ref/OID precondition to publish after verification;
 * expected repository/config safety digest;
 * credential capability;
 * exact fetch-side-effect profile;
@@ -827,12 +1019,20 @@ The request binds:
 The adapter uses explicit repository URL/refspec from protected configuration. It never
 uses default ``origin`` selection from mutable repo config.
 
-The preferred narrow profile suppresses default side effects that are not part of the
-contract, including ``FETCH_HEAD`` writing, automatic maintenance, and commit-graph writing,
-when the candidate Git version proves the required switches. Atomic ref update mode is used
-where the operation updates multiple exact local refs and the reviewed Git version supports
-the desired semantics. The plan does not claim concurrent readers observe multi-ref updates
-as an indivisible snapshot beyond Git's documented guarantees.
+The preferred narrow profile fetches one exact protected remote ref into an absent
+operation-owned namespace such as ``refs/binnacle/fetch/<operation-id>``. It suppresses
+``FETCH_HEAD``, implicit tags, maintenance, commit-graph, and other default effects when the
+candidate Git version proves the required switches. Fetched object type/connectivity,
+object-store containment, and pack/object ceilings are verified before any shared ref is
+published. Shared publication is a separate ``update-ref`` expected-old/absence CAS; fetch
+output or the earlier snapshot never substitutes for that CAS. The private ref is removed
+only after its effect/evidence is durably classified, while downloaded objects remain
+truthful local effects.
+
+Fetch never writes the checked-out branch or force-updates a shared ref. If transfer cannot
+be isolated in a private ref with the named ambient effects suppressed, the Tool remains
+unsupported. Exact atomic multi-ref mode may be used only for a reviewed set; no stronger
+reader atomicity is claimed beyond Git's documented guarantees.
 
 No ``--all``, implicit tag sweep, pruning, submodule recursion, or arbitrary force fetch is
 allowed in Bootstrap.
@@ -853,14 +1053,20 @@ composition:
 #. verify the exact fetched target OID and expected local current branch OID;
 #. prove fast-forward ancestry using a reviewed local Git query;
 #. if fast-forward is not possible, return ``git_diverged`` with no automatic merge/rebase;
-#. perform an explicit fast-forward-only local integration under the same/reconciled CHANGE
-   coordination and exact expected-old ref/worktree/index preconditions;
+#. perform an explicit fast-forward-only local integration under the same continuously held
+   CHANGE guard/durable fence and exact expected-old ref/worktree/index preconditions;
 #. verify resulting ref/index/worktree state and close the operation truthfully.
 
 The operation binds enough phase-stable evidence to distinguish expected self-owned
 fetch/ref transitions from unrelated concurrent mutation.
 
 No conflict resolution, auto-stash, merge commit, rebase, or reset occurs implicitly.
+
+Before local integration, Phase 8 validates the complete bounded target-tree publication
+manifest using the same protected-name, type/mode, symlink/gitlink, collision, root/mount,
+and path rules as switch. It journals exact affected paths and publication progress. A
+partial checkout remains recovery-closed and is never repaired with automatic
+``reset --hard`` or ``clean``.
 
 Because fetch and local integration are separate consequential boundaries, the operation
 model records intermediate effect knowledge. A successful fetch followed by a stale local
@@ -882,6 +1088,7 @@ Bootstrap push input binds:
 * exact local source branch ref and commit OID;
 * exact remote destination branch ref;
 * exact expected remote old OID or exact nonexistence predicate;
+* exact bounded outgoing reachable-object closure digest/count/bytes and information class;
 * protected-branch policy;
 * repository safety digest;
 * credential capability/audience;
@@ -923,13 +1130,21 @@ such as protected ``core.hooksPath`` plus ``--no-verify`` when the selected Git 
 proves them. Repository config cannot select the destination, credential helper, SSH
 command, proxy, protocol helper, or pre-push hook.
 
+Push preparation enumerates and bounds every missing reachable object that may be sent,
+not merely the tip diff. The prepared data boundary covers that full outbound closure and
+rejects an unbounded, unavailable, or changed closure before credential use. Transport
+resource ceilings and hosting policy must make the bound enforceable; otherwise push stays
+unsupported.
+
 22.2 Remote preflight
 ~~~~~~~~~~~~~~~~~~~~~
 
-Where the remote protocol/profile can safely obtain the exact current destination OID,
-Binnacle records that as current-state evidence before final admission/effect. The expected
-remote OID/nonexistence predicate is effect-bearing request input and is passed to the exact
-CAS mechanism.
+No-effect preparation binds the exact expected destination OID/absence and protected remote
+constraints without DNS, authentication, or a remote query. After durable execution
+admission, an initial bounded credentialed remote-observation member obtains the exact
+current destination state and persists its network/credential-use evidence. A mismatch
+blocks the push member. That observation remains non-atomic current-state evidence; the
+exact lease/CAS decides any later race.
 
 DNS/host/known-host/credential audience and exact destination are revalidated at final
 boundary. A changed expected remote ref blocks the push at the hosted CAS even if it changes
@@ -996,12 +1211,21 @@ reconstruct integrity solely from mutable surviving Git state.
 24. Phase 7 supervisor integration
 ----------------------------------
 
-Phase 8 does not bypass or weaken Phase 7.
+Phase 8 does not bypass or weaken Phase 7. It extends the supervisor protocol/evidence store
+with two closed internal ticket shapes:
 
-Every Git process uses an exact ``GitExecutionTicket`` mapped to the Phase 7 ticket model and
-bound to:
+``GitReadExecutionTicket``
+   The no-effect read shape from section 10, bound to ``GitReadPermit`` and no Phase 4
+   operation/fence.
 
-* operation/repository/controller/device/session identity;
+``GitOperationMemberTicket``
+   One fixed consequential stage under an already-durable Phase 8 parent operation and
+   existing Phase 6 fence.
+
+Common ticket fields bind:
+
+* exact read request/member identity or parent operation/member identity;
+* repository/controller/device/session identity;
 * semantic Git action;
 * Git executable identity/version profile;
 * exact argv/stdin/environment/FD digests;
@@ -1014,7 +1238,47 @@ bound to:
 * expiry/single-use nonce.
 
 The supervisor independently validates the ticket/profile mapping it is responsible for and
-retains normal Phase 7 start/cancel/output/restart evidence. One ticket cannot launch twice.
+retains Phase 7 start/cancel/output/restart evidence. Both profiles are
+``command_run_visible=false``. Phase 8 never invokes public/general ``command_run`` because
+that would create a second Phase 4 operation and reacquire CHANGE/fence while the parent
+owns them. One ticket cannot launch twice.
+
+A consequential parent may have a bounded ordered stage graph. Each member identity is
+derived from ``parent operation_id + Phase 8 contract/stage + monotonic stage generation``
+and persisted before dispatch with its exact argv/environment/credential capability,
+crossing/receipt/effect fields. The preferred derivation is a Phase 7 member identity, not a
+new Phase 4 ``create_or_find`` call. Any use of Phase 4 ``derived_member_key`` requires an
+explicit registered parent derivation and still cannot create a second operation/fence.
+Wrong-parent/stage/generation and caller-supplied member identities fail closed.
+
+The parent owns exactly one Phase 4 operation and one Phase 6 fence, permits at most one
+active member, and binds every member to one supervisor acceptance home. It retains the
+CHANGE/fence across the graph. Before each consequential member it re-enters the parent's
+Phase 4 dispatch handoff, session gate, and process-wide boundary in fixed order and
+revalidates exact repository/root/mount/fence/profile/credential/destination facts. Session
+or policy loss blocks later stages without erasing earlier effects. Lost/uncertain member
+evidence blocks dependent stages and is never rerun merely because the parent is unfinished.
+
+Phase 7 protocol/schema/store APIs therefore gain exact member addressing:
+
+* ``start_member(ticket)`` returns the discriminated accepted/no-accept receipt for one
+  member;
+* ``get_member(parent_or_read_request_id, member_id)`` addresses one execution;
+* ``read_member_output(member_id, stream, offset, evidence_generation)`` returns only that
+  member's retained bytes and stable cursor;
+* ``cancel_member(parent_operation_id, member_id, cancellation_generation)`` targets the
+  one active member while cancellation remains authoritative on the parent.
+
+Application ``operation_get`` aggregates durable Phase 8 stages plus exact member evidence.
+``operation_output`` uses an opaque cursor containing parent, member generation, stream,
+offset, and executor evidence generation; it never ambiguously queries by parent operation
+alone. Member outputs remain stable in stage order. Read-only status/diff return their
+immutable semantic result directly and do not use parent-operation output APIs.
+
+Parent aggregate effect is ``known_no_effect`` only when every declared member is proven
+not crossed; proven effects aggregate to ``known_effect``/``partial`` according to the
+operation contract; any unresolved crossing/outcome makes the parent ``uncertain`` and
+retains the fence.
 
 Git children use the preferred distinct unprivileged execution identity/process domain and
 inherit Phase 7 ptrace/process-introspection isolation. Credential-bearing exact child
@@ -1083,6 +1347,9 @@ After MCP/application restart:
 
 #. restore Phase 4 audit/operation readiness;
 #. restore Phase 6 workspace access coordinator and durable fence ownership;
+#. run the gate-serialized ``close_and_drain_read_generation`` barrier and keep both
+   workspace modes closed until queued handlers are sealed/drained and every accepted prior
+   read member/process/output resource is proven quiescent by a durable receipt;
 #. reconcile Phase 7 supervisor accepted/running/terminal Git execution evidence;
 #. restore exact Phase 8 Git operation facts, temporary-index/main-index-publication/
    credential obligations, and repository-profile binding;
@@ -1098,6 +1365,30 @@ After MCP/application restart:
 An application restart must not cause a new Git process or credential use for an already
 accepted retained logical operation unless the exact reconciliation contract explicitly
 allows a no-effect reissue and Phase 4 idempotency proves it safe.
+
+27.1 Recovery, cleanup, and rollback truth
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Startup keeps Git mutation admission ``RECOVERY_CLOSED`` until root/Git-directory/mount/
+profile identity, the existing Phase 6 fence, all retained members/helpers/credential
+endpoints, exact refs/objects/index/worktree, operation-owned temp/quarantine state, remote
+evidence, and audit obligations reconcile. Current Git state corroborates durable history;
+it does not replace an absent crossing/receipt.
+
+Cleanup removes only exact operation-owned temporary state whose identity/preimage and dead
+owner are proven. It never guesses that ``index.lock``, ref locks, pack temporaries,
+sequencer state, or dangling objects are stale. Automatic ``reset --hard``, ``clean``,
+force checkout, GC/prune, reflog expiry, or remote push reversal is forbidden. A local ref
+rollback, if ever supported, is a predefined expected-current CAS or a new explicit
+operation. Tree-path restoration is allowed only for exact recorded partial publication
+whose current value still matches the operation's own write; otherwise preserve and provide
+bounded owner guidance.
+
+Changing the checkout does not change the running service build. Runtime/status evidence
+records ``running_build_sha`` separately from ``checkout_head``; Phase 8 neither restarts
+the service nor claims the running process adopted the new tree. Mixed-revision risk for an
+editable/lazy-import runtime is a deployment test and controlled restart is deferred to the
+Phase 9 administration path.
 
 28. Supervisor crash/restart reconciliation
 -------------------------------------------
@@ -1169,6 +1460,8 @@ Before runtime handler exposure:
 #. define host-confirmation/session-authority class;
 #. define idempotency requirement for every consequential operation;
 #. define credential capability composition where applicable;
+#. define no-effect preparation plus the closed read-ticket/consequential-member ticket,
+   member output/cancel cursor, and broker-use schemas;
 #. define Git metadata, main-index publication, and remote-CAS result/evidence variants;
 #. add exact manifest entries and handler bindings;
 #. pass schema/manifest/confusable-name/handler parity validation;
@@ -1214,6 +1507,32 @@ Diagnostics may expose safe public Git/version/profile/ref/OID/fingerprint facts
 reason codes. They never expose private key material, credential-agent protocol secrets,
 unredacted protected config, raw ``.git`` file content, or arbitrary helper command content.
 
+32.1 Result projection and cancellation
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Phase 8 reuses Phase 7 ``operation_get``, ``operation_output``, ``operation_cancel``, and
+``operation_list`` for consequential parent operations; section 24's member-addressed
+extension removes parent/execution ambiguity. It adds no Git-specific status/cancel/list
+Tools. Every consequential Git Tool returns the parent ``operation_id`` and canonical
+retained snapshot. ``operation_get`` projects semantic stage and safe evidence;
+``operation_output`` projects only sanitized bounded member diagnostics. Semantic diff data
+uses the immutable retained result contract instead.
+
+Cancellation acts on the parent and is safe only at declared stage boundaries:
+
+* branch/switch/ref CAS cannot be interrupted inside an atomic ref update and completes
+  post-crossing reconciliation;
+* commit may stop between closed members, never by regenerating/discarding a retained
+  signature/object/ref effect;
+* fetch/push cancellation terminates the exact active member while possible network/object/
+  remote effects remain classified independently;
+* pull cancellation after fetch preserves that partial effect and blocks integration;
+* natural completion may win, and cancellation acknowledgement alone never means
+  ``cancelled``.
+
+Cancellation never creates another Git operation/member generation. Fence release waits
+for member/process/credential/output/Git/audit/aggregate-effect closure.
+
 33. Ports and adapters
 ----------------------
 
@@ -1243,6 +1562,18 @@ implementation while preserving contracts:
        async def prepare_repository_ssh(self, request: GitSshCapabilityRequest) -> OpaqueCapability: ...
        async def prepare_commit_signing(self, request: GitSigningCapabilityRequest) -> OpaqueCapability: ...
 
+   class GitExecutionMemberDispatcher(Protocol):
+       async def dispatch(self, member: GitExecutionMember) -> ExecutionStartReceipt: ...
+
+   class GitReadRecoveryBarrier(Protocol):
+       async def close_and_drain(
+           self, previous_generation: int, new_generation: int
+       ) -> GitReadRecoveryResult: ...
+
+   class GitCredentialEvidenceStore(Protocol):
+       async def accept_once(self, request: CredentialUseRequest) -> CredentialUseReceipt: ...
+       async def reconcile(self, ticket_digest: str) -> CredentialUseReceipt: ...
+
    class GitEffectReconciler(Protocol):
        async def reconcile(self, operation: OperationSnapshot) -> GitReconciliationResult: ...
 
@@ -1253,11 +1584,12 @@ reading, index publication, and operation orchestration behind separate typed se
 34. Repository layout and implementation seams
 ----------------------------------------------
 
-A likely implementation layout is:
+A likely implementation file set is:
 
 .. code-block:: text
 
    src/binnacle/domain/git.py
+   src/binnacle/ports/git.py
    src/binnacle/application/git/
        service.py
        repository_profile.py
@@ -1274,16 +1606,50 @@ A likely implementation layout is:
        fetch.py
        push.py
    src/binnacle/adapters/credentials/
+       protocol.py
        git_ssh.py
        git_signing.py
-   src/binnacle/infrastructure/git/
-       profile_store.py
+   src/binnacle/adapters/sqlite/git.py
+   src/binnacle/credential_broker/
+       service.py
+       protocol.py
+       state.py
+       sqlite.py
+   migrations/versions/0005_git_operations.py
+   migrations_executor/versions/0002_git_members.py
+   migrations_git_credential/env.py
+   migrations_git_credential/versions/0001_credential_evidence.py
+   spec/operation/git-operations.yaml
+   spec/policy/git-profiles.yaml
+   spec/mcp/bootstrap-tool-manifest.yaml
+   schemas/mcp/bootstrap-inputs.schema.json
+   schemas/mcp/bootstrap-outputs.schema.json
+   spec/mcp/evaluation-cases.yaml
+   src/binnacle/_generated/compatibility_core_registry.json
+   src/binnacle/_generated/compatibility_core_registry.digest.json
+   deploy/systemd/binnacle-dev.service
+   deploy/systemd/binnacle-executor.service
+   deploy/systemd/binnacle-git-credential.service
+   deploy/systemd/binnacle-git-credential.socket
+   deploy/tmpfiles.d/binnacle-git-credential.conf
+   scripts/setup_dev_pi.py
+   scripts/verify_dev_pi.py
+   scripts/verify_git_profile.py
+   docs/security/git-development.md
+   docs/operations/development-pi.rst
+   .github/workflows/python.yml
+   pyproject.toml
+   uv.lock
    tests/unit/git/
    tests/integration/git/
    tests/security/git/
 
-Do not create empty layers merely to match this sketch. Reuse Phase 4/6/7 ports where they
-already provide the required seam.
+The exact credential service assets apply to the selected software broker; a hardware-backed
+alternative names and tests equivalent concrete assets. ``pyproject.toml``/``uv.lock``
+change only for a genuine selected dependency. Do not create empty layers merely to match
+this sketch. Reuse Phase 4/6/7 ports where they already provide the required seam, and
+extend the canonical manifest/schema/evaluation sources above rather than inventing a
+parallel ``spec/mcp/manifest.yaml`` or per-Tool schema tree.
 
 35. Protected configuration and persistence
 -------------------------------------------
@@ -1292,25 +1658,87 @@ Protected repository/credential profiles live outside the source workspace in th
 Binnacle protected configuration/state areas. They are versioned, digest-bound, owner-
 governed, and not mutable through Git/workspace operations.
 
-Application SQLite may persist authoritative Phase 8 operation metadata such as:
+35.1 Application and executor persistence
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-* operation-specific Git semantic type;
-* repository-profile/version/digest snapshot;
-* expected/current/result ref/tree/commit OIDs;
-* repository safety digest;
-* temporary index identity/tree/effect-reference identities;
-* expected/target main-index identity/tree/digest and publication state/receipt;
-* selected-path/worktree snapshot digest;
-* public signer/SSH fingerprints;
-* credential capability reference digests, never secrets;
-* remote destination/ref/expected-old/target/evidence digests;
-* phase-specific effect knowledge/reconciliation status;
-* Phase 7 execution references;
-* workspace fence linkage;
-* audit references.
+Application migration ``0005_git_operations.py`` follows Phase 7
+``0004_execution_operations.py``. Runtime requires the exact expected head and never
+creates/upgrades schema opportunistically. It adds authoritative tables equivalent to:
 
-The Phase 7 executor does not open application SQLite. Its normal minimal execution evidence
-store remains separate.
+``git_operations``
+   One-to-one with the Phase 4 operation. It binds operation kind, repository/workspace/
+   session/profile/safety digests, expected ``repository_state_binding_sha256``, source/
+   destination refs and typed OIDs, commit/remote request digests, current semantic stage,
+   aggregate effect knowledge, credential reference digests, and existing Phase 6 fence.
+
+``git_operation_stages``
+   Parent operation plus monotonic stage generation, deterministic member/ticket identity,
+   stage/input/pre-state digest, supervisor acceptance/execution, crossing/effect knowledge,
+   before/after typed OIDs, cancellation generation, cleanup, and reconciliation. Checks
+   allow at most one active member and reject a dependent stage before predecessor closure.
+
+``git_commit_evidence``
+   Typed commit/tree/parent OIDs, author/committer/message/preimage digests, one-time
+   timestamps, signer/profile and signature verification, object import, branch CAS, exact
+   main-index publication, and worktree evidence.
+
+``git_remote_evidence``
+   Remote-profile/destination/outbound-closure digests, refs, expected/observed typed OIDs,
+   transport acceptance/send/reconciliation, and safe credential-use evidence.
+
+Constraints reject contradictory receipt/effect shapes, commit success without verified
+signature/object/ref/index closure, push success without exact remote evidence, or terminal
+parent with unresolved member/audit/fence. Retained diff/status data uses existing bounded
+payload/result facilities. Raw keys, agent paths, full diffs/messages, config, and stderr do
+not enter application SQLite.
+
+Executor migration ``0002_git_members.py`` is required, not conditional. It adds the closed
+read-vs-consequential ticket discriminator, parent/read-request plus member identity,
+application runtime generation/seal/high-water/quiescence receipt, read no-accept
+tombstones, member-specific acceptance/launch/cancel/output/terminal evidence, and
+uniqueness needed by sections 10/24. The executor never opens application SQLite, and the
+application never infers a member by querying only ``operation_id``.
+
+35.2 Broker persistence and runtime ownership
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Software-broker migration
+``migrations_git_credential/versions/0001_credential_evidence.py`` targets only the broker
+DB. It records protocol/schema/generation metadata plus one row/tombstone per
+credential-use ticket: exact operation/member/action/audience/credential generation,
+preimage or destination digest, expiry, consume generation, ``REGISTERED|ACCEPTED|COMPLETED|
+UNCERTAIN|REVOKED`` state, retained response/evidence digest, cleanup, and timestamps. One
+serialized ``accept_once`` transaction consumes a matching ticket or returns its retained
+response; conflicting/replayed input fails closed. Signing retains the exact private
+response needed to return the same signature after response loss. Ambiguous SSH use is not
+reissued and remains ``UNCERTAIN`` for Git/remote reconciliation. Neither broker nor
+executor opens the other's or application DB.
+
+Use a dedicated non-root ``binnacle-git-credential`` identity/private group, distinct from
+application, supervisor, and command identities. Avoid the app-owned ``/run/binnacle``
+parent. Root tmpfiles creates ``/run/binnacle-git-credential`` as broker-owned, client-group
+traversable but non-writable (for example 0710) under root-owned ``/run``; its socket is
+broker-owned and connectable only by the exact executor client group. The application and
+generic command identity are not clients. The supervisor obtains an approved connected FD
+and maps it only into the exact Git member. Private broker state lives under a separate
+``/var/lib/binnacle-git-credential`` tree and key/config material under a separate protected
+``/etc/binnacle-git-credential`` tree; existing app runtime/maintenance-lock ownership is
+unchanged.
+
+Both sides verify Linux peer credentials plus protocol/build/ticket/action/audience. The
+broker service uses no new privileges/capabilities, strict filesystem/device isolation, no
+workspace/app/executor state, and action-exact network policy; signing is network-denied.
+Setup and the read-only verifier check fresh/upgrade ownership, exact socket parent/mode,
+effective unit/drop-ins, keys/known-host public fingerprints, broker DB head/integrity, and
+generic-command denial without printing secrets.
+
+Offline upgrade order is fixed: stop app/new admission, drain or conservatively retain Git
+operations, stop executor and credential socket/service, acquire each service's runtime
+migration lock, migrate application as ``binnacle``, executor as its identity, and broker as
+``binnacle-git-credential``, verify all heads/ownership/integrity, then start broker socket/
+service, executor, and application. Failure leaves dependent services stopped and retained
+uncertainty intact. Credential rotation/revocation advances generation and never silently
+reissues an accepted ticket.
 
 36. Security invariants
 -----------------------
@@ -1323,14 +1751,24 @@ The implementation must preserve at least:
 #. Phase 8's internal Git-metadata authority does not make raw protected ``.git`` content a
    model-visible Phase 6 capability.
 #. General ``command_run`` receives no raw Git SSH/signing secret or ambient dedicated agent.
+#. A consequential Phase 8 parent owns one Phase 4 operation and one Phase 6 fence; internal
+   members never re-enter ``command_run`` or create/reacquire either one.
 #. Repository SSH and commit-signing authority are separate exact capabilities.
+#. At most one exact credential authority is visible to a stage; signing and transport are
+   never simultaneously mapped.
 #. Protected remote destination/ref policy is not chosen by mutable repository config.
 #. Credential-bearing operations revalidate repository safety digest, destination, audience,
    action, controller/device/session/profile, and credential identity immediately before
    effect.
 #. Repository-local includes/helpers/hooks/filters/textconv/external diff/submodule/LFS or
    other unsupported executable surfaces cause fail-closed behavior.
-#. Status/diff cannot execute helpers or trigger network/credential effects.
+#. Status/diff cannot execute helpers or trigger network/credential/repository-write
+   effects, and a complete result never rereads live state after guard release.
+#. The discriminated Git-read supervisor lane is bound to ``GitReadPermit`` and startup
+   gate-serializes prior-generation close/drain against queued acceptance and proves every
+   handler/reader quiescent before either workspace mode opens.
+#. Git object IDs are full algorithm-tagged values and are never conflated with Binnacle
+   JCS/SHA-256 state digests.
 #. Branch creation cannot overwrite an existing ref.
 #. Switch never implicitly discards/stashes/resets user work.
 #. Bootstrap commit never consumes or overwrites preexisting staged main-index changes.
@@ -1341,7 +1779,8 @@ The implementation must preserve at least:
 #. Fetch default side effects are narrowed to the reviewed effect contract.
 #. Pull is fetch + verified fast-forward-only integration, never automatic merge/rebase.
 #. Every push enforces the bound expected remote old OID/nonexistence atomically at the
-   hosted ref update; non-atomic preflight is never accepted as the CAS.
+   hosted ref update and binds the full bounded outgoing object closure; non-atomic preflight
+   is never accepted as the CAS.
 #. Exact remote lease use does not waive fast-forward/protected-branch policy.
 #. Remote state differing after an ambiguous push does not prove the push never occurred.
 #. Phase 6 workspace guard/fence covers all Binnacle-managed Git changers for their truthful
@@ -1362,11 +1801,14 @@ The implementation must preserve at least:
 Cover at least:
 
 * ref-name normalization/namespace/protected-branch policy;
+* algorithm-tagged SHA-1/SHA-256 full OID validation and strict OID/state-digest separation;
 * repository snapshot/current-state canonicalization;
 * repository-safety digest determinism;
 * protected Git-metadata authority never becoming content authority;
 * config/helper-surface rejection matrix;
 * operation request fingerprints/idempotency conflicts;
+* read-vs-consequential ticket discriminator and permit/fence cross-field rejection;
+* deterministic parent/stage/generation member derivation and wrong-parent rejection;
 * branch-create absence/old-OID CAS mapping;
 * switch stale/dirty/conflict rejection;
 * commit exact path selection and preexisting staged-index rejection;
@@ -1387,7 +1829,9 @@ Cover at least:
 Use temporary local repositories and exact Git versions in CI where available. Cover:
 
 * clean/dirty/conflicted/untracked status;
-* bounded diff with binary/large content;
+* status/index byte-for-byte non-mutation under OS-read-only worktree/``.git``;
+* bounded retained diff with binary/large content and no live re-read across cursor pages;
+* SHA-1 and, where installed Git supports it, SHA-256 repositories;
 * branch create CAS and concurrent creator;
 * switch with stale index/worktree and no implicit data loss;
 * commit rejects preexisting staged changes;
@@ -1406,6 +1850,7 @@ Use temporary local repositories and exact Git versions in CI where available. C
 * lost/ambiguous push response and independent remote-ref reconciliation;
 * application restart with Phase 7 executor evidence;
 * supervisor crash around Git/SSH/GPG process start/exit;
+* application restart with an accepted Git reader and ``GitReadRecoveryBarrier`` closure;
 * Phase 6 CHANGE/fence concurrency with workspace edits/commands.
 
 37.3 Adversarial repository tests
@@ -1422,7 +1867,8 @@ Construct repositories containing hostile:
 * ``.gitattributes`` filter/textconv/external-diff surfaces;
 * LFS/submodule configuration;
 * fake pager/editor/merge driver;
-* alternate-object-store indirection;
+* fsmonitor, shallow/partial/promisor/sparse/replace/graft state, linked worktree, and
+  alternate-object-store indirection;
 * branch/ref names intended to escape the allowed namespace;
 * repository config changed between admission and final boundary.
 
@@ -1467,6 +1913,52 @@ Inject crashes/lost receipts:
 
 Every fault has a truthful retained outcome and no blind automatic repeat.
 
+37.6 Race, migration, deployment, and evaluation tests
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Cover status/diff against every Phase 6/7/8 mutation; two operations for one ref/parent;
+session end, audit trip, root/mount/Git-directory replacement, remote advance, and cancel at
+every member boundary; parent/member persistence before dispatch; exactly one active member;
+member-specific output/cancel addressing; app/supervisor/broker restart; object/pack/output/
+quota/ENOSPC/unknown-lock behavior; and no automatic reset/clean/gc/prune.
+
+The mandatory read-generation race delays an old application's handler after frame receipt
+but before registration/acceptance while new startup closes/drains that generation. Both
+linearizations are tested: accept-first makes the barrier wait for terminal cleanup;
+seal-first creates durable no-accept and the delayed handler can never launch. An empty
+pre-barrier member scan is never sufficient evidence.
+
+Migration tests cover application ``0005``, mandatory executor ``0002``, and broker
+``0001`` from empty/current/prior head with FK/check/unique/index/integrity and strict DB
+ownership isolation. Deployment tests cover fresh/upgrade tmpfiles and unit ownership,
+separate runtime parents, peer/DAC denial, effective drop-ins, protected keys/config, broker
+restart/retained signing response, offline migration order, and generic-command denial.
+
+CI retains Python 3.11/3.12/3.13, frozen sync, Ruff/format, strict MyPy, Import Linter,
+coverage, pip-audit, RST, canonical contracts/schemas/registry, manifest parity, all three
+migration environments, and pre-commit. It records Git version and uses temporary repos,
+local bare remotes, and ephemeral signing material; it does not claim Pi/systemd/UID/quota/
+GitHub/ChatGPT evidence.
+
+Add frozen cases to ``spec/mcp/evaluation-cases.yaml`` with exact risk classes:
+
+* status/diff selection/rendering/paging use ``tool_selection_and_result_rendering`` with
+  minimum 10 attempts;
+* confirmation/entitlement-only cases use ``confirmation_and_entitlement`` with minimum 5;
+* **every** branch/switch/commit/fetch/pull/push write, cancellation, retry, and cache/
+  confirmation case uses ``write_cancellation_retry_cache_confirmation`` with minimum 20;
+* remote races, reconnect, response loss, and instability use
+  ``concurrency_race_reconnect_instability`` with minimum 20.
+
+Cases cover branch response loss; dirty/collision switch refusal; exact tree/parent/signer;
+signing failure and ref/index crash windows; exact private-ref fetch; fast-forward/divergent
+pull; exact feature push and protected/force/delete/tag denial; outbound closure; remote
+race/response loss/reconciliation; credential non-disclosure; reconnect; cancellation; and
+uncertainty. Evidence binds exact repository snapshots/profile/build/Git digests, Phase 4
+operation/audit, Phase 6 fence, Phase 7 member receipts, broker evidence, signature, remote
+ref, and detached evaluation receipt. Missing Pi/ChatGPT attempts remain blocked without
+stopping repository-only implementation work.
+
 38. Review-correction invariants
 --------------------------------
 
@@ -1479,6 +1971,20 @@ plan, not local exceptions:
 #. **Every hosted push is an exact remote CAS.** The expected remote old OID/nonexistence
    predicate is enforced atomically at the hosted update even for normal fast-forward/new-
    branch pushes. Preflight is evidence, never the mutation precondition.
+#. **Git readers have a lawful supervisor lane.** ``CONTENT_READ`` mints a
+   ``GitReadPermit`` and a discriminated no-effect read ticket; it never fabricates the
+   operation/fence fields required by consequential Phase 7 tickets. Startup seals/drains
+   every prior application generation under the acceptance gate so even queued pre-accept
+   handlers cannot launch after recovery reports quiescence.
+#. **Compound Git work is one parent with addressed members.** Internal stages cannot call
+   ``command_run`` or create another Phase 4 operation/fence; output/cancel/restart evidence
+   always names the exact member.
+#. **Credential use is durable and separately owned.** Broker acceptance/retained response/
+   uncertainty survives restart in its own store/runtime tree, and transport/signing
+   capabilities are never simultaneously visible.
+#. **Object and result identity is exact.** Algorithm-tagged Git OIDs remain distinct from
+   Binnacle SHA-256 state digests; complete status/diff results are immutable; fetch uses a
+   private ref; push preparation binds the full outbound reachable-object closure.
 
 These requirements must be preserved by later implementation edits and by Phase 10
 acceptance evidence.
@@ -1497,7 +2003,8 @@ Verify at least:
 * operation-local index behavior and exact main-index publication/recovery primitive;
 * status/diff helper suppression;
 * config-source isolation plus repository-local safety validation;
-* no-hook semantics used by switch/push profiles;
+* physically unavailable hooks plus disabled filters/textconv/fsmonitor/maintenance and
+  byte-for-byte read-only index/status behavior;
 * fetch side-effect suppression used by the contract;
 * explicit exact ``--force-with-lease=<ref>:<expect>`` behavior for existing and absent
   destination refs, without relying on remote-tracking refs;
@@ -1506,8 +2013,16 @@ Verify at least:
 * non-exportable signing capability use and signer fingerprint verification;
 * Phase 7 distinct-UID/process-introspection/resource/FD isolation with Git/SSH/GPG children;
 * Phase 6 root/mount/workspace coordination while Git modifies refs/index/worktree;
+* read-ticket acceptance/application-crash recovery and complete prior-reader quiescence;
+* tree-publication path/type/mount validation and crash recovery for switch/pull;
+* enforceable object/pack/ref/index/worktree/temp/output byte/inode quotas and disk-full
+  behavior rather than cgroup-only claims;
 * real remote fetch/push exact-ref behavior against the registered Binnacle repository;
+* outgoing reachable-object closure binding and protected/force/delete/tag denial;
 * response-loss/reconciliation procedure without deliberately corrupting the hosted repo;
+* broker persistence/restart, same-signature replay, runtime parent/DAC/peer isolation, and
+  offline three-database migration order;
+* separate running-build versus checkout-HEAD reporting;
 * no raw credential disclosure.
 
 Then run real ChatGPT through the Phase 8 exit sequence. Record only actual observed host
@@ -1526,15 +2041,15 @@ full chain for every operation:
      -> caller-binding-first retained lookup/minimal received identity
      -> received audit
      -> policy + protected repository profile + repository-safety validation
-     -> Phase6 GIT_READ or CHANGE/fence
+     -> Phase6 CONTENT_READ/GitReadPermit or CHANGE/fence
      -> post-policy exact current-state/expected-self binding
      -> authorised audit
-     -> Phase7 exact Git ticket + optional exact credential capability
+     -> Phase7 exact read/member ticket + optional one exact credential capability
      -> running/effect intent
      -> final controller/device/session/root/mount/repository/config/ref/index/worktree/
         remote/credential/network/audit OP-BOUNDARY
      -> audit obligation
-     -> Phase7 single-use acceptance
+     -> Phase7 single-use read/member acceptance with exact member addressing
      -> exact Git/SSH/GPG effect
      -> immediate process/effect evidence
      -> Git-specific ref/object/index-publication/worktree/remote reconciliation
@@ -1580,12 +2095,17 @@ Plan acceptance requires:
 * no direct-subprocess or generic credential-bearing command fallback;
 * repository-local config/helper surface treated as untrusted and fail-closed;
 * exact Phase 6 workspace coordination and Phase 7 process semantics consumed;
+* Git OIDs separated from Binnacle state digests;
+* lawful read-ticket/recovery lane plus one Phase 4 parent/Phase 6 fence and deterministic,
+  member-addressed consequential executions without ``command_run`` re-entry;
 * local branch/ref CAS and switch safety concrete;
 * commit path selection, clean main-index precondition, signed commit, branch CAS, and
   durable main-index publication/recovery semantics concrete;
 * fetch/pull effects separated and truthful;
 * every push uses exact hosted expected-old/nonexistence CAS plus independent branch policy;
 * separate SSH/signing authority and non-exportable credential contract explicit;
+* exact application/executor/broker migrations, runtime ownership, result/cancellation, CI,
+  and frozen evaluation seams named;
 * effect knowledge/idempotency/restart/reconciliation walk complete;
 * adversarial/fault/candidate-Pi/real-host evidence procedures concrete;
 * no Raspberry Pi/ChatGPT/Git/credential support fact fabricated;
@@ -1603,21 +2123,25 @@ Implement Phase 8 in this order after prerequisite exits are real:
    Git-metadata authority;
 #. implement repository identity/snapshot and supported-shape validator;
 #. implement repository config/attributes/helper-surface validator and safety digest;
-#. implement typed closed Git execution-plan builder over Phase 7 supervisor;
+#. implement application ``0005``, executor ``0002``, broker ``0001``, and their isolated
+   stores/migration/runtime ownership;
+#. implement the discriminated read ticket/recovery barrier and deterministic member-
+   addressed Phase 7 tickets under one consequential parent/fence;
+#. implement typed closed Git execution-plan builder over that dispatcher;
 #. implement read-only status/diff with strict bounds and helper suppression;
 #. implement ref normalization/policy and branch-create expected-old/absence CAS;
 #. implement switch stale/dirty/no-loss semantics and integration tests;
 #. implement exact commit-selection validation and clean-main-index requirement;
 #. implement operation-local index/tree builder and signed commit creation/verification;
 #. implement exact branch-ref CAS plus durable main-index publication/restart state machine;
-#. provision/integrate non-exportable repository SSH capability in protected deployment
-   configuration and prove generic commands cannot reach it;
+#. provision/integrate separately isolated signing and SSH broker capabilities, retained
+   one-use evidence, and prove generic commands cannot reach either or observe both;
 #. implement narrow fetch and fetched-effect reconciliation;
 #. implement fast-forward-only pull composition with explicit local publication states;
 #. implement exact protected-destination push with mandatory expected-remote hosted CAS and
    remote reconciliation;
-#. wire Phase 4 operation/audit/idempotency, Phase 6 guard/fence, Phase 7 ticket/output/restart,
-   and credential obligations end-to-end;
+#. wire Phase 4 operation/audit/idempotency, Phase 6 guard/fence, Phase 7 member-addressed
+   output/restart, immutable results, cancellation, and broker obligations end-to-end;
 #. promote reviewed manifest entries only after contract/schema/handler parity passes;
 #. run unit/property/integration/security/fault tests;
 #. run candidate-Pi Git/SSH/GPG evidence suite;
