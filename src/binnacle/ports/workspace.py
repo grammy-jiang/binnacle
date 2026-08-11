@@ -219,6 +219,14 @@ class WorkspaceRepository(Protocol):
         after_operation_id: str | None = None,
     ) -> tuple[WorkspaceOperationRecord, ...]: ...
 
+    async def list_operations_for_closure(
+        self,
+        *,
+        limit: int,
+        after_created_at: datetime | None = None,
+        after_operation_id: str | None = None,
+    ) -> tuple[WorkspaceOperationRecord, ...]: ...
+
     async def verify_integrity(self) -> None: ...
 
 

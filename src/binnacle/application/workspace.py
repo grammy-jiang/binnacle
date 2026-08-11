@@ -9,8 +9,11 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from binnacle.application.development_session import DevelopmentSessionAuthorityGate
-from binnacle.application.operations import CoordinatedOperationRequest
-from binnacle.application.workspace_coordination import WorkspaceAccessGate
+from binnacle.application.operations import CoordinatedOperationRequest, OperationAuthorityError
+from binnacle.application.workspace_coordination import (
+    WorkspaceAccessGate,
+    WorkspaceCoordinationError,
+)
 from binnacle.domain.operation import (
     EffectKnowledge,
     OperationSnapshot,
@@ -50,7 +53,7 @@ from binnacle.ports.workspace import (
 )
 
 
-class WorkspaceCapabilityUnavailable(RuntimeError):
+class WorkspaceCapabilityUnavailable(OperationAuthorityError):
     """The requested Phase 6 capability is not promoted by the active profile."""
 
 
@@ -217,7 +220,10 @@ class WorkspaceChangePostPolicyAuthority:
         request: CoordinatedOperationRequest,
     ) -> AsyncIterator[None]:
         del decision, request
-        guard = await self._access_gate.acquire_change(operation.operation_id)
+        try:
+            guard = await self._access_gate.acquire_change(operation.operation_id)
+        except WorkspaceCoordinationError as exc:
+            raise WorkspaceCapabilityUnavailable("workspace_change_recovery_closed") from exc
         try:
             yield
         finally:
@@ -339,6 +345,11 @@ class WorkspaceMutationClosure:
         request: CoordinatedOperationRequest,
     ) -> OperationSnapshot:
         del request
+        return await self.close_retained(operation)
+
+    async def close_retained(self, operation: OperationSnapshot) -> OperationSnapshot:
+        """Close one retained mutation from its durable operation/fence projection."""
+
         record = await self._repository.get_operation(operation.operation_id)
         if record is None:
             raise WorkspaceCapabilityUnavailable("workspace operation closure is missing")
@@ -425,7 +436,10 @@ class WorkspaceMutationBoundaryVerifier:
         )
         if workspace_path_sha256(normalized) != expected_path:
             return BoundaryCheckResult(False, "workspace_boundary_path_mismatch")
-        await self._filesystem.verify_scope_no_submounts(normalized)
+        scope = normalized
+        if record.mutation_kind is WorkspaceMutationKind.CREATE:
+            scope = normalized.rsplit("/", 1)[0] if "/" in normalized else ""
+        await self._filesystem.verify_scope_no_submounts(scope)
         return BoundaryCheckResult(True, "workspace_boundary_verified")
 
 

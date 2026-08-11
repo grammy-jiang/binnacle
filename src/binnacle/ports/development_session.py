@@ -75,6 +75,14 @@ class DevelopmentSessionRepository(Protocol):
         after_session_id: str | None = None,
     ) -> tuple[DevelopmentSessionSnapshot, ...]: ...
 
+    async def list_activation_closures(
+        self,
+        *,
+        limit: int,
+        after_created_at: datetime | None = None,
+        after_session_id: str | None = None,
+    ) -> tuple[DevelopmentSessionSnapshot, ...]: ...
+
     async def verify_integrity(self) -> None: ...
 
 

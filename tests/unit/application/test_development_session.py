@@ -11,6 +11,7 @@ from binnacle.application.development_session import (
     DevelopmentSessionAuthorityError,
     DevelopmentSessionAuthorityGate,
     DevelopmentSessionService,
+    SessionActivationBoundaryVerifier,
     SessionActivationClosure,
     SessionActivationDispatchAuthority,
     SessionActivationEffectBoundary,
@@ -20,6 +21,7 @@ from binnacle.application.development_session import (
 from binnacle.application.operations import CoordinatedOperationRequest
 from binnacle.application.workspace_coordination import ContentReadGuard
 from binnacle.domain.development_session import (
+    ActivationClosure,
     DevelopmentSessionError,
     DevelopmentSessionSnapshot,
     DevelopmentSessionState,
@@ -40,6 +42,7 @@ from binnacle.domain.operation import (
     transition,
 )
 from binnacle.domain.policy import PolicyDecision, PolicyDecisionValue
+from binnacle.ports.boundary import OperationBoundaryCheck
 from binnacle.ports.development_session import SessionAuthorisationRequest
 from binnacle.ports.effect import BoundaryCrossing, EffectRequest
 from binnacle.ports.operation_store import CreateOrFindRequest
@@ -148,6 +151,20 @@ class MemorySessionRepository:
         del after_created_at, after_session_id
         return tuple(self.sessions.values())[:limit]
 
+    async def list_activation_closures(
+        self,
+        *,
+        limit: int,
+        after_created_at: datetime | None = None,
+        after_session_id: str | None = None,
+    ) -> tuple[DevelopmentSessionSnapshot, ...]:
+        del after_created_at, after_session_id
+        return tuple(
+            item
+            for item in self.sessions.values()
+            if item.activation_closure is ActivationClosure.PENDING
+        )[:limit]
+
     async def verify_integrity(self) -> None:
         return None
 
@@ -197,9 +214,28 @@ def _facts() -> SessionAuthorityFacts:
         contract_profile_sha256=DIGEST,
         wall_time=NOW + timedelta(minutes=1),
         wall_time_trusted=True,
+        trusted_time_generation=1,
         boot_id_digest=DIGEST,
         monotonic_ns=1_000,
         kernel_consequential_ready=True,
+    )
+
+
+async def _facts_reader(snapshot: DevelopmentSessionSnapshot) -> SessionAuthorityFacts:
+    return replace(
+        _facts(),
+        controller_id=snapshot.controller_id,
+        controller_epoch=snapshot.controller_epoch,
+        device_id=snapshot.device_id,
+        device_epoch=snapshot.device_epoch,
+        workspace_id=snapshot.workspace_id,
+        workspace_profile_sha256=snapshot.workspace_profile_sha256,
+        workspace_root_identity_sha256=snapshot.workspace_root_identity_sha256,
+        workspace_mount_identity_sha256=snapshot.workspace_mount_identity_sha256,
+        policy_version=snapshot.policy_version,
+        contract_profile_sha256=snapshot.contract_profile_sha256,
+        trusted_time_generation=snapshot.trusted_time_generation,
+        boot_id_digest=snapshot.activation_boot_id_digest,
     )
 
 
@@ -436,7 +472,7 @@ async def test_session_activation_effect_and_closure_require_exact_operation_tru
         request=_coordinated(received),
     )
     pending = await repository.require_session("dev_reserved")
-    boundary = SessionActivationEffectBoundary(repository)
+    boundary = SessionActivationEffectBoundary(repository, facts_reader=_facts_reader)
     receipt = await boundary.start(
         EffectRequest(
             "op_begin",
@@ -455,6 +491,7 @@ async def test_session_activation_effect_and_closure_require_exact_operation_tru
     active = await repository.require_session(pending.session_id)
     assert active.state is DevelopmentSessionState.ACTIVE
     assert active.activation_closure.value == "pending"
+    assert active.started_at == (await _facts_reader(pending)).wall_time
 
     running = transition(
         authorised,
@@ -501,10 +538,187 @@ async def test_session_activation_effect_and_closure_require_exact_operation_tru
     assert repeated is succeeded
 
 
+def _activation_predicates(session: DevelopmentSessionSnapshot) -> dict[str, str | int]:
+    return {
+        "session_id": session.session_id,
+        "session_state_version": session.state_version,
+        "controller_id": session.controller_id,
+        "controller_epoch": session.controller_epoch,
+        "device_id": session.device_id,
+        "device_epoch": session.device_epoch,
+        "workspace_id": session.workspace_id,
+        "workspace_profile_sha256": session.workspace_profile_sha256,
+        "workspace_root_identity_sha256": session.workspace_root_identity_sha256,
+        "workspace_mount_identity_sha256": session.workspace_mount_identity_sha256,
+        "policy_version": session.policy_version,
+        "contract_profile_sha256": session.contract_profile_sha256,
+        "trusted_time_generation": session.trusted_time_generation,
+        "activation_boot_id_digest": session.activation_boot_id_digest,
+        "monotonic_deadline_ns": session.monotonic_deadline_ns,
+    }
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("drift", "reason"),
+    [
+        ({"controller_epoch": 2}, "controller_identity_mismatch"),
+        ({"device_epoch": 2}, "device_identity_mismatch"),
+        ({"workspace_profile_sha256": "0" * 64}, "workspace_profile_mismatch"),
+        ({"workspace_root_identity_sha256": "0" * 64}, "workspace_root_identity_mismatch"),
+        ({"workspace_mount_identity_sha256": "0" * 64}, "workspace_mount_identity_mismatch"),
+        ({"policy_version": "policy-v2"}, "policy_identity_mismatch"),
+        ({"contract_profile_sha256": "0" * 64}, "contract_profile_mismatch"),
+        ({"trusted_time_generation": 2}, "trusted_time_unavailable"),
+        ({"wall_time_trusted": False}, "trusted_time_unavailable"),
+        ({"wall_time": NOW + timedelta(hours=2)}, "development_session_expired"),
+        ({"kernel_consequential_ready": False}, "kernel_unavailable"),
+    ],
+)
+async def test_activation_revalidates_every_current_authority_fact_before_start(
+    drift: dict[str, object],
+    reason: str,
+) -> None:
+    repository = MemorySessionRepository()
+    received, _authorised, pending = await _reserve_pending(
+        repository,
+        session_id=f"dev_drift_{reason}",
+    )
+    facts = replace(await _facts_reader(pending), **drift)  # type: ignore[arg-type]
+
+    async def read(session_id: str) -> DevelopmentSessionSnapshot | None:
+        return await repository.get_session(session_id)
+
+    async def current_facts(_snapshot: DevelopmentSessionSnapshot) -> SessionAuthorityFacts:
+        return facts
+
+    gate = DevelopmentSessionAuthorityGate(
+        session_reader=read,
+        facts_reader=current_facts,
+    )
+    with pytest.raises(DevelopmentSessionAuthorityError, match=reason):
+        async with gate.hold_activation_start(
+            session_id=pending.session_id,
+            begin_operation_id=received.operation_id,
+            expected_state_version=pending.state_version,
+        ):
+            pytest.fail("stale authority must not enter the activation suffix")
+
+    verifier = SessionActivationBoundaryVerifier(
+        repository=repository,
+        facts_reader=current_facts,
+    )
+    decision = await verifier.verify(
+        OperationBoundaryCheck(
+            received.operation_id,
+            3,
+            _activation_predicates(pending),
+        )
+    )
+    assert not decision.allowed
+    assert decision.reason_code == reason
+
+    receipt = await SessionActivationEffectBoundary(
+        repository,
+        facts_reader=current_facts,
+    ).start(
+        EffectRequest(
+            received.operation_id,
+            3,
+            "development_session_activate",
+            {
+                "session_id": pending.session_id,
+                "expected_state_version": pending.state_version,
+                "started_at": pending.created_at,
+            },
+        )
+    )
+    assert receipt.crossing is BoundaryCrossing.DEFINITELY_NOT_CROSSED
+    assert receipt.reason_code == reason
+    assert (await repository.require_session(pending.session_id)).state is (
+        DevelopmentSessionState.PENDING
+    )
+
+
+@pytest.mark.anyio
+async def test_activation_closure_converges_after_authority_reduction_wins() -> None:
+    repository = MemorySessionRepository()
+    received, authorised, pending = await _reserve_pending(
+        repository,
+        session_id="dev_reduce_before_closure",
+    )
+
+    async def read(session_id: str) -> DevelopmentSessionSnapshot | None:
+        return await repository.get_session(session_id)
+
+    gate = DevelopmentSessionAuthorityGate(session_reader=read, facts_reader=_facts_reader)
+    service = DevelopmentSessionService(repository=repository, authority_gate=gate)
+    receipt = await SessionActivationEffectBoundary(
+        repository,
+        facts_reader=_facts_reader,
+    ).start(
+        EffectRequest(
+            received.operation_id,
+            3,
+            "development_session_activate",
+            {
+                "session_id": pending.session_id,
+                "expected_state_version": pending.state_version,
+            },
+        )
+    )
+    running = transition(
+        authorised,
+        TransitionRequest(
+            authorised.state_version,
+            OperationState.RUNNING,
+            EffectKnowledge.NONE,
+            "dispatch",
+            occurred_at=NOW,
+        ),
+    )
+    succeeded = transition(
+        running,
+        TransitionRequest(
+            running.state_version,
+            OperationState.SUCCEEDED,
+            EffectKnowledge.KNOWN_EFFECT,
+            "activated",
+            effect_reference=receipt.reference,
+            effect_reference_digest=receipt.reference_digest,
+            occurred_at=NOW + timedelta(minutes=1),
+        ),
+    )
+    active = await repository.require_session(pending.session_id)
+    ended = await service.reduce_authority(
+        session_id=active.session_id,
+        expected_state_version=active.state_version,
+        target=DevelopmentSessionState.ENDED,
+        reason="owner_end",
+        terminal_at=NOW + timedelta(minutes=2),
+    )
+    assert ended.activation_closure is ActivationClosure.PENDING
+
+    async def closure_verified(
+        _operation: OperationSnapshot,
+        _session: DevelopmentSessionSnapshot,
+    ) -> bool:
+        return True
+
+    await SessionActivationClosure(
+        service=service,
+        repository=repository,
+        closure_verifier=closure_verified,
+    ).close_retained(succeeded)
+    retained = await repository.require_session(pending.session_id)
+    assert retained.state is DevelopmentSessionState.ENDED
+    assert retained.activation_closure is ActivationClosure.COMPLETE
+
+
 @pytest.mark.anyio
 async def test_activation_boundary_rejects_foreign_or_malformed_request_without_effect() -> None:
     repository = MemorySessionRepository()
-    boundary = SessionActivationEffectBoundary(repository)
+    boundary = SessionActivationEffectBoundary(repository, facts_reader=_facts_reader)
     malformed = await boundary.start(
         EffectRequest("op_unknown", 3, "development_session_activate", {})
     )
@@ -518,8 +732,8 @@ async def test_session_gate_rejects_missing_foreign_and_unnamed_authority() -> N
     async def missing(_session_id: str) -> DevelopmentSessionSnapshot | None:
         return None
 
-    async def facts(_snapshot: DevelopmentSessionSnapshot) -> SessionAuthorityFacts:
-        return _facts()
+    async def facts(snapshot: DevelopmentSessionSnapshot) -> SessionAuthorityFacts:
+        return await _facts_reader(snapshot)
 
     missing_gate = DevelopmentSessionAuthorityGate(session_reader=missing, facts_reader=facts)
     with pytest.raises(DevelopmentSessionAuthorityError, match="unavailable"):
@@ -685,7 +899,7 @@ async def test_activation_helpers_fail_closed_on_missing_stale_or_contradictory_
         repository,
         session_id="dev_boundary_failures",
     )
-    boundary = SessionActivationEffectBoundary(repository)
+    boundary = SessionActivationEffectBoundary(repository, facts_reader=_facts_reader)
     stale = await boundary.start(
         EffectRequest(
             received.operation_id,
@@ -704,8 +918,8 @@ async def test_activation_helpers_fail_closed_on_missing_stale_or_contradictory_
     async def read(session_id: str) -> DevelopmentSessionSnapshot | None:
         return await repository.get_session(session_id)
 
-    async def facts(_snapshot: DevelopmentSessionSnapshot) -> SessionAuthorityFacts:
-        return _facts()
+    async def facts(snapshot: DevelopmentSessionSnapshot) -> SessionAuthorityFacts:
+        return await _facts_reader(snapshot)
 
     authority_gate = DevelopmentSessionAuthorityGate(
         session_reader=read,

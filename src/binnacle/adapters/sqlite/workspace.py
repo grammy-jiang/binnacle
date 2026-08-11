@@ -347,6 +347,45 @@ class SqliteWorkspaceRepository:
             models = (await session.execute(statement)).scalars().all()
             return tuple(self._operation(model) for model in models)
 
+    async def list_operations_for_closure(
+        self,
+        *,
+        limit: int,
+        after_created_at: datetime | None = None,
+        after_operation_id: str | None = None,
+    ) -> tuple[WorkspaceOperationRecord, ...]:
+        if not 1 <= limit <= 1_000:
+            raise WorkspaceStoreError("workspace closure page limit is invalid")
+        if (after_created_at is None) != (after_operation_id is None):
+            raise WorkspaceStoreError("workspace closure cursor must contain both fields")
+        statement = (
+            select(WorkspaceOperationModel)
+            .join(
+                WorkspaceMutationFenceModel,
+                WorkspaceMutationFenceModel.workspace_id == WorkspaceOperationModel.workspace_id,
+            )
+            .where(
+                WorkspaceMutationFenceModel.active_operation_id
+                == WorkspaceOperationModel.operation_id
+            )
+        )
+        if after_created_at is not None and after_operation_id is not None:
+            statement = statement.where(
+                or_(
+                    WorkspaceOperationModel.created_at > after_created_at,
+                    and_(
+                        WorkspaceOperationModel.created_at == after_created_at,
+                        WorkspaceOperationModel.operation_id > after_operation_id,
+                    ),
+                )
+            )
+        statement = statement.order_by(
+            WorkspaceOperationModel.created_at, WorkspaceOperationModel.operation_id
+        ).limit(limit)
+        async with self._runtime.session_factory() as session:
+            models = (await session.execute(statement)).scalars().all()
+            return tuple(self._operation(model) for model in models)
+
     async def verify_integrity(self) -> None:
         async with self._runtime.session_factory() as session:
             missing_fences = (
@@ -400,7 +439,25 @@ class SqliteWorkspaceRepository:
                     )
                 )
             ).scalar_one()
-            if int(missing_fences) or int(mismatched_operations):
+            mismatched_fences = (
+                await session.execute(
+                    text(
+                        """
+                        SELECT COUNT(*) FROM workspace_mutation_fences f
+                        LEFT JOIN workspace_operations wo
+                          ON wo.operation_id=f.active_operation_id
+                        LEFT JOIN operations o ON o.operation_id=f.active_operation_id
+                        WHERE f.active_operation_id IS NOT NULL
+                          AND (wo.operation_id IS NULL OR o.operation_id IS NULL
+                               OR wo.workspace_id!=f.workspace_id
+                               OR f.active_contract!=('workspace_' || wo.mutation_kind)
+                               OR o.operation_contract!=f.active_contract
+                               OR o.state IN ('received','rejected'))
+                        """
+                    )
+                )
+            ).scalar_one()
+            if int(missing_fences) or int(mismatched_operations) or int(mismatched_fences):
                 raise WorkspaceStoreError(
                     "workspace registration or mutation state failed exact integrity checks"
                 )

@@ -7,9 +7,15 @@ from binnacle.adapters.workspace.linux import (
     WorkspaceEffectUncertain,
     WorkspaceFilesystemError,
 )
+from binnacle.adapters.workspace.reconcile import (
+    Phase6OperationReconciler,
+    Phase6ReconciliationError,
+)
 
 __all__ = [
     "LinuxWorkspace",
+    "Phase6OperationReconciler",
+    "Phase6ReconciliationError",
     "WorkspaceCapabilityUnavailable",
     "WorkspaceEffectNotStarted",
     "WorkspaceEffectUncertain",

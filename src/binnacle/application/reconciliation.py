@@ -47,6 +47,28 @@ class SpecializedOperationReconciler(Protocol):
     async def reconcile_terminal_closures(self) -> tuple[OperationSnapshot, ...]: ...
 
 
+class CompositeSpecializedOperationReconciler:
+    """Route disjoint operation families without allowing one fallback to shadow another."""
+
+    def __init__(self, *reconcilers: SpecializedOperationReconciler) -> None:
+        if not reconcilers:
+            raise ValueError("at least one specialized reconciler is required")
+        self._reconcilers = reconcilers
+
+    async def reconcile(self, operation: OperationSnapshot) -> OperationSnapshot | None:
+        for reconciler in self._reconcilers:
+            result = await reconciler.reconcile(operation)
+            if result is not None:
+                return result
+        return None
+
+    async def reconcile_terminal_closures(self) -> tuple[OperationSnapshot, ...]:
+        results: list[OperationSnapshot] = []
+        for reconciler in self._reconcilers:
+            results.extend(await reconciler.reconcile_terminal_closures())
+        return tuple(results)
+
+
 @dataclass(frozen=True, slots=True)
 class AuditObligationClosure:
     obligation_id: str

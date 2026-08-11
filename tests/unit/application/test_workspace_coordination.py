@@ -109,6 +109,16 @@ class FenceRepository:
         del limit, after_created_at, after_operation_id
         raise NotImplementedError
 
+    async def list_operations_for_closure(
+        self,
+        *,
+        limit: int,
+        after_created_at: datetime | None = None,
+        after_operation_id: str | None = None,
+    ) -> tuple[WorkspaceOperationRecord, ...]:
+        del limit, after_created_at, after_operation_id
+        return ()
+
     async def verify_integrity(self) -> None:
         raise NotImplementedError
 

@@ -28,7 +28,12 @@ from binnacle.domain.development_session import (
     new_pending_session,
 )
 from binnacle.domain.idempotency import IdempotencyKeyMode, validate_and_digest_key
-from binnacle.domain.operation import OperationSnapshot, OperationState
+from binnacle.domain.operation import (
+    EffectKnowledge,
+    OperationSnapshot,
+    OperationState,
+    TransitionRequest,
+)
 from binnacle.domain.policy import PolicyDecision, PolicyDecisionValue
 from binnacle.domain.workspace import WorkspaceMutationKind, WorkspaceObjectKind
 from binnacle.ports.development_session import SessionAuthorisationRequest
@@ -184,18 +189,42 @@ async def _active_session(
     key_byte: str,
     session_id: str,
 ) -> DevelopmentSessionSnapshot:
-    _authorised, pending = await _authorise_pending_session(
+    authorised, pending = await _authorise_pending_session(
         sessions,
         operations,
         key_byte=key_byte,
         session_id=session_id,
     )
+    running = await operations.transition(
+        authorised.operation_id,
+        TransitionRequest(
+            authorised.state_version,
+            OperationState.RUNNING,
+            EffectKnowledge.NONE,
+            "dispatch_attempt_recorded",
+            occurred_at=pending.created_at + timedelta(milliseconds=500),
+        ),
+    )
+    reference = f"activation-{session_id}"
+    reference_sha256 = "7" * 64
     active = await sessions.activate(
         session_id=session_id,
         expected_state_version=1,
-        effect_reference=f"activation-{session_id}",
-        effect_reference_sha256="7" * 64,
+        effect_reference=reference,
+        effect_reference_sha256=reference_sha256,
         started_at=pending.created_at + timedelta(seconds=1),
+    )
+    await operations.transition(
+        running.operation_id,
+        TransitionRequest(
+            running.state_version,
+            OperationState.SUCCEEDED,
+            EffectKnowledge.KNOWN_EFFECT,
+            "development_session_activated",
+            effect_reference=reference,
+            effect_reference_digest=reference_sha256,
+            occurred_at=pending.created_at + timedelta(seconds=1),
+        ),
     )
     return await sessions.complete_activation(
         session_id=session_id,
@@ -783,7 +812,7 @@ async def test_repository_transition_errors_and_integrity_mismatches_fail_closed
                 effect_reference_sha256="7" * 64,
                 started_at=pending.created_at + timedelta(seconds=1),
             )
-        with pytest.raises(DevelopmentSessionError, match="only an active"):
+        with pytest.raises(DevelopmentSessionError, match="only an activated"):
             await sessions.complete_activation(
                 session_id=pending.session_id,
                 expected_state_version=1,
@@ -1044,6 +1073,91 @@ async def test_repository_and_read_only_verifier_reject_nonatomic_workspace_meta
             await workspaces.verify_integrity()
 
     with pytest.raises(KernelVerificationError, match="workspace operation provenance"):
+        verify_database_read_only(
+            database_path=tmp_path / "state/binnacle.db",
+            runtime_directory=tmp_path / "run",
+            busy_timeout_ms=5_000,
+            wal_autocheckpoint_pages=1_000,
+        )
+
+
+@pytest.mark.anyio
+async def test_verifiers_reject_activation_without_exact_phase4_effect_truth(
+    tmp_path: Path, repo_root: Path
+) -> None:
+    async with operation_runtime(tmp_path, repo_root) as (runtime, operations):
+        workspaces = SqliteWorkspaceRepository(runtime)
+        sessions = SqliteDevelopmentSessionRepository(runtime)
+        await workspaces.register_workspace(_registration())
+        authorised, pending = await _authorise_pending_session(
+            sessions,
+            operations,
+            key_byte="c",
+            session_id="dev_invented_activation",
+        )
+        active = await sessions.activate(
+            session_id=pending.session_id,
+            expected_state_version=pending.state_version,
+            effect_reference="invented-activation",
+            effect_reference_sha256="7" * 64,
+            started_at=pending.created_at + timedelta(seconds=1),
+        )
+        await sessions.complete_activation(
+            session_id=active.session_id,
+            expected_state_version=active.state_version,
+            closed_at=pending.created_at + timedelta(seconds=2),
+        )
+        assert authorised.state is OperationState.AUTHORISED
+        with pytest.raises(DevelopmentSessionStoreError, match="integrity"):
+            await sessions.verify_integrity()
+
+    with pytest.raises(KernelVerificationError, match="development session provenance"):
+        verify_database_read_only(
+            database_path=tmp_path / "state/binnacle.db",
+            runtime_directory=tmp_path / "run",
+            busy_timeout_ms=5_000,
+            wal_autocheckpoint_pages=1_000,
+        )
+
+
+@pytest.mark.anyio
+async def test_verifiers_reject_foreign_or_contract_mismatched_fence_owner(
+    tmp_path: Path, repo_root: Path
+) -> None:
+    async with operation_runtime(tmp_path, repo_root) as (runtime, operations):
+        workspaces = SqliteWorkspaceRepository(runtime)
+        sessions = SqliteDevelopmentSessionRepository(runtime)
+        await workspaces.register_workspace(_registration())
+        session = await _active_session(
+            sessions,
+            operations,
+            key_byte="d",
+            session_id="dev_fence_integrity",
+        )
+        operation = await _operation_snapshot(
+            operations,
+            key_byte="e",
+            fingerprint="e",
+            contract="workspace_create",
+            target_identity_sha256="f" * 64,
+        )
+        request = _authorisation_request(
+            operation,
+            session.session_id,
+            decision_id="policy-fence-integrity",
+        )
+        await workspaces.authorise_mutation(request)
+        async with runtime.engine.begin() as connection:
+            await connection.execute(
+                text(
+                    "UPDATE workspace_mutation_fences SET active_contract='workspace_write' "
+                    "WHERE workspace_id='workspace-fixture'"
+                )
+            )
+        with pytest.raises(WorkspaceStoreError, match="integrity"):
+            await workspaces.verify_integrity()
+
+    with pytest.raises(KernelVerificationError, match="workspace fence owner"):
         verify_database_read_only(
             database_path=tmp_path / "state/binnacle.db",
             runtime_directory=tmp_path / "run",

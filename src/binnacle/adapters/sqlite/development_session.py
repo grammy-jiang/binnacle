@@ -222,7 +222,14 @@ class SqliteDevelopmentSessionRepository:
                     update(DevelopmentSessionModel)
                     .where(
                         DevelopmentSessionModel.session_id == session_id,
-                        DevelopmentSessionModel.state == DevelopmentSessionState.ACTIVE.value,
+                        DevelopmentSessionModel.state.in_(
+                            (
+                                DevelopmentSessionState.ACTIVE.value,
+                                DevelopmentSessionState.ENDED.value,
+                                DevelopmentSessionState.EXPIRED.value,
+                                DevelopmentSessionState.REVOKED.value,
+                            )
+                        ),
                         DevelopmentSessionModel.state_version == expected_state_version,
                         DevelopmentSessionModel.activation_closure
                         == ActivationClosure.PENDING.value,
@@ -324,6 +331,37 @@ class SqliteDevelopmentSessionRepository:
             models = (await session.execute(statement)).scalars().all()
             return tuple(self._snapshot(model) for model in models)
 
+    async def list_activation_closures(
+        self,
+        *,
+        limit: int,
+        after_created_at: datetime | None = None,
+        after_session_id: str | None = None,
+    ) -> tuple[DevelopmentSessionSnapshot, ...]:
+        if not 1 <= limit <= 1_000:
+            raise DevelopmentSessionStoreError("session closure page limit is invalid")
+        if (after_created_at is None) != (after_session_id is None):
+            raise DevelopmentSessionStoreError("session closure cursor must contain both fields")
+        statement = select(DevelopmentSessionModel).where(
+            DevelopmentSessionModel.activation_closure == ActivationClosure.PENDING.value
+        )
+        if after_created_at is not None and after_session_id is not None:
+            statement = statement.where(
+                or_(
+                    DevelopmentSessionModel.created_at > after_created_at,
+                    and_(
+                        DevelopmentSessionModel.created_at == after_created_at,
+                        DevelopmentSessionModel.session_id > after_session_id,
+                    ),
+                )
+            )
+        statement = statement.order_by(
+            DevelopmentSessionModel.created_at, DevelopmentSessionModel.session_id
+        ).limit(limit)
+        async with self._runtime.session_factory() as session:
+            models = (await session.execute(statement)).scalars().all()
+            return tuple(self._snapshot(model) for model in models)
+
     async def verify_integrity(self) -> None:
         async with self._runtime.session_factory() as session:
             duplicate_slot = (
@@ -396,6 +434,28 @@ class SqliteDevelopmentSessionRepository:
                                  AND t.effect_knowledge='none'
                                  AND t.reason_code='policy_allowed'
                            )
+                           OR (s.activation_effect_reference IS NOT NULL
+                               AND o.state NOT IN ('running','uncertain','succeeded'))
+                           OR (s.state='active'
+                               AND o.state NOT IN ('running','uncertain','succeeded'))
+                           OR (o.effect_reference IS NOT NULL
+                               AND o.effect_reference IS NOT s.activation_effect_reference)
+                           OR (o.effect_reference_digest IS NOT NULL
+                               AND o.effect_reference_digest
+                                   IS NOT s.activation_effect_reference_sha256)
+                           OR (o.state='succeeded'
+                               AND (o.effect_knowledge!='known_effect'
+                                    OR o.effect_reference
+                                       IS NOT s.activation_effect_reference
+                                    OR o.effect_reference_digest
+                                       IS NOT s.activation_effect_reference_sha256))
+                           OR (s.activation_closure='complete'
+                               AND (o.state!='succeeded'
+                                    OR o.effect_knowledge!='known_effect'
+                                    OR o.effect_reference
+                                       IS NOT s.activation_effect_reference
+                                    OR o.effect_reference_digest
+                                       IS NOT s.activation_effect_reference_sha256))
                         """
                     )
                 )

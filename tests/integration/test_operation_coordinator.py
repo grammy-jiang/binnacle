@@ -35,6 +35,7 @@ from binnacle.application.kernel_health import KernelAvailability, KernelHealth
 from binnacle.application.operations import (
     CoordinatedOperationRequest,
     DispatchAuthority,
+    OperationAuthorityError,
     OperationClosure,
     OperationCoordinator,
     PostPolicyAuthority,
@@ -220,6 +221,20 @@ class RecordingOperationClosure:
         assert self._post_policy.active
         self.states.append(operation.state)
         return operation
+
+
+class RejectingPostPolicyAuthority:
+    @asynccontextmanager
+    async def hold(self, **_kwargs: object) -> AsyncIterator[None]:
+        raise OperationAuthorityError("workspace recovery closed")
+        yield
+
+
+class RejectingDispatchAuthority:
+    @asynccontextmanager
+    async def hold(self, **_kwargs: object) -> AsyncIterator[None]:
+        raise OperationAuthorityError("development session expired")
+        yield
 
 
 class StaticTrustedTimeSource:
@@ -439,6 +454,59 @@ async def test_operation_family_authority_wraps_start_and_immediate_classificati
         assert post_policy.entered == post_policy.exited == 1
         assert boundary.count == 1
         assert closure.states == [OperationState.SUCCEEDED]
+        assert await obligations.scan() == ()
+
+
+@pytest.mark.anyio
+async def test_post_policy_authority_denial_is_durable_and_retained(
+    tmp_path: Path, repo_root: Path
+) -> None:
+    async with operation_runtime(tmp_path, repo_root) as (_, store):
+        boundary = CountingBoundary()
+        coordinator, _, obligations, _ = await _coordinator(
+            root=tmp_path,
+            repo_root=repo_root,
+            store=store,
+            boundary=boundary,
+            post_policy_authority=RejectingPostPolicyAuthority(),
+        )
+        key = validate_and_digest_key(secrets.token_hex(32), IdempotencyKeyMode.CALLER_KEY)
+        result = await coordinator.execute(_request(key))
+        assert result.operation is not None
+        assert result.operation.state is OperationState.REJECTED
+        assert result.operation.effect_knowledge is EffectKnowledge.KNOWN_NO_EFFECT
+        assert boundary.count == 0
+        assert await obligations.scan() == ()
+        retained = await coordinator.execute(_request(key))
+        assert retained.outcome is IdempotencyOutcome.RETAINED_OPERATION
+        assert retained.operation == result.operation
+
+
+@pytest.mark.anyio
+async def test_dispatch_authority_denial_closes_family_known_no_effect(
+    tmp_path: Path, repo_root: Path
+) -> None:
+    async with operation_runtime(tmp_path, repo_root) as (_, store):
+        post_policy = RecordingPostPolicyAuthority()
+        closure = RecordingOperationClosure(post_policy)
+        boundary = CountingBoundary()
+        coordinator, _, obligations, _ = await _coordinator(
+            root=tmp_path,
+            repo_root=repo_root,
+            store=store,
+            boundary=boundary,
+            dispatch_authority=RejectingDispatchAuthority(),
+            post_policy_authority=post_policy,
+            operation_closure=closure,
+        )
+        result = await coordinator.execute(
+            _request(validate_and_digest_key(secrets.token_hex(32), IdempotencyKeyMode.CALLER_KEY))
+        )
+        assert result.operation is not None
+        assert result.operation.state is OperationState.FAILED
+        assert result.operation.effect_knowledge is EffectKnowledge.KNOWN_NO_EFFECT
+        assert closure.states == [OperationState.FAILED]
+        assert boundary.count == 0
         assert await obligations.scan() == ()
 
 
@@ -826,11 +894,15 @@ async def test_transport_cancellation_cannot_leak_start_permit_or_interrupt_clas
 ) -> None:
     async with operation_runtime(tmp_path, repo_root) as (_, store):
         boundary = BlockingBoundary()
+        post_policy = RecordingPostPolicyAuthority()
+        closure = RecordingOperationClosure(post_policy)
         coordinator, _, obligations, gate = await _coordinator(
             root=tmp_path,
             repo_root=repo_root,
             store=store,
             boundary=boundary,
+            post_policy_authority=post_policy,
+            operation_closure=closure,
         )
         key = validate_and_digest_key(secrets.token_hex(32), IdempotencyKeyMode.CALLER_KEY)
         execution = asyncio.create_task(coordinator.execute(_request(key)))
@@ -849,6 +921,7 @@ async def test_transport_cancellation_cannot_leak_start_permit_or_interrupt_clas
         assert retained.operation is not None
         assert retained.operation.state is OperationState.SUCCEEDED
         assert boundary.count == 1
+        assert closure.states == [OperationState.SUCCEEDED]
         assert await obligations.scan() == ()
 
 

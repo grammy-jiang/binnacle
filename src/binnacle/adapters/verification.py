@@ -435,6 +435,25 @@ def _verify_development_workspace_invariants(connection: sqlite3.Connection) -> 
                      AND t.from_state='received' AND t.to_state='authorised'
                      AND t.effect_knowledge='none' AND t.reason_code='policy_allowed'
                )
+               OR (s.activation_effect_reference IS NOT NULL
+                   AND o.state NOT IN ('running','uncertain','succeeded'))
+               OR (s.state='active'
+                   AND o.state NOT IN ('running','uncertain','succeeded'))
+               OR (o.effect_reference IS NOT NULL
+                   AND o.effect_reference IS NOT s.activation_effect_reference)
+               OR (o.effect_reference_digest IS NOT NULL
+                   AND o.effect_reference_digest
+                       IS NOT s.activation_effect_reference_sha256)
+               OR (o.state='succeeded'
+                   AND (o.effect_knowledge!='known_effect'
+                        OR o.effect_reference IS NOT s.activation_effect_reference
+                        OR o.effect_reference_digest
+                           IS NOT s.activation_effect_reference_sha256))
+               OR (s.activation_closure='complete'
+                   AND (o.state!='succeeded' OR o.effect_knowledge!='known_effect'
+                        OR o.effect_reference IS NOT s.activation_effect_reference
+                        OR o.effect_reference_digest
+                           IS NOT s.activation_effect_reference_sha256))
         """,
         "workspace operation provenance": """
             SELECT COUNT(*) FROM workspace_operations wo
@@ -469,8 +488,14 @@ def _verify_development_workspace_invariants(connection: sqlite3.Connection) -> 
         """,
         "workspace fence owner": """
             SELECT COUNT(*) FROM workspace_mutation_fences f
+            LEFT JOIN workspace_operations wo ON wo.operation_id=f.active_operation_id
             LEFT JOIN operations o ON o.operation_id=f.active_operation_id
-            WHERE f.active_operation_id IS NOT NULL AND o.operation_id IS NULL
+            WHERE f.active_operation_id IS NOT NULL
+              AND (wo.operation_id IS NULL OR o.operation_id IS NULL
+                   OR wo.workspace_id!=f.workspace_id
+                   OR f.active_contract!=('workspace_' || wo.mutation_kind)
+                   OR o.operation_contract!=f.active_contract
+                   OR o.state IN ('received','rejected'))
         """,
     }
     for name, query in checks.items():

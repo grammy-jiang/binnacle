@@ -333,8 +333,18 @@ def test_verifier_rejects_broadened_effective_write_paths(
     monkeypatch.setattr(verify_dev_pi, "_systemd_properties", lambda _names: expected)
     service = pwd.struct_passwd(("binnacle", "x", 1200, 1200, "", "/", "/usr/sbin/nologin"))
     monkeypatch.setattr(pwd, "getpwnam", lambda _name: service)
+    groups = {
+        "binnacle": grp.struct_group(("binnacle", "x", 1200, [])),
+        "binnacle-dev": grp.struct_group(("binnacle-dev", "x", 1201, [])),
+    }
+    monkeypatch.setattr(grp, "getgrnam", lambda name: groups[name])
 
     checks = {check.name: check for check in verify_dev_pi._systemd_service_checks()}
 
+    assert checks["service-identity"].status == "pass"
     assert checks["service-write-boundary"].status == "fail"
     assert checks["service-process-lifecycle"].status == "pass"
+
+    groups["binnacle-dev"] = grp.struct_group(("binnacle-dev", "x", 1200, []))
+    aliased = {check.name: check for check in verify_dev_pi._systemd_service_checks()}
+    assert aliased["service-identity"].status == "fail"

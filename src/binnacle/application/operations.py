@@ -70,6 +70,15 @@ class RequiredAuditError(RuntimeError):
     pass
 
 
+class OperationAuthorityError(RuntimeError):
+    """A typed pre-start authority denial that can be closed as known-no-effect."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        normalized = "_".join(reason.lower().replace("-", "_").split())
+        self.reason_code = normalized[:160] or "operation_authority_unavailable"
+
+
 class OperationAuthoriser(Protocol):
     async def authorise(
         self,
@@ -90,6 +99,12 @@ class CoordinatedOperationRequest:
     protected_effect_arguments: Mapping[str, object]
     prepared_state_facts: Mapping[str, str] | None = None
     prepared_execution: PreparedExecutionAdmission | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class _DispatchOutcome:
+    operation: OperationSnapshot
+    transport_cancelled: bool = False
 
 
 class DispatchAuthority(Protocol):
@@ -307,6 +322,47 @@ class OperationCoordinator:
         operation: OperationSnapshot,
         decision: PolicyDecision,
     ) -> CreateOrFindResult:
+        try:
+            return await self._execute_under_post_policy_authority(
+                request=request,
+                operation=operation,
+                decision=decision,
+            )
+        except OperationAuthorityError as exc:
+            current = await self._store.get_operation(operation.operation_id)
+            if current is None or current.state is not OperationState.RECEIVED:
+                raise
+            await self._store.store_policy_decision(decision)
+            rejected = await self._store.transition(
+                current.operation_id,
+                TransitionRequest(
+                    expected_state_version=current.state_version,
+                    to_state=OperationState.REJECTED,
+                    effect_knowledge=EffectKnowledge.KNOWN_NO_EFFECT,
+                    reason_code=exc.reason_code,
+                    error=OperationError(
+                        "authority_unavailable",
+                        "Operation-family authority was unavailable before admission.",
+                    ),
+                ),
+            )
+            await self._required_audit(self._policy_event(rejected, True, "policy_allowed"))
+            await self._required_audit(
+                self._state_event(
+                    rejected,
+                    old_state=OperationState.RECEIVED.value,
+                    reason_code=exc.reason_code,
+                )
+            )
+            return CreateOrFindResult(IdempotencyOutcome.CREATED, rejected)
+
+    async def _execute_under_post_policy_authority(
+        self,
+        *,
+        request: CoordinatedOperationRequest,
+        operation: OperationSnapshot,
+        decision: PolicyDecision,
+    ) -> CreateOrFindResult:
         async with self._post_policy_authority.hold(
             operation=operation,
             decision=decision,
@@ -330,7 +386,7 @@ class OperationCoordinator:
                 failed = await self._fail_known_no_effect(
                     authorised, code="audit_unavailable", reason="authorization_audit_failed"
                 )
-                closed = await self._operation_closure.close(
+                closed = await self._close_operation(
                     operation=failed,
                     request=request,
                 )
@@ -367,22 +423,51 @@ class OperationCoordinator:
                 failed = await self._fail_known_no_effect(
                     running, code="audit_unavailable", reason="effect_intent_audit_failed"
                 )
-                closed = await self._operation_closure.close(
+                closed = await self._close_operation(
                     operation=failed,
                     request=request,
                 )
                 return CreateOrFindResult(IdempotencyOutcome.CREATED, closed)
 
-            result = await self._dispatch(request, running)
-            closed = await self._operation_closure.close(
-                operation=result,
+            outcome = await self._dispatch(request, running)
+            closed = await self._close_operation(
+                operation=outcome.operation,
                 request=request,
             )
+            if outcome.transport_cancelled:
+                raise asyncio.CancelledError
             return CreateOrFindResult(IdempotencyOutcome.CREATED, closed)
 
     async def _dispatch(
         self, request: CoordinatedOperationRequest, running: OperationSnapshot
-    ) -> OperationSnapshot:
+    ) -> _DispatchOutcome:
+        try:
+            return await self._dispatch_under_authority(request, running)
+        except OperationAuthorityError as exc:
+            current = await self._store.get_operation(running.operation_id)
+            if (
+                current is None
+                or current.state is not OperationState.RUNNING
+                or current.effect_knowledge is not EffectKnowledge.NONE
+            ):
+                raise
+            failed = await self._fail_known_no_effect(
+                current,
+                code="authority_unavailable",
+                reason=exc.reason_code,
+            )
+            await self._required_audit(
+                self._state_event(
+                    failed,
+                    old_state=OperationState.RUNNING.value,
+                    reason_code=exc.reason_code,
+                )
+            )
+            return _DispatchOutcome(failed)
+
+    async def _dispatch_under_authority(
+        self, request: CoordinatedOperationRequest, running: OperationSnapshot
+    ) -> _DispatchOutcome:
         async with self._dispatch_scope(request=request, operation=running):
             permit = await self._consequential_gate.acquire()
             try:
@@ -407,7 +492,7 @@ class OperationCoordinator:
                             reason_code=prepared_reason,
                         )
                     )
-                    return failed
+                    return _DispatchOutcome(failed)
                 check = OperationBoundaryCheck(
                     operation_id=current.operation_id,
                     expected_state_version=current.state_version,
@@ -423,7 +508,7 @@ class OperationCoordinator:
                         latest.state is not OperationState.RUNNING
                         or latest.state_version != current.state_version
                     ):
-                        return latest
+                        return _DispatchOutcome(latest)
                     code = (
                         boundary.reason_code
                         if boundary.disposition is BoundaryDisposition.KNOWN_NO_EFFECT
@@ -441,7 +526,7 @@ class OperationCoordinator:
                             reason_code=boundary.reason_code,
                         )
                     )
-                    return failed
+                    return _DispatchOutcome(failed)
                 obligation = AuditObligation(
                     schema_version="1",
                     obligation_id=f"obl_{secrets.token_hex(16)}",
@@ -481,12 +566,35 @@ class OperationCoordinator:
                         if task.done():
                             result = task.result()
                             break
-                if cancelled:
-                    raise asyncio.CancelledError
-                return result
+                return _DispatchOutcome(result, transport_cancelled=cancelled)
             finally:
                 if permit.state is PermitState.PRE_START:
                     await self._consequential_gate.release(permit)
+
+    async def _close_operation(
+        self,
+        *,
+        operation: OperationSnapshot,
+        request: CoordinatedOperationRequest,
+    ) -> OperationSnapshot:
+        """Finish family closure even when transport cancellation arrives meanwhile."""
+
+        task = asyncio.create_task(
+            self._operation_closure.close(operation=operation, request=request)
+        )
+        cancelled = False
+        while True:
+            try:
+                closed = await asyncio.shield(task)
+                break
+            except asyncio.CancelledError:
+                cancelled = True
+                if task.done():
+                    closed = task.result()
+                    break
+        if cancelled:
+            raise asyncio.CancelledError
+        return closed
 
     @asynccontextmanager
     async def _dispatch_scope(

@@ -106,6 +106,7 @@ class FixtureFilesystem:
         )
         self.read_count = 0
         self.create_count = 0
+        self.verified_scopes: list[str] = []
 
     async def initialize(self) -> WorkspaceRootIdentity:
         return self.root
@@ -114,7 +115,7 @@ class FixtureFilesystem:
         return self.root
 
     async def verify_scope_no_submounts(self, relative_path: str) -> None:
-        del relative_path
+        self.verified_scopes.append(relative_path)
 
     async def inspect(self, request: WorkspaceInspectRequest) -> WorkspaceEntry:
         del request
@@ -374,6 +375,7 @@ def _facts(*, ready: bool = True) -> SessionAuthorityFacts:
         DIGEST,
         NOW + timedelta(minutes=1),
         True,
+        1,
         DIGEST,
         1_000,
         ready,
@@ -671,6 +673,7 @@ async def test_dispatch_and_final_boundary_require_exact_session_fence_and_mount
             )
         )
         assert decision.allowed
+        assert filesystem.verified_scopes == ["src"]
 
         stale = await verifier.verify(
             OperationBoundaryCheck(

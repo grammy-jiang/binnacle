@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime
 
-from binnacle.application.operations import CoordinatedOperationRequest
+from binnacle.application.operations import CoordinatedOperationRequest, OperationAuthorityError
 from binnacle.application.workspace_coordination import ContentReadGuard
 from binnacle.domain.development_session import (
     ActivationClosure,
@@ -18,6 +18,8 @@ from binnacle.domain.development_session import (
     DevelopmentSessionSnapshot,
     DevelopmentSessionState,
     SessionAuthorityFacts,
+    SessionIneffectiveReason,
+    evaluate_pending_activation_authority,
     evaluate_session_authority,
     new_pending_session,
 )
@@ -29,6 +31,7 @@ from binnacle.domain.operation import (
 )
 from binnacle.domain.policy import PolicyDecision
 from binnacle.domain.workspace import ContentReadPermit, validate_sha256
+from binnacle.ports.boundary import BoundaryCheckResult, OperationBoundaryCheck
 from binnacle.ports.development_session import (
     DevelopmentSessionRepository,
     SessionAuthorisationRequest,
@@ -40,7 +43,7 @@ from binnacle.ports.effect import (
 )
 
 
-class DevelopmentSessionAuthorityError(RuntimeError):
+class DevelopmentSessionAuthorityError(OperationAuthorityError):
     """The current session cannot grant the requested bounded authority."""
 
 
@@ -160,7 +163,27 @@ class DevelopmentSessionAuthorityGate:
                 or snapshot.state_version != expected_state_version
             ):
                 raise DevelopmentSessionAuthorityError("pending session activation is stale")
+            facts = await self._facts_reader(snapshot)
+            effectiveness = evaluate_pending_activation_authority(snapshot, facts)
+            if not effectiveness.effective:
+                reason = effectiveness.reason or SessionIneffectiveReason.KERNEL_UNAVAILABLE
+                raise DevelopmentSessionAuthorityError(reason.value)
             yield snapshot
+
+    async def mutate_authority(
+        self,
+        *,
+        session_id: str,
+        mutator: AuthorityReducer,
+    ) -> DevelopmentSessionSnapshot:
+        """Serialize every durable session mutation with member/activation admission."""
+
+        lock = await self._lock_for(session_id)
+        async with lock:
+            snapshot = await self._session_reader(session_id)
+            if snapshot is None:
+                raise DevelopmentSessionAuthorityError("development session is unavailable")
+            return await mutator(snapshot)
 
     async def reduce_authority(
         self,
@@ -170,12 +193,7 @@ class DevelopmentSessionAuthorityGate:
     ) -> DevelopmentSessionSnapshot:
         """Run one durable authority-reducing transition under the same gate."""
 
-        lock = await self._lock_for(session_id)
-        async with lock:
-            snapshot = await self._session_reader(session_id)
-            if snapshot is None:
-                raise DevelopmentSessionAuthorityError("development session is unavailable")
-            return await reducer(snapshot)
+        return await self.mutate_authority(session_id=session_id, mutator=reducer)
 
     async def _require_effective(
         self,
@@ -227,18 +245,29 @@ class DevelopmentSessionService:
         ):
             raise DevelopmentSessionError("activation operation lacks exact known-effect proof")
         session = await self._repository.get_by_begin_operation(operation.operation_id)
-        if (
-            session is None
-            or session.state is not DevelopmentSessionState.ACTIVE
-            or session.activation_closure is not ActivationClosure.PENDING
-            or session.activation_effect_reference != operation.effect_reference
-            or session.activation_effect_reference_sha256 != operation.effect_reference_digest
-        ):
+        if session is None:
             raise DevelopmentSessionError("activation closure evidence is inconsistent")
-        return await self._repository.complete_activation(
+
+        async def close_exact(
+            current: DevelopmentSessionSnapshot,
+        ) -> DevelopmentSessionSnapshot:
+            if (
+                current.begin_operation_id != operation.operation_id
+                or current.state is DevelopmentSessionState.PENDING
+                or current.activation_closure is not ActivationClosure.PENDING
+                or current.activation_effect_reference != operation.effect_reference
+                or current.activation_effect_reference_sha256 != operation.effect_reference_digest
+            ):
+                raise DevelopmentSessionError("activation closure evidence is inconsistent")
+            return await self._repository.complete_activation(
+                session_id=current.session_id,
+                expected_state_version=current.state_version,
+                closed_at=closed_at,
+            )
+
+        return await self._authority_gate.mutate_authority(
             session_id=session.session_id,
-            expected_state_version=session.state_version,
-            closed_at=closed_at,
+            mutator=close_exact,
         )
 
     async def reduce_authority(
@@ -332,6 +361,11 @@ class SessionActivationClosure:
         request: CoordinatedOperationRequest,
     ) -> OperationSnapshot:
         del request
+        return await self.close_retained(operation)
+
+    async def close_retained(self, operation: OperationSnapshot) -> OperationSnapshot:
+        """Close one retained activation without reconstructing caller input."""
+
         session = await self._repository.get_by_begin_operation(operation.operation_id)
         if session is None:
             raise DevelopmentSessionError("activation session closure is missing")
@@ -342,7 +376,7 @@ class SessionActivationClosure:
             and operation.effect_knowledge is EffectKnowledge.KNOWN_EFFECT
         ):
             if (
-                session.state is DevelopmentSessionState.ACTIVE
+                session.state is not DevelopmentSessionState.PENDING
                 and session.activation_closure is ActivationClosure.COMPLETE
                 and session.activation_effect_reference == operation.effect_reference
                 and session.activation_effect_reference_sha256 == operation.effect_reference_digest
@@ -399,23 +433,72 @@ def _pending_snapshot(request: SessionReservationRequest) -> DevelopmentSessionS
     )
 
 
+class SessionActivationBoundaryVerifier:
+    """Re-read exact pending authority and accepted trusted time at final OP-BOUNDARY."""
+
+    def __init__(
+        self,
+        *,
+        repository: DevelopmentSessionRepository,
+        facts_reader: AuthorityFactsReader,
+    ) -> None:
+        self._repository = repository
+        self._facts_reader = facts_reader
+
+    async def verify(self, request: OperationBoundaryCheck) -> BoundaryCheckResult:
+        session = await self._repository.get_by_begin_operation(request.operation_id)
+        if session is None:
+            return BoundaryCheckResult(False, "session_activation_missing")
+        predicates = request.predicates
+        if (
+            predicates.get("session_id") != session.session_id
+            or predicates.get("session_state_version") != session.state_version
+            or predicates.get("controller_id") != session.controller_id
+            or predicates.get("controller_epoch") != session.controller_epoch
+            or predicates.get("device_id") != session.device_id
+            or predicates.get("device_epoch") != session.device_epoch
+            or predicates.get("workspace_id") != session.workspace_id
+            or predicates.get("workspace_profile_sha256") != session.workspace_profile_sha256
+            or predicates.get("workspace_root_identity_sha256")
+            != session.workspace_root_identity_sha256
+            or predicates.get("workspace_mount_identity_sha256")
+            != session.workspace_mount_identity_sha256
+            or predicates.get("policy_version") != session.policy_version
+            or predicates.get("contract_profile_sha256") != session.contract_profile_sha256
+            or predicates.get("trusted_time_generation") != session.trusted_time_generation
+            or predicates.get("activation_boot_id_digest") != session.activation_boot_id_digest
+            or predicates.get("monotonic_deadline_ns") != session.monotonic_deadline_ns
+        ):
+            return BoundaryCheckResult(False, "session_activation_binding_mismatch")
+        facts = await self._facts_reader(session)
+        effectiveness = evaluate_pending_activation_authority(session, facts)
+        if not effectiveness.effective:
+            reason = effectiveness.reason or SessionIneffectiveReason.KERNEL_UNAVAILABLE
+            return BoundaryCheckResult(False, reason.value)
+        return BoundaryCheckResult(True, "session_activation_verified")
+
+
 class SessionActivationEffectBoundary:
     """The sole narrow PENDING -> ACTIVE effect boundary."""
 
-    def __init__(self, repository: DevelopmentSessionRepository) -> None:
+    def __init__(
+        self,
+        repository: DevelopmentSessionRepository,
+        *,
+        facts_reader: AuthorityFactsReader,
+    ) -> None:
         self._repository = repository
+        self._facts_reader = facts_reader
 
     async def start(self, request: EffectRequest) -> EffectStartReceipt:
         if request.effect_type != "development_session_activate":
             return _activation_not_started("session_activation_effect_type_unavailable")
         session_id = request.protected_arguments.get("session_id")
         expected_version = request.protected_arguments.get("expected_state_version")
-        started_at = request.protected_arguments.get("started_at")
         if (
             not isinstance(session_id, str)
             or not isinstance(expected_version, int)
             or isinstance(expected_version, bool)
-            or not isinstance(started_at, datetime)
         ):
             return _activation_not_started("session_activation_arguments_invalid")
         current = await self._repository.get_by_begin_operation(request.operation_id)
@@ -426,14 +509,22 @@ class SessionActivationEffectBoundary:
             or current.state_version != expected_version
         ):
             return _activation_not_started("session_activation_state_stale")
-        reference = f"session_activation:{session_id}:{expected_version + 1}"
+        facts = await self._facts_reader(current)
+        effectiveness = evaluate_pending_activation_authority(current, facts)
+        if not effectiveness.effective:
+            reason = effectiveness.reason or SessionIneffectiveReason.KERNEL_UNAVAILABLE
+            return _activation_not_started(reason.value)
+        session_digest = hashlib.sha256(
+            b"binnacle.session-activation.v1\0" + session_id.encode("utf-8")
+        ).hexdigest()
+        reference = f"session_activation:{session_digest}:{expected_version + 1}"
         reference_sha256 = hashlib.sha256(reference.encode("utf-8")).hexdigest()
         activated = await self._repository.activate(
             session_id=session_id,
             expected_state_version=expected_version,
             effect_reference=reference,
             effect_reference_sha256=reference_sha256,
-            started_at=started_at,
+            started_at=facts.wall_time,
         )
         if (
             activated.state is not DevelopmentSessionState.ACTIVE
@@ -496,6 +587,7 @@ __all__ = [
     "DevelopmentSessionAuthorityError",
     "DevelopmentSessionAuthorityGate",
     "DevelopmentSessionService",
+    "SessionActivationBoundaryVerifier",
     "SessionActivationClosure",
     "SessionActivationDispatchAuthority",
     "SessionActivationEffectBoundary",

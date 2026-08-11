@@ -73,6 +73,7 @@ def _facts() -> SessionAuthorityFacts:
         contract_profile_sha256=DIGEST,
         wall_time=NOW + timedelta(minutes=1),
         wall_time_trusted=True,
+        trusted_time_generation=1,
         boot_id_digest=DIGEST,
         monotonic_ns=10_000,
         kernel_consequential_ready=True,
@@ -131,6 +132,32 @@ def test_reboot_without_trusted_wall_time_never_extends_session() -> None:
         replace(_facts(), boot_id_digest="b" * 64, wall_time_trusted=False),
     )
     assert result.reason is SessionIneffectiveReason.TRUSTED_TIME_UNAVAILABLE
+
+
+def test_trusted_time_generation_must_be_guard_accepted_across_boots() -> None:
+    active = _active()
+    same_boot_drift = evaluate_session_authority(
+        active,
+        replace(_facts(), trusted_time_generation=2),
+    )
+    assert same_boot_drift.reason is SessionIneffectiveReason.TRUSTED_TIME_UNAVAILABLE
+
+    unchanged_reboot = evaluate_session_authority(
+        active,
+        replace(_facts(), boot_id_digest="b" * 64),
+    )
+    assert unchanged_reboot.reason is SessionIneffectiveReason.TRUSTED_TIME_UNAVAILABLE
+
+    accepted_reboot = evaluate_session_authority(
+        active,
+        replace(
+            _facts(),
+            boot_id_digest="b" * 64,
+            trusted_time_generation=2,
+            monotonic_ns=0,
+        ),
+    )
+    assert accepted_reboot.effective
 
 
 def test_authority_reduction_is_terminal_and_versioned() -> None:

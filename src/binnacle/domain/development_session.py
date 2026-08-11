@@ -97,6 +97,7 @@ class SessionAuthorityFacts:
     contract_profile_sha256: str
     wall_time: datetime
     wall_time_trusted: bool
+    trusted_time_generation: int
     boot_id_digest: str
     monotonic_ns: int
     kernel_consequential_ready: bool
@@ -201,8 +202,13 @@ def complete_activation(
 ) -> DevelopmentSessionSnapshot:
     """Close activation only after the application proves audit/obligation truth."""
 
-    if snapshot.state is not DevelopmentSessionState.ACTIVE:
-        raise DevelopmentSessionError("only an active session can close activation")
+    if snapshot.state not in {
+        DevelopmentSessionState.ACTIVE,
+        DevelopmentSessionState.ENDED,
+        DevelopmentSessionState.EXPIRED,
+        DevelopmentSessionState.REVOKED,
+    }:
+        raise DevelopmentSessionError("only an activated session can close activation")
     if snapshot.activation_closure is not ActivationClosure.PENDING:
         raise DevelopmentSessionError("session activation is already closed")
     if snapshot.state_version != expected_state_version:
@@ -283,19 +289,68 @@ def evaluate_session_authority(
         return SessionEffectiveness(False, SessionIneffectiveReason.POLICY_MISMATCH)
     if facts.contract_profile_sha256 != snapshot.contract_profile_sha256:
         return SessionEffectiveness(False, SessionIneffectiveReason.CONTRACT_MISMATCH)
-    same_boot = facts.boot_id_digest == snapshot.activation_boot_id_digest
-    if same_boot:
-        if facts.monotonic_ns < 0:
-            return SessionEffectiveness(False, SessionIneffectiveReason.TRUSTED_TIME_UNAVAILABLE)
-        if facts.monotonic_ns >= snapshot.monotonic_deadline_ns:
-            return SessionEffectiveness(False, SessionIneffectiveReason.EXPIRED)
-    elif not facts.wall_time_trusted:
-        return SessionEffectiveness(False, SessionIneffectiveReason.TRUSTED_TIME_UNAVAILABLE)
-    if not facts.wall_time_trusted:
-        return SessionEffectiveness(False, SessionIneffectiveReason.TRUSTED_TIME_UNAVAILABLE)
-    if facts.wall_time >= snapshot.expires_at:
-        return SessionEffectiveness(False, SessionIneffectiveReason.EXPIRED)
+    time_reason = _trusted_time_reason(snapshot, facts)
+    if time_reason is not None:
+        return SessionEffectiveness(False, time_reason)
     return SessionEffectiveness(True, None)
+
+
+def evaluate_pending_activation_authority(
+    snapshot: DevelopmentSessionSnapshot,
+    facts: SessionAuthorityFacts,
+) -> SessionEffectiveness:
+    """Revalidate the complete current authority tuple immediately before activation."""
+
+    if snapshot.state is not DevelopmentSessionState.PENDING:
+        return SessionEffectiveness(False, SessionIneffectiveReason.NOT_ACTIVE)
+    if not facts.kernel_consequential_ready:
+        return SessionEffectiveness(False, SessionIneffectiveReason.KERNEL_UNAVAILABLE)
+    if (
+        facts.controller_id != snapshot.controller_id
+        or facts.controller_epoch != snapshot.controller_epoch
+    ):
+        return SessionEffectiveness(False, SessionIneffectiveReason.CONTROLLER_MISMATCH)
+    if facts.device_id != snapshot.device_id or facts.device_epoch != snapshot.device_epoch:
+        return SessionEffectiveness(False, SessionIneffectiveReason.DEVICE_MISMATCH)
+    if facts.workspace_id != snapshot.workspace_id or (
+        facts.workspace_profile_sha256 != snapshot.workspace_profile_sha256
+    ):
+        return SessionEffectiveness(False, SessionIneffectiveReason.WORKSPACE_MISMATCH)
+    if facts.workspace_root_identity_sha256 != snapshot.workspace_root_identity_sha256:
+        return SessionEffectiveness(False, SessionIneffectiveReason.ROOT_MISMATCH)
+    if facts.workspace_mount_identity_sha256 != snapshot.workspace_mount_identity_sha256:
+        return SessionEffectiveness(False, SessionIneffectiveReason.MOUNT_MISMATCH)
+    if facts.policy_version != snapshot.policy_version:
+        return SessionEffectiveness(False, SessionIneffectiveReason.POLICY_MISMATCH)
+    if facts.contract_profile_sha256 != snapshot.contract_profile_sha256:
+        return SessionEffectiveness(False, SessionIneffectiveReason.CONTRACT_MISMATCH)
+    time_reason = _trusted_time_reason(snapshot, facts)
+    if time_reason is not None:
+        return SessionEffectiveness(False, time_reason)
+    return SessionEffectiveness(True, None)
+
+
+def _trusted_time_reason(
+    snapshot: DevelopmentSessionSnapshot,
+    facts: SessionAuthorityFacts,
+) -> SessionIneffectiveReason | None:
+    """Require a guard-accepted, non-regressing trusted-time generation."""
+
+    if not facts.wall_time_trusted or facts.trusted_time_generation < 1:
+        return SessionIneffectiveReason.TRUSTED_TIME_UNAVAILABLE
+    if facts.wall_time >= snapshot.expires_at:
+        return SessionIneffectiveReason.EXPIRED
+    if facts.boot_id_digest == snapshot.activation_boot_id_digest:
+        if (
+            facts.trusted_time_generation != snapshot.trusted_time_generation
+            or facts.monotonic_ns < 0
+        ):
+            return SessionIneffectiveReason.TRUSTED_TIME_UNAVAILABLE
+        if facts.monotonic_ns >= snapshot.monotonic_deadline_ns:
+            return SessionIneffectiveReason.EXPIRED
+    elif facts.trusted_time_generation <= snapshot.trusted_time_generation:
+        return SessionIneffectiveReason.TRUSTED_TIME_UNAVAILABLE
+    return None
 
 
 def objective_sha256(objective: str) -> str:
@@ -390,6 +445,7 @@ __all__ = [
     "SessionIneffectiveReason",
     "activate_session",
     "complete_activation",
+    "evaluate_pending_activation_authority",
     "evaluate_session_authority",
     "new_pending_session",
     "new_session_id",
