@@ -15,10 +15,10 @@ Binnacle Phase 5 Detailed Implementation Plan
                     disposable probe root through the real ChatGPT host without granting
                     authority over the Binnacle source workspace or other host state
 :Implementation scope: the three already-reviewed ``compatibility-write-probe`` Tools,
-                       one disposable local filesystem adapter, preparation/current-state
-                       binding, Phase 4 durable-operation integration, exact idempotency,
-                       durable path-history integrity, evaluation/evidence capture, and
-                       narrow deployment permissions only
+                       one disposable local filesystem adapter, Phase 4 durable-operation
+                       integration, preparation/current-state binding, independently
+                       anchored path history, exact idempotency, evaluation/evidence
+                       capture, and narrow deployment permissions only
 
 Purpose
 -------
@@ -34,18 +34,18 @@ filesystem API. The only effect-capable production adapter introduced here owns 
 protected disposable probe root and implements exactly two logical effects:
 
 * create one new regular file, at most 65536 decoded bytes, without overwrite; and
-* establish absence of one exact artifact previously created by the probe, deleting that
-  artifact only while retained identity/content/ownership facts still match.
+* establish absence of one exact live artifact previously created by the probe, deleting
+  it only while retained identity/content/ownership/history facts still match.
 
 ``probe_workspace_prepare`` remains HC0/no-effect. Preparation binds exact future effect
 inputs and exact current state; it is not owner authority and cannot cross the filesystem
 effect boundary.
 
 This document freezes evidence-independent implementation semantics only. It does not
-claim that ChatGPT currently exposes these Tools, presents an HC1 confirmation UI, grants
-write entitlement, refreshes catalogue metadata in a particular way, retries in a
-particular way, or reconnects in a particular way. Those remain real-host observations.
-The ``:Status: merged`` value is the terminal document status after this planning PR lands;
+claim that ChatGPT currently exposes these Tools, presents HC1 confirmation, grants write
+entitlement, refreshes catalogue metadata in a particular way, retries in a particular
+way, or reconnects in a particular way. Those remain real-host observations. The
+``:Status: merged`` value is the terminal document status after this planning PR lands;
 while the PR is open this document is proposed rather than authoritative.
 
 1. Governing source order
@@ -92,7 +92,7 @@ implementation details are inconvenient.
 The plan may merge when it specifies deterministic disposable-write semantics without
 assuming host behavior, consumes the Phase 4 durable kernel rather than creating a second
 operation system, preserves the reviewed MCP surface, keeps host/device choices explicitly
-evidence-gated, passes Contract Validation, and has no unresolved actionable review
+evidence-gated, passes repository validation, and has no unresolved actionable review
 finding. Plan acceptance grants no runtime authority.
 
 2.2 Implementation/promotion gate
@@ -104,7 +104,7 @@ Do not begin or promote the live Phase 5 capability until:
 * real Phase 3 evidence is reviewed/current for the selected ChatGPT product, plan,
   workspace, connection/authentication profile, discovery behavior, and applicable
   host-confirmation capability;
-* the selected controller profile maps to a concrete non-wildcard local write-probe
+* the selected controller profile maps to one concrete non-wildcard local write-probe
   capability;
 * production composition can keep ``compatibility-write-probe`` invisible/disabled when
   any prerequisite is missing or stale; and
@@ -139,8 +139,9 @@ Phase 5 implements/exposes only the existing ``compatibility-write-probe`` addit
    path, ``overwrite=false``, and exactly one text/base64 content representation.
 
 ``probe_workspace_cleanup``
-   Contract ``1.1``; HC1; establishes absence of one exact manifest-owned probe artifact,
-   deleting only while path/artifact/preparation/controller/content facts remain exact.
+   Contract ``1.1``; HC1; establishes absence of one exact manifest-owned live probe
+   artifact, deleting only while path/artifact/preparation/controller/content/history
+   facts remain exact.
 
 The five ``compatibility-core`` Tools remain as already declared. Phase 5 adds no other
 Tool, Resource, Task, Prompt, operation-status surface, cancellation surface, or custom
@@ -203,7 +204,7 @@ Typed protected settings are equivalent to:
    class ProbeWorkspaceSettings(BaseModel):
        enabled: bool = False
        root: Path = Path("/var/lib/binnacle/probe-workspace")
-       max_file_bytes: int = 65536
+       max_file_bytes: int = Field(default=65536, ge=1, le=65536)
        preparation_ttl_seconds: int = Field(default=300, ge=30, le=900)
 
 ``root`` and ``max_file_bytes`` are structural security settings; model-controlled input
@@ -231,12 +232,12 @@ explicit Alembic revision after the Phase 4 kernel revision. Representative path
 Runtime code never opportunistically creates schema. Phase 5 adds no broad filesystem
 framework and no new general runtime framework.
 
-7. Deterministic domain and path normalization
-----------------------------------------------
+7. Deterministic domain, path, and fingerprinting
+-------------------------------------------------
 
 Use small typed domain values for operation kind, path, write intent, cleanup intent,
-artifact state, state binding, and retained artifact. Raw execution nonces/idempotency
-keys stop existing after the Phase 4 digest boundary.
+artifact state, state binding, path ledger, and retained artifact. Raw execution
+nonces/idempotency keys stop existing after the Phase 4 digest boundary.
 
 Phase 5 deliberately narrows the schema-valid relative-path envelope to exactly one
 filename component:
@@ -256,8 +257,8 @@ prepared operation ID, and prepared input digest. Cleanup fingerprinting additio
 binds exact artifact ID and expected content digest. JCS + SHA-256 is used exactly as in
 Phase 4. Raw content is not duplicated into SQLite/audit.
 
-8. Persistence: operation-specific facts
-----------------------------------------
+8. Persistence and independent path-history integrity
+-----------------------------------------------------
 
 Migration ``0002`` adds only Phase 5-specific facts. Generic lifecycle/idempotency remains
 Phase 4-owned.
@@ -271,8 +272,7 @@ One row exists per mutating Phase 5 operation that passed policy admission:
 * ``probe_operation`` enum ``write``/``cleanup``;
 * ``prepared_binding_id`` UNIQUE FK to ``idempotency_bindings``;
 * ``caller_binding_id`` UNIQUE FK to ``idempotency_bindings``;
-* ``artifact_id`` NOT NULL, with a deferred integrity FK to ``probe_artifacts.artifact_id``
-  for admitted write/cleanup operations that own/target an artifact;
+* ``artifact_id`` NOT NULL, deferred FK to ``probe_artifacts.artifact_id``;
 * ``relative_path``;
 * expected content SHA-256 and optional expected byte count;
 * ``prepared_state_binding_sha256``;
@@ -280,9 +280,9 @@ One row exists per mutating Phase 5 operation that passed policy admission:
 
 The row is inserted only in the post-policy admission transaction. A denied/interrupted
 pre-policy ``received`` operation has no ``probe_operations`` row and owns no path
-reservation. Deferred FK use is allowed only to permit same-transaction creation of the
-write's ``probe_operations`` and ``probe_artifacts`` rows; after commit no admitted probe
-operation may reference a missing artifact.
+reservation. Deferred FK use is allowed only to permit same-transaction creation of a
+write's operation/artifact rows; after commit no admitted probe operation may reference a
+missing artifact.
 
 8.2 ``probe_artifacts``
 ~~~~~~~~~~~~~~~~~~~~~~~
@@ -301,8 +301,8 @@ Retain every historical probe generation:
 * created/updated/removed timestamps as applicable;
 * nullable protected ``file_identity_digest`` after exact created-file verification.
 
-Migration ``0002`` enforces ``UNIQUE(relative_path, path_generation)`` and the state-aware
-live-path uniqueness equivalent to:
+Migration ``0002`` enforces ``UNIQUE(relative_path, path_generation)`` and state-aware live
+path uniqueness equivalent to:
 
 ::
 
@@ -314,12 +314,11 @@ Terminal historical commitment fields become immutable after final ``removed`` o
 durably-proven-no-effect ``abandoned`` terminalization. Runtime code never deletes a
 terminal artifact row to make a later request succeed.
 
-8.3 ``probe_path_ledger``: independent path-history anchor
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+8.3 ``probe_path_ledger``
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The previous artifact-row set is not itself trusted as the source of path high-water or
-history completeness. Migration ``0002`` therefore also adds an independently protected
-per-normalized-path ledger:
+Artifact rows are not trusted as their own history-completeness/high-water source.
+Migration ``0002`` therefore adds one independently protected row per normalized path:
 
 * ``relative_path`` PK;
 * ``generation_high_water`` integer >= 0, monotonic and never decremented;
@@ -335,7 +334,7 @@ per-normalized-path ledger:
 The ledger is integrity/security state, not a cache. It is never reconstructed or silently
 rebased from surviving ``probe_artifacts`` rows after initial creation.
 
-For a never-seen path, the only acceptable initial state is the deterministic empty anchor:
+For a truly never-seen path, the only acceptable initial state is:
 
 ::
 
@@ -346,25 +345,17 @@ For a never-seen path, the only acceptable initial state is the deterministic em
    active_generation = NULL
    active_create_operation_id = NULL
 
-The preparation service may create this empty metadata row in one race-safe SQLite
-transaction only when both the ledger and every artifact row for the normalized path are
-absent. This is durable no-effect security metadata, not a filesystem reservation. If a
-ledger is missing while any artifact/probe provenance proves the path was previously seen,
-that is integrity failure, not a new path. Conversely, an existing non-empty ledger with
-missing history is integrity failure; it is never reset to empty.
+Preparation may create this empty metadata row in one race-safe SQLite transaction only
+when both the ledger and every artifact/probe provenance row for the normalized path are
+absent. If a ledger is missing while any retained provenance proves the path was seen,
+that is integrity failure, not a new path. An existing ledger with missing history is
+never reset to empty.
 
-Stable/preparable path invariants are exact:
+8.4 Canonical terminal history
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-* ``active_artifact_id``, ``active_generation``, and ``active_create_operation_id`` are
-  NULL;
-* every generation 1..``generation_high_water`` exists exactly once in
-  ``probe_artifacts`` and is terminal/stable ``removed`` or proven-no-effect
-  ``abandoned``;
-* ``terminal_history_count == generation_high_water``;
-* canonical ordered terminal history recomputes exactly to
-  ``terminal_history_sha256``.
-
-Canonical terminal history is strict ascending ``path_generation`` JCS over at least:
+Canonical terminal history is strict ascending ``path_generation`` JCS over immutable
+security/provenance fields including at least:
 
 ::
 
@@ -378,140 +369,143 @@ Canonical terminal history is strict ascending ``path_generation`` JCS over at l
    content_sha256
    byte_count
    file_identity_digest
-   active_cleanup_operation_id     # NULL in terminal history
+   active_cleanup_operation_id
    removed_by_cleanup_operation_id
    created_at
    removed_at
 
-Any missing generation, deletion of the maximum row, deletion/mutation/insertion of a
-lower row, duplicate/reordered generation, orphaned operation/artifact provenance, digest
-failure, nonterminal row, or canonicalization failure makes the path non-preparable and
-fails closed. The ledger is the independent commitment that prevents already-damaged rows
-from becoming a new baseline.
+For a stable path with no active generation:
 
-8.4 Ledger reservation transition
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+* generations 1..``generation_high_water`` exist exactly once;
+* every row is stable ``removed`` or durably-proven-no-effect ``abandoned``;
+* ``active_cleanup_operation_id`` is NULL in every terminal row;
+* ``terminal_history_count == generation_high_water``;
+* recomputed canonical count/digest exactly equals ledger count/digest.
 
-A write reservation is one atomic post-policy transition from prepared ledger state
+For a path with active generation ``N``:
+
+* ledger ``generation_high_water == N``;
+* exact ledger ``active_*`` fields identify that generation/artifact/create operation;
+* generations 1..``N-1`` exist exactly once and are stable terminal history;
+* terminal count is ``N-1`` and its canonical digest exactly matches the ledger;
+* generation ``N`` exists exactly once and is the exact active artifact.
+
+Any missing maximum/lower generation, mutation/insertion/duplicate/reorder, orphaned
+operation/artifact provenance, nonterminal prior row, ledger mismatch, or canonicalization
+failure is an integrity failure. Damage is never absorbed into a new baseline.
+
+8.5 Write reservation and terminalization
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A write reservation is one atomic post-policy transition from prepared stable ledger
 ``L/N/C/H`` to exact-self active state:
 
 ::
 
-   before admission:
-     ledger_version = L
-     generation_high_water = N
-     terminal_history_count = C = N
-     terminal_history_sha256 = H
-     active_* = NULL
+   ledger_version: L -> L+1
+   generation_high_water: N -> N+1
+   terminal_history_count: C -> C
+   terminal_history_sha256: H -> H
+   active_*: NULL -> exact self artifact / generation N+1 / create operation
 
-   after exact-self reservation:
-     ledger_version = L + 1
-     generation_high_water = N + 1
-     terminal_history_count = C
-     terminal_history_sha256 = H
-     active_artifact_id = exact self artifact
-     active_generation = N + 1
-     active_create_operation_id = exact current operation
+The same transaction inserts exactly one ``reserved`` artifact generation ``N+1`` and
+satisfies deferred references. Generation allocation uses ledger high-water only; it never
+uses ``max(surviving rows)+1``.
 
-The same short transaction inserts the unique ``reserved`` artifact generation ``N+1``
-and deferred referential facts. Allocation therefore comes from the durable ledger, never
-``max(current rows)+1``. A lost/deleted maximum artifact row cannot cause generation reuse.
+Only exact ``removed`` and durably-proven-no-effect ``abandoned`` generations may enter
+stable terminal history. Before terminalization one transaction must:
 
-The phase-stable semantic token
-``write_reservation_transition=absent_generation_N_then_exact_self_reserved_generation_N_plus_1``
-represents this entire exact-self artifact **and ledger** transition. At preparation it is
-valid only for exact ``L/N/C/H`` with no active generation; at final OP-BOUNDARY it may be
-canonicalized to the same prepared component only for exact ``L+1/N+1/C/H`` owned by the
-consuming operation and prepared binding. No other ledger transition is normalized.
+#. recompute prior terminal history strictly below the active generation and require exact
+   ledger count/digest;
+#. require exact ledger high-water/version and active artifact/generation/create operation;
+#. require exact operation effect-knowledge/audit/recovery predicates;
+#. construct the final immutable terminal representation;
+#. append it to canonical history and compute the next count/digest;
+#. atomically update artifact terminal state/provenance and ledger terminal commitment,
+   clear ledger ``active_*``, increment ``ledger_version``, and preserve monotonic
+   high-water.
 
-8.5 Ledger terminalization transition
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-A live generation remains the ledger's exact active generation while ``reserved``,
-``created``, or ``uncertain``. New write preparation is therefore impossible while a live
-or uncertain generation exists.
-
-Only two states may join terminal stable history: exact ``removed`` and a write generation
-whose no-effect outcome is durably proven and therefore becomes ``abandoned``. Before
-terminalization, one short transaction must:
-
-#. revalidate the prior terminal rows against the existing ledger ``C/H``;
-#. revalidate exact active artifact/generation/create operation and the required operation
-   effect/audit/recovery predicates;
-#. build the exact final immutable representation of generation ``N``;
-#. append that generation conceptually to canonical history and compute ``C+1/H'``;
-#. update the artifact to its terminal final representation and atomically update the
-   ledger to ``terminal_history_count=C+1``, ``terminal_history_sha256=H'``, clear
-   ``active_*``, and increment ``ledger_version``;
-#. require ``terminal_history_count == generation_high_water`` after commit.
-
-If prior history no longer matches the independent anchor, or any required operation/
-audit/filesystem fact is unavailable, terminalization fails closed and leaves the ledger
-active/conservative. Recovery never repairs the anchor from damaged rows.
-
-A reviewed migration/manual integrity repair may deliberately change history only through
-an explicit recovery procedure that invalidates every outstanding preparation for the
-path, records bounded integrity evidence, and establishes a newly reviewed anchor. Normal
-runtime/restart reconciliation never performs automatic rebasing.
+If prior integrity or required effect/audit/recovery facts cannot be proven, terminalization
+fails closed and leaves active/conservative state. Normal runtime/restart never repairs a
+ledger from damaged artifact rows. Any deliberate migration/manual integrity repair is a
+separately reviewed procedure that invalidates outstanding preparations and records
+bounded integrity evidence; it never occurs as ordinary request handling.
 
 9. Preparation service
 ----------------------
 
 ``ProbeWorkspaceService.prepare`` is no-effect but durable security state.
 
+9.1 Write preparation
+~~~~~~~~~~~~~~~~~~~~~
+
 For ``operation=write``:
 
 #. authenticate the selected Phase 3 controller/profile;
-#. validate schema, Phase 5 path policy, byte count, and protected probe-root identity;
+#. validate schema/path/byte bounds and protected probe-root identity;
 #. prove target absent and no live-path artifact row;
-#. load the ledger. If both ledger and all path/provenance rows are absent, race-safely
-   create/read the deterministic empty ledger; if evidence shows a previously seen path
-   but ledger is absent, fail integrity-closed;
+#. load the ledger, creating only the deterministic empty anchor for a truly never-seen
+   path;
 #. require no ledger active generation;
-#. load the complete terminal artifact history and prove exact contiguous generations
-   1..``N``;
-#. recompute ``C/H`` and require exact match to ledger
-   ``generation_high_water=N``, ``terminal_history_count=C=N``, and digest ``H``;
-#. bind root identity, target-absent fact, ledger identity/version ``L``, exact ``N/C/H``,
-   and the phase-stable write-reservation transition token;
-#. generate the reviewed random execution nonce and separate prepared operation ID;
-#. compute exact prepared input/fingerprint;
-#. register through Phase 4 ``register_prepared_execution_nonce`` with owner/device/Tool/
-   contract, expiry, current-state digest, boot identity, trusted-time deadline, and exact
-   prepared fingerprint;
-#. append/fsync only schema-valid bounded preparation evidence; do not claim policy allow,
-   owner UI confirmation, artifact reservation, or filesystem effect;
-#. return the existing output schema.
+#. load complete terminal history, prove contiguous generations 1..``N``, recompute
+   ``C/H``, and require exact ledger ``L/N/C/H``;
+#. bind root identity, target-absence, controller facts, ledger identity/version,
+   ``N/C/H``, and exact
+   ``write_reservation_transition=absent_generation_N_then_exact_self_reserved_generation_N_plus_1``;
+#. generate reviewed execution nonce and separate prepared operation ID;
+#. compute exact input/effect fingerprint and register through Phase 4 prepared-execution
+   nonce storage with owner/device/Tool/contract/expiry/current-state digest/boot/trusted
+   time facts;
+#. append/fsync only schema-valid bounded preparation evidence;
+#. return the existing output schema without claiming policy allow, confirmation,
+   reservation, or filesystem effect.
 
-Preparation, execute pre-policy validation, and post-policy pre-reservation admission must
-all recompute the exact pre-reservation state. A changed ledger version, anchor, row set,
-target, root, controller epoch, or prepared binding is stale/mismatch and cannot be
-absorbed.
+Execute pre-policy validation and post-policy pre-reservation admission recompute this
+exact pre-reservation state. Changed ledger/history/target/root/controller/prepared binding
+is stale/mismatch and cannot be absorbed.
 
-For ``operation=cleanup``, preparation additionally requires the exact retained artifact,
-path/generation/controller ownership/content digest. A still-created artifact must have no
-unresolved ``active_cleanup_operation_id``. Cleanup preparation permits exactly:
+9.2 Cleanup preparation
+~~~~~~~~~~~~~~~~~~~~~~~
+
+A **new** cleanup preparation is valid only for the exact current active artifact retained
+as ``created``. An already terminal ``removed``/``abandoned`` generation is not a valid new
+cleanup-preparation target. Idempotent repetition of a prior cleanup uses that operation's
+same caller key/retained result; it does not manufacture a second authorised cleanup for
+an already-terminal generation.
+
+Cleanup preparation must:
+
+#. authenticate controller/profile and validate exact artifact/path/content facts;
+#. load the path ledger and require exact active artifact/generation/create-operation
+   ownership for this ``created`` artifact;
+#. recompute the complete contiguous terminal history strictly below this active generation
+   and require exact ledger count/digest, high-water, and version;
+#. require ``active_cleanup_operation_id`` NULL;
+#. bind exact ledger ``L/N/C/H`` plus active artifact/create ownership, root/controller/path/
+   content facts, exact prepared binding, and one target variant below.
+
+Allowed target variants are:
 
 * **present** -- secure lookup proves exact retained regular-file identity/content and the
   binding includes
   ``cleanup_target_transition=exact_prepared_identity_or_absent_no_start``;
 * **created target observed absent** -- secure lookup proves exact absence and the binding
-  carries typed ``created_target_observed_absent`` plus exact artifact/generation/owner/
-  content/root/path facts, without inventing a nonexistent file identity.
+  includes typed ``created_target_observed_absent`` without inventing a nonexistent file
+  identity or effect knowledge.
 
-For both still-created variants, canonical current state contains
-``cleanup_claim_transition=unclaimed_then_exact_self`` instead of a raw changing claim
-literal. Before admission that token is valid only while the raw active cleanup claim is
-NULL. After exact allow, one CAS may set NULL -> current operation. Final verification may
-canonicalize back to the same token only after proving raw claim equals the exact running
-operation and its immutable ``probe_operations.prepared_binding_id`` equals the consumed
-prepared binding carrying the stored digest.
+For both variants the canonical binding contains
+``cleanup_claim_transition=unclaimed_then_exact_self`` instead of a raw claim literal.
+Before admission that token is valid only while the raw claim is NULL. Post-policy
+admission may perform one exact NULL -> self CAS. Final verification may canonicalize back
+to the same token only after proving the raw claim equals the exact running operation and
+its immutable ``probe_operations.prepared_binding_id`` equals the consumed prepared
+binding.
 
-For a present-bound cleanup, disappearance **before admission** is stale/rejected. At final
-pre-start verification only, exact secure absence may reproduce the same prepared target
-token when every retained artifact/controller/root/path/self-claim/prepared-binding fact
-remains exact. That path returns typed ``already_missing_pre_start`` and never authorizes a
-filesystem effect. Replacement/mismatch/unverifiable absence is never normalized.
+For a present-bound cleanup, disappearance before admission is stale/rejected. At final
+pre-start verification only, secure absence may reproduce the prepared target token when
+**all** ledger/history/artifact/controller/root/path/self-claim/prepared-binding facts remain
+exact. That path returns typed ``already_missing_pre_start`` and never authorizes a
+filesystem effect.
 
 Preparation-time or final secure absence is observation only. It never proves who removed
 a file, never produces ``known_effect``, never sets remover provenance, and never mutates
@@ -521,23 +515,22 @@ artifact/ledger state by itself.
 ------------------------------------------------------------
 
 Execute schemas require both ``execution_nonce`` and ``idempotency_key``. One internal
-transaction binds them to one Phase 4 operation without weakening global duplicate
-prevention:
+transaction binds them to one Phase 4 operation:
 
 #. digest raw identities and discard raw material;
 #. load prepared and caller-key bindings with Phase 4 owner/tombstone rules;
-#. require exact unexpired preparation/owner/device/Tool/contract/prepared input/fingerprint
-   and current-state binding;
+#. require exact unexpired preparation/owner/device/Tool/contract/input/fingerprint/current
+   state;
 #. if caller binding exists, require same owner/fingerprint and same attached operation;
 #. if prepared binding is already attached, only the same admitted caller key may obtain
-   the retained operation; another fresh key is conflict;
+   retained work; a fresh key conflicts;
 #. otherwise atomically create only the minimal version-1 ``received`` operation, caller
    binding, and prepared-binding attachment;
 #. commit.
 
-This pre-policy transaction does **not** insert ``probe_operations``, create an artifact,
-advance a path ledger, reserve a path, or claim cleanup. Policy deny, received-audit
-failure, or crash before policy therefore cannot strand probe authority.
+This transaction does **not** insert ``probe_operations``, create an artifact, advance a
+ledger, reserve a path, or claim cleanup. Policy deny, received-audit failure, or crash
+before policy therefore cannot strand probe authority.
 
 11. Policy, mandatory audit gates, and post-policy admission
 ------------------------------------------------------------
@@ -545,98 +538,123 @@ failure, or crash before policy therefore cannot strand probe authority.
 Phase 5 adds only two local consequential intents:
 
 * ``probe_workspace_write@1.1`` -- one absent-file create under the probe root;
-* ``probe_workspace_cleanup@1.1`` -- establish absence of one exact retained artifact.
+* ``probe_workspace_cleanup@1.1`` -- establish absence of one exact live retained artifact.
 
 External auth claim names remain evidence-selected. They map to one internal capability
 such as ``probe_workspace_mutate``; no wildcard filesystem grant exists.
 
 Phase 4 ordering remains exact:
 
-#. after minimal durable ``received``, fsync schema-valid
+#. after minimal durable ``received``, append/fsync schema-valid
    ``operation.state_changed(null -> received)`` before policy;
 #. evaluate and durably retain one policy decision;
 #. deny -> ``received -> rejected`` with required deny/rejected audit, no probe row, no
    ledger/reservation/claim transition;
-#. allow -> one short transaction revalidates exact prepared state, persists the allow,
-   inserts immutable ``probe_operations``, acquires operation-specific reservation/claim,
-   and commits ``received -> authorised``;
-#. fsync required ``policy.decision(allowed)`` + ``operation.authorised`` evidence;
+#. allow -> one short transaction revalidates exact prepared state, persists allow,
+   inserts immutable ``probe_operations``, acquires the exact operation-specific
+   reservation/claim, and commits ``received -> authorised``;
+#. append/fsync required ``policy.decision(allowed)`` + ``operation.authorised`` evidence;
 #. only then may ``authorised -> running`` occur.
 
 Required audit failure suppresses filesystem start and follows Phase 4 fail-restricted
-recovery. An authorised reservation after an allow-audit failure remains conservative
+recovery. An authorised reservation/claim after an allow-audit failure remains conservative
 recovery state; it is never freed by fabricating a terminal outcome.
 
-For an allowed write, the admission transaction must prove exact prepared
-``L/N/C/H``/absence/no-live-row, then atomically perform the ledger reservation transition
-from section 8.4 and insert only the exact self ``reserved`` generation ``N+1``. Deferred
-FKs must be satisfied at commit. A changed/missing ledger, changed history, pre-existing
-live row, wrong generation, or integrity failure produces rejection/no effect; the
-transaction never falls back to surviving-row ``max()+1``.
+For an allowed write, admission proves exact prepared stable ``L/N/C/H`` plus absence/no
+live row, then atomically performs section 8.5 reservation and inserts only exact self
+``reserved`` generation ``N+1``. Changed/missing ledger/history or pre-existing live state
+rejects with no effect; there is no surviving-row ``max()+1`` fallback.
 
-For an allowed still-created cleanup, the transaction revalidates exact retained artifact
-and exact prepared filesystem observation, recomputes the pre-claim prepared digest while
-claim is NULL, then atomically CASes
-``active_cleanup_operation_id: NULL -> current operation``. It does not change artifact or
-ledger terminal state. A present-bound disappearance before admission is stale. The
-observed-absent variant merely acquires the exact claim after absence is re-proven.
+For an allowed cleanup, admission is possible only for the exact prepared still-``created``
+active artifact. It revalidates the complete ledger/history snapshot and exact prepared
+filesystem observation, recomputes the pre-claim prepared digest while claim is NULL, then
+atomically inserts ``probe_operations``, CASes
+``active_cleanup_operation_id: NULL -> current operation``, and commits
+``received -> authorised``. It does not change artifact or ledger terminal state.
 
-A cleanup of an already durably ``removed`` artifact may be admitted as idempotent no-
-effect establishment and acquires no live cleanup claim/start authority.
+A new cleanup against an already durably ``removed``/``abandoned`` artifact is rejected
+**before post-policy admission/authorisation** as a stale/non-live preparation target. It
+never creates an authorised mutating cleanup without a claim and never needs a special
+final-boundary exception. Same-key retry of the actual prior cleanup returns retained
+result/effect knowledge through Phase 4 idempotency.
 
-12. Final OP-BOUNDARY verifier
-------------------------------
+12. Final all-mode OP-BOUNDARY verifier
+--------------------------------------
 
 Every consequential operation uses Phase 4's per-operation handoff gate, global
-consequential gate, and all-mode final current-state verifier before any effect-obligation
-marker or ``EffectBoundary.start``.
+consequential gate, and all-mode final current-state verifier before audit-obligation
+publication or ``EffectBoundary.start``. Failure/unavailability is fail closed.
 
-For write, before the generic kernel compares current digest to the prepared digest, Phase
-5 must prove:
+12.1 Write final verifier
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Immediately before any write start, prove:
 
 * exact running operation/state version and exact consumed prepared binding;
 * exact self ``reserved`` artifact at generation ``N+1`` with matching path/content/owner/
   controller/root facts;
 * target remains securely absent;
-* durable ledger is exactly the reviewed reservation state derived from prepared anchor:
-  ``ledger_version=L+1``, ``generation_high_water=N+1``, terminal ``C/H`` unchanged, and
-  ``active_artifact_id``/``active_generation``/``active_create_operation_id`` exactly name
-  this artifact/generation/operation;
-* complete retained history excluding **only** this exact self reservation is still
-  contiguous terminal generations 1..N and recomputes to exact prepared ``C/H``;
-* no operation/artifact/ledger referential integrity check fails.
+* ledger is exact reservation state derived from preparation:
+  ``ledger_version=L+1``, high-water ``N+1``, terminal ``C/H`` unchanged, and exact
+  ``active_*`` ownership of this artifact/generation/create operation;
+* complete retained history excluding only the self reservation is still contiguous
+  terminal generations 1..``N`` and recomputes to exact prepared ``C/H``;
+* all operation/artifact/ledger referential-integrity checks pass.
 
-Only then may the callback canonicalize the exact current state back to the prepared
-``write_reservation_transition=absent_generation_N_then_exact_self_reserved_generation_N_plus_1``
-token. The token explicitly covers the expected ``L/N -> L+1/N+1`` ledger transition and
-self reservation; it is not a wildcard state exception.
+Only then may the callback canonicalize exact current state back to the prepared
+write-reservation transition token. Any changed/deleted/inserted history, changed ledger,
+generation reuse, foreign/missing reservation, binding mismatch, target appearance,
+root/controller change, or unverifiable fact produces prepared-state mismatch/no start.
 
-Deletion of the maximum historical row, deletion/mutation/insertion of a lower row,
-changed ledger version/high-water/digest/active owner, generation reuse, foreign/missing
-reservation, prepared-binding mismatch, target appearance, root/controller change, or any
-unverifiable state causes prepared mismatch/no start. A damaged row set can never become a
-new baseline merely because preparation or verification recomputes a fresh digest.
+12.2 Cleanup final verifier -- mandatory ledger/history gate
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-For still-created cleanup, final current-state canonicalization is phase-aware only for:
+**Every cleanup path capable of reaching ``EffectBoundary.start`` must pass this verifier
+immediately before start.** Admission-time checks are not sufficient.
 
-* exact admission-owned cleanup claim ``NULL -> exact self``; and
-* for a present-bound preparation, exact prepared identity -> secure absence no-start.
+For the exact active cleanup artifact generation ``N``, the verifier must:
 
-The verifier first proves raw active cleanup claim equals the exact current running
-operation and exact prepared binding. For a present-bound target, exact same identity may
-continue; secure absence may return ``already_missing_pre_start`` only while all other
-retained facts are exact. Replacement/mismatch fails closed. For an observed-absent
-preparation, continued secure absence is required; later appearance fails closed.
+#. re-read the independently durable path ledger;
+#. require exact prepared ledger identity/version ``L``, monotonic high-water ``N``, and
+   exact ``active_artifact_id``/``active_generation``/``active_create_operation_id``;
+#. load every terminal generation 1..``N-1`` and prove exact contiguity/stable terminal
+   state/referential integrity;
+#. recompute terminal history count/digest and require exact equality to both the durable
+   ledger and the ``C/H`` carried by the consumed prepared binding;
+#. require exact retained active artifact state ``created``, generation/owner/controller/
+   root/path/content/create-operation facts;
+#. require raw ``active_cleanup_operation_id`` equals this exact running operation;
+#. require immutable ``probe_operations.prepared_binding_id`` equals the exact consumed
+   prepared binding;
+#. require exact target variant below.
+
+The cleanup-claim NULL -> self transition may be phase-stably canonicalized only **after**
+these checks. A deleted/mutated/inserted older terminal row, removed/corrupt ledger,
+changed ledger version/high-water/active owner, orphaned provenance, foreign/cleared claim,
+changed artifact/controller/root/path/content, or binding mismatch fails closed **before**
+audit-obligation publication, ``EffectBoundary.start``, or unlink.
+
+For a present-bound preparation:
+
+* exact same file identity/content may proceed toward the effect boundary;
+* secure absence may reproduce the prepared target token only after all ledger/history and
+  self-claim/binding checks above pass, returning ``already_missing_pre_start``;
+* replacement/mismatch/unverifiable absence fails closed.
+
+For a preparation made while the still-created target was already securely absent,
+continued secure absence is required after the same complete ledger/history checks;
+reappearance fails closed.
 
 ``already_missing_pre_start`` returns before audit-obligation publication and before
-``EffectBoundary.start``. Because this admitted operation is proven not to have crossed the
-boundary, it is durably classified ``known_no_effect``. The frozen lifecycle uses
-``running -> failed``/``known_no_effect`` with bounded reason such as
-``cleanup_already_missing_before_start`` while the existing cleanup Tool result may
+``EffectBoundary.start``. The admitted operation is durably classified
+``known_no_effect`` and follows frozen lifecycle ``running -> failed`` with bounded reason
+such as ``cleanup_already_missing_before_start``. The existing cleanup Tool result may
 truthfully return ``removed=false, already_missing=true``. No remover/effect provenance is
 invented.
 
-Any verifier unavailable/error condition fails closed. No "best effort" repair exists.
+There is deliberately **no final cleanup verifier for an already-terminal artifact**,
+because section 9.2 refuses new preparation and section 11 refuses post-policy admission
+for that state. This removes the previous authorised-without-claim ambiguity.
 
 13. Phase 4 audit-obligation and effect ordering
 ------------------------------------------------
@@ -649,8 +667,8 @@ After ``authorised -> running``, Phase 5 preserves Phase 4 exactly:
      -> fsynced effect.intent_recorded
      -> per-operation DispatchHandoffGate
      -> global ConsequentialBoundaryGate PRE_START permit
-     -> final Phase 5 OP-BOUNDARY verifier
-     -> if exact already_missing_pre_start: no start; known_no_effect closure path
+     -> final Phase 5 all-mode OP-BOUNDARY verifier
+     -> if exact already_missing_pre_start: no start; known_no_effect closure
      -> otherwise durable audit-obligation marker
      -> gate-owned call_start
      -> bounded effect/no-effect receipt/uncertainty
@@ -659,9 +677,9 @@ After ``authorised -> running``, Phase 5 preserves Phase 4 exactly:
      -> exact obligation-marker closure when Phase 4 permits
      -> terminal/reconciliation closure
 
-Failure of required intent audit trips the global consequential gate before effect. A
-surviving obligation marker remains explicit-recovery-required across restart. Phase 5
-never skips an audit stage because the effect is small or local.
+Failure of required intent audit trips the global gate before effect. A surviving
+obligation marker remains explicit-recovery-required across restart. Phase 5 never skips
+an audit stage because the effect is small or local.
 
 14. Atomic write effect
 -----------------------
@@ -679,22 +697,22 @@ success:
 #. unlink private staging name and fsync staging directory;
 #. return stable opaque artifact/effect reference.
 
-Unavailable safe no-replace or directory-fsync semantics keep capability disabled.
-Crash after publish/root-fsync is reconciled from exact retained reservation/file facts.
+Unavailable safe no-replace or directory-fsync semantics keep capability disabled. Crash
+after publish/root-fsync is reconciled from exact retained reservation/file facts.
 
 15. Exact cleanup effect
 ------------------------
 
-``LinuxProbeWorkspace.start_cleanup`` accepts only the exact claimed retained artifact.
-Before unlink it verifies protected root fd, exact active cleanup operation, exact regular
-file identity/type/path/generation/content/owner facts. It then unlinks exact name, fsyncs
-root directory, and returns stable effect reference.
+``LinuxProbeWorkspace.start_cleanup`` is callable only after section 12.2 succeeds. It
+accepts the exact claimed active ``created`` artifact and performs a second adapter-local
+identity/type/content check using protected root directory fds. It then unlinks exact name,
+fsyncs the root directory, and returns a stable effect reference.
 
 If target becomes absent after ``call_start`` linearization but before unlink, the adapter
 performs no unlink and may return an explicit no-effect receipt correlated to exact
-operation/artifact/path generation. Only a durably retained/classified receipt proves that
-no unlink was attempted. Receipt loss leaves post-dispatch absence ``uncertain``; absence
-alone cannot reconstruct no-effect or known-effect.
+operation/artifact/path generation. Only a durably retained/classified receipt proves no
+unlink was attempted. Receipt loss leaves post-dispatch absence ``uncertain``; absence
+alone cannot reconstruct either no-effect or known-effect.
 
 Mismatched/symlink/directory/unowned content is never deleted automatically.
 
@@ -702,78 +720,69 @@ Mismatched/symlink/directory/unowned content is never deleted automatically.
 ------------------------------------------
 
 Reconciliation reconstructs references from durable operation/probe/artifact/ledger facts;
-it never reconstructs effect knowledge merely from filesystem observation.
+it never reconstructs effect knowledge merely from final filesystem observation.
 
 16.1 Write reconciliation
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
 * exact final file present matching exact active ledger/artifact reservation -> durable
   created effect may be classified/converged according to Phase 4;
-* unpublished staging only with final absent -> clean internal staging safely and converge
+* unpublished staging only with final absent -> clean private staging safely and converge
   truthful no-effect failure;
-* final absent with proof no publication occurred -> no create effect;
-* mismatched final state -> ``uncertain``/fail restricted.
+* final absent with durable proof no publication occurred -> no create effect;
+* mismatched/insufficient state -> ``uncertain``/fail restricted.
 
-A successfully created artifact remains the ledger's active generation while state is
-``created``. It is not part of terminal-history ``C/H`` until exact later cleanup closure
-terminalizes it as ``removed``.
+A reserved write durably proven ``known_no_effect`` may become ``abandoned`` only through
+section 8.5 terminalization after required audit/recovery closure. A successfully created
+artifact remains the ledger's active generation while ``created``; it enters terminal
+history only after exact cleanup closure.
 
-A reserved write that is durably proven ``known_no_effect`` before publication may become
-``abandoned`` only through section 8.5 ledger terminalization after required audit/recovery
-closure. That atomic transition appends the immutable abandoned generation to terminal
-history and clears the ledger active generation. If prior ledger/history integrity cannot
-be re-proven, leave it conservative; never free the path by rebasing.
-
-16.2 Cleanup claim closure
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+16.2 Cleanup closure
+~~~~~~~~~~~~~~~~~~~~
 
 Keep these cases separate:
 
-* **pre-start or explicit durable no-effect-receipt absence:** after exact terminal
-  ``known_no_effect`` plus required audit/recovery closure, one transaction revalidates
-  exact artifact/generation/owner/current cleanup claim, exact no-effect reason/receipt,
-  secure continued absence, and the existing path ledger's exact active generation. It
-  then terminalizes that artifact to ``removed`` through section 8.5, clears
-  ``active_cleanup_operation_id``, clears ledger ``active_*``, and leaves
-  ``removed_by_cleanup_operation_id`` NULL. ``removed`` means durable current absence,
-  not that this cleanup removed it;
+* **pre-start/explicit durable no-effect absence:** after terminal ``known_no_effect`` and
+  required audit/recovery closure, one transaction first re-proves complete ledger/history
+  integrity, exact active artifact/generation/create operation, exact cleanup claim, exact
+  no-effect reason/receipt, and secure continued absence. It then terminalizes the artifact
+  to ``removed`` through section 8.5, clears cleanup claim and ledger ``active_*``, and
+  leaves ``removed_by_cleanup_operation_id`` NULL. ``removed`` means durable current
+  absence, not that this cleanup removed it;
 * **successful removal:** only exact durable ``known_effect`` plus matching recoverable
   effect reference and completed post-effect audit/obligation/recovery closure may record
-  ``removed_by_cleanup_operation_id=current operation`` and terminalize the exact artifact
-  to ``removed`` through the same ledger-checked transaction;
+  ``removed_by_cleanup_operation_id=current operation`` and terminalize through the same
+  ledger-checked transaction;
 * **post-dispatch absence without proof:** lost unlink/start receipt, uncertain effect
-  knowledge, or incomplete audit/obligation/recovery closure -> do not set ``removed``, do
-  not change ledger terminal commitment, do not clear ledger/artifact active ownership,
-  and do not clear cleanup claim;
+  knowledge, or incomplete audit/obligation/recovery closure -> no terminalization, no
+  history commitment change, no claim/active-owner release;
 * **known no-effect while exact artifact remains present:** after terminal audit/recovery
-  closure, clear only ``active_cleanup_operation_id`` by exact CAS. Artifact remains
-  ``created`` and path ledger remains active on that generation;
-* **mismatch/identity ambiguity:** retain claim/ledger active generation and fail restricted.
+  closure and complete ledger/history integrity verification, clear only the exact cleanup
+  claim by CAS; artifact remains ``created`` and ledger remains active;
+* **mismatch/identity ambiguity:** retain claim/ledger active ownership and fail restricted.
 
-All closure transactions first recompute/verify the prior ledger terminal ``C/H``. A
-missing/deleted/mutated historical row or corrupted/missing ledger therefore blocks
-closure instead of silently repairing history.
+No closure transaction repairs a damaged ledger/history baseline.
 
 16.3 Restart integrity
 ~~~~~~~~~~~~~~~~~~~~~~
 
 Fresh-process startup verifies ledger/artifact/probe-operation referential integrity before
-write-probe activation. A path whose ledger and rows disagree is integrity-failed and
-cannot prepare/admit/start another effect. Restart never creates a missing ledger from
-surviving rows and never decrements generation high-water.
+write-probe activation. A path whose ledger/rows disagree cannot prepare, admit, or start
+another effect. Restart never creates a missing ledger from surviving rows and never
+decrements generation high-water.
 
 17. Audit mapping and diagnostics
 ---------------------------------
 
-Use only existing schema-valid payload kinds. Preparation records bounded digest/code
-facts only: root/target state, prepared path-ledger version/high-water/count/digest, content/
-maximum-effect digests, and reviewed transition identifiers. It never emits raw history
-rows, raw nonce/key, filesystem content, credentials, owner-confirmation claims, or a
-fictional reservation.
+Use only existing schema-valid payload kinds. Preparation records bounded digest/code facts
+only: root/target state, path-ledger version/high-water/count/digest, active artifact facts,
+content/maximum-effect digests, and reviewed transition identifiers. It never emits raw
+history rows, raw nonce/key, filesystem content, credentials, owner-confirmation claims, or
+fictional effect provenance.
 
-Execution preserves Phase 4 lifecycle/effect audit ordering exactly. Pre-start
-``already_missing`` never emits ``effect.started`` and never claims ``known_effect``.
-Ledger reservation/terminalization may be represented by bounded correlation/digest facts
+Execution preserves Phase 4 lifecycle/effect audit ordering exactly.
+``already_missing_pre_start`` never emits ``effect.started`` and never claims
+``known_effect``. Ledger reservation/terminalization uses bounded correlation/digest facts
 inside existing schema-compatible audit payloads; Phase 5 adds no new audit subsystem or
 unreviewed payload kind.
 
@@ -789,21 +798,19 @@ application service/Phase 4 coordinator, and return the existing envelope plus c
 retained operation metadata. Same-key retry returns retained state/result rather than
 executing again.
 
-For cleanup ``already_missing=true``, preserve the existing Tool success data even when
-the retained consequential operation is ``failed``/``known_no_effect`` under the frozen
-lifecycle; the effect snapshot truthfully states that this admitted operation performed no
-filesystem effect.
-
 Retry rules:
 
 * same key/same input -> retained operation/result;
 * same key/different input -> conflict;
 * consumed preparation/new caller key -> conflict;
-* expired preparation before admission -> deliberate new preparation only after proving
-  no earlier operation was admitted;
+* expired preparation before admission -> deliberate new preparation only after proving no
+  earlier operation was admitted;
 * ``uncertain`` -> reconciliation/status semantics only, never automatic fresh effect;
+* cleanup of an already terminal artifact is not a new preparation/admission path; retry
+  the actual prior cleanup with its original logical identity to obtain retained result;
 * terminal known-no-effect cleanup does not silently reacquire a released claim; a later
-  independent cleanup needs new preparation/key/policy admission.
+  independent cleanup is possible only if the exact artifact remains live ``created`` and
+  receives new preparation/key/policy admission.
 
 19. Catalogue activation and real-host branch
 ---------------------------------------------
@@ -823,10 +830,10 @@ mutate Tool metadata or weaken local policy.
 When implementation/promotion prerequisites pass, use a sanitized frozen evaluation
 bundle:
 
-#. record exact build/config/manifest/schema/policy/profile digests and required Pi
-   identity evidence;
+#. record exact build/config/manifest/schema/policy/profile digests and required Pi identity
+   evidence;
 #. verify ``compatibility-core`` and authentication have not regressed;
-#. activate/refresh the reviewed write-probe catalogue through observed host procedure;
+#. activate/refresh reviewed write-probe catalogue through the observed host procedure;
 #. verify visible Tools exactly match manifest;
 #. prepare the frozen synthetic path/content and capture sanitized preparation facts;
 #. exercise required decline attempts and prove no execute/effect;
@@ -834,8 +841,7 @@ bundle:
 #. exercise lost response/same-key retry and prove one operation/one effect;
 #. reconnect and prove exact retry returns retained work without duplicate effect;
 #. prepare/execute exact cleanup and prove only exact artifact reaches absent state;
-#. after cleanup, prove terminal artifact history remains retained and path ledger high-
-   water remains monotonic; next independent attempt must allocate the next generation;
+#. verify retained history + independent ledger remain coherent and high-water monotonic;
 #. repeat exact frozen risk-class attempt counts, retaining blocked/failed/unstable results;
 #. validate/freeze manifest, reviewer decision, evidence archive, and detached receipt;
 #. only then update ``docs/mcp-profile.md`` with observations actually proven.
@@ -848,42 +854,45 @@ audit files, or other paths. CI mocks do not establish real Pi/real ChatGPT supp
 
 Coverage includes at least:
 
-* path normalization and max-effect bounds;
-* deterministic text/base64/input fingerprints;
-* empty path-ledger creation is race-safe and allowed only when ledger + all provenance
-  rows are absent;
-* missing ledger for a previously seen path fails closed;
+* path normalization, byte/maximum-effect bounds, deterministic text/base64 fingerprints;
+* race-safe empty-ledger creation only for truly never-seen paths;
+* missing ledger for a seen path fails closed;
 * preparation recomputes complete contiguous terminal history and requires exact independent
-  ledger ``L/N/C/H``;
-* deleting the **maximum** historical row before preparation fails integrity and cannot
-  reduce high-water or permit generation reuse;
-* deleting or mutating a lower historical row before preparation fails history digest/
-  count/integrity rather than becoming a new baseline;
-* insertion/duplicate/reorder/canonical corruption fails closed;
-* nonterminal prior history or active ledger generation rejects new write preparation;
-* write reservation allocates strictly from ledger ``N -> N+1`` and atomically binds exact
-  self active artifact/create operation/version ``L -> L+1``;
-* attempted generation reuse is impossible even if artifact rows are missing/corrupt;
-* final write canonicalization accepts only exact prepared ``L/N/C/H`` -> exact self
-  ``L+1/N+1/C/H`` transition with prior rows unchanged;
-* row/ledger deletion/mutation **after** preparation or admission yields mismatch/no start;
-* terminalization checks prior ledger/history and atomically updates terminal digest/count;
-* artifact/probe-operation deferred references are satisfied at commit and orphaning is
-  rejected;
-* cleanup observed-absent preparation is effect-neutral;
-* present-bound cleanup disappearance before admission is stale, while exact disappearance
-  after admission but before start reaches only ``already_missing_pre_start``;
+  ledger count/digest/version/high-water;
+* deleting the maximum historical row before preparation cannot lower high-water or permit
+  generation reuse;
+* deleting/mutating/inserting a lower historical row before preparation cannot become a
+  new trusted baseline;
+* duplicate/reordered/canonical-corrupt/nonterminal prior history fails closed;
+* write reservation allocates strictly ledger ``N -> N+1`` and exact self
+  ``L -> L+1`` active ownership;
+* final write canonicalization accepts only exact self reservation plus unchanged complete
+  prior history;
+* new cleanup preparation rejects terminal ``removed``/``abandoned`` artifacts before an
+  authorised mutating operation can exist;
+* same-key retry of the prior successful/no-effect cleanup returns retained outcome without
+  another claim/effect;
+* cleanup preparation binds exact ledger ``L/N/C/H`` and active ownership;
 * cleanup claim canonicalization accepts only NULL -> exact consuming operation with exact
   prepared binding;
-* replacement/mismatch/foreign claim fails closed;
+* **after cleanup admission but before final boundary, deleting/mutating an older terminal
+  generation changes integrity and yields zero ``EffectBoundary.start`` and zero unlink**;
+* **after cleanup admission but before final boundary, removing/corrupting ledger or changing
+  ledger version/high-water/active ownership yields zero start and zero unlink**;
+* final cleanup verifier recomputes history strictly below active generation and compares
+  exact ledger + prepared ``C/H`` before every start-capable path;
+* present-bound disappearance before admission is stale; exact disappearance after
+  admission can reach only ``already_missing_pre_start`` after full ledger/history checks;
+* observed-absent preparation remains effect-neutral; reappearance fails closed;
+* replacement/mismatch/foreign or cleared claim fails closed;
 * mandatory received audit precedes policy;
 * policy deny/pre-policy crash creates no probe reservation/ledger advance;
 * allowed/authorised audit precedes ``running``;
 * same nonce/key races converge on one operation/effect;
-* lost receipts never infer effect from absence;
-* known-no-effect claim release/absence closure and known-effect successful removal obey
-  exact audit/recovery/ledger predicates;
-* uncertain cleanup retains artifact/ledger active ownership and cleanup claim;
+* lost receipts never infer effect/no-effect from final absence;
+* known-no-effect and known-effect cleanup closure obey exact audit/recovery/ledger
+  predicates;
+* uncertain cleanup retains active ownership + claim;
 * no mismatch is deleted automatically;
 * maximum effect remains one bounded artifact.
 
@@ -891,45 +900,52 @@ Property state machines combine preparation expiry, controller replacement, idem
 collisions, ledger versions/high-water/history digests, artifact generations/states,
 cleanup claims, policy/audit failures, and restart/reconciliation.
 
-22. Required integration/fault tests
-------------------------------------
+22. Required integration and fault tests
+----------------------------------------
 
 Required faults include:
 
-* crash after prepared binding registration;
+* crash after prepared-binding registration;
 * concurrent first execute same nonce/key and different caller keys;
-* crash after minimal ``received`` before received audit/policy -> no probe reservation;
+* crash after minimal ``received`` before received audit/policy -> no reservation;
 * received-audit failure -> no policy/reservation/effect;
 * policy deny -> no reservation/ledger advance;
 * concurrent allowed writes same path -> exactly one ledger/self reservation wins;
 * crash after ledger/artifact reservation before ``running``;
 * allowed/authorised audit failure -> no ``running``/filesystem start;
 * crash after running/intent audit before final verifier;
-* **delete maximum terminal artifact before preparation** -> ledger mismatch, zero start,
+* delete maximum terminal artifact before preparation -> ledger mismatch, zero start,
   high-water not decremented;
-* **delete/mutate lower terminal artifact before preparation** -> ledger mismatch, zero
-  start, no new baseline;
-* delete/mutate/insert history after preparation -> admission/final mismatch, zero start;
-* corrupt/remove path ledger while artifact/provenance rows exist -> integrity failure;
-* restart with ledger/artifact mismatch -> write probe stays unavailable/fail restricted;
+* delete/mutate lower terminal artifact before preparation -> ledger mismatch, zero start,
+  no new baseline;
+* delete/mutate/insert history after write preparation -> admission/final mismatch;
+* corrupt/remove ledger while artifact/provenance rows exist -> integrity failure;
+* restart with ledger/artifact mismatch -> write probe unavailable/fail restricted;
 * attempted generation reuse after deleting maximum row -> impossible;
-* rebind/delete/change exact self reservation -> final mismatch;
-* target appears after preparation/before final boundary -> no start;
+* rebind/delete/change exact self write reservation -> final mismatch;
+* target appears after write preparation/before final boundary -> no start;
 * staging/fsync/publish/root-fsync/receipt DB failures;
 * crash after publish/root-fsync before receipt;
 * exact cleanup self claim change -> final mismatch;
+* **delete/mutate older terminal history after cleanup admission but before final verifier ->
+  zero effect-boundary start and zero unlink**;
+* **corrupt/remove/change ledger after cleanup admission but before final verifier -> zero
+  effect-boundary start and zero unlink**;
 * cleanup present target disappears after admission/before final boundary -> no start,
-  truthful ``known_no_effect`` path;
+  truthful ``known_no_effect`` only after full integrity verification;
 * cleanup replacement/identity mismatch -> no delete;
+* new cleanup preparation against already terminal artifact -> rejected/non-live before
+  authorisation; no cleanup claim and no effect-boundary path;
 * audit-obligation publication/final audit failures;
-* target absent before cleanup preparation -> observed-absent preparation, exact claim,
-  no-start known-no-effect closure only after required audit/recovery;
+* target absent before cleanup preparation while artifact remains ``created`` ->
+  observed-absent preparation, exact claim, no-start known-no-effect closure only after
+  full ledger/history verification and required audit/recovery closure;
 * target absent after ``call_start`` but before unlink with durable explicit no-effect
   receipt -> no unlink and exact no-effect closure;
 * same race with receipt loss -> uncertain, claim/ledger active retained;
 * crash after unlink/root-fsync before receipt -> uncertain until explicit recovery proves
   effect; absence alone cannot close ledger;
-* crash during ledger terminalization transaction -> atomic old or new state only;
+* crash during ledger terminalization -> atomic old or new state only;
 * DB failure during cleanup claim/ledger closure -> conservative active state;
 * response loss/restart/same-key retry;
 * controller replacement replay;
@@ -945,19 +961,22 @@ A fresh process reconstructs all decisions from durable state. Verify:
 
 * prepared nonce/expiry/current-state binding remains enforceable;
 * ledger versions/high-water/terminal count/digest survive restart and are compared against
-  complete retained history before preparation/admission/start;
-* missing/corrupt ledger or missing/mutated artifact history never gets auto-rebuilt;
+  complete retained history before preparation/admission/**every final effect boundary**;
+* missing/corrupt ledger or missing/mutated history never gets auto-rebuilt;
 * admitted write reconstructs exact self ledger/reservation transition without in-memory
   exceptions;
 * foreign/missing/changed self reservation or prepared binding fails closed;
-* cleanup observed-absent/present-bound transitions and exact self claim reconstruct from
-  durable facts only;
+* cleanup present/observed-absent transitions and exact self claim reconstruct from durable
+  facts only;
+* cleanup final verifier re-proves independent ledger/history integrity after restart and
+  immediately before any possible unlink;
+* a terminal artifact cannot acquire a new cleanup operation through restart/retry;
 * interrupted pre-policy operation has no probe reservation;
 * interrupted audit gates do not progress toward start outside Phase 4 recovery;
 * reserved/created/uncertain active artifact remains ledger-active and blocks a new write;
 * terminal removed/abandoned history is immutable and committed by the ledger;
-* no-effect and successful cleanup closures update terminal history only after exact
-  predicates; uncertain cleanup remains active;
+* no-effect/successful cleanup closures update terminal history only after exact predicates;
+* uncertain cleanup remains active;
 * stale staging never becomes a second visible artifact;
 * same-key retry returns retained work;
 * surviving audit-obligation marker remains recovery-required;
@@ -985,28 +1004,31 @@ Phase 5 preserves all of the following:
 #. required received audit precedes policy and allowed/authorised audit precedes running;
 #. prepared nonce + caller key converge on one operation;
 #. path generation high-water is independently anchored and monotonically increasing;
-#. preparation never trusts a new digest computed only from whatever artifact rows happen
-   to survive; complete rows must match the pre-existing ledger exactly;
-#. deleting the maximum row cannot lower high-water or enable generation reuse;
-#. deleting/mutating/inserting any prior row before or after preparation is detected and
-   fails closed;
-#. terminal artifact history and ledger commitment fields are immutable to ordinary
-   runtime code except the reviewed atomic terminalization transition;
+#. preparation never trusts a digest computed only from whatever rows survive;
+#. deleting maximum/lower history cannot lower high-water, permit generation reuse, or
+   silently establish a new baseline;
+#. terminal artifact history/ledger commitment is immutable to ordinary runtime except the
+   reviewed atomic terminalization transition;
 #. missing/corrupt ledger for a seen path is integrity failure, never an empty-path reset;
-#. write prepared/current-state canonicalization normalizes only exact
-   ``L/N/C/H`` -> consuming self ``L+1/N+1/C/H`` reservation transition;
+#. write canonicalization normalizes only exact prepared ledger -> exact self reservation;
+#. cleanup preparation is valid only for the exact active ``created`` artifact; terminal
+   artifacts cannot produce a new authorised cleanup-without-claim path;
 #. cleanup preparation absence is observation only, never effect knowledge/provenance;
-#. present-bound cleanup may normalize only exact secure present->absent pre-start no-effect
-   transition after exact retained/self-claim/prepared-binding checks;
 #. cleanup claim normalization accepts only expected NULL -> exact self transition;
+#. **every start-capable cleanup final verifier rechecks independent ledger/version/
+   high-water/active ownership and complete prior terminal history against prepared C/H**;
+#. changed history/ledger after cleanup admission fails before audit-obligation publication,
+   start, or unlink;
+#. present-bound cleanup may normalize only exact secure present -> absent pre-start no-
+   effect transition after complete ledger/history/artifact/self-claim/binding checks;
 #. live path/cleanup ownership is single-owner and uncertain claims are non-stealable;
 #. on-disk absence after dispatch alone never proves successful/no-effect cleanup;
-#. exact current state is revalidated immediately before the Phase 4 boundary;
+#. exact current state is revalidated immediately before the Phase 4 effect boundary;
 #. Phase 4 gates/audit-obligation marker remain the only start path;
 #. write cannot overwrite and cleanup cannot delete mismatch;
 #. raw keys/nonces/credentials do not enter DB/audit/log/evidence;
 #. filesystem content is never interpreted as authority/instruction;
-#. catalogue activation is fail-closed when prerequisite evidence/integrity is absent;
+#. catalogue activation is fail closed when prerequisite evidence/integrity is absent;
 #. Phase 6 remains unimplemented/unpromoted.
 
 26. Implementation order
@@ -1018,29 +1040,30 @@ After implementation/promotion prerequisites are met:
 #. add protected root/config/systemd/setup verification;
 #. add domain normalization/path/max-effect types/tests;
 #. add migration ``0002`` with ``probe_operations``, ``probe_artifacts``, state-aware live
-   uniqueness, unique generations, deferred referential constraints, and independent
+   uniqueness, unique generations, deferred references, and independent
    ``probe_path_ledger``;
-#. implement deterministic empty-ledger creation and complete terminal-history
+#. implement deterministic empty-ledger creation plus complete terminal-history
    canonicalization/integrity verification;
 #. implement atomic ledger reservation/terminalization transitions and tests before any
    filesystem effect adapter;
-#. implement preparation binding including ledger ``L/N/C/H`` and exact write reservation
-   transition plus cleanup observed-absent/present-bound/self-claim transitions;
+#. implement preparation binding for exact write ledger transition and cleanup
+   ledger/active-artifact/target/self-claim state;
+#. explicitly reject new cleanup preparation/admission for terminal artifacts;
 #. implement dual prepared-nonce/caller-key minimal pre-policy identity;
 #. integrate mandatory received audit before policy;
 #. implement exact write/cleanup policy entries;
-#. implement post-policy exact ledger/self reservation and cleanup claim admission with
-   ``received -> authorised``;
+#. implement post-policy exact write reservation and cleanup self-claim admission;
 #. integrate required allowed/authorised audit before ``running``;
-#. implement final OP-BOUNDARY verifier with independent ledger checks;
+#. implement write final OP-BOUNDARY with independent ledger/history checks;
+#. implement cleanup final OP-BOUNDARY that **always** rechecks independent ledger/history
+   immediately before every possible effect start;
 #. implement secure staging/root adapter and atomic no-overwrite create;
 #. implement exact cleanup/no-effect receipt;
 #. implement receipt-aware reconciliation and ledger-safe terminal closure;
-#. integrate Phase 4 audit obligations, global/per-operation gates, lifecycle, and retained
-   result semantics;
+#. integrate Phase 4 audit obligations, gates, lifecycle, and retained-result semantics;
 #. bind existing MCP handlers without changing contracts;
-#. add all unit/property/integration/fault/restart/systemd tests, especially every
-   before-preparation history-corruption case;
+#. add all unit/property/integration/fault/restart/systemd tests, especially corruption
+   between cleanup admission and final boundary;
 #. extend real-Pi verification;
 #. run full candidate validation;
 #. activate write-probe only through evidence-selected host path;
@@ -1063,25 +1086,27 @@ This planning PR is accepted only when a reviewer can establish all of the follo
 * ``probe_path_ledger`` is an independent integrity anchor, not a cache derived from
   current rows;
 * path generation allocation uses ledger high-water, never surviving-row ``max()+1``;
-* never-seen/seen-path distinction is deterministic and race safe;
+* never-seen/seen-path distinction is deterministic/race-safe;
 * every terminal generation is retained, contiguous, immutable, and committed by exact
   count/digest;
-* maximum-row deletion, lower-row mutation/deletion/insertion, missing/corrupt anchor, and
-  orphaned provenance all fail closed even when damage precedes preparation;
-* write final canonicalization accepts only the exact prepared ledger -> exact consuming
-  self reservation transition and unchanged complete prior history;
+* maximum/lower-row corruption, missing/corrupt anchor, and orphaned provenance fail closed
+  even when damage precedes preparation;
+* write final canonicalization accepts only exact prepared ledger -> exact consuming self
+  reservation and unchanged complete prior history;
+* new cleanup preparation/admission applies only to live ``created`` artifact; already
+  terminal artifacts cannot create an authorised no-claim operation;
+* cleanup final verifier recomputes and compares complete prior terminal history + ledger
+  version/high-water/active ownership immediately before every possible unlink;
+* history/ledger corruption after cleanup admission therefore yields zero start/unlink;
 * cleanup observed absence does not fabricate file identity/effect knowledge;
-* present-bound cleanup secure absence is accepted only at final pre-start boundary as
-  exact no-effect branch;
-* cleanup claim canonicalization accepts only exact admission-owned NULL -> self CAS;
-* pre-start already-missing closure is representable without effect/remover provenance;
-* post-dispatch absence needs exact durable effect/no-effect evidence before claim/ledger
-  closure;
+* present-bound secure absence is accepted only at final pre-start boundary as exact
+  no-effect branch after full integrity revalidation;
+* post-dispatch absence needs exact durable effect/no-effect evidence before closure;
 * uncertain operations remain fail closed across restart;
 * one-artifact create/cleanup and crash reconciliation are deterministic;
 * real-host choices remain evidence-selected;
-* exact-head Contract Validation is green;
-* all actionable review threads are addressed/resolved.
+* exact-head Contract Validation/Python CI are green where configured;
+* all actionable review threads are individually addressed/resolved.
 
 28. Implementation-promotion checklist
 --------------------------------------
@@ -1092,14 +1117,14 @@ The capability may become live only when:
 * selected Phase 3 profile/evidence is reviewed/current;
 * real-Pi root/filesystem/systemd checks pass;
 * protected local policy grants only the selected controller profile;
-* automated tests prove no denied/pre-policy/audit-failed request can reserve/advance a
-  path;
-* automated tests prove independent ledger integrity before preparation, admission, final
-  boundary, terminalization, and restart;
-* automated tests explicitly cover deletion of maximum and lower historical rows **before
-  preparation**, after preparation, missing/corrupt ledger, generation-reuse attempt, and
-  restart mismatch with zero start;
-* automated tests prove exact-self write and cleanup canonical transitions only;
+* automated tests prove no denied/pre-policy/audit-failed request can reserve/advance path;
+* automated tests prove independent ledger integrity before preparation, admission,
+  **every final write/cleanup effect boundary**, terminalization, and restart;
+* tests cover maximum/lower history corruption before preparation and after admission,
+  missing/corrupt ledger, generation-reuse attempts, and restart mismatch with zero start;
+* tests prove terminal-artifact new cleanup is rejected before authorisation and prior
+  same-key cleanup retries return retained work;
+* tests prove exact-self write/cleanup canonical transitions only;
 * lost cleanup receipts cannot infer success/no-effect from absence;
 * all Phase 5 automated tests and existing quality/contract validation pass;
 * production composition adds no other effect adapter;
@@ -1144,8 +1169,9 @@ None changes local maximum effect or permits broader authority.
 
 This plan is complete when a coding agent can implement the disposable write probe,
 integrate it with Phase 4, preserve independent path-history integrity across crash/restart,
-test exact idempotency/audit/current-state/effect semantics, and execute the real-host
-evidence procedure without inventing unresolved host/device facts.
+revalidate that integrity immediately before **every** consequential filesystem start, test
+exact idempotency/audit/current-state/effect semantics, and execute the real-host evidence
+procedure without inventing unresolved host/device facts.
 
 Stop here. Do not add Phase 6 development-workspace operations, repository mutation,
 command execution, Git, privileged service/package control, hardware, or later-phase
