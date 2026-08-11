@@ -7,6 +7,7 @@ from dataclasses import dataclass, fields, is_dataclass
 from enum import StrEnum
 from typing import Generic, TypeAlias, TypeVar
 
+from binnacle.domain.controller import ControllerSecurityContext
 from binnacle.domain.system import SystemSection
 
 
@@ -33,6 +34,7 @@ class McpCallContext:
     revision: str
     era: ProtocolEra
     request_id: str
+    controller: ControllerSecurityContext | None = None
 
 
 @dataclass(frozen=True, slots=True)

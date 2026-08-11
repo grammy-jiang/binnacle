@@ -65,6 +65,7 @@ from binnacle.domain.mcp import (
     envelope_to_mapping,
 )
 from binnacle.domain.system import SystemSection
+from binnacle.security.controller import get_controller_context
 
 ASGIMessage: TypeAlias = MutableMapping[str, Any]
 ASGIReceive: TypeAlias = Callable[[], Awaitable[ASGIMessage]]
@@ -85,27 +86,36 @@ MAX_SESSION_IDLE_TIMEOUT_SECONDS = 1_800.0
 _LOGGER = structlog.get_logger(__name__)
 
 
+class _ControllerSessionMismatch(Exception):
+    """A valid legacy session is being presented by a different controller."""
+
+
 class _SessionRevisionCodec:
-    """Bind an SDK-owned session ID to its revision without shadow session state."""
+    """Bind an SDK-owned session ID to its revision and authenticated controller."""
 
     def __init__(self, secret: bytes) -> None:
         if len(secret) < 32:
             raise ValueError("session binding secret must contain at least 32 bytes")
         self._secret = secret
 
-    def encode(self, session_id: str, revision: str) -> str:
-        payload = f"{revision}\n{session_id}".encode("ascii")
+    def encode(
+        self,
+        session_id: str,
+        revision: str,
+        controller_id: str | None,
+    ) -> str:
+        payload = f"{revision}\n{controller_id or ''}\n{session_id}".encode("ascii")
         encoded_payload = base64.urlsafe_b64encode(payload).rstrip(b"=").decode("ascii")
         signature = hmac.digest(self._secret, payload, "sha256")
         encoded_signature = base64.urlsafe_b64encode(signature).rstrip(b"=").decode("ascii")
-        return f"b1.{encoded_payload}.{encoded_signature}"
+        return f"b2.{encoded_payload}.{encoded_signature}"
 
-    def decode(self, token: str) -> tuple[str, str] | None:
+    def decode(self, token: str) -> tuple[str, str, str | None] | None:
         if len(token) > 512:
             return None
         prefix, separator, remainder = token.partition(".")
         encoded_payload, second_separator, encoded_signature = remainder.partition(".")
-        if prefix != "b1" or not separator or not second_separator:
+        if prefix != "b2" or not separator or not second_separator:
             return None
         try:
             payload = self._decode_base64(encoded_payload)
@@ -115,16 +125,20 @@ class _SessionRevisionCodec:
             return None
         if not hmac.compare_digest(signature, hmac.digest(self._secret, payload, "sha256")):
             return None
-        revision, revision_separator, session_id = decoded.partition("\n")
+        revision, revision_separator, remainder = decoded.partition("\n")
+        controller_id, controller_separator, session_id = remainder.partition("\n")
         if (
             not revision_separator
+            or not controller_separator
             or revision not in LEGACY_REVISIONS
+            or len(controller_id) > 160
+            or any(not 0x21 <= ord(character) <= 0x7E for character in controller_id)
             or not session_id
             or len(session_id) > 256
             or any(not 0x21 <= ord(character) <= 0x7E for character in session_id)
         ):
             return None
-        return session_id, revision
+        return session_id, revision, controller_id or None
 
     @staticmethod
     def _decode_base64(value: str) -> bytes:
@@ -186,7 +200,11 @@ class RequestBodyLimitMiddleware:
             rejection = self._validate_transport_revision(scope)
             bound_revision: str | None = None
             if rejection is None:
-                bound_revision, rejection = self._unwrap_legacy_session(scope)
+                try:
+                    bound_revision, rejection = self._unwrap_legacy_session(scope)
+                except _ControllerSessionMismatch:
+                    await _send_http_error(send, 403, "controller_session_mismatch")
+                    return
             if rejection is not None:
                 code, data_code, error_message = rejection
                 await _send_jsonrpc_error(
@@ -308,10 +326,14 @@ class RequestBodyLimitMiddleware:
                 return
 
         initialize_revision = self._legacy_initialize_revision(parsed)
-        bound_revision, rejection = self._unwrap_legacy_session(
-            scope,
-            allow_missing=initialize_revision is not None,
-        )
+        try:
+            bound_revision, rejection = self._unwrap_legacy_session(
+                scope,
+                allow_missing=initialize_revision is not None,
+            )
+        except _ControllerSessionMismatch:
+            await _send_http_error(send, 403, "controller_session_mismatch")
+            return
         if rejection is not None:
             code, data_code, error_message = rejection
             await _send_jsonrpc_error(
@@ -421,7 +443,13 @@ class RequestBodyLimitMiddleware:
                 "protocol_header_mismatch",
                 "Mcp-Session-Id is not bound to a reviewed legacy session.",
             )
-        raw_session_id, bound_revision = decoded
+        raw_session_id, bound_revision, bound_controller_id = decoded
+        current_controller = get_controller_context()
+        current_controller_id = (
+            current_controller.identity.controller_id if current_controller is not None else None
+        )
+        if bound_controller_id != current_controller_id:
+            raise _ControllerSessionMismatch
         if header_version != bound_revision:
             return None, (
                 -32020,
@@ -452,9 +480,11 @@ class RequestBodyLimitMiddleware:
                 message["headers"] = [
                     (
                         name,
-                        self._session_codec.encode(value.decode("latin-1"), revision).encode(
-                            "ascii"
-                        ),
+                        self._session_codec.encode(
+                            value.decode("latin-1"),
+                            revision,
+                            _current_controller_id(),
+                        ).encode("ascii"),
                     )
                     if isinstance(name, bytes)
                     and isinstance(value, bytes)
@@ -651,6 +681,11 @@ async def _send_http_error(send: ASGISend, status: int, code: str) -> None:
     await send({"type": "http.response.body", "body": body})
 
 
+def _current_controller_id() -> str | None:
+    context = get_controller_context()
+    return context.identity.controller_id if context is not None else None
+
+
 async def _send_jsonrpc_error(
     send: ASGISend,
     *,
@@ -824,13 +859,23 @@ def _create_function_tool(
             revision=revision,
             era=era,
             request_id=f"req_{secrets.token_hex(16)}",
+            controller=get_controller_context(),
         )
+        log_fields: dict[str, object] = {
+            "request_id": context.request_id,
+            "tool_name": contract.name,
+            "contract_version": contract.contract_version,
+            "protocol_revision": revision,
+            "protocol_era": era.value,
+        }
+        if context.controller is not None:
+            log_fields.update(
+                controller_id=context.controller.identity.controller_id,
+                controller_profile_id=context.controller.identity.profile_id,
+                controller_profile_version=context.controller.profile_version,
+            )
         call_logger = _LOGGER.bind(
-            request_id=context.request_id,
-            tool_name=contract.name,
-            contract_version=contract.contract_version,
-            protocol_revision=revision,
-            protocol_era=era.value,
+            **log_fields,
         )
         call_logger.info("mcp_tool_call_started")
         try:
