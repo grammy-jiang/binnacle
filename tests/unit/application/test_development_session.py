@@ -716,6 +716,64 @@ async def test_activation_closure_converges_after_authority_reduction_wins() -> 
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize(
+    "target",
+    [DevelopmentSessionState.ENDED, DevelopmentSessionState.EXPIRED],
+)
+async def test_known_no_effect_closure_preserves_prior_terminal_reduction(
+    target: DevelopmentSessionState,
+) -> None:
+    repository = MemorySessionRepository()
+    _received, authorised, pending = await _reserve_pending(
+        repository,
+        session_id=f"dev_{target.value}_before_start",
+    )
+
+    async def read(session_id: str) -> DevelopmentSessionSnapshot | None:
+        return await repository.get_session(session_id)
+
+    gate = DevelopmentSessionAuthorityGate(session_reader=read, facts_reader=_facts_reader)
+    service = DevelopmentSessionService(repository=repository, authority_gate=gate)
+    terminal = await service.reduce_authority(
+        session_id=pending.session_id,
+        expected_state_version=pending.state_version,
+        target=target,
+        reason=f"{target.value}_before_activation",
+        terminal_at=NOW + timedelta(minutes=1),
+    )
+    failed = transition(
+        authorised,
+        TransitionRequest(
+            authorised.state_version,
+            OperationState.FAILED,
+            EffectKnowledge.KNOWN_NO_EFFECT,
+            "activation_authority_unavailable",
+            error=OperationError(
+                "authority_unavailable",
+                "Activation authority was reduced before dispatch.",
+            ),
+            occurred_at=NOW + timedelta(minutes=2),
+        ),
+    )
+
+    async def closure_verified(
+        _operation: OperationSnapshot,
+        _session: DevelopmentSessionSnapshot,
+    ) -> bool:
+        return True
+
+    await SessionActivationClosure(
+        service=service,
+        repository=repository,
+        closure_verifier=closure_verified,
+    ).close_retained(failed)
+    retained = await repository.require_session(pending.session_id)
+    assert retained == terminal
+    assert retained.activation_closure is ActivationClosure.PENDING
+    assert retained.activation_effect_reference is None
+
+
+@pytest.mark.anyio
 async def test_activation_boundary_rejects_foreign_or_malformed_request_without_effect() -> None:
     repository = MemorySessionRepository()
     boundary = SessionActivationEffectBoundary(repository, facts_reader=_facts_reader)

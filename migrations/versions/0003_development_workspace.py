@@ -406,9 +406,40 @@ def upgrade() -> None:
         """
         CREATE TRIGGER trg_terminal_development_session_immutable
         BEFORE UPDATE ON development_sessions
-        WHEN OLD.state IN ('ended','expired','revoked')
+        WHEN OLD.state IN ('ended','expired','revoked') AND (
+             NEW.session_id IS NOT OLD.session_id OR
+             NEW.begin_operation_id IS NOT OLD.begin_operation_id OR
+             NEW.state IS NOT OLD.state OR
+             NEW.controller_id IS NOT OLD.controller_id OR
+             NEW.controller_epoch IS NOT OLD.controller_epoch OR
+             NEW.device_id IS NOT OLD.device_id OR
+             NEW.device_epoch IS NOT OLD.device_epoch OR
+             NEW.workspace_id IS NOT OLD.workspace_id OR
+             NEW.workspace_profile_sha256 IS NOT OLD.workspace_profile_sha256 OR
+             NEW.workspace_root_identity_sha256 IS NOT OLD.workspace_root_identity_sha256 OR
+             NEW.workspace_mount_identity_sha256 IS NOT OLD.workspace_mount_identity_sha256 OR
+             NEW.policy_version IS NOT OLD.policy_version OR
+             NEW.contract_profile_sha256 IS NOT OLD.contract_profile_sha256 OR
+             NEW.objective_sha256 IS NOT OLD.objective_sha256 OR
+             NEW.created_at IS NOT OLD.created_at OR
+             NEW.expires_at IS NOT OLD.expires_at OR
+             NEW.trusted_time_generation IS NOT OLD.trusted_time_generation OR
+             NEW.activation_boot_id_digest IS NOT OLD.activation_boot_id_digest OR
+             NEW.monotonic_deadline_ns IS NOT OLD.monotonic_deadline_ns OR
+             NEW.started_at IS NOT OLD.started_at OR
+             NEW.terminal_at IS NOT OLD.terminal_at OR
+             NEW.terminal_reason IS NOT OLD.terminal_reason OR
+             NEW.activation_effect_reference IS NOT OLD.activation_effect_reference OR
+             NEW.activation_effect_reference_sha256
+                 IS NOT OLD.activation_effect_reference_sha256 OR
+             OLD.activation_closure != 'pending' OR
+             NEW.activation_closure != 'complete' OR
+             NEW.activation_closure_version != OLD.activation_closure_version + 1 OR
+             NEW.state_version != OLD.state_version + 1 OR
+             NEW.updated_at < OLD.updated_at
+        )
         BEGIN
-            SELECT RAISE(ABORT, 'terminal development session is immutable');
+            SELECT RAISE(ABORT, 'terminal development session authority is immutable');
         END
         """
     )

@@ -391,7 +391,18 @@ class SessionActivationClosure:
             operation.terminality is Terminality.TERMINAL
             and operation.effect_knowledge is EffectKnowledge.KNOWN_NO_EFFECT
         ):
-            if session.state is DevelopmentSessionState.REVOKED:
+            if (
+                session.state
+                in {
+                    DevelopmentSessionState.ENDED,
+                    DevelopmentSessionState.EXPIRED,
+                    DevelopmentSessionState.REVOKED,
+                }
+                and session.started_at is None
+                and session.activation_effect_reference is None
+                and session.activation_effect_reference_sha256 is None
+                and session.activation_closure is ActivationClosure.PENDING
+            ):
                 return operation
             if session.state is not DevelopmentSessionState.PENDING:
                 raise DevelopmentSessionError(

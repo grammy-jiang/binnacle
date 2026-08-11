@@ -30,6 +30,7 @@ from binnacle.domain.development_session import (
 from binnacle.domain.idempotency import IdempotencyKeyMode, validate_and_digest_key
 from binnacle.domain.operation import (
     EffectKnowledge,
+    OperationError,
     OperationSnapshot,
     OperationState,
     TransitionRequest,
@@ -582,6 +583,147 @@ async def test_session_closure_reduction_and_workspace_operation_round_trip(
                     decision_id="policy-reused-begin",
                 )
             )
+
+
+@pytest.mark.anyio
+async def test_terminal_activation_closure_is_monotonic_and_exact_in_sqlite(
+    tmp_path: Path, repo_root: Path
+) -> None:
+    async with operation_runtime(tmp_path, repo_root) as (runtime, operations):
+        workspaces = SqliteWorkspaceRepository(runtime)
+        sessions = SqliteDevelopmentSessionRepository(runtime)
+        await workspaces.register_workspace(_registration())
+        authorised, pending = await _authorise_pending_session(
+            sessions,
+            operations,
+            key_byte="a",
+            session_id="dev_terminal_before_closure",
+        )
+        running = await operations.transition(
+            authorised.operation_id,
+            TransitionRequest(
+                authorised.state_version,
+                OperationState.RUNNING,
+                EffectKnowledge.NONE,
+                "dispatch_attempt_recorded",
+                occurred_at=pending.created_at + timedelta(seconds=1),
+            ),
+        )
+        reference = "activation-terminal-before-closure"
+        reference_digest = "7" * 64
+        active = await sessions.activate(
+            session_id=pending.session_id,
+            expected_state_version=pending.state_version,
+            effect_reference=reference,
+            effect_reference_sha256=reference_digest,
+            started_at=pending.created_at + timedelta(seconds=2),
+        )
+        succeeded = await operations.transition(
+            running.operation_id,
+            TransitionRequest(
+                running.state_version,
+                OperationState.SUCCEEDED,
+                EffectKnowledge.KNOWN_EFFECT,
+                "development_session_activated",
+                effect_reference=reference,
+                effect_reference_digest=reference_digest,
+                occurred_at=pending.created_at + timedelta(seconds=3),
+            ),
+        )
+        assert await operations.get_transition_audit_context(
+            succeeded.operation_id,
+            succeeded.state_version,
+        ) == (OperationState.RUNNING, "development_session_activated")
+        ended = await sessions.reduce(
+            session_id=active.session_id,
+            expected_state_version=active.state_version,
+            target=DevelopmentSessionState.ENDED,
+            reason="owner_end_won",
+            terminal_at=pending.created_at + timedelta(seconds=5),
+        )
+
+        closed = await sessions.complete_activation(
+            session_id=ended.session_id,
+            expected_state_version=ended.state_version,
+            closed_at=succeeded.terminal_at or succeeded.updated_at,
+        )
+
+        assert closed.state is DevelopmentSessionState.ENDED
+        assert closed.activation_closure is ActivationClosure.COMPLETE
+        assert closed.state_version == ended.state_version + 1
+        assert closed.terminal_at == ended.terminal_at
+        await sessions.verify_integrity()
+
+        async with runtime.engine.connect() as connection:
+            with pytest.raises(IntegrityError, match="authority is immutable"):
+                await connection.execute(
+                    text(
+                        "UPDATE development_sessions SET terminal_reason='tampered' "
+                        "WHERE session_id='dev_terminal_before_closure'"
+                    )
+                )
+            await connection.rollback()
+
+
+@pytest.mark.anyio
+async def test_activation_closure_scan_excludes_terminal_never_started_history(
+    tmp_path: Path, repo_root: Path
+) -> None:
+    async with operation_runtime(tmp_path, repo_root) as (runtime, operations):
+        workspaces = SqliteWorkspaceRepository(runtime)
+        sessions = SqliteDevelopmentSessionRepository(runtime)
+        await workspaces.register_workspace(_registration())
+        for key_byte, target in (
+            ("1", DevelopmentSessionState.ENDED),
+            ("2", DevelopmentSessionState.EXPIRED),
+            ("3", DevelopmentSessionState.REVOKED),
+        ):
+            authorised, pending = await _authorise_pending_session(
+                sessions,
+                operations,
+                key_byte=key_byte,
+                session_id=f"dev_historical_{target.value}",
+            )
+            await sessions.reduce(
+                session_id=pending.session_id,
+                expected_state_version=pending.state_version,
+                target=target,
+                reason=f"{target.value}_before_start",
+                terminal_at=pending.created_at + timedelta(seconds=1),
+            )
+            await operations.transition(
+                authorised.operation_id,
+                TransitionRequest(
+                    authorised.state_version,
+                    OperationState.FAILED,
+                    EffectKnowledge.KNOWN_NO_EFFECT,
+                    "activation_authority_unavailable",
+                    error=OperationError(
+                        "authority_unavailable",
+                        "Activation authority was reduced before dispatch.",
+                    ),
+                    occurred_at=pending.created_at + timedelta(seconds=2),
+                ),
+            )
+
+        _authorised, actionable = await _authorise_pending_session(
+            sessions,
+            operations,
+            key_byte="4",
+            session_id="dev_actionable_pending",
+        )
+        page = await sessions.list_activation_closures(limit=1)
+
+        assert tuple(item.session_id for item in page) == (actionable.session_id,)
+        assert (
+            await sessions.list_activation_closures(
+                limit=1,
+                after_created_at=page[-1].created_at,
+                after_session_id=page[-1].session_id,
+            )
+            == ()
+        )
+        await sessions.verify_integrity()
 
 
 @pytest.mark.anyio

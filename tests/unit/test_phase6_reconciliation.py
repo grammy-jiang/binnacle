@@ -54,6 +54,7 @@ DIGEST = "a" * 64
 class MemoryOperations:
     def __init__(self, *operations: OperationSnapshot) -> None:
         self.operations = {item.operation_id: item for item in operations}
+        self.audit_contexts: dict[tuple[str, int], tuple[OperationState, str]] = {}
         self.tail = AuditTail(0, None)
         self.latched = False
 
@@ -68,7 +69,18 @@ class MemoryOperations:
         current = self.operations[operation_id]
         desired = transition(current, request)
         self.operations[operation_id] = desired
+        self.audit_contexts[(operation_id, desired.state_version)] = (
+            current.state,
+            request.reason_code,
+        )
         return desired
+
+    async def get_transition_audit_context(
+        self,
+        operation_id: str,
+        state_version: int,
+    ) -> tuple[OperationState, str] | None:
+        return self.audit_contexts.get((operation_id, state_version))
 
     async def update_audit_tail_cache(self, tail: AuditTail) -> None:
         self.tail = tail
@@ -136,6 +148,10 @@ class MemorySessions:
         if (
             after_session_id is not None
             or self.session.activation_closure is ActivationClosure.COMPLETE
+            or (
+                self.session.state is not DevelopmentSessionState.PENDING
+                and self.session.activation_effect_reference is None
+            )
         ):
             return ()
         return (self.session,)
@@ -465,22 +481,37 @@ async def test_restart_releases_only_audited_terminal_workspace_fence() -> None:
 
 
 @pytest.mark.anyio
-async def test_open_obligation_retains_activation_and_fails_startup_closed() -> None:
+async def test_exact_activation_truth_precedes_obligation_recovery_and_closure() -> None:
     running = _running("op_session_obligation", "development_session_begin")
     sessions = MemorySessions(_active_session(running.operation_id))
     marker = AuditObligation("1", "obl_fixture", running.operation_id, running.state_version)
+    audit = MemoryAudit()
+    obligations = MemoryObligations(marker)
     reconciler, operations = _reconciler(
         operation=running,
         sessions=sessions,
         workspaces=MemoryWorkspaces(),
-        audit=MemoryAudit(),
-        obligations=MemoryObligations(marker),
+        audit=audit,
+        obligations=obligations,
     )
 
     with pytest.raises(Phase6ReconciliationError, match="obligation"):
         await reconciler.reconcile(running)
-    assert operations.operations[running.operation_id] == running
+    classified = operations.operations[running.operation_id]
+    assert classified.state is OperationState.SUCCEEDED
+    assert classified.effect_knowledge is EffectKnowledge.KNOWN_EFFECT
+    assert classified.effect_reference == sessions.session.activation_effect_reference
     assert sessions.session.activation_closure is ActivationClosure.PENDING
+
+    # Exact-generation recovery validates this durable known-effect truth before
+    # removing the marker.  Model that completed owner action, then prove the next
+    # restart closes the retained authority exactly once.
+    obligations.markers = ()
+    assert await reconciler.reconcile_terminal_closures() == (classified,)
+    closed_session = await sessions.get_session(sessions.session.session_id)
+    assert closed_session is not None
+    assert closed_session.activation_closure is ActivationClosure.COMPLETE
+    assert await reconciler.reconcile_terminal_closures() == ()
 
 
 @pytest.mark.anyio
@@ -636,7 +667,7 @@ async def test_unknown_family_and_missing_terminal_evidence_fail_closed() -> Non
         audit=MemoryAudit(),
         obligations=MemoryObligations(),
     )
-    with pytest.raises(Phase6ReconciliationError, match="evidence"):
+    with pytest.raises(Phase6ReconciliationError, match="audit context"):
         await missing.reconcile_terminal_closures()
     assert workspaces.fence.active_operation_id == succeeded.operation_id
 
@@ -659,6 +690,18 @@ async def test_restart_audit_failure_latches_and_retains_authority() -> None:
     assert operations.latched
     assert audit.emergency_count == 1
     assert sessions.session.state is DevelopmentSessionState.PENDING
+
+    # Model the explicit generation recovery that makes the main journal healthy
+    # again.  The terminal-closure retry must reconstruct the exact missing state
+    # event from durable transition history before releasing authority.
+    operations.latched = False
+    audit.fail_append = False
+    failed = operations.operations[authorised.operation_id]
+    assert await reconciler.reconcile_terminal_closures() == (failed,)
+    revoked_session = await sessions.get_session(sessions.session.session_id)
+    assert revoked_session is not None
+    assert revoked_session.state is DevelopmentSessionState.REVOKED
+    assert await reconciler.reconcile_terminal_closures() == ()
 
 
 @pytest.mark.anyio

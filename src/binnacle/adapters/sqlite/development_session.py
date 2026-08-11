@@ -215,8 +215,23 @@ class SqliteDevelopmentSessionRepository:
             try:
                 model = await self._require_model(session, session_id)
                 current = self._snapshot(model)
+                persisted_updated_at = _utc(model.updated_at)
+                if persisted_updated_at is None:
+                    raise DevelopmentSessionStoreError("development session update time is absent")
+                effective_closed_at = max(
+                    value
+                    for value in (
+                        closed_at,
+                        current.created_at,
+                        persisted_updated_at,
+                        current.started_at,
+                        current.terminal_at,
+                    )
+                    if value is not None
+                )
                 desired = complete_activation(
-                    current, expected_state_version=expected_state_version
+                    current,
+                    expected_state_version=expected_state_version,
                 )
                 result = await session.execute(
                     update(DevelopmentSessionModel)
@@ -240,7 +255,7 @@ class SqliteDevelopmentSessionRepository:
                         state_version=desired.state_version,
                         activation_closure=desired.activation_closure.value,
                         activation_closure_version=desired.activation_closure_version,
-                        updated_at=closed_at,
+                        updated_at=effective_closed_at,
                     )
                 )
                 self._require_one_row(result, "activation closure lost its exact version")
@@ -343,7 +358,11 @@ class SqliteDevelopmentSessionRepository:
         if (after_created_at is None) != (after_session_id is None):
             raise DevelopmentSessionStoreError("session closure cursor must contain both fields")
         statement = select(DevelopmentSessionModel).where(
-            DevelopmentSessionModel.activation_closure == ActivationClosure.PENDING.value
+            DevelopmentSessionModel.activation_closure == ActivationClosure.PENDING.value,
+            or_(
+                DevelopmentSessionModel.state == DevelopmentSessionState.PENDING.value,
+                DevelopmentSessionModel.activation_effect_reference.is_not(None),
+            ),
         )
         if after_created_at is not None and after_session_id is not None:
             statement = statement.where(

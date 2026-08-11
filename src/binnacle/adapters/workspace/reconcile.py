@@ -39,6 +39,12 @@ class Phase6ReconciliationStore(OperationStore, Protocol):
 
     async def latch_audit_failure(self, reason_code: str) -> int: ...
 
+    async def get_transition_audit_context(
+        self,
+        operation_id: str,
+        state_version: int,
+    ) -> tuple[OperationState, str] | None: ...
+
 
 class Phase6OperationReconciler:
     """Reconcile exact activation/fence truth before either workspace mode opens."""
@@ -94,11 +100,14 @@ class Phase6OperationReconciler:
                 ),
             )
         elif operation.state in {OperationState.RUNNING, OperationState.UNCERTAIN}:
-            await self._require_runtime_ready(operation)
             if (
                 session.activation_effect_reference is not None
                 and session.activation_effect_reference_sha256 is not None
             ):
+                # This exact retained domain receipt is the effect truth needed by
+                # AuditRecoveryService to close a surviving post-effect obligation.
+                # Persist it even while global admission remains latched; closure
+                # below still requires the marker/generation recovery to finish.
                 operation = await self._transition_with_audit(
                     operation,
                     to_state=OperationState.SUCCEEDED,
@@ -107,18 +116,20 @@ class Phase6OperationReconciler:
                     effect_reference=session.activation_effect_reference,
                     effect_reference_digest=session.activation_effect_reference_sha256,
                 )
-            elif operation.state is OperationState.RUNNING:
-                operation = await self._transition_with_audit(
-                    operation,
-                    to_state=OperationState.UNCERTAIN,
-                    effect_knowledge=EffectKnowledge.UNCERTAIN,
-                    reason_code="session_activation_receipt_unavailable",
-                    error=OperationError(
-                        "operation_uncertain",
-                        "Session activation start cannot be proven after restart.",
-                        "reconcile",
-                    ),
-                )
+            else:
+                await self._require_runtime_ready(operation)
+                if operation.state is OperationState.RUNNING:
+                    operation = await self._transition_with_audit(
+                        operation,
+                        to_state=OperationState.UNCERTAIN,
+                        effect_knowledge=EffectKnowledge.UNCERTAIN,
+                        reason_code="session_activation_receipt_unavailable",
+                        error=OperationError(
+                            "operation_uncertain",
+                            "Session activation start cannot be proven after restart.",
+                            "reconcile",
+                        ),
+                    )
         if self._is_closable(operation):
             await self._require_closure_evidence(operation)
             return await self._session_closure.close_retained(operation)
@@ -230,14 +241,19 @@ class Phase6OperationReconciler:
                 occurred_at=datetime.now(UTC),
             ),
         )
-        await self._ensure_state_audit(transitioned, old_state=operation.state)
+        await self._ensure_state_audit(
+            transitioned,
+            old_state=operation.state,
+            reason_code=reason_code,
+        )
         return transitioned
 
     async def _ensure_state_audit(
         self,
         operation: OperationSnapshot,
         *,
-        old_state: OperationState,
+        old_state: OperationState | None = None,
+        reason_code: str | None = None,
     ) -> None:
         existing = await self._audit.find_operation_state_evidence(
             operation_id=operation.operation_id,
@@ -247,6 +263,16 @@ class Phase6OperationReconciler:
         )
         if existing is not None:
             return
+        if old_state is None or reason_code is None:
+            context = await self._operations.get_transition_audit_context(
+                operation.operation_id,
+                operation.state_version,
+            )
+            if context is None:
+                raise Phase6ReconciliationError(
+                    "Phase 6 operation transition audit context is unavailable"
+                )
+            old_state, reason_code = context
         draft = AuditEventDraft(
             event_id=f"event_{secrets.token_hex(16)}",
             recorded_at=datetime.now(UTC),
@@ -262,7 +288,7 @@ class Phase6OperationReconciler:
                 "state_version": operation.state_version,
                 "effect_knowledge": operation.effect_knowledge.value,
                 "result_digest": operation.effect_reference_digest,
-                "reason_code": "restart_reconciliation",
+                "reason_code": reason_code,
             },
         )
         try:
@@ -300,6 +326,14 @@ class Phase6OperationReconciler:
             state=operation.state.value,
             effect_knowledge=operation.effect_knowledge.value,
         )
+        if evidence is None:
+            await self._ensure_state_audit(operation)
+            evidence = await self._audit.find_operation_state_evidence(
+                operation_id=operation.operation_id,
+                state_version=operation.state_version,
+                state=operation.state.value,
+                effect_knowledge=operation.effect_knowledge.value,
+            )
         if evidence is None:
             raise Phase6ReconciliationError("Phase 6 operation audit evidence is unavailable")
 
