@@ -1,5 +1,7 @@
 """Shared test fixtures for the executable skeleton."""
 
+from pathlib import Path
+
 import pytest
 
 from binnacle.application import BinnacleApplication, CompatibilityUseCases
@@ -88,6 +90,13 @@ def anyio_backend() -> str:
     """Exercise async tests on the supported standard asyncio backend."""
 
     return "asyncio"
+
+
+@pytest.fixture
+def repo_root() -> Path:
+    """Return the checked-out repository root for frozen-source tests."""
+
+    return Path(__file__).resolve().parents[1]
 
 
 @pytest.fixture

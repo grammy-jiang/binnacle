@@ -579,3 +579,6 @@ $RECYCLE.BIN/
 *.lnk
 
 # End of https://www.toptal.com/developers/gitignore/api/git,macos,linux,windows,vim,emacs,visualstudiocode,node,python,direnv,jetbrains+all
+
+# Local or Pi-staged MCP evaluation evidence is reviewed and distributed separately.
+/artifacts/mcp-evaluation/

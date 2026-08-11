@@ -1,0 +1,33 @@
+[Unit]
+Description=Binnacle development MCP server
+Documentation=https://github.com/grammy-jiang/binnacle/tree/master/docs/operations
+After=network-online.target
+Wants=network-online.target
+ConditionPathIsDirectory=/srv/binnacle-dev/repo
+
+[Service]
+Type=simple
+User=binnacle
+Group=binnacle
+SupplementaryGroups=binnacle-dev
+WorkingDirectory=/srv/binnacle-dev/repo
+ExecStart=/srv/binnacle-dev/repo/.venv/bin/binnacle serve --config /etc/binnacle/dev.toml
+Restart=on-failure
+RestartSec=2s
+UMask=0077
+RuntimeDirectory=binnacle
+RuntimeDirectoryMode=0700
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+[Install]
+WantedBy=multi-user.target

@@ -81,7 +81,11 @@ jobs:
         run: uv run ruff format --check .
 
       - name: Type-check Python
-        run: uv run mypy src/binnacle tests
+        run: >-
+          uv run mypy src/binnacle tests
+          scripts/mcp_evaluation.py
+          scripts/setup_dev_pi.py
+          scripts/verify_dev_pi.py
 
       - name: Enforce import boundaries
         run: uv run lint-imports
@@ -100,6 +104,12 @@ jobs:
 
       - name: Validate representative schema instances
         run: uv run python scripts/validate_schema_instances.py
+
+      - name: Validate operational CLI entry points
+        run: |
+          uv run python scripts/mcp_evaluation.py --help
+          uv run python scripts/setup_dev_pi.py --help
+          uv run python scripts/verify_dev_pi.py --help
 
       - name: Validate repository and documentation hygiene
         run: uv run pre-commit run --all-files

@@ -82,7 +82,13 @@ line-ending = "lf"
 [tool.mypy]
 python_version = "3.11"
 strict = true
-files = ["src/binnacle", "tests"]
+files = [
+  "src/binnacle",
+  "tests",
+  "scripts/mcp_evaluation.py",
+  "scripts/setup_dev_pi.py",
+  "scripts/verify_dev_pi.py",
+]
 
 [tool.pytest.ini_options]
 addopts = [
@@ -124,6 +130,8 @@ forbidden_modules = [
   "binnacle.config",
   "binnacle.logging",
   "binnacle.contracts",
+  "binnacle.evaluation",
+  "binnacle.security",
   "fastmcp",
   "mcp",
   "pydantic",
@@ -147,6 +155,8 @@ forbidden_modules = [
   "binnacle.config",
   "binnacle.contracts",
   "binnacle.logging",
+  "binnacle.evaluation",
+  "binnacle.security",
   "fastmcp",
   "jsonschema",
   "mcp",
@@ -170,6 +180,8 @@ forbidden_modules = [
   "binnacle.composition",
   "binnacle.config",
   "binnacle.logging",
+  "binnacle.evaluation",
+  "binnacle.security",
   "fastmcp",
   "mcp",
   "pydantic",
@@ -232,7 +244,56 @@ forbidden_modules = [
   "binnacle.cli",
   "binnacle.composition",
   "binnacle.config",
+  "binnacle.evaluation",
   "binnacle.logging",
+]
+
+[[tool.importlinter.contracts]]
+name = "Controller security stays outside delivery and application"
+type = "forbidden"
+source_modules = ["binnacle.security"]
+forbidden_modules = [
+  "binnacle.adapters",
+  "binnacle.application",
+  "binnacle.bootstrap",
+  "binnacle.cli",
+  "binnacle.composition",
+  "binnacle.config",
+  "binnacle.contracts",
+  "binnacle.evaluation",
+  "binnacle.logging",
+  "fastmcp",
+  "mcp",
+  "rich",
+  "structlog",
+  "typer",
+  "uvicorn",
+]
+
+[[tool.importlinter.contracts]]
+name = "Evaluation tooling stays outside runtime and delivery"
+type = "forbidden"
+source_modules = ["binnacle.evaluation"]
+forbidden_modules = [
+  "binnacle.adapters",
+  "binnacle.application",
+  "binnacle.bootstrap",
+  "binnacle.cli",
+  "binnacle.composition",
+  "binnacle.config",
+  "binnacle.contracts",
+  "binnacle.domain",
+  "binnacle.logging",
+  "binnacle.ports",
+  "binnacle.security",
+  "fastmcp",
+  "mcp",
+  "pydantic_settings",
+  "rich",
+  "starlette",
+  "structlog",
+  "typer",
+  "uvicorn",
 ]
 
 [[tool.importlinter.contracts]]
@@ -264,11 +325,14 @@ dependency_groups = test, quality, contracts
 commands =
     ruff check .
     ruff format --check .
-    mypy src/binnacle tests
+    mypy src/binnacle tests scripts/mcp_evaluation.py scripts/setup_dev_pi.py scripts/verify_dev_pi.py
     lint-imports
     pip-audit
     rstcheck --recursive docs
     python scripts/compile_mcp_registry.py --check
     python scripts/validate_contracts.py
     python scripts/validate_schema_instances.py
+    python scripts/mcp_evaluation.py --help
+    python scripts/setup_dev_pi.py --help
+    python scripts/verify_dev_pi.py --help
 """
