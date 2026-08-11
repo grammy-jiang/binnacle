@@ -23,6 +23,11 @@
         "summary": "No real ChatGPT host evidence has been recorded."
       },
       {
+        "axis": "write_discovery_and_metadata",
+        "status": "server-not-implemented",
+        "summary": "The required consequential server capability is absent in Phase 2."
+      },
+      {
         "axis": "tool_selection",
         "status": "not-tested",
         "summary": "No real ChatGPT host evidence has been recorded."
@@ -54,6 +59,16 @@
       },
       {
         "axis": "retry_safety",
+        "status": "server-not-implemented",
+        "summary": "The required consequential server capability is absent in Phase 2."
+      },
+      {
+        "axis": "write_reconnect",
+        "status": "server-not-implemented",
+        "summary": "The required consequential server capability is absent in Phase 2."
+      },
+      {
+        "axis": "probe_workspace_integrity",
         "status": "server-not-implemented",
         "summary": "The required consequential server capability is absent in Phase 2."
       },
@@ -104,9 +119,9 @@
       }
     ],
     "observed_protocol_revision": null,
-    "profile_version": "1.1.0"
+    "profile_version": "1.2.0"
   },
-  "evaluation_profile_version": "1.1.0",
+  "evaluation_profile_version": "1.2.0",
   "registry_format": "binnacle-compatibility-core-v1",
   "revision_contract_sha256": "8207b7e9ea90aec37ec3bd6f2c0e688fcc0a928d234c4fee1f22a270ae787bd0",
   "revision_eras": {

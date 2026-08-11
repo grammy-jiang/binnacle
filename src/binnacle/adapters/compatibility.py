@@ -23,7 +23,7 @@ def compute_build_identity(*, version: str) -> BuildIdentity:
     paths.extend(
         sorted(
             path
-            for path in (package_root / "_generated").glob("compatibility_core_registry*.json")
+            for path in (package_root / "_generated").glob("compatibility_*_registry*.json")
             if path.is_file()
         )
     )

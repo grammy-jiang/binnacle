@@ -116,7 +116,7 @@ jobs:
           uv run binnacle kernel --help
           uv run binnacle audit --help
 
-      - name: Exercise isolated Phase 4 migration and read-only verification
+      - name: Exercise isolated Phase 5 migration and read-only verification
         run: uv run python scripts/verify_operation_kernel.py --temporary --output json
 
       - name: Validate repository and documentation hygiene

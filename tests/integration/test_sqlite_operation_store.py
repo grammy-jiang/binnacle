@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import secrets
+from dataclasses import replace
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
@@ -40,6 +41,7 @@ from binnacle.domain.policy import PolicyDecision, PolicyDecisionValue
 from binnacle.domain.trusted_time import DeadlineStatus, TrustedTimeSnapshot
 from binnacle.ports.operation_store import (
     CreateOrFindRequest,
+    PreparedExecutionAdmission,
     PreparedNonceRegistration,
 )
 
@@ -506,3 +508,143 @@ async def test_valid_prepared_nonce_attaches_once_and_later_expiry_returns_retai
         assert later.operation is not None
         assert first.operation is not None
         assert later.operation.operation_id == first.operation.operation_id
+
+
+@pytest.mark.anyio
+async def test_dual_key_prepared_admission_is_caller_first_and_fail_closed(
+    tmp_path: Path, repo_root: Path
+) -> None:
+    async with operation_runtime(tmp_path, repo_root) as (_, store):
+
+        async def register(
+            *,
+            controller: OperationOwner | None = None,
+            fingerprint: str = "a" * 64,
+        ) -> tuple[IdempotencyKey, str]:
+            prepared_key = _key(IdempotencyKeyMode.PREPARED_EXECUTION_NONCE)
+            prepared_operation_id = f"prepared-{secrets.token_hex(4)}"
+            await store.register_prepared_execution_nonce(
+                PreparedNonceRegistration(
+                    prepared_key,
+                    controller or owner(),
+                    "device-fixture",
+                    1,
+                    "internal.synthetic",
+                    "1.0.0",
+                    fingerprint,
+                    prepared_operation_id,
+                    "1" * 64,
+                    NOW + timedelta(minutes=5),
+                    "2" * 64,
+                    "3" * 64,
+                    100,
+                    "d" * 64,
+                    "e" * 64,
+                )
+            )
+            return prepared_key, prepared_operation_id
+
+        def caller(
+            *,
+            controller: OperationOwner | None = None,
+            fingerprint: str = "a" * 64,
+            deadline: DeadlineStatus = DeadlineStatus.VALID,
+            prepared_operation_id: str,
+            prepared_input_sha256: str = "1" * 64,
+            verified_state: str = "2" * 64,
+        ) -> CreateOrFindRequest:
+            return _request(
+                _key(IdempotencyKeyMode.CALLER_KEY),
+                controller=controller,
+                fingerprint=fingerprint,
+                prepared_operation_id=prepared_operation_id,
+                prepared_input_sha256=prepared_input_sha256,
+                prepared_state_binding_sha256="2" * 64,
+                prepared_deadline_status=deadline,
+                verified_prepared_state_binding_sha256=verified_state,
+            )
+
+        missing = caller(prepared_operation_id="prepared-missing")
+        assert (
+            await store.create_or_find_prepared(
+                PreparedExecutionAdmission(
+                    missing,
+                    _key(IdempotencyKeyMode.PREPARED_EXECUTION_NONCE),
+                )
+            )
+        ).outcome is IdempotencyOutcome.PREPARED_MISMATCH
+
+        wrong_owner_key, wrong_owner_prepared_id = await register()
+        wrong_owner = caller(
+            controller=owner("replacement"),
+            prepared_operation_id=wrong_owner_prepared_id,
+        )
+        assert (
+            await store.create_or_find_prepared(
+                PreparedExecutionAdmission(wrong_owner, wrong_owner_key)
+            )
+        ).outcome is IdempotencyOutcome.OWNER_MISMATCH
+
+        async def outcome_for(
+            *,
+            deadline: DeadlineStatus = DeadlineStatus.VALID,
+            fingerprint: str = "a" * 64,
+            prepared_input: str = "1" * 64,
+            verified_state: str = "2" * 64,
+        ) -> IdempotencyOutcome:
+            prepared_key, prepared_operation_id = await register()
+            request = caller(
+                fingerprint=fingerprint,
+                deadline=deadline,
+                prepared_operation_id=prepared_operation_id,
+                prepared_input_sha256=prepared_input,
+                verified_state=verified_state,
+            )
+            return (
+                await store.create_or_find_prepared(
+                    PreparedExecutionAdmission(request, prepared_key)
+                )
+            ).outcome
+
+        assert await outcome_for(deadline=DeadlineStatus.EXPIRED) is (
+            IdempotencyOutcome.PREPARED_EXPIRED
+        )
+        assert await outcome_for(deadline=DeadlineStatus.UNAVAILABLE) is (
+            IdempotencyOutcome.TRUSTED_TIME_UNAVAILABLE
+        )
+        assert await outcome_for(fingerprint="9" * 64) is IdempotencyOutcome.CONFLICT
+        assert await outcome_for(prepared_input="8" * 64) is (IdempotencyOutcome.PREPARED_MISMATCH)
+        assert await outcome_for(verified_state="7" * 64) is (IdempotencyOutcome.PREPARED_MISMATCH)
+
+        prepared_key, prepared_operation_id = await register()
+        first_request = caller(prepared_operation_id=prepared_operation_id)
+        first = await store.create_or_find_prepared(
+            PreparedExecutionAdmission(first_request, prepared_key)
+        )
+        assert first.outcome is IdempotencyOutcome.CREATED
+        retained = await store.create_or_find_prepared(
+            PreparedExecutionAdmission(
+                replace(first_request, prepared_deadline_status=DeadlineStatus.EXPIRED),
+                prepared_key,
+            )
+        )
+        assert retained.outcome is IdempotencyOutcome.RETAINED_OPERATION
+
+        second_caller = caller(prepared_operation_id=prepared_operation_id)
+        assert (
+            await store.create_or_find_prepared(
+                PreparedExecutionAdmission(second_caller, prepared_key)
+            )
+        ).outcome is IdempotencyOutcome.CONFLICT
+
+        with pytest.raises(OperationStoreError, match="caller-key"):
+            await store.create_or_find_prepared(
+                PreparedExecutionAdmission(
+                    replace(first_request, key=prepared_key),
+                    prepared_key,
+                )
+            )
+        with pytest.raises(OperationStoreError, match="prepared-nonce"):
+            await store.create_or_find_prepared(
+                PreparedExecutionAdmission(first_request, first_request.key)
+            )

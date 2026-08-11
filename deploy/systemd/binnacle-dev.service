@@ -21,6 +21,7 @@ RuntimeDirectoryPreserve=yes
 ReadWritePaths=/var/lib/binnacle/state
 ReadWritePaths=/var/lib/binnacle/results
 ReadWritePaths=/var/lib/binnacle/audit
+ReadWritePaths=/var/lib/binnacle/probe-workspace
 NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=strict

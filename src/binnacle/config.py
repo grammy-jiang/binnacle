@@ -91,6 +91,23 @@ class PayloadSettings(BaseModel):
         return self
 
 
+class ProbeWorkspaceSettings(BaseModel):
+    """Protected, default-disabled Phase 5 probe-workspace settings."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    enabled: bool = False
+    root: Path = Path("/var/lib/binnacle/probe-workspace")
+    max_file_bytes: int = Field(default=65_536, ge=1, le=65_536)
+    preparation_ttl_seconds: int = Field(default=300, ge=30, le=900)
+
+    @model_validator(mode="after")
+    def _fixed_root(self) -> ProbeWorkspaceSettings:
+        if self.root != Path("/var/lib/binnacle/probe-workspace"):
+            raise ValueError("probe workspace root is fixed by the protected deployment profile")
+        return self
+
+
 class BinnacleSettings(BaseSettings):
     """Immutable settings snapshot for the executable skeleton."""
 
@@ -107,6 +124,7 @@ class BinnacleSettings(BaseSettings):
     database: DatabaseSettings = Field(default_factory=DatabaseSettings)
     audit: AuditSettings = Field(default_factory=AuditSettings)
     payload: PayloadSettings = Field(default_factory=PayloadSettings)
+    probe_workspace: ProbeWorkspaceSettings = Field(default_factory=ProbeWorkspaceSettings)
 
     @classmethod
     def settings_customise_sources(

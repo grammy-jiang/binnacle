@@ -72,25 +72,44 @@ def _run(repo_root: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-def _initialize(repo_root: Path, tmp_path: Path) -> Path:
+def _initialization_inputs(
+    repo_root: Path,
+    tmp_path: Path,
+    *,
+    catalogue_phase: str,
+) -> tuple[Path, Path]:
     profile_path = tmp_path / "profile.json"
     profile_path.write_text(json.dumps(_profile_snapshot(repo_root)), encoding="utf-8")
     capability_path = tmp_path / "scope.json"
     capability_path.write_text(
         json.dumps(
             {
-                "catalogue_phase": "compatibility-core",
-                "implemented_tools": 5,
-                "write_tools": 0,
-                "durable_operations": False,
+                "catalogue_phase": catalogue_phase,
+                "implemented_tools": 8 if catalogue_phase == "compatibility-write-probe" else 5,
+                "write_tools": 3 if catalogue_phase == "compatibility-write-probe" else 0,
+                "durable_operations": catalogue_phase == "compatibility-write-probe",
                 "second_binnacle_server": False,
             }
         ),
         encoding="utf-8",
     )
-    output = tmp_path / "evaluation"
-    result = _run(
+    return profile_path, capability_path
+
+
+def _initialize(
+    repo_root: Path,
+    tmp_path: Path,
+    *,
+    catalogue_phase: str = "compatibility-core",
+    probe_release: str | None = None,
+) -> Path:
+    profile_path, capability_path = _initialization_inputs(
         repo_root,
+        tmp_path,
+        catalogue_phase=catalogue_phase,
+    )
+    output = tmp_path / "evaluation"
+    arguments = [
         "init",
         "--output",
         str(output),
@@ -98,10 +117,100 @@ def _initialize(repo_root: Path, tmp_path: Path) -> Path:
         str(profile_path),
         "--capability-scope-json",
         str(capability_path),
-    )
+    ]
+    if probe_release is not None:
+        arguments.extend(("--probe-release", probe_release))
+    result = _run(repo_root, *arguments)
     assert result.returncode == 0, result.stderr
     assert json.loads(result.stdout)["status"] == "initialized"
     return output
+
+
+def test_init_defaults_to_the_reviewed_phase3_release_and_core_catalogue(
+    repo_root: Path,
+    tmp_path: Path,
+) -> None:
+    output = _initialize(repo_root, tmp_path)
+
+    working = json.loads((output / WORKING_MANIFEST_NAME).read_bytes())
+
+    assert working["probe"]["probe_release"] == "phase3-readonly-evaluation-v1"
+    assert working["evidence_files"][0]["evidence_id"] == "phase3-capability-scope"
+    assert working["evidence_files"][0]["path"] == "evidence/phase3-capability-scope.json"
+
+
+def test_init_selects_the_reviewed_phase5_release_and_write_probe_catalogue(
+    repo_root: Path,
+    tmp_path: Path,
+) -> None:
+    output = _initialize(
+        repo_root,
+        tmp_path,
+        catalogue_phase="compatibility-write-probe",
+        probe_release="phase5-write-probe-evaluation-v1",
+    )
+
+    working = json.loads((output / WORKING_MANIFEST_NAME).read_bytes())
+    capability_scope = json.loads((output / "evidence/phase5-capability-scope.json").read_bytes())
+
+    assert working["probe"]["probe_release"] == "phase5-write-probe-evaluation-v1"
+    assert working["evidence_files"][0]["evidence_id"] == "phase5-capability-scope"
+    assert working["evidence_files"][0]["path"] == "evidence/phase5-capability-scope.json"
+    assert capability_scope["catalogue_phase"] == "compatibility-write-probe"
+
+
+def test_init_rejects_a_capability_scope_for_a_different_catalogue(
+    repo_root: Path,
+    tmp_path: Path,
+) -> None:
+    profile_path, capability_path = _initialization_inputs(
+        repo_root,
+        tmp_path,
+        catalogue_phase="compatibility-core",
+    )
+
+    result = _run(
+        repo_root,
+        "init",
+        "--output",
+        str(tmp_path / "evaluation"),
+        "--profile-json",
+        str(profile_path),
+        "--capability-scope-json",
+        str(capability_path),
+        "--probe-release",
+        "phase5-write-probe-evaluation-v1",
+    )
+
+    assert result.returncode == 2
+    assert "catalogue_phase does not match" in result.stderr
+
+
+def test_init_rejects_an_unreviewed_probe_release_at_the_cli_boundary(
+    repo_root: Path,
+    tmp_path: Path,
+) -> None:
+    profile_path, capability_path = _initialization_inputs(
+        repo_root,
+        tmp_path,
+        catalogue_phase="compatibility-core",
+    )
+
+    result = _run(
+        repo_root,
+        "init",
+        "--output",
+        str(tmp_path / "evaluation"),
+        "--profile-json",
+        str(profile_path),
+        "--capability-scope-json",
+        str(capability_path),
+        "--probe-release",
+        "invented-release",
+    )
+
+    assert result.returncode == 2
+    assert "invalid choice" in result.stderr
 
 
 def test_rejected_review_can_finalize_a_truthful_complete_bundle(

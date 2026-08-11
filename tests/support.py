@@ -10,7 +10,11 @@ import httpx2
 from fastmcp import Client
 from fastmcp.client.transports import StreamableHttpTransport
 
-from binnacle.adapters.mcp import RequestBodyLimitMiddleware, create_http_app
+from binnacle.adapters.mcp import (
+    OperationKernelFactory,
+    RequestBodyLimitMiddleware,
+    create_http_app,
+)
 from binnacle.application import BinnacleApplication
 
 
@@ -19,10 +23,14 @@ async def running_http_client(
     application: BinnacleApplication,
     *,
     mode: str = "2026-07-28",
+    operation_kernel_factory: OperationKernelFactory | None = None,
 ) -> AsyncIterator[Client[StreamableHttpTransport]]:
     """Connect the official client to the real ASGI app without a socket."""
 
-    app = create_http_app(application)
+    app = create_http_app(
+        application,
+        operation_kernel_factory=operation_kernel_factory,
+    )
     if not isinstance(app, RequestBodyLimitMiddleware):
         raise TypeError("expected bounded MCP ASGI application")
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import Protocol
 
 
@@ -31,5 +32,23 @@ class BoundaryCheckResult:
     reason_code: str
 
 
+class BoundaryDisposition(StrEnum):
+    PROCEED = "proceed"
+    KNOWN_NO_EFFECT = "known_no_effect"
+    DENY = "deny"
+
+
+@dataclass(frozen=True, slots=True)
+class BoundaryDecision:
+    disposition: BoundaryDisposition
+    reason_code: str
+
+    @property
+    def allowed(self) -> bool:
+        return self.disposition is BoundaryDisposition.PROCEED
+
+
 class OperationBoundaryVerifier(Protocol):
-    async def verify(self, request: OperationBoundaryCheck) -> BoundaryCheckResult: ...
+    async def verify(
+        self, request: OperationBoundaryCheck
+    ) -> BoundaryCheckResult | BoundaryDecision: ...

@@ -23,6 +23,8 @@ SERVICE_NAME = "binnacle-dev.service"
 SERVICE_USER = "binnacle"
 SERVICE_GROUP = "binnacle"
 DEVELOPMENT_GROUP = "binnacle-dev"
+PROBE_ROOT = Path("/var/lib/binnacle/probe-workspace")
+SUPPORTED_PROBE_FILESYSTEM_TYPES = frozenset({"ext4"})
 ROOT_PROTECTED_PATHS = (
     (Path("/etc/binnacle"), 0o750),
     (Path("/var/lib/binnacle"), 0o750),
@@ -40,7 +42,11 @@ SERVICE_STATE_PATHS = (
     (Path("/var/lib/binnacle/audit/epochs"), 0o750),
     (Path("/var/lib/binnacle/audit/emergency"), 0o750),
 )
-SYSTEM_PATHS = (*ROOT_PROTECTED_PATHS, *SERVICE_STATE_PATHS)
+PROBE_WORKSPACE_PATHS = (
+    (PROBE_ROOT, 0o700),
+    (PROBE_ROOT / ".staging", 0o700),
+)
+SYSTEM_PATHS = (*ROOT_PROTECTED_PATHS, *SERVICE_STATE_PATHS, *PROBE_WORKSPACE_PATHS)
 
 
 class SetupError(RuntimeError):
@@ -54,6 +60,15 @@ class Check:
     name: str
     status: str
     summary: str
+
+
+@dataclass(frozen=True, slots=True)
+class _ProbeMountFacts:
+    target: Path
+    source: str
+    filesystem_type: str
+    options: frozenset[str]
+    filesystem_root: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,12 +95,13 @@ def build_setup_plan(repo: Path) -> SetupPlan:
         _check_repository(repo),
         _check_identity_compatibility(),
         _check_system_path_safety(),
+        _check_probe_mount_profile(repo),
     )
     actions = (
         "ensure system groups binnacle and binnacle-dev",
         "ensure non-root service user binnacle with primary group binnacle",
         "ensure binnacle has supplementary source-read group binnacle-dev",
-        "protect configuration/evaluation and create narrow application-owned kernel state",
+        "protect configuration/evaluation and create narrow application-owned kernel/probe state",
         "install binnacle-dev.service atomically",
         "run systemctl daemon-reload",
     )
@@ -113,6 +129,8 @@ def apply_setup(repo: Path, *, enable: bool) -> SetupPlan:
     for path, mode in ROOT_PROTECTED_PATHS:
         _ensure_protected_directory(path, uid=0, gid=service_gid, mode=mode)
     for path, mode in SERVICE_STATE_PATHS:
+        _ensure_protected_directory(path, uid=service_uid, gid=service_gid, mode=mode)
+    for path, mode in PROBE_WORKSPACE_PATHS:
         _ensure_protected_directory(path, uid=service_uid, gid=service_gid, mode=mode)
 
     source = repo / "deploy/systemd" / SERVICE_NAME
@@ -234,6 +252,139 @@ def _check_system_path_safety() -> Check:
                     "a protected system path component is unsafe",
                 )
     return Check("system-paths", "pass", "protected system path components are safe")
+
+
+def _check_probe_mount_profile(repo: Path) -> Check:
+    """Reject unsafe probe aliases before setup changes any identity or mode."""
+
+    inspection_target = PROBE_ROOT
+    while not inspection_target.exists():
+        parent = inspection_target.parent
+        if parent == inspection_target:
+            return Check("probe-mount", "fail", "probe mount ancestry is unavailable")
+        inspection_target = parent
+    try:
+        observed = inspection_target.stat(follow_symlinks=False)
+        mount = _parse_probe_mount_facts(
+            _run_bounded(
+                [
+                    "findmnt",
+                    "--json",
+                    "--output",
+                    "TARGET,SOURCE,FSTYPE,OPTIONS,FSROOT",
+                    "--target",
+                    str(inspection_target),
+                ]
+            )
+        )
+    except (OSError, subprocess.CalledProcessError, ValueError):
+        return Check("probe-mount", "fail", "probe mount identity is unavailable")
+    protected_devices: set[int] = set()
+    for path in (
+        repo,
+        Path("/etc/binnacle"),
+        Path("/var/lib/binnacle/state"),
+        Path("/var/lib/binnacle/results"),
+        Path("/var/lib/binnacle/audit"),
+        Path("/var/lib/binnacle/evaluation"),
+    ):
+        try:
+            protected_devices.add(path.stat(follow_symlinks=False).st_dev)
+        except OSError:
+            continue
+    if not _probe_mount_is_supported(
+        mount,
+        root_device=observed.st_dev,
+        protected_devices=frozenset(protected_devices),
+    ):
+        return Check(
+            "probe-mount",
+            "fail",
+            "probe mount is not the reviewed block-backed ext4 profile",
+        )
+    return Check("probe-mount", "pass", "reviewed block-backed ext4 profile observed")
+
+
+def _parse_probe_mount_facts(value: str) -> _ProbeMountFacts:
+    document = json.loads(value)
+    if not isinstance(document, dict):
+        raise ValueError("findmnt output is not an object")
+    filesystems = document.get("filesystems")
+    if not isinstance(filesystems, list) or len(filesystems) != 1:
+        raise ValueError("findmnt did not return exactly one filesystem")
+    raw = filesystems[0]
+    if not isinstance(raw, dict):
+        raise ValueError("findmnt filesystem entry is not an object")
+    target = raw.get("target")
+    source = raw.get("source")
+    filesystem_type = raw.get("fstype")
+    options = raw.get("options")
+    filesystem_root = raw.get("fsroot")
+    if (
+        not isinstance(target, str)
+        or not target
+        or len(target) > 4096
+        or not isinstance(source, str)
+        or not source
+        or len(source) > 4096
+        or not isinstance(filesystem_type, str)
+        or not filesystem_type
+        or len(filesystem_type) > 4096
+        or not isinstance(options, str)
+        or not options
+        or len(options) > 4096
+        or not isinstance(filesystem_root, str)
+        or not filesystem_root
+        or len(filesystem_root) > 4096
+    ):
+        raise ValueError("findmnt filesystem fields are invalid")
+    target_path = Path(target)
+    if not target_path.is_absolute() or target_path != Path(os.path.normpath(target)):
+        raise ValueError("findmnt target is not a canonical absolute path")
+    return _ProbeMountFacts(
+        target=target_path,
+        source=source,
+        filesystem_type=filesystem_type.casefold(),
+        options=frozenset(item.casefold() for item in options.split(",") if item),
+        filesystem_root=filesystem_root,
+    )
+
+
+def _probe_mount_is_supported(
+    mount: _ProbeMountFacts,
+    *,
+    root_device: int,
+    protected_devices: frozenset[int],
+) -> bool:
+    target_contains_root = mount.target == PROBE_ROOT or PROBE_ROOT.is_relative_to(mount.target)
+    block_source = mount.source.startswith("/dev/") or mount.source.startswith(
+        ("UUID=", "LABEL=", "PARTUUID=", "PARTLABEL=")
+    )
+    if (
+        not target_contains_root
+        or mount.filesystem_type not in SUPPORTED_PROBE_FILESYSTEM_TYPES
+        or "rw" not in mount.options
+        or {"ro", "bind", "rbind"} & mount.options
+        or mount.filesystem_root != "/"
+        or "[" in mount.source
+        or "]" in mount.source
+        or not block_source
+    ):
+        return False
+    return not (mount.target == PROBE_ROOT and root_device in protected_devices)
+
+
+def _run_bounded(command: list[str]) -> str:
+    result = subprocess.run(
+        command,
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    if len(result.stdout.encode("utf-8")) > 65_536:
+        raise ValueError("command output exceeded setup bound")
+    return result.stdout.strip()
 
 
 def _ensure_protected_directory(path: Path, *, uid: int, gid: int, mode: int) -> None:

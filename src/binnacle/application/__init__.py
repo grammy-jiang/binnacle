@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import asyncio
-from typing import TypeVar
+from typing import TYPE_CHECKING, TypeVar
 
 from binnacle.contracts import ContractRegistry
 from binnacle.domain.mcp import (
     BinnacleError,
     BinnacleProbeData,
     BinnacleProbeRequest,
-    CataloguePhase,
     CompatibilityReportData,
     CompatibilityReportRequest,
     ExecutionErrorEnvelope,
@@ -39,6 +38,9 @@ from binnacle.ports.compatibility import CompatibilityProfileReader
 from binnacle.ports.device import DeviceIdentityProvider
 from binnacle.ports.system import SystemInspector
 
+if TYPE_CHECKING:
+    from binnacle.application.probe_workspace import ProbeWorkspaceUseCases
+
 SuccessDataT = TypeVar("SuccessDataT")
 
 
@@ -58,6 +60,16 @@ class CompatibilityUseCases:
         self._device_identity = device_identity_provider.get_device_identity()
         self._system_inspector = system_inspector
         self._compatibility_reader = compatibility_reader
+        self._contracts = contracts
+
+    def set_contracts(self, contracts: ContractRegistry) -> None:
+        """Switch only between the two compiled projections of the same manifest."""
+
+        if (
+            contracts.manifest_sha256 != self._contracts.manifest_sha256
+            or contracts.supported_revisions != self._contracts.supported_revisions
+        ):
+            raise ValueError("compatibility contract projection identity mismatch")
         self._contracts = contracts
 
     async def binnacle_probe(
@@ -80,7 +92,7 @@ class CompatibilityUseCases:
                     version=self._contracts.manifest_version,
                     sha256=self._contracts.manifest_sha256,
                 ),
-                catalogue_phase=CataloguePhase.COMPATIBILITY_CORE.value,
+                catalogue_phase=self._contracts.catalogue_phase,
                 catalogue_sha256=self._contracts.catalogue_sha256,
                 request_correlation_id=context.request_id,
             ),
@@ -297,10 +309,14 @@ class BinnacleApplication:
         identity: PackageIdentity,
         compatibility: CompatibilityUseCases | None = None,
         contracts: ContractRegistry | None = None,
+        write_contracts: ContractRegistry | None = None,
     ) -> None:
         self._identity = identity
         self._compatibility = compatibility
+        self._core_contracts = contracts
+        self._write_contracts = write_contracts
         self._contracts = contracts
+        self._probe_workspace: ProbeWorkspaceUseCases | None = None
         self._started = False
         self._registered_tool_count = 0
 
@@ -322,7 +338,7 @@ class BinnacleApplication:
             self._started
             and self._compatibility is not None
             and self._contracts is not None
-            and self._registered_tool_count == 5
+            and self._registered_tool_count == len(self._contracts.tools)
         )
 
     @property
@@ -337,8 +353,29 @@ class BinnacleApplication:
             raise RuntimeError("contract registry is not composed")
         return self._contracts
 
+    @property
+    def available_contracts(self) -> ContractRegistry:
+        return self._write_contracts or self.contracts
+
     def set_registered_tool_count(self, count: int) -> None:
         self._registered_tool_count = count
+
+    @property
+    def probe_workspace(self) -> ProbeWorkspaceUseCases:
+        if self._probe_workspace is None:
+            raise RuntimeError("probe workspace use cases are unavailable")
+        return self._probe_workspace
+
+    def set_probe_workspace(self, use_cases: ProbeWorkspaceUseCases | None) -> None:
+        self._probe_workspace = use_cases
+        selected = self._core_contracts
+        if use_cases is not None:
+            if self._write_contracts is None:
+                raise RuntimeError("write-probe contracts are unavailable")
+            selected = self._write_contracts
+        self._contracts = selected
+        if self._compatibility is not None and selected is not None:
+            self._compatibility.set_contracts(selected)
 
     async def start(self) -> None:
         """Start the application once."""

@@ -35,10 +35,11 @@ from binnacle.domain.operation import (
     OperationState,
     TransitionRequest,
 )
-from binnacle.domain.policy import PolicyDecisionValue, PolicyRequest
+from binnacle.domain.policy import PolicyDecision, PolicyDecisionValue, PolicyRequest
 from binnacle.domain.trusted_time import DeadlineStatus
 from binnacle.ports.audit import AuditJournal, AuditObligation, AuditObligationStore
 from binnacle.ports.boundary import (
+    BoundaryDisposition,
     OperationBoundaryCheck,
     PreparedStateCheck,
     PreparedStateVerifier,
@@ -54,6 +55,7 @@ from binnacle.ports.operation_store import (
     CreateOrFindRequest,
     CreateOrFindResult,
     OperationStore,
+    PreparedExecutionAdmission,
 )
 from binnacle.ports.policy import PolicyEngine
 
@@ -68,6 +70,16 @@ class RequiredAuditError(RuntimeError):
     pass
 
 
+class OperationAuthoriser(Protocol):
+    async def authorise(
+        self,
+        *,
+        operation: OperationSnapshot,
+        decision: PolicyDecision,
+        request: CoordinatedOperationRequest,
+    ) -> OperationSnapshot: ...
+
+
 @dataclass(frozen=True, slots=True)
 class CoordinatedOperationRequest:
     admission: CreateOrFindRequest
@@ -77,6 +89,31 @@ class CoordinatedOperationRequest:
     effect_type: str
     protected_effect_arguments: Mapping[str, object]
     prepared_state_facts: Mapping[str, str] | None = None
+    prepared_execution: PreparedExecutionAdmission | None = None
+
+
+class _DefaultOperationAuthoriser:
+    def __init__(self, store: KernelOperationStore) -> None:
+        self._store = store
+
+    async def authorise(
+        self,
+        *,
+        operation: OperationSnapshot,
+        decision: PolicyDecision,
+        request: CoordinatedOperationRequest,
+    ) -> OperationSnapshot:
+        del request
+        await self._store.store_policy_decision(decision)
+        return await self._store.transition(
+            operation.operation_id,
+            TransitionRequest(
+                expected_state_version=operation.state_version,
+                to_state=OperationState.AUTHORISED,
+                effect_knowledge=EffectKnowledge.NONE,
+                reason_code="policy_allowed",
+            ),
+        )
 
 
 class OperationCoordinator:
@@ -93,6 +130,7 @@ class OperationCoordinator:
         effect_boundary: EffectBoundary,
         trusted_time_guard: TrustedTimeGuard | None = None,
         prepared_state_verifier: PreparedStateVerifier | None = None,
+        authoriser: OperationAuthoriser | None = None,
     ) -> None:
         self._store = store
         self._policy = policy
@@ -104,10 +142,10 @@ class OperationCoordinator:
         self._effect_boundary = effect_boundary
         self._trusted_time_guard = trusted_time_guard
         self._prepared_state_verifier = prepared_state_verifier
+        self._authoriser = authoriser or _DefaultOperationAuthoriser(store)
 
     async def execute(self, request: CoordinatedOperationRequest) -> CreateOrFindResult:
-        admission = await self._admission_with_prepared_revalidation(request)
-        admitted = await self._store.create_or_find(admission)
+        admitted = await self._create_or_find(request)
         if admitted.outcome is not IdempotencyOutcome.CREATED or admitted.operation is None:
             await self._audit_idempotency_outcome(request, admitted)
             return admitted
@@ -128,8 +166,8 @@ class OperationCoordinator:
             normalized_target_digest=request.normalized_target_digest,
         )
         decision = await self._policy.evaluate(policy_request)
-        await self._store.store_policy_decision(decision)
         if decision.decision is PolicyDecisionValue.DENY:
+            await self._store.store_policy_decision(decision)
             rejected = await self._store.transition(
                 operation.operation_id,
                 TransitionRequest(
@@ -150,14 +188,42 @@ class OperationCoordinator:
             )
             return CreateOrFindResult(IdempotencyOutcome.CREATED, rejected)
 
-        authorised = await self._store.transition(
-            operation.operation_id,
-            TransitionRequest(
-                expected_state_version=operation.state_version,
-                to_state=OperationState.AUTHORISED,
-                effect_knowledge=EffectKnowledge.NONE,
-                reason_code="policy_allowed",
-            ),
+        prepared_allowed = True
+        prepared_reason = "prepared_state_not_applicable"
+        if request.prepared_execution is not None:
+            prepared_allowed, prepared_reason = await self._prepared_revalidation(
+                request,
+                operation_id=operation.operation_id,
+            )
+        if not prepared_allowed:
+            await self._store.store_policy_decision(decision)
+            rejected = await self._store.transition(
+                operation.operation_id,
+                TransitionRequest(
+                    expected_state_version=operation.state_version,
+                    to_state=OperationState.REJECTED,
+                    effect_knowledge=EffectKnowledge.KNOWN_NO_EFFECT,
+                    reason_code=prepared_reason,
+                    error=OperationError(
+                        prepared_reason,
+                        "Prepared state changed before post-policy admission.",
+                    ),
+                ),
+            )
+            await self._required_audit(self._policy_event(rejected, True, "policy_allowed"))
+            await self._required_audit(
+                self._state_event(
+                    rejected,
+                    old_state=OperationState.RECEIVED.value,
+                    reason_code=prepared_reason,
+                )
+            )
+            return CreateOrFindResult(IdempotencyOutcome.CREATED, rejected)
+
+        authorised = await self._authoriser.authorise(
+            operation=operation,
+            decision=decision,
+            request=request,
         )
         try:
             await self._required_audit(self._policy_event(authorised, True, "policy_allowed"))
@@ -254,9 +320,14 @@ class OperationCoordinator:
                         or latest.state_version != current.state_version
                     ):
                         return latest
+                    code = (
+                        boundary.reason_code
+                        if boundary.disposition is BoundaryDisposition.KNOWN_NO_EFFECT
+                        else "boundary_revalidation_failed"
+                    )
                     failed = await self._fail_known_no_effect(
                         latest,
-                        code="boundary_revalidation_failed",
+                        code=code,
                         reason=boundary.reason_code,
                     )
                     await self._required_audit(
@@ -516,13 +587,45 @@ class OperationCoordinator:
             verified_prepared_state_binding_sha256=digest,
         )
 
+    async def _create_or_find(self, request: CoordinatedOperationRequest) -> CreateOrFindResult:
+        prepared = request.prepared_execution
+        if prepared is None:
+            admission = await self._admission_with_prepared_revalidation(request)
+            return await self._store.create_or_find(admission)
+        if prepared.caller != request.admission:
+            raise ValueError("prepared caller admission does not match coordinated request")
+        retained = await self._store.find_existing(request.admission)
+        if retained is not None:
+            return retained
+        allowed, reason, digest = await self._prepared_revalidation_details(
+            request,
+            operation_id=None,
+        )
+        status = DeadlineStatus.VALID
+        if reason == IdempotencyOutcome.PREPARED_EXPIRED.value:
+            status = DeadlineStatus.EXPIRED
+        elif not allowed and reason == IdempotencyOutcome.TRUSTED_TIME_UNAVAILABLE.value:
+            status = DeadlineStatus.UNAVAILABLE
+        caller = replace(
+            request.admission,
+            prepared_state_binding_sha256=digest,
+            prepared_deadline_status=status,
+            verified_prepared_state_binding_sha256=digest,
+        )
+        return await self._store.create_or_find_prepared(
+            PreparedExecutionAdmission(caller=caller, prepared_key=prepared.prepared_key)
+        )
+
     async def _prepared_revalidation(
         self,
         request: CoordinatedOperationRequest,
         *,
         operation_id: str,
     ) -> tuple[bool, str]:
-        if request.admission.key.mode is not IdempotencyKeyMode.PREPARED_EXECUTION_NONCE:
+        if (
+            request.prepared_execution is None
+            and request.admission.key.mode is not IdempotencyKeyMode.PREPARED_EXECUTION_NONCE
+        ):
             return True, "prepared_state_not_applicable"
         allowed, reason, _ = await self._prepared_revalidation_details(
             request,
@@ -536,7 +639,10 @@ class OperationCoordinator:
         *,
         operation_id: str | None,
     ) -> tuple[bool, str, str | None]:
-        retained = await self._store.get_prepared_execution(request.admission)
+        admission = request.admission
+        if request.prepared_execution is not None:
+            admission = replace(admission, key=request.prepared_execution.prepared_key)
+        retained = await self._store.get_prepared_execution(admission)
         if retained is None:
             return False, IdempotencyOutcome.PREPARED_MISMATCH.value, None
         if self._trusted_time_guard is None:
@@ -629,6 +735,11 @@ class OperationCoordinator:
                     source_event_id=draft.event_id,
                 )
             raise RequiredAuditError("required audit persistence failed") from exc
+
+    async def record_required_audit(self, draft: AuditEventDraft) -> None:
+        """Append one schema-valid operation-owned audit fact through the kernel gate."""
+
+        await self._required_audit(draft)
 
     async def _latch_failure(self, reason: str) -> None:
         try:

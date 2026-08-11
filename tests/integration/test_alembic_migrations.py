@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -181,6 +182,46 @@ EXPECTED_COLUMNS = {
         "facts_json",
         "recorded_at",
     },
+    "probe_path_ledger": {
+        "relative_path",
+        "generation_high_water",
+        "terminal_history_count",
+        "terminal_history_sha256",
+        "active_artifact_id",
+        "active_generation",
+        "active_create_operation_id",
+        "ledger_version",
+        "updated_at",
+    },
+    "probe_artifacts": {
+        "artifact_id",
+        "relative_path",
+        "path_generation",
+        "owner_controller_id",
+        "owner_controller_epoch",
+        "content_sha256",
+        "byte_count",
+        "state",
+        "create_operation_id",
+        "active_cleanup_operation_id",
+        "removed_by_cleanup_operation_id",
+        "created_at",
+        "updated_at",
+        "removed_at",
+        "file_identity_digest",
+    },
+    "probe_operations": {
+        "operation_id",
+        "probe_operation",
+        "prepared_binding_id",
+        "caller_binding_id",
+        "artifact_id",
+        "relative_path",
+        "expected_content_sha256",
+        "expected_byte_count",
+        "prepared_state_binding_sha256",
+        "created_at",
+    },
 }
 
 
@@ -197,7 +238,7 @@ async def test_fresh_upgrade_has_exact_authoritative_shape_and_pragmas(
     try:
         health = await verify_database_runtime(runtime)
         assert health.healthy
-        assert health.revision == "0001_durable_operation_kernel"
+        assert health.revision == "0002_write_probe_state"
         assert health.foreign_keys == 1
         assert health.journal_mode == "wal"
         assert health.synchronous == 2
@@ -235,7 +276,24 @@ async def test_fresh_upgrade_has_exact_authoritative_shape_and_pragmas(
             indexes = await connection.run_sync(
                 lambda sync: {
                     table: {item["name"] for item in inspect(sync).get_indexes(table)}
-                    for table in ("operations", "idempotency_bindings", "payload_objects")
+                    for table in (
+                        "operations",
+                        "idempotency_bindings",
+                        "payload_objects",
+                        "probe_artifacts",
+                    )
+                }
+            )
+            probe_fks = await connection.run_sync(
+                lambda sync: {
+                    table: inspect(sync).get_foreign_keys(table)
+                    for table in ("probe_path_ledger", "probe_artifacts", "probe_operations")
+                }
+            )
+            probe_checks = await connection.run_sync(
+                lambda sync: {
+                    table: {item["name"] for item in inspect(sync).get_check_constraints(table)}
+                    for table in ("probe_path_ledger", "probe_artifacts", "probe_operations")
                 }
             )
         assert tables == set(EXPECTED_COLUMNS) | {"alembic_version"}
@@ -250,7 +308,21 @@ async def test_fresh_upgrade_has_exact_authoritative_shape_and_pragmas(
             "operations": {"ix_operations_state"},
             "idempotency_bindings": {"ix_bindings_operation"},
             "payload_objects": {"ix_payload_owner"},
+            "probe_artifacts": {"uq_probe_artifacts_live_relative_path"},
         }
+        assert {item["name"] for item in probe_fks["probe_path_ledger"]} == {
+            "fk_probe_ledger_active_artifact",
+            "fk_probe_ledger_active_create_operation",
+        }
+        active_artifact_fk = next(
+            item
+            for item in probe_fks["probe_path_ledger"]
+            if item["name"] == "fk_probe_ledger_active_artifact"
+        )
+        assert active_artifact_fk["options"] == {"deferrable": True, "initially": "DEFERRED"}
+        assert "ck_probe_ledger_active_shape" in probe_checks["probe_path_ledger"]
+        assert "ck_probe_artifacts_state_shape" in probe_checks["probe_artifacts"]
+        assert "ck_probe_operations_byte_shape" in probe_checks["probe_operations"]
     finally:
         await close_database_runtime(runtime)
 
@@ -308,6 +380,94 @@ async def test_transition_shape_constraint_rejects_invalid_version_rows(
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("state", "file_identity", "active_cleanup", "removed_at", "active"),
+    (
+        ("reserved", "b" * 64, None, None, True),
+        ("uncertain", None, "self", None, True),
+        ("removed", None, None, "2026-08-12 00:00:00", False),
+    ),
+)
+async def test_probe_artifact_state_shape_rejects_contradictory_rows(
+    tmp_path: Path,
+    repo_root: Path,
+    state: str,
+    file_identity: str | None,
+    active_cleanup: str | None,
+    removed_at: str | None,
+    active: bool,
+) -> None:
+    database = tmp_path / "state/binnacle.db"
+    database.parent.mkdir()
+    migrate_database(database, repo_root)
+    runtime = await create_database_runtime(
+        DatabaseRuntimeSettings(database, tmp_path / "run", verify_runtime_directory=False)
+    )
+    try:
+        store = SqliteOperationStore(runtime)
+        await store.initialize_kernel(device_id="device-fixture", audit_stream_id="stream-fixture")
+        created = await store.create_or_find(
+            CreateOrFindRequest(
+                validate_and_digest_key("cd" * 32, IdempotencyKeyMode.CALLER_KEY),
+                owner(),
+                intent(),
+                "internal.synthetic",
+                "1.0.0",
+            )
+        )
+        assert created.operation is not None
+        operation_id = created.operation.operation_id
+        artifact_id = "artifact-state-shape"
+        async with runtime.engine.connect() as connection:
+            await connection.execute(
+                text(
+                    "INSERT INTO probe_path_ledger "
+                    "(relative_path,generation_high_water,terminal_history_count,"
+                    "terminal_history_sha256,active_artifact_id,active_generation,"
+                    "active_create_operation_id,ledger_version,updated_at) VALUES "
+                    "('probe.txt',1,:terminal_count,:history,:artifact_id,:generation,"
+                    ":create_operation,1,CURRENT_TIMESTAMP)"
+                ),
+                {
+                    "terminal_count": 0 if active else 1,
+                    "history": "a" * 64,
+                    "artifact_id": artifact_id if active else None,
+                    "generation": 1 if active else None,
+                    "create_operation": operation_id if active else None,
+                },
+            )
+            with pytest.raises(IntegrityError):
+                await connection.execute(
+                    text(
+                        "INSERT INTO probe_artifacts "
+                        "(artifact_id,relative_path,path_generation,owner_controller_id,"
+                        "owner_controller_epoch,content_sha256,byte_count,state,"
+                        "create_operation_id,active_cleanup_operation_id,"
+                        "removed_by_cleanup_operation_id,created_at,updated_at,removed_at,"
+                        "file_identity_digest) VALUES "
+                        "(:artifact_id,'probe.txt',1,:controller_id,1,:content,4,:state,"
+                        ":create_operation,:active_cleanup,NULL,CURRENT_TIMESTAMP,"
+                        "CURRENT_TIMESTAMP,:removed_at,:file_identity)"
+                    ),
+                    {
+                        "artifact_id": artifact_id,
+                        "controller_id": created.operation.owner.controller_id,
+                        "content": "a" * 64,
+                        "state": state,
+                        "create_operation": operation_id,
+                        "active_cleanup": (
+                            operation_id if active_cleanup == "self" else active_cleanup
+                        ),
+                        "removed_at": removed_at,
+                        "file_identity": file_identity,
+                    },
+                )
+            await connection.rollback()
+    finally:
+        await close_database_runtime(runtime)
+
+
+@pytest.mark.anyio
 async def test_live_writer_lock_and_revision_mismatch_fail_closed(
     tmp_path: Path, repo_root: Path
 ) -> None:
@@ -330,14 +490,55 @@ async def test_live_writer_lock_and_revision_mismatch_fail_closed(
 
 def test_migration_refuses_unmanaged_tables(tmp_path: Path, repo_root: Path) -> None:
     database = tmp_path / "unmanaged.db"
-    import sqlite3
-
     connection = sqlite3.connect(database)
     connection.execute("CREATE TABLE unrelated (id INTEGER PRIMARY KEY)")
     connection.commit()
     connection.close()
     with pytest.raises(RuntimeError, match="unmanaged"):
         migrate_database(database, repo_root)
+
+
+def test_populated_phase4_database_upgrades_without_rewriting_existing_rows(
+    tmp_path: Path, repo_root: Path
+) -> None:
+    from alembic import command
+    from alembic.config import Config
+
+    database = tmp_path / "upgrade.db"
+    config = Config(repo_root / "alembic.ini")
+    config.set_main_option("script_location", str(repo_root / "migrations"))
+    config.set_main_option("sqlalchemy.url", f"sqlite:///{database}")
+    command.upgrade(config, "0001_durable_operation_kernel")
+    connection = sqlite3.connect(database)
+    try:
+        connection.execute(
+            "INSERT INTO controller_owners "
+            "(controller_id, controller_epoch, controller_profile_id, "
+            "controller_profile_version, first_seen_at, last_seen_at, active) "
+            "VALUES (?, 1, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1)",
+            ("controller-preserved", "profile-preserved", "1.0.0"),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    command.upgrade(config, "head")
+    connection = sqlite3.connect(database)
+    try:
+        owner_row = connection.execute(
+            "SELECT controller_id, controller_epoch FROM controller_owners"
+        ).fetchone()
+        revision = connection.execute("SELECT version_num FROM alembic_version").fetchone()
+        probe_counts = tuple(
+            connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+            for table in ("probe_operations", "probe_artifacts", "probe_path_ledger")
+        )
+    finally:
+        connection.close()
+
+    assert owner_row == ("controller-preserved", 1)
+    assert revision == ("0002_write_probe_state",)
+    assert probe_counts == (0, 0, 0)
 
 
 def test_bare_alembic_invocation_requires_explicit_database(repo_root: Path) -> None:
@@ -378,7 +579,7 @@ def test_stopped_service_upgrade_and_current_revision_commands(
         revision = connection.execute("SELECT version_num FROM alembic_version").fetchone()
     finally:
         connection.close()
-    assert revision == ("0001_durable_operation_kernel",)
+    assert revision == ("0002_write_probe_state",)
 
 
 @pytest.mark.anyio

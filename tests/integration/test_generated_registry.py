@@ -12,7 +12,12 @@ import pytest
 import yaml  # type: ignore[import-untyped]
 from scripts import compile_mcp_registry as compiler
 
-from binnacle.contracts import EXPECTED_REVISIONS, EXPECTED_TOOL_NAMES, ContractRegistry
+from binnacle.contracts import (
+    EXPECTED_REVISIONS,
+    EXPECTED_TOOL_NAMES,
+    EXPECTED_WRITE_PROBE_TOOL_NAMES,
+    ContractRegistry,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -32,6 +37,23 @@ def test_compiler_output_is_deterministic_and_checked_in() -> None:
     assert first_registry == compiler.REGISTRY_PATH.read_bytes()
     assert first_digest == compiler.DIGEST_PATH.read_bytes()
     assert compiler._write_or_check(check=True) == 0
+
+
+def test_write_probe_projection_is_deterministic_exact_and_checked_in() -> None:
+    registry_path, digest_path, _format, expected_count = compiler.PROJECTIONS[
+        "compatibility-write-probe"
+    ]
+    first_registry, first_digest = compiler.compile_registry("compatibility-write-probe")
+    second_registry, second_digest = compiler.compile_registry("compatibility-write-probe")
+    registry = json.loads(first_registry)
+
+    assert first_registry == second_registry == registry_path.read_bytes()
+    assert first_digest == second_digest == digest_path.read_bytes()
+    assert expected_count == 8
+    assert tuple(tool["name"] for tool in registry["tools"]) == EXPECTED_WRITE_PROBE_TOOL_NAMES
+    assert ContractRegistry.load_phase("compatibility-write-probe").catalogue_phase == (
+        "compatibility-write-probe"
+    )
 
 
 def test_check_detects_missing_and_drifted_outputs(

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import secrets
+from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any, cast
 
@@ -47,6 +48,7 @@ from binnacle.domain.trusted_time import DeadlineStatus, TrustedTimeEvidence
 from binnacle.ports.operation_store import (
     CreateOrFindRequest,
     CreateOrFindResult,
+    PreparedExecutionAdmission,
     PreparedExecutionRecord,
     PreparedNonceRegistration,
     ReconciliationCursor,
@@ -82,7 +84,7 @@ class SqliteOperationStore:
                 session.add(
                     KernelMetaModel(
                         id=1,
-                        schema_generation=1,
+                        schema_generation=2,
                         device_id=device_id,
                         device_epoch=1,
                         created_at=timestamp,
@@ -106,7 +108,8 @@ class SqliteOperationStore:
                     )
                 )
             elif (
-                existing.device_id != device_id
+                existing.schema_generation != 2
+                or existing.device_id != device_id
                 or existing.audit_stream_id != audit_stream_id
                 or existing.audit_epoch != audit_epoch
             ):
@@ -147,6 +150,28 @@ class SqliteOperationStore:
             IdempotencyBindingModel.contract_version == request.contract_version,
             IdempotencyBindingModel.key_digest_sha256 == request.key.digest_sha256,
         )
+
+    async def find_existing(self, request: CreateOrFindRequest) -> CreateOrFindResult | None:
+        """Classify an existing binding without creating a new operation."""
+
+        now = datetime.now(UTC)
+        async with self._runtime.session_factory() as session:
+            await session.execute(text("BEGIN IMMEDIATE"))
+            try:
+                binding = (
+                    await session.execute(
+                        select(IdempotencyBindingModel).where(*self._scope_filter(request))
+                    )
+                ).scalar_one_or_none()
+                if binding is None:
+                    await session.commit()
+                    return None
+                result = await self._classify_existing(session, binding, request, now)
+                await session.commit()
+                return result
+            except Exception:
+                await session.rollback()
+                raise
 
     async def create_or_find(self, request: CreateOrFindRequest) -> CreateOrFindResult:
         if request.key.mode is IdempotencyKeyMode.DERIVED_MEMBER_KEY:
@@ -196,6 +221,146 @@ class SqliteOperationStore:
                         prepared_monotonic_deadline_ns=None,
                         target_identity_sha256=request.intent.target_identity_sha256,
                         maximum_effect_sha256=request.intent.maximum_effect_sha256,
+                        operation_id=operation.operation_id,
+                        terminal_class=None,
+                        created_at=now,
+                        last_access_at=now,
+                        terminal_at=None,
+                        retired_at=None,
+                        record_kind=BindingRecordKind.FULL.value,
+                        duplicate_count=0,
+                        conflict_count=0,
+                    )
+                )
+                await session.commit()
+                return CreateOrFindResult(IdempotencyOutcome.CREATED, operation)
+            except Exception:
+                await session.rollback()
+                raise
+
+    async def create_or_find_prepared(
+        self, request: PreparedExecutionAdmission
+    ) -> CreateOrFindResult:
+        """Atomically bind one caller key to one unconsumed prepared nonce.
+
+        The caller binding is always checked first, including on the retry race after
+        mutable preparation revalidation.  A retained caller therefore remains
+        retrievable after its preparation expires or its external state changes.
+        """
+
+        caller = request.caller
+        if caller.key.mode is not IdempotencyKeyMode.CALLER_KEY:
+            raise OperationStoreError("prepared execution requires caller-key mode")
+        if request.prepared_key.mode is not IdempotencyKeyMode.PREPARED_EXECUTION_NONCE:
+            raise OperationStoreError("prepared execution requires prepared-nonce mode")
+        prepared_request = replace(caller, key=request.prepared_key)
+        now = datetime.now(UTC)
+        async with self._runtime.session_factory() as session:
+            await session.execute(text("BEGIN IMMEDIATE"))
+            try:
+                caller_binding = (
+                    await session.execute(
+                        select(IdempotencyBindingModel).where(*self._scope_filter(caller))
+                    )
+                ).scalar_one_or_none()
+                if caller_binding is not None:
+                    result = await self._classify_existing(session, caller_binding, caller, now)
+                    await session.commit()
+                    return result
+
+                prepared = (
+                    await session.execute(
+                        select(IdempotencyBindingModel).where(*self._scope_filter(prepared_request))
+                    )
+                ).scalar_one_or_none()
+                if prepared is None:
+                    await session.commit()
+                    return CreateOrFindResult(IdempotencyOutcome.PREPARED_MISMATCH, None)
+                prepared.last_access_at = now
+                if prepared.owner_controller_digest != owner_digest(caller.owner):
+                    prepared.conflict_count += 1
+                    await session.commit()
+                    return CreateOrFindResult(IdempotencyOutcome.OWNER_MISMATCH, None)
+                if prepared.record_kind == BindingRecordKind.TOMBSTONE.value:
+                    await session.commit()
+                    return CreateOrFindResult(IdempotencyOutcome.KEY_RETIRED, None)
+                if prepared.key_mode != IdempotencyKeyMode.PREPARED_EXECUTION_NONCE.value:
+                    raise OperationStoreError("prepared binding has an invalid key mode")
+                if prepared.operation_id is not None:
+                    prepared.conflict_count += 1
+                    await session.commit()
+                    return CreateOrFindResult(IdempotencyOutcome.CONFLICT, None)
+                if (
+                    prepared.terminal_class == IdempotencyOutcome.PREPARED_EXPIRED.value
+                    or caller.prepared_deadline_status is DeadlineStatus.EXPIRED
+                ):
+                    prepared.terminal_class = IdempotencyOutcome.PREPARED_EXPIRED.value
+                    prepared.terminal_at = prepared.terminal_at or now
+                    await session.commit()
+                    return CreateOrFindResult(IdempotencyOutcome.PREPARED_EXPIRED, None)
+                if caller.prepared_deadline_status is DeadlineStatus.UNAVAILABLE:
+                    await session.commit()
+                    return CreateOrFindResult(IdempotencyOutcome.TRUSTED_TIME_UNAVAILABLE, None)
+                if prepared.request_fingerprint_sha256 != caller.intent.request_fingerprint_sha256:
+                    prepared.conflict_count += 1
+                    await session.commit()
+                    return CreateOrFindResult(IdempotencyOutcome.CONFLICT, None)
+                mismatch = (
+                    caller.prepared_operation_id != prepared.prepared_operation_id
+                    or caller.prepared_input_sha256 != prepared.prepared_input_sha256
+                    or caller.prepared_state_binding_sha256
+                    != prepared.prepared_state_binding_sha256
+                    or caller.intent.target_identity_sha256 != prepared.target_identity_sha256
+                    or caller.intent.maximum_effect_sha256 != prepared.maximum_effect_sha256
+                )
+                if mismatch:
+                    prepared.conflict_count += 1
+                    await session.commit()
+                    return CreateOrFindResult(IdempotencyOutcome.PREPARED_MISMATCH, None)
+                if caller.prepared_deadline_status is not DeadlineStatus.VALID:
+                    await session.commit()
+                    return CreateOrFindResult(IdempotencyOutcome.TRUSTED_TIME_UNAVAILABLE, None)
+                if (
+                    caller.verified_prepared_state_binding_sha256
+                    != prepared.prepared_state_binding_sha256
+                ):
+                    prepared.conflict_count += 1
+                    await session.commit()
+                    return CreateOrFindResult(IdempotencyOutcome.PREPARED_MISMATCH, None)
+
+                await self._ensure_owner(session, caller.owner, now)
+                await session.flush()
+                operation = new_received_operation(
+                    owner=caller.owner,
+                    intent=caller.intent,
+                    now=now,
+                )
+                session.add(self._operation_model(operation))
+                await session.flush()
+                session.add(self._initial_transition_model(operation))
+                prepared.operation_id = operation.operation_id
+                prepared.duplicate_count += 1
+                session.add(
+                    IdempotencyBindingModel(
+                        binding_id=f"binding_{secrets.token_hex(16)}",
+                        device_id=caller.intent.device_id,
+                        device_epoch=caller.intent.device_epoch,
+                        key_mode=caller.key.mode.value,
+                        key_digest_sha256=caller.key.digest_sha256,
+                        tool_name=caller.tool_name,
+                        contract_version=caller.contract_version,
+                        owner_controller_id=caller.owner.controller_id,
+                        owner_controller_epoch=caller.owner.controller_epoch,
+                        owner_controller_digest=owner_digest(caller.owner),
+                        request_fingerprint_sha256=caller.intent.request_fingerprint_sha256,
+                        prepared_operation_id=None,
+                        prepared_input_sha256=None,
+                        prepared_expires_at=None,
+                        prepared_state_binding_sha256=None,
+                        prepared_registered_boot_id_digest=None,
+                        prepared_monotonic_deadline_ns=None,
+                        target_identity_sha256=caller.intent.target_identity_sha256,
+                        maximum_effect_sha256=caller.intent.maximum_effect_sha256,
                         operation_id=operation.operation_id,
                         terminal_class=None,
                         created_at=now,

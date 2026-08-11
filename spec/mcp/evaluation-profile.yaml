@@ -1,11 +1,11 @@
 schema_version: "1.1"
 profile_id: chatgpt-web-personal-binnacle-bootstrap
-profile_version: "1.1.0"
+profile_version: "1.2.0"
 manifest_schema: schemas/mcp/evaluation-manifest.schema.json
 case_manifest:
   path: spec/mcp/evaluation-cases.yaml
-  version: "1.1.0"
-  sha256: 72e10e0446e57879191155305d40a489279472706f6bda930c62cb24fe2c2d17
+  version: "1.2.0"
+  sha256: 1748a8374a0faf6e44d33e8c5a861e07f32a69be6725d13d048e67b9e0e05e23
 
 profile_dimensions:
   chatgpt_product: /profile/chatgpt_product

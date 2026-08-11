@@ -4,9 +4,10 @@ Binnacle development Pi
 Purpose and current gate
 ------------------------
 
-This runbook prepares the Phase 2 read-only compatibility server on one 64-bit Raspberry
-Pi and provides the repository-side Phase 3 verification and evidence tools.  It does not
-claim that a ChatGPT controller is authenticated.
+This runbook prepares the read-only compatibility server and the disabled Phase 5 write
+probe on one 64-bit Raspberry Pi.  It provides repository-side deployment, integrity, and
+evidence checks; it does not claim that a ChatGPT controller is authenticated or that the
+write catalogue has been promoted.
 
 Do not expose ``/mcp`` through a tunnel until the live feasibility gate has selected and
 tested exactly one controller profile.  The repository intentionally contains neither a
@@ -38,6 +39,8 @@ The development profile uses these fixed paths and identities:
    /var/lib/binnacle/state
    /var/lib/binnacle/results
    /var/lib/binnacle/audit
+   /var/lib/binnacle/probe-workspace
+   /var/lib/binnacle/probe-workspace/.staging
    /run/binnacle
 
    service user and primary group: binnacle
@@ -85,9 +88,12 @@ Inspect the deterministic plan before applying it:
 
 Add ``--enable`` to ``apply`` only when the protected configuration is ready.  The script
 creates the two Binnacle groups, the non-root service user, protected configuration and
-evaluation directories, application-owned state/result/audit subtrees, and the reviewed
-systemd unit.  It does not install packages, pull/reset Git, create secrets, configure a
-firewall or tunnel, or start a ChatGPT evaluation.
+evaluation directories, application-owned state/result/audit subtrees, the dedicated
+``0700`` probe root and staging directory, and the reviewed systemd unit.  It does not
+install packages, pull/reset Git, create secrets, configure a firewall or tunnel, or start
+a ChatGPT evaluation.  The unit adds only
+``ReadWritePaths=/var/lib/binnacle/probe-workspace`` to the Phase 4 write boundary; it
+does not grant source, configuration, evaluation, or credential write access.
 
 The systemd unit, not the setup script, creates ``/run/binnacle`` on service start with
 ``RuntimeDirectory=binnacle``.  ``RuntimeDirectoryPreserve=yes`` keeps that protected
@@ -148,6 +154,19 @@ Phase 2 bounded defaults explicit:
    controller_bytes_max = 268435456
    append_chunk_bytes_max = 262144
 
+   [probe_workspace]
+   enabled = false
+   root = "/var/lib/binnacle/probe-workspace"
+   max_file_bytes = 65536
+   preparation_ttl_seconds = 300
+
+The probe root and maximum are structural settings.  Do not redirect the root or increase
+the maximum.  ``enabled = true`` is not sufficient to expose the write Tools: production
+composition also requires the reviewed controller profile, one exact external-scope to
+``probe_workspace_mutate`` entitlement mapping, a healthy Phase 4/5 kernel, and the exact
+compiled eight-Tool projection.  Until those evidence-selected inputs exist, the server
+continues to expose only the five read-only Tools.
+
 After the feasibility gate, create ``/etc/binnacle/controller-profile.toml`` as
 ``root:binnacle`` with mode ``0640``.  Freeze the selected profile ID/version, exact
 external HTTPS ``/mcp`` resource URI, exact Host/Origin policy, and only these read-only
@@ -162,12 +181,14 @@ Profile-specific issuer, audience, gateway, algorithm, freshness, key, and revoc
 fields come only from the selected live profile.  Environment variables and convenience
 CLI flags do not override this protected file.
 
-Offline kernel migration and verification
------------------------------------------
+Offline kernel and probe migration and verification
+----------------------------------------------------
 
-The Phase 4 schema is never created or upgraded opportunistically by ``serve``.  For a
-new installation, first let systemd create the protected runtime directory, then stop the
-service.  The ordinary stop preserves that directory for the non-root maintenance lock:
+The Phase 4/5 schema is never created or upgraded opportunistically by ``serve``.  The
+reviewed Phase 5 head is ``0002_write_probe_state``.  For a new installation or an upgrade
+from ``0001_durable_operation_kernel``, first let systemd create the protected runtime
+directory, then stop the service.  The ordinary stop preserves that directory for the
+non-root maintenance lock:
 
 .. code-block:: console
 
@@ -191,8 +212,9 @@ recreates and preserves the runtime directory.
 
 The verifier checks the exact Alembic revision, SQLite foreign keys/WAL/FULL synchronous
 pragmas, audit chain/cache continuity, durable audit-failure generation, obligation
-markers, payload roots, and consequential-boundary gate state.  It performs no migration
-or automatic recovery.
+markers, payload roots, consequential-boundary gate state, and the complete Phase 5 probe
+ledger/history/provenance invariants.  It performs no migration, directory creation,
+ledger reconstruction, cleanup, or automatic recovery.
 
 If audit recovery is required, keep the service stopped.  A human must reconcile every
 surviving obligation and prepare a protected closure JSON containing the exact active
@@ -243,8 +265,46 @@ proving the service's real checkout access.  It does not execute the mutable che
 root.  Supply the complete reviewed SHA printed by ``git rev-parse --verify HEAD``; an
 abbreviated SHA is rejected.
 
-A non-zero result is expected while the live profile, authenticated five-Tool probe, or
-tunnel identity remains blocked.  Do not relabel a blocked check as passed.
+A non-zero result is expected while the live profile, authenticated catalogue, filesystem
+primitive evidence, write entitlement, or tunnel identity remains blocked.  Do not
+relabel a blocked check as passed.
+
+Phase 5 write-probe validation
+------------------------------
+
+Do not enable the write catalogue merely because repository tests pass.  On the exact
+candidate Pi, first keep the service stopped and verify that the probe root and
+``.staging`` are real directories owned by ``binnacle:binnacle`` with mode ``0700``, are
+on the reviewed block-backed ``ext4`` profile, and are not bind/subpath aliases of the
+checkout, configuration, database, results, audit, or evaluation trees.  The deployment
+verifier rejects every other filesystem type and any non-root ``findmnt`` source mapping.
+Then record bounded tests of no-replace publication,
+file and directory ``fsync``, crash windows, symlink containment, and unknown-entry
+preservation.  These observations belong in sanitized evidence outside Git.
+
+Only after the selected authenticated controller profile and the one finite mutation
+entitlement are reviewed may an owner set ``enabled = true`` and restart the service.
+Refresh or reconnect through the observed host procedure and verify that the visible
+catalogue is exactly the reviewed eight-Tool projection.  Exercise only the synthetic
+one-component path and bounded content from the frozen evaluation case:
+
+#. prepare the write and retain its state binding and expiry;
+#. record required confirmation decline attempts and prove zero operation/effect;
+#. approve once, deliberately lose the response, and retry the same caller key after both
+   filesystem state change and nonce expiry;
+#. prove one retained operation, one path generation, and one filesystem publication;
+#. reconnect and repeat the same-key retry with zero additional effect;
+#. prepare and execute exact cleanup, deliberately repeat the response-loss retry, and
+   prove the exact artifact alone is absent;
+#. run stopped-service ``kernel verify`` and prove ledger high-water, terminal history,
+   provenance, audit obligations, and operation state agree.
+
+Never recursively clean the probe root.  A reserved/uncertain artifact, unknown staging
+entry, identity mismatch, corrupt ledger/history, or lost receipt is an operator-visible
+recovery condition, not permission to infer success from pathname presence or absence.
+Keep the write catalogue disabled and record the case as blocked until every prerequisite
+above is observed on the real Pi.  CI and temporary-directory tests are implementation
+evidence only; they are not real-Pi or real-ChatGPT support evidence.
 
 Live authentication feasibility
 -------------------------------
@@ -280,6 +340,18 @@ record.  Initialize the workspace:
      --profile-json /var/lib/binnacle/evaluation/profile-snapshot.json \
      --capability-scope-json /var/lib/binnacle/evaluation/phase3-capability-scope.json
 
+The default remains the reviewed Phase 3 read-only release.  For an eligible Phase 5
+write-probe run, select its reviewed release explicitly and provide a capability-scope
+record whose ``catalogue_phase`` is exactly ``compatibility-write-probe``:
+
+.. code-block:: console
+
+   uv run python scripts/mcp_evaluation.py init \
+     --output artifacts/mcp-evaluation/<evaluation-id> \
+     --profile-json /var/lib/binnacle/evaluation/profile-snapshot.json \
+     --capability-scope-json /var/lib/binnacle/evaluation/phase5-capability-scope.json \
+     --probe-release phase5-write-probe-evaluation-v1
+
 Use ``record`` once per retained attempt or evidence-backed status classification, then
 run ``verify``.  The command refuses unknown case IDs and statuses, secret-bearing or
 oversized evidence, missing evidence references, inconsistent attempt totals, and frozen
@@ -298,11 +370,12 @@ Human review is mandatory and precedes final hashing:
      --reviewer <reviewer-id> --reject-promotion --owner-private-data-reviewed
    uv run python scripts/mcp_evaluation.py finalize --output <workspace>
 
-Use ``--approve-promotion`` only when all mandatory live read-only cases meet their
-frozen attempt and pass-rate thresholds.  A rejected or blocked run may still be
-finalized truthfully.  Finalization writes a reviewed manifest, deterministic archive,
-and detached receipt.  The archive contains the manifest and sanitized evidence, never
-the detached receipt, and the manifest does not inventory/hash itself.
+Use ``--approve-promotion`` only when all mandatory live cases for the selected reviewed
+release/catalogue meet their frozen attempt and pass-rate thresholds.  A rejected or
+blocked run may still be finalized truthfully.  Finalization writes a reviewed manifest,
+deterministic archive, and detached receipt.  The archive contains the manifest and
+sanitized evidence, never the detached receipt, and the manifest does not inventory/hash
+itself.
 
 Retain evidence outside Git
 ---------------------------

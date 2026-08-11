@@ -13,6 +13,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
+from types import MappingProxyType
 from typing import Any, cast
 
 from jsonschema import Draft202012Validator, FormatChecker  # type: ignore[import-untyped]
@@ -34,7 +35,7 @@ _PROMOTED_STATUSES = frozenset({"observed-supported", "observed-limited", "host-
 _PASS_RATE_STATUSES = frozenset({"observed-supported", "observed-limited"})
 _PENDING_MARKERS = frozenset({"pending", "unknown", "tbd", "unobserved"})
 _MAX_MANIFEST_BYTES = 1_048_576
-_REQUIRED_LIVE_CASE_STATUSES = {
+_CORE_REQUIRED_LIVE_CASE_STATUSES = {
     "endpoint-connect": frozenset({"observed-supported"}),
     "protocol-revision-observed": frozenset({"observed-supported"}),
     "tool-discovery-manifest": frozenset({"observed-supported"}),
@@ -44,6 +45,29 @@ _REQUIRED_LIVE_CASE_STATUSES = {
     "execution-error-rendering": frozenset({"observed-supported", "observed-limited"}),
     "read-entitlement": frozenset({"observed-supported"}),
     "latency-context-cost": frozenset({"observed-supported", "observed-limited"}),
+}
+_WRITE_PROBE_REQUIRED_LIVE_CASE_STATUSES = {
+    **_CORE_REQUIRED_LIVE_CASE_STATUSES,
+    "write-tool-discovery-manifest": frozenset({"observed-supported"}),
+    "write-entitlement-and-confirmation": frozenset({"observed-supported"}),
+    "confirmation-decline": frozenset({"observed-supported"}),
+    "idempotency-lost-response": frozenset({"observed-supported"}),
+    "write-retained-after-state-and-expiry": frozenset({"observed-supported"}),
+    "cleanup-lost-response-after-state-and-expiry": frozenset({"observed-supported"}),
+    "uncertain-no-auto-retry": frozenset({"observed-supported"}),
+    "write-reconnect-retained": frozenset({"observed-supported"}),
+    "cleanup-exact-artifact": frozenset({"observed-supported"}),
+    "probe-ledger-history-integrity": frozenset({"observed-supported"}),
+}
+REVIEWED_PROMOTION_RELEASES: Mapping[str, str] = MappingProxyType(
+    {
+        "phase3-readonly-evaluation-v1": "compatibility-core",
+        "phase5-write-probe-evaluation-v1": "compatibility-write-probe",
+    }
+)
+_REQUIRED_LIVE_CASE_STATUSES_BY_CATALOGUE = {
+    "compatibility-core": _CORE_REQUIRED_LIVE_CASE_STATUSES,
+    "compatibility-write-probe": _WRITE_PROBE_REQUIRED_LIVE_CASE_STATUSES,
 }
 
 
@@ -113,6 +137,10 @@ def verify_evaluation_manifest(
     if require_review and not reviewed:
         raise EvaluationVerificationError("human review is incomplete")
     approved = review.get("approved_for_promotion") is True
+    promotion_catalogue: str | None = None
+    promotion_requirements: Mapping[str, frozenset[str]] | None = None
+    if approved:
+        promotion_catalogue, promotion_requirements = _promotion_requirements(manifest)
 
     redaction = _required_mapping(manifest, "redaction")
     redaction_complete = all(
@@ -216,15 +244,19 @@ def verify_evaluation_manifest(
     ):
         raise EvaluationVerificationError("promotion approval lacks required review attestations")
     if approved:
-        for case_id, allowed_statuses in _REQUIRED_LIVE_CASE_STATUSES.items():
+        selected_catalogue = cast(str, promotion_catalogue)
+        selected_requirements = cast(Mapping[str, frozenset[str]], promotion_requirements)
+        for case_id, allowed_statuses in selected_requirements.items():
             if result_statuses.get(case_id) not in allowed_statuses:
                 raise EvaluationVerificationError(
-                    f"promotion approval lacks required live evidence: {case_id}"
+                    f"promotion approval for {selected_catalogue} lacks required live evidence: "
+                    f"{case_id}"
                 )
             case_axis = cases.require(case_id).axis
             if conclusion_statuses.get(case_axis) not in allowed_statuses:
                 raise EvaluationVerificationError(
-                    f"promotion conclusion lacks required live evidence: {case_axis}"
+                    f"promotion conclusion for {selected_catalogue} lacks required live evidence: "
+                    f"{case_axis}"
                 )
     return VerificationReport(
         evaluation_id=evaluation_id,
@@ -233,6 +265,18 @@ def verify_evaluation_manifest(
         reviewed=reviewed,
         approved_for_promotion=approved,
     )
+
+
+def _promotion_requirements(
+    manifest: Mapping[str, Any],
+) -> tuple[str, Mapping[str, frozenset[str]]]:
+    probe_release = _required_string(_required_mapping(manifest, "probe"), "probe_release")
+    catalogue = REVIEWED_PROMOTION_RELEASES.get(probe_release)
+    if catalogue is None:
+        raise EvaluationVerificationError(
+            f"promotion approval uses unsupported probe release: {probe_release}"
+        )
+    return catalogue, _REQUIRED_LIVE_CASE_STATUSES_BY_CATALOGUE[catalogue]
 
 
 def finalize_evaluation(

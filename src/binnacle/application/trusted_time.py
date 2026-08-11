@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from dataclasses import dataclass
+from datetime import datetime, timedelta
 
 from binnacle.domain.trusted_time import (
     DeadlineEvaluation,
@@ -67,3 +68,24 @@ class TrustedTimeGuard:
         )
         await self._store.store_trusted_time_evidence(accepted)
         return True
+
+    async def issue_deadline(self, ttl_seconds: int) -> PreparedDeadline:
+        """Issue a same-boot monotonic deadline only from accepted trusted time."""
+
+        if ttl_seconds < 1:
+            raise ValueError("deadline TTL must be positive")
+        snapshot = await self._source.snapshot()
+        if not await self.accept_startup_snapshot(snapshot):
+            raise RuntimeError("trusted time is unavailable")
+        return PreparedDeadline(
+            expires_at=snapshot.wall_time + timedelta(seconds=ttl_seconds),
+            registered_boot_id_digest=snapshot.boot_id_digest,
+            monotonic_deadline_ns=snapshot.monotonic_ns + ttl_seconds * 1_000_000_000,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class PreparedDeadline:
+    expires_at: datetime
+    registered_boot_id_digest: str
+    monotonic_deadline_ns: int

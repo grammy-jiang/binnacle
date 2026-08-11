@@ -49,6 +49,15 @@ class AuditJournal(Protocol):
         running_state_version: int,
     ) -> str | None: ...
 
+    async def find_operation_state_evidence(
+        self,
+        *,
+        operation_id: str,
+        state_version: int,
+        state: str,
+        effect_knowledge: str,
+    ) -> str | None: ...
+
     async def find_generation_recovery(self, generation: int) -> str | None: ...
 
     async def list_obligation_recoveries(

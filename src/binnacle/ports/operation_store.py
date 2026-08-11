@@ -39,6 +39,14 @@ class CreateOrFindResult:
 
 
 @dataclass(frozen=True, slots=True)
+class PreparedExecutionAdmission:
+    """One caller key consuming one separately registered prepared nonce."""
+
+    caller: CreateOrFindRequest
+    prepared_key: IdempotencyKey
+
+
+@dataclass(frozen=True, slots=True)
 class PreparedNonceRegistration:
     key: IdempotencyKey
     owner: OperationOwner
@@ -75,7 +83,13 @@ class ReconciliationCursor:
 
 
 class OperationStore(Protocol):
+    async def find_existing(self, request: CreateOrFindRequest) -> CreateOrFindResult | None: ...
+
     async def create_or_find(self, request: CreateOrFindRequest) -> CreateOrFindResult: ...
+
+    async def create_or_find_prepared(
+        self, request: PreparedExecutionAdmission
+    ) -> CreateOrFindResult: ...
 
     async def get_operation(self, operation_id: str) -> OperationSnapshot | None: ...
 

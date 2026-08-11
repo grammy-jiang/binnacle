@@ -7,6 +7,7 @@ import json
 import sqlite3
 import stat
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import quote
 
@@ -15,8 +16,18 @@ from binnacle.adapters.audit.verify import AuditChainVerifier
 from binnacle.adapters.sqlite.engine import acquire_existing_runtime_lock
 from binnacle.domain.audit import AuditIntegrityError, AuditRuntimeIdentity, AuditTail
 from binnacle.domain.payload import is_canonical_payload_id
+from binnacle.domain.probe_workspace import (
+    ProbeArtifact,
+    ProbeArtifactState,
+    ProbeOperationKind,
+    ProbePathLedger,
+    ProbePathSnapshot,
+    operation_fingerprint_sha256,
+    prepared_input_sha256,
+    validate_path_snapshot,
+)
 
-EXPECTED_REVISION = "0001_durable_operation_kernel"
+EXPECTED_REVISION = "0002_write_probe_state"
 EXPECTED_TABLES = frozenset(
     {
         "alembic_version",
@@ -28,6 +39,9 @@ EXPECTED_TABLES = frozenset(
         "policy_decisions",
         "payload_objects",
         "operation_evidence",
+        "probe_operations",
+        "probe_artifacts",
+        "probe_path_ledger",
     }
 )
 
@@ -55,6 +69,9 @@ class DatabaseVerification:
     operation_count: int
     idempotency_count: int
     payload_count: int
+    probe_operation_count: int
+    probe_artifact_count: int
+    probe_path_count: int
     audit_tail_cache: AuditTail
     audit_failure_latched: bool
     audit_failure_generation: int
@@ -101,6 +118,7 @@ class KernelVerificationReport:
             "database_healthy": "database_integrity_failed" not in self.reason_codes,
             "audit_healthy": not any(reason.startswith("audit_") for reason in self.reason_codes),
             "payload_healthy": "payload_integrity_failed" not in self.reason_codes,
+            "probe_workspace_healthy": "probe_integrity_failed" not in self.reason_codes,
             "audit_failure_latched": self.database.audit_failure_latched,
             "audit_failure_generation": self.database.audit_failure_generation,
             "audit_recovered_generation": self.database.audit_recovered_generation,
@@ -114,6 +132,9 @@ class KernelVerificationReport:
             "operation_count": self.database.operation_count,
             "idempotency_count": self.database.idempotency_count,
             "payload_count": self.payload.metadata_count,
+            "probe_operation_count": self.database.probe_operation_count,
+            "probe_artifact_count": self.database.probe_artifact_count,
+            "probe_path_count": self.database.probe_path_count,
             "reason_codes": list(self.reason_codes),
         }
 
@@ -227,6 +248,7 @@ def _verify_database(
     if revision_row is None or revision_row[0] != EXPECTED_REVISION:
         raise KernelVerificationError("Alembic revision does not match")
     _verify_database_invariants(connection)
+    _verify_probe_invariants(connection)
     meta = connection.execute("SELECT * FROM kernel_meta WHERE id=1").fetchone()
     if meta is None:
         raise KernelVerificationError("kernel metadata singleton is absent")
@@ -243,6 +265,15 @@ def _verify_database(
             connection.execute("SELECT COUNT(*) FROM idempotency_bindings").fetchone()[0]
         ),
         payload_count=len(payload_rows),
+        probe_operation_count=int(
+            connection.execute("SELECT COUNT(*) FROM probe_operations").fetchone()[0]
+        ),
+        probe_artifact_count=int(
+            connection.execute("SELECT COUNT(*) FROM probe_artifacts").fetchone()[0]
+        ),
+        probe_path_count=int(
+            connection.execute("SELECT COUNT(*) FROM probe_path_ledger").fetchone()[0]
+        ),
         audit_tail_cache=AuditTail(meta["audit_last_sequence"], meta["audit_last_hash"]),
         audit_failure_latched=bool(meta["audit_failure_latched"]),
         audit_failure_generation=int(meta["audit_failure_generation"]),
@@ -330,6 +361,237 @@ def _verify_database_invariants(connection: sqlite3.Connection) -> None:
     for name, query in checks.items():
         if int(connection.execute(query).fetchone()[0]):
             raise KernelVerificationError(f"{name} invariant failed")
+
+
+def _verify_probe_invariants(connection: sqlite3.Connection) -> None:
+    provenance_errors = int(
+        connection.execute(
+            """
+            SELECT COUNT(*) FROM probe_operations p
+            LEFT JOIN operations o ON o.operation_id=p.operation_id
+            LEFT JOIN probe_artifacts a ON a.artifact_id=p.artifact_id
+            LEFT JOIN idempotency_bindings prepared
+              ON prepared.binding_id=p.prepared_binding_id
+            LEFT JOIN idempotency_bindings caller
+              ON caller.binding_id=p.caller_binding_id
+            WHERE o.operation_id IS NULL OR a.artifact_id IS NULL
+               OR prepared.binding_id IS NULL OR caller.binding_id IS NULL
+               OR prepared.operation_id!=p.operation_id OR caller.operation_id!=p.operation_id
+               OR prepared.key_mode!='prepared_execution_nonce'
+               OR caller.key_mode!='caller_key'
+               OR a.relative_path!=p.relative_path
+               OR a.content_sha256!=p.expected_content_sha256
+               OR a.owner_controller_id!=o.controller_id
+               OR a.owner_controller_epoch!=o.controller_epoch
+               OR prepared.owner_controller_id!=o.controller_id
+               OR prepared.owner_controller_epoch!=o.controller_epoch
+               OR caller.owner_controller_id!=o.controller_id
+               OR caller.owner_controller_epoch!=o.controller_epoch
+               OR prepared.record_kind!='full' OR caller.record_kind!='full'
+               OR prepared.request_fingerprint_sha256!=o.request_fingerprint_sha256
+               OR caller.request_fingerprint_sha256!=o.request_fingerprint_sha256
+               OR prepared.prepared_state_binding_sha256!=p.prepared_state_binding_sha256
+               OR prepared.target_identity_sha256 IS NOT caller.target_identity_sha256
+               OR prepared.maximum_effect_sha256 IS NOT caller.maximum_effect_sha256
+               OR prepared.tool_name!=('probe_workspace_' || p.probe_operation)
+               OR caller.tool_name!=('probe_workspace_' || p.probe_operation)
+               OR o.operation_contract!=('probe_workspace_' || p.probe_operation)
+               OR o.tool_name!=('probe_workspace_' || p.probe_operation)
+               OR prepared.contract_version!='1.1' OR caller.contract_version!='1.1'
+               OR o.operation_contract_version!='1.1' OR o.tool_contract_version!='1.1'
+               OR (p.probe_operation='write' AND
+                   (p.expected_byte_count IS NULL OR p.expected_byte_count!=a.byte_count
+                    OR a.create_operation_id!=p.operation_id))
+               OR (p.probe_operation='cleanup' AND p.expected_byte_count IS NOT NULL)
+            """
+        ).fetchone()[0]
+    )
+    orphan_errors = int(
+        connection.execute(
+            """
+            SELECT COUNT(*) FROM probe_artifacts a
+            LEFT JOIN probe_path_ledger l ON l.relative_path=a.relative_path
+            WHERE l.relative_path IS NULL
+            """
+        ).fetchone()[0]
+    )
+    if provenance_errors or orphan_errors:
+        raise KernelVerificationError("probe provenance invariant failed")
+
+    for probe in connection.execute("SELECT * FROM probe_operations ORDER BY operation_id"):
+        _verify_probe_operation_provenance(connection, probe)
+
+    ledgers = tuple(connection.execute("SELECT * FROM probe_path_ledger ORDER BY relative_path"))
+    for ledger_row in ledgers:
+        artifacts = tuple(
+            connection.execute(
+                "SELECT * FROM probe_artifacts WHERE relative_path=? ORDER BY path_generation",
+                (ledger_row["relative_path"],),
+            )
+        )
+        terminal: list[ProbeArtifact] = []
+        active: ProbeArtifact | None = None
+        for row in artifacts:
+            artifact = _probe_artifact(row)
+            if artifact.artifact_id == ledger_row["active_artifact_id"]:
+                if active is not None:
+                    raise KernelVerificationError("probe ledger has duplicate active artifacts")
+                active = artifact
+            elif artifact.state in {
+                ProbeArtifactState.REMOVED,
+                ProbeArtifactState.ABANDONED,
+            }:
+                terminal.append(artifact)
+            else:
+                raise KernelVerificationError("probe nonterminal artifact is not ledger-active")
+        snapshot = ProbePathSnapshot(
+            ledger=ProbePathLedger(
+                relative_path=str(ledger_row["relative_path"]),
+                generation_high_water=int(ledger_row["generation_high_water"]),
+                terminal_history_count=int(ledger_row["terminal_history_count"]),
+                terminal_history_sha256=str(ledger_row["terminal_history_sha256"]),
+                active_artifact_id=ledger_row["active_artifact_id"],
+                active_generation=ledger_row["active_generation"],
+                active_create_operation_id=ledger_row["active_create_operation_id"],
+                ledger_version=int(ledger_row["ledger_version"]),
+                updated_at=_sqlite_datetime(ledger_row["updated_at"]),
+            ),
+            terminal_artifacts=tuple(terminal),
+            active_artifact=active,
+        )
+        try:
+            validate_path_snapshot(snapshot)
+        except (TypeError, ValueError) as exc:
+            raise KernelVerificationError("probe ledger history invariant failed") from exc
+
+
+def _verify_probe_operation_provenance(
+    connection: sqlite3.Connection,
+    probe: sqlite3.Row,
+) -> None:
+    operation = connection.execute(
+        "SELECT * FROM operations WHERE operation_id=?",
+        (probe["operation_id"],),
+    ).fetchone()
+    prepared = connection.execute(
+        "SELECT * FROM idempotency_bindings WHERE binding_id=?",
+        (probe["prepared_binding_id"],),
+    ).fetchone()
+    caller = connection.execute(
+        "SELECT * FROM idempotency_bindings WHERE binding_id=?",
+        (probe["caller_binding_id"],),
+    ).fetchone()
+    artifact = connection.execute(
+        "SELECT * FROM probe_artifacts WHERE artifact_id=?",
+        (probe["artifact_id"],),
+    ).fetchone()
+    if operation is None or prepared is None or caller is None or artifact is None:
+        raise KernelVerificationError("probe operation provenance is incomplete")
+    try:
+        kind = ProbeOperationKind(str(probe["probe_operation"]))
+        prepared_artifact_id = (
+            None if kind is ProbeOperationKind.WRITE else str(probe["artifact_id"])
+        )
+        input_digest = prepared_input_sha256(
+            operation=kind,
+            relative_path=str(probe["relative_path"]),
+            expected_content_sha256=str(probe["expected_content_sha256"]),
+            byte_count=(
+                None if probe["expected_byte_count"] is None else int(probe["expected_byte_count"])
+            ),
+            artifact_id=prepared_artifact_id,
+        )
+        prepared_operation_id = str(prepared["prepared_operation_id"])
+        target_digest = str(prepared["target_identity_sha256"])
+        maximum_digest = str(prepared["maximum_effect_sha256"])
+        fingerprint = operation_fingerprint_sha256(
+            operation=kind,
+            prepared_operation_id=prepared_operation_id,
+            prepared_input_sha256=input_digest,
+            relative_path=str(probe["relative_path"]),
+            expected_content_sha256=str(probe["expected_content_sha256"]),
+            byte_count=(
+                None if probe["expected_byte_count"] is None else int(probe["expected_byte_count"])
+            ),
+            artifact_id=prepared_artifact_id,
+            target_identity_digest=target_digest,
+            maximum_effect_digest=maximum_digest,
+        )
+    except (TypeError, ValueError) as exc:
+        raise KernelVerificationError("probe operation digest provenance is invalid") from exc
+    if (
+        prepared["prepared_input_sha256"] != input_digest
+        or prepared["request_fingerprint_sha256"] != fingerprint
+        or caller["request_fingerprint_sha256"] != fingerprint
+        or operation["request_fingerprint_sha256"] != fingerprint
+    ):
+        raise KernelVerificationError("probe operation digest provenance is inconsistent")
+
+    create_probe = connection.execute(
+        "SELECT * FROM probe_operations WHERE operation_id=?",
+        (artifact["create_operation_id"],),
+    ).fetchone()
+    if (
+        create_probe is None
+        or create_probe["probe_operation"] != ProbeOperationKind.WRITE.value
+        or create_probe["artifact_id"] != artifact["artifact_id"]
+        or create_probe["relative_path"] != artifact["relative_path"]
+        or create_probe["expected_content_sha256"] != artifact["content_sha256"]
+        or create_probe["expected_byte_count"] != artifact["byte_count"]
+    ):
+        raise KernelVerificationError("probe artifact creation provenance is inconsistent")
+    for cleanup_operation_id in (
+        artifact["active_cleanup_operation_id"],
+        artifact["removed_by_cleanup_operation_id"],
+    ):
+        if cleanup_operation_id is None:
+            continue
+        cleanup_probe = connection.execute(
+            "SELECT * FROM probe_operations WHERE operation_id=?",
+            (cleanup_operation_id,),
+        ).fetchone()
+        if (
+            cleanup_probe is None
+            or cleanup_probe["probe_operation"] != ProbeOperationKind.CLEANUP.value
+            or cleanup_probe["artifact_id"] != artifact["artifact_id"]
+            or cleanup_probe["relative_path"] != artifact["relative_path"]
+            or cleanup_probe["expected_content_sha256"] != artifact["content_sha256"]
+        ):
+            raise KernelVerificationError("probe cleanup provenance is inconsistent")
+
+
+def _probe_artifact(row: sqlite3.Row) -> ProbeArtifact:
+    try:
+        state = ProbeArtifactState(str(row["state"]))
+    except ValueError as exc:
+        raise KernelVerificationError("probe artifact state is invalid") from exc
+    return ProbeArtifact(
+        artifact_id=str(row["artifact_id"]),
+        relative_path=str(row["relative_path"]),
+        path_generation=int(row["path_generation"]),
+        owner_controller_id=str(row["owner_controller_id"]),
+        owner_controller_epoch=int(row["owner_controller_epoch"]),
+        content_sha256=str(row["content_sha256"]),
+        byte_count=int(row["byte_count"]),
+        state=state,
+        create_operation_id=str(row["create_operation_id"]),
+        active_cleanup_operation_id=row["active_cleanup_operation_id"],
+        removed_by_cleanup_operation_id=row["removed_by_cleanup_operation_id"],
+        created_at=_sqlite_datetime(row["created_at"]),
+        updated_at=_sqlite_datetime(row["updated_at"]),
+        removed_at=(None if row["removed_at"] is None else _sqlite_datetime(row["removed_at"])),
+        file_identity_digest=row["file_identity_digest"],
+    )
+
+
+def _sqlite_datetime(value: object) -> datetime:
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, str):
+        parsed = datetime.fromisoformat(value)
+    else:
+        raise KernelVerificationError("probe timestamp is invalid")
+    return parsed.replace(tzinfo=UTC) if parsed.tzinfo is None else parsed.astimezone(UTC)
 
 
 async def _verify_audit(

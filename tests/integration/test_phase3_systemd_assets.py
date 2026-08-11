@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import grp
+import json
 import os
 import pwd
 from pathlib import Path
@@ -117,6 +118,8 @@ def test_verifier_keeps_external_live_gates_explicitly_blocked(tmp_path: Path) -
     assert by_name["selected-auth-profile"].status == "blocked"
     assert by_name["authenticated-catalogue"].status == "blocked"
     assert by_name["tunnel-identity"].status == "blocked"
+    assert by_name["probe-filesystem-primitives"].status == "blocked"
+    assert by_name["write-probe-catalogue"].status == "blocked"
 
 
 def test_verifier_rejects_a_clean_but_unreviewed_commit(
@@ -196,3 +199,135 @@ credential_reference = "not-rendered"
         encoding="utf-8",
     )
     assert verify_dev_pi._safe_server_settings(config) is None
+
+
+def test_verifier_accepts_only_the_fixed_bounded_probe_profile(tmp_path: Path) -> None:
+    config = tmp_path / "dev.toml"
+    config.write_text(
+        """
+[probe_workspace]
+enabled = false
+root = "/var/lib/binnacle/probe-workspace"
+max_file_bytes = 65536
+preparation_ttl_seconds = 300
+""".strip(),
+        encoding="utf-8",
+    )
+
+    assert verify_dev_pi._safe_probe_settings(config) == (False, 65_536, 300)
+
+    config.write_text(
+        '[probe_workspace]\nroot = "/tmp/model-selected"\n',
+        encoding="utf-8",
+    )
+    assert verify_dev_pi._safe_probe_settings(config) is None
+
+
+def test_probe_mount_profile_accepts_only_reviewed_ext4_block_storage() -> None:
+    mount = verify_dev_pi._parse_probe_mount_facts(
+        json.dumps(
+            {
+                "filesystems": [
+                    {
+                        "target": "/",
+                        "source": "/dev/mmcblk0p2",
+                        "fstype": "ext4",
+                        "options": "rw,relatime",
+                        "fsroot": "/",
+                    }
+                ]
+            }
+        )
+    )
+
+    assert verify_dev_pi._probe_mount_is_supported(
+        mount,
+        root_device=7,
+        protected_devices=frozenset({7}),
+    )
+
+
+@pytest.mark.parametrize(
+    "filesystem",
+    ("nfs4", "ceph", "cifs", "xfs"),
+)
+def test_probe_mount_profile_rejects_network_and_unreviewed_filesystems(
+    filesystem: str,
+) -> None:
+    mount = verify_dev_pi._ProbeMountFacts(
+        target=Path("/"),
+        source="/dev/mmcblk0p2",
+        filesystem_type=filesystem,
+        options=frozenset({"rw"}),
+        filesystem_root="/",
+    )
+
+    assert not verify_dev_pi._probe_mount_is_supported(
+        mount,
+        root_device=7,
+        protected_devices=frozenset({7}),
+    )
+
+
+def test_probe_mount_profile_rejects_bind_to_checkout_subdirectory() -> None:
+    mount = verify_dev_pi._ProbeMountFacts(
+        target=verify_dev_pi.PROBE_ROOT,
+        source="/dev/mmcblk0p2[/srv/binnacle-dev/repo/probe-data]",
+        filesystem_type="ext4",
+        options=frozenset({"rw", "bind"}),
+        filesystem_root="/srv/binnacle-dev/repo/probe-data",
+    )
+
+    assert not verify_dev_pi._probe_mount_is_supported(
+        mount,
+        root_device=7,
+        protected_devices=frozenset({7}),
+    )
+
+
+def test_probe_mount_profile_rejects_whole_filesystem_alias_of_protected_tree() -> None:
+    mount = verify_dev_pi._ProbeMountFacts(
+        target=verify_dev_pi.PROBE_ROOT,
+        source="/dev/mmcblk0p2",
+        filesystem_type="ext4",
+        options=frozenset({"rw"}),
+        filesystem_root="/",
+    )
+
+    assert not verify_dev_pi._probe_mount_is_supported(
+        mount,
+        root_device=7,
+        protected_devices=frozenset({7}),
+    )
+    assert verify_dev_pi._probe_mount_is_supported(
+        mount,
+        root_device=8,
+        protected_devices=frozenset({7}),
+    )
+
+
+def test_verifier_rejects_broadened_effective_write_paths(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    expected = {
+        "ActiveState": "active",
+        "UnitFileState": "enabled",
+        "User": "binnacle",
+        "Group": "binnacle",
+        "SupplementaryGroups": "binnacle-dev",
+        "Environment": "",
+        "EnvironmentFiles": "",
+        "ReadWritePaths": " ".join(
+            sorted(verify_dev_pi.EXPECTED_READ_WRITE_PATHS | {"/srv/binnacle-dev/repo"})
+        ),
+        "ProtectSystem": "strict",
+        "FragmentPath": "/etc/systemd/system/binnacle-dev.service",
+        "DropInPaths": "",
+    }
+    monkeypatch.setattr(verify_dev_pi, "_systemd_properties", lambda _names: expected)
+    service = pwd.struct_passwd(("binnacle", "x", 1200, 1200, "", "/", "/usr/sbin/nologin"))
+    monkeypatch.setattr(pwd, "getpwnam", lambda _name: service)
+
+    checks = {check.name: check for check in verify_dev_pi._systemd_service_checks()}
+
+    assert checks["service-write-boundary"].status == "fail"

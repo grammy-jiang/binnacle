@@ -33,6 +33,9 @@ jobs:
           python -m pip install --disable-pip-version-check
           PyYAML==6.0.3 jsonschema==4.26.0
 
+      - name: Check both generated MCP catalogue projections
+        run: python scripts/compile_mcp_registry.py --check
+
       - name: Validate contracts
         run: python scripts/validate_contracts.py
 

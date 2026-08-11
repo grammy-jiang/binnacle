@@ -8,6 +8,8 @@ from enum import StrEnum
 from typing import Generic, TypeAlias, TypeVar
 
 from binnacle.domain.controller import ControllerSecurityContext
+from binnacle.domain.operation import OperationSnapshot
+from binnacle.domain.probe_workspace import ProbeOperationKind
 from binnacle.domain.system import SystemSection
 
 
@@ -18,6 +20,7 @@ class ProtocolEra(StrEnum):
 
 class CataloguePhase(StrEnum):
     COMPATIBILITY_CORE = "compatibility-core"
+    COMPATIBILITY_WRITE_PROBE = "compatibility-write-probe"
 
 
 class ProbeErrorCase(StrEnum):
@@ -62,7 +65,7 @@ class BinnacleError:
     message: str
     retryable: bool
     retry_action: str
-    operation_id: None = None
+    operation_id: str | None = None
     details: tuple[DiagnosticFact, ...] = ()
 
 
@@ -76,7 +79,7 @@ class SuccessEnvelope(Generic[DataT]):
     tool: ToolIdentity
     request_id: str
     data: DataT
-    operation: None = None
+    operation: OperationView | None = None
     evidence: tuple[object, ...] = ()
     warnings: tuple[WarningRecord, ...] = ()
 
@@ -88,7 +91,7 @@ class ExecutionErrorEnvelope:
     tool: ToolIdentity
     request_id: str
     error: BinnacleError
-    operation: None = None
+    operation: OperationView | None = None
     evidence: tuple[object, ...] = ()
     warnings: tuple[WarningRecord, ...] = ()
 
@@ -119,6 +122,35 @@ class ProbeErrorRequest:
 @dataclass(frozen=True, slots=True)
 class CompatibilityReportRequest:
     pass
+
+
+@dataclass(frozen=True, slots=True)
+class ProbeWorkspacePrepareRequest:
+    operation: ProbeOperationKind
+    relative_path: str
+    content_sha256: str
+    byte_count: int | None = None
+    artifact_id: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ProbeWorkspaceWriteRequest:
+    prepared_operation_id: str
+    execution_nonce: str
+    idempotency_key: str
+    relative_path: str
+    content: bytes
+    overwrite: bool
+
+
+@dataclass(frozen=True, slots=True)
+class ProbeWorkspaceCleanupRequest:
+    prepared_operation_id: str
+    execution_nonce: str
+    idempotency_key: str
+    relative_path: str
+    artifact_id: str
+    content_sha256: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -189,6 +221,76 @@ class CompatibilityReportData:
     observations: tuple[CompatibilityObservation, ...]
     evidence_bundle_sha256: str | None
     limitations: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class OperationProgress:
+    known: bool = False
+    millionths: int | None = None
+    unit: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class OperationView:
+    operation_id: str
+    state: str
+    terminality: str
+    state_version: int
+    effect_knowledge: str
+    progress: OperationProgress
+    automatic_retry_allowed: bool
+    error: BinnacleError | None
+
+
+@dataclass(frozen=True, slots=True)
+class ProbeWorkspacePreparationData:
+    prepared_operation_id: str
+    execution_nonce: str
+    expires_at: str
+    operation: str
+    relative_path: str
+    normalized_input_sha256: str
+    maximum_effect: str
+
+
+@dataclass(frozen=True, slots=True)
+class ProbeWorkspaceWriteData:
+    relative_path: str
+    byte_count: int
+    content_sha256: str
+    artifact_id: str
+    created: bool
+
+
+@dataclass(frozen=True, slots=True)
+class ProbeWorkspaceCleanupData:
+    relative_path: str
+    artifact_id: str
+    content_sha256: str
+    removed: bool
+    already_missing: bool
+
+
+def operation_view(snapshot: OperationSnapshot) -> OperationView:
+    error = None
+    if snapshot.error is not None:
+        error = BinnacleError(
+            code=snapshot.error.code,
+            message=snapshot.error.summary,
+            retryable=False,
+            retry_action=snapshot.error.retry_action,
+            operation_id=snapshot.operation_id,
+        )
+    return OperationView(
+        operation_id=snapshot.operation_id,
+        state=snapshot.state.value,
+        terminality=snapshot.terminality.value,
+        state_version=snapshot.state_version,
+        effect_knowledge=snapshot.effect_knowledge.value,
+        progress=OperationProgress(),
+        automatic_retry_allowed=snapshot.automatic_retry_allowed,
+        error=error,
+    )
 
 
 JsonScalar: TypeAlias = str | int | float | bool | None

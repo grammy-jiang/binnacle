@@ -1,0 +1,468 @@
+"""Descriptor-relative Linux probe boundary tests."""
+
+from __future__ import annotations
+
+import hashlib
+import os
+from pathlib import Path
+
+import pytest
+
+from binnacle.adapters.probe_workspace import (
+    LinuxProbeWorkspace,
+    ProbeEffectNotStarted,
+    ProbeWorkspaceFilesystemError,
+)
+from binnacle.domain.probe_workspace import ProbeTargetState
+
+
+def _root(tmp_path: Path) -> Path:
+    root = tmp_path / "probe"
+    (root / ".staging").mkdir(parents=True)
+    root.chmod(0o700)
+    (root / ".staging").chmod(0o700)
+    return root
+
+
+@pytest.mark.anyio
+async def test_linux_probe_create_is_no_replace_and_cleanup_is_identity_bound(
+    tmp_path: Path,
+) -> None:
+    root = _root(tmp_path)
+    workspace = LinuxProbeWorkspace(root=root, maximum_file_bytes=65_536)
+    await workspace.initialize()
+    content = b"bounded probe"
+    digest = hashlib.sha256(content).hexdigest()
+    reference = await workspace.create(
+        operation_id="op_fixture",
+        artifact_id="artifact_fixture",
+        path_generation=1,
+        relative_path="probe.txt",
+        content=content,
+        expected_content_sha256=digest,
+    )
+    observation = await workspace.observe("probe.txt")
+    assert observation.state is ProbeTargetState.EXACT
+    assert observation.content_sha256 == digest
+    assert reference.endswith(observation.file_identity_digest or "missing")
+    with pytest.raises(ProbeEffectNotStarted):
+        await workspace.create(
+            operation_id="op_second",
+            artifact_id="artifact_second",
+            path_generation=2,
+            relative_path="probe.txt",
+            content=b"replacement",
+            expected_content_sha256=hashlib.sha256(b"replacement").hexdigest(),
+        )
+    assert (root / "probe.txt").read_bytes() == content
+    with pytest.raises(ProbeEffectNotStarted):
+        await workspace.remove(
+            operation_id="op_cleanup",
+            artifact_id="artifact_fixture",
+            path_generation=1,
+            relative_path="probe.txt",
+            expected_content_sha256=digest,
+            expected_file_identity_digest="f" * 64,
+        )
+    await workspace.remove(
+        operation_id="op_cleanup",
+        artifact_id="artifact_fixture",
+        path_generation=1,
+        relative_path="probe.txt",
+        expected_content_sha256=digest,
+        expected_file_identity_digest=observation.file_identity_digest or "",
+    )
+    assert (await workspace.observe("probe.txt")).state is ProbeTargetState.ABSENT
+
+
+@pytest.mark.anyio
+async def test_linux_probe_rejects_symlinked_root_or_staging(tmp_path: Path) -> None:
+    real = _root(tmp_path)
+    linked = tmp_path / "linked"
+    linked.symlink_to(real, target_is_directory=True)
+    with pytest.raises(ProbeWorkspaceFilesystemError, match=r"layout|directory|root"):
+        await LinuxProbeWorkspace(root=linked, maximum_file_bytes=100).initialize()
+
+
+@pytest.mark.anyio
+async def test_linux_probe_layout_identity_and_constructor_bounds(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="absolute"):
+        LinuxProbeWorkspace(root=Path("relative"))
+    with pytest.raises(ValueError, match="byte limit"):
+        LinuxProbeWorkspace(root=tmp_path.resolve(), maximum_file_bytes=0)
+
+    root = _root(tmp_path)
+    workspace = LinuxProbeWorkspace(root=root, maximum_file_bytes=16)
+    await workspace.initialize()
+    identity = await workspace.root_identity()
+    assert workspace.root == root
+    assert identity.inode == root.stat().st_ino
+    assert identity.mode == 0o700
+
+    root.chmod(0o750)
+    with pytest.raises(ProbeWorkspaceFilesystemError, match="unsafe"):
+        await workspace.root_identity()
+
+
+@pytest.mark.anyio
+async def test_linux_probe_detects_replaced_root_identity(tmp_path: Path) -> None:
+    root = _root(tmp_path)
+    workspace = LinuxProbeWorkspace(root=root, maximum_file_bytes=16)
+    await workspace.initialize()
+    root.rename(tmp_path / "old-probe")
+    replacement = _root(tmp_path)
+    assert replacement == root
+
+    with pytest.raises(ProbeWorkspaceFilesystemError, match="identity changed"):
+        await workspace.root_identity()
+
+
+@pytest.mark.anyio
+async def test_linux_probe_effect_fds_reject_replaced_root_or_staging(tmp_path: Path) -> None:
+    content = b"safe"
+    digest = hashlib.sha256(content).hexdigest()
+    root = _root(tmp_path / "root-replaced")
+    workspace = LinuxProbeWorkspace(root=root, maximum_file_bytes=16)
+    await workspace.initialize()
+    root.rename(root.parent / "old-probe")
+    replacement = _root(root.parent)
+
+    with pytest.raises(ProbeWorkspaceFilesystemError, match="identity changed before effect"):
+        await workspace.create(
+            operation_id="op-fixture",
+            artifact_id="artifact-fixture",
+            path_generation=1,
+            relative_path="probe.txt",
+            content=content,
+            expected_content_sha256=digest,
+        )
+    assert not (replacement / "probe.txt").exists()
+
+    root = _root(tmp_path / "staging-replaced")
+    workspace = LinuxProbeWorkspace(root=root, maximum_file_bytes=16)
+    await workspace.initialize()
+    staging = root / ".staging"
+    staging.rename(root / ".staging-old")
+    staging.mkdir(mode=0o700)
+
+    with pytest.raises(ProbeWorkspaceFilesystemError, match="identity changed before effect"):
+        await workspace.create(
+            operation_id="op-fixture",
+            artifact_id="artifact-fixture",
+            path_generation=1,
+            relative_path="probe.txt",
+            content=content,
+            expected_content_sha256=digest,
+        )
+    assert not (root / "probe.txt").exists()
+
+
+@pytest.mark.anyio
+async def test_linux_probe_observation_rejects_non_regular_or_broad_files(
+    tmp_path: Path,
+) -> None:
+    root = _root(tmp_path)
+    workspace = LinuxProbeWorkspace(root=root, maximum_file_bytes=4)
+    await workspace.initialize()
+
+    (root / "directory").mkdir()
+    assert (await workspace.observe("directory")).state is ProbeTargetState.MISMATCH
+
+    (root / "broad.txt").write_bytes(b"12345")
+    (root / "broad.txt").chmod(0o600)
+    assert (await workspace.observe("broad.txt")).state is ProbeTargetState.MISMATCH
+
+    (root / "wrong-mode.txt").write_bytes(b"1234")
+    (root / "wrong-mode.txt").chmod(0o640)
+    assert (await workspace.observe("wrong-mode.txt")).state is ProbeTargetState.MISMATCH
+
+    (root / "target.txt").write_bytes(b"1234")
+    (root / "target.txt").chmod(0o600)
+    (root / "linked.txt").symlink_to(root / "target.txt")
+    assert (await workspace.observe("linked.txt")).state is ProbeTargetState.MISMATCH
+
+
+@pytest.mark.anyio
+async def test_linux_probe_bounds_digest_and_absent_cleanup_are_known_no_effect(
+    tmp_path: Path,
+) -> None:
+    root = _root(tmp_path)
+    workspace = LinuxProbeWorkspace(root=root, maximum_file_bytes=4)
+    await workspace.initialize()
+
+    with pytest.raises(ProbeEffectNotStarted, match="bounds"):
+        await workspace.create(
+            operation_id="op_fixture",
+            artifact_id="artifact_fixture",
+            path_generation=0,
+            relative_path="probe.txt",
+            content=b"1234",
+            expected_content_sha256=hashlib.sha256(b"1234").hexdigest(),
+        )
+    with pytest.raises(ProbeEffectNotStarted, match="digest"):
+        await workspace.create(
+            operation_id="op_fixture",
+            artifact_id="artifact_fixture",
+            path_generation=1,
+            relative_path="probe.txt",
+            content=b"1234",
+            expected_content_sha256="a" * 64,
+        )
+    assert (
+        await workspace.remove(
+            operation_id="op_cleanup",
+            artifact_id="artifact_fixture",
+            path_generation=1,
+            relative_path="missing.txt",
+            expected_content_sha256="a" * 64,
+            expected_file_identity_digest="b" * 64,
+        )
+        is None
+    )
+    with pytest.raises(ProbeEffectNotStarted, match="generation"):
+        await workspace.remove(
+            operation_id="op_cleanup",
+            artifact_id="artifact_fixture",
+            path_generation=0,
+            relative_path="missing.txt",
+            expected_content_sha256="a" * 64,
+            expected_file_identity_digest="b" * 64,
+        )
+
+
+def test_linux_probe_low_level_io_helpers_are_bounded(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    workspace = LinuxProbeWorkspace(root=tmp_path.resolve(), maximum_file_bytes=4)
+    read_fd, write_fd = os.pipe()
+    try:
+        os.write(write_fd, b"12345")
+        os.close(write_fd)
+        write_fd = -1
+        with pytest.raises(ProbeWorkspaceFilesystemError, match="structural bound"):
+            workspace._read_bounded(read_fd)
+    finally:
+        os.close(read_fd)
+        if write_fd >= 0:
+            os.close(write_fd)
+
+    monkeypatch.setattr(os, "write", lambda _descriptor, _content: 0)
+    with pytest.raises(OSError, match="short"):
+        workspace._write_all(1, b"x")
+
+
+@pytest.mark.anyio
+async def test_linux_probe_descriptor_open_races_fail_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _root(tmp_path)
+    workspace = LinuxProbeWorkspace(root=root, maximum_file_bytes=8)
+    await workspace.initialize()
+    real_open = os.open
+    open_count = 0
+
+    def fail_second_open(*args: object, **kwargs: object) -> int:
+        nonlocal open_count
+        open_count += 1
+        if open_count == 2:
+            raise OSError("staging raced")
+        return real_open(*args, **kwargs)  # type: ignore[arg-type]
+
+    with monkeypatch.context() as patcher:
+        patcher.setattr(os, "open", fail_second_open)
+        with pytest.raises(OSError, match="staging raced"):
+            workspace._open_directories()
+
+    target = root / "probe.txt"
+    target.write_bytes(b"safe")
+    target.chmod(0o600)
+    root_fd = real_open(root, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+
+        def fail_target_open(
+            path: str | bytes | os.PathLike[str] | os.PathLike[bytes],
+            flags: int,
+            mode: int = 0o777,
+            *,
+            dir_fd: int | None = None,
+        ) -> int:
+            if path == "probe.txt":
+                raise OSError("target raced")
+            return real_open(path, flags, mode, dir_fd=dir_fd)
+
+        with monkeypatch.context() as patcher:
+            patcher.setattr(os, "open", fail_target_open)
+            assert workspace._observe_at(root_fd, "probe.txt").state is ProbeTargetState.MISMATCH
+    finally:
+        os.close(root_fd)
+
+
+@pytest.mark.anyio
+async def test_linux_probe_create_faults_preserve_no_start_vs_uncertain(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    content = b"safe"
+    digest = hashlib.sha256(content).hexdigest()
+
+    root = _root(tmp_path / "staging-mismatch")
+    workspace = LinuxProbeWorkspace(root=root, maximum_file_bytes=8)
+    await workspace.initialize()
+    with monkeypatch.context() as patcher:
+        patcher.setattr(workspace, "_read_bounded", lambda _descriptor: b"wrong")
+        with pytest.raises(ProbeEffectNotStarted, match="staging_verification"):
+            await workspace.create(
+                operation_id="op-fixture",
+                artifact_id="artifact-fixture",
+                path_generation=1,
+                relative_path="probe.txt",
+                content=content,
+                expected_content_sha256=digest,
+            )
+    assert not (root / "probe.txt").exists()
+
+    root = _root(tmp_path / "link-race")
+    workspace = LinuxProbeWorkspace(root=root, maximum_file_bytes=8)
+    await workspace.initialize()
+    with monkeypatch.context() as patcher:
+
+        def target_exists(*_args: object, **_kwargs: object) -> None:
+            raise FileExistsError("target appeared")
+
+        patcher.setattr(os, "link", target_exists)
+        with pytest.raises(ProbeEffectNotStarted, match="target_not_absent"):
+            await workspace.create(
+                operation_id="op-fixture",
+                artifact_id="artifact-fixture",
+                path_generation=1,
+                relative_path="probe.txt",
+                content=content,
+                expected_content_sha256=digest,
+            )
+
+    root = _root(tmp_path / "pre-publish")
+    workspace = LinuxProbeWorkspace(root=root, maximum_file_bytes=8)
+    await workspace.initialize()
+    with monkeypatch.context() as patcher:
+        patcher.setattr(os, "fsync", lambda _descriptor: (_ for _ in ()).throw(OSError("disk")))
+        with pytest.raises(ProbeEffectNotStarted, match="write_not_started"):
+            await workspace.create(
+                operation_id="op-fixture",
+                artifact_id="artifact-fixture",
+                path_generation=1,
+                relative_path="probe.txt",
+                content=content,
+                expected_content_sha256=digest,
+            )
+    assert not (root / "probe.txt").exists()
+
+    root = _root(tmp_path / "post-publish")
+    workspace = LinuxProbeWorkspace(root=root, maximum_file_bytes=8)
+    await workspace.initialize()
+    real_fsync = os.fsync
+
+    def fail_root_fsync(descriptor: int) -> None:
+        if os.fstat(descriptor).st_ino == root.stat().st_ino:
+            raise OSError("root fsync failed")
+        real_fsync(descriptor)
+
+    with monkeypatch.context() as patcher:
+        patcher.setattr(os, "fsync", fail_root_fsync)
+        with pytest.raises(OSError, match="root fsync failed"):
+            await workspace.create(
+                operation_id="op-fixture",
+                artifact_id="artifact-fixture",
+                path_generation=1,
+                relative_path="probe.txt",
+                content=content,
+                expected_content_sha256=digest,
+            )
+    assert (root / "probe.txt").read_bytes() == content
+
+
+@pytest.mark.anyio
+async def test_linux_probe_cleanup_races_are_conservatively_classified(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _root(tmp_path)
+    workspace = LinuxProbeWorkspace(root=root, maximum_file_bytes=8)
+    await workspace.initialize()
+    content = b"safe"
+    digest = hashlib.sha256(content).hexdigest()
+    await workspace.create(
+        operation_id="op-write",
+        artifact_id="artifact-fixture",
+        path_generation=1,
+        relative_path="probe.txt",
+        content=content,
+        expected_content_sha256=digest,
+    )
+    exact = await workspace.observe("probe.txt")
+    assert exact.file_identity_digest is not None
+
+    observations = iter(
+        (
+            exact,
+            type(exact)(
+                ProbeTargetState.EXACT,
+                file_identity_digest="f" * 64,
+                content_sha256=digest,
+                byte_count=len(content),
+            ),
+        )
+    )
+    with monkeypatch.context() as patcher:
+        patcher.setattr(workspace, "_observe_at", lambda _fd, _path: next(observations))
+        with pytest.raises(ProbeEffectNotStarted, match="identity_changed"):
+            await workspace.remove(
+                operation_id="op-cleanup",
+                artifact_id="artifact-fixture",
+                path_generation=1,
+                relative_path="probe.txt",
+                expected_content_sha256=digest,
+                expected_file_identity_digest=exact.file_identity_digest,
+            )
+
+    real_unlink = os.unlink
+
+    def disappear_before_unlink(
+        path: str | bytes | os.PathLike[str] | os.PathLike[bytes],
+        *,
+        dir_fd: int | None = None,
+    ) -> None:
+        if path == "probe.txt":
+            raise FileNotFoundError("raced")
+        real_unlink(path, dir_fd=dir_fd)
+
+    with monkeypatch.context() as patcher:
+        patcher.setattr(os, "unlink", disappear_before_unlink)
+        assert (
+            await workspace.remove(
+                operation_id="op-cleanup",
+                artifact_id="artifact-fixture",
+                path_generation=1,
+                relative_path="probe.txt",
+                expected_content_sha256=digest,
+                expected_file_identity_digest=exact.file_identity_digest,
+            )
+            is None
+        )
+
+    real_fsync = os.fsync
+
+    def fail_root_fsync(descriptor: int) -> None:
+        if os.fstat(descriptor).st_ino == root.stat().st_ino:
+            raise OSError("root fsync failed")
+        real_fsync(descriptor)
+
+    with monkeypatch.context() as patcher:
+        patcher.setattr(os, "fsync", fail_root_fsync)
+        with pytest.raises(OSError, match="root fsync failed"):
+            await workspace.remove(
+                operation_id="op-cleanup",
+                artifact_id="artifact-fixture",
+                path_generation=1,
+                relative_path="probe.txt",
+                expected_content_sha256=digest,
+                expected_file_identity_digest=exact.file_identity_digest,
+            )
+    assert not (root / "probe.txt").exists()

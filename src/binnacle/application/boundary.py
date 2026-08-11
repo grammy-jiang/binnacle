@@ -13,6 +13,8 @@ from binnacle.application.kernel_health import KernelHealth
 from binnacle.domain.operation import OperationSnapshot, OperationState
 from binnacle.ports.boundary import (
     BoundaryCheckResult,
+    BoundaryDecision,
+    BoundaryDisposition,
     OperationBoundaryCheck,
     OperationBoundaryVerifier,
     PreparedStateCheck,
@@ -200,18 +202,24 @@ class FinalBoundaryService:
         *,
         snapshot: OperationSnapshot,
         check: OperationBoundaryCheck,
-    ) -> BoundaryCheckResult:
+    ) -> BoundaryDecision:
         if snapshot.state is not OperationState.RUNNING:
-            return BoundaryCheckResult(False, "operation_not_running")
+            return BoundaryDecision(BoundaryDisposition.DENY, "operation_not_running")
         if snapshot.state_version != check.expected_state_version:
-            return BoundaryCheckResult(False, "operation_state_conflict")
+            return BoundaryDecision(BoundaryDisposition.DENY, "operation_state_conflict")
         health = await self._health_reader()
         if not health.consequential_admission_allowed:
-            return BoundaryCheckResult(False, "kernel_unavailable")
+            return BoundaryDecision(BoundaryDisposition.DENY, "kernel_unavailable")
         try:
-            return await self._verifier.verify(check)
+            result = await self._verifier.verify(check)
+            if isinstance(result, BoundaryDecision):
+                return result
+            return BoundaryDecision(
+                BoundaryDisposition.PROCEED if result.allowed else BoundaryDisposition.DENY,
+                result.reason_code,
+            )
         except Exception:  # noqa: BLE001 - verifier failure is a fail-closed result.
-            return BoundaryCheckResult(False, "boundary_verifier_unavailable")
+            return BoundaryDecision(BoundaryDisposition.DENY, "boundary_verifier_unavailable")
 
 
 class UnavailableOperationBoundaryVerifier:
