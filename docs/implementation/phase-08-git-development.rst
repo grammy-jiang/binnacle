@@ -168,6 +168,9 @@ Do not expose an operational Git Tool until all applicable prerequisites are cur
 * status/diff bounds, local ref CAS, switch/commit worktree/index safety, fetch side-effect
   suppression, fast-forward-only pull semantics, and push remote-state reconciliation pass
   unit/integration/fault tests;
+* every push profile proves an exact remote-old/nonexistence CAS at the hosted destination,
+  including ordinary fast-forward and new-branch creation rather than relying on a
+  non-atomic preflight;
 * any stale, contradictory, unsupported, or unverifiable prerequisite keeps the affected
   Git Tool invisible/disabled rather than falling back to generic shell Git with ambient
   credentials.
@@ -176,7 +179,7 @@ Do not expose an operational Git Tool until all applicable prerequisites are cur
 ~~~~~~~~~~~~~~
 
 Phase exit additionally requires the empirical real-Pi/real-ChatGPT procedure in section
-38. Automated tests and a locally signed synthetic commit do not establish the complete
+39. Automated tests and a locally signed synthetic commit do not establish the complete
 host/repository/credential profile.
 
 4. Explicit non-goals
@@ -196,12 +199,14 @@ Phase 8 does not implement or promote:
   repository hooks, external diff/textconv, or custom pager/editor execution;
 * automatic stash, reset, checkout-force, conflict resolution, merge commits, rebases, or
   history rewriting;
+* a general-purpose staging/index editor. Bootstrap ``git_commit`` owns one exact bounded
+  commit selection and requires a clean main staging index before it starts;
 * raw private-key, token, password, agent-cookie, or reusable credential disclosure;
 * GitHub PR/review/Actions/merge implementation inside Binnacle;
 * package/service/root administration;
 * libgit2/pygit2;
 * treating Git stdout/stderr as authoritative effect truth;
-* blind retry of an uncertain fetch/push/ref/worktree effect;
+* blind retry of an uncertain fetch/push/ref/worktree/index effect;
 * deriving protected remote destination or signing identity from untrusted repository
   files.
 
@@ -211,13 +216,13 @@ Phase 8 does not implement or promote:
 The Phase 8 path composes existing process boundaries rather than adding another long-lived
 service:
 
-::
+.. code-block:: text
 
    MCP / CLI adapter
       -> GitApplicationService
       -> Phase 4 operation/policy/audit kernel
       -> Phase 6 workspace access/change coordinator
-      -> GitRepositoryProfileValidator
+      -> protected Git-metadata authority + repository validator
       -> GitOperationTicketBuilder
       -> Phase 7 execution supervisor
       -> dedicated semantic Git process profile
@@ -232,6 +237,30 @@ semantic operations into fixed executable/argv/environment/file-descriptor/netwo
 A credential broker/agent may perform one exact SSH/signing action without exporting the
 secret. It is **not** a generic shell endpoint and is not reachable by ordinary
 ``command_run``.
+
+5.1 Protected Git-metadata authority is not Phase 6 content authority
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Phase 6 deliberately prevents model-visible workspace read/search/mutation from treating
+``.git`` and other protected control/credential paths as ordinary source content. Phase 8
+does not weaken that boundary.
+
+Instead, the Phase 8 application and dedicated Git execution profile receive a separate,
+internal semantic authority for the exact registered Git directory/common directory needed
+to perform reviewed Git operations. That authority:
+
+* is derived only from the protected ``RegisteredGitRepositoryProfile``;
+* is never produced by a model-supplied path;
+* is bound to the exact registered workspace/root/mount/Git-dir identity;
+* permits only the metadata access required by the selected semantic Git operation;
+* does not make raw ``.git`` file contents model-visible;
+* does not make protected credential/config files ordinary repository content;
+* is unavailable to generic ``command_run`` unless a separately reviewed command contract
+  explicitly grants a safe non-credential Git operation;
+* remains coordinated by the same Phase 6 ``WorkspaceAccessGate``/CHANGE seam.
+
+``WorkspaceAccessGate`` coordinates Binnacle-managed readers/changers; it does not itself
+grant Git-metadata or credential authority.
 
 6. Registered Git repository profile
 -------------------------------------
@@ -268,7 +297,7 @@ operation state.
 -------------------------------------------------------
 
 Every semantic operation first verifies the exact registered checkout under the Phase 6
-root/mount/no-submount boundary.
+root/mount/no-submount boundary and the protected Git-metadata authority from section 5.1.
 
 Bootstrap supports the normal single registered Binnacle development worktree first. A
 repository shape is unsupported when exact identity or containment cannot be established,
@@ -281,7 +310,8 @@ revalidation, including as applicable:
 
 * HEAD symbolic/detached state;
 * current branch ref and OID;
-* exact selected index identity/digest/metadata;
+* exact selected index identity/digest/metadata and index-tree OID;
+* unmerged-entry count;
 * worktree status digest/projection;
 * repository config/worktree-config identities and safety digest;
 * attributes/helper-surface digest;
@@ -302,9 +332,10 @@ Skipping system/global Git config does **not** make repository-local configurati
 trustworthy. Phase 8 therefore treats ``.git/config`` and worktree config as untrusted
 repository inputs.
 
-Before a Git capability is enabled for a repository snapshot, ``GitRepositoryProfileValidator``
-performs a bounded, side-effect-free validation under the appropriate Phase 6 access guard.
-The validation does not follow arbitrary config includes or execute any Git helper.
+Before a Git capability is enabled for a repository snapshot,
+``GitRepositoryProfileValidator`` performs a bounded, side-effect-free validation under the
+appropriate Phase 6 access guard and protected internal Git-metadata authority. The
+validation does not follow arbitrary config includes or execute any Git helper.
 
 The supported Bootstrap repository profile rejects or explicitly neutralizes at least:
 
@@ -342,7 +373,7 @@ Every Phase 8 Git process is built from a closed typed ``GitExecutionPlan``. It 
 
 * absolute reviewed Git executable;
 * fixed semantic argv template plus validated operation-specific values;
-* exact registered worktree/Git-dir context;
+* exact registered worktree/Git-dir context through the protected internal authority;
 * fixed noninteractive stdin plan;
 * allowlisted environment;
 * exact FD map;
@@ -364,7 +395,9 @@ binds values such as:
 * no model-provided ``GIT_SSH_COMMAND``;
 * explicit protocol allowlist;
 * command-scope configuration used only to neutralize/force reviewed behavior and itself
-  included in the ticket digest.
+  included in the ticket digest;
+* a fixed no-hook profile such as command-scope ``core.hooksPath=/dev/null`` when the exact
+  Git version proves the intended behavior.
 
 Repository-local config is still validated separately because ordinary repository Git
 commands may consume it despite system/global isolation.
@@ -401,6 +434,11 @@ Bootstrap defaults conservatively:
 The guard/fence remains held until process descendants, Git lock files/temporary files,
 index/ref/worktree effect knowledge, credential-child lifecycle, output/evidence, and audit
 obligations are truthfully closed. ``uncertain`` retains the fence.
+
+The promoted repository profile also requires the accepted cooperative/local-writer model
+needed by Phase 6. An uncoordinated external writer that can mutate the main index,
+worktree, refs, config, attributes, hooks, or mount topology keeps affected Git mutations
+unsupported unless a stronger reviewed confinement/CAS mechanism covers the exact surface.
 
 11. Proposed MCP semantic surface and promotion barrier
 -------------------------------------------------------
@@ -439,7 +477,7 @@ Every consequential Git operation request fingerprint includes at least:
 * exact protected branch/ref/remote target as applicable;
 * exact expected current OIDs or absence predicates;
 * relevant index/worktree/config/attributes safety digests;
-* exact message/content/tree/parent digest for commit;
+* exact commit path-selection/message/content/tree/parent digest as applicable;
 * credential/signing capability profile identities where applicable;
 * maximum effect;
 * policy/profile versions;
@@ -489,9 +527,11 @@ The contract requires an explicit diff mode, for example:
 No arbitrary revision expression is accepted when a closed OID/ref input can be used.
 Output has file-count, hunk, line, byte, and timeout ceilings and truthful truncation.
 
-The adapter disables external diff/textconv execution and does not invoke pagers or
-repository helpers. Attributes/config that would require a custom driver/filter cause the
-repository profile or requested diff mode to be rejected rather than executing the helper.
+The adapter uses exact helper-suppression switches/configuration such as ``--no-ext-diff``
+and disabled textconv where supported by the reviewed Git version. It does not invoke
+pagers or repository helpers. Attributes/config that would require a custom driver/filter
+cause the repository profile or requested diff mode to be rejected rather than executing
+the helper.
 
 Diff content is untrusted/model-visible only under the normal repository-content information
 policy; it is never authority for a later credential/system action.
@@ -531,7 +571,8 @@ The contract accepts an exact already-existing local branch/ref and binds:
 
 * expected current HEAD ref/OID;
 * target branch ref/OID;
-* expected index/worktree status digest;
+* expected main-index identity/tree/digest;
+* expected worktree status digest;
 * clean-state requirements;
 * repository safety/profile digest;
 * exact maximum effect.
@@ -550,73 +591,101 @@ If the current worktree/index differs from the bound expected snapshot at final 
 return stale-state with no switch effect.
 
 The implementation may use a reviewed official porcelain/plumbing sequence that preserves
-ordinary checkout semantics without helper execution. The exact Git version/profile must
-be proven on the candidate Pi. The plan does not freeze a fragile hand-written worktree
-algorithm before that evidence; it freezes the no-loss/no-stash/no-force semantics and the
-Phase 4/6/7 ordering.
+ordinary checkout semantics without helper/hook execution. The exact Git version/profile
+must be proven on the candidate Pi. The plan does not freeze a fragile hand-written
+worktree algorithm before that evidence; it freezes the no-loss/no-stash/no-force semantics
+and the Phase 4/6/7 ordering.
 
 A lost response after worktree/index mutation is not classified solely from current HEAD.
 Index/worktree effect evidence and Git process receipt must be reconciled; ambiguous partial
 checkout remains ``uncertain`` and retains the workspace fence.
 
-17. Commit semantics
---------------------
+17. ``git_commit`` selection and preconditions
+----------------------------------------------
 
 Commit is a high-value local Git mutation because it combines repository content, protected
-identity, signing authority, object creation, and branch-ref update.
+identity, signing authority, object creation, main-index reconciliation, and branch-ref
+update.
+
+Bootstrap does not expose a separate staging Tool. The first ``git_commit`` contract
+therefore uses an exact **commit selection** rather than inheriting arbitrary preexisting
+staging state.
+
+Before admission and again at final boundary:
+
+* HEAD must be an allowed non-protected feature/fix branch with exact expected parent OID;
+* the normal main index must contain no unmerged entries;
+* the main index tree must equal the exact current HEAD tree -- preexisting staged changes
+  cause ``git_index_not_clean`` rather than being silently committed or overwritten;
+* the caller supplies an exact bounded set of repository-relative paths to commit, and each
+  path is bound to the Phase 6 object/version/content/mode state or exact deletion predicate;
+* every selected path must appear in the exact supported worktree delta and every selected
+  untracked path must be explicit; no implicit ``git add -A`` or hidden discovery broadens
+  the commit;
+* unselected worktree changes may remain only when the supported repository/profile can
+  prove they do not overlap the selected commit paths or main-index publication semantics;
+* repository safety/config/attributes/profile/session/fence state is bound and current.
+
+The exact normalized path selection and per-path action/content/mode digest are effect-
+bearing request inputs.
+
+17.1 Controlled commit construction
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Bootstrap prefers a controlled plumbing path rather than unrestricted ``git commit``
 porcelain:
 
 #. acquire ``CHANGE`` + durable workspace mutation fence;
-#. bind exact current branch ref/OID, expected worktree/index state, repository safety
-   digest, protected author/committer profile, commit message digest, and signing profile;
-#. construct an operation-local index/tree using reviewed Git plumbing from the exact
-   intended workspace content/modes without invoking repository clean/smudge filters or
-   hooks;
+#. persist the expected main-index identity/tree/digest, selected-path digest, exact parent,
+   worktree snapshot, repository safety digest, protected author/committer profile, commit
+   message digest, and signing profile;
+#. create an operation-owned temporary index initialized from the exact expected HEAD tree;
+#. update that temporary index only for the exact selected path actions using reviewed Git
+   plumbing that does not invoke repository clean/smudge/process filters, LFS, submodules,
+   or hooks;
 #. run ``write-tree`` and record the exact tree OID;
 #. create the commit object with official ``commit-tree`` using the exact parent OID,
    bounded message input, protected author/committer environment, and exact signing
    capability;
-#. verify the created commit object: tree, parent set, author/committer identity, message
-   digest, signature presence/status, signer fingerprint, and object OID;
+#. independently verify the created commit object: tree, parent set, author/committer
+   identity, message digest, signature presence/status, signer fingerprint, and object OID;
 #. update the exact current feature branch using ``update-ref`` CAS from old parent OID to
-   the new commit OID;
-#. reconcile the normal worktree/index representation explicitly and verify expected
-   post-state;
-#. close audit/credential/process/fence obligations only after truthful repository state is
-   established.
+   the verified new commit OID;
+#. publish/reconcile the normal main index through the explicit state machine in section
+   17.5; selected worktree files are not rewritten merely to make status look clean;
+#. verify the exact intended post-state, including selected paths clean against new HEAD and
+   allowed unselected worktree changes preserved;
+#. close audit/credential/process/fence obligations only after truthful repository/index
+   state is established.
 
 No commit is created on protected ``master`` under the normal development profile.
 
-17.1 Operation-local index
+17.2 Operation-local index
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Do not let an unreviewed main-index mutation become an implicit staging API. The preferred
-Bootstrap commit path uses an operation-owned temporary index (for example through a
-protected operation-local ``GIT_INDEX_FILE``) whose path and lifecycle are not model-
-controlled.
+The operation-owned temporary index path is protected and not model-controlled. It starts
+from the exact expected parent tree rather than copying an arbitrary staged main index.
 
-The tree-builder consumes the exact intended repository/workspace snapshot and modes. It
-must not invoke repository-defined clean/smudge/process filters. If the repository semantics
-cannot be faithfully represented without an unsupported filter/LFS/submodule behavior, the
-commit capability is disabled for that repository profile.
+The tree builder consumes only the selected Phase 6-bound path state and modes. It must not
+invoke repository-defined filters, LFS, submodule recursion, or helpers. If repository
+semantics cannot be faithfully represented within this supported profile, ``git_commit`` is
+disabled rather than invoking repository-selected executable behavior.
 
-The temporary index is private, bounded, operation-owned, fsync/cleanup-aware as required by
-the platform profile, and never treated as reusable credential/protected content.
+Temporary-index identity, tree OID, lifecycle, and cleanup obligation are retained as
+operation evidence. Temporary-index cleanup failure does not erase commit/ref effects.
 
-17.2 Commit message and identity
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+17.3 Commit message and protected identity
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Commit message is untrusted model input with explicit byte/encoding limits. It is passed as
-bounded stdin/file data, not shell/config syntax.
+bounded data, never as shell/config syntax.
 
-Author and committer name/email come from protected owner/device Git profile. The model may
-not substitute an arbitrary identity in Bootstrap. Author/committer timestamps follow the
-reviewed time policy and are recorded as effect-bearing facts when exact reproducibility or
-reconciliation requires them.
+Author and committer name/email come from the protected owner/device Git profile. The model
+may not substitute an arbitrary identity in Bootstrap. Author/committer timestamps follow
+the reviewed time policy and are recorded as effect-bearing facts when required for exact
+reconciliation.
 
-17.3 Signing
+17.4 Signing
 ~~~~~~~~~~~~
 
 The commit-signing identity is separate from repository transport SSH authority.
@@ -634,20 +703,62 @@ Raw private key material is never put in argv, environment, stdin, output, audit
 or model-visible data. A protected operation-owned signing agent/socket/helper may be mapped
 only into the exact Git signing process tree and removed when the operation ends.
 
-After ``commit-tree -S`` (or the exact reviewed official equivalent), Binnacle independently
+After ``commit-tree -S`` or the exact reviewed official equivalent, Binnacle independently
 verifies that the resulting commit has the expected signature and signer fingerprint before
 allowing branch-ref CAS. Signing failure or wrong signer produces no branch-ref update.
 
-17.4 Ref CAS and unreachable objects
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+17.5 Branch CAS and main-index publication state machine
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The branch transition is ``expected_old_oid -> new_signed_commit_oid``. It is performed by
-an exact expected-old ref update. If CAS fails because the branch changed concurrently, the
-branch remains unchanged. The newly created commit/object may be unreachable; this is a
-benign retained object, not evidence that the branch changed.
+The branch transition is ``expected_old_oid -> new_signed_commit_oid`` and uses an exact
+expected-old ``update-ref`` CAS. CAS failure leaves the branch unchanged; the created commit
+may remain unreachable and is recorded as a real object effect.
 
-No retry creates another commit object/ref effect under a fresh operation merely to work
-around a stale branch. The caller must reconcile/re-admit against the new state.
+Main-index reconciliation is a separate **post-ref effect**, not an informal cleanup step.
+Before branch CAS, the operation durably retains:
+
+* ``expected_main_index_identity``;
+* ``expected_main_index_tree_oid`` equal to the exact parent tree;
+* ``expected_main_index_digest``/metadata needed to detect replacement;
+* ``target_main_index_tree_oid`` equal to the verified new commit tree;
+* exact selected-path/unselected-worktree snapshot digest;
+* ``main_index_publication_state=PENDING``.
+
+After branch CAS succeeds, publication uses a reviewed lockfile/atomic-replacement Git index
+primitive. It must first re-prove that the main index still has the exact expected identity/
+tree/digest and that the selected/unselected worktree snapshot remains compatible. It then
+builds/fsyncs the exact target index representation and atomically publishes it, retaining an
+exact publication receipt/digest before marking ``COMPLETE``.
+
+The authoritative states are:
+
+``NOT_REQUIRED``
+   Branch CAS did not occur; main index remains governed by the original expectation.
+
+``PENDING``
+   Signed commit and branch CAS may have succeeded but main-index publication is not yet
+   proven complete. The Phase 6 CHANGE/fence remains held.
+
+``COMPLETE``
+   Exact target index identity/tree/digest and compatible worktree post-state are proven.
+
+``UNCERTAIN``
+   Publication may have occurred but receipt/post-state cannot be proven, or external state
+   changed so safe completion cannot be established. The fence remains held and no blind
+   index overwrite is attempted.
+
+Application restart replays the state machine, not a generic ``git reset``. If branch CAS
+is proven and publication is still ``PENDING``, recovery may finish publication only after
+re-proving the exact pre-publication main-index/worktree identity. If current index already
+matches the exact target representation, retained publication evidence/current-state rules
+may close it. If neither exact old nor exact target state is provable, remain ``UNCERTAIN``.
+No recovery step overwrites an intervening index/worktree state merely because HEAD points
+to the new commit.
+
+Mandatory fault tests crash before target-index build, after build/fsync, immediately after
+atomic publication, and before the ``COMPLETE`` receipt. They prove no intervening main
+index/worktree state is overwritten and that the workspace fence cannot release while
+publication is unresolved.
 
 18. Repository SSH authority
 ----------------------------
@@ -681,12 +792,14 @@ part of Bootstrap.
 
 Credential-bearing Git actions are explicit high-risk compositions:
 
-``untrusted repository state``
-   -> validated repository safety digest
-   -> exact semantic Git operation
-   -> exact protected remote/signing target
-   -> one operation-scoped credential capability
-   -> supervised Git/SSH/GPG process tree
+.. code-block:: text
+
+   untrusted repository state
+      -> validated repository safety digest
+      -> exact semantic Git operation
+      -> exact protected remote/signing target
+      -> one operation-scoped credential capability
+      -> supervised Git/SSH/GPG process tree
 
 The broker/agent validates exact audience and action at the consequential boundary. It does
 not expose a general socket that the ordinary Phase 7 command profile can discover.
@@ -725,13 +838,13 @@ No ``--all``, implicit tag sweep, pruning, submodule recursion, or arbitrary for
 allowed in Bootstrap.
 
 Downloaded objects/packfiles are a real local effect even when the intended ref update later
-fails. Effect knowledge and retry semantics must therefore distinguish object transfer from
-ref publication. Response loss or process failure after network transfer may be
-``known_effect`` or ``uncertain`` depending on retained Git/executor evidence; it is never
-blindly repeated just because the target ref did not move.
+fails. Effect knowledge and retry semantics therefore distinguish object transfer from ref
+publication. Response loss or process failure after network transfer may be ``known_effect``
+or ``uncertain`` depending on retained Git/executor evidence; it is never blindly repeated
+just because the target ref did not move.
 
 21. ``git_pull``
-----------------
+-----------------
 
 Bootstrap pull is **not** arbitrary ``git pull`` merge/rebase porcelain. It is a semantic
 composition:
@@ -753,6 +866,10 @@ Because fetch and local integration are separate consequential boundaries, the o
 model records intermediate effect knowledge. A successful fetch followed by a stale local
 integration is not ``known_no_effect``; downloaded objects/ref updates remain real effects.
 
+Fast-forward local integration uses the same explicit index/worktree publication discipline
+as switch/commit where applicable. A branch-ref move with unresolved index/worktree
+publication remains partial/uncertain with the CHANGE/fence retained.
+
 22. ``git_push``
 -----------------
 
@@ -773,27 +890,52 @@ Bootstrap push input binds:
 Only an allowed feature/fix branch destination is accepted. Direct normal push to protected
 ``master`` is rejected.
 
-No wildcard refspec, tag side effect, delete, mirror, arbitrary push option, or generic
-force is allowed. If a contract ever requires a non-fast-forward exact replacement, it must
-use an explicit exact expected-remote-OID lease/CAS profile; bare ``--force`` or a lease that
-derives expectations from mutable remote-tracking refs is not sufficient.
+22.1 Exact hosted-ref CAS is mandatory for every push
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The bound expected remote state is enforced atomically at the hosted ref update for
+**every** Phase 8 push, not merely non-fast-forward replacement.
+
+For the reviewed Git profile, the preferred mechanism is an explicit exact lease such as
+``--force-with-lease=<destination-ref>:<expected-old-oid>``. For new branch creation the
+explicit empty expected value is used only when the reviewed Git version proves that it
+requires destination nonexistence. A bare lease, a lease without explicit expected value,
+or an expectation derived from mutable local remote-tracking refs is forbidden.
+
+Use of the exact lease is a CAS mechanism, not permission to rewrite history. Binnacle
+separately proves branch policy before launch:
+
+* for an existing ordinary feature branch, the expected remote old commit must be the exact
+  bound value and the target local commit must satisfy the operation's reviewed
+  fast-forward/ancestry policy unless an explicitly different future contract exists;
+* for a new feature branch, expected remote state is exact nonexistence;
+* protected branches remain rejected;
+* no wildcard, tag side effect, delete, mirror, arbitrary push option, or generic force is
+  accepted.
+
+A non-atomic remote preflight is current-state evidence only. It never substitutes for the
+exact lease/CAS at mutation time. If the selected Git/remote profile cannot provide the
+required exact CAS semantics, ``git_push`` remains disabled.
 
 The adapter supplies the protected explicit remote URL/refspec and closed SSH environment.
-Repository config cannot select the destination, credential helper, SSH command, proxy, or
-protocol helper.
+It also disables repository hook execution for push, using exact reviewed no-hook semantics
+such as protected ``core.hooksPath`` plus ``--no-verify`` when the selected Git version
+proves them. Repository config cannot select the destination, credential helper, SSH
+command, proxy, protocol helper, or pre-push hook.
 
-22.1 Remote preflight
+22.2 Remote preflight
 ~~~~~~~~~~~~~~~~~~~~~
 
 Where the remote protocol/profile can safely obtain the exact current destination OID,
 Binnacle records that as current-state evidence before final admission/effect. The expected
-remote OID is effect-bearing request input when the contract requires it.
+remote OID/nonexistence predicate is effect-bearing request input and is passed to the exact
+CAS mechanism.
 
 DNS/host/known-host/credential audience and exact destination are revalidated at final
-boundary. A changed expected remote ref blocks the push before effect when it can be proven
-without causing an unintended mutation.
+boundary. A changed expected remote ref blocks the push at the hosted CAS even if it changes
+after local preflight.
 
-22.2 Push response loss and reconciliation
+22.3 Push response loss and reconciliation
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 A successful process exit/line of stdout is useful evidence but not sufficient by itself
@@ -818,9 +960,9 @@ material.
 --------------------------------------------
 
 Every consequential Phase 8 operation follows the merged Phase 4 kernel and Phase 6/7
-handoffs. Conceptually:
+handoffs.
 
-::
+.. code-block:: text
 
    authenticate / normalize semantic Git request
      -> caller-binding-first durable idempotency lookup / minimal received identity
@@ -840,16 +982,16 @@ handoffs. Conceptually:
      -> Phase7 supervisor single-use acceptance
      -> exact Git/SSH/GPG process effect
      -> immediate durable supervisor/process/effect receipt
-     -> operation-specific Git reconciliation
+     -> operation-specific Git ref/object/index/worktree/remote reconciliation
      -> post-effect audit / credential cleanup / process-tree cleanup / fence closure
      -> restart reconciliation
      -> retained same-key retry
 
 Post-policy exact-self changes such as the operation-owned workspace fence, temporary index,
-expected ref lock/CAS inputs, or fetched exact self-owned refs are represented phase-stably
-in the final verifier. The final boundary does not reject the operation merely because it
-sees an expected self-owned transition, and it does not reconstruct integrity solely from
-mutable surviving Git state.
+expected ref CAS inputs, exact-hosted-ref lease, or fetched exact self-owned refs are
+represented phase-stably in the final verifier. The final boundary does not reject the
+operation merely because it sees an expected self-owned transition, and it does not
+reconstruct integrity solely from mutable surviving Git state.
 
 24. Phase 7 supervisor integration
 ----------------------------------
@@ -863,7 +1005,7 @@ bound to:
 * semantic Git action;
 * Git executable identity/version profile;
 * exact argv/stdin/environment/FD digests;
-* workspace/root/mount/Git-dir identity;
+* workspace/root/mount/Git-dir identity and protected Git-metadata authority;
 * repository safety digest;
 * ref/index/worktree/remote expectation digests;
 * network profile;
@@ -895,20 +1037,23 @@ specific interpretation.
    Phase 4 contract; never infer success from HEAD alone.
 
 ``git_commit``
-   Commit-object creation is an effect even if signing/ref CAS later fails. A signed commit
-   object plus failed branch CAS is known object effect with no branch-ref effect. The
-   operation result reports the exact distinction. Ambiguous branch CAS remains uncertain.
+   Commit-object creation, branch CAS, and main-index publication are separate effect facts.
+   A verified signed commit object with failed branch CAS is a known object effect with no
+   branch-ref effect. Branch CAS success with ``main_index_publication_state=PENDING`` is a
+   real branch effect with incomplete local publication and the fence retained. Ambiguous
+   index publication or branch CAS remains uncertain according to the exact receipt.
 
 ``git_fetch``
    Pack/object transfer and local ref publication are separate effect facts. Failed ref
    update does not erase downloaded-object effect.
 
 ``git_pull``
-   Fetch effect and local fast-forward integration are separate facts. Failure/staleness in
-   the second stage does not rewrite the first stage to no-effect.
+   Fetch effect, local ref move, and index/worktree publication are separate facts. Failure
+   or staleness in a later stage does not rewrite an earlier real effect to no-effect.
 
 ``git_push``
-   Remote ref mutation is independent external effect. Ambiguous network/response outcome is
+   Remote ref mutation is an independent external effect. Exact lease rejection proves that
+   requested hosted ref CAS did not occur; ambiguous network/response outcome remains
    uncertain until reconciled by trustworthy remote evidence.
 
 26. Idempotency and retained retry
@@ -921,7 +1066,7 @@ Retained reconciliation first examines:
 * authoritative Phase 4 operation state/effect knowledge;
 * Phase 7 executor ticket/acceptance/process evidence;
 * exact Git operation evidence;
-* ref/index/worktree/object evidence;
+* ref/index/worktree/object evidence and main-index publication state;
 * remote evidence for network effects;
 * audit-obligation closure;
 * credential-use evidence;
@@ -939,12 +1084,14 @@ After MCP/application restart:
 #. restore Phase 4 audit/operation readiness;
 #. restore Phase 6 workspace access coordinator and durable fence ownership;
 #. reconcile Phase 7 supervisor accepted/running/terminal Git execution evidence;
-#. restore exact Phase 8 Git operation facts, temporary-index/credential obligations, and
-   repository-profile binding;
+#. restore exact Phase 8 Git operation facts, temporary-index/main-index-publication/
+   credential obligations, and repository-profile binding;
 #. query current repository state only as an observation, never as sole effect truth;
 #. reconcile ref/index/worktree/object/remote evidence according to the operation type;
+#. finish a ``PENDING`` main-index publication only after exact old/target index and worktree
+   preconditions prove the repair cannot overwrite intervening state;
 #. retain CHANGE/fence when any Git process, credential child, lock/temp, partial worktree,
-   remote effect, or audit obligation remains ambiguous;
+   index publication, remote effect, or audit obligation remains ambiguous;
 #. expose retained operation status/output/result only after the resulting state is
    schema-valid and ownership-scoped.
 
@@ -970,7 +1117,7 @@ process-tree and credential-child cleanup are proven.
 
 Normal Binnacle self-development policy is:
 
-::
+.. code-block:: text
 
    protected master
       -> exact feature/fix branch creation
@@ -1005,6 +1152,11 @@ remote response grants credential authority. Local authority derives from authen
 controller + local policy + exact live development session + protected repository/credential
 profiles + durable operation/ticket bindings.
 
+Session end before a Git effect starts blocks a new start through the Phase 6/7 authority
+linearization. Session end after a remote/local Git effect has started never rewrites effect
+truth; it blocks new starts and the retained operation must reconcile/clean up under its
+already-admitted authority without manufacturing a second effect.
+
 31. Contract/schema/manifest promotion
 --------------------------------------
 
@@ -1017,6 +1169,7 @@ Before runtime handler exposure:
 #. define host-confirmation/session-authority class;
 #. define idempotency requirement for every consequential operation;
 #. define credential capability composition where applicable;
+#. define Git metadata, main-index publication, and remote-CAS result/evidence variants;
 #. add exact manifest entries and handler bindings;
 #. pass schema/manifest/confusable-name/handler parity validation;
 #. record the promoted manifest/config digests used by runtime readiness.
@@ -1038,7 +1191,9 @@ Phase 8 needs typed bounded error vocabulary, including as appropriate:
 * ``git_ref_exists``;
 * ``git_ref_stale``;
 * ``git_worktree_dirty``;
+* ``git_index_not_clean``;
 * ``git_index_stale``;
+* ``git_index_publication_uncertain``;
 * ``git_conflict_state``;
 * ``git_helper_surface_unsupported``;
 * ``git_signing_unavailable``;
@@ -1047,6 +1202,7 @@ Phase 8 needs typed bounded error vocabulary, including as appropriate:
 * ``git_credential_profile_unavailable``;
 * ``git_remote_destination_mismatch``;
 * ``git_remote_ref_stale``;
+* ``git_remote_cas_rejected``;
 * ``git_diverged``;
 * ``git_fetch_partial``;
 * ``git_push_uncertain``;
@@ -1056,7 +1212,7 @@ Phase 8 needs typed bounded error vocabulary, including as appropriate:
 
 Diagnostics may expose safe public Git/version/profile/ref/OID/fingerprint facts and bounded
 reason codes. They never expose private key material, credential-agent protocol secrets,
-unredacted protected config, or arbitrary helper command content.
+unredacted protected config, raw ``.git`` file content, or arbitrary helper command content.
 
 33. Ports and adapters
 ----------------------
@@ -1078,6 +1234,7 @@ implementation while preserving contracts:
        async def branch_create(self, plan: GitBranchCreatePlan) -> GitEffectResult: ...
        async def switch(self, plan: GitSwitchPlan) -> GitEffectResult: ...
        async def create_signed_commit(self, plan: GitCommitPlan) -> GitCommitResult: ...
+       async def publish_main_index(self, plan: MainIndexPublicationPlan) -> MainIndexPublicationResult: ...
        async def fetch(self, plan: GitFetchPlan) -> GitFetchResult: ...
        async def fast_forward(self, plan: GitFastForwardPlan) -> GitEffectResult: ...
        async def push(self, plan: GitPushPlan) -> GitPushResult: ...
@@ -1089,16 +1246,16 @@ implementation while preserving contracts:
    class GitEffectReconciler(Protocol):
        async def reconcile(self, operation: OperationSnapshot) -> GitReconciliationResult: ...
 
-The implementation should keep Git command construction, repository safety validation,
-credential capability mapping, process execution, remote evidence reading, and operation
-orchestration behind separate typed seams.
+The implementation keeps Git command construction, protected metadata access, repository
+safety validation, credential capability mapping, process execution, remote evidence
+reading, index publication, and operation orchestration behind separate typed seams.
 
 34. Repository layout and implementation seams
 ----------------------------------------------
 
 A likely implementation layout is:
 
-::
+.. code-block:: text
 
    src/binnacle/domain/git.py
    src/binnacle/application/git/
@@ -1113,6 +1270,7 @@ A likely implementation layout is:
        diff.py
        refs.py
        commit.py
+       index.py
        fetch.py
        push.py
    src/binnacle/adapters/credentials/
@@ -1140,10 +1298,12 @@ Application SQLite may persist authoritative Phase 8 operation metadata such as:
 * repository-profile/version/digest snapshot;
 * expected/current/result ref/tree/commit OIDs;
 * repository safety digest;
-* temporary index/effect-reference identities;
+* temporary index identity/tree/effect-reference identities;
+* expected/target main-index identity/tree/digest and publication state/receipt;
+* selected-path/worktree snapshot digest;
 * public signer/SSH fingerprints;
 * credential capability reference digests, never secrets;
-* remote destination/ref/evidence digests;
+* remote destination/ref/expected-old/target/evidence digests;
 * phase-specific effect knowledge/reconciliation status;
 * Phase 7 execution references;
 * workspace fence linkage;
@@ -1160,6 +1320,8 @@ The implementation must preserve at least:
 #. Repository content/config/output is untrusted data, never credential or policy authority.
 #. Git executes only through the Phase 7 supervisor; no MCP-process direct-subprocess
    fallback exists.
+#. Phase 8's internal Git-metadata authority does not make raw protected ``.git`` content a
+   model-visible Phase 6 capability.
 #. General ``command_run`` receives no raw Git SSH/signing secret or ambient dedicated agent.
 #. Repository SSH and commit-signing authority are separate exact capabilities.
 #. Protected remote destination/ref policy is not chosen by mutable repository config.
@@ -1171,12 +1333,16 @@ The implementation must preserve at least:
 #. Status/diff cannot execute helpers or trigger network/credential effects.
 #. Branch creation cannot overwrite an existing ref.
 #. Switch never implicitly discards/stashes/resets user work.
+#. Bootstrap commit never consumes or overwrites preexisting staged main-index changes.
 #. A branch ref is updated to a new commit only after exact signed-commit verification.
+#. Branch CAS and main-index publication are separate durable effect facts; unresolved index
+   publication retains the workspace fence and never triggers a blind reset/overwrite.
 #. Protected ``master`` is not a normal direct development/push target.
 #. Fetch default side effects are narrowed to the reviewed effect contract.
 #. Pull is fetch + verified fast-forward-only integration, never automatic merge/rebase.
-#. Push binds exact local OID + destination ref + expected remote old OID/nonexistence as
-   required by the contract; no generic force/wildcard behavior.
+#. Every push enforces the bound expected remote old OID/nonexistence atomically at the
+   hosted ref update; non-atomic preflight is never accepted as the CAS.
+#. Exact remote lease use does not waive fast-forward/protected-branch policy.
 #. Remote state differing after an ambiguous push does not prove the push never occurred.
 #. Phase 6 workspace guard/fence covers all Binnacle-managed Git changers for their truthful
    effect/cleanup lifetime.
@@ -1198,13 +1364,17 @@ Cover at least:
 * ref-name normalization/namespace/protected-branch policy;
 * repository snapshot/current-state canonicalization;
 * repository-safety digest determinism;
+* protected Git-metadata authority never becoming content authority;
 * config/helper-surface rejection matrix;
 * operation request fingerprints/idempotency conflicts;
 * branch-create absence/old-OID CAS mapping;
 * switch stale/dirty/conflict rejection;
+* commit exact path selection and preexisting staged-index rejection;
 * commit tree/parent/message/identity/signature/ref-CAS state machine;
+* main-index publication PENDING/COMPLETE/UNCERTAIN invariants and recovery preconditions;
 * fetch object/ref intermediate effects;
-* pull fast-forward/divergence state machine;
+* pull fast-forward/divergence/publication state machine;
+* push exact remote-old/nonexistence CAS mapping for ordinary existing/new branches;
 * push expected-remote-state/effect reconciliation;
 * output/truncation/error parser bounds;
 * credential capability audience/action binding;
@@ -1220,14 +1390,19 @@ Use temporary local repositories and exact Git versions in CI where available. C
 * bounded diff with binary/large content;
 * branch create CAS and concurrent creator;
 * switch with stale index/worktree and no implicit data loss;
-* operation-local index/tree creation;
+* commit rejects preexisting staged changes;
+* operation-local index initialized from exact HEAD and exact selected-path tree creation;
 * signed commit using a test-only signing identity, verification, wrong-signer and signing
   failure;
 * ref CAS race after commit object creation;
+* branch CAS followed by main-index publication and selected/unselected worktree status;
+* crash at every main-index publication boundary and exact safe recovery/no-overwrite;
 * fetch explicit refspec with default ``FETCH_HEAD``/maintenance/commit-graph side effects
   suppressed according to the selected profile;
 * pull fast-forward and divergence rejection;
-* push to a local controlled SSH/bare-repository fixture with exact expected remote OID;
+* push to a local controlled SSH/bare-repository fixture with explicit expected-old lease;
+* concurrent remote advancement between preflight and push is rejected by hosted CAS;
+* concurrent new-branch creation after absence preflight is rejected by hosted CAS;
 * lost/ambiguous push response and independent remote-ref reconciliation;
 * application restart with Phase 7 executor evidence;
 * supervisor crash around Git/SSH/GPG process start/exit;
@@ -1243,7 +1418,7 @@ Construct repositories containing hostile:
 * URL rewrite and unexpected remote config;
 * ``core.sshCommand``;
 * proxy/protocol helper settings;
-* hooks/hook-path overrides;
+* hooks/hook-path overrides including ``pre-push`` and checkout-related hooks;
 * ``.gitattributes`` filter/textconv/external-diff surfaces;
 * LFS/submodule configuration;
 * fake pager/editor/merge driver;
@@ -1277,11 +1452,13 @@ Inject crashes/lost receipts:
 * after switch changes HEAD but before worktree/index completion;
 * after commit object creation before signature verification;
 * after signed commit creation before branch CAS;
-* after branch CAS before app receipt;
+* immediately after branch CAS before main-index publication;
+* during target main-index build/fsync;
+* immediately after atomic main-index publication before durable completion receipt;
 * during fetch after pack transfer but before ref update;
 * after fetch ref update before result receipt;
 * between fetch and pull fast-forward;
-* during worktree fast-forward integration;
+* during worktree/index fast-forward integration;
 * after push request is sent but before response;
 * after hosted ref update but before local receipt;
 * after application crash while Phase 7 supervisor owns Git process;
@@ -1290,7 +1467,23 @@ Inject crashes/lost receipts:
 
 Every fault has a truthful retained outcome and no blind automatic repeat.
 
-38. Candidate-Pi and real-host evidence
+38. Review-correction invariants
+--------------------------------
+
+The first exact-head review established two foundation requirements that are part of the
+plan, not local exceptions:
+
+#. **Main-index publication is durable effect state.** Branch CAS cannot be treated as
+   complete commit cleanup while the normal index is stale. Exact old/target index identity,
+   publication state, receipt, restart repair predicates, and fault tests are mandatory.
+#. **Every hosted push is an exact remote CAS.** The expected remote old OID/nonexistence
+   predicate is enforced atomically at the hosted update even for normal fast-forward/new-
+   branch pushes. Preflight is evidence, never the mutation precondition.
+
+These requirements must be preserved by later implementation edits and by Phase 10
+acceptance evidence.
+
+39. Candidate-Pi and real-host evidence
 --------------------------------------
 
 Before operational promotion, run an explicit candidate-Pi evidence suite recording exact
@@ -1301,10 +1494,13 @@ Verify at least:
 * official Git executable identity/version and required machine-readable/plumbing switches;
 * ``update-ref`` exact expected-old/nonexistence behavior and any transaction semantics used;
 * ``commit-tree`` signing behavior and independent signature verification;
-* operation-local index behavior;
+* operation-local index behavior and exact main-index publication/recovery primitive;
 * status/diff helper suppression;
 * config-source isolation plus repository-local safety validation;
+* no-hook semantics used by switch/push profiles;
 * fetch side-effect suppression used by the contract;
+* explicit exact ``--force-with-lease=<ref>:<expect>`` behavior for existing and absent
+  destination refs, without relying on remote-tracking refs;
 * exact SSH host-key/known-host/identity behavior;
 * non-exportable SSH credential use;
 * non-exportable signing capability use and signer fingerprint verification;
@@ -1318,42 +1514,48 @@ Then run real ChatGPT through the Phase 8 exit sequence. Record only actual obse
 behavior. Unsupported Tool projection, confirmation/session semantics, credential mechanism,
 or candidate Git behavior remains explicitly unsupported/blocked.
 
-39. Holistic invariant pass before review/promotion
---------------------------------------------------
+40. Holistic invariant pass before review/promotion
+---------------------------------------------------
 
 Before requesting review for this plan and again before implementation promotion, walk the
 full chain for every operation:
 
-``request / session / repository snapshot``
-   -> caller-binding-first retained lookup/minimal received identity
-   -> received audit
-   -> policy + protected repository profile + repository-safety validation
-   -> Phase6 GIT_READ or CHANGE/fence
-   -> post-policy exact current-state/expected-self binding
-   -> authorised audit
-   -> Phase7 exact Git ticket + optional exact credential capability
-   -> running/effect intent
-   -> final controller/device/session/root/mount/repository/config/ref/index/worktree/remote/
-      credential/network/audit OP-BOUNDARY
-   -> audit obligation
-   -> Phase7 single-use acceptance
-   -> exact Git/SSH/GPG effect
-   -> immediate process/effect evidence
-   -> Git-specific ref/index/worktree/object/remote reconciliation
-   -> post-effect audit/credential/process cleanup/fence release
-   -> application/supervisor restart
-   -> retained same-key reconciliation.
+.. code-block:: text
+
+   request / session / repository snapshot
+     -> caller-binding-first retained lookup/minimal received identity
+     -> received audit
+     -> policy + protected repository profile + repository-safety validation
+     -> Phase6 GIT_READ or CHANGE/fence
+     -> post-policy exact current-state/expected-self binding
+     -> authorised audit
+     -> Phase7 exact Git ticket + optional exact credential capability
+     -> running/effect intent
+     -> final controller/device/session/root/mount/repository/config/ref/index/worktree/
+        remote/credential/network/audit OP-BOUNDARY
+     -> audit obligation
+     -> Phase7 single-use acceptance
+     -> exact Git/SSH/GPG effect
+     -> immediate process/effect evidence
+     -> Git-specific ref/object/index-publication/worktree/remote reconciliation
+     -> post-effect audit/credential/process cleanup/fence release
+     -> application/supervisor restart
+     -> retained same-key reconciliation
 
 Walk at least:
 
 * clean status/diff and output truncation;
 * malicious repository config/helper/filter surfaces;
+* protected internal Git metadata versus model-visible content authority;
 * concurrent branch creation;
 * switch stale/dirty/conflict cases;
+* commit preexisting staged-index rejection and exact selected-path semantics;
 * commit signing failure/wrong signer/ref CAS race;
+* branch CAS followed by every main-index publication crash window;
 * fetched objects with failed local ref publication;
 * pull divergence after successful fetch;
-* push expected-remote mismatch;
+* push expected-remote mismatch and a race after preflight;
+* new-branch push racing a concurrent remote creator;
 * push response loss followed by remote equality and remote difference;
 * repository/config/profile change after policy but before effect;
 * development-session end before start and after remote effect start;
@@ -1363,10 +1565,10 @@ Walk at least:
 * no raw secret or authority escalation anywhere in results/output/audit.
 
 If multiple review findings share a common repository-profile, credential, current-state,
-or effect-reconciliation abstraction defect, fix the shared foundation rather than serially
-patching individual Tools.
+publication, or effect-reconciliation abstraction defect, fix the shared foundation rather
+than serially patching individual Tools.
 
-40. Plan acceptance and promotion checklist
+41. Plan acceptance and promotion checklist
 -------------------------------------------
 
 Plan acceptance requires:
@@ -1374,10 +1576,15 @@ Plan acceptance requires:
 * exactly this Phase 8 numbered document in the planning PR;
 * governing source order/current merged Phase 4/6/7 references correct;
 * official-Git/typed-adapter boundary explicit;
+* protected Git-metadata authority separated from Phase 6 model-visible content authority;
 * no direct-subprocess or generic credential-bearing command fallback;
 * repository-local config/helper surface treated as untrusted and fail-closed;
 * exact Phase 6 workspace coordination and Phase 7 process semantics consumed;
-* local branch/ref CAS, switch safety, signed commit, fetch/pull/push semantics concrete;
+* local branch/ref CAS and switch safety concrete;
+* commit path selection, clean main-index precondition, signed commit, branch CAS, and
+  durable main-index publication/recovery semantics concrete;
+* fetch/pull effects separated and truthful;
+* every push uses exact hosted expected-old/nonexistence CAS plus independent branch policy;
 * separate SSH/signing authority and non-exportable credential contract explicit;
 * effect knowledge/idempotency/restart/reconciliation walk complete;
 * adversarial/fault/candidate-Pi/real-host evidence procedures concrete;
@@ -1386,26 +1593,29 @@ Plan acceptance requires:
 
 Implementation promotion additionally requires the empirical gates in section 3.2.
 
-41. Implementation order
+42. Implementation order
 ------------------------
 
 Implement Phase 8 in this order after prerequisite exits are real:
 
 #. define/review versioned Phase 8 operation contracts and schemas without exposing handlers;
-#. define protected registered Git repository/remote/identity/signing profiles;
+#. define protected registered Git repository/remote/identity/signing profiles and internal
+   Git-metadata authority;
 #. implement repository identity/snapshot and supported-shape validator;
 #. implement repository config/attributes/helper-surface validator and safety digest;
 #. implement typed closed Git execution-plan builder over Phase 7 supervisor;
 #. implement read-only status/diff with strict bounds and helper suppression;
 #. implement ref normalization/policy and branch-create expected-old/absence CAS;
 #. implement switch stale/dirty/no-loss semantics and integration tests;
+#. implement exact commit-selection validation and clean-main-index requirement;
 #. implement operation-local index/tree builder and signed commit creation/verification;
-#. implement exact branch-ref CAS and commit reconciliation;
+#. implement exact branch-ref CAS plus durable main-index publication/restart state machine;
 #. provision/integrate non-exportable repository SSH capability in protected deployment
    configuration and prove generic commands cannot reach it;
 #. implement narrow fetch and fetched-effect reconciliation;
-#. implement fast-forward-only pull composition;
-#. implement exact protected-destination push + remote reconciliation;
+#. implement fast-forward-only pull composition with explicit local publication states;
+#. implement exact protected-destination push with mandatory expected-remote hosted CAS and
+   remote reconciliation;
 #. wire Phase 4 operation/audit/idempotency, Phase 6 guard/fence, Phase 7 ticket/output/restart,
    and credential obligations end-to-end;
 #. promote reviewed manifest entries only after contract/schema/handler parity passes;
@@ -1414,7 +1624,7 @@ Implement Phase 8 in this order after prerequisite exits are real:
 #. run real ChatGPT Phase 8 exit workflow;
 #. only then mark Phase 8 implementation exited and unblock operational Phase 9/10 use.
 
-42. Provisional and deferred items
+43. Provisional and deferred items
 ----------------------------------
 
 The following remain evidence-gated or deferred rather than guessed:
@@ -1424,10 +1634,11 @@ The following remain evidence-gated or deferred rather than guessed:
 * exact ChatGPT host-confirmation/session projection for Git credential effects;
 * broader repository config/features beyond the conservative supported profile;
 * LFS/submodules/custom filters/hooks/merge drivers/external diff/textconv;
+* a general staging/index API;
 * multiple repositories/remotes;
 * tag/release workflows;
 * history rewriting/rebase/merge/conflict automation;
-* force push;
+* generic force push;
 * libgit2/pygit2;
 * GitHub PR/review/merge APIs inside Binnacle;
 * hardware-backed signing keys;
@@ -1437,7 +1648,7 @@ The following remain evidence-gated or deferred rather than guessed:
 Missing evidence in these areas does not stop this evidence-independent plan from merging.
 It blocks only the corresponding implementation/promotion claim.
 
-43. Completion state
+44. Completion state
 --------------------
 
 When this numbered plan is accepted, set ``:Status: merged``. That means the Phase 8
@@ -1445,4 +1656,4 @@ When this numbered plan is accepted, set ``:Status: merged``. That means the Pha
 commit path, remote effects, or real ChatGPT self-hosting workflow have been implemented or
 validated.
 
-Phase 8 implementation exits only when the real evidence procedure in section 38 passes.
+Phase 8 implementation exits only when the real evidence procedure in section 39 passes.
