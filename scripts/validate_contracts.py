@@ -517,8 +517,12 @@ def validate_bootstrap_command_profile_alignment() -> None:
     capability_policy = load_yaml(ROOT / "spec/policy/capability-zones.yaml")
     isolation_fixture = load_yaml(ROOT / "tests/fixtures/security/command-isolation.yaml")
     composition_fixture = load_yaml(ROOT / "tests/fixtures/security/capability-composition.yaml")
-    if not isinstance(command_policy, dict) or not isinstance(capability_policy, dict):
+    command_policy_root = _mapping(command_policy, context="command policy")
+    capability_policy_root = _mapping(capability_policy, context="capability policy")
+    if command_policy_root is None or capability_policy_root is None:
         return
+    command_policy = command_policy_root
+    capability_policy = capability_policy_root
 
     for document, context in (
         (command_policy, "command policy"),
