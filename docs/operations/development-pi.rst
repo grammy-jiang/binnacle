@@ -282,11 +282,21 @@ Then record bounded tests of no-replace publication,
 file and directory ``fsync``, crash windows, symlink containment, and unknown-entry
 preservation.  These observations belong in sanitized evidence outside Git.
 
-Only after the selected authenticated controller profile and the one finite mutation
-entitlement are reviewed may an owner set ``enabled = true`` and restart the service.
-Refresh or reconnect through the observed host procedure and verify that the visible
-catalogue is exactly the reviewed eight-Tool projection.  Exercise only the synthetic
-one-component path and bounded content from the frozen evaluation case:
+The current default-disabled build intentionally keeps production ``binnacle serve`` on
+the exact five-Tool core even when ``enabled = true``.  Its dependency-injected write
+composition is implementation-test evidence only: no concrete production authentication
+adapter, middleware composition, or evidence-selected external mutation scope has been
+chosen.  Do not set ``enabled = true`` to try to bypass that gate.
+
+After live Phase 3 evidence selects the concrete authentication adapter and exact external
+mutation scope, a separately reviewed repository change must bind one immutable protected
+activation record into the authentication middleware, catalogue selection, kernel policy,
+and runtime identity.  Only that exact production path may make ``enabled = true`` select
+the eight-Tool projection.  If the adapter, protected profile/mapping, activation digest,
+kernel health, or filesystem evidence is absent or stale, the visible catalogue remains the
+five-Tool core.  Once that change and the real-host prerequisites pass, refresh or reconnect
+through the observed host procedure and exercise only the synthetic one-component path and
+bounded content from the frozen evaluation case:
 
 #. prepare the write and retain its state binding and expiry;
 #. record required confirmation decline attempts and prove zero operation/effect;

@@ -114,6 +114,22 @@ Do not begin or promote the live Phase 5 capability until:
 Missing, expired, contradictory, or unavailable evidence fails closed. Planning text is
 never substituted for an observation.
 
+The default-disabled repository implementation may merge before the live gate selects a
+concrete authentication adapter and external mutation scope. In that state the production
+``binnacle serve`` path remains the exact five-Tool core even when the structural probe
+setting is enabled; dependency-injected test composition is not production promotion.
+
+The later evidence-selected activation change must construct one immutable protected
+activation record and pass that same record to controller authentication middleware,
+application catalogue selection, and operation-kernel composition. It binds the exact
+profile ID/version/audience, stable controller epoch rule, one non-wildcard external scope
+to literal internal ``probe_workspace_mutate``, catalogue/manifest identity, policy/mapping
+version, and a canonical activation digest. Every consequential admission persists the
+mapped scope digest in its policy input, and the activation digest contributes to runtime
+configuration identity. Missing authentication middleware/authenticator, unsafe or stale
+profile/mapping, or any digest disagreement keeps the five-Tool core; it never exposes a
+catalogue that the production boundary cannot authenticate and authorize.
+
 2.3 Phase exit gate
 ~~~~~~~~~~~~~~~~~~~
 
@@ -1414,7 +1430,8 @@ The capability may become live only when:
 * lost cleanup receipts cannot infer success/no-effect from absence;
 * all Phase 5 automated tests and existing quality/contract validation pass;
 * production composition adds no other effect adapter;
-* HOST catalogue is activated only through reviewed evidence-selected profile;
+* HOST catalogue is activated only through one reviewed evidence-selected activation
+  record shared by authentication, catalogue, and kernel composition; and
 * no HC1 support axis is promoted before live evaluation passes.
 
 29. Real Phase 5 exit checklist
