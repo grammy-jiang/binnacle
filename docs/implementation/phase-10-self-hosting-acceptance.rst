@@ -11,7 +11,7 @@ Binnacle Phase 10 Detailed Implementation Plan
 :Depends on: merged Phase 4 durable-operation kernel plan; merged Phase 6 development
              workspace plan; merged Phase 7 execution-supervisor plan; merged Phase 8 Git
              development plan; merged Phase 9 privileged self-management plan; real
-             implementation/promotion exits for the capabilities exercised by acceptance
+             implementation/promotion exits for every capability exercised by acceptance
 :Primary objective: Prove, with one correlated retained evidence chain, that real ChatGPT
                     can use Binnacle to make, test, review, merge, deploy, restart and
                     verify one real Binnacle change without routine manual intervention
@@ -40,6 +40,7 @@ The acceptance loop is:
        -> create and independently verify one signed commit
        -> push the exact branch/ref with protected repository credentials
        -> use ChatGPT GitHub integration for PR/review/Actions/merge
+       -> if review changes the head, repeat the complete local Phase 6/7/8 candidate chain
        -> independently bind the exact hosted merge result
        -> update the development checkout through Phase 8 semantics
        -> run Phase 9 restart preflight
@@ -88,9 +89,9 @@ replaced by a manual shell shortcut.
 2.3 No hidden manual development step
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The acceptance run is intended to prove Binnacle self-development. Human setup that is
-explicitly outside Bootstrap runtime scope may occur before the run -- for example initial
-Pi installation, registered controller/credential/profile provisioning or enabling the
+The acceptance run is intended to prove Binnacle self-development. Human setup explicitly
+outside Bootstrap runtime scope may occur before the run -- for example initial Pi
+installation, registered controller/credential/profile provisioning or enabling the
 already-reviewed connectivity path -- but the correlated acceptance sequence itself may
 not silently substitute a human editor, local shell, manual ``git`` command, ``sudo`` or
 service restart for a missing Binnacle operation.
@@ -107,8 +108,8 @@ to get a cleaner-looking second attempt.
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The MCP connection disappearing during the Phase 9 controlled restart is not itself a
-failure. The acceptance contract expects it. The next ChatGPT connection must reconcile
-the retained restart operation and checkpoint rather than requesting a second restart.
+failure. The next ChatGPT connection must reconcile the retained restart operation and
+checkpoint rather than requesting a second restart.
 
 2.6 The tested change is selected at execution time
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -124,6 +125,39 @@ Once the real evidence bundle passes and is accepted by the owner/reviewer, Boot
 closed milestone. Subsequent capability expansion belongs to post-Bootstrap development
 and should be performed through the working Binnacle loop rather than extending the
 Bootstrap acceptance target indefinitely.
+
+2.8 Final PR head has closed local provenance
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The final hosted PR head is not allowed to be merely "reviewed code". It must be the exact
+signed commit produced by the complete Binnacle-local acceptance chain for the current
+candidate generation.
+
+Every change to the candidate commit after local signing -- whether made by ChatGPT's
+GitHub integration, a reviewer, an owner, an automation, or another contributor --
+invalidates the prior candidate generation's Phase 6 mutation evidence, Phase 7 local
+checks, Phase 8 status/diff evidence, signed-commit verification and push evidence for
+PASS purposes.
+
+A moved PR head can continue in the same acceptance run only by creating a new monotonic
+``candidate_generation`` and repeating the complete local candidate chain:
+
+#. obtain/reconcile the exact remediation content through the supported repository flow;
+#. ensure the final source content is present in the registered local workspace;
+#. apply or reproduce the accepted remediation through Phase 6 workspace semantics when
+   local mutation is required;
+#. rerun the complete required Phase 7 local test/quality chain against that exact content;
+#. rerun Phase 8 status/diff and repository-safety inspection;
+#. create and independently verify a **new signed Phase 8 commit** containing the final
+   remediation content;
+#. push/reconcile that exact signed commit through the protected Phase 8 push operation;
+#. prove the hosted PR head equals that exact newly signed/pushed OID;
+#. only then collect exact-head review and CI evidence for the new generation.
+
+A remotely authored, unsigned, locally untested, or otherwise non-Binnacle-proven commit
+can never be the final PASS candidate. If it cannot be superseded by a complete locally
+proven signed candidate, the run is ``INCOMPLETE``. Review/CI on a moved head never inherits
+local evidence from the previous head merely because the diff is small.
 
 3. Source-of-truth composition
 ------------------------------
@@ -208,11 +242,15 @@ record conceptually contains:
 * exact initial Binnacle runtime identity;
 * exact initial repository/workspace identity;
 * selected change objective and scope digest;
+* monotonic ``candidate_generation``;
+* for every generation, exact locally proven source-content/change-scope digest, local
+  checks evidence set, status/diff evidence, signed commit OID+signer and push effect;
+* explicit invalidation reason/reference for every superseded generation;
 * every Phase 4 operation ID/idempotency key reference used by the run;
 * Phase 6 workspace-session/fence references;
 * Phase 7 execution IDs/output evidence used for tests/failure exercise;
 * Phase 8 branch/ref/index/worktree/commit/push evidence;
-* hosted GitHub repository/PR/review/CI/merge identifiers;
+* hosted GitHub repository/PR/review/CI/merge identifiers bound to the final generation;
 * Phase 9 restart preflight/checkpoint/broker/runtime-slot/recovery evidence;
 * post-reconnect exact runtime identity and changed-behaviour evidence;
 * security/non-disclosure checks;
@@ -220,6 +258,10 @@ record conceptually contains:
 
 The run record is correlation evidence, not an authority token. Possessing
 ``acceptance_run_id`` grants no workspace, credential or root capability.
+
+A candidate generation is immutable once its signed commit is recorded. A later head
+movement creates a new generation rather than overwriting the old commit/evidence fields.
+This prevents stale local evidence from being rebound to a new hosted head.
 
 6. Evidence collection model
 -----------------------------
@@ -231,7 +273,7 @@ be implemented as a test/helper/report component that:
 * records external GitHub identifiers supplied/read through ChatGPT's connected GitHub
   workflow;
 * canonicalizes exact references/digests;
-* evaluates the pass/fail matrix;
+* evaluates candidate-generation validity and the pass/fail matrix;
 * emits a bounded machine-readable acceptance report and a human-readable summary.
 
 It must not:
@@ -240,7 +282,8 @@ It must not:
 * mutate files, Git refs or services itself;
 * hold SSH/GPG/root credentials;
 * create a second operation lifecycle;
-* infer success from transcript text when an authoritative source exists.
+* infer success from transcript text when an authoritative source exists;
+* relabel review/CI evidence from one candidate generation as evidence for another.
 
 If no new evidence-assembler code is required, the run may be evaluated from existing
 operation snapshots plus a reviewed acceptance fixture/report procedure. Phase 10 should
@@ -283,9 +326,10 @@ The evidence-level run state is monotonic and may use names equivalent to:
    change_in_progress
    local_checks_in_progress
    local_checks_ready
-   commit_ready
-   pushed
+   candidate_signed
+   candidate_pushed
    hosted_review_in_progress
+   candidate_superseded
    hosted_merge_ready
    hosted_merged
    local_update_ready
@@ -298,6 +342,10 @@ The evidence-level run state is monotonic and may use names equivalent to:
    passed
    failed
    incomplete
+
+``candidate_superseded`` creates a new ``candidate_generation`` and routes back through
+``change_in_progress`` / ``local_checks_in_progress``. It never jumps directly from a
+remotely moved PR head to ``hosted_review_in_progress`` with inherited local evidence.
 
 This state machine does not replace Phase 4 operations. Each transition references the
 underlying authoritative operation/evidence. A run may be ``incomplete`` while an
@@ -324,10 +372,9 @@ Before branch creation, collect an exact baseline:
 * current verified LKG/runtime-control evidence required for the selected restart class;
 * exact CI/review policy expected for the hosted PR.
 
-The baseline must be internally coherent. For example, repository HEAD used to create the
-feature branch must equal the baseline commit bound into the run; the runtime revision may
-legitimately differ only if the documented development topology says so and the exact
-relationship is captured.
+The baseline must be internally coherent. Repository HEAD used to create the feature
+branch must equal the baseline commit bound into the run. Runtime revision may differ only
+if the documented development topology permits it and the exact relationship is captured.
 
 10. Development-session admission
 ---------------------------------
@@ -373,12 +420,12 @@ Use Phase 6 inspect/list/read/search operations to understand the selected chang
 * bounded search/query evidence relevant to the change;
 * exact source object versions/content bindings used to prepare the patch;
 * protected-content exclusions encountered, if any;
-* final approved change-scope digest.
+* final approved change-scope digest for the current candidate generation.
 
-The change scope should be narrow. If investigation proves the requested change actually
-requires a deferred capability, environment migration, DB migration or broad privileged
-change outside the selected real evidence profile, classify this run ``INCOMPLETE`` and
-select a different acceptance case later rather than silently broadening authority.
+The change scope should be narrow. If investigation proves the change requires a deferred
+capability, environment migration, DB migration or broad privileged change outside the
+selected real evidence profile, classify this run ``INCOMPLETE`` and choose another case
+later rather than silently broadening authority.
 
 13. Source mutation
 -------------------
@@ -388,7 +435,8 @@ Every mutation remains under Phase 4 idempotency/audit and the shared workspace-
 coordination model.
 
 After mutation, inspect exact resulting files/object versions and record the changed-path
-set. The acceptance run rejects:
+set and exact source-content digest for this candidate generation. The acceptance run
+rejects:
 
 * unexpected files outside selected scope;
 * protected ``.git``/credential/control-plane content mutation through workspace Tools;
@@ -396,16 +444,20 @@ set. The acceptance run rejects:
 * uncertain workspace effect;
 * a mutation requiring manual repair outside Binnacle.
 
+When review remediation changes source later, section 22 requires a new candidate
+generation and this Phase 6 content-binding step is repeated for the final content.
+
 14. Development-command checks
 ------------------------------
 
 Run the exact test/quality commands required by the repository using Phase 7 semantic
-execution. Command profiles must be current and all source-changing command effects remain
+execution. Command profiles must be current and source-changing command effects remain
 coordinated through the Phase 6 workspace fence as required by Phase 7.
 
 For each command record:
 
 * Phase 4 operation ID;
+* candidate generation and exact source-content digest tested;
 * Phase 7 execution ID/ticket profile;
 * executable/argv/cwd/profile digests;
 * start/terminal process evidence;
@@ -414,10 +466,12 @@ For each command record:
 * descendant cleanup result;
 * workspace-fence closure.
 
-At minimum run the repository's current required focused tests plus the normal quality gate
-appropriate to the selected change. The plan does not freeze future command strings; the
-actual repository at execution time determines them through its reviewed development
-profile.
+At minimum run the repository's current focused tests plus the normal quality gate
+appropriate to the selected change. The actual repository at execution time determines
+commands through its reviewed development profile.
+
+Every new candidate generation created after review remediation repeats the **complete**
+required local Phase 7 chain. A previous generation's green local checks are not inherited.
 
 15. Required recoverable failure or cancellation
 ------------------------------------------------
@@ -432,24 +486,26 @@ Preferred choices, in order:
    the selected change, run the exact test, observe truthful non-zero failure, correct it
    through Phase 6, and rerun to success;
 #. **Phase 7 cancellation** -- run a bounded long test/check command whose cancellation is
-   safe, cancel before launch or while running, prove the exact accepted/cancel generation,
+   safe, cancel before launch or while running, prove exact accepted/cancel generation,
    descendant termination and workspace-fence closure, then run the real check normally;
 #. **controlled broken-candidate restart** -- use only if real Phase 9 LKG rollback has
    already been independently proven for this exact candidate class; do not make the first
    Phase 10 run depend on an unproven destructive recovery path.
 
-The chosen failure/cancel event gets its own evidence reference in ``AcceptanceRun``. It
-must be reconciled before continuing. An ``uncertain`` cancellation does not satisfy the
-requirement.
+The chosen event gets its own evidence reference in ``AcceptanceRun`` and must be
+reconciled before continuing. An ``uncertain`` cancellation does not satisfy the
+requirement. The exercise need not be repeated merely because review creates a new
+candidate generation unless its evidence depends on the changed candidate content; the
+final generation's ordinary local test/quality chain is always repeated regardless.
 
 16. Local checks gate
 ---------------------
 
-Before commit:
+Before **each** candidate generation can be signed:
 
 * every selected test/quality command required by current repository policy is terminal and
-  acceptable;
-* the deliberate failure/cancel is truthfully reconciled;
+  acceptable for that exact generation/source digest;
+* the required deliberate failure/cancel is truthfully reconciled;
 * no Phase 7 descendant or ambiguous process remains;
 * workspace mutation fences are released or have the exact expected current owner;
 * Phase 6 inspection confirms the intended source state;
@@ -462,9 +518,9 @@ CI diagnose it.
 -------------------------------
 
 Use Phase 8 ``git_status``/``git_diff`` semantics under the supported repository profile.
-Record exact:
+For every candidate generation record exact:
 
-* branch/HEAD OID;
+* branch/HEAD OID before commit;
 * changed paths and modes;
 * index/worktree state;
 * bounded diff digest/result;
@@ -478,9 +534,10 @@ make the acceptance commit succeed.
 18. Signed commit creation
 --------------------------
 
-Create one signed commit through Phase 8 controlled semantics. The acceptance evidence
-binds independently:
+Create one signed commit for the candidate generation through Phase 8 controlled
+semantics. The acceptance evidence binds independently:
 
+* candidate generation;
 * exact parent OID;
 * exact committed tree OID and changed-path set;
 * exact commit OID;
@@ -489,47 +546,52 @@ binds independently:
 * exact signing identity/fingerprint/profile;
 * signature verification result;
 * branch ref CAS old -> new evidence;
-* repository safety/profile digest used by the operation.
+* repository safety/profile digest used by the operation;
+* exact Phase 6 source-content + Phase 7 local-check evidence set from which this commit
+  was produced.
 
 Do not accept "git commit exited zero" as sufficient proof. Verify the resulting commit
-object/tree/parent/signature/ref identity through the Phase 8 post-effect evidence path.
+object/tree/parent/signature/ref identity through Phase 8 post-effect evidence.
 
 A branch-ref CAS conflict is a truthful failure and requires reconciliation/replanning,
 not force-updating a ref to preserve the acceptance script.
 
+The **final** Phase 10 candidate must be a commit created and signed by this step. A commit
+created only on GitHub or by a reviewer cannot become the final PR head for PASS.
+
 19. Push preparation and exact remote binding
 ---------------------------------------------
 
-Before push, bind:
+Before each candidate-generation push, bind:
 
 * protected repository remote profile;
 * exact normalized host/repository identity;
-* feature branch local ref and commit OID;
+* feature branch local ref and signed commit OID;
 * exact destination remote ref;
 * expected remote old OID/nonexistence condition according to the promoted push contract;
 * dedicated repository SSH identity profile;
 * closed SSH/known-hosts/helper configuration;
 * operation/idempotency identity.
 
-The local repository's mutable URL/config does not choose the credential audience or push
+The local repository's mutable URL/config does not choose credential audience or push
 destination. Generic Phase 7 commands receive no repository SSH/GPG credential authority.
 
 20. Push and ambiguous-network reconciliation
 ---------------------------------------------
 
-Perform Phase 8 semantic push. Record broker/executor/Git evidence and the exact protected
-remote/ref target.
+Perform Phase 8 semantic push. Record executor/Git evidence and the exact protected
+remote/ref target. The pushed target OID must equal the signed OID for the same candidate
+generation.
 
 If the network response is lost:
 
 * do not issue a fresh blind push under a new idempotency key;
 * reconcile the retained push operation;
 * independently inspect the protected remote ref through the reviewed Phase 8 mechanism;
-* remote ref == exact target commit may prove the desired current effect under the Phase 8
-  contract;
+* remote ref == exact target commit may prove desired current effect under Phase 8;
 * a different current remote ref does not automatically prove the original push had no
   effect because another change may have occurred after success;
-* remain uncertain until the exact effect can be reconciled.
+* remain uncertain until exact effect can be reconciled.
 
 Phase 10 cannot PASS with an ambiguous push effect.
 
@@ -544,44 +606,67 @@ Record:
 
 * GitHub repository identity;
 * PR number/URL identity;
+* candidate generation;
 * exact head branch/ref and commit OID observed by GitHub;
 * exact base protected branch and base OID at PR creation;
 * PR creation time/evidence source;
-* run correlation note/reference if the repository process permits one.
+* run correlation note/reference if repository process permits one.
 
-If the hosted PR head differs from the exact pushed commit, stop and reconcile before
-review.
+The hosted PR head must equal the exact signed/pushed commit of the current candidate
+generation. If it differs, stop and reconcile before review.
 
-22. Hosted review policy
-------------------------
+22. Hosted review policy and head movement
+-----------------------------------------
 
 Use the repository's current review process, including the bounded AI-review policy that
-applies to the development workflow at execution time. Phase 10 acceptance itself requires
-that the hosted change is substantively reviewed; it does not require review spam or a
-specific bot signal when an equivalent exact-head clean assessment is already accepted by
-repository policy.
+applies to development workflow at execution time. Phase 10 acceptance requires that the
+hosted change is substantively reviewed; it does not require review spam or a particular
+bot signal when an equivalent exact-head clean assessment is accepted by repository
+policy.
 
 Record:
 
+* candidate generation;
 * exact reviewed head commit;
 * required reviewer identities/types;
 * actionable findings;
-* remediation commits if any;
+* remediation decisions;
 * proof each actionable thread is resolved or explicitly accepted under owner policy;
 * final exact-head clean review evidence.
 
-If review causes a source change, return through the normal local or hosted-approved
-workflow as defined by the real repository process, rebind the final commit/push/PR head,
-and rerun all evidence gates affected by the changed head. Never claim the original
-pre-review commit as the accepted candidate after its head moved.
+**Any remediation that changes PR content/head invalidates the current candidate
+generation for PASS.** The workflow must not use a GitHub-side edit or reviewer-authored
+commit as the new final candidate while retaining old local evidence.
+
+For a changed head, create the next candidate generation and repeat sections 12 through 20
+as one closed chain. In particular:
+
+#. bind/produce the final remediation content in the real registered workspace through the
+   supported Phase 6 path;
+#. rerun the complete required Phase 7 local tests/quality against that exact content;
+#. rerun Phase 8 status/diff/repository-safety checks;
+#. create a new independently verified signed Phase 8 commit;
+#. push/reconcile exactly that commit;
+#. prove GitHub PR head equals that signed/pushed OID;
+#. then rerun exact-head substantive review and Actions for the new head.
+
+If a hosted reviewer/automation has already authored a commit, it is historical input, not
+final acceptance provenance. Its desired changes must be represented in a new locally
+proven signed candidate before PASS. If repository policy cannot preserve this closed
+local provenance, the acceptance run is ``INCOMPLETE`` rather than weakening the gate.
+
+No local check, diff, signature, push, review or CI evidence from a superseded generation
+can satisfy the final generation's corresponding requirement.
 
 23. GitHub Actions gate
 -----------------------
 
-Record the exact required workflow runs/checks for the final PR head:
+Record the exact required workflow runs/checks for the **final locally proven candidate
+generation and exact PR head**:
 
 * workflow name/ID and run ID;
 * exact commit SHA;
+* candidate generation;
 * trigger/source;
 * terminal conclusion;
 * required job/check conclusions;
@@ -589,24 +674,32 @@ Record the exact required workflow runs/checks for the final PR head:
 
 A rerun is acceptable when repository policy permits it and evidence shows the original
 failure was infrastructure/transient rather than a hidden code change. Final PASS requires
-that the current exact head satisfies the repository's required hosted gate.
+that the exact GitHub Actions head equals the generation's locally signed/pushed OID.
+Green CI on any prior generation is stale and cannot be reused.
 
 24. Hosted merge binding
 ------------------------
 
 Merge through ChatGPT GitHub integration only after exact-head review and CI are clean.
-Record:
+Immediately before merge, re-read and bind:
 
 * PR number;
-* exact expected head at merge;
+* current candidate generation;
+* exact expected PR head;
+* exact locally signed commit OID for that generation;
+* exact pushed remote-ref OID;
+* final review head;
+* final CI head;
 * merge method;
-* exact resulting merged commit OID;
-* protected base branch;
-* hosted merge timestamp/evidence;
-* proof the PR is closed/merged and not merely marked mergeable.
+* protected base branch/current expected base state as required by repository policy.
 
-Read the hosted result independently after merge. The merge OID becomes the only allowed
-local update/restart candidate for the remainder of the run.
+The four candidate identities -- locally signed OID, pushed ref OID, current PR head, and
+review/CI head -- must be exactly equal before merge. A last-second head movement returns
+to section 22; it never proceeds with mixed-generation evidence.
+
+Record the exact resulting merged commit OID and hosted merge timestamp/evidence. Read the
+hosted result independently after merge. The merge OID becomes the only allowed local
+update/restart candidate for the remainder of the run.
 
 25. Local checkout update after hosted merge
 --------------------------------------------
@@ -616,14 +709,14 @@ substitute a manual ``git pull``.
 
 Before update, prove:
 
-* feature-branch commit pushed/merged as expected;
+* final-generation signed commit was pushed/merged as expected;
 * local index/worktree state matches the exact allowed transition;
 * no uncommitted acceptance artifacts or unrelated edits exist;
 * no conflicting Phase 6/7/8 workspace changer is active;
 * protected remote/base identities are current.
 
-Use the promoted fetch/pull/switch/ref-update semantics to reach the exact hosted merged
-commit. The preferred integration is protected fetch plus explicit verified fast-forward /
+Use promoted fetch/pull/switch/ref-update semantics to reach the exact hosted merged
+commit. Preferred integration is protected fetch plus explicit verified fast-forward /
 exact branch update as defined by Phase 8, not arbitrary merge/rebase/stash.
 
 After update record:
@@ -642,6 +735,7 @@ If local HEAD != hosted merged OID, restart is prohibited.
 
 Construct the Phase 9 candidate identity only after local update is exact. Bind:
 
+* final candidate-generation signed/pushed/PR-head evidence;
 * hosted merged OID == local HEAD;
 * exact branch/dirty expectation;
 * source/workspace/root/mount identity;
@@ -670,9 +764,9 @@ Call Phase 9 ``restart_preflight`` and record:
 * predicted restart impact/blockers;
 * manager-reload/database compatibility facts when applicable.
 
-Preflight is advisory. The actual ``binnacle_restart`` must acquire Phase 6 exclusive
-workspace coordination and revalidate the exact current state under the Phase 9 final
-boundary before privileged dispatch.
+Preflight is advisory. Actual ``binnacle_restart`` must acquire Phase 6 exclusive workspace
+coordination and revalidate exact current state under the Phase 9 final boundary before
+privileged dispatch.
 
 28. Controlled restart dispatch
 -------------------------------
@@ -685,10 +779,11 @@ Request exactly one Phase 9 controlled restart with a stable idempotency key bou
 * restart-owned Phase 6 workspace fence ID/generation;
 * Phase 9 broker acceptance evidence;
 * exact restart checkpoint ID/digest;
-* candidate runtime identity;
+* exact hosted merged candidate OID;
+* final candidate-generation provenance reference;
 * retained LKG ``VerifiedRuntimeSlot`` identity;
 * restart deadline/profile;
-* any manager-reload/database-compatibility plan required by the candidate class.
+* any manager-reload/database-compatibility plan required by candidate class.
 
 Once broker acceptance occurs, application/session disappearance does not cancel accepted
 recovery. Do not issue a second restart merely because ChatGPT loses the MCP connection.
@@ -702,19 +797,19 @@ machine.
 
 Reconnect attempts use the same registered endpoint/controller profile. On reconnect:
 
-* authenticate the current controller/device again;
+* authenticate current controller/device again;
 * inspect current runtime identity/readiness;
 * retrieve/reconcile the exact retained Phase 4 restart operation;
 * inspect Phase 9 broker checkpoint/recovery evidence;
-* prove that the restart-owned workspace fence and audit obligations reached a truthful
-  supported closure before new overlapping work;
+* prove restart-owned workspace fence and audit obligations reached truthful supported
+  closure before new overlapping work;
 * never create a fresh restart operation to replace an accepted one.
 
 30. Candidate success versus rollback outcome
 ---------------------------------------------
 
-For the normal Phase 10 acceptance case, expected success is the exact merged candidate.
-Acceptance recognizes Phase 9 truth if a failure occurs:
+For the normal Phase 10 acceptance case, expected success is the exact hosted merged
+candidate. Acceptance recognizes Phase 9 truth if a failure occurs:
 
 * ``candidate_ready`` at exact merged revision and expected runtime identity can proceed to
   behaviour verification;
@@ -724,8 +819,8 @@ Acceptance recognizes Phase 9 truth if a failure occurs:
   this run;
 * ambiguous broker/systemd/database effect is ``INCOMPLETE`` until reconciled.
 
-Phase 10 never calls a successful rollback proof equivalent to successful candidate
-self-hosting deployment.
+Phase 10 never calls a successful rollback equivalent to successful candidate self-hosting
+deployment.
 
 31. Post-reconnect runtime identity verification
 ------------------------------------------------
@@ -733,15 +828,17 @@ self-hosting deployment.
 Before probing changed behaviour, prove at minimum:
 
 * exact runtime Git revision == hosted merged OID;
+* hosted merged OID descends from/includes the final candidate-generation signed commit as
+  expected for the repository merge method;
 * exact protected branch/detached expectation;
 * clean/expected source state;
 * exact source/workspace/root/mount identity;
-* exact Python/environment/lock/package identity expected for the selected candidate;
+* exact Python/environment/lock/package identity expected for selected candidate;
 * config/policy/manifest/service-profile identities;
 * loaded service composition where Phase 9 exposes it;
 * application DB compatibility generation where applicable;
 * device ID/epoch;
-* readiness generation/runtime instance distinct from the pre-restart instance;
+* readiness generation/runtime instance distinct from pre-restart instance;
 * no fail-restricted startup state;
 * exact retained restart operation shows candidate success, not hidden rollback.
 
@@ -759,11 +856,13 @@ surface and records:
 * expected old-vs-new behavioural distinction;
 * actual structured result/evidence;
 * runtime/catalogue generation used;
-* proof the result comes from the post-restart candidate runtime;
-* no consequential side effect unless the selected probe contract explicitly requires one.
+* proof result comes from post-restart candidate runtime;
+* final candidate-generation/merged-OID evidence reference;
+* no consequential side effect unless selected probe contract explicitly requires one.
 
-The probe should distinguish the merged change from the old runtime. Merely seeing the
-commit OID is not changed-behaviour evidence.
+The probe must distinguish the merged change from old runtime. Merely seeing commit OID is
+not changed-behaviour evidence. A result cached or observed from a pre-restart runtime or
+catalogue generation cannot satisfy this step.
 
 33. Security/non-disclosure acceptance checks
 ---------------------------------------------
@@ -798,25 +897,27 @@ The acceptance evaluator returns exactly ``PASS``, ``FAIL`` or ``INCOMPLETE``.
 
 PASS requires **all** of:
 
-#. real ChatGPT connected to the real selected development Pi under the expected controller
-   and compatibility profile;
+#. real ChatGPT connected to the real selected development Pi under expected controller and
+   compatibility profile;
 #. exact baseline/runtime/repository/run correlation recorded;
-#. one real feature branch created from the expected base without protected-master direct
+#. one real feature branch created from expected base without protected-master direct
    mutation;
 #. one real bounded source behaviour change made through Phase 6;
-#. required local Phase 7 tests/quality checks pass;
+#. the **final candidate generation** has complete Phase 6 source/content binding, complete
+   required Phase 7 local test/quality evidence, Phase 8 status/diff evidence, independently
+   verified signed commit and exact protected push evidence;
 #. one safe recoverable failure/cancellation is truthfully reconciled;
-#. exact Git status/diff proves only intended candidate content;
-#. one signed commit is independently verified for tree/parent/message/signer/ref;
-#. exact branch push succeeds/reconciles with no reusable credential disclosure;
-#. hosted GitHub PR exists on the exact pushed head;
-#. required substantive review is clean on the exact final head;
-#. required GitHub Actions checks are green on that head;
+#. no superseded candidate generation contributes local/review/CI evidence to the final
+   generation's required fields;
+#. final locally signed commit OID == exact pushed feature-branch OID == exact final hosted
+   PR head == exact substantive-review head == exact GitHub Actions head;
+#. required substantive review is clean for that exact final head;
+#. required GitHub Actions checks are green on that exact final head;
 #. PR is merged and exact merged OID independently recorded;
 #. local development checkout reaches exactly that merged OID through Phase 8 semantics;
-#. Phase 9 restart preflight and controlled restart use that exact candidate;
+#. Phase 9 restart preflight and controlled restart use exactly that merged candidate;
 #. reconnect reconciles the same retained restart rather than a second attempt;
-#. post-reconnect runtime identity equals the exact merged OID and expected runtime/control
+#. post-reconnect runtime identity equals exact merged OID and expected runtime/control
    composition;
 #. selected changed behaviour is observed through real MCP on that runtime;
 #. no unresolved ``uncertain`` operation, audit obligation, workspace fence, credential
@@ -829,27 +930,31 @@ PASS requires **all** of:
 
 FAIL is a terminal evidence-backed negative result, for example:
 
-* hosted review/CI rejects the final candidate and the run is deliberately ended;
+* hosted review/CI rejects final candidate and run is deliberately ended;
 * protected repository/security policy violation occurs;
 * wrong signer/remote/branch/merge/runtime identity is proven;
-* candidate restart truthfully rolls back instead of running the merged candidate;
-* changed behaviour is definitively absent on the exact candidate runtime;
+* final PR head cannot be traced to a complete locally tested/signed/pushed candidate
+  generation;
+* candidate restart truthfully rolls back instead of running merged candidate;
+* changed behaviour is definitively absent on exact candidate runtime;
 * credential or privilege boundary is breached.
 
-A later acceptance run may start only after the underlying issue is corrected and normal
+A later acceptance run may start only after underlying issue is corrected and normal
 predecessor gates are restored.
 
 34.3 INCOMPLETE
 ~~~~~~~~~~~~~~~
 
-INCOMPLETE means the acceptance truth cannot yet be decided safely, for example:
+INCOMPLETE means acceptance truth cannot yet be decided safely, for example:
 
 * required predecessor capability/evidence is unavailable;
 * an effect remains ``uncertain``;
 * GitHub/executor/broker evidence needed for correlation is unavailable;
-* the selected change unexpectedly requires an unpromoted environment/DB/root capability;
+* PR head moved and the complete local Phase 6/7/8 candidate chain has not yet been
+  repeated for the new head;
+* selected change unexpectedly requires unpromoted environment/DB/root capability;
 * restricted recovery requires local operator work;
-* external service outage prevents completion without proving a candidate failure.
+* external service outage prevents completion without proving candidate failure.
 
 INCOMPLETE never silently becomes PASS from elapsed time or a later unrelated observation.
 
@@ -858,39 +963,46 @@ INCOMPLETE never silently becomes PASS from elapsed time or a later unrelated ob
 
 For every Phase 4/6/7/8/9 operation:
 
-* same logical retry uses the same idempotency binding/fingerprint according to its
-  contract;
+* same logical retry uses same idempotency binding/fingerprint according to contract;
 * retained work is resolved before mutable admission predicates;
-* response loss does not authorize a fresh logical effect;
+* response loss does not authorize fresh logical effect;
 * ``uncertain`` blocks blind repeat;
 * session expiry cannot rewrite already-started effect truth;
-* restart connection loss cannot allocate a second restart;
+* restart connection loss cannot allocate second restart;
 * hosted GitHub operations are re-read from GitHub rather than guessed from local state.
 
-The acceptance-run record itself may be updated with new evidence, but it cannot rewrite a
-previously recorded authoritative effect result to make the matrix pass.
+For acceptance candidate generations:
+
+* head movement never mutates old generation's OID/evidence in place;
+* a new generation must rebuild the complete local source/check/sign/push provenance;
+* only evidence explicitly bound to final generation can satisfy PASS fields.
+
+The acceptance-run record may gain new evidence, but it cannot rewrite authoritative effect
+results to make the matrix pass.
 
 36. Fault and interruption scenarios
 ------------------------------------
 
 Before real exit, walk or exercise as appropriate:
 
-* ChatGPT disconnects during a read-only inspection;
+* ChatGPT disconnects during read-only inspection;
 * application restarts between source edit and test;
 * Phase 7 command response lost after acceptance;
 * safe cancellation before command launch;
 * safe cancellation while command process tree is running;
 * test fails, source is corrected and exact same acceptance objective continues;
 * application dies while retained Phase 7 operation survives;
-* Git branch/ref CAS loses to an unexpected concurrent change;
+* Git branch/ref CAS loses to unexpected concurrent change;
 * push response lost;
 * remote ref changes after a push may have succeeded;
-* PR review moves the head and invalidates earlier review/CI evidence;
+* PR review remediation moves head after original local checks/signing;
+* reviewer/GitHub automation creates an unsigned or locally untested commit;
+* old-generation local checks are accidentally offered with new-generation review/CI;
 * transient GitHub Actions infrastructure failure is rerun under repository policy;
 * hosted merge response lost but GitHub later proves exact merged OID;
 * local update response lost after ref/worktree effect;
-* restart preflight clean but a competing Phase 7/8 changer races final admission -- the
-  shared Phase 6 fence gives one winner;
+* restart preflight clean but competing Phase 7/8 changer races final admission -- shared
+  Phase 6 fence gives one winner;
 * application connection disappears after Phase 9 broker acceptance;
 * broker accepted restart and app retry arrives after reconnect;
 * candidate readiness delayed until near deadline;
@@ -920,16 +1032,23 @@ representative shape is:
      baseline_runtime_ref
      baseline_repo_ref
      change_objective_digest
+     candidate_generations[]:
+       generation
+       source_content_ref
+       local_check_refs[]
+       status_diff_ref
+       signed_commit_oid
+       signer_ref
+       push_effect_ref
+       hosted_head_ref
+       review_refs[]
+       ci_refs[]
+       superseded_reason_ref
+     final_candidate_generation
      operation_refs[]
      command_execution_refs[]
      failure_exercise_ref
-     branch_ref
-     commit_oid
-     signer_ref
-     push_effect_ref
      github_pr_ref
-     github_review_refs[]
-     github_ci_refs[]
      github_merge_oid
      local_update_ref
      restart_operation_ref
@@ -951,16 +1070,17 @@ The final evidence package should allow an owner/reviewer to answer quickly:
 
 * What exact real Pi/runtime did ChatGPT start from?
 * What exact change was selected and why was it safe for this acceptance profile?
-* What files changed?
-* What local tests ran and what recoverable failure/cancel was exercised?
-* What exact signed commit was produced and by which approved signer?
-* What exact remote ref received it?
-* What PR/review/CI/merge evidence corresponds to the final head?
+* Which candidate generations were superseded and why?
+* Does the final PR head equal the final locally tested/signed/pushed commit?
+* What files changed in that final generation?
+* What local tests ran against that exact content and what failure/cancel was exercised?
+* What exact signer and protected remote were used?
+* What PR/review/CI/merge evidence corresponds to exact final head?
 * What exact merged OID was installed locally?
-* What Phase 9 checkpoint/LKG/broker operation performed the restart?
-* Did the candidate run or did rollback occur?
+* What Phase 9 checkpoint/LKG/broker operation performed restart?
+* Did candidate run or rollback occur?
 * What exact post-restart runtime identity was observed?
-* What semantic MCP probe proves the changed behaviour is live?
+* What semantic MCP probe proves changed behaviour is live?
 * Were all audit/fence/credential/broker states closed?
 * Was any reusable credential or privileged authority exposed?
 
@@ -970,14 +1090,17 @@ evidence design is insufficient.
 39. Tests for the acceptance evaluator
 --------------------------------------
 
-Any implementation of the evidence assembler/evaluator should have deterministic tests
-for:
+Any implementation of evidence assembler/evaluator should have deterministic tests for:
 
 * missing required evidence -> INCOMPLETE;
 * wrong branch/base/head relationship -> FAIL;
 * wrong signer -> FAIL;
 * review on old head -> INCOMPLETE/FAIL according to repository policy, never PASS;
 * CI green on old head only -> INCOMPLETE;
+* final PR head differs from final locally signed/pushed OID -> FAIL/INCOMPLETE, never PASS;
+* new PR head reuses old generation's Phase 6/7/8 local evidence -> INCOMPLETE;
+* remotely authored remediation commit lacks new local test/sign/push generation ->
+  INCOMPLETE;
 * merged OID != local update target -> FAIL;
 * local update target != post-restart runtime revision -> FAIL;
 * candidate rollback despite hosted merge -> FAIL for Phase 10 candidate success;
@@ -986,10 +1109,10 @@ for:
 * unresolved Phase 4/7/8/9 uncertain state -> INCOMPLETE;
 * deliberate cancellation not truthfully reconciled -> INCOMPLETE;
 * leaked credential/security invariant -> FAIL;
-* every identity/evidence exact and closed -> PASS.
+* every final-generation identity/evidence exact and closed -> PASS.
 
-Use property tests for evidence-reference permutation/omission so the evaluator cannot pass
-because a similarly named but different operation/commit/run was supplied.
+Use property tests for evidence-reference permutation/omission so evaluator cannot pass
+because a similarly named but different operation/commit/run/generation was supplied.
 
 40. Real-Pi/ChatGPT evidence campaign
 -------------------------------------
@@ -997,8 +1120,8 @@ because a similarly named but different operation/commit/run was supplied.
 The real acceptance campaign records, rather than assumes:
 
 * actual ChatGPT connection/reconnection behaviour;
-* actual catalogue refresh behaviour after restart if relevant to the selected change;
-* actual host confirmation/authority prompts for the promoted operations;
+* actual catalogue refresh behaviour after restart if relevant to selected change;
+* actual host confirmation/authority prompts for promoted operations;
 * real Phase 7 process/cancel survival behaviour;
 * real Phase 8 SSH/signing/push evidence without raw-secret disclosure;
 * real GitHub connected integration PR/review/Actions/merge behaviour;
@@ -1007,16 +1130,15 @@ The real acceptance campaign records, rather than assumes:
 * exact post-restart runtime identity/readiness evidence;
 * actual changed Tool behaviour.
 
-Unknown facts stay unknown until this campaign runs. The plan does not claim that ChatGPT
-will automatically rediscover a changed catalogue, that the Pi can materialize an LKG slot,
-or that a particular Git/GPG/systemd mechanism works merely because the design names it.
+Unknown facts stay unknown until this campaign runs. The plan does not claim ChatGPT will
+automatically rediscover a changed catalogue, that Pi can materialize an LKG slot, or that
+a particular Git/GPG/systemd mechanism works merely because design names it.
 
 41. No manual fallback inside the acceptance chain
 --------------------------------------------------
 
-If a required step cannot be completed through the promoted Binnacle/ChatGPT GitHub
-interfaces, record the missing capability and stop the run INCOMPLETE. Do not patch over it
-with:
+If a required step cannot be completed through promoted Binnacle/ChatGPT GitHub
+interfaces, record missing capability and stop run INCOMPLETE. Do not patch over it with:
 
 * SSH shell commands;
 * manual file edits;
@@ -1026,19 +1148,25 @@ with:
 * local database edits;
 * hidden repository force updates.
 
+This also applies to review remediation: a GitHub-side edit may be useful collaboration
+input, but it cannot become final PASS head unless its content is superseded by a complete
+Binnacle-local Phase 6/7/8 tested/signed/pushed candidate generation.
+
 A separately documented operator recovery required by Phase 9 ``restricted_recovery`` is
-truthful recovery, but once used it means this Phase 10 run did not prove the required
-routine no-manual-intervention self-hosting loop.
+truthful recovery, but once used it means this Phase 10 run did not prove required routine
+no-manual-intervention self-hosting loop.
 
 42. Hosted GitHub boundary
 --------------------------
 
 Keeping hosted PR/review/CI/merge in ChatGPT's GitHub integration is deliberate Bootstrap
-scope. Phase 10 verifies the composition:
+scope. Phase 10 verifies composition:
 
-* Binnacle can prepare/push a correct branch without exposing reusable credentials;
+* Binnacle can prepare/push a correct signed branch without exposing reusable credentials;
 * ChatGPT can use its separate connected GitHub authority for hosted collaboration;
-* the exact hosted result can be brought back into Binnacle local/restart evidence.
+* hosted collaboration may suggest changes but cannot replace the required local final-head
+  provenance;
+* exact hosted result can be brought back into Binnacle local/restart evidence.
 
 This is not considered a local Binnacle authority leak and does not justify exposing
 GitHub credentials to the Pi.
@@ -1046,32 +1174,32 @@ GitHub credentials to the Pi.
 43. Acceptance of changed MCP behaviour
 ---------------------------------------
 
-When the selected change affects a Tool schema/catalogue entry, the run must respect the
-actual promoted contract/catalogue-refresh rules observed in Phase 3 and later evidence.
-It may require reconnect or catalogue refresh according to real host behaviour. Do not
-assume immediate host uptake.
+When selected change affects a Tool schema/catalogue entry, run must respect actual
+promoted contract/catalogue-refresh rules observed in Phase 3 and later evidence. It may
+require reconnect or catalogue refresh according to real host behaviour. Do not assume
+immediate host uptake.
 
-When the selected change affects only handler behaviour under an unchanged schema, the
-probe still verifies the actual post-restart result and binds it to the post-restart runtime
+When selected change affects only handler behaviour under unchanged schema, probe still
+verifies actual post-restart result and binds it to post-restart runtime
 instance/catalogue generation.
 
-A Tool result from a pre-restart connection/cache cannot satisfy changed-behaviour proof.
+A Tool result from pre-restart connection/cache cannot satisfy changed-behaviour proof.
 
 44. Database/environment/service-definition guard
 --------------------------------------------------
 
 Phase 10 intentionally chooses a candidate class supported by current Phase 9 evidence.
-Before commit/push and again before restart:
+Before every candidate-generation signing/push and again before restart:
 
-* classify whether the change alters dependencies/environment;
+* classify whether change alters dependencies/environment;
 * classify whether it alters configuration/policy/manifest;
 * classify whether it alters systemd service-unit/drop-in/runtime-selector material;
 * classify whether it can perform application DB schema/data migration;
-* compare those classes to the promoted candidate/LKG recovery profile.
+* compare classes to promoted candidate/LKG recovery profile.
 
-If the real Phase 9 profile currently supports only database-neutral/no-environment-change
-candidates, Phase 10 uses that class. Acceptance never expands Phase 9 by selecting a more
-aggressive candidate and hoping rollback works.
+If real Phase 9 profile supports only database-neutral/no-environment-change candidates,
+Phase 10 uses that class. Acceptance never expands Phase 9 by selecting a more aggressive
+candidate and hoping rollback works.
 
 45. Cleanup after PASS or terminal FAIL
 ---------------------------------------
@@ -1080,14 +1208,14 @@ After terminal evidence closure:
 
 * development session is ended/allowed to expire under normal authority semantics;
 * no Phase 7 command descendant remains;
-* repository worktree/index state is exactly the expected protected branch state;
-* no acceptance-only feature branch cleanup is performed if it would destroy useful hosted
-  evidence; cleanup follows normal repository policy;
+* repository worktree/index state is exact expected protected branch state;
+* no acceptance-only feature branch cleanup destroys useful hosted evidence; cleanup
+  follows normal repository policy;
 * credential capability sockets/leases are closed;
 * Phase 6 workspace fences are free;
-* Phase 9 restart/recovery reservations and broker state are terminally retained/cleaned
-  according to retention policy;
-* acceptance evidence bundle is durably retained at its reviewed location without secrets.
+* Phase 9 restart/recovery reservations/broker state are terminally retained/cleaned under
+  retention policy;
+* acceptance evidence bundle is durably retained at reviewed location without secrets.
 
 Cleanup cannot retroactively rewrite a failed/uncertain effect.
 
@@ -1096,23 +1224,24 @@ Cleanup cannot retroactively rewrite a failed/uncertain effect.
 
 Phase 10 implementation/execution should proceed in this order:
 
-#. Freeze/review the Phase 10 evidence schema and pass/fail matrix.
+#. Freeze/review Phase 10 evidence schema, candidate-generation rules and pass/fail matrix.
 #. Implement only the small evidence assembler/evaluator if existing retained snapshots are
    insufficient for reliable review; do not add a new authority surface.
-#. Add evaluator fixtures/property tests.
+#. Add evaluator fixtures/property tests including moved-head/stale-generation cases.
 #. Add an acceptance-run operator/reviewer procedure referencing existing semantic Tools.
-#. Verify Phase 3-9 implementation/promotion exits on the real selected Pi.
+#. Verify Phase 3-9 implementation/promotion exits on real selected Pi.
 #. Choose one real safe acceptance change at execution time.
-#. Capture the exact baseline and create ``AcceptanceRun``.
+#. Capture exact baseline and create ``AcceptanceRun`` generation 1.
 #. Execute branch/read/edit/test/failure-exercise/diff/commit/push through Binnacle.
-#. Complete hosted PR/review/CI/merge through ChatGPT GitHub integration.
-#. Bind exact merged OID and update the development checkout through Phase 8.
+#. Complete hosted PR/review; for every head-changing remediation, create next generation
+   and repeat the complete local Phase 6/7/8 candidate chain before further review/CI.
+#. Complete exact-head hosted CI/merge through ChatGPT GitHub integration.
+#. Bind exact merged OID and update development checkout through Phase 8.
 #. Execute Phase 9 restart preflight + controlled restart.
-#. Reconnect and reconcile the same restart.
+#. Reconnect and reconcile same restart.
 #. Verify exact runtime identity and changed behaviour.
 #. Close security/audit/fence/credential/broker evidence.
-#. Evaluate PASS/FAIL/INCOMPLETE and submit the evidence bundle for owner/reviewer
-   acceptance.
+#. Evaluate PASS/FAIL/INCOMPLETE and submit evidence bundle for owner/reviewer acceptance.
 #. On accepted PASS, mark Bootstrap milestone complete and stop Bootstrap feature expansion.
 
 47. Holistic pre-review checklist
@@ -1121,42 +1250,45 @@ Phase 10 implementation/execution should proceed in this order:
 Before asking bot reviewers to accept this plan, walk the complete chain:
 
 ``real ChatGPT/controller/device -> run readiness -> baseline runtime/repository -> one
-Phase6 development session -> Phase8 feature branch -> Phase6 inspect/search/read ->
-Phase6 mutation -> Phase7 tests/quality -> one recoverable failure/cancel -> exact local
-checks -> Phase8 status/diff -> signed commit -> exact push/reconciliation -> ChatGPT
-GitHub PR -> exact-head substantive review -> exact-head Actions -> hosted merge -> exact
-merged OID -> Phase8 local checkout update -> Phase9 candidate binding -> restart preflight
--> shared Phase6 CHANGE fence -> broker accept/checkpoint -> service stop/candidate start /
-optional manager reload/recovery -> expected connection loss -> reconnect -> same retained
-restart reconciliation -> exact merged runtime identity -> changed MCP behaviour probe ->
+Phase 6 development session -> Phase 8 feature branch -> Phase 6 inspect/search/read ->
+Phase 6 mutation -> Phase 7 tests/quality -> one recoverable failure/cancel -> exact local
+checks -> Phase 8 status/diff -> locally created signed commit -> exact push/reconciliation
+-> ChatGPT GitHub PR -> if head changes: NEW GENERATION + repeat Phase 6/7/8 local
+content/check/diff/sign/push chain -> final PR head == final signed/pushed OID -> exact-head
+substantive review -> exact-head Actions -> hosted merge -> exact merged OID -> Phase 8 local
+checkout update -> Phase 9 candidate binding -> restart preflight -> shared Phase 6 CHANGE
+fence -> broker accept/checkpoint -> service stop/candidate start / optional manager
+reload/recovery -> expected connection loss -> reconnect -> same retained restart
+reconciliation -> exact merged runtime identity -> changed MCP behaviour probe ->
 security/audit/fence/credential closure -> PASS/FAIL/INCOMPLETE``.
 
 Scrutinize especially:
 
-* stale evidence from an old commit/head/run being accidentally reused;
-* review/CI on a pre-remediation head;
+* stale evidence from an old candidate generation/commit/head/run being reused;
+* review/CI on pre-remediation head;
+* hosted-authored remediation becoming final head without complete local retest/sign/push;
 * push or merge response loss;
 * local checkout update not equal to hosted merge OID;
-* a manual ``git pull`` or shell restart sneaking into the loop;
-* a second restart being issued after connection loss;
-* candidate rollback being mislabeled candidate success;
+* manual ``git pull`` or shell restart sneaking into loop;
+* second restart issued after connection loss;
+* candidate rollback mislabeled candidate success;
 * runtime HEAD matching while wrong environment/config/service/DB state runs;
 * behaviour probe coming from stale connection/catalogue/runtime;
 * deliberate failure/cancel not truthfully reconciled;
-* unresolved uncertainty being hidden by later success;
+* unresolved uncertainty hidden by later success;
 * credential/helper/root authority leakage;
-* Phase 9 recovery profile being exceeded by the selected candidate;
-* evidence bundle claiming Bootstrap complete merely because the Phase 10 plan merged.
+* Phase 9 recovery profile exceeded by selected candidate;
+* evidence bundle claiming Bootstrap complete merely because Phase 10 plan merged.
 
 48. Plan acceptance checklist
 -----------------------------
 
 This planning PR may merge when:
 
-* branch starts from the exact merged Phase 9 ``master``;
+* branch starts from exact merged Phase 9 ``master``;
 * it adds exactly ``docs/implementation/phase-10-self-hosting-acceptance.rst``;
 * it changes no runtime implementation, contracts, manifest or prior numbered plan;
-* a holistic pre-review has checked the full evidence chain;
+* holistic pre-review has checked full evidence chain and candidate-generation provenance;
 * exact-head Contract Validation and Python CI are green;
 * mandatory exact-head Codex substantive review is clean;
 * actionable threads are resolved;
@@ -1172,23 +1304,27 @@ It does not complete Bootstrap implementation.
 Real Phase 10 exit requires one owner/reviewer-accepted ``PASS`` evidence bundle meeting
 section 34 on the real development Pi with real ChatGPT.
 
-The decisive identity chain is:
+The decisive identity/provenance chain is:
 
 ::
 
    exact baseline
       -> feature branch
-      -> signed commit OID
-      -> pushed remote ref
-      -> exact hosted PR final head
-      -> exact reviewed/CI head
+      -> final candidate generation
+      -> exact locally content-bound/tested/diffed source
+      -> locally created signed commit OID
+      -> pushed remote ref at same OID
+      -> exact hosted PR final head at same OID
+      -> exact review/CI head at same OID
       -> exact hosted merged OID
       -> exact local update target
       -> exact Phase 9 restart candidate
       -> exact post-restart runtime revision
       -> exact changed behaviour
 
-Every equality/transition is independently evidenced. Any gap is not a partial pass.
+Every equality/transition is independently evidenced. Any head-changing remediation
+creates a new locally proven candidate generation; there is no shortcut from hosted edit to
+accepted final head. Any gap is not a partial pass.
 
 The run must additionally prove one safe recoverable failure/cancellation and no reusable
 credential/root/workspace-boundary disclosure.
@@ -1201,13 +1337,13 @@ Only after that evidence is accepted is Bootstrap V1 complete.
 After accepted PASS:
 
 * stop expanding Bootstrap V1;
-* preserve the acceptance evidence and exact milestone revision;
-* record any deferred hardening/architecture gaps without retroactively adding them to the
+* preserve acceptance evidence and exact milestone revision;
+* record deferred hardening/architecture gaps without retroactively adding them to
   Bootstrap exit gate;
-* use the now-working Binnacle self-development loop for subsequent architecture,
-  hardening and feature work;
-* require future migrations/privilege/credential changes to follow their normal reviewed
-  contracts rather than inheriting special authority from the Bootstrap acceptance run.
+* use now-working Binnacle self-development loop for subsequent architecture, hardening and
+  feature work;
+* require future migrations/privilege/credential changes to follow normal reviewed
+  contracts rather than inheriting special authority from Bootstrap acceptance run.
 
 The target outcome is not a permanently privileged bootstrap mode. It is a normal,
 reviewable Binnacle development workflow that has been proven once end-to-end.
