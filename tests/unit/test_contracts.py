@@ -188,6 +188,36 @@ def test_source_manifest_digest_drift_is_rejected() -> None:
         )
 
 
+def test_self_consistent_source_manifest_drift_is_rejected() -> None:
+    registry, digest = _documents()
+    registry["source_manifest"] = {
+        "id": "unreviewed-manifest",
+        "version": "9.9.9",
+        "sha256": "a" * 64,
+    }
+    digest["source_manifest_sha256"] = "a" * 64
+    registry_bytes, digest_bytes = _encoded(registry, digest)
+
+    with pytest.raises(ContractRegistryError, match="reviewed Phase 2 identity"):
+        ContractRegistry.from_bytes(
+            registry_bytes=registry_bytes,
+            digest_bytes=digest_bytes,
+        )
+
+
+def test_self_consistent_evaluation_profile_version_drift_is_rejected() -> None:
+    registry, digest = _documents()
+    registry["evaluation_profile_version"] = "9.9.9"
+    registry["compatibility_baseline"]["profile_version"] = "9.9.9"
+    registry_bytes, digest_bytes = _encoded(registry, digest)
+
+    with pytest.raises(ContractRegistryError, match="reviewed Phase 2 identity"):
+        ContractRegistry.from_bytes(
+            registry_bytes=registry_bytes,
+            digest_bytes=digest_bytes,
+        )
+
+
 @pytest.mark.parametrize(
     ("document", "key", "message"),
     [
@@ -429,6 +459,41 @@ def test_handler_binding_must_match_the_reviewed_tool_projection() -> None:
     registry_bytes, digest_bytes = _encoded(registry, digest)
 
     with pytest.raises(ContractRegistryError, match="reviewed projection"):
+        ContractRegistry.from_bytes(
+            registry_bytes=registry_bytes,
+            digest_bytes=digest_bytes,
+        )
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("title", "Unreviewed Tool title"),
+        ("description", "Unreviewed model-facing behavior."),
+        ("contract_version", "9.9"),
+        ("information_class", "restricted-result"),
+        ("confirmation_class", "HC3"),
+        (
+            "annotations",
+            {
+                "readOnlyHint": False,
+                "destructiveHint": False,
+                "idempotentHint": True,
+                "openWorldHint": False,
+            },
+        ),
+    ],
+)
+def test_all_model_facing_tool_metadata_matches_the_reviewed_projection(
+    field: str,
+    value: object,
+) -> None:
+    registry, digest = _documents()
+    registry["tools"][0][field] = value
+    _refresh_catalogue_digest(registry, digest)
+    registry_bytes, digest_bytes = _encoded(registry, digest)
+
+    with pytest.raises(ContractRegistryError, match="metadata does not match reviewed"):
         ContractRegistry.from_bytes(
             registry_bytes=registry_bytes,
             digest_bytes=digest_bytes,

@@ -281,7 +281,11 @@ class RequestBodyLimitMiddleware:
                 )
                 return
 
-        bound_revision, rejection = self._unwrap_legacy_session(scope)
+        initialize_revision = self._legacy_initialize_revision(parsed)
+        bound_revision, rejection = self._unwrap_legacy_session(
+            scope,
+            allow_missing=initialize_revision is not None,
+        )
         if rejection is not None:
             code, data_code, error_message = rejection
             await _send_jsonrpc_error(
@@ -292,7 +296,7 @@ class RequestBodyLimitMiddleware:
                 message=error_message,
             )
             return
-        response_revision = bound_revision or self._legacy_initialize_revision(parsed)
+        response_revision = bound_revision or initialize_revision
         await self.app(
             scope,
             replay,
@@ -310,8 +314,16 @@ class RequestBodyLimitMiddleware:
     def _unwrap_legacy_session(
         self,
         scope: MutableMapping[str, Any],
+        *,
+        allow_missing: bool = False,
     ) -> tuple[str | None, RevisionRejection | None]:
         raw_headers = scope.get("headers", ())
+        headers = {
+            name.decode("latin-1").lower(): value.decode("latin-1")
+            for name, value in raw_headers
+            if isinstance(name, bytes) and isinstance(value, bytes)
+        }
+        header_version = headers.get(MCP_PROTOCOL_VERSION_HEADER)
         session_values = [
             value
             for name, value in raw_headers
@@ -320,6 +332,12 @@ class RequestBodyLimitMiddleware:
             and name.lower() == MCP_SESSION_ID_HEADER.encode("ascii")
         ]
         if not session_values:
+            if header_version in LEGACY_REVISIONS and not allow_missing:
+                return None, (
+                    -32020,
+                    "protocol_header_mismatch",
+                    "The legacy transport request requires a bound Mcp-Session-Id.",
+                )
             return None, None
         if len(session_values) != 1:
             return None, (
@@ -328,12 +346,6 @@ class RequestBodyLimitMiddleware:
                 "Duplicate routing header: Mcp-Session-Id",
             )
 
-        headers = {
-            name.decode("latin-1").lower(): value.decode("latin-1")
-            for name, value in raw_headers
-            if isinstance(name, bytes) and isinstance(value, bytes)
-        }
-        header_version = headers.get(MCP_PROTOCOL_VERSION_HEADER)
         if header_version not in LEGACY_REVISIONS:
             return None, None
         decoded = self._session_codec.decode(session_values[0].decode("latin-1"))

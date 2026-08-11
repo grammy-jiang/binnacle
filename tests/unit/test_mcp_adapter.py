@@ -279,7 +279,7 @@ async def test_non_post_mcp_transport_requires_a_reviewed_revision(method: str) 
 
 @pytest.mark.anyio
 @pytest.mark.parametrize("method", ["GET", "DELETE"])
-async def test_non_post_mcp_transport_with_reviewed_revision_is_forwarded(
+async def test_non_post_legacy_transport_without_session_is_rejected(
     method: str,
 ) -> None:
     downstream, sent = await _exercise_middleware(
@@ -289,8 +289,11 @@ async def test_non_post_mcp_transport_with_reviewed_revision_is_forwarded(
         ],
     )
 
-    assert downstream.calls == 1
-    assert sent[0]["status"] == 200
+    assert downstream.calls == 0
+    assert sent[0]["status"] == 400
+    assert _response_json(sent)["error"]["message"] == (
+        "The legacy transport request requires a bound Mcp-Session-Id."
+    )
 
 
 @pytest.mark.anyio

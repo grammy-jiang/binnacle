@@ -497,6 +497,56 @@ async def test_legacy_session_revision_binding_rejects_token_tampering(
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize("method", ["POST", "GET", "DELETE"])
+async def test_sessionless_legacy_transport_is_rejected_before_sdk_allocation(
+    phase2_application: BinnacleApplication,
+    method: str,
+) -> None:
+    revision = EXPECTED_REVISIONS[1]
+    request_kwargs: dict[str, Any] = {
+        "headers": {"accept": ACCEPT, "MCP-Protocol-Version": revision}
+    }
+    if method == "POST":
+        request_kwargs["json"] = {
+            "jsonrpc": "2.0",
+            "id": 8,
+            "method": "tools/list",
+            "params": {},
+        }
+    async with running_raw_http_client(phase2_application) as client:
+        responses = [await client.request(method, "/mcp", **request_kwargs) for _ in range(3)]
+
+    for response in responses:
+        assert response.status_code == 400
+        assert "mcp-session-id" not in response.headers
+        assert _jsonrpc(response)["error"]["message"] == (
+            "The legacy transport request requires a bound Mcp-Session-Id."
+        )
+
+
+@pytest.mark.anyio
+async def test_malformed_sessionless_legacy_post_is_rejected_before_sdk_allocation(
+    phase2_application: BinnacleApplication,
+) -> None:
+    async with running_raw_http_client(phase2_application) as client:
+        response = await client.post(
+            "/mcp",
+            content=b"{",
+            headers={
+                "accept": ACCEPT,
+                "content-type": "application/json",
+                "MCP-Protocol-Version": EXPECTED_REVISIONS[1],
+            },
+        )
+
+    assert response.status_code == 400
+    assert "mcp-session-id" not in response.headers
+    assert _jsonrpc(response)["error"]["message"] == (
+        "The legacy transport request requires a bound Mcp-Session-Id."
+    )
+
+
+@pytest.mark.anyio
 async def test_disabled_tasks_request_reaches_method_dispatch(
     phase2_application: BinnacleApplication,
 ) -> None:

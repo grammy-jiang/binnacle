@@ -1090,6 +1090,11 @@ stateless integrity binding, not a parallel session table: FastMCP remains the s
 of session creation, lookup, lifetime, and termination, and a process restart already
 invalidates the corresponding framework sessions.
 
+Every legacy transport request other than a valid ``initialize`` must present that bound
+token. The adapter rejects missing, invalid, or revision-mismatched tokens before the SDK
+session manager runs, including malformed POST bodies, so invalid traffic cannot allocate
+or hold orphan framework transports.
+
 22. HTTP/ASGI surface
 ---------------------
 

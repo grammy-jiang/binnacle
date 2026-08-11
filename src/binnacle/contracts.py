@@ -71,6 +71,15 @@ TOOL_KEYS = frozenset(
         "output_schema",
     }
 )
+TOOL_METADATA_FIELDS = (
+    "name",
+    "title",
+    "description",
+    "contract_version",
+    "information_class",
+    "confirmation_class",
+    "annotations",
+)
 SCHEMA_BINDING_KEYS = frozenset({"source_ref", "definition_sha256", "schema"})
 ANNOTATION_KEYS = frozenset({"readOnlyHint", "destructiveHint", "idempotentHint", "openWorldHint"})
 SCHEMA_DOCUMENT_PATHS = frozenset(
@@ -149,6 +158,38 @@ EXPECTED_HANDLER_BINDINGS = MappingProxyType(
         "probe_result_formats": "binnacle.bootstrap.probe_result_formats.v1_1",
         "probe_error": "binnacle.bootstrap.probe_error.v1_1",
         "compatibility_report": "binnacle.bootstrap.compatibility_report.v1_1",
+    }
+)
+EXPECTED_TOOL_METADATA_SHA256 = MappingProxyType(
+    {
+        "binnacle_probe": "f3e2e1a38773506f38448f4fd3e89d80c16896140409b36a59155c24f5dbc40c",
+        "system_inspect": "fd3d9de3b68a9cb0b12be340e6f7da64f4bf53229717ef916e02f2498f2e7a86",
+        "probe_result_formats": (
+            "314ec24fa13f826eb5061d761aab6e4b763eee9a195d66e79f3bed35e23e69d7"
+        ),
+        "probe_error": "d45e3c32bcb22ac1dfce6c74c72e1e9ff41e2e8ac2b8b6e81dc21da8a93356d2",
+        "compatibility_report": (
+            "b87c22a3ac4370b27830ad867e3684fffb1b1944cf52cce2d826f98b0d87c493"
+        ),
+    }
+)
+EXPECTED_SOURCE_MANIFEST = MappingProxyType(
+    {
+        "id": "binnacle-bootstrap-tools",
+        "version": "1.1.0",
+        "sha256": "e2e28381067e4445c03abb5217e36c6efa63a58c3906ec1684fffa41b9e6acc1",
+    }
+)
+EXPECTED_REGISTRY_IDENTITIES = MappingProxyType(
+    {
+        "schema_registry_sha256": (
+            "042e862b1222641b573e2725aca24592be80a1cdd8d66214e1bc5f1f5ce9dfb1"
+        ),
+        "revision_contract_sha256": (
+            "8207b7e9ea90aec37ec3bd6f2c0e688fcc0a928d234c4fee1f22a270ae787bd0"
+        ),
+        "evaluation_profile_version": "1.1.0",
+        "catalogue_sha256": ("9ecb9823da48b65bd168930e2c3a6650eaf0d0af149ef98fd3a6d36fd873194a"),
     }
 )
 
@@ -308,6 +349,15 @@ class ContractRegistry:
                 "evaluation_profile_version",
             ),
         )
+        if source_manifest != EXPECTED_SOURCE_MANIFEST:
+            raise ContractRegistryError(
+                "generated source manifest does not match the reviewed Phase 2 identity"
+            )
+        for key, expected_value in EXPECTED_REGISTRY_IDENTITIES.items():
+            if registry.get(key) != expected_value:
+                raise ContractRegistryError(
+                    f"generated {key} does not match the reviewed Phase 2 identity"
+                )
         return cls(
             manifest_id=_require_string(source_manifest, "id"),
             manifest_version=_require_string(source_manifest, "version"),
@@ -466,14 +516,28 @@ def _parse_tool(
         if not isinstance(value, bool):
             raise ContractRegistryError(f"Tool annotation {key} must be boolean")
         annotations[key] = value
+    name = _require_string(raw, "name")
+    title = _require_string(raw, "title")
+    description = _require_string(raw, "description")
+    contract_version = _require_string(raw, "contract_version")
+    handler_binding = _require_string(raw, "handler_binding")
+    information_class = _require_string(raw, "information_class")
+    confirmation_class = _require_string(raw, "confirmation_class")
+    metadata_projection = {field: raw.get(field) for field in TOOL_METADATA_FIELDS}
+    expected_metadata_sha256 = EXPECTED_TOOL_METADATA_SHA256.get(name)
+    if (
+        expected_metadata_sha256 is None
+        or _canonical_sha256(metadata_projection) != expected_metadata_sha256
+    ):
+        raise ContractRegistryError(f"Tool metadata does not match reviewed projection: {name}")
     return ToolContract(
-        name=_require_string(raw, "name"),
-        title=_require_string(raw, "title"),
-        description=_require_string(raw, "description"),
-        contract_version=_require_string(raw, "contract_version"),
-        handler_binding=_require_string(raw, "handler_binding"),
-        information_class=_require_string(raw, "information_class"),
-        confirmation_class=_require_string(raw, "confirmation_class"),
+        name=name,
+        title=title,
+        description=description,
+        contract_version=contract_version,
+        handler_binding=handler_binding,
+        information_class=information_class,
+        confirmation_class=confirmation_class,
         annotations=MappingProxyType(annotations),
         input_schema=_parse_schema(
             raw.get("input_schema"),
