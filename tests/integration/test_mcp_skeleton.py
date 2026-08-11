@@ -1,43 +1,46 @@
-"""Integration tests for the zero-capability FastMCP skeleton."""
+"""Regression tests for the executable MCP server boundary."""
 
 import pytest
 from fastmcp import FastMCP
 
 from binnacle.adapters.mcp import create_http_app, create_mcp_server
 from binnacle.application import BinnacleApplication
-from binnacle.domain.runtime import PackageIdentity
-
-
-def _application(identity: PackageIdentity) -> BinnacleApplication:
-    return BinnacleApplication(identity=identity)
 
 
 def test_create_mcp_server_returns_framework_server(
-    package_identity: PackageIdentity,
+    phase2_application: BinnacleApplication,
 ) -> None:
-    server = create_mcp_server(_application(package_identity))
+    server = create_mcp_server(phase2_application)
 
     assert isinstance(server, FastMCP)
     assert server.name == "Binnacle"
 
 
-def test_http_app_can_be_constructed(package_identity: PackageIdentity) -> None:
-    http_app = create_http_app(_application(package_identity))
+def test_http_app_can_be_constructed(
+    phase2_application: BinnacleApplication,
+) -> None:
+    http_app = create_http_app(phase2_application)
 
     assert callable(http_app)
 
 
 @pytest.mark.anyio
-async def test_phase1_registers_no_binnacle_operational_tools(
-    package_identity: PackageIdentity,
+async def test_phase2_registers_exact_compatibility_core(
+    phase2_application: BinnacleApplication,
 ) -> None:
-    server = create_mcp_server(_application(package_identity))
+    server = create_mcp_server(phase2_application)
 
-    assert await server.list_tools() == []
+    assert [tool.name for tool in await server.list_tools()] == [
+        "binnacle_probe",
+        "system_inspect",
+        "probe_result_formats",
+        "probe_error",
+        "compatibility_report",
+    ]
 
 
 def test_http_runner_preserves_configured_logging(
-    package_identity: PackageIdentity,
+    phase2_application: BinnacleApplication,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     observed: dict[str, object] = {}
@@ -52,17 +55,18 @@ def test_http_runner_preserves_configured_logging(
     from binnacle.config import ServerSettings
 
     run_http_server(
-        application=_application(package_identity),
-        settings=ServerSettings(),
+        application=phase2_application,
+        settings=ServerSettings(graceful_shutdown_seconds=1.1),
     )
 
     assert callable(observed["app"])
     assert observed["workers"] == 1
     assert observed["log_config"] is None
+    assert observed["timeout_graceful_shutdown"] == 2
 
 
 def test_http_runner_rejects_multiple_workers(
-    package_identity: PackageIdentity,
+    phase2_application: BinnacleApplication,
 ) -> None:
     class MultipleWorkers:
         @property
@@ -77,10 +81,31 @@ def test_http_runner_rejects_multiple_workers(
         def workers(self) -> int:
             return 2
 
+        @property
+        def max_request_bytes(self) -> int:
+            return 1_048_576
+
+        @property
+        def graceful_shutdown_seconds(self) -> float:
+            return 10.0
+
     from binnacle.adapters.mcp import run_http_server
 
     with pytest.raises(ValueError, match="exactly one worker"):
         run_http_server(
-            application=_application(package_identity),
+            application=phase2_application,
             settings=MultipleWorkers(),
+        )
+
+
+def test_http_runner_rejects_nonloopback(
+    phase2_application: BinnacleApplication,
+) -> None:
+    from binnacle.adapters.mcp import run_http_server
+    from binnacle.config import ServerSettings
+
+    with pytest.raises(ValueError, match="loopback"):
+        run_http_server(
+            application=phase2_application,
+            settings=ServerSettings(host="192.0.2.10"),
         )

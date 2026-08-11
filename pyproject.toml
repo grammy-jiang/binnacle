@@ -8,13 +8,16 @@ version = "0.1.0.dev0"
 description = "Deterministic MCP execution and observation boundary for a Raspberry Pi/Linux device"
 requires-python = ">=3.11,<3.14"
 dependencies = [
+  "anyio>=4,<5",
   "fastmcp==4.0.0b2",
   "fastmcp-slim[client,server]==4.0.0b2",
+  "jsonschema>=4.26,<5",
   "mcp>=2,<3",
   "pydantic>=2,<3",
   "pydantic-settings>=2,<3",
   "rich>=15,<16",
   "structlog>=26,<27",
+  "starlette>=1,<2",
   "typer>=0.27,<1",
   "uvicorn>=0.40,<1",
 ]
@@ -24,8 +27,8 @@ binnacle = "binnacle.cli:main"
 
 [dependency-groups]
 test = [
-  "anyio>=4,<5",
   "coverage[toml]>=7,<8",
+  "httpx2>=2,<3",
   "pytest>=9,<10",
   "pytest-cov>=7,<8",
 ]
@@ -34,6 +37,7 @@ quality = [
   "mypy>=1.19,<2",
   "pip-audit>=2.10,<3",
   "pre-commit>=4,<5",
+  "rstcheck[toml]>=6.3,<7",
   "ruff>=0.15,<1",
 ]
 matrix = [
@@ -57,6 +61,9 @@ package-dir = { "" = "src" }
 [tool.setuptools.packages.find]
 where = ["src"]
 namespaces = false
+
+[tool.setuptools.package-data]
+"binnacle._generated" = ["*.json"]
 
 [tool.uv]
 default-groups = ["dev"]
@@ -97,6 +104,10 @@ source = ["binnacle"]
 fail_under = 90
 show_missing = true
 
+[tool.rstcheck]
+report_level = "ERROR"
+ignore_languages = ["bash", "c", "cpp", "doctest", "json", "python", "xml"]
+
 [tool.importlinter]
 root_package = "binnacle"
 include_external_packages = true
@@ -112,6 +123,7 @@ forbidden_modules = [
   "binnacle.composition",
   "binnacle.config",
   "binnacle.logging",
+  "binnacle.contracts",
   "fastmcp",
   "mcp",
   "pydantic",
@@ -123,9 +135,55 @@ forbidden_modules = [
 ]
 
 [[tool.importlinter.contracts]]
+name = "Ports depend on domain only"
+type = "forbidden"
+source_modules = ["binnacle.ports"]
+forbidden_modules = [
+  "binnacle.adapters",
+  "binnacle.application",
+  "binnacle.bootstrap",
+  "binnacle.cli",
+  "binnacle.composition",
+  "binnacle.config",
+  "binnacle.contracts",
+  "binnacle.logging",
+  "fastmcp",
+  "jsonschema",
+  "mcp",
+  "pydantic",
+  "pydantic_settings",
+  "rich",
+  "starlette",
+  "structlog",
+  "typer",
+  "uvicorn",
+]
+
+[[tool.importlinter.contracts]]
 name = "Application depends inward only"
 type = "forbidden"
 source_modules = ["binnacle.application"]
+forbidden_modules = [
+  "binnacle.adapters",
+  "binnacle.bootstrap",
+  "binnacle.cli",
+  "binnacle.composition",
+  "binnacle.config",
+  "binnacle.logging",
+  "fastmcp",
+  "mcp",
+  "pydantic",
+  "pydantic_settings",
+  "rich",
+  "structlog",
+  "typer",
+  "uvicorn",
+]
+
+[[tool.importlinter.contracts]]
+name = "Bootstrap bindings remain framework independent"
+type = "forbidden"
+source_modules = ["binnacle.bootstrap"]
 forbidden_modules = [
   "binnacle.adapters",
   "binnacle.cli",
@@ -137,6 +195,30 @@ forbidden_modules = [
   "pydantic",
   "pydantic_settings",
   "rich",
+  "starlette",
+  "structlog",
+  "typer",
+  "uvicorn",
+]
+
+[[tool.importlinter.contracts]]
+name = "Contract registry is independent from delivery"
+type = "forbidden"
+source_modules = ["binnacle.contracts"]
+forbidden_modules = [
+  "binnacle.adapters",
+  "binnacle.application",
+  "binnacle.bootstrap",
+  "binnacle.cli",
+  "binnacle.composition",
+  "binnacle.config",
+  "binnacle.logging",
+  "fastmcp",
+  "mcp",
+  "pydantic",
+  "pydantic_settings",
+  "rich",
+  "starlette",
   "structlog",
   "typer",
   "uvicorn",
@@ -185,6 +267,8 @@ commands =
     mypy src/binnacle tests
     lint-imports
     pip-audit
+    rstcheck --recursive docs
+    python scripts/compile_mcp_registry.py --check
     python scripts/validate_contracts.py
     python scripts/validate_schema_instances.py
 """

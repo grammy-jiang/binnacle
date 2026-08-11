@@ -404,6 +404,66 @@ def validate_tool_manifest() -> None:
         fail("source Tool manifest must not contain its own digest/signature")
 
 
+def validate_revision_support_contract() -> None:
+    """Validate the finite machine revision contract and evaluation cross-reference."""
+
+    contract_path = ROOT / "spec/mcp/revision-support.yaml"
+    schema_path = ROOT / "schemas/mcp/revision-support.schema.json"
+    contract = load_yaml(contract_path)
+    schema = load_json(schema_path)
+    if not isinstance(contract, dict) or not isinstance(schema, dict):
+        return
+
+    for error in Draft202012Validator(schema).iter_errors(contract):
+        location = "/".join(str(part) for part in error.absolute_path) or "<root>"
+        fail(f"revision support contract: {location}: {error.message}")
+
+    expected = (
+        "2026-07-28",
+        "2025-11-25",
+        "2025-06-18",
+        "2025-03-26",
+    )
+    raw_revisions = contract.get("revisions")
+    if not isinstance(raw_revisions, list):
+        return
+    entries = [entry for entry in raw_revisions if isinstance(entry, dict)]
+    actual = tuple(entry.get("revision") for entry in entries)
+    if actual != expected:
+        fail(f"revision support contract: expected finite ordered set {expected!r}")
+    if contract.get("target_revision") != expected[0]:
+        fail("revision support contract: target revision must be 2026-07-28")
+    for index, entry in enumerate(entries):
+        expected_era = "modern" if index == 0 else "legacy"
+        expected_profile = "target-stateless" if index == 0 else "legacy-streamable-http"
+        if entry.get("era") != expected_era:
+            fail(f"revision support contract: {expected[index]} era must be {expected_era}")
+        if entry.get("profile") != expected_profile:
+            fail(f"revision support contract: {expected[index]} profile must be {expected_profile}")
+
+    evaluation = load_yaml(ROOT / "spec/mcp/evaluation-cases.yaml")
+    if not isinstance(evaluation, dict):
+        return
+    cases = evaluation.get("cases")
+    if not isinstance(cases, list):
+        fail("evaluation cases: cases must be an array")
+        return
+    protocol_case = next(
+        (
+            case
+            for case in cases
+            if isinstance(case, dict) and case.get("axis") == "protocol_revision"
+        ),
+        None,
+    )
+    if not isinstance(protocol_case, dict):
+        fail("evaluation cases: protocol_revision case is missing")
+        return
+    setup = protocol_case.get("setup")
+    if not isinstance(setup, dict) or tuple(setup.get("supported_revision_set", ())) != expected:
+        fail("evaluation cases: supported revision set diverges from machine contract")
+
+
 def validate_evaluation_contract() -> None:
     profile_path = ROOT / "spec/mcp/evaluation-profile.yaml"
     cases_path = ROOT / "spec/mcp/evaluation-cases.yaml"
@@ -1022,6 +1082,7 @@ def main() -> int:
     validate_bootstrap_command_profile_alignment()
     validate_bootstrap_self_hosting_scope_alignment()
     validate_tool_manifest()
+    validate_revision_support_contract()
     validate_evaluation_contract()
     validate_audit_release_and_results()
     validate_repository_vocabulary()

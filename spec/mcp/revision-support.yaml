@@ -1,0 +1,17 @@
+schema_version: "1.1"
+contract_id: mcp-revision-dispatch-v1
+contract_version: "1.0.0"
+target_revision: "2026-07-28"
+revisions:
+  - revision: "2026-07-28"
+    era: modern
+    profile: target-stateless
+  - revision: "2025-11-25"
+    era: legacy
+    profile: legacy-streamable-http
+  - revision: "2025-06-18"
+    era: legacy
+    profile: legacy-streamable-http
+  - revision: "2025-03-26"
+    era: legacy
+    profile: legacy-streamable-http

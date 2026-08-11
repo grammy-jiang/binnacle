@@ -14,6 +14,9 @@ def test_default_settings_are_development_loopback() -> None:
     assert settings.runtime_profile == "development"
     assert settings.server.host == "127.0.0.1"
     assert settings.server.workers == 1
+    assert settings.server.max_request_bytes == 1_048_576
+    assert settings.server.graceful_shutdown_seconds == 10.0
+    assert settings.server.filesystem_stat_timeout_seconds == 2.0
 
 
 def test_toml_overrides_defaults(tmp_path: Path) -> None:
@@ -111,6 +114,39 @@ def test_unknown_environment_key_is_rejected(
 def test_invalid_port_is_rejected(port: int) -> None:
     with pytest.raises(ValidationError, match="port"):
         load_settings(cli_overrides={"server": {"port": port}})
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("max_request_bytes", 65_535),
+        ("max_request_bytes", 4_194_305),
+        ("graceful_shutdown_seconds", 0),
+        ("graceful_shutdown_seconds", 61),
+        ("filesystem_stat_timeout_seconds", 0),
+        ("filesystem_stat_timeout_seconds", 11),
+    ],
+)
+def test_phase2_server_bounds_fail_closed(field: str, value: int) -> None:
+    with pytest.raises(ValidationError, match=field):
+        load_settings(cli_overrides={"server": {field: value}})
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("max_request_bytes", 65_536),
+        ("max_request_bytes", 4_194_304),
+        ("graceful_shutdown_seconds", 0.001),
+        ("graceful_shutdown_seconds", 60),
+        ("filesystem_stat_timeout_seconds", 0.001),
+        ("filesystem_stat_timeout_seconds", 10),
+    ],
+)
+def test_phase2_server_boundaries_are_accepted(field: str, value: float) -> None:
+    settings = load_settings(cli_overrides={"server": {field: value}})
+
+    assert getattr(settings.server, field) == value
 
 
 def test_settings_snapshot_is_immutable() -> None:

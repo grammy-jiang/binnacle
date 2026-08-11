@@ -8,9 +8,28 @@ from typer.testing import CliRunner
 
 from binnacle.application import BinnacleApplication
 from binnacle.cli import app
-from binnacle.config import ServerSettings
+from binnacle.config import BinnacleSettings, ServerSettings
 
 runner = CliRunner()
+
+
+class _FakeComposed:
+    def __init__(self, application: BinnacleApplication) -> None:
+        self.application = application
+
+    async def close(self) -> None:
+        return None
+
+
+def _stub_composition(
+    monkeypatch: pytest.MonkeyPatch,
+    application: BinnacleApplication,
+) -> None:
+    def fake_compose(*, settings: BinnacleSettings) -> _FakeComposed:
+        del settings
+        return _FakeComposed(application)
+
+    monkeypatch.setattr("binnacle.cli.compose_application", fake_compose)
 
 
 def test_version_human() -> None:
@@ -139,6 +158,7 @@ def test_config_validation_rejects_unknown_environment_key_without_echoing_it(
 
 def test_serve_defaults_to_loopback_one_worker(
     monkeypatch: pytest.MonkeyPatch,
+    phase2_application: BinnacleApplication,
 ) -> None:
     observed: dict[str, object] = {}
 
@@ -156,6 +176,7 @@ def test_serve_defaults_to_loopback_one_worker(
         "binnacle.cli.run_http_server",
         fake_run_http_server,
     )
+    _stub_composition(monkeypatch, phase2_application)
 
     result = runner.invoke(app, ["serve"])
 
@@ -168,7 +189,30 @@ def test_serve_defaults_to_loopback_one_worker(
     }
 
 
-def test_serve_cli_bind_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_serve_rejects_nonloopback_before_composition(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    composed = False
+
+    def unexpected_compose(*, settings: BinnacleSettings) -> _FakeComposed:
+        del settings
+        nonlocal composed
+        composed = True
+        raise AssertionError("composition must not run")
+
+    monkeypatch.setattr("binnacle.cli.compose_application", unexpected_compose)
+
+    result = runner.invoke(app, ["serve", "--host", "0.0.0.0", "--port", "9000"])
+
+    assert result.exit_code == 2
+    assert "canonical loopback" in result.stderr
+    assert composed is False
+
+
+def test_serve_accepts_ipv6_loopback_override(
+    monkeypatch: pytest.MonkeyPatch,
+    phase2_application: BinnacleApplication,
+) -> None:
     observed: dict[str, object] = {}
 
     def fake_run_http_server(
@@ -179,12 +223,10 @@ def test_serve_cli_bind_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
         del application
         observed.update(host=settings.host, port=settings.port)
 
-    monkeypatch.setattr(
-        "binnacle.cli.run_http_server",
-        fake_run_http_server,
-    )
+    monkeypatch.setattr("binnacle.cli.run_http_server", fake_run_http_server)
+    _stub_composition(monkeypatch, phase2_application)
 
-    result = runner.invoke(app, ["serve", "--host", "0.0.0.0", "--port", "9000"])
+    result = runner.invoke(app, ["serve", "--host", "::1", "--port", "9000"])
 
     assert result.exit_code == 0
-    assert observed == {"host": "0.0.0.0", "port": 9000}
+    assert observed == {"host": "::1", "port": 9000}

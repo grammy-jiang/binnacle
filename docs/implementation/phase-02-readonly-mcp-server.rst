@@ -322,6 +322,22 @@ HTTP/ASGI protocol-negative cases.
 No ``psutil`` dependency is required. The Linux read adapter uses bounded standard
 Linux/stdlib interfaces described below.
 
+6.4 Legacy output-schema representation evidence
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Implementation against the reviewed MCP SDK 2.0.0 line found one concrete source-
+contract incompatibility: legacy ``Tool.outputSchema`` serialization requires a root
+``type: object`` keyword. The existing Bootstrap output definitions used only a root
+``oneOf`` whose alternatives were already closed objects. Exact projection therefore
+worked for ``2026-07-28`` but caused SDK legacy ``tools/list`` serialization to reject
+all five Tool schemas before dispatch.
+
+Phase 2 adds the semantically redundant root ``"type": "object"`` to every Bootstrap
+output definition, including the deferred write-probe definitions so the shared schema
+remains internally consistent. This neither widens nor narrows any accepted result: all
+existing alternatives are objects. The compiler then records the changed source-schema
+and definition digests normally. Runtime code does not inject or rewrite this keyword.
+
 7. Compiled compatibility-core registry
 ---------------------------------------
 
@@ -1506,6 +1522,7 @@ The authoritative quality job additionally runs:
 .. code-block:: console
 
    uv run python scripts/compile_mcp_registry.py --check
+   uv run rstcheck --recursive docs
    python scripts/validate_contracts.py
    python scripts/validate_schema_instances.py
 
@@ -1532,6 +1549,7 @@ The Phase 2 implementation PR must document and pass:
    uv run mypy src/binnacle tests
    uv run lint-imports
    uv run pip-audit
+   uv run rstcheck --recursive docs
    uv run coverage run -m pytest
    uv run coverage report
    uv run tox -e py311,py312,py313,quality
@@ -1658,6 +1676,7 @@ Phase 2 implementation is accepted only when every item below is true:
 #. Ruff and Ruff format checks pass;
 #. strict MyPy passes;
 #. Import Linter passes;
+#. reStructuredText syntax lint passes for ``docs/``;
 #. ``pip-audit`` passes or has a separately reviewed explicit advisory exception;
 #. branch-inclusive coverage remains at or above the Phase 1 threshold;
 #. Python 3.11, 3.12, and 3.13 test lanes pass with their explicit interpreters;

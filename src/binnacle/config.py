@@ -18,13 +18,16 @@ from pydantic_settings import (
 
 
 class ServerSettings(BaseModel):
-    """HTTP server settings with fail-closed unknown fields."""
+    """Bounded loopback HTTP server settings."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     host: str = "127.0.0.1"
     port: int = Field(default=8000, ge=1, le=65535)
     workers: Literal[1] = 1
+    max_request_bytes: int = Field(default=1_048_576, ge=65_536, le=4_194_304)
+    graceful_shutdown_seconds: float = Field(default=10.0, gt=0, le=60)
+    filesystem_stat_timeout_seconds: float = Field(default=2.0, gt=0, le=10)
 
 
 class LoggingSettings(BaseModel):
