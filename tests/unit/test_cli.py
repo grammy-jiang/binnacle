@@ -92,6 +92,22 @@ def test_config_validation_redacts_invalid_environment_value(
     assert secret_value not in result.stderr
 
 
+def test_config_validation_redacts_untrusted_location_segments(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    untrusted_key = "\nTOKEN=accidental-secret-name"
+    secret_value = "accidental-secret-value"
+    monkeypatch.setenv("BINNACLE_SERVER", json.dumps({untrusted_key: secret_value}))
+
+    result = runner.invoke(app, ["config", "validate"])
+
+    assert result.exit_code == 2
+    assert "server.<unknown>" in result.stderr
+    assert result.stderr.count("\n") == 1
+    assert untrusted_key not in result.stderr
+    assert secret_value not in result.stderr
+
+
 def test_config_validation_sanitizes_environment_source_parse_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

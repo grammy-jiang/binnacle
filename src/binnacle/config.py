@@ -106,14 +106,31 @@ def _known_environment_names(
     *,
     path: tuple[str, ...] = (),
 ) -> frozenset[str]:
-    names: set[str] = set()
+    return frozenset(
+        ("BINNACLE_" + "__".join(field_path)).casefold()
+        for field_path in _setting_field_paths(model, path=path)
+    )
+
+
+def setting_field_paths() -> frozenset[tuple[str, ...]]:
+    """Return the finite model-owned paths safe to render in diagnostics."""
+
+    return _setting_field_paths(BinnacleSettings)
+
+
+def _setting_field_paths(
+    model: type[BaseModel],
+    *,
+    path: tuple[str, ...] = (),
+) -> frozenset[tuple[str, ...]]:
+    paths: set[tuple[str, ...]] = set()
     for field_name, field in model.model_fields.items():
         field_path = (*path, field_name)
-        names.add(("BINNACLE_" + "__".join(field_path)).casefold())
+        paths.add(field_path)
         annotation = field.annotation
         if isinstance(annotation, type) and issubclass(annotation, BaseModel):
-            names.update(_known_environment_names(annotation, path=field_path))
-    return frozenset(names)
+            paths.update(_setting_field_paths(annotation, path=field_path))
+    return frozenset(paths)
 
 
 def _validate_environment_namespace(environment: Mapping[str, str]) -> None:

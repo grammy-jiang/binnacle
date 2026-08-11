@@ -18,7 +18,12 @@ from rich.console import Console
 from binnacle import distribution_version
 from binnacle.adapters.mcp import run_http_server
 from binnacle.composition import compose_application
-from binnacle.config import BinnacleSettings, EnvironmentNamespaceError, load_settings
+from binnacle.config import (
+    BinnacleSettings,
+    EnvironmentNamespaceError,
+    load_settings,
+    setting_field_paths,
+)
 from binnacle.domain.runtime import PackageIdentity
 
 app = typer.Typer(help="Binnacle executable project skeleton.", no_args_is_help=True)
@@ -117,9 +122,30 @@ def _safe_validation_summary(error: ValidationError) -> str:
         include_context=False,
         include_input=False,
     ):
-        location = ".".join(str(part) for part in detail["loc"]) or "configuration"
+        location = _safe_validation_location(detail["loc"])
         summaries.append(f"{location}: {detail['msg']}")
     return "; ".join(summaries)
+
+
+def _safe_validation_location(location: tuple[int | str, ...]) -> str:
+    """Render only model-owned path segments, never source-controlled keys."""
+
+    normalized = tuple(str(part) for part in location)
+    known_paths = setting_field_paths()
+    if normalized in known_paths:
+        return ".".join(normalized)
+    safe_prefix = max(
+        (
+            path
+            for path in known_paths
+            if len(path) < len(normalized) and normalized[: len(path)] == path
+        ),
+        key=len,
+        default=(),
+    )
+    if safe_prefix:
+        return ".".join((*safe_prefix, "<unknown>"))
+    return "configuration.<unknown>"
 
 
 def _safe_settings_error_summary(error: SettingsError) -> str:
