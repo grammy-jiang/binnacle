@@ -6,6 +6,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -22,7 +23,9 @@ class UniqueKeyLoader(yaml.SafeLoader):
     """SafeLoader that rejects ordinary duplicate keys and supports YAML merges."""
 
 
-def _construct_mapping(loader: UniqueKeyLoader, node: yaml.MappingNode, deep: bool = False) -> dict[Any, Any]:
+def _construct_mapping(
+    loader: UniqueKeyLoader, node: yaml.MappingNode, deep: bool = False
+) -> dict[Any, Any]:
     has_merge = any(key_node.tag == MERGE_TAG for key_node, _ in node.value)
     if has_merge:
         loader.flatten_mapping(node)
@@ -79,6 +82,168 @@ def load_json(path: Path) -> Any:
         return None
 
 
+def _mapping(value: Any, *, context: str) -> dict[str, Any] | None:
+    if not isinstance(value, dict):
+        fail(f"{context}: expected an object")
+        return None
+    if not all(isinstance(key, str) for key in value):
+        fail(f"{context}: object keys must be strings")
+        return None
+    return value
+
+
+def _same_typed_value(actual: Any, expected: Any) -> bool:
+    """Compare scalar contract values without bool/int equality coercion."""
+
+    return type(actual) is type(expected) and actual == expected
+
+
+def _fixture_cases_by_id(
+    document: Any,
+    *,
+    context: str,
+) -> dict[str, dict[str, Any]]:
+    root = _mapping(document, context=context)
+    if root is None:
+        return {}
+    raw_cases = root.get("cases")
+    if not isinstance(raw_cases, list):
+        fail(f"{context}: cases must be an array")
+        return {}
+
+    indexed: dict[str, dict[str, Any]] = {}
+    for index, raw_case in enumerate(raw_cases):
+        case = _mapping(raw_case, context=f"{context}: cases[{index}]")
+        if case is None:
+            continue
+        case_id = case.get("id")
+        if not isinstance(case_id, str) or not case_id:
+            fail(f"{context}: cases[{index}] has a missing or invalid id")
+            continue
+        if case_id in indexed:
+            fail(f"{context}: duplicate fixture case id {case_id}")
+            continue
+        indexed[case_id] = case
+    return indexed
+
+
+def _require_fixture_case(
+    cases: dict[str, dict[str, Any]],
+    case_id: str,
+    *,
+    kind: str | None = None,
+    profile: str | None = None,
+    fields: Mapping[str, Any] | None = None,
+    expected: Mapping[str, Any] | None = None,
+) -> None:
+    case = cases.get(case_id)
+    if case is None:
+        fail(f"required fixture case is missing: {case_id}")
+        return
+    if kind is not None and case.get("kind") != kind:
+        fail(f"fixture case {case_id}: kind must be {kind!r}")
+    if profile is not None and case.get("profile") != profile:
+        fail(f"fixture case {case_id}: profile must be {profile!r}")
+    if fields is not None:
+        for key, value in fields.items():
+            if key not in case:
+                fail(f"fixture case {case_id}: {key} is required")
+            elif not _same_typed_value(case[key], value):
+                fail(f"fixture case {case_id}: {key} must be {value!r}, found {case[key]!r}")
+    if expected is None:
+        return
+    actual = _mapping(case.get("expect"), context=f"fixture case {case_id}: expect")
+    if actual is None:
+        return
+    for key, value in expected.items():
+        if key not in actual:
+            fail(f"fixture case {case_id}: expect.{key} is required")
+        elif not _same_typed_value(actual[key], value):
+            fail(f"fixture case {case_id}: expect.{key} must be {value!r}, found {actual[key]!r}")
+
+
+def _merge_mappings(base: Mapping[str, Any], override: Mapping[str, Any]) -> dict[str, Any]:
+    merged = dict(base)
+    for key, value in override.items():
+        current = merged.get(key)
+        if isinstance(current, dict) and isinstance(value, dict):
+            merged[key] = _merge_mappings(current, value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def _profile_section_policy(
+    policy: dict[str, Any],
+    profile_id: str,
+    *,
+    section: str,
+    inherits_global_key: str | None = None,
+) -> dict[str, Any] | None:
+    global_section = _mapping(
+        policy.get(section),
+        context=f"command policy: {section}",
+    )
+    profiles = _mapping(policy.get("profiles"), context="command policy: profiles")
+    if global_section is None or profiles is None:
+        return None
+    if profile_id == "default":
+        return dict(global_section)
+
+    resolving: set[str] = set()
+
+    def resolve(current_id: str) -> dict[str, Any] | None:
+        if current_id in resolving:
+            fail(f"command policy: cyclic profile inheritance at {current_id}")
+            return None
+        profile = _mapping(
+            profiles.get(current_id),
+            context=f"command policy: profile {current_id}",
+        )
+        if profile is None:
+            return None
+        resolving.add(current_id)
+        parent_id = profile.get("inherits")
+        if parent_id is None:
+            effective = dict(global_section)
+            if inherits_global_key is not None and profile.get(inherits_global_key) is not True:
+                fail(f"command policy: profile {current_id} must set {inherits_global_key}=true")
+        elif isinstance(parent_id, str):
+            parent = resolve(parent_id)
+            if parent is None:
+                resolving.remove(current_id)
+                return None
+            effective = parent
+        else:
+            fail(f"command policy: profile {current_id} inherits must be a string")
+            resolving.remove(current_id)
+            return None
+        if (
+            inherits_global_key is not None
+            and inherits_global_key in profile
+            and profile[inherits_global_key] is not True
+        ):
+            fail(f"command policy: profile {current_id} must not disable {inherits_global_key}")
+        override = profile.get(section, {})
+        override_mapping = _mapping(
+            override,
+            context=f"command policy: profile {current_id} {section}",
+        )
+        resolving.remove(current_id)
+        if override_mapping is None:
+            return None
+        return _merge_mappings(effective, override_mapping)
+
+    return resolve(profile_id)
+
+
+def _profile_network_policy(
+    policy: dict[str, Any],
+    profile_id: str,
+) -> dict[str, Any] | None:
+    return _profile_section_policy(policy, profile_id, section="network")
+
+
 def pointer_get(document: Any, pointer: str) -> Any:
     if pointer in ("", "/"):
         return document
@@ -129,7 +294,11 @@ def find_enums(value: Any, required_member: str) -> list[list[str]]:
     found: list[list[str]] = []
     if isinstance(value, dict):
         enum = value.get("enum")
-        if isinstance(enum, list) and required_member in enum and all(isinstance(item, str) for item in enum):
+        if (
+            isinstance(enum, list)
+            and required_member in enum
+            and all(isinstance(item, str) for item in enum)
+        ):
             found.append(enum)
         for child in value.values():
             found.extend(find_enums(child, required_member))
@@ -279,7 +448,9 @@ def validate_evaluation_contract() -> None:
         if set(risk_profile) != set(risk_cases):
             fail("evaluation risk-class names differ between profile and case manifest")
         for name in set(risk_profile) & set(risk_cases):
-            if risk_profile[name].get("minimum_attempts") != risk_cases[name].get("minimum_attempts"):
+            if risk_profile[name].get("minimum_attempts") != risk_cases[name].get(
+                "minimum_attempts"
+            ):
                 fail(f"evaluation minimum attempts differ for {name}")
 
     case_ids: set[str] = set()
@@ -288,7 +459,16 @@ def validate_evaluation_contract() -> None:
         if case_id in case_ids:
             fail(f"duplicate evaluation case_id: {case_id}")
         case_ids.add(case_id)
-        for required in ("axis", "risk_class", "setup", "action", "oracle", "timeout_seconds", "prohibited_effects", "evidence"):
+        for required in (
+            "axis",
+            "risk_class",
+            "setup",
+            "action",
+            "oracle",
+            "timeout_seconds",
+            "prohibited_effects",
+            "evidence",
+        ):
             if required not in case:
                 fail(f"evaluation case {case_id} missing {required}")
         if case.get("risk_class") not in risk_cases:
@@ -306,7 +486,9 @@ def validate_audit_release_and_results() -> None:
 
     release_schema = load_json(ROOT / "schemas/supply-chain/release-manifest.schema.json")
     if isinstance(release_schema, dict):
-        payload_props = release_schema.get("$defs", {}).get("releasePayload", {}).get("properties", {})
+        payload_props = (
+            release_schema.get("$defs", {}).get("releasePayload", {}).get("properties", {})
+        )
         forbidden = {"payload_sha256", "manifest_sha256", "signatures", "signature"}
         present = forbidden & set(payload_props)
         if present:
@@ -318,7 +500,10 @@ def validate_audit_release_and_results() -> None:
             for clause in sbom_schema.get("allOf", [])
         }
         if required_types != {"source_build", "runtime", "deployed_inventory"}:
-            fail("release schema must require source/build, runtime, and deployed inventory documents")
+            fail(
+                "release schema must require source/build, runtime, and deployed "
+                "inventory documents"
+            )
 
     result_policy = load_yaml(ROOT / "spec/mcp/result-limits.yaml")
     if isinstance(result_policy, dict):
@@ -337,6 +522,481 @@ def validate_audit_release_and_results() -> None:
     large_doc = (ROOT / "docs/mcp-large-results.md").read_text(encoding="utf-8")
     if "Personal V1" in large_doc:
         fail("mcp-large-results.md must use the current Binnacle V1 terminology")
+
+
+def _require_values(
+    actual: Mapping[str, Any] | None,
+    expected: Mapping[str, Any],
+    *,
+    context: str,
+) -> None:
+    if actual is None:
+        return
+    for key, value in expected.items():
+        if key not in actual:
+            fail(f"{context}: {key} is required")
+        elif not _same_typed_value(actual[key], value):
+            fail(f"{context}: {key} must be {value!r}, found {actual[key]!r}")
+
+
+def validate_bootstrap_command_profile_alignment() -> None:
+    command_policy = load_yaml(ROOT / "spec/policy/command-profiles.yaml")
+    capability_policy = load_yaml(ROOT / "spec/policy/capability-zones.yaml")
+    isolation_fixture = load_yaml(ROOT / "tests/fixtures/security/command-isolation.yaml")
+    composition_fixture = load_yaml(ROOT / "tests/fixtures/security/capability-composition.yaml")
+    command_policy_root = _mapping(command_policy, context="command policy")
+    capability_policy_root = _mapping(capability_policy, context="capability policy")
+    if command_policy_root is None or capability_policy_root is None:
+        return
+    command_policy = command_policy_root
+    capability_policy = capability_policy_root
+
+    for document, context in (
+        (command_policy, "command policy"),
+        (capability_policy, "capability policy"),
+        (isolation_fixture, "command-isolation fixture"),
+        (composition_fixture, "capability-composition fixture"),
+    ):
+        mapping = _mapping(document, context=context)
+        if mapping is not None and mapping.get("policy_version") != "1.2.0":
+            fail(f"{context}: policy_version must be '1.2.0'")
+
+    profiles = _mapping(command_policy.get("profiles"), context="command policy: profiles")
+    if profiles is None:
+        return
+    general = _mapping(
+        profiles.get("workspace-general-v1"),
+        context="command policy: profile workspace-general-v1",
+    )
+    check = _mapping(
+        profiles.get("workspace-check-v1"),
+        context="command policy: profile workspace-check-v1",
+    )
+    self_management = _mapping(
+        profiles.get("self-management"),
+        context="command policy: profile self-management",
+    )
+    _require_values(
+        general,
+        {
+            "command_run_visible": True,
+            "command_run_allowed": True,
+            "inherits_global_devices": True,
+            "inherits_global_credentials": True,
+        },
+        context="command policy: profile workspace-general-v1",
+    )
+    _require_values(
+        check,
+        {
+            "inherits": "workspace-general-v1",
+            "command_run_visible": True,
+            "command_run_allowed": True,
+        },
+        context="command policy: profile workspace-check-v1",
+    )
+    _require_values(
+        self_management,
+        {"command_run_visible": False, "command_run_allowed": False},
+        context="command policy: profile self-management",
+    )
+
+    required_network = {
+        "mode": "application",
+        "ipv4": "allowed",
+        "ipv6": "allowed",
+        "dns": "allowed",
+        "unix_sockets": "denied",
+        "inherited_sockets": "denied",
+        "protected_control_plane_ipc": "denied",
+        "raw_packet": "denied",
+        "network_admin": "denied",
+        "mediated_egress_only": False,
+    }
+    required_listener = {
+        "loopback": "allowed",
+        "non_loopback": "explicit",
+        "explicit_exposure_required": True,
+    }
+    for profile_id in ("workspace-general-v1", "workspace-check-v1"):
+        network = _profile_network_policy(command_policy, profile_id)
+        _require_values(network, required_network, context=f"effective network {profile_id}")
+        listener = None
+        if network is not None:
+            listener = _mapping(
+                network.get("listener_bind"),
+                context=f"effective network {profile_id}: listener_bind",
+            )
+        _require_values(listener, required_listener, context=f"listener policy {profile_id}")
+
+    default_network = _profile_network_policy(command_policy, "default")
+    _require_values(
+        default_network,
+        {
+            "default": "denied",
+            "ipv4": "denied",
+            "ipv6": "denied",
+            "dns": "denied",
+            "unix_sockets": "denied",
+            "inherited_sockets": "denied",
+            "protected_control_plane_ipc": "denied",
+            "raw_packet": "denied",
+            "network_admin": "denied",
+        },
+        context="default command network",
+    )
+    default_listener = None
+    if default_network is not None:
+        default_listener = _mapping(
+            default_network.get("listener_bind"),
+            context="default command network: listener_bind",
+        )
+    _require_values(
+        default_listener,
+        {
+            "loopback": "denied",
+            "non_loopback": "denied",
+            "explicit_exposure_required": True,
+        },
+        context="default command listener policy",
+    )
+    devices = _mapping(command_policy.get("devices"), context="command policy: devices")
+    credentials = _mapping(
+        command_policy.get("credentials"),
+        context="command policy: credentials",
+    )
+    _require_values(
+        devices,
+        {"default": "denied", "arbitrary_device_nodes": "denied"},
+        context="command policy: devices",
+    )
+    _require_values(
+        credentials,
+        {
+            "raw_credentials": "denied",
+            "credential_helpers": "denied",
+            "inherited_agents": "denied",
+        },
+        context="command policy: credentials",
+    )
+    required_devices = {"default": "denied", "arbitrary_device_nodes": "denied"}
+    required_credentials = {
+        "raw_credentials": "denied",
+        "credential_helpers": "denied",
+        "inherited_agents": "denied",
+    }
+    for profile_id, profile in (
+        ("workspace-general-v1", general),
+        ("workspace-check-v1", check),
+    ):
+        if profile is not None:
+            for section in ("devices", "credentials"):
+                if section in profile:
+                    fail(
+                        f"command policy: profile {profile_id} must inherit global "
+                        f"{section} without a local override"
+                    )
+        effective_devices = _profile_section_policy(
+            command_policy,
+            profile_id,
+            section="devices",
+            inherits_global_key="inherits_global_devices",
+        )
+        effective_credentials = _profile_section_policy(
+            command_policy,
+            profile_id,
+            section="credentials",
+            inherits_global_key="inherits_global_credentials",
+        )
+        _require_values(
+            effective_devices,
+            required_devices,
+            context=f"effective devices {profile_id}",
+        )
+        _require_values(
+            effective_credentials,
+            required_credentials,
+            context=f"effective credentials {profile_id}",
+        )
+    privilege = _mapping(command_policy.get("privilege"), context="command policy: privilege")
+    if privilege is not None:
+        if privilege.get("syscall_policy_required") is True:
+            fail("command policy: legacy syscall_policy_required must not gate Bootstrap")
+        if privilege.get("mandatory_access_control_required") is True:
+            fail("command policy: legacy mandatory_access_control_required must not gate Bootstrap")
+        advanced_syscall = _mapping(
+            privilege.get("advanced_syscall_policy"),
+            context="command policy: privilege.advanced_syscall_policy",
+        )
+        mandatory_access = _mapping(
+            privilege.get("mandatory_access_control"),
+            context="command policy: privilege.mandatory_access_control",
+        )
+        _require_values(
+            advanced_syscall,
+            {"bootstrap_required": False, "target_hardening": True},
+            context="command policy: privilege.advanced_syscall_policy",
+        )
+        _require_values(
+            mandatory_access,
+            {"bootstrap_required": False, "target_hardening": True},
+            context="command policy: privilege.mandatory_access_control",
+        )
+
+    command_composition = _mapping(
+        capability_policy.get("command_run"),
+        context="capability policy: command_run",
+    )
+    if command_composition is not None:
+        for legacy_field in ("network_available", "mediated_egress_only"):
+            if legacy_field in command_composition:
+                fail(
+                    "capability policy: command_run must not retain universal legacy field "
+                    f"{legacy_field}"
+                )
+    _require_values(
+        command_composition,
+        {
+            "network_authority": "profile-defined",
+            "bootstrap_development_application_network": "allowed",
+            "listener_bind_default": "loopback",
+            "non_loopback_listener_requires_explicit_exposure": True,
+            "raw_credentials_available": False,
+            "credential_helpers_available": False,
+            "device_access_available": False,
+            "local_control_sockets_available": False,
+            "raw_packet_network_available": False,
+            "network_admin_available": False,
+            "protected_data_egress_requires_exact_contract": True,
+            "credential_bearing_effect_requires_dedicated_operation": True,
+        },
+        context="capability policy: command_run",
+    )
+
+    isolation_cases = _fixture_cases_by_id(
+        isolation_fixture,
+        context="command-isolation fixture",
+    )
+    isolation_requirements = (
+        (
+            "development-ipv4-application-network",
+            "positive",
+            "workspace-general-v1",
+            {"ipv4": "allowed"},
+        ),
+        (
+            "development-ipv6-application-network",
+            "positive",
+            "workspace-general-v1",
+            {"ipv6": "allowed"},
+        ),
+        ("development-dns-resolution", "positive", "workspace-general-v1", {"dns": "allowed"}),
+        (
+            "development-loopback-listener-allowed",
+            "positive",
+            "workspace-general-v1",
+            {"loopback_listener": "allowed"},
+        ),
+        (
+            "development-non-loopback-listener-requires-explicit-exposure",
+            "negative",
+            "workspace-general-v1",
+            {"non_loopback_listener": "explicit", "explicit_exposure_required": True},
+        ),
+        (
+            "default-profile-network-denied",
+            "positive",
+            "default",
+            {
+                "ipv4": "denied",
+                "ipv6": "denied",
+                "dns": "denied",
+                "loopback_listener": "denied",
+                "non_loopback_listener": "denied",
+            },
+        ),
+        (
+            "development-unix-control-socket-denied",
+            "negative",
+            "workspace-general-v1",
+            {"unix_sockets": "denied", "protected_control_plane_ipc": "denied"},
+        ),
+        (
+            "development-inherited-socket-denied",
+            "negative",
+            "workspace-general-v1",
+            {"inherited_sockets": "denied"},
+        ),
+        (
+            "development-raw-packet-denied",
+            "negative",
+            "workspace-general-v1",
+            {"raw_packet": "denied", "network_admin": "denied"},
+        ),
+        (
+            "development-credential-agent-denied",
+            "negative",
+            "workspace-general-v1",
+            {
+                "raw_credentials": "denied",
+                "credential_helpers": "denied",
+                "inherited_agents": "denied",
+            },
+        ),
+        (
+            "workspace-check-profile-consistent",
+            "positive",
+            "workspace-check-v1",
+            {
+                "command_run_visible": True,
+                "command_run_allowed": True,
+                "ipv4": "allowed",
+                "ipv6": "allowed",
+                "dns": "allowed",
+                "loopback_listener": "allowed",
+                "non_loopback_listener": "explicit",
+                "explicit_exposure_required": True,
+                "unix_sockets": "denied",
+                "inherited_sockets": "denied",
+                "protected_control_plane_ipc": "denied",
+                "raw_packet": "denied",
+                "network_admin": "denied",
+                "device_default": "denied",
+                "raw_credentials": "denied",
+                "credential_helpers": "denied",
+                "inherited_agents": "denied",
+            },
+        ),
+        (
+            "self-management-hidden",
+            "positive",
+            "self-management",
+            {
+                "command_run_visible": False,
+                "command_run_allowed": False,
+                "dedicated_self_management_tools_required": True,
+            },
+        ),
+    )
+    for case_id, kind, profile, expected in isolation_requirements:
+        _require_fixture_case(
+            isolation_cases,
+            case_id,
+            kind=kind,
+            profile=profile,
+            expected=expected,
+        )
+    _require_fixture_case(
+        isolation_cases,
+        "development-non-loopback-listener-with-explicit-exposure",
+        kind="positive",
+        profile="workspace-general-v1",
+        fields={"explicit_exposure_granted": True},
+        expected={"non_loopback_listener": "allowed"},
+    )
+
+    composition_cases = _fixture_cases_by_id(
+        composition_fixture,
+        context="capability-composition fixture",
+    )
+    composition_requirements = (
+        (
+            "command-default-profile-network-deny",
+            "positive",
+            "default",
+            {
+                "network_authority": "denied",
+                "credential_helpers_available": False,
+                "device_access_available": False,
+                "local_control_sockets_available": False,
+            },
+        ),
+        (
+            "development-command-application-network-allowed",
+            "positive",
+            "workspace-general-v1",
+            {
+                "ipv4": "allowed",
+                "ipv6": "allowed",
+                "dns": "allowed",
+                "credential_helpers_available": False,
+                "device_access_available": False,
+                "local_control_sockets_available": False,
+            },
+        ),
+        (
+            "development-loopback-listener-default",
+            "positive",
+            "workspace-general-v1",
+            {"loopback_listener": "allowed"},
+        ),
+        (
+            "development-non-loopback-listener-needs-explicit-exposure",
+            "negative",
+            "workspace-general-v1",
+            {
+                "non_loopback_listener": "explicit",
+                "explicit_exposure_required": True,
+                "effect_without_exposure": "denied",
+            },
+        ),
+        (
+            "development-network-does-not-grant-credential-broker",
+            "negative",
+            "workspace-general-v1",
+            {
+                "raw_credentials_available": False,
+                "credential_helpers_available": False,
+                "credential_broker_available": False,
+            },
+        ),
+        (
+            "development-network-does-not-grant-protected-data",
+            "negative",
+            "workspace-general-v1",
+            {"protected_data_available": False, "exact_contract_required": True},
+        ),
+    )
+    for case_id, kind, profile, expected in composition_requirements:
+        _require_fixture_case(
+            composition_cases,
+            case_id,
+            kind=kind,
+            profile=profile,
+            expected=expected,
+        )
+
+
+def validate_bootstrap_self_hosting_scope_alignment() -> None:
+    required_markers = {
+        ROOT / "docs/design-principles.rst": (
+            "signed commits and push development branches",
+            "minimum privileged package, service, and Binnacle-restart operations",
+        ),
+        ROOT / "docs/bootstrap-v1.rst": (
+            "install a missing development OS package",
+            "create a signed commit",
+            "push the branch",
+            "perform the controlled Binnacle restart path",
+        ),
+        ROOT / "docs/bootstrap-implementation-plan.rst": (
+            "signed Git commit and branch push",
+            "install a specifically requested development OS package",
+            "perform the controlled Binnacle restart path",
+        ),
+    }
+    for path, markers in required_markers.items():
+        try:
+            text = " ".join(path.read_text(encoding="utf-8").split())
+        except OSError as exc:
+            fail(f"{path.relative_to(ROOT)}: unable to read Bootstrap scope document: {exc}")
+            continue
+        for marker in markers:
+            if marker not in text:
+                fail(
+                    f"{path.relative_to(ROOT)}: missing Bootstrap self-hosting "
+                    f"scope marker {marker!r}"
+                )
 
 
 def validate_repository_vocabulary() -> None:
@@ -359,6 +1019,8 @@ def validate_repository_vocabulary() -> None:
 
 def main() -> int:
     validate_parse_and_schemas()
+    validate_bootstrap_command_profile_alignment()
+    validate_bootstrap_self_hosting_scope_alignment()
     validate_tool_manifest()
     validate_evaluation_contract()
     validate_audit_release_and_results()

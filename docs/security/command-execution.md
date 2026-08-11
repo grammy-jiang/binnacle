@@ -1,7 +1,7 @@
 # Binnacle Command Execution Isolation
 
 - **Status:** Draft security contract
-- **Contract version:** `1.1.0`
+- **Contract version:** `1.2.0`
 - **Policy:** `spec/policy/command-profiles.yaml`
 - **Feature-design basis:** [`../design.md`](../design.md), V17
 
@@ -9,7 +9,7 @@
 
 `command_run` is a controlled general-purpose primitive for software engineering and diagnosis. It is not a direct subprocess wrapper and never inherits Binnacle's control-plane privilege.
 
-The Tool remains unsupported unless the selected Raspberry Pi/Linux profile proves every mandatory isolation property and adversarial case.
+Bootstrap support requires the independent unprivileged executor boundary, explicit workspace and resource controls, process-tree supervision, and exclusion of credentials, protected control-plane IPC, device authority, and network-administration privilege described below. Advanced namespace, seccomp, and mandatory-access-control hardening remains target work and is promoted only when the selected Raspberry Pi/Linux profile proves it; it is not a Bootstrap support prerequisite.
 
 ## 2. Process Separation
 
@@ -73,7 +73,7 @@ The executor has no access to:
 
 ## 6. Network and Devices
 
-General command profiles default to:
+Command profiles that do not explicitly opt in to networking default to:
 
 ```text
 network: denied
@@ -82,22 +82,23 @@ raw credentials: denied
 credential helpers: denied
 ```
 
-External communication uses a dedicated mediated-egress Tool. Hardware access uses separately promoted hardware Tools and profiles. `command_run` cannot acquire either authority through argv, environment, child processes, local sockets, or inherited descriptors.
+The authorised `workspace-general-v1` development profile, inherited by `workspace-check-v1`, explicitly permits ordinary IPv4, IPv6, and DNS application networking needed for software engineering. Development servers bind to loopback by default. Binding to `0.0.0.0`, `::`, a LAN address, or another non-loopback interface requires a separate explicit exposure request and authority; application-network permission alone is insufficient.
+
+Ordinary application networking does not grant raw-packet or network-administration capability, protected Unix/control sockets, inherited sockets, reusable credentials, credential helpers or agents, protected Binnacle data, or device access. Dedicated mediated egress remains the path for protected-data and credential-bearing effects whose exact contracts require it. Hardware access remains separately promoted. `command_run` cannot acquire any of those authorities through argv, environment, child processes, local sockets, or inherited descriptors.
 
 ## 7. Privilege and Kernel Controls
 
-The selected profile must prove:
+The Bootstrap profile must prove:
 
 - a dedicated unprivileged execution identity;
 - no-new-privileges;
 - no ambient or inheritable capabilities;
 - no setuid/setgid privilege gain;
-- an appropriate syscall and mandatory-access-control policy;
 - process-tree containment and descendant-wide controls;
-- inability to create a more privileged user/mount/network namespace escape;
+- inability to use namespace facilities to gain privilege or protected authority;
 - bounded `/proc` visibility and ptrace behavior.
 
-The contract states properties, not a mandatory container engine. Namespaces, cgroups, seccomp, Landlock, AppArmor, SELinux, systemd, or another mechanism are acceptable only when the full profile passes.
+The contract states properties, not a mandatory container engine. systemd/cgroups and the independent execution identity establish the Bootstrap boundary. Namespaces, seccomp, Landlock, AppArmor, SELinux, and equivalent controls are target hardening mechanisms that may be promoted when real-device evidence proves them; their absence does not authorize a direct-subprocess fallback or weaken the permanent authority exclusions.
 
 ## 8. Descendant-Wide Resources
 
@@ -139,7 +140,10 @@ Required cases include:
 - host/control-plane/credential/audit reads;
 - symlink, mount, hard-link, and rename races;
 - inherited file descriptors and local sockets;
-- IPv4, IPv6, DNS, Unix-socket, proxy, and loopback egress;
+- default-profile IPv4, IPv6, DNS, Unix-socket, proxy, and listener denial;
+- development-profile IPv4, IPv6, DNS, and loopback-listener permission;
+- non-loopback listener denial without explicit exposure authority;
+- raw-packet/network-administration, protected-socket, and credential-agent denial;
 - device nodes, capabilities, setuid, namespaces, ptrace, BPF, and keyring;
 - child, grandchild, fork-bomb, daemon, output-flood, and storage-exhaustion cases;
 - per-file and aggregate workspace quota enforcement;
@@ -154,6 +158,6 @@ Required cases include:
 2. Every command uses one exact single-use ticket.
 3. Ticket identity includes every executable input and its digest.
 4. Writable workspace growth is bounded in aggregate, not only per file.
-5. Network, credentials, devices, and control sockets are denied by default.
+5. Networking is fail-closed by default; authorised development profiles explicitly permit ordinary application networking without granting credentials, devices, protected control sockets, raw packets, network administration, or non-loopback listener exposure.
 6. Limits and cleanup cover the complete descendant tree.
-7. Missing or untestable isolation keeps `command_run` unsupported.
+7. Missing or untestable Bootstrap isolation keeps `command_run` unsupported; unpromoted advanced hardening alone does not block Bootstrap support.

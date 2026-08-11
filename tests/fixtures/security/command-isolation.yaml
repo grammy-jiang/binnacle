@@ -1,6 +1,6 @@
 schema_version: "1.1"
 contract: COMMAND-EXECUTION-ISOLATION
-policy_version: "1.1.0"
+policy_version: "1.2.0"
 
 canonical_ticket: &canonical_ticket
   ticket_id: ticket-1
@@ -91,9 +91,21 @@ cases:
     expect:
       command_run_visible: true
       command_run_allowed: true
-      network_default: denied
+      ipv4: allowed
+      ipv6: allowed
+      dns: allowed
+      loopback_listener: allowed
+      non_loopback_listener: explicit
+      explicit_exposure_required: true
+      unix_sockets: denied
+      inherited_sockets: denied
+      protected_control_plane_ipc: denied
+      raw_packet: denied
+      network_admin: denied
       device_default: denied
       raw_credentials: denied
+      credential_helpers: denied
+      inherited_agents: denied
 
   - id: self-management-hidden
     kind: positive
@@ -153,19 +165,81 @@ cases:
     expect:
       socket_available: false
 
-  - id: ipv4-egress
-    kind: negative
-    command:
-      argv: [python3, -c, "import socket; socket.create_connection(('203.0.113.1',443))"]
+  - id: default-profile-network-denied
+    kind: positive
+    profile: default
     expect:
-      network_connection_established: false
+      ipv4: denied
+      ipv6: denied
+      dns: denied
+      loopback_listener: denied
+      non_loopback_listener: denied
 
-  - id: ipv6-egress
-    kind: negative
-    command:
-      argv: [python3, -c, "import socket; socket.socket(socket.AF_INET6)"]
+  - id: development-ipv4-application-network
+    kind: positive
+    profile: workspace-general-v1
     expect:
-      network_connection_established: false
+      ipv4: allowed
+
+  - id: development-ipv6-application-network
+    kind: positive
+    profile: workspace-general-v1
+    expect:
+      ipv6: allowed
+
+  - id: development-dns-resolution
+    kind: positive
+    profile: workspace-general-v1
+    expect:
+      dns: allowed
+
+  - id: development-loopback-listener-allowed
+    kind: positive
+    profile: workspace-general-v1
+    expect:
+      loopback_listener: allowed
+
+  - id: development-non-loopback-listener-requires-explicit-exposure
+    kind: negative
+    profile: workspace-general-v1
+    expect:
+      non_loopback_listener: explicit
+      explicit_exposure_required: true
+
+  - id: development-non-loopback-listener-with-explicit-exposure
+    kind: positive
+    profile: workspace-general-v1
+    explicit_exposure_granted: true
+    expect:
+      non_loopback_listener: allowed
+
+  - id: development-unix-control-socket-denied
+    kind: negative
+    profile: workspace-general-v1
+    expect:
+      unix_sockets: denied
+      protected_control_plane_ipc: denied
+
+  - id: development-inherited-socket-denied
+    kind: negative
+    profile: workspace-general-v1
+    expect:
+      inherited_sockets: denied
+
+  - id: development-raw-packet-denied
+    kind: negative
+    profile: workspace-general-v1
+    expect:
+      raw_packet: denied
+      network_admin: denied
+
+  - id: development-credential-agent-denied
+    kind: negative
+    profile: workspace-general-v1
+    expect:
+      raw_credentials: denied
+      credential_helpers: denied
+      inherited_agents: denied
 
   - id: device-node-access
     kind: negative
