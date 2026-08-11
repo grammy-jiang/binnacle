@@ -19,12 +19,13 @@ Binnacle Phase 6 Detailed Implementation Plan
                     authority
 :Implementation scope: development-session state, registered-workspace read/search/file
                        services, descriptor-relative Linux containment with an exact
-                       no-submount/mount-identity boundary, descriptor-pinned and
-                       configuration-disabled ``ripgrep`` search, protected-object alias
-                       rejection, shared content/change coordination, durable Phase 4
-                       consequential-operation integration for mutations, session/start and
-                       content-admission linearization, bounded MCP contract/schema/manifest
-                       promotion, tests, deployment permissions, and evidence gates only
+                       no-submount/mount-identity boundary, descriptor-enumerated exact-file
+                       snapshot search using process-pure ``ripgrep`` as a stdin matcher,
+                       protected-object alias rejection, shared content/change
+                       coordination, durable Phase 4 consequential-operation integration
+                       for mutations, session/start and content-admission linearization,
+                       bounded MCP contract/schema/manifest promotion, tests, deployment
+                       permissions, and evidence gates only
 
 Purpose
 -------
@@ -49,7 +50,8 @@ This document freezes evidence-independent local architecture and algorithms onl
 not claim that the current ChatGPT product exposes the proposed Phase 6 Tools, that a
 particular host confirmation UI exists, that the development Pi already satisfies the
 required filesystem/mount/process primitives, that ``ripgrep`` supports a particular
-option on the candidate Pi, or that real Phase 5 write evidence has passed.
+option or stdin-matching performance on the candidate Pi, or that real Phase 5 write
+evidence has passed.
 
 ``:Status: merged`` denotes the terminal authoritative state of this numbered plan after
 planning review and CI acceptance. Before that acceptance the document is proposed.
@@ -119,12 +121,13 @@ are true:
   model plus the shared access gate, or a stronger reviewed protected-object confinement
   mechanism; link-count semantics must be reliable enough to enforce the conservative
   no-hard-link content rule in sections 10, 14, and 15;
-* the candidate ``ripgrep`` binary proves the exact configuration/preprocessor/archive
-  disabling options used by the typed adapter, and the child receives only the reviewed
-  sanitized environment; otherwise ``workspace_search`` remains disabled;
+* the candidate ``ripgrep`` binary proves the exact stdin/JSON matching and
+  configuration/preprocessor/archive disabling semantics used by the typed adapter, and
+  the child receives only the reviewed sanitized environment and **no workspace path or
+  workspace descriptor**; otherwise ``workspace_search`` remains disabled;
 * the candidate systemd deployment proves the search-child lifecycle/readiness barrier in
-  sections 15, 16, and 25: an ``rg`` child or helper cannot survive an application service
-  restart into a newly opened workspace access gate;
+  sections 15, 16, and 25, including that application death closes matcher input and no
+  prior matcher/helper can regain workspace-discovery authority after restart;
 * mutations whose required primitive, mount-boundary proof, or writer assumption is
   unavailable stay disabled rather than silently degrading;
 * the proposed Phase 6 operation contracts, JSON schemas, Tool-manifest entries,
@@ -421,15 +424,16 @@ state+version/activation closure/workspace/profile/root/**mount identity**/prote
 policy. Only an exact still-effective session may create a bounded process-local
 ``ContentReadPermit`` bound to exact session state/version, profile/root/mount identity,
 request digest, and current content-guard epoch. No source bytes are opened/returned and no
-``rg`` child is spawned before that permit exists.
+``rg`` matcher is spawned before that permit exists.
 
 Permit creation while content guard + session gate are held is the content-admission
 linearization point. The session gate may then be released while the shared content guard
-remains held for the full file read or search traversal. If end/revocation/expiry/recovery
-reduction wins first, the reader releases its content guard and returns no source content.
-If content admission wins first, later reduction blocks new admission but does not
-retroactively interrupt/reclassify the already-admitted bounded no-effect request. The
-permit is non-durable, non-transferable, non-reusable, and dies with its exact guard/runtime.
+remains held for the full file read or search enumeration/pinned-file matching. If
+end/revocation/expiry/recovery reduction wins first, the reader releases its content guard
+and returns no source content. If content admission wins first, later reduction blocks new
+admission but does not retroactively interrupt/reclassify the already-admitted bounded
+no-effect request. The permit is non-durable, non-transferable, non-reusable, and dies with
+its exact guard/runtime.
 
 For a member mutation, the session gate is held from final trusted-time/session predicates
 through final Phase 4 revalidation, durable audit-obligation publication, and process-wide
@@ -589,9 +593,13 @@ Representative resolved settings:
        max_file_mutation_bytes: int = 4 * 1024 * 1024
        max_read_chunk_bytes: int = 1024 * 1024
        max_list_entries: int = 4096
+       max_search_files: int = 4096
+       max_search_open_fds: int = 4096
+       max_search_preflight_bytes: int = 64 * 1024 * 1024
        max_search_matches: int = 2000
        max_search_output_bytes: int = 1024 * 1024
        search_timeout_seconds: float = 5.0
+       search_preflight_timeout_seconds: float = 5.0
        allow_out_of_band_writers: bool = False
        allow_submounts: bool = False
        require_mount_id_verification: bool = True
@@ -655,12 +663,13 @@ therefore adopts the conservative rule:
   regular file whose descriptor-visible ``st_nlink`` is not exactly 1;
 * direct read checks the opened target descriptor after the content permit and before any
   bytes are returned;
-* recursive search performs a descriptor-relative bounded alias **and mount-boundary**
-  preflight of the exact admitted search scope while ``CONTENT_READ`` is held and rejects
-  the whole search if any search-eligible regular file is multiply linked, any component/
-  candidate crosses the registered mount boundary, or link/mount identity is unverifiable;
-* the preflight is bounded by a reviewed entry/time ceiling; exceeding the ceiling is a
-  fail-closed search-degraded result, not permission to skip alias or mount checks;
+* search performs a bounded descriptor-relative enumeration of the exact admitted scope
+  while ``CONTENT_READ`` is held; every search-eligible regular file must pass protected-
+  prefix, ordinary-file, exact registered-mount, reliable ``st_nlink == 1`` checks and is
+  opened/pinned before matching begins;
+* the enumeration is bounded by reviewed entry/file/open-FD/byte/time ceilings; exceeding
+  any ceiling is an explicit incomplete/scope-too-large result **before matcher spawn**, not
+  permission to skip alias or mount checks or report a complete negative search;
 * Phase 6 exposes no hard-link creation operation;
 * every Phase 6 mutation revalidates single-link status for an existing regular-file
   source and the exact registered mount identity of source/target/parents/staging
@@ -671,18 +680,19 @@ therefore adopts the conservative rule:
   create an alias bypass, or silently reopen parent-workspace content readiness without
   its own reviewed boundary proof.
 
-The no-uncoordinated-writer profile plus shared access gate makes a successful alias
-preflight stable for that admitted read/search with respect to Binnacle-managed namespace
-changes. It does **not** prove mount topology stability; mount identity is an independent
-containment predicate and must be revalidated through descriptor-visible evidence. A
-profile permitting uncoordinated writers cannot promote content access merely by checking
-``st_nlink`` or mount state once; it requires a stronger reviewed confinement mechanism.
+The no-uncoordinated-writer profile plus shared access gate makes the parent-owned exact-file
+snapshot stable for that admitted read/search with respect to Binnacle-managed namespace
+changes. Mount identity remains an independent containment predicate during enumeration;
+a profile permitting uncoordinated writers cannot promote content access merely by checking
+``st_nlink`` or mount state once and requires a stronger reviewed confinement mechanism.
 
-Protection must remain stable for the **entire** content traversal. A Binnacle-managed
+Protection must remain stable for the **entire** content operation. A Binnacle-managed
 changer cannot rename/exchange protected directories beneath allowed names because content
 operations hold shared ``WorkspaceAccessGate`` and every changer holds exclusive
-``CHANGE``. ``ripgrep`` ignore/path filters are defense in depth, not the security boundary.
-A bind mount/submount is rejected independently even when pathname filters, link count, and
+``CHANGE``. The search matcher receives neither a workspace pathname nor workspace/search-
+directory descriptor, so it cannot discover a directory, hard-link alias, or mount that
+was not already admitted and opened by the parent. A bind mount/submount encountered during
+parent enumeration is rejected independently even when path filters, link count, and
 ``st_dev`` look benign.
 
 ``workspace_inspect``/``workspace_list`` may expose bounded non-sensitive metadata for a
@@ -753,7 +763,7 @@ same boundary. It must:
   ``st_nlink == 1``, and exact registered mount identity under the reviewed filesystem
   profile;
 * never follow a workspace symlink or cross an unregistered submount during metadata
-  traversal, content read/search, staging, or mutation;
+  traversal, content read/search enumeration, staging, or mutation;
 * close descriptors deterministically.
 
 If ``openat2 RESOLVE_NO_XDEV`` or the selected fallback mount-ID primitive is unavailable,
@@ -763,17 +773,22 @@ only fallback.
 
 Mount topology is revalidated at admission as applicable and again at the final
 OP-BOUNDARY for every mutation. A mount insertion/replacement after preparation/admission
-but before start is a stale/containment failure and produces zero effect. If a mount-
-topology or receipt question becomes ambiguous only after an effect may have started, the
-operation becomes ``uncertain``; final pathname state cannot reconstruct the answer.
+but before start is a stale/containment failure and produces zero effect. During a search,
+mount identity is enforced on every parent-owned descriptor open used to build the exact
+file snapshot; after a file descriptor is pinned, a later mount insertion cannot redirect
+that descriptor. The matcher performs no child-side recursive workspace lookup. If a
+mount-topology or receipt question becomes ambiguous only after a mutation effect may have
+started, the operation becomes ``uncertain``; final pathname state cannot reconstruct the
+answer.
 
-A narrowly reviewed internal ``/proc/self/fd/<n>`` reference may be used **only** to bind a
-trusted subprocess such as ``ripgrep`` to an already-pinned descriptor whose mount boundary
-has already been proven. It is not a model path and does not relax workspace magic-link,
-symlink, or mount-crossing rejection.
+A narrowly reviewed internal ``/proc/self/fd/<n>`` reference may be used **only inside the
+Binnacle application** for descriptor bookkeeping where required. Phase 6 never hands
+``ripgrep`` a workspace directory descriptor or procfd path from which it can recursively
+traverse the workspace. This internal mechanism is not a model path and does not relax
+workspace magic-link, symlink, or mount-crossing rejection.
 
 Inspect/list may report symlink or rejected-mount metadata where explicitly reviewed, but
-read/search traversal and all Phase 6 mutations reject symlink-as-content/effect targets
+read/search enumeration and all Phase 6 mutations reject symlink-as-content/effect targets
 and mount-crossing targets.
 
 13. Stable object/version identity
@@ -831,11 +846,12 @@ Content-returning operations are stricter:
    mount-ID boundary;
 #. for each directly opened regular file require descriptor-visible ``st_nlink == 1`` and
    exact registered mount identity;
-#. retain content guard until direct read finishes or search alias/mount preflight, child
-   traversal, output drain, and termination fully complete.
+#. retain content guard until direct read finishes or search exact-file enumeration,
+   pinned-descriptor streaming/matching, output drain, and matcher process termination fully
+   complete.
 
 If session reduction wins before permit, release guard and return no source content/no
-search child. Permit winning first authorizes only that already-admitted bounded no-effect
+search matcher. Permit winning first authorizes only that already-admitted bounded no-effect
 request; later end blocks later admission but does not retroactively reclassify it. A mount
 boundary failure at any point returns no protected/arbitrary mounted bytes.
 
@@ -849,105 +865,141 @@ truncation facts. Binary content is never silently decoded as text.
 truncation or mount-boundary rejection. Protected metadata is exposed only if contract
 allows it.
 
-15. Descriptor-pinned, configuration-disabled typed ``ripgrep`` adapter
------------------------------------------------------------------------
+15. Descriptor-enumerated exact-file-set ``ripgrep`` matcher
+------------------------------------------------------------
 
-``workspace_search`` uses mature ``ripgrep`` behind a typed adapter rather than a custom
-repository index or Python regex walk.
+``workspace_search`` uses mature ``ripgrep`` for text/regex matching, but **Binnacle owns
+all workspace traversal**. Ripgrep is not a workspace directory walker in Phase 6. The
+previous design of giving ``rg`` a pinned search-directory descriptor and recursively
+searching ``.`` is rejected because a mount can be attached beneath that directory after
+preflight while the child is performing fresh pathname lookups.
 
-Explicit argv alone is not enough: ripgrep can load configuration from
-``RIPGREP_CONFIG_PATH`` and some optional modes can invoke preprocessors/decompression
-helpers. Phase 6 therefore treats **process purity** as part of the search security
-boundary.
+The security invariant is an exact parent-owned file set:
 
-The exact executable is an owner-profile-resolved absolute path. Child environment is
-constructed from a minimal closed allowlist needed for deterministic execution/locale; it
-never inherits the service environment wholesale and specifically excludes
-``RIPGREP_CONFIG_PATH``, ``HOME``, credential/helper variables, Python/runtime injection
-variables, proxy/agent variables not required by this no-network search, and every
-Binnacle control-plane value. The adapter explicitly supplies and the candidate binary must
-prove support for options equivalent to:
+* while exact ``CONTENT_READ`` and ``ContentReadPermit`` are held, Binnacle performs the
+  bounded descriptor-relative enumeration itself using section 12 no-XDEV/mount-ID,
+  protected-prefix, type and reliable ``st_nlink == 1`` checks;
+* every search-eligible regular file is opened and pinned by descriptor **before any
+  matcher child is allowed to consume its bytes**;
+* a mount inserted while enumeration is in progress is rejected when a later component or
+  candidate is opened; a mount inserted after a candidate FD is pinned cannot redirect that
+  already-open FD;
+* the resulting exact set is represented by bounded immutable application data such as::
 
-* ``--no-config`` -- do not load ripgrep configuration;
-* ``--no-pre`` -- no per-file preprocessor command;
-* ``--no-search-zip`` -- no decompression helper subprocess;
-* ``--no-follow`` -- never follow symlinks;
-* ``--json`` -- structured output.
+     @dataclass(frozen=True, slots=True)
+     class SearchFileSnapshot:
+         relative_path: str
+         read_handle: SearchReadHandle
+         object_version: str
+         object_identity_sha256: str
+         mount_identity_sha256: str
+         byte_count: int
 
-No caller option may negate those mandatory flags. If the selected ripgrep version cannot
-prove those disabling semantics, ``workspace_search`` is not promoted for that profile.
-The adapter never invokes a shell and never enables PCRE2, preprocessor, archive-search,
-external pager, or another helper-spawning mode in Bootstrap.
+  ``SearchReadHandle`` is operation/request-local and cannot be serialized as authority or
+  reused after guard/runtime lifetime;
+* the snapshot operation has exact file-count, open-FD, aggregate preflight-byte, per-file,
+  path-depth and elapsed-time ceilings. If the complete admitted scope cannot be snapshotted
+  within those reviewed ceilings, search terminates **before spawning a matcher** with an
+  explicit ``scope_too_large``/``preflight_incomplete``-class result. An incomplete
+  enumeration is never reported as a complete negative search;
+* deterministic include/exclude/hidden/ignore policy is applied by the parent enumerator.
+  Protected ``.git`` is excluded before open, normal ``.github`` remains eligible, and
+  ignore policy cannot reintroduce a protected/mount-crossing object. Bootstrap does not
+  hand an arbitrary ignore/config file to a child. If later full Git-ignore semantics need
+  a helper, use a mature pure path matcher behind a narrow parent-side adapter; do not
+  reintroduce recursive child workspace traversal or a persistent repository index.
 
-Before spawn, search proves both protected-object alias and mount-boundary invariants.
-While the shared ``CONTENT_READ`` guard and exact ``ContentReadPermit`` are held, Binnacle
-performs a bounded descriptor-relative preflight over the exact admitted search directory.
-Every traversed component/candidate must remain on the exact registered mount ID; every
-search-eligible regular file must be an ordinary non-symlink file with reliable
-``st_nlink == 1``. A multiply-linked file, mount crossing, alias/mount preflight ceiling,
-unsupported link/mount semantics, or ambiguous entry fails the search **before** ``rg``
-starts. Under the reviewed coordinated/no-out-of-band-writer model the shared guard keeps
-namespace/alias state stable for the full traversal; mount identity remains separately
-verified and is not inferred from that guard.
+15.1 Matcher process purity and stdin-only input
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The launch sequence is:
+The exact ``rg`` executable is owner-profile-resolved absolute path. Explicit argv alone is
+not enough because ripgrep can load configuration and optional modes can invoke helpers.
+Child environment is therefore a minimal closed allowlist for deterministic locale/runtime;
+it excludes ``RIPGREP_CONFIG_PATH``, ``HOME``, credential/helper variables, Python/runtime
+injection variables, proxy/agent variables not required by no-network matching, and every
+Binnacle control-plane value.
 
-#. normalize optional search subpath and reject protected/symlink-bearing scope;
-#. verify writer/confinement + hard-link/link-count + mount-ID/no-submount profile;
-#. require current service invocation to pass ``SearchChildRecoveryBarrier``;
-#. acquire shared ``CONTENT_READ`` and atomically require durable mutation fence free;
-#. under that guard acquire session gate, revalidate exact trusted/session/controller/
-   device/profile/root/**mount identity**/protected policy and mint ``ContentReadPermit``;
-#. descriptor-walk the admitted search scope with no-XDEV/mount-ID checks and complete the
-   bounded single-link + mount-boundary preflight;
-#. open/pin exact registered root and exact search-directory descriptor and verify
-   permit-bound root/mount identities;
-#. duplicate pinned search FD to an operation-owned inherited FD;
-#. spawn absolute ``rg`` executable with ``close_fds=True`` and only that FD explicitly
-   inherited, using only the closed sanitized environment and mandatory disabling flags;
-#. keep child in exact Binnacle application systemd service cgroup; no ``systemd-run``,
-   delegated scope, double-fork/daemon escape, preprocessor/helper, or archive-helper path;
-#. establish child cwd from pinned descriptor via reviewed internal procfd/helper and pass
-   ``.`` as the only search root; never pass configured root/reconstructed subpath;
-#. retain process handle binding PID + non-reused identity such as start-time/pidfd +
-   current application service invocation identity;
-#. keep inherited descriptor through exec/cwd establishment then close parent copies;
-#. hold content guard through traversal, timeout/termination and bounded stdout/stderr
-   drain, releasing only after pidfd/wait-style proof that ``rg`` is reaped **and** no
-   operation-attributable descendant/helper remains able to traverse the workspace.
+The adapter supplies and candidate binary must prove non-negatable semantics equivalent to:
 
-The service unit retains search children in its cgroup and uses
-``KillMode=control-group`` + ``SendSIGKILL=yes`` or reviewed stronger lifecycle. ``Delegate``
-is not granted for this purpose. A bounded stop timeout is part of deployment profile.
-Parent-death signalling may be defense in depth but is never sole restart invariant.
+* ``--no-config``;
+* ``--no-pre``;
+* ``--no-search-zip``;
+* ``--no-follow``;
+* ``--json``.
+
+No shell, PCRE2 helper, preprocessor, archive search, external pager, or other helper-
+spawning mode is enabled in Bootstrap.
+
+Matching is one exact pinned file per child by default. A future bounded batch is permitted
+only when it preserves the same property that the child can open/discover **no** workspace
+file beyond the already pinned set. For each file:
+
+#. parent validates the snapshot is still bound to the active request/guard;
+#. spawn absolute ``rg`` with ``close_fds=True`` from a fixed non-workspace/private safe cwd;
+#. child receives no workspace path, no workspace/search-directory FD, no procfd path, and
+   no inherited descriptor other than stdin/stdout/stderr plus narrowly required process-
+   control plumbing;
+#. parent streams bytes only from the already-open candidate descriptor to ``rg`` stdin;
+#. matcher consumes stdin and emits bounded JSON; any child-supplied path/filename text is
+   non-authoritative and is ignored/replaced by the exact parent-bound ``relative_path``;
+#. line/match offsets/results are correlated to that one snapshot; aggregate match/output/
+   timeout ceilings span all children in the logical search;
+#. parent closes/terminates/reaps child before advancing/finishing as required by the
+   configured bounded concurrency model.
+
+The child has no recursively traversable workspace capability. Mount insertion while
+matching cannot expand the file set because the only source bytes arrive over stdin from a
+previously pinned descriptor. Under the reviewed coordinated/no-out-of-band-writer model,
+CHANGE exclusion stabilizes Binnacle-managed namespace/content changes for the admitted
+search. If uncoordinated same-inode writers are permitted, search remains disabled without a
+stronger reviewed content-snapshot/confinement mechanism; the fact that a file FD is pinned
+does not pretend hostile same-inode writes are impossible.
+
+15.2 Search lifecycle, restart and bounds
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Matcher children remain in the exact Binnacle application systemd service cgroup with
+``KillMode=control-group`` + ``SendSIGKILL=yes`` or reviewed stronger lifecycle and no
+``Delegate`` escape. Parent-death signalling is defense in depth.
 
 Every fresh application invocation starts ``SearchChildRecoveryBarrier`` before
-``WorkspaceAccessGate`` may leave ``RECOVERY_CLOSED``. Barrier verifies exact unit/cgroup
-identity and proves no process from prior invocation remains able to traverse a pinned
-workspace descriptor. Startup also re-pins the registered root and proves exact mount
-identity/no-submount profile before content/change readiness opens. Service-manager state
-may be combined with cgroup membership, process start-time/pidfd, current systemd invocation
-identity, and descriptor-visible mount evidence. Stale/foreign/unverifiable state keeps
-both ``CONTENT_READ`` and ``CHANGE`` closed. Barrier never clears a durable mutation fence.
+``WorkspaceAccessGate`` may leave ``RECOVERY_CLOSED``. Barrier proves prior invocation
+matcher/helper trees quiesced and durable fence/root-mount recovery predicates pass. Unlike
+the rejected directory-walking design, an old matcher has **no workspace FD/path** from
+which to discover new files. Application death closes its stdin pipe; even before systemd
+cleanup completes, the old child cannot reopen/traverse the source workspace. The barrier
+is retained for resource/output/process-lifecycle assurance and prevents stale output/process
+state from being mistaken for a current search.
 
-Configured root/search-directory replacement cannot redirect child because traversal is
-against pinned object. A pre-existing or inserted bind mount cannot expand search because
-preflight and pinned descriptors enforce the registered mount ID. Binnacle-managed Phase
-6/7/8 changer cannot relabel protected dir while search runs because exclusive CHANGE
-cannot overlap CONTENT_READ. Uncoordinated writers/mount topology remain fail-closed
-without stronger confinement and exact mount proof.
+Additional typed bounds include closed pattern/case/fixed-string options, Rust regex/default
+engine only, file/match/output/per-file byte ceilings, aggregate search/preflight timeout,
+binary policy, bounded stdout/stderr, and truthful truncation/timeout/incomplete-scope
+projection. File-snapshot exhaustion is distinct from result truncation: if enumeration is
+incomplete, the response must say the search scope was not completely evaluated rather than
+returning a misleading complete result.
 
-Additional typed search bounds include closed pattern/case/fixed-string options, Rust
-regex/default engine only, file/match/output/per-file byte ceilings, hard timeout, binary
-skip, hidden handling sufficient for normal ``.github`` while protected ``.git`` excluded,
-reviewed ignore behaviour, bounded stdout/stderr, and truthful truncation/timeout.
+Mandatory adversarial tests include:
 
-Mandatory adversarial tests include service-level ``RIPGREP_CONFIG_PATH`` containing
-``--pre=<sentinel command>`` and config options that attempt archive/helper execution. The
-sentinel must never execute, mandatory no-config/no-pre/no-search-zip flags must remain
-present, the child environment must omit the config variable, and no unexpected descendant
-may survive search completion/restart. Bind-mount an otherwise protected/readable tree
-beneath an allowed search scope and require zero ``rg`` spawn/zero mounted-content bytes.
+* bind mount inserted after some/all files are pinned but before/during matcher execution:
+  zero bytes from the mounted tree and no expansion of the snapshot;
+* child FD/cwd inspection proves zero workspace/search-directory FDs and zero workspace
+  pathname/procfd argument;
+* hostile ``RIPGREP_CONFIG_PATH``/``--pre`` sentinel produces zero helper execution or
+  unexpected descendant;
+* SIGKILL application while matcher is active closes stdin; surviving child cannot discover
+  any new workspace file and replacement runtime remains recovery-closed until process
+  quiescence/fence/root-mount predicates pass;
+* file/open-FD/preflight-byte/time ceiling yields explicit incomplete/scope-too-large
+  outcome before any matcher child starts;
+* forged/odd stdin-origin path fields in ``rg`` JSON cannot change parent-bound logical path;
+* configured root/subpath rename/replacement or mount insertion during enumeration is
+  rejected by descriptor/mount checks, while changes after a candidate FD is pinned cannot
+  redirect that FD.
+
+Candidate-Pi evidence must prove the exact stdin JSON behaviour, process-purity flags,
+resource ceilings and performance envelope before ``workspace_search`` promotion. Missing
+or contradictory evidence keeps search disabled; the plan never infers support from a local
+development machine.
 
 16. Shared workspace access/change coordination seam
 ----------------------------------------------------
@@ -960,10 +1012,11 @@ content readers but not a Binnacle-managed changer.
 One per-workspace ``WorkspaceAccessGate`` supplies linearization:
 
 * ``CONTENT_READ`` is shared, available only while durable mutation fence is free and
-  startup search-child/mount-identity recovery complete. Acquisition is not authority:
-  while guard held, caller next acquires session gate, revalidates exact effective session,
+  startup matcher/mount-identity recovery complete. Acquisition is not authority: while
+  guard held, caller next acquires session gate, revalidates exact effective session,
   root/mount identity, mints request-bound ``ContentReadPermit``, and then performs direct
-  single-link/mount check or search alias/mount preflight before source bytes/search child;
+  single-link/mount check or builds the bounded exact-file search snapshot before source
+  bytes/matcher output;
 * ``CHANGE`` is exclusive. New mutation acquires it **after policy allow but before**
   durable workspace fence and retains until fence truthfully released. ``uncertain`` keeps
   durable fence owned and access gate/recovery change-closed;
@@ -981,6 +1034,8 @@ Gate is not authority and cannot make out-of-band writers cooperate **or prove m
 stability**. ``ContentReadPermit`` is only ephemeral proof of exact request/session
 admission while exact guard is held. Content operations therefore require coordinated
 writer profile or stronger confinement **plus** the independent registered mount boundary.
+Search additionally eliminates child-side workspace traversal by matching only parent-
+enumerated pinned file bytes.
 
 The word **changing** includes later Phase 7 commands and Phase 8 Git operations whenever
 their contract may change workspace. Those phases must consume this seam and additionally
@@ -1255,14 +1310,17 @@ Required behaviour:
 
 * before access coordinator admits CONTENT_READ/CHANGE, new runtime is ``RECOVERY_CLOSED``
   and ``SearchChildRecoveryBarrier`` proves systemd cleanup of every prior-invocation rg or
-  operation-attributable helper/descendant that could hold workspace descriptor; stale/
-  foreign/unverifiable member keeps readiness closed;
+  operation-attributable helper/descendant; stale/foreign/unverifiable member keeps
+  readiness closed. Search children have no workspace descriptor/path authority, and app
+  death closes their stdin, but process quiescence is still required for lifecycle/output
+  correctness;
 * startup opens/pins configured registered root, verifies exact stored root filesystem/
   directory identity **and registered mount identity**, and establishes the reviewed
   no-submount/mount-ID verifier before access readiness; changed/unverifiable mount
   topology keeps both content and change closed;
-* old in-process read cannot survive app death; old search child/descendant is never
-  assumed gone because parent PID exited;
+* old in-process read cannot survive app death; old matcher child/descendant is never
+  assumed gone because parent PID exited and cannot discover new workspace files because
+  it has no workspace path/FD and its parent-provided stdin closes on app death;
 * service cgroup/lifecycle profile verified before search promotion; startup never opens by
   pathname/cgroup-emptiness or ``st_dev`` guess alone;
 * access-gate recovery never equals session authority: each new content admission still
@@ -1357,17 +1415,35 @@ Representative boundaries:
 
 .. code-block:: python
 
+   @dataclass(frozen=True, slots=True)
+   class SearchFileSnapshot:
+       relative_path: str
+       read_handle: SearchReadHandle
+       object_version: str
+       object_identity_sha256: str
+       mount_identity_sha256: str
+       byte_count: int
+
    class WorkspaceReader(Protocol):
        async def inspect(self, request: InspectRequest) -> WorkspaceEntry: ...
        async def list(self, request: ListRequest) -> WorkspaceListing: ...
        async def read(self, request: ReadRequest) -> WorkspaceReadResult: ...
+
+   class WorkspaceSearchEnumerator(Protocol):
+       async def snapshot(
+           self,
+           request: SearchRequest,
+           permit: ContentReadPermit,
+       ) -> tuple[SearchFileSnapshot, ...]: ...
 
    class WorkspaceSearch(Protocol):
        async def search(self, request: SearchRequest) -> WorkspaceSearchResult: ...
 
    class WorkspaceSearchProcessSupervisor(Protocol):
        async def verify_previous_runtime_quiesced(self, workspace_id: str) -> None: ...
-       async def spawn(self, request: SearchSpawnRequest) -> SearchProcessHandle: ...
+       async def spawn_stdin_matcher(
+           self, request: SearchMatcherRequest
+       ) -> SearchProcessHandle: ...
        async def wait_tree_terminated(self, handle: SearchProcessHandle) -> None: ...
 
    class WorkspaceMountBoundaryVerifier(Protocol):
@@ -1381,9 +1457,6 @@ Representative boundaries:
 
    class WorkspaceAliasVerifier(Protocol):
        async def verify_single_link_file(self, fd: int) -> None: ...
-       async def preflight_search_scope(
-           self, root_fd: int, relative_scope: str
-       ) -> AliasPreflightResult: ...
 
    class WorkspaceMutator(Protocol):
        async def create(self, intent: CreateIntent) -> WorkspaceEffectReceipt: ...
@@ -1414,8 +1487,14 @@ Representative boundaries:
 authoritative session/time/profile/root/mount state and returns permit bound to guard/
 request. Permit itself neither acquires workspace access nor persists authority.
 
+``WorkspaceSearchEnumerator`` owns all recursive workspace discovery and must open/pin the
+exact candidate file set under the reviewed no-XDEV/mount/link/protected-path rules before
+matching. ``WorkspaceSearchProcessSupervisor`` receives matcher requests with stdin bytes
+or a parent-side stream reference only; it never receives a workspace path/search-directory
+FD or authority to enumerate additional files.
+
 ``WorkspaceMountBoundaryVerifier`` is a security boundary shared by metadata traversal,
-content, search preflight, staging and mutation. ``WorkspaceAccessGate`` never substitutes
+content/search enumeration, staging and mutation. ``WorkspaceAccessGate`` never substitutes
 for it. The verifier must use the reviewed Linux no-XDEV/mount-ID profile and fail closed
 when mount identity is unavailable or changes.
 
@@ -1446,6 +1525,8 @@ Use closed machine-readable codes/bounded safe summaries. Representative errors:
 * ``workspace_symlink_forbidden``;
 * ``workspace_hardlink_forbidden``;
 * ``workspace_alias_preflight_limit``;
+* ``workspace_search_scope_too_large``;
+* ``workspace_search_preflight_incomplete``;
 * ``workspace_object_type_unsupported``;
 * ``workspace_object_stale``;
 * ``workspace_target_exists``;
@@ -1474,17 +1555,18 @@ state.
 
 Structured diagnostics may include workspace ID, operation/session IDs, kind, normalized-
 path digest, result bytes/truncation/search duration/fence state/reason codes/primitive
-profile/session-gate outcome/content-admission/alias+mount-preflight/search-child recovery/
-effect-reference digest.
+profile/session-gate outcome/content-admission/search-snapshot file+byte counts/mount-
+rejections/search-child recovery/effect-reference digest.
 
 Never log raw keys/nonces, source/search matches by default, credentials, protected
 absolute or mounted-source paths where relative identity suffices, controller auth
 material, inherited procfd numbers as stable IDs, or inherited environment/config content.
 
-Metrics may cover bounded reads/searches/mutations, search timeout/truncation, alias/mount
-rejections/preflight limits, stale versions, fence contention, session-race rejection,
-uncertain effects, session starts/ends, stale-search-child recovery, unsafe search config,
-and disabled primitives. Path names/keys/mount source names are not unbounded labels.
+Metrics may cover bounded reads/searches/mutations, search snapshot/scope-too-large/
+timeout/truncation, alias/mount rejections, stale versions, fence contention, session-race
+rejection, uncertain effects, session starts/ends, stale-search-child recovery, unsafe
+search config, and disabled primitives. Path names/keys/mount source names are not unbounded
+labels.
 
 31. Security invariants
 -----------------------
@@ -1517,20 +1599,25 @@ Implementation/review proves at least:
 #. WorkspaceAccessGate/change fence is never treated as mount-topology evidence.
 #. Protected content cannot be exposed through path prefix, rename/exchange, hard-link
    alias, **or bind/submount**; content-bearing regular files require reliable
-   ``st_nlink == 1`` and search preflights exact admitted scope under shared guard + mount
-   verifier.
+   ``st_nlink == 1`` and search parent-enumerates/pins the exact admitted file set under the
+   shared guard + mount verifier.
 #. A profile with uncoordinated writers cannot promote content access from one-time alias/
    pathname/mount checks; stronger confinement required.
-#. No source bytes/no rg child before exact ContentReadPermit + successful mount/alias
-   checks.
-#. Every runtime starts RECOVERY_CLOSED until prior search children/helpers are proven gone,
+#. No source bytes/no matcher child before exact ContentReadPermit + successful bounded
+   parent enumeration/snapshot checks.
+#. Search matcher has no workspace pathname, workspace/search-directory FD, or recursive
+   child-side discovery authority; it receives only parent-streamed bytes from exact pinned
+   candidate descriptors.
+#. Mount insertion during matching cannot expand exact file set; insertion during parent
+   enumeration is rejected by the next no-XDEV/mount-ID checked open.
+#. Every runtime starts RECOVERY_CLOSED until prior matcher/helper children are proven gone,
    durable fence reconciled, and root/mount identity re-pinned.
-#. Ripgrep stays in exact service cgroup; guard release proves process tree quiescence.
-#. Ripgrep starts from descriptor-pinned directory already proven on registered mount,
-   never revalidated pathname.
+#. Ripgrep matcher stays in exact service cgroup; guard release proves process tree
+   quiescence; app death closes matcher stdin.
 #. Ripgrep child environment is closed/sanitized, configuration is explicitly disabled,
    preprocessors/archive helpers are explicitly disabled, no mandatory disabling flag is
    caller-negatable, and unexpected descendants are a failure.
+#. Matcher-returned path text is never authority; result path comes from parent snapshot.
 #. Create cannot overwrite and staging cleanup exact/non-recursive/on registered mount;
    final content-ready regular file is single-linked.
 #. Move target no-replace never degrades; move rejects mount crossing even same device;
@@ -1538,7 +1625,8 @@ Implementation/review proves at least:
 #. Linux external-writer races are explicit limitations, not fake inode CAS.
 #. Required unavailable primitive/writer/link-count/mount-ID/search-purity keeps capability
    disabled.
-#. Pre-start mount topology change yields no effect; post-start ambiguity is ``uncertain``.
+#. Pre-start mount topology change yields no mutation effect; post-start ambiguity is
+   ``uncertain``.
 #. Post-syscall path or mount appearance alone never proves effect.
 #. Source content bounded/classified; reusable secrets excluded.
 #. Integrity state never rebuilt from mutable source or observed mount topology after
@@ -1559,8 +1647,9 @@ Cover:
 * CONTENT_READ then session gate, exact permit, no content before permit;
 * WorkspaceAccessGate shared/exclusive + RECOVERY_CLOSED startup;
 * root/mount identity binding + mount-ID verifier + no-submount policy;
+* search exact-file snapshot ceilings and matcher zero-workspace-FD/path contract;
 * search process identity/no-release-before-tree-quiescence;
-* direct regular-file ``st_nlink==1`` enforcement and bounded alias/mount-preflight outcomes;
+* direct regular-file ``st_nlink==1`` enforcement and bounded parent enumeration outcomes;
 * same-key retry before mutable state;
 * object-version including link-count/mount facts;
 * exact patch transformation;
@@ -1571,14 +1660,14 @@ Cover:
 * bounded read/list/search projection.
 
 Property tests prove normalized paths never escape; symlink trees and mount crossings never
-become valid; protected hard-link aliases/multiply-linked files never become content-bearing
-targets; same key creates at most one effect; different fingerprint adds zero effects;
-uncertain never releases fence; session reduction before mutation start yields zero effect;
-reduction after CONTENT_READ but before permit yields zero source/child; permit-first admits
-at most one exact request while later admission fails; incomplete activation never admits;
-distinct begins yield one live slot; content and change guards never overlap;
-RECOVERY_CLOSED never opens without child quiescence + mount-root verification; patch
-deterministic or no-effect; fence version monotonic.
+become valid; protected hard-link aliases/multiply-linked files never enter search snapshot;
+same key creates at most one effect; different fingerprint adds zero effects; uncertain
+never releases fence; session reduction before mutation start yields zero effect; reduction
+after CONTENT_READ but before permit yields zero source/matcher; permit-first admits at most
+one exact request while later admission fails; incomplete activation never admits; distinct
+begins yield one live slot; content and change guards never overlap; RECOVERY_CLOSED never
+opens without child quiescence + mount-root verification; patch deterministic or no-effect;
+fence version monotonic.
 
 32.2 Linux integration/adversarial tests
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1590,29 +1679,34 @@ On Linux temp workspaces test:
 * root mount identity pinning using ``statx`` mount ID or the exact selected equivalent;
 * ``openat2 RESOLVE_NO_XDEV`` support/semantics where selected;
 * bind-mount a readable/protected host tree beneath an allowed workspace directory and
-  require inspect/list not to descend, direct read zero mounted bytes, recursive search
-  zero child/bytes, and mutations zero start;
-* insert/replace a mount after admission/preflight but before final content projection or
-  mutation start and require fail-closed zero content/effect;
+  require inspect/list not to descend, direct read zero mounted bytes, search snapshot
+  excludes/rejects mount, and mutations zero start;
+* insert/replace a mount during parent search enumeration and require fail-closed zero
+  mounted bytes; insert a mount after enumeration but before/during matching and prove the
+  exact pinned file set cannot expand;
 * simulate same-``st_dev`` bind mount and prove mount-ID check, not device number, rejects;
 * hard-link ``.git/config`` or another protected regular file into an allowed filename:
-  direct read rejects before bytes and recursive search rejects before rg spawn;
+  direct read rejects before bytes and search rejects before matcher spawn;
 * multiply link an ordinary file: Phase 6 content-bearing operations reject
   conservatively; remove alias and verify exact single-link recovery;
 * link-count/mount-ID-unreliable/unsupported profile keeps affected capability disabled;
-* descriptor-pinned rg while configured root/subdir renamed/replaced;
-* rg JSON, hidden ``.github``, protected ``.git``, binary skip, timeout/truncation/failure;
+* configured root/subdir renamed/replaced during parent enumeration cannot redirect already
+  pinned candidate FDs;
+* child FD/cwd inspection proves rg receives zero workspace descriptors/path/procfd;
+* rg stdin JSON, logical parent path mapping, binary skip, timeout/truncation/failure;
 * set service ``RIPGREP_CONFIG_PATH`` to a config that requests ``--pre`` sentinel or
   helper/archive behavior: sanitized environment + ``--no-config``/``--no-pre``/
   ``--no-search-zip`` prevent sentinel execution and no unexpected descendant appears;
 * attempt caller options that negate mandatory process-purity flags and verify schema/
   adapter rejection;
-* rg stays owning service cgroup and normal completion proves process tree quiescence
+* scope file/open-FD/preflight-byte/time ceiling returns explicit incomplete/scope-too-large
+  outcome before matcher spawn and never a misleading complete negative;
+* rg matcher stays owning service cgroup and normal completion proves process tree quiescence
   before CONTENT_READ release;
 * changer holds CHANGE, content caller early-validates session, end/expiry wins before guard
-  available: queued content revalidates after guard and returns zero bytes/zero rg;
-* Binnacle rename/exchange protected dir under allowed name while rg active cannot acquire
-  exclusive guard until search ends;
+  available: queued content revalidates after guard and returns zero bytes/zero matcher;
+* Binnacle rename/exchange protected dir while search active cannot acquire exclusive guard
+  until search ends;
 * uncoordinated-writer profile without stronger confinement disables content access;
 * create no-overwrite + unavailable primitive, exact staging recovery, final single-link/
   registered-mount publication;
@@ -1644,9 +1738,9 @@ Inject failures/crashes:
 * DB failure during closure/fence release;
 * after PENDING->ACTIVE before activation audit; after audit before closure CAS;
 * after CONTENT_READ before permit while session end wins;
-* app SIGKILL while rg holds descriptor: systemd removes rg and any operation-attributable
-  descendant before replacement passes SearchChildRecoveryBarrier; both access modes remain
-  blocked meanwhile;
+* app SIGKILL while rg matcher is active: stdin closes, old child can discover no new
+  workspace file, systemd removes matcher/helper tree, and replacement runtime cannot open
+  access modes until SearchChildRecoveryBarrier + root/fence recovery pass;
 * app restart with changed/unverifiable root mount topology keeps access/session ineffective;
 * app restart active/effective, active/incomplete, expired/untrusted, uncertain mutation.
 
@@ -1655,20 +1749,21 @@ same-key first mutation converges; session end vs call_start binary; content que
 changer cannot disclose after end; permit-first request may finish while later rejects;
 trusted-time expiry blocks both start/content admission; audit-failure dispatch follows
 Phase4 global gate; content cannot start while durable fence owner exists; changer cannot
-acquire during content; replacement runtime cannot change while old search traversal may
+acquire during content; replacement runtime cannot change while old matcher/helper may
 survive; protected rename/exchange cannot race active search; mount topology change never
-inherits authority from access guard/fence.
+inherits authority from access guard/fence and cannot expand a completed exact-file
+snapshot.
 
 32.4 Contract/schema tests
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Before exposure prove proposed Tool uniqueness, JSON Pointers, versions, information/host
 classes, protected path+alias+mount rules, content gate-owned session revalidation,
-coordinated-writer/strong-confinement requirement, search process-purity flags/environment,
-service-cgroup recovery barrier, live session slot non-disclosure, mount-ID/no-XDEV and
-primitive degradation, no Phase6 Tool when prereq absent, existing eight-tool profiles
-unchanged until promotion, and catalogue digest changes only through reviewed manifest
-bump.
+coordinated-writer/strong-confinement requirement, search exact-file snapshot ceilings,
+matcher zero-workspace-path/FD and process-purity flags/environment, service-cgroup recovery
+barrier, live session slot non-disclosure, mount-ID/no-XDEV and primitive degradation, no
+Phase6 Tool when prereq absent, existing eight-tool profiles unchanged until promotion, and
+catalogue digest changes only through reviewed manifest bump.
 
 33. Real-Pi and real-ChatGPT evidence procedure
 -----------------------------------------------
@@ -1678,16 +1773,18 @@ Evidence is for implementation promotion/exit, not plan acceptance.
 Real Pi evidence verifies root ownership/identity; descriptor filesystem behavior; exact
 root mount identity and ``statx`` mount-ID (or selected equivalent) reliability;
 ``openat2 RESOLVE_NO_XDEV`` semantics where selected; bind-mount attack below an allowed
-path; mount insertion/replacement during traversal/start; restart with changed mount
-topology; reliable ``st_nlink`` semantics and protected-hard-link rejection; no-replace
-create; RENAME_NOREPLACE if move enabled; accepted writer profile; rename/fsync;
-descriptor-pinned rg; exact rg configuration/preprocessor/archive disabling options;
-sanitized environment; service KillMode/control-group lifecycle, non-delegated search-child
-membership, crash/restart child cleanup, SearchChildRecoveryBarrier, WorkspaceAccessGate
-protected-rename and retained-fence behavior, queued-content/session-end linearization,
-writer/confinement model, rg version/performance limits, and systemd permissions limited to
-registered source workspace without protected state. Every rejected/unverifiable mount
-case must demonstrate zero mounted-content disclosure and zero workspace effect start.
+path; mount insertion/replacement during parent enumeration and after file snapshot;
+restart with changed mount topology; reliable ``st_nlink`` semantics and protected-hard-
+link rejection; no-replace create; RENAME_NOREPLACE if move enabled; accepted writer
+profile; rename/fsync; exact-file enumeration/open-FD ceilings; rg stdin JSON/path mapping;
+rg zero workspace FD/path authority; exact rg configuration/preprocessor/archive disabling
+options; sanitized environment; service KillMode/control-group lifecycle, non-delegated
+search-child membership, app-death stdin closure, crash/restart child cleanup,
+SearchChildRecoveryBarrier, WorkspaceAccessGate protected-rename and retained-fence
+behavior, queued-content/session-end linearization, writer/confinement model, rg version/
+stdin performance limits, and systemd permissions limited to registered source workspace
+without protected state. Every rejected/unverifiable mount case must demonstrate zero
+mounted-content disclosure and zero workspace effect start.
 
 Real ChatGPT evidence verifies exact promoted catalogue; actual session-start host
 interaction; no redundant member confirmation if HOST profile claims it; bounded source
@@ -1712,14 +1809,18 @@ Content read/search:
      -> session-authority gate
      -> exact time/session/controller/device/profile/root/mount/protected-policy recheck
      -> request/guard-bound ContentReadPermit
-     -> direct opened-file single-link+mount check OR bounded recursive alias+mount preflight
-     -> descriptor read OR pinned/config-disabled/process-pure rg traversal on registered mount
-     -> proven read completion / process-tree termination+output drain
+     -> direct opened-file single-link+mount check OR bounded descriptor enumeration
+     -> exact SearchFileSnapshot set (protected/link/mount checks + pinned file handles)
+     -> parent streams one exact pinned file to process-pure rg stdin matcher
+     -> parent maps JSON matches to snapshot-bound logical path
+     -> proven read/matcher completion / process-tree termination+output drain
      -> content-guard release
 
-Reduction before permit -> zero content/child. Permit-first authorizes only that bounded
-request. Multiply-linked/mount-crossing/unverifiable file -> zero content/child. Search
-configuration/helper ambiguity -> zero child.
+Reduction before permit -> zero content/matcher. Permit-first authorizes only that bounded
+request. Multiply-linked/mount-crossing/unverifiable candidate -> no snapshot/matcher.
+Incomplete scope -> explicit incomplete result before matcher. Mount insertion after a file
+is pinned cannot redirect that descriptor; matcher has no workspace traversal authority.
+Search configuration/helper ambiguity -> zero matcher.
 
 Mutation:
 
@@ -1749,11 +1850,11 @@ Mutation:
 
 Review walks normal success; stale source/target; session reduction while content waits and
 before/during mutation start; activation incomplete/audit failure/concurrent begin; audit
-failure; root/search replacement; bind/submount insertion/replacement; protected rename/
-exchange; hard-link alias; hostile rg config/preprocessor attempt; app crash with search
-child; lost filesystem receipt; out-of-band source replacement; durable known effect then
-DB/audit closure failure; same-key retry after session expiry; uncertain restart + unrelated
-mutation attempt.
+failure; root replacement; bind/submount insertion/replacement during enumeration and after
+snapshot; protected rename/exchange; hard-link alias; hostile rg config/preprocessor
+attempt; app crash with matcher; lost filesystem receipt; out-of-band source replacement;
+durable known effect then DB/audit closure failure; same-key retry after session expiry;
+uncertain restart + unrelated mutation attempt.
 
 Shared abstraction defect is fixed at foundation rather than patching each Tool.
 
@@ -1767,20 +1868,24 @@ Accept when review/CI confirms:
 * session semantics owner-approved and HC0/HC1 mismatch named promotion prerequisite;
 * activation cannot authorize before audit closure; one live PENDING/ACTIVE slot;
 * session reduction vs mutation start one linearization;
-* content waits for CONTENT_READ then revalidates under session gate before bytes/rg;
+* content waits for CONTENT_READ then revalidates under session gate before bytes/matcher;
 * fixed cross-gate order/no reverse reduction;
 * Tools absent until reviewed contracts/schemas/manifest/host reconciliation;
-* read/search bounded, protected-path/alias aware, symlink safe, descriptor-pinned, stable
-  against coordinated rename/exchange;
+* read/search bounded, protected-path/alias aware, symlink safe and stable against
+  coordinated rename/exchange;
 * no operation traverses an unregistered submount; root/object mount identity is bound,
   openat2 no-XDEV or exact mount-ID fallback is fail-closed, and same-device bind mounts do
   not bypass containment;
-* content-bearing regular files reject multiply-linked aliases and recursive search has a
-  bounded exact-scope alias+mount preflight under the shared guard;
+* search traversal is parent-owned and every eligible file is descriptor-opened/pinned
+  before matching; rg receives no workspace path/directory FD and cannot discover a mount
+  inserted after enumeration;
+* content-bearing regular files reject multiply-linked aliases and search enumeration has
+  explicit file/open-FD/byte/time ceilings; incomplete scope is never a complete negative;
 * rg uses sanitized environment + mandatory no-config/no-pre/no-search-zip/no-follow
   process-purity settings and no unreviewed helper subprocess;
-* search child lifecycle bound to service cgroup, process-tree quiescence proven, startup
-  recovery closed until prior traversal absent **and mount identity reverified**;
+* search child lifecycle bound to service cgroup, process-tree quiescence proven, app death
+  closes stdin, startup recovery closed until prior matcher absent and mount identity
+  reverified;
 * content fails closed if writer/link-count/mount/confinement model insufficient;
 * mutations exact version/descriptor/mount containment + durable shared change fence
   reusable by Phase7/8;
@@ -1799,13 +1904,14 @@ Accept when review/CI confirms:
 
 Blocked until real Phase5 exit/write-confirmation; session host profile reviewed/passed;
 Phase6 contracts/schemas/manifest promoted; migration + one-live-slot pass; session/access/
-alias/**mount**/fence/idempotency/audit/boundary tests pass; descriptor-pinned and config-
-disabled search + protected rename + hardlink alias + bind-mount attack + mount topology
-change + session-end-while-waiting + application-crash/child cleanup barrier pass; candidate
-service proves no prior rg/helper survives readiness; candidate kernel/filesystem proves
-no-XDEV or exact mount-ID fallback semantics; content writer/confinement and link-count/
-mount model accepted; no-overwrite primitives verified; local writer profile permits each
-mutation; Linux tests pass; production exposes nothing when prerequisite fails.
+alias/**mount**/fence/idempotency/audit/boundary tests pass; parent-owned exact-file search
+snapshot + rg zero-workspace-FD/path + config-disabled stdin matching + protected rename +
+hardlink alias + bind-mount insertion-during-enumeration/after-snapshot + mount topology
+change + session-end-while-waiting + application-crash/stdin-close/child cleanup barrier
+pass; candidate service proves no prior rg/helper survives readiness; candidate kernel/
+filesystem proves no-XDEV or exact mount-ID fallback semantics; content writer/confinement
+and link-count/mount model accepted; no-overwrite primitives verified; local writer profile
+permits each mutation; Linux tests pass; production exposes nothing when prerequisite fails.
 
 37. Real Phase 6 exit criteria
 ------------------------------
@@ -1825,7 +1931,7 @@ Do not mark implementation complete until real evidence proves:
 #. no workspace/protected/mount escape;
 #. session end/expiry blocks new/not-yet-started mutation;
 #. restart preserves or truthfully rejects session, and active search cannot admit changer
-   until prior rg/helper traversal proven terminated + root mount identity reverified;
+   until prior rg/helper process proven terminated + root mount identity reverified;
 #. evidence captured from real Pi/ChatGPT, not inferred.
 
 Move/delete/content access may remain truthfully disabled when their independent promotion
@@ -1849,9 +1955,12 @@ When evidence permits implementation:
 #. CONTENT_READ -> session gate -> ContentReadPermit with root/mount binding;
 #. application service child lifecycle + SearchChildRecoveryBarrier + mount readiness;
 #. descriptor inspect/list/read with permit + single-link + no-XDEV/mount checks;
-#. descriptor-pinned ``ripgrep`` with sanitized env, mandatory no-config/no-pre/
-   no-search-zip, bounded alias+mount preflight, full guard, process-tree quiescence, all
-   race/config-injection/bind-mount/restart tests;
+#. parent-owned bounded search enumerator that opens/pins exact eligible file set and enforces
+   file/open-FD/byte/time ceilings before any matcher spawn;
+#. process-pure ``ripgrep`` stdin matcher with sanitized env, mandatory no-config/no-pre/
+   no-search-zip/no-follow/json, zero workspace path/FD authority, parent logical-path
+   mapping, full guard and process-tree quiescence; run mount-insertion/config-injection/
+   app-death/scope-limit tests;
 #. session begin/inspect/end with atomic PENDING slot, closure, fail-safe revocation;
 #. mutation final-binding callback/shared change seam with final mount revalidation;
 #. create exact staging/no-replace/final single-link registered-mount closure;
@@ -1874,19 +1983,20 @@ Remain evidence-gated after plan merges:
 * exact ChatGPT session-start UI/interaction and whether HOST supports session semantics;
 * exact host-profile identifier if ``HCS1`` name changes while semantics remain;
 * Pi filesystem/kernel no-replace/durability/link-count/**mount-ID/no-XDEV** behavior;
-* descriptor-pinned rg spawn feasibility;
-* exact candidate rg version and support/semantics for mandatory configuration,
-  preprocessor, archive-helper disabling options;
-* systemd proof that service cgroup + startup barrier prevents prior rg/helper survival;
+* exact-file search enumeration/open-FD ceilings and candidate resource limits;
+* exact candidate rg version, stdin JSON/path semantics/performance and support/semantics for
+  mandatory configuration, preprocessor and archive-helper disabling options;
+* systemd proof that service cgroup + stdin closure + startup barrier prevents prior rg/
+  helper process from interfering with current readiness;
 * whether deployment enforces coordinated/no-out-of-band writer model or stronger
   protected-object confinement;
 * whether move/delete cooperative writer assumption can be accepted;
-* rg performance ceilings;
 * real-host result size/catalogue refresh where promoted schemas depend on it.
 
 These may change profile-specific choices/limits but not local authority, durable ordering,
 truthful uncertainty, session start/content-admission linearization, protected-content
-path+alias+mount boundary, or no workspace escape without reviewed revision.
+path+alias+mount boundary, exact-file search containment, or no workspace escape without
+reviewed revision.
 
 40. Deferred work
 -----------------
