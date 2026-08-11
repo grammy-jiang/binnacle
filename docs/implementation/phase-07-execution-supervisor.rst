@@ -24,9 +24,9 @@ Binnacle Phase 7 Detailed Implementation Plan
                        tickets; versioned framed-JSON Unix-domain-socket IPC; executor-owned
                        minimal durable evidence and output spool separate from the
                        application database; workspace-change coordination; exact
-                       start/cancel linearization; process-tree/resource/output lifecycle;
-                       restart/reconciliation; tests, deployment seams, and evidence gates
-                       only
+                       start/cancel/launch linearization; process-tree/resource/output
+                       lifecycle; restart/reconciliation; tests, deployment seams, and
+                       evidence gates only
 
 Purpose
 -------
@@ -49,9 +49,9 @@ The phase deliberately preserves three independent truths:
   ``command_run`` unsupported rather than causing a direct-subprocess or privileged fallback.
 
 This document freezes evidence-independent semantics. It does not claim that a Raspberry Pi
-already supports a particular systemd/cgroup mechanism, that ChatGPT exposes MCP Tasks or
-any proposed command/status Tool, that non-loopback listener enforcement is available, or
-that Phase 6 runtime authority has passed its real exit gate.
+already supports a particular systemd/cgroup/process-isolation mechanism, that ChatGPT
+exposes MCP Tasks or any proposed command/status Tool, that non-loopback listener enforcement
+is available, or that Phase 6 runtime authority has passed its real exit gate.
 
 ``:Status: merged`` denotes the terminal authoritative state of this numbered plan after
 planning review and CI acceptance. Before that acceptance the document is proposed.
@@ -102,7 +102,7 @@ development Pi to:
 #. restart/reconnect the MCP/application process while an acknowledged independently
    supervised command remains resolvable;
 #. demonstrate no command-process access to prohibited credentials/control-plane/privileged
-   state and no workspace/mount escape;
+   state and no workspace/mount/process-introspection escape;
 #. preserve exactly-once start semantics across response loss/retry.
 
 3. Three independent gates
@@ -131,18 +131,23 @@ Do not expose a command-start or command-operation Tool until all of the followi
   classes, annotations, and result limits are reviewed and validated;
 * the candidate Pi proves the selected independent supervisor/child execution backend,
   process-tree accounting, resource enforcement, filesystem view, exact registered root/
-  mount/no-submount semantics, descriptor/FD closure, output spool durability, and UDS peer
-  credentials;
+  mount/no-submount semantics, descriptor/FD closure, output spool durability, UDS peer
+  credentials, and the required process-introspection/ptrace boundary;
 * command children cannot see Binnacle inbound authentication material, protected app/
   executor control state, app SQLite/audit/recovery, root broker socket, credential agents,
-  SSH/GPG private material, arbitrary device nodes, or undeclared host mounts;
+  SSH/GPG private material, arbitrary device nodes, undeclared host mounts, or another
+  Binnacle process's memory/descriptors/process-control surface;
+* the preferred execution profile uses a distinct unprivileged command identity from the
+  supervisor, **or** a same-UID profile independently proves bounded ``/proc`` visibility,
+  denied ptrace/process-vm access and denied arbitrary signalling/process inspection outside
+  the command execution domain. Merely hiding supervisor paths/sockets is insufficient;
 * the selected network-confinement profile proves default network denial and, for the
   development profile, ordinary IPv4/IPv6/DNS application networking while preserving
   explicit non-loopback-listener authority. If that listener distinction cannot be
   enforced on the candidate profile, the affected networked command profile remains
   unsupported rather than relying on argv heuristics;
-* exact single-use-ticket replay prevention and executor evidence-store durability pass
-  crash/fault tests;
+* exact single-use-ticket replay prevention, executor launch/cancel linearization, and
+  executor evidence-store durability pass crash/fault tests;
 * the production main app has no direct-subprocess fallback and no access path that bypasses
   the execution supervisor;
 * missing, stale, contradictory, or unverifiable prerequisite makes the relevant command
@@ -204,7 +209,8 @@ creating a second privileged broker:
 ``unprivileged executor``
    The exact command process/tree created by the supervisor inside the selected reviewed
    execution domain. It is a separate process domain from the supervisor and cannot access
-   supervisor/app sockets or state merely because it was spawned locally.
+   supervisor/app sockets, memory, descriptors, process-control interfaces, or state merely
+   because it was spawned locally.
 
 Thus ``narrow_execution_broker_separate=true`` means the broker/supervisor is separate from
 the policy process, while ``unprivileged_executor_separate=true`` means the command process
@@ -216,8 +222,8 @@ The Phase 9 privileged broker remains entirely separate and is never a hidden co
 sandbox helper. Candidate isolation that would require generic root calls from every
 command is not a valid Phase 7 implementation.
 
-6. Runtime identities and filesystem state layout
--------------------------------------------------
+6. Runtime identities and filesystem/process state layout
+---------------------------------------------------------
 
 Conceptual deployment uses separate service/runtime state:
 
@@ -243,11 +249,30 @@ The application never opens ``executor-state.sqlite3`` directly. The supervisor 
 Binnacle's authoritative application SQLite database, audit journal, authentication state,
 or policy store. Reconciliation occurs through the UDS protocol.
 
-The supervisor service and command process may use the same dedicated unprivileged OS
-identity only when the selected execution-domain confinement proves command children cannot
-reach supervisor state/socket despite same-UID DAC. A stronger separate child identity is
-permitted if it can be established without granting generic privilege. Exact identity
-mechanism is evidence-gated; the permanent visibility boundary is not.
+The preferred Bootstrap profile runs command processes under a **distinct unprivileged OS
+identity/process domain** from the supervisor so ordinary same-UID process inspection does
+not collapse the broker/executor boundary. A stronger or equally safe mechanism is allowed
+when the candidate platform proves it.
+
+A same-UID supervisor/command profile is not accepted merely because filesystem state and the
+UDS socket are masked. It is eligible only when the selected execution-domain confinement
+independently proves all of the following for the command process/tree:
+
+* bounded ``/proc`` exposure that does not reveal supervisor/application memory,
+  descriptors, environment, control sockets, or other process-sensitive state;
+* ptrace-style attachment and ``process_vm_readv``/``process_vm_writev`` access to
+  supervisor/application processes are denied;
+* opening ``/proc/<supervisor-or-app-pid>/mem``, ``fd``, ``fdinfo``, or equivalent
+  process-introspection surfaces is denied;
+* arbitrary signals/process-control operations against the supervisor/application are
+  denied outside the exact reviewed lifecycle boundary;
+* the command cannot escape those restrictions by spawning descendants, changing process
+  groups/sessions, or using another same-UID process interface.
+
+The exact mechanism -- distinct UID, PID namespace/proc view, non-dumpable protected
+processes, LSM/process policy, or a reviewed composition -- is candidate-Pi evidence. The
+security property is not optional. If the selected platform cannot prove the same-UID
+boundary, use a distinct child identity or keep ``command_run`` unsupported.
 
 7. Separate executor evidence store
 -----------------------------------
@@ -273,9 +298,11 @@ Representative tables:
 ``execution_records``
    ``execution_id`` PK; exact operation ID; ticket ID/digest; single-use nonce digest;
    command/profile/workspace/root/mount/resource/environment/sandbox-plan digests;
-   accepted generation/time; evidence state; backend domain identity; PID/start-time/cgroup
-   or unit references where available; exit/signal/resource/cancel facts; cleanup state;
-   output references/counters/digests/truncation; last evidence generation/reconciled time.
+   accepted generation/time; evidence state; durable ``cancel_generation`` and cancellation
+   disposition; launch generation/commit state; backend domain identity; PID/start-time/
+   cgroup or unit references where available; exit/signal/resource/cancel facts; cleanup
+   state; output references/counters/digests/truncation; last evidence generation/reconciled
+   time.
 
 ``ticket_tombstones`` or retained terminal execution rows
    Preserve enough non-secret ticket/operation identity for the full duplicate/replay
@@ -295,36 +322,55 @@ silently rewritten from the other.
 ----------------------------------
 
 Use a separate executor-only state vocabulary to avoid pretending it is the Phase 4
-lifecycle:
+lifecycle. The exact names may differ, but the state/fact model must preserve this
+linearization:
 
 ::
 
    ticket_seen
      -> accepted
-     -> launching
+     -> launch_preparing
+     -> launch_committed
      -> running
      -> exited
      -> cleanup_pending
      -> closed
 
-   accepted | launching | running | cleanup_pending
-     -> executor_uncertain
+   accepted | launch_preparing
+     -> cancel_requested
+     -> exited              # exact proven no-process cancellation
+     -> cleanup_pending
+     -> closed
 
-   running
+   launch_committed | running
      -> cancel_requested
      -> cancelling
      -> exited
+     -> cleanup_pending
+     -> closed
+
+   accepted | launch_preparing | launch_committed | running | cancelling | cleanup_pending
+     -> executor_uncertain
+
+``launch_committed`` is an executor-local fact: the launch path won the executor
+launch-versus-cancel gate and is permitted to cross the exact backend process/domain-create
+boundary once. It is **not** a second Binnacle effect boundary and it does not permit a
+second process on retry.
 
 The exact persisted representation may combine states/facts, but it must distinguish at
 least:
 
 * ticket never durably accepted;
-* ticket durably accepted/consumed -- **commit-to-start exists**;
-* process launch attempted;
+* ticket durably accepted/consumed -- **Phase 4 command commit-to-supervisor exists**;
+* cancellation generation durably recorded before any process/domain creation;
+* executor launch preparation versus gate-owned launch commit;
+* process/domain creation attempted;
 * exact process/domain identity known;
 * process tree currently running;
 * exit observed with exact code/signal/reason;
 * cancellation requested/signalled;
+* cancellation proven to suppress process creation versus cancellation targeting an exact
+  created/possibly-created domain;
 * descendants fully terminated or not;
 * workspace/private-temp/domain cleanup complete or not;
 * output complete/truncated/expired;
@@ -333,8 +379,10 @@ least:
 Once a ticket is durably ``accepted``, replay can return the same ``execution_id`` but can
 never allocate another execution. A supervisor crash after acceptance but before actual
 ``exec`` is recovery of one committed execution, not permission to create a second one.
-The selected backend/recovery rules determine whether it can continue the exact committed
-launch or must close failed/uncertain. It never synthesizes a fresh ticket.
+Durable cancellation discovered before executor launch commit suppresses that launch. If
+launch commit won or process creation is ambiguous, recovery must reconcile/terminate the
+same exact execution; it never synthesizes a fresh ticket or assumes process absence from a
+missing PID alone.
 
 9. Local execution ticket
 -------------------------
@@ -373,6 +421,7 @@ trusted same-boot deadline evidence where needed:
 * workspace ID/profile/root identity and **registered mount identity/no-submount policy**;
 * exact Phase 6 workspace mutation-fence owner/version;
 * mount/execution-filesystem-view plan digest;
+* process-visibility/ptrace-isolation plan digest;
 * environment plan digest;
 * network/listener-exposure plan digest;
 * policy/admission record and policy digest;
@@ -385,8 +434,8 @@ trusted same-boot deadline evidence where needed:
 
 Supervisor independently revalidates every field that it can observe. It does not query the
 application SQLite database. A mismatch, expired/different-boot ticket, wrong peer,
-unsupported profile, changed executable/root/mount plan, duplicate nonce with different
-ticket digest, or corrupt executor evidence fails closed.
+unsupported profile, changed executable/root/mount/process-isolation plan, duplicate nonce
+with different ticket digest, or corrupt executor evidence fails closed.
 
 10. Command request normalization
 ---------------------------------
@@ -450,14 +499,14 @@ heuristics are not sufficient.
 Phase 8 semantic Git operations consume the same coordination seam; no later adapter gets a
 parallel writer path.
 
-12. Command filesystem view and protected state
------------------------------------------------
+12. Command filesystem and process view; protected state
+--------------------------------------------------------
 
-The command process filesystem view is its own explicit command contract. It is not a
-Phase 6 ``ContentReadPermit`` and does not inherit arbitrary content authority merely
-because ChatGPT can read source through workspace Tools.
+The command process filesystem/process view is its own explicit command contract. It is not
+a Phase 6 ``ContentReadPermit`` and does not inherit arbitrary content or process authority
+merely because ChatGPT can read source through workspace Tools.
 
-Required view:
+Required filesystem view:
 
 * exact registered source workspace root/mount identity from Phase 6;
 * no implicit nested/unregistered submounts from the source tree;
@@ -472,6 +521,16 @@ Required view:
 * no arbitrary host mounts or device nodes;
 * no inherited Binnacle MCP/server sockets.
 
+Required process-introspection view:
+
+* no ptrace/process-vm/memory/descriptors/process-control authority over the supervisor,
+  application, Phase 9 broker, or unrelated host processes;
+* bounded ``/proc`` exposure appropriate to the exact command execution domain, or an exact
+  independently enforced equivalent;
+* descendants receive no more process-inspection authority than the top command;
+* same-UID execution is unsupported unless these properties are explicitly tested and
+  proven on the candidate profile.
+
 If the backend intentionally maps the registered source workspace into an execution-local
 sandbox path, the ticket binds the **source** root/mount identity and the exact reviewed
 mapping/mount-plan digest. That internal mapping is not an implicit permission to traverse
@@ -479,15 +538,15 @@ nested source mounts. The supervisor independently verifies the mapping before a
 and the command cannot remount/broaden it.
 
 The current command contract's fail-closed symlink/bind-mount/hard-link/rename ambiguity
-remains. Candidate evidence must demonstrate the actual filesystem-view mechanism. If the
-platform cannot provide the minimum protected-state exclusion, ``command_run`` stays
-unsupported; a working ``cwd`` alone is not containment.
+remains. Candidate evidence must demonstrate the actual filesystem/process-view mechanism.
+If the platform cannot provide the minimum protected-state/process-isolation boundary,
+``command_run`` stays unsupported; a working ``cwd`` alone is not containment.
 
 Phase 6 excludes ``.git`` from direct content Tools. Generic Phase 7 command execution does
 not automatically declassify protected Git metadata into model-visible output. The promoted
 command filesystem/profile must state whether ``.git`` is absent/masked in Phase 7 or
 narrowly available to selected no-credential commands. Bootstrap Phase 7 exit does not
-require Git metadata access, and the conservative default is to keep `.git` hidden from
+require Git metadata access, and the conservative default is to keep ``.git`` hidden from
 generic command processes until the Phase 8 Git boundary is reviewed. If existing command-
 profile fixtures require ``git`` executable availability, that executable may remain
 allowed without granting repository metadata or credentials.
@@ -552,10 +611,12 @@ but the exact candidate mechanism is not guessed.
 A valid backend must prove:
 
 * execution occurs outside the MCP/application process;
-* dedicated unprivileged command identity/domain;
+* dedicated unprivileged command identity/domain; a distinct child UID is preferred;
+* if supervisor and command share UID, bounded ``/proc`` visibility plus denied
+  ptrace/process-vm/arbitrary-signal access to supervisor/application/unrelated processes;
 * exact executable/argv/cwd/env/stdin;
 * no-new-privileges and no ambient/inheritable capabilities/setuid gain;
-* the section 12 filesystem/protected-state boundary;
+* the section 12 filesystem/protected-state/process-introspection boundary;
 * the section 13 network/listener profile;
 * descendant-wide cgroup/accounting that fork/double-fork/setsid/daemon behavior cannot
   escape;
@@ -569,6 +630,11 @@ Candidate choices may include a preconfigured systemd transient-unit/scope mecha
 predelegated cgroup subtree plus controlled spawn, or another reviewed systemd-backed
 execution domain. If creating the required domain would need an unrestricted privileged
 call at each start, that candidate is not Phase 7 Bootstrap architecture.
+
+The chosen process-visibility/ptrace mechanism is part of the reviewed execution profile and
+``sandbox_plan_sha256``. It is independently revalidated before launch. The command security
+contract's ``ptrace_outside_sandbox: denied`` property is a mandatory promotion predicate,
+not target-only hardening.
 
 ``direct_subprocess_fallback=false`` means the main MCP/application process never falls
 back to local ``subprocess`` if supervisor/backend is unhealthy. It does not prohibit the
@@ -614,10 +680,16 @@ frame after exact digest verification or uses a separately reviewed bounded tran
 subprotocol before start acceptance. No input reference lets the supervisor open the
 application database or arbitrary protected filesystem path.
 
+Cancellation messages identify the exact operation and original ticket identity plus a
+monotonic cancel generation. ``execution_id`` is included when already known to the
+application but is not required to prevent cancellation during the interval after supervisor
+acceptance and before the start response is received: the supervisor resolves the one
+retained execution bound to that operation/ticket and rejects contradictory identity.
+
 17. Start linearization across Phase 4 and supervisor
 -----------------------------------------------------
 
-This is the core Phase 7 invariant.
+This is the core Phase 7 cross-process invariant.
 
 For a new ``command_run`` first admission:
 
@@ -647,33 +719,40 @@ For a new ``command_run`` first admission:
 #. publish/fsync the Phase 4 audit-obligation marker;
 #. recheck exact predicates and let the process-wide gate own ``call_start`` for
    ``ExecutionSupervisorPort.start(ticket)``;
-#. ``call_start`` is the **session/audit/cancellation commit-to-start linearization**. Once it
-   wins, later session end/audit trip/cancel cannot claim the execution was never committed
-   merely because the supervisor response has not arrived;
+#. ``call_start`` is the **session/audit/application-cancellation commit-to-supervisor
+   linearization**. Once it wins, later session end/audit trip/cancel cannot claim the
+   supervisor execution was never committed merely because the start response has not
+   arrived;
 #. supervisor validates peer+ticket and performs its own durable single-use acceptance
    transaction before process launch;
+#. supervisor then applies the **executor-local launch-versus-cancel gate** in section 18.1;
 #. bounded start response returns either exact durable accepted execution reference,
    explicit durable no-accept result, or transport/receipt ambiguity;
 #. application immediately persists effect reference/effect knowledge before releasing the
    process/session/per-operation gates;
 #. fsync required post-start audit and close the exact obligation when permitted;
-#. command remains running/uncertain until later supervisor evidence reaches a truthful
-   terminal lifecycle outcome;
+#. command remains running/cancelling/uncertain until later supervisor evidence reaches a
+   truthful terminal lifecycle outcome;
 #. release workspace fence/CHANGE only after section 24 terminal/cleanup closure.
 
 The Phase 4 process-wide ``call_start`` remains the audit-failure-vs-dispatch linearization.
 The executor's durable acceptance is the independent exactly-once evidence after that
-linearization.
+linearization. The executor-local launch gate does not weaken or replace Phase 4; it
+serializes cancellation with the later child/domain-creation side effect after that one
+supervisor execution has already been committed.
 
-18. Supervisor single-use acceptance transaction
-------------------------------------------------
+18. Supervisor single-use acceptance and executor-local launch gate
+-------------------------------------------------------------------
+
+18.1 Single-use acceptance transaction
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 On ``start_execution`` the supervisor:
 
 #. verifies protocol version/frame/schema and exact application peer credentials;
 #. validates ticket digest, operation/ticket IDs, single-use nonce syntax/digest, expiry/
-   boot deadline, profile, executable, cwd/root/mount, environment/resource/network/sandbox
-   plan, and all supplied input bytes/digests;
+   boot deadline, profile, executable, cwd/root/mount, process-isolation, environment/
+   resource/network/sandbox plan, and all supplied input bytes/digests;
 #. looks up ticket/operation in executor evidence **before** mutable launch checks;
 #. same exact already-consumed ticket -> return retained ``execution_id``/state; never
    spawn again;
@@ -689,6 +768,64 @@ outlives every allowed replay window.
 Supervisor never invents a second Binnacle operation and never accepts a fresh ticket for
 an already-bound operation merely because application state is ``uncertain``.
 
+18.2 ``ExecutorLaunchGate``: atomic launch-versus-cancel ownership
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Every accepted execution has one supervisor-local ``ExecutorLaunchGate`` (or exact durable
+CAS/lock equivalent) shared by the launch worker, cancellation handler, timeout/resource
+pre-start handler, and restart reconciler. The fixed rule is that **no backend process/domain
+creation may begin from a stale ``accepted``/``launch_preparing`` snapshot**.
+
+The launch path:
+
+#. acquires the exact execution's launch gate;
+#. re-reads the durable execution row, latest ``cancel_generation``, ticket/profile,
+   executor readiness/integrity, and any terminal/uncertain state;
+#. if a durable cancellation already exists and no backend create was committed, atomically
+   records ``cancellation_suppressed_spawn=true`` plus the exact no-process evidence and
+   performs **zero** backend create/spawn;
+#. otherwise atomically records one ``launch_committed`` generation while holding the gate;
+#. while still holding the gate, crosses the exact backend ``create``/spawn handoff and
+   obtains either an exact durable/reconcilable domain handle, an explicit no-domain receipt,
+   or an ambiguous receipt;
+#. durably records that handle/receipt/evidence generation before releasing the gate;
+#. if cancellation became pending only after launch commit (the cancel handler waits for the
+   same gate), it is applied to the exact returned domain immediately after the handler
+   acquires the gate; if create receipt is ambiguous, executor state becomes
+   ``executor_uncertain`` and cancellation/recovery conservatively targets any independently
+   discovered domain for this exact execution.
+
+The cancellation path:
+
+#. authenticates the application peer and resolves the exact retained execution by
+   operation+ticket, with ``execution_id`` as an additional consistency check when present;
+#. acquires the same ``ExecutorLaunchGate``;
+#. persists a strictly higher ``cancel_generation`` before signalling or deciding spawn
+   suppression;
+#. if state is ``accepted``/``launch_preparing`` and no launch commit exists, atomically
+   wins cancellation, suppresses backend creation, and closes with exact no-process
+   evidence;
+#. if ``launch_committed``/``running`` or process creation is possibly committed, it never
+   returns a no-process success from absence. It targets the exact domain if known, or
+   enters conservative reconciliation/termination if the create receipt is ambiguous;
+#. same/lower cancel generations are idempotent retained reads and never duplicate signals
+   or launch.
+
+The gate is held only in the unprivileged supervisor and never while the application owns a
+SQLite transaction. It may cover the bounded backend-create/receipt handoff because its
+purpose is exactly to eliminate the ``accepted -> process created`` cancellation gap. A
+backend whose create call can hang without a bounded deadline is not promotable.
+
+A supervisor crash is recovered from the durable launch/cancel facts. ``cancel_requested``
+before ``launch_committed`` can never later spawn. ``launch_committed`` without a trustworthy
+create receipt is **not** permission to start a second domain: recovery uses the exact
+execution/backend identity and returns uncertainty unless the backend independently proves
+the one committed domain/no-domain outcome.
+
+This is the required executor-side counterpart to Phase 4's application-side
+``DispatchHandoffGate`` and ``ConsequentialBoundaryGate``. It closes the later process-spawn
+race without inventing another Binnacle operation or another user authority source.
+
 19. Start outcomes and Phase 4 effect knowledge
 -----------------------------------------------
 
@@ -696,19 +833,23 @@ an already-bound operation merely because application state is ``uncertain``.
    Exact supervisor response proves the ticket was durably accepted/consumed and returns a
    stable ``execution_id`` + executor evidence generation/reference. The Phase 4 effect is
    **commit one execution to the independent supervisor**; actual child may still be in
-   accepted/launching/running state. Later launch failure is a command failure, not proof
-   that the accepted effect never occurred.
+   accepted/launch-preparing/launch-committed/running/cancel-requested state. Later launch
+   failure or cancellation-before-spawn is a terminal outcome of that already-committed
+   supervisor execution, not proof that the Phase 4 effect never occurred.
 
 ``known_no_effect``
-   Allowed only when exact pre-start/gate failure or an explicit supervisor proof establishes
-   that the ticket was not accepted/consumed and no execution domain/process was created.
-   A simple socket error is not enough.
+   Allowed only when exact pre-start/Phase4-gate failure or an explicit supervisor proof
+   establishes that the ticket itself was not accepted/consumed and no execution was
+   committed to the supervisor. A cancellation that suppresses child spawn **after durable
+   supervisor acceptance remains ``known_effect``** for the command operation. A simple
+   socket error is not enough.
 
 ``uncertain``
    Lost/ambiguous UDS delivery/receipt, supervisor evidence-store unavailability,
-   contradictory start response, or inability to prove accepted-versus-not-accepted after
-   ``call_start``. Workspace fence remains owned and no new execution is created. Same
-   ticket/operation is reconciled through the supervisor.
+   contradictory start response, ambiguous backend create receipt after launch commit, or
+   inability to prove accepted-versus-not-accepted after ``call_start``. Workspace fence
+   remains owned and no fresh execution is created. Same ticket/operation is reconciled
+   through the supervisor.
 
 A later reconciliation that finds an uncertain operation's command still running does
 **not** move Phase 4 ``uncertain`` back to ``running`` because the reviewed lifecycle has no
@@ -786,7 +927,7 @@ profile. Result distinguishes:
 * current retained end;
 * execution still running with no new bytes -- empty data + ``eof=false``;
 * terminal stream fully drained -- ``eof=true``;
-* output truncated due execution ceiling;
+* output truncated due to execution ceiling;
 * output payload expired while security/operation record remains;
 * supervisor/evidence unavailable;
 * operation uncertain while executor evidence is running/terminal.
@@ -822,8 +963,9 @@ Task support. Task identity never replaces Binnacle ``operation_id``.
 
 A normal accepted command closes only after supervisor evidence proves:
 
-* exact execution/process domain identified;
-* top process exit code/signal/reason observed;
+* exact execution/process domain identified, **or** exact gate-owned cancellation-before-
+  spawn evidence proves no domain/process was created after durable supervisor acceptance;
+* top process exit code/signal/reason observed when a process existed;
 * all descendants terminated or exact contract-approved survivors accounted;
 * output pipes drained/finalized under policy;
 * private temp/mount/execution resources removed or explicitly quarantined;
@@ -836,8 +978,9 @@ Then Phase 4 lifecycle mapping is:
 * verified exit 0 under success contract -> ``succeeded`` + ``known_effect``;
 * verified non-zero/timeout/resource/start-after-accept failure -> ``failed`` +
   ``known_effect``;
-* verified owner cancellation with complete descendant/cleanup proof -> ``cancelled`` +
-  ``known_effect``;
+* verified owner cancellation, including cancellation that suppresses child spawn **after
+  supervisor acceptance**, with complete executor/descendant/cleanup proof -> ``cancelled``
+  + ``known_effect``;
 * ambiguity after accepted/possible start -> ``uncertain`` unless lifecycle already
   uncertain and awaiting later terminal proof;
 * explicit supervisor no-accept before any execution commit -> failed/cancelled
@@ -859,19 +1002,37 @@ reduces/terminates an already acknowledged execution rather than authorizing new
 Another controller cannot cancel it absent a separately reviewed recovery/ownership
 transfer contract.
 
+There are two nested cancellation/start races and each has one owner:
+
+* **application Phase 4 race** -- the existing per-operation dispatch handoff decides
+  cancellation versus ``ConsequentialBoundaryGate.call_start``. Cancellation winning here
+  means the supervisor ticket was never committed;
+* **executor launch race** -- after supervisor acceptance, section 18.2
+  ``ExecutorLaunchGate`` decides cancellation versus backend process/domain creation.
+  Cancellation winning here suppresses child spawn but does not erase the already-known
+  Phase 4 effect of supervisor acceptance.
+
 Ordering:
 
-#. authenticate owner and resolve target operation/execution evidence;
-#. under Phase 4 per-operation dispatch handoff, record durable cancellation intent/
-   monotonic ``cancel_generation`` in Phase 7 command metadata and transition lifecycle to
-   ``cancelling`` when the current state permits;
+#. authenticate owner and resolve target operation plus original ticket/executor evidence;
+#. under Phase 4 per-operation dispatch handoff, record durable application cancellation
+   intent/monotonic ``cancel_generation`` in Phase 7 command metadata and transition
+   lifecycle to ``cancelling`` when the current state permits;
 #. if cancellation wins before Phase 4 command ``call_start``, final start check sees it and
    no supervisor ticket is committed;
-#. if command ``call_start`` already won, cancellation sends exact execution ID + operation
-   ID + monotonic cancel generation over UDS;
-#. supervisor same/lower cancel generation returns retained status; higher exact generation
-   persists intent before signalling;
-#. cooperative signal/grace first, then reviewed forced termination;
+#. if command ``call_start`` already won, send exact operation ID + original ticket ID +
+   monotonic cancel generation over UDS; include ``execution_id`` when known but do not
+   require the application to have received the start response first;
+#. supervisor resolves exactly one retained execution and applies the same/lower/higher
+   generation rules under ``ExecutorLaunchGate``;
+#. if cancel wins while executor state is ``accepted``/``launch_preparing`` and no
+   ``launch_committed`` fact exists, durably suppress backend creation and prove the
+   no-process cancellation closure;
+#. if executor launch commit won, cancellation waits for the same gate's bounded create/
+   receipt handoff and targets the exact returned domain; ambiguous create receipt causes
+   conservative reconciliation/termination, never a false no-process cancellation;
+#. for a known running domain, cooperative signal/grace first, then reviewed forced
+   termination;
 #. all descendants/accounting/private resources/output finalization verified;
 #. only then application may commit ``cancelled``;
 #. natural successful/failed completion winning the race remains ``succeeded``/``failed``;
@@ -879,9 +1040,14 @@ Ordering:
    lifecycle/evidence permits, never falsely ``cancelled``.
 
 For an authoritative Phase 4 ``uncertain`` start whose supervisor evidence later shows a
-possibly running execution, cancellation may be sent as reconciliation action while the
-operation remains ``uncertain``; only complete stop/cleanup proof permits the allowed
-``uncertain -> cancelled`` transition.
+possibly running/launch-committed execution, cancellation may be sent as reconciliation
+action while the operation remains ``uncertain``; only complete stop/no-spawn + cleanup
+proof permits the allowed ``uncertain -> cancelled`` transition.
+
+A supervisor restart that sees durable cancellation before launch commit **must not spawn**.
+A restart that sees launch commit with ambiguous create evidence must reconcile the exact
+committed execution and must not create a replacement process. These cases are mandatory
+fault tests.
 
 26. Timeout/resource termination
 --------------------------------
@@ -892,6 +1058,10 @@ with bounded reason code after all descendants/cleanup/output close.
 
 If limit enforcement or cleanup outcome is unverifiable, state is ``uncertain``. A timeout
 timestamp or missing PID alone does not prove process-tree termination.
+
+A timeout/resource decision that arrives before backend launch commit consumes the same
+``ExecutorLaunchGate`` as cancellation; it may suppress spawn under its own exact terminal
+reason. It never races an unsynchronized launch worker.
 
 27. Application restart
 -----------------------
@@ -906,7 +1076,8 @@ The supervisor remains an independent systemd service/process role. Application 
 #. queries supervisor by exact operation/ticket/execution reference;
 #. validates executor evidence generation, ticket digest, workspace/root/mount/profile and
    command identity;
-#. reconciles running/terminal/uncertain evidence without creating a new ticket/process;
+#. reconciles accepted/launching/running/cancelling/terminal/uncertain evidence without
+   creating a new ticket/process;
 #. restores operation/status/output projection;
 #. retains workspace fence until truthful terminal closure.
 
@@ -926,6 +1097,12 @@ nonterminal execution evidence, and queries the selected backend using exact exe
 domain identity. PID absence alone is not no-effect because a process may have run and
 modified workspace before disappearing.
 
+Before any accepted execution is allowed to continue launch recovery, startup replays the
+executor launch/cancel invariant: durable cancellation before ``launch_committed`` suppresses
+spawn; a retained ``launch_committed`` row can only reconcile the one committed backend
+domain and can never allocate a replacement. A launch-commit/create-receipt ambiguity stays
+executor-uncertain until independent backend evidence resolves it.
+
 If backend independently proves process/domain running, supervisor can reattach/reconcile
 where selected profile permits. If it proves exact terminal exit/cleanup, expose that
 truth. If evidence is missing/corrupt/contradictory or the backend cannot establish what
@@ -934,7 +1111,8 @@ Phase 4 uncertainty/fence.
 
 Bootstrap Phase 7 exit requires survival across **MCP application restart**, not necessarily
 transparent supervisor crash. Supervisor-crash recovery is nevertheless fault-tested and
-must never duplicate execution or falsely release workspace authority.
+must never duplicate execution, ignore a durable cancellation, or falsely release workspace
+authority.
 
 29. Start-response loss and retained retry
 -----------------------------------------
@@ -942,14 +1120,18 @@ must never duplicate execution or falsely release workspace authority.
 Lost UDS or MCP response never authorizes a fresh effect.
 
 Application same-key retry first resolves the Phase 4 caller binding. If retained operation
-is running/terminal/uncertain, return/reconcile it; do not validate a new mutable session/
-ticket as first admission and do not allocate another fence.
+is running/cancelling/terminal/uncertain, return/reconcile it; do not validate a new mutable
+session/ticket as first admission and do not allocate another fence.
 
 If application must query supervisor after ambiguous start, it uses exact original ticket/
 operation identity. Supervisor returns retained accepted execution if present. If its
 healthy durable store proves exact ticket never accepted and the request deadline/generation
 rules make later acceptance impossible, reconciliation may establish known-no-effect. If
 that proof is unavailable, remain uncertain.
+
+Cancellation does not depend on having received ``execution_id`` from the lost start
+response: the exact operation+ticket binding identifies the one retained executor record,
+and a conflicting execution ID is rejected rather than guessed.
 
 A fresh caller key after an uncertain command does not bypass the retained workspace fence.
 
@@ -963,14 +1145,16 @@ Phase 4 obligation publication, process-wide ``call_start`` and immediate start-
 classification. Therefore:
 
 * end/expiry/revocation wins before command ``call_start`` -> zero committed execution;
-* command ``call_start`` wins first -> the execution is committed-to-start under the valid
-  session; later end/expiry does **not** silently kill or reclassify it;
+* command ``call_start`` wins first -> the execution is committed-to-supervisor under the
+  valid session; later end/expiry does **not** silently kill or reclassify it;
 * an already-started/committed command continues until natural completion, explicit owner
   cancellation, or resource policy; session end simply blocks new command starts;
 * same-key retained reconciliation after session end remains available.
 
 This is deliberately consistent with Phase 6 file-mutation and session-activation start
-linearization.
+linearization. Executor launch/cancel handling after supervisor acceptance is independent of
+whether the development session later ends: no new owner authority is created by completing
+or cancelling the already-committed execution.
 
 31. Executable and script identity
 ----------------------------------
@@ -1008,7 +1192,8 @@ Exact names remain proposals until promotion. A minimal set is:
 
 ``operation_cancel``
    Authority-reducing/idempotent cancellation request against existing operation; no new
-   arbitrary command authority.
+   arbitrary command authority. It may target the exact retained operation+ticket before
+   the application has received ``execution_id``.
 
 ``operation_list``
    Read-only bounded owner-scoped outstanding/recent operation listing.
@@ -1029,14 +1214,15 @@ Before runtime handler registration:
 #. define exact command/status/output/cancel/list operation contracts;
 #. reconcile the section 5 mapping of policy process / narrow broker-supervisor / command
    executor process with ``command-profiles.yaml`` and validators if required;
-#. add trusted ticket deadline, workspace fence/root-mount, network exposure, output and
-   execution-evidence fields needed by this plan;
+#. add trusted ticket deadline, workspace fence/root-mount, process-introspection/ptrace,
+   network exposure, output, executor launch/cancel and execution-evidence fields needed by
+   this plan;
 #. define exact input/output JSON schemas and bounded errors/result limits;
 #. assign information/confirmation/session-host profile requirements;
 #. add exact manifest entries and bump manifest version;
 #. update security/evaluation fixtures for single-use replay, UDS loss, app restart,
-   cancellation, output cursors, listener exposure, protected-state access, and workspace
-   coordination;
+   cancellation-before-spawn, cancellation-during-launch, output cursors, listener exposure,
+   process-introspection isolation, protected-state access, and workspace coordination;
 #. validate all schema pointers, handler bindings, versions, annotations, profile digests,
    and current compatibility profiles;
 #. only then compose handlers.
@@ -1071,6 +1257,7 @@ Representative paths:
    tests/unit/domain/test_execution.py
    tests/unit/application/test_execution.py
    tests/unit/executor/test_tickets.py
+   tests/unit/executor/test_launch_cancel.py
    tests/integration/test_executor_ipc.py
    tests/integration/test_executor_restart.py
    tests/integration/test_execution_backend.py
@@ -1102,6 +1289,7 @@ Representative contracts:
        environment_sha256: str
        resource_plan_sha256: str
        sandbox_plan_sha256: str
+       process_isolation_plan_sha256: str
        expires_at: datetime
        single_use_nonce: str
        ...
@@ -1122,7 +1310,11 @@ Representative contracts:
            self, operation_id: str, stream: OutputStream, offset: int, max_bytes: int
        ) -> ExecutorOutputChunk: ...
        async def cancel(
-           self, operation_id: str, execution_id: str, cancel_generation: int
+           self,
+           operation_id: str,
+           ticket_id: str,
+           cancel_generation: int,
+           execution_id: str | None = None,
        ) -> ExecutorCancelReceipt: ...
        async def list(self, operation_ids: tuple[str, ...]) -> tuple[ExecutorSnapshot, ...]: ...
 
@@ -1136,6 +1328,9 @@ Representative contracts:
    class ExecutorEvidenceStore(Protocol):
        async def accept_once(self, ticket: ValidatedTicket) -> AcceptanceResult: ...
        async def transition(self, event: ExecutorEvidenceEvent) -> ExecutorSnapshot: ...
+       async def record_cancel_generation(
+           self, execution_id: str, cancel_generation: int
+       ) -> ExecutorSnapshot: ...
        async def lookup_ticket(self, ticket_id: str) -> ExecutorSnapshot | None: ...
 
 Application service consumes Phase 4 operation store/audit/policy + Phase 6
@@ -1161,7 +1356,9 @@ Representative closed errors, pending contract promotion:
 * ``command_executor_unavailable``;
 * ``command_executor_integrity_failed``;
 * ``command_start_uncertain``;
+* ``command_launch_uncertain``;
 * ``command_isolation_unsupported``;
+* ``command_process_introspection_unsupported``;
 * ``command_network_profile_unsupported``;
 * ``command_listener_exposure_required``;
 * ``command_resource_limit_exceeded``;
@@ -1175,9 +1372,9 @@ Errors never reveal another controller's operation, raw ticket/nonce, credential
 host path, environment secret, or root-broker detail.
 
 Structured diagnostics may include operation/execution IDs, command profile, safe executable
-identity/name, workspace ID, state/evidence generations, resource/output counters, cgroup/
-backend class, reason codes, protocol/build/profile digests and reconciliation state.
-Command argv/output/path content is not routine log labels.
+identity/name, workspace ID, state/evidence/launch/cancel generations, resource/output
+counters, cgroup/backend class, reason codes, protocol/build/profile digests and
+reconciliation state. Command argv/output/path content is not routine log labels.
 
 37. Test strategy and real evidence
 -----------------------------------
@@ -1197,8 +1394,16 @@ Prove:
   start request;
 * session end/expiry before call_start => zero accepted execution; call_start-first may
   continue;
-* cancellation-before-start wins and suppresses ticket; start-first cancellation targets
-  one retained execution;
+* application cancellation-before-start wins and suppresses ticket acceptance;
+* executor cancellation immediately after acceptance but before launch commit suppresses
+  backend process creation and closes one accepted execution as ``known_effect``;
+* launch-commit-first cancellation targets the exact created/possibly-created domain;
+* concurrent cancel versus backend create has one winner under ``ExecutorLaunchGate`` and
+  never produces an orphan process;
+* same/lower cancel-generation replay is idempotent and a higher generation persists before
+  signal/spawn-suppression action;
+* supervisor restart with cancel-before-launch never later spawns; launch-commit/create-
+  receipt ambiguity never creates a replacement domain;
 * output empty-vs-EOF/truncated/expired cursor semantics;
 * top-PID exit cannot release fence while descendant/cleanup unknown;
 * app restart reconciliation never allocates new ticket;
@@ -1214,12 +1419,15 @@ Test:
 * duplicate request/correlation IDs and ticket replay;
 * response loss after executor acceptance then same ticket retry -> same execution ID, one
   process-domain creation;
+* cancellation by exact operation+ticket while the start response/execution ID is lost;
 * application SIGKILL after accepted start; supervisor/process/output continue; replacement
   app reconnects and resolves;
 * supervisor unavailable -> no direct-subprocess fallback;
 * supervisor DB WAL/FULL/schema/integrity failure -> new starts fail closed;
-* supervisor crash after accept before launch, during launch, while running, during output,
-  cancellation, cleanup; never duplicate and never false fence release;
+* supervisor crash after accept before launch, after durable cancel-before-launch, after
+  launch commit before create receipt, during launch, while running, during output,
+  cancellation, cleanup; never duplicate, never ignore durable cancellation and never false
+  fence release;
 * UDS output chunk bounds/backpressure;
 * application and executor DB files never opened by the other process.
 
@@ -1229,10 +1437,20 @@ Test:
 Candidate backend tests:
 
 * dedicated unprivileged identity/no-new-privileges/no capabilities/setuid gain;
+* distinct supervisor/command UID for the preferred profile, or explicit evidence for a
+  same-UID profile that all process-introspection tests below fail closed;
+* command attempts to ptrace supervisor/application and receives denial;
+* command attempts ``process_vm_readv``/``process_vm_writev`` against supervisor/application
+  and receives denial;
+* command cannot open/read ``/proc/<supervisor-or-app-pid>/mem``, ``fd``, ``fdinfo`` or
+  equivalent sensitive process surfaces;
+* command cannot send arbitrary signals/control supervisor/application outside the exact
+  reviewed execution lifecycle;
+* descendants cannot escape the same process-introspection boundary;
 * exact workspace root/mount/no-submount binding and replacement/bind-mount attacks;
 * command cannot read ``/etc/binnacle``, app SQLite/audit/recovery, executor DB/output/
-  socket, root-broker socket, SSH/GPG keys/agents, protected `.git` when conservative Phase 7
-  profile masks it;
+  socket, root-broker socket, SSH/GPG keys/agents, protected ``.git`` when conservative
+  Phase 7 profile masks it;
 * inherited FD/socket/environment leakage;
 * child/grandchild/double-fork/setsid/daemon/fork-bomb remain in accounting/termination
   domain;
@@ -1250,13 +1468,15 @@ Candidate backend tests:
 
 Real candidate Pi evidence records:
 
-* selected supervisor process identity/systemd unit;
+* selected supervisor and command process identities/systemd units/domains;
 * exact execution-domain backend and cgroup/systemd behavior;
 * filesystem/protected-state view enforcement;
+* exact ``/proc``/ptrace/process-vm/signal isolation, especially if a shared UID is proposed;
 * root mount/no-submount handling;
 * process-tree accounting across daemon/fork patterns;
 * UDS peer credentials/frame behavior;
 * executor evidence SQLite durability and response-loss recovery;
+* launch/cancel gate behavior and crash recovery;
 * output spool fsync/limits/performance;
 * app restart while a command runs;
 * supervisor crash behavior;
@@ -1272,8 +1492,9 @@ No candidate feature is marked supported merely because the documentation descri
 
 After promotion, real ChatGPT evidence covers catalogue discovery; session-authorised
 ``command_run``; structured argv; tests/quality command; incremental output; status;
-cancellation; same-key retry/lost response; application restart/reconnect; outstanding
-listing; bounded result behavior; and host Task/status behavior only if actually observed.
+cancellation including prompt cancellation after accepted start; same-key retry/lost
+response; application restart/reconnect; outstanding listing; bounded result behavior; and
+host Task/status behavior only if actually observed.
 
 38. Holistic invariant pass before review
 -----------------------------------------
@@ -1298,9 +1519,10 @@ New command start::
      -> durable audit obligation
      -> gate-owned call_start(ExecutionSupervisorPort.start exact ticket)
      -> supervisor peer/ticket validation + durable accept-once
+     -> ExecutorLaunchGate: cancel-before-launch OR one bounded launch commit/create receipt
      -> immediate application effect-reference/effect-knowledge classification
      -> post-start audit/obligation closure
-     -> independent launch/process/output lifecycle
+     -> independent process/output lifecycle
      -> truthful terminal + descendant/private-resource/output closure
      -> application terminal audit + workspace fence/CHANGE release
      -> restart/reconciliation
@@ -1309,13 +1531,23 @@ New command start::
 Cancellation::
 
    same-owner retained operation lookup
-     -> per-operation cancellation/start handoff linearization
-     -> durable cancel generation/state
-     -> exact executor cancellation request if start committed
-     -> cooperative then forced descendant termination
+     -> Phase4 per-operation cancellation/start handoff
+     -> durable application cancel generation/state
+     -> if start committed: exact operation+ticket executor cancellation
+     -> ExecutorLaunchGate durable cancel generation
+     -> cancel-before-launch suppresses process creation OR launch-first targets one domain
+     -> cooperative then forced descendant termination when process exists
      -> output/private-domain cleanup proof
      -> cancelled OR natural succeeded/failed OR uncertain
      -> fence release only after truthful closure
+
+Process isolation::
+
+   promoted command profile
+     -> distinct child UID preferred OR exact same-UID process-isolation plan
+     -> supervisor independently validates sandbox/process plan digest
+     -> bounded /proc + ptrace/process-vm/signal boundary established
+     -> only then launch commit may cross backend process-create boundary
 
 Output/status::
 
@@ -1325,12 +1557,14 @@ Output/status::
      -> exact offset/cursor projection
      -> no state/effect invention from output/process absence
 
-Review explicitly stresses: audit trip/start race; session end/start race; cancel/start race;
-executor accept/response-loss; app crash; supervisor crash; ticket replay after terminal;
-workspace root/mount replacement; out-of-band source write; process daemon escape; output
-flood; resource/cancel cleanup; network listener authority; protected-state/credential
-access; executor/application DB ownership; uncertain fence retention; same-key retry after
-session end; and every accepted/no-accept/ambiguous outcome.
+Review explicitly stresses: audit trip/start race; session end/start race; application
+cancel/start race; executor cancel/launch race; executor accept/response-loss; app crash;
+supervisor crash at accepted/cancelled/launch-committed/create-receipt states; ticket replay
+after terminal; workspace root/mount replacement; out-of-band source write; process daemon
+escape; same-UID ptrace/proc/process-vm escape; output flood; resource/cancel cleanup; network
+listener authority; protected-state/credential access; executor/application DB ownership;
+uncertain fence retention; same-key retry after session end; and every accepted/no-accept/
+ambiguous outcome.
 
 39. Plan acceptance checklist
 -----------------------------
@@ -1346,17 +1580,24 @@ Accept this plan only when:
 * app remains authoritative Phase 4 lifecycle owner;
 * default commands consume Phase 6 CHANGE/fence for complete descendant lifetime;
 * root/mount/no-submount and protected-state view are exact/fail-closed;
+* distinct command UID is preferred; same-UID requires explicit bounded ``/proc`` plus
+  denied ptrace/process-vm/arbitrary-signal access to supervisor/application;
 * start uses Phase4 per-op/session/process gates and process-gate ``call_start``;
 * executor accept-once precedes launch and survives lost response;
+* ``ExecutorLaunchGate`` serializes accepted/launching cancellation with backend create;
+* durable cancel-before-launch can never later spawn; launch-first cancellation targets the
+  one committed domain or remains conservative if create receipt is ambiguous;
 * accepted execution can never be respawned from a fresh ticket/retry;
-* known-effect/no-effect/uncertain mapping is explicit;
+* known-effect/no-effect/uncertain mapping is explicit, including cancellation-before-child-
+  spawn after supervisor acceptance remaining ``known_effect``;
 * lifecycle handles uncertain-running evidence without inventing ``uncertain -> running``;
-* start/cancel/session/audit races each have one linearization;
+* application start/cancel/session/audit and executor launch/cancel races each have one
+  explicit linearization;
 * output is independent/bounded/cursor-correct and never process truth;
 * all descendants/resources/output/private state close before verified cancellation/fence
   release;
 * ordinary app restart preserves acknowledged execution visibility;
-* supervisor crash never implies no-effect or duplicate start;
+* supervisor crash never implies no-effect, duplicate start, or ignored durable cancellation;
 * development networking and non-loopback exposure remain distinct/enforceable profile
   properties;
 * credentials/control-plane/root broker/devices remain unavailable;
@@ -1370,24 +1611,30 @@ Accept this plan only when:
 When predecessor evidence permits implementation:
 
 #. promote/reconcile command contracts, schemas, manifest and logical broker/executor
-   mapping;
+   mapping, including process-introspection and executor launch/cancel fields;
 #. add application command metadata migration ``0004``;
 #. create separate executor evidence migration/setup and executor state directory;
 #. implement versioned framed JSON UDS protocol + peer auth + frame/schema ceilings;
 #. implement supervisor evidence store and concurrent accept-once/tombstone tests;
-#. implement application executor client/reconciliation port;
+#. implement per-execution ``ExecutorLaunchGate`` + durable cancel-generation/launch-state
+   recovery before any backend process creation;
+#. implement application executor client/reconciliation/cancel-by-operation+ticket port;
 #. implement exact executable/cwd/workspace/root/mount/ticket normalization;
 #. integrate Phase 6 CHANGE + durable mutation fence into command post-policy admission;
 #. implement Phase 4 received/policy/authorised/running/effect-intent + per-op/session/
    process-gated ``call_start`` path;
-#. implement candidate ``ExecutionDomainBackend`` behind evidence-gated profile;
+#. implement candidate ``ExecutionDomainBackend`` behind evidence-gated profile, with
+   explicit child-vs-supervisor process-introspection isolation;
 #. implement process/domain identity and descendant-wide resource accounting;
 #. implement output spool/drain/digest/truncation/retention;
 #. implement status/output/outstanding application projection;
-#. implement cancellation generation + start/cancel linearization + descendant cleanup;
+#. implement application cancellation + executor launch/cancel linearization + descendant
+   cleanup;
 #. implement app restart reconciliation;
-#. implement supervisor restart/fault reconciliation;
-#. add filesystem/credential/FD/network/listener/process/resource adversarial tests;
+#. implement supervisor restart/fault reconciliation including accepted/cancel/launch-commit
+   recovery;
+#. add filesystem/credential/FD/process-introspection/network/listener/process/resource
+   adversarial tests;
 #. validate contract/schema/manifest/profile parity;
 #. compose runtime Tools only when all promotion prerequisites are current;
 #. collect candidate-Pi evidence;
@@ -1402,19 +1649,23 @@ Remain evidence-gated after plan acceptance:
   reviewed systemd-backed mechanism);
 * exact filesystem-view mechanism sufficient for protected host-state exclusion;
 * exact network/listener enforcement mechanism;
-* whether supervisor and child may safely share an OS UID under the selected confinement;
+* whether supervisor and child may safely share an OS UID; a shared UID is unsupported until
+  the selected profile proves bounded ``/proc`` and denied ptrace/process-vm/process-control
+  access, otherwise use a distinct child identity;
 * exact cgroup v2/systemd capabilities and restart semantics on the candidate Pi;
 * exact executor evidence DB/storage throughput and output fsync cadence;
+* exact bounded backend-create deadline needed by ``ExecutorLaunchGate``;
 * exact inline stdin/control-frame/result chunk maxima within reviewed upper bounds;
 * exact set of allowed executables/profile limits;
-* whether generic Phase 7 commands see any `.git` metadata before Phase 8;
+* whether generic Phase 7 commands see any ``.git`` metadata before Phase 8;
 * actual ChatGPT Tool/Task/status/output behavior;
 * actual catalogue refresh and result-size behavior.
 
 Those items may change profile-specific mechanism/limits. They do not change the mandatory
-process separation, single-use acceptance, durable idempotency, Phase4 gated start,
-Phase6 workspace coordination, protected-state exclusions, truthful uncertainty, or
-no-direct-subprocess invariants without a separately reviewed revision.
+process separation, single-use acceptance, executor launch/cancel serialization, durable
+idempotency, Phase4 gated start, Phase6 workspace coordination, protected-state/process-
+introspection exclusions, truthful uncertainty, or no-direct-subprocess invariants without a
+separately reviewed revision.
 
 42. Deferred work
 -----------------
