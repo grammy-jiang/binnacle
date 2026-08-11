@@ -563,6 +563,9 @@ def _systemd_service_checks() -> list[VerificationCheck]:
                 "ProtectSystem",
                 "FragmentPath",
                 "DropInPaths",
+                "KillMode",
+                "SendSIGKILL",
+                "Delegate",
             )
         )
     except (OSError, subprocess.CalledProcessError, ValueError):
@@ -624,6 +627,20 @@ def _systemd_service_checks() -> list[VerificationCheck]:
             "exact four-path strict write boundary has no drop-ins"
             if paths_ok
             else "effective service write boundary differs or has drop-ins",
+        )
+    )
+    lifecycle_ok = (
+        properties["KillMode"] == "control-group"
+        and properties["SendSIGKILL"] == "yes"
+        and properties["Delegate"] == "no"
+    )
+    checks.append(
+        VerificationCheck(
+            "service-process-lifecycle",
+            "pass" if lifecycle_ok else "fail",
+            "service owns and terminates its complete non-delegated process group"
+            if lifecycle_ok
+            else "effective service process-tree lifecycle differs",
         )
     )
     return checks

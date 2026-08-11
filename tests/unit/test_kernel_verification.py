@@ -42,6 +42,9 @@ def _database(**overrides: object) -> DatabaseVerification:
         "probe_operation_count": 0,
         "probe_artifact_count": 0,
         "probe_path_count": 0,
+        "registered_workspace_count": 0,
+        "development_session_count": 0,
+        "workspace_operation_count": 0,
         "audit_tail_cache": AuditTail(0, None),
         "audit_failure_latched": False,
         "audit_failure_generation": 0,
@@ -180,6 +183,27 @@ def test_each_database_invariant_is_independently_fail_closed(index: int, messag
         verification._verify_database_invariants(connection)
     verification._verify_database_invariants(
         cast(sqlite3.Connection, _InvariantConnection([0] * 6))
+    )
+
+
+@pytest.mark.parametrize(
+    ("index", "message"),
+    (
+        (0, "registered workspace fence"),
+        (1, "development session live slot"),
+        (2, "development session provenance"),
+        (3, "workspace operation provenance"),
+        (4, "workspace fence owner"),
+    ),
+)
+def test_each_development_workspace_invariant_is_fail_closed(index: int, message: str) -> None:
+    values = [0] * 5
+    values[index] = 1
+    connection = cast(sqlite3.Connection, _InvariantConnection(values))
+    with pytest.raises(KernelVerificationError, match=message):
+        verification._verify_development_workspace_invariants(connection)
+    verification._verify_development_workspace_invariants(
+        cast(sqlite3.Connection, _InvariantConnection([0] * 5))
     )
 
 

@@ -6,8 +6,8 @@ import asyncio
 import hashlib
 import secrets
 import time
-from collections.abc import Mapping
-from contextlib import suppress
+from collections.abc import AsyncIterator, Mapping
+from contextlib import AbstractAsyncContextManager, asynccontextmanager, suppress
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import Protocol
@@ -92,6 +92,78 @@ class CoordinatedOperationRequest:
     prepared_execution: PreparedExecutionAdmission | None = None
 
 
+class DispatchAuthority(Protocol):
+    """Hold an operation-family authority gate inside the per-operation handoff."""
+
+    def hold(
+        self,
+        *,
+        operation: OperationSnapshot,
+        request: CoordinatedOperationRequest,
+    ) -> AbstractAsyncContextManager[None]: ...
+
+
+class PostPolicyAuthority(Protocol):
+    """Hold operation-family admission authority from allow through domain closure."""
+
+    def hold(
+        self,
+        *,
+        operation: OperationSnapshot,
+        decision: PolicyDecision,
+        request: CoordinatedOperationRequest,
+    ) -> AbstractAsyncContextManager[None]: ...
+
+
+class OperationClosure(Protocol):
+    """Complete operation-family state before post-policy authority can release."""
+
+    async def close(
+        self,
+        *,
+        operation: OperationSnapshot,
+        request: CoordinatedOperationRequest,
+    ) -> OperationSnapshot: ...
+
+
+class _UnrestrictedDispatchAuthority:
+    """Compatibility default for operation families without an additional gate."""
+
+    @asynccontextmanager
+    async def hold(
+        self,
+        *,
+        operation: OperationSnapshot,
+        request: CoordinatedOperationRequest,
+    ) -> AsyncIterator[None]:
+        del operation, request
+        yield
+
+
+class _UnrestrictedPostPolicyAuthority:
+    @asynccontextmanager
+    async def hold(
+        self,
+        *,
+        operation: OperationSnapshot,
+        decision: PolicyDecision,
+        request: CoordinatedOperationRequest,
+    ) -> AsyncIterator[None]:
+        del operation, decision, request
+        yield
+
+
+class _IdentityOperationClosure:
+    async def close(
+        self,
+        *,
+        operation: OperationSnapshot,
+        request: CoordinatedOperationRequest,
+    ) -> OperationSnapshot:
+        del request
+        return operation
+
+
 class _DefaultOperationAuthoriser:
     def __init__(self, store: KernelOperationStore) -> None:
         self._store = store
@@ -131,6 +203,9 @@ class OperationCoordinator:
         trusted_time_guard: TrustedTimeGuard | None = None,
         prepared_state_verifier: PreparedStateVerifier | None = None,
         authoriser: OperationAuthoriser | None = None,
+        dispatch_authority: DispatchAuthority | None = None,
+        post_policy_authority: PostPolicyAuthority | None = None,
+        operation_closure: OperationClosure | None = None,
     ) -> None:
         self._store = store
         self._policy = policy
@@ -143,6 +218,9 @@ class OperationCoordinator:
         self._trusted_time_guard = trusted_time_guard
         self._prepared_state_verifier = prepared_state_verifier
         self._authoriser = authoriser or _DefaultOperationAuthoriser(store)
+        self._dispatch_authority = dispatch_authority or _UnrestrictedDispatchAuthority()
+        self._post_policy_authority = post_policy_authority or _UnrestrictedPostPolicyAuthority()
+        self._operation_closure = operation_closure or _IdentityOperationClosure()
 
     async def execute(self, request: CoordinatedOperationRequest) -> CreateOrFindResult:
         admitted = await self._create_or_find(request)
@@ -220,66 +298,92 @@ class OperationCoordinator:
             )
             return CreateOrFindResult(IdempotencyOutcome.CREATED, rejected)
 
-        authorised = await self._authoriser.authorise(
+        return await self._execute_allowed(request=request, operation=operation, decision=decision)
+
+    async def _execute_allowed(
+        self,
+        *,
+        request: CoordinatedOperationRequest,
+        operation: OperationSnapshot,
+        decision: PolicyDecision,
+    ) -> CreateOrFindResult:
+        async with self._post_policy_authority.hold(
             operation=operation,
             decision=decision,
             request=request,
-        )
-        try:
-            await self._required_audit(self._policy_event(authorised, True, "policy_allowed"))
-            await self._required_audit(
-                self._state_event(
-                    authorised,
-                    old_state=OperationState.RECEIVED.value,
-                    reason_code="operation_authorised",
+        ):
+            authorised = await self._authoriser.authorise(
+                operation=operation,
+                decision=decision,
+                request=request,
+            )
+            try:
+                await self._required_audit(self._policy_event(authorised, True, "policy_allowed"))
+                await self._required_audit(
+                    self._state_event(
+                        authorised,
+                        old_state=OperationState.RECEIVED.value,
+                        reason_code="operation_authorised",
+                    )
                 )
-            )
-        except RequiredAuditError:
-            failed = await self._fail_known_no_effect(
-                authorised, code="audit_unavailable", reason="authorization_audit_failed"
-            )
-            return CreateOrFindResult(IdempotencyOutcome.CREATED, failed)
+            except RequiredAuditError:
+                failed = await self._fail_known_no_effect(
+                    authorised, code="audit_unavailable", reason="authorization_audit_failed"
+                )
+                closed = await self._operation_closure.close(
+                    operation=failed,
+                    request=request,
+                )
+                return CreateOrFindResult(IdempotencyOutcome.CREATED, closed)
 
-        running = await self._store.transition(
-            authorised.operation_id,
-            TransitionRequest(
-                expected_state_version=authorised.state_version,
-                to_state=OperationState.RUNNING,
-                effect_knowledge=EffectKnowledge.NONE,
-                reason_code="dispatch_attempt_recorded",
-            ),
-        )
-        try:
-            await self._required_audit(
-                self._state_event(
-                    running,
-                    old_state=OperationState.AUTHORISED.value,
-                    reason_code="dispatch_attempt_recorded",
-                )
-            )
-            await self._required_audit(
-                self._effect_event(
-                    running,
-                    kind="effect.intent_recorded",
-                    effect_type=request.effect_type,
-                    target_digest=request.normalized_target_digest,
+            running = await self._store.transition(
+                authorised.operation_id,
+                TransitionRequest(
+                    expected_state_version=authorised.state_version,
+                    to_state=OperationState.RUNNING,
                     effect_knowledge=EffectKnowledge.NONE,
-                    reason_code="effect_intent_recorded",
+                    reason_code="dispatch_attempt_recorded",
+                ),
+            )
+            try:
+                await self._required_audit(
+                    self._state_event(
+                        running,
+                        old_state=OperationState.AUTHORISED.value,
+                        reason_code="dispatch_attempt_recorded",
+                    )
                 )
-            )
-        except RequiredAuditError:
-            failed = await self._fail_known_no_effect(
-                running, code="audit_unavailable", reason="effect_intent_audit_failed"
-            )
-            return CreateOrFindResult(IdempotencyOutcome.CREATED, failed)
+                await self._required_audit(
+                    self._effect_event(
+                        running,
+                        kind="effect.intent_recorded",
+                        effect_type=request.effect_type,
+                        target_digest=request.normalized_target_digest,
+                        effect_knowledge=EffectKnowledge.NONE,
+                        reason_code="effect_intent_recorded",
+                    )
+                )
+            except RequiredAuditError:
+                failed = await self._fail_known_no_effect(
+                    running, code="audit_unavailable", reason="effect_intent_audit_failed"
+                )
+                closed = await self._operation_closure.close(
+                    operation=failed,
+                    request=request,
+                )
+                return CreateOrFindResult(IdempotencyOutcome.CREATED, closed)
 
-        result = await self._dispatch(request, running)
-        return CreateOrFindResult(IdempotencyOutcome.CREATED, result)
+            result = await self._dispatch(request, running)
+            closed = await self._operation_closure.close(
+                operation=result,
+                request=request,
+            )
+            return CreateOrFindResult(IdempotencyOutcome.CREATED, closed)
 
     async def _dispatch(
         self, request: CoordinatedOperationRequest, running: OperationSnapshot
     ) -> OperationSnapshot:
-        async with self._handoff_gate.hold(running.operation_id):
+        async with self._dispatch_scope(request=request, operation=running):
             permit = await self._consequential_gate.acquire()
             try:
                 current = await self._store.get_operation(running.operation_id)
@@ -383,6 +487,21 @@ class OperationCoordinator:
             finally:
                 if permit.state is PermitState.PRE_START:
                     await self._consequential_gate.release(permit)
+
+    @asynccontextmanager
+    async def _dispatch_scope(
+        self,
+        *,
+        request: CoordinatedOperationRequest,
+        operation: OperationSnapshot,
+    ) -> AsyncIterator[None]:
+        # Fixed global order: per-operation handoff, then any operation-family gate,
+        # then the process-wide consequential permit acquired by the caller below.
+        async with (
+            self._handoff_gate.hold(operation.operation_id),
+            self._dispatch_authority.hold(operation=operation, request=request),
+        ):
+            yield
 
     async def _run_committed_dispatch(
         self,

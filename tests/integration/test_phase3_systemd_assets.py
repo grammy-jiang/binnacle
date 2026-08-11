@@ -29,6 +29,9 @@ def test_systemd_unit_has_exact_unprivileged_source_checkout_shape(repo_root: Pa
         "RuntimeDirectory=binnacle",
         "RuntimeDirectoryMode=0750",
         "RuntimeDirectoryPreserve=yes",
+        "KillMode=control-group",
+        "SendSIGKILL=yes",
+        "Delegate=no",
         "CapabilityBoundingSet=",
         "AmbientCapabilities=",
     }
@@ -323,6 +326,9 @@ def test_verifier_rejects_broadened_effective_write_paths(
         "ProtectSystem": "strict",
         "FragmentPath": "/etc/systemd/system/binnacle-dev.service",
         "DropInPaths": "",
+        "KillMode": "control-group",
+        "SendSIGKILL": "yes",
+        "Delegate": "no",
     }
     monkeypatch.setattr(verify_dev_pi, "_systemd_properties", lambda _names: expected)
     service = pwd.struct_passwd(("binnacle", "x", 1200, 1200, "", "/", "/usr/sbin/nologin"))
@@ -331,3 +337,4 @@ def test_verifier_rejects_broadened_effective_write_paths(
     checks = {check.name: check for check in verify_dev_pi._systemd_service_checks()}
 
     assert checks["service-write-boundary"].status == "fail"
+    assert checks["service-process-lifecycle"].status == "pass"
