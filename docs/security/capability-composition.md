@@ -1,7 +1,7 @@
 # Binnacle Capability Composition and Egress Security
 
 - **Status:** Draft security contract
-- **Contract version:** `1.1.0`
+- **Contract version:** `1.2.0`
 - **Policy:** `spec/policy/capability-zones.yaml`
 - **Feature-design basis:** [`../design.md`](../design.md), V17
 
@@ -49,7 +49,9 @@ The following are denied unless one exact contract authorizes them:
 - protected data to model-visible result;
 - protected data to outbound egress;
 - raw credential material to command execution;
-- general command execution to network, local control sockets, or devices;
+- default-profile command execution to application networking;
+- development application-network authority to non-loopback listener exposure without an exact exposure grant;
+- general command execution to local control sockets, reusable credentials, protected data, or devices;
 - untrusted content to privileged/system/self-management action;
 - one Tool's result reference used under another controller or destination contract.
 
@@ -73,7 +75,7 @@ The execute request must match every field and revalidate current state. Paramet
 
 ## 6. Mediated Egress
 
-General command execution has no direct egress or credential authority. Outbound effects use a dedicated mediator that:
+Authorised Bootstrap development commands have ordinary application-network authority but no credential or protected-data authority. A dedicated mediator remains mandatory for protected-data or credential-bearing outbound effects whose exact contract requires it. That mediator:
 
 - resolves the effective destination after DNS, proxy, redirect, and URL normalization;
 - enforces scheme, host/IP range, port, method, path, and query-name/value constraints;
@@ -99,6 +101,7 @@ After a permitted `normal-result` enters model-visible context, Binnacle cannot 
 ## 8. Command and Credential Separation
 
 - `command_run` receives no inbound MCP bearer token.
+- The development profile's IPv4/IPv6/DNS authority permits ordinary client traffic and loopback development listeners, but does not permit non-loopback listener exposure without an exact exposure grant.
 - Raw credentials are absent from environment, argv, stdin, files, descriptors, logs, and child processes.
 - A credential broker may perform one bound target action without revealing the secret.
 - Credential audience and action are revalidated at the consequential boundary.
@@ -118,7 +121,9 @@ Required adversarial cases include:
 - forged provenance and information relabelling;
 - source, transformation, destination, query, and credential substitution;
 - redirect, DNS rebinding, proxy, path, query, and allowed-host abuse;
-- command network/socket/device escape;
+- default-profile network denial and development-profile application networking;
+- non-loopback listener exposure without explicit authority;
+- command protected-socket/raw-packet/network-admin/device escape;
 - cross-controller reference reuse;
 - protected-data laundering through an intermediate Tool;
 - cross-server copying after legitimate model disclosure;
@@ -127,7 +132,7 @@ Required adversarial cases include:
 ## 11. Invariants
 
 1. Untrusted content is data, never authority.
-2. General command execution has no direct credential, egress, or device composition.
+2. Development command networking is profile-defined and never composes into credential, protected-data, control-socket, device, raw-packet, network-administration, or implicit non-loopback listener authority.
 3. High-risk composition is bound to an exact unexpired prepared operation.
 4. Effective destinations include constrained query names and values.
 5. `restricted-result` is the only V17 restricted disclosure class.

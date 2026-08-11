@@ -1,6 +1,6 @@
 schema_version: "1.1"
 policy_id: command-execution
-policy_version: "1.1.0"
+policy_version: "1.2.0"
 
 architecture:
   policy_process_separate: true
@@ -55,7 +55,14 @@ network:
   dns: denied
   unix_sockets: denied
   inherited_sockets: denied
+  protected_control_plane_ipc: denied
+  raw_packet: denied
+  network_admin: denied
   mediated_egress_only: true
+  listener_bind:
+    loopback: denied
+    non_loopback: denied
+    explicit_exposure_required: true
 
 devices:
   default: denied
@@ -75,8 +82,12 @@ privilege:
   ptrace_outside_sandbox: denied
   bpf: denied
   kernel_keyring: denied
-  syscall_policy_required: true
-  mandatory_access_control_required: true
+  advanced_syscall_policy:
+    bootstrap_required: false
+    target_hardening: true
+  mandatory_access_control:
+    bootstrap_required: false
+    target_hardening: true
 
 resources:
   descendant_wide: true
@@ -101,7 +112,21 @@ profiles:
     command_run_visible: true
     command_run_allowed: true
     structured_argv_only: true
-    inherits_global_network: true
+    network:
+      mode: application
+      ipv4: allowed
+      ipv6: allowed
+      dns: allowed
+      unix_sockets: denied
+      inherited_sockets: denied
+      protected_control_plane_ipc: denied
+      raw_packet: denied
+      network_admin: denied
+      mediated_egress_only: false
+      listener_bind:
+        loopback: allowed
+        non_loopback: explicit
+        explicit_exposure_required: true
     inherits_global_devices: true
     inherits_global_credentials: true
     workspace_write_bytes_max: 134217728

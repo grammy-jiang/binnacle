@@ -1,6 +1,6 @@
 schema_version: "1.1"
 policy_id: capability-composition
-policy_version: "1.1.0"
+policy_version: "1.2.0"
 
 zones:
   control-plane:
@@ -84,12 +84,18 @@ prepared_operation:
   semantic_intent_is_not_a_field: true
 
 command_run:
-  network_available: false
+  network_authority: profile-defined
+  bootstrap_development_application_network: allowed
+  listener_bind_default: loopback
+  non_loopback_listener_requires_explicit_exposure: true
   raw_credentials_available: false
   credential_helpers_available: false
   device_access_available: false
   local_control_sockets_available: false
-  mediated_egress_only: true
+  raw_packet_network_available: false
+  network_admin_available: false
+  protected_data_egress_requires_exact_contract: true
+  credential_bearing_effect_requires_dedicated_operation: true
 
 credential_broker:
   raw_secret_export: false
