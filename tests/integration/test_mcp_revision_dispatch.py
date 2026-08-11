@@ -547,6 +547,82 @@ async def test_malformed_sessionless_legacy_post_is_rejected_before_sdk_allocati
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"method": "initialize", "params": {"protocolVersion": "2025-11-25"}},
+        {
+            "jsonrpc": "2.0",
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2025-11-25",
+                "capabilities": {},
+                "clientInfo": {"name": "binnacle-test", "version": "1"},
+            },
+        },
+        {
+            "jsonrpc": "2.0",
+            "id": 9,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2025-11-25",
+                "clientInfo": {"name": "binnacle-test", "version": "1"},
+            },
+        },
+        {
+            "jsonrpc": "2.0",
+            "id": 9,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2025-11-25",
+                "capabilities": {},
+            },
+        },
+    ],
+)
+async def test_only_sdk_validated_initialize_can_omit_legacy_session_token(
+    phase2_application: BinnacleApplication,
+    body: dict[str, Any],
+) -> None:
+    async with running_raw_http_client(phase2_application) as client:
+        response = await client.post(
+            "/mcp",
+            json=body,
+            headers={
+                "accept": ACCEPT,
+                "MCP-Protocol-Version": EXPECTED_REVISIONS[1],
+            },
+        )
+
+    assert response.status_code == 400
+    assert "mcp-session-id" not in response.headers
+    assert _jsonrpc(response)["error"]["message"] == (
+        "The legacy transport request requires a bound Mcp-Session-Id."
+    )
+
+
+@pytest.mark.anyio
+async def test_malformed_initialize_without_version_header_cannot_allocate_session(
+    phase2_application: BinnacleApplication,
+) -> None:
+    async with running_raw_http_client(phase2_application) as client:
+        response = await client.post(
+            "/mcp",
+            json={
+                "method": "initialize",
+                "params": {"protocolVersion": EXPECTED_REVISIONS[1]},
+            },
+            headers={"accept": ACCEPT},
+        )
+
+    assert response.status_code == 400
+    assert "mcp-session-id" not in response.headers
+    assert _jsonrpc(response)["error"]["message"] == (
+        "The sessionless request is not a validated legacy initialize."
+    )
+
+
+@pytest.mark.anyio
 async def test_disabled_tasks_request_reaches_method_dispatch(
     phase2_application: BinnacleApplication,
 ) -> None:

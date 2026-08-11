@@ -339,15 +339,30 @@ async def test_chunked_body_is_bounded_without_content_length() -> None:
 
 @pytest.mark.anyio
 async def test_valid_chunked_body_is_coalesced_for_constant_message_replay() -> None:
+    body = json.dumps(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2025-11-25",
+                "capabilities": {},
+                "clientInfo": {"name": "binnacle-test", "version": "1"},
+            },
+        }
+    ).encode()
+    midpoint = len(body) // 2
     downstream, sent = await _exercise_middleware(
+        max_request_bytes=1024,
+        headers=[(b"mcp-protocol-version", b"2025-11-25")],
         messages=[
-            {"type": "http.request", "body": b"{", "more_body": True},
-            {"type": "http.request", "body": b"}", "more_body": False},
+            {"type": "http.request", "body": body[:midpoint], "more_body": True},
+            {"type": "http.request", "body": body[midpoint:], "more_body": False},
         ],
     )
 
     assert downstream.calls == 1
-    assert downstream.received == [{"type": "http.request", "body": b"{}"}]
+    assert downstream.received == [{"type": "http.request", "body": body}]
     assert sent[0]["status"] == 200
 
 
@@ -365,6 +380,7 @@ async def test_empty_chunk_count_is_bounded() -> None:
 @pytest.mark.anyio
 async def test_invalid_json_is_replayed_to_framework_validation() -> None:
     downstream, sent = await _exercise_middleware(
+        headers=[(b"mcp-protocol-version", b"2026-07-28")],
         messages=[{"type": "http.request", "body": b"{"}],
     )
 
@@ -383,7 +399,11 @@ async def test_legacy_initialize_is_forwarded_without_binnacle_session_storage()
             "jsonrpc": "2.0",
             "id": 1,
             "method": "initialize",
-            "params": {"protocolVersion": "2025-11-25"},
+            "params": {
+                "protocolVersion": "2025-11-25",
+                "capabilities": {},
+                "clientInfo": {"name": "binnacle-test", "version": "1"},
+            },
         }
     ).encode()
     middleware = RequestBodyLimitMiddleware(downstream, max_request_bytes=1024)
@@ -397,7 +417,12 @@ async def test_legacy_initialize_is_forwarded_without_binnacle_session_storage()
         sent.append(message)
 
     await middleware(
-        {"type": "http", "method": "POST", "path": "/mcp", "headers": []},
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/mcp",
+            "headers": [(b"mcp-protocol-version", b"2025-11-25")],
+        },
         receive,
         send,
     )

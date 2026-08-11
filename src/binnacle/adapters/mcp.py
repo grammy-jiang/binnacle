@@ -33,9 +33,12 @@ from mcp.types import (
     PROTOCOL_VERSION_META_KEY,
     UNSUPPORTED_PROTOCOL_VERSION,
     CallToolResult,
+    InitializeRequest,
+    JSONRPCRequest,
     TextContent,
     ToolAnnotations,
 )
+from pydantic import ValidationError
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
@@ -305,11 +308,13 @@ class RequestBodyLimitMiddleware:
 
     @staticmethod
     def _legacy_initialize_revision(parsed: object) -> str | None:
-        if not isinstance(parsed, Mapping) or parsed.get("method") != "initialize":
+        try:
+            JSONRPCRequest.model_validate(parsed)
+            initialize = InitializeRequest.model_validate(parsed)
+        except ValidationError:
             return None
-        params = parsed.get("params")
-        requested = params.get("protocolVersion") if isinstance(params, Mapping) else None
-        return requested if isinstance(requested, str) and requested in LEGACY_REVISIONS else None
+        requested = initialize.params.protocol_version
+        return requested if requested in LEGACY_REVISIONS else None
 
     def _unwrap_legacy_session(
         self,
@@ -332,11 +337,17 @@ class RequestBodyLimitMiddleware:
             and name.lower() == MCP_SESSION_ID_HEADER.encode("ascii")
         ]
         if not session_values:
-            if header_version in LEGACY_REVISIONS and not allow_missing:
+            if not allow_missing and header_version in LEGACY_REVISIONS:
                 return None, (
                     -32020,
                     "protocol_header_mismatch",
                     "The legacy transport request requires a bound Mcp-Session-Id.",
+                )
+            if not allow_missing and header_version is None:
+                return None, (
+                    -32020,
+                    "protocol_header_mismatch",
+                    "The sessionless request is not a validated legacy initialize.",
                 )
             return None, None
         if len(session_values) != 1:
