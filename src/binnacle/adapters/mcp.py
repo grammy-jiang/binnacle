@@ -143,6 +143,9 @@ class ServerConfiguration(Protocol):
     def max_request_bytes(self) -> int: ...
 
     @property
+    def session_idle_timeout_seconds(self) -> float: ...
+
+    @property
     def graceful_shutdown_seconds(self) -> float: ...
 
 
@@ -966,13 +969,24 @@ def create_http_app(
     application: BinnacleApplication,
     *,
     max_request_bytes: int = 1_048_576,
+    session_idle_timeout_seconds: float = 300.0,
 ) -> ASGIApp:
-    """Return FastMCP's native stateless Streamable HTTP application at ``/mcp``."""
+    """Return FastMCP's revision-aware Streamable HTTP application at ``/mcp``."""
+
+    if session_idle_timeout_seconds <= 0:
+        raise ValueError("session_idle_timeout_seconds must be positive")
 
     server = create_mcp_server(application)
     # The SDK routes 2026-era requests to its sessionless modern path while
     # retaining negotiated sessions for the three reviewed legacy revisions.
-    app = cast(ASGIApp, server.http_app(path="/mcp", stateless_http=False))
+    app = cast(
+        ASGIApp,
+        server.http_app(
+            path="/mcp",
+            stateless_http=False,
+            session_idle_timeout=session_idle_timeout_seconds,
+        ),
+    )
     return RequestBodyLimitMiddleware(app, max_request_bytes=max_request_bytes)
 
 
@@ -992,6 +1006,7 @@ def run_http_server(
         create_http_app(
             application,
             max_request_bytes=settings.max_request_bytes,
+            session_idle_timeout_seconds=settings.session_idle_timeout_seconds,
         ),
         host=settings.host,
         port=settings.port,

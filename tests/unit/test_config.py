@@ -15,6 +15,7 @@ def test_default_settings_are_development_loopback() -> None:
     assert settings.server.host == "127.0.0.1"
     assert settings.server.workers == 1
     assert settings.server.max_request_bytes == 1_048_576
+    assert settings.server.session_idle_timeout_seconds == 300.0
     assert settings.server.graceful_shutdown_seconds == 10.0
     assert settings.server.filesystem_stat_timeout_seconds == 2.0
 
@@ -121,6 +122,8 @@ def test_invalid_port_is_rejected(port: int) -> None:
     [
         ("max_request_bytes", 65_535),
         ("max_request_bytes", 4_194_305),
+        ("session_idle_timeout_seconds", 0),
+        ("session_idle_timeout_seconds", 1_801),
         ("graceful_shutdown_seconds", 0),
         ("graceful_shutdown_seconds", 61),
         ("filesystem_stat_timeout_seconds", 0),
@@ -137,6 +140,8 @@ def test_phase2_server_bounds_fail_closed(field: str, value: int) -> None:
     [
         ("max_request_bytes", 65_536),
         ("max_request_bytes", 4_194_304),
+        ("session_idle_timeout_seconds", 0.001),
+        ("session_idle_timeout_seconds", 1_800),
         ("graceful_shutdown_seconds", 0.001),
         ("graceful_shutdown_seconds", 60),
         ("filesystem_stat_timeout_seconds", 0.001),

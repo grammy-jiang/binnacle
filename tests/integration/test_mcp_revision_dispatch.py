@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+import anyio
 import httpx2
 import pytest
 from tests.support import running_raw_http_client
@@ -522,6 +523,33 @@ async def test_sessionless_legacy_transport_is_rejected_before_sdk_allocation(
         assert _jsonrpc(response)["error"]["message"] == (
             "The legacy transport request requires a bound Mcp-Session-Id."
         )
+
+
+@pytest.mark.anyio
+async def test_idle_legacy_session_expires_and_releases_sdk_transport(
+    phase2_application: BinnacleApplication,
+) -> None:
+    revision = EXPECTED_REVISIONS[1]
+    async with running_raw_http_client(
+        phase2_application,
+        session_idle_timeout_seconds=0.05,
+    ) as client:
+        expired_session_id = await _legacy_session(client, revision)
+        await anyio.sleep(0.2)
+        expired = await client.post(
+            "/mcp",
+            json={"jsonrpc": "2.0", "id": 8, "method": "tools/list", "params": {}},
+            headers={
+                "accept": ACCEPT,
+                "MCP-Protocol-Version": revision,
+                "Mcp-Session-Id": expired_session_id,
+            },
+        )
+        replacement_session_id = await _legacy_session(client, revision)
+
+    assert expired.status_code == 404
+    assert _jsonrpc(expired)["error"]["message"] == "Session not found"
+    assert replacement_session_id != expired_session_id
 
 
 @pytest.mark.anyio

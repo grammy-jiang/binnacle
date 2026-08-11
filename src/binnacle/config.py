@@ -1,4 +1,4 @@
-"""Immutable Phase 1 settings and source precedence."""
+"""Immutable Binnacle settings and source precedence."""
 
 from __future__ import annotations
 
@@ -26,6 +26,7 @@ class ServerSettings(BaseModel):
     port: int = Field(default=8000, ge=1, le=65535)
     workers: Literal[1] = 1
     max_request_bytes: int = Field(default=1_048_576, ge=65_536, le=4_194_304)
+    session_idle_timeout_seconds: float = Field(default=300.0, gt=0, le=1_800)
     graceful_shutdown_seconds: float = Field(default=10.0, gt=0, le=60)
     filesystem_stat_timeout_seconds: float = Field(default=2.0, gt=0, le=10)
 

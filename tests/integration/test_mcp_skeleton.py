@@ -24,6 +24,13 @@ def test_http_app_can_be_constructed(
     assert callable(http_app)
 
 
+def test_http_app_rejects_nonpositive_session_idle_timeout(
+    phase2_application: BinnacleApplication,
+) -> None:
+    with pytest.raises(ValueError, match="session_idle_timeout_seconds"):
+        create_http_app(phase2_application, session_idle_timeout_seconds=0)
+
+
 @pytest.mark.anyio
 async def test_phase2_registers_exact_compatibility_core(
     phase2_application: BinnacleApplication,
@@ -65,6 +72,43 @@ def test_http_runner_preserves_configured_logging(
     assert observed["timeout_graceful_shutdown"] == 2
 
 
+def test_http_runner_forwards_session_idle_timeout(
+    phase2_application: BinnacleApplication,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observed: dict[str, object] = {}
+
+    def fake_create_http_app(
+        application: BinnacleApplication,
+        *,
+        max_request_bytes: int,
+        session_idle_timeout_seconds: float,
+    ) -> object:
+        observed.update(
+            application=application,
+            max_request_bytes=max_request_bytes,
+            session_idle_timeout_seconds=session_idle_timeout_seconds,
+        )
+        return object()
+
+    monkeypatch.setattr("binnacle.adapters.mcp.create_http_app", fake_create_http_app)
+    monkeypatch.setattr("binnacle.adapters.mcp.uvicorn.run", lambda *args, **kwargs: None)
+
+    from binnacle.adapters.mcp import run_http_server
+    from binnacle.config import ServerSettings
+
+    run_http_server(
+        application=phase2_application,
+        settings=ServerSettings(session_idle_timeout_seconds=42.0),
+    )
+
+    assert observed == {
+        "application": phase2_application,
+        "max_request_bytes": 1_048_576,
+        "session_idle_timeout_seconds": 42.0,
+    }
+
+
 def test_http_runner_rejects_multiple_workers(
     phase2_application: BinnacleApplication,
 ) -> None:
@@ -84,6 +128,10 @@ def test_http_runner_rejects_multiple_workers(
         @property
         def max_request_bytes(self) -> int:
             return 1_048_576
+
+        @property
+        def session_idle_timeout_seconds(self) -> float:
+            return 300.0
 
         @property
         def graceful_shutdown_seconds(self) -> float:

@@ -58,10 +58,15 @@ async def running_raw_http_client(
     application: BinnacleApplication,
     *,
     max_request_bytes: int = 1_048_576,
+    session_idle_timeout_seconds: float = 300.0,
 ) -> AsyncIterator[httpx2.AsyncClient]:
     """Connect a raw HTTP client while managing the FastMCP ASGI lifespan."""
 
-    app = create_http_app(application, max_request_bytes=max_request_bytes)
+    app = create_http_app(
+        application,
+        max_request_bytes=max_request_bytes,
+        session_idle_timeout_seconds=session_idle_timeout_seconds,
+    )
     if not isinstance(app, RequestBodyLimitMiddleware):
         raise TypeError("expected bounded MCP ASGI application")
     inner_app = cast(Any, app.app)

@@ -1105,6 +1105,11 @@ A bounded body that triggers a JSON parser ``ValueError`` or ``RecursionError``
 as HTTP 400 ``invalid_request_body`` before framework dispatch. It must not escape the
 ASGI middleware as an unhandled server error.
 
+FastMCP's public ``session_idle_timeout`` is always configured for the stateful legacy
+transport. The default is 300 seconds and the accepted setting is finite and no greater
+than 1,800 seconds. The SDK pushes the deadline forward on each request, then terminates
+and removes an inactive transport itself. Binnacle does not add a shadow session table.
+
 22. HTTP/ASGI surface
 ---------------------
 
@@ -1193,6 +1198,7 @@ Extend ``ServerSettings`` only with fields Phase 2 genuinely uses:
        port: int = Field(default=8000, ge=1, le=65535)
        workers: Literal[1] = 1
        max_request_bytes: int = Field(default=1_048_576, ge=65_536, le=4_194_304)
+       session_idle_timeout_seconds: float = Field(default=300.0, gt=0, le=1_800)
        graceful_shutdown_seconds: float = Field(default=10.0, gt=0, le=60)
        filesystem_stat_timeout_seconds: float = Field(default=2.0, gt=0, le=10)
 
@@ -1413,6 +1419,7 @@ Negative tests include:
 * missing version where not permitted;
 * modern request carrying legacy session state;
 * legacy post-initialization wrong version header;
+* expired legacy session after the configured SDK idle lifetime;
 * target ``Mcp-Method`` mismatch;
 * target ``Mcp-Name`` mismatch for Tool call;
 * cross-era result-shape contamination;
@@ -1533,6 +1540,7 @@ Phase 2 implementation must preserve all of these invariants:
 #. invalid registry/schema/binding integrity aborts startup instead of serving a degraded
    untrusted MCP surface;
 #. a malformed/oversized target-era body cannot force unbounded middleware buffering;
+#. every SDK-owned legacy session has a finite configured idle lifetime;
 #. shutdown cannot leave a Phase 2 managed consequential effect because none exists.
 
 36. Quality and CI changes
