@@ -99,18 +99,17 @@ Once the exact ticket is durably accepted, later ticket expiry, application repl
 or development-session end cannot erase the accepted work. Recovery resumes/reconciles
 the accepted privileged operation to a truthful terminal/uncertain state.
 
-2.7 Restart owns the shared workspace exclusion
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+2.7 Restart owns the workspace change boundary
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Restart preflight is advisory evidence, not concurrency control. Every simple or controlled
-Binnacle restart that depends on the development workspace/runtime acquires the exact
-Phase 6 exclusive ``WorkspaceAccessGate.CHANGE`` coordination seam and its durable
-workspace mutation fence after policy and before privileged dispatch. The durable fence is
-retained through broker acceptance, application disappearance, candidate/LKG selection,
-rollback/restricted recovery and final audit/operation closure. A replacement application
-reconstructs workspace change admission closed from that retained fence before Phase 7/8
-workspace-changing work may start. Point-in-time outstanding-work inspection alone never
-proves the checkout or runtime remains stable during restart.
+A point-in-time restart preflight is not exclusion. Every simple or controlled restart of
+a service whose runtime is sourced from the registered development workspace acquires the
+Phase 6 exclusive ``WorkspaceAccessGate.CHANGE`` guard and durable workspace mutation
+fence during post-policy admission. The same operation retains durable fence ownership
+through broker acceptance, service disappearance, candidate/LKG selection, recovery,
+post-effect audit and truthful terminal closure. Application replacement does not release
+or steal it; the replacement starts workspace access recovery-closed and reconciles the
+exact retained fence owner before any new content reader or changer may enter.
 
 3. Source-of-truth composition
 ------------------------------
@@ -119,9 +118,8 @@ Phase 9 consumes earlier foundations:
 
 * Phase 4 owns caller-binding-first idempotency, lifecycle, audit, final OP-BOUNDARY,
   audit obligations, effect knowledge and retained retry;
-* Phase 6 owns development-session authority and the shared workspace access/change
-  coordination seam; Phase 9 restart must consume the same exclusive ``CHANGE`` guard and
-  durable mutation fence rather than creating a restart-only parallel lock;
+* Phase 6 owns development-session authority, the exclusive workspace ``CHANGE`` guard
+  and durable mutation fence consumed by service/self-restart;
 * Phase 7 owns durable command/process truth and outstanding-operation inspection;
 * Phase 8 owns exact candidate Git revision, signed commit/push semantics and Git process
   authority.
@@ -136,6 +134,8 @@ Names remain proposals until operation contracts, schemas, information classes,
 confirmation/authority classifications and manifest entries are reviewed and promoted.
 The working Phase 9 set is:
 
+* ``privileged_prepare`` -- one no-effect preparation Tool with a closed action
+  discriminator, never arbitrary root vocabulary;
 * ``package_inspect``;
 * ``package_install``;
 * ``binnacle_service_inspect``;
@@ -154,6 +154,69 @@ Read-only inspection operations create no consequential Phase 4 effect unless a 
 contract explicitly requires one. Package installation, service restart, controlled
 self-restart and any future reboot are consequential operations.
 
+The initial contract classification is frozen for implementation review:
+
+.. list-table:: Initial Phase 9 contract classification
+   :header-rows: 1
+
+   * - Tool
+     - Maximum effect
+     - Information class
+     - Host class
+   * - ``privileged_prepare``
+     - no-effect preparation
+     - ``normal-result``
+     - HC0
+   * - ``package_inspect``
+     - observation
+     - ``normal-result``
+     - HC0
+   * - ``binnacle_service_inspect``
+     - observation
+     - ``normal-result``
+     - HC0
+   * - ``restart_preflight``
+     - observation
+     - ``normal-result``
+     - HC0
+   * - ``binnacle_runtime_inspect``
+     - observation
+     - ``normal-result``
+     - HC0
+   * - ``package_install``
+     - privileged change
+     - ``restricted-result``
+     - HC2
+   * - ``binnacle_service_restart``
+     - self-management
+     - ``restricted-result``
+     - HC2
+   * - ``binnacle_restart``
+     - self-management
+     - ``restricted-result``
+     - HC2
+   * - ``host_reboot`` (unpromoted)
+     - destructive privilege
+     - ``restricted-result``
+     - HC2
+
+Inspection/preflight results remain ``normal-result`` only by returning bounded sanitized
+owner-safe facts: no other-controller identity, raw operation payload, protected path,
+credential, configuration value or unrestricted journal output. A future richer result is
+``restricted-result`` and must receive a separately reviewed host class.
+
+All HC2 execute Tools require an exact preceding ``privileged_prepare`` result with
+``prepared_operation_id``, single-use execution nonce, expiry, normalized action/target,
+maximum effect, exact current-state binding, cancellation/recovery disclosure and the
+additional HC2 privilege/destructive/credential/audit fields required by
+``spec/policy/host-confirmation-classes.yaml``. Preparation grants no authority and runs no
+package-manager/systemd/runtime-selector effect. Execution must match and consume the
+prepared record exactly, then revalidate current state. Package preparation includes the
+complete ``PackageTransactionPlan``; self-restart preparation includes the exact tested
+candidate and complete LKG/runtime-slot evidence. Direct execute, cached metadata, batch,
+MCP Task, reconnect, another conversation and argument/device substitution cannot bypass
+the prepare-confirm-execute route.
+
 5. Protected configuration profiles
 ------------------------------------
 
@@ -168,6 +231,7 @@ Bind at least:
 * allowed semantic action set;
 * frame/deadline/rate ceilings;
 * broker evidence/checkpoint roots and mount/ownership identities;
+* exact root-owned broker executable/runtime identity and broker migration head;
 * ticket verification key/reference and algorithm profile;
 * service hardening digest;
 * candidate-Pi capability-evidence digest.
@@ -180,12 +244,15 @@ Bind at least:
 * exact development service unit name;
 * exact development workspace/source identity;
 * exact runtime-selector/recovery root;
+* exact immutable-slot root/current-selector identity, layout generation and byte/inode/
+  retained-slot ceilings;
 * service user/group;
-* protected configuration/policy/manifest identities and the exact protected material
-  store/selector used to restore them;
-* exact service-unit/drop-in/runtime-selector composition identity and protected
-  restorable material reference;
+* protected configuration/policy/manifest identities;
 * expected executable/entry point;
+* exact effective stable unit/drop-in digest and application/executor/Git-credential/
+  privileged-broker migration heads;
+* exact deployed Phase 7 executor, Git-credential broker and privileged-broker build,
+  protocol/profile, unit/config and readiness identities;
 * readiness contract and restart deadline;
 * allowed service lifecycle actions;
 * checkpoint/LKG storage identity;
@@ -237,9 +304,16 @@ canonical structure with at least:
 * ticket ID and cryptographic integrity proof.
 
 Operation-specific tickets add exact package transaction, service, candidate/LKG or
-reboot facts. Restart tickets additionally bind the exact Phase 6 workspace-change fence
-identity/generation and candidate/LKG runtime-control-bundle identities. Ticket expiry
-blocks first acceptance only. A retained accepted ticket remains recoverable after expiry.
+reboot facts. Ticket expiry blocks first acceptance only. A retained accepted ticket
+remains recoverable after expiry.
+
+Exactly one immutable privileged ticket binding exists for each Phase 4 operation. During
+post-policy admission and before Phase 4 ``call_start``, the application durably binds the
+operation to one ``ticket_id``, ticket digest, nonce, semantic action, target/profile and
+broker evidence generation. Every retained retry, replacement application and reconciliation
+path reuses that ticket; a second ticket ID/digest/nonce for the same operation is a conflict,
+not a replacement attempt. Ticket ID and nonce are also globally unique so one ticket cannot
+be rebound to another operation.
 
 7. Root broker process and IPC
 ------------------------------
@@ -290,11 +364,13 @@ The broker store records only privileged replay/recovery evidence, including:
 
 It never stores raw controller, SSH or signing credentials.
 
-8.1 Ticket-scoped ``BrokerAcceptanceGate``
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+8.1 Operation-binding-scoped ``BrokerAcceptanceGate``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Every exact ``(operation_id, ticket_id, ticket_sha256)`` owns one broker acceptance gate
-(or an equivalent serialized FULL transaction boundary). The gate is shared by:
+Every exact Phase 4 ``operation_id`` owns one broker acceptance gate (or an equivalent
+serialized FULL transaction boundary). The first retained broker binding stores the one
+expected ticket ID/digest/nonce/action/target/generation as compared data beneath that gate;
+ticket digest is not part of an isolating lock key. The gate is shared by:
 
 * ``accept_once``;
 * ``seal_no_accept``;
@@ -309,7 +385,8 @@ ownership ends after the durable acceptance/seal decision is committed.
 Under the gate and one FULL transaction:
 
 #. verify peer-independent ticket integrity/action/target/replay identity;
-#. reject a conflicting ticket digest/semantic fingerprint;
+#. create/find the operation's one immutable ticket binding and reject any different
+   ticket ID, digest, nonce, semantic action, target or evidence generation;
 #. if a matching no-accept tombstone exists, return retained ``no_accept_proven`` and
    create no accepted row;
 #. if the accepted row exists, return retained acceptance;
@@ -337,6 +414,9 @@ Under the same gate and one FULL transaction:
 Every queued, delayed or replayed ``accept_once`` checks this tombstone first and can
 never accept after the seal wins. An empty broker store, ticket expiry or lost
 application connection outside this gate is not no-effect proof.
+
+A seal for the operation binding also rejects every alternate-ticket attempt for that
+operation. It cannot be bypassed by allocating a different ticket ID or digest.
 
 8.4 Post-accept recovery
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -369,7 +449,8 @@ revalidates ticket-bound root-side current state. It then:
 #. reconciles operation-specific post-state;
 #. returns bounded evidence.
 
-A broker crash never causes replay by allocating a new ticket or new subeffect identity.
+A broker or application crash never causes replay by allocating a new ticket or new
+subeffect identity.
 
 10. Read-only package inspection and transaction preparation
 ------------------------------------------------------------
@@ -462,6 +543,13 @@ Terminal classification is conservative:
 Post-effect verification checks the whole prepared closure and flags any unexpected
 package-manager state change.
 
+The protected package profile also binds the broker/current-LKG operating-system runtime
+dependency closure. A prepared transaction that removes, upgrades or otherwise changes a
+member of that closure is unsupported by the initial profile; installing an unrelated
+development prerequisite may proceed without invalidating the LKG. A future transaction
+that changes runtime dependencies requires an offline complete-slot/LKG requalification
+contract and cannot be smuggled through normal ``package_install``.
+
 12. Service inspection
 ----------------------
 
@@ -483,15 +571,20 @@ coordination. It reports bounded facts for:
 * Git/credential/privileged effects;
 * current runtime identity;
 * current LKG runtime slot/checkpoint;
+* exact candidate verification-evidence freshness and tested-state match;
+* current application/executor/credential-broker/privileged-broker schema heads;
+* current deployed peer-service build/protocol/profile set and candidate compatibility;
 * predicted service-restart impact;
 * blocking or cleanup/cancel reasons.
 
 A source-changing Phase 7/8 operation normally blocks controlled restart/rollback of the
 same Binnacle source/runtime unless exact non-overlap is proven. Package mutation and an
-unresolved prior restart also block a new restart. This read-only result is advisory: the
-consequential restart must subsequently acquire the shared Phase 6 ``CHANGE`` guard and
-durable workspace mutation fence and then revalidate the relevant preflight/current-state
-facts while that exclusion is owned.
+unresolved prior restart also block a new restart.
+
+These are advisory point-in-time facts for presentation and policy. They do not authorize
+dispatch or close the race with a new Phase 6/7/8 changer. Consequential restart admission
+must still acquire exclusive ``WorkspaceAccessGate.CHANGE`` and the free durable workspace
+mutation fence, then re-prove the preflight predicates under the normal Phase 6 lock order.
 
 14. Runtime identity
 --------------------
@@ -509,9 +602,46 @@ A runtime identity binds at least:
 * configuration, policy and promoted contract/manifest digests;
 * service profile/version;
 * device ID/epoch;
-* readiness generation.
+* readiness generation;
+* application, executor, Git-credential-broker and privileged-broker migration heads;
+* protected runtime-layout/service-definition generation;
+* exact deployed-peer set: Phase 7 executor, Git-credential broker and privileged broker
+  build/artifact, protocol/profile, config/unit and readiness generations.
 
 No raw environment variable or credential value is returned.
+
+14.1 Candidate build/test provenance
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Controlled self-restart requires one retained ``CandidateVerificationEvidence`` produced
+by an isolated, terminal-success Phase 7 verification workflow before preparation. It
+binds at least:
+
+* exact Phase 8 repository/worktree identity, branch, commit and source-tree digest;
+* candidate runtime-slot/source/environment/lock/config/policy/manifest/service-profile
+  identities and all migration heads;
+* exact installed peer-service set and every candidate client protocol compatibility range;
+* protected peer-owned path/module digest map and proof the candidate changes no separately
+  deployed peer/server/protocol artifact;
+* exact protected verification-plan/profile version and canonical command-plan digest;
+* Phase 7 parent operation plus deterministic member/execution IDs and ticket/evidence
+  generations;
+* formatter/linter/type/test/build tool and dependency identities;
+* every required member's exit/result classification and bounded output/artifact digests;
+* trusted completion time, expiry and evidence digest.
+
+The verification profile is protected configuration, not caller-supplied arbitrary argv.
+Every required member must have terminal verified success; cancelled, truncated, skipped,
+stale or uncertain work is not qualifying evidence. ``privileged_prepare``, the caller
+fingerprint, restart checkpoint, privileged ticket, Phase 4 final OP-BOUNDARY and broker
+root boundary all bind the same verification-evidence digest. After the restart operation
+acquires the Phase 6 ``CHANGE`` guard, it proves current source/tree/environment/config/
+policy/manifest/schema state still equals the tested state. Any mismatch or expired/stale
+evidence yields zero service-stop effect and requires a new verification run.
+
+A simple restart with no source/environment/config/schema change may reuse the currently
+qualified LKG verification evidence. It cannot use that exception to run a different
+candidate.
 
 15. ``VerifiedRuntimeSlot`` and last-known-good recovery
 -------------------------------------------------------
@@ -532,32 +662,35 @@ A ``VerifiedRuntimeSlot`` binds:
 * isolated environment root/artifact identity;
 * exact lockfile/dependency-manifest digest;
 * installed distribution/package inventory digest where used for verification;
-* exact ``RuntimeControlBundle`` ID/version and immutable/protected bundle-root identity;
-* independently restorable configuration, policy, promoted contract/manifest and exact
-  service-unit/drop-in/runtime-selector material identities, plus their content digests;
-* service-profile digest and the exact selector needed to activate this control bundle;
+* immutable/restorable protected configuration, policy, promoted manifest and exact
+  effective service-definition material, including their content digests, ownership,
+  modes, labels where relevant, selected drop-ins and service-profile identity;
+* application, executor, Git-credential-broker and privileged-broker migration heads plus
+  protected runtime-layout generation;
+* qualifying ``CandidateVerificationEvidence`` identity and evidence digest;
+* exact compatible deployed-peer set and peer-issued compatibility receipt digests;
 * readiness evidence from the run that qualified the slot;
 * creation/promotion evidence generation and retention state.
 
 The LKG slot is stored outside the normal editable development checkout or otherwise
 protected so ordinary candidate editing/dependency synchronization cannot mutate it.
-The exact materialization mechanism is evidence-gated: a protected worktree/runtime tree,
-immutable copy/artifact or equivalent may be selected only after candidate-Pi durability,
-disk and startup behavior is verified.
+Its protected configuration/policy/manifest/service material is stored as exact sealed
+slot artifacts or an equivalently immutable content-addressed snapshot, not as digests
+without restorable bytes. Those artifacts are never returned through MCP/broker results;
+any referenced secret remains root-protected and non-exportable under the selected
+profile. Runtime activation selects/restores the complete slot as one verified generation
+so LKG source cannot run with candidate environment, configuration, policy, manifest or
+unit/drop-in material.
 
-The control material is not digest-only recovery metadata. The protected slot must contain
-immutable/restorable bytes or an equivalently protected independently selectable artifact
-for the exact configuration, policy, promoted contract/manifest and service definition
-needed to start that LKG runtime. If a protected file contains a reusable secret, the slot
-stores only the protected secret reference/selector required by the service profile, not a
-new plaintext secret copy; restoration must prove the reference still resolves to the
-same allowed authority. Source, environment and ``RuntimeControlBundle`` form one runtime
-slot and are selected/restored as one exact unit. A profile that cannot independently
-restore the complete control bundle must reject a candidate that changes any of those
-control identities before service stop.
+Section 34 freezes the first implementation algorithm: an unprivileged verified build,
+root-owned immutable complete slot, same-filesystem atomic selector and stable service-unit
+interface. Candidate-Pi evidence must prove that algorithm's durability, disk and startup
+behavior before promotion; lack of evidence disables it rather than reverting to the
+mutable checkout. An alternative protected worktree/artifact mechanism requires an explicit
+plan amendment with equivalent invariants.
 
-15.2 Candidate environment and control-material rule
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+15.2 Candidate environment rule
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Preparing a candidate may mutate the normal development ``.venv``. That mutable
 environment is never treated as the LKG environment merely because its digest was once
@@ -568,22 +701,52 @@ Controlled restart promotion requires one of two reviewed profiles:
 #. **independent-LKG profile** -- a complete protected LKG runtime slot already exists and
    the service/recovery adapter can select it without overwriting unrecognized editable
    workspace state; or
-#. **no-environment-or-control-change profile** -- until an independent complete LKG
-   slot mechanism is proven, controlled restart rejects any candidate whose interpreter /
-   lock / environment / configuration / policy / manifest / service-definition identity
-   differs from the current verified LKG.
+#. **no-runtime-material-change profile** -- until an independent complete LKG slot
+   mechanism is proven, controlled restart rejects any candidate whose interpreter/lock/
+   environment/configuration/policy/manifest/effective-service identity differs from the
+   current verified LKG.
 
 The implementation must never start restored LKG source with an unproven candidate-mutated
-shared environment or candidate control material.
+shared environment, configuration, policy, manifest or effective service definition.
+
+The initial Bootstrap profile is also **no-schema-change**. A candidate whose expected
+application, executor, Git-credential-broker or privileged-broker migration head differs
+from the running verified LKG is rejected before service stop. Runtime self-restart never
+opportunistically migrates or downgrades any database. Schema/control-plane layout changes
+use the explicit offline owner procedure in section 34, which must establish a newly
+compatible verified LKG before privileged restart is re-enabled. A later schema-changing
+self-management profile requires a separately reviewed database snapshot/migration/rollback
+contract and is unsupported by this plan.
+
+It is additionally **no-peer-service-change**. Phase 9 controlled restart replaces only
+the application runtime slot; it does not replace or restart the independently supervised
+Phase 7 executor, Git-credential broker or root privileged broker. The protected profile
+maps their owned source/protocol/unit/config paths and installed artifact digests. A
+candidate changing any mapped peer artifact, requiring another peer build/protocol/profile,
+or lacking compatibility with the exact deployed set is rejected before service stop.
+
+Before candidate success, each deployed peer supplies a bounded peer-generated
+``PeerCompatibilityReceipt`` binding peer build/protocol/profile, app runtime instance,
+negotiated protocol, challenge generation and readiness. The broker verifies those receipts
+against protected peer identities and exact peer-authenticated UDS/receipt integrity; a
+candidate self-assertion or matching migration head is insufficient. LKG eligibility also
+binds the same peer set. If a peer changes out of band,
+automatic candidate start/rollback is unavailable until the offline multi-service procedure
+qualifies a compatible complete LKG.
 
 15.3 LKG promotion
 ~~~~~~~~~~~~~~~~~~
 
 A candidate becomes the new LKG only after exact runtime identity/readiness and required
-audit closure succeed and its protected source+environment+``RuntimeControlBundle`` slot
-is durably materialized/verified. The previous complete slot is retained until new-slot
-promotion is durable. A candidate cannot destroy or mutate the only verified recovery
-source, environment or control bundle before it has qualified.
+audit closure succeed and its complete protected source/environment/configuration/policy/
+manifest/service-definition runtime slot is durably materialized/verified. The previous
+complete LKG is retained until new-slot promotion is durable.
+A candidate cannot destroy the only verified recovery slot before it has qualified.
+
+The one bootstrap exception is the explicit offline owner initialization in section 34.4,
+which qualifies the already reviewed/current runtime as the first LKG using the same full
+build/test/runtime/readiness and durability predicates before any Phase 9 execute Tool is
+enabled. It is not a model-visible shortcut and cannot overwrite an existing LKG.
 
 16. Controlled restart checkpoint
 ---------------------------------
@@ -593,12 +756,15 @@ The broker-owned ``RestartCheckpoint`` is fsynced before service stop and binds:
 * checkpoint ID/version and Phase 4 operation/ticket identity;
 * exact development service;
 * candidate source Git OID/branch/dirty expectation;
-* candidate interpreter/environment/lock/config/policy/manifest/service-composition
-  identities and exact candidate ``RuntimeControlBundle`` reference;
+* candidate interpreter/environment/lock/config/policy/manifest identities;
+* exact tested candidate ``CandidateVerificationEvidence`` reference/digest;
+* exact application/executor/Git-credential/privileged-broker migration heads and runtime-
+  layout generation;
+* exact installed peer-service build/protocol/profile set and expected compatibility-
+  receipt identities;
 * exact candidate runtime slot or candidate-runtime selector inputs;
-* exact retained LKG ``VerifiedRuntimeSlot`` ID, protected source/environment/control
-  bundle references and all protected identity digests;
-* exact Phase 6 workspace-change fence ID/owner/generation retained for this restart;
+* exact retained complete LKG ``VerifiedRuntimeSlot`` ID, sealed-artifact identities and
+  all protected identity digests;
 * pre-restart runtime identity;
 * restart/readiness deadline;
 * allowed rollback/runtime-selector action;
@@ -612,23 +778,21 @@ service stop.
 
 The broker is not a generic Git client. Normal candidate Git preparation is Phase 8.
 Recovery uses a narrowly structured ``SelfRecoveryAdapter`` that can select/restore only
-the checkpoint's candidate or exact retained LKG runtime slot.
+the checkpoint's candidate or exact retained complete LKG runtime slot.
 
 Preferred recovery avoids destructive reset of the editable development workspace. A
 protected service runtime selector or equivalent exact mechanism points the service at the
-candidate/LKG slot while preserving unrelated/unrecognized editable state. The selected
-slot includes source, environment and the exact protected ``RuntimeControlBundle``. If a
-candidate implementation instead requires restoration into shared source, environment or
-control-material locations, that mechanism must prove exact old-state/CAS semantics and
-refuse intervening state.
+candidate/LKG slot while preserving unrelated/unrecognized editable state. If a candidate
+implementation instead requires source/environment restoration into a shared location,
+that mechanism must prove exact old-state/CAS semantics and refuse intervening state.
 
 Required invariants:
 
 * target is exactly the checkpoint slot;
-* no arbitrary path/revision/environment/config/policy/manifest/service definition is
-  accepted;
-* source, environment and the complete runtime control bundle are selected/restored and
-  verified as one checkpoint-bound runtime before service start;
+* no arbitrary path/revision/environment is accepted;
+* source, environment, protected configuration, policy, manifest and effective service
+  definition are selected/restored as one slot generation and verified before service
+  start;
 * unrecognized intervening state is never overwritten;
 * ambiguous restoration/selection enters restricted recovery;
 * candidate-Pi evidence chooses the concrete mechanism before promotion.
@@ -668,26 +832,36 @@ Application flow:
 #. retained caller-idempotency lookup;
 #. required received audit;
 #. policy;
-#. advisory restart preflight;
-#. acquire exclusive Phase 6 ``WorkspaceAccessGate.CHANGE`` and, only when the workspace
-   mutation fence is free, publish the exact durable restart-owned workspace change fence;
-#. while that exclusion is owned, revalidate candidate/protected LKG slot eligibility and
-   the outstanding Phase 7/8/workspace facts that made preflight acceptable;
-#. post-policy one-restart reservation bound to the exact workspace fence;
+#. restart preflight;
+#. candidate and protected LKG slot eligibility, exact fresh terminal-success build/test
+   evidence, and no-schema-change compatibility;
+#. acquire exclusive Phase 6 ``WorkspaceAccessGate.CHANGE``;
+#. in the post-policy admission transaction re-prove exact predicates, acquire the free
+   durable workspace mutation fence for this operation and the one-restart reservation;
+#. create/find the operation's one immutable prepared-operation/ticket binding, including
+   exact candidate verification, schema heads, slot and fence generation;
 #. authorised audit;
 #. running/effect intent;
 #. Phase 4 handoff/session/consequential gates;
-#. final controller/device/session/service/candidate/LKG/workspace-fence /
-   outstanding-work/audit/recovery OP-BOUNDARY;
+#. final controller/device/session/service/candidate/LKG/outstanding-work/audit/recovery
+   OP-BOUNDARY;
 #. durable audit obligation;
 #. privileged ticket dispatch.
 
-Broker flow first wins accept-or-seal. If accepted, it durably creates/verifies
-``checkpoint_ready`` including the protected LKG slot and the exact restart-owned Phase 6
-workspace fence before systemd stop. The application may disappear after stop, but the
-durable fence remains authoritative; a replacement application reconstructs workspace
-change admission closed before exposing Phase 7/8 changers and releases it only after
-truthful restart/recovery/audit closure.
+Broker flow first wins accept-or-seal. If accepted, it durably materializes/verifies the
+complete candidate slot and creates ``checkpoint_ready`` including both candidate and
+protected LKG slot generations before systemd stop.
+
+The lock order is the existing Phase 6 order: ``WorkspaceAccessGate.CHANGE`` -> durable
+workspace fence/restart reservation -> Phase 4 per-operation handoff -> development-
+session authority gate -> process-wide consequential gate. The in-memory access guard is
+held until the current application stops. Durable fence ownership survives that stop and
+remains assigned to the exact Phase 4 restart operation through every broker candidate/
+rollback state, retained application reconciliation, audit-obligation closure and truthful
+terminal release. ``uncertain`` or ``restricted_recovery`` retains the fence. A replacement
+application does not reacquire it as new work: startup remains ``RECOVERY_CLOSED``, loads
+the exact owner/checkpoint/broker generation, reconciles it, and only after durable fence
+release may reopen ``CONTENT_READ`` or ``CHANGE``.
 
 18.2 Candidate lifecycle
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -695,14 +869,22 @@ truthful restart/recovery/audit closure.
 The broker selects/verifies the exact candidate runtime, requests exact service stop/start
 and records each systemd effect receipt. Application disappearance is expected.
 
+The retained Phase 6 fence prevents any new Binnacle-managed Phase 7/8 source/environment
+changer from being admitted while the application is absent. A deployment profile with
+uncoordinated out-of-band writers cannot promote controlled restart unless an independently
+proven runtime-slot mechanism makes those writers unable to mutate either selected slot.
+
 Candidate success requires:
 
 * endpoint/readiness within the deadline;
 * exact candidate Git OID;
 * branch/dirty expectation;
 * source/runtime-slot/environment/lock identities;
-* exact selected ``RuntimeControlBundle`` identity and configuration/policy/manifest /
-  service-composition digests;
+* config/policy/manifest digests;
+* migration heads/runtime-layout generation;
+* exact match to the retained candidate build/test evidence;
+* independently verified peer-generated compatibility receipts for the exact deployed
+  executor, Git-credential broker and privileged broker builds/protocols;
 * device/service identities;
 * absence of disqualifying fail-restricted startup state.
 
@@ -714,10 +896,7 @@ Systemd active with wrong identity is candidate failure.
 Only exact verified ``candidate_ready`` can be reconciled as requested restart success.
 The replacement application closes Phase 4 audit/operation obligations from broker
 evidence. Protected new-LKG slot promotion occurs only after required verification/audit
-closure and complete source+environment+control-bundle materialization; it never destroys
-the previous complete LKG before durable promotion. The restart-owned workspace fence is
-not released merely because the candidate is ready; release waits for operation/audit and
-runtime-slot promotion/retention obligations to reach the reviewed terminal closure.
+closure and never destroys the previous LKG before durable promotion.
 
 19. Failed-candidate rollback
 -----------------------------
@@ -730,10 +909,9 @@ The broker:
 
 #. reaches a service state safe for recovery;
 #. verifies the retained LKG slot is complete and unchanged;
-#. selects/restores exact LKG source, environment **and protected runtime control
-   bundle** through ``SelfRecoveryAdapter`` as one checkpoint-bound recovery target;
-#. verifies the selected service definition/configuration/policy/manifest composition
-   before service start;
+#. atomically selects/restores the exact complete LKG source, environment, protected
+   configuration, policy, manifest and effective service definition through
+   ``SelfRecoveryAdapter``;
 #. records exact recovery receipt;
 #. starts the exact service;
 #. verifies exact LKG runtime identity/readiness;
@@ -745,9 +923,9 @@ Host-visible result says candidate failed and LKG recovery succeeded.
 20. Restricted local recovery
 -----------------------------
 
-Missing/corrupt LKG source/environment/control material, unresolved protected secret
-reference, disk-full, systemd failure, ambiguous selector receipt, package damage,
-filesystem mismatch or power loss may make rollback unverifiable.
+Missing/corrupt LKG source/environment/configuration/policy/manifest/service-definition,
+disk-full, systemd failure, ambiguous selector receipt, package damage, filesystem mismatch
+or power loss may make rollback unverifiable.
 The broker then stops bounded autonomous recovery and enters ``restricted_recovery``.
 
 Root-protected retained evidence includes restart/checkpoint ID, candidate/LKG runtime-slot
@@ -759,16 +937,15 @@ model-generated arbitrary root shell commands.
 --------------------------
 
 ``binnacle_service_restart`` is only for restarting the fixed service when source,
-environment, config and candidate/LKG semantics are unchanged. It still requires advisory
-preflight, acquisition of the same exclusive Phase 6 ``CHANGE`` guard/durable workspace
-mutation fence, and exact post-restart runtime verification before truthful fence release.
-This prevents a Phase 7/8 source changer from being admitted after preflight but before or
-during the service restart.
+environment, config and candidate/LKG semantics are unchanged. It still requires
+preflight, the same exclusive Phase 6 ``CHANGE`` guard/durable mutation fence when the
+service executes from the registered workspace, and exact post-restart runtime
+verification. Its fence remains owned through broker and audit closure just as for
+controlled restart; the smaller semantic effect does not reopen a workspace race.
 
-``binnacle_restart`` is mandatory whenever source/environment/config/policy/manifest /
-service-composition candidate identity changes or rollback semantics may be needed. The
-final current-state verifier prevents a caller from selecting the simple path for a
-candidate-changing restart.
+``binnacle_restart`` is mandatory whenever source/environment/config candidate identity
+changes or rollback semantics may be needed. The final current-state verifier prevents a
+caller from selecting the simple path for a candidate-changing restart.
 
 22. Application/broker restart reconciliation
 ---------------------------------------------
@@ -776,6 +953,12 @@ candidate-changing restart.
 Application startup queries broker acceptance/effect/recovery evidence before new
 privileged work. It reconciles exact operation/ticket/checkpoint/evidence generation,
 runtime identity, Phase 4 effect knowledge, audit obligations and Phase 6/7/8 cleanup.
+
+Startup reads the Phase 6 durable mutation fence before opening workspace access. A fence
+owned by a retained service/self-restart keeps both ``CONTENT_READ`` and ``CHANGE``
+recovery-closed while the application reconciles that exact Phase 4 operation and broker
+generation. Filesystem appearance, service active state, ticket expiry or an empty broker
+query cannot clear or replace fence ownership.
 
 If Phase 4 ``call_start`` occurred but broker acceptance is unknown, application recovery
 may request gate-owned ``seal_no_accept`` only under the rule in section 8. If acceptance
@@ -786,12 +969,6 @@ Broker startup validates every retained accepted pre-effect state and resumes it
 operation-specific state machine. It never abandons accepted work because the ticket
 expired or session ended.
 
-Application startup reconstructs the Phase 6 workspace coordinator from any retained
-restart-owned durable mutation fence **before** enabling source-changing Phase 7/8 or
-Phase 6 mutation admission. Broker terminal/recovery evidence, application audit closure
-and the exact fence owner/generation must agree before that fence is released. Missing or
-ambiguous broker evidence keeps workspace change admission closed.
-
 Broker unavailability while privileged work may be incomplete keeps affected Phase 4
 operations uncertain/reconciling and blocks overlapping privileged work.
 
@@ -800,16 +977,11 @@ operations uncertain/reconciling and blocks overlapping privileged work.
 
 A Phase 7 command may survive application restart only when its independent supervision,
 workspace/profile and non-overlap predicates remain valid. Source-changing work that can
-race candidate/LKG runtime selection normally blocks controlled restart. Active
-credentialed Git effects, package transactions, prior restart/recovery, audit failure or
-uncertain source mutation also block.
-
-Preflight is not the exclusion primitive. Restart admission must acquire the shared Phase
-6 exclusive ``CHANGE`` side only after currently active changers have truthfully closed;
-while it owns the durable workspace fence, every later Phase 6 mutation and Phase 7/8
-workspace-changing start observes that fence and cannot begin. If the application exits,
-the retained fence reconstructs the new runtime's workspace coordinator closed until the
-same restart reaches truthful terminal/recovery closure.
+race candidate/LKG runtime selection prevents the restart operation from acquiring the
+free Phase 6 durable mutation fence. Once restart owns that fence, no new Phase 7/8
+workspace changer may be admitted until truthful release. Active credentialed Git effects,
+package transactions, prior restart/recovery, audit failure or uncertain source mutation
+also block.
 
 24. Systemd adapter
 -------------------
@@ -861,9 +1033,6 @@ requires exact post-restart Binnacle identity/readiness.
 Checkpoint persistence is preparation. Service stop/start, runtime selection and rollback
 are individually retained privileged subeffects. Candidate failure followed by proven LKG
 rollback is a completed recovery result with known privileged effects, not known-no-effect.
-The restart-owned Phase 6 workspace fence is coordination state, not proof of the systemd
-subeffect; it remains held until exact terminal/recovery/audit closure and is never released
-from service/process presence alone.
 
 27. Idempotency, overlap and cancellation
 ----------------------------------------
@@ -873,16 +1042,27 @@ depth. Same-owner/same-key/same-fingerprint retries reconcile retained applicati
 state before mutable checks. An uncertain retained root effect never receives a fresh
 ticket just to retry it.
 
+The application database enforces one privileged-ticket binding per Phase 4 operation.
+The broker independently enforces one operation binding plus globally unique ticket ID
+and nonce. Concurrent different-ticket attempts for the same operation serialize through
+the operation-scoped acceptance gate: exactly the retained binding can accept or seal and
+every alternative conflicts with zero new root effect.
+
 Overlap rules include:
 
 * one package mutation at a time;
 * no package mutation overlapping service/self-restart;
 * one restart/recovery slot at a time;
 * no new restart while rollback/recovery unresolved;
-* simple/controlled restart owns the shared Phase 6 workspace ``CHANGE`` guard/durable
-  mutation fence before dispatch, so no source-changing Phase 6/7/8 work overlaps runtime
-  selection, service transition or rollback closure;
+* no source-changing Phase 7/8 work overlapping candidate/LKG selection;
 * future reboot excludes every unproven consequential operation.
+
+For a service/self-restart backed by the development workspace, these overlap rules are
+enforced by the Phase 6 exclusive ``CHANGE`` guard plus durable mutation fence, not only
+by a preflight snapshot or a Phase 9 in-memory reservation. Fence release requires broker
+terminal/recovery evidence, Phase 4 effect classification and required audit-obligation
+closure. ``uncertain`` and ``restricted_recovery`` retain ownership and block new readers
+and changers until explicit reconciliation.
 
 Owner cancellation is not a generic mid-root-effect interrupt. Package-manager and
 restart effects are allowed to reach their deterministic reconciliation/recovery state
@@ -921,9 +1101,15 @@ and redacted against reusable authority material.
 All broker-writable paths come from protected profiles. Direct broker filesystem work
 uses descriptor-relative containment, exact ownership/mount identity, no symlink escape,
 restrictive modes, fsync/file+parent durability and CAS/no-overwrite publication where
-applicable. Runtime-slot storage treats source, environment and the protected
-``RuntimeControlBundle`` as one checkpoint-bound object set; candidate operations cannot
-rewrite the retained LKG control material in place.
+applicable.
+
+Complete runtime slots use a fixed root-owned layout and generation manifest that binds
+source, environment, protected configuration, policy, promoted manifest and effective
+service-definition artifacts. Publication fsyncs every artifact and parent before one
+atomic/CAS selector transition. Restore/select rejects a missing member, digest/mode/
+ownership mismatch, cross-generation mixture, symlink/mount replacement or unrecognized
+current selector. Protected slot bytes and secret references are never copied into the
+application database, audit journal or model-visible evidence.
 
 Root helper processes use fixed executable identity, constructed argv/environment,
 closed stdin where possible, closed inherited FDs, no application/executor credential
@@ -945,13 +1131,16 @@ including:
 * ``package_transaction_busy`` / ``package_partial_or_uncertain``;
 * ``service_profile_mismatch``;
 * ``restart_preflight_blocked``;
-* ``restart_workspace_fence_unavailable`` / ``restart_workspace_fence_uncertain``;
 * ``restart_checkpoint_failed``;
-* ``lkg_runtime_slot_unavailable`` / ``lkg_control_bundle_unavailable``;
-* ``candidate_environment_unsupported`` / ``candidate_control_material_unsupported``;
+* ``lkg_runtime_slot_unavailable``;
+* ``candidate_environment_unsupported``;
 * ``restart_candidate_failed`` / ``restart_rolled_back``;
 * ``restart_rollback_failed`` / ``restart_restricted_recovery``;
 * ``runtime_identity_mismatch``;
+* ``candidate_verification_missing`` / ``candidate_verification_stale``;
+* ``candidate_tested_state_mismatch``;
+* ``candidate_schema_change_unsupported``;
+* ``candidate_peer_change_unsupported`` / ``peer_build_protocol_mismatch``;
 * ``privileged_effect_uncertain``.
 
 No error returns raw privileged stderr, credentials, protected config or arbitrary root
@@ -976,11 +1165,6 @@ Representative application-side ports:
 
    class RestartPreflightPort(Protocol):
        async def inspect(self, request: RestartPreflightRequest) -> RestartPreflightResult: ...
-
-   class RestartWorkspaceCoordinationPort(Protocol):
-       async def acquire_change(self, request: RestartChangeRequest) -> RestartChangeLease: ...
-       async def reconcile_change(self, operation_id: str) -> RestartChangeLease: ...
-       async def release_after_terminal(self, lease: RestartChangeLease) -> None: ...
 
    class RuntimeIdentityPort(Protocol):
        async def current(self) -> RuntimeIdentity: ...
@@ -1011,8 +1195,8 @@ Representative broker-side ports:
 
    class RuntimeSlotStore(Protocol):
        def inspect(self, slot_id: str) -> VerifiedRuntimeSlot: ...
-       def verify_control_bundle(self, slot_id: str) -> RuntimeControlBundleVerification: ...
        def materialize_candidate(self, request: RuntimeSlotPrepare) -> RuntimeSlotReceipt: ...
+       def activate_complete_slot(self, request: RuntimeSlotActivation) -> RuntimeSlotReceipt: ...
        def promote_lkg(self, request: RuntimeSlotPromotion) -> RuntimeSlotReceipt: ...
 
    class SelfRecoveryAdapter(Protocol):
@@ -1026,30 +1210,304 @@ paths.
 33. Persistence ownership
 -------------------------
 
-Application-side Phase 9 metadata extends Phase 4 only for correlation/reservation:
-privileged ticket digest/reference, broker evidence generation/reference, target/profile
-digest, restart slot/checkpoint reference, exact restart-owned Phase 6 workspace-fence
-reference/generation, package transaction-plan digest and observed candidate/rollback
-outcome.
+Application migration ``migrations/versions/0006_privileged_operations.py`` follows the
+mandatory Phase 8 ``0005_git_operations.py`` head. It extends Phase 4 only for authoritative
+correlation/reservation: one privileged operation subtype, one immutable ticket binding,
+broker evidence generation/reference, target/profile/prepared-operation digest, restart
+slot/checkpoint and ``CandidateVerificationEvidence`` references, package transaction-plan
+digest, schema/runtime-layout heads and observed candidate/rollback outcome. Service/self-
+restart rows bind the exact Phase 6 workspace/fence ID, version and operation ownership;
+the existing Phase 6 fence row remains authoritative and is never copied or cleared from
+broker state. Unique/check constraints enforce one ticket per operation and globally unique
+ticket ID/nonce, exact operation subtype shapes, HC2 preparation binding and terminal state
+only after broker/audit/fence closure.
 
-Broker migrations are separate and immutable. Broker tables include accepted tickets,
-no-accept tombstones, privileged subeffect state, package-plan evidence and restart/runtime
-slot/checkpoint state. Accepted ticket and no-accept tombstone are mutually exclusive for
-one exact ticket identity.
+The root broker has an isolated Alembic environment:
 
-Migration/integrity failure keeps new privileged effects unavailable; it never silently
-repairs unknown state.
+::
+
+   alembic_privileged.ini
+   migrations_privileged/env.py
+   migrations_privileged/versions/0001_privileged_evidence.py
+
+Broker ``0001`` creates protocol/schema metadata, operation-ticket bindings, no-accept
+tombstones, privileged subeffect states, package-plan evidence, restart/checkpoints,
+runtime-slot generations/selectors and restricted-recovery evidence. One unique operation-
+binding row owns the immutable ticket ID/digest/nonce/action/target/evidence generation;
+ticket ID and nonce are separately unique. Accepted and sealed/no-accept states are mutually
+exclusive for the Phase 4 operation binding, not merely for one caller-provided ticket.
+Runtime-slot rows bind complete sealed source, environment, configuration, policy,
+manifest, service-definition, verification-evidence, migration-head, deployed-peer and
+layout artifacts.
+
+The broker never opens or migrates application, executor or Git-credential databases. The
+application never opens or migrates the broker database. Runtime requires the exact expected
+head and never creates/upgrades either schema opportunistically. Empty/prior/current/head,
+FK/check/unique/index/integrity and cross-database-denial tests are mandatory. Migration or
+integrity failure keeps new privileged effects unavailable and never silently repairs,
+deletes or reconstructs unknown state.
 
 34. systemd and installation assets
 -----------------------------------
 
-Phase 9 implementation will add broker service/socket assets only after contracts/profiles
-are reviewed. Candidate hardening may include narrow filesystem access, private temporary
-storage, restrictive umask, exact ``RuntimeDirectory``/``StateDirectory`` ownership,
-appropriate capability reduction and ``NoNewPrivileges`` only where compatible with the
-selected root mechanisms.
+34.1 Identities and protected paths
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-No hardening directive is claimed effective until verified on the candidate Pi.
+The initial software-broker profile freezes this topology:
+
+* the broker service runs as ``root`` from a separately installed root-owned runtime;
+* ``binnacle-privileged-client`` is a dedicated socket-DAC group containing only the
+  unprivileged ``binnacle`` application identity;
+* executor, command and Git/credential identities are not members and cannot traverse the
+  socket directory;
+* the broker checks ``SO_PEERCRED`` against the exact application UID and **primary** GID;
+  it never mistakes the supplementary socket group for peer identity.
+
+Exact default paths and minimum modes are:
+
+.. list-table:: Initial protected path profile
+   :header-rows: 1
+
+   * - Path
+     - Owner:group
+     - Mode
+   * - ``/run/binnacle-privileged``
+     - ``root:binnacle-privileged-client``
+     - 0750
+   * - ``/run/binnacle-privileged/broker.sock``
+     - ``root:binnacle-privileged-client``
+     - 0660
+   * - ``/etc/binnacle-privileged``
+     - ``root:root``
+     - 0700
+   * - ``/etc/binnacle-privileged/broker.toml``
+     - ``root:root``
+     - 0600
+   * - ``/var/lib/binnacle-privileged``
+     - ``root:root``
+     - 0700
+   * - ``/var/lib/binnacle-privileged/evidence.db``
+     - ``root:root``
+     - 0600
+   * - ``/opt/binnacle-privileged``
+     - ``root:root``
+     - 0755
+   * - ``/srv/binnacle-runtime``
+     - ``root:binnacle``
+     - 0750
+   * - ``/srv/binnacle-runtime/slots/<slot-id>``
+     - ``root:binnacle``
+     - 0550
+   * - ``/srv/binnacle-runtime/current``
+     - root-owned selector
+     - not applicable
+
+Slot members that the service must read use exact root-owned, non-writable modes (normally
+0440 for data and 0550 for traversable/executable content) and group ``binnacle``. Secret-
+bearing configuration remains model-never-disclosable even though the exact service
+identity can read it. The application cannot write, rename or replace the slot or selector.
+
+The broker runtime parent is outside the candidate checkout and candidate ``.venv``. An
+explicit owner installation copies/verifies one reviewed broker artifact and dependencies
+into ``/opt/binnacle-privileged``; the broker never imports or executes mutable workspace
+Python as root. The socket parent is directly beneath root-owned ``/run``, not beneath the
+application-owned ``/run/binnacle``. Broker state/checkpoints are not stored under the app-
+traversable runtime-slot tree.
+
+34.2 Unit lifecycle and hardening
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``binnacle-privileged.socket`` owns the socket pathname with ``Accept=no`` and the exact
+directory/socket modes above. ``binnacle-privileged.service`` is not ``PartOf`` the
+application service and is not stopped by ``binnacle-dev`` restart; it must retain restart
+and rollback evidence while the application is absent. The application may ``Wants`` and
+order ``After`` the broker socket/readiness, without creating a reverse lifecycle cycle.
+
+The service uses a restrictive umask, closed inherited FDs/stdin, private temporary paths,
+bounded descendants/output and the strongest filesystem/device/network/capability/systemd-
+bus restrictions compatible with the selected package/systemd adapters. Package install
+is honestly broad root filesystem/network authority under the exact prepared transaction;
+the plan does not claim that ``ProtectSystem=strict`` or a capability set is effective when
+it would prevent that semantic operation. Effective unit properties, fragment path and
+drop-ins are verified on the Pi. No hardening directive is treated as proven by tracked
+unit text alone.
+
+34.3 Runtime-slot publication and selector
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The first profile uses one same-filesystem, root-owned immutable slot tree plus an atomic
+``current`` relative-symlink/selector under ``/srv/binnacle-runtime``:
+
+#. the unprivileged Phase 7 verification workflow builds/tests and exports only the exact
+   reviewed candidate artifacts; root never executes candidate build hooks or source;
+#. while the restart owns the Phase 6 fence, the broker creates an unguessable exclusive
+   staging directory on the slot filesystem and copies the exact verified source,
+   environment, configuration, policy, manifest and service-definition evidence;
+#. it verifies every expected digest, migration head, owner/mode and generation manifest,
+   reserves configured bytes/inodes and fsyncs files/directories;
+#. it publishes the immutable slot by no-overwrite rename and fsyncs the slot parent;
+#. before selector change it records durable intent, creates a relative temporary selector
+   naming that exact slot, atomically renames it over ``current`` and fsyncs the selector
+   parent;
+#. it verifies the selected complete generation before asking systemd to start the service
+   and records selector/systemd receipts separately.
+
+The stable reviewed ``binnacle-dev.service`` executes source/environment/config through
+``/srv/binnacle-runtime/current``. The initial profile requires its effective unit/drop-in
+definition and runtime-selector interface to be identical across candidate and LKG slots;
+a candidate that changes that interface or migration heads is rejected before stop. Slot
+service-definition material is still retained and verified so rollback cannot silently use
+an unreviewed installed unit. A future profile that actually replaces unit/drop-in material
+needs a separately reviewed crash-safe daemon-reload/rollback state machine.
+
+Selector crash recovery uses the retained intent, old/new slot IDs and actual root-owned
+selector target. It never guesses from service presence and never deletes an unknown slot
+or selector. Configuration reserves enough bounded storage for current LKG, candidate and
+one prior retained slot; referenced LKG/candidate/recovery slots cannot be garbage-collected.
+Disk/inode reservation failure occurs before service stop. Cleanup is limited to exact
+unreferenced, terminally closed generations with retained deletion receipts.
+
+34.4 Initial LKG bootstrap
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The first LKG does not require an earlier successful controlled restart. It is created by
+an explicit owner-only offline initialization using the already installed, root-owned
+broker executable:
+
+#. stop new application admission and prove/reconcile no outstanding Phase 4/6/7/8/9
+   operation or workspace fence;
+#. as the unprivileged identities, verify the exact reviewed commit, clean source, frozen
+   dependencies, all schema heads and a terminal-success protected build/test plan;
+#. stop the application, acquire the offline app/broker/runtime-slot maintenance locks and
+   import the exact prebuilt artifacts into a staged complete slot without executing them
+   as root;
+#. verify/fsync/publish the slot and selector using section 34.3 **without** starting or
+   qualifying the application;
+#. retain the exact old unit/selector state, install and verify the reviewed stable app
+   unit plus broker service/socket assets, run ``systemctl daemon-reload``, then verify
+   effective fragment/drop-ins/``ExecStart`` resolve through the selected slot and the
+   broker ordering has no lifecycle cycle;
+#. start and verify broker socket/service/protocol/store readiness first;
+#. start the application exactly once through the reloaded stable selector-backed unit,
+   verify complete runtime identity/readiness and exact peer-generated compatibility
+   receipts from outside the candidate process, then durably qualify that slot as initial
+   LKG;
+#. only after qualification enable the Phase 9 execute contracts.
+
+Initialization is idempotent for the same full slot/evidence digest and conflicts on a
+different candidate once an LKG exists. Failure before selector/unit publication leaves the
+old layout unchanged. Failure after publication but before qualification stops the new app,
+restores the exact retained selector/unit state and daemon-reloads it when those receipts
+are proven, or leaves the service stopped in restricted local recovery with root-retained
+evidence. It never starts both old and new app units or qualifies a run through the old
+loaded unit. Setup never labels an unstarted or merely systemd-active slot as LKG.
+
+34.5 Offline migration and upgrade order
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The owner runbook freezes this order:
+
+#. stop new application admission; inspect and drain/reconcile or retain uncertainty for
+   application, executor, Git/credential and privileged operations;
+#. stop the application, then stop broker socket activation and broker only after every
+   accepted privileged state is terminal or explicitly retained for maintenance recovery;
+#. acquire each service's runtime migration lock and create the reviewed control-plane
+   backup/checkpoint needed by the offline upgrade;
+#. migrate the application to exact ``0006`` as ``binnacle`` from the reviewed runtime and
+   migrate the broker to exact ``0001`` only through its root-owned installed executable;
+#. verify both heads, FK/integrity, owners/modes, runtime-slot generation and the unchanged
+   executor/Git-credential heads; never run mutable checkout code as root;
+#. for this schema-changing Phase 9 installation, execute section 34.4's single ordered
+   stage/publish -> install/verify units -> daemon-reload -> start/verify broker -> start
+   app once -> externally verify -> qualify sequence; old-schema slots are ineligible for
+   automatic rollback.
+
+Any failure leaves dependent services stopped/restricted with backups and evidence intact;
+runtime startup never performs migrations or silently restores a database. Later MCP-driven
+controlled restart is no-schema-change. An owner-performed future schema upgrade disables
+restart until the offline process establishes a compatible complete LKG.
+
+The same offline rule applies to a new executor, Git-credential broker or privileged-
+broker build/protocol/profile: drain and stop affected peers, install/migrate/verify their
+exact protected artifacts and units first, then build/select/start the compatible app slot
+and qualify a new complete LKG against peer-generated receipts. An old LKG bound to the
+previous peer set is not eligible for automatic rollback. MCP ``binnacle_restart`` never
+performs this multi-service upgrade.
+
+34.6 Expected repository implementation set
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Representative exact paths are:
+
+.. code-block:: text
+
+   src/binnacle/domain/privileged.py
+   src/binnacle/ports/privileged.py
+   src/binnacle/application/privileged/
+       preparation.py
+       service.py
+       restart.py
+       reconciliation.py
+   src/binnacle/adapters/privileged_ipc/
+       client.py
+       protocol.py
+   src/binnacle/adapters/sqlite/privileged.py
+   src/binnacle/privileged_broker/
+       service.py
+       protocol.py
+       tickets.py
+       acceptance.py
+       sqlite.py
+       package_manager.py
+       systemd.py
+       runtime_slots.py
+       reconciliation.py
+   migrations/versions/0006_privileged_operations.py
+   alembic_privileged.ini
+   migrations_privileged/env.py
+   migrations_privileged/versions/0001_privileged_evidence.py
+   spec/operation/privileged-operations.yaml
+   spec/policy/privileged-profiles.yaml
+   spec/policy/host-confirmation-classes.yaml
+   spec/policy/capability-zones.yaml
+   spec/mcp/bootstrap-tool-manifest.yaml
+   spec/mcp/evaluation-cases.yaml
+   spec/mcp/evaluation-profile.yaml
+   schemas/mcp/bootstrap-inputs.schema.json
+   schemas/mcp/bootstrap-outputs.schema.json
+   src/binnacle/_generated/compatibility_core_registry.json
+   src/binnacle/_generated/compatibility_core_registry.digest.json
+   deploy/systemd/binnacle-dev.service
+   deploy/systemd/binnacle-executor.service
+   deploy/systemd/binnacle-git-credential.service
+   deploy/systemd/binnacle-git-credential.socket
+   deploy/systemd/binnacle-privileged.service
+   deploy/systemd/binnacle-privileged.socket
+   deploy/tmpfiles.d/binnacle-privileged.conf
+   scripts/setup_dev_pi.py
+   scripts/verify_dev_pi.py
+   scripts/verify_privileged_broker.py
+   docs/security/privileged-self-management.md
+   docs/operations/development-pi.rst
+   .github/workflows/python.yml
+   pyproject.toml
+   uv.lock
+   tests/unit/privileged/
+   tests/integration/privileged/
+   tests/security/privileged/
+   tests/property/test_privileged_lifecycle.py
+
+The exact file set may reuse an existing inward port rather than create an empty layer, but
+may not omit either migration environment, units/socket/tmpfiles, setup/read-only verifier,
+operator runbook, canonical contracts/evaluation, runtime-slot bootstrap/recovery tests or
+deployment CI. ``pyproject.toml``/``uv.lock`` change only for a real selected dependency.
+The verifier uses an unprivileged static repository path for public checks and the installed
+root-owned broker executable for private root-state inspection; root never imports a mutable
+checkout merely to verify it.
+
+No hardening, durability or selector directive is claimed effective until verified on the
+candidate Pi. The evidence-independent topology/algorithms above remain implementation
+requirements even before that evidence exists.
 
 35. Security invariants
 -----------------------
@@ -1062,27 +1520,32 @@ The implementation must mechanically preserve:
 #. Every root effect has Phase 4 operation identity before dispatch and broker replay
    identity before root subeffect.
 #. Accept-or-seal gives exactly one terminal acceptance winner.
+#. One Phase 4 operation has exactly one immutable privileged ticket binding; alternate
+   tickets cannot create another acceptance gate or root effect.
 #. Delayed/queued handlers cannot accept after no-accept seal.
 #. Accepted work remains recoverable after ticket/session expiry.
 #. Broker replay cannot create a second effect.
 #. Package install executes only the exact prepared complete transaction closure.
 #. Repository metadata/solver/artifact mismatch before package effect yields zero effect.
 #. Arbitrary systemd units cannot be selected.
-#. Restart acquires the shared Phase 6 exclusive workspace ``CHANGE`` guard and durable
-   mutation fence before broker dispatch and retains it through truthful terminal/recovery
-   and audit closure.
 #. Checkpoint and complete LKG runtime slot are durable before service stop.
-#. LKG includes independently restorable source, environment and protected
-   configuration/policy/manifest/service-definition control material.
-#. Candidate cannot mutate/destroy the only verified LKG source, environment or control
-   bundle.
+#. LKG includes source, independently restorable environment and exact restorable
+   protected configuration/policy/manifest/service-definition material.
+#. Candidate cannot mutate/destroy the only verified LKG slot.
 #. Candidate success requires exact runtime identity/readiness, not systemd active.
+#. Candidate stop/start is impossible without fresh exact terminal-success Phase 7
+   build/test evidence bound through preparation, final boundary, ticket and checkpoint.
+#. Bootstrap controlled restart rejects every migration-head/runtime-layout change.
+#. Bootstrap controlled restart rejects every separately deployed peer-service artifact/
+   protocol change and verifies exact peer-generated post-start compatibility receipts.
 #. Rollback is broker-owned and does not depend on failed candidate.
 #. Unverifiable rollback enters restricted recovery instead of looping.
 #. Shared mutable candidate ``.venv`` is never treated as LKG environment.
 #. Empty broker store/application response is not no-effect proof after call-start.
-#. Active Phase 7/8 work participates in restart preflight, and the shared Phase 6 fence
-   closes the race between that preflight and later workspace-changing admission.
+#. Active Phase 7/8 work participates in restart preflight.
+#. Every workspace-backed service/self-restart owns the Phase 6 exclusive ``CHANGE`` guard
+   and durable mutation fence from post-policy admission through truthful closure.
+#. Application replacement never clears, steals or bypasses a retained restart fence.
 #. Audit failure before start prevents effect; later audit failure does not erase truth.
 #. Reboot remains absent until separately evidenced/promoted.
 #. Results/logs/evidence/recovery markers disclose no reusable secret.
@@ -1093,6 +1556,8 @@ The implementation must mechanically preserve:
 Walk at least:
 
 * queued broker handler versus gate-owned no-accept sealing after app crash;
+* two different ticket IDs/digests concurrently target one Phase 4 operation in both
+  arrival orders;
 * broker accepts then crashes before first root subeffect;
 * ticket expires/session ends after acceptance;
 * two package installs;
@@ -1100,18 +1565,25 @@ Walk at least:
 * malicious repository metadata broadens dependency closure;
 * package install races controlled restart;
 * two self-restarts with different candidates;
-* restart preflight clean versus a source-changing Phase 7/8 admission racing the shared
-  ``CHANGE`` acquisition: exactly one side owns the workspace mutation fence;
-* application dies after restart fence acquisition and before/after broker acceptance;
+* restart preflight clean then source-changing Phase 7/8 work starts before final boundary;
+* source-changing Phase 7/8 admission races restart ``CHANGE``/fence acquisition in both
+  winner orders;
 * app crash before/after broker acceptance/receipt;
 * broker crash after package manager/systemd start but before receipt;
 * checkpoint fsync failure;
 * service stop then broker crash;
 * candidate active with wrong revision/environment/config;
+* candidate app is new while executor, Git-credential broker or privileged broker remains
+  an older incompatible build/protocol;
+* a peer changes after LKG qualification and candidate/rollback tries to reuse stale
+  compatibility evidence;
+* build/test evidence succeeds, then source/environment/config/schema state changes before
+  restart fence acquisition or final boundary;
 * mutable development ``.venv`` changed after LKG qualification;
-* candidate configuration/policy/manifest/service definition changes while the retained
-  LKG control bundle remains independently restorable;
-* protected LKG environment or control bundle missing/corrupt before service stop;
+* candidate changes protected config/policy/manifest/unit material after LKG qualification;
+* protected LKG environment missing/corrupt before service stop;
+* one member of the protected LKG configuration/service generation missing, corrupt or
+  replaced before service stop;
 * candidate timeout and rollback;
 * rollback slot selection succeeds but service-start receipt lost;
 * LKG service active with wrong environment identity;
@@ -1129,15 +1601,17 @@ infers root-effect truth from process/service presence alone.
 37.1 Unit/property tests
 ~~~~~~~~~~~~~~~~~~~~~~~
 
-Test ticket canonicalization/replay/expiry, accept-or-seal state machine, delayed handler
+Test ticket canonicalization/replay/expiry, one-ticket-per-operation uniqueness,
+alternate-ticket conflicts, accept-or-seal state machine, delayed handler
 rejection, package-plan canonicalization, complete dependency closure, service target
-binding, runtime-slot/LKG source+environment+control-bundle eligibility, shared restart
-workspace-fence ownership/reconstruction, restart transitions, runtime identity matching,
-error redaction and reboot absent-by-default.
+binding, runtime-slot/LKG eligibility, restart transitions, runtime identity matching,
+verification-evidence freshness/matching, schema-head compatibility, error redaction and
+peer-set compatibility, reboot absent-by-default.
 
 Property/state-machine tests inject crashes between every durable broker transition and
 prove no double root effect, no accept after seal, no accepted-work abandonment, no
-package-plan broadening and no ambiguous rollback promoted to success.
+package-plan broadening, no restart/source-changing admission overlap, no mixed-generation
+runtime-slot activation and no ambiguous rollback promoted to success.
 
 37.2 Linux integration/fault tests
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1151,37 +1625,85 @@ On disposable fixtures prove:
 * solver dependency broadening => rejection;
 * exact fixed-unit systemd lifecycle;
 * readiness/runtime identity separate from unit active;
-* checkpoint/runtime-slot/control-bundle fsync durability;
-* restart preflight versus source-changing Phase 7/8 admission: exactly one shared Phase 6
-  ``CHANGE`` owner and zero overlap; replacement app reconstructs retained fence closed;
+* exact Phase 7 verification success is accepted while failed/cancelled/truncated/stale/
+  mismatched evidence causes zero service stop;
+* new-client/old-peer protocol mismatch and peer-owned candidate changes cause zero service
+  stop; peer-generated receipt loss/mismatch cannot be replaced by candidate assertion;
+* checkpoint/runtime-slot fsync durability;
+* restart-vs-Phase 7/8 change admission in both linearization orders, with the loser
+  blocked before effect and retained fence surviving application replacement;
 * app death with broker handler queued: accept versus seal one durable winner;
+* app/broker restart plus a forged replacement ticket for the same operation yields the
+  retained binding and zero second root effect;
 * broker crash after accepted before root boundary: accepted recovery resumes/closes;
-* environment/control-material-changing candidate uses an independently protected
-  complete LKG runtime slot or is rejected;
-* corrupt/missing LKG environment/control bundle before stop => zero service-stop effect;
-* corrupt/missing LKG environment/control bundle after effect => restricted recovery,
-  never false rollback success;
+* environment-changing candidate uses independently protected LKG env or is rejected;
+* config/policy/manifest/service-definition-changing candidate uses a complete protected
+  LKG generation and rollback restores/selects that exact generation atomically;
+* corrupt/missing LKG env before stop => zero service-stop effect;
+* corrupt/missing LKG after effect => restricted recovery, never false rollback success;
 * service stop/start while application absent;
 * source/runtime-slot path symlink/mount replacement fails closed;
 * secret redaction.
 
-37.3 Real candidate-Pi evidence
+37.3 CI gates
+~~~~~~~~~~~~~
+
+CI retains the repository Python 3.11/3.12/3.13 test matrix and the quality lane: frozen
+``uv`` sync, Ruff/format, strict MyPy including every new setup/verifier/broker script,
+Import Linter application/broker isolation, branch coverage, ``pip-audit``, recursive RST,
+canonical contracts/schemas/generated registry, manifest/handler parity and pre-commit.
+
+Isolated temporary-root lanes exercise application ``0006`` and broker ``0001`` from empty,
+prior/current/head states and prove neither migration environment can open the other's DB.
+Static/fake-systemd deployment tests cover fresh and upgrade identities/groups/modes,
+socket peer/DAC denial, exact unit/socket/tmpfiles paths, effective-property verifier parsing,
+root-owned broker-runtime independence, setup idempotency, offline order and initial-LKG
+bootstrap. Temporary filesystem/state-machine tests cover selector publication, fsync/rename
+crash windows, quota/ENOSPC, schema mismatch, complete slot generations and retained cleanup.
+Package/systemd adapters use deterministic fakes or disposable non-host-mutating fixtures;
+CI never installs host packages, restarts the CI service, writes repository state paths or
+claims real root/systemd/Pi behavior.
+
+Deployment/order tests prove selector publication alone cannot qualify a slot, daemon-
+reload and effective stable-unit verification precede the only application start, broker
+readiness precedes that start, and failure restores the exact retained unit/selector or
+stops restricted. Peer tests bind installed executor/Git-credential/privileged-broker
+artifact and protocol identities, reject peer-owned candidate changes and old-peer/new-
+client combinations, and require peer-generated post-start receipts before LKG promotion.
+
+The contract lane compiles every Phase 9 Tool/preparation schema and frozen evaluation case,
+checks the HC0/HC2 mapping, exact minimum-attempt risk classes, information/result limits,
+idempotency/ticket binding and reboot absence. A documentation-only plan PR need not add
+those runtime files, but the Phase 9 implementation exit cannot pass without them.
+
+37.4 Real candidate-Pi evidence
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Before promotion record:
 
+* exact numeric identities/groups, protected-path modes/mounts, peer credentials, effective
+  unit/socket/tmpfiles fragments/drop-ins and broker-runtime independence from candidate;
 * exact package manager/version and deterministic prepare/execute plan behavior;
 * repository metadata/artifact identity semantics;
 * package transaction database/reconciliation evidence;
 * systemd version, socket peer credentials and service lifecycle behavior;
 * broker hardening actually enforced;
-* filesystem durability/mount/ownership behavior for broker/runtime slots;
+* filesystem durability/mount/ownership behavior for complete broker/runtime slots,
+  including protected configuration/policy/manifest/service-definition material;
+* fresh-host initial-LKG bootstrap, selector swap/fsync/crash recovery, bounded slot quota
+  and upgrade from the prior application/broker schema heads;
+* unit install/effective verification/daemon-reload ordering with exactly one selector-
+  backed app start and broker readiness first;
 * restart/readiness timing distribution;
-* exact immutable/restorable LKG source+environment+configuration/policy/manifest /
-  service-definition control-bundle mechanism;
-* shared Phase 6 workspace-fence acquisition/reconstruction across application stop/start;
+* exact immutable/restorable complete LKG source/environment/configuration/policy/manifest/
+  service-definition mechanism;
+* exact build/test evidence production and final tested-state comparison;
+* exact executor/Git-credential/privileged-broker installed build/protocol receipts and
+  old-peer/new-client rejection;
 * service runtime-selector/recovery behavior under stale/intervening state;
 * application restart while Phase 7 process survives;
+* application stop/crash while broker acceptance/restart continues and replacement startup
+  remains Phase 6 recovery-closed on the exact retained fence;
 * deliberately broken candidate rollback;
 * deliberately unverifiable rollback -> restricted recovery;
 * whether any Bootstrap operation truly requires reboot.
@@ -1209,6 +1731,48 @@ Before any handler is exposed:
 
 The current manifest is not changed merely by accepting this plan.
 
+The implementation PR must change the canonical contract sources, not create Phase 9
+sidecar registries:
+
+* ``spec/mcp/bootstrap-tool-manifest.yaml``;
+* ``schemas/mcp/bootstrap-inputs.schema.json``;
+* ``schemas/mcp/bootstrap-outputs.schema.json``;
+* ``spec/policy/host-confirmation-classes.yaml``;
+* ``spec/policy/capability-zones.yaml``;
+* ``spec/mcp/evaluation-cases.yaml`` and ``spec/mcp/evaluation-profile.yaml``;
+* compiler-owned ``src/binnacle/_generated/compatibility_core_registry.json`` and digest,
+  unless a separately reviewed registry rename is performed atomically.
+
+Manifest entries bind the table in section 4, the ``privileged_prepare``/HC2 execute
+relationship, exact schemas, annotations, information/result limits, operation contract,
+idempotency requirement, development-session/host authority, privileged profile and
+handler binding. Schema/manifest/generated-registry/handler parity is a blocking CI gate.
+
+Frozen Phase 9 cases use the existing risk-class names and minimum attempts from
+``spec/mcp/evaluation-cases.yaml``:
+
+* inspection/preflight/preparation Tool selection, bounded rendering and recovery-result
+  rendering use ``tool_selection_and_result_rendering`` with minimum 10 attempts;
+* owner confirmation allow/decline/dismiss/timeout and entitlement-only behavior use
+  ``confirmation_and_entitlement`` with minimum 5 attempts;
+* **every** package-install, service/self-restart, future reboot, cancellation, same-key
+  retry, prepared-nonce reuse, cached/batch confirmation and tested-state-change case uses
+  ``write_cancellation_retry_cache_confirmation`` with minimum 20 attempts;
+* broker accept/seal, alternate-ticket, workspace-fence race, application/broker restart,
+  response loss, candidate/rollback reconnect, wrong-runtime and restricted-recovery cases
+  use ``concurrency_race_reconnect_instability`` with minimum 20 attempts.
+
+Cases include exact prepared view and state binding; argument/device/action substitution;
+expired/consumed preparation; package-plan/repository/artifact drift; tested-candidate drift;
+different-ticket same-operation conflict; restart-versus-Phase 7/8 fence winner orders;
+application disappearance/reconnect; systemd-active wrong runtime; candidate failure and
+complete LKG rollback; corrupt/mixed slot generation; schema-head mismatch; audit failure;
+credential/config redaction; and reboot absence. Evidence binds exact profile/build/config/
+policy/manifest/schema digests, Phase 4 operation/audit, Phase 6 fence, Phase 7 verification,
+broker operation binding/checkpoint/subeffect, runtime-slot generation and detached
+evaluation receipt. Missing real Pi/ChatGPT attempts remain blocked; they never stop
+repository-only implementation and CI work.
+
 39. Implementation order
 ------------------------
 
@@ -1216,21 +1780,26 @@ The current manifest is not changed merely by accepting this plan.
 #. Add broker/service/package/runtime-slot protected profile models.
 #. Implement ticket issuer/validator and exact peer boundary.
 #. Implement broker protocol and separate evidence schema/migrations.
-#. Implement ``BrokerAcceptanceGate``, ``accept_once`` and ``seal_no_accept`` with fault
-   tests before any root adapter.
+#. Implement operation-scoped ``BrokerAcceptanceGate``, immutable one-ticket binding,
+   ``accept_once`` and ``seal_no_accept`` with fault tests before any root adapter.
 #. Implement read-only package/service inspection.
 #. Implement deterministic ``PackageTransactionPlan`` prepare/verify logic.
 #. Implement exact package execute/reconcile behind disabled composition.
-#. Implement restart preflight plus consumption of the exact Phase 6 shared workspace
-   ``CHANGE`` guard/durable mutation fence and restart-time reconstruction before source
-   changers are enabled.
-#. Implement protected ``VerifiedRuntimeSlot`` storage/validation, complete
-   ``RuntimeControlBundle`` materialization/restoration and candidate/LKG eligibility.
+#. Integrate restart admission with the Phase 6 exclusive ``CHANGE`` guard and durable
+   mutation fence, including replacement-application recovery-closed startup tests.
+#. Implement restart preflight/overlap reservations and runtime identity.
+#. Implement protected Phase 7 candidate-verification profiles/evidence binding and
+   no-schema-change admission.
+#. Implement protected peer-owned path/build/protocol identities, peer-generated
+   compatibility receipts and no-peer-service-change admission.
+#. Implement complete protected ``VerifiedRuntimeSlot`` storage/validation for source,
+   environment, configuration, policy, manifest and effective service-definition
+   material, plus candidate/LKG eligibility.
 #. Implement broker checkpoint/restart state machine without host exposure.
 #. Implement fixed systemd adapter and application/broker reconciliation.
 #. Implement candidate runtime selection and exact post-start verification.
-#. Implement atomic LKG source+environment+runtime-control-bundle recovery and the
-   restricted-recovery path.
+#. Implement complete LKG source/environment/configuration/policy/manifest/service-
+   definition recovery and restricted-recovery path.
 #. Compose simple service restart and controlled restart behind all promotion gates.
 #. Keep reboot seam unpromoted unless real evidence requires it.
 #. Run full property/Linux/fault/security suite and candidate-Pi evidence campaign.
@@ -1242,36 +1811,38 @@ The current manifest is not changed merely by accepting this plan.
 The complete pipeline is:
 
 ``request/session/current state -> caller-binding-first retained lookup -> received audit
--> policy -> advisory restart preflight -> for service/self-restart acquire Phase6
-WorkspaceAccessGate.CHANGE + exact durable workspace mutation fence -> revalidate
-candidate/LKG/control-bundle/outstanding-work under exclusion -> post-policy privileged /
-restart / package-plan reservation -> authorised audit -> running/effect intent -> Phase4
-handoff/session/consequential gates -> final controller / device / package-plan / service /
-candidate / complete LKG-runtime-slot / workspace-fence / outstanding-work / audit / recovery
-OP-BOUNDARY -> audit obligation -> exact privileged ticket -> broker peer/ticket validation
--> BrokerAcceptanceGate accept OR terminal no-accept seal -> accepted root-side state machine
--> immediate subeffect evidence -> package/service/candidate/LKG reconciliation -> application
-audit/operation reconciliation -> truthful workspace-fence/process/reservation cleanup ->
-retained retry``.
+-> policy -> no-effect HC2 preparation + post-policy privileged/restart/package-plan /
+workspace-fence reservation -> immutable one-ticket operation binding -> authorised audit
+-> running/effect intent -> Phase4 handoff/session/consequential gates -> final controller /
+device / preparation / tested-candidate / schema / package-plan / service / candidate /
+LKG-runtime-slot / outstanding-work / audit / recovery OP-BOUNDARY -> audit obligation ->
+exact retained privileged ticket -> broker peer/ticket validation -> operation-scoped
+BrokerAcceptanceGate accept OR terminal no-accept seal -> accepted root-side state machine
+-> immediate subeffect evidence -> package/service/candidate/LKG reconciliation ->
+application audit/operation reconciliation -> process/reservation/fence cleanup -> retained
+retry``.
 
 Verify specifically:
 
 * queued requests cannot defeat no-accept closure;
+* an alternate ticket cannot bypass an operation's accepted/sealed binding;
 * accepted work never expires into abandonment;
 * package plan binds the complete root-running transaction closure;
-* restart preflight is closed by the exact shared Phase 6 workspace fence before dispatch,
-  and that fence survives application replacement until terminal/recovery closure;
-* LKG source, environment and configuration/policy/manifest/service control bundle are
-  independently restorable as one runtime slot;
-* editable workspace/shared ``.venv`` or candidate control files cannot masquerade as
-  rollback safety;
+* LKG source, environment, protected configuration, policy, manifest and service
+  definition are independently and atomically restorable/selectable;
+* editable workspace/shared ``.venv`` cannot masquerade as rollback safety;
 * application/executor/Git/root-broker authority remains disjoint;
 * checkpoint/LKG are durable before stop;
 * candidate readiness is exact runtime identity;
+* candidate restart binds fresh exact isolated build/test success and unchanged tested
+  state;
+* candidate/LKG bind exact independently deployed peer builds/protocols and cannot promote
+  against a stale or self-asserted peer set;
 * rollback does not depend on failed application;
 * ambiguous rollback becomes restricted recovery;
-* Phase 7/8 outstanding work and package effects are in preflight, while the shared
-  workspace fence prevents a new changer from entering after the check;
+* Phase 7/8 outstanding work and package effects are in preflight;
+* Phase 6 ``CHANGE`` plus durable mutation-fence ownership closes admission races after
+  preflight and survives the application process being restarted;
 * Phase 4 effect/audit/idempotency truth survives application replacement;
 * every uncertain root effect blocks blind repeat;
 * no reusable secret leaks;
@@ -1304,11 +1875,12 @@ Promotion remains blocked until at least:
 * accept-or-seal/replay isolation is proven on candidate Pi;
 * deterministic complete package-plan preparation/execution is proven;
 * selected systemd/readiness behavior is proven;
-* independently restorable LKG source+environment+configuration/policy/manifest /
-  service-definition runtime slot is proven, or the safe no-environment-or-control-change
-  fallback is enforced;
-* Phase 9 restart consumption/reconstruction of the exact Phase 6 shared workspace-change
-  fence is proven across application disappearance and reconnect;
+* exact isolated candidate build/test provenance and stale-state rejection are proven;
+* exact peer build/protocol receipts and old-peer/new-client rejection are proven;
+* Phase 6 restart-fence exclusion and replacement-application recovery are proven;
+* independently restorable complete LKG source/environment/configuration/policy/manifest/
+  service-definition runtime slot is proven, or the safe no-change fallback is enforced
+  for every unsupported material class;
 * failed candidate rollback and restricted recovery are proven;
 * fault/security/redaction gates pass.
 
@@ -1326,14 +1898,13 @@ evidence:
 #. request controlled restart of an exact candidate;
 #. observe application connection disappearance without loss of broker/restart truth;
 #. reconnect to the same endpoint;
-#. verify exact candidate Git/environment/config/policy/manifest/service composition and
-   readiness;
+#. verify exact candidate Git/environment/config/policy/manifest and readiness;
 #. inspect bounded startup diagnostics;
 #. prove no reusable credential/root authority disclosure;
-#. run a deliberately broken candidate and prove exact LKG source+environment+protected
-   configuration/policy/manifest/service composition rollback to a reachable verified
-   runtime, or a verified restricted local-recovery state whose
-   evidence survives outside the failed process.
+#. run a deliberately broken candidate and prove exact complete LKG source/environment/
+   configuration/policy/manifest/service-definition rollback to a reachable verified
+   runtime, or a verified restricted local-recovery state whose evidence survives outside
+   the failed process.
 
 Only then is Phase 9 complete. Missing real Pi/ChatGPT evidence does not block provisional
 plan acceptance but blocks this exit and the real Phase 10 acceptance run.
