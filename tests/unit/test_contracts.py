@@ -340,6 +340,27 @@ def test_compatibility_baseline_prose_cannot_claim_live_host_evidence(field: str
         )
 
 
+@pytest.mark.parametrize("mutation", ["remove", "replace", "reorder"])
+def test_compatibility_baseline_requires_exact_phase2_axis_projection(
+    mutation: str,
+) -> None:
+    registry, digest = _documents()
+    observations = registry["compatibility_baseline"]["observations"]
+    if mutation == "remove":
+        observations.pop()
+    elif mutation == "replace":
+        observations[0]["axis"] = "unreviewed_axis"
+    else:
+        observations.reverse()
+    registry_bytes, digest_bytes = _encoded(registry, digest)
+
+    with pytest.raises(ContractRegistryError, match="axis projection"):
+        ContractRegistry.from_bytes(
+            registry_bytes=registry_bytes,
+            digest_bytes=digest_bytes,
+        )
+
+
 @pytest.mark.parametrize(
     ("field", "value", "message"),
     [

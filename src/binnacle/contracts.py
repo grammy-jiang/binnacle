@@ -121,6 +121,27 @@ PHASE2_BASELINE_SUMMARIES = MappingProxyType(
         "not-applicable": "The optional probe is not promoted in the Phase 2 catalogue.",
     }
 )
+PHASE2_OBSERVATION_AXES = (
+    "connectivity",
+    "protocol_revision",
+    "discovery_and_metadata",
+    "tool_selection",
+    "result_handling",
+    "error_handling",
+    "read_entitlement",
+    "write_entitlement",
+    "host_confirmation",
+    "retry_safety",
+    "cancellation",
+    "reconnect",
+    "concurrency",
+    "resources",
+    "mrtr_elicitation",
+    "tasks",
+    "information_boundary",
+    "cross_server_behavior",
+    "performance",
+)
 
 
 class ContractRegistryError(RuntimeError):
@@ -615,7 +636,8 @@ def _validate_compatibility_baseline(
     observations = baseline.get("observations")
     if not isinstance(observations, list) or not observations:
         raise ContractRegistryError("generated compatibility observations are invalid")
-    axes: set[str] = set()
+    axes: list[str] = []
+    seen_axes: set[str] = set()
     for value in observations:
         observation = _require_mapping(value, "compatibility observation")
         _require_exact_keys(observation, OBSERVATION_KEYS, "compatibility observation")
@@ -636,9 +658,14 @@ def _validate_compatibility_baseline(
             raise ContractRegistryError(
                 "generated compatibility observation summary does not match the Phase 2 baseline"
             )
-        if axis in axes:
+        if axis in seen_axes:
             raise ContractRegistryError("generated compatibility observation axis is duplicated")
-        axes.add(axis)
+        seen_axes.add(axis)
+        axes.append(axis)
+    if tuple(axes) != PHASE2_OBSERVATION_AXES:
+        raise ContractRegistryError(
+            "generated compatibility observation axis projection does not match Phase 2"
+        )
 
 
 def _validate_handler_binding(binding: str) -> None:

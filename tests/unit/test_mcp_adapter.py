@@ -256,9 +256,39 @@ def test_request_bound_must_be_positive() -> None:
 
 
 @pytest.mark.anyio
-@pytest.mark.parametrize(("method", "path"), [("GET", "/mcp"), ("POST", "/readyz")])
+@pytest.mark.parametrize(("method", "path"), [("GET", "/readyz"), ("POST", "/readyz")])
 async def test_non_target_requests_bypass_body_buffering(method: str, path: str) -> None:
     downstream, sent = await _exercise_middleware(method=method, path=path)
+
+    assert downstream.calls == 1
+    assert sent[0]["status"] == 200
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("method", ["GET", "DELETE"])
+async def test_non_post_mcp_transport_requires_a_reviewed_revision(method: str) -> None:
+    downstream, sent = await _exercise_middleware(
+        method=method,
+        headers=[(b"mcp-session-id", b"session-fixture")],
+    )
+
+    assert downstream.calls == 0
+    assert sent[0]["status"] == 400
+    assert _response_json(sent)["error"]["data"]["code"] == ("unsupported_protocol_version")
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("method", ["GET", "DELETE"])
+async def test_non_post_mcp_transport_with_reviewed_revision_is_forwarded(
+    method: str,
+) -> None:
+    downstream, sent = await _exercise_middleware(
+        method=method,
+        headers=[
+            (b"mcp-protocol-version", b"2025-11-25"),
+            (b"mcp-session-id", b"session-fixture"),
+        ],
+    )
 
     assert downstream.calls == 1
     assert sent[0]["status"] == 200

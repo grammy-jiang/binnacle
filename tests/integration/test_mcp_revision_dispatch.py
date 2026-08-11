@@ -384,6 +384,37 @@ async def test_legacy_session_requires_post_initialize_version(
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize("method", ["GET", "DELETE"])
+@pytest.mark.parametrize("revision", [None, "2024-11-05"])
+async def test_legacy_non_post_transport_rejects_missing_or_unsupported_revision(
+    phase2_application: BinnacleApplication,
+    method: str,
+    revision: str | None,
+) -> None:
+    legacy_revision = EXPECTED_REVISIONS[1]
+    async with running_raw_http_client(phase2_application) as client:
+        session_id = await _legacy_session(client, legacy_revision)
+        headers = {"accept": ACCEPT, "Mcp-Session-Id": session_id}
+        if revision is not None:
+            headers["MCP-Protocol-Version"] = revision
+        response = await client.request(method, "/mcp", headers=headers)
+        follow_up = await client.post(
+            "/mcp",
+            json={"jsonrpc": "2.0", "id": 4, "method": "tools/list", "params": {}},
+            headers={
+                "accept": ACCEPT,
+                "MCP-Protocol-Version": legacy_revision,
+                "Mcp-Session-Id": session_id,
+            },
+        )
+
+    assert response.status_code == 400
+    assert _jsonrpc(response)["error"]["data"]["code"] == ("unsupported_protocol_version")
+    assert follow_up.status_code == 200
+    assert len(_jsonrpc(follow_up)["result"]["tools"]) == 5
+
+
+@pytest.mark.anyio
 async def test_disabled_tasks_request_reaches_method_dispatch(
     phase2_application: BinnacleApplication,
 ) -> None:
