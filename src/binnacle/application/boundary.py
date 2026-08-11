@@ -15,6 +15,7 @@ from binnacle.ports.boundary import (
     BoundaryCheckResult,
     OperationBoundaryCheck,
     OperationBoundaryVerifier,
+    PreparedStateCheck,
 )
 from binnacle.ports.effect import EffectBoundary, EffectRequest, EffectStartReceipt
 
@@ -211,3 +212,19 @@ class FinalBoundaryService:
             return await self._verifier.verify(check)
         except Exception:  # noqa: BLE001 - verifier failure is a fail-closed result.
             return BoundaryCheckResult(False, "boundary_verifier_unavailable")
+
+
+class UnavailableOperationBoundaryVerifier:
+    """Production-safe verifier while Phase 4 exposes no consequential contract."""
+
+    async def verify(self, request: OperationBoundaryCheck) -> BoundaryCheckResult:
+        del request
+        return BoundaryCheckResult(False, "operation_boundary_unavailable")
+
+
+class UnavailablePreparedStateVerifier:
+    """Fail closed until a later reviewed operation provides a concrete state verifier."""
+
+    async def current_state_digest(self, request: PreparedStateCheck) -> str:
+        del request
+        raise RuntimeError("prepared-state verification is unavailable")

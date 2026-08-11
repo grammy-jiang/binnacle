@@ -7,7 +7,8 @@ from pathlib import Path
 
 import pytest
 from sqlalchemy import inspect, text
-from tests.phase4_support import migrate_database
+from sqlalchemy.exc import IntegrityError
+from tests.phase4_support import intent, migrate_database, owner
 
 from binnacle.adapters.sqlite.engine import (
     DatabaseRuntimeError,
@@ -18,6 +19,9 @@ from binnacle.adapters.sqlite.engine import (
     verify_runtime_directory,
 )
 from binnacle.adapters.sqlite.migrations import current_revision, upgrade_database
+from binnacle.adapters.sqlite.operation_store import SqliteOperationStore
+from binnacle.domain.idempotency import IdempotencyKeyMode, validate_and_digest_key
+from binnacle.ports.operation_store import CreateOrFindRequest
 
 EXPECTED_COLUMNS = {
     "kernel_meta": {
@@ -222,6 +226,12 @@ async def test_fresh_upgrade_has_exact_authoritative_shape_and_pragmas(
                     item["name"] for item in inspect(sync).get_check_constraints("kernel_meta")
                 }
             )
+            transition_checks = await connection.run_sync(
+                lambda sync: {
+                    item["name"]
+                    for item in inspect(sync).get_check_constraints("operation_transitions")
+                }
+            )
             indexes = await connection.run_sync(
                 lambda sync: {
                     table: {item["name"] for item in inspect(sync).get_indexes(table)}
@@ -235,11 +245,64 @@ async def test_fresh_upgrade_has_exact_authoritative_shape_and_pragmas(
         assert "ck_bindings_owner_shape" in binding_checks
         assert "ck_kernel_meta_time_monotonic" in kernel_checks
         assert "ck_kernel_meta_admission_safe" in kernel_checks
+        assert "ck_operation_transitions_shape" in transition_checks
         assert indexes == {
             "operations": {"ix_operations_state"},
             "idempotency_bindings": {"ix_bindings_operation"},
             "payload_objects": {"ix_payload_owner"},
         }
+    finally:
+        await close_database_runtime(runtime)
+
+
+@pytest.mark.anyio
+async def test_transition_shape_constraint_rejects_invalid_version_rows(
+    tmp_path: Path, repo_root: Path
+) -> None:
+    database = tmp_path / "state/binnacle.db"
+    database.parent.mkdir()
+    migrate_database(database, repo_root)
+    runtime = await create_database_runtime(
+        DatabaseRuntimeSettings(database, tmp_path / "run", verify_runtime_directory=False)
+    )
+    try:
+        store = SqliteOperationStore(runtime)
+        await store.initialize_kernel(device_id="device-fixture", audit_stream_id="stream-fixture")
+        key = validate_and_digest_key("ab" * 32, IdempotencyKeyMode.CALLER_KEY)
+        created = await store.create_or_find(
+            CreateOrFindRequest(key, owner(), intent(), "internal.synthetic", "1.0.0")
+        )
+        assert created.operation is not None
+        operation_id = created.operation.operation_id
+        insert = text(
+            "INSERT INTO operation_transitions "
+            "(operation_id, state_version, from_state, to_state, effect_knowledge, "
+            "terminality, reason_code, error_code, recorded_at, runtime_build_sha256) "
+            "VALUES (:operation_id, :state_version, :from_state, :to_state, 'none', "
+            "'non_terminal', 'invalid_fixture', NULL, CURRENT_TIMESTAMP, :runtime_build)"
+        )
+        invalid_shapes = (
+            {"state_version": 1, "from_state": "received", "to_state": "received"},
+            {"state_version": 1, "from_state": None, "to_state": "failed"},
+            {"state_version": 2, "from_state": None, "to_state": "authorised"},
+        )
+        async with runtime.engine.connect() as connection:
+            await connection.execute(
+                text("DELETE FROM operation_transitions WHERE operation_id = :operation_id"),
+                {"operation_id": operation_id},
+            )
+            await connection.commit()
+            for shape in invalid_shapes:
+                with pytest.raises(IntegrityError):
+                    await connection.execute(
+                        insert,
+                        {
+                            "operation_id": operation_id,
+                            "runtime_build": "b" * 64,
+                            **shape,
+                        },
+                    )
+                await connection.rollback()
     finally:
         await close_database_runtime(runtime)
 

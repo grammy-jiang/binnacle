@@ -155,3 +155,92 @@ async def test_reopen_rejects_foreign_stream_or_device_identity(
     )
     with pytest.raises(AuditIntegrityError, match="identity"):
         await foreign.open()
+
+
+@pytest.mark.anyio
+async def test_segment_rotation_is_bounded_serialized_and_reopenable(
+    tmp_path: Path, repo_root: Path
+) -> None:
+    directory = tmp_path / "audit"
+    journal = FileAuditJournal(
+        directory=directory,
+        identity=audit_identity(),
+        schema=audit_schema(repo_root),
+        event_bytes_max=4_096,
+        segment_bytes_max=5_000,
+    )
+    await journal.open()
+    results = [await journal.append(_draft(index)) for index in range(8)]
+
+    segments = sorted((directory / "epochs/epoch-1").glob("segment-*.jsonl"))
+    assert len(segments) > 1
+    assert all(segment.stat().st_size <= 5_000 for segment in segments)
+    events = [
+        json.loads(line)
+        for segment in segments
+        for line in segment.read_bytes().splitlines(keepends=True)
+    ]
+    for index, segment in enumerate(segments, start=1):
+        for line in segment.read_bytes().splitlines(keepends=True):
+            assert json.loads(line)["segment_id"] == f"segment-{index}"
+    assert [event["sequence"] for event in events] == list(range(1, 9))
+    assert journal.tail.event_hash == results[-1].event_hash
+
+    reopened = FileAuditJournal(
+        directory=directory,
+        identity=audit_identity(),
+        schema=audit_schema(repo_root),
+        event_bytes_max=4_096,
+        segment_bytes_max=5_000,
+    )
+    assert await reopened.open() == journal.tail
+
+
+@pytest.mark.anyio
+async def test_emergency_journal_is_integrity_linked_and_fails_when_bounded_capacity_exhausts(
+    tmp_path: Path, repo_root: Path
+) -> None:
+    directory = tmp_path / "audit"
+    journal = FileAuditJournal(
+        directory=directory,
+        identity=audit_identity(),
+        schema=audit_schema(repo_root),
+        emergency_bytes_max=1_024,
+    )
+    await journal.open()
+    await journal.append_emergency(
+        reason_code="audit_unavailable",
+        operation_id="operation-fixture",
+        source_event_id="event-fixture",
+    )
+    emergency = directory / "emergency/events.jsonl"
+    while True:
+        try:
+            await journal.append_emergency(
+                reason_code="audit_unavailable",
+                operation_id="operation-fixture",
+                source_event_id="event-fixture",
+            )
+        except AuditIntegrityError as exc:
+            assert "exhausted" in str(exc)
+            break
+    assert emergency.stat().st_size <= 1_024
+
+    reopened = FileAuditJournal(
+        directory=directory,
+        identity=audit_identity(),
+        schema=audit_schema(repo_root),
+        emergency_bytes_max=1_024,
+    )
+    await reopened.open()
+    data = bytearray(emergency.read_bytes())
+    data[-3] = ord("x")
+    emergency.write_bytes(data)
+    corrupted = FileAuditJournal(
+        directory=directory,
+        identity=audit_identity(),
+        schema=audit_schema(repo_root),
+        emergency_bytes_max=1_024,
+    )
+    with pytest.raises(AuditIntegrityError, match="emergency"):
+        await corrupted.open()

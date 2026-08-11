@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import os
 import stat
+from collections.abc import AsyncIterator, Hashable
+from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
 from binnacle.domain.payload import PayloadLifecycle, PayloadMetadata
@@ -13,6 +17,34 @@ from binnacle.ports.payload import PayloadMetadataRepository
 
 class PayloadStorageError(RuntimeError):
     pass
+
+
+@dataclass(slots=True)
+class _LockEntry:
+    lock: asyncio.Lock
+    users: int = 0
+
+
+class _KeyedMutex:
+    """Keep a bounded registry of mutexes for active payload/controller mutations."""
+
+    def __init__(self) -> None:
+        self._registry_lock = asyncio.Lock()
+        self._entries: dict[Hashable, _LockEntry] = {}
+
+    @asynccontextmanager
+    async def hold(self, key: Hashable) -> AsyncIterator[None]:
+        async with self._registry_lock:
+            entry = self._entries.setdefault(key, _LockEntry(asyncio.Lock()))
+            entry.users += 1
+        try:
+            async with entry.lock:
+                yield
+        finally:
+            async with self._registry_lock:
+                entry.users -= 1
+                if entry.users == 0 and not entry.lock.locked():
+                    self._entries.pop(key, None)
 
 
 def _fsync_directory(path: Path) -> None:
@@ -40,6 +72,8 @@ class FilesystemPayloadStore:
         self._append_chunk_bytes_max = append_chunk_bytes_max
         self._objects = directory / "objects"
         self._temporary = directory / "tmp"
+        self._payload_mutations = _KeyedMutex()
+        self._controller_quota_mutations = _KeyedMutex()
 
     async def initialize(self) -> None:
         for path in (self._directory, self._objects, self._temporary):
@@ -118,53 +152,62 @@ class FilesystemPayloadStore:
     async def append(self, payload_id: str, chunk: bytes) -> PayloadMetadata:
         if len(chunk) > self._append_chunk_bytes_max:
             raise PayloadStorageError("payload append chunk exceeds maximum")
-        metadata = await self._require(payload_id)
-        if metadata.lifecycle is not PayloadLifecycle.BUILDING:
-            raise PayloadStorageError("payload is not building")
-        new_size = metadata.decoded_byte_count + len(chunk)
-        if new_size > self._object_bytes_max:
-            raise PayloadStorageError("payload object quota exceeded")
-        controller_bytes = await self._repository.controller_bytes(
-            metadata.controller_id, metadata.controller_epoch
-        )
-        if controller_bytes + len(chunk) > self._controller_bytes_max:
-            raise PayloadStorageError("payload controller quota exceeded")
-        temporary, _ = self._paths(metadata)
-        descriptor = os.open(temporary, os.O_WRONLY | os.O_APPEND | getattr(os, "O_NOFOLLOW", 0))
-        try:
-            written = 0
-            while written < len(chunk):
-                written += os.write(descriptor, chunk[written:])
-        finally:
-            os.close(descriptor)
-        return await self._repository.update_building_size(payload_id, new_size)
+        async with self._payload_mutations.hold(payload_id):
+            metadata = await self._require(payload_id)
+            if metadata.lifecycle is not PayloadLifecycle.BUILDING:
+                raise PayloadStorageError("payload is not building")
+            new_size = metadata.decoded_byte_count + len(chunk)
+            if new_size > self._object_bytes_max:
+                raise PayloadStorageError("payload object quota exceeded")
+            controller_key = (metadata.controller_id, metadata.controller_epoch)
+            async with self._controller_quota_mutations.hold(controller_key):
+                controller_bytes = await self._repository.controller_bytes(*controller_key)
+                if controller_bytes + len(chunk) > self._controller_bytes_max:
+                    raise PayloadStorageError("payload controller quota exceeded")
+                temporary, _ = self._paths(metadata)
+                descriptor = os.open(
+                    temporary,
+                    os.O_WRONLY | os.O_APPEND | getattr(os, "O_NOFOLLOW", 0),
+                )
+                try:
+                    written = 0
+                    while written < len(chunk):
+                        written += os.write(descriptor, chunk[written:])
+                    # The database size may advance only after the appended bytes are
+                    # durable.  Otherwise a crash can leave authoritative metadata
+                    # ahead of the retained payload.
+                    os.fsync(descriptor)
+                finally:
+                    os.close(descriptor)
+                return await self._repository.update_building_size(payload_id, new_size)
 
     async def finalize(self, payload_id: str) -> PayloadMetadata:
-        metadata = await self._require(payload_id)
-        temporary, final = self._paths(metadata)
-        if metadata.lifecycle is PayloadLifecycle.COMPLETE:
-            return await self.verify(payload_id)
-        if metadata.lifecycle is not PayloadLifecycle.BUILDING:
-            raise PayloadStorageError("payload cannot be finalized")
-        descriptor = os.open(temporary, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
-        digest = hashlib.sha256()
-        count = 0
-        try:
-            while block := os.read(descriptor, 1024 * 1024):
-                digest.update(block)
-                count += len(block)
-            os.fsync(descriptor)
-        finally:
-            os.close(descriptor)
-        if count != metadata.decoded_byte_count:
-            raise PayloadStorageError("payload bytes disagree with building metadata")
-        os.link(temporary, final, follow_symlinks=False)
-        os.unlink(temporary)
-        _fsync_directory(self._objects)
-        _fsync_directory(self._temporary)
-        return await self._repository.complete(
-            payload_id, byte_count=count, sha256=digest.hexdigest()
-        )
+        async with self._payload_mutations.hold(payload_id):
+            metadata = await self._require(payload_id)
+            temporary, final = self._paths(metadata)
+            if metadata.lifecycle is PayloadLifecycle.COMPLETE:
+                return await self.verify(payload_id)
+            if metadata.lifecycle is not PayloadLifecycle.BUILDING:
+                raise PayloadStorageError("payload cannot be finalized")
+            descriptor = os.open(temporary, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+            digest = hashlib.sha256()
+            count = 0
+            try:
+                while block := os.read(descriptor, 1024 * 1024):
+                    digest.update(block)
+                    count += len(block)
+                os.fsync(descriptor)
+            finally:
+                os.close(descriptor)
+            if count != metadata.decoded_byte_count:
+                raise PayloadStorageError("payload bytes disagree with building metadata")
+            os.link(temporary, final, follow_symlinks=False)
+            os.unlink(temporary)
+            _fsync_directory(self._objects)
+            _fsync_directory(self._temporary)
+            return await self._repository.complete(
+                payload_id, byte_count=count, sha256=digest.hexdigest()
+            )
 
     async def read_range(self, payload_id: str, start: int, end: int) -> bytes:
         metadata = await self.verify(payload_id)

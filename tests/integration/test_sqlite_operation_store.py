@@ -30,6 +30,7 @@ from binnacle.domain.idempotency import (
 )
 from binnacle.domain.operation import (
     EffectKnowledge,
+    OperationError,
     OperationOwner,
     OperationState,
     OperationTransitionError,
@@ -355,6 +356,51 @@ async def test_database_rejects_ownerless_full_idempotency_binding(
 
 
 @pytest.mark.anyio
+async def test_uncertain_operation_binding_cannot_compact(tmp_path: Path, repo_root: Path) -> None:
+    async with operation_runtime(tmp_path, repo_root) as (_, store):
+        key = _key()
+        request = _request(key)
+        created = await store.create_or_find(request)
+        assert created.operation is not None
+        await store.store_policy_decision(_decision(created.operation.operation_id))
+        authorised = await store.transition(
+            created.operation.operation_id,
+            TransitionRequest(1, OperationState.AUTHORISED, EffectKnowledge.NONE, "allowed"),
+        )
+        running = await store.transition(
+            authorised.operation_id,
+            TransitionRequest(2, OperationState.RUNNING, EffectKnowledge.NONE, "running"),
+        )
+        uncertain = await store.transition(
+            running.operation_id,
+            TransitionRequest(
+                3,
+                OperationState.UNCERTAIN,
+                EffectKnowledge.UNCERTAIN,
+                "effect_outcome_unknown",
+                OperationError(
+                    "operation_uncertain",
+                    "Effect outcome requires reconciliation.",
+                    "reconcile",
+                ),
+            ),
+        )
+        with pytest.raises(OperationStoreError, match="only a terminal operation"):
+            await store.compact_idempotency_binding(
+                device_id=uncertain.intent.device_id,
+                device_epoch=uncertain.intent.device_epoch,
+                tool_name="internal.synthetic",
+                contract_version="1.0.0",
+                key_digest_sha256=key.digest_sha256,
+                retired_at=NOW + timedelta(days=30),
+            )
+        retained = await store.create_or_find(request)
+        assert retained.outcome is IdempotencyOutcome.RETAINED_OPERATION
+        assert retained.operation is not None
+        assert retained.operation.state is OperationState.UNCERTAIN
+
+
+@pytest.mark.anyio
 async def test_internal_operation_service_enforces_owner_and_cancellation_states(
     tmp_path: Path, repo_root: Path
 ) -> None:
@@ -443,6 +489,7 @@ async def test_valid_prepared_nonce_attaches_once_and_later_expiry_returns_retai
             prepared_input_sha256="1" * 64,
             prepared_state_binding_sha256="2" * 64,
             prepared_deadline_status=DeadlineStatus.VALID,
+            verified_prepared_state_binding_sha256="2" * 64,
         )
         first = await store.create_or_find(request)
         assert first.outcome is IdempotencyOutcome.CREATED

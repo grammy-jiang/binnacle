@@ -168,11 +168,13 @@ def test_serve_defaults_to_loopback_one_worker(
         *,
         application: BinnacleApplication,
         settings: ServerSettings,
+        operation_kernel_factory: object,
     ) -> None:
         observed["identity"] = application.identity.distribution_name
         observed["host"] = settings.host
         observed["port"] = settings.port
         observed["workers"] = settings.workers
+        observed["kernel_factory"] = callable(operation_kernel_factory)
 
     monkeypatch.setattr(
         "binnacle.cli.run_http_server",
@@ -188,6 +190,7 @@ def test_serve_defaults_to_loopback_one_worker(
         "host": "127.0.0.1",
         "port": 8000,
         "workers": 1,
+        "kernel_factory": True,
     }
 
 
@@ -221,9 +224,14 @@ def test_serve_accepts_ipv6_loopback_override(
         *,
         application: BinnacleApplication,
         settings: ServerSettings,
+        operation_kernel_factory: object,
     ) -> None:
         del application
-        observed.update(host=settings.host, port=settings.port)
+        observed.update(
+            host=settings.host,
+            port=settings.port,
+            kernel_factory=callable(operation_kernel_factory),
+        )
 
     monkeypatch.setattr("binnacle.cli.run_http_server", fake_run_http_server)
     _stub_composition(monkeypatch, phase2_application)
@@ -231,7 +239,7 @@ def test_serve_accepts_ipv6_loopback_override(
     result = runner.invoke(app, ["serve", "--host", "::1", "--port", "9000"])
 
     assert result.exit_code == 0
-    assert observed == {"host": "::1", "port": 9000}
+    assert observed == {"host": "::1", "port": 9000, "kernel_factory": True}
 
 
 def test_database_upgrade_reports_success_and_sanitized_failure(

@@ -28,7 +28,11 @@ from binnacle.application.reconciliation import (
     AuditObligationClosure,
     AuditRecoveryService,
 )
-from binnacle.composition import compose_application, compose_operation_kernel
+from binnacle.composition import (
+    ComposedOperationKernel,
+    compose_application,
+    compose_operation_kernel,
+)
 from binnacle.config import (
     BinnacleSettings,
     EnvironmentNamespaceError,
@@ -499,8 +503,16 @@ def serve_command(
         )
         raise typer.Exit(code=2)
     composed = compose_application(settings=settings)
+
+    async def compose_kernel() -> ComposedOperationKernel:
+        return await compose_operation_kernel(settings=settings, project_root=_project_root())
+
     try:
-        run_http_server(application=composed.application, settings=settings.server)
+        run_http_server(
+            application=composed.application,
+            settings=settings.server,
+            operation_kernel_factory=compose_kernel,
+        )
     finally:
         asyncio.run(composed.close())
 

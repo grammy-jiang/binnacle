@@ -47,6 +47,7 @@ from binnacle.domain.trusted_time import DeadlineStatus, TrustedTimeEvidence
 from binnacle.ports.operation_store import (
     CreateOrFindRequest,
     CreateOrFindResult,
+    PreparedExecutionRecord,
     PreparedNonceRegistration,
     ReconciliationCursor,
 )
@@ -251,6 +252,12 @@ class SqliteOperationStore:
             if binding.operation_id is None:
                 if request.prepared_deadline_status is not DeadlineStatus.VALID:
                     return CreateOrFindResult(IdempotencyOutcome.TRUSTED_TIME_UNAVAILABLE, None)
+                if (
+                    request.verified_prepared_state_binding_sha256
+                    != binding.prepared_state_binding_sha256
+                ):
+                    binding.conflict_count += 1
+                    return CreateOrFindResult(IdempotencyOutcome.PREPARED_MISMATCH, None)
                 await self._ensure_owner(session, request.owner, now)
                 await session.flush()
                 operation = new_received_operation(
@@ -327,6 +334,63 @@ class SqliteOperationStore:
                 await session.rollback()
                 raise
 
+    async def get_prepared_execution(
+        self, request: CreateOrFindRequest
+    ) -> PreparedExecutionRecord | None:
+        """Read exact retained preparation facts without authorising first use."""
+
+        if request.key.mode is not IdempotencyKeyMode.PREPARED_EXECUTION_NONCE:
+            return None
+        async with self._runtime.session_factory() as session:
+            binding = (
+                await session.execute(
+                    select(IdempotencyBindingModel).where(*self._scope_filter(request))
+                )
+            ).scalar_one_or_none()
+            if (
+                binding is None
+                or binding.record_kind != BindingRecordKind.FULL.value
+                or binding.owner_controller_digest != owner_digest(request.owner)
+                or binding.prepared_operation_id is None
+                or binding.prepared_expires_at is None
+                or binding.prepared_state_binding_sha256 is None
+                or binding.prepared_registered_boot_id_digest is None
+                or binding.prepared_monotonic_deadline_ns is None
+            ):
+                return None
+            prepared_expires_at = _utc(binding.prepared_expires_at)
+            assert prepared_expires_at is not None
+            return PreparedExecutionRecord(
+                prepared_operation_id=binding.prepared_operation_id,
+                prepared_expires_at=prepared_expires_at,
+                prepared_state_binding_sha256=binding.prepared_state_binding_sha256,
+                registered_boot_id_digest=binding.prepared_registered_boot_id_digest,
+                monotonic_deadline_ns=binding.prepared_monotonic_deadline_ns,
+            )
+
+    async def get_idempotency_conflict_operation(
+        self, request: CreateOrFindRequest
+    ) -> OperationSnapshot | None:
+        """Return truthful same-owner retained state solely for conflict auditing."""
+
+        async with self._runtime.session_factory() as session:
+            binding = (
+                await session.execute(
+                    select(IdempotencyBindingModel).where(*self._scope_filter(request))
+                )
+            ).scalar_one_or_none()
+            if (
+                binding is None
+                or binding.record_kind != BindingRecordKind.FULL.value
+                or binding.owner_controller_digest != owner_digest(request.owner)
+                or binding.operation_id is None
+            ):
+                return None
+            operation = await session.get(OperationModel, binding.operation_id)
+            if operation is None:
+                raise OperationStoreError("idempotency binding references a missing operation")
+            return await self._snapshot(session, operation)
+
     async def compact_idempotency_binding(
         self,
         *,
@@ -359,8 +423,8 @@ class SqliteOperationStore:
                 terminal_at = binding.terminal_at
                 if binding.operation_id is not None:
                     operation = await session.get(OperationModel, binding.operation_id)
-                    if operation is None or operation.terminality == Terminality.NON_TERMINAL.value:
-                        raise OperationStoreError("active operation cannot be compacted")
+                    if operation is None or operation.terminality != Terminality.TERMINAL.value:
+                        raise OperationStoreError("only a terminal operation can be compacted")
                     terminal_class = operation.state
                     terminal_at = operation.terminal_at or operation.updated_at
                 elif terminal_class != IdempotencyOutcome.PREPARED_EXPIRED.value:
@@ -794,6 +858,13 @@ class SqliteOperationStore:
             if model is None:
                 raise OperationStoreError("kernel metadata is not initialized")
             return bool(model.consequential_admission_enabled)
+
+    async def audit_recovery_evidence_sha256(self) -> str | None:
+        async with self._runtime.session_factory() as session:
+            model = await session.get(KernelMetaModel, 1)
+            if model is None:
+                raise OperationStoreError("kernel metadata is not initialized")
+            return model.audit_recovery_evidence_sha256
 
     @staticmethod
     def _operation_model(snapshot: OperationSnapshot) -> OperationModel:

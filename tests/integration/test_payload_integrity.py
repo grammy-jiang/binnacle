@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import os
 import secrets
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -12,6 +14,7 @@ from tests.phase4_support import intent, operation_runtime, owner
 
 from binnacle.adapters.payload.filesystem import FilesystemPayloadStore, PayloadStorageError
 from binnacle.adapters.payload.verify import find_orphan_payloads
+from binnacle.adapters.sqlite.engine import DatabaseRuntime
 from binnacle.adapters.sqlite.payload import SqlitePayloadMetadataRepository
 from binnacle.domain.idempotency import IdempotencyKeyMode, validate_and_digest_key
 from binnacle.domain.payload import PayloadKind, PayloadLifecycle, PayloadMetadata
@@ -36,6 +39,55 @@ def _metadata(payload_id: str, operation_id: str) -> PayloadMetadata:
         retention_class="AR2",
         created_at=datetime.now(UTC),
     )
+
+
+class _PausingPayloadReadRepository(SqlitePayloadMetadataRepository):
+    """Hold the first metadata snapshot so a second append attempts the same race."""
+
+    def __init__(self, runtime: DatabaseRuntime, payload_id: str) -> None:
+        super().__init__(runtime)
+        self._payload_id = payload_id
+        self.payload_read_calls = 0
+        self.first_read_entered = asyncio.Event()
+        self.release_first_read = asyncio.Event()
+
+    async def get(self, payload_id: str) -> PayloadMetadata | None:
+        if payload_id != self._payload_id:
+            return await super().get(payload_id)
+        self.payload_read_calls += 1
+        metadata = await super().get(payload_id)
+        if self.payload_read_calls == 1:
+            self.first_read_entered.set()
+            await self.release_first_read.wait()
+        return metadata
+
+
+class _PausingControllerQuotaRepository(SqlitePayloadMetadataRepository):
+    """Hold one quota snapshot while a second payload reaches controller admission."""
+
+    def __init__(self, runtime: DatabaseRuntime, second_payload_id: str) -> None:
+        super().__init__(runtime)
+        self._second_payload_id = second_payload_id
+        self.quota_read_calls = 0
+        self.first_quota_read_entered = asyncio.Event()
+        self.release_first_quota_read = asyncio.Event()
+        self.second_metadata_read_entered = asyncio.Event()
+        self.release_second_metadata_read = asyncio.Event()
+
+    async def get(self, payload_id: str) -> PayloadMetadata | None:
+        metadata = await super().get(payload_id)
+        if payload_id == self._second_payload_id:
+            self.second_metadata_read_entered.set()
+            await self.release_second_metadata_read.wait()
+        return metadata
+
+    async def controller_bytes(self, controller_id: str, controller_epoch: int) -> int:
+        self.quota_read_calls += 1
+        value = await super().controller_bytes(controller_id, controller_epoch)
+        if self.quota_read_calls == 1:
+            self.first_quota_read_entered.set()
+            await self.release_first_quota_read.wait()
+        return value
 
 
 @pytest.mark.anyio
@@ -70,6 +122,149 @@ async def test_payload_finalize_is_digest_truthful_and_idempotent(
         assert await payloads.read_range(metadata.payload_id, 2, 6) == b"cdef"
         assert await payloads.finalize(metadata.payload_id) == complete
         assert await payloads.verify_all() == (complete,)
+
+
+@pytest.mark.anyio
+async def test_payload_append_fsyncs_bytes_before_advancing_metadata(
+    tmp_path: Path, repo_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async with operation_runtime(tmp_path, repo_root) as (runtime, operation_store):
+        created = await operation_store.create_or_find(
+            CreateOrFindRequest(
+                validate_and_digest_key(secrets.token_hex(32), IdempotencyKeyMode.CALLER_KEY),
+                owner(),
+                intent(),
+                "internal.synthetic",
+                "1.0.0",
+            )
+        )
+        assert created.operation is not None
+        repository = SqlitePayloadMetadataRepository(runtime)
+        payloads = FilesystemPayloadStore(
+            directory=tmp_path / "results",
+            repository=repository,
+            object_bytes_max=32,
+            controller_bytes_max=64,
+            append_chunk_bytes_max=8,
+        )
+        await payloads.initialize()
+        metadata = _metadata("durable-append", created.operation.operation_id)
+        await payloads.create(metadata)
+
+        events: list[str] = []
+        original_fsync = os.fsync
+        original_update = repository.update_building_size
+
+        def tracked_fsync(descriptor: int) -> None:
+            events.append("fsync")
+            original_fsync(descriptor)
+
+        async def tracked_update(payload_id: str, new_size: int) -> PayloadMetadata:
+            events.append("metadata")
+            return await original_update(payload_id, new_size)
+
+        monkeypatch.setattr(os, "fsync", tracked_fsync)
+        monkeypatch.setattr(repository, "update_building_size", tracked_update)
+
+        updated = await payloads.append(metadata.payload_id, b"abcd")
+
+        assert updated.decoded_byte_count == 4
+        assert events == ["fsync", "metadata"]
+
+
+@pytest.mark.anyio
+async def test_concurrent_same_payload_appends_cannot_lose_metadata(
+    tmp_path: Path, repo_root: Path
+) -> None:
+    async with operation_runtime(tmp_path, repo_root) as (runtime, operation_store):
+        created = await operation_store.create_or_find(
+            CreateOrFindRequest(
+                validate_and_digest_key(secrets.token_hex(32), IdempotencyKeyMode.CALLER_KEY),
+                owner(),
+                intent(),
+                "internal.synthetic",
+                "1.0.0",
+            )
+        )
+        assert created.operation is not None
+        metadata = _metadata("concurrent", created.operation.operation_id)
+        repository = _PausingPayloadReadRepository(runtime, metadata.payload_id)
+        payloads = FilesystemPayloadStore(
+            directory=tmp_path / "results",
+            repository=repository,
+            object_bytes_max=32,
+            controller_bytes_max=32,
+            append_chunk_bytes_max=8,
+        )
+        await payloads.initialize()
+        await payloads.create(metadata)
+
+        first = asyncio.create_task(payloads.append(metadata.payload_id, b"aaaa"))
+        await repository.first_read_entered.wait()
+        second_started = asyncio.Event()
+
+        async def second_append() -> PayloadMetadata:
+            second_started.set()
+            return await payloads.append(metadata.payload_id, b"bbbb")
+
+        second = asyncio.create_task(second_append())
+        await second_started.wait()
+        await asyncio.sleep(0)
+        assert repository.payload_read_calls == 1
+
+        repository.release_first_read.set()
+        first_result, second_result = await asyncio.gather(first, second)
+        assert first_result.decoded_byte_count == 4
+        assert second_result.decoded_byte_count == 8
+        assert (tmp_path / "results/tmp/concurrent.part").read_bytes() == b"aaaabbbb"
+        assert (await repository.get(metadata.payload_id)) == second_result
+
+
+@pytest.mark.anyio
+async def test_concurrent_payloads_cannot_overcommit_controller_quota(
+    tmp_path: Path, repo_root: Path
+) -> None:
+    async with operation_runtime(tmp_path, repo_root) as (runtime, operation_store):
+        created = await operation_store.create_or_find(
+            CreateOrFindRequest(
+                validate_and_digest_key(secrets.token_hex(32), IdempotencyKeyMode.CALLER_KEY),
+                owner(),
+                intent(),
+                "internal.synthetic",
+                "1.0.0",
+            )
+        )
+        assert created.operation is not None
+        first_metadata = _metadata("quota-first", created.operation.operation_id)
+        second_metadata = _metadata("quota-second", created.operation.operation_id)
+        repository = _PausingControllerQuotaRepository(runtime, second_metadata.payload_id)
+        payloads = FilesystemPayloadStore(
+            directory=tmp_path / "results",
+            repository=repository,
+            object_bytes_max=8,
+            controller_bytes_max=4,
+            append_chunk_bytes_max=4,
+        )
+        await payloads.initialize()
+        await payloads.create(first_metadata)
+        await payloads.create(second_metadata)
+
+        first = asyncio.create_task(payloads.append(first_metadata.payload_id, b"1111"))
+        await repository.first_quota_read_entered.wait()
+        second = asyncio.create_task(payloads.append(second_metadata.payload_id, b"2222"))
+        await repository.second_metadata_read_entered.wait()
+        repository.release_second_metadata_read.set()
+        await asyncio.sleep(0)
+        assert repository.quota_read_calls == 1
+
+        repository.release_first_quota_read.set()
+        first_result = await first
+        assert first_result.decoded_byte_count == 4
+        with pytest.raises(PayloadStorageError, match="controller quota"):
+            await second
+        assert await repository.controller_bytes("controller-fixture", 1) == 4
+        assert (tmp_path / "results/tmp/quota-first.part").read_bytes() == b"1111"
+        assert (tmp_path / "results/tmp/quota-second.part").read_bytes() == b""
 
 
 @pytest.mark.anyio

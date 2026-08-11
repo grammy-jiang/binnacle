@@ -9,7 +9,7 @@ from typing import Protocol
 
 @dataclass(frozen=True, slots=True)
 class PreparedStateCheck:
-    operation_id: str
+    operation_id: str | None
     prepared_operation_id: str
     protected_facts: Mapping[str, str]
 

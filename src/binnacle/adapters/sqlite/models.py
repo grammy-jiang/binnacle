@@ -168,6 +168,11 @@ class OperationTransitionModel(Base):
     __tablename__ = "operation_transitions"
     __table_args__ = (
         CheckConstraint("state_version >= 1", name="ck_operation_transitions_version"),
+        CheckConstraint(
+            "(state_version = 1 AND from_state IS NULL AND to_state = 'received') OR "
+            "(state_version > 1 AND from_state IS NOT NULL)",
+            name="ck_operation_transitions_shape",
+        ),
     )
 
     operation_id: Mapped[str] = mapped_column(

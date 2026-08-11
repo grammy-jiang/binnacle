@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import stat
 from pathlib import Path
 
 import pytest
@@ -37,6 +39,7 @@ def test_setup_declares_exact_protected_and_service_owned_roots() -> None:
     service_paths = {str(path): mode for path, mode in setup_dev_pi.SERVICE_STATE_PATHS}
     assert root_paths == {
         "/etc/binnacle": 0o750,
+        "/var/lib/binnacle": 0o750,
         "/var/lib/binnacle/evaluation": 0o750,
     }
     assert {
@@ -53,6 +56,35 @@ def test_setup_declares_exact_protected_and_service_owned_roots() -> None:
     } == set(service_paths)
     assert set(service_paths.values()) == {0o750}
     assert "/run/binnacle" not in root_paths | service_paths
+
+
+def test_setup_creates_traversable_protected_parent_before_fresh_state_tree(
+    tmp_path: Path,
+) -> None:
+    protected_parent = tmp_path / "var" / "lib" / "binnacle"
+    service_state = protected_parent / "state"
+    uid = os.getuid()
+    service_gid = os.getgid()
+
+    setup_dev_pi._ensure_protected_directory(
+        protected_parent,
+        uid=uid,
+        gid=service_gid,
+        mode=0o750,
+    )
+    setup_dev_pi._ensure_protected_directory(
+        service_state,
+        uid=uid,
+        gid=service_gid,
+        mode=0o750,
+    )
+
+    parent_info = protected_parent.stat()
+    assert parent_info.st_uid == uid
+    assert parent_info.st_gid == service_gid
+    assert stat.S_IMODE(parent_info.st_mode) == 0o750
+    assert parent_info.st_mode & stat.S_IXGRP
+    assert service_state.is_dir()
 
 
 def test_setup_rejects_symlinked_protected_path_components(

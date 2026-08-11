@@ -29,6 +29,7 @@ class CreateOrFindRequest:
     prepared_input_sha256: str | None = None
     prepared_state_binding_sha256: str | None = None
     prepared_deadline_status: DeadlineStatus | None = None
+    verified_prepared_state_binding_sha256: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,6 +55,17 @@ class PreparedNonceRegistration:
     monotonic_deadline_ns: int
     target_identity_sha256: str | None = None
     maximum_effect_sha256: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class PreparedExecutionRecord:
+    """Authoritative retained facts needed for application-layer revalidation."""
+
+    prepared_operation_id: str
+    prepared_expires_at: datetime
+    prepared_state_binding_sha256: str
+    registered_boot_id_digest: str
+    monotonic_deadline_ns: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,6 +101,14 @@ class OperationStore(Protocol):
         self, registration: PreparedNonceRegistration
     ) -> None: ...
 
+    async def get_prepared_execution(
+        self, request: CreateOrFindRequest
+    ) -> PreparedExecutionRecord | None: ...
+
+    async def get_idempotency_conflict_operation(
+        self, request: CreateOrFindRequest
+    ) -> OperationSnapshot | None: ...
+
     async def get_trusted_time_evidence(self) -> TrustedTimeEvidence: ...
 
     async def store_trusted_time_evidence(self, evidence: TrustedTimeEvidence) -> None: ...
@@ -96,6 +116,8 @@ class OperationStore(Protocol):
     async def set_consequential_admission_enabled(self, enabled: bool) -> None: ...
 
     async def consequential_admission_enabled(self) -> bool: ...
+
+    async def audit_recovery_evidence_sha256(self) -> str | None: ...
 
     async def list_reconcilable(
         self,

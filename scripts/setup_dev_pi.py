@@ -25,6 +25,7 @@ SERVICE_GROUP = "binnacle"
 DEVELOPMENT_GROUP = "binnacle-dev"
 ROOT_PROTECTED_PATHS = (
     (Path("/etc/binnacle"), 0o750),
+    (Path("/var/lib/binnacle"), 0o750),
     (Path("/var/lib/binnacle/evaluation"), 0o750),
 )
 SERVICE_STATE_PATHS = (

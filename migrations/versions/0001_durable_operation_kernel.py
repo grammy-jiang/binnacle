@@ -274,6 +274,11 @@ def upgrade() -> None:
         sa.Column("recorded_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("runtime_build_sha256", sa.String(length=64), nullable=False),
         sa.CheckConstraint("state_version >= 1", name="ck_operation_transitions_version"),
+        sa.CheckConstraint(
+            "(state_version = 1 AND from_state IS NULL AND to_state = 'received') OR "
+            "(state_version > 1 AND from_state IS NOT NULL)",
+            name="ck_operation_transitions_shape",
+        ),
         sa.ForeignKeyConstraint(
             ["operation_id"],
             ["operations.operation_id"],
