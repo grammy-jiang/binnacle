@@ -611,10 +611,38 @@ Preparation then permits exactly two truthful filesystem observations for that e
   digest, and the current-state binding includes that protected on-disk identity; or
 * **observed absent** -- secure lookup through the protected root proves the exact target
   name is absent. The binding includes the exact ``artifact_id``, retained
-  ``path_generation``, owner/controller epoch, expected content digest, NULL active-claim
-  state, root identity, normalized path, and a typed
-  ``created_target_observed_absent`` current-state fact instead of an on-disk file
-  identity.
+  ``path_generation``, owner/controller epoch, expected content digest, root identity,
+  normalized path, a typed ``created_target_observed_absent`` current-state fact instead
+  of an on-disk file identity, and the phase-stable cleanup-claim component described
+  below.
+
+For **either** still-created cleanup variant, the Phase 5 operation-specific current-state
+canonicalizer includes the literal semantic component
+``cleanup_claim_transition=unclaimed_then_exact_self`` instead of hashing the raw
+``active_cleanup_operation_id`` value as a changing literal. This is a narrowly bounded,
+phase-aware representation of the one internal reservation transition that policy
+admission is expected to make; it is not an omission of cleanup-claim state:
+
+* at preparation, pre-policy execute validation, and the pre-CAS admission revalidation,
+  the component is valid only when the durable ``active_cleanup_operation_id`` is NULL;
+* after policy allows the exact operation, the post-policy transaction may perform the
+  one atomic CAS ``NULL -> current operation`` already specified in section 16;
+* at final OP-BOUNDARY revalidation, the same canonical component is valid only when the
+  durable claim equals the exact current ``running`` operation **and** that operation's
+  immutable ``probe_operations.prepared_binding_id`` names the same consumed prepared
+  binding whose stored current-state digest is being checked;
+* a non-NULL claim before admission, a NULL claim at final verification, a claim owned by
+  any other operation, or a missing/mismatched prepared-binding relationship is a current-
+  state mismatch and fails closed;
+* no other current-state fact is normalized across phases: artifact state/generation/
+  owner, root/path, content/file identity or observed absence, controller epoch, and every
+  other prepared fact must still compare exactly.
+
+The canonicalizer is deterministic from durable state and the exact operation/prepared-
+binding relationship, so fresh-process recovery can reproduce it without an in-memory
+whitelist. The self-claim normalization does not itself authorize an effect; it only keeps
+Phase 4's exact prepared-current-state digest stable across the one reservation transition
+that Phase 5 itself requires after an allow decision.
 
 The observed-absent preparation fact is **not** effect knowledge, remover provenance, or a
 state transition. Preparation leaves the artifact durably ``created``, does not set
@@ -751,11 +779,15 @@ The post-policy admission behavior is exact:
   artifact/path/generation/ownership and the exact prepared filesystem observation. A
   present-bound preparation must still match the protected file identity/digest; a
   ``created_target_observed_absent`` preparation must still prove secure absence for the
-  same root/path/generation. Only after that exact-state check does admission atomically
-  compare-and-set ``active_cleanup_operation_id`` from NULL to this operation; an existing
-  active claim is never stolen or overwritten. Admitting the observed-absent variant does
-  not mark the artifact removed and does not create effect knowledge -- it merely gives
-  the exact cleanup operation a claim so the final no-start verifier can close it
+  same root/path/generation. The phase-aware current-state canonicalizer must recompute the
+  prepared digest in its pre-claim form while the durable active claim is still NULL.
+  Only after that exact digest check does admission atomically compare-and-set
+  ``active_cleanup_operation_id`` from NULL to this operation; an existing active claim is
+  never stolen or overwritten. That successful CAS is the sole internal state transition
+  represented by ``cleanup_claim_transition=unclaimed_then_exact_self`` and does not
+  authorize normalization of any other changed fact. Admitting the observed-absent variant
+  does not mark the artifact removed and does not create effect knowledge -- it merely
+  gives the exact cleanup operation a claim so the final no-start verifier can close it
   truthfully if absence is still proven;
 * for cleanup whose retained artifact is already durably ``removed``, the operation may
   be admitted as an idempotent no-effect establishment of the requested absent state and
@@ -765,6 +797,11 @@ The post-policy admission behavior is exact:
 * after the allow transaction commits, the required allowed ``policy.decision`` and
   ``operation.authorised`` audit evidence must fsync before any ``authorised -> running``
   transition.
+
+The post-CAS current state is therefore not a blanket exception to Phase 4 current-state
+binding. At final verification, the claim may canonicalize back to the same prepared token
+only for the exact operation that consumed the exact prepared binding; the raw claim and
+that durable relationship must be checked before digest comparison as section 17 defines.
 
 If a prepared filesystem observation changes before admission -- including a file
 appearing for an observed-absent cleanup preparation or a present-bound file disappearing,
@@ -799,12 +836,32 @@ The Phase 5 ``OperationBoundaryVerifier`` plugs into the mandatory Phase 4 all-m
 revalidation path and runs while the per-operation ``DispatchHandoffGate`` and global
 ``ConsequentialBoundaryGate`` semantics remain authoritative.
 
+For a still-created cleanup, the Phase 5 current-state callback is phase-aware **only** for
+the cleanup-claim component frozen in section 14. Immediately before Phase 4 compares the
+current digest with ``operation.prepared_current_state_digest``, the verifier must first
+prove that ``active_cleanup_operation_id`` equals the exact current ``running`` operation
+and that the immutable ``probe_operations.prepared_binding_id`` for that operation equals
+the consumed prepared binding that carries the stored digest. Only then may the callback
+canonicalize that exact self-owned claim as
+``cleanup_claim_transition=unclaimed_then_exact_self``. A NULL claim at this stage, a
+claim owned by any other operation, or a missing/mismatched prepared-binding relationship
+is a digest mismatch and blocks start. The claim is never simply omitted from the digest,
+and no other current-state fact receives phase-aware normalization.
+
+This operation-specific canonical form preserves Phase 4's exact-digest rule: the digest
+computed before admission while the claim is NULL and the digest computed at final
+verification after the exact operation has acquired its own claim are identical only
+because both represent the same reviewed reservation transition. Artifact generation,
+owner/controller epoch, root/path, file identity/content or typed observed absence, and all
+other prepared facts remain byte-for-byte exact and any change still invalidates the
+preparation.
+
 Immediately before ``EffectBoundary.start``, revalidate:
 
 * current authenticated controller/profile/epoch and write-probe policy;
 * Phase 4 kernel/audit/recovery health and open global consequential permit;
 * exact ``running`` operation/state version;
-* preparation expiry/trusted-time/current-state binding;
+* preparation expiry/trusted-time/current-state binding through the phase-aware rule above;
 * probe-root identity and permissions;
 * exact single-component target path;
 * write target still absent and its live durable reservation/generation still belongs to
@@ -1339,8 +1396,13 @@ Unit/property coverage includes:
 * prepare/write and prepare/cleanup fingerprints are deterministic and contract-exact;
 * cleanup preparation for a durable ``created`` artifact whose exact target is already
   absent succeeds only with the typed ``created_target_observed_absent`` binding over the
-  exact artifact/generation/owner/content/root/path and NULL active claim; preparation does
-  not mutate artifact state/claim or effect knowledge;
+  exact artifact/generation/owner/content/root/path and the phase-stable cleanup-claim
+  component; preparation does not mutate artifact state/claim or effect knowledge;
+* phase-aware cleanup-claim canonicalization produces the same current-state digest across
+  only the expected durable ``NULL -> exact consuming operation`` admission transition;
+  a pre-admission non-NULL claim, final NULL/different claim, or missing/mismatched
+  ``prepared_binding_id`` relationship invalidates the binding, and no unrelated state
+  fact is normalized;
 * a file appearing after observed-absent preparation, or any artifact/generation/owner
   change, invalidates that prepared state before admission/final boundary rather than
   converting absence/presence into inferred effect knowledge;
@@ -1420,6 +1482,9 @@ Required faults include:
   mismatch despite target being absent again;
 * crash after post-policy artifact reservation/authorisation before ``running``;
 * crash after ``running``/intent audit before final verifier;
+* exact self-owned cleanup claim acquired by admission -> final verifier reconstructs the
+  prepared digest through the phase-stable claim component; clearing that claim or
+  rebinding it to any other operation before final verification yields mismatch/no start;
 * audit-obligation marker failure;
 * target appears after prepare but before final boundary;
 * staging create/write/fsync failure;
@@ -1474,6 +1539,9 @@ Close all runtimes and reconstruct a fresh application. Verify:
   exact no-effect-neutral current-state digest after restart; continued absence may proceed
   through normal admission/final verification, while reappearance or any generation/owner
   change invalidates the preparation without inferring an effect;
+* an admitted still-created cleanup reconstructs the phase-stable claim component solely
+  from durable exact ``operation_id``/``probe_operations.prepared_binding_id``/active-claim
+  state; no in-memory exception is required, and a missing or foreign claim fails closed;
 * dual caller/prepared binding relation remains intact even when no post-policy probe row
   exists for a rejected/interrupted pre-policy operation;
 * a ``received`` operation whose required received audit never fsynced does not proceed to
@@ -1539,6 +1607,10 @@ Phase 5 must preserve all of the following:
    ``created`` generation is absent, but that observation is never effect knowledge,
    removal provenance, or permission to mutate durable artifact state before independent
    policy admission and final no-start verification;
+#. cleanup prepared/current-state binding normalizes only the reviewed admission-owned
+   ``NULL -> exact self`` active-claim transition through one deterministic semantic token;
+   every phase separately verifies raw claim ownership/prepared-binding relation as
+   applicable, and no unrelated state change can be hidden by that canonicalization;
 #. live path uniqueness is state-aware; removed/proven-abandoned history is retained and
    path generations prevent stale preparation resurrection;
 #. a created artifact has at most one active cleanup claim; policy admission never steals
@@ -1621,20 +1693,23 @@ Implement Phase 5 in this order after the implementation/promotion prerequisites
    path-generation history, state-aware active cleanup claims, successful-cleanup
    provenance, and ``probe_artifacts`` constraints;
 #. implement preparation state binding -- including the exact
-   ``created_target_observed_absent`` cleanup variant that carries no effect knowledge --
-   and Phase 4 prepared-nonce registration;
+   ``created_target_observed_absent`` cleanup variant that carries no effect knowledge and
+   the phase-stable ``unclaimed_then_exact_self`` cleanup-claim component -- and Phase 4
+   prepared-nonce registration;
 #. implement minimal dual prepared-nonce + caller-key pre-policy identity admission;
 #. integrate mandatory fsynced ``operation.state_changed(null -> received)`` immediately
    after first durable identity and before any policy evaluation;
 #. implement exact Bootstrap policy entries for write/cleanup;
 #. implement post-policy ``probe_operations`` plus write/active-cleanup reservation,
    admission decision, exact prepared-state revalidation for present/observed-absent
-   cleanup variants, and ``received -> authorised`` transaction;
+   cleanup variants, exact NULL-to-self claim CAS, and ``received -> authorised``
+   transaction;
 #. integrate mandatory fsynced allowed ``policy.decision`` + ``operation.authorised``
    evidence before any ``authorised -> running`` transition;
 #. implement secure root/staging adapter and filesystem capability verification;
-#. implement Phase 5 final boundary verifier including the exact pre-start already-missing
-   no-effect branch for both preparation-bound and later-observed absence;
+#. implement Phase 5 final boundary verifier including exact prepared-binding/self-claim
+   canonical reconstruction and the pre-start already-missing no-effect branch for both
+   preparation-bound and later-observed absence;
 #. implement atomic create/no-overwrite effect and reconciler;
 #. implement exact cleanup effect, explicit adapter no-effect receipt, receipt-aware
    successful-removal closure, special no-effect absence closure, state-aware still-present
@@ -1665,6 +1740,10 @@ A reviewer verifies:
 * cleanup preparation can truthfully bind an exact retained ``created`` generation plus
   secure observed absence without requiring an on-disk identity and without creating
   effect knowledge, remover provenance, or an artifact-state transition;
+* still-created cleanup current-state binding remains stable across only the expected
+  admission-owned ``NULL -> exact self`` claim transition: preparation/admission require
+  NULL, final verification requires the exact self claim plus the exact immutable
+  prepared-binding relationship, and all unrelated state remains exact;
 * execute requires both prepared nonce and caller key and atomically binds both to one
   minimal pre-policy operation;
 * required received-state audit fsync precedes policy and required allowed/authorised audit
@@ -1713,6 +1792,10 @@ This **planning PR** is accepted only when:
 #. cleanup preparation supports exact created-but-observed-absent current-state binding
    without requiring a nonexistent file identity and without mutating durable artifact or
    effect state;
+#. cleanup prepared/current-state digests remain exact while permitting only the one
+   deterministic post-policy ``NULL -> exact consuming operation`` claim transition via a
+   phase-stable semantic component; foreign/missing claims or binding relationships fail
+   closed and no other current-state fact is normalized;
 #. required ``received`` audit precedes policy and required allowed/authorised audit
    precedes ``running``; failure of either gate cannot reach filesystem start;
 #. policy deny/pre-policy crash cannot strand a probe-path reservation;
@@ -1754,6 +1837,9 @@ The implementation may become live for the selected HOST profile only when:
 #. automated tests prove cleanup preparation can bind exact secure absence for a retained
    ``created`` generation without fabricating identity/effect knowledge, and any state
    change before admission/final verification invalidates that preparation fail closed;
+#. automated tests prove the prepared cleanup digest survives exactly the expected
+   admission-owned NULL-to-self claim CAS, while a foreign/cleared claim or mismatched
+   durable prepared-binding relation suppresses final start;
 #. automated tests prove both mandatory Phase 4 audit gates suppress policy/dispatch or
    running/start exactly when their required fsync fails;
 #. automated tests prove known-no-effect cleanup claims release/close only after durable
