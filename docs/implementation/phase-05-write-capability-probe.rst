@@ -803,14 +803,34 @@ reaches exact ``created``.
 
 ``LinuxProbeWorkspace.start_cleanup`` is callable only after section 12.2 succeeds. It
 accepts the exact claimed active ``created`` artifact and performs a second adapter-local
-identity/type/content check using protected root directory fds. It then unlinks exact name,
-fsyncs the root directory, and returns a stable effect reference.
+identity/type/content check using protected root directory fds. Cleanup then:
 
-If target becomes absent after ``call_start`` linearization but before unlink, the adapter
-performs no unlink and may return an explicit no-effect receipt correlated to exact
-operation/artifact/path generation. Only a durably retained/classified receipt proves no
-unlink was attempted. Receipt loss leaves post-dispatch absence ``uncertain``; absence
-alone cannot reconstruct either no-effect or known-effect.
+#. atomically moves the current root entry to a unique, operation-correlated private
+   ``.staging`` tomb using same-filesystem no-replace semantics;
+#. opens that tomb read/write with no-follow defenses and re-verifies the exact held
+   inode/type/owner/mode/size/content identity;
+#. on mismatch, restores the quarantined entry to the root with no-replace semantics and
+   fsyncs both directories, or retains it and reports uncertainty if safe restoration is
+   impossible;
+#. on an exact match, truncates and fsyncs **only the held verified inode**, fsyncs both
+   directories, requires the public root name to remain absent, and returns a stable effect
+   reference;
+#. retains the recognizable zero-length private tomb for stopped-service accounting.
+
+Linux has no unlink-by-open-file-descriptor primitive. Pathname-unlinking the quarantine
+after verification would recreate the same substitution race inside ``.staging`` and could
+delete an unrelated replacement. Runtime cleanup therefore never unlinks the mutable tomb
+pathname. A future cleanup/retention procedure may remove a tomb only under a separately
+reviewed stopped-service proof; unknown or non-empty staging entries are never deleted
+automatically.
+
+If target becomes absent after ``call_start`` linearization but before the quarantine move,
+the adapter performs no filesystem mutation and may return an explicit no-effect receipt
+correlated to exact operation/artifact/path generation. Only a durably retained/classified
+receipt proves no move was attempted. Receipt loss leaves post-dispatch absence
+``uncertain``; absence alone cannot reconstruct either no-effect or known-effect. A
+replacement appearing after quarantine is preserved and forces uncertainty; it is never
+deleted as though it were the prepared artifact.
 
 Mismatched/symlink/directory/unowned content is never deleted automatically.
 
@@ -1120,10 +1140,19 @@ Required faults include:
 * target absent before cleanup preparation while artifact remains ``created`` ->
   observed-absent preparation, exact claim, no-start known-no-effect closure only after
   full ledger/history verification and required audit/recovery closure;
-* target absent after ``call_start`` but before unlink with durable explicit no-effect
-  receipt -> no unlink and exact no-effect closure;
+* target absent after ``call_start`` but before quarantine with durable explicit no-effect
+  receipt -> no move and exact no-effect closure;
+* target is renamed/replaced before quarantine -> replacement is restored without
+  overwrite, neither the original nor replacement is deleted, and cleanup is known no
+  effect only after exact durable classification;
+* target is replaced after exact quarantine verification -> only the held prepared inode
+  is truncated, the replacement survives, and cleanup remains uncertain because the public
+  target is occupied;
+* successful cleanup retains one recognizable zero-length private tomb; no runtime path
+  unlinks that mutable tomb name;
 * same race with receipt loss -> uncertain, claim/ledger active retained;
-* crash after unlink/root-fsync before receipt -> uncertain until explicit recovery proves
+* crash after held-inode truncation/directory fsync before receipt -> uncertain until
+  explicit recovery proves
   effect; absence alone cannot close ledger;
 * crash during ledger terminalization -> atomic old or new state only;
 * DB failure during cleanup claim/ledger closure -> conservative active state;

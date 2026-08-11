@@ -302,6 +302,11 @@ one-component path and bounded content from the frozen evaluation case:
 Never recursively clean the probe root.  A reserved/uncertain artifact, unknown staging
 entry, identity mismatch, corrupt ledger/history, or lost receipt is an operator-visible
 recovery condition, not permission to infer success from pathname presence or absence.
+Successful identity-bound cleanup intentionally retains one recognizable zero-length
+``.staging/.binnacle-cleanup-tomb-v1-*`` entry.  Do not remove these tombs while the service
+is running and do not treat a similarly named non-empty or identity-unbound entry as safe.
+Tomb retention or removal requires a separately reviewed stopped-service accounting
+procedure; this Bootstrap implementation never pathname-unlinks them automatically.
 Keep the write catalogue disabled and record the case as blocked until every prerequisite
 above is observed on the real Pi.  CI and temporary-directory tests are implementation
 evidence only; they are not real-Pi or real-ChatGPT support evidence.

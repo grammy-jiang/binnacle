@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import ctypes
 import os
 import secrets
 import stat
@@ -378,8 +379,18 @@ class LinuxProbeWorkspace:
         if path_generation < 1:
             raise ProbeEffectNotStarted("probe_cleanup_generation_invalid")
         root_fd, staging_fd = self._open_directories()
-        os.close(staging_fd)
-        unlinked = False
+        quarantine_correlation = canonical_sha256(
+            {
+                "artifact_id": artifact_id,
+                "operation_id": operation_id,
+                "path_generation": path_generation,
+            }
+        )[:32]
+        quarantine_name = (
+            f".binnacle-cleanup-tomb-v1-{quarantine_correlation}-{secrets.token_hex(12)}"
+        )
+        quarantined = False
+        quarantine_descriptor: int | None = None
         try:
             observation = self._observe_at(root_fd, relative_path)
             if observation.state is ProbeTargetState.ABSENT:
@@ -390,27 +401,135 @@ class LinuxProbeWorkspace:
                 or observation.file_identity_digest != expected_file_identity_digest
             ):
                 raise ProbeEffectNotStarted("probe_cleanup_identity_mismatch")
-            before_unlink = self._observe_at(root_fd, relative_path)
-            if before_unlink != observation:
+            try:
+                self._rename_noreplace(
+                    source_dir_fd=root_fd,
+                    source_name=relative_path,
+                    destination_dir_fd=staging_fd,
+                    destination_name=quarantine_name,
+                )
+            except FileNotFoundError:
+                return None
+            except FileExistsError as exc:
+                raise ProbeEffectNotStarted("probe_cleanup_quarantine_collision") from exc
+            quarantined = True
+            quarantine_descriptor = os.open(
+                quarantine_name,
+                os.O_RDWR | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0),
+                dir_fd=staging_fd,
+            )
+            quarantined_observation = self._observe_descriptor(quarantine_descriptor)
+            if (
+                quarantined_observation.state is not ProbeTargetState.EXACT
+                or quarantined_observation.content_sha256 != expected_content_sha256
+                or quarantined_observation.file_identity_digest != expected_file_identity_digest
+            ):
+                os.close(quarantine_descriptor)
+                quarantine_descriptor = None
+                try:
+                    self._rename_noreplace(
+                        source_dir_fd=staging_fd,
+                        source_name=quarantine_name,
+                        destination_dir_fd=root_fd,
+                        destination_name=relative_path,
+                    )
+                    os.fsync(staging_fd)
+                    os.fsync(root_fd)
+                except Exception as exc:
+                    raise ProbeWorkspaceFilesystemError(
+                        "mismatched cleanup quarantine could not be restored"
+                    ) from exc
+                quarantined = False
                 raise ProbeEffectNotStarted("probe_cleanup_identity_changed")
-            os.unlink(relative_path, dir_fd=root_fd)
-            unlinked = True
+
+            # Linux has no unlink-by-open-fd. A pathname unlink here would recreate
+            # the same substitution race inside .staging. Destroy only the verified
+            # held inode and retain its empty private tomb until separately reviewed
+            # maintenance can account for it.
+            os.ftruncate(quarantine_descriptor, 0)
+            os.fsync(quarantine_descriptor)
+            os.fsync(staging_fd)
             os.fsync(root_fd)
+            if self._observe_at(root_fd, relative_path).state is not ProbeTargetState.ABSENT:
+                raise ProbeWorkspaceFilesystemError(
+                    "probe cleanup target was replaced after quarantine"
+                )
             return (
                 f"probe-cleanup:v1:{artifact_id}:{path_generation}:{expected_file_identity_digest}"
             )
         except ProbeEffectNotStarted:
             raise
         except FileNotFoundError:
-            if unlinked:
+            if quarantined:
                 raise
             return None
         except Exception as exc:
-            if unlinked:
+            if quarantined:
                 raise
             raise ProbeEffectNotStarted("probe_cleanup_not_started") from exc
         finally:
+            if quarantine_descriptor is not None:
+                os.close(quarantine_descriptor)
+            os.close(staging_fd)
             os.close(root_fd)
+
+    @staticmethod
+    def _rename_noreplace(
+        *,
+        source_dir_fd: int,
+        source_name: str,
+        destination_dir_fd: int,
+        destination_name: str,
+    ) -> None:
+        """Atomically rename one directory entry without replacing another."""
+
+        libc = ctypes.CDLL(None, use_errno=True)
+        try:
+            renameat2 = libc.renameat2
+        except AttributeError as exc:
+            raise ProbeWorkspaceFilesystemError(
+                "renameat2 no-replace is unavailable for probe cleanup"
+            ) from exc
+        renameat2.argtypes = (
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_uint,
+        )
+        renameat2.restype = ctypes.c_int
+        result = renameat2(
+            source_dir_fd,
+            os.fsencode(source_name),
+            destination_dir_fd,
+            os.fsencode(destination_name),
+            1,  # RENAME_NOREPLACE
+        )
+        if result != 0:
+            error = ctypes.get_errno()
+            raise OSError(error, os.strerror(error), source_name)
+
+    def _observe_descriptor(self, descriptor: int) -> ProbeFileObservation:
+        """Verify an already-open inode without any second pathname lookup."""
+
+        info = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(info.st_mode)
+            or info.st_uid != os.geteuid()
+            or info.st_gid != os.getegid()
+            or stat.S_IMODE(info.st_mode) != 0o600
+            or not 0 <= info.st_size <= self._maximum_file_bytes
+        ):
+            return ProbeFileObservation(ProbeTargetState.MISMATCH)
+        os.lseek(descriptor, 0, os.SEEK_SET)
+        content = self._read_bounded(descriptor)
+        digest = content_sha256(content)
+        return ProbeFileObservation(
+            ProbeTargetState.EXACT,
+            file_identity_digest=self._file_identity(info, digest),
+            content_sha256=digest,
+            byte_count=len(content),
+        )
 
     def _read_bounded(self, descriptor: int) -> bytes:
         chunks: list[bytes] = []

@@ -73,6 +73,10 @@ async def test_linux_probe_create_is_no_replace_and_cleanup_is_identity_bound(
         expected_file_identity_digest=observation.file_identity_digest or "",
     )
     assert (await workspace.observe("probe.txt")).state is ProbeTargetState.ABSENT
+    tombs = tuple((root / ".staging").iterdir())
+    assert len(tombs) == 1
+    assert tombs[0].name.startswith(".binnacle-cleanup-tomb-v1-")
+    assert tombs[0].stat().st_size == 0
 
 
 @pytest.mark.anyio
@@ -399,19 +403,44 @@ async def test_linux_probe_cleanup_races_are_conservatively_classified(
     exact = await workspace.observe("probe.txt")
     assert exact.file_identity_digest is not None
 
-    observations = iter(
-        (
-            exact,
-            type(exact)(
-                ProbeTargetState.EXACT,
-                file_identity_digest="f" * 64,
-                content_sha256=digest,
-                byte_count=len(content),
-            ),
+    real_rename_noreplace = workspace._rename_noreplace
+    substituted = False
+
+    def substitute_before_quarantine(
+        *,
+        source_dir_fd: int,
+        source_name: str,
+        destination_dir_fd: int,
+        destination_name: str,
+    ) -> None:
+        nonlocal substituted
+        if source_name == "probe.txt" and not substituted:
+            substituted = True
+            os.rename(
+                source_name,
+                "original-survives.txt",
+                src_dir_fd=source_dir_fd,
+                dst_dir_fd=source_dir_fd,
+            )
+            replacement = os.open(
+                source_name,
+                os.O_CREAT | os.O_EXCL | os.O_WRONLY,
+                0o600,
+                dir_fd=source_dir_fd,
+            )
+            try:
+                os.write(replacement, b"other")
+            finally:
+                os.close(replacement)
+        real_rename_noreplace(
+            source_dir_fd=source_dir_fd,
+            source_name=source_name,
+            destination_dir_fd=destination_dir_fd,
+            destination_name=destination_name,
         )
-    )
+
     with monkeypatch.context() as patcher:
-        patcher.setattr(workspace, "_observe_at", lambda _fd, _path: next(observations))
+        patcher.setattr(workspace, "_rename_noreplace", substitute_before_quarantine)
         with pytest.raises(ProbeEffectNotStarted, match="identity_changed"):
             await workspace.remove(
                 operation_id="op-cleanup",
@@ -421,20 +450,31 @@ async def test_linux_probe_cleanup_races_are_conservatively_classified(
                 expected_content_sha256=digest,
                 expected_file_identity_digest=exact.file_identity_digest,
             )
+    assert (root / "original-survives.txt").read_bytes() == content
+    assert (root / "probe.txt").read_bytes() == b"other"
+    assert tuple((root / ".staging").iterdir()) == ()
 
-    real_unlink = os.unlink
+    (root / "probe.txt").unlink()
+    (root / "original-survives.txt").rename(root / "probe.txt")
 
-    def disappear_before_unlink(
-        path: str | bytes | os.PathLike[str] | os.PathLike[bytes],
+    def disappear_before_quarantine(
         *,
-        dir_fd: int | None = None,
+        source_dir_fd: int,
+        source_name: str,
+        destination_dir_fd: int,
+        destination_name: str,
     ) -> None:
-        if path == "probe.txt":
+        if source_name == "probe.txt":
             raise FileNotFoundError("raced")
-        real_unlink(path, dir_fd=dir_fd)
+        real_rename_noreplace(
+            source_dir_fd=source_dir_fd,
+            source_name=source_name,
+            destination_dir_fd=destination_dir_fd,
+            destination_name=destination_name,
+        )
 
     with monkeypatch.context() as patcher:
-        patcher.setattr(os, "unlink", disappear_before_unlink)
+        patcher.setattr(workspace, "_rename_noreplace", disappear_before_quarantine)
         assert (
             await workspace.remove(
                 operation_id="op-cleanup",
@@ -466,3 +506,155 @@ async def test_linux_probe_cleanup_races_are_conservatively_classified(
                 expected_file_identity_digest=exact.file_identity_digest,
             )
     assert not (root / "probe.txt").exists()
+
+
+@pytest.mark.anyio
+async def test_linux_probe_cleanup_only_destroys_held_inode_when_target_is_replaced(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _root(tmp_path)
+    workspace = LinuxProbeWorkspace(root=root, maximum_file_bytes=16)
+    await workspace.initialize()
+    content = b"safe"
+    digest = hashlib.sha256(content).hexdigest()
+    await workspace.create(
+        operation_id="op-write",
+        artifact_id="artifact-fixture",
+        path_generation=1,
+        relative_path="probe.txt",
+        content=content,
+        expected_content_sha256=digest,
+    )
+    observation = await workspace.observe("probe.txt")
+    assert observation.file_identity_digest is not None
+    original_inode = (root / "probe.txt").stat().st_ino
+    real_observe_descriptor = workspace._observe_descriptor
+
+    def replace_after_quarantine(descriptor: int) -> object:
+        verified = real_observe_descriptor(descriptor)
+        replacement = root / "probe.txt"
+        replacement.write_bytes(b"unrelated")
+        replacement.chmod(0o600)
+        return verified
+
+    with monkeypatch.context() as patcher:
+        patcher.setattr(workspace, "_observe_descriptor", replace_after_quarantine)
+        with pytest.raises(ProbeWorkspaceFilesystemError, match="replaced after quarantine"):
+            await workspace.remove(
+                operation_id="op-cleanup",
+                artifact_id="artifact-fixture",
+                path_generation=1,
+                relative_path="probe.txt",
+                expected_content_sha256=digest,
+                expected_file_identity_digest=observation.file_identity_digest,
+            )
+
+    assert (root / "probe.txt").read_bytes() == b"unrelated"
+    tombs = tuple((root / ".staging").iterdir())
+    assert len(tombs) == 1
+    assert tombs[0].stat().st_ino == original_inode
+    assert tombs[0].stat().st_size == 0
+
+
+@pytest.mark.anyio
+async def test_linux_probe_cleanup_collision_and_failed_restore_retain_every_inode(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _root(tmp_path)
+    workspace = LinuxProbeWorkspace(root=root, maximum_file_bytes=16)
+    await workspace.initialize()
+    content = b"safe"
+    digest = hashlib.sha256(content).hexdigest()
+    await workspace.create(
+        operation_id="op-write",
+        artifact_id="artifact-fixture",
+        path_generation=1,
+        relative_path="probe.txt",
+        content=content,
+        expected_content_sha256=digest,
+    )
+    observation = await workspace.observe("probe.txt")
+    assert observation.file_identity_digest is not None
+
+    def quarantine_collision(**_arguments: object) -> None:
+        raise FileExistsError("private quarantine collision")
+
+    with monkeypatch.context() as patcher:
+        patcher.setattr(workspace, "_rename_noreplace", quarantine_collision)
+        with pytest.raises(ProbeEffectNotStarted, match="quarantine_collision"):
+            await workspace.remove(
+                operation_id="op-cleanup",
+                artifact_id="artifact-fixture",
+                path_generation=1,
+                relative_path="probe.txt",
+                expected_content_sha256=digest,
+                expected_file_identity_digest=observation.file_identity_digest,
+            )
+    assert (root / "probe.txt").read_bytes() == content
+    assert tuple((root / ".staging").iterdir()) == ()
+
+    real_rename_noreplace = workspace._rename_noreplace
+    rename_count = 0
+
+    def substitute_then_block_restore(
+        *,
+        source_dir_fd: int,
+        source_name: str,
+        destination_dir_fd: int,
+        destination_name: str,
+    ) -> None:
+        nonlocal rename_count
+        rename_count += 1
+        if rename_count == 1:
+            os.rename(
+                source_name,
+                "original-survives.txt",
+                src_dir_fd=source_dir_fd,
+                dst_dir_fd=source_dir_fd,
+            )
+            replacement = os.open(
+                source_name,
+                os.O_CREAT | os.O_EXCL | os.O_WRONLY,
+                0o600,
+                dir_fd=source_dir_fd,
+            )
+            try:
+                os.write(replacement, b"other")
+            finally:
+                os.close(replacement)
+        else:
+            blocker = os.open(
+                destination_name,
+                os.O_CREAT | os.O_EXCL | os.O_WRONLY,
+                0o600,
+                dir_fd=destination_dir_fd,
+            )
+            try:
+                os.write(blocker, b"blocker")
+            finally:
+                os.close(blocker)
+        real_rename_noreplace(
+            source_dir_fd=source_dir_fd,
+            source_name=source_name,
+            destination_dir_fd=destination_dir_fd,
+            destination_name=destination_name,
+        )
+
+    with monkeypatch.context() as patcher:
+        patcher.setattr(workspace, "_rename_noreplace", substitute_then_block_restore)
+        with pytest.raises(ProbeWorkspaceFilesystemError, match="could not be restored"):
+            await workspace.remove(
+                operation_id="op-cleanup",
+                artifact_id="artifact-fixture",
+                path_generation=1,
+                relative_path="probe.txt",
+                expected_content_sha256=digest,
+                expected_file_identity_digest=observation.file_identity_digest,
+            )
+
+    assert rename_count == 2
+    assert (root / "original-survives.txt").read_bytes() == content
+    assert (root / "probe.txt").read_bytes() == b"blocker"
+    quarantined = tuple((root / ".staging").iterdir())
+    assert len(quarantined) == 1
+    assert quarantined[0].read_bytes() == b"other"
