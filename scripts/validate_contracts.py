@@ -127,6 +127,7 @@ def _require_fixture_case(
     *,
     kind: str | None = None,
     profile: str | None = None,
+    fields: Mapping[str, Any] | None = None,
     expected: Mapping[str, Any] | None = None,
 ) -> None:
     case = cases.get(case_id)
@@ -137,6 +138,12 @@ def _require_fixture_case(
         fail(f"fixture case {case_id}: kind must be {kind!r}")
     if profile is not None and case.get("profile") != profile:
         fail(f"fixture case {case_id}: profile must be {profile!r}")
+    if fields is not None:
+        for key, value in fields.items():
+            if key not in case:
+                fail(f"fixture case {case_id}: {key} is required")
+            elif case[key] != value:
+                fail(f"fixture case {case_id}: {key} must be {value!r}, found {case[key]!r}")
     if expected is None:
         return
     actual = _mapping(case.get("expect"), context=f"fixture case {case_id}: expect")
@@ -716,12 +723,6 @@ def validate_bootstrap_command_profile_alignment() -> None:
             },
         ),
         (
-            "development-non-loopback-listener-with-explicit-exposure",
-            "positive",
-            "workspace-general-v1",
-            {"non_loopback_listener": "allowed"},
-        ),
-        (
             "development-unix-control-socket-denied",
             "negative",
             "workspace-general-v1",
@@ -782,6 +783,14 @@ def validate_bootstrap_command_profile_alignment() -> None:
             profile=profile,
             expected=expected,
         )
+    _require_fixture_case(
+        isolation_cases,
+        "development-non-loopback-listener-with-explicit-exposure",
+        kind="positive",
+        profile="workspace-general-v1",
+        fields={"explicit_exposure_granted": True},
+        expected={"non_loopback_listener": "allowed"},
+    )
 
     composition_cases = _fixture_cases_by_id(
         composition_fixture,
@@ -874,7 +883,11 @@ def validate_bootstrap_self_hosting_scope_alignment() -> None:
         ),
     }
     for path, markers in required_markers.items():
-        text = " ".join(path.read_text(encoding="utf-8").split())
+        try:
+            text = " ".join(path.read_text(encoding="utf-8").split())
+        except OSError as exc:
+            fail(f"{path.relative_to(ROOT)}: unable to read Bootstrap scope document: {exc}")
+            continue
         for marker in markers:
             if marker not in text:
                 fail(
