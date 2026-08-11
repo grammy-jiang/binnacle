@@ -152,6 +152,12 @@ Do not expose a command-start or command-operation Tool until all of the followi
 * application restart proves that every durably persisted Phase 7 cancel generation is
   replayed until the supervisor durably acknowledges the same-or-higher generation or exact
   terminal/no-accept evidence closes that delivery obligation;
+* any in-flight command whose process-local dispatch latch was lost across application
+  restart is treated as **possibly committed**, never as pre-commit merely because the
+  volatile latch disappeared. Before cancellation can use a no-supervisor pre-commit path,
+  exact durable Phase 4/supervisor evidence must prove ``no_accept_proven``; otherwise the
+  application persists and replays cancellation through the supervisor until exact
+  acceptance/no-accept/terminal truth is established;
 * the production main app has no direct-subprocess fallback and no access path that bypasses
   the execution supervisor;
 * missing, stale, contradictory, or unverifiable prerequisite makes the relevant command
@@ -801,12 +807,18 @@ For a new ``command_run`` first admission:
 The Phase 4 process-wide ``call_start`` remains the audit-failure-vs-dispatch linearization.
 The executor's durable acceptance is the independent exactly-once evidence after that
 linearization. ``DispatchCommitLatch`` is a runtime race discriminator, not durable effect
-truth: after application crash, restart derives nothing from the lost latch and reconciles
-from Phase 4 dispatch/effect state, the application's durable Phase 7 cancel generation,
-and exact supervisor evidence/acknowledgement. The post-commit cancel path does not weaken
-the Phase 4 rule that cancellation winning **before** ``call_start`` must suppress
-supervisor dispatch; it only prevents an already-committed start RPC from blocking
-cancellation until backend creation finishes.
+truth. While the runtime that owns it is alive, it distinguishes ``PRE_COMMIT`` from
+``COMMITTED`` for concurrent cancellation. After application crash/restart, that volatile
+fact is **lost** and the replacement runtime initializes the affected in-flight operation's
+``DispatchCommitKnowledge`` as ``UNKNOWN_AFTER_RUNTIME_LOSS`` rather than recreating a
+``PRE_COMMIT`` latch. Restart derives durable truth only from Phase 4 dispatch/effect state,
+the authoritative Phase 7 cancel generation, and exact supervisor evidence. Until those
+stores prove ``no_accept_proven``, ``UNKNOWN_AFTER_RUNTIME_LOSS`` is handled as possibly
+committed for cancellation delivery and cannot enter the no-supervisor pre-commit branch.
+The post-commit cancel path does not weaken the Phase 4 rule that cancellation winning
+**before** ``call_start`` in the current runtime must suppress supervisor dispatch; it only
+prevents an already-committed or possibly-committed start from blocking/lossily routing
+cancellation.
 
 18. Supervisor atomic acceptance/cancel routing and executor-local launch gate
 -----------------------------------------------------------------------------
@@ -956,7 +968,8 @@ user authority source.
 ``uncertain``
    Lost/ambiguous UDS delivery/receipt, supervisor evidence-store unavailability,
    contradictory start response, ambiguous backend create receipt after launch commit,
-   inability to prove accepted-versus-not-accepted after ``call_start``, or inability to
+   inability to prove accepted-versus-not-accepted after ``call_start``, inability to
+   classify an in-flight start after the volatile dispatch latch was lost, or inability to
    prove delivery/acknowledgement of the application's highest durable cancel generation.
    Workspace fence remains owned and no fresh execution is created. Same ticket/operation
    is reconciled through the supervisor. A concurrently forwarded cancellation remains
@@ -1107,7 +1120,8 @@ Then Phase 4 lifecycle mapping is:
 Workspace durable mutation fence and exclusive CHANGE guard release only after truthful
 terminal/effect/audit/cleanup/cancel-delivery closure. If process might still run,
 descendants are unknown, workspace cleanup is unresolved, output/process evidence
-contradicts, executor state is uncertain, or the highest application cancellation
+contradicts, executor state is uncertain, the application has lost its current-runtime
+commit discriminator without exact no-accept proof, or the highest application cancellation
 generation is not reconciled, fence stays owned.
 
 25. Cancellation model
@@ -1117,22 +1131,32 @@ Cancellation uses the **existing command operation identity**, not a new generic
 operation that could race into duplicate work.
 
 Owner-scoped cancel is permitted even if the development session has ended because it
-reduces/terminates an already acknowledged execution rather than authorizing new work.
-Another controller cannot cancel it absent a separately reviewed recovery/ownership
-transfer contract.
+reduces/terminates an already acknowledged or possibly committed execution rather than
+authorizing new work. Another controller cannot cancel it absent a separately reviewed
+recovery/ownership transfer contract.
 
-There are two nested cancellation/start races and a durable post-commit delivery seam:
+There are two nested cancellation/start races plus a durable post-commit delivery seam and
+one restart-only **unknown dispatch-knowledge** branch:
 
-* **application pre-commit Phase 4 race** -- while ``DispatchCommitLatch`` is still
-  ``PRE_COMMIT``, the existing per-operation dispatch handoff decides cancellation versus
+* **application pre-commit Phase 4 race** -- only while the *current application runtime*
+  owns a live ``DispatchCommitLatch`` that reads ``PRE_COMMIT`` may the existing
+  per-operation dispatch handoff decide cancellation versus
   ``ConsequentialBoundaryGate.call_start``. Cancellation winning here means the supervisor
-  ticket was never committed;
-* **application post-commit delivery** -- once gate-owned ``call_start`` sets the runtime
-  latch ``COMMITTED``, cancellation must not wait for the still-held pre-start handoff while
-  ``ExecutionSupervisorPort.start()`` performs bounded supervisor acceptance/launch work.
-  The application first durably records a strictly higher Phase 7 cancel generation, then
-  forwards that exact generation on the concurrent supervisor control path. The UDS send
-  and response are retryable delivery, never the durable source of cancellation intent;
+  ticket was never committed in that runtime;
+* **application post-commit delivery** -- once gate-owned ``call_start`` sets the current-
+  runtime latch ``COMMITTED``, cancellation must not wait for the still-held pre-start
+  handoff while ``ExecutionSupervisorPort.start()`` performs bounded supervisor acceptance/
+  launch work. The application first durably records a strictly higher Phase 7 cancel
+  generation, then forwards that exact generation on the concurrent supervisor control
+  path. The UDS send and response are retryable delivery, never the durable source of
+  cancellation intent;
+* **runtime-loss / possibly-committed branch** -- after process crash/restart there is no
+  trustworthy ``PRE_COMMIT`` latch to read. The replacement runtime represents the dispatch
+  discriminator as ``UNKNOWN_AFTER_RUNTIME_LOSS`` until exact durable Phase 4/supervisor
+  evidence resolves it. Owner cancellation in this state must use the same persist-before-
+  send/replay-safe supervisor path as a committed start unless exact durable evidence already
+  proves ``no_accept_proven``. A missing latch, missing start response or missing PID is
+  never permission to take the pre-commit-only branch;
 * **supervisor acceptance race** -- ``ExecutorAcceptanceGate`` atomically routes each
   incoming cancel generation either into the pre-accept pending row or the already-accepted
   execution row, so acceptance cannot slip between a missing-row check and pending insert;
@@ -1147,24 +1171,48 @@ bounded evidence reference. The application **always commits the higher generati
 first UDS send**. A process crash after that commit but before/during send therefore leaves a
 durable delivery obligation that restart/reconciliation must replay.
 
+The application also maintains a process-local dispatch discriminator only for the runtime
+that owns the in-flight first start. Conceptually:
+
+::
+
+   DispatchCommitKnowledge = PRE_COMMIT_CURRENT_RUNTIME
+                           | COMMITTED_CURRENT_RUNTIME
+                           | UNKNOWN_AFTER_RUNTIME_LOSS
+
+``PRE_COMMIT_CURRENT_RUNTIME`` exists only while that runtime has the actual live latch and
+can recheck it under the Phase 4 handoff. ``UNKNOWN_AFTER_RUNTIME_LOSS`` is the default for
+an unresolved in-flight first start loaded by a replacement runtime; it cannot be converted
+to pre-commit by absence of supervisor evidence. It becomes exact no-accept/accepted/
+terminal truth only through durable Phase 4 and supervisor reconciliation.
+
 Application ordering:
 
 #. authenticate owner and resolve target operation plus original ticket/executor evidence;
-#. read the process-local ``DispatchCommitLatch``. If it appears ``PRE_COMMIT``, acquire the
-   Phase 4 per-operation dispatch handoff and **recheck** it under that handoff;
-#. if still ``PRE_COMMIT``, record durable application cancellation intent/generation and
-   the legal lifecycle transition, so final start validation observes it and no supervisor
-   ticket is committed;
-#. if the recheck or initial read is ``COMMITTED``, do **not** wait for the start path to
-   release the dispatch handoff. In a short optimistic SQLite transaction persist a strictly
-   higher authoritative ``phase7_cancel_generation``/request fact without overwriting
-   start/effect fields. If Phase 4 effect classification is already durable and lifecycle
-   permits, transition ``running -> cancelling``; if start classification is still in
-   flight, retain the Phase 7 cancel intent and let classification project the legal
-   lifecycle once effect truth is known;
+#. derive ``DispatchCommitKnowledge``. In the current start-owning runtime, read its live
+   process-local ``DispatchCommitLatch``. After runtime loss, initialize unresolved in-flight
+   start as ``UNKNOWN_AFTER_RUNTIME_LOSS`` and query durable Phase 4/supervisor evidence;
+#. if exact durable evidence already proves ``no_accept_proven`` and no Phase 4 call-start
+   could still be outstanding, close the cancellation request under the existing no-effect
+   reconciliation rules; do not manufacture a pending supervisor cancellation;
+#. if knowledge is ``PRE_COMMIT_CURRENT_RUNTIME``, acquire the Phase 4 per-operation
+   dispatch handoff and **recheck the same live latch** under that handoff;
+#. if still ``PRE_COMMIT_CURRENT_RUNTIME``, record durable application cancellation intent/
+   generation and the legal lifecycle transition, so final start validation observes it and
+   no supervisor ticket is committed;
+#. if the recheck or initial knowledge is ``COMMITTED_CURRENT_RUNTIME`` **or**
+   ``UNKNOWN_AFTER_RUNTIME_LOSS``, do **not** take the pre-commit-only path. In a short
+   optimistic SQLite transaction persist a strictly higher authoritative
+   ``phase7_cancel_generation``/request fact without overwriting start/effect fields. If
+   Phase 4 effect classification is already durable and lifecycle permits, transition
+   ``running -> cancelling``; if start classification is unresolved, retain the Phase 7
+   cancel intent while the operation remains/enters conservative reconciliation state;
 #. immediately send exact operation ID + original ticket ID/digest + that durable monotonic
    generation over the concurrent UDS control path; include ``execution_id`` when known but
-   do not require start response receipt;
+   do not require start response receipt. For ``UNKNOWN_AFTER_RUNTIME_LOSS``, this send is
+   intentionally conservative: the supervisor atomically latches pre-accept cancellation if
+   the ticket has not yet been accepted, attaches to an accepted execution if it has, or
+   returns exact no-accept/terminal evidence when available;
 #. supervisor invokes atomic ``cancel_or_attach`` under ``ExecutorAcceptanceGate``. It
    returns either ``pending_preaccept`` or an accepted execution with the same-or-higher
    durably acknowledged generation. There is no separate accepted-row lookup followed by a
@@ -1198,7 +1246,9 @@ transaction is held across either UDS call.
 A supervisor cancel receipt is not considered delivery-complete unless its
 ``acknowledged_cancel_generation`` is at least the application's durable generation. A
 transport error, lost response, lower generation or supervisor unavailability leaves the
-application delivery obligation outstanding.
+application delivery obligation outstanding. The same is true when dispatch knowledge is
+``UNKNOWN_AFTER_RUNTIME_LOSS``: uncertainty remains until durable reconciliation establishes
+accepted/terminal/no-accept truth and closes the cancellation generation.
 
 For an authoritative Phase 4 ``uncertain`` start whose supervisor evidence later shows a
 possibly running/launch-committed execution, cancellation may be sent as reconciliation
@@ -1228,26 +1278,39 @@ reason. It never races an unsynchronized launch worker.
 27. Application restart
 -----------------------
 
-Ordinary MCP/application restart must not orphan an accepted command or a durably persisted
-cancellation that was not yet delivered.
+Ordinary MCP/application restart must not orphan an accepted command, a possibly committed
+start whose process-local discriminator was lost, or a durably persisted cancellation that
+was not yet delivered.
 
 The supervisor remains an independent systemd service/process role. Application startup:
 
 #. verifies executor UDS protocol/peer/build/profile compatibility;
 #. loads authoritative Phase 4 nonterminal/uncertain command operations, retained fence
    owners, authoritative ``phase7_cancel_generation`` and last supervisor-ack generation;
-#. treats any lost process-local ``DispatchCommitLatch`` as **non-authoritative** and never
-   reconstructs pre/post-commit truth from it;
+#. for every in-flight first start whose owning runtime was lost before exact durable
+   accepted/no-accept classification, initializes process-local routing state as
+   ``DispatchCommitKnowledge=UNKNOWN_AFTER_RUNTIME_LOSS``. It never manufactures a new
+   ``PRE_COMMIT`` latch from the absence of the old one;
 #. queries supervisor by exact operation/ticket/execution reference, including retained
    pending/attached/effective/acknowledged cancel generation;
 #. validates executor evidence generation, ticket digest, workspace/root/mount/profile and
    command identity;
+#. if exact Phase 4/supervisor evidence proves ticket no-accept and no outstanding call-start
+   can still commit, record/retain exact no-effect truth and close any cancellation request
+   under ``no_accept_proven``. Otherwise an unresolved lost-latch start remains possibly
+   committed and must not use the pre-commit-only cancellation path;
 #. for every operation with application generation ``A`` and supervisor acknowledged/
    effective generation ``S`` where ``A > S``, idempotently re-forwards the exact original
    operation+ticket/digest+generation ``A`` through ``request_cancel``. Repeat during
    reconciliation until the supervisor durably acknowledges ``>= A``, or exact retained
    supervisor evidence proves ``terminal_already_won``/``no_accept_proven`` for generation
    ``A``;
+#. if an owner requests cancellation while dispatch knowledge is
+   ``UNKNOWN_AFTER_RUNTIME_LOSS`` and exact no-accept proof is absent, first persist the next
+   authoritative cancel generation and route/replay it through the supervisor exactly as a
+   possibly committed start, even if the supervisor currently has no accepted row. Atomic
+   ``cancel_or_attach`` then safely latches it pre-accept or attaches it to the accepted
+   execution;
 #. if supervisor is unavailable, contradictory, or cannot acknowledge ``A``, retain
    ``cancelling``/``uncertain`` as lifecycle/evidence permits and retain the Phase 6
    workspace fence. Never silently declare the cancel delivered and never admit fresh work
@@ -1260,15 +1323,16 @@ The supervisor remains an independent systemd service/process role. Application 
 A naturally terminal execution may acknowledge a replayed higher generation with
 ``terminal_already_won`` and no signal; application preserves natural ``succeeded``/
 ``failed`` truth. Exact durable no-accept/expiry evidence may acknowledge
-``no_accept_proven`` under the existing Phase 4 no-effect rules. Absence, timeout or a
-missing PID alone cannot manufacture either disposition.
+``no_accept_proven`` under the existing Phase 4 no-effect rules. Absence, timeout, missing
+PID or missing process-local latch alone cannot manufacture either disposition.
 
 An app restart does not require session renewal solely to inspect/reconcile the already
-acknowledged command. A still-valid session is required for a **new** command admission.
-Session ending during app downtime prevents new starts but does not rewrite a start whose
-Phase 4 ``call_start`` already linearized. If the supervisor proves the ticket never
-accepted, the ordinary Phase 4 no-effect reconciliation rules apply; otherwise retained
-execution/cancellation truth governs.
+acknowledged or possibly committed command. A still-valid session is required for a **new**
+command admission. Session ending during app downtime prevents new starts but does not
+rewrite a start whose Phase 4 ``call_start`` may already have linearized. If the supervisor
+and Phase 4 durable evidence prove the ticket never accepted and no start remains possible,
+the ordinary no-effect reconciliation rules apply; otherwise retained execution/
+cancellation truth governs.
 
 28. Supervisor restart/crash
 ----------------------------
@@ -1318,15 +1382,17 @@ session/ticket as first admission and do not allocate another fence.
 If application must query supervisor after ambiguous start, it uses exact original ticket/
 operation identity. Supervisor returns retained accepted execution if present and includes
 retained cancel state and acknowledged generation. If its healthy durable store proves exact
-ticket never accepted and no matching pending acceptance can occur under deadline/
-generation rules, reconciliation may establish known-no-effect. If that proof is
-unavailable, remain uncertain.
+ticket never accepted **and** durable Phase 4 state proves no in-flight call-start can still
+reach it, reconciliation may establish known-no-effect. If that joint proof is unavailable,
+remain uncertain/possibly committed; a missing volatile latch never supplies the proof.
 
 Cancellation does not depend on having received ``execution_id`` from the lost start
-response: once application ``call_start`` is committed, the post-commit control path can
-persist and forward exact operation+ticket/digest cancellation while the start response is
-still in flight. Supervisor atomically either attaches it to the existing execution or
-latches it for matching first acceptance.
+response. In the current start-owning runtime, once application ``call_start`` is committed,
+the post-commit control path can persist and forward exact operation+ticket/digest
+cancellation while the start response is still in flight. After runtime loss, an unresolved
+start uses ``UNKNOWN_AFTER_RUNTIME_LOSS`` and the same conservative persist/replay path until
+exact no-accept/accepted/terminal evidence resolves it. Supervisor atomically either
+attaches cancellation to the existing execution or latches it for matching first acceptance.
 
 If the application crashes or loses the UDS response after committing cancel generation
 ``A``, retained retry/restart compares ``A`` with supervisor acknowledged generation ``S``.
@@ -1399,7 +1465,10 @@ Exact names remain proposals until promotion. A minimal set is:
    Authority-reducing/idempotent cancellation request against existing operation; no new
    arbitrary command authority. It may target the exact retained operation+ticket before
    the application has received ``execution_id`` and, after application ``call_start``
-   commitment, must not be head-of-line blocked by the still-running start RPC. Its durable
+   commitment, must not be head-of-line blocked by the still-running start RPC. After
+   application runtime loss, missing ``DispatchCommitLatch`` is treated as
+   ``UNKNOWN_AFTER_RUNTIME_LOSS``/possibly committed, so cancellation persists/replays to
+   the supervisor unless exact durable ``no_accept_proven`` evidence exists. Its durable
    application cancel generation is replayed until supervisor acknowledgement closes the
    delivery obligation.
 
@@ -1424,8 +1493,9 @@ Before runtime handler registration:
    executor process with ``command-profiles.yaml`` and validators if required;
 #. add trusted ticket deadline, workspace fence/root-mount, process-introspection/ptrace,
    network exposure, output, executor acceptance/cancel routing, launch/cancel,
-   application cancel-generation/acknowledgement replay, post-commit cancel-forwarding and
-   execution-evidence fields needed by this plan;
+   application cancel-generation/acknowledgement replay, current-runtime dispatch commit
+   discriminator plus ``UNKNOWN_AFTER_RUNTIME_LOSS`` cancellation routing,
+   post-commit cancel-forwarding and execution-evidence fields needed by this plan;
 #. define exact ``cancel_result``/snapshot fields for acknowledged generation, closed
    disposition and executor evidence generation;
 #. define exact input/output JSON schemas and bounded errors/result limits;
@@ -1433,10 +1503,10 @@ Before runtime handler registration:
 #. add exact manifest entries and bump manifest version;
 #. update security/evaluation fixtures for single-use replay, UDS loss, app restart,
    cancellation-before-start, post-commit cancellation while start response is in flight,
-   atomic pre-accept cancel/accept routing, application crash after cancel-generation commit
-   before send, cancellation-before-spawn, cancellation-during-launch, output cursors,
-   listener exposure, process-introspection isolation, protected-state access, and workspace
-   coordination;
+   cancellation after runtime loss with unresolved call-start, atomic pre-accept cancel/
+   accept routing, application crash after cancel-generation commit before send,
+   cancellation-before-spawn, cancellation-during-launch, output cursors, listener exposure,
+   process-introspection isolation, protected-state access, and workspace coordination;
 #. validate all schema pointers, handler bindings, versions, annotations, profile digests,
    and current compatibility profiles;
 #. only then compose handlers.
@@ -1487,6 +1557,11 @@ command-specific authoritative metadata/cancellation/fence correlation as needed
 Representative contracts:
 
 .. code-block:: python
+
+   class DispatchCommitKnowledge(StrEnum):
+       PRE_COMMIT_CURRENT_RUNTIME = "pre_commit_current_runtime"
+       COMMITTED_CURRENT_RUNTIME = "committed_current_runtime"
+       UNKNOWN_AFTER_RUNTIME_LOSS = "unknown_after_runtime_loss"
 
    @dataclass(frozen=True, slots=True)
    class ExecutionTicket:
@@ -1574,10 +1649,12 @@ insert. ``lookup_ticket`` is retained only for bounded read/reconciliation paths
 
 Application service consumes Phase 4 operation store/audit/policy + Phase 6
 ``WorkspaceAccessCoordinator``/``DevelopmentSessionAuthorityGate`` + supervisor port. The
-application also owns a process-local ``DispatchCommitLatch`` per in-flight first start,
-an authoritative durable monotonic ``phase7_cancel_generation``, and the last
-supervisor-acknowledged generation/evidence reference. None is a substitute for Phase 4
-effect truth. The executor never imports application persistence/policy/MCP modules.
+application owns a process-local ``DispatchCommitLatch`` only for the runtime that owns an
+in-flight first start; a replacement runtime models an unresolved lost latch as
+``DispatchCommitKnowledge.UNKNOWN_AFTER_RUNTIME_LOSS``. It also owns authoritative durable
+monotonic ``phase7_cancel_generation`` and the last supervisor-acknowledged generation/
+evidence reference. None is a substitute for Phase 4 effect truth. The executor never
+imports application persistence/policy/MCP modules.
 
 36. Error and diagnostic projection
 -----------------------------------
@@ -1598,6 +1675,7 @@ Representative closed errors, pending contract promotion:
 * ``command_executor_unavailable``;
 * ``command_executor_integrity_failed``;
 * ``command_start_uncertain``;
+* ``command_dispatch_commit_unknown``;
 * ``command_launch_uncertain``;
 * ``command_isolation_unsupported``;
 * ``command_process_introspection_unsupported``;
@@ -1616,9 +1694,9 @@ host path, environment secret, or root-broker detail.
 
 Structured diagnostics may include operation/execution IDs, command profile, safe executable
 identity/name, workspace ID, state/evidence/launch/application-cancel/supervisor-ack
-cancel generations, cancellation disposition, resource/output counters,
-cgroup/backend class, reason codes, protocol/build/profile digests and reconciliation state.
-Command argv/output/path content is not routine log labels.
+cancel generations, dispatch-commit knowledge, cancellation disposition, resource/output
+counters, cgroup/backend class, reason codes, protocol/build/profile digests and
+reconciliation state. Command argv/output/path content is not routine log labels.
 
 37. Test strategy and real evidence
 -----------------------------------
@@ -1649,6 +1727,13 @@ Prove:
 * after gate-owned call_start commits, application cancellation does not wait for the
   still-running start RPC/DispatchHandoffGate, persists its generation first and can
   durably forward exact operation+ticket/digest cancellation;
+* application SIGKILL after gate-owned ``call_start`` wins but before start classification
+  or any cancel generation is persisted -> replacement runtime marks dispatch knowledge
+  ``UNKNOWN_AFTER_RUNTIME_LOSS``; a subsequent owner cancel never takes the pre-commit-only
+  branch and is forwarded/replayed until exact supervisor/no-accept/terminal truth closes it;
+* exact durable no-accept proof after such a crash may close cancellation without creating
+  a pending supervisor intent, but missing latch/start response/PID alone never supplies
+  that proof;
 * cancellation racing before supervisor acceptance is retained as one pre-accept intent and
   atomically attached by matching acceptance;
 * application SIGKILL after ``phase7_cancel_generation=A`` commit but before/during UDS send
@@ -1671,7 +1756,7 @@ Prove:
 * output empty-vs-EOF/truncated/expired cursor semantics;
 * top-PID exit cannot release fence while descendant/cleanup or cancel acknowledgement is
   unknown;
-* app restart reconciliation never allocates new ticket or infers commit state from the
+* app restart reconciliation never allocates new ticket and never infers PRE_COMMIT from a
   lost process-local latch;
 * executor uncertainty never creates no-effect proof or fresh execution;
 * operation lifecycle parity including uncertain terminal-only reconciliation.
@@ -1689,6 +1774,10 @@ Test:
 * response loss after executor acceptance then same ticket retry -> same execution ID, one
   process-domain creation;
 * cancellation by exact operation+ticket while the start response/execution ID is lost;
+* application crash after ``call_start`` linearization but before classification, followed
+  by owner cancellation after restart: if supervisor accepted, cancel reaches exact retained
+  execution; if supervisor has not yet accepted, cancel is latched pre-accept; only exact
+  joint no-accept proof suppresses supervisor delivery;
 * cancel decision before acceptance, acceptance before cancel, and fully concurrent first
   accept/cancel; highest generation always lands in pending or accepted row atomically;
 * cancellation arriving just before first acceptance -> durable pending cancel -> matching
@@ -1756,6 +1845,8 @@ Real candidate Pi evidence records:
   cancellation acknowledgement and response-loss recovery;
 * application post-commit cancel forwarding/replay plus executor launch/cancel gate behavior
   and crash recovery;
+* application restart after call_start linearization with lost volatile latch, proving
+  ``UNKNOWN_AFTER_RUNTIME_LOSS`` routing and exact no-accept-vs-possibly-accepted handling;
 * output spool fsync/limits/performance;
 * app restart after durable cancel-generation commit before send, and while a command runs;
 * supervisor crash behavior;
@@ -1772,9 +1863,10 @@ No candidate feature is marked supported merely because the documentation descri
 After promotion, real ChatGPT evidence covers catalogue discovery; session-authorised
 ``command_run``; structured argv; tests/quality command; incremental output; status;
 cancellation including prompt cancellation after gate-owned start commitment while start
-receipt is delayed, cancellation after accepted start, same-key retry/lost response;
-application restart/reconnect including durable cancellation replay; outstanding listing;
-bounded result behavior; and host Task/status behavior only if actually observed.
+receipt is delayed, cancellation after application restart with an unresolved lost dispatch
+latch, cancellation after accepted start, same-key retry/lost response; application
+restart/reconnect including durable cancellation replay; outstanding listing; bounded
+result behavior; and host Task/status behavior only if actually observed.
 
 38. Holistic invariant pass before review
 -----------------------------------------
@@ -1816,17 +1908,24 @@ New command start::
 Cancellation::
 
    same-owner retained operation lookup
-     -> read DispatchCommitLatch
-     -> PRE_COMMIT: Phase4 per-operation cancellation/start handoff + recheck
+     -> derive DispatchCommitKnowledge
+     -> PRE_COMMIT_CURRENT_RUNTIME:
+        Phase4 per-operation cancellation/start handoff + same-latch recheck
         -> durable application cancel generation/state -> zero start if cancel wins
-     -> COMMITTED: no wait on still-held start handoff
+     -> COMMITTED_CURRENT_RUNTIME:
+        no wait on still-held start handoff
         -> authoritative durable Phase7 cancel generation A (persist-before-send)
         -> exact operation+ticket/digest supervisor cancellation concurrently with start RPC
+     -> UNKNOWN_AFTER_RUNTIME_LOSS:
+        no conversion to PRE_COMMIT from missing latch
+        -> exact no_accept_proven may close locally
+        -> otherwise persist authoritative cancel generation A and use same supervisor
+           cancel/replay path as possibly committed work
      -> ExecutorAcceptanceGate atomic cancel_or_attach
         -> pending_preaccept OR accepted row with acknowledged generation >= A
      -> if accepted: ExecutorLaunchGate
         -> cancel-before-launch suppresses process creation OR launch-first targets one domain
-     -> start classification preserves newer cancel/ack state
+     -> start/reconciliation classification preserves newer cancel/ack state
      -> cooperative then forced descendant termination when process exists
      -> output/private-domain cleanup proof
      -> cancelled OR natural succeeded/failed + terminal_already_won ack OR uncertain
@@ -1851,14 +1950,15 @@ Output/status::
 
 Review explicitly stresses: audit trip/start race; session end/start race; application
 pre-commit cancel/start race; post-commit cancel while start RPC/handoff still active;
-pre-accept cancel/accept serialization; app crash after cancel generation commit before UDS
-send; executor cancel/launch race; executor accept/response-loss; app crash; supervisor crash
-at pending/attach/pre-accept/accepted/cancelled/launch-committed/create-receipt states; ticket
-replay after terminal; workspace root/mount replacement; out-of-band source write; process
-daemon escape; same-UID ptrace/proc/process-vm escape; output flood; resource/cancel cleanup;
-network listener authority; protected-state/credential access; executor/application DB
-ownership; uncertain fence retention; same-key retry after session end; and every
-accepted/no-accept/ambiguous outcome.
+application crash after call_start before classification with later cancellation and lost
+volatile dispatch latch; pre-accept cancel/accept serialization; app crash after cancel
+generation commit before UDS send; executor cancel/launch race; executor accept/response-
+loss; app crash; supervisor crash at pending/attach/pre-accept/accepted/cancelled/launch-
+committed/create-receipt states; ticket replay after terminal; workspace root/mount
+replacement; out-of-band source write; process daemon escape; same-UID ptrace/proc/process-
+vm escape; output flood; resource/cancel cleanup; network listener authority; protected-
+state/credential access; executor/application DB ownership; uncertain fence retention;
+same-key retry after session end; and every accepted/no-accept/ambiguous outcome.
 
 39. Plan acceptance checklist
 -----------------------------
@@ -1879,12 +1979,15 @@ Accept this plan only when:
 * start uses Phase4 per-op/session/process gates and process-gate ``call_start``;
 * gate-owned call_start publishes a runtime post-commit discriminator so cancellation after
   commit cannot be blocked behind the still-running pre-start handoff/start RPC;
+* lost runtime discriminator is represented as ``UNKNOWN_AFTER_RUNTIME_LOSS``/possibly
+  committed; only exact durable no-accept proof permits the pre-commit/no-supervisor
+  cancellation closure after restart;
 * application cancel generation is authoritative, monotonic, persisted before UDS send and
   replayed after crash until supervisor acknowledgement reaches the same-or-higher
   generation or exact terminal/no-accept evidence closes it;
-* post-commit cancellation has a concurrent supervisor control path and exact
-  ``ExecutorAcceptanceGate``/atomic ``cancel_or_attach`` decision, so acceptance can never
-  slip between a missing-row check and pending-intent persistence;
+* post-commit or possibly-committed cancellation has a concurrent supervisor control path
+  and exact ``ExecutorAcceptanceGate``/atomic ``cancel_or_attach`` decision, so acceptance
+  can never slip between a missing-row check and pending-intent persistence;
 * pending-first acceptance attaches/consumes the highest generation atomically; accept-first
   cancellation advances the accepted row atomically; an accepted execution cannot coexist
   with an unattached matching pending intent;
@@ -1898,14 +2001,14 @@ Accept this plan only when:
 * known-effect/no-effect/uncertain mapping is explicit, including cancellation-before-child-
   spawn after supervisor acceptance remaining ``known_effect``;
 * lifecycle handles uncertain-running evidence without inventing ``uncertain -> running``;
-* application pre-commit/start, application post-commit delivery, supervisor
-  acceptance/cancel routing, session/audit, and executor launch/cancel races each have one
-  explicit linearization;
+* application current-runtime pre-commit/start, current-runtime post-commit delivery,
+  runtime-loss possibly-committed routing, supervisor acceptance/cancel routing, session/
+  audit, and executor launch/cancel races each have one explicit linearization;
 * output is independent/bounded/cursor-correct and never process truth;
 * all descendants/resources/output/private state and cancellation-delivery obligation close
   before verified cancellation/fence release;
-* ordinary app restart preserves acknowledged execution visibility without treating the
-  lost process-local dispatch latch as durable truth and replays any persisted-but-
+* ordinary app restart preserves acknowledged execution visibility, never treats the lost
+  process-local dispatch latch as pre-commit truth, and replays any persisted-but-
   unacknowledged cancellation;
 * supervisor crash never implies no-effect, duplicate start, orphan pending cancellation,
   or ignored durable cancellation;
@@ -1922,9 +2025,9 @@ Accept this plan only when:
 When predecessor evidence permits implementation:
 
 #. promote/reconcile command contracts, schemas, manifest and logical broker/executor
-   mapping, including process-introspection, post-commit cancel-forwarding,
-   application-cancel/supervisor-ack fields, atomic accept/cancel routing and executor
-   launch/cancel fields;
+   mapping, including process-introspection, post-commit/possibly-committed cancel-forwarding,
+   dispatch-commit-knowledge routing, application-cancel/supervisor-ack fields, atomic
+   accept/cancel routing and executor launch/cancel fields;
 #. add application command metadata migration ``0004`` with monotonic Phase 7 cancel
    generation, supervisor-ack generation/evidence and fence correlation fields;
 #. create separate executor evidence migration/setup and executor state directory,
@@ -1940,8 +2043,9 @@ When predecessor evidence permits implementation:
    recovery before any backend process creation;
 #. implement application executor client with persist-before-send cancellation,
    supervisor-ack generation tracking and restart/reconciliation re-forwarding;
-#. implement process-local ``DispatchCommitLatch`` and the field-aware post-commit cancel
-   forwarding path before backend launch is enabled in tests;
+#. implement process-local ``DispatchCommitLatch`` plus replacement-runtime
+   ``UNKNOWN_AFTER_RUNTIME_LOSS`` routing and field-aware committed/possibly-committed cancel
+   forwarding before backend launch is enabled in tests;
 #. implement exact executable/cwd/workspace/root/mount/ticket normalization;
 #. integrate Phase 6 CHANGE + durable mutation fence into command post-policy admission;
 #. implement Phase 4 received/policy/authorised/running/effect-intent + per-op/session/
@@ -1951,9 +2055,10 @@ When predecessor evidence permits implementation:
 #. implement process/domain identity and descendant-wide resource accounting;
 #. implement output spool/drain/digest/truncation/retention;
 #. implement status/output/outstanding application projection;
-#. implement application pre/post-commit cancellation + supervisor acceptance/cancel +
-   executor launch/cancel linearization + descendant cleanup;
-#. implement app restart reconciliation including ``A>S`` cancel re-forwarding;
+#. implement application pre/post-commit/runtime-loss cancellation + supervisor acceptance/
+   cancel + executor launch/cancel linearization + descendant cleanup;
+#. implement app restart reconciliation including lost-latch possibly-committed routing and
+   ``A>S`` cancel re-forwarding;
 #. implement supervisor restart/fault reconciliation including pending/attach/accepted/
    cancel/launch-commit recovery;
 #. add filesystem/credential/FD/process-introspection/network/listener/process/resource
@@ -1985,6 +2090,9 @@ Remain evidence-gated after plan acceptance:
 * exact cancellation re-forward retry/backoff/diagnostic cadence; the correctness rule
   ``application A > supervisor S => delivery unresolved and idempotent re-forward`` is
   fixed even though timing is profile-specific;
+* exact durable reconciliation mechanism that proves ``no_accept_proven`` for a lost-latch
+  start; until exact proof exists, ``UNKNOWN_AFTER_RUNTIME_LOSS`` remains possibly committed
+  and cancellation is routed/replayed conservatively;
 * exact pending-cancel retention ceiling tied to ticket expiry/replay window;
 * exact inline stdin/control-frame/result chunk maxima within reviewed upper bounds;
 * exact set of allowed executables/profile limits;
@@ -1994,10 +2102,10 @@ Remain evidence-gated after plan acceptance:
 
 Those items may change profile-specific mechanism/limits. They do not change the mandatory
 process separation, single-use acceptance, atomic acceptance/cancel routing, application
-durable cancellation replay/acknowledgement, executor launch/cancel serialization, durable
-idempotency, Phase4 gated start, Phase6 workspace coordination, protected-state/process-
-introspection exclusions, truthful uncertainty, or no-direct-subprocess invariants without
-a separately reviewed revision.
+durable cancellation replay/acknowledgement, runtime-loss possibly-committed routing,
+executor launch/cancel serialization, durable idempotency, Phase4 gated start, Phase6
+workspace coordination, protected-state/process-introspection exclusions, truthful
+uncertainty, or no-direct-subprocess invariants without a separately reviewed revision.
 
 42. Deferred work
 -----------------
