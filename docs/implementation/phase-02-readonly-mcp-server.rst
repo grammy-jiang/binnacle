@@ -322,6 +322,22 @@ HTTP/ASGI protocol-negative cases.
 No ``psutil`` dependency is required. The Linux read adapter uses bounded standard
 Linux/stdlib interfaces described below.
 
+6.4 Legacy output-schema representation evidence
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Implementation against the reviewed MCP SDK 2.0.0 line found one concrete source-
+contract incompatibility: legacy ``Tool.outputSchema`` serialization requires a root
+``type: object`` keyword. The existing Bootstrap output definitions used only a root
+``oneOf`` whose alternatives were already closed objects. Exact projection therefore
+worked for ``2026-07-28`` but caused SDK legacy ``tools/list`` serialization to reject
+all five Tool schemas before dispatch.
+
+Phase 2 adds the semantically redundant root ``"type": "object"`` to every Bootstrap
+output definition, including the deferred write-probe definitions so the shared schema
+remains internally consistent. This neither widens nor narrows any accepted result: all
+existing alternatives are objects. The compiler then records the changed source-schema
+and definition digests normally. Runtime code does not inject or rewrite this keyword.
+
 7. Compiled compatibility-core registry
 ---------------------------------------
 
@@ -1066,6 +1082,37 @@ Target-era body inspection, if required for header/body integrity, buffers at mo
 configured request-body limit and faithfully replays the bytes to FastMCP after
 validation.
 
+Legacy session/revision integrity must also cover bodyless ``GET`` and ``DELETE``
+transport requests. The adapter wraps each framework-owned legacy session identifier in
+a process-scoped authenticated token containing its negotiated revision. It verifies
+and unwraps that token before forwarding the raw identifier to FastMCP. This is a
+stateless integrity binding, not a parallel session table: FastMCP remains the sole owner
+of session creation, lookup, lifetime, and termination, and a process restart already
+invalidates the corresponding framework sessions.
+
+Every legacy transport request other than a valid ``initialize`` must present that bound
+token. The adapter rejects missing, invalid, or revision-mismatched tokens before the SDK
+session manager runs, including malformed POST bodies, so invalid traffic cannot allocate
+or hold orphan framework transports.
+
+The finite revision allowlist and duplicate routing-header checks run before POST body
+parsing. This is required because some revisions outside Binnacle's reviewed set remain
+handshake revisions in the locked SDK and would otherwise enter its stateful allocation
+path before malformed JSON is rejected.
+
+A bounded body that triggers a JSON parser ``ValueError`` or ``RecursionError``
+(including Python's configured integer digit limit or excessive JSON nesting) is rejected
+as HTTP 400 ``invalid_request_body`` before framework dispatch. It must not escape the
+ASGI middleware as an unhandled server error.
+
+FastMCP's public ``session_idle_timeout`` is always configured for the stateful legacy
+transport. The default is 300 seconds and the accepted setting is finite and no greater
+than 1,800 seconds. The SDK pushes the deadline forward on each request, then terminates
+and removes an inactive transport itself. Both the settings model and public ASGI factory
+enforce the bound, so programmatic construction cannot bypass it. The factory likewise
+enforces the reviewed 64 KiB--4 MiB request-body range. Binnacle does not add a shadow
+session table.
+
 22. HTTP/ASGI surface
 ---------------------
 
@@ -1154,6 +1201,7 @@ Extend ``ServerSettings`` only with fields Phase 2 genuinely uses:
        port: int = Field(default=8000, ge=1, le=65535)
        workers: Literal[1] = 1
        max_request_bytes: int = Field(default=1_048_576, ge=65_536, le=4_194_304)
+       session_idle_timeout_seconds: float = Field(default=300.0, gt=0, le=1_800)
        graceful_shutdown_seconds: float = Field(default=10.0, gt=0, le=60)
        filesystem_stat_timeout_seconds: float = Field(default=2.0, gt=0, le=10)
 
@@ -1374,6 +1422,7 @@ Negative tests include:
 * missing version where not permitted;
 * modern request carrying legacy session state;
 * legacy post-initialization wrong version header;
+* expired legacy session after the configured SDK idle lifetime;
 * target ``Mcp-Method`` mismatch;
 * target ``Mcp-Name`` mismatch for Tool call;
 * cross-era result-shape contamination;
@@ -1494,6 +1543,7 @@ Phase 2 implementation must preserve all of these invariants:
 #. invalid registry/schema/binding integrity aborts startup instead of serving a degraded
    untrusted MCP surface;
 #. a malformed/oversized target-era body cannot force unbounded middleware buffering;
+#. every SDK-owned legacy session has a finite configured idle lifetime;
 #. shutdown cannot leave a Phase 2 managed consequential effect because none exists.
 
 36. Quality and CI changes
@@ -1506,6 +1556,7 @@ The authoritative quality job additionally runs:
 .. code-block:: console
 
    uv run python scripts/compile_mcp_registry.py --check
+   uv run rstcheck --recursive docs
    python scripts/validate_contracts.py
    python scripts/validate_schema_instances.py
 
@@ -1532,6 +1583,7 @@ The Phase 2 implementation PR must document and pass:
    uv run mypy src/binnacle tests
    uv run lint-imports
    uv run pip-audit
+   uv run rstcheck --recursive docs
    uv run coverage run -m pytest
    uv run coverage report
    uv run tox -e py311,py312,py313,quality
@@ -1658,6 +1710,7 @@ Phase 2 implementation is accepted only when every item below is true:
 #. Ruff and Ruff format checks pass;
 #. strict MyPy passes;
 #. Import Linter passes;
+#. reStructuredText syntax lint passes for ``docs/``;
 #. ``pip-audit`` passes or has a separately reviewed explicit advisory exception;
 #. branch-inclusive coverage remains at or above the Phase 1 threshold;
 #. Python 3.11, 3.12, and 3.13 test lanes pass with their explicit interpreters;

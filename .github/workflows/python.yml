@@ -89,6 +89,12 @@ jobs:
       - name: Audit locked dependencies
         run: uv run pip-audit
 
+      - name: Lint reStructuredText documentation
+        run: uv run rstcheck --recursive docs
+
+      - name: Check generated MCP registry
+        run: uv run python scripts/compile_mcp_registry.py --check
+
       - name: Validate contracts
         run: uv run python scripts/validate_contracts.py
 

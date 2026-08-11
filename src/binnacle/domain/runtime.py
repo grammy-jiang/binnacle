@@ -16,3 +16,11 @@ class PackageIdentity:
 
     distribution_name: str
     version: str
+
+
+@dataclass(frozen=True, slots=True)
+class BuildIdentity:
+    """Deterministic source-checkout build fingerprint."""
+
+    version: str
+    build_sha256: str

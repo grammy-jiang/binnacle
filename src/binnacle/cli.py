@@ -201,7 +201,7 @@ def serve_command(
         typer.Option("--port", min=1, max=65535, help="Explicit HTTP bind port."),
     ] = None,
 ) -> None:
-    """Start the zero-tool FastMCP HTTP skeleton."""
+    """Start the loopback-only read-only MCP compatibility server."""
 
     server_overrides: dict[str, object] = {}
     if host is not None:
@@ -213,6 +213,12 @@ def serve_command(
         cli_overrides = {"server": server_overrides}
 
     settings = _load_or_exit(config_path=config_path, cli_overrides=cli_overrides)
+    if settings.server.host not in {"127.0.0.1", "::1"}:
+        typer.echo(
+            "Configuration error: Phase 2 MCP server requires canonical loopback bind",
+            err=True,
+        )
+        raise typer.Exit(code=2)
     composed = compose_application(settings=settings)
     try:
         run_http_server(application=composed.application, settings=settings.server)

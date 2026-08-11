@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://binnacle.dev/schemas/mcp/revision-support.schema.json",
+  "title": "Binnacle finite MCP revision-support contract",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "1.1"
+    },
+    "contract_id": {
+      "const": "mcp-revision-dispatch-v1"
+    },
+    "contract_version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "target_revision": {
+      "const": "2026-07-28"
+    },
+    "revisions": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "revision": {
+            "enum": [
+              "2026-07-28",
+              "2025-11-25",
+              "2025-06-18",
+              "2025-03-26"
+            ]
+          },
+          "era": {
+            "enum": [
+              "modern",
+              "legacy"
+            ]
+          },
+          "profile": {
+            "enum": [
+              "target-stateless",
+              "legacy-streamable-http"
+            ]
+          }
+        },
+        "required": [
+          "revision",
+          "era",
+          "profile"
+        ]
+      }
+    }
+  },
+  "required": [
+    "schema_version",
+    "contract_id",
+    "contract_version",
+    "target_revision",
+    "revisions"
+  ]
+}
