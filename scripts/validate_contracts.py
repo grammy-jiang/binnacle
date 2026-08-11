@@ -92,6 +92,12 @@ def _mapping(value: Any, *, context: str) -> dict[str, Any] | None:
     return value
 
 
+def _same_typed_value(actual: Any, expected: Any) -> bool:
+    """Compare scalar contract values without bool/int equality coercion."""
+
+    return type(actual) is type(expected) and actual == expected
+
+
 def _fixture_cases_by_id(
     document: Any,
     *,
@@ -142,7 +148,7 @@ def _require_fixture_case(
         for key, value in fields.items():
             if key not in case:
                 fail(f"fixture case {case_id}: {key} is required")
-            elif case[key] != value:
+            elif not _same_typed_value(case[key], value):
                 fail(f"fixture case {case_id}: {key} must be {value!r}, found {case[key]!r}")
     if expected is None:
         return
@@ -152,7 +158,7 @@ def _require_fixture_case(
     for key, value in expected.items():
         if key not in actual:
             fail(f"fixture case {case_id}: expect.{key} is required")
-        elif actual[key] != value:
+        elif not _same_typed_value(actual[key], value):
             fail(f"fixture case {case_id}: expect.{key} must be {value!r}, found {actual[key]!r}")
 
 
@@ -529,7 +535,7 @@ def _require_values(
     for key, value in expected.items():
         if key not in actual:
             fail(f"{context}: {key} is required")
-        elif actual[key] != value:
+        elif not _same_typed_value(actual[key], value):
             fail(f"{context}: {key} must be {value!r}, found {actual[key]!r}")
 
 
