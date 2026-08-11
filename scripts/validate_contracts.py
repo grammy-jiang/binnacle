@@ -167,16 +167,22 @@ def _merge_mappings(base: Mapping[str, Any], override: Mapping[str, Any]) -> dic
     return merged
 
 
-def _profile_network_policy(
+def _profile_section_policy(
     policy: dict[str, Any],
     profile_id: str,
+    *,
+    section: str,
+    inherits_global_key: str | None = None,
 ) -> dict[str, Any] | None:
-    global_network = _mapping(policy.get("network"), context="command policy: network")
+    global_section = _mapping(
+        policy.get(section),
+        context=f"command policy: {section}",
+    )
     profiles = _mapping(policy.get("profiles"), context="command policy: profiles")
-    if global_network is None or profiles is None:
+    if global_section is None or profiles is None:
         return None
     if profile_id == "default":
-        return dict(global_network)
+        return dict(global_section)
 
     resolving: set[str] = set()
 
@@ -193,7 +199,9 @@ def _profile_network_policy(
         resolving.add(current_id)
         parent_id = profile.get("inherits")
         if parent_id is None:
-            effective = dict(global_network)
+            effective = dict(global_section)
+            if inherits_global_key is not None and profile.get(inherits_global_key) is not True:
+                fail(f"command policy: profile {current_id} must set {inherits_global_key}=true")
         elif isinstance(parent_id, str):
             parent = resolve(parent_id)
             if parent is None:
@@ -204,10 +212,16 @@ def _profile_network_policy(
             fail(f"command policy: profile {current_id} inherits must be a string")
             resolving.remove(current_id)
             return None
-        override = profile.get("network", {})
+        if (
+            inherits_global_key is not None
+            and inherits_global_key in profile
+            and profile[inherits_global_key] is not True
+        ):
+            fail(f"command policy: profile {current_id} must not disable {inherits_global_key}")
+        override = profile.get(section, {})
         override_mapping = _mapping(
             override,
-            context=f"command policy: profile {current_id} network",
+            context=f"command policy: profile {current_id} {section}",
         )
         resolving.remove(current_id)
         if override_mapping is None:
@@ -215,6 +229,13 @@ def _profile_network_policy(
         return _merge_mappings(effective, override_mapping)
 
     return resolve(profile_id)
+
+
+def _profile_network_policy(
+    policy: dict[str, Any],
+    profile_id: str,
+) -> dict[str, Any] | None:
+    return _profile_section_policy(policy, profile_id, section="network")
 
 
 def pointer_get(document: Any, pointer: str) -> Any:
@@ -636,6 +657,45 @@ def validate_bootstrap_command_profile_alignment() -> None:
         },
         context="command policy: credentials",
     )
+    required_devices = {"default": "denied", "arbitrary_device_nodes": "denied"}
+    required_credentials = {
+        "raw_credentials": "denied",
+        "credential_helpers": "denied",
+        "inherited_agents": "denied",
+    }
+    for profile_id, profile in (
+        ("workspace-general-v1", general),
+        ("workspace-check-v1", check),
+    ):
+        if profile is not None:
+            for section in ("devices", "credentials"):
+                if section in profile:
+                    fail(
+                        f"command policy: profile {profile_id} must inherit global "
+                        f"{section} without a local override"
+                    )
+        effective_devices = _profile_section_policy(
+            command_policy,
+            profile_id,
+            section="devices",
+            inherits_global_key="inherits_global_devices",
+        )
+        effective_credentials = _profile_section_policy(
+            command_policy,
+            profile_id,
+            section="credentials",
+            inherits_global_key="inherits_global_credentials",
+        )
+        _require_values(
+            effective_devices,
+            required_devices,
+            context=f"effective devices {profile_id}",
+        )
+        _require_values(
+            effective_credentials,
+            required_credentials,
+            context=f"effective credentials {profile_id}",
+        )
     privilege = _mapping(command_policy.get("privilege"), context="command policy: privilege")
     if privilege is not None:
         if privilege.get("syscall_policy_required") is True:
