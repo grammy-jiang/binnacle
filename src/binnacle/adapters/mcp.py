@@ -9,7 +9,7 @@ import json
 import math
 import secrets
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, MutableMapping
-from contextlib import asynccontextmanager, suppress
+from contextlib import asynccontextmanager
 from typing import Any, Protocol, TypeAlias, cast
 
 import structlog
@@ -280,8 +280,13 @@ class RequestBodyLimitMiddleware:
 
         parsed: object = None
         if body:
-            with suppress(UnicodeDecodeError, json.JSONDecodeError):
+            try:
                 parsed = json.loads(body)
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                pass
+            except ValueError:
+                await _send_http_error(send, 400, "invalid_request_body")
+                return
 
         if isinstance(parsed, dict):
             rejection = self._validate_revision_request(scope, parsed)

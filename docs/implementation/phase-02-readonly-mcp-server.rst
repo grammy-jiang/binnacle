@@ -1100,6 +1100,10 @@ parsing. This is required because some revisions outside Binnacle's reviewed set
 handshake revisions in the locked SDK and would otherwise enter its stateful allocation
 path before malformed JSON is rejected.
 
+A bounded body that triggers a non-syntax JSON parser ``ValueError`` (including Python's
+configured integer digit limit) is rejected as HTTP 400 ``invalid_request_body`` before
+framework dispatch. It must not escape the ASGI middleware as an unhandled server error.
+
 22. HTTP/ASGI surface
 ---------------------
 

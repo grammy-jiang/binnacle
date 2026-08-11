@@ -402,6 +402,21 @@ async def test_invalid_json_is_replayed_to_framework_validation() -> None:
 
 
 @pytest.mark.anyio
+async def test_json_integer_digit_limit_is_rejected_before_downstream() -> None:
+    body = b'{"jsonrpc":"2.0","id":' + (b"9" * 5000) + b',"method":"tools/list"}'
+    downstream, sent = await _exercise_middleware(
+        max_request_bytes=8192,
+        headers=[(b"mcp-protocol-version", b"2026-07-28")],
+        messages=[{"type": "http.request", "body": body}],
+    )
+
+    assert len(body) < 8192
+    assert downstream.calls == 0
+    assert sent[0]["status"] == 400
+    assert _response_json(sent) == {"error": "invalid_request_body"}
+
+
+@pytest.mark.anyio
 async def test_legacy_initialize_is_forwarded_without_binnacle_session_storage() -> None:
     downstream = RecordingASGIApp(
         response_headers=[(b"mcp-session-id", b"session-fixture")],
