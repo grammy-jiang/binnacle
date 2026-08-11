@@ -24,11 +24,28 @@ def test_http_app_can_be_constructed(
     assert callable(http_app)
 
 
-def test_http_app_rejects_nonpositive_session_idle_timeout(
+@pytest.mark.parametrize(
+    "session_idle_timeout_seconds",
+    [0.0, -1.0, 1_800.001, float("inf"), float("nan")],
+)
+def test_http_app_rejects_session_idle_timeout_outside_reviewed_range(
     phase2_application: BinnacleApplication,
+    session_idle_timeout_seconds: float,
 ) -> None:
     with pytest.raises(ValueError, match="session_idle_timeout_seconds"):
-        create_http_app(phase2_application, session_idle_timeout_seconds=0)
+        create_http_app(
+            phase2_application,
+            session_idle_timeout_seconds=session_idle_timeout_seconds,
+        )
+
+
+@pytest.mark.parametrize("max_request_bytes", [65_535, 4_194_305])
+def test_http_app_rejects_request_bound_outside_reviewed_range(
+    phase2_application: BinnacleApplication,
+    max_request_bytes: int,
+) -> None:
+    with pytest.raises(ValueError, match="max_request_bytes"):
+        create_http_app(phase2_application, max_request_bytes=max_request_bytes)
 
 
 @pytest.mark.anyio

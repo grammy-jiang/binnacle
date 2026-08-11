@@ -1108,7 +1108,10 @@ ASGI middleware as an unhandled server error.
 FastMCP's public ``session_idle_timeout`` is always configured for the stateful legacy
 transport. The default is 300 seconds and the accepted setting is finite and no greater
 than 1,800 seconds. The SDK pushes the deadline forward on each request, then terminates
-and removes an inactive transport itself. Binnacle does not add a shadow session table.
+and removes an inactive transport itself. Both the settings model and public ASGI factory
+enforce the bound, so programmatic construction cannot bypass it. The factory likewise
+enforces the reviewed 64 KiB--4 MiB request-body range. Binnacle does not add a shadow
+session table.
 
 22. HTTP/ASGI surface
 ---------------------

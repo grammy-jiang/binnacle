@@ -79,6 +79,9 @@ TARGET_REVISION = EXPECTED_REVISIONS[0]
 LEGACY_REVISIONS = frozenset(EXPECTED_REVISIONS[1:])
 MCP_SESSION_ID_HEADER = "mcp-session-id"
 MAX_BODY_CHUNKS = 1024
+MIN_REQUEST_BYTES = 65_536
+MAX_REQUEST_BYTES = 4_194_304
+MAX_SESSION_IDLE_TIMEOUT_SECONDS = 1_800.0
 _LOGGER = structlog.get_logger(__name__)
 
 
@@ -973,8 +976,13 @@ def create_http_app(
 ) -> ASGIApp:
     """Return FastMCP's revision-aware Streamable HTTP application at ``/mcp``."""
 
-    if session_idle_timeout_seconds <= 0:
-        raise ValueError("session_idle_timeout_seconds must be positive")
+    if not MIN_REQUEST_BYTES <= max_request_bytes <= MAX_REQUEST_BYTES:
+        raise ValueError("max_request_bytes is outside the reviewed range")
+    if not (
+        math.isfinite(session_idle_timeout_seconds)
+        and 0 < session_idle_timeout_seconds <= MAX_SESSION_IDLE_TIMEOUT_SECONDS
+    ):
+        raise ValueError("session_idle_timeout_seconds is outside the reviewed range")
 
     server = create_mcp_server(application)
     # The SDK routes 2026-era requests to its sessionless modern path while

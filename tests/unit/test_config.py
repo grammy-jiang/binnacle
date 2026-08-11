@@ -122,8 +122,10 @@ def test_invalid_port_is_rejected(port: int) -> None:
     [
         ("max_request_bytes", 65_535),
         ("max_request_bytes", 4_194_305),
-        ("session_idle_timeout_seconds", 0),
-        ("session_idle_timeout_seconds", 1_801),
+        ("session_idle_timeout_seconds", 0.0),
+        ("session_idle_timeout_seconds", 1_801.0),
+        ("session_idle_timeout_seconds", float("inf")),
+        ("session_idle_timeout_seconds", float("nan")),
         ("graceful_shutdown_seconds", 0),
         ("graceful_shutdown_seconds", 61),
         ("filesystem_stat_timeout_seconds", 0),
