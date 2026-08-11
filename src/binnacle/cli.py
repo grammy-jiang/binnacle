@@ -18,7 +18,7 @@ from rich.console import Console
 from binnacle import distribution_version
 from binnacle.adapters.mcp import run_http_server
 from binnacle.composition import compose_application
-from binnacle.config import BinnacleSettings, load_settings
+from binnacle.config import BinnacleSettings, EnvironmentNamespaceError, load_settings
 from binnacle.domain.runtime import PackageIdentity
 
 app = typer.Typer(help="Binnacle executable project skeleton.", no_args_is_help=True)
@@ -91,6 +91,9 @@ def _load_or_exit(
 ) -> BinnacleSettings:
     try:
         return load_settings(config_path=config_path, cli_overrides=cli_overrides)
+    except EnvironmentNamespaceError as exc:
+        typer.echo("Configuration error: unknown BINNACLE_* environment setting", err=True)
+        raise typer.Exit(code=2) from exc
     except SettingsError as exc:
         typer.echo(f"Configuration error: {_safe_settings_error_summary(exc)}", err=True)
         raise typer.Exit(code=2) from exc

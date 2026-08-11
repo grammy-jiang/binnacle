@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from binnacle.config import BinnacleSettings, load_settings
+from binnacle.config import BinnacleSettings, EnvironmentNamespaceError, load_settings
 
 
 def test_default_settings_are_development_loopback() -> None:
@@ -87,6 +87,24 @@ def test_unknown_toml_key_is_rejected(tmp_path: Path) -> None:
 
     with pytest.raises(ValidationError, match="unknown"):
         load_settings(config_path=config_path)
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "BINNACLE_UNKNOWN",
+        "BINNACLE_SERVER__PRT",
+        "BINNACLE_LOGGING__LEVEL__EXTRA",
+    ],
+)
+def test_unknown_environment_key_is_rejected(
+    name: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(name, "not-observed")
+
+    with pytest.raises(EnvironmentNamespaceError, match="unknown BINNACLE"):
+        load_settings()
 
 
 @pytest.mark.parametrize("port", [0, 65536])

@@ -106,6 +106,21 @@ def test_config_validation_sanitizes_environment_source_parse_error(
     assert result.exception is not None
 
 
+def test_config_validation_rejects_unknown_environment_key_without_echoing_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    unknown_name = "BINNACLE_SERVER__ACCIDENTAL_SECRET_NAME"
+    secret_value = "accidental-secret-value"
+    monkeypatch.setenv(unknown_name, secret_value)
+
+    result = runner.invoke(app, ["config", "validate"])
+
+    assert result.exit_code == 2
+    assert result.stderr == "Configuration error: unknown BINNACLE_* environment setting\n"
+    assert unknown_name not in result.stderr
+    assert secret_value not in result.stderr
+
+
 def test_serve_defaults_to_loopback_one_worker(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

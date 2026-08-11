@@ -608,8 +608,8 @@ Phase 1 precedence for its **ordinary, non-security-critical** fields is:
 
    defaults < TOML file < BINNACLE_* environment < explicit CLI override
 
-Unknown TOML keys are errors. Invalid environment values are errors. The resolved object
-is frozen.
+Unknown TOML keys and unknown names in the reserved ``BINNACLE_*`` environment namespace
+are errors. Invalid environment values are errors. The resolved object is frozen.
 
 Do not generalise this precedence into a future security-policy rule. Security-critical
 settings are not introduced in Phase 1 and later protected settings may deliberately
@@ -984,6 +984,10 @@ or make the audit advisory-only merely to keep CI green.
 
 ``test_unknown_toml_key_is_rejected``
    Extra keys fail closed.
+
+``test_unknown_environment_key_is_rejected``
+   Unknown top-level, nested, and over-nested ``BINNACLE_*`` names fail closed without
+   exposing their names or values through the CLI.
 
 ``test_invalid_port_is_rejected``
    Values outside 1--65535 fail validation.

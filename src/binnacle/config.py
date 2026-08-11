@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import tomllib
 from collections.abc import Mapping
 from pathlib import Path
@@ -64,6 +65,13 @@ class BinnacleSettings(BaseSettings):
         return env_settings, init_settings
 
 
+class EnvironmentNamespaceError(ValueError):
+    """The reserved ``BINNACLE_*`` namespace contains an unknown setting name."""
+
+    def __init__(self) -> None:
+        super().__init__("unknown BINNACLE_* environment setting")
+
+
 class _ExplicitSettings(BinnacleSettings):
     """Validate an already resolved snapshot without re-reading the environment."""
 
@@ -93,6 +101,30 @@ def _merge_mappings(
     return merged
 
 
+def _known_environment_names(
+    model: type[BaseModel],
+    *,
+    path: tuple[str, ...] = (),
+) -> frozenset[str]:
+    names: set[str] = set()
+    for field_name, field in model.model_fields.items():
+        field_path = (*path, field_name)
+        names.add(("BINNACLE_" + "__".join(field_path)).casefold())
+        annotation = field.annotation
+        if isinstance(annotation, type) and issubclass(annotation, BaseModel):
+            names.update(_known_environment_names(annotation, path=field_path))
+    return frozenset(names)
+
+
+def _validate_environment_namespace(environment: Mapping[str, str]) -> None:
+    known = _known_environment_names(BinnacleSettings)
+    if any(
+        name.casefold().startswith("binnacle_") and name.casefold() not in known
+        for name in environment
+    ):
+        raise EnvironmentNamespaceError
+
+
 def load_settings(
     *,
     config_path: Path | None = None,
@@ -104,6 +136,8 @@ def load_settings(
     if config_path is not None:
         with config_path.open("rb") as config_file:
             toml_values = tomllib.load(config_file)
+
+    _validate_environment_namespace(os.environ)
 
     # Collect every source as raw input first.  Validating an intermediate TOML/env
     # snapshot would incorrectly reject a lower-priority invalid value even when an
