@@ -102,6 +102,35 @@ def test_activation_requires_exact_pending_state_and_closure() -> None:
 
 
 @pytest.mark.parametrize(
+    "target",
+    [
+        DevelopmentSessionState.ENDED,
+        DevelopmentSessionState.EXPIRED,
+        DevelopmentSessionState.REVOKED,
+    ],
+)
+def test_terminal_never_started_activation_has_durable_no_effect_closure(
+    target: DevelopmentSessionState,
+) -> None:
+    terminal = reduce_session(
+        _pending(),
+        expected_state_version=1,
+        target=target,
+        reason=f"{target.value}_before_start",
+        now=NOW + timedelta(seconds=1),
+    )
+
+    closed = complete_activation(terminal, expected_state_version=2)
+
+    assert closed.state is target
+    assert closed.state_version == 3
+    assert closed.activation_closure is ActivationClosure.COMPLETE
+    assert closed.activation_closure_version == 2
+    assert closed.started_at is None
+    assert closed.activation_effect_reference is None
+
+
+@pytest.mark.parametrize(
     ("change", "reason"),
     [
         ({"controller_epoch": 9}, SessionIneffectiveReason.CONTROLLER_MISMATCH),

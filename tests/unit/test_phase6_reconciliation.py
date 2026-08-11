@@ -148,10 +148,6 @@ class MemorySessions:
         if (
             after_session_id is not None
             or self.session.activation_closure is ActivationClosure.COMPLETE
-            or (
-                self.session.state is not DevelopmentSessionState.PENDING
-                and self.session.activation_effect_reference is None
-            )
         ):
             return ()
         return (self.session,)
@@ -501,7 +497,7 @@ async def test_exact_activation_truth_precedes_obligation_recovery_and_closure()
     assert classified.state is OperationState.SUCCEEDED
     assert classified.effect_knowledge is EffectKnowledge.KNOWN_EFFECT
     assert classified.effect_reference == sessions.session.activation_effect_reference
-    assert sessions.session.activation_closure is ActivationClosure.PENDING
+    assert sessions.session.activation_closure.value == ActivationClosure.PENDING.value
 
     # Exact-generation recovery validates this durable known-effect truth before
     # removing the marker.  Model that completed owner action, then prove the next
@@ -531,6 +527,63 @@ async def test_restart_authorised_session_is_audited_no_effect_and_revoked() -> 
     assert result.state is OperationState.FAILED
     assert result.effect_knowledge is EffectKnowledge.KNOWN_NO_EFFECT
     assert sessions.session.state is DevelopmentSessionState.REVOKED
+    assert sessions.session.activation_closure is ActivationClosure.COMPLETE
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "terminal_state",
+    [DevelopmentSessionState.ENDED, DevelopmentSessionState.EXPIRED],
+)
+async def test_terminal_no_effect_activation_repairs_audit_then_closes_after_restart(
+    terminal_state: DevelopmentSessionState,
+) -> None:
+    authorised = _authorised(
+        f"op_session_{terminal_state.value}_audit_window",
+        "development_session_begin",
+    )
+    terminal = reduce_session(
+        _pending_session(authorised.operation_id),
+        expected_state_version=1,
+        target=terminal_state,
+        reason=f"{terminal_state.value}_before_start",
+        now=NOW + timedelta(seconds=1),
+    )
+    sessions = MemorySessions(terminal)
+    audit = MemoryAudit(fail_append=True)
+    reconciler, operations = _reconciler(
+        operation=authorised,
+        sessions=sessions,
+        workspaces=MemoryWorkspaces(),
+        audit=audit,
+        obligations=MemoryObligations(),
+    )
+
+    # The lifecycle transition commits before the injected audit failure.  The
+    # terminal session remains a durable, actionable closure record.
+    with pytest.raises(Phase6ReconciliationError, match="audit evidence"):
+        await reconciler.reconcile(authorised)
+    failed = operations.operations[authorised.operation_id]
+    assert failed.state is OperationState.FAILED
+    assert failed.effect_knowledge is EffectKnowledge.KNOWN_NO_EFFECT
+    assert sessions.session.activation_closure.value == ActivationClosure.PENDING.value
+    assert operations.latched
+
+    # Model explicit audit-generation recovery, then prove the next startup
+    # repairs the exact state event before completing the no-effect closure.
+    audit.fail_append = False
+    assert await reconciler.reconcile_terminal_closures() == (failed,)
+    assert sessions.session.state is terminal_state
+    assert sessions.session.started_at is None
+    assert sessions.session.activation_effect_reference is None
+    assert sessions.session.activation_closure is ActivationClosure.COMPLETE
+    assert (
+        failed.operation_id,
+        failed.state_version,
+        failed.state.value,
+        failed.effect_knowledge.value,
+    ) in audit.evidence
+    assert await reconciler.reconcile_terminal_closures() == ()
 
 
 @pytest.mark.anyio

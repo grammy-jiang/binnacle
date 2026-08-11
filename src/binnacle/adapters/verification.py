@@ -450,10 +450,17 @@ def _verify_development_workspace_invariants(connection: sqlite3.Connection) -> 
                         OR o.effect_reference_digest
                            IS NOT s.activation_effect_reference_sha256))
                OR (s.activation_closure='complete'
-                   AND (o.state!='succeeded' OR o.effect_knowledge!='known_effect'
-                        OR o.effect_reference IS NOT s.activation_effect_reference
-                        OR o.effect_reference_digest
-                           IS NOT s.activation_effect_reference_sha256))
+                   AND ((s.activation_effect_reference IS NOT NULL
+                         AND (o.state!='succeeded' OR o.effect_knowledge!='known_effect'
+                              OR o.effect_reference IS NOT s.activation_effect_reference
+                              OR o.effect_reference_digest
+                                 IS NOT s.activation_effect_reference_sha256))
+                        OR (s.activation_effect_reference IS NULL
+                            AND (s.started_at IS NOT NULL
+                                 OR o.state NOT IN ('rejected','cancelled','failed')
+                                 OR o.effect_knowledge!='known_no_effect'
+                                 OR o.effect_reference IS NOT NULL
+                                 OR o.effect_reference_digest IS NOT NULL))))
         """,
         "workspace operation provenance": """
             SELECT COUNT(*) FROM workspace_operations wo

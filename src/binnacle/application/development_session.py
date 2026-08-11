@@ -270,6 +270,53 @@ class DevelopmentSessionService:
             mutator=close_exact,
         )
 
+    async def close_no_effect_activation(
+        self,
+        *,
+        operation: OperationSnapshot,
+        closed_at: datetime,
+    ) -> DevelopmentSessionSnapshot:
+        """Durably close a terminal never-started activation after exact audit proof."""
+
+        if (
+            operation.terminality is not Terminality.TERMINAL
+            or operation.effect_knowledge is not EffectKnowledge.KNOWN_NO_EFFECT
+            or operation.effect_reference is not None
+            or operation.effect_reference_digest is not None
+        ):
+            raise DevelopmentSessionError("activation operation lacks exact no-effect proof")
+        session = await self._repository.get_by_begin_operation(operation.operation_id)
+        if session is None:
+            raise DevelopmentSessionError("activation closure evidence is inconsistent")
+
+        async def close_exact(
+            current: DevelopmentSessionSnapshot,
+        ) -> DevelopmentSessionSnapshot:
+            if (
+                current.begin_operation_id != operation.operation_id
+                or current.state
+                not in {
+                    DevelopmentSessionState.ENDED,
+                    DevelopmentSessionState.EXPIRED,
+                    DevelopmentSessionState.REVOKED,
+                }
+                or current.started_at is not None
+                or current.activation_closure is not ActivationClosure.PENDING
+                or current.activation_effect_reference is not None
+                or current.activation_effect_reference_sha256 is not None
+            ):
+                raise DevelopmentSessionError("no-effect activation closure is inconsistent")
+            return await self._repository.complete_activation(
+                session_id=current.session_id,
+                expected_state_version=current.state_version,
+                closed_at=closed_at,
+            )
+
+        return await self._authority_gate.mutate_authority(
+            session_id=session.session_id,
+            mutator=close_exact,
+        )
+
     async def reduce_authority(
         self,
         *,
@@ -401,19 +448,42 @@ class SessionActivationClosure:
                 and session.started_at is None
                 and session.activation_effect_reference is None
                 and session.activation_effect_reference_sha256 is None
+                and session.activation_closure is ActivationClosure.COMPLETE
+            ):
+                return operation
+            if (
+                session.state
+                in {
+                    DevelopmentSessionState.ENDED,
+                    DevelopmentSessionState.EXPIRED,
+                    DevelopmentSessionState.REVOKED,
+                }
+                and session.started_at is None
+                and session.activation_effect_reference is None
+                and session.activation_effect_reference_sha256 is None
                 and session.activation_closure is ActivationClosure.PENDING
             ):
+                await self._service.close_no_effect_activation(
+                    operation=operation,
+                    closed_at=operation.terminal_at or operation.updated_at,
+                )
                 return operation
             if session.state is not DevelopmentSessionState.PENDING:
                 raise DevelopmentSessionError(
                     "known-no-effect activation contradicts retained session state"
                 )
-            await self._service.reduce_authority(
+            reduced = await self._service.reduce_authority(
                 session_id=session.session_id,
                 expected_state_version=session.state_version,
                 target=DevelopmentSessionState.REVOKED,
                 reason="activation_known_no_effect",
                 terminal_at=operation.terminal_at or operation.updated_at,
+            )
+            if reduced.activation_closure is not ActivationClosure.PENDING:
+                raise DevelopmentSessionError("no-effect activation closure changed unexpectedly")
+            await self._service.close_no_effect_activation(
+                operation=operation,
+                closed_at=operation.terminal_at or operation.updated_at,
             )
         return operation
 

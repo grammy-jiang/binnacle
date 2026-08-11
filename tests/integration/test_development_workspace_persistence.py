@@ -684,14 +684,14 @@ async def test_activation_closure_scan_excludes_terminal_never_started_history(
                 key_byte=key_byte,
                 session_id=f"dev_historical_{target.value}",
             )
-            await sessions.reduce(
+            terminal = await sessions.reduce(
                 session_id=pending.session_id,
                 expected_state_version=pending.state_version,
                 target=target,
                 reason=f"{target.value}_before_start",
                 terminal_at=pending.created_at + timedelta(seconds=1),
             )
-            await operations.transition(
+            failed = await operations.transition(
                 authorised.operation_id,
                 TransitionRequest(
                     authorised.state_version,
@@ -705,6 +705,12 @@ async def test_activation_closure_scan_excludes_terminal_never_started_history(
                     occurred_at=pending.created_at + timedelta(seconds=2),
                 ),
             )
+            closed = await sessions.complete_activation(
+                session_id=terminal.session_id,
+                expected_state_version=terminal.state_version,
+                closed_at=failed.terminal_at or failed.updated_at,
+            )
+            assert closed.activation_closure is ActivationClosure.COMPLETE
 
         _authorised, actionable = await _authorise_pending_session(
             sessions,
@@ -723,6 +729,55 @@ async def test_activation_closure_scan_excludes_terminal_never_started_history(
             )
             == ()
         )
+        await sessions.verify_integrity()
+
+
+@pytest.mark.anyio
+async def test_terminal_never_started_closure_stays_actionable_until_complete(
+    tmp_path: Path, repo_root: Path
+) -> None:
+    async with operation_runtime(tmp_path, repo_root) as (runtime, operations):
+        workspaces = SqliteWorkspaceRepository(runtime)
+        sessions = SqliteDevelopmentSessionRepository(runtime)
+        await workspaces.register_workspace(_registration())
+        authorised, pending = await _authorise_pending_session(
+            sessions,
+            operations,
+            key_byte="5",
+            session_id="dev_terminal_audit_window",
+        )
+        terminal = await sessions.reduce(
+            session_id=pending.session_id,
+            expected_state_version=pending.state_version,
+            target=DevelopmentSessionState.ENDED,
+            reason="ended_before_audit_repair",
+            terminal_at=pending.created_at + timedelta(seconds=1),
+        )
+        failed = await operations.transition(
+            authorised.operation_id,
+            TransitionRequest(
+                authorised.state_version,
+                OperationState.FAILED,
+                EffectKnowledge.KNOWN_NO_EFFECT,
+                "activation_authority_unavailable",
+                error=OperationError(
+                    "authority_unavailable",
+                    "Activation authority was reduced before dispatch.",
+                ),
+                occurred_at=pending.created_at + timedelta(seconds=2),
+            ),
+        )
+
+        assert await sessions.list_activation_closures(limit=10) == (terminal,)
+        closed = await sessions.complete_activation(
+            session_id=terminal.session_id,
+            expected_state_version=terminal.state_version,
+            closed_at=failed.terminal_at or failed.updated_at,
+        )
+
+        assert closed.activation_closure is ActivationClosure.COMPLETE
+        assert closed.state_version == terminal.state_version + 1
+        assert await sessions.list_activation_closures(limit=10) == ()
         await sessions.verify_integrity()
 
 

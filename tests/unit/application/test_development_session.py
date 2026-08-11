@@ -768,8 +768,9 @@ async def test_known_no_effect_closure_preserves_prior_terminal_reduction(
         closure_verifier=closure_verified,
     ).close_retained(failed)
     retained = await repository.require_session(pending.session_id)
-    assert retained == terminal
-    assert retained.activation_closure is ActivationClosure.PENDING
+    assert retained.state is terminal.state
+    assert retained.terminal_reason == terminal.terminal_reason
+    assert retained.activation_closure is ActivationClosure.COMPLETE
     assert retained.activation_effect_reference is None
 
 
@@ -947,6 +948,7 @@ async def test_activation_known_no_effect_revokes_once_and_retains_audit_block()
     assert await closure.close(operation=failed, request=_coordinated(received)) is failed
     revoked = await repository.require_session(pending.session_id)
     assert revoked.state is DevelopmentSessionState.REVOKED
+    assert revoked.activation_closure is ActivationClosure.COMPLETE
     assert await closure.close(operation=failed, request=_coordinated(received)) is failed
 
 

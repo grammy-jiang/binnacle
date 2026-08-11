@@ -208,13 +208,17 @@ def complete_activation(
         DevelopmentSessionState.EXPIRED,
         DevelopmentSessionState.REVOKED,
     }:
-        raise DevelopmentSessionError("only an activated session can close activation")
+        raise DevelopmentSessionError("only an activated or terminal session can close activation")
     if snapshot.activation_closure is not ActivationClosure.PENDING:
         raise DevelopmentSessionError("session activation is already closed")
     if snapshot.state_version != expected_state_version:
         raise DevelopmentSessionError("activation closure state version is stale")
-    if snapshot.activation_effect_reference is None:
-        raise DevelopmentSessionError("activation closure requires retained effect evidence")
+    if snapshot.state is DevelopmentSessionState.ACTIVE and (
+        snapshot.activation_effect_reference is None or snapshot.started_at is None
+    ):
+        raise DevelopmentSessionError("active activation closure requires retained effect evidence")
+    if (snapshot.started_at is None) != (snapshot.activation_effect_reference is None):
+        raise DevelopmentSessionError("activation closure history is contradictory")
     return replace(
         snapshot,
         state_version=snapshot.state_version + 1,
@@ -414,11 +418,14 @@ def validate_session_snapshot(snapshot: DevelopmentSessionSnapshot) -> None:
         raise DevelopmentSessionError("pending session cannot have started")
     if snapshot.state is DevelopmentSessionState.ACTIVE and snapshot.started_at is None:
         raise DevelopmentSessionError("active session lacks start evidence")
-    if snapshot.activation_closure is ActivationClosure.COMPLETE and (
-        snapshot.activation_effect_reference is None
-        or snapshot.activation_effect_reference_sha256 is None
-    ):
-        raise DevelopmentSessionError("closed activation lacks effect evidence")
+    if snapshot.activation_closure is ActivationClosure.COMPLETE:
+        if snapshot.state is DevelopmentSessionState.PENDING:
+            raise DevelopmentSessionError("pending activation cannot be closed")
+        if snapshot.started_at is not None and (
+            snapshot.activation_effect_reference is None
+            or snapshot.activation_effect_reference_sha256 is None
+        ):
+            raise DevelopmentSessionError("closed started activation lacks effect evidence")
 
 
 def _identifier(value: str, name: str) -> str:

@@ -174,8 +174,7 @@ def upgrade() -> None:
         ),
         sa.CheckConstraint(
             "(activation_closure = 'pending' AND activation_closure_version = 1) OR "
-            "(activation_closure = 'complete' AND activation_closure_version = 2 "
-            "AND activation_effect_reference IS NOT NULL)",
+            "(activation_closure = 'complete' AND activation_closure_version = 2)",
             name="ck_development_sessions_closure_shape",
         ),
         sa.CheckConstraint(
@@ -186,9 +185,11 @@ def upgrade() -> None:
             "AND state_version = 3) OR "
             "(state IN ('ended','expired','revoked') AND started_at IS NULL "
             "AND activation_closure = 'pending' AND state_version = 2) OR "
+            "(state IN ('ended','expired','revoked') AND started_at IS NULL "
+            "AND activation_closure = 'complete' AND state_version = 3) OR "
             "(state IN ('ended','expired','revoked') AND started_at IS NOT NULL "
             "AND activation_closure = 'pending' AND state_version = 3) OR "
-            "(state IN ('ended','expired','revoked') "
+            "(state IN ('ended','expired','revoked') AND started_at IS NOT NULL "
             "AND activation_closure = 'complete' AND state_version = 4)",
             name="ck_development_sessions_version_shape",
         ),

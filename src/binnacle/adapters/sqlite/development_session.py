@@ -359,10 +359,6 @@ class SqliteDevelopmentSessionRepository:
             raise DevelopmentSessionStoreError("session closure cursor must contain both fields")
         statement = select(DevelopmentSessionModel).where(
             DevelopmentSessionModel.activation_closure == ActivationClosure.PENDING.value,
-            or_(
-                DevelopmentSessionModel.state == DevelopmentSessionState.PENDING.value,
-                DevelopmentSessionModel.activation_effect_reference.is_not(None),
-            ),
         )
         if after_created_at is not None and after_session_id is not None:
             statement = statement.where(
@@ -469,12 +465,19 @@ class SqliteDevelopmentSessionRepository:
                                     OR o.effect_reference_digest
                                        IS NOT s.activation_effect_reference_sha256))
                            OR (s.activation_closure='complete'
-                               AND (o.state!='succeeded'
-                                    OR o.effect_knowledge!='known_effect'
-                                    OR o.effect_reference
-                                       IS NOT s.activation_effect_reference
-                                    OR o.effect_reference_digest
-                                       IS NOT s.activation_effect_reference_sha256))
+                               AND ((s.activation_effect_reference IS NOT NULL
+                                     AND (o.state!='succeeded'
+                                          OR o.effect_knowledge!='known_effect'
+                                          OR o.effect_reference
+                                             IS NOT s.activation_effect_reference
+                                          OR o.effect_reference_digest
+                                             IS NOT s.activation_effect_reference_sha256))
+                                    OR (s.activation_effect_reference IS NULL
+                                        AND (s.started_at IS NOT NULL
+                                             OR o.state NOT IN ('rejected','cancelled','failed')
+                                             OR o.effect_knowledge!='known_no_effect'
+                                             OR o.effect_reference IS NOT NULL
+                                             OR o.effect_reference_digest IS NOT NULL))))
                         """
                     )
                 )
