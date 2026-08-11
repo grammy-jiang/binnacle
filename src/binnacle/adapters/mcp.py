@@ -39,6 +39,7 @@ from starlette.responses import JSONResponse, Response
 
 from binnacle.application import BinnacleApplication, CompatibilityUseCases
 from binnacle.contracts import (
+    EXPECTED_REVISIONS,
     ContractRegistry,
     InputContractError,
     OutputContractError,
@@ -69,8 +70,8 @@ ASGIApp: TypeAlias = Callable[
 ]
 ToolEnvelope: TypeAlias = SuccessEnvelope[object] | ExecutionErrorEnvelope
 RevisionRejection: TypeAlias = tuple[int, str, str]
-TARGET_REVISION = "2026-07-28"
-LEGACY_REVISIONS = frozenset({"2025-11-25", "2025-06-18", "2025-03-26"})
+TARGET_REVISION = EXPECTED_REVISIONS[0]
+LEGACY_REVISIONS = frozenset(EXPECTED_REVISIONS[1:])
 MCP_SESSION_ID_HEADER = "mcp-session-id"
 MAX_BODY_CHUNKS = 1024
 _LOGGER = structlog.get_logger(__name__)
@@ -349,12 +350,7 @@ async def _send_jsonrpc_error(
                 "message": message,
                 "data": {
                     "code": data_code,
-                    "supported": [
-                        TARGET_REVISION,
-                        "2025-11-25",
-                        "2025-06-18",
-                        "2025-03-26",
-                    ],
+                    "supported": list(EXPECTED_REVISIONS),
                 },
             },
         },

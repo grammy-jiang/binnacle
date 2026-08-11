@@ -289,7 +289,7 @@ class CompatibilityUseCases:
 
 
 class BinnacleApplication:
-    """Minimal idempotent lifecycle for the Phase 1 application."""
+    """Idempotent lifecycle for the Phase 2 compatibility-core application."""
 
     def __init__(
         self,
