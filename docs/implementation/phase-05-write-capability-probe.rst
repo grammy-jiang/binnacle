@@ -603,10 +603,32 @@ Algorithm for ``operation=cleanup`` is identical except that it additionally req
 retained ``probe_artifacts`` record owned by the current controller and exact
 ``artifact_id``/path/content digest. For a still-created artifact, preparation requires no
 unresolved ``active_cleanup_operation_id``; a potentially releasable terminal claim must
-first pass section 20 reconciliation, and preparation never steals or clears a claim. The
-current-state binding includes the retained artifact generation, active-claim state, and
-secure on-disk identity/digest when the file is present, or the exact durable
-already-removed state when the prior cleanup has already succeeded.
+first pass section 20 reconciliation, and preparation never steals or clears a claim.
+Preparation then permits exactly two truthful filesystem observations for that exact
+``created`` generation:
+
+* **present** -- secure lookup proves the exact retained regular-file identity/content
+  digest, and the current-state binding includes that protected on-disk identity; or
+* **observed absent** -- secure lookup through the protected root proves the exact target
+  name is absent. The binding includes the exact ``artifact_id``, retained
+  ``path_generation``, owner/controller epoch, expected content digest, NULL active-claim
+  state, root identity, normalized path, and a typed
+  ``created_target_observed_absent`` current-state fact instead of an on-disk file
+  identity.
+
+The observed-absent preparation fact is **not** effect knowledge, remover provenance, or a
+state transition. Preparation leaves the artifact durably ``created``, does not set
+``removed_at``, does not create/clear a cleanup claim, and does not claim that any cleanup
+performed the disappearance. It merely binds the exact current absence so a later
+independently authorised operation can revalidate that same state and, before any effect
+boundary is crossed, use the truthful no-effect path in sections 17 and 20. Any mismatched
+replacement, uncertain durable artifact state, active claim, or unsafe/unverifiable root
+rejects preparation fail closed.
+
+For an artifact already durably ``removed``, the current-state binding instead includes
+the exact durable already-removed state. These present/created-observed-absent/removed
+variants are distinct prepared-state digests and cannot substitute for one another after
+preparation.
 
 Preparation output is not authorization. Raw execution nonce is returned to the caller as
 required by the Tool schema but is never logged, audited, used as a metric label, or
@@ -726,9 +748,15 @@ The post-policy admission behavior is exact:
   ``artifact_id``, and inserts the ``probe_artifacts`` row in ``reserved`` state under the
   partial live-path unique index;
 * for cleanup of a still-created artifact, it revalidates exact
-  artifact/path/generation/ownership and atomically compare-and-sets
-  ``active_cleanup_operation_id`` from NULL to this operation; an existing active claim is
-  never stolen or overwritten by admission;
+  artifact/path/generation/ownership and the exact prepared filesystem observation. A
+  present-bound preparation must still match the protected file identity/digest; a
+  ``created_target_observed_absent`` preparation must still prove secure absence for the
+  same root/path/generation. Only after that exact-state check does admission atomically
+  compare-and-set ``active_cleanup_operation_id`` from NULL to this operation; an existing
+  active claim is never stolen or overwritten. Admitting the observed-absent variant does
+  not mark the artifact removed and does not create effect knowledge -- it merely gives
+  the exact cleanup operation a claim so the final no-start verifier can close it
+  truthfully if absence is still proven;
 * for cleanup whose retained artifact is already durably ``removed``, the operation may
   be admitted as an idempotent no-effect establishment of the requested absent state and
   acquires no active cleanup claim or filesystem-start authority;
@@ -737,6 +765,13 @@ The post-policy admission behavior is exact:
 * after the allow transaction commits, the required allowed ``policy.decision`` and
   ``operation.authorised`` audit evidence must fsync before any ``authorised -> running``
   transition.
+
+If a prepared filesystem observation changes before admission -- including a file
+appearing for an observed-absent cleanup preparation or a present-bound file disappearing,
+being replaced, or changing identity -- the prepared current-state digest no longer
+matches. The operation must not become authorised from that stale preparation. A new
+preparation is required after truthful state observation; this rule never infers an effect
+from the changed filesystem state.
 
 If a concurrent operation wins the live-path reservation, acquires the active cleanup
 claim, or changes the retained artifact before the allowing transaction commits, this
@@ -775,7 +810,9 @@ Immediately before ``EffectBoundary.start``, revalidate:
 * write target still absent and its live durable reservation/generation still belongs to
   this operation; or cleanup artifact still has the exact retained
   identity/digest/generation/ownership and ``active_cleanup_operation_id`` equals this
-  operation;
+  operation. For a cleanup prepared with ``created_target_observed_absent``, the retained
+  created-generation/owner/content facts and active claim must match and secure lookup
+  must still prove absence; no nonexistent file identity is fabricated;
 * maximum effect remains one bounded local artifact;
 * no cancellation/state-version change has occurred.
 
@@ -783,9 +820,12 @@ For a cleanup claim whose retained artifact is still ``created``, the final veri
 one explicit no-start branch. If secure lookup proves the exact target is already absent
 **before** ``EffectBoundary.start`` while the retained artifact/generation/ownership and
 active claim still match, the verifier returns a typed ``already_missing_pre_start``
-no-effect outcome instead of failing open or calling the adapter. Because the coordinator
-knows the effect boundary has not been crossed, it may durably classify this operation as
-``known_no_effect``. It must not infer ``known_effect`` from absence.
+no-effect outcome instead of failing open or calling the adapter. This applies whether the
+absence was first observed and bound during preparation or arose later after a
+present-bound preparation but before the final boundary. Because the coordinator knows the
+effect boundary has not been crossed for this admitted operation, it may durably classify
+this operation as ``known_no_effect``. It must not infer ``known_effect`` from absence, and
+the earlier preparation-time observation alone never classified any effect knowledge.
 
 The frozen lifecycle currently permits ``known_no_effect`` terminality for ``failed`` but
 not for ``succeeded``. Phase 5 therefore does not mutate the lifecycle contract merely to
@@ -1032,7 +1072,11 @@ Use only existing schema-valid audit payload kinds.
 
 Preparation may use existing policy/preparation evidence with ``operation_id=null`` and
 ``prepared_operation_id`` populated where schema permits. It must not claim a filesystem
-reservation or owner UI confirmation occurred before policy admission.
+reservation or owner UI confirmation occurred before policy admission. A cleanup
+preparation may include only a bounded digest/code for the typed
+``created_target_observed_absent`` current-state fact when that fact is actually observed;
+it must not emit effect/lifecycle evidence, set effect knowledge, or claim removal merely
+because the target is absent during preparation.
 
 Execution keeps the Phase 4 lifecycle/effect mapping and ordering exactly:
 
@@ -1293,6 +1337,13 @@ Unit/property coverage includes:
 * path policy rejects nested/absolute/dot/backslash/reserved/non-NFC/overlong names;
 * text/base64 normalization produces identical digest only for identical decoded bytes;
 * prepare/write and prepare/cleanup fingerprints are deterministic and contract-exact;
+* cleanup preparation for a durable ``created`` artifact whose exact target is already
+  absent succeeds only with the typed ``created_target_observed_absent`` binding over the
+  exact artifact/generation/owner/content/root/path and NULL active claim; preparation does
+  not mutate artifact state/claim or effect knowledge;
+* a file appearing after observed-absent preparation, or any artifact/generation/owner
+  change, invalidates that prepared state before admission/final boundary rather than
+  converting absence/presence into inferred effect knowledge;
 * prepared nonce/caller key dual admission creates one minimal ``received`` operation
   before policy and no probe-path reservation;
 * required ``operation.state_changed(null -> received)`` audit fsync occurs before policy;
@@ -1318,10 +1369,11 @@ Unit/property coverage includes:
 * a terminal cleanup with durably proven ``known_no_effect`` plus unchanged exact artifact
   still present releases its active claim only after required audit/recovery closure,
   retains its operation history, and permits a later independently admitted cleanup;
-* exact target absent at final pre-start verification produces no boundary call, durable
-  ``known_no_effect``, schema-valid ``already_missing=true`` result, and only after
-  terminal/no-effect audit/recovery closure may the exact CAS move the artifact to
-  ``removed`` with NULL remover provenance and clear the active claim;
+* exact target absent at final pre-start verification -- including an absence bound during
+  preparation -- produces no boundary call, durable ``known_no_effect``, schema-valid
+  ``already_missing=true`` result, and only after terminal/no-effect audit/recovery closure
+  may the exact CAS move the artifact to ``removed`` with NULL remover provenance and
+  clear the active claim;
 * an explicit adapter no-effect receipt for absence before unlink may use the same closure
   only after that receipt/effect classification is durable;
 * cleanup absence with lost/missing start or no-effect receipt, ``uncertain`` effect
@@ -1377,6 +1429,12 @@ Required faults include:
 * crash after publish before staging unlink;
 * DB failure after created effect;
 * required post-effect audit failure/latch failure paths inherited from Phase 4;
+* cleanup target already absent **before cleanup preparation** -> preparation binds the
+  exact created generation plus ``created_target_observed_absent`` without changing
+  effect knowledge/state, admission acquires only the exact cleanup claim after re-proving
+  absence, final verification performs no boundary call, and the retained operation reaches
+  the same ``known_no_effect``/``already_missing=true`` closure only after required
+  audit/recovery completion;
 * cleanup target already absent before final filesystem start -> no boundary call, retained
   ``known_no_effect`` terminal operation, success data ``already_missing=true``, and exact
   no-effect absence closure only after required audit/recovery closure;
@@ -1412,6 +1470,10 @@ may "repair" uncertainty by repeating a fresh effect.
 Close all runtimes and reconstruct a fresh application. Verify:
 
 * prepared nonce/expiry/state binding remains enforceable;
+* a retained cleanup preparation with ``created_target_observed_absent`` reconstructs its
+  exact no-effect-neutral current-state digest after restart; continued absence may proceed
+  through normal admission/final verification, while reappearance or any generation/owner
+  change invalidates the preparation without inferring an effect;
 * dual caller/prepared binding relation remains intact even when no post-policy probe row
   exists for a rejected/interrupted pre-policy operation;
 * a ``received`` operation whose required received audit never fsynced does not proceed to
@@ -1473,6 +1535,10 @@ Phase 5 must preserve all of the following:
    recovery;
 #. prepared nonce and caller key converge on one operation and cannot create aliases that
    produce additional effects;
+#. cleanup preparation may bind a secure current observation that the exact retained
+   ``created`` generation is absent, but that observation is never effect knowledge,
+   removal provenance, or permission to mutate durable artifact state before independent
+   policy admission and final no-start verification;
 #. live path uniqueness is state-aware; removed/proven-abandoned history is retained and
    path generations prevent stale preparation resurrection;
 #. a created artifact has at most one active cleanup claim; policy admission never steals
@@ -1554,18 +1620,21 @@ Implement Phase 5 in this order after the implementation/promotion prerequisites
 #. add migration ``0002`` with ``probe_operations``, state-aware live-path uniqueness,
    path-generation history, state-aware active cleanup claims, successful-cleanup
    provenance, and ``probe_artifacts`` constraints;
-#. implement preparation state binding and Phase 4 prepared-nonce registration;
+#. implement preparation state binding -- including the exact
+   ``created_target_observed_absent`` cleanup variant that carries no effect knowledge --
+   and Phase 4 prepared-nonce registration;
 #. implement minimal dual prepared-nonce + caller-key pre-policy identity admission;
 #. integrate mandatory fsynced ``operation.state_changed(null -> received)`` immediately
    after first durable identity and before any policy evaluation;
 #. implement exact Bootstrap policy entries for write/cleanup;
 #. implement post-policy ``probe_operations`` plus write/active-cleanup reservation,
-   admission decision, and ``received -> authorised`` transaction;
+   admission decision, exact prepared-state revalidation for present/observed-absent
+   cleanup variants, and ``received -> authorised`` transaction;
 #. integrate mandatory fsynced allowed ``policy.decision`` + ``operation.authorised``
    evidence before any ``authorised -> running`` transition;
 #. implement secure root/staging adapter and filesystem capability verification;
 #. implement Phase 5 final boundary verifier including the exact pre-start already-missing
-   no-effect branch;
+   no-effect branch for both preparation-bound and later-observed absence;
 #. implement atomic create/no-overwrite effect and reconciler;
 #. implement exact cleanup effect, explicit adapter no-effect receipt, receipt-aware
    successful-removal closure, special no-effect absence closure, state-aware still-present
@@ -1593,6 +1662,9 @@ A reviewer verifies:
 * Phase 4 implementation + real Phase 3 profile evidence remain promotion prerequisites;
 * host-confirmation behavior is never assumed or converted into server authority;
 * prepare is no-effect and binds exact input/current state/expiry/path generation;
+* cleanup preparation can truthfully bind an exact retained ``created`` generation plus
+  secure observed absence without requiring an on-disk identity and without creating
+  effect knowledge, remover provenance, or an artifact-state transition;
 * execute requires both prepared nonce and caller key and atomically binds both to one
   minimal pre-policy operation;
 * required received-state audit fsync precedes policy and required allowed/authorised audit
@@ -1606,8 +1678,10 @@ A reviewer verifies:
   active claim after terminal audit/recovery closure, while its operation history remains
   retained and uncertainty never permits claim supersession;
 * exact pre-start absence closes as ``known_no_effect`` without a filesystem boundary,
-  never ``known_effect``; only after terminal/no-effect audit/recovery closure may the exact
-  claim be closed and artifact state become ``removed`` with NULL remover provenance;
+  including when that absence was first bound during preparation; it never becomes
+  ``known_effect`` merely from absence, and only after terminal/no-effect audit/recovery
+  closure may the exact claim be closed and artifact state become ``removed`` with NULL
+  remover provenance;
 * cleanup absence after dispatch records successful removal/clears the claim only with
   exact durable ``known_effect``, matching recoverable effect reference, and completed
   required post-effect audit/obligation/recovery closure; lost receipt/uncertainty keeps
@@ -1636,6 +1710,9 @@ This **planning PR** is accepted only when:
 #. the disposable root is separate from repository/config/state/audit/evaluation paths;
 #. dual nonce/key idempotency has one atomic minimal pre-policy one-operation identity
    design;
+#. cleanup preparation supports exact created-but-observed-absent current-state binding
+   without requiring a nonexistent file identity and without mutating durable artifact or
+   effect state;
 #. required ``received`` audit precedes policy and required allowed/authorised audit
    precedes ``running``; failure of either gate cannot reach filesystem start;
 #. policy deny/pre-policy crash cannot strand a probe-path reservation;
@@ -1646,7 +1723,9 @@ This **planning PR** is accepted only when:
    remain fail-closed and all cleanup-attempt history is retained;
 #. pre-start already-missing closure is representable without fabricating an effect:
    durable ``known_no_effect``, no boundary call/remover provenance, exact terminal audit/
-   recovery closure, then conditional artifact ``removed``/claim closure;
+   recovery closure, then conditional artifact ``removed``/claim closure; preparation-time
+   absence is only a bound observation until the admitted operation reaches this no-start
+   decision;
 #. cleanup removal/claim release after post-dispatch observed absence requires exact durable
    ``known_effect`` plus matching effect reference and completed required post-effect
    audit/obligation/recovery closure, or an exact independently durable no-effect receipt;
@@ -1672,6 +1751,9 @@ The implementation may become live for the selected HOST profile only when:
    write-probe capability;
 #. automated tests prove denied/interrupted pre-policy operations cannot reserve paths and
    repeated cleaned-up attempts advance retained path generations safely;
+#. automated tests prove cleanup preparation can bind exact secure absence for a retained
+   ``created`` generation without fabricating identity/effect knowledge, and any state
+   change before admission/final verification invalidates that preparation fail closed;
 #. automated tests prove both mandatory Phase 4 audit gates suppress policy/dispatch or
    running/start exactly when their required fsync fails;
 #. automated tests prove known-no-effect cleanup claims release/close only after durable
