@@ -672,6 +672,28 @@ async def test_oversized_json_integer_is_rejected_before_framework_dispatch(
 
 
 @pytest.mark.anyio
+async def test_recursive_json_is_rejected_before_framework_dispatch(
+    phase2_application: BinnacleApplication,
+) -> None:
+    body = (b"[" * 10_000) + b"0" + (b"]" * 10_000)
+    async with running_raw_http_client(phase2_application) as client:
+        response = await client.post(
+            "/mcp",
+            content=body,
+            headers={
+                "accept": ACCEPT,
+                "content-type": "application/json",
+                "MCP-Protocol-Version": EXPECTED_REVISIONS[0],
+            },
+        )
+
+    assert len(body) < 1_048_576
+    assert response.status_code == 400
+    assert "mcp-session-id" not in response.headers
+    assert response.json() == {"error": "invalid_request_body"}
+
+
+@pytest.mark.anyio
 async def test_disabled_tasks_request_reaches_method_dispatch(
     phase2_application: BinnacleApplication,
 ) -> None:

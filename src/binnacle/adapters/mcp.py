@@ -284,7 +284,7 @@ class RequestBodyLimitMiddleware:
                 parsed = json.loads(body)
             except (UnicodeDecodeError, json.JSONDecodeError):
                 pass
-            except ValueError:
+            except (RecursionError, ValueError):
                 await _send_http_error(send, 400, "invalid_request_body")
                 return
 
