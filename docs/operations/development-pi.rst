@@ -212,9 +212,10 @@ recreates and preserves the runtime directory.
 
 The verifier checks the exact Alembic revision, SQLite foreign keys/WAL/FULL synchronous
 pragmas, audit chain/cache continuity, durable audit-failure generation, obligation
-markers, payload roots, consequential-boundary gate state, and the complete Phase 5 probe
-ledger/history/provenance invariants.  It performs no migration, directory creation,
-ledger reconstruction, cleanup, or automatic recovery.
+markers, payload roots, consequential-boundary gate state, the complete Phase 5 probe
+ledger/history/provenance invariants, and the Phase 6 session/registered-workspace/
+mutation-fence cross-row invariants.  It performs no migration, directory creation,
+workspace registration, fence reconstruction, cleanup, or automatic recovery.
 
 If audit recovery is required, keep the service stopped.  A human must reconcile every
 surviving obligation and prepare a protected closure JSON containing the exact active
@@ -320,6 +321,53 @@ procedure; this Bootstrap implementation never pathname-unlinks them automatical
 Keep the write catalogue disabled and record the case as blocked until every prerequisite
 above is observed on the real Pi.  CI and temporary-directory tests are implementation
 evidence only; they are not real-Pi or real-ChatGPT support evidence.
+
+Phase 6 development-workspace foundation
+----------------------------------------
+
+Migration ``0003_development_workspace`` adds durable registered-workspace identity,
+development-session authority state, workspace-operation provenance, and the one shared
+monotonic mutation fence.  Repository code, the descriptor-relative Linux adapter, and
+the process-local ``CONTENT_READ``/``CHANGE`` coordination seam are implemented for local
+and CI verification.  Search, move, and delete remain explicitly unavailable.
+
+The protected profile format is deliberately separate from ``dev.toml`` and from every
+environment/CLI override.  An eventual owner-reviewed file is fixed at
+``/etc/binnacle/workspace-profile.toml``, owned ``root:binnacle`` with exact mode ``0640``.
+The safe pre-promotion posture is:
+
+.. code-block:: toml
+
+   workspace_id = "binnacle-development"
+   profile_version = "phase6-disabled-v1"
+   enabled = false
+   root = "/srv/binnacle-dev/repo"
+   protected_prefixes = [".git"]
+   allow_out_of_band_writers = false
+   allow_submounts = false
+   require_mount_id_verification = true
+   move_enabled = false
+   delete_enabled = false
+
+Do not set ``enabled = true`` on the deployed service yet.  Production ``binnacle serve``
+does not load this profile or register Phase 6 MCP handlers; it continues to expose the
+exact five-Tool core.  The base unit also intentionally retains a read-only source
+checkout.  A boolean, file presence, database row, or session ID is never sufficient to
+grant source authority.
+
+Promotion requires a later reviewed change that supplies the exact session-scoped host
+confirmation contract, concrete authenticated controller/profile binding, closed
+catalogue/schema projection, stopped-service workspace registration, accepted writer and
+mount model, and the systemd/DAC source-write boundary.  That change must pass the same
+immutable activation identity to authentication, catalogue selection, session authority,
+kernel policy, and runtime evidence.  Failure or mismatch at any gate keeps Phase 6
+invisible and keeps the checkout read-only.
+
+The service unit now freezes ``KillMode=control-group``, ``SendSIGKILL=yes``, and
+``Delegate=no`` so any future bounded matcher/helper tree remains owned by and terminable
+with the service.  This does not itself enable a matcher or grant source write.  Real Pi
+mount/process-tree observations and real ChatGPT session behavior remain promotion/exit
+evidence; their absence does not block repository implementation or CI review.
 
 Live authentication feasibility
 -------------------------------

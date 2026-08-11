@@ -27,7 +27,7 @@ from binnacle.domain.probe_workspace import (
     validate_path_snapshot,
 )
 
-EXPECTED_REVISION = "0002_write_probe_state"
+EXPECTED_REVISION = "0003_development_workspace"
 EXPECTED_TABLES = frozenset(
     {
         "alembic_version",
@@ -42,6 +42,10 @@ EXPECTED_TABLES = frozenset(
         "probe_operations",
         "probe_artifacts",
         "probe_path_ledger",
+        "registered_workspaces",
+        "development_sessions",
+        "workspace_operations",
+        "workspace_mutation_fences",
     }
 )
 
@@ -72,6 +76,9 @@ class DatabaseVerification:
     probe_operation_count: int
     probe_artifact_count: int
     probe_path_count: int
+    registered_workspace_count: int
+    development_session_count: int
+    workspace_operation_count: int
     audit_tail_cache: AuditTail
     audit_failure_latched: bool
     audit_failure_generation: int
@@ -135,6 +142,9 @@ class KernelVerificationReport:
             "probe_operation_count": self.database.probe_operation_count,
             "probe_artifact_count": self.database.probe_artifact_count,
             "probe_path_count": self.database.probe_path_count,
+            "registered_workspace_count": self.database.registered_workspace_count,
+            "development_session_count": self.database.development_session_count,
+            "workspace_operation_count": self.database.workspace_operation_count,
             "reason_codes": list(self.reason_codes),
         }
 
@@ -249,6 +259,7 @@ def _verify_database(
         raise KernelVerificationError("Alembic revision does not match")
     _verify_database_invariants(connection)
     _verify_probe_invariants(connection)
+    _verify_development_workspace_invariants(connection)
     meta = connection.execute("SELECT * FROM kernel_meta WHERE id=1").fetchone()
     if meta is None:
         raise KernelVerificationError("kernel metadata singleton is absent")
@@ -273,6 +284,15 @@ def _verify_database(
         ),
         probe_path_count=int(
             connection.execute("SELECT COUNT(*) FROM probe_path_ledger").fetchone()[0]
+        ),
+        registered_workspace_count=int(
+            connection.execute("SELECT COUNT(*) FROM registered_workspaces").fetchone()[0]
+        ),
+        development_session_count=int(
+            connection.execute("SELECT COUNT(*) FROM development_sessions").fetchone()[0]
+        ),
+        workspace_operation_count=int(
+            connection.execute("SELECT COUNT(*) FROM workspace_operations").fetchone()[0]
         ),
         audit_tail_cache=AuditTail(meta["audit_last_sequence"], meta["audit_last_hash"]),
         audit_failure_latched=bool(meta["audit_failure_latched"]),
@@ -349,13 +369,140 @@ def _verify_database_invariants(connection: sqlite3.Connection) -> None:
         """,
         "trusted time ordering": """
             SELECT COUNT(*) FROM kernel_meta
-            WHERE trusted_time_generation < 1
+            WHERE schema_generation != 3 OR trusted_time_generation < 1
                OR audit_recovered_generation > audit_failure_generation
                OR (audit_failure_latched=1 AND
                    audit_failure_generation <= audit_recovered_generation)
                OR (consequential_admission_enabled=1 AND
                    (audit_failure_latched=1 OR
                     audit_failure_generation!=audit_recovered_generation))
+        """,
+    }
+    for name, query in checks.items():
+        if int(connection.execute(query).fetchone()[0]):
+            raise KernelVerificationError(f"{name} invariant failed")
+
+
+def _verify_development_workspace_invariants(connection: sqlite3.Connection) -> None:
+    checks = {
+        "registered workspace fence": """
+            SELECT COUNT(*) FROM registered_workspaces w
+            LEFT JOIN workspace_mutation_fences f ON f.workspace_id=w.workspace_id
+            WHERE f.workspace_id IS NULL
+        """,
+        "development session live slot": """
+            SELECT COUNT(*) FROM (
+              SELECT device_id, device_epoch, workspace_id
+              FROM development_sessions
+              WHERE state IN ('pending','active')
+              GROUP BY device_id, device_epoch, workspace_id
+              HAVING COUNT(*) != 1
+            )
+        """,
+        "development session provenance": """
+            SELECT COUNT(*) FROM development_sessions s
+            LEFT JOIN registered_workspaces w ON w.workspace_id=s.workspace_id
+            LEFT JOIN operations o ON o.operation_id=s.begin_operation_id
+            LEFT JOIN policy_decisions p ON p.operation_id=s.begin_operation_id
+            WHERE w.workspace_id IS NULL OR o.operation_id IS NULL
+               OR p.operation_id IS NULL
+               OR s.workspace_profile_sha256!=w.profile_sha256
+               OR s.workspace_root_identity_sha256!=w.root_identity_sha256
+               OR s.workspace_mount_identity_sha256!=w.mount_identity_sha256
+               OR s.controller_id!=o.controller_id
+               OR s.controller_epoch!=o.controller_epoch
+               OR s.device_id!=o.device_id OR s.device_epoch!=o.device_epoch
+               OR p.decision!='allow' OR p.policy_version!=s.policy_version
+               OR p.controller_id!=o.controller_id OR p.controller_epoch!=o.controller_epoch
+               OR p.operation_contract!=o.operation_contract
+               OR p.operation_contract_version!=o.operation_contract_version
+               OR p.decided_at>s.created_at
+               OR o.operation_contract!='development_session_begin'
+               OR o.tool_name!='development_session_begin'
+               OR o.tool_contract_version!=o.operation_contract_version
+               OR o.state IN ('received','rejected')
+               OR NOT EXISTS (
+                   SELECT 1 FROM idempotency_bindings b WHERE b.operation_id=o.operation_id
+               )
+               OR EXISTS (
+                   SELECT 1 FROM idempotency_bindings b
+                   WHERE b.operation_id=o.operation_id
+                     AND b.target_identity_sha256 IS NOT p.normalized_target_digest
+               )
+               OR NOT EXISTS (
+                   SELECT 1 FROM operation_transitions t
+                   WHERE t.operation_id=o.operation_id AND t.state_version=2
+                     AND t.from_state='received' AND t.to_state='authorised'
+                     AND t.effect_knowledge='none' AND t.reason_code='policy_allowed'
+               )
+               OR (s.activation_effect_reference IS NOT NULL
+                   AND o.state NOT IN ('running','uncertain','succeeded'))
+               OR (s.state='active'
+                   AND o.state NOT IN ('running','uncertain','succeeded'))
+               OR (o.effect_reference IS NOT NULL
+                   AND o.effect_reference IS NOT s.activation_effect_reference)
+               OR (o.effect_reference_digest IS NOT NULL
+                   AND o.effect_reference_digest
+                       IS NOT s.activation_effect_reference_sha256)
+               OR (o.state='succeeded'
+                   AND (o.effect_knowledge!='known_effect'
+                        OR o.effect_reference IS NOT s.activation_effect_reference
+                        OR o.effect_reference_digest
+                           IS NOT s.activation_effect_reference_sha256))
+               OR (s.activation_closure='complete'
+                   AND ((s.activation_effect_reference IS NOT NULL
+                         AND (o.state!='succeeded' OR o.effect_knowledge!='known_effect'
+                              OR o.effect_reference IS NOT s.activation_effect_reference
+                              OR o.effect_reference_digest
+                                 IS NOT s.activation_effect_reference_sha256))
+                        OR (s.activation_effect_reference IS NULL
+                            AND (s.started_at IS NOT NULL
+                                 OR o.state NOT IN ('rejected','cancelled','failed')
+                                 OR o.effect_knowledge!='known_no_effect'
+                                 OR o.effect_reference IS NOT NULL
+                                 OR o.effect_reference_digest IS NOT NULL))))
+        """,
+        "workspace operation provenance": """
+            SELECT COUNT(*) FROM workspace_operations wo
+            LEFT JOIN development_sessions s ON s.session_id=wo.session_id
+            LEFT JOIN operations o ON o.operation_id=wo.operation_id
+            LEFT JOIN policy_decisions p ON p.operation_id=wo.operation_id
+            LEFT JOIN registered_workspaces w ON w.workspace_id=wo.workspace_id
+            LEFT JOIN workspace_mutation_fences f ON f.workspace_id=wo.workspace_id
+            WHERE s.session_id IS NULL OR o.operation_id IS NULL
+               OR p.operation_id IS NULL OR w.workspace_id IS NULL OR f.workspace_id IS NULL
+               OR wo.workspace_id!=s.workspace_id
+               OR wo.expected_mount_identity_sha256!=s.workspace_mount_identity_sha256
+               OR o.controller_id!=s.controller_id OR o.controller_epoch!=s.controller_epoch
+               OR o.device_id!=s.device_id OR o.device_epoch!=s.device_epoch
+               OR p.decision!='allow' OR p.policy_version!=s.policy_version
+               OR p.controller_id!=o.controller_id OR p.controller_epoch!=o.controller_epoch
+               OR p.operation_contract!=o.operation_contract
+               OR p.operation_contract_version!=o.operation_contract_version
+               OR NOT EXISTS (
+                   SELECT 1 FROM idempotency_bindings b WHERE b.operation_id=o.operation_id
+               )
+               OR EXISTS (
+                   SELECT 1 FROM idempotency_bindings b
+                   WHERE b.operation_id=o.operation_id
+                     AND b.target_identity_sha256 IS NOT p.normalized_target_digest
+               )
+               OR o.operation_contract!=('workspace_' || wo.mutation_kind)
+               OR o.tool_name!=o.operation_contract
+               OR o.state IN ('received','rejected')
+               OR (o.state IN ('authorised','running','paused','cancelling','uncertain')
+                   AND f.active_operation_id!=o.operation_id)
+        """,
+        "workspace fence owner": """
+            SELECT COUNT(*) FROM workspace_mutation_fences f
+            LEFT JOIN workspace_operations wo ON wo.operation_id=f.active_operation_id
+            LEFT JOIN operations o ON o.operation_id=f.active_operation_id
+            WHERE f.active_operation_id IS NOT NULL
+              AND (wo.operation_id IS NULL OR o.operation_id IS NULL
+                   OR wo.workspace_id!=f.workspace_id
+                   OR f.active_contract!=('workspace_' || wo.mutation_kind)
+                   OR o.operation_contract!=f.active_contract
+                   OR o.state IN ('received','rejected'))
         """,
     }
     for name, query in checks.items():

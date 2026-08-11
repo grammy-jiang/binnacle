@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read-only local verification of the Phase 5 durable-operation kernel."""
+"""Read-only local verification of the Phase 6 durable-operation kernel."""
 
 from __future__ import annotations
 
@@ -78,7 +78,7 @@ async def _verify_temporary(root: Path) -> dict[str, object]:
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "Verify migrated SQLite, audit, obligation, payload, probe-ledger, and gate state."
+            "Verify migrated SQLite, audit, payload, probe, session, workspace, and gate state."
         )
     )
     parser.add_argument("--config", type=Path)
@@ -114,7 +114,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             f"status={result['status']} availability={result['availability']} "
             f"audit_sequence={result['audit_sequence']} "
             f"audit_obligations={result['audit_obligation_count']} "
-            f"probe_paths={result['probe_path_count']}"
+            f"probe_paths={result['probe_path_count']} "
+            f"development_sessions={result['development_session_count']} "
+            f"registered_workspaces={result['registered_workspace_count']}"
         )
     return 0 if result["status"] == "pass" else 1
 

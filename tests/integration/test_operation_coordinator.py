@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 import json
 import secrets
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import replace
 from datetime import timedelta
 from pathlib import Path
@@ -32,7 +34,11 @@ from binnacle.application.boundary import (
 from binnacle.application.kernel_health import KernelAvailability, KernelHealth
 from binnacle.application.operations import (
     CoordinatedOperationRequest,
+    DispatchAuthority,
+    OperationAuthorityError,
+    OperationClosure,
     OperationCoordinator,
+    PostPolicyAuthority,
     RequiredAuditError,
 )
 from binnacle.application.trusted_time import TrustedTimeGuard
@@ -43,7 +49,7 @@ from binnacle.domain.idempotency import (
     IdempotencyOutcome,
     validate_and_digest_key,
 )
-from binnacle.domain.operation import EffectKnowledge, OperationState
+from binnacle.domain.operation import EffectKnowledge, OperationSnapshot, OperationState
 from binnacle.domain.trusted_time import TrustedTimeSnapshot
 from binnacle.ports.audit import AuditObligationRecovery
 from binnacle.ports.boundary import (
@@ -133,6 +139,102 @@ class BoundaryGateErrorBoundary:
         self.count += 1
         assert request.running_state_version == 3
         raise BoundaryGateError("adapter response lost")
+
+
+class RecordingDispatchAuthority:
+    def __init__(self) -> None:
+        self.active = False
+        self.entered = 0
+        self.exited = 0
+
+    @asynccontextmanager
+    async def hold(
+        self,
+        *,
+        operation: object,
+        request: object,
+    ) -> AsyncIterator[None]:
+        del operation, request
+        assert not self.active
+        self.active = True
+        self.entered += 1
+        try:
+            yield
+        finally:
+            self.active = False
+            self.exited += 1
+
+
+class AuthorityCheckingBoundary(CountingBoundary):
+    def __init__(
+        self,
+        authority: RecordingDispatchAuthority,
+        post_policy: RecordingPostPolicyAuthority | None = None,
+    ) -> None:
+        super().__init__()
+        self._authority = authority
+        self._post_policy = post_policy
+
+    async def start(self, request: EffectRequest) -> EffectStartReceipt:
+        assert self._authority.active
+        assert self._post_policy is None or self._post_policy.active
+        return await super().start(request)
+
+
+class RecordingPostPolicyAuthority:
+    def __init__(self) -> None:
+        self.active = False
+        self.entered = 0
+        self.exited = 0
+
+    @asynccontextmanager
+    async def hold(
+        self,
+        *,
+        operation: object,
+        decision: object,
+        request: object,
+    ) -> AsyncIterator[None]:
+        del operation, decision, request
+        assert not self.active
+        self.active = True
+        self.entered += 1
+        try:
+            yield
+        finally:
+            self.active = False
+            self.exited += 1
+
+
+class RecordingOperationClosure:
+    def __init__(self, post_policy: RecordingPostPolicyAuthority) -> None:
+        self._post_policy = post_policy
+        self.states: list[OperationState] = []
+
+    async def close(
+        self,
+        *,
+        operation: OperationSnapshot,
+        request: object,
+    ) -> OperationSnapshot:
+        del request
+        assert self._post_policy.active
+        self.states.append(operation.state)
+        return operation
+
+
+class RejectingPostPolicyAuthority:
+    @asynccontextmanager
+    async def hold(self, **_kwargs: object) -> AsyncIterator[None]:
+        raise OperationAuthorityError("workspace recovery closed")
+        yield
+
+
+class RejectingDispatchAuthority:
+    @asynccontextmanager
+    async def hold(self, **_kwargs: object) -> AsyncIterator[None]:
+        raise OperationAuthorityError("development session expired")
+        yield
 
 
 class StaticTrustedTimeSource:
@@ -227,6 +329,9 @@ async def _coordinator(
     fail_audit_kind: str | None = None,
     trusted_time_guard: TrustedTimeGuard | None = None,
     prepared_state_verifier: SequencedPreparedStateVerifier | None = None,
+    dispatch_authority: DispatchAuthority | None = None,
+    post_policy_authority: PostPolicyAuthority | None = None,
+    operation_closure: OperationClosure | None = None,
 ) -> tuple[
     OperationCoordinator,
     FileAuditJournal,
@@ -262,6 +367,9 @@ async def _coordinator(
         effect_boundary=boundary,
         trusted_time_guard=trusted_time_guard,
         prepared_state_verifier=prepared_state_verifier,
+        dispatch_authority=dispatch_authority,
+        post_policy_authority=post_policy_authority,
+        operation_closure=operation_closure,
     )
     return coordinator, journal, obligations, gate
 
@@ -315,6 +423,91 @@ async def test_successful_dispatch_is_audited_once_and_duplicate_reconciles(
         assert boundary.count == 1
         assert await obligations.scan() == ()
         assert journal.tail.sequence == 7
+
+
+@pytest.mark.anyio
+async def test_operation_family_authority_wraps_start_and_immediate_classification(
+    tmp_path: Path, repo_root: Path
+) -> None:
+    async with operation_runtime(tmp_path, repo_root) as (_, store):
+        authority = RecordingDispatchAuthority()
+        post_policy = RecordingPostPolicyAuthority()
+        closure = RecordingOperationClosure(post_policy)
+        boundary = AuthorityCheckingBoundary(authority, post_policy)
+        coordinator, _, obligations, _ = await _coordinator(
+            root=tmp_path,
+            repo_root=repo_root,
+            store=store,
+            boundary=boundary,
+            dispatch_authority=authority,
+            post_policy_authority=post_policy,
+            operation_closure=closure,
+        )
+        result = await coordinator.execute(
+            _request(validate_and_digest_key(secrets.token_hex(32), IdempotencyKeyMode.CALLER_KEY))
+        )
+        assert result.operation is not None
+        assert result.operation.state is OperationState.SUCCEEDED
+        assert not authority.active
+        assert authority.entered == authority.exited == 1
+        assert not post_policy.active
+        assert post_policy.entered == post_policy.exited == 1
+        assert boundary.count == 1
+        assert closure.states == [OperationState.SUCCEEDED]
+        assert await obligations.scan() == ()
+
+
+@pytest.mark.anyio
+async def test_post_policy_authority_denial_is_durable_and_retained(
+    tmp_path: Path, repo_root: Path
+) -> None:
+    async with operation_runtime(tmp_path, repo_root) as (_, store):
+        boundary = CountingBoundary()
+        coordinator, _, obligations, _ = await _coordinator(
+            root=tmp_path,
+            repo_root=repo_root,
+            store=store,
+            boundary=boundary,
+            post_policy_authority=RejectingPostPolicyAuthority(),
+        )
+        key = validate_and_digest_key(secrets.token_hex(32), IdempotencyKeyMode.CALLER_KEY)
+        result = await coordinator.execute(_request(key))
+        assert result.operation is not None
+        assert result.operation.state is OperationState.REJECTED
+        assert result.operation.effect_knowledge is EffectKnowledge.KNOWN_NO_EFFECT
+        assert boundary.count == 0
+        assert await obligations.scan() == ()
+        retained = await coordinator.execute(_request(key))
+        assert retained.outcome is IdempotencyOutcome.RETAINED_OPERATION
+        assert retained.operation == result.operation
+
+
+@pytest.mark.anyio
+async def test_dispatch_authority_denial_closes_family_known_no_effect(
+    tmp_path: Path, repo_root: Path
+) -> None:
+    async with operation_runtime(tmp_path, repo_root) as (_, store):
+        post_policy = RecordingPostPolicyAuthority()
+        closure = RecordingOperationClosure(post_policy)
+        boundary = CountingBoundary()
+        coordinator, _, obligations, _ = await _coordinator(
+            root=tmp_path,
+            repo_root=repo_root,
+            store=store,
+            boundary=boundary,
+            dispatch_authority=RejectingDispatchAuthority(),
+            post_policy_authority=post_policy,
+            operation_closure=closure,
+        )
+        result = await coordinator.execute(
+            _request(validate_and_digest_key(secrets.token_hex(32), IdempotencyKeyMode.CALLER_KEY))
+        )
+        assert result.operation is not None
+        assert result.operation.state is OperationState.FAILED
+        assert result.operation.effect_knowledge is EffectKnowledge.KNOWN_NO_EFFECT
+        assert closure.states == [OperationState.FAILED]
+        assert boundary.count == 0
+        assert await obligations.scan() == ()
 
 
 @pytest.mark.anyio
@@ -701,11 +894,15 @@ async def test_transport_cancellation_cannot_leak_start_permit_or_interrupt_clas
 ) -> None:
     async with operation_runtime(tmp_path, repo_root) as (_, store):
         boundary = BlockingBoundary()
+        post_policy = RecordingPostPolicyAuthority()
+        closure = RecordingOperationClosure(post_policy)
         coordinator, _, obligations, gate = await _coordinator(
             root=tmp_path,
             repo_root=repo_root,
             store=store,
             boundary=boundary,
+            post_policy_authority=post_policy,
+            operation_closure=closure,
         )
         key = validate_and_digest_key(secrets.token_hex(32), IdempotencyKeyMode.CALLER_KEY)
         execution = asyncio.create_task(coordinator.execute(_request(key)))
@@ -724,6 +921,7 @@ async def test_transport_cancellation_cannot_leak_start_permit_or_interrupt_clas
         assert retained.operation is not None
         assert retained.operation.state is OperationState.SUCCEEDED
         assert boundary.count == 1
+        assert closure.states == [OperationState.SUCCEEDED]
         assert await obligations.scan() == ()
 
 

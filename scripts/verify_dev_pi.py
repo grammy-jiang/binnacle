@@ -563,6 +563,9 @@ def _systemd_service_checks() -> list[VerificationCheck]:
                 "ProtectSystem",
                 "FragmentPath",
                 "DropInPaths",
+                "KillMode",
+                "SendSIGKILL",
+                "Delegate",
             )
         )
     except (OSError, subprocess.CalledProcessError, ValueError):
@@ -589,7 +592,16 @@ def _systemd_service_checks() -> list[VerificationCheck]:
         and set(properties["SupplementaryGroups"].split()) == {"binnacle-dev"}
     )
     try:
-        identity_ok = identity_ok and pwd.getpwnam("binnacle").pw_uid != 0
+        account = pwd.getpwnam("binnacle")
+        service_group = grp.getgrnam("binnacle")
+        development_group = grp.getgrnam("binnacle-dev")
+        identity_ok = identity_ok and (
+            account.pw_uid != 0
+            and account.pw_gid == service_group.gr_gid
+            and service_group.gr_gid != 0
+            and development_group.gr_gid != 0
+            and service_group.gr_gid != development_group.gr_gid
+        )
     except KeyError:
         identity_ok = False
     checks.append(
@@ -624,6 +636,20 @@ def _systemd_service_checks() -> list[VerificationCheck]:
             "exact four-path strict write boundary has no drop-ins"
             if paths_ok
             else "effective service write boundary differs or has drop-ins",
+        )
+    )
+    lifecycle_ok = (
+        properties["KillMode"] == "control-group"
+        and properties["SendSIGKILL"] == "yes"
+        and properties["Delegate"] == "no"
+    )
+    checks.append(
+        VerificationCheck(
+            "service-process-lifecycle",
+            "pass" if lifecycle_ok else "fail",
+            "service owns and terminates its complete non-delegated process group"
+            if lifecycle_ok
+            else "effective service process-tree lifecycle differs",
         )
     )
     return checks

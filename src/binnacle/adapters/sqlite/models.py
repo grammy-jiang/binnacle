@@ -558,6 +558,365 @@ class OperationEvidenceModel(Base):
     recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
+class RegisteredWorkspaceModel(Base):
+    __tablename__ = "registered_workspaces"
+    __table_args__ = (
+        CheckConstraint(
+            "length(profile_sha256) = 64 AND length(root_identity_sha256) = 64 "
+            "AND length(mount_identity_sha256) = 64",
+            name="ck_registered_workspaces_digests",
+        ),
+        CheckConstraint(
+            "length(workspace_id) >= 1 AND length(workspace_id) <= 160",
+            name="ck_registered_workspaces_identifier",
+        ),
+        CheckConstraint(
+            "root_device >= 0 AND root_inode >= 1 AND mount_id >= 1 AND mount_device >= 0",
+            name="ck_registered_workspaces_identity",
+        ),
+        CheckConstraint(
+            "owner_uid >= 0 AND owner_gid >= 0 AND mode >= 0 AND mode <= 4095",
+            name="ck_registered_workspaces_ownership",
+        ),
+        CheckConstraint(
+            "length(filesystem_type) >= 1 AND length(filesystem_type) <= 64 "
+            "AND length(primitive_profile_version) >= 1 "
+            "AND length(primitive_profile_version) <= 64",
+            name="ck_registered_workspaces_profile",
+        ),
+        CheckConstraint("registration_version >= 1", name="ck_registered_workspaces_version"),
+        CheckConstraint("updated_at >= registered_at", name="ck_registered_workspaces_time_order"),
+        UniqueConstraint("root_identity_sha256", name="uq_registered_workspaces_root_identity"),
+    )
+
+    workspace_id: Mapped[str] = mapped_column(String(160), primary_key=True)
+    profile_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    root_identity_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    mount_identity_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    root_device: Mapped[int] = mapped_column(Integer, nullable=False)
+    root_inode: Mapped[int] = mapped_column(Integer, nullable=False)
+    mount_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    mount_device: Mapped[int] = mapped_column(Integer, nullable=False)
+    filesystem_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    owner_uid: Mapped[int] = mapped_column(Integer, nullable=False)
+    owner_gid: Mapped[int] = mapped_column(Integer, nullable=False)
+    mode: Mapped[int] = mapped_column(Integer, nullable=False)
+    primitive_profile_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    registration_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    registered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class DevelopmentSessionModel(Base):
+    __tablename__ = "development_sessions"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["controller_id", "controller_epoch"],
+            ["controller_owners.controller_id", "controller_owners.controller_epoch"],
+            name="fk_development_sessions_controller_owner",
+        ),
+        CheckConstraint(
+            "state IN ('pending','active','ended','expired','revoked')",
+            name="ck_development_sessions_state",
+        ),
+        CheckConstraint(
+            "activation_closure IN ('pending','complete')",
+            name="ck_development_sessions_activation_closure",
+        ),
+        CheckConstraint(
+            "state_version >= 1 AND activation_closure_version >= 1",
+            name="ck_development_sessions_versions",
+        ),
+        CheckConstraint(
+            "length(session_id) >= 1 AND length(session_id) <= 160 "
+            "AND length(begin_operation_id) >= 1 AND length(begin_operation_id) <= 160 "
+            "AND length(controller_id) >= 1 AND length(controller_id) <= 160 "
+            "AND length(device_id) >= 1 AND length(device_id) <= 160 "
+            "AND length(workspace_id) >= 1 AND length(workspace_id) <= 160 "
+            "AND length(policy_version) >= 1 AND length(policy_version) <= 64",
+            name="ck_development_sessions_identifiers",
+        ),
+        CheckConstraint(
+            "controller_epoch >= 1 AND device_epoch >= 1 "
+            "AND trusted_time_generation >= 1 AND monotonic_deadline_ns >= 0",
+            name="ck_development_sessions_epochs",
+        ),
+        CheckConstraint(
+            "length(workspace_profile_sha256) = 64 "
+            "AND length(workspace_root_identity_sha256) = 64 "
+            "AND length(workspace_mount_identity_sha256) = 64 "
+            "AND length(contract_profile_sha256) = 64 "
+            "AND length(objective_sha256) = 64 "
+            "AND length(activation_boot_id_digest) = 64 "
+            "AND (activation_effect_reference_sha256 IS NULL "
+            "OR length(activation_effect_reference_sha256) = 64)",
+            name="ck_development_sessions_digests",
+        ),
+        CheckConstraint(
+            "expires_at > created_at AND updated_at >= created_at "
+            "AND (started_at IS NULL OR (started_at >= created_at AND started_at < expires_at)) "
+            "AND (terminal_at IS NULL OR terminal_at >= created_at) "
+            "AND (started_at IS NULL OR updated_at >= started_at) "
+            "AND (terminal_at IS NULL OR updated_at >= terminal_at) "
+            "AND (started_at IS NULL OR terminal_at IS NULL OR terminal_at >= started_at)",
+            name="ck_development_sessions_time_order",
+        ),
+        CheckConstraint(
+            "(activation_effect_reference IS NULL "
+            "AND activation_effect_reference_sha256 IS NULL) OR "
+            "(activation_effect_reference IS NOT NULL "
+            "AND activation_effect_reference_sha256 IS NOT NULL)",
+            name="ck_development_sessions_effect_reference",
+        ),
+        CheckConstraint(
+            "((started_at IS NULL AND activation_effect_reference IS NULL) OR "
+            "(started_at IS NOT NULL AND activation_effect_reference IS NOT NULL)) "
+            "AND (terminal_reason IS NULL OR "
+            "(length(terminal_reason) >= 1 AND length(terminal_reason) <= 160)) "
+            "AND (activation_effect_reference IS NULL OR "
+            "(length(activation_effect_reference) >= 1 "
+            "AND length(activation_effect_reference) <= 160))",
+            name="ck_development_sessions_history_shape",
+        ),
+        CheckConstraint(
+            "(state = 'pending' AND started_at IS NULL AND terminal_at IS NULL "
+            "AND terminal_reason IS NULL AND activation_closure = 'pending' "
+            "AND activation_closure_version = 1 "
+            "AND activation_effect_reference IS NULL) OR "
+            "(state = 'active' AND started_at IS NOT NULL AND terminal_at IS NULL "
+            "AND terminal_reason IS NULL AND activation_effect_reference IS NOT NULL) OR "
+            "(state IN ('ended','expired','revoked') AND terminal_at IS NOT NULL "
+            "AND terminal_reason IS NOT NULL)",
+            name="ck_development_sessions_state_shape",
+        ),
+        CheckConstraint(
+            "(activation_closure = 'pending' AND activation_closure_version = 1) OR "
+            "(activation_closure = 'complete' AND activation_closure_version = 2)",
+            name="ck_development_sessions_closure_shape",
+        ),
+        CheckConstraint(
+            "(state = 'pending' AND state_version = 1) OR "
+            "(state = 'active' AND activation_closure = 'pending' "
+            "AND state_version = 2) OR "
+            "(state = 'active' AND activation_closure = 'complete' "
+            "AND state_version = 3) OR "
+            "(state IN ('ended','expired','revoked') AND started_at IS NULL "
+            "AND activation_closure = 'pending' AND state_version = 2) OR "
+            "(state IN ('ended','expired','revoked') AND started_at IS NULL "
+            "AND activation_closure = 'complete' AND state_version = 3) OR "
+            "(state IN ('ended','expired','revoked') AND started_at IS NOT NULL "
+            "AND activation_closure = 'pending' AND state_version = 3) OR "
+            "(state IN ('ended','expired','revoked') AND started_at IS NOT NULL "
+            "AND activation_closure = 'complete' AND state_version = 4)",
+            name="ck_development_sessions_version_shape",
+        ),
+        UniqueConstraint("begin_operation_id", name="uq_development_sessions_begin_operation"),
+    )
+
+    session_id: Mapped[str] = mapped_column(String(160), primary_key=True)
+    begin_operation_id: Mapped[str] = mapped_column(
+        String(160),
+        ForeignKey("operations.operation_id", name="fk_development_sessions_begin_operation"),
+        nullable=False,
+    )
+    state: Mapped[str] = mapped_column(String(16), nullable=False)
+    state_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    activation_closure: Mapped[str] = mapped_column(String(16), nullable=False)
+    activation_closure_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    controller_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    controller_epoch: Mapped[int] = mapped_column(Integer, nullable=False)
+    device_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    device_epoch: Mapped[int] = mapped_column(Integer, nullable=False)
+    workspace_id: Mapped[str] = mapped_column(
+        String(160),
+        ForeignKey(
+            "registered_workspaces.workspace_id",
+            name="fk_development_sessions_registered_workspace",
+        ),
+        nullable=False,
+    )
+    workspace_profile_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    workspace_root_identity_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    workspace_mount_identity_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    policy_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    contract_profile_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    objective_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    trusted_time_generation: Mapped[int] = mapped_column(Integer, nullable=False)
+    activation_boot_id_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    monotonic_deadline_ns: Mapped[int] = mapped_column(Integer, nullable=False)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    terminal_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    terminal_reason: Mapped[str | None] = mapped_column(String(160))
+    activation_effect_reference: Mapped[str | None] = mapped_column(String(160))
+    activation_effect_reference_sha256: Mapped[str | None] = mapped_column(String(64))
+
+
+class WorkspaceOperationModel(Base):
+    __tablename__ = "workspace_operations"
+    __table_args__ = (
+        CheckConstraint(
+            "mutation_kind IN ('create','write','patch','move','delete')",
+            name="ck_workspace_operations_kind",
+        ),
+        CheckConstraint(
+            "object_kind IN ('regular_file','directory')",
+            name="ck_workspace_operations_object_kind",
+        ),
+        CheckConstraint(
+            "mutation_kind NOT IN ('write','patch') OR object_kind = 'regular_file'",
+            name="ck_workspace_operations_kind_object",
+        ),
+        CheckConstraint(
+            "length(operation_id) >= 1 AND length(operation_id) <= 160 "
+            "AND length(session_id) >= 1 AND length(session_id) <= 160 "
+            "AND length(workspace_id) >= 1 AND length(workspace_id) <= 160 "
+            "AND length(primitive_profile_version) >= 1 "
+            "AND length(primitive_profile_version) <= 64",
+            name="ck_workspace_operations_identifiers",
+        ),
+        CheckConstraint(
+            "(mutation_kind = 'create' AND source_path_sha256 IS NULL "
+            "AND target_path_sha256 IS NOT NULL) OR "
+            "(mutation_kind IN ('write','patch','delete') "
+            "AND source_path_sha256 IS NOT NULL AND target_path_sha256 IS NULL) OR "
+            "(mutation_kind = 'move' AND source_path_sha256 IS NOT NULL "
+            "AND target_path_sha256 IS NOT NULL)",
+            name="ck_workspace_operations_path_shape",
+        ),
+        CheckConstraint(
+            "(mutation_kind = 'create' AND expected_object_sha256 IS NULL "
+            "AND expected_content_sha256 IS NULL AND expected_link_count IS NULL) OR "
+            "(mutation_kind != 'create' AND expected_object_sha256 IS NOT NULL)",
+            name="ck_workspace_operations_expected_object",
+        ),
+        CheckConstraint(
+            "(object_kind = 'regular_file' AND mutation_kind != 'create' "
+            "AND expected_content_sha256 IS NOT NULL AND expected_link_count = 1) OR "
+            "(object_kind = 'directory' AND expected_content_sha256 IS NULL "
+            "AND expected_link_count IS NULL) OR mutation_kind = 'create'",
+            name="ck_workspace_operations_existing_object",
+        ),
+        CheckConstraint(
+            "(mutation_kind IN ('write','patch') AND proposed_content_sha256 IS NOT NULL "
+            "AND proposed_byte_count IS NOT NULL AND proposed_byte_count >= 0 "
+            "AND proposed_byte_count <= 4194304) OR "
+            "(mutation_kind = 'create' AND object_kind = 'regular_file' "
+            "AND proposed_content_sha256 IS NOT NULL AND proposed_byte_count IS NOT NULL "
+            "AND proposed_byte_count >= 0 AND proposed_byte_count <= 4194304) OR "
+            "(mutation_kind = 'create' AND object_kind = 'directory' "
+            "AND proposed_content_sha256 IS NULL AND proposed_byte_count IS NULL) OR "
+            "(mutation_kind IN ('move','delete') AND proposed_content_sha256 IS NULL "
+            "AND proposed_byte_count IS NULL)",
+            name="ck_workspace_operations_proposed_content",
+        ),
+        CheckConstraint(
+            "length(expected_mount_identity_sha256) = 64 "
+            "AND length(state_binding_sha256) = 64 "
+            "AND (source_path_sha256 IS NULL OR length(source_path_sha256) = 64) "
+            "AND (target_path_sha256 IS NULL OR length(target_path_sha256) = 64) "
+            "AND (expected_object_sha256 IS NULL OR length(expected_object_sha256) = 64) "
+            "AND (expected_content_sha256 IS NULL OR length(expected_content_sha256) = 64) "
+            "AND (proposed_content_sha256 IS NULL OR length(proposed_content_sha256) = 64) "
+            "AND (staging_reference_sha256 IS NULL "
+            "OR length(staging_reference_sha256) = 64)",
+            name="ck_workspace_operations_digests",
+        ),
+        CheckConstraint(
+            "((mutation_kind IN ('write','patch') OR "
+            "(mutation_kind = 'create' AND object_kind = 'regular_file')) "
+            "AND staging_reference IS NOT NULL AND staging_reference_sha256 IS NOT NULL "
+            "AND length(staging_reference) >= 1 AND length(staging_reference) <= 512) OR "
+            "((mutation_kind IN ('move','delete') OR "
+            "(mutation_kind = 'create' AND object_kind = 'directory')) "
+            "AND staging_reference IS NULL AND staging_reference_sha256 IS NULL)",
+            name="ck_workspace_operations_staging_reference",
+        ),
+        CheckConstraint("updated_at >= created_at", name="ck_workspace_operations_time_order"),
+    )
+
+    operation_id: Mapped[str] = mapped_column(
+        String(160),
+        ForeignKey("operations.operation_id", name="fk_workspace_operations_operation"),
+        primary_key=True,
+    )
+    session_id: Mapped[str] = mapped_column(
+        String(160),
+        ForeignKey("development_sessions.session_id", name="fk_workspace_operations_session"),
+        nullable=False,
+    )
+    workspace_id: Mapped[str] = mapped_column(
+        String(160),
+        ForeignKey(
+            "registered_workspaces.workspace_id",
+            name="fk_workspace_operations_registered_workspace",
+        ),
+        nullable=False,
+    )
+    mutation_kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    object_kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    source_path_sha256: Mapped[str | None] = mapped_column(String(64))
+    target_path_sha256: Mapped[str | None] = mapped_column(String(64))
+    expected_object_sha256: Mapped[str | None] = mapped_column(String(64))
+    expected_content_sha256: Mapped[str | None] = mapped_column(String(64))
+    expected_link_count: Mapped[int | None] = mapped_column(Integer)
+    expected_mount_identity_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    proposed_content_sha256: Mapped[str | None] = mapped_column(String(64))
+    proposed_byte_count: Mapped[int | None] = mapped_column(Integer)
+    state_binding_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    staging_reference: Mapped[str | None] = mapped_column(String(512))
+    staging_reference_sha256: Mapped[str | None] = mapped_column(String(64))
+    primitive_profile_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class WorkspaceMutationFenceModel(Base):
+    __tablename__ = "workspace_mutation_fences"
+    __table_args__ = (
+        CheckConstraint("fence_version >= 1", name="ck_workspace_fences_version"),
+        CheckConstraint(
+            "length(workspace_id) >= 1 AND length(workspace_id) <= 160 "
+            "AND (active_operation_id IS NULL OR "
+            "(length(active_operation_id) >= 1 AND length(active_operation_id) <= 160)) "
+            "AND (active_contract IS NULL OR "
+            "(length(active_contract) >= 1 AND length(active_contract) <= 160))",
+            name="ck_workspace_fences_identifiers",
+        ),
+        CheckConstraint(
+            "(active_operation_id IS NULL AND active_contract IS NULL "
+            "AND acquired_at IS NULL) OR "
+            "(active_operation_id IS NOT NULL AND active_contract IS NOT NULL "
+            "AND acquired_at IS NOT NULL)",
+            name="ck_workspace_fences_owner_shape",
+        ),
+        CheckConstraint(
+            "acquired_at IS NULL OR updated_at >= acquired_at",
+            name="ck_workspace_fences_time_order",
+        ),
+        UniqueConstraint("active_operation_id", name="uq_workspace_fences_active_operation"),
+    )
+
+    workspace_id: Mapped[str] = mapped_column(
+        String(160),
+        ForeignKey(
+            "registered_workspaces.workspace_id",
+            name="fk_workspace_fences_registered_workspace",
+        ),
+        primary_key=True,
+    )
+    fence_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    active_operation_id: Mapped[str | None] = mapped_column(
+        String(160),
+        ForeignKey("operations.operation_id", name="fk_workspace_fences_active_operation"),
+    )
+    active_contract: Mapped[str | None] = mapped_column(String(160))
+    acquired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 Index("ix_operations_state", OperationModel.state, OperationModel.updated_at)
 Index("ix_bindings_operation", IdempotencyBindingModel.operation_id)
 Index("ix_payload_owner", PayloadObjectModel.controller_id, PayloadObjectModel.controller_epoch)
@@ -566,4 +925,17 @@ Index(
     ProbeArtifactModel.relative_path,
     unique=True,
     sqlite_where=ProbeArtifactModel.state.in_(("reserved", "created", "uncertain")),
+)
+Index(
+    "uq_development_sessions_live_slot",
+    DevelopmentSessionModel.device_id,
+    DevelopmentSessionModel.device_epoch,
+    DevelopmentSessionModel.workspace_id,
+    unique=True,
+    sqlite_where=DevelopmentSessionModel.state.in_(("pending", "active")),
+)
+Index(
+    "ix_workspace_operations_session",
+    WorkspaceOperationModel.session_id,
+    WorkspaceOperationModel.created_at,
 )

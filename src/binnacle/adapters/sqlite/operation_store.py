@@ -84,7 +84,7 @@ class SqliteOperationStore:
                 session.add(
                     KernelMetaModel(
                         id=1,
-                        schema_generation=2,
+                        schema_generation=3,
                         device_id=device_id,
                         device_epoch=1,
                         created_at=timestamp,
@@ -108,7 +108,7 @@ class SqliteOperationStore:
                     )
                 )
             elif (
-                existing.schema_generation != 2
+                existing.schema_generation != 3
                 or existing.device_id != device_id
                 or existing.audit_stream_id != audit_stream_id
                 or existing.audit_epoch != audit_epoch
@@ -618,6 +618,32 @@ class SqliteOperationStore:
         async with self._runtime.session_factory() as session:
             model = await session.get(OperationModel, operation_id)
             return None if model is None else await self._snapshot(session, model)
+
+    async def get_transition_audit_context(
+        self,
+        operation_id: str,
+        state_version: int,
+    ) -> tuple[OperationState, str] | None:
+        """Return the durable predecessor/reason needed to repair one state audit event."""
+
+        async with self._runtime.session_factory() as session:
+            row = (
+                await session.execute(
+                    select(
+                        OperationTransitionModel.from_state,
+                        OperationTransitionModel.reason_code,
+                    ).where(
+                        OperationTransitionModel.operation_id == operation_id,
+                        OperationTransitionModel.state_version == state_version,
+                    )
+                )
+            ).one_or_none()
+        if row is None or row.from_state is None:
+            return None
+        try:
+            return OperationState(row.from_state), str(row.reason_code)
+        except ValueError as exc:
+            raise OperationStoreError("operation transition audit context is invalid") from exc
 
     async def transition(self, operation_id: str, request: TransitionRequest) -> OperationSnapshot:
         async with self._runtime.session_factory() as session:

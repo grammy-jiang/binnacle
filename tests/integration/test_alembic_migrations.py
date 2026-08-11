@@ -222,6 +222,83 @@ EXPECTED_COLUMNS = {
         "prepared_state_binding_sha256",
         "created_at",
     },
+    "registered_workspaces": {
+        "workspace_id",
+        "profile_sha256",
+        "root_identity_sha256",
+        "mount_identity_sha256",
+        "root_device",
+        "root_inode",
+        "mount_id",
+        "mount_device",
+        "filesystem_type",
+        "owner_uid",
+        "owner_gid",
+        "mode",
+        "primitive_profile_version",
+        "registration_version",
+        "registered_at",
+        "updated_at",
+    },
+    "development_sessions": {
+        "session_id",
+        "begin_operation_id",
+        "state",
+        "state_version",
+        "activation_closure",
+        "activation_closure_version",
+        "controller_id",
+        "controller_epoch",
+        "device_id",
+        "device_epoch",
+        "workspace_id",
+        "workspace_profile_sha256",
+        "workspace_root_identity_sha256",
+        "workspace_mount_identity_sha256",
+        "policy_version",
+        "contract_profile_sha256",
+        "objective_sha256",
+        "created_at",
+        "updated_at",
+        "expires_at",
+        "trusted_time_generation",
+        "activation_boot_id_digest",
+        "monotonic_deadline_ns",
+        "started_at",
+        "terminal_at",
+        "terminal_reason",
+        "activation_effect_reference",
+        "activation_effect_reference_sha256",
+    },
+    "workspace_operations": {
+        "operation_id",
+        "session_id",
+        "workspace_id",
+        "mutation_kind",
+        "object_kind",
+        "source_path_sha256",
+        "target_path_sha256",
+        "expected_object_sha256",
+        "expected_content_sha256",
+        "expected_link_count",
+        "expected_mount_identity_sha256",
+        "proposed_content_sha256",
+        "proposed_byte_count",
+        "state_binding_sha256",
+        "staging_reference",
+        "staging_reference_sha256",
+        "primitive_profile_version",
+        "created_at",
+        "updated_at",
+    },
+    "workspace_mutation_fences": {
+        "workspace_id",
+        "fence_version",
+        "active_operation_id",
+        "active_contract",
+        "acquired_at",
+        "updated_at",
+    },
 }
 
 
@@ -238,7 +315,7 @@ async def test_fresh_upgrade_has_exact_authoritative_shape_and_pragmas(
     try:
         health = await verify_database_runtime(runtime)
         assert health.healthy
-        assert health.revision == "0002_write_probe_state"
+        assert health.revision == "0003_development_workspace"
         assert health.foreign_keys == 1
         assert health.journal_mode == "wal"
         assert health.synchronous == 2
@@ -281,6 +358,8 @@ async def test_fresh_upgrade_has_exact_authoritative_shape_and_pragmas(
                         "idempotency_bindings",
                         "payload_objects",
                         "probe_artifacts",
+                        "development_sessions",
+                        "workspace_operations",
                     )
                 }
             )
@@ -296,6 +375,27 @@ async def test_fresh_upgrade_has_exact_authoritative_shape_and_pragmas(
                     for table in ("probe_path_ledger", "probe_artifacts", "probe_operations")
                 }
             )
+            phase6_fks = await connection.run_sync(
+                lambda sync: {
+                    table: inspect(sync).get_foreign_keys(table)
+                    for table in (
+                        "development_sessions",
+                        "workspace_operations",
+                        "workspace_mutation_fences",
+                    )
+                }
+            )
+            phase6_checks = await connection.run_sync(
+                lambda sync: {
+                    table: {item["name"] for item in inspect(sync).get_check_constraints(table)}
+                    for table in (
+                        "registered_workspaces",
+                        "development_sessions",
+                        "workspace_operations",
+                        "workspace_mutation_fences",
+                    )
+                }
+            )
         assert tables == set(EXPECTED_COLUMNS) | {"alembic_version"}
         assert columns == EXPECTED_COLUMNS
         assert {tuple(item["constrained_columns"]) for item in policy_fks} == {("operation_id",)}
@@ -309,6 +409,8 @@ async def test_fresh_upgrade_has_exact_authoritative_shape_and_pragmas(
             "idempotency_bindings": {"ix_bindings_operation"},
             "payload_objects": {"ix_payload_owner"},
             "probe_artifacts": {"uq_probe_artifacts_live_relative_path"},
+            "development_sessions": {"uq_development_sessions_live_slot"},
+            "workspace_operations": {"ix_workspace_operations_session"},
         }
         assert {item["name"] for item in probe_fks["probe_path_ledger"]} == {
             "fk_probe_ledger_active_artifact",
@@ -323,6 +425,19 @@ async def test_fresh_upgrade_has_exact_authoritative_shape_and_pragmas(
         assert "ck_probe_ledger_active_shape" in probe_checks["probe_path_ledger"]
         assert "ck_probe_artifacts_state_shape" in probe_checks["probe_artifacts"]
         assert "ck_probe_operations_byte_shape" in probe_checks["probe_operations"]
+        assert {
+            tuple(item["constrained_columns"]) for item in phase6_fks["development_sessions"]
+        } == {("begin_operation_id",), ("controller_id", "controller_epoch"), ("workspace_id",)}
+        assert {
+            tuple(item["constrained_columns"]) for item in phase6_fks["workspace_operations"]
+        } == {("operation_id",), ("session_id",), ("workspace_id",)}
+        assert {
+            tuple(item["constrained_columns"]) for item in phase6_fks["workspace_mutation_fences"]
+        } == {("active_operation_id",), ("workspace_id",)}
+        assert "ck_registered_workspaces_digests" in phase6_checks["registered_workspaces"]
+        assert "ck_development_sessions_version_shape" in phase6_checks["development_sessions"]
+        assert "ck_workspace_operations_path_shape" in phase6_checks["workspace_operations"]
+        assert "ck_workspace_fences_owner_shape" in phase6_checks["workspace_mutation_fences"]
     finally:
         await close_database_runtime(runtime)
 
@@ -529,16 +644,24 @@ def test_populated_phase4_database_upgrades_without_rewriting_existing_rows(
             "SELECT controller_id, controller_epoch FROM controller_owners"
         ).fetchone()
         revision = connection.execute("SELECT version_num FROM alembic_version").fetchone()
-        probe_counts = tuple(
+        phase5_counts = tuple(
             connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
-            for table in ("probe_operations", "probe_artifacts", "probe_path_ledger")
+            for table in (
+                "probe_operations",
+                "probe_artifacts",
+                "probe_path_ledger",
+                "registered_workspaces",
+                "development_sessions",
+                "workspace_operations",
+                "workspace_mutation_fences",
+            )
         )
     finally:
         connection.close()
 
     assert owner_row == ("controller-preserved", 1)
-    assert revision == ("0002_write_probe_state",)
-    assert probe_counts == (0, 0, 0)
+    assert revision == ("0003_development_workspace",)
+    assert phase5_counts == (0, 0, 0, 0, 0, 0, 0)
 
 
 def test_bare_alembic_invocation_requires_explicit_database(repo_root: Path) -> None:
@@ -579,7 +702,7 @@ def test_stopped_service_upgrade_and_current_revision_commands(
         revision = connection.execute("SELECT version_num FROM alembic_version").fetchone()
     finally:
         connection.close()
-    assert revision == ("0002_write_probe_state",)
+    assert revision == ("0003_development_workspace",)
 
 
 @pytest.mark.anyio
