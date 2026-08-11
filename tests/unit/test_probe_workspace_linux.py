@@ -76,7 +76,7 @@ async def test_linux_probe_create_is_no_replace_and_cleanup_is_identity_bound(
     tombs = tuple((root / ".staging").iterdir())
     assert len(tombs) == 1
     assert tombs[0].name.startswith(".binnacle-cleanup-tomb-v1-")
-    assert tombs[0].stat().st_size == 0
+    assert tombs[0].read_bytes() == content
 
 
 @pytest.mark.anyio
@@ -509,7 +509,7 @@ async def test_linux_probe_cleanup_races_are_conservatively_classified(
 
 
 @pytest.mark.anyio
-async def test_linux_probe_cleanup_only_destroys_held_inode_when_target_is_replaced(
+async def test_linux_probe_cleanup_retains_held_inode_when_target_is_replaced(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = _root(tmp_path)
@@ -553,7 +553,257 @@ async def test_linux_probe_cleanup_only_destroys_held_inode_when_target_is_repla
     tombs = tuple((root / ".staging").iterdir())
     assert len(tombs) == 1
     assert tombs[0].stat().st_ino == original_inode
-    assert tombs[0].stat().st_size == 0
+    assert tombs[0].read_bytes() == content
+
+
+@pytest.mark.anyio
+async def test_linux_probe_cleanup_rejects_hard_link_without_mutating_alias(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _root(tmp_path)
+    workspace = LinuxProbeWorkspace(root=root, maximum_file_bytes=16)
+    await workspace.initialize()
+    content = b"safe"
+    digest = hashlib.sha256(content).hexdigest()
+    await workspace.create(
+        operation_id="op-write",
+        artifact_id="artifact-fixture",
+        path_generation=1,
+        relative_path="probe.txt",
+        content=content,
+        expected_content_sha256=digest,
+    )
+    observation = await workspace.observe("probe.txt")
+    assert observation.file_identity_digest is not None
+    real_observe_descriptor = workspace._observe_descriptor
+    preexisting_alias = tmp_path / "preexisting-alias.txt"
+    external_alias = tmp_path / "external-alias.txt"
+
+    os.link(root / "probe.txt", preexisting_alias)
+    with pytest.raises(ProbeEffectNotStarted, match="identity_mismatch"):
+        await workspace.remove(
+            operation_id="op-cleanup-preexisting",
+            artifact_id="artifact-fixture",
+            path_generation=1,
+            relative_path="probe.txt",
+            expected_content_sha256=digest,
+            expected_file_identity_digest=observation.file_identity_digest,
+        )
+    assert (root / "probe.txt").read_bytes() == content
+    assert preexisting_alias.read_bytes() == content
+    preexisting_alias.unlink()
+
+    def link_after_quarantine_observation(descriptor: int) -> object:
+        verified = real_observe_descriptor(descriptor)
+        tomb = next((root / ".staging").iterdir())
+        os.link(tomb, external_alias)
+        return verified
+
+    with monkeypatch.context() as patcher:
+        patcher.setattr(
+            workspace,
+            "_observe_descriptor",
+            link_after_quarantine_observation,
+        )
+        with pytest.raises(ProbeEffectNotStarted, match="hardlink_detected"):
+            await workspace.remove(
+                operation_id="op-cleanup",
+                artifact_id="artifact-fixture",
+                path_generation=1,
+                relative_path="probe.txt",
+                expected_content_sha256=digest,
+                expected_file_identity_digest=observation.file_identity_digest,
+            )
+
+    assert (root / "probe.txt").read_bytes() == content
+    assert external_alias.read_bytes() == content
+    assert tuple((root / ".staging").iterdir()) == ()
+
+
+@pytest.mark.anyio
+async def test_linux_probe_observations_reject_hard_link_races(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _root(tmp_path)
+    workspace = LinuxProbeWorkspace(root=root, maximum_file_bytes=16)
+    await workspace.initialize()
+    content = b"safe"
+    digest = hashlib.sha256(content).hexdigest()
+    await workspace.create(
+        operation_id="op-write",
+        artifact_id="artifact-fixture",
+        path_generation=1,
+        relative_path="probe.txt",
+        content=content,
+        expected_content_sha256=digest,
+    )
+    exact = await workspace.observe("probe.txt")
+    assert exact.file_identity_digest is not None
+    alias = tmp_path / "external-alias.txt"
+    real_read_bounded = workspace._read_bounded
+
+    def link_during_root_read(descriptor: int) -> bytes:
+        observed = real_read_bounded(descriptor)
+        os.link(root / "probe.txt", alias)
+        return observed
+
+    with monkeypatch.context() as patcher:
+        patcher.setattr(workspace, "_read_bounded", link_during_root_read)
+        assert (await workspace.observe("probe.txt")).state is ProbeTargetState.MISMATCH
+    assert (root / "probe.txt").read_bytes() == content
+    assert alias.read_bytes() == content
+    alias.unlink()
+
+    real_rename_noreplace = workspace._rename_noreplace
+
+    def link_immediately_after_quarantine(
+        *,
+        source_dir_fd: int,
+        source_name: str,
+        destination_dir_fd: int,
+        destination_name: str,
+    ) -> None:
+        real_rename_noreplace(
+            source_dir_fd=source_dir_fd,
+            source_name=source_name,
+            destination_dir_fd=destination_dir_fd,
+            destination_name=destination_name,
+        )
+        if source_name == "probe.txt":
+            os.link(root / ".staging" / destination_name, alias)
+
+    with monkeypatch.context() as patcher:
+        patcher.setattr(workspace, "_rename_noreplace", link_immediately_after_quarantine)
+        with pytest.raises(ProbeEffectNotStarted, match="identity_changed"):
+            await workspace.remove(
+                operation_id="op-cleanup-after-move",
+                artifact_id="artifact-fixture",
+                path_generation=1,
+                relative_path="probe.txt",
+                expected_content_sha256=digest,
+                expected_file_identity_digest=exact.file_identity_digest,
+            )
+    assert (root / "probe.txt").read_bytes() == content
+    assert alias.read_bytes() == content
+    assert tuple((root / ".staging").iterdir()) == ()
+    alias.unlink()
+
+    read_count = 0
+
+    def link_during_quarantine_read(descriptor: int) -> bytes:
+        nonlocal read_count
+        observed = real_read_bounded(descriptor)
+        read_count += 1
+        if read_count == 2:
+            tomb = next((root / ".staging").iterdir())
+            os.link(tomb, alias)
+        return observed
+
+    with monkeypatch.context() as patcher:
+        patcher.setattr(workspace, "_read_bounded", link_during_quarantine_read)
+        with pytest.raises(ProbeEffectNotStarted, match="identity_changed"):
+            await workspace.remove(
+                operation_id="op-cleanup-during-read",
+                artifact_id="artifact-fixture",
+                path_generation=1,
+                relative_path="probe.txt",
+                expected_content_sha256=digest,
+                expected_file_identity_digest=exact.file_identity_digest,
+            )
+    assert read_count == 2
+    assert (root / "probe.txt").read_bytes() == content
+    assert alias.read_bytes() == content
+    assert tuple((root / ".staging").iterdir()) == ()
+
+
+@pytest.mark.anyio
+async def test_linux_probe_hard_link_races_retain_uncertain_content(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    content = b"safe"
+    digest = hashlib.sha256(content).hexdigest()
+
+    root = _root(tmp_path / "restore-failure")
+    workspace = LinuxProbeWorkspace(root=root, maximum_file_bytes=16)
+    await workspace.initialize()
+    await workspace.create(
+        operation_id="op-write",
+        artifact_id="artifact-fixture",
+        path_generation=1,
+        relative_path="probe.txt",
+        content=content,
+        expected_content_sha256=digest,
+    )
+    exact = await workspace.observe("probe.txt")
+    assert exact.file_identity_digest is not None
+    alias = tmp_path / "restore-failure-alias.txt"
+    real_observe_descriptor = workspace._observe_descriptor
+
+    def link_after_observation(descriptor: int) -> object:
+        verified = real_observe_descriptor(descriptor)
+        os.link(next((root / ".staging").iterdir()), alias)
+        return verified
+
+    with monkeypatch.context() as patcher:
+        patcher.setattr(workspace, "_observe_descriptor", link_after_observation)
+        patcher.setattr(
+            workspace,
+            "_restore_quarantine",
+            lambda **_arguments: (_ for _ in ()).throw(OSError("restore blocked")),
+        )
+        with pytest.raises(ProbeWorkspaceFilesystemError, match="could not be restored"):
+            await workspace.remove(
+                operation_id="op-cleanup",
+                artifact_id="artifact-fixture",
+                path_generation=1,
+                relative_path="probe.txt",
+                expected_content_sha256=digest,
+                expected_file_identity_digest=exact.file_identity_digest,
+            )
+    assert not (root / "probe.txt").exists()
+    assert alias.read_bytes() == content
+    tombs = tuple((root / ".staging").iterdir())
+    assert len(tombs) == 1
+    assert tombs[0].read_bytes() == content
+
+    root = _root(tmp_path / "late-link")
+    workspace = LinuxProbeWorkspace(root=root, maximum_file_bytes=16)
+    await workspace.initialize()
+    await workspace.create(
+        operation_id="op-write-late",
+        artifact_id="artifact-late",
+        path_generation=1,
+        relative_path="probe.txt",
+        content=content,
+        expected_content_sha256=digest,
+    )
+    exact = await workspace.observe("probe.txt")
+    assert exact.file_identity_digest is not None
+    alias = tmp_path / "late-link-alias.txt"
+    real_observe_at = workspace._observe_at
+
+    def link_before_final_check(root_fd: int, relative_path: str) -> object:
+        observed = real_observe_at(root_fd, relative_path)
+        if observed.state is ProbeTargetState.ABSENT and not alias.exists():
+            os.link(next((root / ".staging").iterdir()), alias)
+        return observed
+
+    with monkeypatch.context() as patcher:
+        patcher.setattr(workspace, "_observe_at", link_before_final_check)
+        with pytest.raises(ProbeWorkspaceFilesystemError, match="gained a hard-link"):
+            await workspace.remove(
+                operation_id="op-cleanup-late",
+                artifact_id="artifact-late",
+                path_generation=1,
+                relative_path="probe.txt",
+                expected_content_sha256=digest,
+                expected_file_identity_digest=exact.file_identity_digest,
+            )
+    assert not (root / "probe.txt").exists()
+    assert alias.read_bytes() == content
+    tombs = tuple((root / ".staging").iterdir())
+    assert len(tombs) == 1
+    assert tombs[0].read_bytes() == content
 
 
 @pytest.mark.anyio

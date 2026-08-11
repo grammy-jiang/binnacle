@@ -807,21 +807,24 @@ identity/type/content check using protected root directory fds. Cleanup then:
 
 #. atomically moves the current root entry to a unique, operation-correlated private
    ``.staging`` tomb using same-filesystem no-replace semantics;
-#. opens that tomb read/write with no-follow defenses and re-verifies the exact held
+#. opens that tomb read-only with no-follow defenses and re-verifies the exact held
    inode/type/owner/mode/size/content identity;
 #. on mismatch, restores the quarantined entry to the root with no-replace semantics and
    fsyncs both directories, or retains it and reports uncertainty if safe restoration is
    impossible;
-#. on an exact match, truncates and fsyncs **only the held verified inode**, fsyncs both
-   directories, requires the public root name to remain absent, and returns a stable effect
-   reference;
-#. retains the recognizable zero-length private tomb for stopped-service accounting.
+#. rejects any observation whose link count is not exactly one and, after quarantine,
+   restores it without overwrite or reports uncertainty if safe restoration is impossible;
+#. on an exact match, fsyncs both directories, requires the public root name to remain
+   absent, and returns a stable effect reference;
+#. retains the recognizable verified full-content private tomb for stopped-service
+   accounting and never mutates the held inode.
 
 Linux has no unlink-by-open-file-descriptor primitive. Pathname-unlinking the quarantine
 after verification would recreate the same substitution race inside ``.staging`` and could
-delete an unrelated replacement. Runtime cleanup therefore never unlinks the mutable tomb
-pathname. A future cleanup/retention procedure may remove a tomb only under a separately
-reviewed stopped-service proof; unknown or non-empty staging entries are never deleted
+delete an unrelated replacement. Truncating the held inode could corrupt a hard-link alias.
+Runtime cleanup therefore never unlinks the mutable tomb pathname or mutates the held inode.
+A future cleanup/retention procedure may remove a tomb only under a separately reviewed
+stopped-service proof; unknown or identity-unbound staging entries are never deleted
 automatically.
 
 If target becomes absent after ``call_start`` linearization but before the quarantine move,
@@ -1145,14 +1148,16 @@ Required faults include:
 * target is renamed/replaced before quarantine -> replacement is restored without
   overwrite, neither the original nor replacement is deleted, and cleanup is known no
   effect only after exact durable classification;
-* target is replaced after exact quarantine verification -> only the held prepared inode
-  is truncated, the replacement survives, and cleanup remains uncertain because the public
-  target is occupied;
-* successful cleanup retains one recognizable zero-length private tomb; no runtime path
-  unlinks that mutable tomb name;
+* target is replaced after exact quarantine verification -> the replacement and verified
+  full-content tomb both survive, and cleanup remains uncertain because the public target
+  is occupied;
+* a hard-link alias observed before or after quarantine -> no inode mutation, safe
+  no-overwrite restoration or retained uncertainty, and no successful cleanup receipt;
+* successful cleanup retains one recognizable verified full-content private tomb; no
+  runtime path unlinks that mutable tomb name or mutates its inode;
 * same race with receipt loss -> uncertain, claim/ledger active retained;
-* crash after held-inode truncation/directory fsync before receipt -> uncertain until
-  explicit recovery proves
+* crash after quarantine/directory fsync before receipt -> uncertain until explicit
+  recovery proves
   effect; absence alone cannot close ledger;
 * crash during ledger terminalization -> atomic old or new state only;
 * DB failure during cleanup claim/ledger closure -> conservative active state;

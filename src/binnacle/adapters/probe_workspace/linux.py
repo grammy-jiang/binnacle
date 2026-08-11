@@ -259,7 +259,11 @@ class LinuxProbeWorkspace:
             path_info = os.stat(relative_path, dir_fd=root_fd, follow_symlinks=False)
         except FileNotFoundError:
             return ProbeFileObservation(ProbeTargetState.ABSENT)
-        if not stat.S_ISREG(path_info.st_mode) or stat.S_ISLNK(path_info.st_mode):
+        if (
+            not stat.S_ISREG(path_info.st_mode)
+            or stat.S_ISLNK(path_info.st_mode)
+            or path_info.st_nlink != 1
+        ):
             return ProbeFileObservation(ProbeTargetState.MISMATCH)
         flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
         try:
@@ -275,10 +279,13 @@ class LinuxProbeWorkspace:
                 or info.st_uid != os.geteuid()
                 or info.st_gid != os.getegid()
                 or stat.S_IMODE(info.st_mode) != 0o600
+                or info.st_nlink != 1
                 or not 0 <= info.st_size <= self._maximum_file_bytes
             ):
                 return ProbeFileObservation(ProbeTargetState.MISMATCH)
             content = self._read_bounded(descriptor)
+            if os.fstat(descriptor).st_nlink != 1:
+                return ProbeFileObservation(ProbeTargetState.MISMATCH)
             digest = content_sha256(content)
             identity = self._file_identity(info, digest)
             return ProbeFileObservation(
@@ -337,6 +344,8 @@ class LinuxProbeWorkspace:
                 raise ProbeEffectNotStarted("probe_target_not_absent") from exc
             published = True
             os.fsync(root_fd)
+            os.unlink(staging_name, dir_fd=staging_fd)
+            os.fsync(staging_fd)
             observation = self._observe_at(root_fd, relative_path)
             if (
                 observation.state is not ProbeTargetState.EXACT
@@ -345,8 +354,6 @@ class LinuxProbeWorkspace:
                 or observation.file_identity_digest is None
             ):
                 raise ProbeWorkspaceFilesystemError("published probe file cannot be verified")
-            os.unlink(staging_name, dir_fd=staging_fd)
-            os.fsync(staging_fd)
             return (
                 f"probe-write:v1:{artifact_id}:{path_generation}:{observation.file_identity_digest}"
             )
@@ -415,7 +422,7 @@ class LinuxProbeWorkspace:
             quarantined = True
             quarantine_descriptor = os.open(
                 quarantine_name,
-                os.O_RDWR | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0),
+                os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0),
                 dir_fd=staging_fd,
             )
             quarantined_observation = self._observe_descriptor(quarantine_descriptor)
@@ -427,14 +434,12 @@ class LinuxProbeWorkspace:
                 os.close(quarantine_descriptor)
                 quarantine_descriptor = None
                 try:
-                    self._rename_noreplace(
-                        source_dir_fd=staging_fd,
-                        source_name=quarantine_name,
-                        destination_dir_fd=root_fd,
-                        destination_name=relative_path,
+                    self._restore_quarantine(
+                        root_fd=root_fd,
+                        staging_fd=staging_fd,
+                        quarantine_name=quarantine_name,
+                        relative_path=relative_path,
                     )
-                    os.fsync(staging_fd)
-                    os.fsync(root_fd)
                 except Exception as exc:
                     raise ProbeWorkspaceFilesystemError(
                         "mismatched cleanup quarantine could not be restored"
@@ -442,17 +447,38 @@ class LinuxProbeWorkspace:
                 quarantined = False
                 raise ProbeEffectNotStarted("probe_cleanup_identity_changed")
 
-            # Linux has no unlink-by-open-fd. A pathname unlink here would recreate
-            # the same substitution race inside .staging. Destroy only the verified
-            # held inode and retain its empty private tomb until separately reviewed
-            # maintenance can account for it.
-            os.ftruncate(quarantine_descriptor, 0)
-            os.fsync(quarantine_descriptor)
+            # Never mutate the held inode. In particular, ftruncate would also modify
+            # any hard-link alias created by a same-UID process. The atomic rename is
+            # the cleanup effect; the verified full-content tomb remains private for
+            # separately reviewed stopped-service accounting.
+            if os.fstat(quarantine_descriptor).st_nlink != 1:
+                os.close(quarantine_descriptor)
+                quarantine_descriptor = None
+                try:
+                    self._restore_quarantine(
+                        root_fd=root_fd,
+                        staging_fd=staging_fd,
+                        quarantine_name=quarantine_name,
+                        relative_path=relative_path,
+                    )
+                except Exception as exc:
+                    raise ProbeWorkspaceFilesystemError(
+                        "hard-linked cleanup quarantine could not be restored"
+                    ) from exc
+                quarantined = False
+                raise ProbeEffectNotStarted("probe_cleanup_hardlink_detected")
             os.fsync(staging_fd)
             os.fsync(root_fd)
             if self._observe_at(root_fd, relative_path).state is not ProbeTargetState.ABSENT:
                 raise ProbeWorkspaceFilesystemError(
                     "probe cleanup target was replaced after quarantine"
+                )
+            # This check is adjacent to reporting success. Linux cannot make a link-
+            # count predicate and a userspace return atomic, but no mutation follows
+            # it, so a later alias cannot expose destructive cleanup behavior.
+            if os.fstat(quarantine_descriptor).st_nlink != 1:
+                raise ProbeWorkspaceFilesystemError(
+                    "probe cleanup quarantine gained a hard-link alias"
                 )
             return (
                 f"probe-cleanup:v1:{artifact_id}:{path_generation}:{expected_file_identity_digest}"
@@ -472,6 +498,23 @@ class LinuxProbeWorkspace:
                 os.close(quarantine_descriptor)
             os.close(staging_fd)
             os.close(root_fd)
+
+    def _restore_quarantine(
+        self,
+        *,
+        root_fd: int,
+        staging_fd: int,
+        quarantine_name: str,
+        relative_path: str,
+    ) -> None:
+        self._rename_noreplace(
+            source_dir_fd=staging_fd,
+            source_name=quarantine_name,
+            destination_dir_fd=root_fd,
+            destination_name=relative_path,
+        )
+        os.fsync(staging_fd)
+        os.fsync(root_fd)
 
     @staticmethod
     def _rename_noreplace(
@@ -518,11 +561,14 @@ class LinuxProbeWorkspace:
             or info.st_uid != os.geteuid()
             or info.st_gid != os.getegid()
             or stat.S_IMODE(info.st_mode) != 0o600
+            or info.st_nlink != 1
             or not 0 <= info.st_size <= self._maximum_file_bytes
         ):
             return ProbeFileObservation(ProbeTargetState.MISMATCH)
         os.lseek(descriptor, 0, os.SEEK_SET)
         content = self._read_bounded(descriptor)
+        if os.fstat(descriptor).st_nlink != 1:
+            return ProbeFileObservation(ProbeTargetState.MISMATCH)
         digest = content_sha256(content)
         return ProbeFileObservation(
             ProbeTargetState.EXACT,
