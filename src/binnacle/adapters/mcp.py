@@ -263,6 +263,12 @@ class RequestBodyLimitMiddleware:
             )
 
         modern_signal = declared is not None or header_version == TARGET_REVISION
+        if method == "initialize" and modern_signal:
+            return (
+                -32021,
+                "unsupported_protocol_version",
+                "The reviewed target revision does not support initialize.",
+            )
         if modern_signal:
             if not isinstance(declared, str) or declared != TARGET_REVISION:
                 return (

@@ -108,6 +108,19 @@ PHASE2_NOT_APPLICABLE_AXES = frozenset(
         "information_boundary",
     }
 )
+PHASE2_BASELINE_LIMITATIONS = (
+    "Only local compatibility-core server evidence exists.",
+    "No real ChatGPT account, workspace, transport, or UI behavior has been observed.",
+)
+PHASE2_BASELINE_SUMMARIES = MappingProxyType(
+    {
+        "not-tested": "No real ChatGPT host evidence has been recorded.",
+        "server-not-implemented": (
+            "The required consequential server capability is absent in Phase 2."
+        ),
+        "not-applicable": "The optional probe is not promoted in the Phase 2 catalogue.",
+    }
+)
 
 
 class ContractRegistryError(RuntimeError):
@@ -595,6 +608,10 @@ def _validate_compatibility_baseline(
         or not all(isinstance(value, str) and value for value in limitations)
     ):
         raise ContractRegistryError("generated compatibility limitations are invalid")
+    if tuple(limitations) != PHASE2_BASELINE_LIMITATIONS:
+        raise ContractRegistryError(
+            "generated compatibility limitations do not match the Phase 2 baseline"
+        )
     observations = baseline.get("observations")
     if not isinstance(observations, list) or not observations:
         raise ContractRegistryError("generated compatibility observations are invalid")
@@ -604,7 +621,7 @@ def _validate_compatibility_baseline(
         _require_exact_keys(observation, OBSERVATION_KEYS, "compatibility observation")
         axis = _require_string(observation, "axis")
         status = _require_string(observation, "status")
-        _require_string(observation, "summary")
+        summary = _require_string(observation, "summary")
         if axis in PHASE2_SERVER_NOT_IMPLEMENTED_AXES:
             expected_status = "server-not-implemented"
         elif axis in PHASE2_NOT_APPLICABLE_AXES:
@@ -614,6 +631,10 @@ def _validate_compatibility_baseline(
         if status != expected_status:
             raise ContractRegistryError(
                 "generated compatibility observation violates the Phase 2 status classification"
+            )
+        if summary != PHASE2_BASELINE_SUMMARIES[expected_status]:
+            raise ContractRegistryError(
+                "generated compatibility observation summary does not match the Phase 2 baseline"
             )
         if axis in axes:
             raise ContractRegistryError("generated compatibility observation axis is duplicated")

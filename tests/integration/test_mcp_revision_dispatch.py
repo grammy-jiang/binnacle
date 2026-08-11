@@ -271,6 +271,36 @@ async def test_cross_era_modern_envelope_is_rejected(
 
 
 @pytest.mark.anyio
+async def test_target_shaped_initialize_cannot_create_a_legacy_session(
+    phase2_application: BinnacleApplication,
+) -> None:
+    async with running_raw_http_client(phase2_application) as client:
+        response = await client.post(
+            "/mcp",
+            json=_modern_body(
+                "initialize",
+                {
+                    "protocolVersion": EXPECTED_REVISIONS[1],
+                    "capabilities": {},
+                    "clientInfo": {"name": "binnacle-test", "version": "1"},
+                },
+            ),
+            headers=_modern_headers("initialize"),
+        )
+
+    assert response.status_code == 400
+    assert "mcp-session-id" not in response.headers
+    assert _jsonrpc(response)["error"] == {
+        "code": -32021,
+        "message": "The reviewed target revision does not support initialize.",
+        "data": {
+            "code": "unsupported_protocol_version",
+            "supported": list(EXPECTED_REVISIONS),
+        },
+    }
+
+
+@pytest.mark.anyio
 @pytest.mark.parametrize(
     ("header_method", "header_name"),
     [

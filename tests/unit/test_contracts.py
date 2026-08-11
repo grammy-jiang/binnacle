@@ -323,6 +323,23 @@ def test_compatibility_baseline_statuses_match_phase2_classification(
         )
 
 
+@pytest.mark.parametrize("field", ["summary", "limitations"])
+def test_compatibility_baseline_prose_cannot_claim_live_host_evidence(field: str) -> None:
+    registry, digest = _documents()
+    baseline = registry["compatibility_baseline"]
+    if field == "summary":
+        baseline["observations"][0]["summary"] = "Observed real ChatGPT support."
+    else:
+        baseline["limitations"][0] = "Real ChatGPT host behavior was verified."
+    registry_bytes, digest_bytes = _encoded(registry, digest)
+
+    with pytest.raises(ContractRegistryError, match="Phase 2 baseline"):
+        ContractRegistry.from_bytes(
+            registry_bytes=registry_bytes,
+            digest_bytes=digest_bytes,
+        )
+
+
 @pytest.mark.parametrize(
     ("field", "value", "message"),
     [
