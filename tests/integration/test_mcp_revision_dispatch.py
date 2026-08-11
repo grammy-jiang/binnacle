@@ -178,6 +178,40 @@ async def test_unsupported_2024_revision_reaches_revision_guard(
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("revision", "message"),
+    [
+        (None, "The request is missing MCP-Protocol-Version."),
+        ("2024-11-05", "The request does not declare a reviewed protocol revision."),
+    ],
+)
+async def test_sessionless_request_requires_a_reviewed_revision_header(
+    phase2_application: BinnacleApplication,
+    revision: str | None,
+    message: str,
+) -> None:
+    headers = {"accept": ACCEPT}
+    if revision is not None:
+        headers["MCP-Protocol-Version"] = revision
+    async with running_raw_http_client(phase2_application) as client:
+        response = await client.post(
+            "/mcp",
+            json={"jsonrpc": "2.0", "id": 99, "method": "tools/list", "params": {}},
+            headers=headers,
+        )
+
+    assert response.status_code == 400
+    assert _jsonrpc(response)["error"] == {
+        "code": -32021,
+        "message": message,
+        "data": {
+            "code": "unsupported_protocol_version",
+            "supported": list(EXPECTED_REVISIONS),
+        },
+    }
+
+
+@pytest.mark.anyio
 async def test_target_request_requires_version_header(
     phase2_application: BinnacleApplication,
 ) -> None:

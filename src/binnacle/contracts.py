@@ -6,12 +6,14 @@ import hashlib
 import importlib
 import inspect
 import json
+import posixpath
 import unicodedata
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from importlib import resources
 from types import MappingProxyType
 from typing import Any
+from urllib.parse import urlparse
 
 from jsonschema import Draft202012Validator  # type: ignore[import-untyped]
 
@@ -88,6 +90,24 @@ BASELINE_KEYS = frozenset(
     }
 )
 OBSERVATION_KEYS = frozenset({"axis", "status", "summary"})
+PHASE2_SERVER_NOT_IMPLEMENTED_AXES = frozenset(
+    {
+        "write_entitlement",
+        "host_confirmation",
+        "retry_safety",
+        "cancellation",
+        "reconnect",
+        "concurrency",
+    }
+)
+PHASE2_NOT_APPLICABLE_AXES = frozenset(
+    {
+        "resources",
+        "mrtr_elicitation",
+        "tasks",
+        "information_boundary",
+    }
+)
 
 
 class ContractRegistryError(RuntimeError):
@@ -216,7 +236,7 @@ class ContractRegistry:
         input_validators: dict[str, Draft202012Validator] = {}
         output_validators: dict[str, Draft202012Validator] = {}
         for raw_tool in raw_tools:
-            tool = _parse_tool(_require_mapping(raw_tool, "tool"))
+            tool = _parse_tool(_require_mapping(raw_tool, "tool"), schemas=schemas)
             if "probe_workspace" in tool.handler_binding:
                 raise ContractRegistryError("write-probe binding is visible")
             _validate_handler_binding(tool.handler_binding)
@@ -363,21 +383,34 @@ def _normalize(value: Any) -> Any:
     return value
 
 
-def _parse_schema(value: object, context: str) -> SchemaBinding:
+def _parse_schema(
+    value: object,
+    context: str,
+    *,
+    schemas: Mapping[str, Any],
+) -> SchemaBinding:
     raw = _require_mapping(value, context)
     _require_exact_keys(raw, SCHEMA_BINDING_KEYS, context)
     schema = _require_mapping(raw.get("schema"), f"{context}.schema")
     definition_sha256 = _require_string(raw, "definition_sha256")
     if _canonical_sha256(schema) != definition_sha256:
         raise ContractRegistryError(f"generated {context} definition digest mismatch")
+    source_ref = _require_string(raw, "source_ref")
+    resolved_source = _resolve_schema_source(source_ref, schemas, context=context)
+    if _canonical_sha256(resolved_source) != definition_sha256:
+        raise ContractRegistryError(f"generated {context} does not match source_ref")
     return SchemaBinding(
-        source_ref=_require_string(raw, "source_ref"),
+        source_ref=source_ref,
         definition_sha256=definition_sha256,
         schema=_freeze_mapping(schema),
     )
 
 
-def _parse_tool(raw: dict[str, Any]) -> ToolContract:
+def _parse_tool(
+    raw: dict[str, Any],
+    *,
+    schemas: Mapping[str, Any],
+) -> ToolContract:
     _require_exact_keys(raw, TOOL_KEYS, "tool")
     raw_annotations = _require_mapping(raw.get("annotations"), "annotations")
     _require_exact_keys(raw_annotations, ANNOTATION_KEYS, "annotations")
@@ -395,9 +428,152 @@ def _parse_tool(raw: dict[str, Any]) -> ToolContract:
         information_class=_require_string(raw, "information_class"),
         confirmation_class=_require_string(raw, "confirmation_class"),
         annotations=MappingProxyType(annotations),
-        input_schema=_parse_schema(raw.get("input_schema"), "input_schema"),
-        output_schema=_parse_schema(raw.get("output_schema"), "output_schema"),
+        input_schema=_parse_schema(
+            raw.get("input_schema"),
+            "input_schema",
+            schemas=schemas,
+        ),
+        output_schema=_parse_schema(
+            raw.get("output_schema"),
+            "output_schema",
+            schemas=schemas,
+        ),
     )
+
+
+def _resolve_schema_source(
+    source_ref: str,
+    schemas: Mapping[str, Any],
+    *,
+    context: str,
+) -> dict[str, Any]:
+    try:
+        path, fragment = _schema_target(source_ref, current_path=None)
+        selected = _json_pointer_get(_schema_document(schemas, path), fragment)
+        resolved = _resolve_schema_value(
+            selected,
+            current_path=path,
+            schemas=schemas,
+            stack=(),
+        )
+    except (KeyError, TypeError, ValueError, RecursionError) as exc:
+        raise ContractRegistryError(f"generated {context} source_ref is invalid") from exc
+    if not isinstance(resolved, dict):
+        raise ContractRegistryError(f"generated {context} source_ref is not an object")
+    return resolved
+
+
+def _resolve_schema_value(
+    value: Any,
+    *,
+    current_path: str,
+    schemas: Mapping[str, Any],
+    stack: tuple[str, ...],
+) -> Any:
+    if isinstance(value, list):
+        return [
+            _resolve_schema_value(
+                item,
+                current_path=current_path,
+                schemas=schemas,
+                stack=stack,
+            )
+            for item in value
+        ]
+    if not isinstance(value, dict):
+        return value
+
+    reference = value.get("$ref")
+    if reference is not None:
+        if not isinstance(reference, str):
+            raise ValueError("schema $ref must be a string")
+        target_path, fragment = _schema_target(reference, current_path=current_path)
+        cycle_key = f"{target_path}#{fragment}"
+        if cycle_key in stack:
+            raise ValueError("recursive schema reference")
+        selected = _json_pointer_get(_schema_document(schemas, target_path), fragment)
+        resolved = _resolve_schema_value(
+            selected,
+            current_path=target_path,
+            schemas=schemas,
+            stack=(*stack, cycle_key),
+        )
+        if not isinstance(resolved, dict):
+            raise ValueError("schema reference did not resolve to an object")
+        siblings = {
+            key: _resolve_schema_value(
+                child,
+                current_path=current_path,
+                schemas=schemas,
+                stack=stack,
+            )
+            for key, child in value.items()
+            if key != "$ref"
+        }
+        return {**resolved, **siblings}
+
+    return {
+        key: _resolve_schema_value(
+            child,
+            current_path=current_path,
+            schemas=schemas,
+            stack=stack,
+        )
+        for key, child in value.items()
+    }
+
+
+def _schema_target(reference: str, *, current_path: str | None) -> tuple[str, str]:
+    if reference.startswith("#"):
+        if current_path is None:
+            raise ValueError("top-level schema reference requires a path")
+        return current_path, reference[1:]
+
+    parsed = urlparse(reference)
+    if parsed.scheme in ("http", "https"):
+        prefix = "/schemas/"
+        if prefix not in parsed.path:
+            raise ValueError("external schema reference is outside the allowlist")
+        path = f"schemas/{parsed.path.split(prefix, 1)[1]}"
+        fragment = parsed.fragment
+    else:
+        path_part, separator, fragment = reference.partition("#")
+        if path_part.startswith("schemas/"):
+            path = posixpath.normpath(path_part)
+        elif current_path is not None:
+            path = posixpath.normpath(posixpath.join(posixpath.dirname(current_path), path_part))
+        else:
+            raise ValueError("top-level schema reference requires a reviewed path")
+        if not separator:
+            fragment = ""
+
+    if path not in SCHEMA_DOCUMENT_PATHS:
+        raise ValueError("schema reference is outside the reviewed allowlist")
+    return path, fragment
+
+
+def _schema_document(schemas: Mapping[str, Any], path: str) -> dict[str, Any]:
+    document = schemas.get(path)
+    if not isinstance(document, dict):
+        raise TypeError("schema document must be an object")
+    return document
+
+
+def _json_pointer_get(document: Any, pointer: str) -> Any:
+    if pointer in ("", "/"):
+        return document
+    if not pointer.startswith("/"):
+        raise ValueError("schema fragment must be a JSON pointer")
+    current = document
+    for raw_token in pointer.lstrip("/").split("/"):
+        token = raw_token.replace("~1", "/").replace("~0", "~")
+        if isinstance(current, list):
+            current = current[int(token)]
+        elif isinstance(current, dict):
+            current = current[token]
+        else:
+            raise KeyError(pointer)
+    return current
 
 
 def _validate_compatibility_baseline(
@@ -427,8 +603,18 @@ def _validate_compatibility_baseline(
         observation = _require_mapping(value, "compatibility observation")
         _require_exact_keys(observation, OBSERVATION_KEYS, "compatibility observation")
         axis = _require_string(observation, "axis")
-        _require_string(observation, "status")
+        status = _require_string(observation, "status")
         _require_string(observation, "summary")
+        if axis in PHASE2_SERVER_NOT_IMPLEMENTED_AXES:
+            expected_status = "server-not-implemented"
+        elif axis in PHASE2_NOT_APPLICABLE_AXES:
+            expected_status = "not-applicable"
+        else:
+            expected_status = "not-tested"
+        if status != expected_status:
+            raise ContractRegistryError(
+                "generated compatibility observation violates the Phase 2 status classification"
+            )
         if axis in axes:
             raise ContractRegistryError("generated compatibility observation axis is duplicated")
         axes.add(axis)

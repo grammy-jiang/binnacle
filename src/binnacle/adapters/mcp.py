@@ -239,6 +239,29 @@ class RequestBodyLimitMiddleware:
                 f"Duplicate routing header: {duplicate}",
             )
 
+        if (
+            isinstance(method, str)
+            and method != "initialize"
+            and declared is None
+            and header_version is None
+        ):
+            return (
+                -32021,
+                "unsupported_protocol_version",
+                "The request is missing MCP-Protocol-Version.",
+            )
+        if (
+            isinstance(method, str)
+            and method != "initialize"
+            and declared is None
+            and header_version not in EXPECTED_REVISIONS
+        ):
+            return (
+                -32021,
+                "unsupported_protocol_version",
+                "The request does not declare a reviewed protocol revision.",
+            )
+
         modern_signal = declared is not None or header_version == TARGET_REVISION
         if modern_signal:
             if not isinstance(declared, str) or declared != TARGET_REVISION:

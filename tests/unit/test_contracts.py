@@ -244,6 +244,21 @@ def test_selected_schema_definition_digest_is_recomputed() -> None:
         )
 
 
+def test_compiled_schema_must_match_its_embedded_source_reference() -> None:
+    registry, digest = _documents()
+    binding = registry["tools"][0]["input_schema"]
+    binding["schema"]["description"] = "self-consistent compiled drift"
+    binding["definition_sha256"] = _canonical_sha256(binding["schema"])
+    _refresh_catalogue_digest(registry, digest)
+    registry_bytes, digest_bytes = _encoded(registry, digest)
+
+    with pytest.raises(ContractRegistryError, match="does not match source_ref"):
+        ContractRegistry.from_bytes(
+            registry_bytes=registry_bytes,
+            digest_bytes=digest_bytes,
+        )
+
+
 def test_compiled_catalogue_digest_is_recomputed() -> None:
     registry, digest = _documents()
     registry["tools"][0]["title"] = "drift"
@@ -274,6 +289,34 @@ def test_compatibility_baseline_cannot_claim_live_evidence_or_drift(
     registry_bytes, digest_bytes = _encoded(registry, digest)
 
     with pytest.raises(ContractRegistryError, match=message):
+        ContractRegistry.from_bytes(
+            registry_bytes=registry_bytes,
+            digest_bytes=digest_bytes,
+        )
+
+
+@pytest.mark.parametrize(
+    ("axis", "status"),
+    [
+        ("connectivity", "observed-supported"),
+        ("write_entitlement", "not-tested"),
+        ("resources", "server-not-implemented"),
+    ],
+)
+def test_compatibility_baseline_statuses_match_phase2_classification(
+    axis: str,
+    status: str,
+) -> None:
+    registry, digest = _documents()
+    observation = next(
+        value
+        for value in registry["compatibility_baseline"]["observations"]
+        if value["axis"] == axis
+    )
+    observation["status"] = status
+    registry_bytes, digest_bytes = _encoded(registry, digest)
+
+    with pytest.raises(ContractRegistryError, match="Phase 2 status classification"):
         ContractRegistry.from_bytes(
             registry_bytes=registry_bytes,
             digest_bytes=digest_bytes,
@@ -343,10 +386,17 @@ def test_invalid_handler_binding_aborts_registry_load(
 
 def test_invalid_compiled_schema_aborts_registry_load() -> None:
     registry, digest = _documents()
-    registry["tools"][0]["input_schema"]["schema"] = {"type": "not-a-type"}
+    invalid_schema = {"type": "not-a-type"}
+    registry["tools"][0]["input_schema"]["schema"] = invalid_schema
     registry["tools"][0]["input_schema"]["definition_sha256"] = _canonical_sha256(
         registry["tools"][0]["input_schema"]["schema"]
     )
+    registry["schemas"]["schemas/mcp/bootstrap-inputs.schema.json"]["$defs"][
+        "binnacle_probe.input.v1_1"
+    ] = invalid_schema
+    schema_registry_sha256 = _canonical_sha256(registry["schemas"])
+    registry["schema_registry_sha256"] = schema_registry_sha256
+    digest["schema_registry_sha256"] = schema_registry_sha256
     _refresh_catalogue_digest(registry, digest)
     registry_bytes, digest_bytes = _encoded(registry, digest)
 
