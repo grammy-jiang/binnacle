@@ -115,6 +115,9 @@ are true:
   a stronger reviewed protected-object confinement mechanism, and mutations whose required
   primitive or writer assumption is unavailable stay disabled rather than silently
   degrading;
+* the candidate systemd deployment proves the search-child lifecycle/readiness barrier in
+  sections 15, 16, and 25: an ``rg`` child cannot survive an application service restart
+  into a newly opened workspace access gate;
 * the proposed Phase 6 operation contracts, JSON schemas, Tool-manifest entries,
   descriptions, annotations, information classes, and host-confirmation metadata have
   passed contract/schema/manifest validation;
@@ -756,15 +759,19 @@ Content-returning operations additionally use the shared workspace access coordi
 ``workspace_read`` and ``workspace_search`` acquire a shared ``CONTENT_READ`` guard only
 after proving the durable mutation fence is free and the exact workspace/session/profile
 is valid; they hold it until the exact file read completes or the ``ripgrep`` child is
-terminated and its bounded output is drained. A Binnacle-managed changer must acquire the
-exclusive ``CHANGE`` side before it can acquire the durable mutation fence, so protected
-objects cannot be relabelled by a coordinated rename while content is being returned.
+proven terminated/reaped and its bounded output is drained. A Binnacle-managed changer
+must acquire the exclusive ``CHANGE`` side before it can acquire the durable mutation
+fence, so protected objects cannot be relabelled by a coordinated rename while content is
+being returned.
 
 The guard is an application/process coordination primitive, not durable authority and not
-a substitute for the mutation fence. If the application restarts, in-flight Phase 6
-content reads/searches terminate; startup reconstructs the access coordinator as
-change-closed whenever a durable mutation fence owner exists, and no new content access is
-admitted until that owner is reconciled.
+a substitute for the mutation fence. In-process ``workspace_read`` dies with the owning
+application runtime. ``workspace_search`` additionally uses the service-cgroup child
+lifecycle and startup barrier in sections 15 and 16 so an ``rg`` child from a failed prior
+runtime cannot retain a pinned descriptor while a replacement process opens the gate.
+Every new application runtime initializes workspace access in ``RECOVERY_CLOSED`` and does
+not admit either ``CONTENT_READ`` or ``CHANGE`` until that barrier and durable-fence
+reconciliation are complete.
 
 14.1 ``workspace_inspect``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -805,6 +812,8 @@ rename could relabel a protected directory. The launch sequence is:
 #. normalize the optional search subpath and reject any protected/symlink-bearing scope;
 #. verify the promoted profile either excludes uncoordinated writers for content traversal
    or supplies a separately reviewed stronger protected-object confinement mechanism;
+#. require the current application service invocation to have passed the
+   ``SearchChildRecoveryBarrier`` described below;
 #. acquire the shared ``WorkspaceAccessGate`` ``CONTENT_READ`` guard and, atomically with
    that admission, require the durable workspace mutation fence to be free;
 #. open/pin the exact registered workspace root descriptor and verify the session-bound
@@ -815,15 +824,40 @@ rename could relabel a protected directory. The launch sequence is:
 #. duplicate the pinned search descriptor to an operation-owned FD with deterministic
    lifetime;
 #. spawn ``rg`` with ``close_fds=True`` and only that exact FD explicitly inherited;
+#. keep the child in the exact Binnacle application systemd service cgroup: do not launch
+   it through ``systemd-run``, a delegated scope, double-fork/daemon path, or any mechanism
+   that can move it outside the service manager's lifecycle domain;
 #. establish child cwd from the pinned descriptor, for example through a reviewed internal
    ``/proc/self/fd/<fd>`` cwd or an equivalent tiny descriptor-bound spawn helper;
 #. pass ``.`` as the only search root; do not pass the configured workspace pathname or a
    reconstructed subpath;
+#. retain a process handle that binds child PID plus a non-reused process identity such as
+   Linux start-time/pidfd evidence and the current application service invocation/runtime
+   identity; PID alone is never sufficient recovery evidence;
 #. keep the inherited descriptor valid until exec/cwd establishment has completed, then
    close parent copies deterministically;
 #. retain the shared content guard for the full recursive traversal, including timeout/
-   termination and bounded stdout/stderr drain, and release it only after the child can no
-   longer traverse the workspace.
+   termination and bounded stdout/stderr drain, and release it only after pidfd/wait-style
+   evidence proves the child is terminated/reaped and can no longer traverse the workspace.
+
+The application service unit must explicitly retain search children in its cgroup and use
+``KillMode=control-group`` plus ``SendSIGKILL=yes`` (or a reviewed strictly stronger
+systemd lifecycle). ``Delegate`` is not granted to the application service for this
+purpose. On service stop/restart, remaining search children therefore belong to the unit
+cleanup rather than becoming an unmanaged process tree. A bounded stop timeout is part of
+the deployment profile. Optional parent-death signalling from a tiny reviewed launcher may
+be defense in depth, but it is never the sole restart invariant.
+
+Every fresh application invocation starts a ``SearchChildRecoveryBarrier`` before the
+``WorkspaceAccessGate`` may leave ``RECOVERY_CLOSED``. The barrier verifies the exact
+systemd unit/cgroup identity and proves that no process from the prior application
+invocation remains able to traverse a pinned workspace descriptor. The implementation may
+combine service-manager state with cgroup membership, process start-time/pidfd evidence,
+and the current systemd invocation identity; any stale/foreign member or unverifiable
+state keeps both ``CONTENT_READ`` and ``CHANGE`` closed. The barrier never clears a durable
+workspace mutation fence. If the required cgroup cleanup/readiness proof cannot be
+implemented and verified on the candidate Pi, content search and workspace-changing
+capability remain unready rather than assuming old children disappeared.
 
 Replacing or renaming the configured root/search directory after verification therefore
 cannot redirect the child into a replacement tree. The search continues against the
@@ -851,9 +885,9 @@ The reviewed adapter additionally binds:
 
 Search is read-only. A timeout or output ceiling never becomes a partial-success claim
 without explicit ``truncated``/``timed_out`` metadata. Root/subdirectory replacement
-races at launch, protected-directory rename/exchange while traversal is active, and
-content-search admission while a durable changer fence exists are mandatory Linux/
-concurrency integration tests.
+races at launch, protected-directory rename/exchange while traversal is active, application
+crash/restart while ``rg`` holds a pinned descriptor, and content-search admission while a
+durable changer fence exists are mandatory Linux/concurrency integration tests.
 
 16. Shared workspace access/change coordination seam
 ------------------------------------------------------
@@ -867,8 +901,9 @@ not with a Binnacle-managed workspace changer.
 One per-workspace ``WorkspaceAccessGate`` supplies that read/write linearization:
 
 * ``CONTENT_READ`` is shared and may be acquired only while the durable mutation fence is
-  free; ``workspace_read`` holds it for the exact descriptor read and
-  ``workspace_search`` for the entire child traversal/output-drain lifetime;
+  free and startup search-child recovery is complete; ``workspace_read`` holds it for the
+  exact descriptor read and ``workspace_search`` for the entire child traversal/output-
+  drain/termination lifetime;
 * ``CHANGE`` is exclusive. A new mutation acquires it **after policy allow but before**
   acquiring the durable workspace mutation fence and retains it until the durable fence is
   truthfully released. If effect truth is ``uncertain``, the durable fence remains owned
@@ -876,9 +911,13 @@ One per-workspace ``WorkspaceAccessGate`` supplies that read/write linearization
 * acquisition/release is ordered by one application coordinator so a content reader cannot
   observe ``fence free`` while a changer concurrently crosses into ownership, and a
   changer cannot acquire its durable fence while a content guard is active;
-* on application restart, any retained durable fence owner reconstructs the access
-  coordinator in change-closed state before content handlers become ready. In-flight Phase
-  6 searches/read calls from the old process are not resumed.
+* every new application invocation initializes the coordinator in ``RECOVERY_CLOSED``.
+  It may transition to its normal free/change-closed posture only after the exact
+  ``SearchChildRecoveryBarrier`` proves no search child from a previous invocation can
+  still traverse the workspace **and** durable mutation-fence state has been loaded and
+  reconciled. A retained durable fence owner keeps the change side closed even after child
+  recovery. A stale/unknown prior search child keeps both content and change admission
+  closed.
 
 The access gate is not a second authority source and does not make out-of-band writers
 cooperate. Content-returning operations therefore require the reviewed no-uncoordinated-
@@ -906,7 +945,8 @@ Migration ``0003`` introduces a durable row conceptually equivalent to:
 The row is authoritative protected state, not a cache reconstructed from surviving
 filesystem observations. A missing/corrupt row for a configured/previously initialized
 workspace fails consequential readiness. ``WorkspaceAccessGate`` derives its restart
-closed/open posture from this row but never reconstructs or clears durable fence ownership.
+closed/open posture from this row **and** the verified search-child recovery barrier, but
+never reconstructs or clears durable fence ownership.
 
 Post-policy admission, while the exact operation already owns the exclusive
 ``WorkspaceAccessGate`` ``CHANGE`` guard, may acquire only the exact transition:
@@ -1223,6 +1263,15 @@ Startup reconciliation loads Phase 4 operations plus Phase 6 session/workspace s
 
 Required behaviour:
 
+* before the workspace access coordinator can admit either ``CONTENT_READ`` or ``CHANGE``,
+  the new runtime starts it ``RECOVERY_CLOSED`` and the ``SearchChildRecoveryBarrier``
+  proves that systemd completed cleanup of every prior-invocation search child that could
+  still hold a pinned workspace descriptor; a stale/foreign/unverifiable service-cgroup
+  member keeps workspace content/change readiness closed;
+* ``workspace_read`` from the old application cannot survive process death; an old
+  ``workspace_search`` child is never assumed gone merely because its parent PID exited;
+* the application service cgroup/lifecycle profile is verified before search promotion and
+  startup never opens the gate by pathname/cgroup emptiness guess alone;
 * ``received`` without completed admission follows Phase 4 fail-closed recovery deny;
 * ``authorised`` that never entered dispatch does not start automatically after restart;
 * ``running`` with no durable exact effect receipt is not classified
@@ -1300,6 +1349,7 @@ Representative implementation paths are:
    src/binnacle/adapters/workspace/__init__.py
    src/binnacle/adapters/workspace/linux.py
    src/binnacle/adapters/workspace/ripgrep.py
+   src/binnacle/adapters/workspace/search_process.py
    src/binnacle/adapters/workspace/reconcile.py
    migrations/versions/0003_development_workspace.py
    tests/unit/domain/test_development_session.py
@@ -1343,6 +1393,11 @@ Representative boundaries:
 
    class WorkspaceSearch(Protocol):
        async def search(self, request: SearchRequest) -> WorkspaceSearchResult: ...
+
+   class WorkspaceSearchProcessSupervisor(Protocol):
+       async def verify_previous_runtime_quiesced(self, workspace_id: str) -> None: ...
+       async def spawn(self, request: SearchSpawnRequest) -> SearchProcessHandle: ...
+       async def wait_terminated(self, handle: SearchProcessHandle) -> None: ...
 
    class WorkspaceMutator(Protocol):
        async def create(self, intent: CreateIntent) -> WorkspaceEffectReceipt: ...
@@ -1401,6 +1456,7 @@ Phase 6 errors include:
 * ``workspace_output_truncated``;
 * ``workspace_search_timeout``;
 * ``workspace_search_root_unavailable``;
+* ``workspace_search_recovery_pending``;
 * ``workspace_content_access_writer_model_unsupported``.
 
 Errors do not reveal a protected absolute path, another controller's session/operation, raw
@@ -1411,7 +1467,8 @@ idempotency key, credential, or never-disclosable state.
 
 Structured diagnostics may include workspace ID, operation/session IDs, mutation kind,
 normalized-path digest, result byte counts, truncation, search duration, fence state,
-reason codes, primitive/profile version, session-gate outcome, and effect-reference digest.
+reason codes, primitive/profile version, session-gate outcome, search-child recovery state,
+and effect-reference digest.
 
 Do not log:
 
@@ -1424,8 +1481,9 @@ Do not log:
 
 Useful metrics include bounded counters/histograms for workspace reads/searches/mutations,
 search timeout/truncation, stale-version rejections, fence contention, uncertain mutation
-outcomes, session starts/ends/expiry, session-start race outcomes, and disabled primitive
-profiles. Path names and operation keys are never unbounded metric labels.
+outcomes, session starts/ends/expiry, session-start race outcomes, stale-search-child
+recovery blocking, and disabled primitive profiles. Path names and operation keys are never
+unbounded metric labels.
 
 31. Security invariants
 -----------------------
@@ -1465,6 +1523,13 @@ The implementation and review must prove at least:
    entire descriptor read/recursive traversal; all Binnacle-managed changers hold the
    exclusive side, and a profile permitting uncoordinated writers cannot promote content
    access without stronger protected-object confinement.
+#. Every application runtime starts the workspace access coordinator ``RECOVERY_CLOSED``;
+   neither content access nor a workspace-changing effect is admitted until the verified
+   service-cgroup search-child barrier proves no prior runtime can still traverse a pinned
+   workspace descriptor.
+#. ``ripgrep`` stays in the exact Binnacle application service cgroup and normal guard
+   release requires proven child termination/reaping; parent PID exit alone is never
+   treated as proof that recursive traversal ended.
 #. ``ripgrep`` starts from a descriptor-pinned search directory and never from a merely
    revalidated configured pathname; pathname ignore rules are defense in depth rather than
    the sole protected-content boundary.
@@ -1496,7 +1561,10 @@ Cover:
 * live-session-slot partial uniqueness, same-key retention, distinct-key concurrent begin,
   and fail-closed slot retention during incomplete/uncertain activation;
 * session-authority gate lock order and start-vs-reduction outcomes;
-* ``WorkspaceAccessGate`` shared-content/exclusive-change acquisition and restart posture;
+* ``WorkspaceAccessGate`` shared-content/exclusive-change acquisition, unconditional
+  startup ``RECOVERY_CLOSED`` state, and transition only after search-child recovery plus
+  durable-fence reconciliation;
+* search-process identity, current-runtime binding, and no-release-before-reap semantics;
 * same-key retained retry before current session/state validation;
 * object-version canonicalization;
 * exact-match patch transformation and duplicate/overlap rejection;
@@ -1524,6 +1592,8 @@ Use Hypothesis for:
   ``PENDING``/``ACTIVE`` session slot;
 * incomplete/uncertain activation never freeing the live slot for a second begin;
 * content-read guards and Binnacle-managed change guards never overlapping;
+* no transition from workspace ``RECOVERY_CLOSED`` to normal admission while prior-runtime
+  search-child quiescence is unproven;
 * patch edits either deterministically produce one exact byte string or reject with no
   effect;
 * fence version monotonicity across acquire/release/restart.
@@ -1540,6 +1610,8 @@ On Linux temp workspaces test:
 * descriptor-pinned search-subdirectory replacement during spawn;
 * ``rg --json`` parsing, hidden ``.github`` search, protected ``.git`` exclusion, binary
   skip, timeout, output truncation, and process failure;
+* ``rg`` remains in the owning application service cgroup/no delegated scope and normal
+  completion proves termination/reaping before ``CONTENT_READ`` release;
 * Binnacle-managed rename/exchange of ``.git`` or another protected directory beneath an
   allowed name while ``rg`` is active: the changer cannot acquire the exclusive access
   guard until search ends and no protected bytes are returned;
@@ -1584,13 +1656,18 @@ Inject crashes/failures at least at:
 * DB failure during terminal/fence release;
 * after ``PENDING -> ACTIVE`` before activation post-effect audit;
 * after activation audit before activation-closure CAS;
+* application main-process ``SIGKILL`` while ``rg`` holds the pinned search descriptor:
+  systemd must remove all prior-invocation search descendants before the replacement
+  runtime can pass ``SearchChildRecoveryBarrier``; until then ``CHANGE`` and
+  ``CONTENT_READ`` both remain blocked;
 * process restart with an active/effective session;
 * process restart with active-but-activation-incomplete session;
 * process restart with expired/untrusted-time session;
 * process restart with retained ``uncertain`` mutation.
 
 Expected results prefer conservative retained truth. In particular, pathname presence or
-absence after a lost receipt never manufactures ``known_effect``/``known_no_effect``.
+absence after a lost receipt never manufactures ``known_effect``/``known_no_effect``, and
+parent process death never proves a search child is gone.
 
 32.5 Concurrency tests
 ~~~~~~~~~~~~~~~~~~~~~~
@@ -1610,6 +1687,8 @@ Prove:
 * required audit failure racing dispatch obeys the process-wide Phase 4 gate;
 * content read/search cannot begin while a durable mutation fence owner exists and a new
   changer cannot acquire its fence while a content guard is active;
+* after application crash, a replacement runtime cannot admit a changer while any
+  prior-invocation search descendant may still hold a pinned workspace descriptor;
 * protected-directory rename/exchange by a Binnacle-managed changer cannot race through an
   active recursive search; metadata-only inspect/list remains bounded under the reviewed
   concurrency rules.
@@ -1627,6 +1706,8 @@ Before runtime exposure prove:
 * a content-read/search profile that permits uncoordinated writers cannot expose those
   Tools unless the promoted contract names a stronger protected-object confinement
   mechanism;
+* search/content/change readiness cannot be advertised before the exact service-cgroup
+  child-recovery barrier and durable mutation-fence reconciliation succeed;
 * live-session-slot uniqueness/current-state errors are represented without disclosing a
   foreign controller's retained session;
 * primitive/writer-profile degradation cannot expose a Tool that lacks required safety
@@ -1649,6 +1730,11 @@ Real Pi evidence should verify:
 * the accepted local writer-safety profile for replacement/move/delete;
 * rename/fsync semantics needed by write/move/delete;
 * descriptor-pinned ``ripgrep`` cwd/inherited-FD launch and root-replacement race test;
+* application service ``KillMode=control-group``/``SendSIGKILL=yes`` (or reviewed stronger
+  equivalent), non-delegated search-child cgroup membership, and a crash/restart run that
+  proves a prior ``rg`` cannot survive into workspace access/change readiness;
+* ``SearchChildRecoveryBarrier`` cgroup/process-identity verification and fail-closed
+  behaviour when stale-member absence cannot be proven;
 * ``WorkspaceAccessGate`` protected-directory rename/exchange coordination and restart
   blocking from a retained durable mutation fence;
 * the accepted writer model for content-returning read/search, or the exact stronger
@@ -1714,6 +1800,9 @@ The review must additionally walk each mutation kind through:
 * audit failure before start;
 * configured root/search-root replacement during ``ripgrep`` launch;
 * protected-directory rename/exchange while content read/search traversal is active;
+* application crash while ``ripgrep`` holds a pinned descriptor, systemd descendant
+  cleanup, startup ``RECOVERY_CLOSED``, and no changer admission before the recovery
+  barrier proves prior traversal is gone;
 * crash after filesystem syscall but before receipt;
 * out-of-band source replacement for write/move/delete;
 * durable known effect then DB/audit closure failure;
@@ -1741,6 +1830,9 @@ The Phase 6 detailed plan is acceptable when review/CI confirms:
 * read/search operations are bounded, protected-path aware, symlink-safe, descriptor-
   pinned when a subprocess traverses the workspace, and protected against coordinated
   rename/exchange for their full content-traversal lifetime;
+* search-child lifecycle is bound to the application service cgroup, normal guard release
+  requires proven termination/reaping, and startup keeps both content and change admission
+  recovery-closed until prior-invocation traversal is proven absent;
 * content-returning access fails closed when the reviewed writer model cannot keep
   protected-object exclusion stable;
 * mutations use exact current identity/version semantics and descriptor-relative
@@ -1771,8 +1863,10 @@ Implementation/promotion remains blocked until:
   the one-live-session partial unique index across ``PENDING``/``ACTIVE``;
 * session authority-gate/access-gate/fence/idempotency/audit/final-boundary fault tests
   pass;
-* descriptor-pinned search launch and protected-directory rename/exchange coordination
-  tests pass;
+* descriptor-pinned search launch, protected-directory rename/exchange coordination, and
+  application-crash/search-child cgroup cleanup/readiness-barrier tests pass;
+* candidate-Pi systemd service lifecycle proves no prior search child can survive into a
+  reopened workspace access/change gate;
 * the content-read/search writer model is accepted, or a stronger reviewed protected-
   object confinement mechanism is verified;
 * required no-overwrite primitives are verified on the candidate Pi;
@@ -1799,7 +1893,8 @@ Do not mark Phase 6 implementation complete until real evidence proves at least:
 #. no operation can escape the registered workspace or protected internal paths;
 #. session end/expiry blocks new/not-yet-started mutations through the authority gate;
 #. reconnect/restart preserves or truthfully rejects the session according to the frozen
-   identity/time/activation-closure rules;
+   identity/time/activation-closure rules, and a restart during an active search cannot
+   admit a changer until the prior search traversal is proven terminated;
 #. all evidence is captured from the real Pi/ChatGPT rather than inferred from tests.
 
 Move/delete need not be falsely claimed supported when their independently reviewed
@@ -1822,12 +1917,15 @@ When the evidence gate permits implementation, use this order:
 #. implement ``DevelopmentSessionAuthorityGate`` and lock-order tests before member
    mutation adapters;
 #. implement registered workspace profile/root identity/protected-content verification;
-#. implement the shared ``WorkspaceAccessGate`` + durable change-fence coordinator,
-   including restart-closed behavior from a retained fence;
+#. implement the shared ``WorkspaceAccessGate`` + durable change-fence coordinator with
+   unconditional startup ``RECOVERY_CLOSED`` posture;
+#. implement and verify the application-service search-child cgroup lifecycle plus
+   ``SearchChildRecoveryBarrier`` before allowing the access gate to open after restart;
 #. implement descriptor-relative inspect/list/read primitives, with content-read guard
    coverage;
-#. implement descriptor-pinned typed ``ripgrep`` search, full-lifetime content guard, and
-   launch/protected-directory-rename race tests;
+#. implement descriptor-pinned typed ``ripgrep`` search, full-lifetime content guard,
+   child termination/reaping proof, and launch/protected-directory-rename/restart race
+   tests;
 #. implement development-session begin/inspect/end orchestration including atomic
    ``PENDING`` slot reservation, activation closure, and fail-safe revocation;
 #. implement the mutation final-binding callback on the shared access/change seam;
@@ -1858,6 +1956,9 @@ The following remain provisional/evidence-gated after this plan merges:
   primitives;
 * actual feasibility of the selected descriptor-pinned ``ripgrep`` spawn mechanism on the
   candidate Python/kernel/systemd profile;
+* candidate-systemd proof that ``KillMode=control-group``/``SendSIGKILL=yes`` (or a
+  reviewed stronger equivalent) plus the startup barrier prevents a prior ``rg`` child
+  from surviving into workspace content/change readiness;
 * whether the candidate deployment can enforce the coordinated/no-uncoordinated-writer
   model required for stable protected-content read/search exclusion, or instead supplies a
   stronger reviewed protected-object confinement mechanism;
