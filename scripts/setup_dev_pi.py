@@ -386,6 +386,33 @@ def _check_identity_compatibility() -> Check:
         return Check(
             "identities", "fail", "application, executor, and credential users must be distinct"
         )
+    credential_clients = groups.get(GIT_CREDENTIAL_CLIENT_GROUP)
+    if credential_clients is not None:
+        denied_client_users = (SERVICE_USER, "binnacle-command")
+        for denied_user_name in denied_client_users:
+            try:
+                denied_user = pwd.getpwnam(denied_user_name)
+            except KeyError:
+                continue
+            if (
+                denied_user.pw_gid == credential_clients.gr_gid
+                or denied_user_name in credential_clients.gr_mem
+            ):
+                return Check(
+                    "identities",
+                    "fail",
+                    f"{denied_user_name} may not be a Git credential-broker client",
+                )
+        unexpected_clients = set(credential_clients.gr_mem) - {
+            EXECUTOR_USER,
+            GIT_CREDENTIAL_USER,
+        }
+        if unexpected_clients:
+            return Check(
+                "identities",
+                "fail",
+                "Git credential-broker client group contains an unexpected identity",
+            )
     return Check("identities", "pass", "existing identities are compatible or absent")
 
 

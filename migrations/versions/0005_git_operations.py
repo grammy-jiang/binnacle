@@ -156,7 +156,16 @@ def upgrade() -> None:
             "AND state IN "
             "('planned','dispatched','running','cleanup_pending','closed','uncertain') "
             "AND (state NOT IN ('closed','uncertain') OR closed_at IS NOT NULL) "
-            "AND (cleanup_complete=0 OR cleanup_evidence_sha256 IS NOT NULL)",
+            "AND (cleanup_complete=0 OR cleanup_evidence_sha256 IS NOT NULL) "
+            "AND (acceptance_state!='no_accept' OR state='closed') "
+            "AND (state!='closed' OR "
+            "(acceptance_state!='unresolved' AND cleanup_complete=1 "
+            "AND acknowledged_cancel_generation=cancel_generation "
+            "AND ((acceptance_state='no_accept' AND crossing_state='not_crossed' "
+            "AND effect_knowledge='known_no_effect') OR "
+            "(acceptance_state='accepted' AND crossing_state='classified' "
+            "AND effect_knowledge IN ('known_no_effect','known_effect','partial'))))) "
+            "AND (state!='uncertain' OR effect_knowledge='uncertain')",
             name="ck_git_stages_state",
         ),
         sa.CheckConstraint(
@@ -202,7 +211,16 @@ def upgrade() -> None:
         sa.Column("signature_verified", sa.Boolean(), nullable=False),
         sa.Column("object_imported", sa.Boolean(), nullable=False),
         sa.Column("branch_cas_complete", sa.Boolean(), nullable=False),
+        sa.Column("expected_main_index_identity_sha256", sa.String(length=64), nullable=False),
+        sa.Column("expected_main_index_tree_oid_algorithm", sa.String(length=8), nullable=False),
+        sa.Column("expected_main_index_tree_oid_hex", sa.String(length=64), nullable=False),
+        sa.Column("expected_main_index_sha256", sa.String(length=64), nullable=False),
+        sa.Column("target_main_index_tree_oid_algorithm", sa.String(length=8), nullable=False),
+        sa.Column("target_main_index_tree_oid_hex", sa.String(length=64), nullable=False),
+        sa.Column("target_main_index_sha256", sa.String(length=64), nullable=False),
+        sa.Column("selected_worktree_snapshot_sha256", sa.String(length=64), nullable=False),
         sa.Column("main_index_publication_state", sa.String(length=16), nullable=False),
+        sa.Column("main_index_publication_receipt_sha256", sa.String(length=64), nullable=True),
         sa.Column("worktree_evidence_sha256", sa.String(length=64), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
@@ -211,21 +229,40 @@ def upgrade() -> None:
             + " AND "
             + _required_oid_shape("tree")
             + " AND "
-            + _required_oid_shape("parent"),
+            + _required_oid_shape("parent")
+            + " AND "
+            + _required_oid_shape("expected_main_index_tree")
+            + " AND "
+            + _required_oid_shape("target_main_index_tree"),
             name="ck_git_commit_oids",
         ),
         sa.CheckConstraint(
             "length(author_sha256)=64 AND length(committer_sha256)=64 "
             "AND length(message_sha256)=64 AND length(preimage_sha256)=64 "
             "AND length(signer_profile_sha256)=64 AND length(signature_sha256)=64 "
+            "AND length(expected_main_index_identity_sha256)=64 "
+            "AND length(expected_main_index_sha256)=64 "
+            "AND length(target_main_index_sha256)=64 "
+            "AND length(selected_worktree_snapshot_sha256)=64 "
+            "AND (main_index_publication_receipt_sha256 IS NULL OR "
+            "length(main_index_publication_receipt_sha256)=64) "
             "AND (worktree_evidence_sha256 IS NULL OR length(worktree_evidence_sha256)=64)",
             name="ck_git_commit_digests",
         ),
         sa.CheckConstraint(
             "committer_at>=author_at AND updated_at>=created_at "
-            "AND main_index_publication_state IN ('pending','complete','uncertain') "
+            "AND target_main_index_tree_oid_algorithm=tree_oid_algorithm "
+            "AND target_main_index_tree_oid_hex=tree_oid_hex "
+            "AND main_index_publication_state IN "
+            "('not_required','pending','complete','uncertain') "
+            "AND (branch_cas_complete=0 OR (signature_verified=1 AND object_imported=1)) "
+            "AND (main_index_publication_state!='not_required' OR "
+            "(branch_cas_complete=0 AND main_index_publication_receipt_sha256 IS NULL)) "
+            "AND (main_index_publication_state!='pending' OR "
+            "main_index_publication_receipt_sha256 IS NULL) "
             "AND (main_index_publication_state!='complete' OR "
             "(signature_verified=1 AND object_imported=1 AND branch_cas_complete=1 "
+            "AND main_index_publication_receipt_sha256 IS NOT NULL "
             "AND worktree_evidence_sha256 IS NOT NULL))",
             name="ck_git_commit_publication",
         ),
@@ -246,8 +283,9 @@ def upgrade() -> None:
         sa.Column("outbound_closure_sha256", sa.String(length=64), nullable=False),
         sa.Column("source_ref", sa.String(length=255), nullable=False),
         sa.Column("destination_ref", sa.String(length=255), nullable=False),
-        sa.Column("expected_oid_algorithm", sa.String(length=8), nullable=False),
-        sa.Column("expected_oid_hex", sa.String(length=64), nullable=False),
+        sa.Column("expected_remote_state", sa.String(length=16), nullable=False),
+        sa.Column("expected_oid_algorithm", sa.String(length=8), nullable=True),
+        sa.Column("expected_oid_hex", sa.String(length=64), nullable=True),
         sa.Column("desired_oid_algorithm", sa.String(length=8), nullable=False),
         sa.Column("desired_oid_hex", sa.String(length=64), nullable=False),
         sa.Column("observed_oid_algorithm", sa.String(length=8), nullable=True),
@@ -266,8 +304,11 @@ def upgrade() -> None:
             name="ck_git_remote_digests",
         ),
         sa.CheckConstraint(
-            _required_oid_shape("expected")
-            + " AND "
+            "((expected_remote_state='absent' AND expected_oid_algorithm IS NULL "
+            "AND expected_oid_hex IS NULL) OR "
+            "(expected_remote_state='oid' AND "
+            + _required_oid_shape("expected")
+            + ")) AND "
             + _required_oid_shape("desired")
             + " AND "
             + _optional_oid_shape("observed"),
@@ -277,7 +318,8 @@ def upgrade() -> None:
             "transport_state IN ('not_started','accepted','sent','lost_response',"
             "'completed','uncertain') AND updated_at>=created_at "
             "AND (transport_state!='completed' OR "
-            "(remote_reconciled=1 AND observed_oid_hex=desired_oid_hex "
+            "(remote_reconciled=1 AND observed_oid_algorithm=desired_oid_algorithm "
+            "AND observed_oid_hex=desired_oid_hex "
             "AND credential_use_evidence_sha256 IS NOT NULL "
             "AND credential_cleanup_complete=1))",
             name="ck_git_remote_state",
@@ -328,9 +370,28 @@ def upgrade() -> None:
             NEW.credential_reference_sha256 IS NOT OLD.credential_reference_sha256 OR
             NEW.created_at!=OLD.created_at
           THEN RAISE(ABORT, 'Git operation immutable facts changed') END;
-          SELECT CASE WHEN NEW.current_stage_generation<OLD.current_stage_generation OR
+          SELECT CASE WHEN
+            NOT (
+              NEW.aggregate_effect_knowledge=OLD.aggregate_effect_knowledge OR
+              (OLD.aggregate_effect_knowledge='none' AND
+               NEW.aggregate_effect_knowledge IN
+               ('known_no_effect','known_effect','partial','uncertain')) OR
+              (OLD.aggregate_effect_knowledge='uncertain' AND
+               NEW.aggregate_effect_knowledge IN
+               ('known_no_effect','known_effect','partial')) OR
+              (OLD.aggregate_effect_knowledge='partial' AND
+               NEW.aggregate_effect_knowledge='known_effect')
+            ) OR NOT (
+              NEW.state=OLD.state OR
+              (OLD.state='planned' AND
+               NEW.state IN ('active','recovery_required','terminal')) OR
+              (OLD.state='active' AND NEW.state IN ('recovery_required','terminal')) OR
+              (OLD.state='recovery_required' AND NEW.state='terminal')
+            ) OR NEW.current_stage_generation<OLD.current_stage_generation OR
             NEW.updated_at<OLD.updated_at OR
-            (OLD.state='terminal' AND NEW.state!='terminal')
+            (OLD.last_reconciled_at IS NOT NULL AND
+             (NEW.last_reconciled_at IS NULL OR
+              NEW.last_reconciled_at<OLD.last_reconciled_at))
           THEN RAISE(ABORT, 'Git operation state regressed') END;
         END
         """
@@ -347,14 +408,142 @@ def upgrade() -> None:
             NEW.pre_state_sha256!=OLD.pre_state_sha256 OR
             NEW.member_ticket_id IS NOT OLD.member_ticket_id OR
             NEW.member_ticket_sha256 IS NOT OLD.member_ticket_sha256 OR
+            NEW.before_oid_algorithm IS NOT OLD.before_oid_algorithm OR
+            NEW.before_oid_hex IS NOT OLD.before_oid_hex OR
             NEW.created_at!=OLD.created_at
           THEN RAISE(ABORT, 'Git stage immutable facts changed') END;
-          SELECT CASE WHEN NEW.cancel_generation<OLD.cancel_generation OR
+          SELECT CASE WHEN
+            (OLD.acceptance_state!='unresolved' AND
+             NEW.acceptance_state!=OLD.acceptance_state) OR
+            (OLD.execution_id IS NOT NULL AND NEW.execution_id IS NOT OLD.execution_id) OR
+            (OLD.after_oid_algorithm IS NOT NULL AND
+             NEW.after_oid_algorithm IS NOT OLD.after_oid_algorithm) OR
+            (OLD.after_oid_hex IS NOT NULL AND NEW.after_oid_hex IS NOT OLD.after_oid_hex) OR
+            (OLD.cleanup_evidence_sha256 IS NOT NULL AND
+             NEW.cleanup_evidence_sha256 IS NOT OLD.cleanup_evidence_sha256) OR
+            (OLD.closed_at IS NOT NULL AND NEW.closed_at IS NOT OLD.closed_at) OR
+            NOT (
+              NEW.crossing_state=OLD.crossing_state OR
+              (OLD.crossing_state='not_crossed' AND
+               NEW.crossing_state IN ('start_committed','classified')) OR
+              (OLD.crossing_state='start_committed' AND NEW.crossing_state='classified')
+            ) OR NOT (
+              NEW.effect_knowledge=OLD.effect_knowledge OR
+              (OLD.effect_knowledge='none' AND
+               NEW.effect_knowledge IN ('known_no_effect','known_effect','partial','uncertain')) OR
+              (OLD.effect_knowledge='uncertain' AND
+               NEW.effect_knowledge IN ('known_no_effect','known_effect','partial')) OR
+              (OLD.effect_knowledge='partial' AND NEW.effect_knowledge='known_effect')
+            ) OR NOT (
+              NEW.state=OLD.state OR
+              (OLD.state='planned' AND NEW.state IN
+               ('dispatched','running','cleanup_pending','closed','uncertain')) OR
+              (OLD.state='dispatched' AND NEW.state IN
+               ('running','cleanup_pending','closed','uncertain')) OR
+              (OLD.state='running' AND NEW.state IN
+               ('cleanup_pending','closed','uncertain')) OR
+              (OLD.state='cleanup_pending' AND NEW.state IN ('closed','uncertain')) OR
+              (OLD.state='uncertain' AND NEW.state='closed')
+            ) OR NEW.cancel_generation<OLD.cancel_generation OR
             NEW.acknowledged_cancel_generation<OLD.acknowledged_cancel_generation OR
             NEW.executor_evidence_generation<OLD.executor_evidence_generation OR
             NEW.cleanup_complete<OLD.cleanup_complete OR NEW.updated_at<OLD.updated_at OR
-            (OLD.state IN ('closed','uncertain') AND NEW.state!=OLD.state)
+            (OLD.state='closed' AND NEW.state!='closed')
           THEN RAISE(ABORT, 'Git stage evidence regressed') END;
+        END
+        """
+    )
+    op.execute(
+        """
+        CREATE TRIGGER git_commit_evidence_guarded_update
+        BEFORE UPDATE ON git_commit_evidence
+        BEGIN
+          SELECT CASE WHEN
+            NEW.operation_id!=OLD.operation_id OR
+            NEW.commit_oid_algorithm!=OLD.commit_oid_algorithm OR
+            NEW.commit_oid_hex!=OLD.commit_oid_hex OR
+            NEW.tree_oid_algorithm!=OLD.tree_oid_algorithm OR
+            NEW.tree_oid_hex!=OLD.tree_oid_hex OR
+            NEW.parent_oid_algorithm!=OLD.parent_oid_algorithm OR
+            NEW.parent_oid_hex!=OLD.parent_oid_hex OR
+            NEW.author_sha256!=OLD.author_sha256 OR
+            NEW.committer_sha256!=OLD.committer_sha256 OR
+            NEW.message_sha256!=OLD.message_sha256 OR
+            NEW.preimage_sha256!=OLD.preimage_sha256 OR
+            NEW.author_at!=OLD.author_at OR NEW.committer_at!=OLD.committer_at OR
+            NEW.signer_profile_sha256!=OLD.signer_profile_sha256 OR
+            NEW.signer_public_fingerprint!=OLD.signer_public_fingerprint OR
+            NEW.signature_sha256!=OLD.signature_sha256 OR
+            NEW.expected_main_index_identity_sha256!=
+              OLD.expected_main_index_identity_sha256 OR
+            NEW.expected_main_index_tree_oid_algorithm!=
+              OLD.expected_main_index_tree_oid_algorithm OR
+            NEW.expected_main_index_tree_oid_hex!=OLD.expected_main_index_tree_oid_hex OR
+            NEW.expected_main_index_sha256!=OLD.expected_main_index_sha256 OR
+            NEW.target_main_index_tree_oid_algorithm!=
+              OLD.target_main_index_tree_oid_algorithm OR
+            NEW.target_main_index_tree_oid_hex!=OLD.target_main_index_tree_oid_hex OR
+            NEW.target_main_index_sha256!=OLD.target_main_index_sha256 OR
+            NEW.selected_worktree_snapshot_sha256!=OLD.selected_worktree_snapshot_sha256 OR
+            NEW.created_at!=OLD.created_at
+          THEN RAISE(ABORT, 'Git commit immutable facts changed') END;
+          SELECT CASE WHEN
+            NEW.signature_verified<OLD.signature_verified OR
+            NEW.object_imported<OLD.object_imported OR
+            NEW.branch_cas_complete<OLD.branch_cas_complete OR
+            (OLD.main_index_publication_receipt_sha256 IS NOT NULL AND
+             NEW.main_index_publication_receipt_sha256 IS NOT
+               OLD.main_index_publication_receipt_sha256) OR
+            (OLD.worktree_evidence_sha256 IS NOT NULL AND
+             NEW.worktree_evidence_sha256 IS NOT OLD.worktree_evidence_sha256) OR
+            NOT (
+              NEW.main_index_publication_state=OLD.main_index_publication_state OR
+              (OLD.main_index_publication_state='pending' AND
+               NEW.main_index_publication_state IN ('not_required','complete','uncertain'))
+            ) OR NEW.updated_at<OLD.updated_at
+          THEN RAISE(ABORT, 'Git commit evidence regressed') END;
+        END
+        """
+    )
+    op.execute(
+        """
+        CREATE TRIGGER git_remote_evidence_guarded_update
+        BEFORE UPDATE ON git_remote_evidence
+        BEGIN
+          SELECT CASE WHEN
+            NEW.operation_id!=OLD.operation_id OR
+            NEW.remote_profile_sha256!=OLD.remote_profile_sha256 OR
+            NEW.destination_sha256!=OLD.destination_sha256 OR
+            NEW.outbound_closure_sha256!=OLD.outbound_closure_sha256 OR
+            NEW.source_ref!=OLD.source_ref OR NEW.destination_ref!=OLD.destination_ref OR
+            NEW.expected_remote_state!=OLD.expected_remote_state OR
+            NEW.expected_oid_algorithm IS NOT OLD.expected_oid_algorithm OR
+            NEW.expected_oid_hex IS NOT OLD.expected_oid_hex OR
+            NEW.desired_oid_algorithm!=OLD.desired_oid_algorithm OR
+            NEW.desired_oid_hex!=OLD.desired_oid_hex OR NEW.created_at!=OLD.created_at
+          THEN RAISE(ABORT, 'Git remote immutable facts changed') END;
+          SELECT CASE WHEN
+            (OLD.observed_oid_algorithm IS NOT NULL AND
+             NEW.observed_oid_algorithm IS NOT OLD.observed_oid_algorithm) OR
+            (OLD.observed_oid_hex IS NOT NULL AND
+             NEW.observed_oid_hex IS NOT OLD.observed_oid_hex) OR
+            (OLD.credential_use_evidence_sha256 IS NOT NULL AND
+             NEW.credential_use_evidence_sha256 IS NOT
+               OLD.credential_use_evidence_sha256) OR
+            NEW.remote_reconciled<OLD.remote_reconciled OR
+            NEW.credential_cleanup_complete<OLD.credential_cleanup_complete OR
+            NOT (
+              NEW.transport_state=OLD.transport_state OR
+              (OLD.transport_state='not_started' AND NEW.transport_state IN
+               ('accepted','sent','lost_response','completed','uncertain')) OR
+              (OLD.transport_state='accepted' AND NEW.transport_state IN
+               ('sent','lost_response','completed','uncertain')) OR
+              (OLD.transport_state='sent' AND NEW.transport_state IN
+               ('lost_response','completed','uncertain')) OR
+              (OLD.transport_state IN ('lost_response','uncertain') AND
+               NEW.transport_state='completed')
+            ) OR NEW.updated_at<OLD.updated_at
+          THEN RAISE(ABORT, 'Git remote evidence regressed') END;
         END
         """
     )
@@ -369,6 +558,8 @@ def downgrade() -> None:
         "UPDATE kernel_meta SET schema_generation=4, updated_at=CURRENT_TIMESTAMP "
         "WHERE id=1 AND schema_generation=5"
     )
+    op.execute("DROP TRIGGER git_remote_evidence_guarded_update")
+    op.execute("DROP TRIGGER git_commit_evidence_guarded_update")
     op.execute("DROP TRIGGER git_operation_stages_guarded_update")
     op.execute("DROP TRIGGER git_operations_guarded_update")
     for table in (

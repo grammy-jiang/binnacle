@@ -97,12 +97,164 @@ def test_git_operation_constraints_bind_full_typed_oids_and_retained_identity(
                 "UPDATE git_operations SET request_sha256=? WHERE operation_id=?",
                 ("e" * 64, values[0]),
             )
+        connection.execute(
+            "UPDATE git_operations SET state='active',aggregate_effect_knowledge='known_effect',"
+            "updated_at=datetime(updated_at,'+1 second') WHERE operation_id=?",
+            (values[0],),
+        )
+        with pytest.raises(sqlite3.IntegrityError, match="state regressed"):
+            connection.execute(
+                "UPDATE git_operations SET state='planned',aggregate_effect_knowledge='none',"
+                "updated_at=datetime(updated_at,'+2 seconds') WHERE operation_id=?",
+                (values[0],),
+            )
 
     malformed = list(values)
     malformed[12] = "1" * 39
     malformed[0] = "malformed-oid"
     with closing(sqlite3.connect(database)) as connection, pytest.raises(sqlite3.IntegrityError):
         connection.execute(insert, tuple(malformed))
+
+
+def test_git_commit_and_stage_recovery_evidence_is_exact_and_monotonic(
+    tmp_path: Path,
+    repo_root: Path,
+) -> None:
+    database = tmp_path / "application.sqlite3"
+    migrate_database(database, repo_root)
+    with closing(sqlite3.connect(database)) as connection, connection:
+        connection.execute(
+            """
+            INSERT INTO git_commit_evidence (
+              operation_id,commit_oid_algorithm,commit_oid_hex,tree_oid_algorithm,tree_oid_hex,
+              parent_oid_algorithm,parent_oid_hex,author_sha256,committer_sha256,message_sha256,
+              preimage_sha256,author_at,committer_at,signer_profile_sha256,
+              signer_public_fingerprint,signature_sha256,signature_verified,object_imported,
+              branch_cas_complete,expected_main_index_identity_sha256,
+              expected_main_index_tree_oid_algorithm,expected_main_index_tree_oid_hex,
+              expected_main_index_sha256,target_main_index_tree_oid_algorithm,
+              target_main_index_tree_oid_hex,target_main_index_sha256,
+              selected_worktree_snapshot_sha256,main_index_publication_state,
+              main_index_publication_receipt_sha256,worktree_evidence_sha256,
+              created_at,updated_at
+            ) VALUES (
+              'commit-op','sha1',?,'sha1',?,'sha1',?,?,?,?,?,
+              CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,?,?,?,0,0,0,?,
+              'sha1',? ,?,'sha1',?,?,?,'pending',NULL,NULL,
+              CURRENT_TIMESTAMP,CURRENT_TIMESTAMP
+            )
+            """,
+            (
+                "1" * 40,
+                "2" * 40,
+                "3" * 40,
+                "a" * 64,
+                "b" * 64,
+                "c" * 64,
+                "d" * 64,
+                "e" * 64,
+                "OPENPGP:test",
+                "f" * 64,
+                "0" * 64,
+                "3" * 40,
+                "1" * 64,
+                "2" * 40,
+                "2" * 64,
+                "4" * 64,
+            ),
+        )
+        connection.execute(
+            "UPDATE git_commit_evidence SET main_index_publication_state='not_required', "
+            "updated_at=datetime(updated_at,'+1 second') WHERE operation_id='commit-op'"
+        )
+        with pytest.raises(sqlite3.IntegrityError, match="commit evidence regressed"):
+            connection.execute(
+                "UPDATE git_commit_evidence SET main_index_publication_state='pending', "
+                "updated_at=datetime(updated_at,'+2 seconds') WHERE operation_id='commit-op'"
+            )
+        with pytest.raises(sqlite3.IntegrityError, match="immutable"):
+            connection.execute(
+                "UPDATE git_commit_evidence SET commit_oid_hex=? WHERE operation_id='commit-op'",
+                ("9" * 40,),
+            )
+
+        connection.execute(
+            """
+            INSERT INTO git_operation_stages (
+              operation_id,stage_generation,member_id,stage_kind,input_sha256,pre_state_sha256,
+              member_ticket_id,member_ticket_sha256,acceptance_state,execution_id,crossing_state,
+              effect_knowledge,before_oid_algorithm,before_oid_hex,after_oid_algorithm,
+              after_oid_hex,cancel_generation,acknowledged_cancel_generation,
+              executor_evidence_generation,cleanup_complete,cleanup_evidence_sha256,state,
+              created_at,updated_at,closed_at
+            ) VALUES (
+              'stage-op',1,'member-1','branch_ref_cas',?,?, 'ticket-1',?,'accepted',
+              'execution-1','start_committed','known_effect','sha1',?,NULL,NULL,
+              0,0,1,0,NULL,'running',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,NULL
+            )
+            """,
+            ("a" * 64, "b" * 64, "c" * 64, "1" * 40),
+        )
+        with pytest.raises(sqlite3.IntegrityError, match="stage evidence regressed"):
+            connection.execute(
+                """
+                UPDATE git_operation_stages
+                SET acceptance_state='no_accept',execution_id=NULL,crossing_state='not_crossed',
+                    effect_knowledge='none',state='planned',
+                    updated_at=datetime(updated_at,'+1 second')
+                WHERE operation_id='stage-op' AND stage_generation=1
+                """
+            )
+
+
+def test_git_remote_expected_absence_and_retained_evidence_are_discriminated(
+    tmp_path: Path,
+    repo_root: Path,
+) -> None:
+    database = tmp_path / "application.sqlite3"
+    migrate_database(database, repo_root)
+    insert = """
+        INSERT INTO git_remote_evidence (
+          operation_id,remote_profile_sha256,destination_sha256,outbound_closure_sha256,
+          source_ref,destination_ref,expected_remote_state,expected_oid_algorithm,
+          expected_oid_hex,desired_oid_algorithm,desired_oid_hex,observed_oid_algorithm,
+          observed_oid_hex,transport_state,credential_use_evidence_sha256,remote_reconciled,
+          credential_cleanup_complete,created_at,updated_at
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
+    """
+    values = (
+        "remote-op",
+        "a" * 64,
+        "b" * 64,
+        "c" * 64,
+        "refs/heads/agent/phase-08",
+        "refs/heads/agent/phase-08",
+        "absent",
+        None,
+        None,
+        "sha1",
+        "1" * 40,
+        None,
+        None,
+        "not_started",
+        None,
+        0,
+        0,
+    )
+    with closing(sqlite3.connect(database)) as connection, connection:
+        connection.execute(insert, values)
+        with pytest.raises(sqlite3.IntegrityError, match="immutable"):
+            connection.execute(
+                "UPDATE git_remote_evidence SET destination_ref=? WHERE operation_id='remote-op'",
+                ("refs/heads/agent/other",),
+            )
+
+    contradictory = list(values)
+    contradictory[0] = "contradictory-remote"
+    contradictory[7] = "sha1"
+    contradictory[8] = "2" * 40
+    with closing(sqlite3.connect(database)) as connection, pytest.raises(sqlite3.IntegrityError):
+        connection.execute(insert, tuple(contradictory))
 
 
 def test_executor_git_migration_is_separate_and_unpromoted_rows_fail_integrity(
@@ -135,6 +287,96 @@ def test_executor_git_migration_is_separate_and_unpromoted_rows_fail_integrity(
             for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
     assert not app_tables & executor_tables
+
+
+def test_executor_git_ticket_union_and_retained_receipts_are_closed(
+    tmp_path: Path,
+    repo_root: Path,
+) -> None:
+    database = tmp_path / "executor.sqlite3"
+    _migrate(database, repo_root / "alembic-executor.ini", repo_root / "migrations_executor")
+    insert_member = """
+        INSERT INTO git_members (
+          member_id,ticket_kind,parent_identity,parent_operation_id,read_request_id,
+          stage_generation,application_generation,repository_profile_sha256,
+          repository_safety_sha256,git_plan_sha256,operation_kind,ticket_id,ticket_sha256,
+          nonce_sha256,acceptance_state,execution_id,state,last_evidence_generation,
+          cancel_generation,acknowledged_cancel_generation,cleanup_complete,
+          cleanup_evidence_sha256,created_at,updated_at,closed_at
+        ) VALUES (
+          ?,?,?,?,?,?,1,?,?,?, ?,?,?,?,'unresolved',NULL,'registered',0,0,0,0,NULL,
+          CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,NULL
+        )
+    """
+    read_values = (
+        "read-member",
+        "git_read",
+        "read-request",
+        None,
+        "read-request",
+        None,
+        "a" * 64,
+        "b" * 64,
+        "c" * 64,
+        "status",
+        "read-ticket",
+        "d" * 64,
+        "e" * 64,
+    )
+    with closing(sqlite3.connect(database)) as connection, connection:
+        connection.execute(insert_member, read_values)
+        write_shaped_read = list(read_values)
+        write_shaped_read[0] = "write-shaped-read"
+        write_shaped_read[9] = "commit"
+        write_shaped_read[10] = "write-shaped-ticket"
+        write_shaped_read[11] = "f" * 64
+        write_shaped_read[12] = "0" * 64
+        with pytest.raises(sqlite3.IntegrityError):
+            connection.execute(insert_member, tuple(write_shaped_read))
+
+        wrong_parent = list(read_values)
+        wrong_parent[0] = "wrong-parent"
+        wrong_parent[2] = "another-read-request"
+        wrong_parent[10] = "wrong-parent-ticket"
+        wrong_parent[11] = "1" * 64
+        wrong_parent[12] = "2" * 64
+        with pytest.raises(sqlite3.IntegrityError):
+            connection.execute(insert_member, tuple(wrong_parent))
+
+        connection.execute(
+            """
+            INSERT INTO git_read_generations (
+              application_generation,application_instance_sha256,state,accepted_high_water,
+              sealed_high_water,outstanding_domains,quiescence_receipt_sha256,opened_at,
+              close_requested_at,drained_at
+            ) VALUES (
+              2,?,'drained',1,1,0,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP
+            )
+            """,
+            ("3" * 64, "4" * 64),
+        )
+        with pytest.raises(sqlite3.IntegrityError, match="generation evidence regressed"):
+            connection.execute(
+                "UPDATE git_read_generations SET state='open',close_requested_at=NULL,"
+                "drained_at=NULL,quiescence_receipt_sha256=NULL "
+                "WHERE application_generation=2"
+            )
+        connection.execute(
+            """
+            INSERT INTO git_read_no_accept_tombstones (
+              application_generation,read_request_id,member_id,ticket_sha256,seal_high_water,
+              receipt_sha256,sealed_at,retain_until
+            ) VALUES (2,'sealed-read','sealed-member',?,1,?,CURRENT_TIMESTAMP,
+                      datetime('now','+1 day'))
+            """,
+            ("5" * 64, "6" * 64),
+        )
+        with pytest.raises(sqlite3.IntegrityError, match="tombstone evidence regressed"):
+            connection.execute(
+                "UPDATE git_read_no_accept_tombstones SET receipt_sha256=? "
+                "WHERE application_generation=2 AND read_request_id='sealed-read'",
+                ("7" * 64,),
+            )
 
 
 def test_credential_broker_migration_is_isolated_and_default_disabled(

@@ -155,6 +155,23 @@ def test_worktree_helper_surfaces_are_rejected_at_any_depth(
     assert reason in assessment.reason_codes
 
 
+def test_git_info_attributes_are_hashed_and_cannot_select_helpers(tmp_path: Path) -> None:
+    root = tmp_path / "repo"
+    profile = initialize_repository_shape(root)
+    validator = BoundedGitRepositoryProfileValidator()
+    before = validator.validate(profile)
+    attributes = root / ".git" / "info" / "attributes"
+    attributes.write_text("*.txt text\n", encoding="utf-8")
+
+    safe = validator.validate(profile)
+    assert safe.safe
+    assert safe.repository_safety_sha256 != before.repository_safety_sha256
+
+    attributes.write_text("*.txt diff=external-driver\n", encoding="utf-8")
+    unsafe = validator.validate(profile)
+    assert "unsafe_attributes" in unsafe.reason_codes
+
+
 def test_hooks_and_worktree_config_are_rejected(tmp_path: Path) -> None:
     root = tmp_path / "repo"
     profile = initialize_repository_shape(root)
@@ -230,6 +247,21 @@ def test_root_shape_and_all_inspection_limits_fail_closed(tmp_path: Path) -> Non
 
     with pytest.raises(ValueError, match="positive"):
         BoundedGitRepositoryProfileValidator(maximum_files=0)
+
+
+def test_tree_and_hook_enumeration_stop_at_the_configured_bound(tmp_path: Path) -> None:
+    root = tmp_path / "repo"
+    profile = initialize_repository_shape(root)
+    for index in range(20):
+        (root / f"directory-{index:02d}").mkdir()
+        (root / ".git" / "hooks" / f"sample-{index:02d}.sample").write_text(
+            "sample",
+            encoding="utf-8",
+        )
+
+    assessment = BoundedGitRepositoryProfileValidator(maximum_tree_entries=3).validate(profile)
+
+    assert "inspection_limit" in assessment.reason_codes
 
 
 def test_git_directory_and_marker_directory_type_confusion_fail_closed(tmp_path: Path) -> None:

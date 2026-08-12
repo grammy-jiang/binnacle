@@ -250,6 +250,8 @@ def _verify_database(
     if connection.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
         raise KernelVerificationError("SQLite integrity check failed")
     connection.execute("PRAGMA foreign_keys=ON")
+    if connection.execute("PRAGMA foreign_key_check").fetchone() is not None:
+        raise KernelVerificationError("SQLite foreign-key integrity check failed")
     connection.execute(f"PRAGMA busy_timeout={busy_timeout_ms}")
     connection.execute(f"PRAGMA wal_autocheckpoint={wal_autocheckpoint_pages}")
     tables = frozenset(
@@ -604,6 +606,9 @@ def _verify_git_invariants(connection: sqlite3.Connection) -> None:
                OR o.operation_contract!=('git_' || go.operation_kind)
                OR o.tool_name!=o.operation_contract
                OR o.state IN ('received','rejected')
+               OR go.aggregate_effect_knowledge!=o.effect_knowledge
+               OR (go.state='terminal' AND o.terminality!='terminal')
+               OR (go.state!='terminal' AND o.terminality='terminal')
                OR (go.state!='terminal' AND
                    (f.active_operation_id!=go.operation_id
                     OR f.fence_version!=go.workspace_fence_version
@@ -624,7 +629,15 @@ def _verify_git_invariants(connection: sqlite3.Connection) -> None:
             WHERE go.state='terminal' AND EXISTS (
                 SELECT 1 FROM git_operation_stages gs
                 WHERE gs.operation_id=go.operation_id
-                  AND gs.state NOT IN ('closed','uncertain'))
+                  AND (gs.state!='closed' OR gs.acceptance_state='unresolved'
+                       OR gs.cleanup_complete=0
+                       OR gs.acknowledged_cancel_generation!=gs.cancel_generation
+                       OR gs.effect_knowledge IN ('none','uncertain')
+                       OR (gs.acceptance_state='no_accept'
+                           AND (gs.crossing_state!='not_crossed'
+                                OR gs.effect_knowledge!='known_no_effect'))
+                       OR (gs.acceptance_state='accepted'
+                           AND gs.crossing_state!='classified')))
         """,
         "Git specialized evidence": """
             SELECT (SELECT COUNT(*) FROM git_commit_evidence ce

@@ -83,6 +83,13 @@ class _Inspection:
         self.facts.append((relative_path, hashlib.sha256(content).hexdigest(), len(content)))
 
 
+@dataclass(frozen=True, slots=True)
+class _DirectoryEntry:
+    name: str
+    is_symlink: bool
+    is_directory: bool
+
+
 class BoundedGitRepositoryProfileValidator:
     """Reject helper-bearing or indeterminate repository shapes without running Git."""
 
@@ -151,6 +158,19 @@ class BoundedGitRepositoryProfileValidator:
             if worktree_config is not None:
                 inspection.reasons.add("linked_worktrees_present")
                 self._inspect_config(worktree_config, profile, inspection)
+
+            info_attributes = self._read_file(
+                git_fd,
+                ("info", "attributes"),
+                inspection,
+                required=False,
+            )
+            if info_attributes is not None:
+                self._inspect_repository_control_file(
+                    ".gitattributes",
+                    info_attributes,
+                    inspection,
+                )
 
             self._inspect_git_markers(git_fd, inspection)
             self._scan_worktree(root_fd, inspection)
@@ -277,7 +297,7 @@ class BoundedGitRepositoryProfileValidator:
             if self._directory_has_entries(git_fd, parts):
                 inspection.reasons.add(reason)
 
-        hooks = self._directory_entries(git_fd, ("hooks",))
+        hooks = self._directory_entries(git_fd, ("hooks",), inspection)
         if hooks is not None and any(not entry.endswith(".sample") for entry in hooks):
             inspection.reasons.add("hooks_present")
 
@@ -288,12 +308,12 @@ class BoundedGitRepositoryProfileValidator:
             parts, relative_directory = pending.pop()
             directory_fd = self._open_directory(root_fd, parts)
             try:
-                with os.scandir(directory_fd) as iterator:
-                    entries = sorted(iterator, key=lambda entry: entry.name)
-                entries_seen += len(entries)
-                if entries_seen > self._maximum_tree_entries:
+                remaining_entries = self._maximum_tree_entries - entries_seen
+                entries, overflow = _bounded_directory_entries(directory_fd, remaining_entries)
+                if overflow:
                     inspection.reasons.add("inspection_limit")
                     return
+                entries_seen += len(entries)
                 for entry in entries:
                     if entry.name == ".git" and not relative_directory:
                         continue
@@ -303,7 +323,7 @@ class BoundedGitRepositoryProfileValidator:
                         else f"{relative_directory}/{entry.name}"
                     )
                     if entry.name in _RELEVANT_WORKTREE_NAMES:
-                        if entry.is_symlink():
+                        if entry.is_symlink:
                             inspection.reasons.add("unsafe_attributes")
                             continue
                         content = self._read_file(
@@ -319,7 +339,7 @@ class BoundedGitRepositoryProfileValidator:
                                 content,
                                 inspection,
                             )
-                    elif entry.is_dir(follow_symlinks=False):
+                    elif entry.is_directory:
                         pending.append(((*parts, entry.name), relative_path))
             finally:
                 os.close(directory_fd)
@@ -426,6 +446,7 @@ class BoundedGitRepositoryProfileValidator:
         self,
         parent_fd: int,
         parts: tuple[str, ...],
+        inspection: _Inspection,
     ) -> tuple[str, ...] | None:
         directory_fd = os.dup(parent_fd)
         try:
@@ -437,7 +458,13 @@ class BoundedGitRepositoryProfileValidator:
                 )
                 os.close(directory_fd)
                 directory_fd = next_fd
-            return tuple(sorted(os.listdir(directory_fd)))
+            entries, overflow = _bounded_directory_entries(
+                directory_fd,
+                self._maximum_tree_entries,
+            )
+            if overflow:
+                inspection.reasons.add("inspection_limit")
+            return tuple(entry.name for entry in entries)
         except FileNotFoundError:
             return None
         except OSError:
@@ -446,8 +473,24 @@ class BoundedGitRepositoryProfileValidator:
             os.close(directory_fd)
 
     def _directory_has_entries(self, parent_fd: int, parts: tuple[str, ...]) -> bool:
-        entries = self._directory_entries(parent_fd, parts)
-        return entries is not None and bool(entries)
+        directory_fd = os.dup(parent_fd)
+        try:
+            for part in parts:
+                next_fd = os.open(
+                    part,
+                    os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLOW,
+                    dir_fd=directory_fd,
+                )
+                os.close(directory_fd)
+                directory_fd = next_fd
+            with os.scandir(directory_fd) as iterator:
+                return next(iterator, None) is not None
+        except FileNotFoundError:
+            return False
+        except OSError:
+            return True
+        finally:
+            os.close(directory_fd)
 
     @staticmethod
     def _result(
@@ -489,6 +532,25 @@ def _read_bounded(file_fd: int, expected_size: int, maximum_bytes: int) -> bytes
     if len(content) != expected_size:
         raise OSError("repository control file changed during inspection")
     return content
+
+
+def _bounded_directory_entries(
+    directory_fd: int,
+    maximum_entries: int,
+) -> tuple[tuple[_DirectoryEntry, ...], bool]:
+    entries: list[_DirectoryEntry] = []
+    with os.scandir(directory_fd) as iterator:
+        for entry in iterator:
+            if len(entries) >= maximum_entries:
+                return tuple(sorted(entries, key=lambda item: item.name)), True
+            entries.append(
+                _DirectoryEntry(
+                    name=entry.name,
+                    is_symlink=entry.is_symlink(),
+                    is_directory=entry.is_dir(follow_symlinks=False),
+                )
+            )
+    return tuple(sorted(entries, key=lambda item: item.name)), False
 
 
 __all__ = ["BoundedGitRepositoryProfileValidator"]

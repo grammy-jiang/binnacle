@@ -96,15 +96,17 @@ def upgrade() -> None:
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("closed_at", sa.DateTime(timezone=True), nullable=True),
         sa.CheckConstraint(
-            "ticket_kind IN ('git_read','git_operation_member') "
-            "AND operation_kind IN ('status','diff','branch_create','switch','commit',"
-            "'fetch','pull','push')",
+            "(ticket_kind='git_read' AND operation_kind IN ('status','diff')) OR "
+            "(ticket_kind='git_operation_member' AND operation_kind IN "
+            "('status','diff','branch_create','switch','commit','fetch','pull','push'))",
             name="ck_git_members_kind",
         ),
         sa.CheckConstraint(
             "((ticket_kind='git_read' AND read_request_id IS NOT NULL "
+            "AND parent_identity=read_request_id "
             "AND parent_operation_id IS NULL AND stage_generation IS NULL) OR "
             "(ticket_kind='git_operation_member' AND parent_operation_id IS NOT NULL "
+            "AND parent_identity=parent_operation_id "
             "AND read_request_id IS NULL AND stage_generation>=1))",
             name="ck_git_members_parent_shape",
         ),
@@ -129,7 +131,13 @@ def upgrade() -> None:
             "AND state IN ('registered','accepted','running','cleanup_pending',"
             "'closed','uncertain') "
             "AND (state NOT IN ('closed','uncertain') OR closed_at IS NOT NULL) "
-            "AND (cleanup_complete=0 OR cleanup_evidence_sha256 IS NOT NULL)",
+            "AND (cleanup_complete=0 OR cleanup_evidence_sha256 IS NOT NULL) "
+            "AND (state NOT IN ('closed','uncertain') OR acceptance_state!='unresolved') "
+            "AND (acceptance_state!='unresolved' OR state='registered') "
+            "AND (acceptance_state!='no_accept' OR state='closed') "
+            "AND (acceptance_state!='accepted' OR state!='registered') "
+            "AND (state!='closed' OR (cleanup_complete=1 "
+            "AND acknowledged_cancel_generation=cancel_generation))",
             name="ck_git_members_state",
         ),
         sa.PrimaryKeyConstraint("member_id", name="pk_git_members"),
@@ -201,7 +209,16 @@ def upgrade() -> None:
             NEW.opened_at!=OLD.opened_at OR
             NEW.accepted_high_water<OLD.accepted_high_water OR
             NEW.sealed_high_water<OLD.sealed_high_water OR
-            (OLD.state='drained' AND NEW.state!='drained')
+            (OLD.close_requested_at IS NOT NULL AND
+             NEW.close_requested_at IS NOT OLD.close_requested_at) OR
+            (OLD.drained_at IS NOT NULL AND NEW.drained_at IS NOT OLD.drained_at) OR
+            (OLD.quiescence_receipt_sha256 IS NOT NULL AND
+             NEW.quiescence_receipt_sha256 IS NOT OLD.quiescence_receipt_sha256) OR
+            NOT (
+              NEW.state=OLD.state OR
+              (OLD.state='open' AND NEW.state='closing') OR
+              (OLD.state='closing' AND NEW.state='drained')
+            )
           THEN RAISE(ABORT, 'Git read generation evidence regressed') END;
         END
         """
@@ -226,12 +243,45 @@ def upgrade() -> None:
             NEW.created_at!=OLD.created_at
           THEN RAISE(ABORT, 'Git member immutable facts changed') END;
           SELECT CASE WHEN
+            (OLD.acceptance_state!='unresolved' AND
+             NEW.acceptance_state!=OLD.acceptance_state) OR
+            (OLD.execution_id IS NOT NULL AND NEW.execution_id IS NOT OLD.execution_id) OR
+            (OLD.cleanup_evidence_sha256 IS NOT NULL AND
+             NEW.cleanup_evidence_sha256 IS NOT OLD.cleanup_evidence_sha256) OR
+            (OLD.closed_at IS NOT NULL AND NEW.closed_at IS NOT OLD.closed_at) OR
+            NOT (
+              NEW.state=OLD.state OR
+              (OLD.state='registered' AND NEW.state IN
+               ('accepted','running','cleanup_pending','closed','uncertain')) OR
+              (OLD.state='accepted' AND NEW.state IN
+               ('running','cleanup_pending','closed','uncertain')) OR
+              (OLD.state='running' AND NEW.state IN
+               ('cleanup_pending','closed','uncertain')) OR
+              (OLD.state='cleanup_pending' AND NEW.state IN ('closed','uncertain')) OR
+              (OLD.state='uncertain' AND NEW.state='closed')
+            ) OR
             NEW.last_evidence_generation<OLD.last_evidence_generation OR
             NEW.cancel_generation<OLD.cancel_generation OR
             NEW.acknowledged_cancel_generation<OLD.acknowledged_cancel_generation OR
             NEW.cleanup_complete<OLD.cleanup_complete OR NEW.updated_at<OLD.updated_at OR
-            (OLD.state IN ('closed','uncertain') AND NEW.state!=OLD.state)
+            (OLD.state='closed' AND NEW.state!='closed')
           THEN RAISE(ABORT, 'Git member evidence regressed') END;
+        END
+        """
+    )
+    op.execute(
+        """
+        CREATE TRIGGER git_read_no_accept_tombstones_guarded_update
+        BEFORE UPDATE ON git_read_no_accept_tombstones
+        BEGIN
+          SELECT CASE WHEN
+            NEW.application_generation!=OLD.application_generation OR
+            NEW.read_request_id!=OLD.read_request_id OR NEW.member_id!=OLD.member_id OR
+            NEW.ticket_sha256!=OLD.ticket_sha256 OR
+            NEW.seal_high_water!=OLD.seal_high_water OR
+            NEW.receipt_sha256!=OLD.receipt_sha256 OR NEW.sealed_at!=OLD.sealed_at OR
+            NEW.retain_until<OLD.retain_until
+          THEN RAISE(ABORT, 'Git read tombstone evidence regressed') END;
         END
         """
     )
@@ -249,6 +299,7 @@ def downgrade() -> None:
         "UPDATE executor_meta SET schema_generation=1, updated_at=CURRENT_TIMESTAMP "
         "WHERE id=1 AND schema_generation=2"
     )
+    op.execute("DROP TRIGGER git_read_no_accept_tombstones_guarded_update")
     op.execute("DROP TRIGGER git_members_guarded_update")
     op.execute("DROP TRIGGER git_read_generations_guarded_update")
     for table in (

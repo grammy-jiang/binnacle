@@ -5,10 +5,11 @@ Purpose and current gate
 ------------------------
 
 This runbook prepares the read-only compatibility server, the disabled Phase 5 write
-probe, and the default-disabled Phase 7 execution-supervisor foundation on one 64-bit
-Raspberry Pi.  It provides repository-side deployment, integrity, and evidence checks; it
-does not claim that a ChatGPT controller is authenticated, that a write catalogue has been
-promoted, or that the host can safely execute command trees.
+probe, the default-disabled Phase 7 execution-supervisor foundation, and the isolated
+default-disabled Phase 8 Git credential-broker foundation on one 64-bit Raspberry Pi.  It
+provides repository-side deployment, integrity, and evidence checks; it does not claim that
+a ChatGPT controller is authenticated, that a write catalogue has been promoted, that the
+host can safely execute command trees, or that Git/signing credentials are installed.
 
 Do not expose ``/mcp`` through a tunnel until the live feasibility gate has selected and
 tested exactly one controller profile.  The repository intentionally contains neither a
@@ -48,11 +49,18 @@ The development profile uses these fixed paths and identities:
    /var/lib/binnacle-executor/output
    /run/binnacle-executor
    /run/binnacle-executor/private
+   /etc/binnacle-git-credential
+   /var/lib/binnacle-git-credential
+   /var/lib/binnacle-git-credential/state
+   /run/binnacle-git-credential
+   /run/binnacle-git-credential/private
 
    application user and primary group: binnacle
    source-read supplementary group: binnacle-dev
    executor user and primary group: binnacle-executor
    executor socket client group: binnacle-executor-client
+   credential broker user and primary group: binnacle-git-credential
+   credential broker client group: binnacle-git-credential-client
 
 Both service identities are supplementary members of ``binnacle-executor-client`` so they
 can traverse the root-owned runtime parent; only ``binnacle`` uses that membership as the
@@ -63,7 +71,11 @@ the checkout or executor evidence database.  Membership in ``binnacle-dev`` does
 access to ``/etc/binnacle``.  The application may connect to the executor socket through
 ``binnacle-executor-client`` but cannot traverse the executor-private runtime or state
 directories; the command identity is not created or granted either authority in this
-default-disabled foundation.
+default-disabled foundation.  Only ``binnacle-executor`` and
+``binnacle-git-credential`` belong to ``binnacle-git-credential-client``.  The application
+and any future general command identity must not belong to it.  The broker state/private
+children remain ``binnacle-git-credential:binnacle-git-credential`` ``0700``; neither the
+application nor the general command boundary may traverse them.
 
 Prepare the reviewed checkout
 -----------------------------
@@ -83,7 +95,7 @@ the exact clean candidate:
    uv run ruff format --check .
    uv run mypy src/binnacle tests scripts/mcp_evaluation.py scripts/setup_dev_pi.py \
      scripts/verify_dev_pi.py scripts/verify_operation_kernel.py \
-     scripts/verify_execution_supervisor.py
+     scripts/verify_execution_supervisor.py scripts/verify_git_credential_broker.py
    uv run lint-imports
    uv run pip-audit
    uv run python scripts/validate_contracts.py
@@ -103,13 +115,16 @@ Inspect the deterministic plan before applying it:
    sudo python scripts/setup_dev_pi.py apply --repo /srv/binnacle-dev/repo
 
 Add ``--enable`` to ``apply`` only when the protected application configuration is ready.
-The script creates distinct application, executor, executor-client, and source-read groups;
-the two non-root service identities; protected configuration and evaluation directories;
+The script creates distinct application, executor, credential-broker, executor-client,
+credential-client, and source-read groups; three non-root service identities; protected
+configuration and evaluation directories;
 application-owned state/result/audit subtrees; the dedicated ``0700`` probe root and
-staging directory; separate executor state/output/runtime roots; and the reviewed systemd,
-socket, and tmpfiles assets.  It leaves ``binnacle-executor.socket`` disabled and does not
-start the executor.  It does not install packages, pull/reset Git, create secrets, configure
-a firewall or tunnel, or start a ChatGPT evaluation.  The application unit adds only
+staging directory; separate executor and credential config/state/runtime roots; and the
+reviewed application/executor/credential systemd, socket, and tmpfiles assets.  It rejects
+an upgrade whose application or general command identity is already a credential client.
+It leaves both ``binnacle-executor.socket`` and ``binnacle-git-credential.socket`` disabled
+and starts neither service.  It does not install packages, pull/reset Git, create secrets,
+configure a firewall or tunnel, or start a ChatGPT evaluation.  The application unit adds only
 ``ReadWritePaths=/var/lib/binnacle/probe-workspace`` to the Phase 4 write boundary; it
 does not grant source, configuration, evaluation, or credential write access.
 
@@ -239,7 +254,7 @@ sqlite:////var/lib/binnacle-executor/state/executor-state.sqlite3 \
      --database /var/lib/binnacle-executor/state/executor-state.sqlite3 \
      --runtime-directory /run/binnacle-executor/private --output json
 
-The credential-broker migration and verifier currently run only in the isolated CI lane:
+The credential-broker schema verifier currently runs only in the isolated CI lane:
 
 .. code-block:: console
 
@@ -250,7 +265,13 @@ grant the broker checkout access from this repository-only result.  The tracked 
 an explicit ``/usr/bin/false`` fail-closed placeholder.  A later reviewed broker
 implementation must supply a protected, immutable migration/verifier runtime and the real
 key, peer, socket, and candidate-Pi evidence before the offline broker migration sequence
-becomes operational.
+becomes operational.  ``verify_dev_pi.py`` still verifies the credential identities,
+root-owned parent paths, exact installed tmpfiles policy, effective service/socket
+properties, absence of drop-ins, and disabled unit state without traversing the broker's
+``0700`` private children.  The broker verifier's ``--foundation-only`` mode verifies those
+private children and absence of config/database/socket authority, but it must be run only
+from that future immutable broker runtime as ``binnacle-git-credential``—never by granting
+the credential identity access to the mutable checkout.
 
 The maintenance command acquires the same exclusive ``/run/binnacle`` writer lock as the
 live kernel.  It refuses to run concurrently with a live writer, refuses an absent or
@@ -266,7 +287,7 @@ mutation-fence plus Phase 7 command-operation and Phase 8 retained Git cross-row
 The executor verifier
 opens only the executor-owned database read-only and checks its exact schema, integrity,
 identity generation, one-home acceptance invariant, and private directory ownership.  The
-The credential verifier checks only its isolated default-disabled schema and refuses any
+credential verifier checks only its isolated default-disabled schema and refuses any
 promoted or retained credential authority.  The verifiers perform no migration, directory
 creation, workspace registration, fence
 reconstruction, cleanup, acceptance sealing, or automatic recovery.

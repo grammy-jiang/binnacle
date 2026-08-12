@@ -159,6 +159,7 @@ class ClosedGitExecutionPlanBuilder:
         maximum_output_bytes: int,
     ) -> GitExecutionPlan:
         environment = (
+            ("GIT_ATTR_NOSYSTEM", "1"),
             ("GIT_CONFIG_GLOBAL", "/dev/null"),
             ("GIT_CONFIG_NOSYSTEM", "1"),
             ("GIT_CONFIG_SYSTEM", "/dev/null"),

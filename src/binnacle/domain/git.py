@@ -28,6 +28,7 @@ _MAX_ARGUMENTS: Final = 256
 _MAX_ARGUMENT_BYTES: Final = 16_384
 _ALLOWED_ENVIRONMENT_NAMES: Final = frozenset(
     {
+        "GIT_ATTR_NOSYSTEM",
         "GIT_CONFIG_GLOBAL",
         "GIT_CONFIG_NOSYSTEM",
         "GIT_CONFIG_SYSTEM",

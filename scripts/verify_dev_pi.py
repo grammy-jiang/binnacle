@@ -32,6 +32,16 @@ EXECUTOR_RUNTIME_ROOT = Path("/run/binnacle-executor")
 EXECUTOR_RUNTIME_PRIVATE = EXECUTOR_RUNTIME_ROOT / "private"
 EXECUTOR_SOCKET_PATH = EXECUTOR_RUNTIME_ROOT / "supervisor.sock"
 EXECUTOR_TMPFILES_PATH = Path("/etc/tmpfiles.d/binnacle-executor.conf")
+GIT_CREDENTIAL_SERVICE_NAME = "binnacle-git-credential.service"
+GIT_CREDENTIAL_SOCKET_NAME = "binnacle-git-credential.socket"
+GIT_CREDENTIAL_CONFIG_DIRECTORY = Path("/etc/binnacle-git-credential")
+GIT_CREDENTIAL_CONFIG_FILE = GIT_CREDENTIAL_CONFIG_DIRECTORY / "broker.toml"
+GIT_CREDENTIAL_PERSISTENT_ROOT = Path("/var/lib/binnacle-git-credential")
+GIT_CREDENTIAL_STATE_DIRECTORY = GIT_CREDENTIAL_PERSISTENT_ROOT / "state"
+GIT_CREDENTIAL_RUNTIME_ROOT = Path("/run/binnacle-git-credential")
+GIT_CREDENTIAL_RUNTIME_PRIVATE = GIT_CREDENTIAL_RUNTIME_ROOT / "private"
+GIT_CREDENTIAL_SOCKET_PATH = GIT_CREDENTIAL_RUNTIME_ROOT / "broker.sock"
+GIT_CREDENTIAL_TMPFILES_PATH = Path("/etc/tmpfiles.d/binnacle-git-credential.conf")
 CANONICAL_REPO = Path("/srv/binnacle-dev/repo")
 _MAX_CONFIG_BYTES = 65_536
 _FULL_GIT_SHA = re.compile(r"[0-9a-f]{40}")
@@ -51,6 +61,12 @@ EXPECTED_EXECUTOR_READ_WRITE_PATHS = frozenset(
         str(EXECUTOR_RUNTIME_PRIVATE),
         str(EXECUTOR_STATE_DIRECTORY),
         str(EXECUTOR_OUTPUT_DIRECTORY),
+    }
+)
+EXPECTED_GIT_CREDENTIAL_READ_WRITE_PATHS = frozenset(
+    {
+        str(GIT_CREDENTIAL_RUNTIME_PRIVATE),
+        str(GIT_CREDENTIAL_STATE_DIRECTORY),
     }
 )
 
@@ -145,6 +161,7 @@ def verify_deployment(
         )
     checks.extend(_systemd_service_checks())
     checks.extend(_executor_foundation_checks())
+    checks.extend(_git_credential_foundation_checks())
     checks.append(_listener_check(host, port))
     checks.append(_health_check(host, port))
     checks.append(_unauthenticated_mcp_check(host, port))
@@ -879,6 +896,202 @@ def _executor_foundation_checks() -> list[VerificationCheck]:
             "executor service/socket are disabled with exact effective isolation"
             if service_boundary_ok and socket_boundary_ok and tmpfiles_ok
             else "executor service/socket/tmpfiles boundary differs",
+        ),
+    ]
+
+
+def _git_credential_foundation_checks() -> list[VerificationCheck]:
+    try:
+        credential = pwd.getpwnam("binnacle-git-credential")
+        credential_group = grp.getgrnam("binnacle-git-credential")
+        client_group = grp.getgrnam("binnacle-git-credential-client")
+        application = pwd.getpwnam("binnacle")
+        application_group = grp.getgrnam("binnacle")
+        executor = pwd.getpwnam("binnacle-executor")
+        executor_group = grp.getgrnam("binnacle-executor")
+        paths = {
+            "config": GIT_CREDENTIAL_CONFIG_DIRECTORY.stat(follow_symlinks=False),
+            "persistent": GIT_CREDENTIAL_PERSISTENT_ROOT.stat(follow_symlinks=False),
+            "runtime": GIT_CREDENTIAL_RUNTIME_ROOT.stat(follow_symlinks=False),
+        }
+        tmpfiles_file = GIT_CREDENTIAL_TMPFILES_PATH.stat(follow_symlinks=False)
+        tmpfiles_lines = frozenset(
+            GIT_CREDENTIAL_TMPFILES_PATH.read_text(encoding="utf-8").splitlines()
+        )
+        service = _systemd_properties(
+            (
+                "ActiveState",
+                "UnitFileState",
+                "FragmentPath",
+                "DropInPaths",
+                "User",
+                "Group",
+                "SupplementaryGroups",
+                "WorkingDirectory",
+                "ExecStart",
+                "ReadWritePaths",
+                "ProtectSystem",
+                "NoNewPrivileges",
+                "PrivateDevices",
+                "DevicePolicy",
+                "ProtectProc",
+                "RestrictAddressFamilies",
+                "CapabilityBoundingSet",
+                "AmbientCapabilities",
+                "KillMode",
+                "SendSIGKILL",
+                "Delegate",
+            ),
+            service_name=GIT_CREDENTIAL_SERVICE_NAME,
+        )
+        socket_properties = _systemd_properties(
+            (
+                "ActiveState",
+                "UnitFileState",
+                "FragmentPath",
+                "DropInPaths",
+                "Listen",
+                "SocketUser",
+                "SocketGroup",
+                "SocketMode",
+                "DirectoryMode",
+                "RemoveOnStop",
+            ),
+            service_name=GIT_CREDENTIAL_SOCKET_NAME,
+        )
+    except (KeyError, OSError, UnicodeError, subprocess.CalledProcessError, ValueError):
+        return [
+            VerificationCheck(
+                "git-credential-foundation",
+                "fail",
+                "credential identities, protected roots, or units are unavailable",
+            )
+        ]
+
+    client_members = set(client_group.gr_mem)
+    identities_ok = (
+        min(credential.pw_uid, credential_group.gr_gid, client_group.gr_gid) > 0
+        and credential.pw_gid == credential_group.gr_gid
+        and credential.pw_uid not in {application.pw_uid, executor.pw_uid}
+        and client_members == {"binnacle-executor", "binnacle-git-credential"}
+        and application.pw_gid != client_group.gr_gid
+        and len(
+            {
+                application_group.gr_gid,
+                executor_group.gr_gid,
+                credential_group.gr_gid,
+                client_group.gr_gid,
+            }
+        )
+        == 4
+    )
+    try:
+        command = pwd.getpwnam("binnacle-command")
+    except KeyError:
+        command = None
+    if command is not None:
+        identities_ok = identities_ok and (
+            command.pw_gid != client_group.gr_gid and "binnacle-command" not in client_members
+        )
+
+    roots_ok = all(
+        stat.S_ISDIR(metadata.st_mode) and not stat.S_ISLNK(metadata.st_mode)
+        for metadata in paths.values()
+    ) and (
+        (
+            paths["config"].st_uid,
+            paths["config"].st_gid,
+            stat.S_IMODE(paths["config"].st_mode),
+        )
+        == (0, credential_group.gr_gid, 0o750)
+        and (
+            paths["persistent"].st_uid,
+            paths["persistent"].st_gid,
+            stat.S_IMODE(paths["persistent"].st_mode),
+        )
+        == (0, credential_group.gr_gid, 0o710)
+        and (
+            paths["runtime"].st_uid,
+            paths["runtime"].st_gid,
+            stat.S_IMODE(paths["runtime"].st_mode),
+        )
+        == (0, client_group.gr_gid, 0o710)
+    )
+    service_boundary_ok = (
+        service["ActiveState"] == "inactive"
+        and service["UnitFileState"] == "static"
+        and service["User"] == "binnacle-git-credential"
+        and service["Group"] == "binnacle-git-credential"
+        and set(service["SupplementaryGroups"].split()) == {"binnacle-git-credential-client"}
+        and service["WorkingDirectory"] == "/var/empty"
+        and "/usr/bin/false" in service["ExecStart"]
+        and frozenset(service["ReadWritePaths"].split()) == EXPECTED_GIT_CREDENTIAL_READ_WRITE_PATHS
+        and service["ProtectSystem"] == "strict"
+        and service["NoNewPrivileges"] == "yes"
+        and service["PrivateDevices"] == "yes"
+        and service["DevicePolicy"] == "closed"
+        and service["ProtectProc"] == "invisible"
+        and service["RestrictAddressFamilies"] == "AF_UNIX"
+        and not service["CapabilityBoundingSet"]
+        and not service["AmbientCapabilities"]
+        and service["KillMode"] == "control-group"
+        and service["SendSIGKILL"] == "yes"
+        and service["Delegate"] == "no"
+        and service["FragmentPath"] == "/etc/systemd/system/binnacle-git-credential.service"
+        and not service["DropInPaths"]
+    )
+    listen = socket_properties["Listen"]
+    socket_boundary_ok = (
+        socket_properties["ActiveState"] == "inactive"
+        and socket_properties["UnitFileState"] == "disabled"
+        and socket_properties["FragmentPath"]
+        == "/etc/systemd/system/binnacle-git-credential.socket"
+        and not socket_properties["DropInPaths"]
+        and str(GIT_CREDENTIAL_SOCKET_PATH) in listen
+        and "Stream" in listen
+        and socket_properties["SocketUser"] == "binnacle-git-credential"
+        and socket_properties["SocketGroup"] == "binnacle-git-credential-client"
+        and socket_properties["SocketMode"] == "0660"
+        and socket_properties["DirectoryMode"] == "0710"
+        and socket_properties["RemoveOnStop"] == "yes"
+    )
+    tmpfiles_ok = (
+        stat.S_ISREG(tmpfiles_file.st_mode)
+        and not stat.S_ISLNK(tmpfiles_file.st_mode)
+        and (tmpfiles_file.st_uid, tmpfiles_file.st_gid, stat.S_IMODE(tmpfiles_file.st_mode))
+        == (0, 0, 0o644)
+        and tmpfiles_lines
+        == {
+            "# Type Path Mode User Group Age Argument",
+            "d /run/binnacle-git-credential 0710 root binnacle-git-credential-client -",
+            "d /run/binnacle-git-credential/private 0700 "
+            "binnacle-git-credential binnacle-git-credential -",
+            "d /var/lib/binnacle-git-credential 0710 root binnacle-git-credential -",
+            "d /var/lib/binnacle-git-credential/state 0700 "
+            "binnacle-git-credential binnacle-git-credential -",
+        }
+    )
+    return [
+        VerificationCheck(
+            "git-credential-identities",
+            "pass" if identities_ok else "fail",
+            "broker clients exclude application and command identities"
+            if identities_ok
+            else "credential client identity separation differs",
+        ),
+        VerificationCheck(
+            "git-credential-roots",
+            "pass" if roots_ok else "fail",
+            "credential root parents have exact separate ownership"
+            if roots_ok
+            else "credential protected-root parent ownership differs",
+        ),
+        VerificationCheck(
+            "git-credential-default-disabled",
+            "pass" if service_boundary_ok and socket_boundary_ok and tmpfiles_ok else "fail",
+            "credential service/socket are disabled with exact effective isolation"
+            if service_boundary_ok and socket_boundary_ok and tmpfiles_ok
+            else "credential service/socket/tmpfiles boundary differs",
         ),
     ]
 
