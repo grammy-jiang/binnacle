@@ -41,10 +41,18 @@ _SOCKET = _RUNTIME_ROOT / "broker.sock"
 _TMPFILES = Path("/etc/tmpfiles.d/binnacle-git-credential.conf")
 
 
-def _effective_group_members(group: grp.struct_group) -> set[str]:
-    """Return supplementary and primary members of one local group."""
+def _same_gid_groups(group: grp.struct_group) -> tuple[grp.struct_group, ...]:
+    """Return every local group entry granting the same numeric authority."""
 
-    return set(group.gr_mem) | {
+    entries = tuple(candidate for candidate in grp.getgrall() if candidate.gr_gid == group.gr_gid)
+    return entries or (group,)
+
+
+def _effective_group_members(group: grp.struct_group) -> set[str]:
+    """Return all supplementary and primary members of one numeric group."""
+
+    supplementary = {member for candidate in _same_gid_groups(group) for member in candidate.gr_mem}
+    return supplementary | {
         account.pw_name for account in pwd.getpwall() if account.pw_gid == group.gr_gid
     }
 
@@ -136,6 +144,10 @@ def verify_default_disabled_foundation() -> None:
         or credential.pw_uid in {0, application.pw_uid, executor.pw_uid}
         or credential_uid_names != {"binnacle-git-credential"}
         or process_group_ids != {credential_group.gr_gid, client_group.gr_gid}
+        or tuple(candidate.gr_name for candidate in _same_gid_groups(credential_group))
+        != ("binnacle-git-credential",)
+        or tuple(candidate.gr_name for candidate in _same_gid_groups(client_group))
+        != ("binnacle-git-credential-client",)
         or client_group.gr_gid in {0, credential_group.gr_gid}
         or members != {"binnacle-executor", "binnacle-git-credential"}
         or application.pw_gid == client_group.gr_gid

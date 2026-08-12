@@ -1673,9 +1673,11 @@ creates/upgrades schema opportunistically. It adds authoritative tables equivale
 
 ``git_operation_stages``
    Parent operation plus monotonic stage generation, deterministic member/ticket identity,
-   stage/input/pre-state digest, supervisor acceptance/execution, crossing/effect knowledge,
-   before/after typed OIDs, cancellation generation, cleanup, and reconciliation. Checks
-   allow at most one active member and reject a dependent stage before predecessor closure.
+   stage/input/pre-state digest, a frozen consequential-versus-verification effect role,
+   supervisor acceptance/execution, crossing/effect knowledge, before/after typed OIDs,
+   cancellation generation, cleanup, and reconciliation. Only consequential stages
+   contribute to the parent aggregate. Checks allow at most one active member and reject a
+   dependent stage before predecessor closure.
 
 ``git_commit_evidence``
    Typed commit/tree/parent OIDs, author/committer/message/preimage digests, one-time
@@ -1684,7 +1686,9 @@ creates/upgrades schema opportunistically. It adds authoritative tables equivale
 
 ``git_remote_evidence``
    Remote-profile/destination/outbound-closure digests, refs, expected/observed typed OIDs,
-   transport acceptance/send/reconciliation, and safe credential-use evidence.
+   transport acceptance/send/reconciliation and exact retained response evidence, plus safe
+   credential-use evidence. A conclusive hosted-CAS rejection records the truthfully observed
+   changed or absent remote state rather than requiring it to equal the stale expectation.
 
 Constraints reject contradictory receipt/effect shapes, commit success without verified
 signature/object/ref/index closure, push success without exact remote evidence, or terminal

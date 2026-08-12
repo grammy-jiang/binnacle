@@ -207,6 +207,48 @@ def upgrade() -> None:
         )
     op.execute(
         """
+        CREATE TRIGGER git_members_read_acceptance_home_insert
+        BEFORE INSERT ON git_members
+        BEGIN
+          SELECT CASE WHEN NEW.ticket_kind='git_read' AND NOT EXISTS (
+            SELECT 1 FROM git_read_generations generation
+            WHERE generation.application_generation=NEW.application_generation
+              AND generation.state='open'
+          ) THEN RAISE(ABORT, 'Git read generation is not open') END;
+          SELECT CASE WHEN EXISTS (
+            SELECT 1 FROM git_read_no_accept_tombstones tombstone
+            WHERE tombstone.member_id=NEW.member_id
+               OR tombstone.ticket_sha256=NEW.ticket_sha256
+               OR (NEW.ticket_kind='git_read'
+                   AND tombstone.application_generation=NEW.application_generation
+                   AND tombstone.read_request_id=NEW.read_request_id)
+          ) THEN RAISE(ABORT, 'Git read acceptance identity has multiple homes') END;
+        END
+        """
+    )
+    op.execute(
+        """
+        CREATE TRIGGER git_read_tombstone_acceptance_home_insert
+        BEFORE INSERT ON git_read_no_accept_tombstones
+        BEGIN
+          SELECT CASE WHEN NOT EXISTS (
+            SELECT 1 FROM git_read_generations generation
+            WHERE generation.application_generation=NEW.application_generation
+              AND generation.state IN ('closing','drained')
+          ) THEN RAISE(ABORT, 'Git read generation is not sealed') END;
+          SELECT CASE WHEN EXISTS (
+            SELECT 1 FROM git_members member
+            WHERE member.member_id=NEW.member_id
+               OR member.ticket_sha256=NEW.ticket_sha256
+               OR (member.ticket_kind='git_read'
+                   AND member.application_generation=NEW.application_generation
+                   AND member.read_request_id=NEW.read_request_id)
+          ) THEN RAISE(ABORT, 'Git read acceptance identity has multiple homes') END;
+        END
+        """
+    )
+    op.execute(
+        """
         CREATE TRIGGER git_read_generations_guarded_update
         BEFORE UPDATE ON git_read_generations
         BEGIN
@@ -307,6 +349,8 @@ def downgrade() -> None:
         "WHERE id=1 AND schema_generation=2"
     )
     op.execute("DROP TRIGGER git_read_no_accept_tombstones_guarded_update")
+    op.execute("DROP TRIGGER git_read_tombstone_acceptance_home_insert")
+    op.execute("DROP TRIGGER git_members_read_acceptance_home_insert")
     op.execute("DROP TRIGGER git_members_guarded_update")
     op.execute("DROP TRIGGER git_read_generations_guarded_update")
     for table in (

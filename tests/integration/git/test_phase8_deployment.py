@@ -273,6 +273,10 @@ def test_credential_foundation_verifier_checks_private_default_disabled_state(
         "scripts.verify_git_credential_broker.grp.getgrnam",
         lambda name: groups[name],
     )
+    monkeypatch.setattr(
+        "scripts.verify_git_credential_broker.grp.getgrall",
+        lambda: list(groups.values()),
+    )
     monkeypatch.setattr("scripts.verify_git_credential_broker.os.geteuid", lambda: credential_uid)
     monkeypatch.setattr("scripts.verify_git_credential_broker.os.getegid", lambda: credential_gid)
     monkeypatch.setattr("scripts.verify_git_credential_broker.os.getgroups", lambda: [client_gid])
@@ -285,6 +289,46 @@ def test_credential_foundation_verifier_checks_private_default_disabled_state(
     monkeypatch.setattr(
         "scripts.verify_git_credential_broker.pwd.getpwall",
         lambda: [*users.values(), rogue],
+    )
+
+    with pytest.raises(
+        GitCredentialBrokerVerificationError,
+        match="identity boundary differs",
+    ):
+        verify_git_credential_broker.verify_default_disabled_foundation()
+
+    client_alias = grp.struct_group(
+        ("credential-client-alias", "x", client_gid, ["unexpected-client"])
+    )
+    monkeypatch.setattr(
+        "scripts.verify_git_credential_broker.pwd.getpwall",
+        lambda: list(users.values()),
+    )
+    monkeypatch.setattr(
+        "scripts.verify_git_credential_broker.grp.getgrall",
+        lambda: list(groups.values()),
+    )
+    monkeypatch.setattr(
+        "scripts.verify_git_credential_broker.os.getgroups",
+        lambda: [client_gid],
+    )
+    monkeypatch.setattr(
+        "scripts.verify_git_credential_broker.grp.getgrall",
+        lambda: [*groups.values(), client_alias],
+    )
+
+    with pytest.raises(
+        GitCredentialBrokerVerificationError,
+        match="identity boundary differs",
+    ):
+        verify_git_credential_broker.verify_default_disabled_foundation()
+
+    duplicate_client = grp.struct_group(
+        ("binnacle-git-credential-client", "x", client_gid, ["unexpected-client"])
+    )
+    monkeypatch.setattr(
+        "scripts.verify_git_credential_broker.grp.getgrall",
+        lambda: [*groups.values(), duplicate_client],
     )
 
     with pytest.raises(
@@ -314,6 +358,10 @@ def test_credential_foundation_verifier_checks_private_default_disabled_state(
     monkeypatch.setattr(
         "scripts.verify_git_credential_broker.pwd.getpwall",
         lambda: [*users.values(), duplicate_uid],
+    )
+    monkeypatch.setattr(
+        "scripts.verify_git_credential_broker.grp.getgrall",
+        lambda: list(groups.values()),
     )
 
     with pytest.raises(

@@ -624,6 +624,14 @@ def _verify_git_invariants(connection: sqlite3.Connection) -> None:
                     SELECT MAX(gs.stage_generation) FROM git_operation_stages gs
                     WHERE gs.operation_id=go.operation_id), 0)
         """,
+        "Git stage predecessor closure": """
+            SELECT COUNT(*) FROM git_operation_stages gs
+            LEFT JOIN git_operation_stages predecessor
+              ON predecessor.operation_id=gs.operation_id
+             AND predecessor.stage_generation=gs.stage_generation-1
+            WHERE gs.stage_generation>1
+              AND (predecessor.operation_id IS NULL OR predecessor.state!='closed')
+        """,
         "Git terminal closure": """
             SELECT COUNT(*) FROM git_operations go
             WHERE go.state='terminal' AND EXISTS (
@@ -650,14 +658,27 @@ def _verify_git_invariants(connection: sqlite3.Connection) -> None:
                   WHEN EXISTS (
                     SELECT 1 FROM git_operation_stages gs
                     WHERE gs.operation_id=go.operation_id
+                      AND gs.effect_role='consequential'
                       AND gs.effect_knowledge='partial') THEN 'partial'
                   WHEN EXISTS (
                     SELECT 1 FROM git_operation_stages gs
                     WHERE gs.operation_id=go.operation_id
+                      AND gs.effect_role='consequential'
+                      AND gs.effect_knowledge='known_effect')
+                   AND EXISTS (
+                    SELECT 1 FROM git_operation_stages gs
+                    WHERE gs.operation_id=go.operation_id
+                      AND gs.effect_role='consequential'
+                      AND gs.effect_knowledge='known_no_effect') THEN 'partial'
+                  WHEN EXISTS (
+                    SELECT 1 FROM git_operation_stages gs
+                    WHERE gs.operation_id=go.operation_id
+                      AND gs.effect_role='consequential'
                       AND gs.effect_knowledge='known_effect') THEN 'known_effect'
                   WHEN EXISTS (
                     SELECT 1 FROM git_operation_stages gs
                     WHERE gs.operation_id=go.operation_id
+                      AND gs.effect_role='consequential'
                       AND gs.effect_knowledge='known_no_effect') THEN 'known_no_effect'
                   ELSE 'none'
                 END)
@@ -683,6 +704,13 @@ def _verify_git_invariants(connection: sqlite3.Connection) -> None:
                  ce.operation_id IS NULL) OR
                 (ce.operation_id IS NOT NULL AND
                  ce.main_index_publication_state NOT IN ('not_required','complete')) OR
+                (ce.operation_id IS NOT NULL AND
+                 go.aggregate_effect_knowledge IN ('known_effect','partial') AND
+                 (ce.signature_verified!=1 OR ce.object_imported!=1)) OR
+                (ce.operation_id IS NOT NULL AND
+                 go.aggregate_effect_knowledge='known_no_effect' AND
+                 (ce.object_imported=1 OR ce.branch_cas_complete=1 OR
+                  ce.main_index_publication_state='complete')) OR
                 (o.state='succeeded' AND
                  (ce.operation_id IS NULL OR ce.signature_verified!=1 OR
                   ce.object_imported!=1 OR ce.branch_cas_complete!=1 OR
@@ -697,6 +725,12 @@ def _verify_git_invariants(connection: sqlite3.Connection) -> None:
                  (re.credential_cleanup_complete!=1 OR
                   re.transport_state IN
                     ('accepted','sent','lost_response','uncertain'))) OR
+                (re.operation_id IS NOT NULL AND
+                 go.aggregate_effect_knowledge='known_no_effect' AND
+                 re.transport_state NOT IN ('not_started','rejected')) OR
+                (re.operation_id IS NOT NULL AND
+                 go.aggregate_effect_knowledge IN ('known_effect','partial') AND
+                 re.transport_state!='completed') OR
                 (o.state='succeeded' AND
                  (re.operation_id IS NULL OR re.transport_state!='completed' OR
                   re.remote_reconciled!=1 OR

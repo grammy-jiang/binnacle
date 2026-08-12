@@ -213,19 +213,20 @@ def test_each_development_workspace_invariant_is_fail_closed(index: int, message
     (
         (0, "operation provenance"),
         (1, "stage sequence"),
-        (2, "terminal closure"),
-        (3, "aggregate effect"),
-        (4, "specialized evidence"),
-        (5, "terminal specialized evidence"),
+        (2, "stage predecessor closure"),
+        (3, "terminal closure"),
+        (4, "aggregate effect"),
+        (5, "specialized evidence"),
+        (6, "terminal specialized evidence"),
     ),
 )
 def test_each_git_invariant_is_independently_fail_closed(index: int, message: str) -> None:
-    values = [0] * 6
+    values = [0] * 7
     values[index] = 1
     connection = cast(sqlite3.Connection, _InvariantConnection(values))
     with pytest.raises(KernelVerificationError, match=message):
         verification._verify_git_invariants(connection)
-    verification._verify_git_invariants(cast(sqlite3.Connection, _InvariantConnection([0] * 6)))
+    verification._verify_git_invariants(cast(sqlite3.Connection, _InvariantConnection([0] * 7)))
 
 
 def _terminal_git_invariant_connection(operation_kind: str = "branch_create") -> sqlite3.Connection:
@@ -254,7 +255,8 @@ def _terminal_git_invariant_connection(operation_kind: str = "branch_create") ->
         CREATE TABLE git_operation_stages (
           operation_id TEXT, stage_generation INTEGER, state TEXT, acceptance_state TEXT,
           cleanup_complete INTEGER, acknowledged_cancel_generation INTEGER,
-          cancel_generation INTEGER, effect_knowledge TEXT, crossing_state TEXT
+          cancel_generation INTEGER, effect_knowledge TEXT, crossing_state TEXT,
+          effect_role TEXT
         );
         CREATE TABLE git_commit_evidence (
           operation_id TEXT, main_index_publication_state TEXT, signature_verified INTEGER,
@@ -270,7 +272,7 @@ def _terminal_git_invariant_connection(operation_kind: str = "branch_create") ->
         INSERT INTO registered_workspaces VALUES ('workspace-1');
         INSERT INTO workspace_mutation_fences VALUES ('workspace-1',NULL,1,NULL);
         INSERT INTO git_operation_stages VALUES ('operation-1',1,'closed','accepted',1,0,0,
-          'known_effect','classified');
+          'known_effect','classified','consequential');
         """
     )
     connection.execute(
@@ -320,6 +322,41 @@ def test_git_integrity_rejects_parent_effect_not_derived_from_closed_stage() -> 
             verification._verify_git_invariants(connection)
 
 
+def test_git_pull_mixed_effect_and_no_effect_stages_aggregate_to_partial() -> None:
+    with closing(_terminal_git_invariant_connection("pull")) as connection:
+        connection.execute(
+            "INSERT INTO git_operation_stages VALUES "
+            "('operation-1',2,'closed','no_accept',1,0,0,'known_no_effect','not_crossed',"
+            "'consequential')"
+        )
+        connection.execute(
+            "UPDATE git_operations SET current_stage_generation=2 WHERE operation_id='operation-1'"
+        )
+
+        with pytest.raises(KernelVerificationError, match="aggregate effect"):
+            verification._verify_git_invariants(connection)
+
+
+def test_git_verification_stage_does_not_change_parent_effect() -> None:
+    with closing(_terminal_git_invariant_connection("branch_create")) as connection:
+        connection.execute(
+            "INSERT INTO git_operation_stages VALUES "
+            "('operation-1',2,'closed','accepted',1,0,0,'known_no_effect','classified',"
+            "'verification')"
+        )
+        connection.execute(
+            "UPDATE git_operations SET current_stage_generation=2 WHERE operation_id='operation-1'"
+        )
+
+        verification._verify_git_invariants(connection)
+
+        connection.execute(
+            "UPDATE git_operation_stages SET effect_knowledge='uncertain' WHERE stage_generation=2"
+        )
+        with pytest.raises(KernelVerificationError, match="terminal closure"):
+            verification._verify_git_invariants(connection)
+
+
 def test_git_integrity_requires_conclusive_commit_publication_evidence() -> None:
     with closing(_terminal_git_invariant_connection("commit")) as connection:
         with pytest.raises(KernelVerificationError, match="terminal specialized evidence"):
@@ -337,6 +374,17 @@ def test_git_integrity_requires_conclusive_commit_publication_evidence() -> None
             ("a" * 64, "b" * 64),
         )
         verification._verify_git_invariants(connection)
+
+
+def test_failed_commit_effect_requires_verified_imported_object_evidence() -> None:
+    with closing(_terminal_git_invariant_connection("commit")) as connection:
+        connection.execute("UPDATE operations SET state='failed'")
+        connection.execute(
+            "INSERT INTO git_commit_evidence VALUES ('operation-1','not_required',0,0,0,NULL,NULL)"
+        )
+
+        with pytest.raises(KernelVerificationError, match="terminal specialized evidence"):
+            verification._verify_git_invariants(connection)
 
 
 def test_obligation_and_generation_event_matching_is_exact() -> None:

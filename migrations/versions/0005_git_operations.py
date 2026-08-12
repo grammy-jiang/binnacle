@@ -109,6 +109,7 @@ def upgrade() -> None:
         sa.Column("stage_generation", sa.Integer(), nullable=False),
         sa.Column("member_id", sa.String(length=160), nullable=False),
         sa.Column("stage_kind", sa.String(length=48), nullable=False),
+        sa.Column("effect_role", sa.String(length=16), nullable=False),
         sa.Column("input_sha256", sa.String(length=64), nullable=False),
         sa.Column("pre_state_sha256", sa.String(length=64), nullable=False),
         sa.Column("member_ticket_id", sa.String(length=160), nullable=True),
@@ -136,6 +137,12 @@ def upgrade() -> None:
             "AND executor_evidence_generation>=0 AND updated_at>=created_at "
             "AND (closed_at IS NULL OR closed_at>=created_at)",
             name="ck_git_stages_generations",
+        ),
+        sa.CheckConstraint(
+            "effect_role IN ('consequential','verification') "
+            "AND (effect_role!='verification' OR "
+            "effect_knowledge IN ('none','known_no_effect','uncertain'))",
+            name="ck_git_stages_effect_role",
         ),
         sa.CheckConstraint(
             "length(input_sha256)=64 AND length(pre_state_sha256)=64 "
@@ -291,6 +298,7 @@ def upgrade() -> None:
         sa.Column("observed_oid_algorithm", sa.String(length=8), nullable=True),
         sa.Column("observed_oid_hex", sa.String(length=64), nullable=True),
         sa.Column("transport_state", sa.String(length=24), nullable=False),
+        sa.Column("transport_evidence_sha256", sa.String(length=64), nullable=True),
         sa.Column("credential_use_evidence_sha256", sa.String(length=64), nullable=True),
         sa.Column("remote_reconciled", sa.Boolean(), nullable=False),
         sa.Column("credential_cleanup_complete", sa.Boolean(), nullable=False),
@@ -299,6 +307,8 @@ def upgrade() -> None:
         sa.CheckConstraint(
             "length(remote_profile_sha256)=64 AND length(destination_sha256)=64 "
             "AND length(outbound_closure_sha256)=64 "
+            "AND (transport_evidence_sha256 IS NULL "
+            "OR length(transport_evidence_sha256)=64) "
             "AND (credential_use_evidence_sha256 IS NULL "
             "OR length(credential_use_evidence_sha256)=64)",
             name="ck_git_remote_digests",
@@ -316,10 +326,15 @@ def upgrade() -> None:
         ),
         sa.CheckConstraint(
             "transport_state IN ('not_started','accepted','sent','lost_response',"
-            "'completed','uncertain') AND updated_at>=created_at "
+            "'completed','rejected','uncertain') AND updated_at>=created_at "
             "AND (transport_state!='completed' OR "
             "(remote_reconciled=1 AND observed_oid_algorithm=desired_oid_algorithm "
             "AND observed_oid_hex=desired_oid_hex "
+            "AND transport_evidence_sha256 IS NOT NULL "
+            "AND credential_use_evidence_sha256 IS NOT NULL "
+            "AND credential_cleanup_complete=1)) "
+            "AND (transport_state!='rejected' OR "
+            "(remote_reconciled=1 AND transport_evidence_sha256 IS NOT NULL "
             "AND credential_use_evidence_sha256 IS NOT NULL "
             "AND credential_cleanup_complete=1))",
             name="ck_git_remote_state",
@@ -379,6 +394,18 @@ def upgrade() -> None:
               (OLD.aggregate_effect_knowledge='uncertain' AND
                NEW.aggregate_effect_knowledge IN
                ('known_no_effect','known_effect','partial')) OR
+              (OLD.aggregate_effect_knowledge='known_effect' AND
+               NEW.aggregate_effect_knowledge='partial' AND
+               NEW.current_stage_generation>OLD.current_stage_generation) OR
+              (OLD.aggregate_effect_knowledge IN
+               ('known_no_effect','known_effect','partial') AND
+               NEW.aggregate_effect_knowledge='uncertain' AND
+               (NEW.current_stage_generation>OLD.current_stage_generation OR EXISTS (
+                 SELECT 1 FROM git_operation_stages current_stage
+                 WHERE current_stage.operation_id=NEW.operation_id
+                   AND current_stage.stage_generation=NEW.current_stage_generation
+                   AND current_stage.effect_knowledge='uncertain'
+               ))) OR
               (OLD.aggregate_effect_knowledge='partial' AND
                NEW.aggregate_effect_knowledge='known_effect')
             ) OR NOT (
@@ -398,13 +425,29 @@ def upgrade() -> None:
     )
     op.execute(
         """
+        CREATE TRIGGER git_operation_stages_predecessor_insert
+        BEFORE INSERT ON git_operation_stages
+        WHEN NEW.stage_generation>1
+        BEGIN
+          SELECT CASE WHEN NOT EXISTS (
+            SELECT 1 FROM git_operation_stages predecessor
+            WHERE predecessor.operation_id=NEW.operation_id
+              AND predecessor.stage_generation=NEW.stage_generation-1
+              AND predecessor.state='closed'
+          ) THEN RAISE(ABORT, 'Git stage predecessor is not closed') END;
+        END
+        """
+    )
+    op.execute(
+        """
         CREATE TRIGGER git_operation_stages_guarded_update
         BEFORE UPDATE ON git_operation_stages
         BEGIN
           SELECT CASE WHEN
             NEW.operation_id!=OLD.operation_id OR
             NEW.stage_generation!=OLD.stage_generation OR NEW.member_id!=OLD.member_id OR
-            NEW.stage_kind!=OLD.stage_kind OR NEW.input_sha256!=OLD.input_sha256 OR
+            NEW.stage_kind!=OLD.stage_kind OR NEW.effect_role!=OLD.effect_role OR
+            NEW.input_sha256!=OLD.input_sha256 OR
             NEW.pre_state_sha256!=OLD.pre_state_sha256 OR
             NEW.member_ticket_id IS NOT OLD.member_ticket_id OR
             NEW.member_ticket_sha256 IS NOT OLD.member_ticket_sha256 OR
@@ -529,6 +572,8 @@ def upgrade() -> None:
              NEW.observed_oid_algorithm IS NOT OLD.observed_oid_algorithm) OR
             (OLD.observed_oid_hex IS NOT NULL AND
              NEW.observed_oid_hex IS NOT OLD.observed_oid_hex) OR
+            (OLD.transport_evidence_sha256 IS NOT NULL AND
+             NEW.transport_evidence_sha256 IS NOT OLD.transport_evidence_sha256) OR
             (OLD.credential_use_evidence_sha256 IS NOT NULL AND
              NEW.credential_use_evidence_sha256 IS NOT
                OLD.credential_use_evidence_sha256) OR
@@ -541,9 +586,9 @@ def upgrade() -> None:
               (OLD.transport_state='accepted' AND NEW.transport_state IN
                ('sent','lost_response','completed','uncertain')) OR
               (OLD.transport_state='sent' AND NEW.transport_state IN
-               ('lost_response','completed','uncertain')) OR
+               ('lost_response','completed','rejected','uncertain')) OR
               (OLD.transport_state IN ('lost_response','uncertain') AND
-               NEW.transport_state='completed')
+               NEW.transport_state IN ('completed','rejected'))
             ) OR NEW.updated_at<OLD.updated_at
           THEN RAISE(ABORT, 'Git remote evidence regressed') END;
         END
@@ -563,6 +608,7 @@ def downgrade() -> None:
     op.execute("DROP TRIGGER git_remote_evidence_guarded_update")
     op.execute("DROP TRIGGER git_commit_evidence_guarded_update")
     op.execute("DROP TRIGGER git_operation_stages_guarded_update")
+    op.execute("DROP TRIGGER git_operation_stages_predecessor_insert")
     op.execute("DROP TRIGGER git_operations_guarded_update")
     for table in (
         "git_remote_evidence",

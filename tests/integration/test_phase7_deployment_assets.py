@@ -91,6 +91,7 @@ def test_setup_grants_both_services_runtime_parent_traversal(
     monkeypatch.setattr(setup_dev_pi, "_ensure_group", lambda _name: None)
     monkeypatch.setattr(setup_dev_pi, "_ensure_user", lambda _user, _group: None)
     monkeypatch.setattr("scripts.setup_dev_pi.grp.getgrnam", lambda name: groups[name])
+    monkeypatch.setattr("scripts.setup_dev_pi.grp.getgrall", lambda: list(groups.values()))
     monkeypatch.setattr("scripts.setup_dev_pi.pwd.getpwnam", lambda name: users[name])
     monkeypatch.setattr(setup_dev_pi, "_ensure_protected_directory", lambda *_a, **_k: None)
     monkeypatch.setattr(setup_dev_pi, "_atomic_install", lambda *_a, **_k: None)
@@ -152,6 +153,7 @@ def test_setup_rejects_application_credential_client_contamination(
         ),
     }
     monkeypatch.setattr("scripts.setup_dev_pi.grp.getgrnam", lambda name: groups[name])
+    monkeypatch.setattr("scripts.setup_dev_pi.grp.getgrall", lambda: list(groups.values()))
     monkeypatch.setattr("scripts.setup_dev_pi.pwd.getpwnam", lambda name: users[name])
     monkeypatch.setattr("scripts.setup_dev_pi.pwd.getpwall", lambda: list(users.values()))
     monkeypatch.setattr(
@@ -197,6 +199,7 @@ def test_setup_rejects_primary_group_credential_client_contamination(
         ("unexpected-client", "x", 1399, client_gid, "", "/", "/usr/sbin/nologin")
     )
     monkeypatch.setattr("scripts.setup_dev_pi.grp.getgrnam", lambda name: groups[name])
+    monkeypatch.setattr("scripts.setup_dev_pi.grp.getgrall", lambda: list(groups.values()))
     monkeypatch.setattr("scripts.setup_dev_pi.pwd.getpwnam", lambda name: users[name])
     monkeypatch.setattr(
         "scripts.setup_dev_pi.pwd.getpwall",
@@ -222,6 +225,36 @@ def test_setup_rejects_primary_group_credential_client_contamination(
 
     assert check.status == "fail"
     assert "unexpected supplementary group" in check.summary
+
+    client_alias = grp.struct_group(
+        ("credential-client-alias", "x", client_gid, ["unexpected-client"])
+    )
+    monkeypatch.setattr(
+        "scripts.setup_dev_pi.grp.getgrall",
+        lambda: [*groups.values(), client_alias],
+    )
+    monkeypatch.setattr(
+        "scripts.setup_dev_pi.os.getgrouplist",
+        lambda _name, primary_gid: [primary_gid, client_gid],
+    )
+
+    check = setup_dev_pi._check_identity_compatibility()
+
+    assert check.status == "fail"
+    assert "numeric group has an unexpected alias" in check.summary
+
+    duplicate_client = grp.struct_group(
+        ("binnacle-git-credential-client", "x", client_gid, ["unexpected-client"])
+    )
+    monkeypatch.setattr(
+        "scripts.setup_dev_pi.grp.getgrall",
+        lambda: [*groups.values(), duplicate_client],
+    )
+
+    check = setup_dev_pi._check_identity_compatibility()
+
+    assert check.status == "fail"
+    assert "numeric group has an unexpected alias" in check.summary
 
 
 @pytest.mark.parametrize("readiness", ("recovering", "integrity_failed"))
@@ -381,6 +414,7 @@ def test_deployment_verifier_checks_effective_executor_boundaries(
     }
     monkeypatch.setattr("scripts.verify_dev_pi.pwd.getpwnam", lambda name: users[name])
     monkeypatch.setattr("scripts.verify_dev_pi.grp.getgrnam", lambda name: groups[name])
+    monkeypatch.setattr("scripts.verify_dev_pi.grp.getgrall", lambda: list(groups.values()))
 
     def properties(names: tuple[str, ...], *, service_name: str) -> dict[str, str]:
         if service_name == verify_dev_pi.EXECUTOR_SERVICE_NAME:
@@ -560,6 +594,7 @@ def test_deployment_verifier_checks_effective_credential_boundaries(
         lambda _name, primary_gid: [primary_gid, client_gid],
     )
     monkeypatch.setattr("scripts.verify_dev_pi.grp.getgrnam", lambda name: groups[name])
+    monkeypatch.setattr("scripts.verify_dev_pi.grp.getgrall", lambda: list(groups.values()))
 
     def properties(names: tuple[str, ...], *, service_name: str) -> dict[str, str]:
         if service_name == verify_dev_pi.GIT_CREDENTIAL_SERVICE_NAME:
@@ -628,7 +663,43 @@ def test_deployment_verifier_checks_effective_credential_boundaries(
         == "fail"
     )
 
+    client_alias = grp.struct_group(
+        ("credential-client-alias", "x", client_gid, ["unexpected-client"])
+    )
     monkeypatch.setattr("scripts.verify_dev_pi.pwd.getpwall", lambda: list(users.values()))
+    monkeypatch.setattr(
+        "scripts.verify_dev_pi.os.getgrouplist",
+        lambda _name, primary_gid: [primary_gid, client_gid],
+    )
+    monkeypatch.setattr(
+        "scripts.verify_dev_pi.grp.getgrall",
+        lambda: [*groups.values(), client_alias],
+    )
+
+    checks = verify_dev_pi._git_credential_foundation_checks()
+
+    assert (
+        next(check for check in checks if check.name == "git-credential-identities").status
+        == "fail"
+    )
+
+    duplicate_client = grp.struct_group(
+        ("binnacle-git-credential-client", "x", client_gid, ["unexpected-client"])
+    )
+    monkeypatch.setattr(
+        "scripts.verify_dev_pi.grp.getgrall",
+        lambda: [*groups.values(), duplicate_client],
+    )
+
+    checks = verify_dev_pi._git_credential_foundation_checks()
+
+    assert (
+        next(check for check in checks if check.name == "git-credential-identities").status
+        == "fail"
+    )
+
+    monkeypatch.setattr("scripts.verify_dev_pi.pwd.getpwall", lambda: list(users.values()))
+    monkeypatch.setattr("scripts.verify_dev_pi.grp.getgrall", lambda: list(groups.values()))
     monkeypatch.setattr(
         "scripts.verify_dev_pi.os.getgrouplist",
         lambda _name, primary_gid: [primary_gid, client_gid, 1999],

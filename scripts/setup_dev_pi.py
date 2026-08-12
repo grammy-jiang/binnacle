@@ -90,10 +90,18 @@ SYSTEM_PATHS = (
 )
 
 
-def _effective_group_members(group: grp.struct_group) -> set[str]:
-    """Return supplementary and primary members of one local group."""
+def _same_gid_groups(group: grp.struct_group) -> tuple[grp.struct_group, ...]:
+    """Return every local group entry granting the same numeric authority."""
 
-    return set(group.gr_mem) | {
+    entries = tuple(candidate for candidate in grp.getgrall() if candidate.gr_gid == group.gr_gid)
+    return entries or (group,)
+
+
+def _effective_group_members(group: grp.struct_group) -> set[str]:
+    """Return all supplementary and primary members of one numeric group."""
+
+    supplementary = {member for candidate in _same_gid_groups(group) for member in candidate.gr_mem}
+    return supplementary | {
         account.pw_name for account in pwd.getpwall() if account.pw_gid == group.gr_gid
     }
 
@@ -374,6 +382,16 @@ def _check_identity_compatibility() -> Check:
             "fail",
             "application, executor, credential, client, and development need distinct group IDs",
         )
+    for protected_group_name in (GIT_CREDENTIAL_GROUP, GIT_CREDENTIAL_CLIENT_GROUP):
+        protected_group = groups.get(protected_group_name)
+        if protected_group is not None and tuple(
+            candidate.gr_name for candidate in _same_gid_groups(protected_group)
+        ) != (protected_group_name,):
+            return Check(
+                "identities",
+                "fail",
+                f"{protected_group_name} numeric group has an unexpected alias",
+            )
     users: dict[str, pwd.struct_passwd] = {}
     for user_name, group_name in (
         (SERVICE_USER, SERVICE_GROUP),

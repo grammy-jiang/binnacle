@@ -82,10 +82,18 @@ EXPECTED_GIT_CREDENTIAL_INACCESSIBLE_PATHS = frozenset(
 )
 
 
-def _effective_group_members(group: grp.struct_group) -> set[str]:
-    """Return supplementary and primary members of one local group."""
+def _same_gid_groups(group: grp.struct_group) -> tuple[grp.struct_group, ...]:
+    """Return every local group entry granting the same numeric authority."""
 
-    return set(group.gr_mem) | {
+    entries = tuple(candidate for candidate in grp.getgrall() if candidate.gr_gid == group.gr_gid)
+    return entries or (group,)
+
+
+def _effective_group_members(group: grp.struct_group) -> set[str]:
+    """Return all supplementary and primary members of one numeric group."""
+
+    supplementary = {member for candidate in _same_gid_groups(group) for member in candidate.gr_mem}
+    return supplementary | {
         account.pw_name for account in pwd.getpwall() if account.pw_gid == group.gr_gid
     }
 
@@ -1002,6 +1010,10 @@ def _git_credential_foundation_checks() -> list[VerificationCheck]:
         and credential.pw_uid not in {application.pw_uid, executor.pw_uid}
         and credential_uid_names == {"binnacle-git-credential"}
         and credential_group_ids == {credential_group.gr_gid, client_group.gr_gid}
+        and tuple(candidate.gr_name for candidate in _same_gid_groups(credential_group))
+        == ("binnacle-git-credential",)
+        and tuple(candidate.gr_name for candidate in _same_gid_groups(client_group))
+        == ("binnacle-git-credential-client",)
         and client_members == {"binnacle-executor", "binnacle-git-credential"}
         and application.pw_gid != client_group.gr_gid
         and len(
