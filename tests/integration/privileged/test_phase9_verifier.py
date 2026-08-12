@@ -25,6 +25,10 @@ def test_temporary_privileged_verifier_is_exact_and_default_disabled(repo_root: 
     assert report.schema_generation == 1
     assert report.readiness == "disabled"
     assert report.evidence_generation == 0
+    assert report.package_plans == 0
+    assert report.runtime_slots == 0
+    assert report.restart_checkpoints == 0
+    assert report.selector_generations == 0
     assert not report.retains_authority
 
 
@@ -96,6 +100,80 @@ def test_default_disabled_gate_rejects_promoted_or_retained_authority(
     with pytest.raises(PrivilegedBrokerVerificationError, match="promoted"):
         require_default_disabled(report)
 
+    retained_root = tmp_path / "retained"
+    retained_root.mkdir()
+    retained_database = retained_root / "privileged-evidence.sqlite3"
+    _migrate(retained_database, repo_root)
+    retained_database.chmod(0o600)
+    with closing(sqlite3.connect(retained_database)) as connection, connection:
+        _insert_slot(connection, slot_id="lkg-slot", generation=1, state="lkg")
+        connection.execute(
+            """
+            INSERT INTO privileged_selector_generations VALUES (
+              1,NULL,1,NULL,'lkg-slot',?,'verified',?,?,CURRENT_TIMESTAMP,
+              CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP
+            )
+            """,
+            ("a" * 64, "b" * 64, "c" * 64),
+        )
+    retained_report = verify_database(retained_database)
+    assert retained_report.runtime_slots == 1
+    assert retained_report.selector_generations == 1
+    assert retained_report.retains_authority
+    with pytest.raises(PrivilegedBrokerVerificationError, match="retains broker evidence"):
+        require_default_disabled(retained_report)
+
+
+def test_integrity_rejects_specialized_evidence_for_the_wrong_action(
+    tmp_path: Path,
+    repo_root: Path,
+) -> None:
+    database = tmp_path / "privileged-evidence.sqlite3"
+    _migrate(database, repo_root)
+    with closing(sqlite3.connect(database)) as connection, connection:
+        connection.execute(
+            """
+            INSERT INTO privileged_operation_bindings VALUES (
+              'operation-1','ticket-1',?,?,?,'target',?,?,?,?,?,
+              datetime(CURRENT_TIMESTAMP,'+2 minutes'),'accepted',1,?,
+              CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,NULL,CURRENT_TIMESTAMP
+            )
+            """,
+            (
+                "a" * 64,
+                "b" * 64,
+                "package_install",
+                "c" * 64,
+                "d" * 64,
+                "e" * 64,
+                "f" * 64,
+                "1" * 64,
+                "2" * 64,
+            ),
+        )
+        connection.execute(
+            "INSERT INTO privileged_evidence_events VALUES "
+            "(1,'event-1','operation-1','ticket.accepted',?,CURRENT_TIMESTAMP)",
+            ("3" * 64,),
+        )
+        connection.execute("UPDATE privileged_meta SET evidence_generation_high_water=1 WHERE id=1")
+        _insert_slot(connection, slot_id="lkg-slot", generation=1, state="lkg")
+        _insert_slot(connection, slot_id="candidate-slot", generation=2, state="complete")
+        connection.execute(
+            """
+            INSERT INTO privileged_restart_checkpoints VALUES (
+              'operation-1',?,'workspace-1',1,'candidate-slot','lkg-slot',NULL,
+              ?,?,?,?,'prepared',NULL,CURRENT_TIMESTAMP,NULL,NULL,CURRENT_TIMESTAMP
+            )
+            """,
+            ("a" * 64, "b" * 64, "c" * 64, "d" * 64, "e" * 64),
+        )
+        with pytest.raises(
+            PrivilegedBrokerIntegrityError,
+            match="accepted complete slot evidence",
+        ):
+            verify_privileged_broker_connection(connection)
+
 
 def _migrate(database: Path, repo_root: Path) -> None:
     from alembic import command
@@ -105,3 +183,36 @@ def _migrate(database: Path, repo_root: Path) -> None:
     config.set_main_option("script_location", str(repo_root / "migrations_privileged"))
     config.attributes["database_url"] = f"sqlite:///{database}"
     command.upgrade(config, "head")
+
+
+def _insert_slot(
+    connection: sqlite3.Connection,
+    *,
+    slot_id: str,
+    generation: int,
+    state: str,
+) -> None:
+    connection.execute(
+        """
+        INSERT INTO privileged_runtime_slots VALUES (
+          ?,?,?,'lkg',?, ?,?,?,?,?, ?,?,?,?, ?,4096,64,CURRENT_TIMESTAMP,
+          CURRENT_TIMESTAMP,CURRENT_TIMESTAMP
+        )
+        """,
+        (
+            slot_id,
+            generation,
+            f"/srv/binnacle-runtime/slots/{slot_id}",
+            state,
+            "a" * 64,
+            "b" * 64,
+            "c" * 64,
+            "d" * 64,
+            "e" * 64,
+            "f" * 64,
+            "1" * 64,
+            "2" * 64,
+            "3" * 64,
+            "4" * 64,
+        ),
+    )

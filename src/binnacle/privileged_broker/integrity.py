@@ -14,6 +14,10 @@ EXPECTED_PRIVILEGED_TABLES: Final = frozenset(
         "privileged_operation_bindings",
         "privileged_no_accept_tombstones",
         "privileged_subeffects",
+        "privileged_package_plans",
+        "privileged_runtime_slots",
+        "privileged_restart_checkpoints",
+        "privileged_selector_generations",
         "privileged_evidence_events",
     }
 )
@@ -34,6 +38,10 @@ class PrivilegedBrokerIntegrityReport:
     sealed_bindings: int
     active_subeffects: int
     uncertain_subeffects: int
+    package_plans: int
+    runtime_slots: int
+    restart_checkpoints: int
+    selector_generations: int
 
     @property
     def retains_authority(self) -> bool:
@@ -42,6 +50,10 @@ class PrivilegedBrokerIntegrityReport:
             or self.accepted_bindings
             or self.active_subeffects
             or self.uncertain_subeffects
+            or self.package_plans
+            or self.runtime_slots
+            or self.restart_checkpoints
+            or self.selector_generations
         )
 
 
@@ -68,6 +80,8 @@ def _verify(
     connection.row_factory = sqlite3.Row
     if connection.execute("PRAGMA quick_check").fetchone()[0] != "ok":
         raise PrivilegedBrokerIntegrityError("privileged-broker SQLite integrity check failed")
+    if connection.execute("PRAGMA foreign_key_check").fetchone() is not None:
+        raise PrivilegedBrokerIntegrityError("privileged-broker foreign-key integrity failed")
     tables = frozenset(
         row[0]
         for row in connection.execute(
@@ -113,6 +127,10 @@ def _verify(
     for row in bindings:
         _verify_binding(connection, row, high_water)
     _verify_subeffects(connection, high_water)
+    package_plans = _verify_package_plans(connection)
+    runtime_slots = _verify_runtime_slots(connection)
+    restart_checkpoints = _verify_restart_checkpoints(connection)
+    selector_generations = _verify_selector_generations(connection)
     orphan_events = int(
         connection.execute(
             "SELECT COUNT(*) FROM privileged_evidence_events event "
@@ -145,6 +163,10 @@ def _verify(
         sealed_bindings=sum(row["acceptance_state"] == "sealed_no_accept" for row in bindings),
         active_subeffects=active_subeffects,
         uncertain_subeffects=uncertain_subeffects,
+        package_plans=package_plans,
+        runtime_slots=runtime_slots,
+        restart_checkpoints=restart_checkpoints,
+        selector_generations=selector_generations,
     )
 
 
@@ -178,6 +200,21 @@ def _verify_binding(
             raise PrivilegedBrokerIntegrityError("privileged no-accept evidence conflicts")
     elif tombstones:
         raise PrivilegedBrokerIntegrityError("privileged tombstone has no sealed binding")
+    if state != "unresolved":
+        event = connection.execute(
+            "SELECT operation_id,event_type FROM privileged_evidence_events "
+            "WHERE evidence_generation=?",
+            (generation,),
+        ).fetchone()
+        expected_type = "ticket.accepted" if state == "accepted" else "ticket.sealed_no_accept"
+        if (
+            event is None
+            or event["operation_id"] != row["operation_id"]
+            or event["event_type"] != expected_type
+        ):
+            raise PrivilegedBrokerIntegrityError(
+                "privileged acceptance lacks its exact evidence event"
+            )
 
 
 def _verify_subeffects(connection: sqlite3.Connection, high_water: int) -> None:
@@ -185,7 +222,7 @@ def _verify_subeffects(connection: sqlite3.Connection, high_water: int) -> None:
     rows = tuple(
         connection.execute(
             """
-            SELECT subeffect.*, binding.acceptance_state
+            SELECT subeffect.*, binding.acceptance_state, binding.action
             FROM privileged_subeffects subeffect
             LEFT JOIN privileged_operation_bindings binding
               ON binding.operation_id=subeffect.operation_id
@@ -202,6 +239,135 @@ def _verify_subeffects(connection: sqlite3.Connection, high_water: int) -> None:
         expected_by_operation[operation_id] = expected + 1
         if row["acceptance_state"] != "accepted":
             raise PrivilegedBrokerIntegrityError("privileged subeffect lacks accepted binding")
+        action = str(row["action"])
+        kind = str(row["kind"])
+        allowed_kinds = {
+            "package_install": {"package_transaction"},
+            "service_restart": {"service_stop", "service_start"},
+            "controlled_restart": {
+                "service_stop",
+                "service_start",
+                "selector_activate",
+                "selector_restore",
+                "runtime_verify",
+            },
+        }
+        if kind not in allowed_kinds.get(action, set()):
+            raise PrivilegedBrokerIntegrityError(
+                "privileged subeffect kind conflicts with its accepted action"
+            )
+
+
+def _verify_package_plans(connection: sqlite3.Connection) -> int:
+    rows = tuple(
+        connection.execute(
+            """
+            SELECT package_plan.*, binding.action, binding.acceptance_state
+            FROM privileged_package_plans package_plan
+            LEFT JOIN privileged_operation_bindings binding
+              ON binding.operation_id=package_plan.operation_id
+            ORDER BY package_plan.operation_id
+            """
+        )
+    )
+    for row in rows:
+        if row["acceptance_state"] != "accepted" or row["action"] != "package_install":
+            raise PrivilegedBrokerIntegrityError(
+                "privileged package plan lacks an accepted package binding"
+            )
+    return len(rows)
+
+
+def _verify_runtime_slots(connection: sqlite3.Connection) -> int:
+    rows = tuple(
+        connection.execute("SELECT * FROM privileged_runtime_slots ORDER BY slot_generation")
+    )
+    if any(
+        _integer(row["slot_generation"]) != expected for expected, row in enumerate(rows, start=1)
+    ):
+        raise PrivilegedBrokerIntegrityError("privileged runtime slot generation has a gap")
+    if sum(row["state"] == "active" for row in rows) > 1:
+        raise PrivilegedBrokerIntegrityError("multiple privileged runtime slots are active")
+    if sum(row["state"] == "lkg" for row in rows) > 1:
+        raise PrivilegedBrokerIntegrityError("multiple privileged runtime slots are LKG")
+    return len(rows)
+
+
+def _verify_restart_checkpoints(connection: sqlite3.Connection) -> int:
+    rows = tuple(
+        connection.execute(
+            """
+            SELECT checkpoint.*, binding.action, binding.acceptance_state,
+                   candidate.state AS candidate_state, lkg.state AS lkg_state
+            FROM privileged_restart_checkpoints checkpoint
+            LEFT JOIN privileged_operation_bindings binding
+              ON binding.operation_id=checkpoint.operation_id
+            LEFT JOIN privileged_runtime_slots candidate
+              ON candidate.slot_id=checkpoint.candidate_slot_id
+            LEFT JOIN privileged_runtime_slots lkg
+              ON lkg.slot_id=checkpoint.lkg_slot_id
+            ORDER BY checkpoint.operation_id
+            """
+        )
+    )
+    complete_states = {"complete", "active", "lkg", "prior"}
+    for row in rows:
+        if (
+            row["acceptance_state"] != "accepted"
+            or row["action"] != "controlled_restart"
+            or row["candidate_slot_id"] == row["lkg_slot_id"]
+            or row["candidate_state"] not in complete_states
+            or row["lkg_state"] not in {"lkg", "prior"}
+        ):
+            raise PrivilegedBrokerIntegrityError(
+                "privileged restart checkpoint lacks accepted complete slot evidence"
+            )
+    return len(rows)
+
+
+def _verify_selector_generations(connection: sqlite3.Connection) -> int:
+    rows = tuple(
+        connection.execute(
+            """
+            SELECT selector.*, binding.action, binding.acceptance_state,
+                   old_slot.state AS old_slot_state, new_slot.state AS new_slot_state
+            FROM privileged_selector_generations selector
+            LEFT JOIN privileged_operation_bindings binding
+              ON binding.operation_id=selector.operation_id
+            LEFT JOIN privileged_runtime_slots old_slot
+              ON old_slot.slot_id=selector.old_slot_id
+            LEFT JOIN privileged_runtime_slots new_slot
+              ON new_slot.slot_id=selector.new_slot_id
+            ORDER BY selector.selector_generation
+            """
+        )
+    )
+    complete_states = {"complete", "active", "lkg", "prior"}
+    for expected, row in enumerate(rows, start=1):
+        initial = bool(row["initial_bootstrap"])
+        if _integer(row["selector_generation"]) != expected:
+            raise PrivilegedBrokerIntegrityError("privileged selector generation has a gap")
+        if (
+            initial != (expected == 1)
+            or initial != (row["operation_id"] is None)
+            or (initial and row["old_slot_id"] is not None)
+        ):
+            raise PrivilegedBrokerIntegrityError(
+                "privileged selector bootstrap identity is contradictory"
+            )
+        if not initial and (
+            row["acceptance_state"] != "accepted" or row["action"] != "controlled_restart"
+        ):
+            raise PrivilegedBrokerIntegrityError(
+                "privileged selector lacks an accepted restart binding"
+            )
+        if row["new_slot_state"] not in complete_states or (
+            row["old_slot_id"] is not None and row["old_slot_state"] not in complete_states
+        ):
+            raise PrivilegedBrokerIntegrityError(
+                "privileged selector references an incomplete runtime slot"
+            )
+    return len(rows)
 
 
 def _integer(value: object) -> int:
