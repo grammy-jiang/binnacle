@@ -474,6 +474,94 @@ EXPECTED_COLUMNS = {
         "created_at",
         "updated_at",
     },
+    "privileged_preparations": {
+        "prepare_operation_id",
+        "session_id",
+        "workspace_id",
+        "action",
+        "target_profile_id",
+        "target_profile_sha256",
+        "maximum_effect",
+        "normalized_request_sha256",
+        "current_state_binding_sha256",
+        "prepared_evidence_sha256",
+        "execution_nonce_sha256",
+        "package_transaction_plan_sha256",
+        "service_profile_sha256",
+        "candidate_verification_reference",
+        "candidate_verification_sha256",
+        "candidate_slot_id",
+        "lkg_slot_id",
+        "schema_heads_sha256",
+        "runtime_layout_sha256",
+        "deployed_peer_set_sha256",
+        "state",
+        "consumed_by_operation_id",
+        "created_at",
+        "expires_at",
+        "consumed_at",
+        "updated_at",
+    },
+    "privileged_operations": {
+        "operation_id",
+        "prepare_operation_id",
+        "session_id",
+        "workspace_id",
+        "workspace_fence_version",
+        "reservation_generation",
+        "action",
+        "maximum_effect",
+        "target_profile_id",
+        "target_profile_sha256",
+        "broker_profile_id",
+        "broker_profile_sha256",
+        "prepared_evidence_sha256",
+        "current_state_binding_sha256",
+        "policy_decision_id",
+        "policy_evidence_sha256",
+        "ticket_id",
+        "ticket_sha256",
+        "ticket_nonce_sha256",
+        "broker_acceptance_state",
+        "broker_evidence_generation",
+        "broker_acceptance_evidence_sha256",
+        "package_transaction_plan_sha256",
+        "service_profile_sha256",
+        "candidate_verification_reference",
+        "candidate_verification_sha256",
+        "candidate_slot_id",
+        "lkg_slot_id",
+        "restart_checkpoint_sha256",
+        "schema_heads_sha256",
+        "runtime_layout_sha256",
+        "deployed_peer_set_sha256",
+        "candidate_outcome",
+        "rollback_outcome",
+        "broker_closure_state",
+        "broker_closure_evidence_sha256",
+        "audit_closure_state",
+        "audit_closure_evidence_sha256",
+        "fence_closure_state",
+        "fence_release_evidence_sha256",
+        "state",
+        "created_at",
+        "broker_decided_at",
+        "closed_at",
+        "updated_at",
+        "last_reconciled_at",
+    },
+    "privileged_effect_reservations": {
+        "operation_id",
+        "workspace_id",
+        "workspace_fence_version",
+        "reservation_generation",
+        "active_slot",
+        "state",
+        "closure_evidence_sha256",
+        "acquired_at",
+        "released_at",
+        "updated_at",
+    },
 }
 
 
@@ -490,7 +578,7 @@ async def test_fresh_upgrade_has_exact_authoritative_shape_and_pragmas(
     try:
         health = await verify_database_runtime(runtime)
         assert health.healthy
-        assert health.revision == "0005_git_operations"
+        assert health.revision == "0006_privileged_operations"
         assert health.foreign_keys == 1
         assert health.journal_mode == "wal"
         assert health.synchronous == 2
@@ -835,7 +923,7 @@ def test_populated_phase4_database_upgrades_without_rewriting_existing_rows(
         connection.close()
 
     assert owner_row == ("controller-preserved", 1)
-    assert revision == ("0005_git_operations",)
+    assert revision == ("0006_privileged_operations",)
     assert phase5_counts == (0, 0, 0, 0, 0, 0, 0)
 
 
@@ -877,7 +965,7 @@ def test_stopped_service_upgrade_and_current_revision_commands(
         revision = connection.execute("SELECT version_num FROM alembic_version").fetchone()
     finally:
         connection.close()
-    assert revision == ("0005_git_operations",)
+    assert revision == ("0006_privileged_operations",)
 
 
 @pytest.mark.anyio

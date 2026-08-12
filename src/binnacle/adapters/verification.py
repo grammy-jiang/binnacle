@@ -27,7 +27,7 @@ from binnacle.domain.probe_workspace import (
     validate_path_snapshot,
 )
 
-EXPECTED_REVISION = "0005_git_operations"
+EXPECTED_REVISION = "0006_privileged_operations"
 EXPECTED_TABLES = frozenset(
     {
         "alembic_version",
@@ -52,6 +52,9 @@ EXPECTED_TABLES = frozenset(
         "git_operation_stages",
         "git_commit_evidence",
         "git_remote_evidence",
+        "privileged_preparations",
+        "privileged_operations",
+        "privileged_effect_reservations",
     }
 )
 
@@ -270,6 +273,7 @@ def _verify_database(
     _verify_development_workspace_invariants(connection)
     _verify_command_execution_invariants(connection)
     _verify_git_invariants(connection)
+    _verify_privileged_invariants(connection)
     meta = connection.execute("SELECT * FROM kernel_meta WHERE id=1").fetchone()
     if meta is None:
         raise KernelVerificationError("kernel metadata singleton is absent")
@@ -379,7 +383,7 @@ def _verify_database_invariants(connection: sqlite3.Connection) -> None:
         """,
         "trusted time ordering": """
             SELECT COUNT(*) FROM kernel_meta
-            WHERE schema_generation != 5 OR trusted_time_generation < 1
+            WHERE schema_generation != 6 OR trusted_time_generation < 1
                OR audit_recovered_generation > audit_failure_generation
                OR (audit_failure_latched=1 AND
                    audit_failure_generation <= audit_recovered_generation)
@@ -508,11 +512,12 @@ def _verify_development_workspace_invariants(connection: sqlite3.Connection) -> 
             LEFT JOIN workspace_operations wo ON wo.operation_id=f.active_operation_id
             LEFT JOIN command_operations co ON co.operation_id=f.active_operation_id
             LEFT JOIN git_operations go ON go.operation_id=f.active_operation_id
+            LEFT JOIN privileged_operations po ON po.operation_id=f.active_operation_id
             LEFT JOIN operations o ON o.operation_id=f.active_operation_id
             WHERE f.active_operation_id IS NOT NULL
               AND (o.operation_id IS NULL
                    OR ((wo.operation_id IS NOT NULL) + (co.operation_id IS NOT NULL) +
-                       (go.operation_id IS NOT NULL)) != 1
+                       (go.operation_id IS NOT NULL) + (po.operation_id IS NOT NULL)) != 1
                    OR (wo.operation_id IS NOT NULL AND
                        (wo.workspace_id!=f.workspace_id OR
                         f.active_contract!=('workspace_' || wo.mutation_kind)))
@@ -520,6 +525,10 @@ def _verify_development_workspace_invariants(connection: sqlite3.Connection) -> 
                        (co.workspace_id!=f.workspace_id OR co.closure_state!='pending'))
                    OR (go.operation_id IS NOT NULL AND
                        (go.workspace_id!=f.workspace_id OR go.state='terminal'))
+                   OR (po.operation_id IS NOT NULL AND
+                       (po.workspace_id!=f.workspace_id OR
+                        po.workspace_fence_version!=f.fence_version OR
+                        po.action='package_install' OR po.state='terminal'))
                    OR o.operation_contract!=f.active_contract
                    OR o.state IN ('received','rejected'))
         """,
@@ -735,6 +744,157 @@ def _verify_git_invariants(connection: sqlite3.Connection) -> None:
                  (re.operation_id IS NULL OR re.transport_state!='completed' OR
                   re.remote_reconciled!=1 OR
                   re.credential_use_evidence_sha256 IS NULL)))))
+        """,
+    }
+    for name, query in checks.items():
+        if int(connection.execute(query).fetchone()[0]):
+            raise KernelVerificationError(f"{name} invariant failed")
+
+
+def _verify_privileged_invariants(connection: sqlite3.Connection) -> None:
+    checks = {
+        "privileged preparation provenance": """
+            SELECT COUNT(*) FROM privileged_preparations preparation
+            LEFT JOIN operations prepare_operation
+              ON prepare_operation.operation_id=preparation.prepare_operation_id
+            LEFT JOIN policy_decisions prepare_policy
+              ON prepare_policy.operation_id=preparation.prepare_operation_id
+            LEFT JOIN development_sessions session
+              ON session.session_id=preparation.session_id
+            LEFT JOIN registered_workspaces workspace
+              ON workspace.workspace_id=preparation.workspace_id
+            LEFT JOIN privileged_operations privileged
+              ON privileged.prepare_operation_id=preparation.prepare_operation_id
+            WHERE prepare_operation.operation_id IS NULL
+               OR prepare_policy.policy_decision_id IS NULL
+               OR prepare_operation.operation_contract!='privileged_prepare'
+               OR prepare_operation.tool_name!='privileged_prepare'
+               OR prepare_operation.state!='succeeded'
+               OR prepare_operation.terminality!='terminal'
+               OR prepare_operation.effect_knowledge!='known_no_effect'
+               OR prepare_policy.decision!='allow'
+               OR prepare_policy.controller_id!=prepare_operation.controller_id
+               OR prepare_policy.controller_epoch!=prepare_operation.controller_epoch
+               OR prepare_policy.operation_contract!=prepare_operation.operation_contract
+               OR prepare_policy.operation_contract_version!=
+                    prepare_operation.operation_contract_version
+               OR prepare_policy.normalized_target_digest!=preparation.target_profile_sha256
+               OR (preparation.action!='package_install' AND
+                   (session.session_id IS NULL OR workspace.workspace_id IS NULL
+                    OR session.workspace_id!=preparation.workspace_id
+                    OR session.controller_id!=prepare_operation.controller_id
+                    OR session.controller_epoch!=prepare_operation.controller_epoch
+                    OR workspace.workspace_id!=session.workspace_id))
+               OR (preparation.state='consumed' AND
+                   (privileged.operation_id IS NULL
+                    OR privileged.operation_id!=preparation.consumed_by_operation_id))
+               OR (preparation.state!='consumed' AND privileged.operation_id IS NOT NULL)
+        """,
+        "privileged operation provenance": """
+            SELECT COUNT(*) FROM privileged_operations privileged
+            LEFT JOIN operations operation
+              ON operation.operation_id=privileged.operation_id
+            LEFT JOIN privileged_preparations preparation
+              ON preparation.prepare_operation_id=privileged.prepare_operation_id
+            LEFT JOIN policy_decisions policy
+              ON policy.policy_decision_id=privileged.policy_decision_id
+            LEFT JOIN development_sessions session
+              ON session.session_id=privileged.session_id
+            LEFT JOIN registered_workspaces workspace
+              ON workspace.workspace_id=privileged.workspace_id
+            LEFT JOIN workspace_mutation_fences fence
+              ON fence.workspace_id=privileged.workspace_id
+            LEFT JOIN privileged_effect_reservations reservation
+              ON reservation.operation_id=privileged.operation_id
+            WHERE operation.operation_id IS NULL OR preparation.prepare_operation_id IS NULL
+               OR policy.policy_decision_id IS NULL OR reservation.operation_id IS NULL
+               OR preparation.state!='consumed'
+               OR preparation.consumed_by_operation_id!=privileged.operation_id
+               OR preparation.action!=privileged.action
+               OR preparation.target_profile_id!=privileged.target_profile_id
+               OR preparation.target_profile_sha256!=privileged.target_profile_sha256
+               OR preparation.maximum_effect!=privileged.maximum_effect
+               OR preparation.prepared_evidence_sha256!=privileged.prepared_evidence_sha256
+               OR preparation.current_state_binding_sha256!=
+                    privileged.current_state_binding_sha256
+               OR preparation.execution_nonce_sha256!=privileged.ticket_nonce_sha256
+               OR preparation.package_transaction_plan_sha256 IS NOT
+                    privileged.package_transaction_plan_sha256
+               OR preparation.service_profile_sha256 IS NOT privileged.service_profile_sha256
+               OR preparation.candidate_verification_reference IS NOT
+                    privileged.candidate_verification_reference
+               OR preparation.candidate_verification_sha256 IS NOT
+                    privileged.candidate_verification_sha256
+               OR preparation.candidate_slot_id IS NOT privileged.candidate_slot_id
+               OR preparation.lkg_slot_id IS NOT privileged.lkg_slot_id
+               OR preparation.schema_heads_sha256 IS NOT privileged.schema_heads_sha256
+               OR preparation.runtime_layout_sha256 IS NOT privileged.runtime_layout_sha256
+               OR preparation.deployed_peer_set_sha256 IS NOT
+                    privileged.deployed_peer_set_sha256
+               OR policy.operation_id!=privileged.operation_id OR policy.decision!='allow'
+               OR policy.controller_id!=operation.controller_id
+               OR policy.controller_epoch!=operation.controller_epoch
+               OR policy.operation_contract!=operation.operation_contract
+               OR policy.operation_contract_version!=operation.operation_contract_version
+               OR policy.normalized_target_digest!=privileged.target_profile_sha256
+               OR policy.runtime_policy_sha256!=privileged.policy_evidence_sha256
+               OR operation.tool_name!=operation.operation_contract
+               OR operation.operation_contract!=CASE privileged.action
+                    WHEN 'package_install' THEN 'package_install'
+                    WHEN 'service_restart' THEN 'binnacle_service_restart'
+                    WHEN 'controlled_restart' THEN 'binnacle_restart' END
+               OR operation.state IN ('received','rejected')
+               OR reservation.reservation_generation!=privileged.reservation_generation
+               OR reservation.workspace_id IS NOT privileged.workspace_id
+               OR reservation.workspace_fence_version IS NOT
+                    privileged.workspace_fence_version
+               OR (privileged.action!='package_install' AND
+                   (session.session_id IS NULL OR workspace.workspace_id IS NULL
+                    OR session.workspace_id!=privileged.workspace_id
+                    OR session.controller_id!=operation.controller_id
+                    OR session.controller_epoch!=operation.controller_epoch))
+               OR (privileged.action='package_install' AND
+                   (session.session_id IS NOT NULL OR workspace.workspace_id IS NOT NULL))
+               OR (privileged.state='terminal' AND operation.terminality!='terminal')
+               OR (privileged.state!='terminal' AND operation.terminality='terminal')
+               OR (privileged.broker_acceptance_state='sealed_no_accept' AND
+                   operation.effect_knowledge!='known_no_effect')
+               OR (privileged.state='terminal' AND
+                   operation.effect_knowledge IN ('none','uncertain'))
+               OR (privileged.state IN ('uncertain','restricted_recovery') AND
+                   operation.effect_knowledge!='uncertain')
+        """,
+        "privileged workspace fence": """
+            SELECT COUNT(*) FROM privileged_operations privileged
+            LEFT JOIN workspace_mutation_fences fence
+              ON fence.workspace_id=privileged.workspace_id
+            WHERE privileged.action!='package_install' AND
+              (fence.workspace_id IS NULL
+               OR fence.fence_version<privileged.workspace_fence_version
+               OR (privileged.state!='terminal' AND
+                   (fence.fence_version!=privileged.workspace_fence_version
+                    OR fence.active_operation_id!=privileged.operation_id
+                    OR fence.active_contract!=CASE privileged.action
+                      WHEN 'service_restart' THEN 'binnacle_service_restart'
+                      WHEN 'controlled_restart' THEN 'binnacle_restart' END))
+               OR (privileged.state='terminal' AND
+                   fence.active_operation_id=privileged.operation_id))
+        """,
+        "privileged reservation closure": """
+            SELECT COUNT(*) FROM privileged_effect_reservations reservation
+            LEFT JOIN privileged_operations privileged
+              ON privileged.operation_id=reservation.operation_id
+            WHERE privileged.operation_id IS NULL
+               OR reservation.reservation_generation!=privileged.reservation_generation
+               OR reservation.workspace_id IS NOT privileged.workspace_id
+               OR reservation.workspace_fence_version IS NOT
+                    privileged.workspace_fence_version
+               OR (privileged.state='terminal' AND reservation.state!='released')
+               OR (privileged.state IN ('prepared','dispatched','reconciling') AND
+                   reservation.state!='held')
+               OR (privileged.state='uncertain' AND reservation.state!='uncertain')
+               OR (privileged.state='restricted_recovery' AND
+                   reservation.state!='restricted_recovery')
         """,
     }
     for name, query in checks.items():

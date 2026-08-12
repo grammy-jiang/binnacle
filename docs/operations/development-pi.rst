@@ -218,7 +218,7 @@ Offline application, executor, and credential migration and verification
 -------------------------------------------------------------------------
 
 Neither database is created or upgraded opportunistically by a runtime service.  The
-reviewed application head is ``0005_git_operations`` and the independent executor head is
+reviewed application head is ``0006_privileged_operations`` and the independent executor head is
 ``0002_git_members``.  The isolated credential-broker head is
 ``0001_credential_evidence``.  All Phase 8 Git and credential capabilities remain disabled.
 For a new installation or an upgrade, first let systemd create the protected application
@@ -454,8 +454,9 @@ evidence; their absence does not block repository implementation or CI review.
 Phase 7 and Phase 8 default-disabled foundations
 ------------------------------------------------
 
-Application migration ``0005_git_operations`` retains the Phase 7 command-operation
-correlation and adds default-disabled Git parent/member/commit/remote evidence.
+Application migrations through ``0006_privileged_operations`` retain the Phase 7
+command-operation correlation, add default-disabled Git parent/member/commit/remote
+evidence, and add default-disabled privileged preparation/ticket/reservation evidence.
 monotonic cancellation delivery, exact supervisor evidence, and mutation-fence ownership.
 The separate executor migration ``0002_git_members`` retains bounded executor acceptance,
 pending-cancel, no-accept, stream, and evidence records and reserves empty discriminated Git
