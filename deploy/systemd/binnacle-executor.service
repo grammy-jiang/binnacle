@@ -1,0 +1,43 @@
+[Unit]
+Description=Binnacle unprivileged execution supervisor (default disabled)
+Documentation=https://github.com/grammy-jiang/binnacle/tree/master/docs/operations
+Requires=binnacle-executor.socket
+After=binnacle-executor.socket
+ConditionPathIsDirectory=/srv/binnacle-dev/repo
+ConditionPathIsReadWrite=/var/lib/binnacle-executor/state
+ConditionPathExists=/etc/binnacle-executor/executor.toml
+
+[Service]
+Type=simple
+User=binnacle-executor
+Group=binnacle-executor
+SupplementaryGroups=binnacle-dev binnacle-executor-client
+WorkingDirectory=/srv/binnacle-dev/repo
+ExecStart=/srv/binnacle-dev/repo/.venv/bin/binnacle executor serve --config /etc/binnacle-executor/executor.toml
+Restart=on-failure
+RestartSec=2s
+KillMode=control-group
+SendSIGKILL=yes
+Delegate=no
+UMask=0077
+ReadWritePaths=/run/binnacle-executor/private
+ReadWritePaths=/var/lib/binnacle-executor/state
+ReadWritePaths=/var/lib/binnacle-executor/output
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+DevicePolicy=closed
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+RestrictAddressFamilies=AF_UNIX
+RestrictSUIDSGID=yes
+LockPersonality=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallArchitectures=native

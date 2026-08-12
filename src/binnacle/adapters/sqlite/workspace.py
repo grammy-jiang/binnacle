@@ -446,11 +446,19 @@ class SqliteWorkspaceRepository:
                         SELECT COUNT(*) FROM workspace_mutation_fences f
                         LEFT JOIN workspace_operations wo
                           ON wo.operation_id=f.active_operation_id
+                        LEFT JOIN command_operations co
+                          ON co.operation_id=f.active_operation_id
                         LEFT JOIN operations o ON o.operation_id=f.active_operation_id
                         WHERE f.active_operation_id IS NOT NULL
-                          AND (wo.operation_id IS NULL OR o.operation_id IS NULL
-                               OR wo.workspace_id!=f.workspace_id
-                               OR f.active_contract!=('workspace_' || wo.mutation_kind)
+                          AND (o.operation_id IS NULL
+                               OR (wo.operation_id IS NULL AND co.operation_id IS NULL)
+                               OR (wo.operation_id IS NOT NULL AND co.operation_id IS NOT NULL)
+                               OR (wo.operation_id IS NOT NULL AND
+                                   (wo.workspace_id!=f.workspace_id OR
+                                    f.active_contract!=('workspace_' || wo.mutation_kind)))
+                               OR (co.operation_id IS NOT NULL AND
+                                   (co.workspace_id!=f.workspace_id OR
+                                    co.closure_state!='pending'))
                                OR o.operation_contract!=f.active_contract
                                OR o.state IN ('received','rejected'))
                         """

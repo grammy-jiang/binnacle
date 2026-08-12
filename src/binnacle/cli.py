@@ -46,10 +46,12 @@ config_app = typer.Typer(help="Validate Binnacle configuration.")
 database_app = typer.Typer(help="Manage the stopped-service durable database.")
 kernel_app = typer.Typer(help="Verify the internal durable-operation kernel.")
 audit_app = typer.Typer(help="Verify or explicitly recover the local audit journal.")
+executor_app = typer.Typer(help="Run or verify the independent execution supervisor.")
 app.add_typer(config_app, name="config")
 app.add_typer(database_app, name="db")
 app.add_typer(kernel_app, name="kernel")
 app.add_typer(audit_app, name="audit")
+app.add_typer(executor_app, name="executor")
 
 
 class OutputMode(StrEnum):
@@ -239,7 +241,7 @@ def database_upgrade_command(
     except Exception as exc:
         typer.echo(f"Database upgrade failed: {type(exc).__name__}", err=True)
         raise typer.Exit(code=1) from exc
-    typer.echo("Database upgraded to 0003_development_workspace")
+    typer.echo("Database upgraded to 0004_execution_operations")
 
 
 @database_app.command("status")
@@ -515,6 +517,24 @@ def serve_command(
         )
     finally:
         asyncio.run(composed.close())
+
+
+@executor_app.command("serve")
+def executor_serve_command(
+    config_path: Annotated[
+        Path,
+        typer.Option("--config", help="Explicit protected executor TOML path."),
+    ],
+) -> None:
+    """Serve the default-disabled executor using one systemd-inherited socket."""
+
+    from binnacle.executor.runtime import run_executor_service
+
+    try:
+        asyncio.run(run_executor_service(config_path))
+    except Exception as exc:
+        typer.echo(f"Executor service failed: {type(exc).__name__}", err=True)
+        raise typer.Exit(code=1) from exc
 
 
 def main() -> None:

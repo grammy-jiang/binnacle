@@ -27,7 +27,7 @@ from binnacle.domain.probe_workspace import (
     validate_path_snapshot,
 )
 
-EXPECTED_REVISION = "0003_development_workspace"
+EXPECTED_REVISION = "0004_execution_operations"
 EXPECTED_TABLES = frozenset(
     {
         "alembic_version",
@@ -46,6 +46,8 @@ EXPECTED_TABLES = frozenset(
         "development_sessions",
         "workspace_operations",
         "workspace_mutation_fences",
+        "command_operations",
+        "command_cancel_requests",
     }
 )
 
@@ -260,6 +262,7 @@ def _verify_database(
     _verify_database_invariants(connection)
     _verify_probe_invariants(connection)
     _verify_development_workspace_invariants(connection)
+    _verify_command_execution_invariants(connection)
     meta = connection.execute("SELECT * FROM kernel_meta WHERE id=1").fetchone()
     if meta is None:
         raise KernelVerificationError("kernel metadata singleton is absent")
@@ -369,7 +372,7 @@ def _verify_database_invariants(connection: sqlite3.Connection) -> None:
         """,
         "trusted time ordering": """
             SELECT COUNT(*) FROM kernel_meta
-            WHERE schema_generation != 3 OR trusted_time_generation < 1
+            WHERE schema_generation != 4 OR trusted_time_generation < 1
                OR audit_recovered_generation > audit_failure_generation
                OR (audit_failure_latched=1 AND
                    audit_failure_generation <= audit_recovered_generation)
@@ -496,13 +499,81 @@ def _verify_development_workspace_invariants(connection: sqlite3.Connection) -> 
         "workspace fence owner": """
             SELECT COUNT(*) FROM workspace_mutation_fences f
             LEFT JOIN workspace_operations wo ON wo.operation_id=f.active_operation_id
+            LEFT JOIN command_operations co ON co.operation_id=f.active_operation_id
             LEFT JOIN operations o ON o.operation_id=f.active_operation_id
             WHERE f.active_operation_id IS NOT NULL
-              AND (wo.operation_id IS NULL OR o.operation_id IS NULL
-                   OR wo.workspace_id!=f.workspace_id
-                   OR f.active_contract!=('workspace_' || wo.mutation_kind)
+              AND (o.operation_id IS NULL
+                   OR (wo.operation_id IS NULL AND co.operation_id IS NULL)
+                   OR (wo.operation_id IS NOT NULL AND co.operation_id IS NOT NULL)
+                   OR (wo.operation_id IS NOT NULL AND
+                       (wo.workspace_id!=f.workspace_id OR
+                        f.active_contract!=('workspace_' || wo.mutation_kind)))
+                   OR (co.operation_id IS NOT NULL AND
+                       (co.workspace_id!=f.workspace_id OR co.closure_state!='pending'))
                    OR o.operation_contract!=f.active_contract
                    OR o.state IN ('received','rejected'))
+        """,
+    }
+    for name, query in checks.items():
+        if int(connection.execute(query).fetchone()[0]):
+            raise KernelVerificationError(f"{name} invariant failed")
+
+
+def _verify_command_execution_invariants(connection: sqlite3.Connection) -> None:
+    checks = {
+        "command operation provenance": """
+            SELECT COUNT(*) FROM command_operations co
+            LEFT JOIN operations o ON o.operation_id=co.operation_id
+            LEFT JOIN development_sessions s ON s.session_id=co.session_id
+            LEFT JOIN registered_workspaces w ON w.workspace_id=co.workspace_id
+            LEFT JOIN policy_decisions p ON p.policy_decision_id=co.admission_record_id
+            LEFT JOIN workspace_mutation_fences f ON f.workspace_id=co.workspace_id
+            WHERE o.operation_id IS NULL OR s.session_id IS NULL OR w.workspace_id IS NULL
+               OR p.policy_decision_id IS NULL OR f.workspace_id IS NULL
+               OR p.operation_id!=co.operation_id OR p.decision!='allow'
+               OR p.controller_id!=o.controller_id OR p.controller_epoch!=o.controller_epoch
+               OR p.operation_contract!=o.operation_contract
+               OR p.operation_contract_version!=o.operation_contract_version
+               OR p.runtime_policy_sha256!=co.policy_sha256
+               OR o.controller_id!=s.controller_id OR o.controller_epoch!=co.controller_epoch
+               OR o.device_id!=s.device_id OR o.device_epoch!=co.device_epoch
+               OR co.workspace_id!=s.workspace_id
+               OR co.workspace_profile_sha256!=s.workspace_profile_sha256
+               OR co.workspace_root_identity_sha256!=s.workspace_root_identity_sha256
+               OR co.workspace_mount_identity_sha256!=s.workspace_mount_identity_sha256
+               OR co.workspace_profile_sha256!=w.profile_sha256
+               OR co.workspace_root_identity_sha256!=w.root_identity_sha256
+               OR co.workspace_mount_identity_sha256!=w.mount_identity_sha256
+               OR co.development_session_state_version>s.state_version
+               OR o.state IN ('received','rejected')
+               OR (co.closure_state='pending' AND
+                   (f.active_operation_id!=co.operation_id
+                    OR f.active_contract!=o.operation_contract
+                    OR f.fence_version!=co.workspace_fence_version))
+               OR (co.closure_state='complete' AND f.active_operation_id=co.operation_id)
+        """,
+        "command cancellation provenance": """
+            SELECT COUNT(*) FROM command_cancel_requests c
+            LEFT JOIN command_operations co ON co.operation_id=c.command_operation_id
+            LEFT JOIN operations cancel_op ON cancel_op.operation_id=c.cancel_operation_id
+            WHERE co.operation_id IS NULL OR cancel_op.operation_id IS NULL
+               OR c.cancel_generation<1
+               OR c.cancel_generation>co.phase7_cancel_generation
+               OR cancel_op.controller_epoch!=(
+                    SELECT o.controller_epoch FROM operations o
+                    WHERE o.operation_id=co.operation_id)
+               OR cancel_op.device_epoch!=(
+                    SELECT o.device_epoch FROM operations o
+                    WHERE o.operation_id=co.operation_id)
+        """,
+        "command cancellation generation": """
+            SELECT COUNT(*) FROM command_operations co
+            WHERE co.phase7_cancel_generation != (
+                SELECT COUNT(*) FROM command_cancel_requests c
+                WHERE c.command_operation_id=co.operation_id)
+               OR co.phase7_cancel_generation != COALESCE((
+                SELECT MAX(c.cancel_generation) FROM command_cancel_requests c
+                WHERE c.command_operation_id=co.operation_id), 0)
         """,
     }
     for name, query in checks.items():

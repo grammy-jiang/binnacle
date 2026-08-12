@@ -18,7 +18,7 @@ def test_systemd_unit_has_exact_unprivileged_source_checkout_shape(repo_root: Pa
     required_lines = {
         "User=binnacle",
         "Group=binnacle",
-        "SupplementaryGroups=binnacle-dev",
+        "SupplementaryGroups=binnacle-dev binnacle-executor-client",
         "WorkingDirectory=/srv/binnacle-dev/repo",
         (
             "ExecStart=/srv/binnacle-dev/repo/.venv/bin/binnacle serve "
@@ -317,7 +317,7 @@ def test_verifier_rejects_broadened_effective_write_paths(
         "UnitFileState": "enabled",
         "User": "binnacle",
         "Group": "binnacle",
-        "SupplementaryGroups": "binnacle-dev",
+        "SupplementaryGroups": "binnacle-dev binnacle-executor-client",
         "Environment": "",
         "EnvironmentFiles": "",
         "ReadWritePaths": " ".join(
@@ -336,6 +336,7 @@ def test_verifier_rejects_broadened_effective_write_paths(
     groups = {
         "binnacle": grp.struct_group(("binnacle", "x", 1200, [])),
         "binnacle-dev": grp.struct_group(("binnacle-dev", "x", 1201, [])),
+        "binnacle-executor-client": grp.struct_group(("binnacle-executor-client", "x", 1202, [])),
     }
     monkeypatch.setattr(grp, "getgrnam", lambda name: groups[name])
 

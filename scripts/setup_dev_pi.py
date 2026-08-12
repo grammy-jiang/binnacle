@@ -23,6 +23,12 @@ SERVICE_NAME = "binnacle-dev.service"
 SERVICE_USER = "binnacle"
 SERVICE_GROUP = "binnacle"
 DEVELOPMENT_GROUP = "binnacle-dev"
+EXECUTOR_SERVICE_NAME = "binnacle-executor.service"
+EXECUTOR_SOCKET_NAME = "binnacle-executor.socket"
+EXECUTOR_USER = "binnacle-executor"
+EXECUTOR_GROUP = "binnacle-executor"
+EXECUTOR_CLIENT_GROUP = "binnacle-executor-client"
+EXECUTOR_TMPFILES_NAME = "binnacle-executor.conf"
 PROBE_ROOT = Path("/var/lib/binnacle/probe-workspace")
 SUPPORTED_PROBE_FILESYSTEM_TYPES = frozenset({"ext4"})
 ROOT_PROTECTED_PATHS = (
@@ -46,7 +52,25 @@ PROBE_WORKSPACE_PATHS = (
     (PROBE_ROOT, 0o700),
     (PROBE_ROOT / ".staging", 0o700),
 )
-SYSTEM_PATHS = (*ROOT_PROTECTED_PATHS, *SERVICE_STATE_PATHS, *PROBE_WORKSPACE_PATHS)
+EXECUTOR_ROOT_PATHS = (
+    (Path("/etc/binnacle-executor"), 0o750),
+    (Path("/var/lib/binnacle-executor"), 0o710),
+)
+EXECUTOR_STATE_PATHS = (
+    (Path("/var/lib/binnacle-executor/state"), 0o700),
+    (Path("/var/lib/binnacle-executor/output"), 0o700),
+)
+EXECUTOR_RUNTIME_ROOT_PATHS = ((Path("/run/binnacle-executor"), 0o710),)
+EXECUTOR_RUNTIME_PRIVATE_PATHS = ((Path("/run/binnacle-executor/private"), 0o700),)
+SYSTEM_PATHS = (
+    *ROOT_PROTECTED_PATHS,
+    *SERVICE_STATE_PATHS,
+    *PROBE_WORKSPACE_PATHS,
+    *EXECUTOR_ROOT_PATHS,
+    *EXECUTOR_STATE_PATHS,
+    *EXECUTOR_RUNTIME_ROOT_PATHS,
+    *EXECUTOR_RUNTIME_PRIVATE_PATHS,
+)
 
 
 class SetupError(RuntimeError):
@@ -98,11 +122,14 @@ def build_setup_plan(repo: Path) -> SetupPlan:
         _check_probe_mount_profile(repo),
     )
     actions = (
-        "ensure system groups binnacle and binnacle-dev",
-        "ensure non-root service user binnacle with primary group binnacle",
+        "ensure distinct application, executor, client, and development groups",
+        "ensure distinct non-root application and executor service users",
         "ensure binnacle has supplementary source-read group binnacle-dev",
+        "grant application connect and executor parent-traverse access through the client group",
         "protect configuration/evaluation and create narrow application-owned kernel/probe state",
-        "install binnacle-dev.service atomically",
+        "create separate executor config/state/output/runtime ownership roots",
+        "install application/executor service, socket, and tmpfiles assets atomically",
+        "leave the executor socket/service disabled until candidate-Pi promotion",
         "run systemctl daemon-reload",
     )
     return SetupPlan(checks=checks, actions=actions)
@@ -119,23 +146,63 @@ def apply_setup(repo: Path, *, enable: bool) -> SetupPlan:
 
     _ensure_group(SERVICE_GROUP)
     _ensure_group(DEVELOPMENT_GROUP)
-    _ensure_user()
+    _ensure_group(EXECUTOR_GROUP)
+    _ensure_group(EXECUTOR_CLIENT_GROUP)
+    _ensure_user(SERVICE_USER, SERVICE_GROUP)
+    _ensure_user(EXECUTOR_USER, EXECUTOR_GROUP)
     subprocess.run(
-        ["usermod", "--append", "--groups", DEVELOPMENT_GROUP, SERVICE_USER],
+        [
+            "usermod",
+            "--append",
+            "--groups",
+            f"{DEVELOPMENT_GROUP},{EXECUTOR_CLIENT_GROUP}",
+            SERVICE_USER,
+        ],
+        check=True,
+    )
+    subprocess.run(
+        [
+            "usermod",
+            "--append",
+            "--groups",
+            f"{DEVELOPMENT_GROUP},{EXECUTOR_CLIENT_GROUP}",
+            EXECUTOR_USER,
+        ],
         check=True,
     )
     service_gid = grp.getgrnam(SERVICE_GROUP).gr_gid
     service_uid = pwd.getpwnam(SERVICE_USER).pw_uid
+    executor_gid = grp.getgrnam(EXECUTOR_GROUP).gr_gid
+    executor_uid = pwd.getpwnam(EXECUTOR_USER).pw_uid
+    executor_client_gid = grp.getgrnam(EXECUTOR_CLIENT_GROUP).gr_gid
     for path, mode in ROOT_PROTECTED_PATHS:
         _ensure_protected_directory(path, uid=0, gid=service_gid, mode=mode)
     for path, mode in SERVICE_STATE_PATHS:
         _ensure_protected_directory(path, uid=service_uid, gid=service_gid, mode=mode)
     for path, mode in PROBE_WORKSPACE_PATHS:
         _ensure_protected_directory(path, uid=service_uid, gid=service_gid, mode=mode)
+    for path, mode in EXECUTOR_ROOT_PATHS:
+        _ensure_protected_directory(path, uid=0, gid=executor_gid, mode=mode)
+    for path, mode in EXECUTOR_STATE_PATHS:
+        _ensure_protected_directory(path, uid=executor_uid, gid=executor_gid, mode=mode)
+    for path, mode in EXECUTOR_RUNTIME_ROOT_PATHS:
+        _ensure_protected_directory(path, uid=0, gid=executor_client_gid, mode=mode)
+    for path, mode in EXECUTOR_RUNTIME_PRIVATE_PATHS:
+        _ensure_protected_directory(path, uid=executor_uid, gid=executor_gid, mode=mode)
 
-    source = repo / "deploy/systemd" / SERVICE_NAME
-    destination = Path("/etc/systemd/system") / SERVICE_NAME
-    _atomic_install(source, destination, mode=0o644)
+    for name in (SERVICE_NAME, EXECUTOR_SERVICE_NAME, EXECUTOR_SOCKET_NAME):
+        source = repo / "deploy/systemd" / name
+        destination = Path("/etc/systemd/system") / name
+        _atomic_install(source, destination, mode=0o644)
+    _atomic_install(
+        repo / "deploy/tmpfiles.d" / EXECUTOR_TMPFILES_NAME,
+        Path("/etc/tmpfiles.d") / EXECUTOR_TMPFILES_NAME,
+        mode=0o644,
+    )
+    subprocess.run(
+        ["systemd-tmpfiles", "--create", f"/etc/tmpfiles.d/{EXECUTOR_TMPFILES_NAME}"],
+        check=True,
+    )
     subprocess.run(["systemctl", "daemon-reload"], check=True)
     if enable:
         subprocess.run(["systemctl", "enable", SERVICE_NAME], check=True)
@@ -190,6 +257,9 @@ def _check_repository(repo: Path) -> Check:
         canonical / "pyproject.toml",
         canonical / "uv.lock",
         canonical / "deploy/systemd" / SERVICE_NAME,
+        canonical / "deploy/systemd" / EXECUTOR_SERVICE_NAME,
+        canonical / "deploy/systemd" / EXECUTOR_SOCKET_NAME,
+        canonical / "deploy/tmpfiles.d" / EXECUTOR_TMPFILES_NAME,
     )
     if not required[0].exists() or any(not path.is_file() for path in required[1:]):
         return Check("repository", "fail", "repository is missing required tracked inputs")
@@ -200,37 +270,43 @@ def _check_repository(repo: Path) -> Check:
 
 
 def _check_identity_compatibility() -> Check:
-    try:
-        service_group = grp.getgrnam(SERVICE_GROUP)
-        if service_group.gr_gid == 0:
-            return Check("identities", "fail", "binnacle group may not be root")
-    except KeyError:
-        service_group = None
-    try:
-        development_group = grp.getgrnam(DEVELOPMENT_GROUP)
-        if development_group.gr_gid == 0:
-            return Check("identities", "fail", "binnacle-dev group may not be root")
-    except KeyError:
-        development_group = None
-    try:
-        user = pwd.getpwnam(SERVICE_USER)
-    except KeyError:
-        user = None
-    if (
-        service_group is not None
-        and development_group is not None
-        and service_group.gr_gid == development_group.gr_gid
+    groups: dict[str, grp.struct_group] = {}
+    for name in (
+        SERVICE_GROUP,
+        DEVELOPMENT_GROUP,
+        EXECUTOR_GROUP,
+        EXECUTOR_CLIENT_GROUP,
     ):
+        try:
+            observed = grp.getgrnam(name)
+        except KeyError:
+            continue
+        if observed.gr_gid == 0:
+            return Check("identities", "fail", f"{name} group may not be root")
+        groups[name] = observed
+    if len({item.gr_gid for item in groups.values()}) != len(groups):
         return Check(
             "identities",
             "fail",
-            "binnacle and binnacle-dev must have distinct group IDs",
+            "application, executor, client, and development must have distinct group IDs",
         )
-    if user is not None:
+    users: dict[str, pwd.struct_passwd] = {}
+    for user_name, group_name in (
+        (SERVICE_USER, SERVICE_GROUP),
+        (EXECUTOR_USER, EXECUTOR_GROUP),
+    ):
+        try:
+            user = pwd.getpwnam(user_name)
+        except KeyError:
+            continue
         if user.pw_uid == 0:
-            return Check("identities", "fail", "binnacle user may not be root")
-        if service_group is None or user.pw_gid != service_group.gr_gid:
-            return Check("identities", "fail", "binnacle primary group is incompatible")
+            return Check("identities", "fail", f"{user_name} user may not be root")
+        group = groups.get(group_name)
+        if group is None or user.pw_gid != group.gr_gid:
+            return Check("identities", "fail", f"{user_name} primary group is incompatible")
+        users[user_name] = user
+    if len({item.pw_uid for item in users.values()}) != len(users):
+        return Check("identities", "fail", "application and executor users must be distinct")
     return Check("identities", "pass", "existing identities are compatible or absent")
 
 
@@ -418,21 +494,21 @@ def _ensure_group(name: str) -> None:
         subprocess.run(["groupadd", "--system", name], check=True)
 
 
-def _ensure_user() -> None:
+def _ensure_user(name: str, primary_group: str) -> None:
     try:
-        pwd.getpwnam(SERVICE_USER)
+        pwd.getpwnam(name)
     except KeyError:
         subprocess.run(
             [
                 "useradd",
                 "--system",
                 "--gid",
-                SERVICE_GROUP,
+                primary_group,
                 "--home-dir",
                 "/nonexistent",
                 "--shell",
                 "/usr/sbin/nologin",
-                SERVICE_USER,
+                name,
             ],
             check=True,
         )

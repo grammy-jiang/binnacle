@@ -299,6 +299,70 @@ EXPECTED_COLUMNS = {
         "acquired_at",
         "updated_at",
     },
+    "command_operations": {
+        "operation_id",
+        "session_id",
+        "workspace_id",
+        "controller_epoch",
+        "device_epoch",
+        "development_session_state_version",
+        "development_session_closure_sha256",
+        "ticket_id",
+        "ticket_sha256",
+        "single_use_nonce_sha256",
+        "ticket_issued_at",
+        "ticket_expires_at",
+        "ticket_boot_id_digest",
+        "ticket_monotonic_deadline_ns",
+        "admission_record_id",
+        "command_profile_id",
+        "workspace_profile_sha256",
+        "workspace_root_identity_sha256",
+        "workspace_mount_identity_sha256",
+        "workspace_fence_version",
+        "executable_identity_sha256",
+        "argv_sha256",
+        "cwd_sha256",
+        "environment_sha256",
+        "stdin_sha256",
+        "stdin_reference_sha256",
+        "workspace_script_sha256",
+        "mount_plan_sha256",
+        "policy_sha256",
+        "resource_plan_sha256",
+        "sandbox_plan_sha256",
+        "process_isolation_plan_sha256",
+        "network_plan_sha256",
+        "record_version",
+        "acceptance_state",
+        "execution_id",
+        "executor_reference",
+        "accepted_receipt_sha256",
+        "no_accept_reference",
+        "no_accept_receipt_sha256",
+        "phase7_cancel_generation",
+        "supervisor_ack_cancel_generation",
+        "supervisor_cancel_disposition",
+        "supervisor_evidence_generation",
+        "supervisor_cancel_evidence_sha256",
+        "last_executor_state",
+        "terminal_evidence_sha256",
+        "descendants_stopped",
+        "output_finalized",
+        "private_resources_cleaned",
+        "cleanup_evidence_sha256",
+        "closure_state",
+        "created_at",
+        "updated_at",
+        "last_reconciled_at",
+    },
+    "command_cancel_requests": {
+        "cancel_operation_id",
+        "command_operation_id",
+        "cancel_generation",
+        "request_fingerprint_sha256",
+        "created_at",
+    },
 }
 
 
@@ -315,7 +379,7 @@ async def test_fresh_upgrade_has_exact_authoritative_shape_and_pragmas(
     try:
         health = await verify_database_runtime(runtime)
         assert health.healthy
-        assert health.revision == "0003_development_workspace"
+        assert health.revision == "0004_execution_operations"
         assert health.foreign_keys == 1
         assert health.journal_mode == "wal"
         assert health.synchronous == 2
@@ -660,7 +724,7 @@ def test_populated_phase4_database_upgrades_without_rewriting_existing_rows(
         connection.close()
 
     assert owner_row == ("controller-preserved", 1)
-    assert revision == ("0003_development_workspace",)
+    assert revision == ("0004_execution_operations",)
     assert phase5_counts == (0, 0, 0, 0, 0, 0, 0)
 
 
@@ -702,7 +766,7 @@ def test_stopped_service_upgrade_and_current_revision_commands(
         revision = connection.execute("SELECT version_num FROM alembic_version").fetchone()
     finally:
         connection.close()
-    assert revision == ("0003_development_workspace",)
+    assert revision == ("0004_execution_operations",)
 
 
 @pytest.mark.anyio

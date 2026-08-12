@@ -94,6 +94,7 @@ files = [
   "scripts/setup_dev_pi.py",
   "scripts/verify_dev_pi.py",
   "scripts/verify_operation_kernel.py",
+  "scripts/verify_execution_supervisor.py",
 ]
 
 [tool.pytest.ini_options]
@@ -255,6 +256,32 @@ forbidden_modules = [
 ]
 
 [[tool.importlinter.contracts]]
+name = "Independent executor does not depend on application or delivery"
+type = "forbidden"
+source_modules = ["binnacle.executor"]
+forbidden_modules = [
+  "binnacle.adapters",
+  "binnacle.application",
+  "binnacle.bootstrap",
+  "binnacle.cli",
+  "binnacle.composition",
+  "binnacle.config",
+  "binnacle.contracts",
+  "binnacle.evaluation",
+  "binnacle.logging",
+  "binnacle.security",
+  "fastmcp",
+  "mcp",
+  "pydantic",
+  "pydantic_settings",
+  "rich",
+  "starlette",
+  "structlog",
+  "typer",
+  "uvicorn",
+]
+
+[[tool.importlinter.contracts]]
 name = "Controller security stays outside delivery and application"
 type = "forbidden"
 source_modules = ["binnacle.security"]
@@ -331,7 +358,7 @@ dependency_groups = test, quality, contracts
 commands =
     ruff check .
     ruff format --check .
-    mypy src/binnacle tests scripts/mcp_evaluation.py scripts/setup_dev_pi.py scripts/verify_dev_pi.py scripts/verify_operation_kernel.py
+    mypy src/binnacle tests scripts/mcp_evaluation.py scripts/setup_dev_pi.py scripts/verify_dev_pi.py scripts/verify_operation_kernel.py scripts/verify_execution_supervisor.py
     lint-imports
     pip-audit --cache-dir={envtmpdir}/pip-audit-cache
     rstcheck --recursive docs
@@ -342,8 +369,11 @@ commands =
     python scripts/setup_dev_pi.py --help
     python scripts/verify_dev_pi.py --help
     python scripts/verify_operation_kernel.py --help
+    python scripts/verify_execution_supervisor.py --help
     python scripts/verify_operation_kernel.py --temporary --output json
+    python scripts/verify_execution_supervisor.py --temporary --output json
     binnacle db --help
     binnacle kernel --help
     binnacle audit --help
+    binnacle executor --help
 """

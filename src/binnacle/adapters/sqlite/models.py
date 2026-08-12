@@ -917,6 +917,111 @@ class WorkspaceMutationFenceModel(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
+class CommandOperationModel(Base):
+    __tablename__ = "command_operations"
+
+    operation_id: Mapped[str] = mapped_column(
+        String(160),
+        ForeignKey("operations.operation_id", name="fk_command_operations_operation"),
+        primary_key=True,
+    )
+    session_id: Mapped[str] = mapped_column(
+        String(160),
+        ForeignKey("development_sessions.session_id", name="fk_command_operations_session"),
+        nullable=False,
+    )
+    workspace_id: Mapped[str] = mapped_column(
+        String(160),
+        ForeignKey("registered_workspaces.workspace_id", name="fk_command_operations_workspace"),
+        nullable=False,
+    )
+    controller_epoch: Mapped[int] = mapped_column(Integer, nullable=False)
+    device_epoch: Mapped[int] = mapped_column(Integer, nullable=False)
+    development_session_state_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    development_session_closure_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    ticket_id: Mapped[str] = mapped_column(String(160), nullable=False, unique=True)
+    ticket_sha256: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    single_use_nonce_sha256: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    ticket_issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    ticket_expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    ticket_boot_id_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    ticket_monotonic_deadline_ns: Mapped[int] = mapped_column(Integer, nullable=False)
+    admission_record_id: Mapped[str] = mapped_column(
+        String(160),
+        ForeignKey("policy_decisions.policy_decision_id", name="fk_command_operations_admission"),
+        nullable=False,
+        unique=True,
+    )
+    command_profile_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    workspace_profile_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    workspace_root_identity_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    workspace_mount_identity_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    workspace_fence_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    executable_identity_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    argv_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    cwd_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    environment_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    stdin_sha256: Mapped[str | None] = mapped_column(String(64))
+    stdin_reference_sha256: Mapped[str | None] = mapped_column(String(64))
+    workspace_script_sha256: Mapped[str | None] = mapped_column(String(64))
+    mount_plan_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    policy_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    resource_plan_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    sandbox_plan_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    process_isolation_plan_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    network_plan_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    record_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    acceptance_state: Mapped[str] = mapped_column(String(32), nullable=False)
+    execution_id: Mapped[str | None] = mapped_column(String(160), unique=True)
+    executor_reference: Mapped[str | None] = mapped_column(String(160))
+    accepted_receipt_sha256: Mapped[str | None] = mapped_column(String(64))
+    no_accept_reference: Mapped[str | None] = mapped_column(String(160))
+    no_accept_receipt_sha256: Mapped[str | None] = mapped_column(String(64))
+    phase7_cancel_generation: Mapped[int] = mapped_column(Integer, nullable=False)
+    supervisor_ack_cancel_generation: Mapped[int] = mapped_column(Integer, nullable=False)
+    supervisor_cancel_disposition: Mapped[str | None] = mapped_column(String(40))
+    supervisor_evidence_generation: Mapped[int] = mapped_column(Integer, nullable=False)
+    supervisor_cancel_evidence_sha256: Mapped[str | None] = mapped_column(String(64))
+    last_executor_state: Mapped[str | None] = mapped_column(String(32))
+    terminal_evidence_sha256: Mapped[str | None] = mapped_column(String(64))
+    descendants_stopped: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    output_finalized: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    private_resources_cleaned: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    cleanup_evidence_sha256: Mapped[str | None] = mapped_column(String(64))
+    closure_state: Mapped[str] = mapped_column(String(16), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_reconciled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class CommandCancelRequestModel(Base):
+    __tablename__ = "command_cancel_requests"
+    __table_args__ = (
+        UniqueConstraint(
+            "command_operation_id",
+            "cancel_generation",
+            name="uq_command_cancel_generation",
+        ),
+    )
+
+    cancel_operation_id: Mapped[str] = mapped_column(
+        String(160),
+        ForeignKey("operations.operation_id", name="fk_command_cancel_request_operation"),
+        primary_key=True,
+    )
+    command_operation_id: Mapped[str] = mapped_column(
+        String(160),
+        ForeignKey(
+            "command_operations.operation_id",
+            name="fk_command_cancel_request_command",
+        ),
+        nullable=False,
+    )
+    cancel_generation: Mapped[int] = mapped_column(Integer, nullable=False)
+    request_fingerprint_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 Index("ix_operations_state", OperationModel.state, OperationModel.updated_at)
 Index("ix_bindings_operation", IdempotencyBindingModel.operation_id)
 Index("ix_payload_owner", PayloadObjectModel.controller_id, PayloadObjectModel.controller_epoch)
@@ -938,4 +1043,9 @@ Index(
     "ix_workspace_operations_session",
     WorkspaceOperationModel.session_id,
     WorkspaceOperationModel.created_at,
+)
+Index(
+    "ix_command_operations_session",
+    CommandOperationModel.session_id,
+    CommandOperationModel.acceptance_state,
 )
