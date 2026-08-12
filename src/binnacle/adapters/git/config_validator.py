@@ -145,7 +145,13 @@ class BoundedGitRepositoryProfileValidator:
             return
 
         try:
-            config = self._read_file(git_fd, ("config",), inspection, required=True)
+            config = self._read_file(
+                git_fd,
+                ("config",),
+                inspection,
+                required=True,
+                missing_reason="config_missing",
+            )
             if config is not None:
                 self._inspect_config(config, profile, inspection)
 
@@ -397,6 +403,7 @@ class BoundedGitRepositoryProfileValidator:
         *,
         required: bool,
         fact_path: str | None = None,
+        missing_reason: str = "repository_shape",
     ) -> bytes | None:
         directory_fd = os.dup(parent_fd)
         try:
@@ -416,7 +423,7 @@ class BoundedGitRepositoryProfileValidator:
                 )
             except FileNotFoundError:
                 if required:
-                    inspection.reasons.add("config_missing")
+                    inspection.reasons.add(missing_reason)
                 return None
             try:
                 metadata = os.fstat(file_fd)
@@ -432,7 +439,7 @@ class BoundedGitRepositoryProfileValidator:
                 os.close(file_fd)
         except FileNotFoundError:
             if required:
-                inspection.reasons.add("config_missing")
+                inspection.reasons.add(missing_reason)
             return None
         except OSError:
             inspection.reasons.add("repository_shape")

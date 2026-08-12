@@ -271,6 +271,8 @@ def test_status_and_diff_result_contracts() -> None:
         replace(entry, original_path=None)
     with pytest.raises(GitError, match="status code"):
         replace(entry, index_status="X")
+    with pytest.raises(GitError, match="status code"):
+        replace(entry, index_status=" ")
     with pytest.raises(GitError, match="ahead/behind"):
         replace(status, ahead=None)
     with pytest.raises(GitError, match="negative"):

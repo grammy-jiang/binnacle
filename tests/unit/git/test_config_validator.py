@@ -210,7 +210,10 @@ def test_missing_malformed_and_non_regular_config_fail_closed(tmp_path: Path) ->
     )
 
 
-def test_hardlinked_and_symlinked_control_files_fail_closed(tmp_path: Path) -> None:
+def test_hardlinked_symlinked_and_disappearing_control_files_fail_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     root = tmp_path / "repo"
     profile = initialize_repository_shape(root)
     attributes = root / ".gitattributes"
@@ -223,6 +226,28 @@ def test_hardlinked_and_symlinked_control_files_fail_closed(tmp_path: Path) -> N
     attributes.symlink_to(root / "attributes-copy")
     symlinked = BoundedGitRepositoryProfileValidator().validate(profile)
     assert "unsafe_attributes" in symlinked.reason_codes
+
+    attributes.unlink()
+    attributes.write_text("*.txt text\n", encoding="utf-8")
+    original_open = os.open
+    disappeared = False
+
+    def disappear_before_open(
+        path: str | bytes | os.PathLike[str] | os.PathLike[bytes],
+        flags: int,
+        mode: int = 0o777,
+        *,
+        dir_fd: int | None = None,
+    ) -> int:
+        nonlocal disappeared
+        if path == ".gitattributes" and dir_fd is not None and not disappeared:
+            attributes.unlink()
+            disappeared = True
+        return original_open(path, flags, mode, dir_fd=dir_fd)
+
+    monkeypatch.setattr(os, "open", disappear_before_open)
+    raced = BoundedGitRepositoryProfileValidator().validate(profile)
+    assert raced.reason_codes == ("repository_shape",)
 
 
 def test_root_shape_and_all_inspection_limits_fail_closed(tmp_path: Path) -> None:

@@ -84,9 +84,10 @@ def _verify_executor_connection(
     meta = connection.execute("SELECT * FROM executor_meta WHERE id=1").fetchone()
     if revision_row is None or revision_row[0] != expected_revision or meta is None:
         raise ExecutorIntegrityError("executor database identity is incompatible")
+    schema_generation = _integer(meta["schema_generation"])
     high_water = _integer(meta["evidence_generation_high_water"])
     if (
-        _integer(meta["schema_generation"]) != 2
+        schema_generation != 2
         or high_water < 0
         or _integer(meta["last_verified_recovery_generation"]) > high_water
         or str(meta["readiness"])
@@ -122,7 +123,7 @@ def _verify_executor_connection(
     return ExecutorIntegrityReport(
         revision=str(revision_row[0]),
         readiness=str(meta["readiness"]),
-        schema_generation=2,
+        schema_generation=schema_generation,
         evidence_generation=high_water,
         accepted_executions=accepted,
         pending_cancels=pending,

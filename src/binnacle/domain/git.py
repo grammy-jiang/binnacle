@@ -318,7 +318,7 @@ class GitStatusEntry:
         if len(self.index_status) != 1 or len(self.worktree_status) != 1:
             raise GitError("Git status codes must be one character")
         for value in (self.index_status, self.worktree_status):
-            if value not in ". MTADRCU?!":
+            if value not in ".MTADRCU?!":
                 raise GitError("Git status code is unsupported")
         _require_repository_path(self.path)
         renamed = self.kind is GitStatusEntryKind.RENAMED_OR_COPIED
