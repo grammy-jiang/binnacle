@@ -446,6 +446,9 @@ binds values such as:
 * explicit protocol allowlist;
 * command-scope configuration used only to neutralize/force reviewed behavior and itself
   included in the ticket digest;
+* one exact command-scope ``safe.directory=<registered workspace root>`` exception for
+  the dedicated Git execution identity, never ``safe.directory=*`` or a caller-selected
+  path;
 * a protected read-only empty hooks directory; ``--no-verify`` or a magic path alone is not
   a sufficient hook boundary.
 

@@ -135,6 +135,8 @@ class ClosedGitExecutionPlanBuilder:
             "--no-pager",
             "--literal-pathspecs",
             "-c",
+            f"safe.directory={self._profile.workspace_root}",
+            "-c",
             f"core.hooksPath={self._profile.empty_hooks_directory}",
             "-c",
             "core.fsmonitor=false",

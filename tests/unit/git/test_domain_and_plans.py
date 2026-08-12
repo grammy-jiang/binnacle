@@ -317,6 +317,8 @@ def test_closed_plan_builder_produces_noninteractive_read_plans(tmp_path: Path) 
     status = builder.status(snapshot, safety)
     assert status.operation is GitOperationKind.STATUS
     assert status.argv[-2:] == ("--no-renames", "-z")
+    assert f"safe.directory={root}" in status.argv
+    assert "safe.directory=*" not in status.argv
     assert ("GIT_ATTR_NOSYSTEM", "1") in status.environment
     assert ("GIT_OPTIONAL_LOCKS", "0") in status.environment
     assert not status.network_allowed
