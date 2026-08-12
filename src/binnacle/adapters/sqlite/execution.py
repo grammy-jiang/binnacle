@@ -297,7 +297,8 @@ class SqliteCommandExecutionRepository:
                 cleanup_evidence_sha256=snapshot.cleanup_evidence_sha256,
                 closure_state=(
                     CommandClosureState.COMPLETE.value
-                    if receipt.acknowledged_cancel_generation == current.cancel_generation
+                    if current.acceptance_state is CommandAcceptanceState.ACCEPTED_EXECUTION
+                    and receipt.acknowledged_cancel_generation == current.cancel_generation
                     else CommandClosureState.PENDING.value
                 ),
             )

@@ -208,6 +208,13 @@ async def test_exchange_rejects_server_error_and_wrong_response_type(
     with pytest.raises(ExecutorClientError, match="response type is invalid"):
         await ExecutorClient(_settings()).hello()
 
+    _install_transport(
+        monkeypatch,
+        lambda request: {"request_id": request["request_id"]},
+    )
+    with pytest.raises(ExecutorClientError, match="failed closed"):
+        await ExecutorClient(_settings()).hello()
+
 
 class _ResultClient(ExecutorClient):
     def __init__(self, responses: Mapping[str, object]) -> None:
@@ -293,6 +300,49 @@ async def test_typed_operations_decode_exact_evidence_and_encode_fields() -> Non
     assert request_fields["read_output"]["stream"] == "stdout"
     assert request_fields["seal_no_accept"]["retain_until"] == retain_until.isoformat()
     assert request_fields["list_executions"]["operation_ids"] == [ticket.operation_id]
+
+
+@pytest.mark.anyio
+async def test_typed_operations_map_all_invalid_evidence_to_client_error() -> None:
+    ticket = execution_ticket()
+    client = _ResultClient(
+        {
+            "hello": {
+                "protocol_id": EXECUTOR_PROTOCOL_ID,
+                "protocol_version": EXECUTOR_PROTOCOL_VERSION,
+                "build_sha256": SHA_B,
+                "profile_sha256": SHA_C,
+                "supervisor_instance_id": "supervisor-fixture",
+                "supervisor_generation": 1,
+                "backend_ready": False,
+                "readiness": "invalid-readiness",
+            },
+            "start_execution": {},
+            "get_execution": {},
+            "read_output": {},
+            "request_cancel": {},
+            "seal_no_accept": {},
+            "list_executions": [{}],
+        }
+    )
+
+    calls = (
+        client.hello(),
+        client.start(ticket),
+        client.get(ticket.operation_id),
+        client.read_output(ticket.operation_id, OutputStream.STDOUT, 0, 1024),
+        client.cancel(ticket.routing_identity, 1),
+        client.seal_no_accept(
+            ticket.routing_identity,
+            "application_runtime_lost",
+            1,
+            NOW + timedelta(hours=1),
+        ),
+        client.list((ticket.operation_id,)),
+    )
+    for call in calls:
+        with pytest.raises(ExecutorClientError, match="invalid evidence"):
+            await call
 
 
 @pytest.mark.anyio

@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import secrets
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Final
+from typing import Final, TypeVar
 
 from binnacle.domain.execution import (
     ExecutionStartReceipt,
@@ -37,6 +38,7 @@ from binnacle.executor.protocol import (
 )
 
 _MAX_LIST_ITEMS: Final = 256
+_Decoded = TypeVar("_Decoded")
 
 
 class ExecutorClientError(RuntimeError):
@@ -81,25 +83,26 @@ class ExecutorClient:
                 "readiness",
             },
         )
-        return ExecutorHello(
-            protocol_id=_text(raw, "protocol_id"),
-            protocol_version=_text(raw, "protocol_version"),
-            build_sha256=_text(raw, "build_sha256"),
-            profile_sha256=_text(raw, "profile_sha256"),
-            supervisor_instance_id=_text(raw, "supervisor_instance_id"),
-            supervisor_generation=_integer(raw, "supervisor_generation"),
-            backend_ready=_boolean(raw, "backend_ready"),
-            readiness=_text(raw, "readiness"),
+        return _decode_result(
+            lambda: ExecutorHello(
+                protocol_id=_text(raw, "protocol_id"),
+                protocol_version=_text(raw, "protocol_version"),
+                build_sha256=_text(raw, "build_sha256"),
+                profile_sha256=_text(raw, "profile_sha256"),
+                supervisor_instance_id=_text(raw, "supervisor_instance_id"),
+                supervisor_generation=_integer(raw, "supervisor_generation"),
+                backend_ready=_boolean(raw, "backend_ready"),
+                readiness=_text(raw, "readiness"),
+            )
         )
 
     async def start(self, ticket: ExecutionTicket) -> ExecutionStartReceipt:
-        return start_receipt_from_wire(
-            await self._exchange("start_execution", ticket=ticket.to_wire())
-        )
+        value = await self._exchange("start_execution", ticket=ticket.to_wire())
+        return _decode_result(lambda: start_receipt_from_wire(value))
 
     async def get(self, operation_id: str) -> ExecutorSnapshot | None:
         value = await self._exchange("get_execution", operation_id=operation_id)
-        return None if value is None else snapshot_from_wire(value)
+        return None if value is None else _decode_result(lambda: snapshot_from_wire(value))
 
     async def read_output(
         self,
@@ -108,15 +111,14 @@ class ExecutorClient:
         offset: int,
         max_bytes: int,
     ) -> ExecutorOutputChunk:
-        return output_chunk_from_wire(
-            await self._exchange(
-                "read_output",
-                operation_id=operation_id,
-                stream=stream.value,
-                offset=offset,
-                max_bytes=max_bytes,
-            )
+        value = await self._exchange(
+            "read_output",
+            operation_id=operation_id,
+            stream=stream.value,
+            offset=offset,
+            max_bytes=max_bytes,
         )
+        return _decode_result(lambda: output_chunk_from_wire(value))
 
     async def cancel(
         self,
@@ -124,14 +126,13 @@ class ExecutorClient:
         cancel_generation: int,
         execution_id: str | None = None,
     ) -> ExecutorCancelReceipt:
-        return cancel_receipt_from_wire(
-            await self._exchange(
-                "request_cancel",
-                identity=routing_identity_to_wire(identity),
-                cancel_generation=cancel_generation,
-                execution_id=execution_id,
-            )
+        value = await self._exchange(
+            "request_cancel",
+            identity=routing_identity_to_wire(identity),
+            cancel_generation=cancel_generation,
+            execution_id=execution_id,
         )
+        return _decode_result(lambda: cancel_receipt_from_wire(value))
 
     async def seal_no_accept(
         self,
@@ -140,15 +141,14 @@ class ExecutorClient:
         close_generation: int,
         retain_until: datetime,
     ) -> NoAcceptSealResult:
-        return no_accept_result_from_wire(
-            await self._exchange(
-                "seal_no_accept",
-                identity=routing_identity_to_wire(identity),
-                reason=reason,
-                close_generation=close_generation,
-                retain_until=canonical_timestamp(retain_until),
-            )
+        value = await self._exchange(
+            "seal_no_accept",
+            identity=routing_identity_to_wire(identity),
+            reason=reason,
+            close_generation=close_generation,
+            retain_until=canonical_timestamp(retain_until),
         )
+        return _decode_result(lambda: no_accept_result_from_wire(value))
 
     async def list(self, operation_ids: tuple[str, ...]) -> tuple[ExecutorSnapshot, ...]:
         if len(operation_ids) > _MAX_LIST_ITEMS:
@@ -156,7 +156,7 @@ class ExecutorClient:
         value = await self._exchange("list_executions", operation_ids=list(operation_ids))
         if not isinstance(value, list):
             raise ExecutorClientError("executor list response is invalid")
-        return tuple(snapshot_from_wire(item) for item in value)
+        return _decode_result(lambda: tuple(snapshot_from_wire(item) for item in value))
 
     async def _exchange(self, message_type: str, **fields: object) -> object:
         request_id = f"req_{secrets.token_hex(16)}"
@@ -183,12 +183,12 @@ class ExecutorClient:
                     read_frame(reader),
                     timeout=self._settings.request_timeout_seconds,
                 )
+                validate_response(response, request_id=request_id)
             finally:
                 writer.close()
                 await writer.wait_closed()
         except (OSError, TimeoutError, ExecutorProtocolError) as exc:
             raise ExecutorClientError("executor request failed closed") from exc
-        validate_response(response, request_id=request_id)
         if response["type"] != f"{message_type}_result":
             raise ExecutorClientError("executor response type is invalid")
         if not response["ok"]:
@@ -206,6 +206,13 @@ def _exact_result(value: object, fields: set[str]) -> dict[str, object]:
     if not isinstance(value, dict) or set(value) != fields:
         raise ExecutorClientError("executor result fields are invalid")
     return value
+
+
+def _decode_result(factory: Callable[[], _Decoded]) -> _Decoded:
+    try:
+        return factory()
+    except (ExecutorProtocolError, ValueError) as exc:
+        raise ExecutorClientError("executor returned invalid evidence") from exc
 
 
 def _text(value: dict[str, object], name: str) -> str:

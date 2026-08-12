@@ -743,6 +743,50 @@ async def test_closed_executor_snapshot_completes_application_closure(
 
 
 @pytest.mark.anyio
+async def test_closed_cancel_acknowledgement_stays_pending_while_acceptance_is_unresolved(
+    tmp_path: Path,
+    repo_root: Path,
+) -> None:
+    async with operation_runtime(tmp_path, repo_root) as (runtime, operations):
+        fixture = await _repository_fixture(runtime, operations)
+        created = await fixture.repository.create(fixture.ticket, created_at=NOW)
+        cancel_id = await _cancel_operation(operations, "c")
+        requested = await fixture.repository.request_cancel(
+            created.operation_id,
+            expected_record_version=created.record_version,
+            cancel_operation_id=cancel_id,
+            request_fingerprint_sha256="1" * 64,
+            requested_at=NOW + timedelta(seconds=7),
+        )
+        snapshot = _executor_snapshot(
+            fixture.ticket,
+            state=ExecutorEvidenceState.CLOSED,
+            evidence_generation=4,
+            cancel_generation=1,
+        )
+
+        retained = await fixture.repository.acknowledge_cancel(
+            requested.operation_id,
+            expected_record_version=requested.record_version,
+            receipt=_cancel_receipt(
+                acknowledged_generation=1,
+                evidence_generation=4,
+                execution_id="execution-command",
+                disposition=CancelDisposition.TERMINAL_ALREADY_WON,
+            ),
+            snapshot=snapshot,
+            reconciled_at=NOW + timedelta(seconds=8),
+        )
+
+        assert retained.acceptance_state is CommandAcceptanceState.UNRESOLVED
+        assert retained.closure_state is CommandClosureState.PENDING
+        assert retained.acknowledged_cancel_generation == retained.cancel_generation == 1
+        assert retained.last_executor_state is ExecutorEvidenceState.CLOSED
+        assert retained.terminal_evidence_sha256 == snapshot.terminal_evidence_sha256
+        assert retained.cleanup_evidence_sha256 == snapshot.cleanup_evidence_sha256
+
+
+@pytest.mark.anyio
 async def test_natural_closed_snapshot_projects_without_cancel_acknowledgement(
     tmp_path: Path,
     repo_root: Path,

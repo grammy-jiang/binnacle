@@ -740,6 +740,36 @@ def test_lists_are_bounded_ordered_and_empty(tmp_path: Path) -> None:
     asyncio.run(exercise())
 
 
+def test_evidence_reads_wait_for_active_write_transaction(tmp_path: Path) -> None:
+    async def exercise() -> None:
+        async with executor_store(tmp_path / "executor", Path(__file__).parents[3]) as store:
+            ticket = execution_ticket()
+            await store.accept_once(ticket)
+            await store._acceptance_gate.acquire()
+            await store._begin()
+            get_task = asyncio.create_task(store.get(ticket.operation_id))
+            list_task = asyncio.create_task(store.list((ticket.operation_id,)))
+            outstanding_task = asyncio.create_task(store.list_outstanding())
+            try:
+                done, pending = await asyncio.wait(
+                    {get_task, list_task, outstanding_task}, timeout=0.01
+                )
+                assert done == set()
+                assert pending == {get_task, list_task, outstanding_task}
+            finally:
+                await store._connection.rollback()
+                store._acceptance_gate.release()
+
+            retained = await get_task
+            listed = await list_task
+            outstanding = await outstanding_task
+            assert retained is not None
+            assert listed == (retained,)
+            assert outstanding == (retained,)
+
+    asyncio.run(exercise())
+
+
 def test_durable_cancel_suppresses_a_tampered_launch_attempt(tmp_path: Path) -> None:
     async def exercise() -> None:
         async with executor_store(tmp_path / "executor", Path(__file__).parents[3]) as store:

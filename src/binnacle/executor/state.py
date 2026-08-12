@@ -640,25 +640,27 @@ class SqliteExecutorEvidenceStore:
                 raise
 
     async def get(self, operation_id: str) -> ExecutorSnapshot | None:
-        row = await self._fetchone(
-            "SELECT * FROM execution_records WHERE operation_id = ?", (operation_id,)
-        )
-        return None if row is None else self._snapshot(row)
+        async with self._acceptance_gate:
+            row = await self._fetchone(
+                "SELECT * FROM execution_records WHERE operation_id = ?", (operation_id,)
+            )
+            return None if row is None else self._snapshot(row)
 
     async def list(self, operation_ids: tuple[str, ...]) -> tuple[ExecutorSnapshot, ...]:
         if not operation_ids:
             return ()
         if len(operation_ids) > 256:
             raise ExecutionError("executor list request exceeds the reviewed limit")
-        placeholders = ",".join("?" for _ in operation_ids)
-        cursor = await self._connection.execute(
-            f"SELECT * FROM execution_records WHERE operation_id IN ({placeholders}) "
-            "ORDER BY accepted_at, operation_id",
-            operation_ids,
-        )
-        rows = await cursor.fetchall()
-        await cursor.close()
-        return tuple(self._snapshot(row) for row in rows)
+        async with self._acceptance_gate:
+            placeholders = ",".join("?" for _ in operation_ids)
+            cursor = await self._connection.execute(
+                f"SELECT * FROM execution_records WHERE operation_id IN ({placeholders}) "
+                "ORDER BY accepted_at, operation_id",
+                operation_ids,
+            )
+            rows = await cursor.fetchall()
+            await cursor.close()
+            return tuple(self._snapshot(row) for row in rows)
 
     async def list_outstanding(
         self,
@@ -668,14 +670,15 @@ class SqliteExecutorEvidenceStore:
     ) -> tuple[ExecutorSnapshot, ...]:
         if not 1 <= limit <= 256:
             raise ExecutionError("executor reconciliation page limit is invalid")
-        cursor = await self._connection.execute(
-            "SELECT * FROM execution_records WHERE state!='closed' AND operation_id>? "
-            "ORDER BY operation_id LIMIT ?",
-            ("" if after_operation_id is None else after_operation_id, limit),
-        )
-        rows = await cursor.fetchall()
-        await cursor.close()
-        return tuple(self._snapshot(row) for row in rows)
+        async with self._acceptance_gate:
+            cursor = await self._connection.execute(
+                "SELECT * FROM execution_records WHERE state!='closed' AND operation_id>? "
+                "ORDER BY operation_id LIMIT ?",
+                ("" if after_operation_id is None else after_operation_id, limit),
+            )
+            rows = await cursor.fetchall()
+            await cursor.close()
+            return tuple(self._snapshot(row) for row in rows)
 
     async def set_readiness(self, readiness: str) -> None:
         if readiness not in {"recovering", "ready", "integrity_failed"}:
