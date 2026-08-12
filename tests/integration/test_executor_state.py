@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import sqlite3
+from contextlib import closing
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -252,7 +253,7 @@ def test_restart_rejects_cross_table_ticket_identity_collision(tmp_path: Path) -
         async with executor_store(root, repo_root) as store:
             await store.accept_once(ticket)
         database = root / "state/executor-state.sqlite3"
-        with sqlite3.connect(database) as connection:
+        with closing(sqlite3.connect(database)) as connection, connection:
             timestamp = NOW.isoformat(timespec="microseconds")
             connection.execute(
                 """

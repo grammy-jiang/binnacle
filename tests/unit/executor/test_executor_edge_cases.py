@@ -5,6 +5,7 @@ import base64
 import hashlib
 import os
 import sqlite3
+from contextlib import closing
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import cast
@@ -100,7 +101,7 @@ def _verify_database(
     *,
     revision: str = EXECUTOR_REVISION,
 ) -> ExecutorIntegrityReport:
-    with sqlite3.connect(database) as connection:
+    with closing(sqlite3.connect(database)) as connection, connection:
         return verify_executor_connection(connection, expected_revision=revision)
 
 
@@ -252,7 +253,7 @@ def test_integrity_rejects_revision_and_unexpected_tables(tmp_path: Path) -> Non
     with pytest.raises(ExecutorIntegrityError, match="identity is incompatible"):
         _verify_database(database, revision="wrong-revision")
 
-    with sqlite3.connect(database) as connection:
+    with closing(sqlite3.connect(database)) as connection, connection:
         connection.execute("CREATE TABLE unexpected_executor_state (id INTEGER PRIMARY KEY)")
     with pytest.raises(ExecutorIntegrityError, match="table set is incompatible"):
         _verify_database(database)
@@ -260,13 +261,13 @@ def test_integrity_rejects_revision_and_unexpected_tables(tmp_path: Path) -> Non
 
 def test_integrity_rejects_event_gaps_and_illegal_transitions(tmp_path: Path) -> None:
     gap_database = _migrated_database(tmp_path / "gap")
-    with sqlite3.connect(gap_database) as connection:
+    with closing(sqlite3.connect(gap_database)) as connection, connection:
         connection.execute("UPDATE executor_meta SET evidence_generation_high_water=1 WHERE id=1")
     with pytest.raises(ExecutorIntegrityError, match="generation sequence has a gap"):
         _verify_database(gap_database)
 
     transition_database = _migrated_database(tmp_path / "transition")
-    with sqlite3.connect(transition_database) as connection:
+    with closing(sqlite3.connect(transition_database)) as connection, connection:
         connection.execute(
             """
             INSERT INTO executor_evidence_events (
@@ -925,7 +926,7 @@ def test_integrity_wraps_invalid_values_and_rejects_failed_quick_check(
 
     monkeypatch.setattr(executor_integrity, "_verify_executor_connection", invalid_value)
     with (
-        sqlite3.connect(":memory:") as connection,
+        closing(sqlite3.connect(":memory:")) as connection,
         pytest.raises(ExecutorIntegrityError, match="contains an invalid value"),
     ):
         verify_executor_connection(connection, expected_revision=EXECUTOR_REVISION)
@@ -933,7 +934,7 @@ def test_integrity_wraps_invalid_values_and_rejects_failed_quick_check(
 
 def test_integrity_rejects_contradictory_metadata_and_orphan_events(tmp_path: Path) -> None:
     contradictory = _migrated_database(tmp_path / "contradictory")
-    with sqlite3.connect(contradictory) as connection:
+    with closing(sqlite3.connect(contradictory)) as connection, connection:
         connection.execute("PRAGMA ignore_check_constraints=ON")
         connection.execute("DROP TRIGGER executor_meta_guarded_update")
         connection.execute("UPDATE executor_meta SET schema_generation=2 WHERE id=1")
@@ -941,7 +942,7 @@ def test_integrity_rejects_contradictory_metadata_and_orphan_events(tmp_path: Pa
             verify_executor_connection(connection, expected_revision=EXECUTOR_REVISION)
 
     orphan = _migrated_database(tmp_path / "orphan")
-    with sqlite3.connect(orphan) as connection:
+    with closing(sqlite3.connect(orphan)) as connection, connection:
         connection.execute(
             """
             INSERT INTO executor_evidence_events (
@@ -959,7 +960,7 @@ def test_integrity_rejects_contradictory_metadata_and_orphan_events(tmp_path: Pa
 
 def test_integrity_rejects_multiple_acceptance_homes(tmp_path: Path) -> None:
     database = _pending_database(tmp_path / "executor")
-    with sqlite3.connect(database) as connection:
+    with closing(sqlite3.connect(database)) as connection, connection:
         connection.execute(
             """
             INSERT INTO no_accept_tombstones (
@@ -1000,7 +1001,7 @@ def test_integrity_rejects_tampered_accepted_evidence(
     message: str,
 ) -> None:
     database = _accepted_database(tmp_path / case)
-    with sqlite3.connect(database) as connection:
+    with closing(sqlite3.connect(database)) as connection, connection:
         connection.execute("PRAGMA ignore_check_constraints=ON")
         if case == "launch_json":
             connection.execute("DROP TRIGGER execution_records_guarded_update")
@@ -1048,14 +1049,14 @@ def test_integrity_verifies_and_rejects_routing_evidence(tmp_path: Path) -> None
     assert pending_report.pending_cancels == 1
 
     invalid_generation = _pending_database(tmp_path / "pending-generation")
-    with sqlite3.connect(invalid_generation) as connection:
+    with closing(sqlite3.connect(invalid_generation)) as connection, connection:
         connection.execute("DROP TRIGGER pending_cancel_intents_guarded_update")
         connection.execute("UPDATE pending_cancel_intents SET last_evidence_generation=2")
     with pytest.raises(ExecutorIntegrityError, match="routing evidence generation is invalid"):
         _verify_database(invalid_generation)
 
     wrong_event = _pending_database(tmp_path / "pending-event")
-    with sqlite3.connect(wrong_event) as connection:
+    with closing(sqlite3.connect(wrong_event)) as connection, connection:
         connection.execute("DROP TRIGGER executor_evidence_events_no_update")
         connection.execute("UPDATE executor_evidence_events SET operation_id='other-operation'")
     with pytest.raises(ExecutorIntegrityError, match="routing evidence has no exact event"):
@@ -1066,7 +1067,7 @@ def test_integrity_verifies_and_rejects_routing_evidence(tmp_path: Path) -> None
     assert tombstone_report.no_accept_tombstones == 1
 
     invalid_receipt = _tombstone_database(tmp_path / "tombstone-receipt")
-    with sqlite3.connect(invalid_receipt) as connection:
+    with closing(sqlite3.connect(invalid_receipt)) as connection, connection:
         connection.execute("DROP TRIGGER no_accept_tombstones_guarded_update")
         connection.execute("UPDATE no_accept_tombstones SET receipt_sha256=?", (SHA_D,))
     with pytest.raises(ExecutorIntegrityError, match="no-accept receipt is invalid"):
@@ -1209,7 +1210,7 @@ def test_open_rechecks_metadata_after_integrity_preflight(
         database = _migrated_database(root)
         runtime = root / "run"
         runtime.mkdir()
-        with sqlite3.connect(database) as connection:
+        with closing(sqlite3.connect(database)) as connection, connection:
             connection.execute("DROP TRIGGER executor_meta_no_delete")
             connection.execute("DELETE FROM executor_meta")
 

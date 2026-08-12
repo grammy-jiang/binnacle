@@ -7,6 +7,7 @@ import os
 import pwd
 import sqlite3
 import stat
+from contextlib import closing
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -116,7 +117,7 @@ def test_executor_verifier_rejects_failure_or_incomplete_readiness(
     database = tmp_path / "executor-state.sqlite3"
     migrate_executor_database(database, repo_root)
     database.chmod(0o600)
-    with sqlite3.connect(database) as connection:
+    with closing(sqlite3.connect(database)) as connection, connection:
         connection.execute("UPDATE executor_meta SET readiness=? WHERE id=1", (readiness,))
 
     with pytest.raises(ExecutorVerificationError, match="identity or integrity"):
