@@ -39,6 +39,13 @@ def test_credential_units_freeze_a_separate_default_disabled_boundary(
         "Restart=no",
         "ReadWritePaths=/run/binnacle-git-credential/private",
         "ReadWritePaths=/var/lib/binnacle-git-credential/state",
+        "InaccessiblePaths=/srv/binnacle-dev/repo",
+        "InaccessiblePaths=/etc/binnacle",
+        "InaccessiblePaths=/var/lib/binnacle",
+        "InaccessiblePaths=-/run/binnacle",
+        "InaccessiblePaths=/etc/binnacle-executor",
+        "InaccessiblePaths=/var/lib/binnacle-executor",
+        "InaccessiblePaths=-/run/binnacle-executor",
         "PrivateDevices=yes",
         "DevicePolicy=closed",
         "ProtectSystem=strict",
@@ -49,9 +56,8 @@ def test_credential_units_freeze_a_separate_default_disabled_boundary(
         "AmbientCapabilities=",
     } <= set(service.splitlines())
     assert "[Install]" not in service
-    assert "/srv/binnacle-dev/repo" not in service
-    assert "/var/lib/binnacle-executor" not in service
-    assert "/var/lib/binnacle/" not in service
+    assert "WorkingDirectory=/srv/binnacle-dev/repo" not in service
+    assert "ExecStart=/srv/binnacle-dev/repo" not in service
 
     assert {
         "ListenStream=/run/binnacle-git-credential/broker.sock",
@@ -260,13 +266,61 @@ def test_credential_foundation_verifier_checks_private_default_disabled_state(
         lambda name: users[name],
     )
     monkeypatch.setattr(
+        "scripts.verify_git_credential_broker.pwd.getpwall",
+        lambda: list(users.values()),
+    )
+    monkeypatch.setattr(
         "scripts.verify_git_credential_broker.grp.getgrnam",
         lambda name: groups[name],
     )
     monkeypatch.setattr("scripts.verify_git_credential_broker.os.geteuid", lambda: credential_uid)
     monkeypatch.setattr("scripts.verify_git_credential_broker.os.getegid", lambda: credential_gid)
+    monkeypatch.setattr("scripts.verify_git_credential_broker.os.getgroups", lambda: [client_gid])
 
     verify_git_credential_broker.verify_default_disabled_foundation()
+
+    rogue = pwd.struct_passwd(
+        ("unexpected-client", "x", 1399, client_gid, "", "/", "/usr/sbin/nologin")
+    )
+    monkeypatch.setattr(
+        "scripts.verify_git_credential_broker.pwd.getpwall",
+        lambda: [*users.values(), rogue],
+    )
+
+    with pytest.raises(
+        GitCredentialBrokerVerificationError,
+        match="identity boundary differs",
+    ):
+        verify_git_credential_broker.verify_default_disabled_foundation()
+
+    monkeypatch.setattr(
+        "scripts.verify_git_credential_broker.pwd.getpwall",
+        lambda: list(users.values()),
+    )
+    monkeypatch.setattr(
+        "scripts.verify_git_credential_broker.os.getgroups",
+        lambda: [client_gid, 1399],
+    )
+
+    with pytest.raises(
+        GitCredentialBrokerVerificationError,
+        match="identity boundary differs",
+    ):
+        verify_git_credential_broker.verify_default_disabled_foundation()
+
+    duplicate_uid = pwd.struct_passwd(
+        ("credential-alias", "x", credential_uid, 1399, "", "/", "/usr/sbin/nologin")
+    )
+    monkeypatch.setattr(
+        "scripts.verify_git_credential_broker.pwd.getpwall",
+        lambda: [*users.values(), duplicate_uid],
+    )
+
+    with pytest.raises(
+        GitCredentialBrokerVerificationError,
+        match="identity boundary differs",
+    ):
+        verify_git_credential_broker.verify_default_disabled_foundation()
 
 
 def _migrate_credential_database(database: Path, repo_root: Path) -> None:

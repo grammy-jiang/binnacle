@@ -41,6 +41,14 @@ _SOCKET = _RUNTIME_ROOT / "broker.sock"
 _TMPFILES = Path("/etc/tmpfiles.d/binnacle-git-credential.conf")
 
 
+def _effective_group_members(group: grp.struct_group) -> set[str]:
+    """Return supplementary and primary members of one local group."""
+
+    return set(group.gr_mem) | {
+        account.pw_name for account in pwd.getpwall() if account.pw_gid == group.gr_gid
+    }
+
+
 def verify_database(path: Path) -> CredentialBrokerIntegrityReport:
     try:
         metadata = path.stat(follow_symlinks=False)
@@ -118,10 +126,16 @@ def verify_default_disabled_foundation() -> None:
         raise GitCredentialBrokerVerificationError(
             "foundation verification must run as the credential identity"
         )
-    members = set(client_group.gr_mem)
+    members = _effective_group_members(client_group)
+    credential_uid_names = {credential.pw_name} | {
+        account.pw_name for account in pwd.getpwall() if account.pw_uid == credential.pw_uid
+    }
+    process_group_ids = {os.getegid(), *os.getgroups()}
     if (
         credential.pw_gid != credential_group.gr_gid
         or credential.pw_uid in {0, application.pw_uid, executor.pw_uid}
+        or credential_uid_names != {"binnacle-git-credential"}
+        or process_group_ids != {credential_group.gr_gid, client_group.gr_gid}
         or client_group.gr_gid in {0, credential_group.gr_gid}
         or members != {"binnacle-executor", "binnacle-git-credential"}
         or application.pw_gid == client_group.gr_gid

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 from typing import cast
 
@@ -205,6 +206,137 @@ def test_each_development_workspace_invariant_is_fail_closed(index: int, message
     verification._verify_development_workspace_invariants(
         cast(sqlite3.Connection, _InvariantConnection([0] * 5))
     )
+
+
+@pytest.mark.parametrize(
+    ("index", "message"),
+    (
+        (0, "operation provenance"),
+        (1, "stage sequence"),
+        (2, "terminal closure"),
+        (3, "aggregate effect"),
+        (4, "specialized evidence"),
+        (5, "terminal specialized evidence"),
+    ),
+)
+def test_each_git_invariant_is_independently_fail_closed(index: int, message: str) -> None:
+    values = [0] * 6
+    values[index] = 1
+    connection = cast(sqlite3.Connection, _InvariantConnection(values))
+    with pytest.raises(KernelVerificationError, match=message):
+        verification._verify_git_invariants(connection)
+    verification._verify_git_invariants(cast(sqlite3.Connection, _InvariantConnection([0] * 6)))
+
+
+def _terminal_git_invariant_connection(operation_kind: str = "branch_create") -> sqlite3.Connection:
+    connection = sqlite3.connect(":memory:")
+    connection.executescript(
+        """
+        CREATE TABLE operations (
+          operation_id TEXT, controller_id TEXT, controller_epoch INTEGER, device_id TEXT,
+          device_epoch INTEGER, operation_contract TEXT, tool_name TEXT, state TEXT,
+          effect_knowledge TEXT, terminality TEXT
+        );
+        CREATE TABLE development_sessions (
+          session_id TEXT, workspace_id TEXT, controller_id TEXT, controller_epoch INTEGER,
+          device_id TEXT, device_epoch INTEGER
+        );
+        CREATE TABLE registered_workspaces (workspace_id TEXT);
+        CREATE TABLE workspace_mutation_fences (
+          workspace_id TEXT, active_operation_id TEXT, fence_version INTEGER,
+          active_contract TEXT
+        );
+        CREATE TABLE git_operations (
+          operation_id TEXT, session_id TEXT, workspace_id TEXT, operation_kind TEXT,
+          aggregate_effect_knowledge TEXT, state TEXT, current_stage_generation INTEGER,
+          workspace_fence_version INTEGER
+        );
+        CREATE TABLE git_operation_stages (
+          operation_id TEXT, stage_generation INTEGER, state TEXT, acceptance_state TEXT,
+          cleanup_complete INTEGER, acknowledged_cancel_generation INTEGER,
+          cancel_generation INTEGER, effect_knowledge TEXT, crossing_state TEXT
+        );
+        CREATE TABLE git_commit_evidence (
+          operation_id TEXT, main_index_publication_state TEXT, signature_verified INTEGER,
+          object_imported INTEGER, branch_cas_complete INTEGER,
+          main_index_publication_receipt_sha256 TEXT, worktree_evidence_sha256 TEXT
+        );
+        CREATE TABLE git_remote_evidence (
+          operation_id TEXT, credential_cleanup_complete INTEGER, transport_state TEXT,
+          remote_reconciled INTEGER, credential_use_evidence_sha256 TEXT
+        );
+        INSERT INTO development_sessions VALUES ('session-1','workspace-1','controller-1',1,
+          'device-1',1);
+        INSERT INTO registered_workspaces VALUES ('workspace-1');
+        INSERT INTO workspace_mutation_fences VALUES ('workspace-1',NULL,1,NULL);
+        INSERT INTO git_operation_stages VALUES ('operation-1',1,'closed','accepted',1,0,0,
+          'known_effect','classified');
+        """
+    )
+    connection.execute(
+        "INSERT INTO operations VALUES (?,?,?,?,?,?,?,?,?,?)",
+        (
+            "operation-1",
+            "controller-1",
+            1,
+            "device-1",
+            1,
+            f"git_{operation_kind}",
+            f"git_{operation_kind}",
+            "succeeded",
+            "known_effect",
+            "terminal",
+        ),
+    )
+    connection.execute(
+        "INSERT INTO git_operations VALUES (?,?,?,?,?,?,?,?)",
+        (
+            "operation-1",
+            "session-1",
+            "workspace-1",
+            operation_kind,
+            "known_effect",
+            "terminal",
+            1,
+            1,
+        ),
+    )
+    return connection
+
+
+def test_git_integrity_rejects_parent_effect_not_derived_from_closed_stage() -> None:
+    with closing(_terminal_git_invariant_connection()) as connection:
+        verification._verify_git_invariants(connection)
+        connection.execute(
+            "UPDATE operations SET effect_knowledge='known_no_effect' "
+            "WHERE operation_id='operation-1'"
+        )
+        connection.execute(
+            "UPDATE git_operations SET aggregate_effect_knowledge='known_no_effect' "
+            "WHERE operation_id='operation-1'"
+        )
+
+        with pytest.raises(KernelVerificationError, match="aggregate effect"):
+            verification._verify_git_invariants(connection)
+
+
+def test_git_integrity_requires_conclusive_commit_publication_evidence() -> None:
+    with closing(_terminal_git_invariant_connection("commit")) as connection:
+        with pytest.raises(KernelVerificationError, match="terminal specialized evidence"):
+            verification._verify_git_invariants(connection)
+
+        connection.execute(
+            "INSERT INTO git_commit_evidence VALUES ('operation-1','pending',1,1,1,NULL,NULL)"
+        )
+        with pytest.raises(KernelVerificationError, match="terminal specialized evidence"):
+            verification._verify_git_invariants(connection)
+
+        connection.execute(
+            "UPDATE git_commit_evidence SET main_index_publication_state='complete',"
+            "main_index_publication_receipt_sha256=?,worktree_evidence_sha256=?",
+            ("a" * 64, "b" * 64),
+        )
+        verification._verify_git_invariants(connection)
 
 
 def test_obligation_and_generation_event_matching_is_exact() -> None:

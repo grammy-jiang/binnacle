@@ -69,6 +69,25 @@ EXPECTED_GIT_CREDENTIAL_READ_WRITE_PATHS = frozenset(
         str(GIT_CREDENTIAL_STATE_DIRECTORY),
     }
 )
+EXPECTED_GIT_CREDENTIAL_INACCESSIBLE_PATHS = frozenset(
+    {
+        "/srv/binnacle-dev/repo",
+        "/etc/binnacle",
+        "/var/lib/binnacle",
+        "-/run/binnacle",
+        "/etc/binnacle-executor",
+        "/var/lib/binnacle-executor",
+        "-/run/binnacle-executor",
+    }
+)
+
+
+def _effective_group_members(group: grp.struct_group) -> set[str]:
+    """Return supplementary and primary members of one local group."""
+
+    return set(group.gr_mem) | {
+        account.pw_name for account in pwd.getpwall() if account.pw_gid == group.gr_gid
+    }
 
 
 @dataclass(frozen=True, slots=True)
@@ -930,6 +949,7 @@ def _git_credential_foundation_checks() -> list[VerificationCheck]:
                 "WorkingDirectory",
                 "ExecStart",
                 "ReadWritePaths",
+                "InaccessiblePaths",
                 "ProtectSystem",
                 "NoNewPrivileges",
                 "PrivateDevices",
@@ -968,11 +988,20 @@ def _git_credential_foundation_checks() -> list[VerificationCheck]:
             )
         ]
 
-    client_members = set(client_group.gr_mem)
+    client_members = _effective_group_members(client_group)
+    credential_uid_names = {credential.pw_name} | {
+        account.pw_name for account in pwd.getpwall() if account.pw_uid == credential.pw_uid
+    }
+    try:
+        credential_group_ids = set(os.getgrouplist(credential.pw_name, credential.pw_gid))
+    except OSError:
+        credential_group_ids = set()
     identities_ok = (
         min(credential.pw_uid, credential_group.gr_gid, client_group.gr_gid) > 0
         and credential.pw_gid == credential_group.gr_gid
         and credential.pw_uid not in {application.pw_uid, executor.pw_uid}
+        and credential_uid_names == {"binnacle-git-credential"}
+        and credential_group_ids == {credential_group.gr_gid, client_group.gr_gid}
         and client_members == {"binnacle-executor", "binnacle-git-credential"}
         and application.pw_gid != client_group.gr_gid
         and len(
@@ -1026,6 +1055,8 @@ def _git_credential_foundation_checks() -> list[VerificationCheck]:
         and service["WorkingDirectory"] == "/var/empty"
         and "/usr/bin/false" in service["ExecStart"]
         and frozenset(service["ReadWritePaths"].split()) == EXPECTED_GIT_CREDENTIAL_READ_WRITE_PATHS
+        and frozenset(service["InaccessiblePaths"].split())
+        == EXPECTED_GIT_CREDENTIAL_INACCESSIBLE_PATHS
         and service["ProtectSystem"] == "strict"
         and service["NoNewPrivileges"] == "yes"
         and service["PrivateDevices"] == "yes"

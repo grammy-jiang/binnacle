@@ -180,6 +180,39 @@ def test_git_commit_and_stage_recovery_evidence_is_exact_and_monotonic(
 
         connection.execute(
             """
+            INSERT INTO git_commit_evidence
+            SELECT 'commit-recovery','sha1',?,tree_oid_algorithm,tree_oid_hex,
+              parent_oid_algorithm,parent_oid_hex,author_sha256,committer_sha256,message_sha256,
+              preimage_sha256,author_at,committer_at,signer_profile_sha256,
+              signer_public_fingerprint,signature_sha256,1,1,1,
+              expected_main_index_identity_sha256,expected_main_index_tree_oid_algorithm,
+              expected_main_index_tree_oid_hex,expected_main_index_sha256,
+              target_main_index_tree_oid_algorithm,target_main_index_tree_oid_hex,
+              target_main_index_sha256,selected_worktree_snapshot_sha256,'pending',NULL,NULL,
+              created_at,updated_at
+            FROM git_commit_evidence WHERE operation_id='commit-op'
+            """,
+            ("9" * 40,),
+        )
+        connection.execute(
+            "UPDATE git_commit_evidence SET main_index_publication_state='uncertain', "
+            "updated_at=datetime(updated_at,'+1 second') "
+            "WHERE operation_id='commit-recovery'"
+        )
+        connection.execute(
+            "UPDATE git_commit_evidence SET main_index_publication_state='complete', "
+            "main_index_publication_receipt_sha256=?,worktree_evidence_sha256=?, "
+            "updated_at=datetime(updated_at,'+2 seconds') "
+            "WHERE operation_id='commit-recovery'",
+            ("7" * 64, "8" * 64),
+        )
+        assert connection.execute(
+            "SELECT main_index_publication_state FROM git_commit_evidence "
+            "WHERE operation_id='commit-recovery'"
+        ).fetchone() == ("complete",)
+
+        connection.execute(
+            """
             INSERT INTO git_operation_stages (
               operation_id,stage_generation,member_id,stage_kind,input_sha256,pre_state_sha256,
               member_ticket_id,member_ticket_sha256,acceptance_state,execution_id,crossing_state,
@@ -342,6 +375,14 @@ def test_executor_git_ticket_union_and_retained_receipts_are_closed(
         wrong_parent[12] = "2" * 64
         with pytest.raises(sqlite3.IntegrityError):
             connection.execute(insert_member, tuple(wrong_parent))
+
+        duplicate_read = list(read_values)
+        duplicate_read[0] = "duplicate-read-member"
+        duplicate_read[10] = "duplicate-read-ticket"
+        duplicate_read[11] = "8" * 64
+        duplicate_read[12] = "9" * 64
+        with pytest.raises(sqlite3.IntegrityError):
+            connection.execute(insert_member, tuple(duplicate_read))
 
         connection.execute(
             """

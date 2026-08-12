@@ -90,6 +90,14 @@ SYSTEM_PATHS = (
 )
 
 
+def _effective_group_members(group: grp.struct_group) -> set[str]:
+    """Return supplementary and primary members of one local group."""
+
+    return set(group.gr_mem) | {
+        account.pw_name for account in pwd.getpwall() if account.pw_gid == group.gr_gid
+    }
+
+
 class SetupError(RuntimeError):
     """The requested setup is unsafe or does not match the fixed development profile."""
 
@@ -386,24 +394,53 @@ def _check_identity_compatibility() -> Check:
         return Check(
             "identities", "fail", "application, executor, and credential users must be distinct"
         )
+    credential_user = users.get(GIT_CREDENTIAL_USER)
+    if credential_user is not None:
+        credential_uid_names = {credential_user.pw_name} | {
+            account.pw_name
+            for account in pwd.getpwall()
+            if account.pw_uid == credential_user.pw_uid
+        }
+        if credential_uid_names != {GIT_CREDENTIAL_USER}:
+            return Check(
+                "identities",
+                "fail",
+                "Git credential-broker UID is shared by an unexpected identity",
+            )
+        credential_client_group = groups.get(GIT_CREDENTIAL_CLIENT_GROUP)
+        allowed_credential_group_ids = {credential_user.pw_gid}
+        if credential_client_group is not None:
+            allowed_credential_group_ids.add(credential_client_group.gr_gid)
+        try:
+            credential_group_ids = set(os.getgrouplist(GIT_CREDENTIAL_USER, credential_user.pw_gid))
+        except OSError:
+            return Check(
+                "identities",
+                "fail",
+                "Git credential-broker supplementary groups are unavailable",
+            )
+        if credential_group_ids != allowed_credential_group_ids:
+            return Check(
+                "identities",
+                "fail",
+                "Git credential-broker has an unexpected supplementary group",
+            )
     credential_clients = groups.get(GIT_CREDENTIAL_CLIENT_GROUP)
     if credential_clients is not None:
+        effective_credential_clients = _effective_group_members(credential_clients)
         denied_client_users = (SERVICE_USER, "binnacle-command")
         for denied_user_name in denied_client_users:
             try:
-                denied_user = pwd.getpwnam(denied_user_name)
+                pwd.getpwnam(denied_user_name)
             except KeyError:
                 continue
-            if (
-                denied_user.pw_gid == credential_clients.gr_gid
-                or denied_user_name in credential_clients.gr_mem
-            ):
+            if denied_user_name in effective_credential_clients:
                 return Check(
                     "identities",
                     "fail",
                     f"{denied_user_name} may not be a Git credential-broker client",
                 )
-        unexpected_clients = set(credential_clients.gr_mem) - {
+        unexpected_clients = effective_credential_clients - {
             EXECUTOR_USER,
             GIT_CREDENTIAL_USER,
         }

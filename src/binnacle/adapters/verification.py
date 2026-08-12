@@ -639,6 +639,29 @@ def _verify_git_invariants(connection: sqlite3.Connection) -> None:
                        OR (gs.acceptance_state='accepted'
                            AND gs.crossing_state!='classified')))
         """,
+        "Git aggregate effect": """
+            SELECT COUNT(*) FROM git_operations go
+            WHERE go.aggregate_effect_knowledge!=(
+                CASE
+                  WHEN EXISTS (
+                    SELECT 1 FROM git_operation_stages gs
+                    WHERE gs.operation_id=go.operation_id
+                      AND gs.effect_knowledge='uncertain') THEN 'uncertain'
+                  WHEN EXISTS (
+                    SELECT 1 FROM git_operation_stages gs
+                    WHERE gs.operation_id=go.operation_id
+                      AND gs.effect_knowledge='partial') THEN 'partial'
+                  WHEN EXISTS (
+                    SELECT 1 FROM git_operation_stages gs
+                    WHERE gs.operation_id=go.operation_id
+                      AND gs.effect_knowledge='known_effect') THEN 'known_effect'
+                  WHEN EXISTS (
+                    SELECT 1 FROM git_operation_stages gs
+                    WHERE gs.operation_id=go.operation_id
+                      AND gs.effect_knowledge='known_no_effect') THEN 'known_no_effect'
+                  ELSE 'none'
+                END)
+        """,
         "Git specialized evidence": """
             SELECT (SELECT COUNT(*) FROM git_commit_evidence ce
                     LEFT JOIN git_operations go ON go.operation_id=ce.operation_id
@@ -647,6 +670,37 @@ def _verify_git_invariants(connection: sqlite3.Connection) -> None:
                     LEFT JOIN git_operations go ON go.operation_id=re.operation_id
                     WHERE go.operation_id IS NULL OR
                           go.operation_kind NOT IN ('fetch','pull','push'))
+        """,
+        "Git terminal specialized evidence": """
+            SELECT COUNT(*) FROM git_operations go
+            JOIN operations o ON o.operation_id=go.operation_id
+            LEFT JOIN git_commit_evidence ce ON ce.operation_id=go.operation_id
+            LEFT JOIN git_remote_evidence re ON re.operation_id=go.operation_id
+            WHERE go.state='terminal' AND (
+              (go.operation_kind='commit' AND (
+                ((o.state='succeeded' OR
+                  go.aggregate_effect_knowledge!='known_no_effect') AND
+                 ce.operation_id IS NULL) OR
+                (ce.operation_id IS NOT NULL AND
+                 ce.main_index_publication_state NOT IN ('not_required','complete')) OR
+                (o.state='succeeded' AND
+                 (ce.operation_id IS NULL OR ce.signature_verified!=1 OR
+                  ce.object_imported!=1 OR ce.branch_cas_complete!=1 OR
+                  ce.main_index_publication_state!='complete' OR
+                  ce.main_index_publication_receipt_sha256 IS NULL OR
+                  ce.worktree_evidence_sha256 IS NULL)))) OR
+              (go.operation_kind IN ('fetch','pull','push') AND (
+                ((o.state='succeeded' OR
+                  go.aggregate_effect_knowledge!='known_no_effect') AND
+                 re.operation_id IS NULL) OR
+                (re.operation_id IS NOT NULL AND
+                 (re.credential_cleanup_complete!=1 OR
+                  re.transport_state IN
+                    ('accepted','sent','lost_response','uncertain'))) OR
+                (o.state='succeeded' AND
+                 (re.operation_id IS NULL OR re.transport_state!='completed' OR
+                  re.remote_reconciled!=1 OR
+                  re.credential_use_evidence_sha256 IS NULL)))))
         """,
     }
     for name, query in checks.items():

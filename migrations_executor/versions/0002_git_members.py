@@ -155,6 +155,13 @@ def upgrade() -> None:
         ["application_generation", "state"],
         unique=False,
     )
+    op.create_index(
+        "uq_git_members_read_request",
+        "git_members",
+        ["application_generation", "read_request_id"],
+        unique=True,
+        sqlite_where=sa.text("ticket_kind='git_read'"),
+    )
 
     op.create_table(
         "git_read_no_accept_tombstones",
@@ -309,6 +316,7 @@ def downgrade() -> None:
     ):
         op.execute(f"DROP TRIGGER {table}_no_delete")
     op.drop_table("git_read_no_accept_tombstones")
+    op.drop_index("uq_git_members_read_request", table_name="git_members")
     op.drop_index("ix_git_members_application_generation", table_name="git_members")
     op.drop_table("git_members")
     op.drop_table("git_read_generations")

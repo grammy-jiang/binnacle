@@ -262,7 +262,11 @@ The credential-broker schema verifier currently runs only in the isolated CI lan
 
 Do not create a Pi credential database, install a key, enable either credential unit, or
 grant the broker checkout access from this repository-only result.  The tracked service is
-an explicit ``/usr/bin/false`` fail-closed placeholder.  A later reviewed broker
+an explicit ``/usr/bin/false`` fail-closed placeholder and applies exact
+``InaccessiblePaths`` barriers to the mutable checkout plus application/executor protected
+roots.  Setup and verification also require the broker UID to be unique and its effective
+groups to contain only the private broker group and credential-client group.  A later
+reviewed broker
 implementation must supply a protected, immutable migration/verifier runtime and the real
 key, peer, socket, and candidate-Pi evidence before the offline broker migration sequence
 becomes operational.  ``verify_dev_pi.py`` still verifies the credential identities,

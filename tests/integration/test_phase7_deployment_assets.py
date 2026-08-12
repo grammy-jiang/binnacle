@@ -153,11 +153,75 @@ def test_setup_rejects_application_credential_client_contamination(
     }
     monkeypatch.setattr("scripts.setup_dev_pi.grp.getgrnam", lambda name: groups[name])
     monkeypatch.setattr("scripts.setup_dev_pi.pwd.getpwnam", lambda name: users[name])
+    monkeypatch.setattr("scripts.setup_dev_pi.pwd.getpwall", lambda: list(users.values()))
+    monkeypatch.setattr(
+        "scripts.setup_dev_pi.os.getgrouplist",
+        lambda _name, primary_gid: [primary_gid, 1205],
+    )
 
     check = setup_dev_pi._check_identity_compatibility()
 
     assert check.status == "fail"
     assert "may not be a Git credential-broker client" in check.summary
+
+
+def test_setup_rejects_primary_group_credential_client_contamination(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client_gid = 1205
+    groups = {
+        "binnacle": grp.struct_group(("binnacle", "x", 1200, [])),
+        "binnacle-dev": grp.struct_group(("binnacle-dev", "x", 1201, [])),
+        "binnacle-executor": grp.struct_group(("binnacle-executor", "x", 1202, [])),
+        "binnacle-executor-client": grp.struct_group(("binnacle-executor-client", "x", 1203, [])),
+        "binnacle-git-credential": grp.struct_group(("binnacle-git-credential", "x", 1204, [])),
+        "binnacle-git-credential-client": grp.struct_group(
+            (
+                "binnacle-git-credential-client",
+                "x",
+                client_gid,
+                ["binnacle-executor", "binnacle-git-credential"],
+            )
+        ),
+    }
+    users = {
+        "binnacle": pwd.struct_passwd(("binnacle", "x", 1300, 1200, "", "/", "/usr/sbin/nologin")),
+        "binnacle-executor": pwd.struct_passwd(
+            ("binnacle-executor", "x", 1301, 1202, "", "/", "/usr/sbin/nologin")
+        ),
+        "binnacle-git-credential": pwd.struct_passwd(
+            ("binnacle-git-credential", "x", 1302, 1204, "", "/", "/usr/sbin/nologin")
+        ),
+    }
+    rogue = pwd.struct_passwd(
+        ("unexpected-client", "x", 1399, client_gid, "", "/", "/usr/sbin/nologin")
+    )
+    monkeypatch.setattr("scripts.setup_dev_pi.grp.getgrnam", lambda name: groups[name])
+    monkeypatch.setattr("scripts.setup_dev_pi.pwd.getpwnam", lambda name: users[name])
+    monkeypatch.setattr(
+        "scripts.setup_dev_pi.pwd.getpwall",
+        lambda: [*users.values(), rogue],
+    )
+    monkeypatch.setattr(
+        "scripts.setup_dev_pi.os.getgrouplist",
+        lambda _name, primary_gid: [primary_gid, client_gid],
+    )
+
+    check = setup_dev_pi._check_identity_compatibility()
+
+    assert check.status == "fail"
+    assert "unexpected identity" in check.summary
+
+    monkeypatch.setattr("scripts.setup_dev_pi.pwd.getpwall", lambda: list(users.values()))
+    monkeypatch.setattr(
+        "scripts.setup_dev_pi.os.getgrouplist",
+        lambda _name, primary_gid: [primary_gid, client_gid, 1201],
+    )
+
+    check = setup_dev_pi._check_identity_compatibility()
+
+    assert check.status == "fail"
+    assert "unexpected supplementary group" in check.summary
 
 
 @pytest.mark.parametrize("readiness", ("recovering", "integrity_failed"))
@@ -490,6 +554,11 @@ def test_deployment_verifier_checks_effective_credential_boundaries(
         "scripts.verify_dev_pi.pwd.getpwnam",
         lambda name: users[name],
     )
+    monkeypatch.setattr("scripts.verify_dev_pi.pwd.getpwall", lambda: list(users.values()))
+    monkeypatch.setattr(
+        "scripts.verify_dev_pi.os.getgrouplist",
+        lambda _name, primary_gid: [primary_gid, client_gid],
+    )
     monkeypatch.setattr("scripts.verify_dev_pi.grp.getgrnam", lambda name: groups[name])
 
     def properties(names: tuple[str, ...], *, service_name: str) -> dict[str, str]:
@@ -506,6 +575,9 @@ def test_deployment_verifier_checks_effective_credential_boundaries(
                 "ExecStart": "{ path=/usr/bin/false ; argv[]=/usr/bin/false ; }",
                 "ReadWritePaths": " ".join(
                     sorted(verify_dev_pi.EXPECTED_GIT_CREDENTIAL_READ_WRITE_PATHS)
+                ),
+                "InaccessiblePaths": " ".join(
+                    sorted(verify_dev_pi.EXPECTED_GIT_CREDENTIAL_INACCESSIBLE_PATHS)
                 ),
                 "ProtectSystem": "strict",
                 "NoNewPrivileges": "yes",
@@ -540,3 +612,31 @@ def test_deployment_verifier_checks_effective_credential_boundaries(
     checks = verify_dev_pi._git_credential_foundation_checks()
 
     assert checks and all(check.status == "pass" for check in checks)
+
+    rogue = pwd.struct_passwd(
+        ("unexpected-client", "x", 1399, client_gid, "", "/", "/usr/sbin/nologin")
+    )
+    monkeypatch.setattr(
+        "scripts.verify_dev_pi.pwd.getpwall",
+        lambda: [*users.values(), rogue],
+    )
+
+    checks = verify_dev_pi._git_credential_foundation_checks()
+
+    assert (
+        next(check for check in checks if check.name == "git-credential-identities").status
+        == "fail"
+    )
+
+    monkeypatch.setattr("scripts.verify_dev_pi.pwd.getpwall", lambda: list(users.values()))
+    monkeypatch.setattr(
+        "scripts.verify_dev_pi.os.getgrouplist",
+        lambda _name, primary_gid: [primary_gid, client_gid, 1999],
+    )
+
+    checks = verify_dev_pi._git_credential_foundation_checks()
+
+    assert (
+        next(check for check in checks if check.name == "git-credential-identities").status
+        == "fail"
+    )

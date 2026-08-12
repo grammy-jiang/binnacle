@@ -499,7 +499,9 @@ def upgrade() -> None:
             NOT (
               NEW.main_index_publication_state=OLD.main_index_publication_state OR
               (OLD.main_index_publication_state='pending' AND
-               NEW.main_index_publication_state IN ('not_required','complete','uncertain'))
+               NEW.main_index_publication_state IN ('not_required','complete','uncertain')) OR
+              (OLD.main_index_publication_state='uncertain' AND
+               NEW.main_index_publication_state='complete')
             ) OR NEW.updated_at<OLD.updated_at
           THEN RAISE(ABORT, 'Git commit evidence regressed') END;
         END
