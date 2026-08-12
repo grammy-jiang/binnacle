@@ -13,6 +13,14 @@ from binnacle.domain.privileged import (
     PrivilegedTicket,
     PrivilegedTicketRoutingIdentity,
 )
+from binnacle.domain.privileged_observation import (
+    PackageInspectionResult,
+    PackageTarget,
+    PackageTransactionPlan,
+    RuntimeIdentity,
+    ServiceInspectionResult,
+    VerifiedRuntimeSlot,
+)
 
 
 class PrivilegedTicketVerifier(Protocol):
@@ -59,4 +67,42 @@ class PrivilegedBrokerPort(Protocol):
     ) -> BrokerAcceptanceReceipt: ...
 
 
-__all__ = ["PrivilegedBrokerPort", "PrivilegedEvidenceStore", "PrivilegedTicketVerifier"]
+class PackageObservationPort(Protocol):
+    """Inspect and prepare one closed package transaction without mutation."""
+
+    async def inspect(self, target: PackageTarget) -> PackageInspectionResult: ...
+
+    async def prepare(self, targets: tuple[PackageTarget, ...]) -> PackageTransactionPlan: ...
+
+
+class ServiceObservationPort(Protocol):
+    """Inspect only the exact configured Binnacle service."""
+
+    async def inspect(self) -> ServiceInspectionResult: ...
+
+
+class RuntimeIdentityPort(Protocol):
+    """Return the exact current application runtime identity."""
+
+    async def current(self) -> RuntimeIdentity: ...
+
+
+class RuntimeSlotInspectionPort(Protocol):
+    """Inspect complete protected runtime slots without changing a selector."""
+
+    async def inspect(self, slot_id: str) -> VerifiedRuntimeSlot: ...
+
+    async def current(self) -> VerifiedRuntimeSlot | None: ...
+
+    async def lkg(self) -> VerifiedRuntimeSlot | None: ...
+
+
+__all__ = [
+    "PackageObservationPort",
+    "PrivilegedBrokerPort",
+    "PrivilegedEvidenceStore",
+    "PrivilegedTicketVerifier",
+    "RuntimeIdentityPort",
+    "RuntimeSlotInspectionPort",
+    "ServiceObservationPort",
+]
