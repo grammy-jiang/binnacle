@@ -43,7 +43,7 @@ from binnacle.executor.integrity import (
     verify_executor_connection,
 )
 
-EXECUTOR_REVISION: Final = "0001_executor_evidence"
+EXECUTOR_REVISION: Final = "0002_git_members"
 _ZERO_DIGEST: Final = "0" * 64
 
 
@@ -1174,7 +1174,7 @@ async def open_executor_store(
         meta_cursor = await connection.execute("SELECT * FROM executor_meta WHERE id = 1")
         meta = await meta_cursor.fetchone()
         await meta_cursor.close()
-        if meta is None or _as_int(meta["schema_generation"]) != 1:
+        if meta is None or _as_int(meta["schema_generation"]) != 2:
             raise ExecutorStoreError("executor metadata is absent or incompatible")
         outstanding = integrity_report.outstanding_executions
         previous_build = str(meta["build_sha256"])

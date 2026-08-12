@@ -1,0 +1,2 @@
+This isolated Alembic environment owns only the Phase 8 Git credential-broker database.
+It never opens or migrates the application or execution-supervisor databases.

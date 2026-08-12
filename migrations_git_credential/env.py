@@ -1,4 +1,4 @@
-"""Alembic environment for the executor-owned evidence database only."""
+"""Alembic environment for the credential-broker-owned database only."""
 
 from __future__ import annotations
 
@@ -20,11 +20,11 @@ def _database_url() -> str:
     raw = (
         configured
         if isinstance(configured, str)
-        else os.environ.get("BINNACLE_EXECUTOR_MIGRATION_DATABASE_URL")
+        else os.environ.get("BINNACLE_GIT_CREDENTIAL_MIGRATION_DATABASE_URL")
     )
     if raw is None or not raw.startswith("sqlite:////") or raw == "sqlite:////":
         raise RuntimeError(
-            "BINNACLE_EXECUTOR_MIGRATION_DATABASE_URL must name one absolute SQLite database"
+            "BINNACLE_GIT_CREDENTIAL_MIGRATION_DATABASE_URL must name one absolute SQLite database"
         )
     return raw
 
@@ -43,11 +43,7 @@ def run_migrations_offline() -> None:
 def run_migrations_online() -> None:
     section = config.get_section(config.config_ini_section, {})
     section["sqlalchemy.url"] = _database_url()
-    connectable = engine_from_config(
-        section,
-        prefix="sqlalchemy.",
-        poolclass=pool.NullPool,
-    )
+    connectable = engine_from_config(section, prefix="sqlalchemy.", poolclass=pool.NullPool)
     try:
         with connectable.connect() as connection:
             context.configure(connection=connection, target_metadata=target_metadata)

@@ -27,7 +27,7 @@ from binnacle.domain.probe_workspace import (
     validate_path_snapshot,
 )
 
-EXPECTED_REVISION = "0004_execution_operations"
+EXPECTED_REVISION = "0005_git_operations"
 EXPECTED_TABLES = frozenset(
     {
         "alembic_version",
@@ -48,6 +48,10 @@ EXPECTED_TABLES = frozenset(
         "workspace_mutation_fences",
         "command_operations",
         "command_cancel_requests",
+        "git_operations",
+        "git_operation_stages",
+        "git_commit_evidence",
+        "git_remote_evidence",
     }
 )
 
@@ -246,6 +250,8 @@ def _verify_database(
     if connection.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
         raise KernelVerificationError("SQLite integrity check failed")
     connection.execute("PRAGMA foreign_keys=ON")
+    if connection.execute("PRAGMA foreign_key_check").fetchone() is not None:
+        raise KernelVerificationError("SQLite foreign-key integrity check failed")
     connection.execute(f"PRAGMA busy_timeout={busy_timeout_ms}")
     connection.execute(f"PRAGMA wal_autocheckpoint={wal_autocheckpoint_pages}")
     tables = frozenset(
@@ -263,6 +269,7 @@ def _verify_database(
     _verify_probe_invariants(connection)
     _verify_development_workspace_invariants(connection)
     _verify_command_execution_invariants(connection)
+    _verify_git_invariants(connection)
     meta = connection.execute("SELECT * FROM kernel_meta WHERE id=1").fetchone()
     if meta is None:
         raise KernelVerificationError("kernel metadata singleton is absent")
@@ -372,7 +379,7 @@ def _verify_database_invariants(connection: sqlite3.Connection) -> None:
         """,
         "trusted time ordering": """
             SELECT COUNT(*) FROM kernel_meta
-            WHERE schema_generation != 4 OR trusted_time_generation < 1
+            WHERE schema_generation != 5 OR trusted_time_generation < 1
                OR audit_recovered_generation > audit_failure_generation
                OR (audit_failure_latched=1 AND
                    audit_failure_generation <= audit_recovered_generation)
@@ -500,16 +507,19 @@ def _verify_development_workspace_invariants(connection: sqlite3.Connection) -> 
             SELECT COUNT(*) FROM workspace_mutation_fences f
             LEFT JOIN workspace_operations wo ON wo.operation_id=f.active_operation_id
             LEFT JOIN command_operations co ON co.operation_id=f.active_operation_id
+            LEFT JOIN git_operations go ON go.operation_id=f.active_operation_id
             LEFT JOIN operations o ON o.operation_id=f.active_operation_id
             WHERE f.active_operation_id IS NOT NULL
               AND (o.operation_id IS NULL
-                   OR (wo.operation_id IS NULL AND co.operation_id IS NULL)
-                   OR (wo.operation_id IS NOT NULL AND co.operation_id IS NOT NULL)
+                   OR ((wo.operation_id IS NOT NULL) + (co.operation_id IS NOT NULL) +
+                       (go.operation_id IS NOT NULL)) != 1
                    OR (wo.operation_id IS NOT NULL AND
                        (wo.workspace_id!=f.workspace_id OR
                         f.active_contract!=('workspace_' || wo.mutation_kind)))
                    OR (co.operation_id IS NOT NULL AND
                        (co.workspace_id!=f.workspace_id OR co.closure_state!='pending'))
+                   OR (go.operation_id IS NOT NULL AND
+                       (go.workspace_id!=f.workspace_id OR go.state='terminal'))
                    OR o.operation_contract!=f.active_contract
                    OR o.state IN ('received','rejected'))
         """,
@@ -574,6 +584,157 @@ def _verify_command_execution_invariants(connection: sqlite3.Connection) -> None
                OR co.phase7_cancel_generation != COALESCE((
                 SELECT MAX(c.cancel_generation) FROM command_cancel_requests c
                 WHERE c.command_operation_id=co.operation_id), 0)
+        """,
+    }
+    for name, query in checks.items():
+        if int(connection.execute(query).fetchone()[0]):
+            raise KernelVerificationError(f"{name} invariant failed")
+
+
+def _verify_git_invariants(connection: sqlite3.Connection) -> None:
+    checks = {
+        "Git operation provenance": """
+            SELECT COUNT(*) FROM git_operations go
+            LEFT JOIN operations o ON o.operation_id=go.operation_id
+            LEFT JOIN development_sessions s ON s.session_id=go.session_id
+            LEFT JOIN registered_workspaces w ON w.workspace_id=go.workspace_id
+            LEFT JOIN workspace_mutation_fences f ON f.workspace_id=go.workspace_id
+            WHERE o.operation_id IS NULL OR s.session_id IS NULL OR w.workspace_id IS NULL
+               OR f.workspace_id IS NULL OR go.workspace_id!=s.workspace_id
+               OR o.controller_id!=s.controller_id OR o.controller_epoch!=s.controller_epoch
+               OR o.device_id!=s.device_id OR o.device_epoch!=s.device_epoch
+               OR o.operation_contract!=('git_' || go.operation_kind)
+               OR o.tool_name!=o.operation_contract
+               OR o.state IN ('received','rejected')
+               OR go.aggregate_effect_knowledge!=o.effect_knowledge
+               OR (go.state='terminal' AND o.terminality!='terminal')
+               OR (go.state!='terminal' AND o.terminality='terminal')
+               OR (go.state!='terminal' AND
+                   (f.active_operation_id!=go.operation_id
+                    OR f.fence_version!=go.workspace_fence_version
+                    OR f.active_contract!=o.operation_contract))
+               OR (go.state='terminal' AND f.active_operation_id=go.operation_id)
+        """,
+        "Git stage sequence": """
+            SELECT COUNT(*) FROM git_operations go
+            WHERE go.current_stage_generation!=(
+                    SELECT COUNT(*) FROM git_operation_stages gs
+                    WHERE gs.operation_id=go.operation_id)
+               OR go.current_stage_generation!=COALESCE((
+                    SELECT MAX(gs.stage_generation) FROM git_operation_stages gs
+                    WHERE gs.operation_id=go.operation_id), 0)
+        """,
+        "Git stage predecessor closure": """
+            SELECT COUNT(*) FROM git_operation_stages gs
+            LEFT JOIN git_operation_stages predecessor
+              ON predecessor.operation_id=gs.operation_id
+             AND predecessor.stage_generation=gs.stage_generation-1
+            WHERE gs.stage_generation>1
+              AND (predecessor.operation_id IS NULL OR predecessor.state!='closed')
+        """,
+        "Git terminal closure": """
+            SELECT COUNT(*) FROM git_operations go
+            WHERE go.state='terminal' AND EXISTS (
+                SELECT 1 FROM git_operation_stages gs
+                WHERE gs.operation_id=go.operation_id
+                  AND (gs.state!='closed' OR gs.acceptance_state='unresolved'
+                       OR gs.cleanup_complete=0
+                       OR gs.acknowledged_cancel_generation!=gs.cancel_generation
+                       OR gs.effect_knowledge IN ('none','uncertain')
+                       OR (gs.acceptance_state='no_accept'
+                           AND (gs.crossing_state!='not_crossed'
+                                OR gs.effect_knowledge!='known_no_effect'))
+                       OR (gs.acceptance_state='accepted'
+                           AND gs.crossing_state!='classified')))
+        """,
+        "Git aggregate effect": """
+            SELECT COUNT(*) FROM git_operations go
+            WHERE go.aggregate_effect_knowledge!=(
+                CASE
+                  WHEN EXISTS (
+                    SELECT 1 FROM git_operation_stages gs
+                    WHERE gs.operation_id=go.operation_id
+                      AND gs.effect_knowledge='uncertain') THEN 'uncertain'
+                  WHEN EXISTS (
+                    SELECT 1 FROM git_operation_stages gs
+                    WHERE gs.operation_id=go.operation_id
+                      AND gs.effect_role='consequential'
+                      AND gs.effect_knowledge='partial') THEN 'partial'
+                  WHEN EXISTS (
+                    SELECT 1 FROM git_operation_stages gs
+                    WHERE gs.operation_id=go.operation_id
+                      AND gs.effect_role='consequential'
+                      AND gs.effect_knowledge='known_effect')
+                   AND EXISTS (
+                    SELECT 1 FROM git_operation_stages gs
+                    WHERE gs.operation_id=go.operation_id
+                      AND gs.effect_role='consequential'
+                      AND gs.effect_knowledge='known_no_effect') THEN 'partial'
+                  WHEN EXISTS (
+                    SELECT 1 FROM git_operation_stages gs
+                    WHERE gs.operation_id=go.operation_id
+                      AND gs.effect_role='consequential'
+                      AND gs.effect_knowledge='known_effect') THEN 'known_effect'
+                  WHEN EXISTS (
+                    SELECT 1 FROM git_operation_stages gs
+                    WHERE gs.operation_id=go.operation_id
+                      AND gs.effect_role='consequential'
+                      AND gs.effect_knowledge='known_no_effect') THEN 'known_no_effect'
+                  ELSE 'none'
+                END)
+        """,
+        "Git specialized evidence": """
+            SELECT (SELECT COUNT(*) FROM git_commit_evidence ce
+                    LEFT JOIN git_operations go ON go.operation_id=ce.operation_id
+                    WHERE go.operation_id IS NULL OR go.operation_kind!='commit') +
+                   (SELECT COUNT(*) FROM git_remote_evidence re
+                    LEFT JOIN git_operations go ON go.operation_id=re.operation_id
+                    WHERE go.operation_id IS NULL OR
+                          go.operation_kind NOT IN ('fetch','pull','push'))
+        """,
+        "Git terminal specialized evidence": """
+            SELECT COUNT(*) FROM git_operations go
+            JOIN operations o ON o.operation_id=go.operation_id
+            LEFT JOIN git_commit_evidence ce ON ce.operation_id=go.operation_id
+            LEFT JOIN git_remote_evidence re ON re.operation_id=go.operation_id
+            WHERE go.state='terminal' AND (
+              (go.operation_kind='commit' AND (
+                ((o.state='succeeded' OR
+                  go.aggregate_effect_knowledge!='known_no_effect') AND
+                 ce.operation_id IS NULL) OR
+                (ce.operation_id IS NOT NULL AND
+                 ce.main_index_publication_state NOT IN ('not_required','complete')) OR
+                (ce.operation_id IS NOT NULL AND
+                 go.aggregate_effect_knowledge IN ('known_effect','partial') AND
+                 (ce.signature_verified!=1 OR ce.object_imported!=1)) OR
+                (ce.operation_id IS NOT NULL AND
+                 go.aggregate_effect_knowledge='known_no_effect' AND
+                 (ce.object_imported=1 OR ce.branch_cas_complete=1 OR
+                  ce.main_index_publication_state='complete')) OR
+                (o.state='succeeded' AND
+                 (ce.operation_id IS NULL OR ce.signature_verified!=1 OR
+                  ce.object_imported!=1 OR ce.branch_cas_complete!=1 OR
+                  ce.main_index_publication_state!='complete' OR
+                  ce.main_index_publication_receipt_sha256 IS NULL OR
+                  ce.worktree_evidence_sha256 IS NULL)))) OR
+              (go.operation_kind IN ('fetch','pull','push') AND (
+                ((o.state='succeeded' OR
+                  go.aggregate_effect_knowledge!='known_no_effect') AND
+                 re.operation_id IS NULL) OR
+                (re.operation_id IS NOT NULL AND
+                 (re.credential_cleanup_complete!=1 OR
+                  re.transport_state IN
+                    ('accepted','sent','lost_response','uncertain'))) OR
+                (re.operation_id IS NOT NULL AND
+                 go.aggregate_effect_knowledge='known_no_effect' AND
+                 re.transport_state NOT IN ('not_started','rejected')) OR
+                (re.operation_id IS NOT NULL AND
+                 go.aggregate_effect_knowledge IN ('known_effect','partial') AND
+                 re.transport_state!='completed') OR
+                (o.state='succeeded' AND
+                 (re.operation_id IS NULL OR re.transport_state!='completed' OR
+                  re.remote_reconciled!=1 OR
+                  re.credential_use_evidence_sha256 IS NULL)))))
         """,
     }
     for name, query in checks.items():

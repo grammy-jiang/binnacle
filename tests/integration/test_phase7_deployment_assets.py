@@ -71,11 +71,18 @@ def test_setup_grants_both_services_runtime_parent_traversal(
         "binnacle-dev": grp.struct_group(("binnacle-dev", "x", 1201, [])),
         "binnacle-executor": grp.struct_group(("binnacle-executor", "x", 1202, [])),
         "binnacle-executor-client": grp.struct_group(("binnacle-executor-client", "x", 1203, [])),
+        "binnacle-git-credential": grp.struct_group(("binnacle-git-credential", "x", 1204, [])),
+        "binnacle-git-credential-client": grp.struct_group(
+            ("binnacle-git-credential-client", "x", 1205, [])
+        ),
     }
     users = {
         "binnacle": pwd.struct_passwd(("binnacle", "x", 1300, 1200, "", "/", "/usr/sbin/nologin")),
         "binnacle-executor": pwd.struct_passwd(
             ("binnacle-executor", "x", 1301, 1202, "", "/", "/usr/sbin/nologin")
+        ),
+        "binnacle-git-credential": pwd.struct_passwd(
+            ("binnacle-git-credential", "x", 1302, 1204, "", "/", "/usr/sbin/nologin")
         ),
     }
     commands: list[tuple[str, ...]] = []
@@ -84,6 +91,7 @@ def test_setup_grants_both_services_runtime_parent_traversal(
     monkeypatch.setattr(setup_dev_pi, "_ensure_group", lambda _name: None)
     monkeypatch.setattr(setup_dev_pi, "_ensure_user", lambda _user, _group: None)
     monkeypatch.setattr("scripts.setup_dev_pi.grp.getgrnam", lambda name: groups[name])
+    monkeypatch.setattr("scripts.setup_dev_pi.grp.getgrall", lambda: list(groups.values()))
     monkeypatch.setattr("scripts.setup_dev_pi.pwd.getpwnam", lambda name: users[name])
     monkeypatch.setattr(setup_dev_pi, "_ensure_protected_directory", lambda *_a, **_k: None)
     monkeypatch.setattr(setup_dev_pi, "_atomic_install", lambda *_a, **_k: None)
@@ -105,7 +113,148 @@ def test_setup_grants_both_services_runtime_parent_traversal(
         expected_groups,
         "binnacle-executor",
     ) in commands
+    assert (
+        "usermod",
+        "--append",
+        "--groups",
+        "binnacle-git-credential-client",
+        "binnacle-executor",
+    ) in commands
+    assert (
+        "usermod",
+        "--append",
+        "--groups",
+        "binnacle-git-credential-client",
+        "binnacle-git-credential",
+    ) in commands
     assert not any(command[:2] == ("systemctl", "enable") for command in commands)
+
+
+def test_setup_rejects_application_credential_client_contamination(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    groups = {
+        "binnacle": grp.struct_group(("binnacle", "x", 1200, [])),
+        "binnacle-dev": grp.struct_group(("binnacle-dev", "x", 1201, [])),
+        "binnacle-executor": grp.struct_group(("binnacle-executor", "x", 1202, [])),
+        "binnacle-executor-client": grp.struct_group(("binnacle-executor-client", "x", 1203, [])),
+        "binnacle-git-credential": grp.struct_group(("binnacle-git-credential", "x", 1204, [])),
+        "binnacle-git-credential-client": grp.struct_group(
+            ("binnacle-git-credential-client", "x", 1205, ["binnacle"])
+        ),
+    }
+    users = {
+        "binnacle": pwd.struct_passwd(("binnacle", "x", 1300, 1200, "", "/", "/usr/sbin/nologin")),
+        "binnacle-executor": pwd.struct_passwd(
+            ("binnacle-executor", "x", 1301, 1202, "", "/", "/usr/sbin/nologin")
+        ),
+        "binnacle-git-credential": pwd.struct_passwd(
+            ("binnacle-git-credential", "x", 1302, 1204, "", "/", "/usr/sbin/nologin")
+        ),
+    }
+    monkeypatch.setattr("scripts.setup_dev_pi.grp.getgrnam", lambda name: groups[name])
+    monkeypatch.setattr("scripts.setup_dev_pi.grp.getgrall", lambda: list(groups.values()))
+    monkeypatch.setattr("scripts.setup_dev_pi.pwd.getpwnam", lambda name: users[name])
+    monkeypatch.setattr("scripts.setup_dev_pi.pwd.getpwall", lambda: list(users.values()))
+    monkeypatch.setattr(
+        "scripts.setup_dev_pi.os.getgrouplist",
+        lambda _name, primary_gid: [primary_gid, 1205],
+    )
+
+    check = setup_dev_pi._check_identity_compatibility()
+
+    assert check.status == "fail"
+    assert "may not be a Git credential-broker client" in check.summary
+
+
+def test_setup_rejects_primary_group_credential_client_contamination(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client_gid = 1205
+    groups = {
+        "binnacle": grp.struct_group(("binnacle", "x", 1200, [])),
+        "binnacle-dev": grp.struct_group(("binnacle-dev", "x", 1201, [])),
+        "binnacle-executor": grp.struct_group(("binnacle-executor", "x", 1202, [])),
+        "binnacle-executor-client": grp.struct_group(("binnacle-executor-client", "x", 1203, [])),
+        "binnacle-git-credential": grp.struct_group(("binnacle-git-credential", "x", 1204, [])),
+        "binnacle-git-credential-client": grp.struct_group(
+            (
+                "binnacle-git-credential-client",
+                "x",
+                client_gid,
+                ["binnacle-executor", "binnacle-git-credential"],
+            )
+        ),
+    }
+    users = {
+        "binnacle": pwd.struct_passwd(("binnacle", "x", 1300, 1200, "", "/", "/usr/sbin/nologin")),
+        "binnacle-executor": pwd.struct_passwd(
+            ("binnacle-executor", "x", 1301, 1202, "", "/", "/usr/sbin/nologin")
+        ),
+        "binnacle-git-credential": pwd.struct_passwd(
+            ("binnacle-git-credential", "x", 1302, 1204, "", "/", "/usr/sbin/nologin")
+        ),
+    }
+    rogue = pwd.struct_passwd(
+        ("unexpected-client", "x", 1399, client_gid, "", "/", "/usr/sbin/nologin")
+    )
+    monkeypatch.setattr("scripts.setup_dev_pi.grp.getgrnam", lambda name: groups[name])
+    monkeypatch.setattr("scripts.setup_dev_pi.grp.getgrall", lambda: list(groups.values()))
+    monkeypatch.setattr("scripts.setup_dev_pi.pwd.getpwnam", lambda name: users[name])
+    monkeypatch.setattr(
+        "scripts.setup_dev_pi.pwd.getpwall",
+        lambda: [*users.values(), rogue],
+    )
+    monkeypatch.setattr(
+        "scripts.setup_dev_pi.os.getgrouplist",
+        lambda _name, primary_gid: [primary_gid, client_gid],
+    )
+
+    check = setup_dev_pi._check_identity_compatibility()
+
+    assert check.status == "fail"
+    assert "unexpected identity" in check.summary
+
+    monkeypatch.setattr("scripts.setup_dev_pi.pwd.getpwall", lambda: list(users.values()))
+    monkeypatch.setattr(
+        "scripts.setup_dev_pi.os.getgrouplist",
+        lambda _name, primary_gid: [primary_gid, client_gid, 1201],
+    )
+
+    check = setup_dev_pi._check_identity_compatibility()
+
+    assert check.status == "fail"
+    assert "unexpected supplementary group" in check.summary
+
+    client_alias = grp.struct_group(
+        ("credential-client-alias", "x", client_gid, ["unexpected-client"])
+    )
+    monkeypatch.setattr(
+        "scripts.setup_dev_pi.grp.getgrall",
+        lambda: [*groups.values(), client_alias],
+    )
+    monkeypatch.setattr(
+        "scripts.setup_dev_pi.os.getgrouplist",
+        lambda _name, primary_gid: [primary_gid, client_gid],
+    )
+
+    check = setup_dev_pi._check_identity_compatibility()
+
+    assert check.status == "fail"
+    assert "numeric group has an unexpected alias" in check.summary
+
+    duplicate_client = grp.struct_group(
+        ("binnacle-git-credential-client", "x", client_gid, ["unexpected-client"])
+    )
+    monkeypatch.setattr(
+        "scripts.setup_dev_pi.grp.getgrall",
+        lambda: [*groups.values(), duplicate_client],
+    )
+
+    check = setup_dev_pi._check_identity_compatibility()
+
+    assert check.status == "fail"
+    assert "numeric group has an unexpected alias" in check.summary
 
 
 @pytest.mark.parametrize("readiness", ("recovering", "integrity_failed"))
@@ -265,6 +414,7 @@ def test_deployment_verifier_checks_effective_executor_boundaries(
     }
     monkeypatch.setattr("scripts.verify_dev_pi.pwd.getpwnam", lambda name: users[name])
     monkeypatch.setattr("scripts.verify_dev_pi.grp.getgrnam", lambda name: groups[name])
+    monkeypatch.setattr("scripts.verify_dev_pi.grp.getgrall", lambda: list(groups.values()))
 
     def properties(names: tuple[str, ...], *, service_name: str) -> dict[str, str]:
         if service_name == verify_dev_pi.EXECUTOR_SERVICE_NAME:
@@ -313,3 +463,251 @@ def test_deployment_verifier_checks_effective_executor_boundaries(
     checks = verify_dev_pi._executor_foundation_checks()
 
     assert checks and all(check.status == "pass" for check in checks)
+
+
+def test_deployment_verifier_checks_effective_credential_boundaries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class ObservedPath:
+        def __init__(
+            self,
+            value: str,
+            *,
+            uid: int,
+            gid: int,
+            mode: int,
+            directory: bool,
+            text: str = "",
+        ) -> None:
+            self.value = value
+            kind = stat.S_IFDIR if directory else stat.S_IFREG
+            self.metadata = SimpleNamespace(st_uid=uid, st_gid=gid, st_mode=kind | mode)
+            self.text = text
+
+        def stat(self, *, follow_symlinks: bool) -> SimpleNamespace:
+            assert not follow_symlinks
+            return self.metadata
+
+        def read_text(self, *, encoding: str) -> str:
+            assert encoding == "utf-8"
+            return self.text
+
+        def __str__(self) -> str:
+            return self.value
+
+    application_uid = 1300
+    executor_uid = 1301
+    credential_uid = 1302
+    application_gid = 1200
+    executor_gid = 1202
+    credential_gid = 1204
+    client_gid = 1205
+    directory_facts = {
+        "GIT_CREDENTIAL_CONFIG_DIRECTORY": (
+            "/etc/binnacle-git-credential",
+            0,
+            credential_gid,
+            0o750,
+        ),
+        "GIT_CREDENTIAL_PERSISTENT_ROOT": (
+            "/var/lib/binnacle-git-credential",
+            0,
+            credential_gid,
+            0o710,
+        ),
+        "GIT_CREDENTIAL_RUNTIME_ROOT": (
+            "/run/binnacle-git-credential",
+            0,
+            client_gid,
+            0o710,
+        ),
+    }
+    for name, (value, uid, gid, mode) in directory_facts.items():
+        monkeypatch.setattr(
+            verify_dev_pi,
+            name,
+            ObservedPath(value, uid=uid, gid=gid, mode=mode, directory=True),
+        )
+    monkeypatch.setattr(
+        verify_dev_pi,
+        "GIT_CREDENTIAL_TMPFILES_PATH",
+        ObservedPath(
+            "/etc/tmpfiles.d/binnacle-git-credential.conf",
+            uid=0,
+            gid=0,
+            mode=0o644,
+            directory=False,
+            text=(
+                "# Type Path Mode User Group Age Argument\n"
+                "d /run/binnacle-git-credential 0710 root "
+                "binnacle-git-credential-client -\n"
+                "d /run/binnacle-git-credential/private 0700 "
+                "binnacle-git-credential binnacle-git-credential -\n"
+                "d /var/lib/binnacle-git-credential 0710 root "
+                "binnacle-git-credential -\n"
+                "d /var/lib/binnacle-git-credential/state 0700 "
+                "binnacle-git-credential binnacle-git-credential -\n"
+            ),
+        ),
+    )
+    users = {
+        "binnacle": pwd.struct_passwd(
+            ("binnacle", "x", application_uid, application_gid, "", "/", "/usr/sbin/nologin")
+        ),
+        "binnacle-executor": pwd.struct_passwd(
+            ("binnacle-executor", "x", executor_uid, executor_gid, "", "/", "/usr/sbin/nologin")
+        ),
+        "binnacle-git-credential": pwd.struct_passwd(
+            (
+                "binnacle-git-credential",
+                "x",
+                credential_uid,
+                credential_gid,
+                "",
+                "/",
+                "/usr/sbin/nologin",
+            )
+        ),
+    }
+    groups = {
+        "binnacle": grp.struct_group(("binnacle", "x", application_gid, [])),
+        "binnacle-executor": grp.struct_group(("binnacle-executor", "x", executor_gid, [])),
+        "binnacle-git-credential": grp.struct_group(
+            ("binnacle-git-credential", "x", credential_gid, [])
+        ),
+        "binnacle-git-credential-client": grp.struct_group(
+            (
+                "binnacle-git-credential-client",
+                "x",
+                client_gid,
+                ["binnacle-executor", "binnacle-git-credential"],
+            )
+        ),
+    }
+    monkeypatch.setattr(
+        "scripts.verify_dev_pi.pwd.getpwnam",
+        lambda name: users[name],
+    )
+    monkeypatch.setattr("scripts.verify_dev_pi.pwd.getpwall", lambda: list(users.values()))
+    monkeypatch.setattr(
+        "scripts.verify_dev_pi.os.getgrouplist",
+        lambda _name, primary_gid: [primary_gid, client_gid],
+    )
+    monkeypatch.setattr("scripts.verify_dev_pi.grp.getgrnam", lambda name: groups[name])
+    monkeypatch.setattr("scripts.verify_dev_pi.grp.getgrall", lambda: list(groups.values()))
+
+    def properties(names: tuple[str, ...], *, service_name: str) -> dict[str, str]:
+        if service_name == verify_dev_pi.GIT_CREDENTIAL_SERVICE_NAME:
+            values = {
+                "ActiveState": "inactive",
+                "UnitFileState": "static",
+                "FragmentPath": "/etc/systemd/system/binnacle-git-credential.service",
+                "DropInPaths": "",
+                "User": "binnacle-git-credential",
+                "Group": "binnacle-git-credential",
+                "SupplementaryGroups": "binnacle-git-credential-client",
+                "WorkingDirectory": "/var/empty",
+                "ExecStart": "{ path=/usr/bin/false ; argv[]=/usr/bin/false ; }",
+                "ReadWritePaths": " ".join(
+                    sorted(verify_dev_pi.EXPECTED_GIT_CREDENTIAL_READ_WRITE_PATHS)
+                ),
+                "InaccessiblePaths": " ".join(
+                    sorted(verify_dev_pi.EXPECTED_GIT_CREDENTIAL_INACCESSIBLE_PATHS)
+                ),
+                "ProtectSystem": "strict",
+                "NoNewPrivileges": "yes",
+                "PrivateDevices": "yes",
+                "DevicePolicy": "closed",
+                "ProtectProc": "invisible",
+                "RestrictAddressFamilies": "AF_UNIX",
+                "CapabilityBoundingSet": "",
+                "AmbientCapabilities": "",
+                "KillMode": "control-group",
+                "SendSIGKILL": "yes",
+                "Delegate": "no",
+            }
+        else:
+            values = {
+                "ActiveState": "inactive",
+                "UnitFileState": "disabled",
+                "FragmentPath": "/etc/systemd/system/binnacle-git-credential.socket",
+                "DropInPaths": "",
+                "Listen": "Stream=/run/binnacle-git-credential/broker.sock",
+                "SocketUser": "binnacle-git-credential",
+                "SocketGroup": "binnacle-git-credential-client",
+                "SocketMode": "0660",
+                "DirectoryMode": "0710",
+                "RemoveOnStop": "yes",
+            }
+        assert set(names) == set(values)
+        return values
+
+    monkeypatch.setattr(verify_dev_pi, "_systemd_properties", properties)
+
+    checks = verify_dev_pi._git_credential_foundation_checks()
+
+    assert checks and all(check.status == "pass" for check in checks)
+
+    rogue = pwd.struct_passwd(
+        ("unexpected-client", "x", 1399, client_gid, "", "/", "/usr/sbin/nologin")
+    )
+    monkeypatch.setattr(
+        "scripts.verify_dev_pi.pwd.getpwall",
+        lambda: [*users.values(), rogue],
+    )
+
+    checks = verify_dev_pi._git_credential_foundation_checks()
+
+    assert (
+        next(check for check in checks if check.name == "git-credential-identities").status
+        == "fail"
+    )
+
+    client_alias = grp.struct_group(
+        ("credential-client-alias", "x", client_gid, ["unexpected-client"])
+    )
+    monkeypatch.setattr("scripts.verify_dev_pi.pwd.getpwall", lambda: list(users.values()))
+    monkeypatch.setattr(
+        "scripts.verify_dev_pi.os.getgrouplist",
+        lambda _name, primary_gid: [primary_gid, client_gid],
+    )
+    monkeypatch.setattr(
+        "scripts.verify_dev_pi.grp.getgrall",
+        lambda: [*groups.values(), client_alias],
+    )
+
+    checks = verify_dev_pi._git_credential_foundation_checks()
+
+    assert (
+        next(check for check in checks if check.name == "git-credential-identities").status
+        == "fail"
+    )
+
+    duplicate_client = grp.struct_group(
+        ("binnacle-git-credential-client", "x", client_gid, ["unexpected-client"])
+    )
+    monkeypatch.setattr(
+        "scripts.verify_dev_pi.grp.getgrall",
+        lambda: [*groups.values(), duplicate_client],
+    )
+
+    checks = verify_dev_pi._git_credential_foundation_checks()
+
+    assert (
+        next(check for check in checks if check.name == "git-credential-identities").status
+        == "fail"
+    )
+
+    monkeypatch.setattr("scripts.verify_dev_pi.pwd.getpwall", lambda: list(users.values()))
+    monkeypatch.setattr("scripts.verify_dev_pi.grp.getgrall", lambda: list(groups.values()))
+    monkeypatch.setattr(
+        "scripts.verify_dev_pi.os.getgrouplist",
+        lambda _name, primary_gid: [primary_gid, client_gid, 1999],
+    )
+
+    checks = verify_dev_pi._git_credential_foundation_checks()
+
+    assert (
+        next(check for check in checks if check.name == "git-credential-identities").status
+        == "fail"
+    )

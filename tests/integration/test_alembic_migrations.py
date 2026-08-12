@@ -363,6 +363,117 @@ EXPECTED_COLUMNS = {
         "request_fingerprint_sha256",
         "created_at",
     },
+    "git_operations": {
+        "operation_id",
+        "session_id",
+        "workspace_id",
+        "operation_kind",
+        "repository_profile_id",
+        "repository_profile_sha256",
+        "repository_safety_sha256",
+        "repository_state_binding_sha256",
+        "workspace_fence_version",
+        "source_ref",
+        "destination_ref",
+        "expected_old_oid_algorithm",
+        "expected_old_oid_hex",
+        "desired_oid_algorithm",
+        "desired_oid_hex",
+        "request_sha256",
+        "commit_request_sha256",
+        "remote_request_sha256",
+        "credential_reference_sha256",
+        "current_stage_generation",
+        "aggregate_effect_knowledge",
+        "state",
+        "created_at",
+        "updated_at",
+        "last_reconciled_at",
+    },
+    "git_operation_stages": {
+        "operation_id",
+        "stage_generation",
+        "member_id",
+        "stage_kind",
+        "effect_role",
+        "input_sha256",
+        "pre_state_sha256",
+        "member_ticket_id",
+        "member_ticket_sha256",
+        "acceptance_state",
+        "execution_id",
+        "crossing_state",
+        "effect_knowledge",
+        "before_oid_algorithm",
+        "before_oid_hex",
+        "after_oid_algorithm",
+        "after_oid_hex",
+        "cancel_generation",
+        "acknowledged_cancel_generation",
+        "executor_evidence_generation",
+        "cleanup_complete",
+        "cleanup_evidence_sha256",
+        "state",
+        "created_at",
+        "updated_at",
+        "closed_at",
+    },
+    "git_commit_evidence": {
+        "operation_id",
+        "commit_oid_algorithm",
+        "commit_oid_hex",
+        "tree_oid_algorithm",
+        "tree_oid_hex",
+        "parent_oid_algorithm",
+        "parent_oid_hex",
+        "author_sha256",
+        "committer_sha256",
+        "message_sha256",
+        "preimage_sha256",
+        "author_at",
+        "committer_at",
+        "signer_profile_sha256",
+        "signer_public_fingerprint",
+        "signature_sha256",
+        "signature_verified",
+        "object_imported",
+        "branch_cas_complete",
+        "expected_main_index_identity_sha256",
+        "expected_main_index_tree_oid_algorithm",
+        "expected_main_index_tree_oid_hex",
+        "expected_main_index_sha256",
+        "target_main_index_tree_oid_algorithm",
+        "target_main_index_tree_oid_hex",
+        "target_main_index_sha256",
+        "selected_worktree_snapshot_sha256",
+        "main_index_publication_state",
+        "main_index_publication_receipt_sha256",
+        "worktree_evidence_sha256",
+        "created_at",
+        "updated_at",
+    },
+    "git_remote_evidence": {
+        "operation_id",
+        "remote_profile_sha256",
+        "destination_sha256",
+        "outbound_closure_sha256",
+        "source_ref",
+        "destination_ref",
+        "expected_remote_state",
+        "expected_oid_algorithm",
+        "expected_oid_hex",
+        "desired_oid_algorithm",
+        "desired_oid_hex",
+        "observed_oid_algorithm",
+        "observed_oid_hex",
+        "transport_state",
+        "transport_evidence_sha256",
+        "credential_use_evidence_sha256",
+        "remote_reconciled",
+        "credential_cleanup_complete",
+        "created_at",
+        "updated_at",
+    },
 }
 
 
@@ -379,7 +490,7 @@ async def test_fresh_upgrade_has_exact_authoritative_shape_and_pragmas(
     try:
         health = await verify_database_runtime(runtime)
         assert health.healthy
-        assert health.revision == "0004_execution_operations"
+        assert health.revision == "0005_git_operations"
         assert health.foreign_keys == 1
         assert health.journal_mode == "wal"
         assert health.synchronous == 2
@@ -724,7 +835,7 @@ def test_populated_phase4_database_upgrades_without_rewriting_existing_rows(
         connection.close()
 
     assert owner_row == ("controller-preserved", 1)
-    assert revision == ("0004_execution_operations",)
+    assert revision == ("0005_git_operations",)
     assert phase5_counts == (0, 0, 0, 0, 0, 0, 0)
 
 
@@ -766,7 +877,7 @@ def test_stopped_service_upgrade_and_current_revision_commands(
         revision = connection.execute("SELECT version_num FROM alembic_version").fetchone()
     finally:
         connection.close()
-    assert revision == ("0004_execution_operations",)
+    assert revision == ("0005_git_operations",)
 
 
 @pytest.mark.anyio

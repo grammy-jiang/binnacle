@@ -967,7 +967,7 @@ def test_integrity_rejects_contradictory_metadata_and_orphan_events(tmp_path: Pa
     with closing(sqlite3.connect(contradictory)) as connection, connection:
         connection.execute("PRAGMA ignore_check_constraints=ON")
         connection.execute("DROP TRIGGER executor_meta_guarded_update")
-        connection.execute("UPDATE executor_meta SET schema_generation=2 WHERE id=1")
+        connection.execute("UPDATE executor_meta SET schema_generation=3 WHERE id=1")
         with pytest.raises(ExecutorIntegrityError, match="metadata is contradictory"):
             verify_executor_connection(connection, expected_revision=EXECUTOR_REVISION)
 
@@ -1247,7 +1247,7 @@ def test_open_rechecks_metadata_after_integrity_preflight(
         report = ExecutorIntegrityReport(
             revision=EXECUTOR_REVISION,
             readiness="uninitialized",
-            schema_generation=1,
+            schema_generation=2,
             evidence_generation=0,
             accepted_executions=0,
             pending_cancels=0,
