@@ -4,10 +4,11 @@ Binnacle development Pi
 Purpose and current gate
 ------------------------
 
-This runbook prepares the read-only compatibility server and the disabled Phase 5 write
-probe on one 64-bit Raspberry Pi.  It provides repository-side deployment, integrity, and
-evidence checks; it does not claim that a ChatGPT controller is authenticated or that the
-write catalogue has been promoted.
+This runbook prepares the read-only compatibility server, the disabled Phase 5 write
+probe, and the default-disabled Phase 7 execution-supervisor foundation on one 64-bit
+Raspberry Pi.  It provides repository-side deployment, integrity, and evidence checks; it
+does not claim that a ChatGPT controller is authenticated, that a write catalogue has been
+promoted, or that the host can safely execute command trees.
 
 Do not expose ``/mcp`` through a tunnel until the live feasibility gate has selected and
 tested exactly one controller profile.  The repository intentionally contains neither a
@@ -42,13 +43,27 @@ The development profile uses these fixed paths and identities:
    /var/lib/binnacle/probe-workspace
    /var/lib/binnacle/probe-workspace/.staging
    /run/binnacle
+   /etc/binnacle-executor/executor.toml
+   /var/lib/binnacle-executor/state
+   /var/lib/binnacle-executor/output
+   /run/binnacle-executor
+   /run/binnacle-executor/private
 
-   service user and primary group: binnacle
+   application user and primary group: binnacle
    source-read supplementary group: binnacle-dev
+   executor user and primary group: binnacle-executor
+   executor socket client group: binnacle-executor-client
 
-The Git checkout and protected controller configuration are separate.  Controller or
-tunnel credentials must never be stored in the checkout.  Membership in
-``binnacle-dev`` does not grant access to ``/etc/binnacle``.
+Both service identities are supplementary members of ``binnacle-executor-client`` so they
+can traverse the root-owned runtime parent; only ``binnacle`` uses that membership as the
+socket client.  The executor-private child remains ``binnacle-executor:binnacle-executor``
+``0700``.  The Git checkout, application configuration, and executor configuration/state are
+separate.  Controller, tunnel, signing, or transport credentials must never be stored in
+the checkout or executor evidence database.  Membership in ``binnacle-dev`` does not grant
+access to ``/etc/binnacle``.  The application may connect to the executor socket through
+``binnacle-executor-client`` but cannot traverse the executor-private runtime or state
+directories; the command identity is not created or granted either authority in this
+default-disabled foundation.
 
 Prepare the reviewed checkout
 -----------------------------
@@ -67,7 +82,8 @@ the exact clean candidate:
    uv run ruff check .
    uv run ruff format --check .
    uv run mypy src/binnacle tests scripts/mcp_evaluation.py scripts/setup_dev_pi.py \
-     scripts/verify_dev_pi.py scripts/verify_operation_kernel.py
+     scripts/verify_dev_pi.py scripts/verify_operation_kernel.py \
+     scripts/verify_execution_supervisor.py
    uv run lint-imports
    uv run pip-audit
    uv run python scripts/validate_contracts.py
@@ -86,12 +102,14 @@ Inspect the deterministic plan before applying it:
    sudo python scripts/setup_dev_pi.py check --repo /srv/binnacle-dev/repo
    sudo python scripts/setup_dev_pi.py apply --repo /srv/binnacle-dev/repo
 
-Add ``--enable`` to ``apply`` only when the protected configuration is ready.  The script
-creates the two Binnacle groups, the non-root service user, protected configuration and
-evaluation directories, application-owned state/result/audit subtrees, the dedicated
-``0700`` probe root and staging directory, and the reviewed systemd unit.  It does not
-install packages, pull/reset Git, create secrets, configure a firewall or tunnel, or start
-a ChatGPT evaluation.  The unit adds only
+Add ``--enable`` to ``apply`` only when the protected application configuration is ready.
+The script creates distinct application, executor, executor-client, and source-read groups;
+the two non-root service identities; protected configuration and evaluation directories;
+application-owned state/result/audit subtrees; the dedicated ``0700`` probe root and
+staging directory; separate executor state/output/runtime roots; and the reviewed systemd,
+socket, and tmpfiles assets.  It leaves ``binnacle-executor.socket`` disabled and does not
+start the executor.  It does not install packages, pull/reset Git, create secrets, configure
+a firewall or tunnel, or start a ChatGPT evaluation.  The application unit adds only
 ``ReadWritePaths=/var/lib/binnacle/probe-workspace`` to the Phase 4 write boundary; it
 does not grant source, configuration, evaluation, or credential write access.
 
@@ -181,19 +199,21 @@ Profile-specific issuer, audience, gateway, algorithm, freshness, key, and revoc
 fields come only from the selected live profile.  Environment variables and convenience
 CLI flags do not override this protected file.
 
-Offline kernel and probe migration and verification
-----------------------------------------------------
+Offline application and executor migration and verification
+------------------------------------------------------------
 
-The Phase 4/5 schema is never created or upgraded opportunistically by ``serve``.  The
-reviewed Phase 5 head is ``0002_write_probe_state``.  For a new installation or an upgrade
-from ``0001_durable_operation_kernel``, first let systemd create the protected runtime
-directory, then stop the service.  The ordinary stop preserves that directory for the
-non-root maintenance lock:
+Neither database is created or upgraded opportunistically by a runtime service.  The
+reviewed application head is ``0004_execution_operations`` and the independent executor
+head is ``0001_executor_evidence``.  For a new installation or an upgrade, first let
+systemd create the protected application runtime directory, then stop the application and
+both executor units.  The ordinary application stop preserves its runtime directory for
+the non-root maintenance lock:
 
 .. code-block:: console
 
    sudo systemctl start binnacle-dev.service
    sudo systemctl stop binnacle-dev.service
+   sudo systemctl stop binnacle-executor.service binnacle-executor.socket
    sudo -u binnacle -- \
      /srv/binnacle-dev/repo/.venv/bin/binnacle db upgrade \
      --config /etc/binnacle/dev.toml
@@ -203,6 +223,19 @@ non-root maintenance lock:
    sudo -u binnacle -- \
      /srv/binnacle-dev/repo/.venv/bin/binnacle kernel verify \
      --config /etc/binnacle/dev.toml --output agent
+   sudo -u binnacle-executor -- \
+     touch /var/lib/binnacle-executor/state/executor-state.sqlite3
+   sudo -u binnacle-executor -- \
+     chmod 0600 /var/lib/binnacle-executor/state/executor-state.sqlite3
+   sudo -u binnacle-executor --chdir=/srv/binnacle-dev/repo -- \
+     env BINNACLE_EXECUTOR_MIGRATION_DATABASE_URL=\
+sqlite:////var/lib/binnacle-executor/state/executor-state.sqlite3 \
+     .venv/bin/alembic -c alembic-executor.ini upgrade head
+   sudo -u binnacle-executor -- \
+     /srv/binnacle-dev/repo/.venv/bin/python \
+     /srv/binnacle-dev/repo/scripts/verify_execution_supervisor.py \
+     --database /var/lib/binnacle-executor/state/executor-state.sqlite3 \
+     --runtime-directory /run/binnacle-executor/private --output json
 
 The maintenance command acquires the same exclusive ``/run/binnacle`` writer lock as the
 live kernel.  It refuses to run concurrently with a live writer, refuses an absent or
@@ -210,12 +243,18 @@ unsafe runtime directory, and never falls back to a source or world-writable loc
 After a reboot, start then stop the service again before offline maintenance so systemd
 recreates and preserves the runtime directory.
 
-The verifier checks the exact Alembic revision, SQLite foreign keys/WAL/FULL synchronous
+The application verifier checks the exact Alembic revision, SQLite foreign keys/WAL/FULL synchronous
 pragmas, audit chain/cache continuity, durable audit-failure generation, obligation
 markers, payload roots, consequential-boundary gate state, the complete Phase 5 probe
 ledger/history/provenance invariants, and the Phase 6 session/registered-workspace/
-mutation-fence cross-row invariants.  It performs no migration, directory creation,
-workspace registration, fence reconstruction, cleanup, or automatic recovery.
+mutation-fence plus Phase 7 command-operation cross-row invariants.  The executor verifier
+opens only the executor-owned database read-only and checks its exact schema, integrity,
+identity generation, one-home acceptance invariant, and private directory ownership.  The
+verifiers perform no migration, directory creation, workspace registration, fence
+reconstruction, cleanup, acceptance sealing, or automatic recovery.
+The explicit ``touch`` is non-truncating for an existing database; it makes a new database
+path executor-owned before Alembic opens it.  The verifier rejects a database broader than
+``0600`` or owned by a different identity.
 
 If audit recovery is required, keep the service stopped.  A human must reconcile every
 surviving obligation and prepare a protected closure JSON containing the exact active
@@ -368,6 +407,48 @@ The service unit now freezes ``KillMode=control-group``, ``SendSIGKILL=yes``, an
 with the service.  This does not itself enable a matcher or grant source write.  Real Pi
 mount/process-tree observations and real ChatGPT session behavior remain promotion/exit
 evidence; their absence does not block repository implementation or CI review.
+
+Phase 7 execution-supervisor foundation
+---------------------------------------
+
+Application migration ``0004_execution_operations`` adds command-operation correlation,
+monotonic cancellation delivery, exact supervisor evidence, and mutation-fence ownership.
+The separate executor migration ``0001_executor_evidence`` owns only bounded executor
+acceptance, pending-cancel, no-accept, stream, and evidence records.  The application never
+opens the executor database and the executor never opens the application database.
+
+Create ``/etc/binnacle-executor/executor.toml`` as ``root:binnacle-executor`` with exact
+mode ``0640`` only after recording the reviewed numeric application peer identity and
+runtime digests.  The format is closed and uses only these fields:
+
+.. code-block:: toml
+
+   [executor]
+   database_path = "/var/lib/binnacle-executor/state/executor-state.sqlite3"
+   runtime_directory = "/run/binnacle-executor/private"
+   output_directory = "/var/lib/binnacle-executor/output"
+   expected_application_uid = <numeric-binnacle-uid>
+   expected_application_gid = <numeric-binnacle-primary-gid>
+   build_sha256 = "<64-lowercase-hex-reviewed-build-digest>"
+   profile_sha256 = "<64-lowercase-hex-reviewed-disabled-profile-digest>"
+   busy_timeout_ms = 5000
+
+Do not enable or start ``binnacle-executor.socket`` merely because migration, temporary
+verification, or CI passes.  The installed service accepts only a systemd-owned Unix socket,
+checks peer credentials and exact framed protocol fields, and keeps durable cancellation/
+acceptance evidence, but its production execution backend intentionally reports
+``backend_unavailable``.  It has no direct subprocess fallback, no root broker, no device or
+credential access, and no MCP Tool/Resource/Task/Prompt exposure.  A disabled socket also
+prevents the application from accidentally treating repository foundations as host support.
+
+Promotion requires one separately reviewed candidate-Pi profile to prove the exact
+execution-domain/cgroup mechanism, descendant-wide termination and accounting, command UID
+separation, protected-path exclusion, output spooling, network/listener enforcement,
+restart reconciliation, and resource ceilings.  Only after those results, Phase 4/6
+authority wiring, closed command schemas/manifest, and authenticated controller binding are
+current may a later change enable the socket and compose command handlers.  Missing Pi or
+real ChatGPT evidence keeps command capability unavailable; it is not a reason to delay or
+misstate this evidence-independent repository implementation.
 
 Live authentication feasibility
 -------------------------------

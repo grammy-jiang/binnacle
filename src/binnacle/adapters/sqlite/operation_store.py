@@ -84,7 +84,7 @@ class SqliteOperationStore:
                 session.add(
                     KernelMetaModel(
                         id=1,
-                        schema_generation=3,
+                        schema_generation=4,
                         device_id=device_id,
                         device_epoch=1,
                         created_at=timestamp,
@@ -108,7 +108,7 @@ class SqliteOperationStore:
                     )
                 )
             elif (
-                existing.schema_generation != 3
+                existing.schema_generation != 4
                 or existing.device_id != device_id
                 or existing.audit_stream_id != audit_stream_id
                 or existing.audit_epoch != audit_epoch

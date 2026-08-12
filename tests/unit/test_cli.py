@@ -254,7 +254,7 @@ def test_database_upgrade_reports_success_and_sanitized_failure(
     monkeypatch.setattr(cli, "upgrade_database", succeed)
     result = runner.invoke(app, ["db", "upgrade"])
     assert result.exit_code == 0
-    assert result.stdout == "Database upgraded to 0003_development_workspace\n"
+    assert result.stdout == "Database upgraded to 0004_execution_operations\n"
     assert observed["project_root"] == Path(cli.__file__).resolve().parents[2]
 
     def fail(settings: object, *, project_root: Path) -> None:
@@ -272,7 +272,7 @@ def test_database_status_renders_and_sanitizes_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     status = SimpleNamespace(
-        revision="0003_development_workspace",
+        revision="0004_execution_operations",
         journal_mode="wal",
         synchronous=2,
         foreign_keys=1,
@@ -282,7 +282,7 @@ def test_database_status_renders_and_sanitizes_failure(
     monkeypatch.setattr(cli, "verify_database_read_only", lambda **_kwargs: status)
     result = runner.invoke(app, ["db", "status", "--output", "json"])
     assert result.exit_code == 0
-    assert json.loads(result.stdout)["revision"] == "0003_development_workspace"
+    assert json.loads(result.stdout)["revision"] == "0004_execution_operations"
 
     def fail(**_kwargs: object) -> object:
         raise OSError("secret database path")

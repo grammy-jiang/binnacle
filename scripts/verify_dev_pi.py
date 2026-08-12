@@ -21,6 +21,17 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 SERVICE_NAME = "binnacle-dev.service"
+EXECUTOR_SERVICE_NAME = "binnacle-executor.service"
+EXECUTOR_SOCKET_NAME = "binnacle-executor.socket"
+EXECUTOR_CONFIG_DIRECTORY = Path("/etc/binnacle-executor")
+EXECUTOR_CONFIG_FILE = EXECUTOR_CONFIG_DIRECTORY / "executor.toml"
+EXECUTOR_PERSISTENT_ROOT = Path("/var/lib/binnacle-executor")
+EXECUTOR_STATE_DIRECTORY = EXECUTOR_PERSISTENT_ROOT / "state"
+EXECUTOR_OUTPUT_DIRECTORY = EXECUTOR_PERSISTENT_ROOT / "output"
+EXECUTOR_RUNTIME_ROOT = Path("/run/binnacle-executor")
+EXECUTOR_RUNTIME_PRIVATE = EXECUTOR_RUNTIME_ROOT / "private"
+EXECUTOR_SOCKET_PATH = EXECUTOR_RUNTIME_ROOT / "supervisor.sock"
+EXECUTOR_TMPFILES_PATH = Path("/etc/tmpfiles.d/binnacle-executor.conf")
 CANONICAL_REPO = Path("/srv/binnacle-dev/repo")
 _MAX_CONFIG_BYTES = 65_536
 _FULL_GIT_SHA = re.compile(r"[0-9a-f]{40}")
@@ -33,6 +44,13 @@ EXPECTED_READ_WRITE_PATHS = frozenset(
         "/var/lib/binnacle/results",
         "/var/lib/binnacle/audit",
         str(PROBE_ROOT),
+    }
+)
+EXPECTED_EXECUTOR_READ_WRITE_PATHS = frozenset(
+    {
+        str(EXECUTOR_RUNTIME_PRIVATE),
+        str(EXECUTOR_STATE_DIRECTORY),
+        str(EXECUTOR_OUTPUT_DIRECTORY),
     }
 )
 
@@ -126,6 +144,7 @@ def verify_deployment(
             VerificationCheck("server-config", "pass", "one-worker loopback profile observed")
         )
     checks.extend(_systemd_service_checks())
+    checks.extend(_executor_foundation_checks())
     checks.append(_listener_check(host, port))
     checks.append(_health_check(host, port))
     checks.append(_unauthenticated_mcp_check(host, port))
@@ -589,18 +608,22 @@ def _systemd_service_checks() -> list[VerificationCheck]:
     identity_ok = (
         properties["User"] == "binnacle"
         and properties["Group"] == "binnacle"
-        and set(properties["SupplementaryGroups"].split()) == {"binnacle-dev"}
+        and set(properties["SupplementaryGroups"].split())
+        == {"binnacle-dev", "binnacle-executor-client"}
     )
     try:
         account = pwd.getpwnam("binnacle")
         service_group = grp.getgrnam("binnacle")
         development_group = grp.getgrnam("binnacle-dev")
+        executor_client_group = grp.getgrnam("binnacle-executor-client")
         identity_ok = identity_ok and (
             account.pw_uid != 0
             and account.pw_gid == service_group.gr_gid
             and service_group.gr_gid != 0
             and development_group.gr_gid != 0
             and service_group.gr_gid != development_group.gr_gid
+            and executor_client_group.gr_gid != 0
+            and executor_client_group.gr_gid not in {service_group.gr_gid, development_group.gr_gid}
         )
     except KeyError:
         identity_ok = False
@@ -655,8 +678,12 @@ def _systemd_service_checks() -> list[VerificationCheck]:
     return checks
 
 
-def _systemd_properties(names: tuple[str, ...]) -> dict[str, str]:
-    command = ["systemctl", "show", SERVICE_NAME]
+def _systemd_properties(
+    names: tuple[str, ...],
+    *,
+    service_name: str = SERVICE_NAME,
+) -> dict[str, str]:
+    command = ["systemctl", "show", service_name]
     for name in names:
         command.extend(("--property", name))
     output = _run_bounded(command)
@@ -668,6 +695,192 @@ def _systemd_properties(names: tuple[str, ...]) -> dict[str, str]:
     if set(values) != set(names):
         raise ValueError("systemd property set is incomplete")
     return values
+
+
+def _executor_foundation_checks() -> list[VerificationCheck]:
+    try:
+        executor = pwd.getpwnam("binnacle-executor")
+        executor_group = grp.getgrnam("binnacle-executor")
+        client_group = grp.getgrnam("binnacle-executor-client")
+        application = pwd.getpwnam("binnacle")
+        application_group = grp.getgrnam("binnacle")
+        paths = {
+            "persistent": EXECUTOR_PERSISTENT_ROOT.stat(follow_symlinks=False),
+            "state": EXECUTOR_STATE_DIRECTORY.stat(follow_symlinks=False),
+            "output": EXECUTOR_OUTPUT_DIRECTORY.stat(follow_symlinks=False),
+            "config": EXECUTOR_CONFIG_DIRECTORY.stat(follow_symlinks=False),
+            "runtime": EXECUTOR_RUNTIME_ROOT.stat(follow_symlinks=False),
+            "private": EXECUTOR_RUNTIME_PRIVATE.stat(follow_symlinks=False),
+        }
+        config_file = EXECUTOR_CONFIG_FILE.stat(follow_symlinks=False)
+        tmpfiles_file = EXECUTOR_TMPFILES_PATH.stat(follow_symlinks=False)
+        tmpfiles_lines = frozenset(EXECUTOR_TMPFILES_PATH.read_text(encoding="utf-8").splitlines())
+        service = _systemd_properties(
+            (
+                "ActiveState",
+                "UnitFileState",
+                "FragmentPath",
+                "DropInPaths",
+                "User",
+                "Group",
+                "SupplementaryGroups",
+                "ReadWritePaths",
+                "ProtectSystem",
+                "NoNewPrivileges",
+                "PrivateDevices",
+                "DevicePolicy",
+                "ProtectProc",
+                "ProcSubset",
+                "RestrictAddressFamilies",
+                "CapabilityBoundingSet",
+                "AmbientCapabilities",
+                "KillMode",
+                "SendSIGKILL",
+                "Delegate",
+            ),
+            service_name=EXECUTOR_SERVICE_NAME,
+        )
+        socket_properties = _systemd_properties(
+            (
+                "ActiveState",
+                "UnitFileState",
+                "FragmentPath",
+                "DropInPaths",
+                "Listen",
+                "SocketUser",
+                "SocketGroup",
+                "SocketMode",
+                "DirectoryMode",
+                "RemoveOnStop",
+            ),
+            service_name=EXECUTOR_SOCKET_NAME,
+        )
+    except (KeyError, OSError, UnicodeError, subprocess.CalledProcessError, ValueError):
+        return [
+            VerificationCheck(
+                "executor-foundation",
+                "fail",
+                "executor identities, protected roots, or units are unavailable",
+            )
+        ]
+    identities_ok = (
+        min(executor.pw_uid, executor_group.gr_gid, client_group.gr_gid) > 0
+        and executor.pw_gid == executor_group.gr_gid
+        and executor.pw_uid != application.pw_uid
+        and {"binnacle", "binnacle-executor"} <= set(client_group.gr_mem)
+        and len(
+            {
+                executor_group.gr_gid,
+                client_group.gr_gid,
+                application_group.gr_gid,
+            }
+        )
+        == 3
+    )
+    roots_ok = all(
+        stat.S_ISDIR(metadata.st_mode) and not stat.S_ISLNK(metadata.st_mode)
+        for metadata in paths.values()
+    ) and (
+        (
+            paths["persistent"].st_uid,
+            paths["persistent"].st_gid,
+            stat.S_IMODE(paths["persistent"].st_mode),
+        )
+        == (0, executor_group.gr_gid, 0o710)
+        and (
+            paths["config"].st_uid,
+            paths["config"].st_gid,
+            stat.S_IMODE(paths["config"].st_mode),
+        )
+        == (0, executor_group.gr_gid, 0o750)
+        and (
+            paths["runtime"].st_uid,
+            paths["runtime"].st_gid,
+            stat.S_IMODE(paths["runtime"].st_mode),
+        )
+        == (0, client_group.gr_gid, 0o710)
+        and all(
+            (paths[name].st_uid, paths[name].st_gid, stat.S_IMODE(paths[name].st_mode))
+            == (executor.pw_uid, executor_group.gr_gid, 0o700)
+            for name in ("state", "output", "private")
+        )
+        and stat.S_ISREG(config_file.st_mode)
+        and not stat.S_ISLNK(config_file.st_mode)
+        and (config_file.st_uid, config_file.st_gid, stat.S_IMODE(config_file.st_mode))
+        == (0, executor_group.gr_gid, 0o640)
+    )
+    service_boundary_ok = (
+        service["ActiveState"] == "inactive"
+        and service["UnitFileState"] == "static"
+        and service["User"] == "binnacle-executor"
+        and service["Group"] == "binnacle-executor"
+        and set(service["SupplementaryGroups"].split())
+        == {"binnacle-dev", "binnacle-executor-client"}
+        and frozenset(service["ReadWritePaths"].split()) == EXPECTED_EXECUTOR_READ_WRITE_PATHS
+        and service["ProtectSystem"] == "strict"
+        and service["NoNewPrivileges"] == "yes"
+        and service["PrivateDevices"] == "yes"
+        and service["DevicePolicy"] == "closed"
+        and service["ProtectProc"] == "invisible"
+        and service["ProcSubset"] != "pid"
+        and service["RestrictAddressFamilies"] == "AF_UNIX"
+        and not service["CapabilityBoundingSet"]
+        and not service["AmbientCapabilities"]
+        and service["KillMode"] == "control-group"
+        and service["SendSIGKILL"] == "yes"
+        and service["Delegate"] == "no"
+        and service["FragmentPath"] == "/etc/systemd/system/binnacle-executor.service"
+        and not service["DropInPaths"]
+    )
+    listen = socket_properties["Listen"]
+    socket_boundary_ok = (
+        socket_properties["ActiveState"] == "inactive"
+        and socket_properties["UnitFileState"] == "disabled"
+        and socket_properties["FragmentPath"] == "/etc/systemd/system/binnacle-executor.socket"
+        and not socket_properties["DropInPaths"]
+        and str(EXECUTOR_SOCKET_PATH) in listen
+        and "Stream" in listen
+        and socket_properties["SocketUser"] == "binnacle-executor"
+        and socket_properties["SocketGroup"] == "binnacle-executor-client"
+        and socket_properties["SocketMode"] == "0660"
+        and socket_properties["DirectoryMode"] == "0710"
+        and socket_properties["RemoveOnStop"] == "yes"
+    )
+    tmpfiles_ok = (
+        stat.S_ISREG(tmpfiles_file.st_mode)
+        and not stat.S_ISLNK(tmpfiles_file.st_mode)
+        and (tmpfiles_file.st_uid, tmpfiles_file.st_gid, stat.S_IMODE(tmpfiles_file.st_mode))
+        == (0, 0, 0o644)
+        and tmpfiles_lines
+        == {
+            "# Type Path Mode User Group Age Argument",
+            "d /run/binnacle-executor 0710 root binnacle-executor-client -",
+            "d /run/binnacle-executor/private 0700 binnacle-executor binnacle-executor -",
+        }
+    )
+    return [
+        VerificationCheck(
+            "executor-identities",
+            "pass" if identities_ok else "fail",
+            "application, executor, and socket-client identities are distinct"
+            if identities_ok
+            else "executor identity separation differs",
+        ),
+        VerificationCheck(
+            "executor-roots",
+            "pass" if roots_ok else "fail",
+            "executor config/state/runtime parents have exact separate ownership"
+            if roots_ok
+            else "executor protected-root ownership differs",
+        ),
+        VerificationCheck(
+            "executor-default-disabled",
+            "pass" if service_boundary_ok and socket_boundary_ok and tmpfiles_ok else "fail",
+            "executor service/socket are disabled with exact effective isolation"
+            if service_boundary_ok and socket_boundary_ok and tmpfiles_ok
+            else "executor service/socket/tmpfiles boundary differs",
+        ),
+    ]
 
 
 def _listener_check(host: str, port: int) -> VerificationCheck:
@@ -770,6 +983,16 @@ def _pending_live_checks() -> list[VerificationCheck]:
             "write-probe-catalogue",
             "blocked",
             "requires selected authentication/scope mapping plus real ChatGPT evidence",
+        ),
+        VerificationCheck(
+            "execution-backend-profile",
+            "blocked",
+            "requires real-Pi process-domain, filesystem, cgroup, and network evidence",
+        ),
+        VerificationCheck(
+            "command-catalogue",
+            "blocked",
+            "requires promoted execution backend and real ChatGPT command evidence",
         ),
     ]
 

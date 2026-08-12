@@ -27,7 +27,7 @@ class DatabaseRuntimeSettings:
     runtime_directory: Path
     busy_timeout_ms: int = 5000
     wal_autocheckpoint_pages: int = 1000
-    expected_revision: str = "0003_development_workspace"
+    expected_revision: str = "0004_execution_operations"
     verify_runtime_directory: bool = True
 
 

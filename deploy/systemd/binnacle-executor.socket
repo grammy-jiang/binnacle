@@ -1,0 +1,15 @@
+[Unit]
+Description=Binnacle execution-supervisor control socket
+Documentation=https://github.com/grammy-jiang/binnacle/tree/master/docs/operations
+
+[Socket]
+ListenStream=/run/binnacle-executor/supervisor.sock
+Accept=no
+SocketUser=binnacle-executor
+SocketGroup=binnacle-executor-client
+SocketMode=0660
+DirectoryMode=0710
+RemoveOnStop=yes
+
+[Install]
+WantedBy=sockets.target

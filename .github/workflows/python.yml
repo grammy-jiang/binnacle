@@ -87,6 +87,7 @@ jobs:
           scripts/setup_dev_pi.py
           scripts/verify_dev_pi.py
           scripts/verify_operation_kernel.py
+          scripts/verify_execution_supervisor.py
 
       - name: Enforce import boundaries
         run: uv run lint-imports
@@ -112,12 +113,16 @@ jobs:
           uv run python scripts/setup_dev_pi.py --help
           uv run python scripts/verify_dev_pi.py --help
           uv run python scripts/verify_operation_kernel.py --help
+          uv run python scripts/verify_execution_supervisor.py --help
           uv run binnacle db --help
           uv run binnacle kernel --help
           uv run binnacle audit --help
+          uv run binnacle executor --help
 
       - name: Exercise isolated latest migration and read-only verification
-        run: uv run python scripts/verify_operation_kernel.py --temporary --output json
+        run: |
+          uv run python scripts/verify_operation_kernel.py --temporary --output json
+          uv run python scripts/verify_execution_supervisor.py --temporary --output json
 
       - name: Validate repository and documentation hygiene
         run: uv run pre-commit run --all-files
