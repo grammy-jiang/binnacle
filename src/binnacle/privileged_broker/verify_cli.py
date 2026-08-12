@@ -13,6 +13,12 @@ from dataclasses import asdict
 from pathlib import Path
 from urllib.parse import quote
 
+from binnacle.privileged_broker.artifact import PrivilegedArtifactError, verify_privileged_artifact
+from binnacle.privileged_broker.config import (
+    DEFAULT_PRIVILEGED_CONFIG_PATH,
+    PrivilegedBrokerConfigError,
+    load_privileged_broker_settings,
+)
 from binnacle.privileged_broker.integrity import (
     PrivilegedBrokerIntegrityError,
     PrivilegedBrokerIntegrityReport,
@@ -73,16 +79,30 @@ def require_installed_default_disabled(report: PrivilegedBrokerIntegrityReport) 
         )
 
 
+def verify_installed_boundary() -> PrivilegedBrokerIntegrityReport:
+    """Bind the protected config, exact artifact tree, and isolated database."""
+
+    settings = load_privileged_broker_settings(DEFAULT_PRIVILEGED_CONFIG_PATH)
+    verify_privileged_artifact(expected_build_sha256=settings.build_sha256)
+    return verify_installed_database(settings.database_path)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--require-default-disabled", action="store_true")
     parser.add_argument("--output", choices=("human", "json"), default="human")
     arguments = parser.parse_args(argv)
     try:
-        report = verify_installed_database()
+        report = verify_installed_boundary()
         if arguments.require_default_disabled:
             require_installed_default_disabled(report)
-    except (InstalledPrivilegedVerificationError, OSError, sqlite3.Error) as exc:
+    except (
+        InstalledPrivilegedVerificationError,
+        PrivilegedArtifactError,
+        PrivilegedBrokerConfigError,
+        OSError,
+        sqlite3.Error,
+    ) as exc:
         print(f"Privileged-broker verification failed: {type(exc).__name__}", file=sys.stderr)
         return 1
     if arguments.output == "json":
@@ -99,5 +119,6 @@ __all__ = [
     "InstalledPrivilegedVerificationError",
     "main",
     "require_installed_default_disabled",
+    "verify_installed_boundary",
     "verify_installed_database",
 ]

@@ -102,6 +102,10 @@ def _install_runtime(
         events.append("store:open")
         return cast(SqlitePrivilegedEvidenceStore, store)
 
+    def verify_artifact(*, expected_build_sha256: str) -> None:
+        assert expected_build_sha256 == "a" * 64
+        events.append("artifact:verify")
+
     async def start_server(
         observed_listener: socket.socket,
         service: PrivilegedBrokerService,
@@ -121,6 +125,7 @@ def _install_runtime(
         lambda _path: _runtime_settings(),
     )
     monkeypatch.setattr(runtime_module, "boot_id_sha256", lambda: BOOT_SHA)
+    monkeypatch.setattr(runtime_module, "verify_privileged_artifact", verify_artifact)
     monkeypatch.setattr(runtime_module, "open_privileged_store", open_store)
     monkeypatch.setattr(
         runtime_module,
@@ -140,6 +145,7 @@ async def test_runtime_serves_recovery_boundary_with_effect_start_disabled(
     await runtime_module.run_privileged_broker_service(Path("/etc/binnacle-privileged/broker.toml"))
 
     assert events == [
+        "artifact:verify",
         "store:open",
         "server:start",
         "server:serve",
@@ -165,7 +171,13 @@ async def test_runtime_closes_listener_and_store_when_server_start_fails(
             Path("/etc/binnacle-privileged/broker.toml")
         )
 
-    assert events == ["store:open", "server:start", "listener:close", "store:close"]
+    assert events == [
+        "artifact:verify",
+        "store:open",
+        "server:start",
+        "listener:close",
+        "store:close",
+    ]
     assert store.closed is True
 
 

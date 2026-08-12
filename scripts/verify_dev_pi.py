@@ -53,6 +53,7 @@ PRIVILEGED_SOCKET_PATH = PRIVILEGED_RUNTIME_ROOT / "broker.sock"
 PRIVILEGED_INSTALL_ROOT = Path("/opt/binnacle-privileged")
 PRIVILEGED_EXECUTABLE = PRIVILEGED_INSTALL_ROOT / "bin/binnacle-privileged-broker"
 PRIVILEGED_VERIFY_EXECUTABLE = PRIVILEGED_INSTALL_ROOT / "bin/binnacle-privileged-verify"
+PRIVILEGED_ARTIFACT_MANIFEST = PRIVILEGED_INSTALL_ROOT / "artifact-manifest.json"
 PRIVILEGED_TMPFILES_PATH = Path("/etc/tmpfiles.d/binnacle-privileged.conf")
 CANONICAL_REPO = Path("/srv/binnacle-dev/repo")
 _MAX_CONFIG_BYTES = 65_536
@@ -1196,6 +1197,7 @@ def _privileged_foundation_checks() -> list[VerificationCheck]:
         database = PRIVILEGED_DATABASE.stat(follow_symlinks=False)
         executable = PRIVILEGED_EXECUTABLE.stat(follow_symlinks=False)
         verify_executable = PRIVILEGED_VERIFY_EXECUTABLE.stat(follow_symlinks=False)
+        artifact_manifest = PRIVILEGED_ARTIFACT_MANIFEST.stat(follow_symlinks=False)
         tmpfiles_file = PRIVILEGED_TMPFILES_PATH.stat(follow_symlinks=False)
         tmpfiles_lines = frozenset(
             PRIVILEGED_TMPFILES_PATH.read_text(encoding="utf-8").splitlines()
@@ -1298,6 +1300,7 @@ def _privileged_foundation_checks() -> list[VerificationCheck]:
                 (database, (0, 0, 0o600)),
                 (executable, (0, 0, 0o755)),
                 (verify_executable, (0, 0, 0o755)),
+                (artifact_manifest, (0, 0, 0o644)),
             )
         )
     )

@@ -8,6 +8,7 @@ import secrets
 from pathlib import Path
 
 from binnacle.domain.privileged import PRIVILEGED_PROTOCOL_VERSION, PrivilegedTicket
+from binnacle.privileged_broker.artifact import verify_privileged_artifact
 from binnacle.privileged_broker.config import boot_id_sha256, load_privileged_broker_settings
 from binnacle.privileged_broker.server import (
     PrivilegedBrokerService,
@@ -37,6 +38,7 @@ async def run_privileged_broker_service(config_path: Path) -> None:
     if os.geteuid() != 0 or os.getegid() != 0:
         raise RuntimeError("privileged broker requires the dedicated root service identity")
     settings = load_privileged_broker_settings(config_path)
+    verify_privileged_artifact(expected_build_sha256=settings.build_sha256)
     broker_instance_id = f"broker_{secrets.token_hex(16)}"
     store = await open_privileged_store(
         settings=PrivilegedStoreSettings(

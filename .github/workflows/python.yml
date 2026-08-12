@@ -84,6 +84,7 @@ jobs:
         run: >-
           uv run mypy src/binnacle tests
           scripts/mcp_evaluation.py
+          scripts/build_privileged_artifact_manifest.py
           scripts/setup_dev_pi.py
           scripts/verify_dev_pi.py
           scripts/verify_operation_kernel.py
@@ -112,6 +113,7 @@ jobs:
       - name: Validate operational CLI entry points
         run: |
           uv run python scripts/mcp_evaluation.py --help
+          uv run python scripts/build_privileged_artifact_manifest.py --help
           uv run python scripts/setup_dev_pi.py --help
           uv run python scripts/verify_dev_pi.py --help
           uv run python scripts/verify_operation_kernel.py --help

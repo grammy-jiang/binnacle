@@ -108,7 +108,8 @@ the exact clean candidate:
    uv run pytest
    uv run ruff check .
    uv run ruff format --check .
-   uv run mypy src/binnacle tests scripts/mcp_evaluation.py scripts/setup_dev_pi.py \
+   uv run mypy src/binnacle tests scripts/mcp_evaluation.py \
+     scripts/build_privileged_artifact_manifest.py scripts/setup_dev_pi.py \
      scripts/verify_dev_pi.py scripts/verify_operation_kernel.py \
      scripts/verify_execution_supervisor.py scripts/verify_git_credential_broker.py \
      scripts/verify_privileged_broker.py
@@ -348,6 +349,21 @@ must contain this exact default-disabled profile:
    busy_timeout_ms = 5000
 
 ``acceptance_enabled = true`` is rejected by this build; it is not an activation switch.
+``build_sha256`` is the canonical digest of the root-owned
+``/opt/binnacle-privileged/artifact-manifest.json``.  Broker startup and the installed
+verifier reject a noncanonical manifest, unexpected/missing directory or file, symlink,
+mode/owner drift, file-size change, or content-digest change before opening authority.
+An unprivileged packaging job may create that manifest only in an already-complete staging
+tree outside protected host roots:
+
+.. code-block:: console
+
+   uv run python scripts/build_privileged_artifact_manifest.py \
+     --root /path/to/unprivileged/staging/binnacle-privileged --output json
+
+The generator creates a new manifest with exclusive-create semantics and refuses installed
+``/opt``, ``/etc``, ``/run``, ``/var`` and runtime-selector trees.  It is not an installer:
+an owner-reviewed, atomic root-owned publication procedure remains required before promotion.
 No package-manager, systemd, runtime-selector, restart, rollback, or reboot effect handler
 is composed.  The socket and service therefore remain disabled while the immutable artifact
 installation/publication procedure, selected adapters, candidate-Pi evidence, and human

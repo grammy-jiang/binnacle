@@ -6,6 +6,7 @@ After=binnacle-privileged.socket
 ConditionPathExists=/etc/binnacle-privileged/broker.toml
 ConditionPathExists=/var/lib/binnacle-privileged/evidence.db
 ConditionPathExists=/opt/binnacle-privileged/bin/binnacle-privileged-broker
+ConditionPathExists=/opt/binnacle-privileged/artifact-manifest.json
 
 [Service]
 Type=simple

@@ -26,6 +26,7 @@ def test_privileged_units_and_tmpfiles_freeze_root_boundary(repo_root: Path) -> 
         "WorkingDirectory=/var/empty",
         "ExecStart=/opt/binnacle-privileged/bin/binnacle-privileged-broker "
         "--config /etc/binnacle-privileged/broker.toml",
+        "ConditionPathExists=/opt/binnacle-privileged/artifact-manifest.json",
         "ReadWritePaths=/run/binnacle-privileged",
         "ReadWritePaths=/var/lib/binnacle-privileged",
         "InaccessiblePaths=/srv/binnacle-dev/repo",
@@ -89,6 +90,7 @@ def _install_foundation_paths(
         path.mkdir(parents=True, exist_ok=True)
         path.chmod(mode)
     original_stat = Path.stat
+    root_owned_paths = (config, persistent, install, tmp_path / "etc/tmpfiles.d")
 
     def stat_with_runtime_group(
         path: Path,
@@ -96,10 +98,16 @@ def _install_foundation_paths(
         follow_symlinks: bool = True,
     ) -> os.stat_result:
         observed = original_stat(path, follow_symlinks=follow_symlinks)
-        if path != runtime:
+        if path == runtime:
+            fields = list(observed)
+            fields[4] = 0
+            fields[5] = 1202
+            return os.stat_result(fields)
+        if not any(path == root or path.is_relative_to(root) for root in root_owned_paths):
             return observed
         fields = list(observed)
-        fields[5] = 1202
+        fields[4] = 0
+        fields[5] = 0
         return os.stat_result(fields)
 
     monkeypatch.setattr(Path, "stat", stat_with_runtime_group)
@@ -107,11 +115,13 @@ def _install_foundation_paths(
     database = persistent / "evidence.db"
     executable = install / "bin/binnacle-privileged-broker"
     verify_executable = install / "bin/binnacle-privileged-verify"
+    artifact_manifest = install / "artifact-manifest.json"
     tmpfiles = tmp_path / "etc/tmpfiles.d/binnacle-privileged.conf"
     _write(config_file, 0o600)
     _write(database, 0o600)
     _write(executable, 0o755)
     _write(verify_executable, 0o755)
+    _write(artifact_manifest, 0o644)
     _write(tmpfiles, 0o644)
     tmpfiles.write_text(
         "# Type Path Mode User Group Age Argument\n"
@@ -130,6 +140,7 @@ def _install_foundation_paths(
     monkeypatch.setattr(verify_dev_pi, "PRIVILEGED_INSTALL_ROOT", install)
     monkeypatch.setattr(verify_dev_pi, "PRIVILEGED_EXECUTABLE", executable)
     monkeypatch.setattr(verify_dev_pi, "PRIVILEGED_VERIFY_EXECUTABLE", verify_executable)
+    monkeypatch.setattr(verify_dev_pi, "PRIVILEGED_ARTIFACT_MANIFEST", artifact_manifest)
     monkeypatch.setattr(verify_dev_pi, "PRIVILEGED_TMPFILES_PATH", tmpfiles)
     monkeypatch.setattr(
         verify_dev_pi,
@@ -231,7 +242,21 @@ def test_installed_privileged_verifier_reads_exact_root_owned_store(
     config.attributes["database_url"] = f"sqlite:///{database}"
     command.upgrade(config, "head")
     database.chmod(0o600)
+    original_lstat = Path.lstat
+
+    def lstat_as_root(path: Path) -> os.stat_result:
+        observed = original_lstat(path)
+        if path not in {state, database}:
+            return observed
+        fields = list(observed)
+        fields[4] = 0
+        fields[5] = 0
+        return os.stat_result(fields)
+
     monkeypatch.setattr(verify_cli, "_DATABASE_PATH", database)
+    monkeypatch.setattr("binnacle.privileged_broker.verify_cli.os.geteuid", lambda: 0)
+    monkeypatch.setattr("binnacle.privileged_broker.verify_cli.os.getegid", lambda: 0)
+    monkeypatch.setattr(Path, "lstat", lstat_as_root)
 
     report = verify_cli.verify_installed_database(database)
     verify_cli.require_installed_default_disabled(report)
