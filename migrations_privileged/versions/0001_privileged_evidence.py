@@ -79,10 +79,16 @@ def upgrade() -> None:
         sa.Column("acceptance_state", sa.String(length=24), nullable=False),
         sa.Column("evidence_generation", sa.Integer(), nullable=False),
         sa.Column("acceptance_evidence_sha256", sa.String(length=64), nullable=True),
+        sa.Column("execution_state", sa.String(length=24), nullable=False),
+        sa.Column("active_slot", sa.Integer(), nullable=True),
+        sa.Column("effect_knowledge", sa.String(length=24), nullable=False),
+        sa.Column("result_evidence_sha256", sa.String(length=64), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("accepted_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("sealed_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("closed_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("last_reconciled_at", sa.DateTime(timezone=True), nullable=True),
         sa.CheckConstraint(
             "action IN ('package_install','service_restart','controlled_restart')",
             name="ck_privileged_bindings_action",
@@ -102,29 +108,53 @@ def upgrade() -> None:
             )
             + " AND (acceptance_evidence_sha256 IS NULL OR "
             + _digest("acceptance_evidence_sha256")
+            + ") AND (result_evidence_sha256 IS NULL OR "
+            + _digest("result_evidence_sha256")
             + ")",
             name="ck_privileged_bindings_digests",
         ),
         sa.CheckConstraint(
-            "expires_at>created_at AND updated_at>=created_at AND evidence_generation>=0",
+            "expires_at>created_at AND updated_at>=created_at AND evidence_generation>=0 "
+            "AND (closed_at IS NULL OR closed_at>=created_at) "
+            "AND (last_reconciled_at IS NULL OR last_reconciled_at>=created_at)",
             name="ck_privileged_bindings_time",
         ),
         sa.CheckConstraint(
             "(acceptance_state='unresolved' AND evidence_generation=0 "
             "AND acceptance_evidence_sha256 IS NULL AND accepted_at IS NULL "
-            "AND sealed_at IS NULL) OR "
+            "AND sealed_at IS NULL AND execution_state='not_accepted' "
+            "AND active_slot IS NULL "
+            "AND effect_knowledge='none' AND result_evidence_sha256 IS NULL "
+            "AND closed_at IS NULL) OR "
             "(acceptance_state='accepted' AND evidence_generation>=1 "
             "AND acceptance_evidence_sha256 IS NOT NULL AND accepted_at IS NOT NULL "
-            "AND sealed_at IS NULL) OR "
+            "AND sealed_at IS NULL AND ((execution_state='accepted_pre_effect' "
+            "AND active_slot=1 "
+            "AND effect_knowledge='none' AND result_evidence_sha256 IS NULL "
+            "AND closed_at IS NULL) OR (execution_state IN ('executing','reconciling') "
+            "AND active_slot=1 "
+            "AND effect_knowledge='known_effect' AND result_evidence_sha256 IS NULL "
+            "AND closed_at IS NULL) OR (execution_state='terminal' "
+            "AND active_slot IS NULL "
+            "AND effect_knowledge IN ('known_no_subeffect','known_effect') "
+            "AND result_evidence_sha256 IS NOT NULL AND closed_at IS NOT NULL) OR "
+            "(execution_state IN ('uncertain','restricted_recovery') "
+            "AND active_slot=1 "
+            "AND effect_knowledge='uncertain' AND result_evidence_sha256 IS NOT NULL "
+            "AND closed_at IS NULL))) OR "
             "(acceptance_state='sealed_no_accept' AND evidence_generation>=1 "
             "AND acceptance_evidence_sha256 IS NOT NULL AND accepted_at IS NULL "
-            "AND sealed_at IS NOT NULL)",
+            "AND sealed_at IS NOT NULL AND execution_state='terminal' "
+            "AND active_slot IS NULL "
+            "AND effect_knowledge='known_no_subeffect' "
+            "AND result_evidence_sha256 IS NOT NULL AND closed_at IS NOT NULL)",
             name="ck_privileged_bindings_acceptance",
         ),
         sa.PrimaryKeyConstraint("operation_id", name="pk_privileged_operation_bindings"),
         sa.UniqueConstraint("ticket_id", name="uq_privileged_binding_ticket_id"),
         sa.UniqueConstraint("ticket_sha256", name="uq_privileged_binding_ticket_digest"),
         sa.UniqueConstraint("ticket_nonce_sha256", name="uq_privileged_binding_nonce"),
+        sa.UniqueConstraint("active_slot", name="uq_privileged_binding_active_slot"),
     )
 
     op.create_table(
@@ -634,6 +664,34 @@ def upgrade() -> None:
              NEW.acceptance_evidence_sha256 IS NOT OLD.acceptance_evidence_sha256) OR
             (OLD.accepted_at IS NOT NULL AND NEW.accepted_at IS NOT OLD.accepted_at) OR
             (OLD.sealed_at IS NOT NULL AND NEW.sealed_at IS NOT OLD.sealed_at)
+            OR (OLD.result_evidence_sha256 IS NOT NULL AND
+                NEW.result_evidence_sha256 IS NOT OLD.result_evidence_sha256)
+            OR (OLD.closed_at IS NOT NULL AND NEW.closed_at IS NOT OLD.closed_at)
+            OR (OLD.last_reconciled_at IS NOT NULL AND
+                NEW.last_reconciled_at<OLD.last_reconciled_at)
+            OR NOT (NEW.active_slot IS OLD.active_slot OR
+              (OLD.active_slot IS NULL AND NEW.active_slot=1 AND
+               OLD.acceptance_state='unresolved' AND NEW.acceptance_state='accepted') OR
+              (OLD.active_slot=1 AND NEW.active_slot IS NULL AND
+               NEW.execution_state='terminal'))
+            OR NOT (NEW.execution_state=OLD.execution_state OR
+              (OLD.execution_state='not_accepted' AND NEW.execution_state IN
+               ('accepted_pre_effect','terminal')) OR
+              (OLD.execution_state='accepted_pre_effect' AND NEW.execution_state IN
+               ('executing','terminal','uncertain','restricted_recovery')) OR
+              (OLD.execution_state='executing' AND NEW.execution_state IN
+               ('reconciling','terminal','uncertain','restricted_recovery')) OR
+              (OLD.execution_state='reconciling' AND NEW.execution_state IN
+               ('terminal','uncertain','restricted_recovery')) OR
+              (OLD.execution_state='uncertain' AND NEW.execution_state IN
+               ('reconciling','terminal','restricted_recovery')) OR
+              (OLD.execution_state='restricted_recovery' AND NEW.execution_state IN
+               ('reconciling','terminal')))
+            OR NOT (NEW.effect_knowledge=OLD.effect_knowledge OR
+              (OLD.effect_knowledge='none' AND NEW.effect_knowledge IN
+               ('known_no_subeffect','known_effect','uncertain')) OR
+              (OLD.effect_knowledge='uncertain' AND NEW.effect_knowledge IN
+               ('known_no_subeffect','known_effect')))
           THEN RAISE(ABORT, 'privileged acceptance evidence regressed') END;
         END
         """

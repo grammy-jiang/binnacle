@@ -36,7 +36,7 @@ def verify_database(path: Path) -> PrivilegedBrokerIntegrityReport:
     if (
         path.is_symlink()
         or not stat.S_ISREG(metadata.st_mode)
-        or path.name != "privileged-evidence.sqlite3"
+        or path.name != "evidence.db"
         or metadata.st_uid != os.geteuid()
         or metadata.st_gid != os.getegid()
         or stat.S_IMODE(metadata.st_mode) != 0o600
@@ -58,6 +58,7 @@ def require_default_disabled(report: PrivilegedBrokerIntegrityReport) -> None:
     if (
         report.readiness not in {"uninitialized", "disabled"}
         or report.retains_authority
+        or report.accepted_bindings
         or report.sealed_bindings
     ):
         raise PrivilegedBrokerVerificationError(
@@ -67,7 +68,7 @@ def require_default_disabled(report: PrivilegedBrokerIntegrityReport) -> None:
 
 def temporary_verification(repo_root: Path) -> PrivilegedBrokerIntegrityReport:
     with tempfile.TemporaryDirectory(prefix="binnacle-privileged-verify-") as temporary:
-        database = Path(temporary) / "privileged-evidence.sqlite3"
+        database = Path(temporary) / "evidence.db"
         config = Config(repo_root / "alembic_privileged.ini")
         config.set_main_option("script_location", str(repo_root / "migrations_privileged"))
         config.attributes["database_url"] = f"sqlite:///{database}"

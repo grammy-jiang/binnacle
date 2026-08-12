@@ -59,6 +59,28 @@ class BrokerAcceptanceDisposition(StrEnum):
     CONFLICT = "conflict"
 
 
+class BrokerAcceptanceState(StrEnum):
+    UNRESOLVED = "unresolved"
+    ACCEPTED = "accepted"
+    SEALED_NO_ACCEPT = "sealed_no_accept"
+
+
+class BrokerNoAcceptReason(StrEnum):
+    PHASE4_NO_START = "phase4_no_start"
+    REPLACEMENT_RECOVERY = "replacement_recovery"
+    DISPATCH_CANCELLED = "dispatch_cancelled"
+
+
+class BrokerExecutionState(StrEnum):
+    NOT_ACCEPTED = "not_accepted"
+    ACCEPTED_PRE_EFFECT = "accepted_pre_effect"
+    EXECUTING = "executing"
+    RECONCILING = "reconciling"
+    TERMINAL = "terminal"
+    UNCERTAIN = "uncertain"
+    RESTRICTED_RECOVERY = "restricted_recovery"
+
+
 class PrivilegedEffectKnowledge(StrEnum):
     NONE = "none"
     KNOWN_NO_SUBEFFECT = "known_no_subeffect"
@@ -313,6 +335,7 @@ class PrivilegedTicket:
     operation_contract_version: str
     broker_profile_id: str
     broker_profile_version: str
+    broker_profile_sha256: str
     action: PrivilegedAction
     target_profile_id: str
     target_profile_sha256: str
@@ -358,6 +381,7 @@ class PrivilegedTicket:
             raise PrivilegedError("privileged action and maximum effect disagree")
         for name, value in (
             ("controller identity", self.controller_identity_sha256),
+            ("broker profile", self.broker_profile_sha256),
             ("target profile", self.target_profile_sha256),
             ("request fingerprint", self.request_fingerprint_sha256),
             ("current state binding", self.current_state_binding_sha256),
@@ -388,6 +412,139 @@ class PrivilegedTicket:
     @property
     def ticket_sha256(self) -> str:
         return canonical_sha256(asdict(self))
+
+    @property
+    def routing_identity(self) -> PrivilegedTicketRoutingIdentity:
+        return PrivilegedTicketRoutingIdentity(
+            operation_id=self.operation_id,
+            ticket_id=self.ticket_id,
+            ticket_sha256=self.ticket_sha256,
+            ticket_nonce_sha256=hashlib.sha256(bytes.fromhex(self.nonce)).hexdigest(),
+            action=self.action,
+            target_profile_id=self.target_profile_id,
+            target_profile_sha256=self.target_profile_sha256,
+            broker_profile_sha256=self.broker_profile_sha256,
+            request_fingerprint_sha256=self.request_fingerprint_sha256,
+            current_state_binding_sha256=self.current_state_binding_sha256,
+            policy_evidence_sha256=self.policy_evidence_sha256,
+            issued_at=self.issued_at,
+            expires_at=self.expires_at,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class PrivilegedTicketRoutingIdentity:
+    """Complete immutable broker correlation without the reusable raw nonce."""
+
+    operation_id: str
+    ticket_id: str
+    ticket_sha256: str
+    ticket_nonce_sha256: str
+    action: PrivilegedAction
+    target_profile_id: str
+    target_profile_sha256: str
+    broker_profile_sha256: str
+    request_fingerprint_sha256: str
+    current_state_binding_sha256: str
+    policy_evidence_sha256: str
+    issued_at: datetime
+    expires_at: datetime
+
+    def __post_init__(self) -> None:
+        _require_ticket_id(self.operation_id, "operation")
+        _require_ticket_id(self.ticket_id, "ticket")
+        _require_id(self.target_profile_id, "target profile")
+        if not self.action.consequential or self.action is PrivilegedAction.HOST_REBOOT:
+            raise PrivilegedError("routing identity action is not promoted")
+        for name, value in (
+            ("ticket", self.ticket_sha256),
+            ("ticket nonce", self.ticket_nonce_sha256),
+            ("target profile", self.target_profile_sha256),
+            ("broker profile", self.broker_profile_sha256),
+            ("request fingerprint", self.request_fingerprint_sha256),
+            ("current state binding", self.current_state_binding_sha256),
+            ("policy evidence", self.policy_evidence_sha256),
+        ):
+            _require_sha256(value, name)
+        _require_aware_utc(self.issued_at, "ticket issue time")
+        _require_aware_utc(self.expires_at, "ticket expiry")
+        if self.expires_at <= self.issued_at:
+            raise PrivilegedError("routing identity expiry must follow issue time")
+
+
+@dataclass(frozen=True, slots=True)
+class BrokerBindingSnapshot:
+    identity: PrivilegedTicketRoutingIdentity
+    acceptance_state: BrokerAcceptanceState
+    evidence_generation: int
+    acceptance_evidence_sha256: str | None
+    execution_state: BrokerExecutionState
+    effect_knowledge: PrivilegedEffectKnowledge
+    result_evidence_sha256: str | None
+    accepted_at: datetime | None
+    sealed_at: datetime | None
+    closed_at: datetime | None
+    last_reconciled_at: datetime | None
+
+    def __post_init__(self) -> None:
+        if self.evidence_generation < 0:
+            raise PrivilegedError("broker binding evidence generation is invalid")
+        unresolved = self.acceptance_state is BrokerAcceptanceState.UNRESOLVED
+        accepted = self.acceptance_state is BrokerAcceptanceState.ACCEPTED
+        sealed = self.acceptance_state is BrokerAcceptanceState.SEALED_NO_ACCEPT
+        if unresolved != (
+            self.evidence_generation == 0
+            and self.acceptance_evidence_sha256 is None
+            and self.accepted_at is None
+            and self.sealed_at is None
+        ):
+            raise PrivilegedError("unresolved broker binding evidence is contradictory")
+        if accepted != (self.accepted_at is not None and self.sealed_at is None):
+            raise PrivilegedError("accepted broker binding evidence is contradictory")
+        if sealed != (self.sealed_at is not None and self.accepted_at is None):
+            raise PrivilegedError("sealed broker binding evidence is contradictory")
+        if not unresolved:
+            if self.evidence_generation < 1 or self.acceptance_evidence_sha256 is None:
+                raise PrivilegedError("decided broker binding lacks evidence")
+            _require_sha256(self.acceptance_evidence_sha256, "broker acceptance evidence")
+        if unresolved != (self.execution_state is BrokerExecutionState.NOT_ACCEPTED):
+            raise PrivilegedError("broker acceptance and execution states disagree")
+        if sealed and not (
+            self.execution_state is BrokerExecutionState.TERMINAL
+            and self.effect_knowledge is PrivilegedEffectKnowledge.KNOWN_NO_SUBEFFECT
+        ):
+            raise PrivilegedError("sealed broker binding has contradictory effect truth")
+        expected = {
+            BrokerExecutionState.NOT_ACCEPTED: (PrivilegedEffectKnowledge.NONE, False),
+            BrokerExecutionState.ACCEPTED_PRE_EFFECT: (PrivilegedEffectKnowledge.NONE, False),
+            BrokerExecutionState.EXECUTING: (PrivilegedEffectKnowledge.KNOWN_EFFECT, False),
+            BrokerExecutionState.RECONCILING: (PrivilegedEffectKnowledge.KNOWN_EFFECT, False),
+            BrokerExecutionState.TERMINAL: (None, True),
+            BrokerExecutionState.UNCERTAIN: (PrivilegedEffectKnowledge.UNCERTAIN, False),
+            BrokerExecutionState.RESTRICTED_RECOVERY: (
+                PrivilegedEffectKnowledge.UNCERTAIN,
+                False,
+            ),
+        }[self.execution_state]
+        expected_knowledge, terminal = expected
+        if expected_knowledge is not None and self.effect_knowledge is not expected_knowledge:
+            raise PrivilegedError("broker execution effect knowledge is contradictory")
+        if terminal != (self.closed_at is not None):
+            raise PrivilegedError("broker execution closure is contradictory")
+        if terminal or self.execution_state in {
+            BrokerExecutionState.UNCERTAIN,
+            BrokerExecutionState.RESTRICTED_RECOVERY,
+        }:
+            if self.result_evidence_sha256 is None:
+                raise PrivilegedError("broker execution result evidence is absent")
+            _require_sha256(self.result_evidence_sha256, "broker execution result")
+        elif self.result_evidence_sha256 is not None:
+            raise PrivilegedError("open broker execution carries terminal result evidence")
+        if self.execution_state is BrokerExecutionState.TERMINAL and self.effect_knowledge not in {
+            PrivilegedEffectKnowledge.KNOWN_NO_SUBEFFECT,
+            PrivilegedEffectKnowledge.KNOWN_EFFECT,
+        }:
+            raise PrivilegedError("terminal broker execution effect truth is invalid")
 
 
 @dataclass(frozen=True, slots=True)
@@ -488,6 +645,10 @@ __all__ = [
     "BinnacleServiceProfile",
     "BrokerAcceptanceDisposition",
     "BrokerAcceptanceReceipt",
+    "BrokerAcceptanceState",
+    "BrokerBindingSnapshot",
+    "BrokerExecutionState",
+    "BrokerNoAcceptReason",
     "PackageProfile",
     "PrivilegedAction",
     "PrivilegedBrokerProfile",
@@ -495,5 +656,6 @@ __all__ = [
     "PrivilegedError",
     "PrivilegedMaximumEffect",
     "PrivilegedTicket",
+    "PrivilegedTicketRoutingIdentity",
     "canonical_sha256",
 ]

@@ -206,6 +206,7 @@ def _seed_package_operation(
           target_profile_sha256,broker_profile_id,broker_profile_sha256,
           prepared_evidence_sha256,current_state_binding_sha256,policy_decision_id,
           policy_evidence_sha256,ticket_id,ticket_sha256,ticket_nonce_sha256,
+          ticket_issued_at,ticket_expires_at,
           broker_acceptance_state,broker_evidence_generation,
           broker_acceptance_evidence_sha256,package_transaction_plan_sha256,
           service_profile_sha256,candidate_verification_reference,
@@ -217,7 +218,7 @@ def _seed_package_operation(
           state,created_at,broker_decided_at,closed_at,updated_at,last_reconciled_at
         ) VALUES (
           ?,?,NULL,NULL,NULL,?,'package_install','package_change','package-profile',?,
-          'broker-profile',?,?,?, ?,? ,?,?,?,'unresolved',0,NULL,?,NULL,NULL,NULL,NULL,NULL,
+          'broker-profile',?,?,?, ?,? ,?,?,?, ?,?,'unresolved',0,NULL,?,NULL,NULL,NULL,NULL,NULL,
           NULL,NULL,NULL,NULL,'not_applicable','not_applicable','pending',NULL,'pending',NULL,
           'not_applicable',NULL,'prepared',?,NULL,NULL,?,NULL
         )
@@ -235,6 +236,8 @@ def _seed_package_operation(
             f"ticket-{suffix}",
             _digest(f"ticket:{suffix}"),
             nonce_sha256,
+            NOW,
+            LATER,
             plan_sha256,
             NOW,
             NOW,

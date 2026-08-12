@@ -41,10 +41,13 @@ def _insert_binding(
           target_profile_id,target_profile_sha256,broker_profile_sha256,
           request_fingerprint_sha256,current_state_binding_sha256,
           policy_evidence_sha256,expires_at,acceptance_state,evidence_generation,
-          acceptance_evidence_sha256,created_at,accepted_at,sealed_at,updated_at
+          acceptance_evidence_sha256,execution_state,effect_knowledge,
+          result_evidence_sha256,created_at,accepted_at,sealed_at,closed_at,
+          updated_at,last_reconciled_at
         ) VALUES (?,?,?,?,?,'development-packages',?,?,?,?,?,
                   datetime(CURRENT_TIMESTAMP,'+2 minutes'),'unresolved',0,NULL,
-                  CURRENT_TIMESTAMP,NULL,NULL,CURRENT_TIMESTAMP)
+                  'not_accepted','none',NULL,CURRENT_TIMESTAMP,NULL,NULL,NULL,
+                  CURRENT_TIMESTAMP,NULL)
         """,
         (
             operation_id,
@@ -157,6 +160,7 @@ def test_accept_or_seal_has_one_durable_winner(
             UPDATE privileged_operation_bindings
             SET acceptance_state='accepted',evidence_generation=1,
                 acceptance_evidence_sha256=?,accepted_at=CURRENT_TIMESTAMP,
+                execution_state='accepted_pre_effect',active_slot=1,
                 updated_at=CURRENT_TIMESTAMP
             WHERE operation_id='operation-1'
             """,
@@ -191,10 +195,12 @@ def test_accept_or_seal_has_one_durable_winner(
             UPDATE privileged_operation_bindings
             SET acceptance_state='sealed_no_accept',evidence_generation=1,
                 acceptance_evidence_sha256=?,sealed_at=CURRENT_TIMESTAMP,
+                execution_state='terminal',effect_knowledge='known_no_subeffect',
+                result_evidence_sha256=?,closed_at=CURRENT_TIMESTAMP,
                 updated_at=CURRENT_TIMESTAMP
             WHERE operation_id='operation-1'
             """,
-            (DIGEST_C,),
+            (DIGEST_C, DIGEST_C),
         )
         with pytest.raises(sqlite3.IntegrityError, match="seal already won"):
             connection.execute(
@@ -219,6 +225,7 @@ def test_subeffect_state_and_receipts_are_monotonic(
             UPDATE privileged_operation_bindings
             SET acceptance_state='accepted',evidence_generation=1,
                 acceptance_evidence_sha256=?,accepted_at=CURRENT_TIMESTAMP,
+                execution_state='accepted_pre_effect',active_slot=1,
                 updated_at=CURRENT_TIMESTAMP
             WHERE operation_id='operation-1'
             """,
@@ -395,7 +402,7 @@ def _accept_binding(connection: sqlite3.Connection) -> None:
         UPDATE privileged_operation_bindings
         SET acceptance_state='accepted',evidence_generation=1,
             acceptance_evidence_sha256=?,accepted_at=CURRENT_TIMESTAMP,
-            updated_at=CURRENT_TIMESTAMP
+            execution_state='accepted_pre_effect',active_slot=1,updated_at=CURRENT_TIMESTAMP
         WHERE operation_id='operation-1'
         """,
         (DIGEST_C,),

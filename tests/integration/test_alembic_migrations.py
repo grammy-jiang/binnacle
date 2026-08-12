@@ -522,6 +522,8 @@ EXPECTED_COLUMNS = {
         "ticket_id",
         "ticket_sha256",
         "ticket_nonce_sha256",
+        "ticket_issued_at",
+        "ticket_expires_at",
         "broker_acceptance_state",
         "broker_evidence_generation",
         "broker_acceptance_evidence_sha256",

@@ -36,7 +36,7 @@ def test_privileged_verifier_rejects_unsafe_database_path(
     tmp_path: Path,
     repo_root: Path,
 ) -> None:
-    database = tmp_path / "privileged-evidence.sqlite3"
+    database = tmp_path / "evidence.db"
     _migrate(database, repo_root)
     database.chmod(0o640)
     with pytest.raises(PrivilegedBrokerVerificationError, match="path is unsafe"):
@@ -53,23 +53,34 @@ def test_integrity_rejects_event_gaps_and_sealed_binding_without_tombstone(
     tmp_path: Path,
     repo_root: Path,
 ) -> None:
-    database = tmp_path / "privileged-evidence.sqlite3"
+    database = tmp_path / "evidence.db"
     _migrate(database, repo_root)
     with closing(sqlite3.connect(database)) as connection, connection:
         connection.execute("UPDATE privileged_meta SET evidence_generation_high_water=1 WHERE id=1")
         with pytest.raises(PrivilegedBrokerIntegrityError, match="generation has a gap"):
             verify_privileged_broker_connection(connection)
 
-    sealed_database = tmp_path / "sealed-privileged-evidence.sqlite3"
+    sealed_root = tmp_path / "sealed"
+    sealed_root.mkdir()
+    sealed_database = sealed_root / "evidence.db"
     _migrate(sealed_database, repo_root)
     with closing(sqlite3.connect(sealed_database)) as connection, connection:
         connection.execute("PRAGMA ignore_check_constraints=ON")
         connection.execute(
             """
-            INSERT INTO privileged_operation_bindings VALUES (
-              'operation-1','ticket-1',?,?,?,?, 'target',?,?,?,?,
+            INSERT INTO privileged_operation_bindings (
+              operation_id,ticket_id,ticket_sha256,ticket_nonce_sha256,action,
+              target_profile_id,target_profile_sha256,broker_profile_sha256,
+              request_fingerprint_sha256,current_state_binding_sha256,
+              policy_evidence_sha256,expires_at,acceptance_state,evidence_generation,
+              acceptance_evidence_sha256,execution_state,active_slot,effect_knowledge,
+              result_evidence_sha256,created_at,accepted_at,sealed_at,closed_at,
+              updated_at,last_reconciled_at
+            ) VALUES (
+              'operation-1','ticket-1',?,?,?,'target',?,?,?,?,?,
               datetime(CURRENT_TIMESTAMP,'+2 minutes'),'sealed_no_accept',0,NULL,
-              CURRENT_TIMESTAMP,NULL,NULL,CURRENT_TIMESTAMP
+              'terminal',NULL,'known_no_subeffect',NULL,CURRENT_TIMESTAMP,NULL,NULL,NULL,
+              CURRENT_TIMESTAMP,NULL
             )
             """,
             (
@@ -91,7 +102,7 @@ def test_default_disabled_gate_rejects_promoted_or_retained_authority(
     tmp_path: Path,
     repo_root: Path,
 ) -> None:
-    database = tmp_path / "privileged-evidence.sqlite3"
+    database = tmp_path / "evidence.db"
     _migrate(database, repo_root)
     database.chmod(0o600)
     with closing(sqlite3.connect(database)) as connection, connection:
@@ -102,7 +113,7 @@ def test_default_disabled_gate_rejects_promoted_or_retained_authority(
 
     retained_root = tmp_path / "retained"
     retained_root.mkdir()
-    retained_database = retained_root / "privileged-evidence.sqlite3"
+    retained_database = retained_root / "evidence.db"
     _migrate(retained_database, repo_root)
     retained_database.chmod(0o600)
     with closing(sqlite3.connect(retained_database)) as connection, connection:
@@ -128,15 +139,24 @@ def test_integrity_rejects_specialized_evidence_for_the_wrong_action(
     tmp_path: Path,
     repo_root: Path,
 ) -> None:
-    database = tmp_path / "privileged-evidence.sqlite3"
+    database = tmp_path / "evidence.db"
     _migrate(database, repo_root)
     with closing(sqlite3.connect(database)) as connection, connection:
         connection.execute(
             """
-            INSERT INTO privileged_operation_bindings VALUES (
+            INSERT INTO privileged_operation_bindings (
+              operation_id,ticket_id,ticket_sha256,ticket_nonce_sha256,action,
+              target_profile_id,target_profile_sha256,broker_profile_sha256,
+              request_fingerprint_sha256,current_state_binding_sha256,
+              policy_evidence_sha256,expires_at,acceptance_state,evidence_generation,
+              acceptance_evidence_sha256,execution_state,active_slot,effect_knowledge,
+              result_evidence_sha256,created_at,accepted_at,sealed_at,closed_at,
+              updated_at,last_reconciled_at
+            ) VALUES (
               'operation-1','ticket-1',?,?,?,'target',?,?,?,?,?,
               datetime(CURRENT_TIMESTAMP,'+2 minutes'),'accepted',1,?,
-              CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,NULL,CURRENT_TIMESTAMP
+              'accepted_pre_effect',1,'none',NULL,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,NULL,NULL,
+              CURRENT_TIMESTAMP,NULL
             )
             """,
             (
@@ -154,7 +174,7 @@ def test_integrity_rejects_specialized_evidence_for_the_wrong_action(
         connection.execute(
             "INSERT INTO privileged_evidence_events VALUES "
             "(1,'event-1','operation-1','ticket.accepted',?,CURRENT_TIMESTAMP)",
-            ("3" * 64,),
+            ("2" * 64,),
         )
         connection.execute("UPDATE privileged_meta SET evidence_generation_high_water=1 WHERE id=1")
         _insert_slot(connection, slot_id="lkg-slot", generation=1, state="lkg")

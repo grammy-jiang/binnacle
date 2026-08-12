@@ -172,6 +172,8 @@ def upgrade() -> None:
         sa.Column("ticket_id", sa.String(length=160), nullable=False),
         sa.Column("ticket_sha256", sa.String(length=64), nullable=False),
         sa.Column("ticket_nonce_sha256", sa.String(length=64), nullable=False),
+        sa.Column("ticket_issued_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("ticket_expires_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("broker_acceptance_state", sa.String(length=24), nullable=False),
         sa.Column("broker_evidence_generation", sa.Integer(), nullable=False),
         sa.Column("broker_acceptance_evidence_sha256", sa.String(length=64), nullable=True),
@@ -210,7 +212,8 @@ def upgrade() -> None:
         sa.CheckConstraint(
             "(workspace_fence_version IS NULL OR workspace_fence_version>=1) "
             "AND reservation_generation>=1 AND broker_evidence_generation>=0 "
-            "AND updated_at>=created_at "
+            "AND updated_at>=created_at AND ticket_issued_at>=created_at "
+            "AND ticket_expires_at>ticket_issued_at "
             "AND (broker_decided_at IS NULL OR broker_decided_at>=created_at) "
             "AND (closed_at IS NULL OR closed_at>=created_at) "
             "AND (last_reconciled_at IS NULL OR last_reconciled_at>=created_at)",
@@ -647,6 +650,8 @@ def _create_operation_triggers() -> None:
             NEW.policy_evidence_sha256!=OLD.policy_evidence_sha256 OR
             NEW.ticket_id!=OLD.ticket_id OR NEW.ticket_sha256!=OLD.ticket_sha256 OR
             NEW.ticket_nonce_sha256!=OLD.ticket_nonce_sha256 OR
+            NEW.ticket_issued_at!=OLD.ticket_issued_at OR
+            NEW.ticket_expires_at!=OLD.ticket_expires_at OR
             NEW.package_transaction_plan_sha256 IS NOT OLD.package_transaction_plan_sha256 OR
             NEW.service_profile_sha256 IS NOT OLD.service_profile_sha256 OR
             NEW.candidate_verification_reference IS NOT OLD.candidate_verification_reference OR

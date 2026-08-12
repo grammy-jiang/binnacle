@@ -35,6 +35,7 @@ class PrivilegedBrokerIntegrityReport:
     evidence_generation: int
     unresolved_bindings: int
     accepted_bindings: int
+    outstanding_accepted_bindings: int
     sealed_bindings: int
     active_subeffects: int
     uncertain_subeffects: int
@@ -47,7 +48,7 @@ class PrivilegedBrokerIntegrityReport:
     def retains_authority(self) -> bool:
         return bool(
             self.unresolved_bindings
-            or self.accepted_bindings
+            or self.outstanding_accepted_bindings
             or self.active_subeffects
             or self.uncertain_subeffects
             or self.package_plans
@@ -160,6 +161,10 @@ def _verify(
         evidence_generation=high_water,
         unresolved_bindings=sum(row["acceptance_state"] == "unresolved" for row in bindings),
         accepted_bindings=sum(row["acceptance_state"] == "accepted" for row in bindings),
+        outstanding_accepted_bindings=sum(
+            row["acceptance_state"] == "accepted" and row["execution_state"] != "terminal"
+            for row in bindings
+        ),
         sealed_bindings=sum(row["acceptance_state"] == "sealed_no_accept" for row in bindings),
         active_subeffects=active_subeffects,
         uncertain_subeffects=uncertain_subeffects,
@@ -202,7 +207,7 @@ def _verify_binding(
         raise PrivilegedBrokerIntegrityError("privileged tombstone has no sealed binding")
     if state != "unresolved":
         event = connection.execute(
-            "SELECT operation_id,event_type FROM privileged_evidence_events "
+            "SELECT operation_id,event_type,event_sha256 FROM privileged_evidence_events "
             "WHERE evidence_generation=?",
             (generation,),
         ).fetchone()
@@ -211,10 +216,50 @@ def _verify_binding(
             event is None
             or event["operation_id"] != row["operation_id"]
             or event["event_type"] != expected_type
+            or event["event_sha256"] != row["acceptance_evidence_sha256"]
         ):
             raise PrivilegedBrokerIntegrityError(
                 "privileged acceptance lacks its exact evidence event"
             )
+    execution_state = str(row["execution_state"])
+    active_slot = row["active_slot"]
+    effect_knowledge = str(row["effect_knowledge"])
+    result_evidence = row["result_evidence_sha256"]
+    if state == "unresolved" and (
+        execution_state != "not_accepted"
+        or active_slot is not None
+        or effect_knowledge != "none"
+        or result_evidence is not None
+    ):
+        raise PrivilegedBrokerIntegrityError("unresolved privileged binding carries effect truth")
+    if state == "sealed_no_accept" and (
+        execution_state != "terminal"
+        or active_slot is not None
+        or effect_knowledge != "known_no_subeffect"
+        or result_evidence != row["acceptance_evidence_sha256"]
+    ):
+        raise PrivilegedBrokerIntegrityError("sealed privileged binding effect truth conflicts")
+    if state == "accepted":
+        allowed = {
+            "accepted_pre_effect": {"none"},
+            "executing": {"known_effect"},
+            "reconciling": {"known_effect"},
+            "terminal": {"known_no_subeffect", "known_effect"},
+            "uncertain": {"uncertain"},
+            "restricted_recovery": {"uncertain"},
+        }
+        if effect_knowledge not in allowed.get(execution_state, set()):
+            raise PrivilegedBrokerIntegrityError("accepted privileged outcome is contradictory")
+        evidence_required = execution_state in {
+            "terminal",
+            "uncertain",
+            "restricted_recovery",
+        }
+        if evidence_required != (result_evidence is not None):
+            raise PrivilegedBrokerIntegrityError("privileged outcome evidence shape is invalid")
+        expected_active = execution_state != "terminal"
+        if expected_active != (active_slot == 1):
+            raise PrivilegedBrokerIntegrityError("privileged active-slot evidence conflicts")
 
 
 def _verify_subeffects(connection: sqlite3.Connection, high_water: int) -> None:
