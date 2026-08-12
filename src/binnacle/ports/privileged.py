@@ -17,6 +17,8 @@ from binnacle.domain.privileged_observation import (
     PackageInspectionResult,
     PackageTarget,
     PackageTransactionPlan,
+    RestartPreflightKind,
+    RestartPreflightResult,
     RuntimeIdentity,
     ServiceInspectionResult,
     VerifiedRuntimeSlot,
@@ -87,6 +89,12 @@ class RuntimeIdentityPort(Protocol):
     async def current(self) -> RuntimeIdentity: ...
 
 
+class RestartPreflightPort(Protocol):
+    """Return advisory restart facts without reserving or authorizing a restart."""
+
+    async def inspect(self, kind: RestartPreflightKind) -> RestartPreflightResult: ...
+
+
 class RuntimeSlotInspectionPort(Protocol):
     """Inspect complete protected runtime slots without changing a selector."""
 
@@ -102,6 +110,7 @@ __all__ = [
     "PrivilegedBrokerPort",
     "PrivilegedEvidenceStore",
     "PrivilegedTicketVerifier",
+    "RestartPreflightPort",
     "RuntimeIdentityPort",
     "RuntimeSlotInspectionPort",
     "ServiceObservationPort",

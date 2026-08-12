@@ -57,6 +57,41 @@ class RuntimeSlotState(StrEnum):
     RESTRICTED = "restricted"
 
 
+class RestartPreflightKind(StrEnum):
+    SIMPLE_SERVICE = "simple_service"
+    CONTROLLED_SELF = "controlled_self"
+
+
+class RestartPreflightReason(StrEnum):
+    AUDIT_UNAVAILABLE = "audit_unavailable"
+    BLOCKING_OPERATION = "blocking_operation"
+    UNCERTAIN_OPERATION = "uncertain_operation"
+    COMMAND_EXECUTION_UNSAFE = "command_execution_unsafe"
+    SOURCE_CHANGER_OPEN = "source_changer_open"
+    WORKSPACE_FENCE_HELD = "workspace_fence_held"
+    GIT_EFFECT_OPEN = "git_effect_open"
+    CREDENTIAL_EFFECT_OPEN = "credential_effect_open"
+    PRIVILEGED_EFFECT_OPEN = "privileged_effect_open"
+    PACKAGE_MUTATION_OPEN = "package_mutation_open"
+    PRIOR_RESTART_UNRESOLVED = "prior_restart_unresolved"
+    SOURCE_MUTATION_UNCERTAIN = "source_mutation_uncertain"
+    CURRENT_RUNTIME_UNAVAILABLE = "current_runtime_unavailable"
+    SERVICE_NOT_READY = "service_not_ready"
+    SCHEMA_HEAD_MISMATCH = "schema_head_mismatch"
+    PEER_SET_MISMATCH = "peer_set_mismatch"
+    LKG_UNAVAILABLE = "lkg_unavailable"
+    CANDIDATE_VERIFICATION_MISSING = "candidate_verification_missing"
+    CANDIDATE_VERIFICATION_STALE = "candidate_verification_stale"
+    CANDIDATE_TESTED_STATE_MISMATCH = "candidate_tested_state_mismatch"
+
+
+class RestartImpact(StrEnum):
+    CONNECTION_INTERRUPTED = "connection_interrupted"
+    APPLICATION_PROCESS_REPLACED = "application_process_replaced"
+    RUNTIME_SELECTOR_CHANGED = "runtime_selector_changed"
+    ROLLBACK_MAY_RUN = "rollback_may_run"
+
+
 @dataclass(frozen=True, slots=True)
 class PackageTarget:
     name: str
@@ -420,6 +455,79 @@ class VerifiedRuntimeSlot:
         return canonical_sha256(asdict(self))
 
 
+@dataclass(frozen=True, slots=True)
+class RestartPreflightResult:
+    kind: RestartPreflightKind
+    available: bool
+    reason_codes: tuple[RestartPreflightReason, ...]
+    predicted_impacts: tuple[RestartImpact, ...]
+    current_runtime_identity_sha256: str | None
+    current_service_observation_sha256: str
+    lkg_slot_identity_sha256: str | None
+    candidate_slot_identity_sha256: str | None
+    candidate_verification_sha256: str | None
+    outstanding_state_sha256: str
+    state_binding_sha256: str
+    observed_at: datetime
+
+    def __post_init__(self) -> None:
+        if self.available != (not self.reason_codes):
+            raise PrivilegedObservationError("restart preflight availability is contradictory")
+        if self.reason_codes != tuple(sorted(set(self.reason_codes), key=lambda item: item.value)):
+            raise PrivilegedObservationError("restart preflight reasons are not canonical")
+        if self.predicted_impacts != tuple(
+            sorted(set(self.predicted_impacts), key=lambda item: item.value)
+        ):
+            raise PrivilegedObservationError("restart impacts are not canonical")
+        expected_impacts = {
+            RestartImpact.APPLICATION_PROCESS_REPLACED,
+            RestartImpact.CONNECTION_INTERRUPTED,
+        }
+        if self.kind is RestartPreflightKind.CONTROLLED_SELF:
+            expected_impacts.update(
+                {
+                    RestartImpact.RUNTIME_SELECTOR_CHANGED,
+                    RestartImpact.ROLLBACK_MAY_RUN,
+                }
+            )
+        if set(self.predicted_impacts) != expected_impacts:
+            raise PrivilegedObservationError("restart impact set differs from its kind")
+        for value, name in (
+            (self.current_service_observation_sha256, "restart service observation"),
+            (self.outstanding_state_sha256, "restart outstanding state"),
+            (self.state_binding_sha256, "restart state binding"),
+        ):
+            _require_sha256(value, name)
+        for optional_value, name in (
+            (self.current_runtime_identity_sha256, "restart current runtime"),
+            (self.lkg_slot_identity_sha256, "restart LKG slot"),
+            (self.candidate_slot_identity_sha256, "restart candidate slot"),
+            (self.candidate_verification_sha256, "restart candidate verification"),
+        ):
+            if optional_value is not None:
+                _require_sha256(optional_value, name)
+        if self.available and self.current_runtime_identity_sha256 is None:
+            raise PrivilegedObservationError("available restart lacks current runtime identity")
+        if (
+            self.available
+            and self.kind is RestartPreflightKind.CONTROLLED_SELF
+            and any(
+                value is None
+                for value in (
+                    self.lkg_slot_identity_sha256,
+                    self.candidate_slot_identity_sha256,
+                    self.candidate_verification_sha256,
+                )
+            )
+        ):
+            raise PrivilegedObservationError("controlled restart lacks candidate or LKG evidence")
+        _require_utc(self.observed_at, "restart preflight observation time")
+
+    @property
+    def observation_sha256(self) -> str:
+        return canonical_sha256(asdict(self))
+
+
 def _require_sha256(value: str, name: str) -> None:
     if _SHA256_RE.fullmatch(value) is None:
         raise PrivilegedObservationError(f"{name} must be a lowercase SHA-256 digest")
@@ -477,6 +585,10 @@ __all__ = [
     "PackageTransactionMember",
     "PackageTransactionPlan",
     "PrivilegedObservationError",
+    "RestartImpact",
+    "RestartPreflightKind",
+    "RestartPreflightReason",
+    "RestartPreflightResult",
     "RuntimeIdentity",
     "RuntimeSlotRole",
     "RuntimeSlotState",

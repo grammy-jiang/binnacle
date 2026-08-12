@@ -155,7 +155,7 @@ async def test_runtime_slot_inspection_rejects_tamper_extra_and_symlink(
     with pytest.raises(RuntimeSlotVerificationError, match="identity differs"):
         await inspector.inspect("slot-0001")
 
-    executable.chmod(0o550)
+    executable.chmod(0o750)
     executable.write_bytes(b"tampered\n")
     executable.chmod(0o550)
     with pytest.raises(RuntimeSlotVerificationError, match=r"identity differs|digest differs"):
@@ -477,7 +477,10 @@ async def test_runtime_slot_rejects_duplicate_invalid_and_unavailable_manifest(
     with pytest.raises(RuntimeSlotVerificationError, match="invalid JSON"):
         await inspector.inspect("slot-0001")
 
+    slot = path.parent
+    slot.chmod(0o750)
     path.unlink()
+    slot.chmod(0o550)
     with pytest.raises(RuntimeSlotVerificationError, match="unavailable"):
         await inspector.inspect("slot-0001")
 
