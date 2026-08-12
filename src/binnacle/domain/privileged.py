@@ -19,6 +19,10 @@ _UNIT_RE: Final = re.compile(r"[A-Za-z0-9_.@-]{1,128}\.service\Z")
 _PACKAGE_RE: Final = re.compile(r"[a-z0-9][a-z0-9+.-]{0,127}\Z")
 _NONCE_RE: Final = re.compile(r"[0-9a-f]{64}\Z")
 
+PRIVILEGED_PROTOCOL_ID: Final = "binnacle-privileged"
+PRIVILEGED_PROTOCOL_VERSION: Final = "v1"
+MAX_PRIVILEGED_FRAME_BYTES: Final = 1_048_576
+
 
 class PrivilegedError(ValueError):
     """A privileged value widens or contradicts its reviewed contract."""
@@ -86,6 +90,37 @@ class PrivilegedEffectKnowledge(StrEnum):
     KNOWN_NO_SUBEFFECT = "known_no_subeffect"
     KNOWN_EFFECT = "known_effect"
     UNCERTAIN = "uncertain"
+
+
+@dataclass(frozen=True, slots=True)
+class PrivilegedBrokerHello:
+    """Authenticated broker identity and fail-closed readiness projection."""
+
+    protocol_id: str
+    protocol_version: str
+    build_sha256: str
+    profile_sha256: str
+    broker_instance_id: str
+    broker_generation: int
+    backend_ready: bool
+    readiness: str
+
+    def __post_init__(self) -> None:
+        if (
+            self.protocol_id != PRIVILEGED_PROTOCOL_ID
+            or self.protocol_version != PRIVILEGED_PROTOCOL_VERSION
+        ):
+            raise PrivilegedError("privileged broker protocol identity is incompatible")
+        _require_sha256(self.build_sha256, "broker build")
+        _require_sha256(self.profile_sha256, "broker profile")
+        _require_ticket_id(self.broker_instance_id, "broker instance")
+        if self.broker_generation < 1 or self.readiness not in {
+            "disabled",
+            "ready",
+            "restricted_recovery",
+            "integrity_failed",
+        }:
+            raise PrivilegedError("privileged broker readiness is invalid")
 
 
 _ACTION_EFFECT: Final = {
@@ -413,6 +448,88 @@ class PrivilegedTicket:
     def ticket_sha256(self) -> str:
         return canonical_sha256(asdict(self))
 
+    def to_wire(self) -> dict[str, object]:
+        """Return the exact bounded JSON representation signed by the application."""
+
+        document = _canonical(asdict(self))
+        if not isinstance(document, dict):  # pragma: no cover - dataclass invariant.
+            raise PrivilegedError("privileged ticket wire document is invalid")
+        return {str(key): item for key, item in document.items()} | {
+            "ticket_sha256": self.ticket_sha256
+        }
+
+    @classmethod
+    def from_wire(cls, value: Mapping[str, object]) -> PrivilegedTicket:
+        expected = {
+            "operation_id",
+            "ticket_id",
+            "ticket_sha256",
+            "nonce",
+            "controller_identity_sha256",
+            "device_id",
+            "device_epoch",
+            "operation_contract",
+            "operation_contract_version",
+            "broker_profile_id",
+            "broker_profile_version",
+            "broker_profile_sha256",
+            "action",
+            "target_profile_id",
+            "target_profile_sha256",
+            "request_fingerprint_sha256",
+            "maximum_effect",
+            "current_state_binding_sha256",
+            "policy_evidence_reference",
+            "policy_evidence_sha256",
+            "application_build_sha256",
+            "application_config_sha256",
+            "application_policy_sha256",
+            "operation_specific_evidence_sha256",
+            "issued_at",
+            "expires_at",
+            "integrity_algorithm",
+            "integrity_proof",
+        }
+        if set(value) != expected:
+            raise PrivilegedError("privileged ticket wire fields are not exact")
+        try:
+            ticket = cls(
+                operation_id=_wire_text(value, "operation_id"),
+                ticket_id=_wire_text(value, "ticket_id"),
+                nonce=_wire_text(value, "nonce"),
+                controller_identity_sha256=_wire_text(value, "controller_identity_sha256"),
+                device_id=_wire_text(value, "device_id"),
+                device_epoch=_wire_integer(value, "device_epoch"),
+                operation_contract=_wire_text(value, "operation_contract"),
+                operation_contract_version=_wire_text(value, "operation_contract_version"),
+                broker_profile_id=_wire_text(value, "broker_profile_id"),
+                broker_profile_version=_wire_text(value, "broker_profile_version"),
+                broker_profile_sha256=_wire_text(value, "broker_profile_sha256"),
+                action=PrivilegedAction(_wire_text(value, "action")),
+                target_profile_id=_wire_text(value, "target_profile_id"),
+                target_profile_sha256=_wire_text(value, "target_profile_sha256"),
+                request_fingerprint_sha256=_wire_text(value, "request_fingerprint_sha256"),
+                maximum_effect=PrivilegedMaximumEffect(_wire_text(value, "maximum_effect")),
+                current_state_binding_sha256=_wire_text(value, "current_state_binding_sha256"),
+                policy_evidence_reference=_wire_text(value, "policy_evidence_reference"),
+                policy_evidence_sha256=_wire_text(value, "policy_evidence_sha256"),
+                application_build_sha256=_wire_text(value, "application_build_sha256"),
+                application_config_sha256=_wire_text(value, "application_config_sha256"),
+                application_policy_sha256=_wire_text(value, "application_policy_sha256"),
+                operation_specific_evidence_sha256=_wire_text(
+                    value, "operation_specific_evidence_sha256"
+                ),
+                issued_at=_wire_timestamp(value, "issued_at"),
+                expires_at=_wire_timestamp(value, "expires_at"),
+                integrity_algorithm=_wire_text(value, "integrity_algorithm"),
+                integrity_proof=_wire_text(value, "integrity_proof"),
+            )
+        except ValueError as exc:
+            raise PrivilegedError("privileged ticket wire enum is invalid") from exc
+        if _wire_text(value, "ticket_sha256") != ticket.ticket_sha256:
+            raise PrivilegedError("privileged ticket wire digest does not match")
+        return ticket
+
     @property
     def routing_identity(self) -> PrivilegedTicketRoutingIdentity:
         return PrivilegedTicketRoutingIdentity(
@@ -641,7 +758,33 @@ def _require_aware_utc(value: datetime, name: str) -> None:
         raise PrivilegedError(f"{name} must be timezone-aware")
 
 
+def _wire_text(value: Mapping[str, object], name: str) -> str:
+    result = value.get(name)
+    if not isinstance(result, str):
+        raise PrivilegedError(f"privileged ticket {name} must be text")
+    return result
+
+
+def _wire_integer(value: Mapping[str, object], name: str) -> int:
+    result = value.get(name)
+    if isinstance(result, bool) or not isinstance(result, int):
+        raise PrivilegedError(f"privileged ticket {name} must be an integer")
+    return result
+
+
+def _wire_timestamp(value: Mapping[str, object], name: str) -> datetime:
+    try:
+        result = datetime.fromisoformat(_wire_text(value, name))
+    except ValueError as exc:
+        raise PrivilegedError(f"privileged ticket {name} must be a timestamp") from exc
+    _require_aware_utc(result, f"privileged ticket {name}")
+    return result
+
+
 __all__ = [
+    "MAX_PRIVILEGED_FRAME_BYTES",
+    "PRIVILEGED_PROTOCOL_ID",
+    "PRIVILEGED_PROTOCOL_VERSION",
     "BinnacleServiceProfile",
     "BrokerAcceptanceDisposition",
     "BrokerAcceptanceReceipt",
@@ -651,6 +794,7 @@ __all__ = [
     "BrokerNoAcceptReason",
     "PackageProfile",
     "PrivilegedAction",
+    "PrivilegedBrokerHello",
     "PrivilegedBrokerProfile",
     "PrivilegedEffectKnowledge",
     "PrivilegedError",

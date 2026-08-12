@@ -1,0 +1,41 @@
+"""Client-facing exports for the privileged broker wire contract."""
+
+from binnacle.privileged_broker.protocol import (
+    PeerCredentials,
+    PrivilegedProtocolError,
+    acceptance_receipt_from_wire,
+    acceptance_receipt_to_wire,
+    binding_snapshot_from_wire,
+    binding_snapshot_to_wire,
+    encode_frame,
+    error_response,
+    read_frame,
+    request_envelope,
+    require_peer,
+    routing_identity_from_wire,
+    routing_identity_to_wire,
+    success_response,
+    validate_request,
+    validate_response,
+    write_frame,
+)
+
+__all__ = [
+    "PeerCredentials",
+    "PrivilegedProtocolError",
+    "acceptance_receipt_from_wire",
+    "acceptance_receipt_to_wire",
+    "binding_snapshot_from_wire",
+    "binding_snapshot_to_wire",
+    "encode_frame",
+    "error_response",
+    "read_frame",
+    "request_envelope",
+    "require_peer",
+    "routing_identity_from_wire",
+    "routing_identity_to_wire",
+    "success_response",
+    "validate_request",
+    "validate_response",
+    "write_frame",
+]

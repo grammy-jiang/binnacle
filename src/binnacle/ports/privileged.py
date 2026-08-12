@@ -9,6 +9,7 @@ from binnacle.domain.privileged import (
     BrokerAcceptanceReceipt,
     BrokerBindingSnapshot,
     BrokerNoAcceptReason,
+    PrivilegedBrokerHello,
     PrivilegedTicket,
     PrivilegedTicketRoutingIdentity,
 )
@@ -39,4 +40,23 @@ class PrivilegedEvidenceStore(Protocol):
     async def close(self) -> None: ...
 
 
-__all__ = ["PrivilegedEvidenceStore", "PrivilegedTicketVerifier"]
+class PrivilegedBrokerPort(Protocol):
+    """Application-side access to the authenticated broker protocol."""
+
+    async def hello(self) -> PrivilegedBrokerHello: ...
+
+    async def start(self, ticket: PrivilegedTicket) -> BrokerAcceptanceReceipt: ...
+
+    async def get(self, operation_id: str) -> BrokerBindingSnapshot | None: ...
+
+    async def seal_no_accept(
+        self,
+        *,
+        identity: PrivilegedTicketRoutingIdentity,
+        reason: BrokerNoAcceptReason,
+        trusted_time_at: datetime,
+        retain_until: datetime,
+    ) -> BrokerAcceptanceReceipt: ...
+
+
+__all__ = ["PrivilegedBrokerPort", "PrivilegedEvidenceStore", "PrivilegedTicketVerifier"]
