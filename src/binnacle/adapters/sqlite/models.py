@@ -1022,6 +1022,149 @@ class CommandCancelRequestModel(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
+class GitOperationModel(Base):
+    __tablename__ = "git_operations"
+
+    operation_id: Mapped[str] = mapped_column(
+        String(160),
+        ForeignKey("operations.operation_id", name="fk_git_operations_operation"),
+        primary_key=True,
+    )
+    session_id: Mapped[str] = mapped_column(
+        String(160),
+        ForeignKey("development_sessions.session_id", name="fk_git_operations_session"),
+        nullable=False,
+    )
+    workspace_id: Mapped[str] = mapped_column(
+        String(160),
+        ForeignKey("registered_workspaces.workspace_id", name="fk_git_operations_workspace"),
+        nullable=False,
+    )
+    operation_kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    repository_profile_id: Mapped[str] = mapped_column(String(96), nullable=False)
+    repository_profile_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    repository_safety_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    repository_state_binding_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    workspace_fence_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    source_ref: Mapped[str | None] = mapped_column(String(255))
+    destination_ref: Mapped[str | None] = mapped_column(String(255))
+    expected_old_oid_algorithm: Mapped[str | None] = mapped_column(String(8))
+    expected_old_oid_hex: Mapped[str | None] = mapped_column(String(64))
+    desired_oid_algorithm: Mapped[str | None] = mapped_column(String(8))
+    desired_oid_hex: Mapped[str | None] = mapped_column(String(64))
+    request_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    commit_request_sha256: Mapped[str | None] = mapped_column(String(64))
+    remote_request_sha256: Mapped[str | None] = mapped_column(String(64))
+    credential_reference_sha256: Mapped[str | None] = mapped_column(String(64))
+    current_stage_generation: Mapped[int] = mapped_column(Integer, nullable=False)
+    aggregate_effect_knowledge: Mapped[str] = mapped_column(String(24), nullable=False)
+    state: Mapped[str] = mapped_column(String(24), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_reconciled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class GitOperationStageModel(Base):
+    __tablename__ = "git_operation_stages"
+    __table_args__ = (
+        UniqueConstraint("member_id", name="uq_git_stages_member"),
+        UniqueConstraint("member_ticket_id", name="uq_git_stages_ticket"),
+        UniqueConstraint("execution_id", name="uq_git_stages_execution"),
+    )
+
+    operation_id: Mapped[str] = mapped_column(
+        String(160),
+        ForeignKey("git_operations.operation_id", name="fk_git_stages_operation"),
+        primary_key=True,
+    )
+    stage_generation: Mapped[int] = mapped_column(Integer, primary_key=True)
+    member_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    stage_kind: Mapped[str] = mapped_column(String(48), nullable=False)
+    input_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    pre_state_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    member_ticket_id: Mapped[str | None] = mapped_column(String(160))
+    member_ticket_sha256: Mapped[str | None] = mapped_column(String(64))
+    acceptance_state: Mapped[str] = mapped_column(String(24), nullable=False)
+    execution_id: Mapped[str | None] = mapped_column(String(160))
+    crossing_state: Mapped[str] = mapped_column(String(24), nullable=False)
+    effect_knowledge: Mapped[str] = mapped_column(String(24), nullable=False)
+    before_oid_algorithm: Mapped[str | None] = mapped_column(String(8))
+    before_oid_hex: Mapped[str | None] = mapped_column(String(64))
+    after_oid_algorithm: Mapped[str | None] = mapped_column(String(8))
+    after_oid_hex: Mapped[str | None] = mapped_column(String(64))
+    cancel_generation: Mapped[int] = mapped_column(Integer, nullable=False)
+    acknowledged_cancel_generation: Mapped[int] = mapped_column(Integer, nullable=False)
+    executor_evidence_generation: Mapped[int] = mapped_column(Integer, nullable=False)
+    cleanup_complete: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    cleanup_evidence_sha256: Mapped[str | None] = mapped_column(String(64))
+    state: Mapped[str] = mapped_column(String(24), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class GitCommitEvidenceModel(Base):
+    __tablename__ = "git_commit_evidence"
+    __table_args__ = (
+        UniqueConstraint("commit_oid_algorithm", "commit_oid_hex", name="uq_git_commit_oid"),
+    )
+
+    operation_id: Mapped[str] = mapped_column(
+        String(160),
+        ForeignKey("git_operations.operation_id", name="fk_git_commit_operation"),
+        primary_key=True,
+    )
+    commit_oid_algorithm: Mapped[str] = mapped_column(String(8), nullable=False)
+    commit_oid_hex: Mapped[str] = mapped_column(String(64), nullable=False)
+    tree_oid_algorithm: Mapped[str] = mapped_column(String(8), nullable=False)
+    tree_oid_hex: Mapped[str] = mapped_column(String(64), nullable=False)
+    parent_oid_algorithm: Mapped[str] = mapped_column(String(8), nullable=False)
+    parent_oid_hex: Mapped[str] = mapped_column(String(64), nullable=False)
+    author_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    committer_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    message_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    preimage_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    author_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    committer_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    signer_profile_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    signer_public_fingerprint: Mapped[str] = mapped_column(String(160), nullable=False)
+    signature_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    signature_verified: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    object_imported: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    branch_cas_complete: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    main_index_publication_state: Mapped[str] = mapped_column(String(16), nullable=False)
+    worktree_evidence_sha256: Mapped[str | None] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class GitRemoteEvidenceModel(Base):
+    __tablename__ = "git_remote_evidence"
+
+    operation_id: Mapped[str] = mapped_column(
+        String(160),
+        ForeignKey("git_operations.operation_id", name="fk_git_remote_operation"),
+        primary_key=True,
+    )
+    remote_profile_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    destination_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    outbound_closure_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_ref: Mapped[str] = mapped_column(String(255), nullable=False)
+    destination_ref: Mapped[str] = mapped_column(String(255), nullable=False)
+    expected_oid_algorithm: Mapped[str] = mapped_column(String(8), nullable=False)
+    expected_oid_hex: Mapped[str] = mapped_column(String(64), nullable=False)
+    desired_oid_algorithm: Mapped[str] = mapped_column(String(8), nullable=False)
+    desired_oid_hex: Mapped[str] = mapped_column(String(64), nullable=False)
+    observed_oid_algorithm: Mapped[str | None] = mapped_column(String(8))
+    observed_oid_hex: Mapped[str | None] = mapped_column(String(64))
+    transport_state: Mapped[str] = mapped_column(String(24), nullable=False)
+    credential_use_evidence_sha256: Mapped[str | None] = mapped_column(String(64))
+    remote_reconciled: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    credential_cleanup_complete: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 Index("ix_operations_state", OperationModel.state, OperationModel.updated_at)
 Index("ix_bindings_operation", IdempotencyBindingModel.operation_id)
 Index("ix_payload_owner", PayloadObjectModel.controller_id, PayloadObjectModel.controller_epoch)
@@ -1048,4 +1191,13 @@ Index(
     "ix_command_operations_session",
     CommandOperationModel.session_id,
     CommandOperationModel.acceptance_state,
+)
+Index("ix_git_operations_session", GitOperationModel.session_id, GitOperationModel.state)
+Index(
+    "uq_git_stages_active_member",
+    GitOperationStageModel.operation_id,
+    unique=True,
+    sqlite_where=GitOperationStageModel.state.in_(
+        ("dispatched", "running", "cleanup_pending", "uncertain")
+    ),
 )

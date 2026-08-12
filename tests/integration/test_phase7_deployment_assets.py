@@ -71,11 +71,18 @@ def test_setup_grants_both_services_runtime_parent_traversal(
         "binnacle-dev": grp.struct_group(("binnacle-dev", "x", 1201, [])),
         "binnacle-executor": grp.struct_group(("binnacle-executor", "x", 1202, [])),
         "binnacle-executor-client": grp.struct_group(("binnacle-executor-client", "x", 1203, [])),
+        "binnacle-git-credential": grp.struct_group(("binnacle-git-credential", "x", 1204, [])),
+        "binnacle-git-credential-client": grp.struct_group(
+            ("binnacle-git-credential-client", "x", 1205, [])
+        ),
     }
     users = {
         "binnacle": pwd.struct_passwd(("binnacle", "x", 1300, 1200, "", "/", "/usr/sbin/nologin")),
         "binnacle-executor": pwd.struct_passwd(
             ("binnacle-executor", "x", 1301, 1202, "", "/", "/usr/sbin/nologin")
+        ),
+        "binnacle-git-credential": pwd.struct_passwd(
+            ("binnacle-git-credential", "x", 1302, 1204, "", "/", "/usr/sbin/nologin")
         ),
     }
     commands: list[tuple[str, ...]] = []
@@ -104,6 +111,20 @@ def test_setup_grants_both_services_runtime_parent_traversal(
         "--groups",
         expected_groups,
         "binnacle-executor",
+    ) in commands
+    assert (
+        "usermod",
+        "--append",
+        "--groups",
+        "binnacle-git-credential-client",
+        "binnacle-executor",
+    ) in commands
+    assert (
+        "usermod",
+        "--append",
+        "--groups",
+        "binnacle-git-credential-client",
+        "binnacle-git-credential",
     ) in commands
     assert not any(command[:2] == ("systemctl", "enable") for command in commands)
 

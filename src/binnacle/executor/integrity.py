@@ -28,6 +28,9 @@ EXPECTED_EXECUTOR_TABLES: Final = frozenset(
         "no_accept_tombstones",
         "execution_streams",
         "executor_evidence_events",
+        "git_read_generations",
+        "git_members",
+        "git_read_no_accept_tombstones",
     }
 )
 
@@ -83,7 +86,7 @@ def _verify_executor_connection(
         raise ExecutorIntegrityError("executor database identity is incompatible")
     high_water = _integer(meta["evidence_generation_high_water"])
     if (
-        _integer(meta["schema_generation"]) != 1
+        _integer(meta["schema_generation"]) != 2
         or high_water < 0
         or _integer(meta["last_verified_recovery_generation"]) > high_water
         or str(meta["readiness"])
@@ -95,6 +98,7 @@ def _verify_executor_connection(
     accepted = _verify_execution_rows(connection, high_water)
     pending = _verify_routing_rows(connection, "pending_cancel_intents", high_water)
     sealed = _verify_routing_rows(connection, "no_accept_tombstones", high_water)
+    _verify_unpromoted_git_tables(connection)
     orphan_events = int(
         connection.execute(
             """
@@ -118,13 +122,25 @@ def _verify_executor_connection(
     return ExecutorIntegrityReport(
         revision=str(revision_row[0]),
         readiness=str(meta["readiness"]),
-        schema_generation=1,
+        schema_generation=2,
         evidence_generation=high_water,
         accepted_executions=accepted,
         pending_cancels=pending,
         no_accept_tombstones=sealed,
         outstanding_executions=outstanding,
     )
+
+
+def _verify_unpromoted_git_tables(connection: sqlite3.Connection) -> None:
+    """Phase 8 handlers are unavailable; retained Git rows therefore fail closed."""
+
+    for table in (
+        "git_read_generations",
+        "git_members",
+        "git_read_no_accept_tombstones",
+    ):
+        if int(connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]):
+            raise ExecutorIntegrityError("unpromoted Git executor evidence is present")
 
 
 def _verify_event_sequence(connection: sqlite3.Connection, high_water: int) -> None:

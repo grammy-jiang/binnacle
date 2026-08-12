@@ -199,21 +199,23 @@ Profile-specific issuer, audience, gateway, algorithm, freshness, key, and revoc
 fields come only from the selected live profile.  Environment variables and convenience
 CLI flags do not override this protected file.
 
-Offline application and executor migration and verification
-------------------------------------------------------------
+Offline application, executor, and credential migration and verification
+-------------------------------------------------------------------------
 
 Neither database is created or upgraded opportunistically by a runtime service.  The
-reviewed application head is ``0004_execution_operations`` and the independent executor
-head is ``0001_executor_evidence``.  For a new installation or an upgrade, first let
-systemd create the protected application runtime directory, then stop the application and
-both executor units.  The ordinary application stop preserves its runtime directory for
-the non-root maintenance lock:
+reviewed application head is ``0005_git_operations`` and the independent executor head is
+``0002_git_members``.  The isolated credential-broker head is
+``0001_credential_evidence``.  All Phase 8 Git and credential capabilities remain disabled.
+For a new installation or an upgrade, first let systemd create the protected application
+runtime directory, then stop the application, executor, and credential-broker units.  The
+ordinary application stop preserves its runtime directory for the non-root maintenance lock:
 
 .. code-block:: console
 
    sudo systemctl start binnacle-dev.service
    sudo systemctl stop binnacle-dev.service
    sudo systemctl stop binnacle-executor.service binnacle-executor.socket
+   sudo systemctl stop binnacle-git-credential.service binnacle-git-credential.socket
    sudo -u binnacle -- \
      /srv/binnacle-dev/repo/.venv/bin/binnacle db upgrade \
      --config /etc/binnacle/dev.toml
@@ -237,6 +239,19 @@ sqlite:////var/lib/binnacle-executor/state/executor-state.sqlite3 \
      --database /var/lib/binnacle-executor/state/executor-state.sqlite3 \
      --runtime-directory /run/binnacle-executor/private --output json
 
+The credential-broker migration and verifier currently run only in the isolated CI lane:
+
+.. code-block:: console
+
+   uv run python scripts/verify_git_credential_broker.py --temporary --output json
+
+Do not create a Pi credential database, install a key, enable either credential unit, or
+grant the broker checkout access from this repository-only result.  The tracked service is
+an explicit ``/usr/bin/false`` fail-closed placeholder.  A later reviewed broker
+implementation must supply a protected, immutable migration/verifier runtime and the real
+key, peer, socket, and candidate-Pi evidence before the offline broker migration sequence
+becomes operational.
+
 The maintenance command acquires the same exclusive ``/run/binnacle`` writer lock as the
 live kernel.  It refuses to run concurrently with a live writer, refuses an absent or
 unsafe runtime directory, and never falls back to a source or world-writable lock path.
@@ -247,10 +262,13 @@ The application verifier checks the exact Alembic revision, SQLite foreign keys/
 pragmas, audit chain/cache continuity, durable audit-failure generation, obligation
 markers, payload roots, consequential-boundary gate state, the complete Phase 5 probe
 ledger/history/provenance invariants, and the Phase 6 session/registered-workspace/
-mutation-fence plus Phase 7 command-operation cross-row invariants.  The executor verifier
+mutation-fence plus Phase 7 command-operation and Phase 8 retained Git cross-row invariants.
+The executor verifier
 opens only the executor-owned database read-only and checks its exact schema, integrity,
 identity generation, one-home acceptance invariant, and private directory ownership.  The
-verifiers perform no migration, directory creation, workspace registration, fence
+The credential verifier checks only its isolated default-disabled schema and refuses any
+promoted or retained credential authority.  The verifiers perform no migration, directory
+creation, workspace registration, fence
 reconstruction, cleanup, acceptance sealing, or automatic recovery.
 The explicit ``touch`` is non-truncating for an existing database; it makes a new database
 path executor-owned before Alembic opens it.  The verifier rejects a database broader than
@@ -408,14 +426,18 @@ with the service.  This does not itself enable a matcher or grant source write. 
 mount/process-tree observations and real ChatGPT session behavior remain promotion/exit
 evidence; their absence does not block repository implementation or CI review.
 
-Phase 7 execution-supervisor foundation
----------------------------------------
+Phase 7 and Phase 8 default-disabled foundations
+------------------------------------------------
 
-Application migration ``0004_execution_operations`` adds command-operation correlation,
+Application migration ``0005_git_operations`` retains the Phase 7 command-operation
+correlation and adds default-disabled Git parent/member/commit/remote evidence.
 monotonic cancellation delivery, exact supervisor evidence, and mutation-fence ownership.
-The separate executor migration ``0001_executor_evidence`` owns only bounded executor
-acceptance, pending-cancel, no-accept, stream, and evidence records.  The application never
-opens the executor database and the executor never opens the application database.
+The separate executor migration ``0002_git_members`` retains bounded executor acceptance,
+pending-cancel, no-accept, stream, and evidence records and reserves empty discriminated Git
+read/member evidence.  The application never opens the executor database and the executor
+never opens the application database.  The separate credential-broker migration owns only
+one-use credential evidence; the tracked broker unit deliberately runs ``/usr/bin/false``
+and both broker units remain disabled until a reviewed implementation and real evidence pass.
 
 Create ``/etc/binnacle-executor/executor.toml`` as ``root:binnacle-executor`` with exact
 mode ``0640`` only after recording the reviewed numeric application peer identity and

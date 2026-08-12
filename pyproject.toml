@@ -95,6 +95,7 @@ files = [
   "scripts/verify_dev_pi.py",
   "scripts/verify_operation_kernel.py",
   "scripts/verify_execution_supervisor.py",
+  "scripts/verify_git_credential_broker.py",
 ]
 
 [tool.pytest.ini_options]
