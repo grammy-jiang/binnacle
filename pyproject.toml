@@ -28,6 +28,8 @@ dependencies = [
 
 [project.scripts]
 binnacle = "binnacle.cli:main"
+binnacle-privileged-broker = "binnacle.privileged_broker.__main__:main"
+binnacle-privileged-verify = "binnacle.privileged_broker.verify_cli:main"
 
 [dependency-groups]
 test = [
@@ -96,6 +98,7 @@ files = [
   "scripts/verify_operation_kernel.py",
   "scripts/verify_execution_supervisor.py",
   "scripts/verify_git_credential_broker.py",
+  "scripts/verify_privileged_broker.py",
 ]
 
 [tool.pytest.ini_options]

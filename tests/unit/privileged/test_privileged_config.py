@@ -1,3 +1,5 @@
+"""Closed configuration tests for the root broker."""
+
 from __future__ import annotations
 
 import os

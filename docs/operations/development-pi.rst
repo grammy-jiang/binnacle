@@ -5,11 +5,13 @@ Purpose and current gate
 ------------------------
 
 This runbook prepares the read-only compatibility server, the disabled Phase 5 write
-probe, the default-disabled Phase 7 execution-supervisor foundation, and the isolated
-default-disabled Phase 8 Git credential-broker foundation on one 64-bit Raspberry Pi.  It
+probe, the default-disabled Phase 7 execution-supervisor foundation, the isolated
+default-disabled Phase 8 Git credential-broker foundation, and the default-disabled Phase 9
+root-broker boundary on one 64-bit Raspberry Pi.  It
 provides repository-side deployment, integrity, and evidence checks; it does not claim that
 a ChatGPT controller is authenticated, that a write catalogue has been promoted, that the
-host can safely execute command trees, or that Git/signing credentials are installed.
+host can safely execute command trees, that Git/signing credentials are installed, or that
+any package, systemd, selector, restart, rollback, or reboot effect is promoted.
 
 Do not expose ``/mcp`` through a tunnel until the live feasibility gate has selected and
 tested exactly one controller profile.  The repository intentionally contains neither a
@@ -54,6 +56,10 @@ The development profile uses these fixed paths and identities:
    /var/lib/binnacle-git-credential/state
    /run/binnacle-git-credential
    /run/binnacle-git-credential/private
+   /etc/binnacle-privileged/broker.toml
+   /var/lib/binnacle-privileged/evidence.db
+   /run/binnacle-privileged
+   /opt/binnacle-privileged
 
    application user and primary group: binnacle
    source-read supplementary group: binnacle-dev
@@ -61,6 +67,7 @@ The development profile uses these fixed paths and identities:
    executor socket client group: binnacle-executor-client
    credential broker user and primary group: binnacle-git-credential
    credential broker client group: binnacle-git-credential-client
+   privileged broker socket client group: binnacle-privileged-client
 
 Both service identities are supplementary members of ``binnacle-executor-client`` so they
 can traverse the root-owned runtime parent; only ``binnacle`` uses that membership as the
@@ -76,6 +83,14 @@ default-disabled foundation.  Only ``binnacle-executor`` and
 and any future general command identity must not belong to it.  The broker state/private
 children remain ``binnacle-git-credential:binnacle-git-credential`` ``0700``; neither the
 application nor the general command boundary may traverse them.
+
+Only ``binnacle`` belongs to ``binnacle-privileged-client``.  That supplementary group
+permits traversal and connection to the systemd-owned root-broker socket; broker-side
+``SO_PEERCRED`` still compares the exact numeric application UID and **primary** GID.  The
+broker config, database, and separately installed runtime are ``root:root`` and cannot be
+read or replaced by the application, executor, command, or credential identities.  The
+socket parent is directly under root-owned ``/run``, never under application-owned
+``/run/binnacle``.
 
 Prepare the reviewed checkout
 -----------------------------
@@ -95,7 +110,8 @@ the exact clean candidate:
    uv run ruff format --check .
    uv run mypy src/binnacle tests scripts/mcp_evaluation.py scripts/setup_dev_pi.py \
      scripts/verify_dev_pi.py scripts/verify_operation_kernel.py \
-     scripts/verify_execution_supervisor.py scripts/verify_git_credential_broker.py
+     scripts/verify_execution_supervisor.py scripts/verify_git_credential_broker.py \
+     scripts/verify_privileged_broker.py
    uv run lint-imports
    uv run pip-audit
    uv run python scripts/validate_contracts.py
@@ -116,14 +132,17 @@ Inspect the deterministic plan before applying it:
 
 Add ``--enable`` to ``apply`` only when the protected application configuration is ready.
 The script creates distinct application, executor, credential-broker, executor-client,
-credential-client, and source-read groups; three non-root service identities; protected
+credential-client, privileged-client, and source-read groups; three non-root service
+identities; protected
 configuration and evaluation directories;
 application-owned state/result/audit subtrees; the dedicated ``0700`` probe root and
-staging directory; separate executor and credential config/state/runtime roots; and the
-reviewed application/executor/credential systemd, socket, and tmpfiles assets.  It rejects
+staging directory; separate executor and credential config/state/runtime roots; root-owned
+privileged config/state/runtime/installation roots; and the reviewed
+application/executor/credential/privileged systemd, socket, and tmpfiles assets.  It rejects
 an upgrade whose application or general command identity is already a credential client.
-It leaves both ``binnacle-executor.socket`` and ``binnacle-git-credential.socket`` disabled
-and starts neither service.  It does not install packages, pull/reset Git, create secrets,
+It leaves ``binnacle-executor.socket``, ``binnacle-git-credential.socket``, and
+``binnacle-privileged.socket`` disabled and starts none of those services.  It does not
+install the immutable root-broker artifact, install packages, pull/reset Git, create secrets,
 configure a firewall or tunnel, or start a ChatGPT evaluation.  The application unit adds only
 ``ReadWritePaths=/var/lib/binnacle/probe-workspace`` to the Phase 4 write boundary; it
 does not grant source, configuration, evaluation, or credential write access.
@@ -298,6 +317,58 @@ reconstruction, cleanup, acceptance sealing, or automatic recovery.
 The explicit ``touch`` is non-truncating for an existing database; it makes a new database
 path executor-owned before Alembic opens it.  The verifier rejects a database broader than
 ``0600`` or owned by a different identity.
+
+Phase 9 privileged-broker foundation
+------------------------------------
+
+The tracked Phase 9 broker service is an independently installed root boundary, not a
+subcommand that systemd runs from ``/srv/binnacle-dev/repo``.  Its unit executes only the
+root-owned ``/opt/binnacle-privileged/bin/binnacle-privileged-broker`` entrypoint.  The
+installed read-only verifier is
+``/opt/binnacle-privileged/bin/binnacle-privileged-verify``.  Both must be non-symlink
+regular files from the same reviewed immutable installation.  Never run the mutable
+checkout, its ``.venv``, or ``scripts/verify_privileged_broker.py`` as root against
+authoritative host state.
+
+The repository currently implements only durable accept-or-seal evidence, authenticated
+framing, retained lookup/sealing, and the read-only installed verifier.  Configuration
+must contain this exact default-disabled profile:
+
+.. code-block:: toml
+
+   [broker]
+   database_path = "/var/lib/binnacle-privileged/evidence.db"
+   runtime_directory = "/run/binnacle-privileged"
+   runtime_group_gid = <numeric-binnacle-privileged-client-gid>
+   expected_application_uid = <numeric-binnacle-uid>
+   expected_application_gid = <numeric-binnacle-primary-gid>
+   build_sha256 = "<64-lowercase-hex-installed-build-digest>"
+   profile_sha256 = "<64-lowercase-hex-disabled-profile-digest>"
+   acceptance_enabled = false
+   busy_timeout_ms = 5000
+
+``acceptance_enabled = true`` is rejected by this build; it is not an activation switch.
+No package-manager, systemd, runtime-selector, restart, rollback, or reboot effect handler
+is composed.  The socket and service therefore remain disabled while the immutable artifact
+installation/publication procedure, selected adapters, candidate-Pi evidence, and human
+promotion review are incomplete.  Do not wait for that hardware evidence while developing
+or reviewing these evidence-independent repository foundations.
+
+The repository-only CI verifier remains safe and temporary:
+
+.. code-block:: console
+
+   uv run python scripts/verify_privileged_broker.py --temporary \
+     --require-default-disabled --output json
+
+That command creates and verifies only a temporary database.  It does not authorize a Pi
+installation.  Once a separately reviewed immutable artifact installer exists, the owner
+procedure must stop both privileged units, migrate the root-owned database from the installed
+artifact (never from the checkout), verify it with
+``/opt/binnacle-privileged/bin/binnacle-privileged-verify --require-default-disabled``, and
+leave both units disabled.  ``verify_dev_pi.py`` checks exact client membership, protected
+path ownership/modes, installed executable modes, effective unit/socket properties,
+drop-in absence, tmpfiles content, and the default-disabled state.
 
 If audit recovery is required, keep the service stopped.  A human must reconcile every
 surviving obligation and prepare a protected closure JSON containing the exact active

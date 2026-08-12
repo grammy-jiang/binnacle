@@ -42,6 +42,18 @@ GIT_CREDENTIAL_RUNTIME_ROOT = Path("/run/binnacle-git-credential")
 GIT_CREDENTIAL_RUNTIME_PRIVATE = GIT_CREDENTIAL_RUNTIME_ROOT / "private"
 GIT_CREDENTIAL_SOCKET_PATH = GIT_CREDENTIAL_RUNTIME_ROOT / "broker.sock"
 GIT_CREDENTIAL_TMPFILES_PATH = Path("/etc/tmpfiles.d/binnacle-git-credential.conf")
+PRIVILEGED_SERVICE_NAME = "binnacle-privileged.service"
+PRIVILEGED_SOCKET_NAME = "binnacle-privileged.socket"
+PRIVILEGED_CONFIG_DIRECTORY = Path("/etc/binnacle-privileged")
+PRIVILEGED_CONFIG_FILE = PRIVILEGED_CONFIG_DIRECTORY / "broker.toml"
+PRIVILEGED_PERSISTENT_ROOT = Path("/var/lib/binnacle-privileged")
+PRIVILEGED_DATABASE = PRIVILEGED_PERSISTENT_ROOT / "evidence.db"
+PRIVILEGED_RUNTIME_ROOT = Path("/run/binnacle-privileged")
+PRIVILEGED_SOCKET_PATH = PRIVILEGED_RUNTIME_ROOT / "broker.sock"
+PRIVILEGED_INSTALL_ROOT = Path("/opt/binnacle-privileged")
+PRIVILEGED_EXECUTABLE = PRIVILEGED_INSTALL_ROOT / "bin/binnacle-privileged-broker"
+PRIVILEGED_VERIFY_EXECUTABLE = PRIVILEGED_INSTALL_ROOT / "bin/binnacle-privileged-verify"
+PRIVILEGED_TMPFILES_PATH = Path("/etc/tmpfiles.d/binnacle-privileged.conf")
 CANONICAL_REPO = Path("/srv/binnacle-dev/repo")
 _MAX_CONFIG_BYTES = 65_536
 _FULL_GIT_SHA = re.compile(r"[0-9a-f]{40}")
@@ -78,6 +90,25 @@ EXPECTED_GIT_CREDENTIAL_INACCESSIBLE_PATHS = frozenset(
         "/etc/binnacle-executor",
         "/var/lib/binnacle-executor",
         "-/run/binnacle-executor",
+    }
+)
+EXPECTED_PRIVILEGED_READ_WRITE_PATHS = frozenset(
+    {str(PRIVILEGED_RUNTIME_ROOT), str(PRIVILEGED_PERSISTENT_ROOT)}
+)
+EXPECTED_PRIVILEGED_INACCESSIBLE_PATHS = frozenset(
+    {
+        "/srv/binnacle-dev/repo",
+        "/etc/binnacle",
+        "/var/lib/binnacle",
+        "-/run/binnacle",
+        "/etc/binnacle-executor",
+        "/var/lib/binnacle-executor",
+        "-/run/binnacle-executor",
+        "/etc/binnacle-git-credential",
+        "/var/lib/binnacle-git-credential",
+        "-/run/binnacle-git-credential",
+        "-/run/systemd/private",
+        "-/run/dbus/system_bus_socket",
     }
 )
 
@@ -189,6 +220,7 @@ def verify_deployment(
     checks.extend(_systemd_service_checks())
     checks.extend(_executor_foundation_checks())
     checks.extend(_git_credential_foundation_checks())
+    checks.extend(_privileged_foundation_checks())
     checks.append(_listener_check(host, port))
     checks.append(_health_check(host, port))
     checks.append(_unauthenticated_mcp_check(host, port))
@@ -653,13 +685,14 @@ def _systemd_service_checks() -> list[VerificationCheck]:
         properties["User"] == "binnacle"
         and properties["Group"] == "binnacle"
         and set(properties["SupplementaryGroups"].split())
-        == {"binnacle-dev", "binnacle-executor-client"}
+        == {"binnacle-dev", "binnacle-executor-client", "binnacle-privileged-client"}
     )
     try:
         account = pwd.getpwnam("binnacle")
         service_group = grp.getgrnam("binnacle")
         development_group = grp.getgrnam("binnacle-dev")
         executor_client_group = grp.getgrnam("binnacle-executor-client")
+        privileged_client_group = grp.getgrnam("binnacle-privileged-client")
         identity_ok = identity_ok and (
             account.pw_uid != 0
             and account.pw_gid == service_group.gr_gid
@@ -667,7 +700,16 @@ def _systemd_service_checks() -> list[VerificationCheck]:
             and development_group.gr_gid != 0
             and service_group.gr_gid != development_group.gr_gid
             and executor_client_group.gr_gid != 0
-            and executor_client_group.gr_gid not in {service_group.gr_gid, development_group.gr_gid}
+            and privileged_client_group.gr_gid != 0
+            and len(
+                {
+                    service_group.gr_gid,
+                    development_group.gr_gid,
+                    executor_client_group.gr_gid,
+                    privileged_client_group.gr_gid,
+                }
+            )
+            == 4
         )
     except KeyError:
         identity_ok = False
@@ -1135,6 +1177,205 @@ def _git_credential_foundation_checks() -> list[VerificationCheck]:
             "credential service/socket are disabled with exact effective isolation"
             if service_boundary_ok and socket_boundary_ok and tmpfiles_ok
             else "credential service/socket/tmpfiles boundary differs",
+        ),
+    ]
+
+
+def _privileged_foundation_checks() -> list[VerificationCheck]:
+    try:
+        application = pwd.getpwnam("binnacle")
+        application_group = grp.getgrnam("binnacle")
+        client_group = grp.getgrnam("binnacle-privileged-client")
+        paths = {
+            "config": PRIVILEGED_CONFIG_DIRECTORY.stat(follow_symlinks=False),
+            "persistent": PRIVILEGED_PERSISTENT_ROOT.stat(follow_symlinks=False),
+            "runtime": PRIVILEGED_RUNTIME_ROOT.stat(follow_symlinks=False),
+            "install": PRIVILEGED_INSTALL_ROOT.stat(follow_symlinks=False),
+        }
+        config_file = PRIVILEGED_CONFIG_FILE.stat(follow_symlinks=False)
+        database = PRIVILEGED_DATABASE.stat(follow_symlinks=False)
+        executable = PRIVILEGED_EXECUTABLE.stat(follow_symlinks=False)
+        verify_executable = PRIVILEGED_VERIFY_EXECUTABLE.stat(follow_symlinks=False)
+        tmpfiles_file = PRIVILEGED_TMPFILES_PATH.stat(follow_symlinks=False)
+        tmpfiles_lines = frozenset(
+            PRIVILEGED_TMPFILES_PATH.read_text(encoding="utf-8").splitlines()
+        )
+        service = _systemd_properties(
+            (
+                "ActiveState",
+                "UnitFileState",
+                "FragmentPath",
+                "DropInPaths",
+                "User",
+                "Group",
+                "SupplementaryGroups",
+                "WorkingDirectory",
+                "ExecStart",
+                "ReadWritePaths",
+                "InaccessiblePaths",
+                "ProtectSystem",
+                "NoNewPrivileges",
+                "PrivateDevices",
+                "DevicePolicy",
+                "ProtectProc",
+                "RestrictAddressFamilies",
+                "CapabilityBoundingSet",
+                "AmbientCapabilities",
+                "KillMode",
+                "SendSIGKILL",
+                "Delegate",
+            ),
+            service_name=PRIVILEGED_SERVICE_NAME,
+        )
+        socket_properties = _systemd_properties(
+            (
+                "ActiveState",
+                "UnitFileState",
+                "FragmentPath",
+                "DropInPaths",
+                "Listen",
+                "SocketUser",
+                "SocketGroup",
+                "SocketMode",
+                "DirectoryMode",
+                "RemoveOnStop",
+            ),
+            service_name=PRIVILEGED_SOCKET_NAME,
+        )
+    except (KeyError, OSError, UnicodeError, subprocess.CalledProcessError, ValueError):
+        return [
+            VerificationCheck(
+                "privileged-foundation",
+                "fail",
+                "privileged client, protected roots, installed runtime, or units are unavailable",
+            )
+        ]
+
+    client_members = _effective_group_members(client_group)
+    identities_ok = (
+        client_group.gr_gid > 0
+        and application.pw_uid > 0
+        and application.pw_gid == application_group.gr_gid
+        and client_group.gr_gid != application_group.gr_gid
+        and tuple(candidate.gr_name for candidate in _same_gid_groups(client_group))
+        == ("binnacle-privileged-client",)
+        and client_members == {"binnacle"}
+    )
+    roots_ok = all(
+        stat.S_ISDIR(metadata.st_mode) and not stat.S_ISLNK(metadata.st_mode)
+        for metadata in paths.values()
+    ) and (
+        (
+            paths["config"].st_uid,
+            paths["config"].st_gid,
+            stat.S_IMODE(paths["config"].st_mode),
+        )
+        == (0, 0, 0o700)
+        and (
+            paths["persistent"].st_uid,
+            paths["persistent"].st_gid,
+            stat.S_IMODE(paths["persistent"].st_mode),
+        )
+        == (0, 0, 0o700)
+        and (
+            paths["runtime"].st_uid,
+            paths["runtime"].st_gid,
+            stat.S_IMODE(paths["runtime"].st_mode),
+        )
+        == (0, client_group.gr_gid, 0o750)
+        and (
+            paths["install"].st_uid,
+            paths["install"].st_gid,
+            stat.S_IMODE(paths["install"].st_mode),
+        )
+        == (0, 0, 0o755)
+        and all(
+            stat.S_ISREG(metadata.st_mode)
+            and not stat.S_ISLNK(metadata.st_mode)
+            and (metadata.st_uid, metadata.st_gid, stat.S_IMODE(metadata.st_mode)) == expected
+            for metadata, expected in (
+                (config_file, (0, 0, 0o600)),
+                (database, (0, 0, 0o600)),
+                (executable, (0, 0, 0o755)),
+                (verify_executable, (0, 0, 0o755)),
+            )
+        )
+    )
+    service_boundary_ok = (
+        service["ActiveState"] == "inactive"
+        and service["UnitFileState"] == "static"
+        and service["User"] == "root"
+        and service["Group"] == "root"
+        and not service["SupplementaryGroups"]
+        and service["WorkingDirectory"] == "/var/empty"
+        and str(PRIVILEGED_EXECUTABLE) in service["ExecStart"]
+        and str(PRIVILEGED_CONFIG_FILE) in service["ExecStart"]
+        and frozenset(service["ReadWritePaths"].split()) == EXPECTED_PRIVILEGED_READ_WRITE_PATHS
+        and frozenset(service["InaccessiblePaths"].split())
+        == EXPECTED_PRIVILEGED_INACCESSIBLE_PATHS
+        and service["ProtectSystem"] == "strict"
+        and service["NoNewPrivileges"] == "yes"
+        and service["PrivateDevices"] == "yes"
+        and service["DevicePolicy"] == "closed"
+        and service["ProtectProc"] == "invisible"
+        and service["RestrictAddressFamilies"] == "AF_UNIX"
+        and not service["CapabilityBoundingSet"]
+        and not service["AmbientCapabilities"]
+        and service["KillMode"] == "control-group"
+        and service["SendSIGKILL"] == "yes"
+        and service["Delegate"] == "no"
+        and service["FragmentPath"] == "/etc/systemd/system/binnacle-privileged.service"
+        and not service["DropInPaths"]
+    )
+    listen = socket_properties["Listen"]
+    socket_boundary_ok = (
+        socket_properties["ActiveState"] == "inactive"
+        and socket_properties["UnitFileState"] == "disabled"
+        and socket_properties["FragmentPath"] == "/etc/systemd/system/binnacle-privileged.socket"
+        and not socket_properties["DropInPaths"]
+        and str(PRIVILEGED_SOCKET_PATH) in listen
+        and "Stream" in listen
+        and socket_properties["SocketUser"] == "root"
+        and socket_properties["SocketGroup"] == "binnacle-privileged-client"
+        and socket_properties["SocketMode"] == "0660"
+        and socket_properties["DirectoryMode"] == "0750"
+        and socket_properties["RemoveOnStop"] == "yes"
+    )
+    tmpfiles_ok = (
+        stat.S_ISREG(tmpfiles_file.st_mode)
+        and not stat.S_ISLNK(tmpfiles_file.st_mode)
+        and (tmpfiles_file.st_uid, tmpfiles_file.st_gid, stat.S_IMODE(tmpfiles_file.st_mode))
+        == (0, 0, 0o644)
+        and tmpfiles_lines
+        == {
+            "# Type Path Mode User Group Age Argument",
+            "d /run/binnacle-privileged 0750 root binnacle-privileged-client -",
+            "d /var/lib/binnacle-privileged 0700 root root -",
+            "d /etc/binnacle-privileged 0700 root root -",
+            "d /opt/binnacle-privileged 0755 root root -",
+        }
+    )
+    return [
+        VerificationCheck(
+            "privileged-identities",
+            "pass" if identities_ok else "fail",
+            "only the application can connect to the root broker socket"
+            if identities_ok
+            else "privileged client identity separation differs",
+        ),
+        VerificationCheck(
+            "privileged-roots",
+            "pass" if roots_ok else "fail",
+            "root-owned config/state/runtime artifact paths have exact ownership"
+            if roots_ok
+            else "privileged protected-root or artifact ownership differs",
+        ),
+        VerificationCheck(
+            "privileged-default-disabled",
+            "pass" if service_boundary_ok and socket_boundary_ok and tmpfiles_ok else "fail",
+            "privileged service/socket are disabled with exact effective isolation"
+            if service_boundary_ok and socket_boundary_ok and tmpfiles_ok
+            else "privileged service/socket/tmpfiles boundary differs",
         ),
     ]
 

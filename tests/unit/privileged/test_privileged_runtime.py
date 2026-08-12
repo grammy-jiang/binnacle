@@ -1,3 +1,5 @@
+"""Composition and cleanup tests for the root broker runtime."""
+
 from __future__ import annotations
 
 import asyncio
