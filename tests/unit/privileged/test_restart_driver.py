@@ -284,6 +284,27 @@ async def test_exact_runtime_verifier_fails_definitive_identity_before_readiness
 
 
 @pytest.mark.anyio
+async def test_exact_runtime_verifier_rejects_late_readiness_and_bounds_final_sleep() -> None:
+    checkpoint = _checkpoint()
+    transient = _observation(checkpoint, active_state="inactive", sub_state="dead")
+    monotonic_values = iter((10.0, 10.8, 11.01))
+    sleep = AsyncMock()
+    verifier = ExactRestartRuntimeVerifier(
+        probe=_Probe(transient, _observation(checkpoint)),
+        monotonic=lambda: next(monotonic_values),
+        sleep=sleep,
+    )
+
+    result = await verifier.verify(
+        checkpoint,
+        expected_slot=checkpoint.intent.candidate_slot,
+    )
+
+    assert result.outcome is RestartDriverOutcome.FAILED
+    sleep.assert_awaited_once_with(pytest.approx(0.2))
+
+
+@pytest.mark.anyio
 async def test_exact_runtime_verifier_fails_wrong_slot_or_deadline_and_restricts_unknown() -> None:
     checkpoint = _checkpoint()
     wrong = ExactRestartRuntimeVerifier(

@@ -237,16 +237,28 @@ class ExactRestartRuntimeVerifier:
                 expected_slot=expected_slot,
                 observation=last,
             )
+            observed_monotonic = self._monotonic()
             if disposition is not None:
-                return disposition
-            if self._monotonic() >= deadline:
+                if (
+                    disposition.outcome is not RestartDriverOutcome.SUCCEEDED
+                    or observed_monotonic < deadline
+                ):
+                    return disposition
                 return self._failure(
                     checkpoint,
                     expected_slot,
                     last,
                     reason="readiness_deadline_elapsed",
                 )
-            await self._sleep(self._settings.poll_interval_seconds)
+            remaining = deadline - observed_monotonic
+            if remaining <= 0:
+                return self._failure(
+                    checkpoint,
+                    expected_slot,
+                    last,
+                    reason="readiness_deadline_elapsed",
+                )
+            await self._sleep(min(self._settings.poll_interval_seconds, remaining))
 
     @staticmethod
     def _classify(
