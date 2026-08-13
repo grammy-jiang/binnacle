@@ -13,7 +13,7 @@ from binnacle.evaluation.ci_attestation import CiAttestationError
 from binnacle.evaluation.ci_attestation import (
     ci_attestation_collector_sha256 as compute_ci_attestation_collector_sha256,
 )
-from binnacle.evaluation.digests import canonical_json_sha256
+from binnacle.evaluation.digests import canonical_json_sha256, sha256_bytes
 
 PHASE10_POLICY_PATH = Path("spec/acceptance/phase10-policy.json")
 PHASE10_SCHEMA_PATH = Path("schemas/acceptance/phase10-run.schema.json")
@@ -23,6 +23,7 @@ _EXPECTED_POLICY_KEYS = frozenset(
         "acceptance_schema_sha256",
         "allowed_merge_methods",
         "artifact_api_authentication",
+        "ci_api_authentication",
         "ci_attestation_schema_sha256",
         "ci_attestation_collector_commit_oid",
         "ci_attestation_collector_sha256",
@@ -33,6 +34,7 @@ _EXPECTED_POLICY_KEYS = frozenset(
         "protected_branch_ref",
         "repository",
         "required_ci_jobs",
+        "required_ci_workflow_profiles",
         "required_security_checks",
         "required_workflows",
         "schema_version",
@@ -43,6 +45,7 @@ _BRANCH_REF_RE = re.compile(r"refs/heads/[A-Za-z0-9][A-Za-z0-9._/-]*\Z")
 _DIGEST_RE = re.compile(r"[0-9a-f]{64}\Z")
 _OID_RE = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})\Z")
 _IDENTIFIER_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]*\Z")
+_WORKFLOW_PATH_RE = re.compile(r"\.github/workflows/[A-Za-z0-9][A-Za-z0-9_.-]*\.ya?ml\Z")
 _EXPECTED_LIMIT_KEYS = frozenset(
     {
         "candidate_generations_max",
@@ -54,12 +57,22 @@ _EXPECTED_LIMIT_KEYS = frozenset(
         "github_api_timeout_seconds",
         "github_api_token_bytes_max",
         "security_checks_max",
+        "workflow_source_bytes_max",
     }
 )
 
 
 class Phase10PolicyError(ValueError):
     """The reviewed Phase 10 policy source is missing or contradictory."""
+
+
+@dataclass(frozen=True, slots=True)
+class Phase10CiWorkflowProfile:
+    """Reviewed immutable identity of one required GitHub Actions workflow."""
+
+    workflow_id: int
+    path: str
+    source_sha256: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,6 +84,7 @@ class Phase10Policy:
     plan_version: str
     acceptance_schema_sha256: str
     artifact_api_authentication: str
+    ci_api_authentication: str
     ci_attestation_schema_sha256: str
     ci_attestation_collector_commit_oid: str
     ci_attestation_collector_sha256: str
@@ -79,6 +93,7 @@ class Phase10Policy:
     allowed_merge_methods: tuple[str, ...]
     required_workflows: tuple[str, ...]
     required_ci_jobs: Mapping[str, tuple[str, ...]]
+    required_ci_workflow_profiles: Mapping[str, Phase10CiWorkflowProfile]
     required_local_check_profiles: Mapping[str, str]
     required_security_checks: tuple[str, ...]
     limits: Mapping[str, int]
@@ -109,6 +124,13 @@ def load_phase10_policy(repo_root: Path) -> Phase10Policy:
     )
     if artifact_api_authentication != "live-bearer-github-rest-v2022-11-28":
         raise Phase10PolicyError("Phase 10 artifact API authentication is unsupported")
+    ci_api_authentication = _bounded_string(
+        policy,
+        "ci_api_authentication",
+        maximum=160,
+    )
+    if ci_api_authentication != "live-bearer-github-rest-v2022-11-28":
+        raise Phase10PolicyError("Phase 10 CI API authentication is unsupported")
 
     policy_id = _bounded_string(policy, "policy_id", maximum=160)
     repository = _bounded_string(policy, "repository", maximum=256)
@@ -159,6 +181,47 @@ def load_phase10_policy(repo_root: Path) -> Phase10Policy:
             context=f"required_ci_jobs.{workflow}",
             maximum=32,
         )
+    raw_workflow_profiles = policy.get("required_ci_workflow_profiles")
+    if not isinstance(raw_workflow_profiles, dict) or set(raw_workflow_profiles) != set(workflows):
+        raise Phase10PolicyError("Phase 10 CI workflow profiles do not match workflows")
+    workflow_profiles: dict[str, Phase10CiWorkflowProfile] = {}
+    for workflow in workflows:
+        raw_profile = raw_workflow_profiles[workflow]
+        if not isinstance(raw_profile, dict) or set(raw_profile) != {
+            "path",
+            "source_sha256",
+            "workflow_id",
+        }:
+            raise Phase10PolicyError(f"Phase 10 CI workflow profile is invalid: {workflow}")
+        workflow_id = raw_profile.get("workflow_id")
+        path_value = raw_profile.get("path")
+        source_sha256 = raw_profile.get("source_sha256")
+        if (
+            isinstance(workflow_id, bool)
+            or not isinstance(workflow_id, int)
+            or not 1 <= workflow_id <= 9_007_199_254_740_991
+            or not isinstance(path_value, str)
+            or _WORKFLOW_PATH_RE.fullmatch(path_value) is None
+            or not isinstance(source_sha256, str)
+            or _DIGEST_RE.fullmatch(source_sha256) is None
+        ):
+            raise Phase10PolicyError(f"Phase 10 CI workflow profile is invalid: {workflow}")
+        workflow_path = repo_root.resolve() / path_value
+        if workflow_path.is_symlink() or not workflow_path.is_file():
+            raise Phase10PolicyError(f"Phase 10 CI workflow source is missing: {workflow}")
+        try:
+            actual_source_sha256 = sha256_bytes(workflow_path.read_bytes())
+        except OSError as exc:
+            raise Phase10PolicyError(
+                f"Phase 10 CI workflow source is unavailable: {workflow}"
+            ) from exc
+        if actual_source_sha256 != source_sha256:
+            raise Phase10PolicyError(f"Phase 10 CI workflow source identity is stale: {workflow}")
+        workflow_profiles[workflow] = Phase10CiWorkflowProfile(
+            workflow_id=workflow_id,
+            path=path_value,
+            source_sha256=source_sha256,
+        )
     raw_local_profiles = policy.get("required_local_check_profiles")
     if not isinstance(raw_local_profiles, dict) or not 1 <= len(raw_local_profiles) <= 64:
         raise Phase10PolicyError("Phase 10 required local check profiles are invalid")
@@ -202,6 +265,7 @@ def load_phase10_policy(repo_root: Path) -> Phase10Policy:
         limits["github_api_response_bytes_max"] > 65_536
         or limits["github_api_token_bytes_max"] > 4_096
         or limits["github_api_timeout_seconds"] > 60
+        or limits["workflow_source_bytes_max"] > 32_768
     ):
         raise Phase10PolicyError("Phase 10 GitHub API limit exceeds the reviewed ceiling")
 
@@ -224,6 +288,7 @@ def load_phase10_policy(repo_root: Path) -> Phase10Policy:
         plan_version="phase10-self-hosting-acceptance-v1",
         acceptance_schema_sha256=acceptance_schema_sha256,
         artifact_api_authentication=artifact_api_authentication,
+        ci_api_authentication=ci_api_authentication,
         ci_attestation_schema_sha256=ci_attestation_schema_sha256,
         ci_attestation_collector_commit_oid=ci_attestation_collector_commit_oid,
         ci_attestation_collector_sha256=ci_attestation_collector_sha256,
@@ -232,6 +297,7 @@ def load_phase10_policy(repo_root: Path) -> Phase10Policy:
         allowed_merge_methods=allowed_merge_methods,
         required_workflows=workflows,
         required_ci_jobs=jobs,
+        required_ci_workflow_profiles=workflow_profiles,
         required_local_check_profiles=local_profiles,
         required_security_checks=security_checks,
         limits=limits,
@@ -299,6 +365,7 @@ __all__ = [
     "CI_ATTESTATION_SCHEMA_PATH",
     "PHASE10_POLICY_PATH",
     "PHASE10_SCHEMA_PATH",
+    "Phase10CiWorkflowProfile",
     "Phase10Policy",
     "Phase10PolicyError",
     "load_phase10_policy",

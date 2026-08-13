@@ -843,6 +843,23 @@ digests are distinct per required job and cannot be reused in a later integratio
 generation.  Changing manifest labels or recomputing only an embedded object/digest
 therefore cannot turn one uploaded artifact into evidence for another job.
 
+The uploaded checkout artifact is deliberately produced before candidate-controlled test
+work, so it cannot authenticate the eventual job result.  Every CI record therefore also
+retains a numeric job ID and a closed ``github_ci_api_observation`` with its canonical
+``github_ci_api_ref`` digest.  At evaluation time a non-manifest authenticated lookup reads
+the exact job, its workflow run, and the policy-selected workflow file at the synthetic
+``checkout_oid``.  PASS requires exact equality with the embedded observation, terminal
+``success`` for both job and run, and equality between the job conclusion and the
+surrounding manifest conclusion.  A completed non-success result or authenticated mismatch
+is ``FAIL``; an unavailable lookup or nonterminal result is ``INCOMPLETE``.
+
+The policy freezes each required workflow's numeric GitHub workflow ID, repository path,
+and raw source SHA-256.  The authenticated run must match that ID/path plus its name,
+pull-request event, candidate head, run ID and attempt.  The workflow source is fetched at
+the actual checkout commit rather than a mutable branch ref and must match the frozen path
+and digest; the Git blob OID and bounded byte size are retained.  Thus a candidate cannot
+keep expected check labels while replacing the reviewed jobs with no-op workflow content.
+
 Do **not** assume a workflow API ``head_sha`` or PR-head field equals the commit actually
 checked out by ``actions/checkout``. Required workflows need bounded attestation/log/artifact
 or an equivalent authoritative source that proves the checked commit/tree/base/candidate.
@@ -1161,8 +1178,9 @@ PASS requires **all** of:
 #. final substantive review is clean for that exact candidate against the exact protected
    base bound to the final integration generation;
 #. required GitHub Actions checks are green and attest the exact candidate/base integration
-   object/tree actually checked, and every embedded artifact observation equals a live
-   bounded bearer-authenticated GitHub REST response;
+   object/tree actually checked; every embedded artifact and CI observation equals a live
+   bounded bearer-authenticated GitHub REST response; and authenticated job/run conclusions
+   plus exact-checkout workflow ID/path/source match the frozen policy;
 #. final protected base at merge equals the reviewed/tested integration base;
 #. hosted merge result independently proves an allowed merge-method relationship to that
    base/candidate and ``result_tree_oid == expected_integration_tree_oid``;
@@ -1415,6 +1433,12 @@ Any implementation of evidence assembler/evaluator should have deterministic tes
 * embedded artifact/API/archive values are internally consistent but differ from the live
   authenticated GitHub artifact endpoint -> FAIL;
 * authenticated GitHub artifact lookup is unavailable -> INCOMPLETE, never PASS;
+* manifest says success but the authenticated exact job or workflow run is non-success ->
+  FAIL;
+* authenticated job/run lookup is unavailable or still nonterminal -> INCOMPLETE, never
+  PASS;
+* authenticated workflow ID/path or exact-checkout source digest differs from the frozen
+  reviewed profile -> FAIL;
 * owner approval bound to a different run, policy or evidence projection -> INCOMPLETE;
 * CI green on old candidate/integration generation only -> INCOMPLETE;
 * workflow status names final candidate but actual checkout/tree is unbound/unavailable ->
@@ -1581,7 +1605,8 @@ block the completed repository implementation.
 #. Add evaluator fixtures/property tests including moved-head, moved-base, checkout-tree and
    stale-generation cases.
 #. Ensure the normal reviewed GitHub CI path can attest exact candidate/base/actual-checkout
-   commit/tree/parents required for Phase 10; if not, acceptance readiness remains
+   commit/tree/parents, authenticate the terminal job/run result, and bind the exact
+   workflow definition required for Phase 10; if not, acceptance readiness remains
    ``INCOMPLETE`` until that support is added through ordinary repository development.
 #. Add an acceptance-run operator/reviewer procedure referencing existing semantic Tools.
 #. Verify Phase 3-9 implementation/promotion exits on real selected Pi.

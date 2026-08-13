@@ -18,6 +18,7 @@ from jsonschema import Draft202012Validator, FormatChecker  # type: ignore[impor
 from binnacle.evaluation.digests import canonical_json_bytes, canonical_json_sha256, sha256_bytes
 from binnacle.evaluation.phase10_policy import (
     PHASE10_SCHEMA_PATH,
+    Phase10CiWorkflowProfile,
     Phase10Policy,
     load_phase10_policy,
 )
@@ -32,6 +33,13 @@ class ArtifactApiLookupUnavailable(RuntimeError):
 
 
 ArtifactApiLookup = Callable[[str, int], Mapping[str, Any] | None]
+
+
+class CiApiLookupUnavailable(RuntimeError):
+    """The authenticated GitHub job/run/workflow lookup could not complete."""
+
+
+CiApiLookup = Callable[[str, int, int, str, str], Mapping[str, Any] | None]
 
 
 class AcceptanceVerdict(StrEnum):
@@ -156,6 +164,7 @@ def evaluate_phase10_manifest(
     *,
     repo_root: Path,
     authenticated_artifact_api_lookup: ArtifactApiLookup | None = None,
+    authenticated_ci_api_lookup: CiApiLookup | None = None,
 ) -> AcceptanceReport:
     """Evaluate evidence without device effects, using a trusted live API reader when supplied."""
 
@@ -199,6 +208,7 @@ def evaluate_phase10_manifest(
             policy,
             findings,
             authenticated_artifact_api_lookup,
+            authenticated_ci_api_lookup,
         )
         _reject_reused_integration_evidence(integrations, final_integration, findings)
 
@@ -471,6 +481,7 @@ def _evaluate_integration(
     policy: Phase10Policy,
     findings: _Findings,
     authenticated_artifact_api_lookup: ArtifactApiLookup | None,
+    authenticated_ci_api_lookup: CiApiLookup | None,
 ) -> None:
     generation = cast(int, integration["generation"])
     prefix = f"/integration_generations/{generation - 1}"
@@ -507,6 +518,9 @@ def _evaluate_integration(
     observed_artifact_archives: set[str] = set()
     observed_artifact_api_ref_ids: set[str] = set()
     observed_artifact_api_ref_digests: set[str] = set()
+    observed_job_ids: set[int] = set()
+    observed_ci_api_ref_ids: set[str] = set()
+    observed_ci_api_ref_digests: set[str] = set()
     expected_tree = integration["expected_integration_tree_oid"]
     commit = _object(candidate["signed_commit"])
     integration_base_oid = cast(str, integration["protected_base_oid"])
@@ -532,6 +546,45 @@ def _evaluate_integration(
         artifact_archive_sha256 = cast(str, evidence["github_artifact_archive_sha256"])
         artifact_api_ref = _object(evidence["github_artifact_api_ref"])
         artifact_api_observation = _object(evidence["github_artifact_api_observation"])
+        job_id = cast(int, evidence["github_job_id"])
+        ci_api_ref = _object(evidence["github_ci_api_ref"])
+        ci_api_observation = _object(evidence["github_ci_api_observation"])
+        ci_api_identity = (_ref_id(ci_api_ref), cast(str, ci_api_ref["sha256"]))
+        if job_id in observed_job_ids:
+            findings.fail("ci_job_reused", f"{path}/github_job_id")
+        observed_job_ids.add(job_id)
+        if (
+            ci_api_identity[0] in observed_ci_api_ref_ids
+            or ci_api_identity[1] in observed_ci_api_ref_digests
+        ):
+            findings.fail("ci_job_reused", f"{path}/github_ci_api_ref")
+        observed_ci_api_ref_ids.add(ci_api_identity[0])
+        observed_ci_api_ref_digests.add(ci_api_identity[1])
+        if canonical_json_sha256(ci_api_observation) != ci_api_identity[1]:
+            findings.fail(
+                "ci_api_observation_digest_mismatch",
+                f"{path}/github_ci_api_ref/sha256",
+            )
+        workflow_profile = policy.required_ci_workflow_profiles.get(workflow)
+        if workflow_profile is not None:
+            _authenticate_ci_api_observation(
+                lookup=authenticated_ci_api_lookup,
+                repository=policy.repository,
+                job_id=job_id,
+                run_id=cast(int, evidence["run_id"]),
+                workflow_path=workflow_profile.path,
+                checkout_oid=cast(str, evidence["checkout_oid"]),
+                embedded=ci_api_observation,
+                path=path,
+                findings=findings,
+            )
+            _evaluate_ci_api_observation(
+                evidence=evidence,
+                observation=ci_api_observation,
+                workflow_profile=workflow_profile,
+                path=path,
+                findings=findings,
+            )
         artifact_api_identity = (
             _ref_id(artifact_api_ref),
             cast(str, artifact_api_ref["sha256"]),
@@ -680,6 +733,145 @@ def _evaluate_integration(
         required_jobs = set(policy.required_ci_jobs[workflow])
         if observed_jobs.get(workflow, set()) != required_jobs:
             findings.incomplete("required_ci_job_evidence_missing", f"{prefix}/ci_evidence")
+
+
+def _authenticate_ci_api_observation(
+    *,
+    lookup: CiApiLookup | None,
+    repository: str,
+    job_id: int,
+    run_id: int,
+    workflow_path: str,
+    checkout_oid: str,
+    embedded: dict[str, Any],
+    path: str,
+    findings: _Findings,
+) -> None:
+    """Compare retained CI facts with live job, run, and exact-workflow sources."""
+
+    if lookup is None:
+        findings.incomplete(
+            "ci_api_authentication_missing",
+            f"{path}/github_ci_api_observation",
+        )
+        return
+    try:
+        authenticated = lookup(repository, job_id, run_id, workflow_path, checkout_oid)
+    except CiApiLookupUnavailable:
+        findings.incomplete(
+            "ci_api_lookup_unavailable",
+            f"{path}/github_ci_api_observation",
+        )
+        return
+    if authenticated is None:
+        findings.fail("ci_api_record_not_found", f"{path}/github_ci_api_observation")
+        return
+    try:
+        authenticated_value = dict(authenticated)
+        canonical_json_sha256(authenticated_value)
+    except (TypeError, ValueError, RecursionError):
+        findings.fail(
+            "ci_api_authentication_invalid",
+            f"{path}/github_ci_api_observation",
+        )
+        return
+    if authenticated_value != embedded:
+        findings.fail(
+            "ci_api_authentication_mismatch",
+            f"{path}/github_ci_api_observation",
+        )
+
+
+def _evaluate_ci_api_observation(
+    *,
+    evidence: dict[str, Any],
+    observation: dict[str, Any],
+    workflow_profile: Phase10CiWorkflowProfile,
+    path: str,
+    findings: _Findings,
+) -> None:
+    """Bind authoritative CI state to the reviewed workflow source and manifest record."""
+
+    repository = cast(str, evidence["repository"])
+    job_id = cast(int, evidence["github_job_id"])
+    run_id = cast(int, evidence["run_id"])
+    run_attempt = cast(int, evidence["run_attempt"])
+    workflow_name = cast(str, evidence["workflow_name"])
+    candidate_oid = cast(str, evidence["candidate_oid"])
+    checkout_oid = cast(str, evidence["checkout_oid"])
+    job = _object(observation["job"])
+    workflow_run = _object(observation["workflow_run"])
+    workflow_source = _object(observation["workflow_source"])
+    if observation["repository"] != repository:
+        findings.fail("ci_api_metadata_mismatch", f"{path}/github_ci_api_observation/repository")
+    job_bindings = {
+        "id": job_id,
+        "run_id": run_id,
+        "run_attempt": run_attempt,
+        "workflow_name": workflow_name,
+        "name": evidence["job_name"],
+        "head_sha": candidate_oid,
+        "url": f"https://api.github.com/repos/{repository}/actions/jobs/{job_id}",
+        "check_run_url": f"https://api.github.com/repos/{repository}/check-runs/{job_id}",
+    }
+    if any(job[name] != expected for name, expected in job_bindings.items()):
+        findings.fail("ci_job_api_metadata_mismatch", f"{path}/github_ci_api_observation/job")
+    if job["status"] != "completed":
+        findings.incomplete(
+            "ci_job_api_nonterminal", f"{path}/github_ci_api_observation/job/status"
+        )
+    elif job["conclusion"] != "success":
+        findings.fail(
+            "ci_job_api_not_successful",
+            f"{path}/github_ci_api_observation/job/conclusion",
+        )
+    expected_manifest_conclusion = (
+        "success"
+        if job["status"] == "completed" and job["conclusion"] == "success"
+        else "failure"
+        if job["status"] == "completed" and job["conclusion"] is not None
+        else "uncertain"
+    )
+    if evidence["conclusion"] != expected_manifest_conclusion:
+        findings.fail("ci_job_conclusion_mismatch", f"{path}/conclusion")
+
+    run_bindings = {
+        "id": run_id,
+        "run_attempt": run_attempt,
+        "workflow_id": workflow_profile.workflow_id,
+        "name": workflow_name,
+        "path": workflow_profile.path,
+        "event": evidence["event_name"],
+        "head_sha": candidate_oid,
+        "url": f"https://api.github.com/repos/{repository}/actions/runs/{run_id}",
+        "jobs_url": f"https://api.github.com/repos/{repository}/actions/runs/{run_id}/jobs",
+    }
+    if any(workflow_run[name] != expected for name, expected in run_bindings.items()):
+        findings.fail(
+            "ci_workflow_run_api_metadata_mismatch",
+            f"{path}/github_ci_api_observation/workflow_run",
+        )
+    if workflow_run["status"] != "completed":
+        findings.incomplete(
+            "ci_workflow_run_api_nonterminal",
+            f"{path}/github_ci_api_observation/workflow_run/status",
+        )
+    elif workflow_run["conclusion"] != "success":
+        findings.fail(
+            "ci_workflow_run_api_not_successful",
+            f"{path}/github_ci_api_observation/workflow_run/conclusion",
+        )
+
+    source_bindings = {
+        "path": workflow_profile.path,
+        "ref": checkout_oid,
+        "sha256": workflow_profile.source_sha256,
+    }
+    if any(workflow_source[name] != expected for name, expected in source_bindings.items()):
+        findings.fail(
+            "ci_workflow_source_identity_mismatch",
+            f"{path}/github_ci_api_observation/workflow_source",
+        )
 
 
 def _authenticate_artifact_api_observation(
@@ -1253,6 +1445,8 @@ __all__ = [
     "AcceptanceVerdict",
     "ArtifactApiLookup",
     "ArtifactApiLookupUnavailable",
+    "CiApiLookup",
+    "CiApiLookupUnavailable",
     "create_phase10_skeleton",
     "evaluate_phase10_manifest",
     "phase10_local_check_evidence_sha256",

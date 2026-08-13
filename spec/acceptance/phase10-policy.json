@@ -1,9 +1,10 @@
 {
-  "acceptance_schema_sha256": "4233ed506f8fcfda211a2c213b0af8dd1b4c1a59b903116de084869a2f6d13c4",
+  "acceptance_schema_sha256": "cafa0b0c2c0c73a21fcfef2ec804f62daa5cf1e1602630a765070166423e78de",
   "allowed_merge_methods": [
     "squash"
   ],
   "artifact_api_authentication": "live-bearer-github-rest-v2022-11-28",
+  "ci_api_authentication": "live-bearer-github-rest-v2022-11-28",
   "ci_attestation_collector_commit_oid": "668a3b69af386894a6eedcd740634589b6bb1ccc",
   "ci_attestation_collector_sha256": "96dc2225a3a12e18341656b2cd5ea05b9458a52a9cb7fa77f98d84ce844f8ec7",
   "ci_attestation_schema_sha256": "6b7d2c6dff03870790dfb3e4ee6be5c93399e61d1bc7c67afea2969ea91e2760",
@@ -16,7 +17,8 @@
     "github_api_token_bytes_max": 4096,
     "integration_generations_max": 64,
     "manifest_bytes_max": 1048576,
-    "security_checks_max": 32
+    "security_checks_max": 32,
+    "workflow_source_bytes_max": 32768
   },
   "plan_version": "phase10-self-hosting-acceptance-v1",
   "policy_id": "binnacle-phase10-acceptance-v1",
@@ -105,6 +107,18 @@
       "Test Python 3.12",
       "Test Python 3.13"
     ]
+  },
+  "required_ci_workflow_profiles": {
+    "Contract validation": {
+      "path": ".github/workflows/contracts.yml",
+      "source_sha256": "b074c669e4b72c7b97523b41d9bc6cb6fa68feb787d4f3e7fcc5251912cf0105",
+      "workflow_id": 330240211
+    },
+    "Python CI": {
+      "path": ".github/workflows/python.yml",
+      "source_sha256": "3e432f34918e7ce168b445bde62eb4deeeb296eabca14c34ef2e6dbd928a085d",
+      "workflow_id": 331525151
+    }
   },
   "required_security_checks": [
     "audit_and_fences_closed",

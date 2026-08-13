@@ -18,6 +18,7 @@ from binnacle.evaluation.phase10_acceptance import (
     AcceptanceReport,
     AcceptanceVerdict,
     ArtifactApiLookup,
+    CiApiLookup,
     create_phase10_skeleton,
     phase10_local_check_evidence_sha256,
     phase10_reviewed_evidence_sha256,
@@ -72,6 +73,50 @@ def _artifact_api_lookup_from(manifest: dict[str, Any]) -> ArtifactApiLookup:
     return lookup
 
 
+def _ci_api_lookup_from(manifest: dict[str, Any]) -> CiApiLookup:
+    observations: dict[tuple[str, int, int, str, str], dict[str, Any]] = {}
+    for integration in manifest.get("integration_generations", []):
+        if not isinstance(integration, dict):
+            continue
+        for evidence in integration.get("ci_evidence", []):
+            if not isinstance(evidence, dict):
+                continue
+            observation = evidence.get("github_ci_api_observation")
+            workflow_source = (
+                observation.get("workflow_source") if isinstance(observation, dict) else None
+            )
+            key = (
+                evidence.get("repository"),
+                evidence.get("github_job_id"),
+                evidence.get("run_id"),
+                workflow_source.get("path") if isinstance(workflow_source, dict) else None,
+                evidence.get("checkout_oid"),
+            )
+            if (
+                isinstance(key[0], str)
+                and isinstance(key[1], int)
+                and not isinstance(key[1], bool)
+                and isinstance(key[2], int)
+                and not isinstance(key[2], bool)
+                and isinstance(key[3], str)
+                and isinstance(key[4], str)
+                and isinstance(observation, dict)
+            ):
+                observations[cast(tuple[str, int, int, str, str], key)] = copy.deepcopy(observation)
+
+    def lookup(
+        repository: str,
+        job_id: int,
+        run_id: int,
+        workflow_path: str,
+        checkout_oid: str,
+    ) -> dict[str, Any] | None:
+        observation = observations.get((repository, job_id, run_id, workflow_path, checkout_oid))
+        return copy.deepcopy(observation) if observation is not None else None
+
+    return lookup
+
+
 def evaluate_phase10_manifest(
     manifest: dict[str, Any],
     *,
@@ -83,6 +128,7 @@ def evaluate_phase10_manifest(
         manifest,
         repo_root=repo_root,
         authenticated_artifact_api_lookup=_artifact_api_lookup_from(manifest),
+        authenticated_ci_api_lookup=_ci_api_lookup_from(manifest),
     )
 
 
@@ -214,9 +260,9 @@ def test_phase10_policy_is_frozen_and_canonical(repo_root: Path) -> None:
     policy = load_phase10_policy(repo_root)
 
     assert policy.policy_id == "binnacle-phase10-acceptance-v1"
-    assert policy.sha256 == "af960ca59ef6a9e0eefdf527c364748f20fed4bd5e361c741f7acd44fca92520"
+    assert policy.sha256 == "57ea3cf7e6cd6bff05de61d1a88dac0680cfc8850126d71c2e16865beb3f78ac"
     assert policy.acceptance_schema_sha256 == (
-        "4233ed506f8fcfda211a2c213b0af8dd1b4c1a59b903116de084869a2f6d13c4"
+        "cafa0b0c2c0c73a21fcfef2ec804f62daa5cf1e1602630a765070166423e78de"
     )
     assert policy.ci_attestation_schema_sha256 == (
         "6b7d2c6dff03870790dfb3e4ee6be5c93399e61d1bc7c67afea2969ea91e2760"
@@ -230,15 +276,31 @@ def test_phase10_policy_is_frozen_and_canonical(repo_root: Path) -> None:
     assert policy.repository == "grammy-jiang/binnacle"
     assert policy.protected_branch_ref == "refs/heads/master"
     assert policy.artifact_api_authentication == "live-bearer-github-rest-v2022-11-28"
+    assert policy.ci_api_authentication == "live-bearer-github-rest-v2022-11-28"
     assert policy.limits["github_api_response_bytes_max"] == 65_536
     assert policy.limits["github_api_token_bytes_max"] == 4_096
     assert policy.limits["github_api_timeout_seconds"] == 15
+    assert policy.limits["workflow_source_bytes_max"] == 32_768
     assert policy.allowed_merge_methods == ("squash",)
     assert policy.required_ci_jobs["Python CI"] == (
         "Code, contract, dependency, and document quality",
         "Test Python 3.11",
         "Test Python 3.12",
         "Test Python 3.13",
+    )
+    assert policy.required_ci_workflow_profiles["Contract validation"].workflow_id == 330240211
+    assert policy.required_ci_workflow_profiles["Contract validation"].path == (
+        ".github/workflows/contracts.yml"
+    )
+    assert policy.required_ci_workflow_profiles["Contract validation"].source_sha256 == (
+        "b074c669e4b72c7b97523b41d9bc6cb6fa68feb787d4f3e7fcc5251912cf0105"
+    )
+    assert policy.required_ci_workflow_profiles["Python CI"].workflow_id == 331525151
+    assert policy.required_ci_workflow_profiles["Python CI"].path == (
+        ".github/workflows/python.yml"
+    )
+    assert policy.required_ci_workflow_profiles["Python CI"].source_sha256 == (
+        "3e432f34918e7ce168b445bde62eb4deeeb296eabca14c34ef2e6dbd928a085d"
     )
     assert tuple(policy.required_local_check_profiles) == (
         "pre-commit-all-files",
@@ -280,6 +342,58 @@ def test_pass_manifest_requires_authenticated_artifact_api_source(repo_root: Pat
     assert "ci_artifact_api_authentication_missing" in {finding.code for finding in report.findings}
 
 
+def test_pass_manifest_requires_authenticated_ci_api_source(repo_root: Path) -> None:
+    manifest = _pass_manifest(repo_root)
+
+    report = _evaluate_phase10_manifest(
+        manifest,
+        repo_root=repo_root,
+        authenticated_artifact_api_lookup=_artifact_api_lookup_from(manifest),
+    )
+
+    assert report.verdict is AcceptanceVerdict.INCOMPLETE
+    assert "ci_api_authentication_missing" in {finding.code for finding in report.findings}
+
+
+def test_manifest_success_claim_cannot_override_authenticated_failed_job(
+    repo_root: Path,
+) -> None:
+    manifest = _pass_manifest(repo_root)
+    evidence = manifest["integration_generations"][0]["ci_evidence"][0]
+    observation = evidence["github_ci_api_observation"]
+    observation["job"]["conclusion"] = "failure"
+    observation["workflow_run"]["conclusion"] = "failure"
+    evidence["github_ci_api_ref"]["sha256"] = canonical_json_sha256(observation)
+    manifest["owner_review"]["reviewed_evidence_sha256"] = phase10_reviewed_evidence_sha256(
+        manifest
+    )
+
+    report = evaluate_phase10_manifest(manifest, repo_root=repo_root)
+
+    assert report.verdict is AcceptanceVerdict.FAIL
+    assert {finding.code for finding in report.findings} >= {
+        "ci_job_api_not_successful",
+        "ci_job_conclusion_mismatch",
+        "ci_workflow_run_api_not_successful",
+    }
+
+
+def test_authenticated_workflow_source_must_match_frozen_profile(repo_root: Path) -> None:
+    manifest = _pass_manifest(repo_root)
+    evidence = manifest["integration_generations"][0]["ci_evidence"][0]
+    observation = evidence["github_ci_api_observation"]
+    observation["workflow_source"]["sha256"] = "8" * 64
+    evidence["github_ci_api_ref"]["sha256"] = canonical_json_sha256(observation)
+    manifest["owner_review"]["reviewed_evidence_sha256"] = phase10_reviewed_evidence_sha256(
+        manifest
+    )
+
+    report = evaluate_phase10_manifest(manifest, repo_root=repo_root)
+
+    assert report.verdict is AcceptanceVerdict.FAIL
+    assert "ci_workflow_source_identity_mismatch" in {finding.code for finding in report.findings}
+
+
 def test_fabricated_artifact_tuple_cannot_replace_authenticated_api_truth(
     repo_root: Path,
 ) -> None:
@@ -300,16 +414,17 @@ def test_fabricated_artifact_tuple_cannot_replace_authenticated_api_truth(
         manifest,
         repo_root=repo_root,
         authenticated_artifact_api_lookup=_artifact_api_lookup_from(trusted_manifest),
+        authenticated_ci_api_lookup=_ci_api_lookup_from(trusted_manifest),
     )
 
     assert report.verdict is AcceptanceVerdict.FAIL
     assert "ci_artifact_api_not_found" in {finding.code for finding in report.findings}
 
 
-@pytest.mark.parametrize("case_index", range(42))
+@pytest.mark.parametrize("case_index", range(44))
 def test_phase10_evaluator_fixture(case_index: int, repo_root: Path) -> None:
     cases = _cases(repo_root)
-    assert len(cases) == 42
+    assert len(cases) == 44
     case = cases[case_index]
     manifest = _pass_manifest(repo_root)
     _apply_case(manifest, case)
@@ -790,11 +905,17 @@ def test_phase10_policy_rejects_missing_duplicate_and_contradictory_sources(
         {**policy, "schema_version": "2.0"},
         {**policy, "plan_version": "unknown"},
         {**policy, "allowed_merge_methods": ["octopus"]},
+        {**policy, "ci_api_authentication": "manifest-asserted"},
         {**policy, "required_workflows": ["Python CI"]},
         {**policy, "required_security_checks": []},
         {**policy, "required_local_check_profiles": {}},
         {**policy, "required_local_check_profiles": {"tox-invalid": {"argv": [], "covers": []}}},
         {**policy, "limits": {**policy["limits"], "manifest_bytes_max": 1_048_577}},
+        {
+            **policy,
+            "limits": {**policy["limits"], "workflow_source_bytes_max": 32_769},
+        },
+        {**policy, "required_ci_workflow_profiles": {}},
         {**policy, "policy_id": ""},
         {**policy, "repository": "not-a-repository"},
         {**policy, "protected_branch_ref": "master"},
@@ -818,6 +939,10 @@ def test_phase10_policy_rejects_missing_duplicate_and_contradictory_sources(
         target = tmp_path / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(repo_root / relative, target)
+    for workflow_profile in load_phase10_policy(repo_root).required_ci_workflow_profiles.values():
+        target = tmp_path / workflow_profile.path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(repo_root / workflow_profile.path, target)
     policy_path.write_text(json.dumps(policy), encoding="utf-8")
     assert load_phase10_policy(tmp_path).sha256 == load_phase10_policy(repo_root).sha256
 

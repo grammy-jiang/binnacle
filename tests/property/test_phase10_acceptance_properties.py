@@ -15,6 +15,7 @@ from binnacle.evaluation.phase10_acceptance import (
     AcceptanceReport,
     AcceptanceVerdict,
     ArtifactApiLookup,
+    CiApiLookup,
     phase10_local_check_evidence_sha256,
     phase10_reviewed_evidence_sha256,
 )
@@ -52,6 +53,32 @@ def _artifact_api_lookup_from(manifest: dict[str, Any]) -> ArtifactApiLookup:
     return lookup
 
 
+def _ci_api_lookup_from(manifest: dict[str, Any]) -> CiApiLookup:
+    observations = {
+        (
+            evidence["repository"],
+            evidence["github_job_id"],
+            evidence["run_id"],
+            evidence["github_ci_api_observation"]["workflow_source"]["path"],
+            evidence["checkout_oid"],
+        ): copy.deepcopy(evidence["github_ci_api_observation"])
+        for integration in manifest["integration_generations"]
+        for evidence in integration["ci_evidence"]
+    }
+
+    def lookup(
+        repository: str,
+        job_id: int,
+        run_id: int,
+        workflow_path: str,
+        checkout_oid: str,
+    ) -> dict[str, Any] | None:
+        observation = observations.get((repository, job_id, run_id, workflow_path, checkout_oid))
+        return copy.deepcopy(observation) if observation is not None else None
+
+    return lookup
+
+
 def evaluate_phase10_manifest(
     manifest: dict[str, Any],
     *,
@@ -61,6 +88,7 @@ def evaluate_phase10_manifest(
         manifest,
         repo_root=repo_root,
         authenticated_artifact_api_lookup=_artifact_api_lookup_from(manifest),
+        authenticated_ci_api_lookup=_ci_api_lookup_from(manifest),
     )
 
 
@@ -233,6 +261,7 @@ def test_artifact_api_observation_must_bind_downloaded_archive_metadata(field: s
         manifest,
         repo_root=REPO_ROOT,
         authenticated_artifact_api_lookup=_artifact_api_lookup_from(trusted_manifest),
+        authenticated_ci_api_lookup=_ci_api_lookup_from(trusted_manifest),
     )
 
     assert report.verdict is AcceptanceVerdict.FAIL

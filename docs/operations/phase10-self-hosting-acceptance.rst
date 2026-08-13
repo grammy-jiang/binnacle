@@ -23,9 +23,10 @@ real ChatGPT-controlled run on the selected development Pi.  Until that campaign
 the truthful live status is ``INCOMPLETE``.  Repository implementation must not invent,
 simulate, or pre-approve that evidence.
 
-The evaluator executes no device, GitHub, credential, package, service, or restart effect.
-It only checks a bounded manifest against repository-owned relationships.  The manifest
-and referenced evidence are evidence, not authority.
+The evaluator executes no device, GitHub mutation, package, service, or restart effect.
+When a private token file is supplied, it performs only bounded, fixed-host GitHub REST
+reads needed to authenticate retained artifact, job, workflow-run, and workflow-source
+facts.  The manifest and referenced evidence are evidence, not authority.
 
 Repository-owned acceptance assets
 -----------------------------------
@@ -49,10 +50,11 @@ The frozen implementation consists of:
 * the checked-in positive, negative, and property-test fixtures under
   ``tests/fixtures/acceptance`` and ``tests``.
 
-The policy includes the canonical digests of both schemas plus the exact collector commit
-and collector-bundle digest.  Its own SHA-256 is part of every run and integration
-generation.  A policy, schema, or collector change makes earlier evidence stale; do not
-edit a retained manifest merely to replace its policy hash.
+The policy includes the canonical digests of both schemas, the exact collector commit and
+collector-bundle digest, and the immutable GitHub workflow ID/path/source-SHA-256 profile
+for every required workflow.  Its own SHA-256 is part of every run and integration
+generation.  A policy, schema, collector, or reviewed workflow-source change makes earlier
+evidence stale; do not edit a retained manifest merely to replace its policy hash.
 
 Repository validation
 ---------------------
@@ -130,16 +132,35 @@ The embedded observation and its hash are not themselves authentication.  Final
 evaluation must receive a bounded mode-``0600`` GitHub bearer-token file and query the
 numeric artifact ID live through fixed ``api.github.com`` TLS with REST version
 ``2022-11-28``.  The evaluator sanitizes that non-manifest response to the same closed
-fields and requires exact equality.  A live 404 is a failure; unavailable authentication
-or transport is ``INCOMPLETE``.  Never place the token in the manifest, evidence reference,
-report, command output, or repository.
+fields and requires exact equality.
+
+The same rule applies to the later job outcome and workflow definition.  Each CI record
+retains a numeric ``github_job_id`` and a closed ``github_ci_api_observation`` whose
+canonical digest is ``github_ci_api_ref``.  Final evaluation independently reads:
+
+* that exact Actions job by numeric ID;
+* its exact workflow run by run ID; and
+* the policy-selected workflow path through the Contents API at the actual synthetic
+  ``checkout_oid``, not at a mutable branch name or PR head.
+
+The authenticated job must match the recorded repository, run/attempt, workflow/job names,
+candidate head and canonical URLs and must be terminal ``success``.  Its conclusion is the
+authority for the manifest ``conclusion``; an early uploaded attestation cannot make a
+later failed job green.  The authenticated run must match the frozen numeric workflow ID,
+name/path, pull-request event, candidate head and run/attempt and must also be terminal
+``success``.  The exact-revision workflow source must match the frozen path and raw
+SHA-256; its Git blob OID and bounded byte size are retained for diagnosis.
+
+A live 404 or authenticated mismatch is a failure.  A nonterminal job/run or unavailable
+authentication/transport is ``INCOMPLETE``.  Never place the token in the manifest,
+evidence reference, report, command output, or repository.
 
 Every workflow/job/run/attempt, repository/event, collector, candidate/base, GitHub SHA,
 checkout OID/tree/parents, and checkout-kind field in the surrounding CI record must equal
-that archived attestation.  Artifact API references, numeric IDs, archive digests, and
-attestation digests must be distinct per required job; copying one uploaded artifact under
-another label or into a later integration generation is a failure.  Independently observe
-the GitHub job conclusion for that same run ID and attempt.
+that archived attestation.  Artifact and CI API references, numeric artifact/job IDs,
+archive digests, and attestation digests must be distinct per required job; copying one
+observation or uploaded artifact under another label or into a later integration
+generation is a failure.
 
 Live campaign prerequisites
 ---------------------------
@@ -219,7 +240,8 @@ candidate OID, protected-base OID, expected integration tree, and policy SHA-256
 
 * substantive review explicitly bound to that candidate and protected base;
 * zero unresolved actionable findings; and
-* every exact required workflow/job result plus its checkout-attestation artifact.
+* every exact required workflow/job result, authenticated terminal conclusion, reviewed
+  exact-revision workflow source, and checkout-attestation artifact.
 
 Follow the final signed candidate's parent through every immediately preceding candidate
 generation to its lineage base.  Each generation must fully pass its own local-check,
@@ -334,7 +356,9 @@ The substantive reviewer verifies all of the following against independent sourc
   repository/ID/name/size/URL/expiry/archive/run/head bindings; each
   original ZIP digest and archived attestation is unique per required job, and the
   downloaded bytes reproduce the API digest, size, and embedded object;
-* GitHub job conclusions for the recorded run IDs and attempts;
+* each embedded CI API observation equals fresh bearer-authenticated job, workflow-run, and
+  exact-checkout workflow-source responses; job/run conclusions are terminal success, and
+  workflow ID/path/source SHA-256 equal the frozen policy profile;
 * lineage-aware same-base signed-tree equality, merge tree/parent/provenance, exact local
   update, and the complete frozen local check profile at both candidate and merged
   identities, with separate canonical ``evidence_binding_sha256`` values, immutable raw

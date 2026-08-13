@@ -842,6 +842,212 @@
         "workflow_run"
       ]
     },
+    "githubCiApiObservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "repository": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 256,
+          "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+        },
+        "job": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "run_id": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "run_attempt": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000
+            },
+            "workflow_name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "head_sha": {
+              "$ref": "#/$defs/oid"
+            },
+            "status": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 32,
+              "pattern": "^[a-z_]+$"
+            },
+            "conclusion": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 32,
+                  "pattern": "^[a-z_]+$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "url": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024
+            },
+            "check_run_url": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024
+            }
+          },
+          "required": [
+            "id",
+            "run_id",
+            "run_attempt",
+            "workflow_name",
+            "name",
+            "head_sha",
+            "status",
+            "conclusion",
+            "url",
+            "check_run_url"
+          ]
+        },
+        "workflow_run": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "run_attempt": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000
+            },
+            "workflow_id": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "path": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256,
+              "pattern": "^\\.github/workflows/[A-Za-z0-9][A-Za-z0-9_.-]*\\.ya?ml$"
+            },
+            "event": {
+              "const": "pull_request"
+            },
+            "head_sha": {
+              "$ref": "#/$defs/oid"
+            },
+            "status": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 32,
+              "pattern": "^[a-z_]+$"
+            },
+            "conclusion": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 32,
+                  "pattern": "^[a-z_]+$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "url": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024
+            },
+            "jobs_url": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024
+            }
+          },
+          "required": [
+            "id",
+            "run_attempt",
+            "workflow_id",
+            "name",
+            "path",
+            "event",
+            "head_sha",
+            "status",
+            "conclusion",
+            "url",
+            "jobs_url"
+          ]
+        },
+        "workflow_source": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "path": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256,
+              "pattern": "^\\.github/workflows/[A-Za-z0-9][A-Za-z0-9_.-]*\\.ya?ml$"
+            },
+            "ref": {
+              "$ref": "#/$defs/oid"
+            },
+            "git_blob_oid": {
+              "$ref": "#/$defs/oid"
+            },
+            "size_in_bytes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 32768
+            },
+            "sha256": {
+              "$ref": "#/$defs/digest"
+            }
+          },
+          "required": [
+            "path",
+            "ref",
+            "git_blob_oid",
+            "size_in_bytes",
+            "sha256"
+          ]
+        }
+      },
+      "required": [
+        "repository",
+        "job",
+        "workflow_run",
+        "workflow_source"
+      ]
+    },
     "ciEvidence": {
       "type": "object",
       "additionalProperties": false,
@@ -949,6 +1155,17 @@
           "minLength": 1,
           "maxLength": 65536,
           "pattern": "^[A-Za-z0-9+/]+={0,2}$"
+        },
+        "github_job_id": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "github_ci_api_ref": {
+          "$ref": "#/$defs/evidenceRef"
+        },
+        "github_ci_api_observation": {
+          "$ref": "#/$defs/githubCiApiObservation"
         }
       },
       "required": [
@@ -977,7 +1194,10 @@
         "github_artifact_id",
         "github_artifact_name",
         "github_artifact_archive_sha256",
-        "github_artifact_archive_base64"
+        "github_artifact_archive_base64",
+        "github_job_id",
+        "github_ci_api_ref",
+        "github_ci_api_observation"
       ]
     },
     "integrationGeneration": {

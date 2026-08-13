@@ -94,6 +94,21 @@
           "operation": "replace",
           "path": "/integration_generations/0/ci_evidence/0/github_artifact_api_ref/sha256",
           "value": "88aa5dc3833204ec2cca4b357de903c9cda2d0922d728dda5c45891c72cb3bbf"
+        },
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/0/github_ci_api_observation/job/head_sha",
+          "value": "8888888888888888888888888888888888888888"
+        },
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/0/github_ci_api_observation/workflow_run/head_sha",
+          "value": "8888888888888888888888888888888888888888"
+        },
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/0/github_ci_api_ref/sha256",
+          "value": "67f8f13330dad30b1aa59375e67969b9caab0857b0b79b2475a0e5a8072575ce"
         }
       ],
       "expected": "INCOMPLETE",
@@ -489,6 +504,32 @@
       "value": "8888888888888888888888888888888888888888",
       "expected": "FAIL",
       "code": "local_check_evidence_binding_mismatch"
+    },
+    {
+      "id": "ci-job-conclusion-mismatch-fails",
+      "operation": "replace",
+      "path": "/integration_generations/0/ci_evidence/0/conclusion",
+      "value": "failure",
+      "expected": "FAIL",
+      "code": "ci_job_conclusion_mismatch"
+    },
+    {
+      "id": "ci-workflow-source-identity-mismatch-fails",
+      "operation": "batch",
+      "operations": [
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/0/github_ci_api_observation/workflow_source/sha256",
+          "value": "8888888888888888888888888888888888888888888888888888888888888888"
+        },
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/0/github_ci_api_ref/sha256",
+          "value": "d7b1c3915301adc543cc2bcea77a02628554ed2e028ed4c0a4cf5f5fcfea0acb"
+        }
+      ],
+      "expected": "FAIL",
+      "code": "ci_workflow_source_identity_mismatch"
     }
   ]
 }

@@ -1316,7 +1316,21 @@ def validate_phase10_acceptance_contract() -> None:
         fail("Phase 10 policy protected branch differs from refs/heads/master")
     if policy.artifact_api_authentication != "live-bearer-github-rest-v2022-11-28":
         fail("Phase 10 policy does not require a live authenticated artifact API source")
-    artifact_reader_source = (ROOT / "scripts/phase10_acceptance.py").read_text(encoding="utf-8")
+    if policy.ci_api_authentication != "live-bearer-github-rest-v2022-11-28":
+        fail("Phase 10 policy does not require a live authenticated CI API source")
+    expected_workflow_profiles = {
+        "Contract validation": (330240211, ".github/workflows/contracts.yml"),
+        "Python CI": (331525151, ".github/workflows/python.yml"),
+    }
+    observed_workflow_profiles = {
+        workflow: (profile.workflow_id, profile.path)
+        for workflow, profile in policy.required_ci_workflow_profiles.items()
+    }
+    if observed_workflow_profiles != expected_workflow_profiles:
+        fail("Phase 10 policy workflow identities differ from the reviewed profiles")
+    artifact_reader_source = (ROOT / "scripts/phase10_acceptance.py").read_text(
+        encoding="utf-8"
+    ) + (ROOT / "src/binnacle/evaluation/phase10_acceptance.py").read_text(encoding="utf-8")
     artifact_reader_markers = (
         'GITHUB_API_HOST = "api.github.com"',
         '"Authorization": f"Bearer {token}"',
@@ -1325,6 +1339,11 @@ def validate_phase10_acceptance_contract() -> None:
         'evaluate.add_argument("--github-token-file", type=Path, default=None)',
         "metadata.st_uid != os.geteuid()",
         "response.read(response_bytes_max + 1)",
+        'path=f"/repos/{repository}/actions/jobs/{job_id}"',
+        'path=f"/repos/{repository}/actions/runs/{run_id}"',
+        'path=f"/repos/{repository}/contents/{encoded_path}?ref={checkout_oid}"',
+        'job["conclusion"] != "success"',
+        'workflow_run["conclusion"] != "success"',
     )
     for marker in artifact_reader_markers:
         if marker not in artifact_reader_source:
@@ -1371,9 +1390,29 @@ def validate_phase10_acceptance_contract() -> None:
         or set(artifact_observation.get("properties", {})) != expected_artifact_observation_fields
     ):
         fail("Phase 10 run schema does not close the authenticated artifact API observation")
+    ci_api_observation = definitions.get("githubCiApiObservation", {})
+    expected_ci_api_observation_fields = {
+        "repository",
+        "job",
+        "workflow_run",
+        "workflow_source",
+    }
+    if (
+        not isinstance(ci_api_observation, dict)
+        or ci_api_observation.get("additionalProperties") is not False
+        or set(ci_api_observation.get("required", [])) != expected_ci_api_observation_fields
+        or set(ci_api_observation.get("properties", {})) != expected_ci_api_observation_fields
+    ):
+        fail("Phase 10 run schema does not close the authenticated CI API observation")
     ci_evidence_schema = definitions.get("ciEvidence", {})
     if "github_artifact_api_observation" not in ci_evidence_schema.get("required", []):
         fail("Phase 10 CI evidence does not require authenticated artifact API metadata")
+    if not {
+        "github_job_id",
+        "github_ci_api_ref",
+        "github_ci_api_observation",
+    }.issubset(ci_evidence_schema.get("required", [])):
+        fail("Phase 10 CI evidence does not require authenticated job and workflow metadata")
     for check_definition in ("localCheck", "postMergeCheck"):
         check_schema = definitions.get(check_definition, {})
         if "evidence_binding_sha256" not in check_schema.get(
@@ -1399,6 +1438,13 @@ def validate_phase10_acceptance_contract() -> None:
         "evidence_reference_id_bytes_max": schema.get("$defs", {})
         .get("identifier", {})
         .get("maxLength"),
+        "workflow_source_bytes_max": schema.get("$defs", {})
+        .get("githubCiApiObservation", {})
+        .get("properties", {})
+        .get("workflow_source", {})
+        .get("properties", {})
+        .get("size_in_bytes", {})
+        .get("maximum"),
     }
     for name, schema_limit in expected_limits.items():
         if policy.limits.get(name) != schema_limit:
@@ -1473,11 +1519,36 @@ def validate_phase10_acceptance_contract() -> None:
         value = artifact_observations.get((repository, artifact_id))
         return value if isinstance(value, dict) else None
 
+    ci_api_observations = {
+        (
+            evidence.get("repository"),
+            evidence.get("github_job_id"),
+            evidence.get("run_id"),
+            evidence.get("github_ci_api_observation", {}).get("workflow_source", {}).get("path"),
+            evidence.get("checkout_oid"),
+        ): evidence.get("github_ci_api_observation")
+        for integration in manifest.get("integration_generations", [])
+        if isinstance(integration, dict)
+        for evidence in integration.get("ci_evidence", [])
+        if isinstance(evidence, dict)
+    }
+
+    def authenticated_ci_api_lookup(
+        repository: str,
+        job_id: int,
+        run_id: int,
+        workflow_path: str,
+        checkout_oid: str,
+    ) -> Mapping[str, Any] | None:
+        value = ci_api_observations.get((repository, job_id, run_id, workflow_path, checkout_oid))
+        return value if isinstance(value, dict) else None
+
     try:
         report = evaluate_phase10_manifest(
             manifest,
             repo_root=ROOT,
             authenticated_artifact_api_lookup=authenticated_artifact_api_lookup,
+            authenticated_ci_api_lookup=authenticated_ci_api_lookup,
         )
     except Exception as exc:  # noqa: BLE001 - aggregate validation failures
         fail(f"Phase 10 PASS fixture could not be evaluated: {exc}")
@@ -1507,6 +1578,8 @@ def validate_phase10_acceptance_contract() -> None:
         "runtime-restart-generation-mismatch-fails",
         "baseline-protected-base-mismatch-fails",
         "artifact-api-metadata-mismatch-fails",
+        "ci-job-conclusion-mismatch-fails",
+        "ci-workflow-source-identity-mismatch-fails",
         "candidate-lineage-disconnected-fails",
         "post-merge-check-reuses-candidate-evidence-fails",
         "post-merge-check-identity-digest-mismatch-fails",

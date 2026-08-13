@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import binascii
 import json
 import os
 import ssl
@@ -12,18 +14,21 @@ import sys
 from http.client import HTTPException, HTTPSConnection
 from pathlib import Path
 from typing import Any, cast
+from urllib.parse import quote
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_ROOT = ROOT / "src"
 if str(SOURCE_ROOT) not in sys.path:
     sys.path.insert(0, str(SOURCE_ROOT))
 
-from binnacle.evaluation.digests import canonical_json_bytes  # noqa: E402
+from binnacle.evaluation.digests import canonical_json_bytes, sha256_bytes  # noqa: E402
 from binnacle.evaluation.phase10_acceptance import (  # noqa: E402
     AcceptanceManifestError,
     AcceptanceVerdict,
     ArtifactApiLookup,
     ArtifactApiLookupUnavailable,
+    CiApiLookup,
+    CiApiLookupUnavailable,
     create_phase10_skeleton,
     evaluate_phase10_manifest,
     phase10_reviewed_evidence_sha256,
@@ -194,6 +199,195 @@ def _sanitize_artifact_api_observation(
     }
 
 
+def _fetch_authenticated_github_json(
+    *,
+    token: str,
+    path: str,
+    response_bytes_max: int,
+    timeout_seconds: int,
+) -> dict[str, Any] | None:
+    """Read one fixed-host GitHub REST JSON object without redirects or proxy routing."""
+
+    connection = HTTPSConnection(
+        GITHUB_API_HOST,
+        timeout=timeout_seconds,
+        context=ssl.create_default_context(),
+    )
+    try:
+        connection.request(
+            "GET",
+            path,
+            headers={
+                "Accept": "application/vnd.github+json",
+                "Authorization": f"Bearer {token}",
+                "User-Agent": "binnacle-phase10-acceptance",
+                "X-GitHub-Api-Version": "2022-11-28",
+            },
+        )
+        response = connection.getresponse()
+        if response.status == 404:
+            response.read(response_bytes_max + 1)
+            return None
+        if response.status != 200:
+            response.read(response_bytes_max + 1)
+            raise CiApiLookupUnavailable("authenticated GitHub CI lookup failed")
+        content_type = response.getheader("Content-Type", "")
+        raw = response.read(response_bytes_max + 1)
+        if len(raw) > response_bytes_max or not content_type.lower().startswith("application/json"):
+            raise CiApiLookupUnavailable("authenticated GitHub CI response is invalid")
+    except (OSError, TimeoutError, HTTPException, ssl.SSLError) as exc:
+        raise CiApiLookupUnavailable("authenticated GitHub CI lookup unavailable") from exc
+    finally:
+        connection.close()
+    try:
+        value = json.loads(raw, object_pairs_hook=_unique_object)
+    except (UnicodeError, ValueError, json.JSONDecodeError, RecursionError) as exc:
+        raise CiApiLookupUnavailable("authenticated GitHub CI response is invalid") from exc
+    if not isinstance(value, dict):
+        raise CiApiLookupUnavailable("authenticated GitHub CI response is invalid")
+    return cast(dict[str, Any], value)
+
+
+def _fetch_authenticated_ci_api_observation(
+    *,
+    token: str,
+    repository: str,
+    job_id: int,
+    run_id: int,
+    workflow_path: str,
+    checkout_oid: str,
+    response_bytes_max: int,
+    workflow_source_bytes_max: int,
+    timeout_seconds: int,
+) -> dict[str, Any] | None:
+    """Read the exact job, workflow run, and workflow source from GitHub REST."""
+
+    job = _fetch_authenticated_github_json(
+        token=token,
+        path=f"/repos/{repository}/actions/jobs/{job_id}",
+        response_bytes_max=response_bytes_max,
+        timeout_seconds=timeout_seconds,
+    )
+    run = _fetch_authenticated_github_json(
+        token=token,
+        path=f"/repos/{repository}/actions/runs/{run_id}",
+        response_bytes_max=response_bytes_max,
+        timeout_seconds=timeout_seconds,
+    )
+    encoded_path = quote(workflow_path, safe="/")
+    source = _fetch_authenticated_github_json(
+        token=token,
+        path=f"/repos/{repository}/contents/{encoded_path}?ref={checkout_oid}",
+        response_bytes_max=response_bytes_max,
+        timeout_seconds=timeout_seconds,
+    )
+    if job is None or run is None or source is None:
+        return None
+    return {
+        "repository": repository,
+        "job": _sanitize_ci_job_api_observation(job),
+        "workflow_run": _sanitize_ci_run_api_observation(run, repository=repository),
+        "workflow_source": _sanitize_workflow_source_api_observation(
+            source,
+            workflow_path=workflow_path,
+            checkout_oid=checkout_oid,
+            maximum=workflow_source_bytes_max,
+        ),
+    }
+
+
+def _sanitize_ci_job_api_observation(value: dict[str, Any]) -> dict[str, Any]:
+    integer_names = ("id", "run_id", "run_attempt")
+    string_names = (
+        "workflow_name",
+        "name",
+        "head_sha",
+        "status",
+        "url",
+        "check_run_url",
+    )
+    conclusion = value.get("conclusion")
+    if (
+        any(
+            isinstance(value.get(name), bool) or not isinstance(value.get(name), int)
+            for name in integer_names
+        )
+        or not all(isinstance(value.get(name), str) and value.get(name) for name in string_names)
+        or (conclusion is not None and (not isinstance(conclusion, str) or not conclusion))
+    ):
+        raise CiApiLookupUnavailable("authenticated GitHub job response is invalid")
+    return {
+        **{name: value[name] for name in integer_names},
+        **{name: value[name] for name in string_names},
+        "conclusion": conclusion,
+    }
+
+
+def _sanitize_ci_run_api_observation(
+    value: dict[str, Any],
+    *,
+    repository: str,
+) -> dict[str, Any]:
+    integer_names = ("id", "run_attempt", "workflow_id")
+    string_names = ("name", "path", "event", "head_sha", "status", "url", "jobs_url")
+    conclusion = value.get("conclusion")
+    api_repository = value.get("repository")
+    if (
+        any(
+            isinstance(value.get(name), bool) or not isinstance(value.get(name), int)
+            for name in integer_names
+        )
+        or not all(isinstance(value.get(name), str) and value.get(name) for name in string_names)
+        or (conclusion is not None and (not isinstance(conclusion, str) or not conclusion))
+        or not isinstance(api_repository, dict)
+        or api_repository.get("full_name") != repository
+    ):
+        raise CiApiLookupUnavailable("authenticated GitHub workflow-run response is invalid")
+    return {
+        **{name: value[name] for name in integer_names},
+        **{name: value[name] for name in string_names},
+        "conclusion": conclusion,
+    }
+
+
+def _sanitize_workflow_source_api_observation(
+    value: dict[str, Any],
+    *,
+    workflow_path: str,
+    checkout_oid: str,
+    maximum: int,
+) -> dict[str, Any]:
+    size = value.get("size")
+    content = value.get("content")
+    git_blob_oid = value.get("sha")
+    if (
+        value.get("type") != "file"
+        or value.get("encoding") != "base64"
+        or value.get("path") != workflow_path
+        or isinstance(size, bool)
+        or not isinstance(size, int)
+        or not 1 <= size <= maximum
+        or not isinstance(content, str)
+        or not isinstance(git_blob_oid, str)
+        or not git_blob_oid
+    ):
+        raise CiApiLookupUnavailable("authenticated GitHub workflow source is invalid")
+    try:
+        compact_content = "".join(content.split()).encode("ascii")
+        raw = base64.b64decode(compact_content, validate=True)
+    except (UnicodeEncodeError, ValueError, binascii.Error) as exc:
+        raise CiApiLookupUnavailable("authenticated GitHub workflow source is invalid") from exc
+    if len(raw) != size or len(raw) > maximum:
+        raise CiApiLookupUnavailable("authenticated GitHub workflow source is invalid")
+    return {
+        "path": workflow_path,
+        "ref": checkout_oid,
+        "git_blob_oid": git_blob_oid,
+        "size_in_bytes": size,
+        "sha256": sha256_bytes(raw),
+    }
+
+
 def _unique_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
     value: dict[str, object] = {}
     for key, item in pairs:
@@ -237,7 +431,6 @@ def _parser() -> argparse.ArgumentParser:
 
     policy = subparsers.add_parser("policy", help="Report the frozen evaluator policy identity.")
     policy.add_argument("--output", choices=("human", "json"), default="human")
-
     initialize = subparsers.add_parser(
         "initialize",
         help="Create a planned manifest without claiming unavailable live evidence.",
@@ -273,6 +466,7 @@ def main(argv: list[str] | None = None) -> int:
                 "schema_version": policy.schema_version,
                 "acceptance_schema_sha256": policy.acceptance_schema_sha256,
                 "artifact_api_authentication": policy.artifact_api_authentication,
+                "ci_api_authentication": policy.ci_api_authentication,
                 "ci_attestation_schema_sha256": policy.ci_attestation_schema_sha256,
                 "ci_attestation_collector_commit_oid": (policy.ci_attestation_collector_commit_oid),
                 "ci_attestation_collector_sha256": policy.ci_attestation_collector_sha256,
@@ -281,6 +475,14 @@ def main(argv: list[str] | None = None) -> int:
                 "allowed_merge_methods": list(policy.allowed_merge_methods),
                 "required_ci_jobs": {
                     workflow: list(jobs) for workflow, jobs in policy.required_ci_jobs.items()
+                },
+                "required_ci_workflow_profiles": {
+                    workflow: {
+                        "workflow_id": profile.workflow_id,
+                        "path": profile.path,
+                        "source_sha256": profile.source_sha256,
+                    }
+                    for workflow, profile in policy.required_ci_workflow_profiles.items()
                 },
                 "required_local_check_profiles": dict(policy.required_local_check_profiles),
                 "required_security_checks": list(policy.required_security_checks),
@@ -306,6 +508,7 @@ def main(argv: list[str] | None = None) -> int:
             maximum=policy.limits["manifest_bytes_max"],
         )
         artifact_api_lookup: ArtifactApiLookup | None = None
+        ci_api_lookup: CiApiLookup | None = None
         if args.github_token_file is not None:
             token = _read_github_token(
                 args.github_token_file,
@@ -326,15 +529,42 @@ def main(argv: list[str] | None = None) -> int:
 
             artifact_api_lookup = _lookup
 
+            def _ci_lookup(
+                repository: str,
+                job_id: int,
+                run_id: int,
+                workflow_path: str,
+                checkout_oid: str,
+            ) -> dict[str, Any] | None:
+                return _fetch_authenticated_ci_api_observation(
+                    token=token,
+                    repository=repository,
+                    job_id=job_id,
+                    run_id=run_id,
+                    workflow_path=workflow_path,
+                    checkout_oid=checkout_oid,
+                    response_bytes_max=policy.limits["github_api_response_bytes_max"],
+                    workflow_source_bytes_max=policy.limits["workflow_source_bytes_max"],
+                    timeout_seconds=policy.limits["github_api_timeout_seconds"],
+                )
+
+            ci_api_lookup = _ci_lookup
+
         if args.command == "review-digest":
             report = evaluate_phase10_manifest(
                 manifest,
                 repo_root=args.repo_root,
                 authenticated_artifact_api_lookup=artifact_api_lookup,
+                authenticated_ci_api_lookup=ci_api_lookup,
             )
-            if any(finding.code.startswith("ci_artifact_api_") for finding in report.findings):
+            if any(
+                finding.code.startswith(
+                    ("ci_artifact_api_", "ci_api_", "ci_job_api_", "ci_workflow_")
+                )
+                for finding in report.findings
+            ):
                 raise AcceptanceManifestError(
-                    "acceptance review digest requires authenticated GitHub artifact evidence"
+                    "acceptance review digest requires authenticated GitHub CI evidence"
                 )
             print(phase10_reviewed_evidence_sha256(manifest))
             return 0
@@ -342,6 +572,7 @@ def main(argv: list[str] | None = None) -> int:
             manifest,
             repo_root=args.repo_root,
             authenticated_artifact_api_lookup=artifact_api_lookup,
+            authenticated_ci_api_lookup=ci_api_lookup,
         )
         report_value = report.as_dict()
         if args.report is not None:

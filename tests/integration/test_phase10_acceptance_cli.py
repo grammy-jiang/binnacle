@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import copy
 import json
 import stat
@@ -18,6 +19,7 @@ from scripts.phase10_acceptance import main as acceptance_main
 
 from binnacle.evaluation.phase10_acceptance import (
     ArtifactApiLookupUnavailable,
+    CiApiLookupUnavailable,
     phase10_reviewed_evidence_sha256,
 )
 from binnacle.evaluation.phase10_policy import load_phase10_policy
@@ -69,6 +71,39 @@ def _install_authenticated_artifact_api(
         return copy.deepcopy(observation) if observation is not None else None
 
     monkeypatch.setattr(acceptance_script, "_fetch_authenticated_artifact_api_observation", fetch)
+
+    ci_observations = {
+        (
+            evidence["repository"],
+            evidence["github_job_id"],
+            evidence["run_id"],
+            evidence["github_ci_api_observation"]["workflow_source"]["path"],
+            evidence["checkout_oid"],
+        ): copy.deepcopy(evidence["github_ci_api_observation"])
+        for integration in fixture["integration_generations"]
+        for evidence in integration["ci_evidence"]
+    }
+
+    def fetch_ci(
+        *,
+        token: str,
+        repository: str,
+        job_id: int,
+        run_id: int,
+        workflow_path: str,
+        checkout_oid: str,
+        response_bytes_max: int,
+        workflow_source_bytes_max: int,
+        timeout_seconds: int,
+    ) -> dict[str, Any] | None:
+        assert token == "github-api-test-token"
+        assert response_bytes_max == 65_536
+        assert workflow_source_bytes_max == 32_768
+        assert timeout_seconds == 15
+        observation = ci_observations.get((repository, job_id, run_id, workflow_path, checkout_oid))
+        return copy.deepcopy(observation) if observation is not None else None
+
+    monkeypatch.setattr(acceptance_script, "_fetch_authenticated_ci_api_observation", fetch_ci)
 
 
 def _private_token_file(tmp_path: Path) -> Path:
@@ -148,6 +183,129 @@ def test_authenticated_artifact_reader_uses_fixed_bounded_github_endpoint(
         "X-GitHub-Api-Version": "2022-11-28",
     }
     assert connection.closed
+
+
+def test_authenticated_ci_reader_uses_fixed_bounded_exact_revision_endpoints(
+    repo_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixture = _load_json(repo_root / "tests/fixtures/acceptance/phase10-pass.json")
+    evidence = fixture["integration_generations"][0]["ci_evidence"][0]
+    embedded = evidence["github_ci_api_observation"]
+    raw_job = copy.deepcopy(embedded["job"])
+    raw_job["ignored"] = "extra GitHub API field"
+    raw_run = copy.deepcopy(embedded["workflow_run"])
+    raw_run["repository"] = {"full_name": evidence["repository"]}
+    workflow_path = embedded["workflow_source"]["path"]
+    source_bytes = (repo_root / workflow_path).read_bytes()
+    raw_source = {
+        "type": "file",
+        "encoding": "base64",
+        "path": workflow_path,
+        "sha": embedded["workflow_source"]["git_blob_oid"],
+        "size": len(source_bytes),
+        "content": base64.b64encode(source_bytes).decode("ascii"),
+    }
+    responses = [
+        _FakeGitHubResponse(status=200, value=raw_job),
+        _FakeGitHubResponse(status=200, value=raw_run),
+        _FakeGitHubResponse(status=200, value=raw_source),
+    ]
+    connections: list[_FakeGitHubConnection] = []
+
+    def connection_factory(host: str, **kwargs: object) -> _FakeGitHubConnection:
+        assert host == "api.github.com"
+        assert kwargs["timeout"] == 15
+        connection = _FakeGitHubConnection(responses[len(connections)])
+        connections.append(connection)
+        return connection
+
+    monkeypatch.setattr(acceptance_script, "HTTPSConnection", connection_factory)
+
+    actual = acceptance_script._fetch_authenticated_ci_api_observation(
+        token="private-test-token",
+        repository=evidence["repository"],
+        job_id=evidence["github_job_id"],
+        run_id=evidence["run_id"],
+        workflow_path=workflow_path,
+        checkout_oid=evidence["checkout_oid"],
+        response_bytes_max=65_536,
+        workflow_source_bytes_max=32_768,
+        timeout_seconds=15,
+    )
+
+    assert actual == embedded
+    requests = [
+        cast(tuple[str, str, dict[str, str]], connection.request_values)
+        for connection in connections
+    ]
+    assert [request[1] for request in requests] == [
+        f"/repos/grammy-jiang/binnacle/actions/jobs/{evidence['github_job_id']}",
+        f"/repos/grammy-jiang/binnacle/actions/runs/{evidence['run_id']}",
+        f"/repos/grammy-jiang/binnacle/contents/{workflow_path}?ref={evidence['checkout_oid']}",
+    ]
+    assert all(request[2]["Authorization"] == "Bearer private-test-token" for request in requests)
+    assert all(connection.closed for connection in connections)
+
+
+def test_authenticated_ci_reader_fails_closed_on_invalid_workflow_source(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        acceptance_script,
+        "_fetch_authenticated_github_json",
+        lambda **kwargs: (
+            {
+                "id": 1,
+                "run_id": 1,
+                "run_attempt": 1,
+                "workflow_name": "Contract validation",
+                "name": "validate-contracts",
+                "head_sha": "2" * 40,
+                "status": "completed",
+                "conclusion": "success",
+                "url": "https://api.github.com/job",
+                "check_run_url": "https://api.github.com/check",
+            }
+            if "/jobs/" in kwargs["path"]
+            else {
+                "id": 1,
+                "run_attempt": 1,
+                "workflow_id": 330240211,
+                "name": "Contract validation",
+                "path": ".github/workflows/contracts.yml",
+                "event": "pull_request",
+                "head_sha": "2" * 40,
+                "status": "completed",
+                "conclusion": "success",
+                "url": "https://api.github.com/run",
+                "jobs_url": "https://api.github.com/jobs",
+                "repository": {"full_name": "grammy-jiang/binnacle"},
+            }
+            if "/runs/" in kwargs["path"]
+            else {
+                "type": "file",
+                "encoding": "base64",
+                "path": ".github/workflows/contracts.yml",
+                "sha": "3" * 40,
+                "size": 1,
+                "content": "not-base64!",
+            }
+        ),
+    )
+
+    with pytest.raises(CiApiLookupUnavailable, match="workflow source is invalid"):
+        acceptance_script._fetch_authenticated_ci_api_observation(
+            token="private-test-token",
+            repository="grammy-jiang/binnacle",
+            job_id=1,
+            run_id=1,
+            workflow_path=".github/workflows/contracts.yml",
+            checkout_oid="2" * 40,
+            response_bytes_max=65_536,
+            workflow_source_bytes_max=32_768,
+            timeout_seconds=15,
+        )
 
 
 @pytest.mark.parametrize(("status", "expected"), ((404, None), (503, "unavailable")))
