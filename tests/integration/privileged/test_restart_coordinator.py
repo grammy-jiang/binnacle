@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import sqlite3
+from contextlib import closing
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -185,7 +186,7 @@ async def test_candidate_success_closes_exact_checkpoint_and_binding(
             "candidate_start",
             "candidate_verify",
         ]
-        with sqlite3.connect(database) as connection:
+        with closing(sqlite3.connect(database)) as connection:
             rows = tuple(
                 connection.execute(
                     "SELECT selector_generation,new_slot_id,state "
@@ -229,7 +230,7 @@ async def test_candidate_failure_restores_and_verifies_exact_lkg(
             "lkg_start",
             "lkg_verify",
         ]
-        with sqlite3.connect(database) as connection:
+        with closing(sqlite3.connect(database)) as connection:
             rows = tuple(
                 connection.execute(
                     "SELECT new_slot_id,state FROM privileged_selector_generations "
@@ -464,7 +465,7 @@ async def test_published_selector_receipt_is_reused_without_duplicate_generation
         ).resume(ticket.operation_id)
         assert result.outcome is BrokerRestartOutcome.CANDIDATE_READY
         assert "candidate_select" not in driver.calls
-        with sqlite3.connect(database) as connection:
+        with closing(sqlite3.connect(database)) as connection:
             generations = connection.execute(
                 "SELECT COUNT(*) FROM privileged_selector_generations"
             ).fetchone()[0]
