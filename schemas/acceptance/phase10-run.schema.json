@@ -1083,6 +1083,11 @@
           "minimum": 1,
           "maximum": 1000
         },
+        "workflow_run_attempt": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000
+        },
         "collector_commit_oid": {
           "$ref": "#/$defs/oid"
         },
@@ -1176,6 +1181,7 @@
         "repository",
         "event_name",
         "run_attempt",
+        "workflow_run_attempt",
         "collector_commit_oid",
         "collector_sha256",
         "candidate_oid",

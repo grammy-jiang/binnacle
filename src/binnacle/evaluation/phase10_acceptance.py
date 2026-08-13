@@ -795,7 +795,8 @@ def _evaluate_ci_api_observation(
     repository = cast(str, evidence["repository"])
     job_id = cast(int, evidence["github_job_id"])
     run_id = cast(int, evidence["run_id"])
-    run_attempt = cast(int, evidence["run_attempt"])
+    job_attempt = cast(int, evidence["run_attempt"])
+    workflow_run_attempt = cast(int, evidence["workflow_run_attempt"])
     workflow_name = cast(str, evidence["workflow_name"])
     candidate_oid = cast(str, evidence["candidate_oid"])
     checkout_oid = cast(str, evidence["checkout_oid"])
@@ -807,7 +808,7 @@ def _evaluate_ci_api_observation(
     job_bindings = {
         "id": job_id,
         "run_id": run_id,
-        "run_attempt": run_attempt,
+        "run_attempt": job_attempt,
         "workflow_name": workflow_name,
         "name": evidence["job_name"],
         "head_sha": candidate_oid,
@@ -837,7 +838,7 @@ def _evaluate_ci_api_observation(
 
     run_bindings = {
         "id": run_id,
-        "run_attempt": run_attempt,
+        "run_attempt": workflow_run_attempt,
         "workflow_id": workflow_profile.workflow_id,
         "name": workflow_name,
         "path": workflow_profile.path,
@@ -850,6 +851,11 @@ def _evaluate_ci_api_observation(
         findings.fail(
             "ci_workflow_run_api_metadata_mismatch",
             f"{path}/github_ci_api_observation/workflow_run",
+        )
+    if workflow_run_attempt < job_attempt:
+        findings.fail(
+            "ci_workflow_run_attempt_precedes_job_attempt",
+            f"{path}/workflow_run_attempt",
         )
     if workflow_run["status"] != "completed":
         findings.incomplete(

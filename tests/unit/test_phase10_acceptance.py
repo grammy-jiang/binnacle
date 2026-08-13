@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import base64
 import copy
+import io
 import json
 import shutil
+import zipfile
 from pathlib import Path
 from typing import Any, cast
 
@@ -12,7 +15,7 @@ import pytest
 
 import binnacle.evaluation as evaluation_package
 from binnacle.evaluation.ci_attestation import CI_ATTESTATION_COLLECTOR_PATHS
-from binnacle.evaluation.digests import canonical_json_sha256
+from binnacle.evaluation.digests import canonical_json_bytes, canonical_json_sha256, sha256_bytes
 from binnacle.evaluation.phase10_acceptance import (
     AcceptanceManifestError,
     AcceptanceReport,
@@ -260,9 +263,9 @@ def test_phase10_policy_is_frozen_and_canonical(repo_root: Path) -> None:
     policy = load_phase10_policy(repo_root)
 
     assert policy.policy_id == "binnacle-phase10-acceptance-v1"
-    assert policy.sha256 == "57ea3cf7e6cd6bff05de61d1a88dac0680cfc8850126d71c2e16865beb3f78ac"
+    assert policy.sha256 == "2b7719d8fa95009c99649f4ade972eeaaf91849db59c0cbeceb77874689474d3"
     assert policy.acceptance_schema_sha256 == (
-        "cafa0b0c2c0c73a21fcfef2ec804f62daa5cf1e1602630a765070166423e78de"
+        "dddb73dabc2d1f23f9a6356982c5b6b51f83cf96cf702101e77f47bdff4f5423"
     )
     assert policy.ci_attestation_schema_sha256 == (
         "6b7d2c6dff03870790dfb3e4ee6be5c93399e61d1bc7c67afea2969ea91e2760"
@@ -375,6 +378,79 @@ def test_manifest_success_claim_cannot_override_authenticated_failed_job(
         "ci_job_api_not_successful",
         "ci_job_conclusion_mismatch",
         "ci_workflow_run_api_not_successful",
+    }
+
+
+def test_successful_job_from_earlier_attempt_can_satisfy_latest_successful_run(
+    repo_root: Path,
+) -> None:
+    manifest = _pass_manifest(repo_root)
+    evidence = manifest["integration_generations"][0]["ci_evidence"]
+    python_evidence = [item for item in evidence if item["workflow_name"] == "Python CI"]
+    for item in python_evidence:
+        item["workflow_run_attempt"] = 2
+        item["github_ci_api_observation"]["workflow_run"]["run_attempt"] = 2
+        item["github_ci_api_ref"]["sha256"] = canonical_json_sha256(
+            item["github_ci_api_observation"]
+        )
+
+    retried = python_evidence[-1]
+    retried["run_attempt"] = 2
+    retried["attestation"]["run_attempt"] = 2
+    retried["attestation_sha256"] = sha256_bytes(
+        canonical_json_bytes(retried["attestation"]) + b"\n"
+    )
+    retried["github_artifact_name"] = "phase10-checkout-1002-test-python-3.13-2"
+    archive_buffer = io.BytesIO()
+    with zipfile.ZipFile(archive_buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(
+            "phase10-ci-checkout.json",
+            canonical_json_bytes(retried["attestation"]) + b"\n",
+        )
+    archive_bytes = archive_buffer.getvalue()
+    archive_sha256 = sha256_bytes(archive_bytes)
+    retried["github_artifact_archive_base64"] = base64.b64encode(archive_bytes).decode("ascii")
+    retried["github_artifact_archive_sha256"] = archive_sha256
+    artifact_observation = retried["github_artifact_api_observation"]
+    artifact_observation["name"] = retried["github_artifact_name"]
+    artifact_observation["size_in_bytes"] = len(archive_bytes)
+    artifact_observation["digest"] = f"sha256:{archive_sha256}"
+    retried["github_artifact_api_ref"]["sha256"] = canonical_json_sha256(artifact_observation)
+    retried["github_ci_api_observation"]["job"]["run_attempt"] = 2
+    retried["github_ci_api_ref"]["sha256"] = canonical_json_sha256(
+        retried["github_ci_api_observation"]
+    )
+    manifest["owner_review"]["reviewed_evidence_sha256"] = phase10_reviewed_evidence_sha256(
+        manifest
+    )
+
+    report = evaluate_phase10_manifest(manifest, repo_root=repo_root)
+
+    assert [item["run_attempt"] for item in python_evidence] == [1, 1, 1, 2]
+    assert {item["workflow_run_attempt"] for item in python_evidence} == {2}
+    assert report.verdict is AcceptanceVerdict.PASS
+
+
+def test_workflow_run_attempt_cannot_precede_retained_job_attempt(repo_root: Path) -> None:
+    manifest = _pass_manifest(repo_root)
+    evidence = manifest["integration_generations"][0]["ci_evidence"][0]
+    observation = evidence["github_ci_api_observation"]
+    evidence["run_attempt"] = 2
+    evidence["attestation"]["run_attempt"] = 2
+    evidence["attestation_sha256"] = sha256_bytes(
+        canonical_json_bytes(evidence["attestation"]) + b"\n"
+    )
+    observation["job"]["run_attempt"] = 2
+    evidence["github_ci_api_ref"]["sha256"] = canonical_json_sha256(observation)
+    manifest["owner_review"]["reviewed_evidence_sha256"] = phase10_reviewed_evidence_sha256(
+        manifest
+    )
+
+    report = evaluate_phase10_manifest(manifest, repo_root=repo_root)
+
+    assert report.verdict is AcceptanceVerdict.FAIL
+    assert "ci_workflow_run_attempt_precedes_job_attempt" in {
+        finding.code for finding in report.findings
     }
 
 

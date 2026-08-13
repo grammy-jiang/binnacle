@@ -822,7 +822,8 @@ For the final integration generation record:
   OIDs and proof they bind the recorded base/candidate;
 * expected integration tree OID derived/accepted from that exact checked integration;
 * terminal conclusion and required job/check conclusions;
-* retry/attempt identity when a transient infrastructure failure is rerun.
+* the per-job execution attempt and the workflow run's independently observed latest
+  attempt when a transient infrastructure failure is rerun.
 
 For every required job, the acceptance record embeds the sanitized GitHub
 artifact-API observation and binds its canonical digest to
@@ -852,6 +853,12 @@ the exact job, its workflow run, and the policy-selected workflow file at the sy
 ``success`` for both job and run, and equality between the job conclusion and the
 surrounding manifest conclusion.  A completed non-success result or authenticated mismatch
 is ``FAIL``; an unavailable lookup or nonterminal result is ``INCOMPLETE``.
+
+The retained ``run_attempt`` is the attempt on which that specific job and its attestation
+artifact executed.  ``workflow_run_attempt`` separately records the workflow run's current
+latest attempt.  A successful job retained from attempt 1 can therefore remain valid after
+``re-run failed jobs`` advances only the failed jobs and the workflow run to attempt 2;
+the latest workflow attempt may never precede a retained job attempt.
 
 The policy freezes each required workflow's numeric GitHub workflow ID, repository path,
 and raw source SHA-256.  The authenticated run must match that ID/path plus its name,

@@ -143,12 +143,16 @@ canonical digest is ``github_ci_api_ref``.  Final evaluation independently reads
 * the policy-selected workflow path through the Contents API at the actual synthetic
   ``checkout_oid``, not at a mutable branch name or PR head.
 
-The authenticated job must match the recorded repository, run/attempt, workflow/job names,
-candidate head and canonical URLs and must be terminal ``success``.  Its conclusion is the
+The authenticated job must match the recorded repository, run and per-job execution
+attempt, workflow/job names, candidate head and canonical URLs and must be terminal
+``success``.  Its conclusion is the
 authority for the manifest ``conclusion``; an early uploaded attestation cannot make a
 later failed job green.  The authenticated run must match the frozen numeric workflow ID,
-name/path, pull-request event, candidate head and run/attempt and must also be terminal
-``success``.  The exact-revision workflow source must match the frozen path and raw
+name/path, pull-request event, candidate head, run ID, and independently retained latest
+workflow-run attempt and must also be terminal ``success``.  A successful job and artifact
+from an earlier attempt remain valid when ``re-run failed jobs`` advances only other jobs;
+the workflow-run attempt may not precede the retained job attempt.  The exact-revision
+workflow source must match the frozen path and raw
 SHA-256; its Git blob OID and bounded byte size are retained for diagnosis.
 
 A live 404 or authenticated mismatch is a failure.  A nonterminal job/run or unavailable

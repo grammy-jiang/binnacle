@@ -1411,6 +1411,7 @@ def validate_phase10_acceptance_contract() -> None:
         "github_job_id",
         "github_ci_api_ref",
         "github_ci_api_observation",
+        "workflow_run_attempt",
     }.issubset(ci_evidence_schema.get("required", [])):
         fail("Phase 10 CI evidence does not require authenticated job and workflow metadata")
     for check_definition in ("localCheck", "postMergeCheck"):

@@ -2,7 +2,7 @@
   "schema_version": "1.0",
   "acceptance_run_id": "acceptance-test-pass",
   "plan_version": "phase10-self-hosting-acceptance-v1",
-  "policy_sha256": "57ea3cf7e6cd6bff05de61d1a88dac0680cfc8850126d71c2e16865beb3f78ac",
+  "policy_sha256": "2b7719d8fa95009c99649f4ade972eeaaf91849db59c0cbeceb77874689474d3",
   "state": "passed",
   "readiness": {
     "evidence_ref": {
@@ -164,7 +164,7 @@
       "candidate_generation": 1,
       "candidate_oid": "2222222222222222222222222222222222222222",
       "protected_base_oid": "1111111111111111111111111111111111111111",
-      "merge_policy_sha256": "57ea3cf7e6cd6bff05de61d1a88dac0680cfc8850126d71c2e16865beb3f78ac",
+      "merge_policy_sha256": "2b7719d8fa95009c99649f4ade972eeaaf91849db59c0cbeceb77874689474d3",
       "reviews": [
         {
           "evidence_ref": {
@@ -190,6 +190,7 @@
           "repository": "grammy-jiang/binnacle",
           "event_name": "pull_request",
           "run_attempt": 1,
+          "workflow_run_attempt": 1,
           "collector_commit_oid": "668a3b69af386894a6eedcd740634589b6bb1ccc",
           "collector_sha256": "96dc2225a3a12e18341656b2cd5ea05b9458a52a9cb7fa77f98d84ce844f8ec7",
           "candidate_oid": "2222222222222222222222222222222222222222",
@@ -302,6 +303,7 @@
           "repository": "grammy-jiang/binnacle",
           "event_name": "pull_request",
           "run_attempt": 1,
+          "workflow_run_attempt": 1,
           "collector_commit_oid": "668a3b69af386894a6eedcd740634589b6bb1ccc",
           "collector_sha256": "96dc2225a3a12e18341656b2cd5ea05b9458a52a9cb7fa77f98d84ce844f8ec7",
           "candidate_oid": "2222222222222222222222222222222222222222",
@@ -414,6 +416,7 @@
           "repository": "grammy-jiang/binnacle",
           "event_name": "pull_request",
           "run_attempt": 1,
+          "workflow_run_attempt": 1,
           "collector_commit_oid": "668a3b69af386894a6eedcd740634589b6bb1ccc",
           "collector_sha256": "96dc2225a3a12e18341656b2cd5ea05b9458a52a9cb7fa77f98d84ce844f8ec7",
           "candidate_oid": "2222222222222222222222222222222222222222",
@@ -526,6 +529,7 @@
           "repository": "grammy-jiang/binnacle",
           "event_name": "pull_request",
           "run_attempt": 1,
+          "workflow_run_attempt": 1,
           "collector_commit_oid": "668a3b69af386894a6eedcd740634589b6bb1ccc",
           "collector_sha256": "96dc2225a3a12e18341656b2cd5ea05b9458a52a9cb7fa77f98d84ce844f8ec7",
           "candidate_oid": "2222222222222222222222222222222222222222",
@@ -638,6 +642,7 @@
           "repository": "grammy-jiang/binnacle",
           "event_name": "pull_request",
           "run_attempt": 1,
+          "workflow_run_attempt": 1,
           "collector_commit_oid": "668a3b69af386894a6eedcd740634589b6bb1ccc",
           "collector_sha256": "96dc2225a3a12e18341656b2cd5ea05b9458a52a9cb7fa77f98d84ce844f8ec7",
           "candidate_oid": "2222222222222222222222222222222222222222",
@@ -992,8 +997,8 @@
       "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
     },
     "acceptance_run_id": "acceptance-test-pass",
-    "policy_sha256": "57ea3cf7e6cd6bff05de61d1a88dac0680cfc8850126d71c2e16865beb3f78ac",
-    "reviewed_evidence_sha256": "03cd7c4b935c00e28d01271da63d21a4e65fc6bbebd8ae5b787537ab7c6b56e8",
+    "policy_sha256": "2b7719d8fa95009c99649f4ade972eeaaf91849db59c0cbeceb77874689474d3",
+    "reviewed_evidence_sha256": "251e777064b81767a753252d25def364be54f84c5e617413b94c3b4caa9f5519",
     "outcome": "accepted",
     "evidence_complete": true
   }
