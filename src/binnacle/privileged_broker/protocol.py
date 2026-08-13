@@ -22,6 +22,7 @@ from binnacle.domain.privileged import (
     BrokerExecutionState,
     BrokerRestartCheckpointState,
     BrokerRestartOutcome,
+    BrokerServiceRestartOutcome,
     PrivilegedAction,
     PrivilegedEffectKnowledge,
     PrivilegedTicketRoutingIdentity,
@@ -354,6 +355,10 @@ def binding_snapshot_to_wire(value: BrokerBindingSnapshot) -> dict[str, object]:
         "candidate_slot_id": value.candidate_slot_id,
         "lkg_slot_id": value.lkg_slot_id,
         "selected_runtime_slot_id": value.selected_runtime_slot_id,
+        "service_restart_outcome": (
+            None if value.service_restart_outcome is None else value.service_restart_outcome.value
+        ),
+        "service_readiness_evidence_sha256": value.service_readiness_evidence_sha256,
         "lkg_promotion_audit_sha256": value.lkg_promotion_audit_sha256,
         "lkg_promotion_evidence_sha256": value.lkg_promotion_evidence_sha256,
         "lkg_promoted_at": _optional_timestamp_to_wire(value.lkg_promoted_at),
@@ -379,6 +384,8 @@ def binding_snapshot_from_wire(value: object) -> BrokerBindingSnapshot:
         "candidate_slot_id",
         "lkg_slot_id",
         "selected_runtime_slot_id",
+        "service_restart_outcome",
+        "service_readiness_evidence_sha256",
         "lkg_promotion_audit_sha256",
         "lkg_promotion_evidence_sha256",
         "lkg_promoted_at",
@@ -412,6 +419,15 @@ def binding_snapshot_from_wire(value: object) -> BrokerBindingSnapshot:
             candidate_slot_id=_optional_text(value, "candidate_slot_id"),
             lkg_slot_id=_optional_text(value, "lkg_slot_id"),
             selected_runtime_slot_id=_optional_text(value, "selected_runtime_slot_id"),
+            service_restart_outcome=(
+                None
+                if value["service_restart_outcome"] is None
+                else BrokerServiceRestartOutcome(_text(value, "service_restart_outcome"))
+            ),
+            service_readiness_evidence_sha256=_optional_text(
+                value,
+                "service_readiness_evidence_sha256",
+            ),
             lkg_promotion_audit_sha256=_optional_text(value, "lkg_promotion_audit_sha256"),
             lkg_promotion_evidence_sha256=_optional_text(value, "lkg_promotion_evidence_sha256"),
             lkg_promoted_at=_optional_timestamp(value, "lkg_promoted_at"),

@@ -149,6 +149,9 @@ The working Phase 9 set is:
 former restarts the exact fixed service without changing the candidate/LKG runtime. The
 latter is the full self-management checkpoint, candidate-verification and rollback path.
 A request cannot downgrade a candidate-changing restart to the simple service operation.
+Its terminal broker result records an explicit ``service_ready``, ``failed`` or
+``no_subeffect`` disposition and the exact readiness/verification evidence where an
+effect started. Effect knowledge alone never implies that the restarted service is ready.
 
 Read-only inspection operations create no consequential Phase 4 effect unless a future
 contract explicitly requires one. Package installation, service restart, controlled
@@ -761,6 +764,13 @@ promotion snapshot may be used to close the application operation, release its r
 and release the workspace fence. A crash at any boundary reuses the audit event and exact
 promotion evidence; a candidate-ready checkpoint without promotion remains outstanding
 authority and blocks a new privileged acceptance or broker identity upgrade.
+
+The immutable slot manifest retains the slot's publication-time role/state and material
+identity; it is not rewritten during promotion. Current ``lkg``/``prior`` lifecycle truth
+comes from the same broker transaction that records promotion. Runtime inspection first
+verifies the immutable filesystem material and then requires every non-lifecycle field to
+match that authoritative retained record before projecting its current role/state. Thus a
+selected promoted candidate is observed as LKG without weakening immutable-slot evidence.
 
 The one bootstrap exception is the explicit offline owner initialization in section 34.4,
 which qualifies the already reviewed/current runtime as the first LKG using the same full

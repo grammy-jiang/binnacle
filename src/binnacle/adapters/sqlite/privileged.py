@@ -36,6 +36,7 @@ from binnacle.domain.privileged import (
     BrokerBindingSnapshot,
     BrokerExecutionState,
     BrokerRestartOutcome,
+    BrokerServiceRestartOutcome,
     PrivilegedAction,
     PrivilegedEffectKnowledge,
     PrivilegedMaximumEffect,
@@ -1044,7 +1045,7 @@ class SqlitePrivilegedApplicationRepository:
                     )
                 phase4_snapshot = await self._operations._snapshot(session, phase4)
                 final_state, effect_knowledge, reason_code, error = (
-                    self._accepted_service_phase4_outcome(snapshot.effect_knowledge)
+                    self._accepted_service_phase4_outcome(snapshot.service_restart_outcome)
                 )
                 fence_evidence = canonical_sha256(
                     {
@@ -1054,6 +1055,10 @@ class SqlitePrivilegedApplicationRepository:
                         "closed_at": canonical_timestamp(request.closed_at),
                         "effect_knowledge": snapshot.effect_knowledge,
                         "operation_id": operation_id,
+                        "service_readiness_evidence_sha256": (
+                            snapshot.service_readiness_evidence_sha256
+                        ),
+                        "service_restart_outcome": snapshot.service_restart_outcome,
                         "service_profile_sha256": operation.service_profile_sha256,
                         "ticket_sha256": operation.ticket_sha256,
                         "workspace_fence_version": operation.workspace_fence_version,
@@ -1604,16 +1609,16 @@ class SqlitePrivilegedApplicationRepository:
 
     @staticmethod
     def _accepted_service_phase4_outcome(
-        effect_knowledge: PrivilegedEffectKnowledge,
+        outcome: BrokerServiceRestartOutcome | None,
     ) -> tuple[OperationState, EffectKnowledge, str, OperationError | None]:
-        if effect_knowledge is PrivilegedEffectKnowledge.KNOWN_EFFECT:
+        if outcome is BrokerServiceRestartOutcome.SERVICE_READY:
             return (
                 OperationState.SUCCEEDED,
                 EffectKnowledge.KNOWN_EFFECT,
                 "privileged_service_ready",
                 None,
             )
-        if effect_knowledge is PrivilegedEffectKnowledge.KNOWN_NO_SUBEFFECT:
+        if outcome is BrokerServiceRestartOutcome.NO_SUBEFFECT:
             return (
                 OperationState.FAILED,
                 EffectKnowledge.KNOWN_NO_EFFECT,
@@ -1623,8 +1628,19 @@ class SqlitePrivilegedApplicationRepository:
                     "The broker accepted the service restart but proved no root subeffect started.",
                 ),
             )
+        if outcome is BrokerServiceRestartOutcome.FAILED:
+            return (
+                OperationState.FAILED,
+                EffectKnowledge.KNOWN_EFFECT,
+                "privileged_service_restart_failed",
+                OperationError(
+                    "service_restart_failed",
+                    "The fixed-service restart did not reach exact runtime readiness.",
+                    "inspect",
+                ),
+            )
         raise PrivilegedApplicationStoreError(
-            "accepted service restart lacks terminal effect truth"
+            "accepted service restart lacks terminal result truth"
         )
 
     @staticmethod

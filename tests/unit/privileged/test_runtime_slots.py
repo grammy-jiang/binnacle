@@ -7,15 +7,25 @@ import json
 import os
 from collections.abc import Callable
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
 
-from binnacle.domain.privileged_observation import RuntimeSlotRole, RuntimeSlotState
+from binnacle.application.privileged_preflight import (
+    RuntimeIdentityBuilder,
+    RuntimeIdentityEvidence,
+)
+from binnacle.domain.privileged_observation import (
+    RuntimeSlotRole,
+    RuntimeSlotState,
+    SourceDirtyState,
+    VerifiedRuntimeSlot,
+)
 from binnacle.privileged_broker.runtime_slots import (
     RUNTIME_SLOT_MANIFEST,
     FilesystemRuntimeSlotInspector,
+    FilesystemRuntimeSlotMaterialInspector,
     RuntimeSlotFile,
     RuntimeSlotInspectionSettings,
     RuntimeSlotManifest,
@@ -27,6 +37,23 @@ NOW = datetime(2026, 8, 13, 2, 3, 4, 567890, tzinfo=UTC)
 SHA_A = "a" * 64
 SHA_B = "b" * 64
 SHA_C = "c" * 64
+
+
+class _Lifecycle:
+    def __init__(self, *slots: VerifiedRuntimeSlot) -> None:
+        self._slots = {slot.slot_id: slot for slot in slots}
+
+    async def get_runtime_slot(self, slot_id: str) -> VerifiedRuntimeSlot | None:
+        return self._slots.get(slot_id)
+
+    async def lkg_runtime_slot(self) -> VerifiedRuntimeSlot | None:
+        matches = tuple(
+            slot
+            for slot in self._slots.values()
+            if slot.role is RuntimeSlotRole.LKG and slot.state is RuntimeSlotState.LKG
+        )
+        assert len(matches) <= 1
+        return None if not matches else matches[0]
 
 
 def _settings(root: Path, *, retained: int = 3) -> RuntimeSlotInspectionSettings:
@@ -122,6 +149,101 @@ def _rewrite_manifest(
     path.chmod(0o440)
 
 
+def _runtime_evidence(slot: VerifiedRuntimeSlot) -> RuntimeIdentityEvidence:
+    return RuntimeIdentityEvidence(
+        source_git_oid="1" * 40,
+        source_dirty_state=SourceDirtyState.CLEAN,
+        source_state_sha256=slot.source_sha256,
+        workspace_identity_sha256=SHA_A,
+        workspace_mount_identity_sha256=SHA_B,
+        python_executable="/srv/binnacle-runtime/current/venv/bin/python",
+        python_version="3.13.14",
+        environment_root="/srv/binnacle-runtime/current/venv",
+        environment_sha256=slot.environment_sha256,
+        lock_sha256=SHA_A,
+        build_sha256=SHA_C,
+        config_sha256=slot.config_sha256,
+        policy_sha256=slot.policy_sha256,
+        manifest_sha256=slot.manifest_sha256,
+        service_profile_sha256=SHA_C,
+        device_id="device_fixture",
+        device_epoch=2,
+        runtime_instance_id="runtime_fixture",
+        process_started_at=NOW - timedelta(minutes=2),
+        readiness_generation=3,
+        schema_heads_sha256=slot.migration_heads_sha256,
+        runtime_layout_sha256=slot.layout_sha256,
+        deployed_peer_set_sha256=slot.deployed_peer_set_sha256,
+        service_main_pid=123,
+        readiness_main_pid=123,
+        observed_at=NOW,
+    )
+
+
+@pytest.mark.anyio
+async def test_runtime_slot_inspection_uses_promoted_retained_lifecycle(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "runtime"
+    _install_root(root)
+    _install_slot(root, slot_id="slot-0001", generation=1)
+    _install_slot(
+        root,
+        slot_id="slot-0002",
+        generation=2,
+        role=RuntimeSlotRole.CANDIDATE,
+        state=RuntimeSlotState.COMPLETE,
+    )
+    (root / "current").symlink_to("slots/slot-0002")
+    material = FilesystemRuntimeSlotMaterialInspector(_settings(root))
+    published_lkg = await material.inspect("slot-0001")
+    published_candidate = await material.inspect("slot-0002")
+    promoted_candidate = replace(
+        published_candidate,
+        role=RuntimeSlotRole.LKG,
+        state=RuntimeSlotState.LKG,
+    )
+    demoted_lkg = replace(
+        published_lkg,
+        role=RuntimeSlotRole.PRIOR,
+        state=RuntimeSlotState.PRIOR,
+    )
+    inspector = FilesystemRuntimeSlotInspector(
+        _settings(root),
+        _Lifecycle(promoted_candidate, demoted_lkg),
+    )
+
+    current = await inspector.current()
+    assert current == await inspector.lkg() == promoted_candidate
+    assert await inspector.inspect("slot-0001") == demoted_lkg
+    assert published_candidate.state is RuntimeSlotState.COMPLETE
+    assert current is not None
+    runtime = RuntimeIdentityBuilder().build(_runtime_evidence(current), slot=current)
+    assert runtime.runtime_slot_identity_sha256 == promoted_candidate.slot_identity_sha256
+
+
+@pytest.mark.anyio
+async def test_runtime_slot_inspection_rejects_missing_or_mismatched_lifecycle(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "runtime"
+    _install_root(root)
+    _install_slot(root)
+    material = FilesystemRuntimeSlotMaterialInspector(_settings(root))
+    published = await material.inspect("slot-0001")
+
+    missing = FilesystemRuntimeSlotInspector(_settings(root), _Lifecycle())
+    with pytest.raises(RuntimeSlotVerificationError, match="no authoritative lifecycle"):
+        await missing.inspect("slot-0001")
+
+    mismatched = FilesystemRuntimeSlotInspector(
+        _settings(root),
+        _Lifecycle(replace(published, source_sha256=SHA_C)),
+    )
+    with pytest.raises(RuntimeSlotVerificationError, match="differs from retained"):
+        await mismatched.inspect("slot-0001")
+
+
 @pytest.mark.anyio
 async def test_runtime_slot_current_and_lkg_are_verified_from_exact_manifest(
     tmp_path: Path,
@@ -130,11 +252,11 @@ async def test_runtime_slot_current_and_lkg_are_verified_from_exact_manifest(
     _install_root(root)
     manifest, _ = _install_slot(root)
     (root / "current").symlink_to("slots/slot-0001")
-    inspector = FilesystemRuntimeSlotInspector(_settings(root))
+    inspector = FilesystemRuntimeSlotMaterialInspector(_settings(root))
 
     direct = await inspector.inspect("slot-0001")
     current = await inspector.current()
-    lkg = await inspector.lkg()
+    lkg = await inspector.published_lkg()
 
     assert direct == current == lkg
     assert direct is not None
@@ -150,7 +272,7 @@ async def test_runtime_slot_inspection_rejects_tamper_extra_and_symlink(
     root = tmp_path / "runtime"
     _install_root(root)
     _, executable = _install_slot(root)
-    inspector = FilesystemRuntimeSlotInspector(_settings(root))
+    inspector = FilesystemRuntimeSlotMaterialInspector(_settings(root))
 
     executable.chmod(0o750)
     with pytest.raises(RuntimeSlotVerificationError, match="identity differs"):
@@ -187,7 +309,7 @@ async def test_runtime_selector_is_relative_owned_and_optional(tmp_path: Path) -
     root = tmp_path / "runtime"
     _install_root(root)
     _install_slot(root)
-    inspector = FilesystemRuntimeSlotInspector(_settings(root))
+    inspector = FilesystemRuntimeSlotMaterialInspector(_settings(root))
 
     assert await inspector.current() is None
     (root / "current").symlink_to("/srv/binnacle-runtime/slots/slot-0001")
@@ -202,7 +324,7 @@ async def test_runtime_slot_rejects_noncanonical_manifest_and_identity(tmp_path:
     _, _ = _install_slot(root)
     manifest_path = root / "slots/slot-0001" / RUNTIME_SLOT_MANIFEST
     manifest_path.chmod(0o640)
-    inspector = FilesystemRuntimeSlotInspector(_settings(root))
+    inspector = FilesystemRuntimeSlotMaterialInspector(_settings(root))
     with pytest.raises(RuntimeSlotVerificationError, match="manifest is unsafe"):
         await inspector.inspect("slot-0001")
 
@@ -220,10 +342,10 @@ async def test_runtime_slot_lkg_scan_is_bounded_and_unique(tmp_path: Path) -> No
     _install_root(root)
     _install_slot(root, slot_id="slot-0001", generation=1)
     _install_slot(root, slot_id="slot-0002", generation=2)
-    inspector = FilesystemRuntimeSlotInspector(_settings(root))
+    inspector = FilesystemRuntimeSlotMaterialInspector(_settings(root))
 
-    with pytest.raises(RuntimeSlotVerificationError, match="multiple complete LKG"):
-        await inspector.lkg()
+    with pytest.raises(RuntimeSlotVerificationError, match="multiple published LKG"):
+        await inspector.published_lkg()
 
     _install_slot(
         root,
@@ -240,7 +362,7 @@ async def test_runtime_slot_lkg_scan_is_bounded_and_unique(tmp_path: Path) -> No
         state=RuntimeSlotState.PRIOR,
     )
     with pytest.raises(RuntimeSlotVerificationError, match="retained runtime slot ceiling"):
-        await inspector.lkg()
+        await inspector.published_lkg()
 
 
 @pytest.mark.parametrize("slot_id", ("../escape", "bad/slot", "bad..slot", "UPPER"))
@@ -251,7 +373,7 @@ async def test_runtime_slot_rejects_untrusted_slot_identifiers(
 ) -> None:
     root = tmp_path / "runtime"
     _install_root(root)
-    inspector = FilesystemRuntimeSlotInspector(_settings(root))
+    inspector = FilesystemRuntimeSlotMaterialInspector(_settings(root))
 
     with pytest.raises(RuntimeSlotVerificationError, match="identity"):
         await inspector.inspect(slot_id)
@@ -357,7 +479,7 @@ async def test_runtime_slot_rejects_unsafe_roots_slot_and_directory(tmp_path: Pa
     root = tmp_path / "runtime"
     _install_root(root)
     _install_slot(root)
-    inspector = FilesystemRuntimeSlotInspector(_settings(root))
+    inspector = FilesystemRuntimeSlotMaterialInspector(_settings(root))
 
     root.chmod(0o770)
     with pytest.raises(RuntimeSlotVerificationError, match="runtime root ownership or mode"):
@@ -383,7 +505,7 @@ async def test_runtime_slot_rejects_manifest_identity_and_resource_ceiling(
     root = tmp_path / "runtime"
     _install_root(root)
     manifest, _ = _install_slot(root)
-    inspector = FilesystemRuntimeSlotInspector(_settings(root))
+    inspector = FilesystemRuntimeSlotMaterialInspector(_settings(root))
     path = root / "slots/slot-0001" / RUNTIME_SLOT_MANIFEST
 
     wrong_identity = replace(manifest, slot_id="slot-other")
@@ -452,7 +574,7 @@ async def test_runtime_slot_rejects_malformed_manifest_shapes(
     _rewrite_manifest(root, mutate)
 
     with pytest.raises(RuntimeSlotVerificationError, match=match):
-        await FilesystemRuntimeSlotInspector(_settings(root)).inspect("slot-0001")
+        await FilesystemRuntimeSlotMaterialInspector(_settings(root)).inspect("slot-0001")
 
 
 @pytest.mark.anyio
@@ -462,7 +584,7 @@ async def test_runtime_slot_rejects_duplicate_invalid_and_unavailable_manifest(
     root = tmp_path / "runtime"
     _install_root(root)
     _install_slot(root)
-    inspector = FilesystemRuntimeSlotInspector(_settings(root))
+    inspector = FilesystemRuntimeSlotMaterialInspector(_settings(root))
     path = root / "slots/slot-0001" / RUNTIME_SLOT_MANIFEST
 
     raw = path.read_text(encoding="utf-8")
@@ -493,7 +615,7 @@ async def test_runtime_slot_rejects_unsupported_entry_and_selector_shapes(
     root = tmp_path / "runtime"
     _install_root(root)
     _install_slot(root)
-    inspector = FilesystemRuntimeSlotInspector(_settings(root))
+    inspector = FilesystemRuntimeSlotMaterialInspector(_settings(root))
     slot = root / "slots/slot-0001"
 
     slot.chmod(0o750)
@@ -524,13 +646,13 @@ async def test_runtime_slot_lkg_none_and_scan_rejects_non_slot_entry(tmp_path: P
         role=RuntimeSlotRole.PRIOR,
         state=RuntimeSlotState.PRIOR,
     )
-    inspector = FilesystemRuntimeSlotInspector(_settings(root))
-    assert await inspector.lkg() is None
+    inspector = FilesystemRuntimeSlotMaterialInspector(_settings(root))
+    assert await inspector.published_lkg() is None
 
     unexpected = root / "slots/not-a-slot.txt"
     unexpected.write_text("bad", encoding="utf-8")
     with pytest.raises(RuntimeSlotVerificationError, match="entry type"):
-        await inspector.lkg()
+        await inspector.published_lkg()
 
 
 @pytest.mark.anyio
@@ -540,4 +662,4 @@ async def test_runtime_slot_translates_domain_role_state_contradiction(tmp_path:
     _install_slot(root, role=RuntimeSlotRole.LKG, state=RuntimeSlotState.PRIOR)
 
     with pytest.raises(RuntimeSlotVerificationError, match="manifest is contradictory"):
-        await FilesystemRuntimeSlotInspector(_settings(root)).inspect("slot-0001")
+        await FilesystemRuntimeSlotMaterialInspector(_settings(root)).inspect("slot-0001")

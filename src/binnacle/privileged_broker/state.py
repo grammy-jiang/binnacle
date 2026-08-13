@@ -29,6 +29,7 @@ from binnacle.domain.privileged import (
     BrokerNoAcceptReason,
     BrokerRestartCheckpointState,
     BrokerRestartOutcome,
+    BrokerServiceRestartOutcome,
     PrivilegedAction,
     PrivilegedEffectKnowledge,
     PrivilegedTicket,
@@ -383,17 +384,140 @@ class SqlitePrivilegedEvidenceStore:
                 raise
 
     async def get(self, operation_id: str) -> BrokerBindingSnapshot | None:
-        row = await self._fetchone(
-            "SELECT * FROM privileged_operation_bindings WHERE operation_id=?",
-            (operation_id,),
+        async with self._acceptance_gate:
+            row = await self._fetchone(
+                "SELECT * FROM privileged_operation_bindings WHERE operation_id=?",
+                (operation_id,),
+            )
+            if row is None:
+                return None
+            checkpoint = await self._fetchone(
+                "SELECT * FROM privileged_restart_checkpoints WHERE operation_id=?",
+                (operation_id,),
+            )
+            return self._snapshot(row, checkpoint=checkpoint)
+
+    async def get_runtime_slot(self, slot_id: str) -> VerifiedRuntimeSlot | None:
+        """Return the transactionally authoritative current lifecycle for one slot."""
+
+        async with self._acceptance_gate:
+            row = await self._fetchone(
+                "SELECT * FROM privileged_runtime_slots WHERE slot_id=?",
+                (slot_id,),
+            )
+            return None if row is None else self._runtime_slot(row)
+
+    async def lkg_runtime_slot(self) -> VerifiedRuntimeSlot | None:
+        """Return the single transactionally authoritative current LKG slot."""
+
+        async with self._acceptance_gate:
+            cursor = await self._connection.execute(
+                "SELECT * FROM privileged_runtime_slots WHERE role='lkg' AND state='lkg'"
+            )
+            rows = tuple(await cursor.fetchall())
+            await cursor.close()
+            if len(rows) > 1:
+                raise PrivilegedStoreError("multiple retained LKG slots exist")
+            return None if not rows else self._runtime_slot(rows[0])
+
+    async def complete_service_restart(
+        self,
+        operation_id: str,
+        *,
+        outcome: BrokerServiceRestartOutcome,
+        result_evidence_sha256: str,
+        readiness_evidence_sha256: str | None,
+        closed_at: datetime,
+    ) -> BrokerBindingSnapshot:
+        """Retain an explicit fixed-service result without inferring it from effect truth."""
+
+        _require_digest(result_evidence_sha256, "service restart result")
+        _require_aware(closed_at, "service restart closure time")
+        if readiness_evidence_sha256 is not None:
+            _require_digest(readiness_evidence_sha256, "service restart readiness")
+        if (outcome is BrokerServiceRestartOutcome.NO_SUBEFFECT) != (
+            readiness_evidence_sha256 is None
+        ):
+            raise PrivilegedStoreConflict("service restart outcome and readiness evidence disagree")
+        effect_knowledge = (
+            PrivilegedEffectKnowledge.KNOWN_NO_SUBEFFECT
+            if outcome is BrokerServiceRestartOutcome.NO_SUBEFFECT
+            else PrivilegedEffectKnowledge.KNOWN_EFFECT
         )
-        if row is None:
-            return None
-        checkpoint = await self._fetchone(
-            "SELECT * FROM privileged_restart_checkpoints WHERE operation_id=?",
-            (operation_id,),
-        )
-        return self._snapshot(row, checkpoint=checkpoint)
+        async with self._acceptance_gate:
+            await self._begin()
+            try:
+                binding = await self._required_binding(operation_id)
+                if (
+                    binding["action"] != PrivilegedAction.SERVICE_RESTART.value
+                    or binding["acceptance_state"] != BrokerAcceptanceState.ACCEPTED.value
+                ):
+                    raise PrivilegedStoreConflict(
+                        "service restart closure lacks accepted authority"
+                    )
+                if binding["execution_state"] == BrokerExecutionState.TERMINAL.value:
+                    if (
+                        binding["effect_knowledge"] != effect_knowledge.value
+                        or binding["result_evidence_sha256"] != result_evidence_sha256
+                        or binding["service_restart_outcome"] != outcome.value
+                        or binding["service_readiness_evidence_sha256"] != readiness_evidence_sha256
+                        or _optional_timestamp(binding["closed_at"]) != closed_at
+                    ):
+                        raise PrivilegedStoreConflict("service restart closure replay differs")
+                    await self._connection.commit()
+                    return self._snapshot(binding, checkpoint=None)
+                if binding["execution_state"] not in {
+                    BrokerExecutionState.ACCEPTED_PRE_EFFECT.value,
+                    BrokerExecutionState.EXECUTING.value,
+                    BrokerExecutionState.RECONCILING.value,
+                    BrokerExecutionState.UNCERTAIN.value,
+                    BrokerExecutionState.RESTRICTED_RECOVERY.value,
+                }:
+                    raise PrivilegedStoreConflict(
+                        "service restart binding is not terminally closable"
+                    )
+                accepted_at = _optional_timestamp(binding["accepted_at"])
+                updated_at = _timestamp(binding["updated_at"])
+                if accepted_at is None or closed_at < max(accepted_at, updated_at):
+                    raise PrivilegedStoreConflict("service restart closure time regressed")
+                generation = await self._next_evidence_generation(closed_at)
+                updated = await self._connection.execute(
+                    """
+                    UPDATE privileged_operation_bindings
+                    SET execution_state='terminal',active_slot=NULL,
+                        effect_knowledge=?,result_evidence_sha256=?,
+                        service_restart_outcome=?,service_readiness_evidence_sha256=?,
+                        closed_at=?,updated_at=?
+                    WHERE operation_id=? AND action='service_restart'
+                      AND acceptance_state='accepted' AND execution_state!='terminal'
+                    """,
+                    (
+                        effect_knowledge.value,
+                        result_evidence_sha256,
+                        outcome.value,
+                        readiness_evidence_sha256,
+                        canonical_timestamp(closed_at),
+                        canonical_timestamp(closed_at),
+                        operation_id,
+                    ),
+                )
+                if updated.rowcount != 1:
+                    raise PrivilegedStoreConflict("service restart closure winner changed")
+                await updated.close()
+                await self._append_event(
+                    generation=generation,
+                    event_id=f"service_restart_{canonical_sha256(operation_id)[:24]}",
+                    operation_id=operation_id,
+                    event_type="service_restart.terminal",
+                    event_sha256=result_evidence_sha256,
+                    recorded_at=closed_at,
+                )
+                binding = await self._required_binding(operation_id)
+                await self._connection.commit()
+                return self._snapshot(binding, checkpoint=None)
+            except BaseException:
+                await self._connection.rollback()
+                raise
 
     async def create_restart_checkpoint(
         self,
@@ -1893,6 +2017,14 @@ class SqlitePrivilegedEvidenceStore:
             lkg_slot_id=None if checkpoint is None else str(checkpoint["lkg_slot_id"]),
             selected_runtime_slot_id=(
                 None if checkpoint is None else _optional_text(checkpoint["selected_slot_id"])
+            ),
+            service_restart_outcome=(
+                None
+                if row["service_restart_outcome"] is None
+                else BrokerServiceRestartOutcome(str(row["service_restart_outcome"]))
+            ),
+            service_readiness_evidence_sha256=_optional_text(
+                row["service_readiness_evidence_sha256"]
             ),
             lkg_promotion_audit_sha256=(
                 None

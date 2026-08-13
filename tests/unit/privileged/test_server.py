@@ -23,9 +23,11 @@ from binnacle.domain.privileged import (
     BrokerAcceptanceReceipt,
     BrokerBindingSnapshot,
     BrokerNoAcceptReason,
+    BrokerServiceRestartOutcome,
     PrivilegedTicket,
     PrivilegedTicketRoutingIdentity,
 )
+from binnacle.domain.privileged_observation import VerifiedRuntimeSlot
 from binnacle.privileged_broker import server as server_module
 from binnacle.privileged_broker.protocol import (
     PeerCredentials,
@@ -72,6 +74,26 @@ class _Store:
     async def get(self, operation_id: str) -> BrokerBindingSnapshot | None:
         if self.snapshot is None or operation_id != self.snapshot.identity.operation_id:
             return None
+        return self.snapshot
+
+    async def get_runtime_slot(self, slot_id: str) -> VerifiedRuntimeSlot | None:
+        del slot_id
+        return None
+
+    async def lkg_runtime_slot(self) -> VerifiedRuntimeSlot | None:
+        return None
+
+    async def complete_service_restart(
+        self,
+        operation_id: str,
+        *,
+        outcome: BrokerServiceRestartOutcome,
+        result_evidence_sha256: str,
+        readiness_evidence_sha256: str | None,
+        closed_at: datetime,
+    ) -> BrokerBindingSnapshot:
+        del operation_id, outcome, result_evidence_sha256, readiness_evidence_sha256, closed_at
+        assert self.snapshot is not None
         return self.snapshot
 
     async def promote_restart_lkg(

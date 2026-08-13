@@ -122,6 +122,14 @@ class BrokerRestartOutcome(StrEnum):
     RESTRICTED_RECOVERY = "restricted_recovery"
 
 
+class BrokerServiceRestartOutcome(StrEnum):
+    """Explicit terminal truth for the unchanged fixed-service restart."""
+
+    SERVICE_READY = "service_ready"
+    NO_SUBEFFECT = "no_subeffect"
+    FAILED = "failed"
+
+
 @dataclass(frozen=True, slots=True)
 class PrivilegedBrokerHello:
     """Authenticated broker identity and fail-closed readiness projection."""
@@ -638,6 +646,8 @@ class BrokerBindingSnapshot:
     candidate_slot_id: str | None = None
     lkg_slot_id: str | None = None
     selected_runtime_slot_id: str | None = None
+    service_restart_outcome: BrokerServiceRestartOutcome | None = None
+    service_readiness_evidence_sha256: str | None = None
     lkg_promotion_audit_sha256: str | None = None
     lkg_promotion_evidence_sha256: str | None = None
     lkg_promoted_at: datetime | None = None
@@ -701,6 +711,40 @@ class BrokerBindingSnapshot:
             PrivilegedEffectKnowledge.KNOWN_EFFECT,
         }:
             raise PrivilegedError("terminal broker execution effect truth is invalid")
+        service_terminal = (
+            self.identity.action is PrivilegedAction.SERVICE_RESTART
+            and self.acceptance_state is BrokerAcceptanceState.ACCEPTED
+            and self.execution_state is BrokerExecutionState.TERMINAL
+        )
+        if service_terminal != (self.service_restart_outcome is not None):
+            raise PrivilegedError("service restart terminal outcome is incomplete")
+        if self.service_readiness_evidence_sha256 is not None:
+            _require_sha256(
+                self.service_readiness_evidence_sha256,
+                "service restart readiness evidence",
+            )
+        if service_terminal:
+            if self.service_restart_outcome is BrokerServiceRestartOutcome.SERVICE_READY:
+                if (
+                    self.effect_knowledge is not PrivilegedEffectKnowledge.KNOWN_EFFECT
+                    or self.service_readiness_evidence_sha256 is None
+                ):
+                    raise PrivilegedError("ready service restart lacks readiness evidence")
+            elif self.service_restart_outcome is BrokerServiceRestartOutcome.FAILED:
+                if (
+                    self.effect_knowledge is not PrivilegedEffectKnowledge.KNOWN_EFFECT
+                    or self.service_readiness_evidence_sha256 is None
+                ):
+                    raise PrivilegedError("failed service restart lacks verification evidence")
+            elif self.service_restart_outcome is BrokerServiceRestartOutcome.NO_SUBEFFECT and (
+                self.effect_knowledge is not PrivilegedEffectKnowledge.KNOWN_NO_SUBEFFECT
+                or self.service_readiness_evidence_sha256 is not None
+            ):
+                raise PrivilegedError("no-subeffect service restart carries readiness evidence")
+            elif self.service_restart_outcome is not BrokerServiceRestartOutcome.NO_SUBEFFECT:
+                raise PrivilegedError("service restart terminal outcome is invalid")
+        elif self.service_readiness_evidence_sha256 is not None:
+            raise PrivilegedError("nonterminal service restart carries readiness evidence")
         restart_values = (
             self.restart_checkpoint_state,
             self.restart_outcome,
@@ -933,6 +977,7 @@ __all__ = [
     "BrokerNoAcceptReason",
     "BrokerRestartCheckpointState",
     "BrokerRestartOutcome",
+    "BrokerServiceRestartOutcome",
     "PackageProfile",
     "PrivilegedAction",
     "PrivilegedBrokerHello",

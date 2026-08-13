@@ -18,7 +18,9 @@ from binnacle.domain.privileged import (
     BrokerAcceptanceState,
     BrokerExecutionState,
     BrokerNoAcceptReason,
+    BrokerServiceRestartOutcome,
     PrivilegedAction,
+    PrivilegedEffectKnowledge,
     PrivilegedMaximumEffect,
     PrivilegedTicket,
 )
@@ -78,8 +80,14 @@ def _validator(now: datetime) -> PrivilegedTicketValidator:
         broker_profile_id="development-privileged",
         broker_profile_version="v1",
         broker_profile_sha256=DIGEST_C,
-        action_contract_versions={PrivilegedAction.PACKAGE_INSTALL: ("package_install", "v1")},
-        target_profiles={PrivilegedAction.PACKAGE_INSTALL: ("development-packages", DIGEST_B)},
+        action_contract_versions={
+            PrivilegedAction.PACKAGE_INSTALL: ("package_install", "v1"),
+            PrivilegedAction.SERVICE_RESTART: ("binnacle_service_restart", "v1"),
+        },
+        target_profiles={
+            PrivilegedAction.PACKAGE_INSTALL: ("development-packages", DIGEST_B),
+            PrivilegedAction.SERVICE_RESTART: ("binnacle-service", DIGEST_B),
+        },
         application_build_sha256=DIGEST_C,
         application_config_sha256=DIGEST_A,
         application_policy_sha256=DIGEST_B,
@@ -91,6 +99,16 @@ def _validator(now: datetime) -> PrivilegedTicketValidator:
             algorithm == "ed25519" and proof == PROOF
         ),
         wall_clock=lambda: now,
+    )
+
+
+def _service_ticket(now: datetime) -> PrivilegedTicket:
+    return replace(
+        _ticket(now, suffix="service"),
+        operation_contract="binnacle_service_restart",
+        action=PrivilegedAction.SERVICE_RESTART,
+        target_profile_id="binnacle-service",
+        maximum_effect=PrivilegedMaximumEffect.SERVICE_RESTART,
     )
 
 
@@ -222,6 +240,80 @@ async def test_acceptance_is_stable_and_conflicting_ticket_is_rejected(
             await restarted.accept_once(_ticket(now, suffix="two"))
     finally:
         await restarted.close()
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("outcome", "expected_knowledge"),
+    (
+        (
+            BrokerServiceRestartOutcome.SERVICE_READY,
+            PrivilegedEffectKnowledge.KNOWN_EFFECT,
+        ),
+        (
+            BrokerServiceRestartOutcome.FAILED,
+            PrivilegedEffectKnowledge.KNOWN_EFFECT,
+        ),
+        (
+            BrokerServiceRestartOutcome.NO_SUBEFFECT,
+            PrivilegedEffectKnowledge.KNOWN_NO_SUBEFFECT,
+        ),
+    ),
+)
+async def test_service_restart_terminal_result_is_explicit_atomic_and_replay_safe(
+    tmp_path: Path,
+    repo_root: Path,
+    outcome: BrokerServiceRestartOutcome,
+    expected_knowledge: PrivilegedEffectKnowledge,
+) -> None:
+    now = datetime.now(UTC)
+    database, store = await _open(tmp_path, repo_root, now=now)
+    ticket = _service_ticket(now)
+    readiness = None if outcome is BrokerServiceRestartOutcome.NO_SUBEFFECT else DIGEST_C
+    closed_at = now + timedelta(seconds=1)
+    try:
+        await store.accept_once(ticket)
+        terminal = await store.complete_service_restart(
+            ticket.operation_id,
+            outcome=outcome,
+            result_evidence_sha256=DIGEST_B,
+            readiness_evidence_sha256=readiness,
+            closed_at=closed_at,
+        )
+        replay = await store.complete_service_restart(
+            ticket.operation_id,
+            outcome=outcome,
+            result_evidence_sha256=DIGEST_B,
+            readiness_evidence_sha256=readiness,
+            closed_at=closed_at,
+        )
+
+        assert replay == terminal
+        assert terminal.execution_state is BrokerExecutionState.TERMINAL
+        assert terminal.effect_knowledge is expected_knowledge
+        assert terminal.service_restart_outcome is outcome
+        assert terminal.service_readiness_evidence_sha256 == readiness
+        with pytest.raises(PrivilegedStoreConflict, match="replay differs"):
+            await store.complete_service_restart(
+                ticket.operation_id,
+                outcome=outcome,
+                result_evidence_sha256=DIGEST_A,
+                readiness_evidence_sha256=readiness,
+                closed_at=closed_at,
+            )
+    finally:
+        await store.close()
+
+    with closing(sqlite3.connect(database)) as connection:
+        report = verify_privileged_broker_connection(connection)
+        terminal_event = connection.execute(
+            "SELECT event_sha256 FROM privileged_evidence_events "
+            "WHERE operation_id=? AND event_type='service_restart.terminal'",
+            (ticket.operation_id,),
+        ).fetchone()
+    assert terminal_event is not None and terminal_event[0] == DIGEST_B
+    assert report.evidence_generation == 2
+    assert report.outstanding_accepted_bindings == 0
 
 
 @pytest.mark.anyio

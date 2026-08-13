@@ -18,6 +18,7 @@ from binnacle.domain.privileged import (
     BrokerBindingSnapshot,
     BrokerExecutionState,
     BrokerRestartOutcome,
+    BrokerServiceRestartOutcome,
     PrivilegedAction,
     PrivilegedEffectKnowledge,
 )
@@ -203,6 +204,20 @@ class PrivilegedRestartAuditClosure:
                         "value": snapshot.selected_runtime_slot_id,
                         "classification": "restricted-result",
                     },
+                    {
+                        "name": "service_restart_outcome",
+                        "value": (
+                            None
+                            if snapshot.service_restart_outcome is None
+                            else snapshot.service_restart_outcome.value
+                        ),
+                        "classification": "normal-result",
+                    },
+                    {
+                        "name": "service_readiness_evidence_sha256",
+                        "value": snapshot.service_readiness_evidence_sha256,
+                        "classification": "restricted-result",
+                    },
                 ),
             )
             try:
@@ -252,20 +267,26 @@ class PrivilegedRestartAuditClosure:
                 raise PrivilegedRestartReconciliationError(
                     "service restart audit closure carries controlled-restart truth"
                 )
-            if snapshot.effect_knowledge is PrivilegedEffectKnowledge.KNOWN_EFFECT:
+            if snapshot.service_restart_outcome is BrokerServiceRestartOutcome.SERVICE_READY:
                 return (
                     OperationState.SUCCEEDED,
                     EffectKnowledge.KNOWN_EFFECT,
                     "privileged_service_ready",
                 )
-            if snapshot.effect_knowledge is PrivilegedEffectKnowledge.KNOWN_NO_SUBEFFECT:
+            if snapshot.service_restart_outcome is BrokerServiceRestartOutcome.NO_SUBEFFECT:
                 return (
                     OperationState.FAILED,
                     EffectKnowledge.KNOWN_NO_EFFECT,
                     "privileged_effect_not_started",
                 )
+            if snapshot.service_restart_outcome is BrokerServiceRestartOutcome.FAILED:
+                return (
+                    OperationState.FAILED,
+                    EffectKnowledge.KNOWN_EFFECT,
+                    "privileged_service_restart_failed",
+                )
             raise PrivilegedRestartReconciliationError(
-                "service restart audit closure lacks terminal effect truth"
+                "service restart audit closure lacks terminal result truth"
             )
         if snapshot.identity.action is not PrivilegedAction.CONTROLLED_RESTART:
             raise PrivilegedRestartReconciliationError(

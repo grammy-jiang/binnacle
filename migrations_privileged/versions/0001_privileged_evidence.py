@@ -83,6 +83,8 @@ def upgrade() -> None:
         sa.Column("active_slot", sa.Integer(), nullable=True),
         sa.Column("effect_knowledge", sa.String(length=24), nullable=False),
         sa.Column("result_evidence_sha256", sa.String(length=64), nullable=True),
+        sa.Column("service_restart_outcome", sa.String(length=24), nullable=True),
+        sa.Column("service_readiness_evidence_sha256", sa.String(length=64), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("accepted_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("sealed_at", sa.DateTime(timezone=True), nullable=True),
@@ -110,6 +112,8 @@ def upgrade() -> None:
             + _digest("acceptance_evidence_sha256")
             + ") AND (result_evidence_sha256 IS NULL OR "
             + _digest("result_evidence_sha256")
+            + ") AND (service_readiness_evidence_sha256 IS NULL OR "
+            + _digest("service_readiness_evidence_sha256")
             + ")",
             name="ck_privileged_bindings_digests",
         ),
@@ -149,6 +153,22 @@ def upgrade() -> None:
             "AND effect_knowledge='known_no_subeffect' "
             "AND result_evidence_sha256 IS NOT NULL AND closed_at IS NOT NULL)",
             name="ck_privileged_bindings_acceptance",
+        ),
+        sa.CheckConstraint(
+            "(service_restart_outcome IS NULL "
+            "AND service_readiness_evidence_sha256 IS NULL "
+            "AND NOT (action='service_restart' AND acceptance_state='accepted' "
+            "AND execution_state='terminal')) OR "
+            "(action='service_restart' AND acceptance_state='accepted' "
+            "AND execution_state='terminal' AND ((service_restart_outcome='service_ready' "
+            "AND effect_knowledge='known_effect' "
+            "AND service_readiness_evidence_sha256 IS NOT NULL) OR "
+            "(service_restart_outcome='failed' AND effect_knowledge='known_effect' "
+            "AND service_readiness_evidence_sha256 IS NOT NULL) OR "
+            "(service_restart_outcome='no_subeffect' "
+            "AND effect_knowledge='known_no_subeffect' "
+            "AND service_readiness_evidence_sha256 IS NULL)))",
+            name="ck_privileged_bindings_service_restart_result",
         ),
         sa.PrimaryKeyConstraint("operation_id", name="pk_privileged_operation_bindings"),
         sa.UniqueConstraint("ticket_id", name="uq_privileged_binding_ticket_id"),
@@ -724,6 +744,11 @@ def upgrade() -> None:
             (OLD.sealed_at IS NOT NULL AND NEW.sealed_at IS NOT OLD.sealed_at)
             OR (OLD.result_evidence_sha256 IS NOT NULL AND
                 NEW.result_evidence_sha256 IS NOT OLD.result_evidence_sha256)
+            OR (OLD.service_restart_outcome IS NOT NULL AND
+                NEW.service_restart_outcome IS NOT OLD.service_restart_outcome)
+            OR (OLD.service_readiness_evidence_sha256 IS NOT NULL AND
+                NEW.service_readiness_evidence_sha256 IS NOT
+                OLD.service_readiness_evidence_sha256)
             OR (OLD.closed_at IS NOT NULL AND NEW.closed_at IS NOT OLD.closed_at)
             OR (OLD.last_reconciled_at IS NOT NULL AND
                 NEW.last_reconciled_at<OLD.last_reconciled_at)

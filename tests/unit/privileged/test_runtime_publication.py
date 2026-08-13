@@ -29,7 +29,7 @@ from binnacle.privileged_broker.runtime_publication import (
     runtime_selector_intent_sha256,
 )
 from binnacle.privileged_broker.runtime_slots import (
-    FilesystemRuntimeSlotInspector,
+    FilesystemRuntimeSlotMaterialInspector,
     RuntimeSlotFile,
     RuntimeSlotInspectionSettings,
     RuntimeSlotManifest,
@@ -167,7 +167,7 @@ def _activation_request(
 
 
 def _inspect(runtime: Path, slot_id: str) -> VerifiedRuntimeSlot:
-    return FilesystemRuntimeSlotInspector(
+    return FilesystemRuntimeSlotMaterialInspector(
         RuntimeSlotInspectionSettings(
             runtime_root=runtime,
             expected_owner_uid=os.geteuid(),

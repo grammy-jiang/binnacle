@@ -35,6 +35,7 @@ from binnacle.domain.privileged import (
     BrokerExecutionState,
     BrokerRestartCheckpointState,
     BrokerRestartOutcome,
+    BrokerServiceRestartOutcome,
     PrivilegedAction,
     PrivilegedEffectKnowledge,
     PrivilegedMaximumEffect,
@@ -379,7 +380,7 @@ def _accepted_terminal_snapshot(
 def _accepted_service_terminal_snapshot(
     ticket: PrivilegedTicket,
     *,
-    effect_knowledge: PrivilegedEffectKnowledge,
+    outcome: BrokerServiceRestartOutcome,
 ) -> BrokerBindingSnapshot:
     closed_at = ticket.issued_at + timedelta(seconds=1)
     return BrokerBindingSnapshot(
@@ -388,12 +389,22 @@ def _accepted_service_terminal_snapshot(
         evidence_generation=3,
         acceptance_evidence_sha256=_digest("service-restart-accepted"),
         execution_state=BrokerExecutionState.TERMINAL,
-        effect_knowledge=effect_knowledge,
-        result_evidence_sha256=_digest(f"service-restart-terminal:{effect_knowledge.value}"),
+        effect_knowledge=(
+            PrivilegedEffectKnowledge.KNOWN_NO_SUBEFFECT
+            if outcome is BrokerServiceRestartOutcome.NO_SUBEFFECT
+            else PrivilegedEffectKnowledge.KNOWN_EFFECT
+        ),
+        result_evidence_sha256=_digest(f"service-restart-terminal:{outcome.value}"),
         accepted_at=ticket.issued_at + timedelta(milliseconds=100),
         sealed_at=None,
         closed_at=closed_at,
         last_reconciled_at=None,
+        service_restart_outcome=outcome,
+        service_readiness_evidence_sha256=(
+            None
+            if outcome is BrokerServiceRestartOutcome.NO_SUBEFFECT
+            else _digest(f"service-restart-readiness:{outcome.value}")
+        ),
     )
 
 
@@ -769,26 +780,32 @@ async def test_no_accept_closure_atomically_releases_operation_reservation_and_f
 
 @pytest.mark.anyio
 @pytest.mark.parametrize(
-    ("effect_knowledge", "expected_state", "expected_knowledge", "error_code"),
+    ("outcome", "expected_state", "expected_knowledge", "error_code"),
     (
         (
-            PrivilegedEffectKnowledge.KNOWN_EFFECT,
+            BrokerServiceRestartOutcome.SERVICE_READY,
             OperationState.SUCCEEDED,
             EffectKnowledge.KNOWN_EFFECT,
             None,
         ),
         (
-            PrivilegedEffectKnowledge.KNOWN_NO_SUBEFFECT,
+            BrokerServiceRestartOutcome.NO_SUBEFFECT,
             OperationState.FAILED,
             EffectKnowledge.KNOWN_NO_EFFECT,
             "effect_not_started",
+        ),
+        (
+            BrokerServiceRestartOutcome.FAILED,
+            OperationState.FAILED,
+            EffectKnowledge.KNOWN_EFFECT,
+            "service_restart_failed",
         ),
     ),
 )
 async def test_accepted_service_restart_closure_releases_audit_reservation_and_fence(
     tmp_path: Path,
     repo_root: Path,
-    effect_knowledge: PrivilegedEffectKnowledge,
+    outcome: BrokerServiceRestartOutcome,
     expected_state: OperationState,
     expected_knowledge: EffectKnowledge,
     error_code: str | None,
@@ -799,7 +816,7 @@ async def test_accepted_service_restart_closure_releases_audit_reservation_and_f
         preparation = _preparation(
             prepare_operation_id=prepare.operation_id,
             nonce="6" * 64,
-            suffix=f"service-{effect_knowledge.value}",
+            suffix=f"service-{outcome.value}",
             action=PrivilegedAction.SERVICE_RESTART,
         )
         repository = SqlitePrivilegedApplicationRepository(runtime)
@@ -814,7 +831,7 @@ async def test_accepted_service_restart_closure_releases_audit_reservation_and_f
             operation,
             preparation,
             nonce="6" * 64,
-            ticket_id=f"ticket-service-{effect_knowledge.value}",
+            ticket_id=f"ticket-service-{outcome.value}",
         )
         await repository.authorise_restart(
             RestartAuthorisationRequest(
@@ -833,13 +850,11 @@ async def test_accepted_service_restart_closure_releases_audit_reservation_and_f
         )
         snapshot = _accepted_service_terminal_snapshot(
             ticket,
-            effect_knowledge=effect_knowledge,
+            outcome=outcome,
         )
         request = ServiceRestartAcceptedClosureRequest(
             snapshot=snapshot,
-            audit_closure_evidence_sha256=_digest(
-                f"service-restart-audit:{effect_knowledge.value}"
-            ),
+            audit_closure_evidence_sha256=_digest(f"service-restart-audit:{outcome.value}"),
             closed_at=ticket.issued_at + timedelta(seconds=2),
         )
 

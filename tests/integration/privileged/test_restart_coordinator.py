@@ -208,6 +208,15 @@ async def test_candidate_success_closes_exact_checkpoint_and_binding(
         assert promoted.lkg_promotion_audit_sha256 == promotion_audit
         assert promoted.lkg_promotion_evidence_sha256 is not None
         assert promoted.lkg_promoted_at == promoted_at
+        promoted_slot = await store.get_runtime_slot(intent.candidate_slot.slot_id)
+        previous_lkg = await store.get_runtime_slot(intent.lkg_slot.slot_id)
+        assert promoted_slot == await store.lkg_runtime_slot()
+        assert promoted_slot is not None
+        assert promoted_slot.role is RuntimeSlotRole.LKG
+        assert promoted_slot.state is RuntimeSlotState.LKG
+        assert previous_lkg is not None
+        assert previous_lkg.role is RuntimeSlotRole.PRIOR
+        assert previous_lkg.state is RuntimeSlotState.PRIOR
         retained_checkpoint = await store.get_restart_checkpoint(ticket.operation_id)
         assert retained_checkpoint is not None
         assert retained_checkpoint.intent == intent

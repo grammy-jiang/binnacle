@@ -6,6 +6,7 @@ import asyncio
 import copy
 import socket
 import struct
+from dataclasses import replace
 from typing import cast
 
 import pytest
@@ -23,6 +24,8 @@ from binnacle.domain.privileged import (
     BrokerExecutionState,
     BrokerRestartCheckpointState,
     BrokerRestartOutcome,
+    BrokerServiceRestartOutcome,
+    PrivilegedAction,
     PrivilegedEffectKnowledge,
     PrivilegedError,
     PrivilegedTicket,
@@ -274,6 +277,30 @@ def test_restart_checkpoint_and_terminal_binding_wire_round_trip() -> None:
         lkg_promoted_at=ticket.issued_at,
     )
     assert binding_snapshot_from_wire(binding_snapshot_to_wire(binding)) == binding
+
+
+def test_service_restart_terminal_binding_wire_requires_explicit_result_truth() -> None:
+    accepted = binding_snapshot()
+    terminal = replace(
+        accepted,
+        identity=replace(accepted.identity, action=PrivilegedAction.SERVICE_RESTART),
+        execution_state=BrokerExecutionState.TERMINAL,
+        effect_knowledge=PrivilegedEffectKnowledge.KNOWN_EFFECT,
+        result_evidence_sha256="b" * 64,
+        closed_at=accepted.accepted_at,
+        service_restart_outcome=BrokerServiceRestartOutcome.SERVICE_READY,
+        service_readiness_evidence_sha256="c" * 64,
+    )
+    document = binding_snapshot_to_wire(terminal)
+
+    assert binding_snapshot_from_wire(document) == terminal
+    for invalid in (
+        {**document, "service_restart_outcome": None},
+        {**document, "service_restart_outcome": "unknown"},
+        {**document, "service_readiness_evidence_sha256": None},
+    ):
+        with pytest.raises(PrivilegedProtocolError):
+            binding_snapshot_from_wire(invalid)
 
 
 def test_restart_checkpoint_wire_rejects_nested_widening_and_tampering() -> None:

@@ -26,7 +26,7 @@ from binnacle.domain.privileged_observation import RuntimeSlotState, VerifiedRun
 from binnacle.privileged_broker.runtime_slots import (
     DEFAULT_RUNTIME_ROOT,
     RUNTIME_SLOT_MANIFEST,
-    FilesystemRuntimeSlotInspector,
+    FilesystemRuntimeSlotMaterialInspector,
     RuntimeSlotInspectionSettings,
     RuntimeSlotManifest,
     RuntimeSlotVerificationError,
@@ -231,7 +231,7 @@ class FilesystemRuntimeSlotPublisher:
 
     def __init__(self, settings: RuntimeSlotPublicationSettings) -> None:
         self._settings = settings
-        self._inspector = FilesystemRuntimeSlotInspector(
+        self._inspector = FilesystemRuntimeSlotMaterialInspector(
             RuntimeSlotInspectionSettings(
                 runtime_root=settings.runtime_root,
                 expected_owner_uid=settings.expected_runtime_owner_uid,

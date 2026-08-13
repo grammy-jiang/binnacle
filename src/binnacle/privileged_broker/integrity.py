@@ -272,6 +272,40 @@ def _verify_binding(
         expected_active = execution_state != "terminal"
         if expected_active != (active_slot == 1):
             raise PrivilegedBrokerIntegrityError("privileged active-slot evidence conflicts")
+    action = str(row["action"])
+    service_outcome = row["service_restart_outcome"]
+    readiness_evidence = row["service_readiness_evidence_sha256"]
+    service_terminal = (
+        action == "service_restart" and state == "accepted" and execution_state == "terminal"
+    )
+    if not service_terminal:
+        if service_outcome is not None or readiness_evidence is not None:
+            raise PrivilegedBrokerIntegrityError(
+                "nonterminal service binding carries terminal result truth"
+            )
+        return
+    expected_knowledge = {
+        "service_ready": "known_effect",
+        "failed": "known_effect",
+        "no_subeffect": "known_no_subeffect",
+    }.get(str(service_outcome))
+    if expected_knowledge != effect_knowledge or (service_outcome == "no_subeffect") != (
+        readiness_evidence is None
+    ):
+        raise PrivilegedBrokerIntegrityError(
+            "service restart disposition and readiness truth conflict"
+        )
+    terminal_events = tuple(
+        connection.execute(
+            "SELECT event_sha256 FROM privileged_evidence_events "
+            "WHERE operation_id=? AND event_type='service_restart.terminal'",
+            (row["operation_id"],),
+        )
+    )
+    if len(terminal_events) != 1 or terminal_events[0]["event_sha256"] != result_evidence:
+        raise PrivilegedBrokerIntegrityError(
+            "service restart terminal result lacks its exact evidence event"
+        )
 
 
 def _verify_subeffects(connection: sqlite3.Connection, high_water: int) -> None:

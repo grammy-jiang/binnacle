@@ -34,6 +34,7 @@ from binnacle.domain.privileged import (
     BrokerExecutionState,
     BrokerRestartCheckpointState,
     BrokerRestartOutcome,
+    BrokerServiceRestartOutcome,
     PrivilegedAction,
     PrivilegedEffectKnowledge,
 )
@@ -123,7 +124,7 @@ def _terminal_snapshot(
 
 def _terminal_service_snapshot(
     *,
-    effect_knowledge: PrivilegedEffectKnowledge = PrivilegedEffectKnowledge.KNOWN_EFFECT,
+    outcome: BrokerServiceRestartOutcome = BrokerServiceRestartOutcome.SERVICE_READY,
 ) -> BrokerBindingSnapshot:
     accepted = binding_snapshot()
     return replace(
@@ -134,10 +135,18 @@ def _terminal_service_snapshot(
         ),
         evidence_generation=3,
         execution_state=BrokerExecutionState.TERMINAL,
-        effect_knowledge=effect_knowledge,
+        effect_knowledge=(
+            PrivilegedEffectKnowledge.KNOWN_NO_SUBEFFECT
+            if outcome is BrokerServiceRestartOutcome.NO_SUBEFFECT
+            else PrivilegedEffectKnowledge.KNOWN_EFFECT
+        ),
         result_evidence_sha256=SHA_C,
         accepted_at=NOW,
         closed_at=NOW,
+        service_restart_outcome=outcome,
+        service_readiness_evidence_sha256=(
+            None if outcome is BrokerServiceRestartOutcome.NO_SUBEFFECT else SHA_C
+        ),
     )
 
 
@@ -542,6 +551,8 @@ async def test_audit_closure_appends_then_reuses_exact_terminal_evidence() -> No
         "restart_checkpoint_sha256",
         "restart_outcome",
         "selected_runtime_slot_id",
+        "service_restart_outcome",
+        "service_readiness_evidence_sha256",
     }
     update_tail.assert_awaited_once_with(AuditTail(2, SHA_C))
     emergency.assert_not_awaited()
@@ -555,30 +566,36 @@ async def test_audit_closure_appends_then_reuses_exact_terminal_evidence() -> No
 
 @pytest.mark.anyio
 @pytest.mark.parametrize(
-    ("broker_knowledge", "new_state", "effect_knowledge", "reason_code"),
+    ("outcome", "new_state", "effect_knowledge", "reason_code"),
     (
         (
-            PrivilegedEffectKnowledge.KNOWN_EFFECT,
+            BrokerServiceRestartOutcome.SERVICE_READY,
             "succeeded",
             "known_effect",
             "privileged_service_ready",
         ),
         (
-            PrivilegedEffectKnowledge.KNOWN_NO_SUBEFFECT,
+            BrokerServiceRestartOutcome.NO_SUBEFFECT,
             "failed",
             "known_no_effect",
             "privileged_effect_not_started",
         ),
+        (
+            BrokerServiceRestartOutcome.FAILED,
+            "failed",
+            "known_effect",
+            "privileged_service_restart_failed",
+        ),
     ),
 )
 async def test_audit_closure_records_terminal_service_restart_without_checkpoint(
-    broker_knowledge: PrivilegedEffectKnowledge,
+    outcome: BrokerServiceRestartOutcome,
     new_state: str,
     effect_knowledge: str,
     reason_code: str,
 ) -> None:
     operation = _running_operation()
-    snapshot = _terminal_service_snapshot(effect_knowledge=broker_knowledge)
+    snapshot = _terminal_service_snapshot(outcome=outcome)
     append = AsyncMock(
         return_value=AuditAppendResult(
             sequence=2,

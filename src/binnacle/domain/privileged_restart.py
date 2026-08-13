@@ -536,6 +536,7 @@ class ServiceRestartAcceptedClosureRequest:
                 PrivilegedEffectKnowledge.KNOWN_EFFECT,
             }
             or snapshot.result_evidence_sha256 is None
+            or snapshot.service_restart_outcome is None
             or snapshot.accepted_at is None
             or snapshot.closed_at is None
             or snapshot.restart_checkpoint_sha256 is not None

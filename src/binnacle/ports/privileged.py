@@ -10,6 +10,7 @@ from binnacle.domain.privileged import (
     BrokerAcceptanceReceipt,
     BrokerBindingSnapshot,
     BrokerNoAcceptReason,
+    BrokerServiceRestartOutcome,
     PrivilegedBrokerHello,
     PrivilegedTicket,
     PrivilegedTicketRoutingIdentity,
@@ -61,6 +62,20 @@ class PrivilegedEvidenceStore(Protocol):
     ) -> BrokerAcceptanceReceipt: ...
 
     async def get(self, operation_id: str) -> BrokerBindingSnapshot | None: ...
+
+    async def get_runtime_slot(self, slot_id: str) -> VerifiedRuntimeSlot | None: ...
+
+    async def lkg_runtime_slot(self) -> VerifiedRuntimeSlot | None: ...
+
+    async def complete_service_restart(
+        self,
+        operation_id: str,
+        *,
+        outcome: BrokerServiceRestartOutcome,
+        result_evidence_sha256: str,
+        readiness_evidence_sha256: str | None,
+        closed_at: datetime,
+    ) -> BrokerBindingSnapshot: ...
 
     async def promote_restart_lkg(
         self,

@@ -7,10 +7,10 @@ import json
 import os
 import re
 import stat
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path, PurePosixPath
-from typing import Final
+from typing import Final, Protocol
 
 from binnacle.domain.privileged import canonical_timestamp
 from binnacle.domain.privileged_observation import (
@@ -54,6 +54,8 @@ class RuntimeSlotFile:
 
 @dataclass(frozen=True, slots=True)
 class RuntimeSlotManifest:
+    """Immutable material receipt; role and state are publication-time facts only."""
+
     format_version: str
     slot_id: str
     slot_generation: int
@@ -146,8 +148,16 @@ class RuntimeSlotInspectionSettings:
             raise RuntimeSlotVerificationError("runtime slot settings are invalid")
 
 
-class FilesystemRuntimeSlotInspector:
-    """Verify root-owned slots and selector without changing either filesystem tree."""
+class RuntimeSlotLifecycleReader(Protocol):
+    """Read transactionally authoritative mutable slot roles from broker evidence."""
+
+    async def get_runtime_slot(self, slot_id: str) -> VerifiedRuntimeSlot | None: ...
+
+    async def lkg_runtime_slot(self) -> VerifiedRuntimeSlot | None: ...
+
+
+class FilesystemRuntimeSlotMaterialInspector:
+    """Verify immutable slot material and its publication-time role declaration."""
 
     def __init__(self, settings: RuntimeSlotInspectionSettings) -> None:
         self._settings = settings
@@ -162,13 +172,13 @@ class FilesystemRuntimeSlotInspector:
         slot_id = self._selector_slot_id()
         return None if slot_id is None else self.inspect_sync(slot_id)
 
-    async def lkg(self) -> VerifiedRuntimeSlot | None:
-        return self.lkg_sync()
+    async def published_lkg(self) -> VerifiedRuntimeSlot | None:
+        return self.published_lkg_sync()
 
-    def lkg_sync(self) -> VerifiedRuntimeSlot | None:
+    def published_lkg_sync(self) -> VerifiedRuntimeSlot | None:
         matches = [slot for slot in self._inspect_all() if slot.state is RuntimeSlotState.LKG]
         if len(matches) > 1:
-            raise RuntimeSlotVerificationError("multiple complete LKG slots exist")
+            raise RuntimeSlotVerificationError("multiple published LKG slots exist")
         return matches[0] if matches else None
 
     def inspect_sync(self, slot_id: str) -> VerifiedRuntimeSlot:
@@ -421,6 +431,61 @@ class FilesystemRuntimeSlotInspector:
         return tuple(self.inspect_sync(slot_id) for slot_id in sorted(slot_ids))
 
 
+class RetainedRuntimeSlotInspector:
+    """Bind immutable filesystem material to atomic broker-owned lifecycle truth."""
+
+    def __init__(
+        self,
+        material: FilesystemRuntimeSlotMaterialInspector,
+        lifecycle: RuntimeSlotLifecycleReader,
+    ) -> None:
+        self._material = material
+        self._lifecycle = lifecycle
+
+    async def inspect(self, slot_id: str) -> VerifiedRuntimeSlot:
+        material = await self._material.inspect(slot_id)
+        retained = await self._lifecycle.get_runtime_slot(slot_id)
+        if retained is None:
+            raise RuntimeSlotVerificationError(
+                "runtime slot has no authoritative lifecycle evidence"
+            )
+        return self._bind_lifecycle(material, retained)
+
+    async def current(self) -> VerifiedRuntimeSlot | None:
+        material = await self._material.current()
+        return None if material is None else await self.inspect(material.slot_id)
+
+    async def lkg(self) -> VerifiedRuntimeSlot | None:
+        retained = await self._lifecycle.lkg_runtime_slot()
+        if retained is None:
+            return None
+        material = await self._material.inspect(retained.slot_id)
+        return self._bind_lifecycle(material, retained)
+
+    @staticmethod
+    def _bind_lifecycle(
+        material: VerifiedRuntimeSlot,
+        retained: VerifiedRuntimeSlot,
+    ) -> VerifiedRuntimeSlot:
+        rebound = replace(material, role=retained.role, state=retained.state)
+        if rebound != retained:
+            raise RuntimeSlotVerificationError(
+                "runtime slot material differs from retained lifecycle evidence"
+            )
+        return retained
+
+
+class FilesystemRuntimeSlotInspector(RetainedRuntimeSlotInspector):
+    """Verify filesystem material under broker-authoritative mutable lifecycle truth."""
+
+    def __init__(
+        self,
+        settings: RuntimeSlotInspectionSettings,
+        lifecycle: RuntimeSlotLifecycleReader,
+    ) -> None:
+        super().__init__(FilesystemRuntimeSlotMaterialInspector(settings), lifecycle)
+
+
 def _manifest_from_document(value: object) -> RuntimeSlotManifest:
     expected = {
         "candidate_verification_sha256",
@@ -603,8 +668,11 @@ __all__ = [
     "DEFAULT_RUNTIME_ROOT",
     "RUNTIME_SLOT_MANIFEST",
     "FilesystemRuntimeSlotInspector",
+    "FilesystemRuntimeSlotMaterialInspector",
+    "RetainedRuntimeSlotInspector",
     "RuntimeSlotFile",
     "RuntimeSlotInspectionSettings",
+    "RuntimeSlotLifecycleReader",
     "RuntimeSlotManifest",
     "RuntimeSlotVerificationError",
     "canonical_runtime_slot_manifest_bytes",

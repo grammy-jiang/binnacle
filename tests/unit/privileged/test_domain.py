@@ -15,6 +15,7 @@ from binnacle.domain.privileged import (
     BrokerExecutionState,
     BrokerRestartCheckpointState,
     BrokerRestartOutcome,
+    BrokerServiceRestartOutcome,
     PackageProfile,
     PrivilegedAction,
     PrivilegedBrokerHello,
@@ -313,6 +314,58 @@ def _controlled_terminal_binding() -> BrokerBindingSnapshot:
         lkg_slot_id="lkg-slot",
         selected_runtime_slot_id="candidate-slot",
     )
+
+
+def _service_terminal_binding() -> BrokerBindingSnapshot:
+    ticket = _ticket()
+    return BrokerBindingSnapshot(
+        identity=replace(ticket.routing_identity, action=PrivilegedAction.SERVICE_RESTART),
+        acceptance_state=BrokerAcceptanceState.ACCEPTED,
+        evidence_generation=2,
+        acceptance_evidence_sha256=DIGEST_A,
+        execution_state=BrokerExecutionState.TERMINAL,
+        effect_knowledge=PrivilegedEffectKnowledge.KNOWN_EFFECT,
+        result_evidence_sha256=DIGEST_B,
+        accepted_at=ticket.issued_at,
+        sealed_at=None,
+        closed_at=ticket.issued_at + timedelta(seconds=1),
+        last_reconciled_at=None,
+        service_restart_outcome=BrokerServiceRestartOutcome.SERVICE_READY,
+        service_readiness_evidence_sha256=DIGEST_C,
+    )
+
+
+def test_service_restart_terminal_projection_requires_explicit_readiness_truth() -> None:
+    ready = _service_terminal_binding()
+    failed = replace(ready, service_restart_outcome=BrokerServiceRestartOutcome.FAILED)
+    no_subeffect = replace(
+        ready,
+        effect_knowledge=PrivilegedEffectKnowledge.KNOWN_NO_SUBEFFECT,
+        service_restart_outcome=BrokerServiceRestartOutcome.NO_SUBEFFECT,
+        service_readiness_evidence_sha256=None,
+    )
+
+    assert failed.effect_knowledge is ready.effect_knowledge
+    assert no_subeffect.service_readiness_evidence_sha256 is None
+    invalid: tuple[Callable[[], object], ...] = (
+        lambda: replace(ready, service_restart_outcome=None),
+        lambda: replace(ready, service_readiness_evidence_sha256=None),
+        lambda: replace(
+            ready,
+            effect_knowledge=PrivilegedEffectKnowledge.KNOWN_NO_SUBEFFECT,
+        ),
+        lambda: replace(
+            no_subeffect,
+            service_readiness_evidence_sha256=DIGEST_C,
+        ),
+        lambda: replace(
+            ready,
+            identity=replace(ready.identity, action=PrivilegedAction.PACKAGE_INSTALL),
+        ),
+    )
+    for construct in invalid:
+        with pytest.raises(PrivilegedError):
+            construct()
 
 
 def test_restart_binding_projection_is_exact_and_fail_closed() -> None:
