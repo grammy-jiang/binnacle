@@ -56,6 +56,7 @@ _EXPECTED_LIMIT_KEYS = frozenset(
         "github_api_response_bytes_max",
         "github_api_timeout_seconds",
         "github_api_token_bytes_max",
+        "github_ci_latest_jobs_max",
         "security_checks_max",
         "workflow_source_bytes_max",
     }
@@ -265,6 +266,7 @@ def load_phase10_policy(repo_root: Path) -> Phase10Policy:
         limits["github_api_response_bytes_max"] > 65_536
         or limits["github_api_token_bytes_max"] > 4_096
         or limits["github_api_timeout_seconds"] > 60
+        or limits["github_ci_latest_jobs_max"] > 100
         or limits["workflow_source_bytes_max"] > 32_768
     ):
         raise Phase10PolicyError("Phase 10 GitHub API limit exceeds the reviewed ceiling")

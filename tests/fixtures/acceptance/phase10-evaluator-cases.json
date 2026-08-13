@@ -108,7 +108,7 @@
         {
           "operation": "replace",
           "path": "/integration_generations/0/ci_evidence/0/github_ci_api_ref/sha256",
-          "value": "67f8f13330dad30b1aa59375e67969b9caab0857b0b79b2475a0e5a8072575ce"
+          "value": "f890e3430da158acdf4bba5d3aaed9fb0b2540c9246ceed1da57e1fe5fbed3e3"
         }
       ],
       "expected": "INCOMPLETE",
@@ -525,11 +525,56 @@
         {
           "operation": "replace",
           "path": "/integration_generations/0/ci_evidence/0/github_ci_api_ref/sha256",
-          "value": "d7b1c3915301adc543cc2bcea77a02628554ed2e028ed4c0a4cf5f5fcfea0acb"
+          "value": "bde9ddd5b78dc1e8102d652a913885fb746991f6fd15b8b0a6e030541712d4c6"
         }
       ],
       "expected": "FAIL",
       "code": "ci_workflow_source_identity_mismatch"
+    },
+    {
+      "id": "post-restart-controller-mismatch-fails",
+      "operation": "replace",
+      "path": "/post_restart_runtime/controller_sha256",
+      "value": "8888888888888888888888888888888888888888888888888888888888888888",
+      "expected": "FAIL",
+      "code": "post_restart_controller_mismatch"
+    },
+    {
+      "id": "stale-security-run-binding-fails",
+      "operation": "replace",
+      "path": "/security_checks/0/acceptance_run_id",
+      "value": "stale-acceptance-run",
+      "expected": "FAIL",
+      "code": "security_acceptance_run_mismatch"
+    },
+    {
+      "id": "superseded-ci-job-fails",
+      "operation": "batch",
+      "operations": [
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/1/workflow_run_attempt",
+          "value": 2
+        },
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/1/github_ci_api_observation/workflow_run/run_attempt",
+          "value": 2
+        },
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/1/github_ci_api_observation/latest_job_id",
+          "value": null
+        },
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/1/github_ci_api_ref/sha256",
+          "value": "bb0bd7e49cee10bd9613cbe001d419ae95b8d29fa82d359b5ef113e49b399452"
+        }
+      ],
+      "path": "/integration_generations/0/ci_evidence/1/github_ci_api_observation/latest_job_id",
+      "expected": "FAIL",
+      "code": "ci_job_superseded_by_later_attempt"
     }
   ]
 }

@@ -27,6 +27,7 @@ from binnacle.evaluation.phase10_acceptance import (  # noqa: E402
     AcceptanceVerdict,
     evaluate_phase10_manifest,
     phase10_local_check_evidence_sha256,
+    phase10_security_evidence_sha256,
 )
 from binnacle.evaluation.phase10_policy import (  # noqa: E402
     Phase10PolicyError,
@@ -1341,7 +1342,10 @@ def validate_phase10_acceptance_contract() -> None:
         "response.read(response_bytes_max + 1)",
         'path=f"/repos/{repository}/actions/jobs/{job_id}"',
         'path=f"/repos/{repository}/actions/runs/{run_id}"',
+        'f"/repos/{repository}/actions/runs/{run_id}/jobs"',
+        'f"?filter=latest&per_page={latest_jobs_max}"',
         'path=f"/repos/{repository}/contents/{encoded_path}?ref={checkout_oid}"',
+        'observation["latest_job_id"] != job_id',
         'job["conclusion"] != "success"',
         'workflow_run["conclusion"] != "success"',
     )
@@ -1394,6 +1398,7 @@ def validate_phase10_acceptance_contract() -> None:
     expected_ci_api_observation_fields = {
         "repository",
         "job",
+        "latest_job_id",
         "workflow_run",
         "workflow_source",
     }
@@ -1414,6 +1419,29 @@ def validate_phase10_acceptance_contract() -> None:
         "workflow_run_attempt",
     }.issubset(ci_evidence_schema.get("required", [])):
         fail("Phase 10 CI evidence does not require authenticated job and workflow metadata")
+    post_restart_schema = definitions.get("postRestartRuntime", {})
+    if not {"controller_sha256", "device_sha256", "workspace_sha256"}.issubset(
+        post_restart_schema.get("required", [])
+    ):
+        fail("Phase 10 post-restart runtime does not bind the selected environment")
+    security_schema = definitions.get("securityCheck", {})
+    required_security_binding_fields = {
+        "evidence_binding_sha256",
+        "acceptance_run_id",
+        "policy_sha256",
+        "merged_oid",
+        "merged_tree_oid",
+        "restart_operation_ref",
+        "restart_checkpoint_ref",
+        "readiness_generation",
+        "runtime_instance_sha256",
+        "runtime_profile_sha256",
+        "controller_sha256",
+        "device_sha256",
+        "workspace_sha256",
+    }
+    if not required_security_binding_fields.issubset(security_schema.get("required", [])):
+        fail("Phase 10 security evidence does not bind the current acceptance execution")
     for check_definition in ("localCheck", "postMergeCheck"):
         check_schema = definitions.get(check_definition, {})
         if "evidence_binding_sha256" not in check_schema.get(
@@ -1450,6 +1478,8 @@ def validate_phase10_acceptance_contract() -> None:
     for name, schema_limit in expected_limits.items():
         if policy.limits.get(name) != schema_limit:
             fail(f"Phase 10 policy {name} differs from acceptance schema")
+    if policy.limits.get("github_ci_latest_jobs_max") != 16:
+        fail("Phase 10 latest-job membership bound differs from the reviewed ceiling")
 
     if manifest.get("policy_sha256") != policy.sha256:
         fail("Phase 10 PASS fixture policy identity is stale")
@@ -1502,6 +1532,22 @@ def validate_phase10_acceptance_contract() -> None:
         "post_merge", set()
     ):
         fail("Phase 10 PASS fixture reuses candidate evidence after merge")
+
+    security_evidence_ids: set[object] = set()
+    security_evidence_digests: set[object] = set()
+    for index, check in enumerate(manifest.get("security_checks", [])):
+        if not isinstance(check, dict) or not isinstance(check.get("evidence_ref"), dict):
+            fail(f"Phase 10 PASS fixture security_checks[{index}] is invalid")
+            continue
+        evidence_ref = check["evidence_ref"]
+        evidence_id = evidence_ref.get("id")
+        evidence_digest = evidence_ref.get("sha256")
+        if evidence_id in security_evidence_ids or evidence_digest in security_evidence_digests:
+            fail("Phase 10 PASS fixture reuses security evidence")
+        security_evidence_ids.add(evidence_id)
+        security_evidence_digests.add(evidence_digest)
+        if check.get("evidence_binding_sha256") != phase10_security_evidence_sha256(check):
+            fail("Phase 10 PASS fixture has an unbound security evidence digest")
 
     artifact_observations = {
         (evidence.get("repository"), evidence.get("github_artifact_id")): evidence.get(
@@ -1586,6 +1632,9 @@ def validate_phase10_acceptance_contract() -> None:
         "post-merge-check-identity-digest-mismatch-fails",
         "stale-policy-is-incomplete",
         "post-restart-runtime-profile-mismatch-fails",
+        "post-restart-controller-mismatch-fails",
+        "stale-security-run-binding-fails",
+        "superseded-ci-job-fails",
         "unresolved-effect-is-incomplete",
     }
     missing_cases = required_cases - set(cases)

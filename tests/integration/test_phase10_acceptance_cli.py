@@ -93,11 +93,13 @@ def _install_authenticated_artifact_api(
         workflow_path: str,
         checkout_oid: str,
         response_bytes_max: int,
+        latest_jobs_max: int,
         workflow_source_bytes_max: int,
         timeout_seconds: int,
     ) -> dict[str, Any] | None:
         assert token == "github-api-test-token"
         assert response_bytes_max == 65_536
+        assert latest_jobs_max == 16
         assert workflow_source_bytes_max == 32_768
         assert timeout_seconds == 15
         observation = ci_observations.get((repository, job_id, run_id, workflow_path, checkout_oid))
@@ -196,6 +198,7 @@ def test_authenticated_ci_reader_uses_fixed_bounded_exact_revision_endpoints(
     raw_job["ignored"] = "extra GitHub API field"
     raw_run = copy.deepcopy(embedded["workflow_run"])
     raw_run["repository"] = {"full_name": evidence["repository"]}
+    raw_latest_jobs = {"total_count": 1, "jobs": [raw_job]}
     workflow_path = embedded["workflow_source"]["path"]
     source_bytes = (repo_root / workflow_path).read_bytes()
     raw_source = {
@@ -209,6 +212,7 @@ def test_authenticated_ci_reader_uses_fixed_bounded_exact_revision_endpoints(
     responses = [
         _FakeGitHubResponse(status=200, value=raw_job),
         _FakeGitHubResponse(status=200, value=raw_run),
+        _FakeGitHubResponse(status=200, value=raw_latest_jobs),
         _FakeGitHubResponse(status=200, value=raw_source),
     ]
     connections: list[_FakeGitHubConnection] = []
@@ -230,6 +234,7 @@ def test_authenticated_ci_reader_uses_fixed_bounded_exact_revision_endpoints(
         workflow_path=workflow_path,
         checkout_oid=evidence["checkout_oid"],
         response_bytes_max=65_536,
+        latest_jobs_max=16,
         workflow_source_bytes_max=32_768,
         timeout_seconds=15,
     )
@@ -242,10 +247,39 @@ def test_authenticated_ci_reader_uses_fixed_bounded_exact_revision_endpoints(
     assert [request[1] for request in requests] == [
         f"/repos/grammy-jiang/binnacle/actions/jobs/{evidence['github_job_id']}",
         f"/repos/grammy-jiang/binnacle/actions/runs/{evidence['run_id']}",
+        (
+            f"/repos/grammy-jiang/binnacle/actions/runs/{evidence['run_id']}/jobs"
+            "?filter=latest&per_page=16"
+        ),
         f"/repos/grammy-jiang/binnacle/contents/{workflow_path}?ref={evidence['checkout_oid']}",
     ]
     assert all(request[2]["Authorization"] == "Bearer private-test-token" for request in requests)
     assert all(connection.closed for connection in connections)
+
+
+def test_latest_jobs_view_rejects_job_superseded_by_full_rerun(repo_root: Path) -> None:
+    fixture = _load_json(repo_root / "tests/fixtures/acceptance/phase10-pass.json")
+    evidence = fixture["integration_generations"][0]["ci_evidence"][0]
+    job = copy.deepcopy(evidence["github_ci_api_observation"]["job"])
+
+    assert (
+        acceptance_script._latest_ci_job_id(
+            {"total_count": 1, "jobs": [job]},
+            job_id=evidence["github_job_id"],
+            maximum=16,
+        )
+        == evidence["github_job_id"]
+    )
+
+    job["id"] += 100
+    assert (
+        acceptance_script._latest_ci_job_id(
+            {"total_count": 1, "jobs": [job]},
+            job_id=evidence["github_job_id"],
+            maximum=16,
+        )
+        is None
+    )
 
 
 def test_authenticated_ci_reader_fails_closed_on_invalid_workflow_source(
@@ -268,6 +302,24 @@ def test_authenticated_ci_reader_fails_closed_on_invalid_workflow_source(
                 "check_run_url": "https://api.github.com/check",
             }
             if "/jobs/" in kwargs["path"]
+            else {
+                "total_count": 1,
+                "jobs": [
+                    {
+                        "id": 1,
+                        "run_id": 1,
+                        "run_attempt": 1,
+                        "workflow_name": "Contract validation",
+                        "name": "validate-contracts",
+                        "head_sha": "2" * 40,
+                        "status": "completed",
+                        "conclusion": "success",
+                        "url": "https://api.github.com/job",
+                        "check_run_url": "https://api.github.com/check",
+                    }
+                ],
+            }
+            if "jobs?filter=latest" in kwargs["path"]
             else {
                 "id": 1,
                 "run_attempt": 1,
@@ -303,6 +355,7 @@ def test_authenticated_ci_reader_fails_closed_on_invalid_workflow_source(
             workflow_path=".github/workflows/contracts.yml",
             checkout_oid="2" * 40,
             response_bytes_max=65_536,
+            latest_jobs_max=16,
             workflow_source_bytes_max=32_768,
             timeout_seconds=15,
         )

@@ -858,7 +858,10 @@ The retained ``run_attempt`` is the attempt on which that specific job and its a
 artifact executed.  ``workflow_run_attempt`` separately records the workflow run's current
 latest attempt.  A successful job retained from attempt 1 can therefore remain valid after
 ``re-run failed jobs`` advances only the failed jobs and the workflow run to attempt 2;
-the latest workflow attempt may never precede a retained job attempt.
+the latest workflow attempt may never precede a retained job attempt.  Authentication also
+reads the run's complete bounded ``filter=latest`` job inventory.  The retained numeric job
+ID must occur in that inventory: this distinguishes jobs GitHub preserved for a failed-job
+rerun from attempt-1 jobs superseded by a full workflow rerun.
 
 The policy freezes each required workflow's numeric GitHub workflow ID, repository path,
 and raw source SHA-256.  The authenticated run must match that ID/path plus its name,
@@ -1063,6 +1066,8 @@ machine.
 Reconnect attempts use the same registered endpoint/controller profile. On reconnect:
 
 * authenticate current controller/device again;
+* reproduce the selected controller, device and workspace digests in the post-restart
+  runtime record and compare them with the coherent baseline;
 * inspect current runtime identity/readiness;
 * retrieve/reconcile the exact retained Phase 4 restart operation;
 * inspect Phase 9 broker checkpoint/recovery evidence;
@@ -1137,6 +1142,10 @@ catalogue generation cannot satisfy this step.
 
 The final bundle must demonstrate that the self-hosting loop did not obtain authority by
 leaking or bypassing permanent boundaries. At minimum verify:
+
+* each security check retains a canonical digest binding its exact evidence to this
+  acceptance run and policy, merged OID/tree, restart operation/checkpoint/readiness
+  generation, runtime instance/profile, and controller/device/workspace identities;
 
 * no reusable controller/auth credential appears in Tool results, command output, Git
   output, audit summaries, PR text or acceptance report;

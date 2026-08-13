@@ -151,8 +151,11 @@ later failed job green.  The authenticated run must match the frozen numeric wor
 name/path, pull-request event, candidate head, run ID, and independently retained latest
 workflow-run attempt and must also be terminal ``success``.  A successful job and artifact
 from an earlier attempt remain valid when ``re-run failed jobs`` advances only other jobs;
-the workflow-run attempt may not precede the retained job attempt.  The exact-revision
-workflow source must match the frozen path and raw
+the workflow-run attempt may not precede the retained job attempt.  The evaluator also
+reads the run's complete bounded ``filter=latest`` job view and requires the retained
+numeric job ID to remain a member.  A full workflow rerun therefore supersedes every older
+job, while a job genuinely preserved by ``re-run failed jobs`` remains admissible.  The
+exact-revision workflow source must match the frozen path and raw
 SHA-256; its Git blob OID and bounded byte size are retained for diagnosis.
 
 A live 404 or authenticated mismatch is a failure.  A nonterminal job/run or unavailable
@@ -297,11 +300,18 @@ restricted recovery or uncertainty is ``INCOMPLETE``.  Then independently verify
 * the post-restart runtime OID and tree equal the hosted merged result;
 * the source state is clean;
 * the post-restart runtime profile equals the frozen baseline runtime profile;
+* the reauthenticated controller, device, and workspace identities equal the selected
+  baseline identities;
 * the runtime instance differs from the baseline instance; and
 * the chosen safe semantic probe observes the changed behaviour on that new instance.
 
 Close the required security checks and unresolved-reference list only after all evidence
-has been sanitized and correlated.  Leave ``owner_review`` null while the evidence is
+has been sanitized and correlated.  Each security record's canonical binding digest must
+cover its raw evidence reference, acceptance run and policy, exact merged OID/tree,
+restart operation/checkpoint/readiness generation, runtime instance/profile, and
+controller/device/workspace identities.  Evidence copied from another campaign cannot be
+refreshed by relabelling the record or recomputing only the owner-review projection.  Leave
+``owner_review`` null while the evidence is
 still changing.  When the evidence projection is final, compute the exact review target:
 
 .. code-block:: console

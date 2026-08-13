@@ -257,10 +257,11 @@ def _fetch_authenticated_ci_api_observation(
     workflow_path: str,
     checkout_oid: str,
     response_bytes_max: int,
+    latest_jobs_max: int,
     workflow_source_bytes_max: int,
     timeout_seconds: int,
 ) -> dict[str, Any] | None:
-    """Read the exact job, workflow run, and workflow source from GitHub REST."""
+    """Read the exact job, latest-job membership, run, and source from GitHub REST."""
 
     job = _fetch_authenticated_github_json(
         token=token,
@@ -274,6 +275,15 @@ def _fetch_authenticated_ci_api_observation(
         response_bytes_max=response_bytes_max,
         timeout_seconds=timeout_seconds,
     )
+    latest_jobs = _fetch_authenticated_github_json(
+        token=token,
+        path=(
+            f"/repos/{repository}/actions/runs/{run_id}/jobs"
+            f"?filter=latest&per_page={latest_jobs_max}"
+        ),
+        response_bytes_max=response_bytes_max,
+        timeout_seconds=timeout_seconds,
+    )
     encoded_path = quote(workflow_path, safe="/")
     source = _fetch_authenticated_github_json(
         token=token,
@@ -281,11 +291,16 @@ def _fetch_authenticated_ci_api_observation(
         response_bytes_max=response_bytes_max,
         timeout_seconds=timeout_seconds,
     )
-    if job is None or run is None or source is None:
+    if job is None or run is None or latest_jobs is None or source is None:
         return None
     return {
         "repository": repository,
         "job": _sanitize_ci_job_api_observation(job),
+        "latest_job_id": _latest_ci_job_id(
+            latest_jobs,
+            job_id=job_id,
+            maximum=latest_jobs_max,
+        ),
         "workflow_run": _sanitize_ci_run_api_observation(run, repository=repository),
         "workflow_source": _sanitize_workflow_source_api_observation(
             source,
@@ -294,6 +309,36 @@ def _fetch_authenticated_ci_api_observation(
             maximum=workflow_source_bytes_max,
         ),
     }
+
+
+def _latest_ci_job_id(
+    value: dict[str, Any],
+    *,
+    job_id: int,
+    maximum: int,
+) -> int | None:
+    """Return the target ID only when it occurs in the complete latest-jobs view."""
+
+    total_count = value.get("total_count")
+    jobs = value.get("jobs")
+    if (
+        isinstance(total_count, bool)
+        or not isinstance(total_count, int)
+        or not 0 <= total_count <= maximum
+        or not isinstance(jobs, list)
+        or len(jobs) != total_count
+    ):
+        raise CiApiLookupUnavailable("authenticated GitHub latest-jobs response is invalid")
+    observed_ids: set[int] = set()
+    for raw_job in jobs:
+        if not isinstance(raw_job, dict):
+            raise CiApiLookupUnavailable("authenticated GitHub latest-jobs response is invalid")
+        sanitized = _sanitize_ci_job_api_observation(cast(dict[str, Any], raw_job))
+        current_id = cast(int, sanitized["id"])
+        if current_id in observed_ids:
+            raise CiApiLookupUnavailable("authenticated GitHub latest-jobs response is invalid")
+        observed_ids.add(current_id)
+    return job_id if job_id in observed_ids else None
 
 
 def _sanitize_ci_job_api_observation(value: dict[str, Any]) -> dict[str, Any]:
@@ -544,6 +589,7 @@ def main(argv: list[str] | None = None) -> int:
                     workflow_path=workflow_path,
                     checkout_oid=checkout_oid,
                     response_bytes_max=policy.limits["github_api_response_bytes_max"],
+                    latest_jobs_max=policy.limits["github_ci_latest_jobs_max"],
                     workflow_source_bytes_max=policy.limits["workflow_source_bytes_max"],
                     timeout_seconds=policy.limits["github_api_timeout_seconds"],
                 )

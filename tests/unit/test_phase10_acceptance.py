@@ -25,6 +25,7 @@ from binnacle.evaluation.phase10_acceptance import (
     create_phase10_skeleton,
     phase10_local_check_evidence_sha256,
     phase10_reviewed_evidence_sha256,
+    phase10_security_evidence_sha256,
 )
 from binnacle.evaluation.phase10_acceptance import (
     evaluate_phase10_manifest as _evaluate_phase10_manifest,
@@ -263,9 +264,9 @@ def test_phase10_policy_is_frozen_and_canonical(repo_root: Path) -> None:
     policy = load_phase10_policy(repo_root)
 
     assert policy.policy_id == "binnacle-phase10-acceptance-v1"
-    assert policy.sha256 == "2b7719d8fa95009c99649f4ade972eeaaf91849db59c0cbeceb77874689474d3"
+    assert policy.sha256 == "519084976123ef1d280c77d5f2a44e9c821c82ccd488027bccfeca4d516e099d"
     assert policy.acceptance_schema_sha256 == (
-        "dddb73dabc2d1f23f9a6356982c5b6b51f83cf96cf702101e77f47bdff4f5423"
+        "4db3aaf056c792383bedf3a17238d94bee6741262d0a4d7860cfea1afec6534f"
     )
     assert policy.ci_attestation_schema_sha256 == (
         "6b7d2c6dff03870790dfb3e4ee6be5c93399e61d1bc7c67afea2969ea91e2760"
@@ -283,6 +284,7 @@ def test_phase10_policy_is_frozen_and_canonical(repo_root: Path) -> None:
     assert policy.limits["github_api_response_bytes_max"] == 65_536
     assert policy.limits["github_api_token_bytes_max"] == 4_096
     assert policy.limits["github_api_timeout_seconds"] == 15
+    assert policy.limits["github_ci_latest_jobs_max"] == 16
     assert policy.limits["workflow_source_bytes_max"] == 32_768
     assert policy.allowed_merge_methods == ("squash",)
     assert policy.required_ci_jobs["Python CI"] == (
@@ -431,6 +433,24 @@ def test_successful_job_from_earlier_attempt_can_satisfy_latest_successful_run(
     assert report.verdict is AcceptanceVerdict.PASS
 
 
+def test_job_superseded_by_full_rerun_cannot_satisfy_latest_run(repo_root: Path) -> None:
+    manifest = _pass_manifest(repo_root)
+    evidence = manifest["integration_generations"][0]["ci_evidence"][1]
+    observation = evidence["github_ci_api_observation"]
+    evidence["workflow_run_attempt"] = 2
+    observation["workflow_run"]["run_attempt"] = 2
+    observation["latest_job_id"] = None
+    evidence["github_ci_api_ref"]["sha256"] = canonical_json_sha256(observation)
+    manifest["owner_review"]["reviewed_evidence_sha256"] = phase10_reviewed_evidence_sha256(
+        manifest
+    )
+
+    report = evaluate_phase10_manifest(manifest, repo_root=repo_root)
+
+    assert report.verdict is AcceptanceVerdict.FAIL
+    assert "ci_job_superseded_by_later_attempt" in {finding.code for finding in report.findings}
+
+
 def test_workflow_run_attempt_cannot_precede_retained_job_attempt(repo_root: Path) -> None:
     manifest = _pass_manifest(repo_root)
     evidence = manifest["integration_generations"][0]["ci_evidence"][0]
@@ -497,10 +517,10 @@ def test_fabricated_artifact_tuple_cannot_replace_authenticated_api_truth(
     assert "ci_artifact_api_not_found" in {finding.code for finding in report.findings}
 
 
-@pytest.mark.parametrize("case_index", range(44))
+@pytest.mark.parametrize("case_index", range(47))
 def test_phase10_evaluator_fixture(case_index: int, repo_root: Path) -> None:
     cases = _cases(repo_root)
-    assert len(cases) == 44
+    assert len(cases) == 47
     case = cases[case_index]
     manifest = _pass_manifest(repo_root)
     _apply_case(manifest, case)
@@ -761,6 +781,21 @@ _EVALUATOR_BRANCH_CASES: tuple[tuple[str, object, str], ...] = (
         "post_restart_runtime_profile_mismatch",
     ),
     (
+        "/post_restart_runtime/controller_sha256",
+        "8" * 64,
+        "post_restart_controller_mismatch",
+    ),
+    (
+        "/post_restart_runtime/device_sha256",
+        "8" * 64,
+        "post_restart_device_mismatch",
+    ),
+    (
+        "/post_restart_runtime/workspace_sha256",
+        "8" * 64,
+        "post_restart_workspace_mismatch",
+    ),
+    (
         "/post_restart_runtime/restart_operation_ref/id",
         "other-restart-operation",
         "post_restart_runtime_restart_mismatch",
@@ -783,6 +818,11 @@ _EVALUATOR_BRANCH_CASES: tuple[tuple[str, object, str], ...] = (
         "behaviour_probe_runtime_mismatch",
     ),
     ("/security_checks/0/conclusion", "unavailable", "security_evidence_unavailable"),
+    (
+        "/security_checks/0/evidence_binding_sha256",
+        "8" * 64,
+        "security_evidence_binding_mismatch",
+    ),
     ("/owner_review/outcome", "rejected", "owner_review_rejected"),
     ("/owner_review/evidence_complete", False, "owner_review_evidence_incomplete"),
     ("/owner_review/acceptance_run_id", "old-run", "owner_review_run_mismatch"),
@@ -812,6 +852,37 @@ def test_phase10_evaluator_rejects_each_nonpassing_branch(
     report = evaluate_phase10_manifest(manifest, repo_root=repo_root)
 
     assert report.verdict is not AcceptanceVerdict.PASS
+    assert expected_code in {finding.code for finding in report.findings}
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "expected_code"),
+    (
+        ("acceptance_run_id", "stale-run", "security_acceptance_run_mismatch"),
+        ("policy_sha256", "8" * 64, "security_policy_mismatch"),
+        ("merged_oid", "8" * 40, "security_merge_identity_mismatch"),
+        ("readiness_generation", 41, "security_restart_identity_mismatch"),
+        ("runtime_instance_sha256", "8" * 64, "security_runtime_identity_mismatch"),
+        ("controller_sha256", "8" * 64, "security_environment_identity_mismatch"),
+    ),
+)
+def test_security_evidence_binding_cannot_relabel_stale_execution(
+    field: str,
+    value: object,
+    expected_code: str,
+    repo_root: Path,
+) -> None:
+    manifest = _pass_manifest(repo_root)
+    check = manifest["security_checks"][0]
+    check[field] = value
+    check["evidence_binding_sha256"] = phase10_security_evidence_sha256(check)
+    manifest["owner_review"]["reviewed_evidence_sha256"] = phase10_reviewed_evidence_sha256(
+        manifest
+    )
+
+    report = evaluate_phase10_manifest(manifest, repo_root=repo_root)
+
+    assert report.verdict is AcceptanceVerdict.FAIL
     assert expected_code in {finding.code for finding in report.findings}
 
 
@@ -990,6 +1061,10 @@ def test_phase10_policy_rejects_missing_duplicate_and_contradictory_sources(
         {
             **policy,
             "limits": {**policy["limits"], "workflow_source_bytes_max": 32_769},
+        },
+        {
+            **policy,
+            "limits": {**policy["limits"], "github_ci_latest_jobs_max": 101},
         },
         {**policy, "required_ci_workflow_profiles": {}},
         {**policy, "policy_id": ""},

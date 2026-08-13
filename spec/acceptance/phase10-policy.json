@@ -1,5 +1,5 @@
 {
-  "acceptance_schema_sha256": "dddb73dabc2d1f23f9a6356982c5b6b51f83cf96cf702101e77f47bdff4f5423",
+  "acceptance_schema_sha256": "4db3aaf056c792383bedf3a17238d94bee6741262d0a4d7860cfea1afec6534f",
   "allowed_merge_methods": [
     "squash"
   ],
@@ -15,6 +15,7 @@
     "github_api_response_bytes_max": 65536,
     "github_api_timeout_seconds": 15,
     "github_api_token_bytes_max": 4096,
+    "github_ci_latest_jobs_max": 16,
     "integration_generations_max": 64,
     "manifest_bytes_max": 1048576,
     "security_checks_max": 32,

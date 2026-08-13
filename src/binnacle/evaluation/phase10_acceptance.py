@@ -213,9 +213,12 @@ def evaluate_phase10_manifest(
         _reject_reused_integration_evidence(integrations, final_integration, findings)
 
     _evaluate_failure_exercise(_optional_object(value["failure_exercise"]), findings)
+    github_merge = _optional_object(value["github_merge"])
+    restart_evidence = _optional_object(value["restart"])
+    runtime_evidence = _optional_object(value["post_restart_runtime"])
     _evaluate_hosted_and_local_chain(
         github_pr=_optional_object(value["github_pr"]),
-        github_merge=_optional_object(value["github_merge"]),
+        github_merge=github_merge,
         local_update=_optional_object(value["local_update"]),
         post_merge_checks=_object_list(value["post_merge_local_checks"]),
         candidates=candidates,
@@ -225,14 +228,22 @@ def evaluate_phase10_manifest(
         findings=findings,
     )
     runtime = _evaluate_restart_and_runtime(
-        restart=_optional_object(value["restart"]),
-        runtime=_optional_object(value["post_restart_runtime"]),
-        github_merge=_optional_object(value["github_merge"]),
+        restart=restart_evidence,
+        runtime=runtime_evidence,
+        github_merge=github_merge,
         baseline=baseline,
         findings=findings,
     )
     _evaluate_behaviour_probe(_optional_object(value["behaviour_probe"]), runtime, findings)
-    _evaluate_security(_object_list(value["security_checks"]), policy, findings)
+    _evaluate_security(
+        _object_list(value["security_checks"]),
+        acceptance_run_id=cast(str, value["acceptance_run_id"]),
+        policy=policy,
+        github_merge=github_merge,
+        restart=restart_evidence,
+        runtime=runtime,
+        findings=findings,
+    )
     if cast(list[object], value["unresolved_refs"]):
         findings.incomplete("unresolved_evidence_remains", "/unresolved_refs")
     _evaluate_owner_review(
@@ -817,6 +828,11 @@ def _evaluate_ci_api_observation(
     }
     if any(job[name] != expected for name, expected in job_bindings.items()):
         findings.fail("ci_job_api_metadata_mismatch", f"{path}/github_ci_api_observation/job")
+    if observation["latest_job_id"] != job_id:
+        findings.fail(
+            "ci_job_superseded_by_later_attempt",
+            f"{path}/github_ci_api_observation/latest_job_id",
+        )
     if job["status"] != "completed":
         findings.incomplete(
             "ci_job_api_nonterminal", f"{path}/github_ci_api_observation/job/status"
@@ -1312,6 +1328,14 @@ def _evaluate_restart_and_runtime(
             "post_restart_runtime_profile_mismatch",
             "/post_restart_runtime/runtime_profile_sha256",
         )
+    if baseline is not None:
+        for field_name, finding_code in (
+            ("controller_sha256", "post_restart_controller_mismatch"),
+            ("device_sha256", "post_restart_device_mismatch"),
+            ("workspace_sha256", "post_restart_workspace_mismatch"),
+        ):
+            if runtime[field_name] != baseline[field_name]:
+                findings.fail(finding_code, f"/post_restart_runtime/{field_name}")
     if (
         baseline is not None
         and runtime["runtime_instance_sha256"] == baseline["runtime_instance_sha256"]
@@ -1349,26 +1373,94 @@ def _evaluate_behaviour_probe(
 
 def _evaluate_security(
     checks: list[dict[str, Any]],
+    *,
+    acceptance_run_id: str,
     policy: Phase10Policy,
+    github_merge: dict[str, Any] | None,
+    restart: dict[str, Any] | None,
+    runtime: dict[str, Any] | None,
     findings: _Findings,
 ) -> None:
     indexed: dict[str, dict[str, Any]] = {}
+    observed_evidence_ids: set[str] = set()
+    observed_evidence_digests: set[str] = set()
     for index, check in enumerate(checks):
+        path = f"/security_checks/{index}"
         check_id = cast(str, check["check_id"])
         if check_id in indexed:
-            findings.fail("duplicate_security_check", f"/security_checks/{index}/check_id")
+            findings.fail("duplicate_security_check", f"{path}/check_id")
         indexed[check_id] = check
+        evidence_ref = _object(check["evidence_ref"])
+        evidence_id = _ref_id(evidence_ref)
+        evidence_digest = cast(str, evidence_ref["sha256"])
+        if evidence_id in observed_evidence_ids or evidence_digest in observed_evidence_digests:
+            findings.fail("security_evidence_reused", f"{path}/evidence_ref")
+        observed_evidence_ids.add(evidence_id)
+        observed_evidence_digests.add(evidence_digest)
+        if check["evidence_binding_sha256"] != phase10_security_evidence_sha256(check):
+            findings.fail("security_evidence_binding_mismatch", f"{path}/evidence_binding_sha256")
+        if check["acceptance_run_id"] != acceptance_run_id:
+            findings.fail("security_acceptance_run_mismatch", f"{path}/acceptance_run_id")
+        if check["policy_sha256"] != policy.sha256:
+            findings.fail("security_policy_mismatch", f"{path}/policy_sha256")
+        if github_merge is not None and (
+            check["merged_oid"] != github_merge["result_oid"]
+            or check["merged_tree_oid"] != github_merge["result_tree_oid"]
+        ):
+            findings.fail("security_merge_identity_mismatch", path)
+        if restart is not None and (
+            check["restart_operation_ref"] != restart["operation_ref"]
+            or check["restart_checkpoint_ref"] != restart["checkpoint_ref"]
+            or check["readiness_generation"] != restart["readiness_generation"]
+        ):
+            findings.fail("security_restart_identity_mismatch", path)
+        if runtime is not None and (
+            check["runtime_instance_sha256"] != runtime["runtime_instance_sha256"]
+            or check["runtime_profile_sha256"] != runtime["runtime_profile_sha256"]
+        ):
+            findings.fail("security_runtime_identity_mismatch", path)
+        if runtime is not None and any(
+            check[field_name] != runtime[field_name]
+            for field_name in ("controller_sha256", "device_sha256", "workspace_sha256")
+        ):
+            findings.fail("security_environment_identity_mismatch", path)
         if check["conclusion"] == "fail":
-            findings.fail("security_invariant_failed", f"/security_checks/{index}/conclusion")
+            findings.fail("security_invariant_failed", f"{path}/conclusion")
         elif check["conclusion"] == "unavailable":
             findings.incomplete(
                 "security_evidence_unavailable",
-                f"/security_checks/{index}/conclusion",
+                f"{path}/conclusion",
             )
     actual = set(indexed)
     required = set(policy.required_security_checks)
     if actual != required:
         findings.incomplete("required_security_checks_incomplete", "/security_checks")
+
+
+def phase10_security_evidence_sha256(check: Mapping[str, Any]) -> str:
+    """Hash one security result and every current execution identity it asserts."""
+
+    return canonical_json_sha256(
+        {
+            "schema_version": "1.0",
+            "stage": "security",
+            "check_id": check["check_id"],
+            "evidence_ref": check["evidence_ref"],
+            "acceptance_run_id": check["acceptance_run_id"],
+            "policy_sha256": check["policy_sha256"],
+            "merged_oid": check["merged_oid"],
+            "merged_tree_oid": check["merged_tree_oid"],
+            "restart_operation_ref": check["restart_operation_ref"],
+            "restart_checkpoint_ref": check["restart_checkpoint_ref"],
+            "readiness_generation": check["readiness_generation"],
+            "runtime_instance_sha256": check["runtime_instance_sha256"],
+            "runtime_profile_sha256": check["runtime_profile_sha256"],
+            "controller_sha256": check["controller_sha256"],
+            "device_sha256": check["device_sha256"],
+            "workspace_sha256": check["workspace_sha256"],
+            "conclusion": check["conclusion"],
+        }
+    )
 
 
 def phase10_reviewed_evidence_sha256(manifest: Mapping[str, Any]) -> str:
@@ -1457,4 +1549,5 @@ __all__ = [
     "evaluate_phase10_manifest",
     "phase10_local_check_evidence_sha256",
     "phase10_reviewed_evidence_sha256",
+    "phase10_security_evidence_sha256",
 ]

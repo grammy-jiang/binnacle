@@ -2,7 +2,7 @@
   "schema_version": "1.0",
   "acceptance_run_id": "acceptance-test-pass",
   "plan_version": "phase10-self-hosting-acceptance-v1",
-  "policy_sha256": "2b7719d8fa95009c99649f4ade972eeaaf91849db59c0cbeceb77874689474d3",
+  "policy_sha256": "519084976123ef1d280c77d5f2a44e9c821c82ccd488027bccfeca4d516e099d",
   "state": "passed",
   "readiness": {
     "evidence_ref": {
@@ -164,7 +164,7 @@
       "candidate_generation": 1,
       "candidate_oid": "2222222222222222222222222222222222222222",
       "protected_base_oid": "1111111111111111111111111111111111111111",
-      "merge_policy_sha256": "2b7719d8fa95009c99649f4ade972eeaaf91849db59c0cbeceb77874689474d3",
+      "merge_policy_sha256": "519084976123ef1d280c77d5f2a44e9c821c82ccd488027bccfeca4d516e099d",
       "reviews": [
         {
           "evidence_ref": {
@@ -253,7 +253,7 @@
           "github_job_id": 8001,
           "github_ci_api_ref": {
             "id": "github-ci-api-8001",
-            "sha256": "5dcddc7a0ceddb7a3c25473f36af126674db69c38802edf1c48d2ef41194d05a"
+            "sha256": "ccb5ffa73b145c9f9804fba9dec5de2d80112e179444c047739c0589eafdbaf5"
           },
           "github_ci_api_observation": {
             "repository": "grammy-jiang/binnacle",
@@ -288,7 +288,8 @@
               "git_blob_oid": "5e1bd05816c759a4e9f16aa78a82bbdd233a49d5",
               "size_in_bytes": 1936,
               "sha256": "b074c669e4b72c7b97523b41d9bc6cb6fa68feb787d4f3e7fcc5251912cf0105"
-            }
+            },
+            "latest_job_id": 8001
           },
           "github_artifact_archive_base64": "UEsDBBQAAAAIAACAn1s5lLGOawEAAFkDAAAYAAAAcGhhc2UxMC1jaS1jaGVja291dC5qc29ulVJNb9swDL3vVww+N53kD1nOtX+hpw6DQVF0osaWUllOUQz776OaGO12cgleJD0+Pj3yd4FHwlNYUn9y3hb74ryMYx/pZaE59c4nOkRILvji7gMaXEZWG+Nz5Rki+XeCudj/LOTGYIpyYxS/PrVLkeimtt4YWW0YR8IUYo9hmtz6X6U0VEZ1MFRa6a4GRWTRtrVQVd3ozihjJCL+wzAfoWwUV3fKIstroAJZktRVLVWjTIm2IRCN6ZgCmhI6NO0AbTt02uoaSdf1oAnbzBoJEtkeEvOVolQ7ITkfhdjnlE+MoUv2F4ZE8Srb8zzXawPzascXnL/WInjrLPe/EWyex0rgYaL/9ovfDi4dF5Nt+tpGPQezMl5gfBe2w+BTBEwzv0c6h9nxBN4YwSs8TW+7Zwf+8MM47wFHyqDFs5mJpjM7Kq/n/DkpBJ9mXqMJ+gvFOe8/e3YvuOg1xNMwhte1/cOt6/ebjoz98+0vUEsBAh4DFAAAAAgAAICfWzmUsY5rAQAAWQMAABgAAAAAAAAAAQAAAKSBAAAAAHBoYXNlMTAtY2ktY2hlY2tvdXQuanNvblBLBQYAAAAAAQABAEYAAAChAQAAAAA="
         },
@@ -366,7 +367,7 @@
           "github_job_id": 8002,
           "github_ci_api_ref": {
             "id": "github-ci-api-8002",
-            "sha256": "a04f5b902de71dea2893f5b3720b4de39727c51aeab9ea1c013c1f65993afad8"
+            "sha256": "1992c213301cc0721a2d9bff82dcc354370589887a1516769b5c3e1353a510c5"
           },
           "github_ci_api_observation": {
             "repository": "grammy-jiang/binnacle",
@@ -401,7 +402,8 @@
               "git_blob_oid": "9db689ee2d315820eb79aecb43c357f25bcd12af",
               "size_in_bytes": 6527,
               "sha256": "3e432f34918e7ce168b445bde62eb4deeeb296eabca14c34ef2e6dbd928a085d"
-            }
+            },
+            "latest_job_id": 8002
           },
           "github_artifact_archive_base64": "UEsDBBQAAAAIAACAn1v6FfwohAEAAG0DAAAYAAAAcGhhc2UxMC1jaS1jaGVja291dC5qc29ulVM9b9wwDN37KwzNTutP2b41U7cOnRoUBkXRd8rZkiPLCYyg/71UL0bTTg6hRRLf49Mj9SrwQnh1a+ivxmpxEvM6jr2np5WW0Bsb6OwhGGdF+jfVmZhZHoz3yBk82T8Eizg9iPxgMEVxMMTPd+WCJ3pTWx2MqNaNI2Fwvkc3TWZ/r5QtlEp2MJStbLsKJJFG3VSZLKu67ZRUKkfEfxiWCxS1ZHQnNbK8GkrIC8rbssplLVWBuibIatUxBdQFdKiaAZpm6FrdVkhtVQ0tYRNZPUEg3UNgviIr5F2W8/qeZae4ih+cQ8/RXxgC+Ztsy/3cjxUsux0fcP6GRbDaaK7/RnC4HzuBhYn+my++O5twWVW06WMT9ejUznjvNKUJOhs8YEgTTTNZTRa3NGHRiXa4TqwgeVphNGFjtKfZLYb7szGeB3yatrtHA/b8RRlrAUeKSatlqwNNM/ud3/bx6XmWFalYeMgm6J/JL/F3sKOfMwa9OH8dRveyi/u2hYuzyf1X8evTb1BLAQIeAxQAAAAIAACAn1v6FfwohAEAAG0DAAAYAAAAAAAAAAEAAACkgQAAAABwaGFzZTEwLWNpLWNoZWNrb3V0Lmpzb25QSwUGAAAAAAEAAQBGAAAAugEAAAAA"
         },
@@ -479,7 +481,7 @@
           "github_job_id": 8003,
           "github_ci_api_ref": {
             "id": "github-ci-api-8003",
-            "sha256": "a9710d0b59661450f3f407861095888c108164743bf90d05657c67433bcea5f7"
+            "sha256": "c64cc7b22cc184c91c6d8b949b6412f71625ff029fae40c6377c4b8bd6c20558"
           },
           "github_ci_api_observation": {
             "repository": "grammy-jiang/binnacle",
@@ -514,7 +516,8 @@
               "git_blob_oid": "9db689ee2d315820eb79aecb43c357f25bcd12af",
               "size_in_bytes": 6527,
               "sha256": "3e432f34918e7ce168b445bde62eb4deeeb296eabca14c34ef2e6dbd928a085d"
-            }
+            },
+            "latest_job_id": 8003
           },
           "github_artifact_archive_base64": "UEsDBBQAAAAIAACAn1uIYokWagEAAE0DAAAYAAAAcGhhc2UxMC1jaS1jaGVja291dC5qc29ulZJNU8MgEIbv/gqHs1XyRUivnrx56EnHySywabEJVEJ0Oo7/3cU248cp7nABdp99edl3pneo936K7d46w9bsMPV9G/BlwjG21kXcBojWO3b1neptyiwWxs/KAwR0X4CRrR9ZtjAIkS8M9vSjXQyIZ7Xlwkhqfd+jjj602g+Dnd8rhIRCiQa6QgrZlCAQjTZ1yUVRVrJRQqlMa/2LMO4grwRVN8JokldBAVmOmSzKTFRC5dpUCLxSDSGgyqHRqu6grrtGGllqlGXZSdR1ogaEiKaFSLyc52LFM1obztdpFQ+Ug6/JX+gihpNsR/85HysYZzv+4fypVoMz1lD/M2Dxf8wABwP+mS+629q4m1Sy6X8T9ezVTNwQ6fL+GHfeXRbXX5IDHvxoyf8j3dMAD8Nx9WzBbW+UdQ50jylpcmRlxOFAfmanfXpaxnl+xUYaogHaVwxjmn5y7JpT0ZsP+673b3Pzc9/bO/Zx8QlQSwECHgMUAAAACAAAgJ9biGKJFmoBAABNAwAAGAAAAAAAAAABAAAApIEAAAAAcGhhc2UxMC1jaS1jaGVja291dC5qc29uUEsFBgAAAAABAAEARgAAAKABAAAAAA=="
         },
@@ -592,7 +595,7 @@
           "github_job_id": 8004,
           "github_ci_api_ref": {
             "id": "github-ci-api-8004",
-            "sha256": "05d60dd63d41dcbc635a9e0cbacf911af576592eb1b84804ddc0e0492c1ca57d"
+            "sha256": "eeda62c28b4d26c1898e65157c502915d27c1c5041fc8a595ba1af1c7e3f5da0"
           },
           "github_ci_api_observation": {
             "repository": "grammy-jiang/binnacle",
@@ -627,7 +630,8 @@
               "git_blob_oid": "9db689ee2d315820eb79aecb43c357f25bcd12af",
               "size_in_bytes": 6527,
               "sha256": "3e432f34918e7ce168b445bde62eb4deeeb296eabca14c34ef2e6dbd928a085d"
-            }
+            },
+            "latest_job_id": 8004
           },
           "github_artifact_archive_base64": "UEsDBBQAAAAIAACAn1vXV31qbQEAAE0DAAAYAAAAcGhhc2UxMC1jaS1jaGVja291dC5qc29ulZKxctwgEIb7PIWH2nZAQghd68pdClfJZDQLrO7wSXBByJ6bjN/dS+40cVLJOzTA7vcvP/ub2QPaY1xyf/TBsR07LePYJ/y14Jx7HzLuE2QfA7v9mxp9yaw3xsfKEyQMfwAz2/1gYmMQotoY7OcHuZwQr93KjVG6jeOINsfU2zhNfn2vUhpqozoYaq10J0EhOutayVUtG90ZZYyw1v5DmA9QNYqqO+UstddADaJCoWspVKNMZV2DwBvTEQKaCjpr2gHadui009KilnLQaNtCTQgZXQ+ZeBWv1B0XtJ4435Ulv1MOvhR/YciYLm0H+s/12MC82vEJ5y+1FoLzjvSvgM3/sQICTPjffNHd3ufDYopNn5uo52hW4hORbr6d8yGGm/peFMWEpzh78v9M9zTA03S+e/YQ9l+NDwHsiCVpCWRlxulEforLvjxNcF7dspmGaIL+BdNcpp8cu+dU9BrTcRjj6yp+1X14ZG9f3gFQSwECHgMUAAAACAAAgJ9b11d9am0BAABNAwAAGAAAAAAAAAABAAAApIEAAAAAcGhhc2UxMC1jaS1jaGVja291dC5qc29uUEsFBgAAAAABAAEARgAAAKMBAAAAAA=="
         },
@@ -705,7 +709,7 @@
           "github_job_id": 8005,
           "github_ci_api_ref": {
             "id": "github-ci-api-8005",
-            "sha256": "b07114cb9562b505572be231e0993e43767c07a0c4e160ae7fbb260cf9f5500f"
+            "sha256": "54fdd2f4bcc8eaa2deb003af8da7d231675d332f7d7b6afe816e81d9aaf05c93"
           },
           "github_ci_api_observation": {
             "repository": "grammy-jiang/binnacle",
@@ -740,7 +744,8 @@
               "git_blob_oid": "9db689ee2d315820eb79aecb43c357f25bcd12af",
               "size_in_bytes": 6527,
               "sha256": "3e432f34918e7ce168b445bde62eb4deeeb296eabca14c34ef2e6dbd928a085d"
-            }
+            },
+            "latest_job_id": 8005
           },
           "github_artifact_archive_base64": "UEsDBBQAAAAIAACAn1sAybg1bAEAAE0DAAAYAAAAcGhhc2UxMC1jaS1jaGVja291dC5qc29ulZK7buswDIb3PkWhuRfJF1nO2qnbGTqdg8KgJDpRY0s5stwiKPrupZoYvUwuocUm+ZH69b8ys0OzD3Pq9s5btmGHeRi6iP9nnFLnfMJthOSCZ1efpcHlynJlfO08QET/AZjY5h8TK4MQxcpgj1/GpYh43rZaGXnbMAxoUoidCePolvtKqaDUsoW+VFK1FUhEa2xTcVlWtWq11FoYY74Rph0UtaTuVlpD69VQgihQqLISspa6MLZG4LVuCQF1Aa3RTQ9N07fKqsqgqqpeoWkyNSIktB0k4hW8kNdc0HngfJNP/Zdq8DnrC33CeFrb03suvzVMixy/UP7Ua8BbZ2n+GbD6PRaAhxF/+ItyW5d2s84y/c5RT0EvxAciXf45pl3wl+WNyNmIhzA50v9IeTLwOB6vnxz47a123oMZMBfNnqRMOB5IT3H6zlcTnBdXbCITjdA9Y5yy+0mxG05NLyHu+yG8LMPPc+/u2dvFO1BLAQIeAxQAAAAIAACAn1sAybg1bAEAAE0DAAAYAAAAAAAAAAEAAACkgQAAAABwaGFzZTEwLWNpLWNoZWNrb3V0Lmpzb25QSwUGAAAAAAEAAQBGAAAAogEAAAAA"
         }
@@ -918,7 +923,10 @@
     },
     "readiness_generation": 42,
     "readiness": "ready",
-    "clean_source_state": true
+    "clean_source_state": true,
+    "controller_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "device_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "workspace_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
   },
   "behaviour_probe": {
     "evidence_ref": {
@@ -937,57 +945,190 @@
       "check_id": "audit_and_fences_closed",
       "evidence_ref": {
         "id": "security-audit-fences",
+        "sha256": "3131313131313131313131313131313131313131313131313131313131313131"
+      },
+      "conclusion": "pass",
+      "evidence_binding_sha256": "3fe6c20abd4dc79ec9738c145c68546b4e11c8da1db4ad79db9f3eb63c2b0d7a",
+      "acceptance_run_id": "acceptance-test-pass",
+      "policy_sha256": "519084976123ef1d280c77d5f2a44e9c821c82ccd488027bccfeca4d516e099d",
+      "merged_oid": "7777777777777777777777777777777777777777",
+      "merged_tree_oid": "4444444444444444444444444444444444444444",
+      "restart_operation_ref": {
+        "id": "restart-operation",
         "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
       },
-      "conclusion": "pass"
+      "restart_checkpoint_ref": {
+        "id": "restart-checkpoint",
+        "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      },
+      "readiness_generation": 42,
+      "runtime_instance_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "runtime_profile_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "controller_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "device_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "workspace_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
     },
     {
       "check_id": "credential_authority_closed",
       "evidence_ref": {
         "id": "security-credential-authority",
+        "sha256": "3232323232323232323232323232323232323232323232323232323232323232"
+      },
+      "conclusion": "pass",
+      "evidence_binding_sha256": "1287bde4014a3f2ea091fed7b62015ee648e5c764c8fbef61c231cd1fc0da9c6",
+      "acceptance_run_id": "acceptance-test-pass",
+      "policy_sha256": "519084976123ef1d280c77d5f2a44e9c821c82ccd488027bccfeca4d516e099d",
+      "merged_oid": "7777777777777777777777777777777777777777",
+      "merged_tree_oid": "4444444444444444444444444444444444444444",
+      "restart_operation_ref": {
+        "id": "restart-operation",
         "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
       },
-      "conclusion": "pass"
+      "restart_checkpoint_ref": {
+        "id": "restart-checkpoint",
+        "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      },
+      "readiness_generation": 42,
+      "runtime_instance_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "runtime_profile_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "controller_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "device_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "workspace_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
     },
     {
       "check_id": "no_generic_root_authority",
       "evidence_ref": {
         "id": "security-root-authority",
+        "sha256": "3333333333333333333333333333333333333333333333333333333333333333"
+      },
+      "conclusion": "pass",
+      "evidence_binding_sha256": "0f5db6599d131825d4bfa50a48fa4a73130d56dee9dd8a8c46e2ea7828e54ace",
+      "acceptance_run_id": "acceptance-test-pass",
+      "policy_sha256": "519084976123ef1d280c77d5f2a44e9c821c82ccd488027bccfeca4d516e099d",
+      "merged_oid": "7777777777777777777777777777777777777777",
+      "merged_tree_oid": "4444444444444444444444444444444444444444",
+      "restart_operation_ref": {
+        "id": "restart-operation",
         "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
       },
-      "conclusion": "pass"
+      "restart_checkpoint_ref": {
+        "id": "restart-checkpoint",
+        "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      },
+      "readiness_generation": 42,
+      "runtime_instance_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "runtime_profile_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "controller_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "device_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "workspace_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
     },
     {
       "check_id": "no_manual_effect_fallback",
       "evidence_ref": {
         "id": "security-manual-fallback",
+        "sha256": "3434343434343434343434343434343434343434343434343434343434343434"
+      },
+      "conclusion": "pass",
+      "evidence_binding_sha256": "8668a164807a4aa942b5c5fb6d2c2e28a840536e2a5e71b9c226d3fa6d53952f",
+      "acceptance_run_id": "acceptance-test-pass",
+      "policy_sha256": "519084976123ef1d280c77d5f2a44e9c821c82ccd488027bccfeca4d516e099d",
+      "merged_oid": "7777777777777777777777777777777777777777",
+      "merged_tree_oid": "4444444444444444444444444444444444444444",
+      "restart_operation_ref": {
+        "id": "restart-operation",
         "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
       },
-      "conclusion": "pass"
+      "restart_checkpoint_ref": {
+        "id": "restart-checkpoint",
+        "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      },
+      "readiness_generation": 42,
+      "runtime_instance_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "runtime_profile_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "controller_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "device_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "workspace_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
     },
     {
       "check_id": "no_reusable_credentials_disclosed",
       "evidence_ref": {
         "id": "security-credential-disclosure",
+        "sha256": "3535353535353535353535353535353535353535353535353535353535353535"
+      },
+      "conclusion": "pass",
+      "evidence_binding_sha256": "aab8e6c2b749eb44965de748f7a7c18ee5f5aa2456b0ef19e4b30d5517e7cdf7",
+      "acceptance_run_id": "acceptance-test-pass",
+      "policy_sha256": "519084976123ef1d280c77d5f2a44e9c821c82ccd488027bccfeca4d516e099d",
+      "merged_oid": "7777777777777777777777777777777777777777",
+      "merged_tree_oid": "4444444444444444444444444444444444444444",
+      "restart_operation_ref": {
+        "id": "restart-operation",
         "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
       },
-      "conclusion": "pass"
+      "restart_checkpoint_ref": {
+        "id": "restart-checkpoint",
+        "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      },
+      "readiness_generation": 42,
+      "runtime_instance_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "runtime_profile_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "controller_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "device_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "workspace_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
     },
     {
       "check_id": "no_workspace_boundary_escape",
       "evidence_ref": {
         "id": "security-workspace-boundary",
+        "sha256": "3636363636363636363636363636363636363636363636363636363636363636"
+      },
+      "conclusion": "pass",
+      "evidence_binding_sha256": "265ca02ead50c939564c9295fef1adcd9df643ee197c9f975058cf99b00ac15f",
+      "acceptance_run_id": "acceptance-test-pass",
+      "policy_sha256": "519084976123ef1d280c77d5f2a44e9c821c82ccd488027bccfeca4d516e099d",
+      "merged_oid": "7777777777777777777777777777777777777777",
+      "merged_tree_oid": "4444444444444444444444444444444444444444",
+      "restart_operation_ref": {
+        "id": "restart-operation",
         "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
       },
-      "conclusion": "pass"
+      "restart_checkpoint_ref": {
+        "id": "restart-checkpoint",
+        "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      },
+      "readiness_generation": 42,
+      "runtime_instance_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "runtime_profile_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "controller_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "device_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "workspace_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
     },
     {
       "check_id": "privileged_evidence_redacted",
       "evidence_ref": {
         "id": "security-privileged-redaction",
+        "sha256": "3737373737373737373737373737373737373737373737373737373737373737"
+      },
+      "conclusion": "pass",
+      "evidence_binding_sha256": "6f7fc88756d51387fcecd87e9c2b598a50b8a50ea6ed751b822ad7546c140d03",
+      "acceptance_run_id": "acceptance-test-pass",
+      "policy_sha256": "519084976123ef1d280c77d5f2a44e9c821c82ccd488027bccfeca4d516e099d",
+      "merged_oid": "7777777777777777777777777777777777777777",
+      "merged_tree_oid": "4444444444444444444444444444444444444444",
+      "restart_operation_ref": {
+        "id": "restart-operation",
         "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
       },
-      "conclusion": "pass"
+      "restart_checkpoint_ref": {
+        "id": "restart-checkpoint",
+        "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      },
+      "readiness_generation": 42,
+      "runtime_instance_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "runtime_profile_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "controller_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "device_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "workspace_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
     }
   ],
   "unresolved_refs": [],
@@ -997,8 +1138,8 @@
       "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
     },
     "acceptance_run_id": "acceptance-test-pass",
-    "policy_sha256": "2b7719d8fa95009c99649f4ade972eeaaf91849db59c0cbeceb77874689474d3",
-    "reviewed_evidence_sha256": "251e777064b81767a753252d25def364be54f84c5e617413b94c3b4caa9f5519",
+    "policy_sha256": "519084976123ef1d280c77d5f2a44e9c821c82ccd488027bccfeca4d516e099d",
+    "reviewed_evidence_sha256": "e5d9b78894d9aec87669293feb0c0d28d223a4cb371c5454786bd06957e9f93e",
     "outcome": "accepted",
     "evidence_complete": true
   }

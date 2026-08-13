@@ -927,6 +927,18 @@
             "check_run_url"
           ]
         },
+        "latest_job_id": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "workflow_run": {
           "type": "object",
           "additionalProperties": false,
@@ -1044,6 +1056,7 @@
       "required": [
         "repository",
         "job",
+        "latest_job_id",
         "workflow_run",
         "workflow_source"
       ]
@@ -1560,6 +1573,15 @@
         "runtime_profile_sha256": {
           "$ref": "#/$defs/digest"
         },
+        "controller_sha256": {
+          "$ref": "#/$defs/digest"
+        },
+        "device_sha256": {
+          "$ref": "#/$defs/digest"
+        },
+        "workspace_sha256": {
+          "$ref": "#/$defs/digest"
+        },
         "restart_operation_ref": {
           "$ref": "#/$defs/evidenceRef"
         },
@@ -1588,6 +1610,9 @@
         "runtime_tree_oid",
         "runtime_instance_sha256",
         "runtime_profile_sha256",
+        "controller_sha256",
+        "device_sha256",
+        "workspace_sha256",
         "restart_operation_ref",
         "restart_checkpoint_ref",
         "readiness_generation",
@@ -1647,6 +1672,47 @@
         "evidence_ref": {
           "$ref": "#/$defs/evidenceRef"
         },
+        "evidence_binding_sha256": {
+          "$ref": "#/$defs/digest"
+        },
+        "acceptance_run_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "policy_sha256": {
+          "$ref": "#/$defs/digest"
+        },
+        "merged_oid": {
+          "$ref": "#/$defs/oid"
+        },
+        "merged_tree_oid": {
+          "$ref": "#/$defs/oid"
+        },
+        "restart_operation_ref": {
+          "$ref": "#/$defs/evidenceRef"
+        },
+        "restart_checkpoint_ref": {
+          "$ref": "#/$defs/evidenceRef"
+        },
+        "readiness_generation": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "runtime_instance_sha256": {
+          "$ref": "#/$defs/digest"
+        },
+        "runtime_profile_sha256": {
+          "$ref": "#/$defs/digest"
+        },
+        "controller_sha256": {
+          "$ref": "#/$defs/digest"
+        },
+        "device_sha256": {
+          "$ref": "#/$defs/digest"
+        },
+        "workspace_sha256": {
+          "$ref": "#/$defs/digest"
+        },
         "conclusion": {
           "enum": [
             "pass",
@@ -1658,6 +1724,19 @@
       "required": [
         "check_id",
         "evidence_ref",
+        "evidence_binding_sha256",
+        "acceptance_run_id",
+        "policy_sha256",
+        "merged_oid",
+        "merged_tree_oid",
+        "restart_operation_ref",
+        "restart_checkpoint_ref",
+        "readiness_generation",
+        "runtime_instance_sha256",
+        "runtime_profile_sha256",
+        "controller_sha256",
+        "device_sha256",
+        "workspace_sha256",
         "conclusion"
       ]
     },
