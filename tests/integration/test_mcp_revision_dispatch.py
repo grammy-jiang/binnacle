@@ -532,10 +532,12 @@ async def test_idle_legacy_session_expires_and_releases_sdk_transport(
     revision = EXPECTED_REVISIONS[1]
     async with running_raw_http_client(
         phase2_application,
-        session_idle_timeout_seconds=0.05,
+        # Keep enough headroom for the two-request legacy handshake on loaded
+        # CI runners while retaining a short, bounded expiry test.
+        session_idle_timeout_seconds=1.0,
     ) as client:
         expired_session_id = await _legacy_session(client, revision)
-        await anyio.sleep(0.2)
+        await anyio.sleep(1.5)
         expired = await client.post(
             "/mcp",
             json={"jsonrpc": "2.0", "id": 8, "method": "tools/list", "params": {}},
