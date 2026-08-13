@@ -174,10 +174,12 @@ on the protected base at integration time. PASS therefore binds an immutable
 ``(candidate_generation, candidate_oid, protected_base_oid, merge_policy_digest,
 expected_integration_tree_oid)``.
 
-The evaluator follows the final signed candidate's parent through earlier candidate
-generations until it reaches the candidate-lineage base.  Every non-base parent must be an
-earlier signed candidate OID; a missing, forward, cyclic, duplicate, or otherwise
-disconnected lineage fails.  When that lineage base equals the integration generation's
+The evaluator requires the final signed candidate's parent chain to consume every
+immediately preceding candidate generation in reverse order until it reaches the
+candidate-lineage base.  It fully evaluates every consumed generation's local checks,
+status/parent evidence, signature, signer, push, and hosted head.  A skipped generation,
+missing/forward/cyclic/duplicate OID, contradictory parent record, invalid signature, or
+otherwise disconnected lineage fails.  When that lineage base equals the integration generation's
 ``protected_base_oid``, the final signed candidate tree must equal
 ``expected_integration_tree_oid`` even when its immediate parent is an earlier candidate.
 A later moved protected base may instead produce a separately derived integration tree,
@@ -631,6 +633,15 @@ Before **each** candidate generation can be signed:
 * Phase 6 inspection confirms the intended source state;
 * no unresolved audit obligation blocks new consequential work.
 
+Every retained candidate check record is the canonical ``candidate``-stage projection of
+its immutable raw evidence reference, check ID/profile, source-content digest, conclusion,
+terminal/descendant/fence state, and schema version.  The separate
+``evidence_binding_sha256`` must equal that projection's
+SHA-256, while ``evidence_ref`` retains the immutable raw execution-evidence identity; raw
+IDs and digests are unique within the generation.  This permits distinct legitimate
+reruns while preventing a result from being rebound to different source content merely by
+editing the surrounding manifest.
+
 If any local check is red/uncertain, no signed commit/push is attempted merely to let hosted
 CI diagnose it.
 
@@ -813,13 +824,18 @@ For the final integration generation record:
 * terminal conclusion and required job/check conclusions;
 * retry/attempt identity when a transient infrastructure failure is rerun.
 
-For every required job, the acceptance record embeds the sanitized authenticated GitHub
+For every required job, the acceptance record embeds the sanitized GitHub
 artifact-API observation and binds its canonical digest to
 ``github_artifact_api_ref``.  The observation contains the repository, numeric ID, exact
 name, byte size, canonical metadata/download URLs, expiry state, ``sha256:`` archive
-digest, and workflow-run ID/head SHA.  The evaluator cross-checks all of those fields with
-the surrounding CI identity and exact decoded ZIP, recomputes the ZIP digest, and opens
-its sole bounded canonical
+digest, and workflow-run ID/head SHA.  The embedded object and its reference are not an
+authentication root.  PASS additionally requires the evaluator's non-manifest lookup to
+read that numeric artifact ID live from fixed ``api.github.com`` using a bounded private
+bearer-token file, direct TLS, and GitHub REST version ``2022-11-28``.  The independently
+returned closed observation must equal the embedded object exactly; an authenticated 404
+fails, while an unavailable lookup is ``INCOMPLETE``.  The evaluator then cross-checks all
+fields with the surrounding CI identity and exact decoded ZIP, recomputes the ZIP digest,
+and opens its sole bounded canonical
 ``phase10-ci-checkout.json`` member, and requires that object to equal the separately
 embedded attestation.  It also verifies the canonical attestation digest and every
 surrounding CI identity field.  API references, artifact IDs, ZIP digests, and attestation
@@ -940,6 +956,14 @@ checkout**. Record execution/output/source/tree bindings just as for section 14,
 separate ``post_merge_local_check_refs`` evidence set. These checks prove the exact object
 that will be restarted works on the selected Pi; they do not substitute for the pre-merge
 base-aware review/integration-CI proof. Any red/uncertain merged-tree check blocks restart.
+Each retained record uses the canonical ``post_merge``-stage projection containing the
+immutable raw evidence reference, check ID/profile, exact merged commit/tree, conclusion,
+terminal/descendant/fence state, and schema version.  Its separate
+``evidence_binding_sha256`` must equal that projection,
+while ``evidence_ref`` continues to identify the immutable raw execution record.  Raw IDs
+and digests must be unique within the post-merge collection and may not overlap any
+candidate generation's local-check evidence; copying candidate results and relabelling
+only the merged OID/tree therefore fails.
 
 26. Runtime-candidate binding
 -----------------------------
@@ -1130,18 +1154,22 @@ PASS requires **all** of:
 #. one safe recoverable failure/cancellation is truthfully reconciled;
 #. no superseded candidate or integration generation contributes stale evidence to the
    final required fields;
+#. every recorded candidate generation fully validates and its signed parent consumes the
+   immediately preceding generation, without a skipped or contradictory lineage bridge;
 #. final locally signed commit OID == exact pushed feature-branch OID == exact final hosted
    PR head == exact substantive-review candidate/head == CI event candidate/head;
 #. final substantive review is clean for that exact candidate against the exact protected
    base bound to the final integration generation;
 #. required GitHub Actions checks are green and attest the exact candidate/base integration
-   object/tree actually checked;
+   object/tree actually checked, and every embedded artifact observation equals a live
+   bounded bearer-authenticated GitHub REST response;
 #. final protected base at merge equals the reviewed/tested integration base;
 #. hosted merge result independently proves an allowed merge-method relationship to that
    base/candidate and ``result_tree_oid == expected_integration_tree_oid``;
 #. local development checkout reaches exactly that merged OID through Phase 8 semantics and
    its tree equals the tested integration tree;
-#. complete required post-merge Phase 7 checks are green on that exact local merged OID/tree;
+#. complete required post-merge Phase 7 checks are green and canonically evidence-bound to
+   that exact local merged OID/tree, with no candidate-check evidence reuse;
 #. Phase 9 restart preflight and controlled restart use exactly that merged OID/tree;
 #. reconnect reconciles the same retained restart rather than a second attempt;
 #. post-reconnect runtime revision/tree equals exact merged OID/tested integration tree and
@@ -1284,7 +1312,8 @@ representative shape is:
      candidate_generations[]:
        generation
        source_content_ref
-       local_checks[] (check_id, check_profile_digest, evidence_ref)
+       local_checks[] (check_id, check_profile_digest, evidence_ref,
+                       evidence_binding_digest)
        status_diff_ref
        signed_commit_oid
        signer_ref
@@ -1315,7 +1344,8 @@ representative shape is:
      github_merge_parent_oids[]
      github_merge_method_ref
      local_update_ref
-     post_merge_local_checks[] (check_id, check_profile_digest, evidence_ref)
+     post_merge_local_checks[] (check_id, check_profile_digest, evidence_ref,
+                                evidence_binding_digest)
      restart_operation_ref
      restart_checkpoint_ref
      restart_readiness_generation
@@ -1382,6 +1412,9 @@ Any implementation of evidence assembler/evaluator should have deterministic tes
 * CI evidence from a collector commit or bundle not frozen by policy -> INCOMPLETE;
 * embedded CI attestation digest differs from the canonical artifact bytes -> FAIL;
 * one attestation artifact is reused or relabelled as a different required job -> FAIL;
+* embedded artifact/API/archive values are internally consistent but differ from the live
+  authenticated GitHub artifact endpoint -> FAIL;
+* authenticated GitHub artifact lookup is unavailable -> INCOMPLETE, never PASS;
 * owner approval bound to a different run, policy or evidence projection -> INCOMPLETE;
 * CI green on old candidate/integration generation only -> INCOMPLETE;
 * workflow status names final candidate but actual checkout/tree is unbound/unavailable ->
@@ -1389,6 +1422,8 @@ Any implementation of evidence assembler/evaluator should have deterministic tes
 * CI checks candidate head only while required integration tree is untested -> INCOMPLETE;
 * final PR head differs from final locally signed/pushed OID -> FAIL/INCOMPLETE, never PASS;
 * new PR head reuses old generation's Phase 6/7/8 local evidence -> INCOMPLETE;
+* a later candidate skips an intervening generation or uses an invalid prior candidate as
+  a lineage bridge -> FAIL;
 * remotely authored remediation commit lacks new local test/sign/push generation ->
   INCOMPLETE;
 * protected base moves after review/CI and old integration generation is reused ->
@@ -1399,6 +1434,8 @@ Any implementation of evidence assembler/evaluator should have deterministic tes
 * merged OID != local update target -> FAIL;
 * local tree != hosted result tree/tested integration tree -> FAIL;
 * post-merge local checks absent/red/uncertain -> INCOMPLETE/FAIL, never PASS;
+* post-merge checks reuse candidate evidence or their canonical digest does not bind the
+  asserted merged commit/tree -> FAIL;
 * local update target != post-restart runtime revision -> FAIL;
 * runtime tree != hosted/tested integration tree -> FAIL;
 * post-restart runtime profile differs from the frozen baseline profile -> FAIL;

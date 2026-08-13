@@ -470,6 +470,25 @@
       ],
       "expected": "FAIL",
       "code": "candidate_lineage_disconnected"
+    },
+    {
+      "id": "post-merge-check-reuses-candidate-evidence-fails",
+      "operation": "replace",
+      "path": "/post_merge_local_checks/0/evidence_ref",
+      "value": {
+        "id": "candidate-1-local-check-pre-commit-all-files",
+        "sha256": "41386327d793e12cc7b9bf6c1fdc841702aa9707416c1ba14427c5736dc96daa"
+      },
+      "expected": "FAIL",
+      "code": "post_merge_check_reuses_candidate_evidence"
+    },
+    {
+      "id": "post-merge-check-identity-digest-mismatch-fails",
+      "operation": "replace",
+      "path": "/post_merge_local_checks/0/commit_oid",
+      "value": "8888888888888888888888888888888888888888",
+      "expected": "FAIL",
+      "code": "local_check_evidence_binding_mismatch"
     }
   ]
 }

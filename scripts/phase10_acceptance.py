@@ -6,8 +6,10 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import ssl
 import stat
 import sys
+from http.client import HTTPException, HTTPSConnection
 from pathlib import Path
 from typing import Any, cast
 
@@ -20,6 +22,8 @@ from binnacle.evaluation.digests import canonical_json_bytes  # noqa: E402
 from binnacle.evaluation.phase10_acceptance import (  # noqa: E402
     AcceptanceManifestError,
     AcceptanceVerdict,
+    ArtifactApiLookup,
+    ArtifactApiLookupUnavailable,
     create_phase10_skeleton,
     evaluate_phase10_manifest,
     phase10_reviewed_evidence_sha256,
@@ -28,6 +32,8 @@ from binnacle.evaluation.phase10_policy import (  # noqa: E402
     Phase10PolicyError,
     load_phase10_policy,
 )
+
+GITHUB_API_HOST = "api.github.com"
 
 
 def _read_manifest(path: Path, *, maximum: int) -> dict[str, Any]:
@@ -57,6 +63,135 @@ def _read_manifest(path: Path, *, maximum: int) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise AcceptanceManifestError("acceptance manifest must be a JSON object")
     return cast(dict[str, Any], value)
+
+
+def _read_github_token(path: Path, *, maximum: int) -> str:
+    descriptor = -1
+    try:
+        descriptor = os.open(
+            path,
+            os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0),
+        )
+        metadata = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(metadata.st_mode)
+            or not 1 <= metadata.st_size <= maximum
+            or stat.S_IMODE(metadata.st_mode) & 0o077
+            or metadata.st_uid != os.geteuid()
+        ):
+            raise AcceptanceManifestError("GitHub API token file is not a bounded private file")
+        with os.fdopen(descriptor, "rb") as source:
+            descriptor = -1
+            raw = source.read(maximum + 1)
+    except OSError as exc:
+        raise AcceptanceManifestError("GitHub API token file is unavailable") from exc
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+    token = raw.rstrip(b"\r\n")
+    if (
+        len(raw) > maximum
+        or not token
+        or any(byte <= 0x20 or byte >= 0x7F for byte in token)
+        or raw not in {token, token + b"\n", token + b"\r\n"}
+    ):
+        raise AcceptanceManifestError("GitHub API token file is invalid")
+    return token.decode("ascii")
+
+
+def _fetch_authenticated_artifact_api_observation(
+    *,
+    token: str,
+    repository: str,
+    artifact_id: int,
+    response_bytes_max: int,
+    timeout_seconds: int,
+) -> dict[str, Any] | None:
+    path = f"/repos/{repository}/actions/artifacts/{artifact_id}"
+    connection = HTTPSConnection(
+        GITHUB_API_HOST,
+        timeout=timeout_seconds,
+        context=ssl.create_default_context(),
+    )
+    try:
+        connection.request(
+            "GET",
+            path,
+            headers={
+                "Accept": "application/vnd.github+json",
+                "Authorization": f"Bearer {token}",
+                "User-Agent": "binnacle-phase10-acceptance",
+                "X-GitHub-Api-Version": "2022-11-28",
+            },
+        )
+        response = connection.getresponse()
+        if response.status == 404:
+            response.read(response_bytes_max + 1)
+            return None
+        if response.status != 200:
+            response.read(response_bytes_max + 1)
+            raise ArtifactApiLookupUnavailable("authenticated GitHub artifact lookup failed")
+        content_type = response.getheader("Content-Type", "")
+        raw = response.read(response_bytes_max + 1)
+        if len(raw) > response_bytes_max or not content_type.lower().startswith("application/json"):
+            raise ArtifactApiLookupUnavailable("authenticated GitHub artifact response is invalid")
+    except (OSError, TimeoutError, HTTPException, ssl.SSLError) as exc:
+        raise ArtifactApiLookupUnavailable(
+            "authenticated GitHub artifact lookup unavailable"
+        ) from exc
+    finally:
+        connection.close()
+    try:
+        value = json.loads(raw, object_pairs_hook=_unique_object)
+    except (UnicodeError, ValueError, json.JSONDecodeError, RecursionError) as exc:
+        raise ArtifactApiLookupUnavailable(
+            "authenticated GitHub artifact response is invalid"
+        ) from exc
+    if not isinstance(value, dict):
+        raise ArtifactApiLookupUnavailable("authenticated GitHub artifact response is invalid")
+    return _sanitize_artifact_api_observation(
+        cast(dict[str, Any], value),
+        repository=repository,
+    )
+
+
+def _sanitize_artifact_api_observation(
+    value: dict[str, Any],
+    *,
+    repository: str,
+) -> dict[str, Any]:
+    workflow_run = value.get("workflow_run")
+    integer_fields = (value.get("id"), value.get("size_in_bytes"))
+    string_fields = (
+        value.get("name"),
+        value.get("url"),
+        value.get("archive_download_url"),
+        value.get("digest"),
+    )
+    if (
+        not isinstance(workflow_run, dict)
+        or any(isinstance(item, bool) or not isinstance(item, int) for item in integer_fields)
+        or not all(isinstance(item, str) and item for item in string_fields)
+        or not isinstance(value.get("expired"), bool)
+        or isinstance(workflow_run.get("id"), bool)
+        or not isinstance(workflow_run.get("id"), int)
+        or not isinstance(workflow_run.get("head_sha"), str)
+    ):
+        raise ArtifactApiLookupUnavailable("authenticated GitHub artifact response is invalid")
+    return {
+        "repository": repository,
+        "id": value["id"],
+        "name": value["name"],
+        "size_in_bytes": value["size_in_bytes"],
+        "url": value["url"],
+        "archive_download_url": value["archive_download_url"],
+        "expired": value["expired"],
+        "digest": value["digest"],
+        "workflow_run": {
+            "id": workflow_run["id"],
+            "head_sha": workflow_run["head_sha"],
+        },
+    }
 
 
 def _unique_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
@@ -115,12 +250,14 @@ def _parser() -> argparse.ArgumentParser:
         help="Hash the exact evidence projection an owner approval must bind.",
     )
     review_digest.add_argument("--manifest", type=Path, required=True)
+    review_digest.add_argument("--github-token-file", type=Path, required=True)
 
     evaluate = subparsers.add_parser("evaluate", help="Evaluate one closed evidence manifest.")
     evaluate.add_argument("--manifest", type=Path, required=True)
     evaluate.add_argument("--report", type=Path, default=None)
     evaluate.add_argument("--output", choices=("human", "json"), default="human")
     evaluate.add_argument("--require-pass", action="store_true")
+    evaluate.add_argument("--github-token-file", type=Path, default=None)
     return parser
 
 
@@ -135,6 +272,7 @@ def main(argv: list[str] | None = None) -> int:
                 "plan_version": policy.plan_version,
                 "schema_version": policy.schema_version,
                 "acceptance_schema_sha256": policy.acceptance_schema_sha256,
+                "artifact_api_authentication": policy.artifact_api_authentication,
                 "ci_attestation_schema_sha256": policy.ci_attestation_schema_sha256,
                 "ci_attestation_collector_commit_oid": (policy.ci_attestation_collector_commit_oid),
                 "ci_attestation_collector_sha256": policy.ci_attestation_collector_sha256,
@@ -167,11 +305,44 @@ def main(argv: list[str] | None = None) -> int:
             args.manifest,
             maximum=policy.limits["manifest_bytes_max"],
         )
+        artifact_api_lookup: ArtifactApiLookup | None = None
+        if args.github_token_file is not None:
+            token = _read_github_token(
+                args.github_token_file,
+                maximum=policy.limits["github_api_token_bytes_max"],
+            )
+
+            def _lookup(
+                repository: str,
+                artifact_id: int,
+            ) -> dict[str, Any] | None:
+                return _fetch_authenticated_artifact_api_observation(
+                    token=token,
+                    repository=repository,
+                    artifact_id=artifact_id,
+                    response_bytes_max=policy.limits["github_api_response_bytes_max"],
+                    timeout_seconds=policy.limits["github_api_timeout_seconds"],
+                )
+
+            artifact_api_lookup = _lookup
+
         if args.command == "review-digest":
-            evaluate_phase10_manifest(manifest, repo_root=args.repo_root)
+            report = evaluate_phase10_manifest(
+                manifest,
+                repo_root=args.repo_root,
+                authenticated_artifact_api_lookup=artifact_api_lookup,
+            )
+            if any(finding.code.startswith("ci_artifact_api_") for finding in report.findings):
+                raise AcceptanceManifestError(
+                    "acceptance review digest requires authenticated GitHub artifact evidence"
+                )
             print(phase10_reviewed_evidence_sha256(manifest))
             return 0
-        report = evaluate_phase10_manifest(manifest, repo_root=args.repo_root)
+        report = evaluate_phase10_manifest(
+            manifest,
+            repo_root=args.repo_root,
+            authenticated_artifact_api_lookup=artifact_api_lookup,
+        )
         report_value = report.as_dict()
         if args.report is not None:
             _write_new(args.report, report_value)

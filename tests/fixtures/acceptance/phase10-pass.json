@@ -2,7 +2,7 @@
   "schema_version": "1.0",
   "acceptance_run_id": "acceptance-test-pass",
   "plan_version": "phase10-self-hosting-acceptance-v1",
-  "policy_sha256": "69a6be229696e42fdc7cfa665e54a080388d1e27180a1e3542727bf8f7385242",
+  "policy_sha256": "af960ca59ef6a9e0eefdf527c364748f20fed4bd5e361c741f7acd44fca92520",
   "state": "passed",
   "readiness": {
     "evidence_ref": {
@@ -51,8 +51,9 @@
         {
           "evidence_ref": {
             "id": "candidate-1-local-check-pre-commit-all-files",
-            "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+            "sha256": "41386327d793e12cc7b9bf6c1fdc841702aa9707416c1ba14427c5736dc96daa"
           },
+          "evidence_binding_sha256": "e1502af35261b9af0567e8e4aee66fc08a0204783351a739f85fd9725cbcbafd",
           "check_id": "pre-commit-all-files",
           "check_profile_sha256": "8d0df0f1fa5a46b49c6818014883b090459d8d28a17f1a02d72cc688fe8eda0d",
           "source_content_sha256": "1212121212121212121212121212121212121212121212121212121212121212",
@@ -64,8 +65,9 @@
         {
           "evidence_ref": {
             "id": "candidate-1-local-check-tox-py311",
-            "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+            "sha256": "5df2e9fe60a0ff7a167a70cf98c0c1e512bdff3099a3f172218a082e6a0ca5e5"
           },
+          "evidence_binding_sha256": "66f42e1b31d3edd22247ebe726e987468273f861b538c600cd3ca1732519b82b",
           "check_id": "tox-py311",
           "check_profile_sha256": "4dece11d8e8b3b913153f694a2164cd26a146dbeb8a231abbe4284a55aa7b358",
           "source_content_sha256": "1212121212121212121212121212121212121212121212121212121212121212",
@@ -77,8 +79,9 @@
         {
           "evidence_ref": {
             "id": "candidate-1-local-check-tox-py312",
-            "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+            "sha256": "6bf04b4db2505ae80e798db059e20168c4bbc2263d388ca9f6674b7231604f4a"
           },
+          "evidence_binding_sha256": "83710e430ccd3d2d4d01133fb6909b598872f579cb62787d8000168818865c30",
           "check_id": "tox-py312",
           "check_profile_sha256": "5fb0f8fe71689fe1d736d9d415c7016d160bf90d276791324af0e33c53d43598",
           "source_content_sha256": "1212121212121212121212121212121212121212121212121212121212121212",
@@ -90,8 +93,9 @@
         {
           "evidence_ref": {
             "id": "candidate-1-local-check-tox-py313",
-            "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+            "sha256": "78878e3eaef792e8fbb74c2a5ed8cf2d6095dd4bb5970869cc98e6865c7ee5ee"
           },
+          "evidence_binding_sha256": "49d96fb3a6ffbc66f5171c14f3b10ad766bc756757f8ed9ed5bac454bd825b04",
           "check_id": "tox-py313",
           "check_profile_sha256": "1c1dd54faf731a284dd35899c1f3ec429f23a6c5936f57c18816b0d6a9f0340c",
           "source_content_sha256": "1212121212121212121212121212121212121212121212121212121212121212",
@@ -103,8 +107,9 @@
         {
           "evidence_ref": {
             "id": "candidate-1-local-check-tox-quality",
-            "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+            "sha256": "1ef523a857611f29e19fe58c4e96979e790327a1038269817787ed6aafed5f63"
           },
+          "evidence_binding_sha256": "0f93d6949901abb1554aae56f04aeb6b0b2b6caa3622031587c499bba8c1193f",
           "check_id": "tox-quality",
           "check_profile_sha256": "bbe4fcf9b38b448b92e469a811cb7c5ac0ee09cb396e1df5ecc9d5fb75c5bcd4",
           "source_content_sha256": "1212121212121212121212121212121212121212121212121212121212121212",
@@ -159,7 +164,7 @@
       "candidate_generation": 1,
       "candidate_oid": "2222222222222222222222222222222222222222",
       "protected_base_oid": "1111111111111111111111111111111111111111",
-      "merge_policy_sha256": "69a6be229696e42fdc7cfa665e54a080388d1e27180a1e3542727bf8f7385242",
+      "merge_policy_sha256": "af960ca59ef6a9e0eefdf527c364748f20fed4bd5e361c741f7acd44fca92520",
       "reviews": [
         {
           "evidence_ref": {
@@ -593,8 +598,9 @@
     {
       "evidence_ref": {
         "id": "post-merge-check-pre-commit-all-files",
-        "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        "sha256": "0ebd01d6bac4b76080ee33a6599bab973ef9bd8821005a5d015b091d184be7d9"
       },
+      "evidence_binding_sha256": "205b147499c32871ea52ef28da82dd0a413b05f7169352574f75aacfe2ad95eb",
       "check_id": "pre-commit-all-files",
       "check_profile_sha256": "8d0df0f1fa5a46b49c6818014883b090459d8d28a17f1a02d72cc688fe8eda0d",
       "commit_oid": "7777777777777777777777777777777777777777",
@@ -607,8 +613,9 @@
     {
       "evidence_ref": {
         "id": "post-merge-check-tox-py311",
-        "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        "sha256": "6699f8432fd2d482cf042f0a8bc0013d38a64ff16bba34154d1f0091bb7050eb"
       },
+      "evidence_binding_sha256": "185ed9687580c53e2dfeef5f62a59e23083261bbbfa459c240edfb5d93ba9ddf",
       "check_id": "tox-py311",
       "check_profile_sha256": "4dece11d8e8b3b913153f694a2164cd26a146dbeb8a231abbe4284a55aa7b358",
       "commit_oid": "7777777777777777777777777777777777777777",
@@ -621,8 +628,9 @@
     {
       "evidence_ref": {
         "id": "post-merge-check-tox-py312",
-        "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        "sha256": "dd3a607f856f71afda2935b326010f78c1b8f94ce2d196aabcc137ec04f30303"
       },
+      "evidence_binding_sha256": "13163e7df62bbe88e286564a2eabbf6abcd86f0e33f952dd68443678c861ff2e",
       "check_id": "tox-py312",
       "check_profile_sha256": "5fb0f8fe71689fe1d736d9d415c7016d160bf90d276791324af0e33c53d43598",
       "commit_oid": "7777777777777777777777777777777777777777",
@@ -635,8 +643,9 @@
     {
       "evidence_ref": {
         "id": "post-merge-check-tox-py313",
-        "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        "sha256": "e146116f79f1cb74bb0ada5700067989db65471b19e5925c69d2979034200085"
       },
+      "evidence_binding_sha256": "dea74b254859357f6282d3c0cdcb8735d8e9f1330fe57f76a73ce4a56d70a21e",
       "check_id": "tox-py313",
       "check_profile_sha256": "1c1dd54faf731a284dd35899c1f3ec429f23a6c5936f57c18816b0d6a9f0340c",
       "commit_oid": "7777777777777777777777777777777777777777",
@@ -649,8 +658,9 @@
     {
       "evidence_ref": {
         "id": "post-merge-check-tox-quality",
-        "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        "sha256": "9d7403be86024e3f5cc2dd0222aec210f2344f3d3a67052ddce56fd9b682e347"
       },
+      "evidence_binding_sha256": "e4e270a1d3041e15254fdd9f51104dafd68f6666c16e05eb7226ea66a4a8ddba",
       "check_id": "tox-quality",
       "check_profile_sha256": "bbe4fcf9b38b448b92e469a811cb7c5ac0ee09cb396e1df5ecc9d5fb75c5bcd4",
       "commit_oid": "7777777777777777777777777777777777777777",
@@ -782,8 +792,8 @@
       "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
     },
     "acceptance_run_id": "acceptance-test-pass",
-    "policy_sha256": "69a6be229696e42fdc7cfa665e54a080388d1e27180a1e3542727bf8f7385242",
-    "reviewed_evidence_sha256": "b0242808f8a44dd2fcfebd09c8e6b371541ed56121baf0eb0ffa120897ded887",
+    "policy_sha256": "af960ca59ef6a9e0eefdf527c364748f20fed4bd5e361c741f7acd44fca92520",
+    "reviewed_evidence_sha256": "d8cefc95c2b23f9ad3b4d28b9515b17c522fc7ab2c1ca90b7dcfb2df276b892c",
     "outcome": "accepted",
     "evidence_complete": true
   }

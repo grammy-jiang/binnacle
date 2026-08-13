@@ -12,12 +12,18 @@ import pytest
 
 import binnacle.evaluation as evaluation_package
 from binnacle.evaluation.ci_attestation import CI_ATTESTATION_COLLECTOR_PATHS
+from binnacle.evaluation.digests import canonical_json_sha256
 from binnacle.evaluation.phase10_acceptance import (
     AcceptanceManifestError,
+    AcceptanceReport,
     AcceptanceVerdict,
+    ArtifactApiLookup,
     create_phase10_skeleton,
-    evaluate_phase10_manifest,
+    phase10_local_check_evidence_sha256,
     phase10_reviewed_evidence_sha256,
+)
+from binnacle.evaluation.phase10_acceptance import (
+    evaluate_phase10_manifest as _evaluate_phase10_manifest,
 )
 from binnacle.evaluation.phase10_policy import Phase10PolicyError, load_phase10_policy
 
@@ -38,6 +44,46 @@ def _load_json(path: Path) -> dict[str, Any]:
 
 def _pass_manifest(repo_root: Path) -> dict[str, Any]:
     return _load_json(repo_root / "tests/fixtures/acceptance/phase10-pass.json")
+
+
+def _artifact_api_lookup_from(manifest: dict[str, Any]) -> ArtifactApiLookup:
+    observations: dict[tuple[str, int], dict[str, Any]] = {}
+    for integration in manifest.get("integration_generations", []):
+        if not isinstance(integration, dict):
+            continue
+        for evidence in integration.get("ci_evidence", []):
+            if not isinstance(evidence, dict):
+                continue
+            repository = evidence.get("repository")
+            artifact_id = evidence.get("github_artifact_id")
+            observation = evidence.get("github_artifact_api_observation")
+            if (
+                isinstance(repository, str)
+                and isinstance(artifact_id, int)
+                and not isinstance(artifact_id, bool)
+                and isinstance(observation, dict)
+            ):
+                observations[(repository, artifact_id)] = copy.deepcopy(observation)
+
+    def lookup(repository: str, artifact_id: int) -> dict[str, Any] | None:
+        observation = observations.get((repository, artifact_id))
+        return copy.deepcopy(observation) if observation is not None else None
+
+    return lookup
+
+
+def evaluate_phase10_manifest(
+    manifest: dict[str, Any],
+    *,
+    repo_root: Path,
+) -> AcceptanceReport:
+    """Evaluate with a test-controlled stand-in for the external authenticated API source."""
+
+    return _evaluate_phase10_manifest(
+        manifest,
+        repo_root=repo_root,
+        authenticated_artifact_api_lookup=_artifact_api_lookup_from(manifest),
+    )
 
 
 def _append_candidate_generation(
@@ -62,15 +108,63 @@ def _append_candidate_generation(
         second["status_diff"]["evidence_ref"],
         second["signed_commit"]["evidence_ref"],
         second["push"]["evidence_ref"],
-        *(check["evidence_ref"] for check in second["local_checks"]),
     ]
     for index, reference in enumerate(references, start=1):
         reference["id"] = f"candidate-2-evidence-{index}"
         reference["sha256"] = f"{index:064x}"
+    for index, check in enumerate(second["local_checks"], start=1):
+        check["evidence_ref"]["id"] = f"candidate-2-local-check-{index}"
+        check["evidence_ref"]["sha256"] = f"{index + 32:064x}"
+        check["evidence_binding_sha256"] = phase10_local_check_evidence_sha256(
+            check,
+            stage="candidate",
+        )
     manifest["candidate_generations"].append(second)
     manifest["final_candidate_generation"] = 2
     manifest["integration_generations"][0]["candidate_generation"] = 2
     manifest["integration_generations"][0]["candidate_oid"] = "6" * 40
+
+
+def _append_third_candidate_generation(
+    manifest: dict[str, Any],
+    *,
+    parent_oid: str,
+) -> None:
+    second = manifest["candidate_generations"][1]
+    second["superseded_reason_ref"] = {"id": "candidate-2-superseded", "sha256": "d" * 64}
+    third = copy.deepcopy(second)
+    third["generation"] = 3
+    third["superseded_reason_ref"] = None
+    third["source_content_sha256"] = "13" * 32
+    third["status_diff"]["parent_oid"] = parent_oid
+    third["signed_commit"]["oid"] = "9" * 40
+    third["signed_commit"]["parent_oid"] = parent_oid
+    third["signed_commit"]["source_content_sha256"] = "13" * 32
+    third["push"]["target_oid"] = "9" * 40
+    third["push"]["remote_observed_oid"] = "9" * 40
+    third["hosted_head_oid"] = "9" * 40
+    for index, reference in enumerate(
+        (
+            third["status_diff"]["evidence_ref"],
+            third["signed_commit"]["evidence_ref"],
+            third["push"]["evidence_ref"],
+        ),
+        start=1,
+    ):
+        reference["id"] = f"candidate-3-evidence-{index}"
+        reference["sha256"] = f"{index + 16:064x}"
+    for index, check in enumerate(third["local_checks"], start=1):
+        check["source_content_sha256"] = "13" * 32
+        check["evidence_ref"]["id"] = f"candidate-3-local-check-{index}"
+        check["evidence_ref"]["sha256"] = f"{index + 48:064x}"
+        check["evidence_binding_sha256"] = phase10_local_check_evidence_sha256(
+            check,
+            stage="candidate",
+        )
+    manifest["candidate_generations"].append(third)
+    manifest["final_candidate_generation"] = 3
+    manifest["integration_generations"][0]["candidate_generation"] = 3
+    manifest["integration_generations"][0]["candidate_oid"] = "9" * 40
 
 
 def _cases(repo_root: Path) -> list[dict[str, Any]]:
@@ -120,9 +214,9 @@ def test_phase10_policy_is_frozen_and_canonical(repo_root: Path) -> None:
     policy = load_phase10_policy(repo_root)
 
     assert policy.policy_id == "binnacle-phase10-acceptance-v1"
-    assert policy.sha256 == "69a6be229696e42fdc7cfa665e54a080388d1e27180a1e3542727bf8f7385242"
+    assert policy.sha256 == "af960ca59ef6a9e0eefdf527c364748f20fed4bd5e361c741f7acd44fca92520"
     assert policy.acceptance_schema_sha256 == (
-        "c04e393621671271918a28eea3a16d5e5fb8185aed7e3f8c9180a59513044855"
+        "4233ed506f8fcfda211a2c213b0af8dd1b4c1a59b903116de084869a2f6d13c4"
     )
     assert policy.ci_attestation_schema_sha256 == (
         "6b7d2c6dff03870790dfb3e4ee6be5c93399e61d1bc7c67afea2969ea91e2760"
@@ -135,6 +229,10 @@ def test_phase10_policy_is_frozen_and_canonical(repo_root: Path) -> None:
     )
     assert policy.repository == "grammy-jiang/binnacle"
     assert policy.protected_branch_ref == "refs/heads/master"
+    assert policy.artifact_api_authentication == "live-bearer-github-rest-v2022-11-28"
+    assert policy.limits["github_api_response_bytes_max"] == 65_536
+    assert policy.limits["github_api_token_bytes_max"] == 4_096
+    assert policy.limits["github_api_timeout_seconds"] == 15
     assert policy.allowed_merge_methods == ("squash",)
     assert policy.required_ci_jobs["Python CI"] == (
         "Code, contract, dependency, and document quality",
@@ -173,10 +271,45 @@ def test_phase10_skeleton_claims_no_live_evidence(repo_root: Path) -> None:
     }
 
 
-@pytest.mark.parametrize("case_index", range(40))
+def test_pass_manifest_requires_authenticated_artifact_api_source(repo_root: Path) -> None:
+    manifest = _pass_manifest(repo_root)
+
+    report = _evaluate_phase10_manifest(manifest, repo_root=repo_root)
+
+    assert report.verdict is AcceptanceVerdict.INCOMPLETE
+    assert "ci_artifact_api_authentication_missing" in {finding.code for finding in report.findings}
+
+
+def test_fabricated_artifact_tuple_cannot_replace_authenticated_api_truth(
+    repo_root: Path,
+) -> None:
+    trusted_manifest = _pass_manifest(repo_root)
+    manifest = copy.deepcopy(trusted_manifest)
+    evidence = manifest["integration_generations"][0]["ci_evidence"][0]
+    observation = evidence["github_artifact_api_observation"]
+    evidence["github_artifact_id"] = 9999
+    observation["id"] = 9999
+    observation["url"] = "https://api.github.com/repos/grammy-jiang/binnacle/actions/artifacts/9999"
+    observation["archive_download_url"] = f"{observation['url']}/zip"
+    evidence["github_artifact_api_ref"]["sha256"] = canonical_json_sha256(observation)
+    manifest["owner_review"]["reviewed_evidence_sha256"] = phase10_reviewed_evidence_sha256(
+        manifest
+    )
+
+    report = _evaluate_phase10_manifest(
+        manifest,
+        repo_root=repo_root,
+        authenticated_artifact_api_lookup=_artifact_api_lookup_from(trusted_manifest),
+    )
+
+    assert report.verdict is AcceptanceVerdict.FAIL
+    assert "ci_artifact_api_not_found" in {finding.code for finding in report.findings}
+
+
+@pytest.mark.parametrize("case_index", range(42))
 def test_phase10_evaluator_fixture(case_index: int, repo_root: Path) -> None:
     cases = _cases(repo_root)
-    assert len(cases) == 40
+    assert len(cases) == 42
     case = cases[case_index]
     manifest = _pass_manifest(repo_root)
     _apply_case(manifest, case)
@@ -592,6 +725,51 @@ def test_later_candidate_must_reach_integration_base_through_prior_generations(
     codes = {finding.code for finding in connected_report.findings}
     assert "candidate_lineage_disconnected" not in codes
     assert "same_base_signed_tree_mismatch" in codes
+
+
+def test_candidate_lineage_cannot_skip_an_intervening_generation(repo_root: Path) -> None:
+    manifest = _pass_manifest(repo_root)
+    first_oid = manifest["candidate_generations"][0]["signed_commit"]["oid"]
+    _append_candidate_generation(manifest, parent_oid=first_oid, tree_oid="4" * 40)
+    _append_third_candidate_generation(manifest, parent_oid=first_oid)
+
+    report = evaluate_phase10_manifest(manifest, repo_root=repo_root)
+
+    assert report.verdict is AcceptanceVerdict.FAIL
+    assert "candidate_lineage_disconnected" in {finding.code for finding in report.findings}
+
+
+def test_every_candidate_in_the_consumed_lineage_is_fully_validated(repo_root: Path) -> None:
+    manifest = _pass_manifest(repo_root)
+    first_oid = manifest["candidate_generations"][0]["signed_commit"]["oid"]
+    _append_candidate_generation(manifest, parent_oid=first_oid, tree_oid="4" * 40)
+    manifest["candidate_generations"][0]["signed_commit"]["signature_verified"] = False
+
+    report = evaluate_phase10_manifest(manifest, repo_root=repo_root)
+
+    assert report.verdict is AcceptanceVerdict.FAIL
+    assert "candidate_signature_unverified" in {finding.code for finding in report.findings}
+
+
+def test_post_merge_checks_cannot_reuse_candidate_evidence(repo_root: Path) -> None:
+    manifest = _pass_manifest(repo_root)
+    candidate_checks = manifest["candidate_generations"][0]["local_checks"]
+    for candidate_check, post_merge_check in zip(
+        candidate_checks,
+        manifest["post_merge_local_checks"],
+        strict=True,
+    ):
+        post_merge_check["evidence_ref"] = copy.deepcopy(candidate_check["evidence_ref"])
+    manifest["owner_review"]["reviewed_evidence_sha256"] = phase10_reviewed_evidence_sha256(
+        manifest
+    )
+
+    report = evaluate_phase10_manifest(manifest, repo_root=repo_root)
+
+    codes = {finding.code for finding in report.findings}
+    assert report.verdict is AcceptanceVerdict.FAIL
+    assert "post_merge_check_reuses_candidate_evidence" in codes
+    assert "local_check_evidence_binding_mismatch" in codes
 
 
 def test_phase10_policy_rejects_missing_duplicate_and_contradictory_sources(

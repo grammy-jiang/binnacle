@@ -430,6 +430,9 @@
         "evidence_ref": {
           "$ref": "#/$defs/evidenceRef"
         },
+        "evidence_binding_sha256": {
+          "$ref": "#/$defs/digest"
+        },
         "source_content_sha256": {
           "$ref": "#/$defs/digest"
         },
@@ -450,6 +453,7 @@
         "check_id",
         "check_profile_sha256",
         "evidence_ref",
+        "evidence_binding_sha256",
         "source_content_sha256",
         "conclusion",
         "terminal",
@@ -1208,6 +1212,9 @@
         "evidence_ref": {
           "$ref": "#/$defs/evidenceRef"
         },
+        "evidence_binding_sha256": {
+          "$ref": "#/$defs/digest"
+        },
         "commit_oid": {
           "$ref": "#/$defs/oid"
         },
@@ -1231,6 +1238,7 @@
         "check_id",
         "check_profile_sha256",
         "evidence_ref",
+        "evidence_binding_sha256",
         "commit_oid",
         "tree_oid",
         "conclusion",

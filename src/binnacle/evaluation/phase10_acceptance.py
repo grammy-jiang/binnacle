@@ -7,7 +7,7 @@ import binascii
 import io
 import json
 import zipfile
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
@@ -25,6 +25,13 @@ from binnacle.evaluation.phase10_policy import (
 
 class AcceptanceManifestError(ValueError):
     """The supplied evidence document is not a closed Phase 10 manifest."""
+
+
+class ArtifactApiLookupUnavailable(RuntimeError):
+    """The authenticated, non-manifest GitHub artifact lookup could not complete."""
+
+
+ArtifactApiLookup = Callable[[str, int], Mapping[str, Any] | None]
 
 
 class AcceptanceVerdict(StrEnum):
@@ -148,8 +155,9 @@ def evaluate_phase10_manifest(
     manifest: Mapping[str, Any],
     *,
     repo_root: Path,
+    authenticated_artifact_api_lookup: ArtifactApiLookup | None = None,
 ) -> AcceptanceReport:
-    """Evaluate exact evidence relationships without executing any device effect."""
+    """Evaluate evidence without device effects, using a trusted live API reader when supplied."""
 
     _validate_manifest_schema(manifest, repo_root)
     policy = load_phase10_policy(repo_root)
@@ -171,9 +179,9 @@ def evaluate_phase10_manifest(
         kind="candidate",
         findings=findings,
     )
-    if final_candidate is not None:
-        _evaluate_candidate(final_candidate, baseline, branch, policy, findings)
-        _reject_reused_candidate_evidence(candidates, final_candidate, findings)
+    for candidate in candidates:
+        _evaluate_candidate(candidate, baseline, branch, policy, findings)
+    _reject_reused_candidate_evidence(candidates, findings)
 
     integrations = _object_list(value["integration_generations"])
     final_integration = _select_final_generation(
@@ -190,6 +198,7 @@ def evaluate_phase10_manifest(
             baseline,
             policy,
             findings,
+            authenticated_artifact_api_lookup,
         )
         _reject_reused_integration_evidence(integrations, final_integration, findings)
 
@@ -199,6 +208,7 @@ def evaluate_phase10_manifest(
         github_merge=_optional_object(value["github_merge"]),
         local_update=_optional_object(value["local_update"]),
         post_merge_checks=_object_list(value["post_merge_local_checks"]),
+        candidates=candidates,
         final_candidate=final_candidate,
         final_integration=final_integration,
         policy=policy,
@@ -360,6 +370,12 @@ def _evaluate_candidate(
         prefix=f"{prefix}/local_checks",
         findings=findings,
     )
+    _evaluate_local_check_evidence_set(
+        checks,
+        stage="candidate",
+        prefix=f"{prefix}/local_checks",
+        findings=findings,
+    )
     for index, check in enumerate(checks):
         check_path = f"{prefix}/local_checks/{index}"
         if check["source_content_sha256"] != source_digest:
@@ -421,20 +437,17 @@ def _evaluate_check_truth(check: dict[str, Any], path: str, findings: _Findings)
 
 def _reject_reused_candidate_evidence(
     candidates: list[dict[str, Any]],
-    final_candidate: dict[str, Any],
     findings: _Findings,
 ) -> None:
-    final_number = cast(int, final_candidate["generation"])
-    final_identities = _candidate_evidence_identities(final_candidate)
-    old_identities: set[tuple[str, str]] = set()
-    for candidate in candidates:
-        if candidate is not final_candidate:
-            old_identities.update(_candidate_evidence_identities(candidate))
-    if final_identities & old_identities:
-        findings.incomplete(
-            "candidate_generation_reuses_stale_evidence",
-            f"/candidate_generations/{final_number - 1}",
-        )
+    prior_identities: set[tuple[str, str]] = set()
+    for index, candidate in enumerate(candidates):
+        identities = _candidate_evidence_identities(candidate)
+        if identities & prior_identities:
+            findings.incomplete(
+                "candidate_generation_reuses_stale_evidence",
+                f"/candidate_generations/{index}",
+            )
+        prior_identities.update(identities)
 
 
 def _candidate_evidence_identities(candidate: dict[str, Any]) -> set[tuple[str, str]]:
@@ -457,6 +470,7 @@ def _evaluate_integration(
     baseline: dict[str, Any] | None,
     policy: Phase10Policy,
     findings: _Findings,
+    authenticated_artifact_api_lookup: ArtifactApiLookup | None,
 ) -> None:
     generation = cast(int, integration["generation"])
     prefix = f"/integration_generations/{generation - 1}"
@@ -534,6 +548,14 @@ def _evaluate_integration(
                 "ci_artifact_api_observation_digest_mismatch",
                 f"{path}/github_artifact_api_ref/sha256",
             )
+        _authenticate_artifact_api_observation(
+            lookup=authenticated_artifact_api_lookup,
+            repository=policy.repository,
+            artifact_id=artifact_id,
+            embedded=artifact_api_observation,
+            path=path,
+            findings=findings,
+        )
         if artifact_api_observation["repository"] != evidence["repository"]:
             findings.fail(
                 "ci_artifact_api_metadata_mismatch",
@@ -660,48 +682,81 @@ def _evaluate_integration(
             findings.incomplete("required_ci_job_evidence_missing", f"{prefix}/ci_evidence")
 
 
+def _authenticate_artifact_api_observation(
+    *,
+    lookup: ArtifactApiLookup | None,
+    repository: str,
+    artifact_id: int,
+    embedded: dict[str, Any],
+    path: str,
+    findings: _Findings,
+) -> None:
+    """Compare manifest metadata with an authenticated source outside the manifest."""
+
+    if lookup is None:
+        findings.incomplete(
+            "ci_artifact_api_authentication_missing",
+            f"{path}/github_artifact_api_observation",
+        )
+        return
+    try:
+        authenticated = lookup(repository, artifact_id)
+    except ArtifactApiLookupUnavailable:
+        findings.incomplete(
+            "ci_artifact_api_lookup_unavailable",
+            f"{path}/github_artifact_api_observation",
+        )
+        return
+    if authenticated is None:
+        findings.fail(
+            "ci_artifact_api_not_found",
+            f"{path}/github_artifact_api_observation/id",
+        )
+        return
+    try:
+        authenticated_value = dict(authenticated)
+        canonical_json_sha256(authenticated_value)
+    except (TypeError, ValueError, RecursionError):
+        findings.fail(
+            "ci_artifact_api_authentication_invalid",
+            f"{path}/github_artifact_api_observation",
+        )
+        return
+    if authenticated_value != embedded:
+        findings.fail(
+            "ci_artifact_api_authentication_mismatch",
+            f"{path}/github_artifact_api_observation",
+        )
+
+
 def _candidate_lineage_base(
     candidates: list[dict[str, Any]],
     final_candidate: dict[str, Any],
     findings: _Findings,
 ) -> str | None:
-    """Follow signed parent OIDs through earlier generations and return the lineage root."""
+    """Require the final candidate to consume every immediately preceding generation."""
 
-    commits: dict[str, tuple[int, dict[str, Any]]] = {}
-    duplicate_oids: set[str] = set()
-    for index, candidate in enumerate(candidates):
-        commit = _object(candidate["signed_commit"])
-        oid = cast(str, commit["oid"])
-        if oid in commits:
-            duplicate_oids.add(oid)
-        commits[oid] = (index, commit)
-    if duplicate_oids:
+    commit_oids = [
+        cast(str, _object(candidate["signed_commit"])["oid"]) for candidate in candidates
+    ]
+    if len(commit_oids) != len(set(commit_oids)):
         findings.fail("candidate_lineage_duplicate_oid", "/candidate_generations")
         return None
 
     current_index = cast(int, final_candidate["generation"]) - 1
-    current = _object(final_candidate["signed_commit"])
-    seen: set[str] = set()
-    while True:
-        oid = cast(str, current["oid"])
-        if oid in seen:
+    if current_index >= len(candidates) or candidates[current_index] is not final_candidate:
+        findings.fail("candidate_lineage_disconnected", "/candidate_generations")
+        return None
+    for index in range(current_index, 0, -1):
+        actual_parent = _object(candidates[index]["signed_commit"])["parent_oid"]
+        expected_parent = _object(candidates[index - 1]["signed_commit"])["oid"]
+        if actual_parent != expected_parent:
             findings.fail(
                 "candidate_lineage_disconnected",
-                f"/candidate_generations/{current_index}/signed_commit/parent_oid",
+                f"/candidate_generations/{index}/signed_commit/parent_oid",
             )
             return None
-        seen.add(oid)
-        parent_oid = cast(str, current["parent_oid"])
-        parent = commits.get(parent_oid)
-        if parent is None:
-            return parent_oid
-        if parent[0] >= current_index:
-            findings.fail(
-                "candidate_lineage_disconnected",
-                f"/candidate_generations/{current_index}/signed_commit/parent_oid",
-            )
-            return None
-        current_index, current = parent
+    return cast(str, _object(candidates[0]["signed_commit"])["parent_oid"])
 
 
 def _reject_reused_integration_evidence(
@@ -760,6 +815,7 @@ def _evaluate_hosted_and_local_chain(
     github_merge: dict[str, Any] | None,
     local_update: dict[str, Any] | None,
     post_merge_checks: list[dict[str, Any]],
+    candidates: list[dict[str, Any]],
     final_candidate: dict[str, Any] | None,
     final_integration: dict[str, Any] | None,
     policy: Phase10Policy,
@@ -842,8 +898,22 @@ def _evaluate_hosted_and_local_chain(
         prefix="/post_merge_local_checks",
         findings=findings,
     )
+    _evaluate_local_check_evidence_set(
+        post_merge_checks,
+        stage="post_merge",
+        prefix="/post_merge_local_checks",
+        findings=findings,
+    )
+    candidate_check_identities = {
+        identity
+        for candidate in candidates
+        for check in _object_list(candidate["local_checks"])
+        for identity in _evidence_ref_identities(check["evidence_ref"])
+    }
     for index, check in enumerate(post_merge_checks):
         path = f"/post_merge_local_checks/{index}"
+        if _evidence_ref_identities(check["evidence_ref"]) & candidate_check_identities:
+            findings.fail("post_merge_check_reuses_candidate_evidence", f"{path}/evidence_ref")
         _evaluate_check_truth(check, path, findings)
         if github_merge is not None and (
             check["commit_oid"] != result_oid or check["tree_oid"] != result_tree
@@ -870,6 +940,55 @@ def _evaluate_local_check_profile(
     for check_id in set(observed) & set(required):
         if observed[check_id] != required[check_id]:
             findings.fail("local_check_profile_mismatch", prefix)
+
+
+def _evaluate_local_check_evidence_set(
+    checks: list[dict[str, Any]],
+    *,
+    stage: str,
+    prefix: str,
+    findings: _Findings,
+) -> None:
+    observed_ids: set[str] = set()
+    observed_digests: set[str] = set()
+    for index, check in enumerate(checks):
+        path = f"{prefix}/{index}/evidence_ref"
+        evidence_ref = _object(check["evidence_ref"])
+        evidence_id = _ref_id(evidence_ref)
+        evidence_sha256 = cast(str, evidence_ref["sha256"])
+        if evidence_id in observed_ids or evidence_sha256 in observed_digests:
+            findings.fail("local_check_evidence_reused", path)
+        observed_ids.add(evidence_id)
+        observed_digests.add(evidence_sha256)
+        if check["evidence_binding_sha256"] != phase10_local_check_evidence_sha256(
+            check,
+            stage=stage,
+        ):
+            findings.fail("local_check_evidence_binding_mismatch", path)
+
+
+def phase10_local_check_evidence_sha256(check: Mapping[str, Any], *, stage: str) -> str:
+    """Hash the closed retained-evidence projection for one local check."""
+
+    projection: dict[str, Any] = {
+        "schema_version": "1.0",
+        "stage": stage,
+        "check_id": check["check_id"],
+        "check_profile_sha256": check["check_profile_sha256"],
+        "evidence_ref": check["evidence_ref"],
+        "conclusion": check["conclusion"],
+        "terminal": check["terminal"],
+        "descendants_closed": check["descendants_closed"],
+        "workspace_fence_closed": check["workspace_fence_closed"],
+    }
+    if stage == "candidate":
+        projection["source_content_sha256"] = check["source_content_sha256"]
+    elif stage == "post_merge":
+        projection["commit_oid"] = check["commit_oid"]
+        projection["tree_oid"] = check["tree_oid"]
+    else:
+        raise AssertionError("unsupported local-check evidence stage")
+    return canonical_json_sha256(projection)
 
 
 def _expected_artifact_name(evidence: dict[str, Any]) -> str:
@@ -1132,7 +1251,10 @@ __all__ = [
     "AcceptanceManifestError",
     "AcceptanceReport",
     "AcceptanceVerdict",
+    "ArtifactApiLookup",
+    "ArtifactApiLookupUnavailable",
     "create_phase10_skeleton",
     "evaluate_phase10_manifest",
+    "phase10_local_check_evidence_sha256",
     "phase10_reviewed_evidence_sha256",
 ]

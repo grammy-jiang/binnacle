@@ -12,9 +12,14 @@ from hypothesis import strategies as st
 
 from binnacle.evaluation.digests import canonical_json_bytes, canonical_json_sha256, sha256_bytes
 from binnacle.evaluation.phase10_acceptance import (
+    AcceptanceReport,
     AcceptanceVerdict,
-    evaluate_phase10_manifest,
+    ArtifactApiLookup,
+    phase10_local_check_evidence_sha256,
     phase10_reviewed_evidence_sha256,
+)
+from binnacle.evaluation.phase10_acceptance import (
+    evaluate_phase10_manifest as _evaluate_phase10_manifest,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -29,6 +34,34 @@ def _pass_manifest(repo_root: Path) -> dict[str, Any]:
     )
     assert isinstance(value, dict)
     return cast(dict[str, Any], value)
+
+
+def _artifact_api_lookup_from(manifest: dict[str, Any]) -> ArtifactApiLookup:
+    observations = {
+        (evidence["repository"], evidence["github_artifact_id"]): copy.deepcopy(
+            evidence["github_artifact_api_observation"]
+        )
+        for integration in manifest["integration_generations"]
+        for evidence in integration["ci_evidence"]
+    }
+
+    def lookup(repository: str, artifact_id: int) -> dict[str, Any] | None:
+        observation = observations.get((repository, artifact_id))
+        return copy.deepcopy(observation) if observation is not None else None
+
+    return lookup
+
+
+def evaluate_phase10_manifest(
+    manifest: dict[str, Any],
+    *,
+    repo_root: Path,
+) -> AcceptanceReport:
+    return _evaluate_phase10_manifest(
+        manifest,
+        repo_root=repo_root,
+        authenticated_artifact_api_lookup=_artifact_api_lookup_from(manifest),
+    )
 
 
 @given(index=st.integers(min_value=0, max_value=6))
@@ -168,7 +201,8 @@ def test_manifest_cannot_replace_attestation_from_uploaded_artifact(index: int) 
     )
 )
 def test_artifact_api_observation_must_bind_downloaded_archive_metadata(field: str) -> None:
-    manifest = _pass_manifest(REPO_ROOT)
+    trusted_manifest = _pass_manifest(REPO_ROOT)
+    manifest = copy.deepcopy(trusted_manifest)
     evidence = manifest["integration_generations"][0]["ci_evidence"][0]
     observation = evidence["github_artifact_api_observation"]
     replacements: dict[str, object] = {
@@ -195,10 +229,16 @@ def test_artifact_api_observation_must_bind_downloaded_archive_metadata(field: s
         manifest
     )
 
-    report = evaluate_phase10_manifest(manifest, repo_root=REPO_ROOT)
+    report = _evaluate_phase10_manifest(
+        manifest,
+        repo_root=REPO_ROOT,
+        authenticated_artifact_api_lookup=_artifact_api_lookup_from(trusted_manifest),
+    )
 
     assert report.verdict is AcceptanceVerdict.FAIL
-    assert "ci_artifact_api_metadata_mismatch" in {finding.code for finding in report.findings}
+    codes = {finding.code for finding in report.findings}
+    assert "ci_artifact_api_metadata_mismatch" in codes
+    assert "ci_artifact_api_authentication_mismatch" in codes
 
 
 @given(
@@ -225,6 +265,41 @@ def test_omitting_any_required_local_check_never_passes(
     assert "required_local_check_profile_incomplete" in {
         finding.code for finding in report.findings
     }
+
+
+@given(index=st.integers(min_value=0, max_value=4))
+def test_candidate_check_evidence_cannot_be_relabelled_after_merge(index: int) -> None:
+    manifest = _pass_manifest(REPO_ROOT)
+    candidate_check = manifest["candidate_generations"][0]["local_checks"][index]
+    post_merge_check = manifest["post_merge_local_checks"][index]
+    post_merge_check["evidence_ref"] = copy.deepcopy(candidate_check["evidence_ref"])
+    manifest["owner_review"]["reviewed_evidence_sha256"] = phase10_reviewed_evidence_sha256(
+        manifest
+    )
+
+    report = evaluate_phase10_manifest(manifest, repo_root=REPO_ROOT)
+
+    codes = {finding.code for finding in report.findings}
+    assert report.verdict is AcceptanceVerdict.FAIL
+    assert "post_merge_check_reuses_candidate_evidence" in codes
+    assert "local_check_evidence_binding_mismatch" in codes
+
+
+@given(
+    index=st.integers(min_value=0, max_value=4),
+    field=st.sampled_from(("commit_oid", "tree_oid")),
+)
+def test_post_merge_check_digest_binds_merged_identity(index: int, field: str) -> None:
+    manifest = _pass_manifest(REPO_ROOT)
+    manifest["post_merge_local_checks"][index][field] = "8" * 40
+    manifest["owner_review"]["reviewed_evidence_sha256"] = phase10_reviewed_evidence_sha256(
+        manifest
+    )
+
+    report = evaluate_phase10_manifest(manifest, repo_root=REPO_ROOT)
+
+    assert report.verdict is AcceptanceVerdict.FAIL
+    assert "local_check_evidence_binding_mismatch" in {finding.code for finding in report.findings}
 
 
 @given(
@@ -287,6 +362,11 @@ def test_new_candidate_generation_cannot_reuse_prior_local_evidence() -> None:
     ]
     for index, evidence_ref in enumerate(candidate_refs):
         evidence_ref["id"] = f"renamed-candidate-2-evidence-{index}"
+    for check in second["local_checks"]:
+        check["evidence_binding_sha256"] = phase10_local_check_evidence_sha256(
+            check,
+            stage="candidate",
+        )
     manifest["candidate_generations"].append(second)
     manifest["final_candidate_generation"] = 2
     manifest["integration_generations"][0]["candidate_generation"] = 2

@@ -26,6 +26,7 @@ if str(SOURCE_ROOT) not in sys.path:
 from binnacle.evaluation.phase10_acceptance import (  # noqa: E402
     AcceptanceVerdict,
     evaluate_phase10_manifest,
+    phase10_local_check_evidence_sha256,
 )
 from binnacle.evaluation.phase10_policy import (  # noqa: E402
     Phase10PolicyError,
@@ -1313,6 +1314,21 @@ def validate_phase10_acceptance_contract() -> None:
         fail("Phase 10 policy repository differs from the reviewed repository")
     if policy.protected_branch_ref != "refs/heads/master":
         fail("Phase 10 policy protected branch differs from refs/heads/master")
+    if policy.artifact_api_authentication != "live-bearer-github-rest-v2022-11-28":
+        fail("Phase 10 policy does not require a live authenticated artifact API source")
+    artifact_reader_source = (ROOT / "scripts/phase10_acceptance.py").read_text(encoding="utf-8")
+    artifact_reader_markers = (
+        'GITHUB_API_HOST = "api.github.com"',
+        '"Authorization": f"Bearer {token}"',
+        '"X-GitHub-Api-Version": "2022-11-28"',
+        'review_digest.add_argument("--github-token-file", type=Path, required=True)',
+        'evaluate.add_argument("--github-token-file", type=Path, default=None)',
+        "metadata.st_uid != os.geteuid()",
+        "response.read(response_bytes_max + 1)",
+    )
+    for marker in artifact_reader_markers:
+        if marker not in artifact_reader_source:
+            fail(f"Phase 10 authenticated artifact reader is missing marker: {marker}")
 
     schema = load_json(ROOT / "schemas/acceptance/phase10-run.schema.json")
     ci_attestation_schema = load_json(
@@ -1358,6 +1374,12 @@ def validate_phase10_acceptance_contract() -> None:
     ci_evidence_schema = definitions.get("ciEvidence", {})
     if "github_artifact_api_observation" not in ci_evidence_schema.get("required", []):
         fail("Phase 10 CI evidence does not require authenticated artifact API metadata")
+    for check_definition in ("localCheck", "postMergeCheck"):
+        check_schema = definitions.get(check_definition, {})
+        if "evidence_binding_sha256" not in check_schema.get(
+            "required", []
+        ) or "evidence_binding_sha256" not in check_schema.get("properties", {}):
+            fail(f"Phase 10 {check_definition} does not require an identity binding digest")
 
     expected_limits = {
         "candidate_generations_max": schema.get("properties", {})
@@ -1385,17 +1407,19 @@ def validate_phase10_acceptance_contract() -> None:
     if manifest.get("policy_sha256") != policy.sha256:
         fail("Phase 10 PASS fixture policy identity is stale")
     required_local_profiles = dict(policy.required_local_check_profiles)
-    local_check_collections: list[tuple[str, object]] = [
+    local_check_collections: list[tuple[str, str, object]] = [
         (
             f"candidate_generations[{index}].local_checks",
+            "candidate",
             candidate.get("local_checks") if isinstance(candidate, dict) else None,
         )
         for index, candidate in enumerate(manifest.get("candidate_generations", []))
     ]
     local_check_collections.append(
-        ("post_merge_local_checks", manifest.get("post_merge_local_checks"))
+        ("post_merge_local_checks", "post_merge", manifest.get("post_merge_local_checks"))
     )
-    for context, raw_checks in local_check_collections:
+    local_evidence_by_stage: dict[str, set[tuple[str, object]]] = {}
+    for context, stage, raw_checks in local_check_collections:
         if not isinstance(raw_checks, list) or not all(
             isinstance(check, dict) for check in raw_checks
         ):
@@ -1408,8 +1432,53 @@ def validate_phase10_acceptance_contract() -> None:
             fail(f"Phase 10 PASS fixture {context} contains duplicate check IDs")
         if observed_profiles != required_local_profiles:
             fail(f"Phase 10 PASS fixture {context} differs from the frozen local profile")
+        identities: set[tuple[str, object]] = set()
+        for check in raw_checks:
+            evidence_ref = check.get("evidence_ref")
+            if not isinstance(evidence_ref, dict):
+                fail(f"Phase 10 PASS fixture {context} has invalid evidence")
+                continue
+            current_identities = {
+                ("id", evidence_ref.get("id")),
+                ("sha256", evidence_ref.get("sha256")),
+            }
+            if current_identities & identities:
+                fail(f"Phase 10 PASS fixture {context} reuses local-check evidence")
+            identities.update(current_identities)
+            if check.get("evidence_binding_sha256") != phase10_local_check_evidence_sha256(
+                check,
+                stage=stage,
+            ):
+                fail(f"Phase 10 PASS fixture {context} has an unbound evidence digest")
+        local_evidence_by_stage.setdefault(stage, set()).update(identities)
+    if local_evidence_by_stage.get("candidate", set()) & local_evidence_by_stage.get(
+        "post_merge", set()
+    ):
+        fail("Phase 10 PASS fixture reuses candidate evidence after merge")
+
+    artifact_observations = {
+        (evidence.get("repository"), evidence.get("github_artifact_id")): evidence.get(
+            "github_artifact_api_observation"
+        )
+        for integration in manifest.get("integration_generations", [])
+        if isinstance(integration, dict)
+        for evidence in integration.get("ci_evidence", [])
+        if isinstance(evidence, dict)
+    }
+
+    def authenticated_artifact_api_lookup(
+        repository: str,
+        artifact_id: int,
+    ) -> Mapping[str, Any] | None:
+        value = artifact_observations.get((repository, artifact_id))
+        return value if isinstance(value, dict) else None
+
     try:
-        report = evaluate_phase10_manifest(manifest, repo_root=ROOT)
+        report = evaluate_phase10_manifest(
+            manifest,
+            repo_root=ROOT,
+            authenticated_artifact_api_lookup=authenticated_artifact_api_lookup,
+        )
     except Exception as exc:  # noqa: BLE001 - aggregate validation failures
         fail(f"Phase 10 PASS fixture could not be evaluated: {exc}")
     else:
@@ -1439,6 +1508,8 @@ def validate_phase10_acceptance_contract() -> None:
         "baseline-protected-base-mismatch-fails",
         "artifact-api-metadata-mismatch-fails",
         "candidate-lineage-disconnected-fails",
+        "post-merge-check-reuses-candidate-evidence-fails",
+        "post-merge-check-identity-digest-mismatch-fails",
         "stale-policy-is-incomplete",
         "post-restart-runtime-profile-mismatch-fails",
         "unresolved-effect-is-incomplete",

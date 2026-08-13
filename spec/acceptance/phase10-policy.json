@@ -1,8 +1,9 @@
 {
-  "acceptance_schema_sha256": "c04e393621671271918a28eea3a16d5e5fb8185aed7e3f8c9180a59513044855",
+  "acceptance_schema_sha256": "4233ed506f8fcfda211a2c213b0af8dd1b4c1a59b903116de084869a2f6d13c4",
   "allowed_merge_methods": [
     "squash"
   ],
+  "artifact_api_authentication": "live-bearer-github-rest-v2022-11-28",
   "ci_attestation_collector_commit_oid": "668a3b69af386894a6eedcd740634589b6bb1ccc",
   "ci_attestation_collector_sha256": "96dc2225a3a12e18341656b2cd5ea05b9458a52a9cb7fa77f98d84ce844f8ec7",
   "ci_attestation_schema_sha256": "6b7d2c6dff03870790dfb3e4ee6be5c93399e61d1bc7c67afea2969ea91e2760",
@@ -10,6 +11,9 @@
     "candidate_generations_max": 64,
     "ci_evidence_per_integration_max": 64,
     "evidence_reference_id_bytes_max": 160,
+    "github_api_response_bytes_max": 65536,
+    "github_api_timeout_seconds": 15,
+    "github_api_token_bytes_max": 4096,
     "integration_generations_max": 64,
     "manifest_bytes_max": 1048576,
     "security_checks_max": 32

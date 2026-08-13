@@ -126,6 +126,14 @@ contain only the bounded canonical
 ``phase10-ci-checkout.json`` member.  The evaluator opens the ZIP again and requires its
 object to equal the separately embedded attestation byte-for-byte after canonical parsing.
 
+The embedded observation and its hash are not themselves authentication.  Final
+evaluation must receive a bounded mode-``0600`` GitHub bearer-token file and query the
+numeric artifact ID live through fixed ``api.github.com`` TLS with REST version
+``2022-11-28``.  The evaluator sanitizes that non-manifest response to the same closed
+fields and requires exact equality.  A live 404 is a failure; unavailable authentication
+or transport is ``INCOMPLETE``.  Never place the token in the manifest, evidence reference,
+report, command output, or repository.
+
 Every workflow/job/run/attempt, repository/event, collector, candidate/base, GitHub SHA,
 checkout OID/tree/parents, and checkout-kind field in the surrounding CI record must equal
 that archived attestation.  Artifact API references, numeric IDs, archive digests, and
@@ -213,9 +221,10 @@ candidate OID, protected-base OID, expected integration tree, and policy SHA-256
 * zero unresolved actionable findings; and
 * every exact required workflow/job result plus its checkout-attestation artifact.
 
-Follow the final signed candidate's parent through earlier candidate generations to its
-lineage base.  Each non-base parent must equal an earlier generation's signed OID; a
-missing, forward, cyclic, duplicate, or otherwise disconnected link fails.  When the
+Follow the final signed candidate's parent through every immediately preceding candidate
+generation to its lineage base.  Each generation must fully pass its own local-check,
+status-parent, signature/signer, push, and hosted-head validation; a skipped generation,
+missing/forward/cyclic/duplicate OID, contradictory record, or otherwise disconnected link fails.  When the
 lineage base is the integration protected base, the final signed tree must equal the
 expected synthetic integration tree even when the immediate parent is an earlier
 candidate.  A moved protected base instead requires a new integration generation and its
@@ -272,7 +281,8 @@ still changing.  When the evidence projection is final, compute the exact review
 .. code-block:: console
 
    uv run python scripts/phase10_acceptance.py review-digest \
-     --manifest /var/lib/binnacle/evaluation/phase10/<run-id>/run.json
+     --manifest /var/lib/binnacle/evaluation/phase10/<run-id>/run.json \
+     --github-token-file /run/credentials/binnacle/github-artifact-read.token
 
 The owner approval record must repeat the manifest ``acceptance_run_id``, current frozen
 ``policy_sha256``, and emitted ``reviewed_evidence_sha256``.  The digest covers the complete
@@ -289,7 +299,8 @@ Evaluate without a promotion assertion while the campaign is in progress:
    uv run python scripts/phase10_acceptance.py evaluate \
      --manifest /var/lib/binnacle/evaluation/phase10/<run-id>/run.json \
      --report /var/lib/binnacle/evaluation/phase10/<run-id>/report.json \
-     --output json
+     --output json \
+     --github-token-file /run/credentials/binnacle/github-artifact-read.token
 
 For the final owner-reviewed candidate, require ``PASS`` explicitly:
 
@@ -298,7 +309,8 @@ For the final owner-reviewed candidate, require ``PASS`` explicitly:
    uv run python scripts/phase10_acceptance.py evaluate \
      --manifest /var/lib/binnacle/evaluation/phase10/<run-id>/run.json \
      --report /var/lib/binnacle/evaluation/phase10/<run-id>/final-report.json \
-     --output json --require-pass
+     --output json --require-pass \
+     --github-token-file /run/credentials/binnacle/github-artifact-read.token
 
 Output files are new-only and mode ``0600``.  A non-PASS result returns a nonzero status
 with ``--require-pass``.  The report contains only finding codes and JSON paths; it does not
@@ -311,19 +323,22 @@ The substantive reviewer verifies all of the following against independent sourc
 
 * manifest and policy digests;
 * clean baseline repository HEAD equality with the independently observed protected base;
-* consecutive candidate and integration generations with no stale reference reuse and a
-  signed parent lineage terminating at the coherent candidate base;
+* consecutive candidate and integration generations with no stale reference reuse, every
+  candidate fully validated, and an immediate-predecessor signed parent lineage terminating
+  at the coherent candidate base;
 * signer, pushed head, PR head, protected base, review, and CI identities;
 * actual checkout commit/tree/parents from each required attestation artifact;
 * each attestation's collector commit and bundle digest against the frozen policy;
-* each embedded authenticated artifact API observation has a matching canonical evidence
-  digest and exact repository/ID/name/size/URL/expiry/archive/run/head bindings; each
+* each embedded artifact API observation exactly equals a fresh bearer-authenticated live
+  GitHub REST response and has matching canonical evidence digest plus exact
+  repository/ID/name/size/URL/expiry/archive/run/head bindings; each
   original ZIP digest and archived attestation is unique per required job, and the
   downloaded bytes reproduce the API digest, size, and embedded object;
 * GitHub job conclusions for the recorded run IDs and attempts;
 * lineage-aware same-base signed-tree equality, merge tree/parent/provenance, exact local
   update, and the complete frozen local check profile at both candidate and merged
-  identities;
+  identities, with separate canonical ``evidence_binding_sha256`` values, immutable raw
+  execution-evidence references, and no candidate/post-merge evidence overlap;
 * same-operation/checkpoint/readiness-generation restart reconciliation, no duplicate
   restart, baseline runtime-profile continuity, and runtime-instance replacement;
 * changed behaviour on the post-restart instance;

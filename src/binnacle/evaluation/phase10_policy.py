@@ -22,6 +22,7 @@ _EXPECTED_POLICY_KEYS = frozenset(
     {
         "acceptance_schema_sha256",
         "allowed_merge_methods",
+        "artifact_api_authentication",
         "ci_attestation_schema_sha256",
         "ci_attestation_collector_commit_oid",
         "ci_attestation_collector_sha256",
@@ -49,6 +50,9 @@ _EXPECTED_LIMIT_KEYS = frozenset(
         "evidence_reference_id_bytes_max",
         "integration_generations_max",
         "manifest_bytes_max",
+        "github_api_response_bytes_max",
+        "github_api_timeout_seconds",
+        "github_api_token_bytes_max",
         "security_checks_max",
     }
 )
@@ -66,6 +70,7 @@ class Phase10Policy:
     schema_version: str
     plan_version: str
     acceptance_schema_sha256: str
+    artifact_api_authentication: str
     ci_attestation_schema_sha256: str
     ci_attestation_collector_commit_oid: str
     ci_attestation_collector_sha256: str
@@ -97,6 +102,13 @@ def load_phase10_policy(repo_root: Path) -> Phase10Policy:
         raise Phase10PolicyError("Phase 10 policy schema version is unsupported")
     if policy.get("plan_version") != "phase10-self-hosting-acceptance-v1":
         raise Phase10PolicyError("Phase 10 plan version is unsupported")
+    artifact_api_authentication = _bounded_string(
+        policy,
+        "artifact_api_authentication",
+        maximum=160,
+    )
+    if artifact_api_authentication != "live-bearer-github-rest-v2022-11-28":
+        raise Phase10PolicyError("Phase 10 artifact API authentication is unsupported")
 
     policy_id = _bounded_string(policy, "policy_id", maximum=160)
     repository = _bounded_string(policy, "repository", maximum=256)
@@ -186,6 +198,12 @@ def load_phase10_policy(repo_root: Path) -> Phase10Policy:
         limits[name] = raw
     if limits["manifest_bytes_max"] > 1_048_576:
         raise Phase10PolicyError("Phase 10 manifest limit exceeds the reviewed ceiling")
+    if (
+        limits["github_api_response_bytes_max"] > 65_536
+        or limits["github_api_token_bytes_max"] > 4_096
+        or limits["github_api_timeout_seconds"] > 60
+    ):
+        raise Phase10PolicyError("Phase 10 GitHub API limit exceeds the reviewed ceiling")
 
     actual_acceptance_schema = _load_schema_sha256(repo_root, PHASE10_SCHEMA_PATH)
     if actual_acceptance_schema != acceptance_schema_sha256:
@@ -205,6 +223,7 @@ def load_phase10_policy(repo_root: Path) -> Phase10Policy:
         schema_version="1.0",
         plan_version="phase10-self-hosting-acceptance-v1",
         acceptance_schema_sha256=acceptance_schema_sha256,
+        artifact_api_authentication=artifact_api_authentication,
         ci_attestation_schema_sha256=ci_attestation_schema_sha256,
         ci_attestation_collector_commit_oid=ci_attestation_collector_commit_oid,
         ci_attestation_collector_sha256=ci_attestation_collector_sha256,
