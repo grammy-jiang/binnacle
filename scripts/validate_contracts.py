@@ -17,6 +17,12 @@ import yaml
 from jsonschema import Draft202012Validator
 
 ROOT = Path(__file__).resolve().parents[1]
+SOURCE_ROOT = ROOT / "src"
+if str(SOURCE_ROOT) not in sys.path:
+    # The contract-only workflow intentionally does not install the package.
+    # Validate bindings against the checked-out implementation in that context.
+    sys.path.insert(0, str(SOURCE_ROOT))
+
 ERRORS: list[str] = []
 MERGE_TAG = "tag:yaml.org,2002:merge"
 PHASE9_TOOL_CLASSES = {
