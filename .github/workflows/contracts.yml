@@ -46,7 +46,7 @@ jobs:
       - name: Attest exact checkout identity
         if: ${{ always() }}
         run: >-
-          python3 scripts/ci_checkout_attestation.py
+          /usr/bin/python3 -S scripts/ci_checkout_attestation.py
           --output phase10-ci-checkout.json
           --job-name validate-contracts
 

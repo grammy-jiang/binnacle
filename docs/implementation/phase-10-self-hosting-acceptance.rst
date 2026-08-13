@@ -353,7 +353,8 @@ It must not:
 * create a second operation lifecycle;
 * infer success from transcript text when an authoritative source exists;
 * relabel review/CI evidence from one candidate/integration generation as evidence for
-  another;
+  another, including by changing an opaque ID while retaining an evidence or checkout-
+  attestation digest;
 * infer the CI checkout tree from a workflow status label or PR head alone.
 
 If no new evidence-assembler code is required, the run may be evaluated from existing
@@ -372,6 +373,8 @@ operator-assembled closed manifest. ``scripts/ci_checkout_attestation.py`` is th
 collector added by this phase; in ordinary GitHub jobs it reads the actual Git commit,
 tree and parents and binds them to the bounded event identity. Neither component has a
 runtime Tool, credential, Git mutation, service mutation or device-effect surface.
+The always-run collector uses fixed ``/usr/bin/python3 -S`` and lazy, standard-library-only
+imports so dependency provisioning failures still produce the bounded diagnostic artifact.
 
 The operator/reviewer procedure is
 ``docs/operations/phase10-self-hosting-acceptance.rst``. The positive/negative fixtures

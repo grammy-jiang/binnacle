@@ -85,14 +85,17 @@ GitHub checkout attestation
 ---------------------------
 
 Every required GitHub job runs ``scripts/ci_checkout_attestation.py`` after its normal
-work, including after a preceding failure.  The script independently reads ``HEAD``,
-``HEAD^{tree}``, and the commit parents.  It then binds those facts to the bounded GitHub
-event payload and environment.  Each checkout fetches depth 2 so the integration commit's
-parents are present without fetching unbounded history; a depth-1 shallow checkout cannot
-provide parent evidence and must remain unbound.  The reader invokes the fixed
-``/usr/bin/git`` binary with a fixed executable path, no system/global Git configuration,
-and replacement objects disabled so earlier workflow environment changes cannot substitute
-the identity reader or its object view.
+work, including after a preceding failure.  The workflow invokes fixed
+``/usr/bin/python3 -S`` and the script's narrow evaluation imports are standard-library
+only, so a failed dependency-install or environment-synchronization step cannot suppress
+the artifact.  The script independently reads ``HEAD``, ``HEAD^{tree}``, and the commit
+parents.  It then binds those facts to the bounded GitHub event payload and environment.
+Each checkout fetches depth 2 so the integration commit's parents are present without
+fetching unbounded history; a depth-1 shallow checkout cannot provide parent evidence and
+must remain unbound.  The reader invokes the fixed ``/usr/bin/git`` binary with a fixed
+executable path, no system/global Git configuration, and replacement objects disabled so
+earlier workflow environment changes cannot substitute the identity reader or its object
+view.
 
 For a pull request, ``checkout_kind`` is ``pull_request_integration`` only when all of the
 following are exact:
@@ -165,8 +168,10 @@ Candidate generations start at 1 and remain consecutive.  One candidate generati
 
 If source changes, the PR head moves, a correction is committed, a result belongs to an
 older source digest, or push truth cannot be reconciled, supersede that generation and
-create the next one.  Never copy a prior evidence reference into a new generation.  The
-final generation must be the latest and must not have a supersession reason.
+create the next one.  Never copy a prior evidence reference into a new generation.  Both
+the opaque reference ID and immutable evidence SHA-256 are generation identities; changing
+only the ID does not refresh old evidence.  The final generation must be the latest and
+must not have a supersession reason.
 
 Integration generations
 -----------------------
@@ -181,7 +186,9 @@ candidate OID, protected-base OID, expected integration tree, and policy SHA-256
 If the candidate moves, return to the complete candidate process and then create a new
 integration generation.  If only the protected base moves, create a new integration
 generation and repeat base-aware review and CI.  Old review, CI, checkout, or expected-tree
-evidence cannot satisfy the new generation.
+evidence cannot satisfy the new generation.  The evaluator compares evidence-reference IDs
+and digests and also compares every checkout-attestation digest, so relabelling an old
+artifact remains stale.
 
 Hosted merge and local update
 -----------------------------

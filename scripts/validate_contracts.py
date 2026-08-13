@@ -1371,13 +1371,13 @@ def validate_phase10_acceptance_contract() -> None:
 
     workflow_requirements = {
         ROOT / ".github/workflows/contracts.yml": (
-            "python3 scripts/ci_checkout_attestation.py",
+            "/usr/bin/python3 -S scripts/ci_checkout_attestation.py",
             "--job-name validate-contracts",
             "actions/upload-artifact@",
             "fetch-depth: 2",
         ),
         ROOT / ".github/workflows/python.yml": (
-            "python3 scripts/ci_checkout_attestation.py",
+            "/usr/bin/python3 -S scripts/ci_checkout_attestation.py",
             "Code, contract, dependency, and document quality",
             "Test Python ${{ matrix.python-version }}",
             "actions/upload-artifact@",
@@ -1392,6 +1392,15 @@ def validate_phase10_acceptance_contract() -> None:
             '_GIT_BINARY = "/usr/bin/git"',
             '"GIT_CONFIG_GLOBAL": "/dev/null"',
             '"GIT_NO_REPLACE_OBJECTS": "1"',
+        ),
+        ROOT / "src/binnacle/evaluation/__init__.py": (
+            "Public exports are loaded lazily",
+            "def __getattr__",
+        ),
+        ROOT / "tests/integration/test_phase10_acceptance_cli.py": (
+            "test_checkout_command_runs_without_site_packages",
+            '"/usr/bin/python3"',
+            '"-S"',
         ),
     }
     for path, markers in workflow_requirements.items():

@@ -395,27 +395,28 @@ def _reject_reused_candidate_evidence(
     findings: _Findings,
 ) -> None:
     final_number = cast(int, final_candidate["generation"])
-    final_ids = _candidate_evidence_ids(final_candidate)
-    old_ids: set[str] = set()
+    final_identities = _candidate_evidence_identities(final_candidate)
+    old_identities: set[tuple[str, str]] = set()
     for candidate in candidates:
         if candidate is not final_candidate:
-            old_ids.update(_candidate_evidence_ids(candidate))
-    if final_ids & old_ids:
+            old_identities.update(_candidate_evidence_identities(candidate))
+    if final_identities & old_identities:
         findings.incomplete(
             "candidate_generation_reuses_stale_evidence",
             f"/candidate_generations/{final_number - 1}",
         )
 
 
-def _candidate_evidence_ids(candidate: dict[str, Any]) -> set[str]:
-    values = {
-        _ref_id(_object(candidate["status_diff"])["evidence_ref"]),
-        _ref_id(_object(candidate["signed_commit"])["evidence_ref"]),
-        _ref_id(_object(candidate["push"])["evidence_ref"]),
-    }
-    values.update(
-        _ref_id(check["evidence_ref"]) for check in _object_list(candidate["local_checks"])
-    )
+def _candidate_evidence_identities(candidate: dict[str, Any]) -> set[tuple[str, str]]:
+    values: set[tuple[str, str]] = set()
+    for evidence_ref in (
+        _object(candidate["status_diff"])["evidence_ref"],
+        _object(candidate["signed_commit"])["evidence_ref"],
+        _object(candidate["push"])["evidence_ref"],
+    ):
+        values.update(_evidence_ref_identities(evidence_ref))
+    for check in _object_list(candidate["local_checks"]):
+        values.update(_evidence_ref_identities(check["evidence_ref"]))
     return values
 
 
@@ -497,23 +498,25 @@ def _reject_reused_integration_evidence(
     findings: _Findings,
 ) -> None:
     final_number = cast(int, final_integration["generation"])
-    final_ids = _integration_evidence_ids(final_integration)
-    old_ids: set[str] = set()
+    final_identities = _integration_evidence_identities(final_integration)
+    old_identities: set[tuple[str, str]] = set()
     for integration in integrations:
         if integration is not final_integration:
-            old_ids.update(_integration_evidence_ids(integration))
-    if final_ids & old_ids:
+            old_identities.update(_integration_evidence_identities(integration))
+    if final_identities & old_identities:
         findings.incomplete(
             "integration_generation_reuses_stale_evidence",
             f"/integration_generations/{final_number - 1}",
         )
 
 
-def _integration_evidence_ids(integration: dict[str, Any]) -> set[str]:
-    values = {_ref_id(review["evidence_ref"]) for review in _object_list(integration["reviews"])}
-    values.update(
-        _ref_id(evidence["evidence_ref"]) for evidence in _object_list(integration["ci_evidence"])
-    )
+def _integration_evidence_identities(integration: dict[str, Any]) -> set[tuple[str, str]]:
+    values: set[tuple[str, str]] = set()
+    for review in _object_list(integration["reviews"]):
+        values.update(_evidence_ref_identities(review["evidence_ref"]))
+    for evidence in _object_list(integration["ci_evidence"]):
+        values.update(_evidence_ref_identities(evidence["evidence_ref"]))
+        values.add(("attestation_sha256", cast(str, evidence["attestation_sha256"])))
     return values
 
 
@@ -759,6 +762,14 @@ def _object_list(value: object) -> list[dict[str, Any]]:
 
 def _ref_id(value: object) -> str:
     return cast(str, _object(value)["id"])
+
+
+def _evidence_ref_identities(value: object) -> set[tuple[str, str]]:
+    evidence_ref = _object(value)
+    return {
+        ("evidence_id", _ref_id(evidence_ref)),
+        ("evidence_sha256", cast(str, evidence_ref["sha256"])),
+    }
 
 
 __all__ = [

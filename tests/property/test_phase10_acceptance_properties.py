@@ -104,6 +104,14 @@ def test_new_candidate_generation_cannot_reuse_prior_local_evidence() -> None:
     second = copy.deepcopy(first)
     second["generation"] = 2
     second["superseded_reason_ref"] = None
+    candidate_refs = [
+        second["status_diff"]["evidence_ref"],
+        second["signed_commit"]["evidence_ref"],
+        second["push"]["evidence_ref"],
+        *(check["evidence_ref"] for check in second["local_checks"]),
+    ]
+    for index, evidence_ref in enumerate(candidate_refs):
+        evidence_ref["id"] = f"renamed-candidate-2-evidence-{index}"
     manifest["candidate_generations"].append(second)
     manifest["final_candidate_generation"] = 2
 
@@ -122,6 +130,37 @@ def test_new_integration_generation_cannot_reuse_old_review_or_ci() -> None:
     second = copy.deepcopy(first)
     second["generation"] = 2
     second["superseded_reason_ref"] = None
+    integration_refs = [
+        *(review["evidence_ref"] for review in second["reviews"]),
+        *(evidence["evidence_ref"] for evidence in second["ci_evidence"]),
+    ]
+    for index, evidence_ref in enumerate(integration_refs):
+        evidence_ref["id"] = f"renamed-integration-2-evidence-{index}"
+    manifest["integration_generations"].append(second)
+    manifest["final_integration_generation"] = 2
+
+    report = evaluate_phase10_manifest(manifest, repo_root=REPO_ROOT)
+
+    assert report.verdict is AcceptanceVerdict.INCOMPLETE
+    assert "integration_generation_reuses_stale_evidence" in {
+        finding.code for finding in report.findings
+    }
+
+
+def test_new_integration_generation_cannot_relabel_old_checkout_attestations() -> None:
+    manifest = _pass_manifest(REPO_ROOT)
+    first = manifest["integration_generations"][0]
+    first["superseded_reason_ref"] = {"id": "base-moved", "sha256": "e" * 64}
+    second = copy.deepcopy(first)
+    second["generation"] = 2
+    second["superseded_reason_ref"] = None
+    integration_refs = [
+        *(review["evidence_ref"] for review in second["reviews"]),
+        *(evidence["evidence_ref"] for evidence in second["ci_evidence"]),
+    ]
+    for index, evidence_ref in enumerate(integration_refs, start=1):
+        evidence_ref["id"] = f"replacement-integration-2-evidence-{index}"
+        evidence_ref["sha256"] = f"{index:064x}"
     manifest["integration_generations"].append(second)
     manifest["final_integration_generation"] = 2
 

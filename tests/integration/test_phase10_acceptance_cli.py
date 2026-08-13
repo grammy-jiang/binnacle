@@ -221,3 +221,55 @@ def test_attestation_git_ignores_ambient_path(
     monkeypatch.setenv("PATH", str(tmp_path))
 
     assert attested_git(repo_root, "rev-parse", "--verify", "HEAD") == expected
+
+
+def test_checkout_command_runs_without_site_packages(
+    tmp_path: Path,
+    repo_root: Path,
+) -> None:
+    head = _git(repo_root, "rev-parse", "HEAD")
+    event_path = tmp_path / "event.json"
+    event_path.write_text(
+        json.dumps(
+            {
+                "repository": {"full_name": "grammy-jiang/binnacle"},
+                "after": head,
+            }
+        ),
+        encoding="utf-8",
+    )
+    output = tmp_path / "attestation.json"
+    result = subprocess.run(
+        [
+            "/usr/bin/python3",
+            "-S",
+            "scripts/ci_checkout_attestation.py",
+            "--repo",
+            str(repo_root),
+            "--event-path",
+            str(event_path),
+            "--output",
+            str(output),
+            "--job-name",
+            "dependency-free-attestation",
+            "--created-at",
+            "2026-08-13T00:00:00Z",
+        ],
+        cwd=repo_root,
+        env={
+            "PATH": "/usr/bin:/bin",
+            "GITHUB_REPOSITORY": "grammy-jiang/binnacle",
+            "GITHUB_EVENT_NAME": "push",
+            "GITHUB_WORKFLOW": "Python CI",
+            "GITHUB_SHA": head,
+            "GITHUB_RUN_ID": "123",
+            "GITHUB_RUN_ATTEMPT": "1",
+        },
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert _load_json(output)["checkout_kind"] == "push_commit"

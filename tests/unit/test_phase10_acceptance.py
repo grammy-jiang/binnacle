@@ -9,6 +9,7 @@ from typing import Any, cast
 
 import pytest
 
+import binnacle.evaluation as evaluation_package
 from binnacle.evaluation.phase10_acceptance import (
     AcceptanceManifestError,
     AcceptanceVerdict,
@@ -16,6 +17,14 @@ from binnacle.evaluation.phase10_acceptance import (
     evaluate_phase10_manifest,
 )
 from binnacle.evaluation.phase10_policy import Phase10PolicyError, load_phase10_policy
+
+
+def test_evaluation_package_preserves_lazy_public_api() -> None:
+    assert "AcceptanceVerdict" in dir(evaluation_package)
+    assert evaluation_package.AcceptanceVerdict is AcceptanceVerdict
+    missing = "not_a_public_export"
+    with pytest.raises(AttributeError, match="no attribute"):
+        getattr(evaluation_package, missing)
 
 
 def _load_json(path: Path) -> dict[str, Any]:
