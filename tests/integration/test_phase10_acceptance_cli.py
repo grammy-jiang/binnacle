@@ -17,6 +17,7 @@ from scripts.ci_checkout_attestation import _git as attested_git
 from scripts.ci_checkout_attestation import main as attestation_main
 from scripts.phase10_acceptance import main as acceptance_main
 
+from binnacle.evaluation.digests import canonical_json_sha256
 from binnacle.evaluation.phase10_acceptance import (
     ArtifactApiLookupUnavailable,
     CiApiLookupUnavailable,
@@ -521,6 +522,41 @@ def test_review_digest_command_emits_exact_owner_review_binding(
     output = capsys.readouterr().out.strip()
     assert output == phase10_reviewed_evidence_sha256(manifest)
     assert output == manifest["owner_review"]["reviewed_evidence_sha256"]
+
+
+def test_review_digest_rejects_job_superseded_by_full_rerun(
+    tmp_path: Path,
+    repo_root: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest = _load_json(repo_root / "tests/fixtures/acceptance/phase10-pass.json")
+    evidence = manifest["integration_generations"][0]["ci_evidence"][0]
+    observation = evidence["github_ci_api_observation"]
+    observation["latest_job_id"] = None
+    evidence["github_ci_api_ref"]["sha256"] = canonical_json_sha256(observation)
+    manifest["owner_review"]["reviewed_evidence_sha256"] = phase10_reviewed_evidence_sha256(
+        manifest
+    )
+    fixture = tmp_path / "superseded-job.json"
+    fixture.write_text(json.dumps(manifest), encoding="utf-8")
+    _install_authenticated_artifact_api(fixture=manifest, monkeypatch=monkeypatch)
+    token_file = _private_token_file(tmp_path)
+
+    result = acceptance_main(
+        [
+            "--repo-root",
+            str(repo_root),
+            "review-digest",
+            "--manifest",
+            str(fixture),
+            "--github-token-file",
+            str(token_file),
+        ]
+    )
+
+    assert result == 2
+    assert "requires authenticated GitHub CI evidence" in capsys.readouterr().err
 
 
 def test_duplicate_manifest_key_is_rejected(

@@ -604,7 +604,8 @@ def main(argv: list[str] | None = None) -> int:
                 authenticated_ci_api_lookup=ci_api_lookup,
             )
             if any(
-                finding.code.startswith(
+                finding.code == "ci_job_superseded_by_later_attempt"
+                or finding.code.startswith(
                     ("ci_artifact_api_", "ci_api_", "ci_job_api_", "ci_workflow_")
                 )
                 for finding in report.findings
