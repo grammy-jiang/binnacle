@@ -706,6 +706,11 @@ Objective
 
 Prove that Bootstrap has achieved its purpose.
 
+Repository implementation status: the evidence schema/policy, authority-free evaluator,
+adversarial fixtures, exact GitHub checkout attestation, and operator/reviewer procedure
+are implemented.  This evidence-independent work does not require a connected Pi.  The
+real ChatGPT-on-Pi campaign below remains the Phase 10 and Bootstrap exit gate.
+
 Use a real, small Binnacle development change.
 
 The complete workflow should be:

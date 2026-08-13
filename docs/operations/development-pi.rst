@@ -7,7 +7,9 @@ Purpose and current gate
 This runbook prepares the read-only compatibility server, the disabled Phase 5 write
 probe, the default-disabled Phase 7 execution-supervisor foundation, the isolated
 default-disabled Phase 8 Git credential-broker foundation, and the default-disabled Phase 9
-root-broker boundary on one 64-bit Raspberry Pi.  It
+root-broker boundary on one 64-bit Raspberry Pi.  It also includes the authority-free
+Phase 10 acceptance evaluator and ordinary-CI checkout attestation; those repository
+assets do not claim that the real acceptance campaign has run.  It
 provides repository-side deployment, integrity, and evidence checks; it does not claim that
 a ChatGPT controller is authenticated, that a write catalogue has been promoted, that the
 host can safely execute command trees, that Git/signing credentials are installed, or that
@@ -122,7 +124,8 @@ the exact clean candidate:
      scripts/build_privileged_artifact_manifest.py scripts/setup_dev_pi.py \
      scripts/verify_dev_pi.py scripts/verify_operation_kernel.py \
      scripts/verify_execution_supervisor.py scripts/verify_git_credential_broker.py \
-     scripts/verify_privileged_broker.py
+     scripts/verify_privileged_broker.py scripts/ci_checkout_attestation.py \
+     scripts/phase10_acceptance.py
    uv run lint-imports
    uv run pip-audit
    uv run python scripts/validate_contracts.py
@@ -130,6 +133,16 @@ the exact clean candidate:
 
 Record the Git commit, clean/dirty state, Python and ``uv`` versions, and resolved MCP,
 FastMCP, and Uvicorn versions.  A dirty candidate is a different evaluation profile.
+
+Inspect the frozen Phase 10 policy as part of repository validation:
+
+.. code-block:: console
+
+   uv run python scripts/phase10_acceptance.py policy --output json
+
+This command checks repository-owned policy only.  Do not initialize or populate a live
+acceptance record until the real prerequisites in
+``docs/operations/phase10-self-hosting-acceptance.rst`` are current.
 
 Privileged setup
 ----------------

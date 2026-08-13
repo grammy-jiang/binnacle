@@ -30,6 +30,25 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
+          fetch-depth: 2
+
+      - name: Attest exact checkout identity with reviewed collector
+        id: phase10-attestation
+        uses: >-
+          grammy-jiang/binnacle/.github/actions/phase10-checkout-attestation@668a3b69af386894a6eedcd740634589b6bb1ccc
+        with:
+          output: ${{ runner.temp }}/phase10-ci-checkout.json
+          job-name: Test Python ${{ matrix.python-version }}
+
+      - name: Upload checkout attestation
+        if: ${{ always() && steps.phase10-attestation.outcome != 'skipped' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: >-
+            phase10-checkout-${{ github.run_id }}-test-python-${{ matrix.python-version }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/phase10-ci-checkout.json
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Set up Python
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
@@ -58,6 +77,25 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
+          fetch-depth: 2
+
+      - name: Attest exact checkout identity with reviewed collector
+        id: phase10-attestation
+        uses: >-
+          grammy-jiang/binnacle/.github/actions/phase10-checkout-attestation@668a3b69af386894a6eedcd740634589b6bb1ccc
+        with:
+          output: ${{ runner.temp }}/phase10-ci-checkout.json
+          job-name: Code, contract, dependency, and document quality
+
+      - name: Upload checkout attestation
+        if: ${{ always() && steps.phase10-attestation.outcome != 'skipped' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: >-
+            phase10-checkout-${{ github.run_id }}-python-quality-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/phase10-ci-checkout.json
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Set up Python
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
@@ -91,6 +129,8 @@ jobs:
           scripts/verify_execution_supervisor.py
           scripts/verify_git_credential_broker.py
           scripts/verify_privileged_broker.py
+          scripts/ci_checkout_attestation.py
+          scripts/phase10_acceptance.py
 
       - name: Enforce import boundaries
         run: uv run lint-imports
@@ -120,6 +160,8 @@ jobs:
           uv run python scripts/verify_execution_supervisor.py --help
           uv run python scripts/verify_git_credential_broker.py --help
           uv run python scripts/verify_privileged_broker.py --help
+          uv run python scripts/ci_checkout_attestation.py --help
+          uv run python scripts/phase10_acceptance.py --help
           uv run binnacle db --help
           uv run binnacle kernel --help
           uv run binnacle audit --help

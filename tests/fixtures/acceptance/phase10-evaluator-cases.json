@@ -1,0 +1,580 @@
+{
+  "cases": [
+    {
+      "id": "complete-exact-chain-passes",
+      "operation": "none",
+      "path": "",
+      "expected": "PASS",
+      "code": null
+    },
+    {
+      "id": "missing-required-field-is-schema-error",
+      "operation": "remove",
+      "path": "/restart",
+      "expected": "ERROR",
+      "code": null
+    },
+    {
+      "id": "wrong-signer-fails",
+      "operation": "replace",
+      "path": "/candidate_generations/0/signed_commit/signer_sha256",
+      "value": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+      "expected": "FAIL",
+      "code": "candidate_signer_mismatch"
+    },
+    {
+      "id": "moved-pr-head-fails",
+      "operation": "replace",
+      "path": "/github_pr/head_oid",
+      "value": "8888888888888888888888888888888888888888",
+      "expected": "FAIL",
+      "code": "github_pr_head_mismatch"
+    },
+    {
+      "id": "review-on-old-candidate-is-incomplete",
+      "operation": "replace",
+      "path": "/integration_generations/0/reviews/0/candidate_oid",
+      "value": "8888888888888888888888888888888888888888",
+      "expected": "INCOMPLETE",
+      "code": "review_bound_to_stale_integration"
+    },
+    {
+      "id": "review-on-old-base-is-incomplete",
+      "operation": "replace",
+      "path": "/integration_generations/0/reviews/0/protected_base_oid",
+      "value": "8888888888888888888888888888888888888888",
+      "expected": "INCOMPLETE",
+      "code": "review_bound_to_stale_integration"
+    },
+    {
+      "id": "ci-on-old-candidate-is-incomplete",
+      "operation": "batch",
+      "operations": [
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/0/candidate_oid",
+          "value": "8888888888888888888888888888888888888888"
+        },
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/0/attestation/event_candidate_oid",
+          "value": "8888888888888888888888888888888888888888"
+        },
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/0/attestation_sha256",
+          "value": "aac711d2ac7ac965a93e8a28296b847925411145b0b27c152f52b064a2087a5c"
+        },
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/0/github_artifact_archive_sha256",
+          "value": "51cb30c045858f61a6099e519093e536c98d28862ade702a6d9b6d512f764b8f"
+        },
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/0/github_artifact_archive_base64",
+          "value": "UEsDBBQAAAAIAAAAIQDm2qNXawEAAFkDAAAYAAAAcGhhc2UxMC1jaS1jaGVja291dC5qc29ulVLLctwgELznK1I6ZxPQA6G95hd8siulGobRLl4J1gity5XKv2fwrmwnJ7mLC9DT0zTzu8Aj4SksqT85b4t9cV7GsY/0tNCceucTHSIkF3zx7Z0aXGZWG/Gx8gyR/KvAXOwfCrkRLFFuRPHrQ7sUiW5u643IbsM4EqYQewzT5Nb3KqWhMqqDodJKdzUoIou2rYWq6kZ3RhkjEfEfhfkIZaO4ulMW2V4DFciSpK5qqRplSrQNgWhMxxLQlNChaQdo26HTVtdIuq4HTdhm1UiQyPaQWK8UpdoJyetOiH1e8p45dMn5wpAoXm17/s/12MC8xvGJ5K+1CN46y/1vAnoj3gQ8TPTffPHdwaXjYnJMn5uox2BWxQuMr8Z2GHyKgGnm+0jnMDv+gRdm8AhP08vu0YE//DDOe8CRMmnxHGai6cyJyus+P04KwbuZx2iC/kJxzvPPmX0XXPQc4mkYw/Pa/uet69ebj8z98+UvUEsBAhQDFAAAAAgAAAAhAObao1drAQAAWQMAABgAAAAAAAAAAAAAAIABAAAAAHBoYXNlMTAtY2ktY2hlY2tvdXQuanNvblBLBQYAAAAAAQABAEYAAAChAQAAAAA="
+        },
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/0/github_artifact_api_observation/size_in_bytes",
+          "value": 509
+        },
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/0/github_artifact_api_observation/digest",
+          "value": "sha256:51cb30c045858f61a6099e519093e536c98d28862ade702a6d9b6d512f764b8f"
+        },
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/0/github_artifact_api_observation/workflow_run/head_sha",
+          "value": "8888888888888888888888888888888888888888"
+        },
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/0/github_artifact_api_ref/sha256",
+          "value": "88aa5dc3833204ec2cca4b357de903c9cda2d0922d728dda5c45891c72cb3bbf"
+        },
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/0/github_ci_api_observation/job/head_sha",
+          "value": "8888888888888888888888888888888888888888"
+        },
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/0/github_ci_api_observation/workflow_run/head_sha",
+          "value": "8888888888888888888888888888888888888888"
+        },
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/0/github_ci_api_ref/sha256",
+          "value": "f890e3430da158acdf4bba5d3aaed9fb0b2540c9246ceed1da57e1fe5fbed3e3"
+        }
+      ],
+      "expected": "INCOMPLETE",
+      "code": "ci_bound_to_stale_integration"
+    },
+    {
+      "id": "unbound-ci-checkout-is-incomplete",
+      "operation": "batch",
+      "operations": [
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/0/checkout_kind",
+          "value": "unbound"
+        },
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/0/attestation/checkout_kind",
+          "value": "unbound"
+        },
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/0/attestation_sha256",
+          "value": "e7010d5c96ce740dd2578b69ab44458df5719621c61c9149ea856104e6ac1c7e"
+        },
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/0/github_artifact_archive_sha256",
+          "value": "197fbe4aeb2f1be2cd7ee86f7fcb6c7fa86473a25efe1738520955de0a37b10f"
+        },
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/0/github_artifact_archive_base64",
+          "value": "UEsDBBQAAAAIAAAAIQCDUPBXZgEAAEgDAAAYAAAAcGhhc2UxMC1jaS1jaGVja291dC5qc29ulVJNb+MgEL33V1Q+N1vwB8a59i/0tKvKGoZxQmNDinGqarX/fYcm1nZv7ogDw8x783jwu8Aj4SksqT85b4t9sXgTFt49/KsElwvVxviKPEMk/0kwF/tfhdwYTFFujOLly7gUiW5q642R1YZxJEwh9himya33VUpDZVQHQ6WV7mpQRBZtWwtV1Y3ujDJGIuJ/DPMRykYxulMWWV4DFciSpK5qqRplSrQNgWhMxxTQlNChaQdo26HTVtdIuq4HTdhm1kiQyPaQmK8UpdoJyetZiH1e8if30CX7C0OieJXtl3Fcjw3Mqx3fcP6KRfDWWZ5/I9j8HiuBh4kYd2Y9faS3hebEtYNLx8Vkm773o16DWRkvMH4K22HwKQKmmeuRzmF2/AIf3HGIME0fu1cH/vBonPeAI+WmxbOZiaYzOyqveb6cFIKzmb/RBP2F4uyCz579EAx6D/E0jOF9Hf90m3p/05F7/9z9BVBLAQIUAxQAAAAIAAAAIQCDUPBXZgEAAEgDAAAYAAAAAAAAAAAAAACAAQAAAABwaGFzZTEwLWNpLWNoZWNrb3V0Lmpzb25QSwUGAAAAAAEAAQBGAAAAnAEAAAAA"
+        },
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/0/github_artifact_api_observation/size_in_bytes",
+          "value": 504
+        },
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/0/github_artifact_api_observation/digest",
+          "value": "sha256:197fbe4aeb2f1be2cd7ee86f7fcb6c7fa86473a25efe1738520955de0a37b10f"
+        },
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/0/github_artifact_api_ref/sha256",
+          "value": "bfcf4ad0b3171a531254bcf036a1ce54124088571a79c58b00e5a83fd467d9e7"
+        }
+      ],
+      "expected": "INCOMPLETE",
+      "code": "ci_checkout_integration_unbound"
+    },
+    {
+      "id": "ci-with-wrong-parents-is-incomplete",
+      "operation": "batch",
+      "operations": [
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/0/checkout_parent_oids",
+          "value": [
+            "2222222222222222222222222222222222222222"
+          ]
+        },
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/0/attestation/checkout_parent_oids",
+          "value": [
+            "2222222222222222222222222222222222222222"
+          ]
+        },
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/0/attestation_sha256",
+          "value": "7ee53bbb86242c53a50a44771337e7d19552ba6832598e2b48e0cc6cc9e25d80"
+        },
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/0/github_artifact_archive_sha256",
+          "value": "06c302876428c50998e665cec0ed0a451e8f984b50107b0a2394bf4ec2de2f00"
+        },
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/0/github_artifact_archive_base64",
+          "value": "UEsDBBQAAAAIAAAAIQD01KTvZwEAAC4DAAAYAAAAcGhhc2UxMC1jaS1jaGVja291dC5qc29ulVLLctswDLznKzo61wmpB0X52l/oqZ2OBgQhm7FEuhRlj6fTfw+YWG3ak4LBheRisVzgV4FHwlNYUn9y3hb74ryMYx/p50Jz6p1PdIiQXPDF57/Q4DKy2hjvK88Qyb8SzMX+e1FujOLHO44Uie4S6o2RJYRxJEwh9himya2fUEpDZVQHQ6WV7mpQRBZtWwtV1Y3ujDJGIuI/DPMRykZxdacssrwGKpAlSV3VUjXKlGgbAtGYjimgKaFD0w7QtkOnra6RdF0PmrDNrJEgke0hMV8pSrUTkvOrEPuc8htj6JJNgyFRfJPteUjrtYF5tUNujD+UCN46y/3vBJvnsRJ4mOi/peG3g0vHxWSbPrYmz8GsjBcYX4XtMPgUAdPM75HOYXY8gRsjeC+n6bZ7duAPT8Z5DzhSBi2ezUw0ndlR+XbOn5NC8GnmNZqgv1Cc81KzZ4+Ci64hnoYxXNf2X+5dP911ZOzvhxdQSwECFAMUAAAACAAAACEA9NSk72cBAAAuAwAAGAAAAAAAAAAAAAAAgAEAAAAAcGhhc2UxMC1jaS1jaGVja291dC5qc29uUEsFBgAAAAABAAEARgAAAJ0BAAAAAA=="
+        },
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/0/github_artifact_api_observation/size_in_bytes",
+          "value": 505
+        },
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/0/github_artifact_api_observation/digest",
+          "value": "sha256:06c302876428c50998e665cec0ed0a451e8f984b50107b0a2394bf4ec2de2f00"
+        },
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/0/github_artifact_api_ref/sha256",
+          "value": "aa7a3309d38f8e5d28379ca23e0ce4ef90b8418b67c61d34425e9de5d70f5b7f"
+        }
+      ],
+      "expected": "INCOMPLETE",
+      "code": "ci_checkout_parents_unbound"
+    },
+    {
+      "id": "missing-required-ci-job-is-incomplete",
+      "operation": "remove",
+      "path": "/integration_generations/0/ci_evidence/4",
+      "expected": "INCOMPLETE",
+      "code": "required_ci_job_evidence_missing"
+    },
+    {
+      "id": "ci-tree-mismatch-fails",
+      "operation": "replace",
+      "path": "/integration_generations/0/ci_evidence/0/checkout_tree_oid",
+      "value": "8888888888888888888888888888888888888888",
+      "expected": "FAIL",
+      "code": "ci_checkout_tree_mismatch"
+    },
+    {
+      "id": "ci-from-unreviewed-collector-fails",
+      "operation": "replace",
+      "path": "/integration_generations/0/ci_evidence/0/collector_sha256",
+      "value": "8888888888888888888888888888888888888888888888888888888888888888",
+      "expected": "FAIL",
+      "code": "ci_collector_bundle_mismatch"
+    },
+    {
+      "id": "reused-ci-attestation-fails",
+      "operation": "replace",
+      "path": "/integration_generations/0/ci_evidence/1/attestation_sha256",
+      "value": "7a442bbbbd86b4de2470eb7122f1d63045320743863ce375ffa0fa35d734a0d8",
+      "expected": "FAIL",
+      "code": "ci_attestation_reused"
+    },
+    {
+      "id": "relabelled-ci-attestation-fails",
+      "operation": "replace",
+      "path": "/integration_generations/0/ci_evidence/0/attestation/workflow_name",
+      "value": "Python CI",
+      "expected": "FAIL",
+      "code": "ci_attestation_identity_mismatch"
+    },
+    {
+      "id": "push-through-wrong-remote-profile-fails",
+      "operation": "replace",
+      "path": "/candidate_generations/0/push/remote_profile_sha256",
+      "value": "8888888888888888888888888888888888888888888888888888888888888888",
+      "expected": "FAIL",
+      "code": "candidate_remote_profile_mismatch"
+    },
+    {
+      "id": "merge-result-tree-mismatch-fails",
+      "operation": "replace",
+      "path": "/github_merge/result_tree_oid",
+      "value": "8888888888888888888888888888888888888888",
+      "expected": "FAIL",
+      "code": "hosted_merge_tree_mismatch"
+    },
+    {
+      "id": "squash-parent-mismatch-fails",
+      "operation": "replace",
+      "path": "/github_merge/parent_oids",
+      "value": [
+        "8888888888888888888888888888888888888888"
+      ],
+      "expected": "FAIL",
+      "code": "squash_merge_parent_mismatch"
+    },
+    {
+      "id": "merge-provenance-unavailable-is-incomplete",
+      "operation": "replace",
+      "path": "/github_merge/provenance_verified",
+      "value": false,
+      "expected": "INCOMPLETE",
+      "code": "merge_provenance_unverified"
+    },
+    {
+      "id": "local-update-mismatch-fails",
+      "operation": "replace",
+      "path": "/local_update/head_oid",
+      "value": "8888888888888888888888888888888888888888",
+      "expected": "FAIL",
+      "code": "local_update_identity_mismatch"
+    },
+    {
+      "id": "missing-post-merge-checks-is-incomplete",
+      "operation": "replace",
+      "path": "/post_merge_local_checks",
+      "value": [],
+      "expected": "INCOMPLETE",
+      "code": "post_merge_local_checks_missing"
+    },
+    {
+      "id": "candidate-rollback-fails",
+      "operation": "replace",
+      "path": "/restart/outcome",
+      "value": "rolled_back",
+      "expected": "FAIL",
+      "code": "restart_candidate_not_running"
+    },
+    {
+      "id": "duplicate-restart-fails",
+      "operation": "replace",
+      "path": "/restart/second_restart_issued",
+      "value": true,
+      "expected": "FAIL",
+      "code": "duplicate_restart_issued"
+    },
+    {
+      "id": "wrong-runtime-tree-fails",
+      "operation": "replace",
+      "path": "/post_restart_runtime/runtime_tree_oid",
+      "value": "8888888888888888888888888888888888888888",
+      "expected": "FAIL",
+      "code": "post_restart_runtime_identity_mismatch"
+    },
+    {
+      "id": "post-restart-runtime-profile-mismatch-fails",
+      "operation": "replace",
+      "path": "/post_restart_runtime/runtime_profile_sha256",
+      "value": "8888888888888888888888888888888888888888888888888888888888888888",
+      "expected": "FAIL",
+      "code": "post_restart_runtime_profile_mismatch"
+    },
+    {
+      "id": "old-behaviour-fails",
+      "operation": "replace",
+      "path": "/behaviour_probe/outcome",
+      "value": "observed_old",
+      "expected": "FAIL",
+      "code": "changed_behaviour_absent"
+    },
+    {
+      "id": "unresolved-effect-is-incomplete",
+      "operation": "replace",
+      "path": "/unresolved_refs",
+      "value": [
+        {
+          "id": "uncertain-operation",
+          "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        }
+      ],
+      "expected": "INCOMPLETE",
+      "code": "unresolved_evidence_remains"
+    },
+    {
+      "id": "uncertain-cancellation-is-incomplete",
+      "operation": "replace",
+      "path": "/failure_exercise/outcome",
+      "value": "uncertain",
+      "expected": "INCOMPLETE",
+      "code": "failure_exercise_uncertain"
+    },
+    {
+      "id": "credential-leak-fails",
+      "operation": "replace",
+      "path": "/security_checks/4/conclusion",
+      "value": "fail",
+      "expected": "FAIL",
+      "code": "security_invariant_failed"
+    },
+    {
+      "id": "stale-policy-is-incomplete",
+      "operation": "replace",
+      "path": "/policy_sha256",
+      "value": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "expected": "INCOMPLETE",
+      "code": "policy_identity_stale"
+    },
+    {
+      "id": "owner-review-pending-is-incomplete",
+      "operation": "replace",
+      "path": "/owner_review/outcome",
+      "value": "pending",
+      "expected": "INCOMPLETE",
+      "code": "owner_review_pending"
+    },
+    {
+      "id": "owner-review-on-old-evidence-is-incomplete",
+      "operation": "replace",
+      "path": "/owner_review/reviewed_evidence_sha256",
+      "value": "8888888888888888888888888888888888888888888888888888888888888888",
+      "expected": "INCOMPLETE",
+      "code": "owner_review_evidence_mismatch"
+    },
+    {
+      "id": "uploaded-artifact-digest-mismatch-fails",
+      "operation": "replace",
+      "path": "/integration_generations/0/ci_evidence/0/github_artifact_archive_sha256",
+      "value": "8888888888888888888888888888888888888888888888888888888888888888",
+      "expected": "FAIL",
+      "code": "ci_artifact_archive_digest_mismatch"
+    },
+    {
+      "id": "same-base-signed-tree-mismatch-fails",
+      "operation": "replace",
+      "path": "/candidate_generations/0/signed_commit/tree_oid",
+      "value": "8888888888888888888888888888888888888888",
+      "expected": "FAIL",
+      "code": "same_base_signed_tree_mismatch"
+    },
+    {
+      "id": "candidate-local-profile-incomplete-is-incomplete",
+      "operation": "remove",
+      "path": "/candidate_generations/0/local_checks/4",
+      "expected": "INCOMPLETE",
+      "code": "required_local_check_profile_incomplete"
+    },
+    {
+      "id": "post-merge-local-profile-incomplete-is-incomplete",
+      "operation": "remove",
+      "path": "/post_merge_local_checks/4",
+      "expected": "INCOMPLETE",
+      "code": "required_local_check_profile_incomplete"
+    },
+    {
+      "id": "runtime-restart-generation-mismatch-fails",
+      "operation": "replace",
+      "path": "/post_restart_runtime/readiness_generation",
+      "value": 43,
+      "expected": "FAIL",
+      "code": "post_restart_runtime_restart_mismatch"
+    },
+    {
+      "id": "malformed-uploaded-artifact-fails",
+      "operation": "batch",
+      "operations": [
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/0/github_artifact_archive_sha256",
+          "value": "709e80c88487a2411e1ee4dfb9f22a861492d20c4765150c0c794abd70f8147c"
+        },
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/0/github_artifact_archive_base64",
+          "value": "AAAA"
+        }
+      ],
+      "expected": "FAIL",
+      "code": "ci_artifact_archive_invalid"
+    },
+    {
+      "id": "baseline-protected-base-mismatch-fails",
+      "operation": "replace",
+      "path": "/baseline/protected_base_oid",
+      "value": "8888888888888888888888888888888888888888",
+      "expected": "FAIL",
+      "code": "baseline_protected_base_mismatch"
+    },
+    {
+      "id": "artifact-api-metadata-mismatch-fails",
+      "operation": "replace",
+      "path": "/integration_generations/0/ci_evidence/0/github_artifact_api_observation/id",
+      "value": 9999,
+      "expected": "FAIL",
+      "code": "ci_artifact_api_metadata_mismatch"
+    },
+    {
+      "id": "candidate-lineage-disconnected-fails",
+      "operation": "batch",
+      "operations": [
+        {
+          "operation": "replace",
+          "path": "/candidate_generations/0/status_diff/parent_oid",
+          "value": "8888888888888888888888888888888888888888"
+        },
+        {
+          "operation": "replace",
+          "path": "/candidate_generations/0/signed_commit/parent_oid",
+          "value": "8888888888888888888888888888888888888888"
+        }
+      ],
+      "expected": "FAIL",
+      "code": "candidate_lineage_disconnected"
+    },
+    {
+      "id": "post-merge-check-reuses-candidate-evidence-fails",
+      "operation": "replace",
+      "path": "/post_merge_local_checks/0/evidence_ref",
+      "value": {
+        "id": "candidate-1-local-check-pre-commit-all-files",
+        "sha256": "41386327d793e12cc7b9bf6c1fdc841702aa9707416c1ba14427c5736dc96daa"
+      },
+      "expected": "FAIL",
+      "code": "post_merge_check_reuses_candidate_evidence"
+    },
+    {
+      "id": "post-merge-check-identity-digest-mismatch-fails",
+      "operation": "replace",
+      "path": "/post_merge_local_checks/0/commit_oid",
+      "value": "8888888888888888888888888888888888888888",
+      "expected": "FAIL",
+      "code": "local_check_evidence_binding_mismatch"
+    },
+    {
+      "id": "ci-job-conclusion-mismatch-fails",
+      "operation": "replace",
+      "path": "/integration_generations/0/ci_evidence/0/conclusion",
+      "value": "failure",
+      "expected": "FAIL",
+      "code": "ci_job_conclusion_mismatch"
+    },
+    {
+      "id": "ci-workflow-source-identity-mismatch-fails",
+      "operation": "batch",
+      "operations": [
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/0/github_ci_api_observation/workflow_source/sha256",
+          "value": "8888888888888888888888888888888888888888888888888888888888888888"
+        },
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/0/github_ci_api_ref/sha256",
+          "value": "bde9ddd5b78dc1e8102d652a913885fb746991f6fd15b8b0a6e030541712d4c6"
+        }
+      ],
+      "expected": "FAIL",
+      "code": "ci_workflow_source_identity_mismatch"
+    },
+    {
+      "id": "post-restart-controller-mismatch-fails",
+      "operation": "replace",
+      "path": "/post_restart_runtime/controller_sha256",
+      "value": "8888888888888888888888888888888888888888888888888888888888888888",
+      "expected": "FAIL",
+      "code": "post_restart_controller_mismatch"
+    },
+    {
+      "id": "stale-security-run-binding-fails",
+      "operation": "replace",
+      "path": "/security_checks/0/acceptance_run_id",
+      "value": "stale-acceptance-run",
+      "expected": "FAIL",
+      "code": "security_acceptance_run_mismatch"
+    },
+    {
+      "id": "superseded-ci-job-fails",
+      "operation": "batch",
+      "operations": [
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/1/workflow_run_attempt",
+          "value": 2
+        },
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/1/github_ci_api_observation/workflow_run/run_attempt",
+          "value": 2
+        },
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/1/github_ci_api_observation/latest_job_id",
+          "value": null
+        },
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/1/github_ci_api_ref/sha256",
+          "value": "bb0bd7e49cee10bd9613cbe001d419ae95b8d29fa82d359b5ef113e49b399452"
+        }
+      ],
+      "path": "/integration_generations/0/ci_evidence/1/github_ci_api_observation/latest_job_id",
+      "expected": "FAIL",
+      "code": "ci_job_superseded_by_later_attempt"
+    }
+  ]
+}

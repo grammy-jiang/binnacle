@@ -2,10 +2,12 @@ Binnacle Phase 10 Detailed Implementation Plan
 ===============================================
 
 :Phase: 10 -- Prove the Bootstrap self-hosting acceptance loop
-:Status: provisional
-:Planning status: evidence-independent acceptance design; real execution remains gated
-                  by predecessor implementation/promotion exits and real development-Pi /
-                  real-ChatGPT evidence
+:Status: repository implementation complete; real acceptance run pending
+:Planning status: accepted evidence-independent design; real execution remains gated
+:Implementation status: policy/schema, evaluator, fixtures, trusted CI attestation and
+                        operator procedure implemented without runtime authority; later
+                        promotion remains gated by predecessor exits and real development-
+                        Pi / real-ChatGPT evidence
 :Roadmap: ``../bootstrap-implementation-plan.rst``
 :Index: ``index.rst``
 :Depends on: merged Phase 4 durable-operation kernel plan; merged Phase 6 development
@@ -171,6 +173,18 @@ on the protected base at integration time. PASS therefore binds an immutable
 
 ``(candidate_generation, candidate_oid, protected_base_oid, merge_policy_digest,
 expected_integration_tree_oid)``.
+
+The evaluator requires the final signed candidate's parent chain to consume every
+immediately preceding candidate generation in reverse order until it reaches the
+candidate-lineage base.  It fully evaluates every consumed generation's local checks,
+status/parent evidence, signature, signer, push, and hosted head.  A skipped generation,
+missing/forward/cyclic/duplicate OID, contradictory parent record, invalid signature, or
+otherwise disconnected lineage fails.  When that lineage base equals the integration generation's
+``protected_base_oid``, the final signed candidate tree must equal
+``expected_integration_tree_oid`` even when its immediate parent is an earlier candidate.
+A later moved protected base may instead produce a separately derived integration tree,
+but the candidate lineage must still terminate at the original coherent baseline (or be
+rebuilt directly from the new integration base).
 
 The final substantive review is correlated to both the exact candidate OID and exact base
 OID. Required CI must prove what integration object/tree it actually checked; a workflow's
@@ -351,12 +365,35 @@ It must not:
 * create a second operation lifecycle;
 * infer success from transcript text when an authoritative source exists;
 * relabel review/CI evidence from one candidate/integration generation as evidence for
-  another;
+  another, including by changing an opaque ID while retaining an evidence or checkout-
+  attestation digest;
 * infer the CI checkout tree from a workflow status label or PR head alone.
 
 If no new evidence-assembler code is required, the run may be evaluated from existing
 operation snapshots plus a reviewed acceptance fixture/report procedure. Phase 10 should
 not add a Tool solely to make the checklist cosmetically convenient.
+
+6.1 Implemented repository projection
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The evidence-independent projection is now frozen in
+``spec/acceptance/phase10-policy.json``,
+``schemas/acceptance/phase10-run.schema.json`` and
+``schemas/acceptance/ci-checkout-attestation.schema.json``.
+``scripts/phase10_acceptance.py`` creates a non-promoted skeleton, emits the exact
+owner-review evidence digest, and evaluates an operator-assembled closed manifest.
+``scripts/ci_checkout_attestation.py`` is the only collector added by this phase; an exact
+commit-pinned composite action executes it immediately after checkout and uploads the
+record from ``runner.temp`` before candidate-controlled setup, dependencies, or tests.  It
+reads the actual Git commit, tree and parents and binds them to the bounded event identity.
+Neither component has a runtime Tool, credential, Git mutation, service mutation or
+device-effect surface.  The trusted action uses fixed ``/usr/bin/python3 -I -S``, lazy
+standard-library-only imports, and a policy-frozen collector commit and bundle digest.
+
+The operator/reviewer procedure is
+``docs/operations/phase10-self-hosting-acceptance.rst``. The positive/negative fixtures
+and property tests under ``tests/fixtures/acceptance`` and ``tests`` freeze moved-head,
+moved-base, wrong-checkout-tree and stale-generation behaviour before the later live run.
 
 7. Selecting the real acceptance change
 ----------------------------------------
@@ -453,8 +490,11 @@ Before branch creation, collect an exact baseline:
   expose candidate/base/actual-checkout/tree evidence and which merge methods are accepted.
 
 The baseline must be internally coherent. Repository HEAD used to create the feature
-branch must equal the baseline commit bound into the run. Runtime revision may differ only
-if the documented development topology permits it and the exact relationship is captured.
+branch must equal both the baseline commit bound into the run and the independently
+observed protected-base OID.  A stale local protected-branch checkout cannot seed the
+accepted feature branch merely because later integration evidence records the newer base.
+Runtime revision may differ only if the documented development topology permits it and the
+exact relationship is captured.
 
 10. Development-session admission
 ---------------------------------
@@ -546,9 +586,11 @@ For each command record:
 * descendant cleanup result;
 * workspace-fence closure.
 
-At minimum run the repository's current focused tests plus the normal quality gate
-appropriate to the selected change. The actual repository at execution time determines
-commands through its reviewed development profile.
+Run the complete repository profile frozen by the Phase 10 policy: ``tox-py311``,
+``tox-py312``, ``tox-py313``, ``tox-quality``, and ``pre-commit-all-files``.  Each evidence
+record includes the exact check ID and canonical digest of its command-and-coverage
+profile.  Focused tests may run in addition, but cannot replace any frozen check at either
+candidate or post-merge identity.
 
 Every new candidate generation created after review remediation repeats the **complete**
 required local Phase 7 chain. A previous generation's green local checks are not inherited.
@@ -590,6 +632,15 @@ Before **each** candidate generation can be signed:
 * workspace mutation fences are released or have the exact expected current owner;
 * Phase 6 inspection confirms the intended source state;
 * no unresolved audit obligation blocks new consequential work.
+
+Every retained candidate check record is the canonical ``candidate``-stage projection of
+its immutable raw evidence reference, check ID/profile, source-content digest, conclusion,
+terminal/descendant/fence state, and schema version.  The separate
+``evidence_binding_sha256`` must equal that projection's
+SHA-256, while ``evidence_ref`` retains the immutable raw execution-evidence identity; raw
+IDs and digests are unique within the generation.  This permits distinct legitimate
+reruns while preventing a result from being rebound to different source content merely by
+editing the surrounding manifest.
 
 If any local check is red/uncertain, no signed commit/push is attempted merely to let hosted
 CI diagnose it.
@@ -652,6 +703,10 @@ Before each candidate-generation push, bind:
 * dedicated repository SSH identity profile;
 * closed SSH/known-hosts/helper configuration;
 * operation/idempotency identity.
+
+The candidate push record carries the same protected-remote profile digest captured by the
+baseline.  The evaluator fails a push whose remote profile differs, even if its target OID
+and remote ref otherwise match.
 
 The local repository's mutable URL/config does not choose credential audience or push
 destination. Generic Phase 7 commands receive no repository SSH/GPG credential authority.
@@ -767,7 +822,53 @@ For the final integration generation record:
   OIDs and proof they bind the recorded base/candidate;
 * expected integration tree OID derived/accepted from that exact checked integration;
 * terminal conclusion and required job/check conclusions;
-* retry/attempt identity when a transient infrastructure failure is rerun.
+* the per-job execution attempt and the workflow run's independently observed latest
+  attempt when a transient infrastructure failure is rerun.
+
+For every required job, the acceptance record embeds the sanitized GitHub
+artifact-API observation and binds its canonical digest to
+``github_artifact_api_ref``.  The observation contains the repository, numeric ID, exact
+name, byte size, canonical metadata/download URLs, expiry state, ``sha256:`` archive
+digest, and workflow-run ID/head SHA.  The embedded object and its reference are not an
+authentication root.  PASS additionally requires the evaluator's non-manifest lookup to
+read that numeric artifact ID live from fixed ``api.github.com`` using a bounded private
+bearer-token file, direct TLS, and GitHub REST version ``2022-11-28``.  The independently
+returned closed observation must equal the embedded object exactly; an authenticated 404
+fails, while an unavailable lookup is ``INCOMPLETE``.  The evaluator then cross-checks all
+fields with the surrounding CI identity and exact decoded ZIP, recomputes the ZIP digest,
+and opens its sole bounded canonical
+``phase10-ci-checkout.json`` member, and requires that object to equal the separately
+embedded attestation.  It also verifies the canonical attestation digest and every
+surrounding CI identity field.  API references, artifact IDs, ZIP digests, and attestation
+digests are distinct per required job and cannot be reused in a later integration
+generation.  Changing manifest labels or recomputing only an embedded object/digest
+therefore cannot turn one uploaded artifact into evidence for another job.
+
+The uploaded checkout artifact is deliberately produced before candidate-controlled test
+work, so it cannot authenticate the eventual job result.  Every CI record therefore also
+retains a numeric job ID and a closed ``github_ci_api_observation`` with its canonical
+``github_ci_api_ref`` digest.  At evaluation time a non-manifest authenticated lookup reads
+the exact job, its workflow run, and the policy-selected workflow file at the synthetic
+``checkout_oid``.  PASS requires exact equality with the embedded observation, terminal
+``success`` for both job and run, and equality between the job conclusion and the
+surrounding manifest conclusion.  A completed non-success result or authenticated mismatch
+is ``FAIL``; an unavailable lookup or nonterminal result is ``INCOMPLETE``.
+
+The retained ``run_attempt`` is the attempt on which that specific job and its attestation
+artifact executed.  ``workflow_run_attempt`` separately records the workflow run's current
+latest attempt.  A successful job retained from attempt 1 can therefore remain valid after
+``re-run failed jobs`` advances only the failed jobs and the workflow run to attempt 2;
+the latest workflow attempt may never precede a retained job attempt.  Authentication also
+reads the run's complete bounded ``filter=latest`` job inventory.  The retained numeric job
+ID must occur in that inventory: this distinguishes jobs GitHub preserved for a failed-job
+rerun from attempt-1 jobs superseded by a full workflow rerun.
+
+The policy freezes each required workflow's numeric GitHub workflow ID, repository path,
+and raw source SHA-256.  The authenticated run must match that ID/path plus its name,
+pull-request event, candidate head, run ID and attempt.  The workflow source is fetched at
+the actual checkout commit rather than a mutable branch ref and must match the frozen path
+and digest; the Git blob OID and bounded byte size are retained.  Thus a candidate cannot
+keep expected check labels while replacing the reviewed jobs with no-op workflow content.
 
 Do **not** assume a workflow API ``head_sha`` or PR-head field equals the commit actually
 checked out by ``actions/checkout``. Required workflows need bounded attestation/log/artifact
@@ -882,6 +983,14 @@ checkout**. Record execution/output/source/tree bindings just as for section 14,
 separate ``post_merge_local_check_refs`` evidence set. These checks prove the exact object
 that will be restarted works on the selected Pi; they do not substitute for the pre-merge
 base-aware review/integration-CI proof. Any red/uncertain merged-tree check blocks restart.
+Each retained record uses the canonical ``post_merge``-stage projection containing the
+immutable raw evidence reference, check ID/profile, exact merged commit/tree, conclusion,
+terminal/descendant/fence state, and schema version.  Its separate
+``evidence_binding_sha256`` must equal that projection,
+while ``evidence_ref`` continues to identify the immutable raw execution record.  Raw IDs
+and digests must be unique within the post-merge collection and may not overlap any
+candidate generation's local-check evidence; copying candidate results and relabelling
+only the merged OID/tree therefore fails.
 
 26. Runtime-candidate binding
 -----------------------------
@@ -937,6 +1046,7 @@ Request exactly one Phase 9 controlled restart with a stable idempotency key bou
 * restart-owned Phase 6 workspace fence ID/generation;
 * Phase 9 broker acceptance evidence;
 * exact restart checkpoint ID/digest;
+* readiness generation owned by that accepted restart operation/checkpoint;
 * exact hosted merged candidate OID and result-tree OID;
 * final candidate/integration-generation provenance reference;
 * retained LKG ``VerifiedRuntimeSlot`` identity;
@@ -956,6 +1066,8 @@ machine.
 Reconnect attempts use the same registered endpoint/controller profile. On reconnect:
 
 * authenticate current controller/device again;
+* reproduce the selected controller, device and workspace digests in the post-restart
+  runtime record and compare them with the coherent baseline;
 * inspect current runtime identity/readiness;
 * retrieve/reconcile the exact retained Phase 4 restart operation;
 * inspect Phase 9 broker checkpoint/recovery evidence;
@@ -992,13 +1104,16 @@ Before probing changed behaviour, prove at minimum:
 * clean/expected source state;
 * exact source/workspace/root/mount identity;
 * exact Python/environment/lock/package identity expected for selected candidate;
-* config/policy/manifest/service-profile identities;
+* config/policy/manifest/service-profile identities, including equality between the
+  post-restart runtime-profile digest and the frozen baseline runtime-profile digest;
 * loaded service composition where Phase 9 exposes it;
 * application DB compatibility generation where applicable;
 * device ID/epoch;
 * readiness generation/runtime instance distinct from pre-restart instance;
 * no fail-restricted startup state;
-* exact retained restart operation shows candidate success, not hidden rollback.
+* exact retained restart operation shows candidate success, not hidden rollback; and
+* the post-restart observation repeats the accepted restart operation reference,
+  checkpoint reference, and readiness generation exactly.
 
 Systemd ``active`` or local source HEAD alone is insufficient.
 
@@ -1027,6 +1142,10 @@ catalogue generation cannot satisfy this step.
 
 The final bundle must demonstrate that the self-hosting loop did not obtain authority by
 leaking or bypassing permanent boundaries. At minimum verify:
+
+* each security check retains a canonical digest binding its exact evidence to this
+  acceptance run and policy, merged OID/tree, restart operation/checkpoint/readiness
+  generation, runtime instance/profile, and controller/device/workspace identities;
 
 * no reusable controller/auth credential appears in Tool results, command output, Git
   output, audit summaries, PR text or acceptance report;
@@ -1057,7 +1176,8 @@ PASS requires **all** of:
 
 #. real ChatGPT connected to the real selected development Pi under expected controller and
    compatibility profile;
-#. exact baseline/runtime/repository/run correlation recorded;
+#. exact baseline/runtime/repository/run correlation recorded, including local repository
+   HEAD equality with the independently observed protected base before branch creation;
 #. one real feature branch created from expected base without protected-master direct
    mutation;
 #. one real bounded source behaviour change made through Phase 6;
@@ -1067,18 +1187,23 @@ PASS requires **all** of:
 #. one safe recoverable failure/cancellation is truthfully reconciled;
 #. no superseded candidate or integration generation contributes stale evidence to the
    final required fields;
+#. every recorded candidate generation fully validates and its signed parent consumes the
+   immediately preceding generation, without a skipped or contradictory lineage bridge;
 #. final locally signed commit OID == exact pushed feature-branch OID == exact final hosted
    PR head == exact substantive-review candidate/head == CI event candidate/head;
 #. final substantive review is clean for that exact candidate against the exact protected
    base bound to the final integration generation;
 #. required GitHub Actions checks are green and attest the exact candidate/base integration
-   object/tree actually checked;
+   object/tree actually checked; every embedded artifact and CI observation equals a live
+   bounded bearer-authenticated GitHub REST response; and authenticated job/run conclusions
+   plus exact-checkout workflow ID/path/source match the frozen policy;
 #. final protected base at merge equals the reviewed/tested integration base;
 #. hosted merge result independently proves an allowed merge-method relationship to that
    base/candidate and ``result_tree_oid == expected_integration_tree_oid``;
 #. local development checkout reaches exactly that merged OID through Phase 8 semantics and
    its tree equals the tested integration tree;
-#. complete required post-merge Phase 7 checks are green on that exact local merged OID/tree;
+#. complete required post-merge Phase 7 checks are green and canonically evidence-bound to
+   that exact local merged OID/tree, with no candidate-check evidence reuse;
 #. Phase 9 restart preflight and controlled restart use exactly that merged OID/tree;
 #. reconnect reconciles the same retained restart rather than a second attempt;
 #. post-reconnect runtime revision/tree equals exact merged OID/tested integration tree and
@@ -1221,7 +1346,8 @@ representative shape is:
      candidate_generations[]:
        generation
        source_content_ref
-       local_check_refs[]
+       local_checks[] (check_id, check_profile_digest, evidence_ref,
+                       evidence_binding_digest)
        status_diff_ref
        signed_commit_oid
        signer_ref
@@ -1252,10 +1378,12 @@ representative shape is:
      github_merge_parent_oids[]
      github_merge_method_ref
      local_update_ref
-     post_merge_local_check_refs[]
+     post_merge_local_checks[] (check_id, check_profile_digest, evidence_ref,
+                                evidence_binding_digest)
      restart_operation_ref
      restart_checkpoint_ref
-     post_restart_runtime_ref
+     restart_readiness_generation
+     post_restart_runtime_ref (restart operation/checkpoint/readiness generation bound)
      behaviour_probe_ref
      security_check_refs[]
      unresolved_refs[]
@@ -1295,6 +1423,13 @@ The final evidence package should allow an owner/reviewer to answer quickly:
 If these questions require reconstructing facts from an unbounded chat transcript, the
 evidence design is insufficient.
 
+The terminal owner approval is not a free-standing narrative assertion.  Its record binds
+the exact ``acceptance_run_id``, frozen policy SHA-256, and a canonical SHA-256 of the
+complete manifest with ``owner_review`` projected to null.  The operator obtains that last
+value with ``scripts/phase10_acceptance.py review-digest`` only after the evidence
+projection is closed.  Any later evidence change invalidates the approval and requires a
+new review; an approval from another run or policy cannot satisfy PASS.
+
 39. Tests for the acceptance evaluator
 --------------------------------------
 
@@ -1302,15 +1437,33 @@ Any implementation of evidence assembler/evaluator should have deterministic tes
 
 * missing required evidence -> INCOMPLETE;
 * wrong branch/base/head relationship -> FAIL;
+* baseline local repository HEAD differs from the independently observed protected base ->
+  FAIL;
 * wrong signer -> FAIL;
+* push through a remote profile different from the protected baseline -> FAIL;
 * review on old candidate head -> INCOMPLETE/FAIL according to repository policy, never PASS;
 * review bound to old protected base after base movement -> INCOMPLETE;
+* CI evidence from a collector commit or bundle not frozen by policy -> INCOMPLETE;
+* embedded CI attestation digest differs from the canonical artifact bytes -> FAIL;
+* one attestation artifact is reused or relabelled as a different required job -> FAIL;
+* embedded artifact/API/archive values are internally consistent but differ from the live
+  authenticated GitHub artifact endpoint -> FAIL;
+* authenticated GitHub artifact lookup is unavailable -> INCOMPLETE, never PASS;
+* manifest says success but the authenticated exact job or workflow run is non-success ->
+  FAIL;
+* authenticated job/run lookup is unavailable or still nonterminal -> INCOMPLETE, never
+  PASS;
+* authenticated workflow ID/path or exact-checkout source digest differs from the frozen
+  reviewed profile -> FAIL;
+* owner approval bound to a different run, policy or evidence projection -> INCOMPLETE;
 * CI green on old candidate/integration generation only -> INCOMPLETE;
 * workflow status names final candidate but actual checkout/tree is unbound/unavailable ->
   INCOMPLETE;
 * CI checks candidate head only while required integration tree is untested -> INCOMPLETE;
 * final PR head differs from final locally signed/pushed OID -> FAIL/INCOMPLETE, never PASS;
 * new PR head reuses old generation's Phase 6/7/8 local evidence -> INCOMPLETE;
+* a later candidate skips an intervening generation or uses an invalid prior candidate as
+  a lineage bridge -> FAIL;
 * remotely authored remediation commit lacks new local test/sign/push generation ->
   INCOMPLETE;
 * protected base moves after review/CI and old integration generation is reused ->
@@ -1321,8 +1474,11 @@ Any implementation of evidence assembler/evaluator should have deterministic tes
 * merged OID != local update target -> FAIL;
 * local tree != hosted result tree/tested integration tree -> FAIL;
 * post-merge local checks absent/red/uncertain -> INCOMPLETE/FAIL, never PASS;
+* post-merge checks reuse candidate evidence or their canonical digest does not bind the
+  asserted merged commit/tree -> FAIL;
 * local update target != post-restart runtime revision -> FAIL;
 * runtime tree != hosted/tested integration tree -> FAIL;
+* post-restart runtime profile differs from the frozen baseline profile -> FAIL;
 * candidate rollback despite hosted merge -> FAIL for Phase 10 candidate success;
 * runtime revision correct but behaviour probe absent -> INCOMPLETE;
 * runtime revision correct but behaviour definitively old/wrong -> FAIL;
@@ -1453,6 +1609,11 @@ Cleanup cannot retroactively rewrite a failed/uncertain effect.
 
 Phase 10 implementation/execution should proceed in this order:
 
+The repository implementation in this revision completes items 1 through 5.  Those items
+are deliberately independent of real Pi and ChatGPT evidence.  Items 6 onward form the
+later real-device campaign and remain promotion-gated; their absence does not reopen or
+block the completed repository implementation.
+
 #. Freeze/review Phase 10 evidence schema, candidate/integration-generation rules and
    pass/fail matrix.
 #. Implement only the small evidence assembler/evaluator if existing retained snapshots are
@@ -1460,7 +1621,8 @@ Phase 10 implementation/execution should proceed in this order:
 #. Add evaluator fixtures/property tests including moved-head, moved-base, checkout-tree and
    stale-generation cases.
 #. Ensure the normal reviewed GitHub CI path can attest exact candidate/base/actual-checkout
-   commit/tree/parents required for Phase 10; if not, acceptance readiness remains
+   commit/tree/parents, authenticate the terminal job/run result, and bind the exact
+   workflow definition required for Phase 10; if not, acceptance readiness remains
    ``INCOMPLETE`` until that support is added through ordinary repository development.
 #. Add an acceptance-run operator/reviewer procedure referencing existing semantic Tools.
 #. Verify Phase 3-9 implementation/promotion exits on real selected Pi.
@@ -1530,6 +1692,9 @@ Scrutinize especially:
 
 48. Plan acceptance checklist
 -----------------------------
+
+This is the historical gate used for the Phase 10 planning-only pull request.  It is not a
+restriction on the later repository implementation pull request described in section 46.
 
 This planning PR may merge when:
 

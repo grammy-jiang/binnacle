@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://binnacle.dev/schemas/acceptance/ci-checkout-attestation.schema.json",
+  "title": "Binnacle GitHub Actions checkout attestation v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "repository": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 256,
+      "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+    },
+    "event_name": {
+      "enum": [
+        "pull_request",
+        "push"
+      ]
+    },
+    "workflow_name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "job_name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "run_id": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "run_attempt": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1000
+    },
+    "collector_commit_oid": {
+      "$ref": "#/$defs/oid"
+    },
+    "collector_sha256": {
+      "$ref": "#/$defs/digest"
+    },
+    "event_candidate_oid": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/oid"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "event_base_oid": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/oid"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "event_after_oid": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/oid"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "github_sha": {
+      "$ref": "#/$defs/oid"
+    },
+    "checkout_oid": {
+      "$ref": "#/$defs/oid"
+    },
+    "checkout_tree_oid": {
+      "$ref": "#/$defs/oid"
+    },
+    "checkout_parent_oids": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "$ref": "#/$defs/oid"
+      }
+    },
+    "checkout_kind": {
+      "enum": [
+        "pull_request_integration",
+        "push_commit",
+        "unbound"
+      ]
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "schema_version",
+    "repository",
+    "event_name",
+    "workflow_name",
+    "job_name",
+    "run_id",
+    "run_attempt",
+    "collector_commit_oid",
+    "collector_sha256",
+    "event_candidate_oid",
+    "event_base_oid",
+    "event_after_oid",
+    "github_sha",
+    "checkout_oid",
+    "checkout_tree_oid",
+    "checkout_parent_oids",
+    "checkout_kind",
+    "created_at"
+  ],
+  "$defs": {
+    "oid": {
+      "type": "string",
+      "pattern": "^([0-9a-f]{40}|[0-9a-f]{64})$"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  }
+}

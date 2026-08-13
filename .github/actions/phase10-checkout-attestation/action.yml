@@ -1,0 +1,45 @@
+name: Phase 10 trusted checkout attestation
+description: Attest the candidate checkout from an immutable reviewed collector commit.
+
+inputs:
+  output:
+    description: Absolute path for the new attestation file.
+    required: true
+  job-name:
+    description: Exact required GitHub Actions job name.
+    required: true
+  allow-unbound:
+    description: Whether an explicit unbound record may return success.
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - name: Execute reviewed collector
+      shell: /usr/bin/bash --noprofile --norc -euo pipefail {0}
+      env:
+        BINNACLE_ACTION_PATH: ${{ github.action_path }}
+        BINNACLE_ACTION_REF: ${{ github.action_ref }}
+        BINNACLE_ATTESTATION_OUTPUT: ${{ inputs.output }}
+        BINNACLE_JOB_NAME: ${{ inputs.job-name }}
+        BINNACLE_ALLOW_UNBOUND: ${{ inputs.allow-unbound }}
+        BINNACLE_COLLECTOR_SHA256: 96dc2225a3a12e18341656b2cd5ea05b9458a52a9cb7fa77f98d84ce844f8ec7
+      run: |
+        collector_root="${BINNACLE_ACTION_PATH}/../../.."
+        arguments=(
+          /usr/bin/python3 -I -S
+          "${collector_root}/scripts/ci_checkout_attestation.py"
+          --repo "${GITHUB_WORKSPACE}"
+          --output "${BINNACLE_ATTESTATION_OUTPUT}"
+          --job-name "${BINNACLE_JOB_NAME}"
+          --collector-commit "${BINNACLE_ACTION_REF}"
+          --expected-collector-sha256 "${BINNACLE_COLLECTOR_SHA256}"
+        )
+        if [[ "${BINNACLE_ALLOW_UNBOUND}" == "true" ]]; then
+          arguments+=(--allow-unbound)
+        elif [[ "${BINNACLE_ALLOW_UNBOUND}" != "false" ]]; then
+          echo "allow-unbound must be true or false" >&2
+          exit 2
+        fi
+        "${arguments[@]}"

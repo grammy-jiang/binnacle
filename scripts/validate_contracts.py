@@ -23,6 +23,17 @@ if str(SOURCE_ROOT) not in sys.path:
     # Validate bindings against the checked-out implementation in that context.
     sys.path.insert(0, str(SOURCE_ROOT))
 
+from binnacle.evaluation.phase10_acceptance import (  # noqa: E402
+    AcceptanceVerdict,
+    evaluate_phase10_manifest,
+    phase10_local_check_evidence_sha256,
+    phase10_security_evidence_sha256,
+)
+from binnacle.evaluation.phase10_policy import (  # noqa: E402
+    Phase10PolicyError,
+    load_phase10_policy,
+)
+
 ERRORS: list[str] = []
 MERGE_TAG = "tag:yaml.org,2002:merge"
 PHASE9_TOOL_CLASSES = {
@@ -1292,12 +1303,523 @@ def validate_bootstrap_self_hosting_scope_alignment() -> None:
                 )
 
 
+def validate_phase10_acceptance_contract() -> None:
+    """Keep the Phase 10 evaluator, schemas, fixtures, CI, and procedure coherent."""
+
+    try:
+        policy = load_phase10_policy(ROOT)
+    except Phase10PolicyError as exc:
+        fail(f"Phase 10 policy: {exc}")
+        return
+    if policy.repository != "grammy-jiang/binnacle":
+        fail("Phase 10 policy repository differs from the reviewed repository")
+    if policy.protected_branch_ref != "refs/heads/master":
+        fail("Phase 10 policy protected branch differs from refs/heads/master")
+    if policy.artifact_api_authentication != "live-bearer-github-rest-v2022-11-28":
+        fail("Phase 10 policy does not require a live authenticated artifact API source")
+    if policy.ci_api_authentication != "live-bearer-github-rest-v2022-11-28":
+        fail("Phase 10 policy does not require a live authenticated CI API source")
+    expected_workflow_profiles = {
+        "Contract validation": (330240211, ".github/workflows/contracts.yml"),
+        "Python CI": (331525151, ".github/workflows/python.yml"),
+    }
+    observed_workflow_profiles = {
+        workflow: (profile.workflow_id, profile.path)
+        for workflow, profile in policy.required_ci_workflow_profiles.items()
+    }
+    if observed_workflow_profiles != expected_workflow_profiles:
+        fail("Phase 10 policy workflow identities differ from the reviewed profiles")
+    artifact_reader_source = (ROOT / "scripts/phase10_acceptance.py").read_text(
+        encoding="utf-8"
+    ) + (ROOT / "src/binnacle/evaluation/phase10_acceptance.py").read_text(encoding="utf-8")
+    artifact_reader_markers = (
+        'GITHUB_API_HOST = "api.github.com"',
+        '"Authorization": f"Bearer {token}"',
+        '"X-GitHub-Api-Version": "2022-11-28"',
+        'review_digest.add_argument("--github-token-file", type=Path, required=True)',
+        'evaluate.add_argument("--github-token-file", type=Path, default=None)',
+        "metadata.st_uid != os.geteuid()",
+        "response.read(response_bytes_max + 1)",
+        'path=f"/repos/{repository}/actions/jobs/{job_id}"',
+        'path=f"/repos/{repository}/actions/runs/{run_id}"',
+        'f"/repos/{repository}/actions/runs/{run_id}/jobs"',
+        'f"?filter=latest&per_page={latest_jobs_max}"',
+        'path=f"/repos/{repository}/contents/{encoded_path}?ref={checkout_oid}"',
+        'observation["latest_job_id"] != job_id',
+        'job["conclusion"] != "success"',
+        'workflow_run["conclusion"] != "success"',
+    )
+    for marker in artifact_reader_markers:
+        if marker not in artifact_reader_source:
+            fail(f"Phase 10 authenticated artifact reader is missing marker: {marker}")
+
+    schema = load_json(ROOT / "schemas/acceptance/phase10-run.schema.json")
+    ci_attestation_schema = load_json(
+        ROOT / "schemas/acceptance/ci-checkout-attestation.schema.json"
+    )
+    manifest = load_json(ROOT / "tests/fixtures/acceptance/phase10-pass.json")
+    cases_document = load_json(ROOT / "tests/fixtures/acceptance/phase10-evaluator-cases.json")
+    if (
+        not isinstance(schema, dict)
+        or not isinstance(ci_attestation_schema, dict)
+        or not isinstance(manifest, dict)
+    ):
+        return
+
+    embedded_attestation = schema.get("$defs", {}).get("ciCheckoutAttestation")
+    expected_embedded_attestation = {
+        name: ci_attestation_schema[name]
+        for name in ("type", "additionalProperties", "properties", "required")
+    }
+    if embedded_attestation != expected_embedded_attestation:
+        fail("Phase 10 run schema embeds a stale CI checkout-attestation contract")
+
+    definitions = schema.get("$defs", {})
+    artifact_observation = definitions.get("githubArtifactApiObservation", {})
+    expected_artifact_observation_fields = {
+        "repository",
+        "id",
+        "name",
+        "size_in_bytes",
+        "url",
+        "archive_download_url",
+        "expired",
+        "digest",
+        "workflow_run",
+    }
+    if (
+        not isinstance(artifact_observation, dict)
+        or artifact_observation.get("additionalProperties") is not False
+        or set(artifact_observation.get("required", [])) != expected_artifact_observation_fields
+        or set(artifact_observation.get("properties", {})) != expected_artifact_observation_fields
+    ):
+        fail("Phase 10 run schema does not close the authenticated artifact API observation")
+    ci_api_observation = definitions.get("githubCiApiObservation", {})
+    expected_ci_api_observation_fields = {
+        "repository",
+        "job",
+        "latest_job_id",
+        "workflow_run",
+        "workflow_source",
+    }
+    if (
+        not isinstance(ci_api_observation, dict)
+        or ci_api_observation.get("additionalProperties") is not False
+        or set(ci_api_observation.get("required", [])) != expected_ci_api_observation_fields
+        or set(ci_api_observation.get("properties", {})) != expected_ci_api_observation_fields
+    ):
+        fail("Phase 10 run schema does not close the authenticated CI API observation")
+    ci_evidence_schema = definitions.get("ciEvidence", {})
+    if "github_artifact_api_observation" not in ci_evidence_schema.get("required", []):
+        fail("Phase 10 CI evidence does not require authenticated artifact API metadata")
+    if not {
+        "github_job_id",
+        "github_ci_api_ref",
+        "github_ci_api_observation",
+        "workflow_run_attempt",
+    }.issubset(ci_evidence_schema.get("required", [])):
+        fail("Phase 10 CI evidence does not require authenticated job and workflow metadata")
+    post_restart_schema = definitions.get("postRestartRuntime", {})
+    if not {"controller_sha256", "device_sha256", "workspace_sha256"}.issubset(
+        post_restart_schema.get("required", [])
+    ):
+        fail("Phase 10 post-restart runtime does not bind the selected environment")
+    security_schema = definitions.get("securityCheck", {})
+    required_security_binding_fields = {
+        "evidence_binding_sha256",
+        "acceptance_run_id",
+        "policy_sha256",
+        "merged_oid",
+        "merged_tree_oid",
+        "restart_operation_ref",
+        "restart_checkpoint_ref",
+        "readiness_generation",
+        "runtime_instance_sha256",
+        "runtime_profile_sha256",
+        "controller_sha256",
+        "device_sha256",
+        "workspace_sha256",
+    }
+    if not required_security_binding_fields.issubset(security_schema.get("required", [])):
+        fail("Phase 10 security evidence does not bind the current acceptance execution")
+    for check_definition in ("localCheck", "postMergeCheck"):
+        check_schema = definitions.get(check_definition, {})
+        if "evidence_binding_sha256" not in check_schema.get(
+            "required", []
+        ) or "evidence_binding_sha256" not in check_schema.get("properties", {}):
+            fail(f"Phase 10 {check_definition} does not require an identity binding digest")
+
+    expected_limits = {
+        "candidate_generations_max": schema.get("properties", {})
+        .get("candidate_generations", {})
+        .get("maxItems"),
+        "integration_generations_max": schema.get("properties", {})
+        .get("integration_generations", {})
+        .get("maxItems"),
+        "security_checks_max": schema.get("properties", {})
+        .get("security_checks", {})
+        .get("maxItems"),
+        "ci_evidence_per_integration_max": schema.get("$defs", {})
+        .get("integrationGeneration", {})
+        .get("properties", {})
+        .get("ci_evidence", {})
+        .get("maxItems"),
+        "evidence_reference_id_bytes_max": schema.get("$defs", {})
+        .get("identifier", {})
+        .get("maxLength"),
+        "workflow_source_bytes_max": schema.get("$defs", {})
+        .get("githubCiApiObservation", {})
+        .get("properties", {})
+        .get("workflow_source", {})
+        .get("properties", {})
+        .get("size_in_bytes", {})
+        .get("maximum"),
+    }
+    for name, schema_limit in expected_limits.items():
+        if policy.limits.get(name) != schema_limit:
+            fail(f"Phase 10 policy {name} differs from acceptance schema")
+    if policy.limits.get("github_ci_latest_jobs_max") != 16:
+        fail("Phase 10 latest-job membership bound differs from the reviewed ceiling")
+
+    if manifest.get("policy_sha256") != policy.sha256:
+        fail("Phase 10 PASS fixture policy identity is stale")
+    required_local_profiles = dict(policy.required_local_check_profiles)
+    local_check_collections: list[tuple[str, str, object]] = [
+        (
+            f"candidate_generations[{index}].local_checks",
+            "candidate",
+            candidate.get("local_checks") if isinstance(candidate, dict) else None,
+        )
+        for index, candidate in enumerate(manifest.get("candidate_generations", []))
+    ]
+    local_check_collections.append(
+        ("post_merge_local_checks", "post_merge", manifest.get("post_merge_local_checks"))
+    )
+    local_evidence_by_stage: dict[str, set[tuple[str, object]]] = {}
+    for context, stage, raw_checks in local_check_collections:
+        if not isinstance(raw_checks, list) or not all(
+            isinstance(check, dict) for check in raw_checks
+        ):
+            fail(f"Phase 10 PASS fixture {context} is invalid")
+            continue
+        observed_profiles = {
+            check.get("check_id"): check.get("check_profile_sha256") for check in raw_checks
+        }
+        if len(observed_profiles) != len(raw_checks):
+            fail(f"Phase 10 PASS fixture {context} contains duplicate check IDs")
+        if observed_profiles != required_local_profiles:
+            fail(f"Phase 10 PASS fixture {context} differs from the frozen local profile")
+        identities: set[tuple[str, object]] = set()
+        for check in raw_checks:
+            evidence_ref = check.get("evidence_ref")
+            if not isinstance(evidence_ref, dict):
+                fail(f"Phase 10 PASS fixture {context} has invalid evidence")
+                continue
+            current_identities = {
+                ("id", evidence_ref.get("id")),
+                ("sha256", evidence_ref.get("sha256")),
+            }
+            if current_identities & identities:
+                fail(f"Phase 10 PASS fixture {context} reuses local-check evidence")
+            identities.update(current_identities)
+            if check.get("evidence_binding_sha256") != phase10_local_check_evidence_sha256(
+                check,
+                stage=stage,
+            ):
+                fail(f"Phase 10 PASS fixture {context} has an unbound evidence digest")
+        local_evidence_by_stage.setdefault(stage, set()).update(identities)
+    if local_evidence_by_stage.get("candidate", set()) & local_evidence_by_stage.get(
+        "post_merge", set()
+    ):
+        fail("Phase 10 PASS fixture reuses candidate evidence after merge")
+
+    security_evidence_ids: set[object] = set()
+    security_evidence_digests: set[object] = set()
+    for index, check in enumerate(manifest.get("security_checks", [])):
+        if not isinstance(check, dict) or not isinstance(check.get("evidence_ref"), dict):
+            fail(f"Phase 10 PASS fixture security_checks[{index}] is invalid")
+            continue
+        evidence_ref = check["evidence_ref"]
+        evidence_id = evidence_ref.get("id")
+        evidence_digest = evidence_ref.get("sha256")
+        if evidence_id in security_evidence_ids or evidence_digest in security_evidence_digests:
+            fail("Phase 10 PASS fixture reuses security evidence")
+        security_evidence_ids.add(evidence_id)
+        security_evidence_digests.add(evidence_digest)
+        if check.get("evidence_binding_sha256") != phase10_security_evidence_sha256(check):
+            fail("Phase 10 PASS fixture has an unbound security evidence digest")
+
+    artifact_observations = {
+        (evidence.get("repository"), evidence.get("github_artifact_id")): evidence.get(
+            "github_artifact_api_observation"
+        )
+        for integration in manifest.get("integration_generations", [])
+        if isinstance(integration, dict)
+        for evidence in integration.get("ci_evidence", [])
+        if isinstance(evidence, dict)
+    }
+
+    def authenticated_artifact_api_lookup(
+        repository: str,
+        artifact_id: int,
+    ) -> Mapping[str, Any] | None:
+        value = artifact_observations.get((repository, artifact_id))
+        return value if isinstance(value, dict) else None
+
+    ci_api_observations = {
+        (
+            evidence.get("repository"),
+            evidence.get("github_job_id"),
+            evidence.get("run_id"),
+            evidence.get("github_ci_api_observation", {}).get("workflow_source", {}).get("path"),
+            evidence.get("checkout_oid"),
+        ): evidence.get("github_ci_api_observation")
+        for integration in manifest.get("integration_generations", [])
+        if isinstance(integration, dict)
+        for evidence in integration.get("ci_evidence", [])
+        if isinstance(evidence, dict)
+    }
+
+    def authenticated_ci_api_lookup(
+        repository: str,
+        job_id: int,
+        run_id: int,
+        workflow_path: str,
+        checkout_oid: str,
+    ) -> Mapping[str, Any] | None:
+        value = ci_api_observations.get((repository, job_id, run_id, workflow_path, checkout_oid))
+        return value if isinstance(value, dict) else None
+
+    try:
+        report = evaluate_phase10_manifest(
+            manifest,
+            repo_root=ROOT,
+            authenticated_artifact_api_lookup=authenticated_artifact_api_lookup,
+            authenticated_ci_api_lookup=authenticated_ci_api_lookup,
+        )
+    except Exception as exc:  # noqa: BLE001 - aggregate validation failures
+        fail(f"Phase 10 PASS fixture could not be evaluated: {exc}")
+    else:
+        if report.verdict is not AcceptanceVerdict.PASS:
+            fail("Phase 10 PASS fixture does not produce PASS")
+
+    cases = _fixture_cases_by_id(cases_document, context="Phase 10 evaluator fixture")
+    required_cases = {
+        "ci-from-unreviewed-collector-fails",
+        "relabelled-ci-attestation-fails",
+        "reused-ci-attestation-fails",
+        "complete-exact-chain-passes",
+        "moved-pr-head-fails",
+        "owner-review-on-old-evidence-is-incomplete",
+        "push-through-wrong-remote-profile-fails",
+        "review-on-old-candidate-is-incomplete",
+        "review-on-old-base-is-incomplete",
+        "ci-on-old-candidate-is-incomplete",
+        "ci-with-wrong-parents-is-incomplete",
+        "ci-tree-mismatch-fails",
+        "uploaded-artifact-digest-mismatch-fails",
+        "malformed-uploaded-artifact-fails",
+        "same-base-signed-tree-mismatch-fails",
+        "candidate-local-profile-incomplete-is-incomplete",
+        "post-merge-local-profile-incomplete-is-incomplete",
+        "runtime-restart-generation-mismatch-fails",
+        "baseline-protected-base-mismatch-fails",
+        "artifact-api-metadata-mismatch-fails",
+        "ci-job-conclusion-mismatch-fails",
+        "ci-workflow-source-identity-mismatch-fails",
+        "candidate-lineage-disconnected-fails",
+        "post-merge-check-reuses-candidate-evidence-fails",
+        "post-merge-check-identity-digest-mismatch-fails",
+        "stale-policy-is-incomplete",
+        "post-restart-runtime-profile-mismatch-fails",
+        "post-restart-controller-mismatch-fails",
+        "stale-security-run-binding-fails",
+        "superseded-ci-job-fails",
+        "unresolved-effect-is-incomplete",
+    }
+    missing_cases = required_cases - set(cases)
+    if missing_cases:
+        fail(f"Phase 10 evaluator fixture is missing cases: {sorted(missing_cases)}")
+
+    collector_action = (
+        f"{policy.repository}/.github/actions/phase10-checkout-attestation@"
+        f"{policy.ci_attestation_collector_commit_oid}"
+    )
+    workflow_jobs = {
+        ROOT / ".github/workflows/contracts.yml": {
+            "validate-contracts": "validate-contracts",
+        },
+        ROOT / ".github/workflows/python.yml": {
+            "test": "Test Python ${{ matrix.python-version }}",
+            "quality": "Code, contract, dependency, and document quality",
+        },
+    }
+    artifact_prefix = "phase10-checkout-${{ github.run_id }}"
+    artifact_attempt = "${{ github.run_attempt }}"
+    workflow_artifact_names = {
+        ROOT / ".github/workflows/contracts.yml": {
+            "validate-contracts": f"{artifact_prefix}-contracts-{artifact_attempt}",
+        },
+        ROOT / ".github/workflows/python.yml": {
+            "test": (
+                f"{artifact_prefix}-test-python-${{{{ matrix.python-version }}}}-{artifact_attempt}"
+            ),
+            "quality": f"{artifact_prefix}-python-quality-{artifact_attempt}",
+        },
+    }
+    for path, expected_jobs in workflow_jobs.items():
+        workflow = load_yaml(path)
+        if not isinstance(workflow, dict):
+            fail(f"{path.relative_to(ROOT)}: workflow must be an object")
+            continue
+        # PyYAML's YAML 1.1 resolver parses GitHub's top-level ``on`` key as
+        # boolean true. Only the jobs mapping is material to this invariant.
+        jobs = _mapping(
+            workflow.get("jobs"),
+            context=f"{path.relative_to(ROOT)}: jobs",
+        )
+        if jobs is None:
+            continue
+        if set(jobs) != set(expected_jobs):
+            fail(
+                f"{path.relative_to(ROOT)}: Phase 10 attestation job set differs "
+                "from the reviewed workflow"
+            )
+            continue
+        for job_id, expected_job_name in expected_jobs.items():
+            job = _mapping(jobs[job_id], context=f"{path.relative_to(ROOT)}: job {job_id}")
+            if job is None:
+                continue
+            steps = job.get("steps")
+            if not isinstance(steps, list) or not all(isinstance(step, dict) for step in steps):
+                fail(f"{path.relative_to(ROOT)}: job {job_id} steps are invalid")
+                continue
+            checkout_indexes = [
+                index
+                for index, step in enumerate(steps)
+                if isinstance(step.get("uses"), str)
+                and step["uses"].startswith("actions/checkout@")
+            ]
+            collector_indexes = [
+                index for index, step in enumerate(steps) if step.get("uses") == collector_action
+            ]
+            upload_indexes = [
+                index
+                for index, step in enumerate(steps)
+                if isinstance(step.get("uses"), str)
+                and step["uses"].startswith("actions/upload-artifact@")
+            ]
+            if (
+                len(checkout_indexes) != 1
+                or len(collector_indexes) != 1
+                or len(upload_indexes) != 1
+            ):
+                fail(
+                    f"{path.relative_to(ROOT)}: job {job_id} must contain exactly one "
+                    "checkout, trusted collector, and attestation upload"
+                )
+                continue
+            checkout_index = checkout_indexes[0]
+            collector_index = collector_indexes[0]
+            upload_index = upload_indexes[0]
+            if collector_index != checkout_index + 1 or upload_index != collector_index + 1:
+                fail(
+                    f"{path.relative_to(ROOT)}: job {job_id} must attest and upload "
+                    "immediately after checkout, before candidate-controlled work"
+                )
+            collector_step = steps[collector_index]
+            collector_inputs = _mapping(
+                collector_step.get("with"),
+                context=f"{path.relative_to(ROOT)}: job {job_id} collector inputs",
+            )
+            if collector_inputs is not None:
+                if collector_inputs.get("output") != (
+                    "${{ runner.temp }}/phase10-ci-checkout.json"
+                ):
+                    fail(
+                        f"{path.relative_to(ROOT)}: job {job_id} collector output must "
+                        "be outside the candidate checkout"
+                    )
+                if collector_inputs.get("job-name") != expected_job_name:
+                    fail(
+                        f"{path.relative_to(ROOT)}: job {job_id} collector job identity "
+                        "differs from the reviewed policy"
+                    )
+            upload_step = steps[upload_index]
+            upload_inputs = _mapping(
+                upload_step.get("with"),
+                context=f"{path.relative_to(ROOT)}: job {job_id} upload inputs",
+            )
+            if upload_inputs is not None:
+                if upload_inputs.get("name") != workflow_artifact_names[path][job_id]:
+                    fail(
+                        f"{path.relative_to(ROOT)}: job {job_id} uploads an "
+                        "unexpected attestation artifact name"
+                    )
+                if upload_inputs.get("path") != "${{ runner.temp }}/phase10-ci-checkout.json":
+                    fail(
+                        f"{path.relative_to(ROOT)}: job {job_id} uploads the wrong attestation path"
+                    )
+                if upload_inputs.get("if-no-files-found") != "error":
+                    fail(
+                        f"{path.relative_to(ROOT)}: job {job_id} permits a missing "
+                        "attestation artifact"
+                    )
+
+    workflow_requirements = {
+        ROOT / ".github/actions/phase10-checkout-attestation/action.yml": (
+            "/usr/bin/python3 -I -S",
+            'collector_root="${BINNACLE_ACTION_PATH}/../../.."',
+            '--collector-commit "${BINNACLE_ACTION_REF}"',
+            '--expected-collector-sha256 "${BINNACLE_COLLECTOR_SHA256}"',
+            policy.ci_attestation_collector_sha256,
+        ),
+        ROOT / "docs/operations/phase10-self-hosting-acceptance.rst": (
+            "Evidence-independent repository implementation",
+            "Real-device acceptance promotion",
+            "scripts/phase10_acceptance.py",
+            "review-digest",
+            "github_artifact_api_ref",
+            "tox-py311",
+            "same-base signed-tree equality",
+            "same-operation/checkpoint/readiness-generation",
+        ),
+        ROOT / "scripts/ci_checkout_attestation.py": (
+            '_GIT_BINARY = "/usr/bin/git"',
+            '"GIT_CONFIG_GLOBAL": "/dev/null"',
+            '"GIT_NO_REPLACE_OBJECTS": "1"',
+        ),
+        ROOT / "src/binnacle/evaluation/__init__.py": (
+            "Public exports are loaded lazily",
+            "def __getattr__",
+        ),
+        ROOT / "tests/integration/test_phase10_acceptance_cli.py": (
+            "test_checkout_command_runs_from_reviewed_bundle_in_isolated_stdlib_mode",
+            '"/usr/bin/python3"',
+            '"-I"',
+            '"-S"',
+        ),
+    }
+    for path, markers in workflow_requirements.items():
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            fail(f"{path.relative_to(ROOT)}: Phase 10 integration file is unavailable: {exc}")
+            continue
+        for marker in markers:
+            if marker not in text:
+                fail(f"{path.relative_to(ROOT)}: missing Phase 10 marker {marker!r}")
+
+
 def validate_repository_vocabulary() -> None:
     paths = [
         *ROOT.glob("docs/**/*.md"),
+        *ROOT.glob("docs/**/*.rst"),
         *ROOT.glob("spec/**/*.yaml"),
+        *ROOT.glob("spec/**/*.json"),
         *ROOT.glob("schemas/**/*.json"),
         *ROOT.glob("tests/fixtures/**/*.yaml"),
+        *ROOT.glob("tests/fixtures/**/*.json"),
     ]
     for path in paths:
         text = path.read_text(encoding="utf-8")
@@ -1314,6 +1836,7 @@ def main() -> int:
     validate_parse_and_schemas()
     validate_bootstrap_command_profile_alignment()
     validate_bootstrap_self_hosting_scope_alignment()
+    validate_phase10_acceptance_contract()
     validate_tool_manifest()
     validate_phase9_privileged_contracts()
     validate_revision_support_contract()

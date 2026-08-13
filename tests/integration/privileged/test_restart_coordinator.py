@@ -671,7 +671,10 @@ async def test_published_selector_receipt_is_reused_without_duplicate_generation
     await first.close()
 
     reopened = await _open(database, runtime, now=now, instance="broker-2")
-    driver = _Driver(now)
+    # Anchor resumed effects after the retained selector publication.  Using the
+    # wall-clock sample captured before migration makes this replay test depend
+    # on setup completing in under one second.
+    driver = _Driver(effect_time)
     try:
         result = await PrivilegedRestartCoordinator(
             store=reopened,

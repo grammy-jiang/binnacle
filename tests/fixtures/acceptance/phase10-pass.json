@@ -1,0 +1,1146 @@
+{
+  "schema_version": "1.0",
+  "acceptance_run_id": "acceptance-test-pass",
+  "plan_version": "phase10-self-hosting-acceptance-v1",
+  "policy_sha256": "519084976123ef1d280c77d5f2a44e9c821c82ccd488027bccfeca4d516e099d",
+  "state": "passed",
+  "readiness": {
+    "evidence_ref": {
+      "id": "readiness",
+      "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    },
+    "real_chatgpt_connection": "verified",
+    "real_development_pi": "verified",
+    "predecessor_promotions": "verified",
+    "baseline_coherence": "verified"
+  },
+  "baseline": {
+    "evidence_ref": {
+      "id": "baseline",
+      "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    },
+    "runtime_oid": "0000000000000000000000000000000000000000",
+    "runtime_tree_oid": "9999999999999999999999999999999999999999",
+    "runtime_instance_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "repository_head_oid": "1111111111111111111111111111111111111111",
+    "protected_base_oid": "1111111111111111111111111111111111111111",
+    "repository_clean": true,
+    "controller_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "device_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "workspace_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "runtime_profile_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "commit_signer_sha256": "abababababababababababababababababababababababababababababababab",
+    "remote_profile_sha256": "1616161616161616161616161616161616161616161616161616161616161616"
+  },
+  "branch": {
+    "evidence_ref": {
+      "id": "branch",
+      "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    },
+    "ref": "refs/heads/phase10-test",
+    "created_from_oid": "1111111111111111111111111111111111111111",
+    "observed_oid": "1111111111111111111111111111111111111111",
+    "protected_branch_mutated": false
+  },
+  "candidate_generations": [
+    {
+      "generation": 1,
+      "source_content_sha256": "1212121212121212121212121212121212121212121212121212121212121212",
+      "change_scope_sha256": "1313131313131313131313131313131313131313131313131313131313131313",
+      "local_checks": [
+        {
+          "evidence_ref": {
+            "id": "candidate-1-local-check-pre-commit-all-files",
+            "sha256": "41386327d793e12cc7b9bf6c1fdc841702aa9707416c1ba14427c5736dc96daa"
+          },
+          "evidence_binding_sha256": "e1502af35261b9af0567e8e4aee66fc08a0204783351a739f85fd9725cbcbafd",
+          "check_id": "pre-commit-all-files",
+          "check_profile_sha256": "8d0df0f1fa5a46b49c6818014883b090459d8d28a17f1a02d72cc688fe8eda0d",
+          "source_content_sha256": "1212121212121212121212121212121212121212121212121212121212121212",
+          "conclusion": "success",
+          "terminal": true,
+          "descendants_closed": true,
+          "workspace_fence_closed": true
+        },
+        {
+          "evidence_ref": {
+            "id": "candidate-1-local-check-tox-py311",
+            "sha256": "5df2e9fe60a0ff7a167a70cf98c0c1e512bdff3099a3f172218a082e6a0ca5e5"
+          },
+          "evidence_binding_sha256": "66f42e1b31d3edd22247ebe726e987468273f861b538c600cd3ca1732519b82b",
+          "check_id": "tox-py311",
+          "check_profile_sha256": "4dece11d8e8b3b913153f694a2164cd26a146dbeb8a231abbe4284a55aa7b358",
+          "source_content_sha256": "1212121212121212121212121212121212121212121212121212121212121212",
+          "conclusion": "success",
+          "terminal": true,
+          "descendants_closed": true,
+          "workspace_fence_closed": true
+        },
+        {
+          "evidence_ref": {
+            "id": "candidate-1-local-check-tox-py312",
+            "sha256": "6bf04b4db2505ae80e798db059e20168c4bbc2263d388ca9f6674b7231604f4a"
+          },
+          "evidence_binding_sha256": "83710e430ccd3d2d4d01133fb6909b598872f579cb62787d8000168818865c30",
+          "check_id": "tox-py312",
+          "check_profile_sha256": "5fb0f8fe71689fe1d736d9d415c7016d160bf90d276791324af0e33c53d43598",
+          "source_content_sha256": "1212121212121212121212121212121212121212121212121212121212121212",
+          "conclusion": "success",
+          "terminal": true,
+          "descendants_closed": true,
+          "workspace_fence_closed": true
+        },
+        {
+          "evidence_ref": {
+            "id": "candidate-1-local-check-tox-py313",
+            "sha256": "78878e3eaef792e8fbb74c2a5ed8cf2d6095dd4bb5970869cc98e6865c7ee5ee"
+          },
+          "evidence_binding_sha256": "49d96fb3a6ffbc66f5171c14f3b10ad766bc756757f8ed9ed5bac454bd825b04",
+          "check_id": "tox-py313",
+          "check_profile_sha256": "1c1dd54faf731a284dd35899c1f3ec429f23a6c5936f57c18816b0d6a9f0340c",
+          "source_content_sha256": "1212121212121212121212121212121212121212121212121212121212121212",
+          "conclusion": "success",
+          "terminal": true,
+          "descendants_closed": true,
+          "workspace_fence_closed": true
+        },
+        {
+          "evidence_ref": {
+            "id": "candidate-1-local-check-tox-quality",
+            "sha256": "1ef523a857611f29e19fe58c4e96979e790327a1038269817787ed6aafed5f63"
+          },
+          "evidence_binding_sha256": "0f93d6949901abb1554aae56f04aeb6b0b2b6caa3622031587c499bba8c1193f",
+          "check_id": "tox-quality",
+          "check_profile_sha256": "bbe4fcf9b38b448b92e469a811cb7c5ac0ee09cb396e1df5ecc9d5fb75c5bcd4",
+          "source_content_sha256": "1212121212121212121212121212121212121212121212121212121212121212",
+          "conclusion": "success",
+          "terminal": true,
+          "descendants_closed": true,
+          "workspace_fence_closed": true
+        }
+      ],
+      "status_diff": {
+        "evidence_ref": {
+          "id": "candidate-1-status-diff",
+          "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        },
+        "parent_oid": "1111111111111111111111111111111111111111",
+        "branch_ref": "refs/heads/phase10-test",
+        "diff_sha256": "1414141414141414141414141414141414141414141414141414141414141414",
+        "repository_safety_sha256": "1515151515151515151515151515151515151515151515151515151515151515",
+        "unexpected_paths": false
+      },
+      "signed_commit": {
+        "evidence_ref": {
+          "id": "candidate-1-signed-commit",
+          "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        },
+        "oid": "2222222222222222222222222222222222222222",
+        "tree_oid": "4444444444444444444444444444444444444444",
+        "parent_oid": "1111111111111111111111111111111111111111",
+        "signer_sha256": "abababababababababababababababababababababababababababababababab",
+        "signature_verified": true,
+        "source_content_sha256": "1212121212121212121212121212121212121212121212121212121212121212"
+      },
+      "push": {
+        "evidence_ref": {
+          "id": "candidate-1-push",
+          "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        },
+        "target_oid": "2222222222222222222222222222222222222222",
+        "remote_observed_oid": "2222222222222222222222222222222222222222",
+        "remote_ref": "refs/heads/phase10-test",
+        "remote_profile_sha256": "1616161616161616161616161616161616161616161616161616161616161616",
+        "conclusion": "success"
+      },
+      "hosted_head_oid": "2222222222222222222222222222222222222222",
+      "superseded_reason_ref": null
+    }
+  ],
+  "final_candidate_generation": 1,
+  "integration_generations": [
+    {
+      "generation": 1,
+      "candidate_generation": 1,
+      "candidate_oid": "2222222222222222222222222222222222222222",
+      "protected_base_oid": "1111111111111111111111111111111111111111",
+      "merge_policy_sha256": "519084976123ef1d280c77d5f2a44e9c821c82ccd488027bccfeca4d516e099d",
+      "reviews": [
+        {
+          "evidence_ref": {
+            "id": "integration-1-review",
+            "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+          },
+          "candidate_oid": "2222222222222222222222222222222222222222",
+          "protected_base_oid": "1111111111111111111111111111111111111111",
+          "substantive": true,
+          "clean": true,
+          "unresolved_actionable_count": 0
+        }
+      ],
+      "ci_evidence": [
+        {
+          "evidence_ref": {
+            "id": "ci-contract-validation",
+            "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+          },
+          "workflow_name": "Contract validation",
+          "run_id": 1001,
+          "job_name": "validate-contracts",
+          "repository": "grammy-jiang/binnacle",
+          "event_name": "pull_request",
+          "run_attempt": 1,
+          "workflow_run_attempt": 1,
+          "collector_commit_oid": "668a3b69af386894a6eedcd740634589b6bb1ccc",
+          "collector_sha256": "96dc2225a3a12e18341656b2cd5ea05b9458a52a9cb7fa77f98d84ce844f8ec7",
+          "candidate_oid": "2222222222222222222222222222222222222222",
+          "protected_base_oid": "1111111111111111111111111111111111111111",
+          "checkout_oid": "3333333333333333333333333333333333333333",
+          "github_sha": "3333333333333333333333333333333333333333",
+          "checkout_tree_oid": "4444444444444444444444444444444444444444",
+          "checkout_parent_oids": [
+            "1111111111111111111111111111111111111111",
+            "2222222222222222222222222222222222222222"
+          ],
+          "checkout_kind": "pull_request_integration",
+          "conclusion": "success",
+          "required": true,
+          "attestation": {
+            "schema_version": "1.0",
+            "repository": "grammy-jiang/binnacle",
+            "event_name": "pull_request",
+            "workflow_name": "Contract validation",
+            "job_name": "validate-contracts",
+            "run_id": 1001,
+            "run_attempt": 1,
+            "collector_commit_oid": "668a3b69af386894a6eedcd740634589b6bb1ccc",
+            "collector_sha256": "96dc2225a3a12e18341656b2cd5ea05b9458a52a9cb7fa77f98d84ce844f8ec7",
+            "event_candidate_oid": "2222222222222222222222222222222222222222",
+            "event_base_oid": "1111111111111111111111111111111111111111",
+            "event_after_oid": null,
+            "github_sha": "3333333333333333333333333333333333333333",
+            "checkout_oid": "3333333333333333333333333333333333333333",
+            "checkout_tree_oid": "4444444444444444444444444444444444444444",
+            "checkout_parent_oids": [
+              "1111111111111111111111111111111111111111",
+              "2222222222222222222222222222222222222222"
+            ],
+            "checkout_kind": "pull_request_integration",
+            "created_at": "2026-01-01T00:00:01Z"
+          },
+          "attestation_sha256": "7a442bbbbd86b4de2470eb7122f1d63045320743863ce375ffa0fa35d734a0d8",
+          "github_artifact_api_ref": {
+            "id": "github-artifact-api-9001",
+            "sha256": "6920e8ae187eda24d48f18e143ffc6a346d49aead7f1edd260a4830d3bbd1c96"
+          },
+          "github_artifact_api_observation": {
+            "repository": "grammy-jiang/binnacle",
+            "id": 9001,
+            "name": "phase10-checkout-1001-contracts-1",
+            "size_in_bytes": 509,
+            "url": "https://api.github.com/repos/grammy-jiang/binnacle/actions/artifacts/9001",
+            "archive_download_url": "https://api.github.com/repos/grammy-jiang/binnacle/actions/artifacts/9001/zip",
+            "expired": false,
+            "digest": "sha256:0028ab2a4a8ca110a2dcb9d287d3a04882603e792977f7f94661f5f41f2d935e",
+            "workflow_run": {
+              "id": 1001,
+              "head_sha": "2222222222222222222222222222222222222222"
+            }
+          },
+          "github_artifact_id": 9001,
+          "github_artifact_name": "phase10-checkout-1001-contracts-1",
+          "github_artifact_archive_sha256": "0028ab2a4a8ca110a2dcb9d287d3a04882603e792977f7f94661f5f41f2d935e",
+          "github_job_id": 8001,
+          "github_ci_api_ref": {
+            "id": "github-ci-api-8001",
+            "sha256": "ccb5ffa73b145c9f9804fba9dec5de2d80112e179444c047739c0589eafdbaf5"
+          },
+          "github_ci_api_observation": {
+            "repository": "grammy-jiang/binnacle",
+            "job": {
+              "id": 8001,
+              "run_id": 1001,
+              "run_attempt": 1,
+              "workflow_name": "Contract validation",
+              "name": "validate-contracts",
+              "head_sha": "2222222222222222222222222222222222222222",
+              "status": "completed",
+              "conclusion": "success",
+              "url": "https://api.github.com/repos/grammy-jiang/binnacle/actions/jobs/8001",
+              "check_run_url": "https://api.github.com/repos/grammy-jiang/binnacle/check-runs/8001"
+            },
+            "workflow_run": {
+              "id": 1001,
+              "run_attempt": 1,
+              "workflow_id": 330240211,
+              "name": "Contract validation",
+              "path": ".github/workflows/contracts.yml",
+              "event": "pull_request",
+              "head_sha": "2222222222222222222222222222222222222222",
+              "status": "completed",
+              "conclusion": "success",
+              "url": "https://api.github.com/repos/grammy-jiang/binnacle/actions/runs/1001",
+              "jobs_url": "https://api.github.com/repos/grammy-jiang/binnacle/actions/runs/1001/jobs"
+            },
+            "workflow_source": {
+              "path": ".github/workflows/contracts.yml",
+              "ref": "3333333333333333333333333333333333333333",
+              "git_blob_oid": "5e1bd05816c759a4e9f16aa78a82bbdd233a49d5",
+              "size_in_bytes": 1936,
+              "sha256": "b074c669e4b72c7b97523b41d9bc6cb6fa68feb787d4f3e7fcc5251912cf0105"
+            },
+            "latest_job_id": 8001
+          },
+          "github_artifact_archive_base64": "UEsDBBQAAAAIAACAn1s5lLGOawEAAFkDAAAYAAAAcGhhc2UxMC1jaS1jaGVja291dC5qc29ulVJNb9swDL3vVww+N53kD1nOtX+hpw6DQVF0osaWUllOUQz776OaGO12cgleJD0+Pj3yd4FHwlNYUn9y3hb74ryMYx/pZaE59c4nOkRILvji7gMaXEZWG+Nz5Rki+XeCudj/LOTGYIpyYxS/PrVLkeimtt4YWW0YR8IUYo9hmtz6X6U0VEZ1MFRa6a4GRWTRtrVQVd3ozihjJCL+wzAfoWwUV3fKIstroAJZktRVLVWjTIm2IRCN6ZgCmhI6NO0AbTt02uoaSdf1oAnbzBoJEtkeEvOVolQ7ITkfhdjnlE+MoUv2F4ZE8Srb8zzXawPzascXnL/WInjrLPe/EWyex0rgYaL/9ovfDi4dF5Nt+tpGPQezMl5gfBe2w+BTBEwzv0c6h9nxBN4YwSs8TW+7Zwf+8MM47wFHyqDFs5mJpjM7Kq/n/DkpBJ9mXqMJ+gvFOe8/e3YvuOg1xNMwhte1/cOt6/ebjoz98+0vUEsBAh4DFAAAAAgAAICfWzmUsY5rAQAAWQMAABgAAAAAAAAAAQAAAKSBAAAAAHBoYXNlMTAtY2ktY2hlY2tvdXQuanNvblBLBQYAAAAAAQABAEYAAAChAQAAAAA="
+        },
+        {
+          "evidence_ref": {
+            "id": "ci-python-quality",
+            "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+          },
+          "workflow_name": "Python CI",
+          "run_id": 1002,
+          "job_name": "Code, contract, dependency, and document quality",
+          "repository": "grammy-jiang/binnacle",
+          "event_name": "pull_request",
+          "run_attempt": 1,
+          "workflow_run_attempt": 1,
+          "collector_commit_oid": "668a3b69af386894a6eedcd740634589b6bb1ccc",
+          "collector_sha256": "96dc2225a3a12e18341656b2cd5ea05b9458a52a9cb7fa77f98d84ce844f8ec7",
+          "candidate_oid": "2222222222222222222222222222222222222222",
+          "protected_base_oid": "1111111111111111111111111111111111111111",
+          "checkout_oid": "3333333333333333333333333333333333333333",
+          "github_sha": "3333333333333333333333333333333333333333",
+          "checkout_tree_oid": "4444444444444444444444444444444444444444",
+          "checkout_parent_oids": [
+            "1111111111111111111111111111111111111111",
+            "2222222222222222222222222222222222222222"
+          ],
+          "checkout_kind": "pull_request_integration",
+          "conclusion": "success",
+          "required": true,
+          "attestation": {
+            "schema_version": "1.0",
+            "repository": "grammy-jiang/binnacle",
+            "event_name": "pull_request",
+            "workflow_name": "Python CI",
+            "job_name": "Code, contract, dependency, and document quality",
+            "run_id": 1002,
+            "run_attempt": 1,
+            "collector_commit_oid": "668a3b69af386894a6eedcd740634589b6bb1ccc",
+            "collector_sha256": "96dc2225a3a12e18341656b2cd5ea05b9458a52a9cb7fa77f98d84ce844f8ec7",
+            "event_candidate_oid": "2222222222222222222222222222222222222222",
+            "event_base_oid": "1111111111111111111111111111111111111111",
+            "event_after_oid": null,
+            "github_sha": "3333333333333333333333333333333333333333",
+            "checkout_oid": "3333333333333333333333333333333333333333",
+            "checkout_tree_oid": "4444444444444444444444444444444444444444",
+            "checkout_parent_oids": [
+              "1111111111111111111111111111111111111111",
+              "2222222222222222222222222222222222222222"
+            ],
+            "checkout_kind": "pull_request_integration",
+            "created_at": "2026-01-01T00:00:02Z"
+          },
+          "attestation_sha256": "00ca6727e2dbb68542237b975b6fb609aba78a96e9115f11854347eaa6abeb64",
+          "github_artifact_api_ref": {
+            "id": "github-artifact-api-9002",
+            "sha256": "1c8a891af45ea6beea837a3d0d5884c01d898cbb80bcf2e0495c216982501838"
+          },
+          "github_artifact_api_observation": {
+            "repository": "grammy-jiang/binnacle",
+            "id": 9002,
+            "name": "phase10-checkout-1002-python-quality-1",
+            "size_in_bytes": 534,
+            "url": "https://api.github.com/repos/grammy-jiang/binnacle/actions/artifacts/9002",
+            "archive_download_url": "https://api.github.com/repos/grammy-jiang/binnacle/actions/artifacts/9002/zip",
+            "expired": false,
+            "digest": "sha256:e006809c425c99130dfa8ed525ea3e267cea35c776c78fb099c274e8014645fe",
+            "workflow_run": {
+              "id": 1002,
+              "head_sha": "2222222222222222222222222222222222222222"
+            }
+          },
+          "github_artifact_id": 9002,
+          "github_artifact_name": "phase10-checkout-1002-python-quality-1",
+          "github_artifact_archive_sha256": "e006809c425c99130dfa8ed525ea3e267cea35c776c78fb099c274e8014645fe",
+          "github_job_id": 8002,
+          "github_ci_api_ref": {
+            "id": "github-ci-api-8002",
+            "sha256": "1992c213301cc0721a2d9bff82dcc354370589887a1516769b5c3e1353a510c5"
+          },
+          "github_ci_api_observation": {
+            "repository": "grammy-jiang/binnacle",
+            "job": {
+              "id": 8002,
+              "run_id": 1002,
+              "run_attempt": 1,
+              "workflow_name": "Python CI",
+              "name": "Code, contract, dependency, and document quality",
+              "head_sha": "2222222222222222222222222222222222222222",
+              "status": "completed",
+              "conclusion": "success",
+              "url": "https://api.github.com/repos/grammy-jiang/binnacle/actions/jobs/8002",
+              "check_run_url": "https://api.github.com/repos/grammy-jiang/binnacle/check-runs/8002"
+            },
+            "workflow_run": {
+              "id": 1002,
+              "run_attempt": 1,
+              "workflow_id": 331525151,
+              "name": "Python CI",
+              "path": ".github/workflows/python.yml",
+              "event": "pull_request",
+              "head_sha": "2222222222222222222222222222222222222222",
+              "status": "completed",
+              "conclusion": "success",
+              "url": "https://api.github.com/repos/grammy-jiang/binnacle/actions/runs/1002",
+              "jobs_url": "https://api.github.com/repos/grammy-jiang/binnacle/actions/runs/1002/jobs"
+            },
+            "workflow_source": {
+              "path": ".github/workflows/python.yml",
+              "ref": "3333333333333333333333333333333333333333",
+              "git_blob_oid": "9db689ee2d315820eb79aecb43c357f25bcd12af",
+              "size_in_bytes": 6527,
+              "sha256": "3e432f34918e7ce168b445bde62eb4deeeb296eabca14c34ef2e6dbd928a085d"
+            },
+            "latest_job_id": 8002
+          },
+          "github_artifact_archive_base64": "UEsDBBQAAAAIAACAn1v6FfwohAEAAG0DAAAYAAAAcGhhc2UxMC1jaS1jaGVja291dC5qc29ulVM9b9wwDN37KwzNTutP2b41U7cOnRoUBkXRd8rZkiPLCYyg/71UL0bTTg6hRRLf49Mj9SrwQnh1a+ivxmpxEvM6jr2np5WW0Bsb6OwhGGdF+jfVmZhZHoz3yBk82T8Eizg9iPxgMEVxMMTPd+WCJ3pTWx2MqNaNI2Fwvkc3TWZ/r5QtlEp2MJStbLsKJJFG3VSZLKu67ZRUKkfEfxiWCxS1ZHQnNbK8GkrIC8rbssplLVWBuibIatUxBdQFdKiaAZpm6FrdVkhtVQ0tYRNZPUEg3UNgviIr5F2W8/qeZae4ih+cQ8/RXxgC+Ztsy/3cjxUsux0fcP6GRbDaaK7/RnC4HzuBhYn+my++O5twWVW06WMT9ejUznjvNKUJOhs8YEgTTTNZTRa3NGHRiXa4TqwgeVphNGFjtKfZLYb7szGeB3yatrtHA/b8RRlrAUeKSatlqwNNM/ud3/bx6XmWFalYeMgm6J/JL/F3sKOfMwa9OH8dRveyi/u2hYuzyf1X8evTb1BLAQIeAxQAAAAIAACAn1v6FfwohAEAAG0DAAAYAAAAAAAAAAEAAACkgQAAAABwaGFzZTEwLWNpLWNoZWNrb3V0Lmpzb25QSwUGAAAAAAEAAQBGAAAAugEAAAAA"
+        },
+        {
+          "evidence_ref": {
+            "id": "ci-python-311",
+            "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+          },
+          "workflow_name": "Python CI",
+          "run_id": 1002,
+          "job_name": "Test Python 3.11",
+          "repository": "grammy-jiang/binnacle",
+          "event_name": "pull_request",
+          "run_attempt": 1,
+          "workflow_run_attempt": 1,
+          "collector_commit_oid": "668a3b69af386894a6eedcd740634589b6bb1ccc",
+          "collector_sha256": "96dc2225a3a12e18341656b2cd5ea05b9458a52a9cb7fa77f98d84ce844f8ec7",
+          "candidate_oid": "2222222222222222222222222222222222222222",
+          "protected_base_oid": "1111111111111111111111111111111111111111",
+          "checkout_oid": "3333333333333333333333333333333333333333",
+          "github_sha": "3333333333333333333333333333333333333333",
+          "checkout_tree_oid": "4444444444444444444444444444444444444444",
+          "checkout_parent_oids": [
+            "1111111111111111111111111111111111111111",
+            "2222222222222222222222222222222222222222"
+          ],
+          "checkout_kind": "pull_request_integration",
+          "conclusion": "success",
+          "required": true,
+          "attestation": {
+            "schema_version": "1.0",
+            "repository": "grammy-jiang/binnacle",
+            "event_name": "pull_request",
+            "workflow_name": "Python CI",
+            "job_name": "Test Python 3.11",
+            "run_id": 1002,
+            "run_attempt": 1,
+            "collector_commit_oid": "668a3b69af386894a6eedcd740634589b6bb1ccc",
+            "collector_sha256": "96dc2225a3a12e18341656b2cd5ea05b9458a52a9cb7fa77f98d84ce844f8ec7",
+            "event_candidate_oid": "2222222222222222222222222222222222222222",
+            "event_base_oid": "1111111111111111111111111111111111111111",
+            "event_after_oid": null,
+            "github_sha": "3333333333333333333333333333333333333333",
+            "checkout_oid": "3333333333333333333333333333333333333333",
+            "checkout_tree_oid": "4444444444444444444444444444444444444444",
+            "checkout_parent_oids": [
+              "1111111111111111111111111111111111111111",
+              "2222222222222222222222222222222222222222"
+            ],
+            "checkout_kind": "pull_request_integration",
+            "created_at": "2026-01-01T00:00:03Z"
+          },
+          "attestation_sha256": "8d25186bb8fcba10c051ac8d0527a13ac5bd4768b36ef7b7eaaf7c12fe9698e2",
+          "github_artifact_api_ref": {
+            "id": "github-artifact-api-9003",
+            "sha256": "acda13a386d5ae385c9122bfc587b87858cb9a21987a1a700f2a6a9b9014e4b8"
+          },
+          "github_artifact_api_observation": {
+            "repository": "grammy-jiang/binnacle",
+            "id": 9003,
+            "name": "phase10-checkout-1002-test-python-3.11-1",
+            "size_in_bytes": 508,
+            "url": "https://api.github.com/repos/grammy-jiang/binnacle/actions/artifacts/9003",
+            "archive_download_url": "https://api.github.com/repos/grammy-jiang/binnacle/actions/artifacts/9003/zip",
+            "expired": false,
+            "digest": "sha256:8f15ad7efe7c76f3949c5edf36bf3bfc8712b745132fa38f9c4a3844eee37bc3",
+            "workflow_run": {
+              "id": 1002,
+              "head_sha": "2222222222222222222222222222222222222222"
+            }
+          },
+          "github_artifact_id": 9003,
+          "github_artifact_name": "phase10-checkout-1002-test-python-3.11-1",
+          "github_artifact_archive_sha256": "8f15ad7efe7c76f3949c5edf36bf3bfc8712b745132fa38f9c4a3844eee37bc3",
+          "github_job_id": 8003,
+          "github_ci_api_ref": {
+            "id": "github-ci-api-8003",
+            "sha256": "c64cc7b22cc184c91c6d8b949b6412f71625ff029fae40c6377c4b8bd6c20558"
+          },
+          "github_ci_api_observation": {
+            "repository": "grammy-jiang/binnacle",
+            "job": {
+              "id": 8003,
+              "run_id": 1002,
+              "run_attempt": 1,
+              "workflow_name": "Python CI",
+              "name": "Test Python 3.11",
+              "head_sha": "2222222222222222222222222222222222222222",
+              "status": "completed",
+              "conclusion": "success",
+              "url": "https://api.github.com/repos/grammy-jiang/binnacle/actions/jobs/8003",
+              "check_run_url": "https://api.github.com/repos/grammy-jiang/binnacle/check-runs/8003"
+            },
+            "workflow_run": {
+              "id": 1002,
+              "run_attempt": 1,
+              "workflow_id": 331525151,
+              "name": "Python CI",
+              "path": ".github/workflows/python.yml",
+              "event": "pull_request",
+              "head_sha": "2222222222222222222222222222222222222222",
+              "status": "completed",
+              "conclusion": "success",
+              "url": "https://api.github.com/repos/grammy-jiang/binnacle/actions/runs/1002",
+              "jobs_url": "https://api.github.com/repos/grammy-jiang/binnacle/actions/runs/1002/jobs"
+            },
+            "workflow_source": {
+              "path": ".github/workflows/python.yml",
+              "ref": "3333333333333333333333333333333333333333",
+              "git_blob_oid": "9db689ee2d315820eb79aecb43c357f25bcd12af",
+              "size_in_bytes": 6527,
+              "sha256": "3e432f34918e7ce168b445bde62eb4deeeb296eabca14c34ef2e6dbd928a085d"
+            },
+            "latest_job_id": 8003
+          },
+          "github_artifact_archive_base64": "UEsDBBQAAAAIAACAn1uIYokWagEAAE0DAAAYAAAAcGhhc2UxMC1jaS1jaGVja291dC5qc29ulZJNU8MgEIbv/gqHs1XyRUivnrx56EnHySywabEJVEJ0Oo7/3cU248cp7nABdp99edl3pneo936K7d46w9bsMPV9G/BlwjG21kXcBojWO3b1neptyiwWxs/KAwR0X4CRrR9ZtjAIkS8M9vSjXQyIZ7Xlwkhqfd+jjj602g+Dnd8rhIRCiQa6QgrZlCAQjTZ1yUVRVrJRQqlMa/2LMO4grwRVN8JokldBAVmOmSzKTFRC5dpUCLxSDSGgyqHRqu6grrtGGllqlGXZSdR1ogaEiKaFSLyc52LFM1obztdpFQ+Ug6/JX+gihpNsR/85HysYZzv+4fypVoMz1lD/M2Dxf8wABwP+mS+629q4m1Sy6X8T9ezVTNwQ6fL+GHfeXRbXX5IDHvxoyf8j3dMAD8Nx9WzBbW+UdQ50jylpcmRlxOFAfmanfXpaxnl+xUYaogHaVwxjmn5y7JpT0ZsP+673b3Pzc9/bO/Zx8QlQSwECHgMUAAAACAAAgJ9biGKJFmoBAABNAwAAGAAAAAAAAAABAAAApIEAAAAAcGhhc2UxMC1jaS1jaGVja291dC5qc29uUEsFBgAAAAABAAEARgAAAKABAAAAAA=="
+        },
+        {
+          "evidence_ref": {
+            "id": "ci-python-312",
+            "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+          },
+          "workflow_name": "Python CI",
+          "run_id": 1002,
+          "job_name": "Test Python 3.12",
+          "repository": "grammy-jiang/binnacle",
+          "event_name": "pull_request",
+          "run_attempt": 1,
+          "workflow_run_attempt": 1,
+          "collector_commit_oid": "668a3b69af386894a6eedcd740634589b6bb1ccc",
+          "collector_sha256": "96dc2225a3a12e18341656b2cd5ea05b9458a52a9cb7fa77f98d84ce844f8ec7",
+          "candidate_oid": "2222222222222222222222222222222222222222",
+          "protected_base_oid": "1111111111111111111111111111111111111111",
+          "checkout_oid": "3333333333333333333333333333333333333333",
+          "github_sha": "3333333333333333333333333333333333333333",
+          "checkout_tree_oid": "4444444444444444444444444444444444444444",
+          "checkout_parent_oids": [
+            "1111111111111111111111111111111111111111",
+            "2222222222222222222222222222222222222222"
+          ],
+          "checkout_kind": "pull_request_integration",
+          "conclusion": "success",
+          "required": true,
+          "attestation": {
+            "schema_version": "1.0",
+            "repository": "grammy-jiang/binnacle",
+            "event_name": "pull_request",
+            "workflow_name": "Python CI",
+            "job_name": "Test Python 3.12",
+            "run_id": 1002,
+            "run_attempt": 1,
+            "collector_commit_oid": "668a3b69af386894a6eedcd740634589b6bb1ccc",
+            "collector_sha256": "96dc2225a3a12e18341656b2cd5ea05b9458a52a9cb7fa77f98d84ce844f8ec7",
+            "event_candidate_oid": "2222222222222222222222222222222222222222",
+            "event_base_oid": "1111111111111111111111111111111111111111",
+            "event_after_oid": null,
+            "github_sha": "3333333333333333333333333333333333333333",
+            "checkout_oid": "3333333333333333333333333333333333333333",
+            "checkout_tree_oid": "4444444444444444444444444444444444444444",
+            "checkout_parent_oids": [
+              "1111111111111111111111111111111111111111",
+              "2222222222222222222222222222222222222222"
+            ],
+            "checkout_kind": "pull_request_integration",
+            "created_at": "2026-01-01T00:00:04Z"
+          },
+          "attestation_sha256": "eeab487570d4b8a63d30f7d4029a5c5b6922c696483576323e011a6a8be39fea",
+          "github_artifact_api_ref": {
+            "id": "github-artifact-api-9004",
+            "sha256": "3fe2e7ef3b3f27f2bce863e87c5e1ab512d860a593e2f1a74b3adc783672c6c1"
+          },
+          "github_artifact_api_observation": {
+            "repository": "grammy-jiang/binnacle",
+            "id": 9004,
+            "name": "phase10-checkout-1002-test-python-3.12-1",
+            "size_in_bytes": 511,
+            "url": "https://api.github.com/repos/grammy-jiang/binnacle/actions/artifacts/9004",
+            "archive_download_url": "https://api.github.com/repos/grammy-jiang/binnacle/actions/artifacts/9004/zip",
+            "expired": false,
+            "digest": "sha256:63d3e1d22a10b3f4fe527165835a2664fc411a03cc07906977f7e2e5a5140127",
+            "workflow_run": {
+              "id": 1002,
+              "head_sha": "2222222222222222222222222222222222222222"
+            }
+          },
+          "github_artifact_id": 9004,
+          "github_artifact_name": "phase10-checkout-1002-test-python-3.12-1",
+          "github_artifact_archive_sha256": "63d3e1d22a10b3f4fe527165835a2664fc411a03cc07906977f7e2e5a5140127",
+          "github_job_id": 8004,
+          "github_ci_api_ref": {
+            "id": "github-ci-api-8004",
+            "sha256": "eeda62c28b4d26c1898e65157c502915d27c1c5041fc8a595ba1af1c7e3f5da0"
+          },
+          "github_ci_api_observation": {
+            "repository": "grammy-jiang/binnacle",
+            "job": {
+              "id": 8004,
+              "run_id": 1002,
+              "run_attempt": 1,
+              "workflow_name": "Python CI",
+              "name": "Test Python 3.12",
+              "head_sha": "2222222222222222222222222222222222222222",
+              "status": "completed",
+              "conclusion": "success",
+              "url": "https://api.github.com/repos/grammy-jiang/binnacle/actions/jobs/8004",
+              "check_run_url": "https://api.github.com/repos/grammy-jiang/binnacle/check-runs/8004"
+            },
+            "workflow_run": {
+              "id": 1002,
+              "run_attempt": 1,
+              "workflow_id": 331525151,
+              "name": "Python CI",
+              "path": ".github/workflows/python.yml",
+              "event": "pull_request",
+              "head_sha": "2222222222222222222222222222222222222222",
+              "status": "completed",
+              "conclusion": "success",
+              "url": "https://api.github.com/repos/grammy-jiang/binnacle/actions/runs/1002",
+              "jobs_url": "https://api.github.com/repos/grammy-jiang/binnacle/actions/runs/1002/jobs"
+            },
+            "workflow_source": {
+              "path": ".github/workflows/python.yml",
+              "ref": "3333333333333333333333333333333333333333",
+              "git_blob_oid": "9db689ee2d315820eb79aecb43c357f25bcd12af",
+              "size_in_bytes": 6527,
+              "sha256": "3e432f34918e7ce168b445bde62eb4deeeb296eabca14c34ef2e6dbd928a085d"
+            },
+            "latest_job_id": 8004
+          },
+          "github_artifact_archive_base64": "UEsDBBQAAAAIAACAn1vXV31qbQEAAE0DAAAYAAAAcGhhc2UxMC1jaS1jaGVja291dC5qc29ulZKxctwgEIb7PIWH2nZAQghd68pdClfJZDQLrO7wSXBByJ6bjN/dS+40cVLJOzTA7vcvP/ub2QPaY1xyf/TBsR07LePYJ/y14Jx7HzLuE2QfA7v9mxp9yaw3xsfKEyQMfwAz2/1gYmMQotoY7OcHuZwQr93KjVG6jeOINsfU2zhNfn2vUhpqozoYaq10J0EhOutayVUtG90ZZYyw1v5DmA9QNYqqO+UstddADaJCoWspVKNMZV2DwBvTEQKaCjpr2gHadui009KilnLQaNtCTQgZXQ+ZeBWv1B0XtJ4435Ulv1MOvhR/YciYLm0H+s/12MC82vEJ5y+1FoLzjvSvgM3/sQICTPjffNHd3ufDYopNn5uo52hW4hORbr6d8yGGm/peFMWEpzh78v9M9zTA03S+e/YQ9l+NDwHsiCVpCWRlxulEforLvjxNcF7dspmGaIL+BdNcpp8cu+dU9BrTcRjj6yp+1X14ZG9f3gFQSwECHgMUAAAACAAAgJ9b11d9am0BAABNAwAAGAAAAAAAAAABAAAApIEAAAAAcGhhc2UxMC1jaS1jaGVja291dC5qc29uUEsFBgAAAAABAAEARgAAAKMBAAAAAA=="
+        },
+        {
+          "evidence_ref": {
+            "id": "ci-python-313",
+            "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+          },
+          "workflow_name": "Python CI",
+          "run_id": 1002,
+          "job_name": "Test Python 3.13",
+          "repository": "grammy-jiang/binnacle",
+          "event_name": "pull_request",
+          "run_attempt": 1,
+          "workflow_run_attempt": 1,
+          "collector_commit_oid": "668a3b69af386894a6eedcd740634589b6bb1ccc",
+          "collector_sha256": "96dc2225a3a12e18341656b2cd5ea05b9458a52a9cb7fa77f98d84ce844f8ec7",
+          "candidate_oid": "2222222222222222222222222222222222222222",
+          "protected_base_oid": "1111111111111111111111111111111111111111",
+          "checkout_oid": "3333333333333333333333333333333333333333",
+          "github_sha": "3333333333333333333333333333333333333333",
+          "checkout_tree_oid": "4444444444444444444444444444444444444444",
+          "checkout_parent_oids": [
+            "1111111111111111111111111111111111111111",
+            "2222222222222222222222222222222222222222"
+          ],
+          "checkout_kind": "pull_request_integration",
+          "conclusion": "success",
+          "required": true,
+          "attestation": {
+            "schema_version": "1.0",
+            "repository": "grammy-jiang/binnacle",
+            "event_name": "pull_request",
+            "workflow_name": "Python CI",
+            "job_name": "Test Python 3.13",
+            "run_id": 1002,
+            "run_attempt": 1,
+            "collector_commit_oid": "668a3b69af386894a6eedcd740634589b6bb1ccc",
+            "collector_sha256": "96dc2225a3a12e18341656b2cd5ea05b9458a52a9cb7fa77f98d84ce844f8ec7",
+            "event_candidate_oid": "2222222222222222222222222222222222222222",
+            "event_base_oid": "1111111111111111111111111111111111111111",
+            "event_after_oid": null,
+            "github_sha": "3333333333333333333333333333333333333333",
+            "checkout_oid": "3333333333333333333333333333333333333333",
+            "checkout_tree_oid": "4444444444444444444444444444444444444444",
+            "checkout_parent_oids": [
+              "1111111111111111111111111111111111111111",
+              "2222222222222222222222222222222222222222"
+            ],
+            "checkout_kind": "pull_request_integration",
+            "created_at": "2026-01-01T00:00:05Z"
+          },
+          "attestation_sha256": "70ea96fb1671325a076804e7ba44cf56f6c7d5a7bebb2d8587a7f76e53e00e05",
+          "github_artifact_api_ref": {
+            "id": "github-artifact-api-9005",
+            "sha256": "9a8212e20ecf4da7677eb1e32a05a61600ffb7c76963deae30ac21613b292fc5"
+          },
+          "github_artifact_api_observation": {
+            "repository": "grammy-jiang/binnacle",
+            "id": 9005,
+            "name": "phase10-checkout-1002-test-python-3.13-1",
+            "size_in_bytes": 510,
+            "url": "https://api.github.com/repos/grammy-jiang/binnacle/actions/artifacts/9005",
+            "archive_download_url": "https://api.github.com/repos/grammy-jiang/binnacle/actions/artifacts/9005/zip",
+            "expired": false,
+            "digest": "sha256:4dc815209fa44e057e0e36ae446f99fb660bc5cd32a03ca413e4cc3acb8105ef",
+            "workflow_run": {
+              "id": 1002,
+              "head_sha": "2222222222222222222222222222222222222222"
+            }
+          },
+          "github_artifact_id": 9005,
+          "github_artifact_name": "phase10-checkout-1002-test-python-3.13-1",
+          "github_artifact_archive_sha256": "4dc815209fa44e057e0e36ae446f99fb660bc5cd32a03ca413e4cc3acb8105ef",
+          "github_job_id": 8005,
+          "github_ci_api_ref": {
+            "id": "github-ci-api-8005",
+            "sha256": "54fdd2f4bcc8eaa2deb003af8da7d231675d332f7d7b6afe816e81d9aaf05c93"
+          },
+          "github_ci_api_observation": {
+            "repository": "grammy-jiang/binnacle",
+            "job": {
+              "id": 8005,
+              "run_id": 1002,
+              "run_attempt": 1,
+              "workflow_name": "Python CI",
+              "name": "Test Python 3.13",
+              "head_sha": "2222222222222222222222222222222222222222",
+              "status": "completed",
+              "conclusion": "success",
+              "url": "https://api.github.com/repos/grammy-jiang/binnacle/actions/jobs/8005",
+              "check_run_url": "https://api.github.com/repos/grammy-jiang/binnacle/check-runs/8005"
+            },
+            "workflow_run": {
+              "id": 1002,
+              "run_attempt": 1,
+              "workflow_id": 331525151,
+              "name": "Python CI",
+              "path": ".github/workflows/python.yml",
+              "event": "pull_request",
+              "head_sha": "2222222222222222222222222222222222222222",
+              "status": "completed",
+              "conclusion": "success",
+              "url": "https://api.github.com/repos/grammy-jiang/binnacle/actions/runs/1002",
+              "jobs_url": "https://api.github.com/repos/grammy-jiang/binnacle/actions/runs/1002/jobs"
+            },
+            "workflow_source": {
+              "path": ".github/workflows/python.yml",
+              "ref": "3333333333333333333333333333333333333333",
+              "git_blob_oid": "9db689ee2d315820eb79aecb43c357f25bcd12af",
+              "size_in_bytes": 6527,
+              "sha256": "3e432f34918e7ce168b445bde62eb4deeeb296eabca14c34ef2e6dbd928a085d"
+            },
+            "latest_job_id": 8005
+          },
+          "github_artifact_archive_base64": "UEsDBBQAAAAIAACAn1sAybg1bAEAAE0DAAAYAAAAcGhhc2UxMC1jaS1jaGVja291dC5qc29ulZK7buswDIb3PkWhuRfJF1nO2qnbGTqdg8KgJDpRY0s5stwiKPrupZoYvUwuocUm+ZH69b8ys0OzD3Pq9s5btmGHeRi6iP9nnFLnfMJthOSCZ1efpcHlynJlfO08QET/AZjY5h8TK4MQxcpgj1/GpYh43rZaGXnbMAxoUoidCePolvtKqaDUsoW+VFK1FUhEa2xTcVlWtWq11FoYY74Rph0UtaTuVlpD69VQgihQqLISspa6MLZG4LVuCQF1Aa3RTQ9N07fKqsqgqqpeoWkyNSIktB0k4hW8kNdc0HngfJNP/Zdq8DnrC33CeFrb03suvzVMixy/UP7Ua8BbZ2n+GbD6PRaAhxF/+ItyW5d2s84y/c5RT0EvxAciXf45pl3wl+WNyNmIhzA50v9IeTLwOB6vnxz47a123oMZMBfNnqRMOB5IT3H6zlcTnBdXbCITjdA9Y5yy+0mxG05NLyHu+yG8LMPPc+/u2dvFO1BLAQIeAxQAAAAIAACAn1sAybg1bAEAAE0DAAAYAAAAAAAAAAEAAACkgQAAAABwaGFzZTEwLWNpLWNoZWNrb3V0Lmpzb25QSwUGAAAAAAEAAQBGAAAAogEAAAAA"
+        }
+      ],
+      "expected_integration_tree_oid": "4444444444444444444444444444444444444444",
+      "superseded_reason_ref": null
+    }
+  ],
+  "final_integration_generation": 1,
+  "failure_exercise": {
+    "evidence_ref": {
+      "id": "failure-exercise",
+      "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    },
+    "kind": "command_cancelled",
+    "outcome": "reconciled",
+    "descendants_closed": true,
+    "workspace_fence_closed": true
+  },
+  "github_pr": {
+    "evidence_ref": {
+      "id": "github-pr",
+      "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    },
+    "repository": "grammy-jiang/binnacle",
+    "number": 100,
+    "head_ref": "refs/heads/phase10-test",
+    "base_ref": "refs/heads/master",
+    "head_oid": "2222222222222222222222222222222222222222",
+    "base_oid": "1111111111111111111111111111111111111111"
+  },
+  "github_merge": {
+    "evidence_ref": {
+      "id": "github-merge",
+      "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    },
+    "method": "squash",
+    "candidate_oid": "2222222222222222222222222222222222222222",
+    "accepted_base_oid": "1111111111111111111111111111111111111111",
+    "result_oid": "7777777777777777777777777777777777777777",
+    "result_tree_oid": "4444444444444444444444444444444444444444",
+    "parent_oids": [
+      "1111111111111111111111111111111111111111"
+    ],
+    "expected_integration_tree_oid": "4444444444444444444444444444444444444444",
+    "provenance_verified": true
+  },
+  "local_update": {
+    "evidence_ref": {
+      "id": "local-update",
+      "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    },
+    "head_oid": "7777777777777777777777777777777777777777",
+    "tree_oid": "4444444444444444444444444444444444444444",
+    "branch_ref": "refs/heads/master",
+    "repository_clean": true,
+    "through_phase8_semantics": true
+  },
+  "post_merge_local_checks": [
+    {
+      "evidence_ref": {
+        "id": "post-merge-check-pre-commit-all-files",
+        "sha256": "0ebd01d6bac4b76080ee33a6599bab973ef9bd8821005a5d015b091d184be7d9"
+      },
+      "evidence_binding_sha256": "205b147499c32871ea52ef28da82dd0a413b05f7169352574f75aacfe2ad95eb",
+      "check_id": "pre-commit-all-files",
+      "check_profile_sha256": "8d0df0f1fa5a46b49c6818014883b090459d8d28a17f1a02d72cc688fe8eda0d",
+      "commit_oid": "7777777777777777777777777777777777777777",
+      "tree_oid": "4444444444444444444444444444444444444444",
+      "conclusion": "success",
+      "terminal": true,
+      "descendants_closed": true,
+      "workspace_fence_closed": true
+    },
+    {
+      "evidence_ref": {
+        "id": "post-merge-check-tox-py311",
+        "sha256": "6699f8432fd2d482cf042f0a8bc0013d38a64ff16bba34154d1f0091bb7050eb"
+      },
+      "evidence_binding_sha256": "185ed9687580c53e2dfeef5f62a59e23083261bbbfa459c240edfb5d93ba9ddf",
+      "check_id": "tox-py311",
+      "check_profile_sha256": "4dece11d8e8b3b913153f694a2164cd26a146dbeb8a231abbe4284a55aa7b358",
+      "commit_oid": "7777777777777777777777777777777777777777",
+      "tree_oid": "4444444444444444444444444444444444444444",
+      "conclusion": "success",
+      "terminal": true,
+      "descendants_closed": true,
+      "workspace_fence_closed": true
+    },
+    {
+      "evidence_ref": {
+        "id": "post-merge-check-tox-py312",
+        "sha256": "dd3a607f856f71afda2935b326010f78c1b8f94ce2d196aabcc137ec04f30303"
+      },
+      "evidence_binding_sha256": "13163e7df62bbe88e286564a2eabbf6abcd86f0e33f952dd68443678c861ff2e",
+      "check_id": "tox-py312",
+      "check_profile_sha256": "5fb0f8fe71689fe1d736d9d415c7016d160bf90d276791324af0e33c53d43598",
+      "commit_oid": "7777777777777777777777777777777777777777",
+      "tree_oid": "4444444444444444444444444444444444444444",
+      "conclusion": "success",
+      "terminal": true,
+      "descendants_closed": true,
+      "workspace_fence_closed": true
+    },
+    {
+      "evidence_ref": {
+        "id": "post-merge-check-tox-py313",
+        "sha256": "e146116f79f1cb74bb0ada5700067989db65471b19e5925c69d2979034200085"
+      },
+      "evidence_binding_sha256": "dea74b254859357f6282d3c0cdcb8735d8e9f1330fe57f76a73ce4a56d70a21e",
+      "check_id": "tox-py313",
+      "check_profile_sha256": "1c1dd54faf731a284dd35899c1f3ec429f23a6c5936f57c18816b0d6a9f0340c",
+      "commit_oid": "7777777777777777777777777777777777777777",
+      "tree_oid": "4444444444444444444444444444444444444444",
+      "conclusion": "success",
+      "terminal": true,
+      "descendants_closed": true,
+      "workspace_fence_closed": true
+    },
+    {
+      "evidence_ref": {
+        "id": "post-merge-check-tox-quality",
+        "sha256": "9d7403be86024e3f5cc2dd0222aec210f2344f3d3a67052ddce56fd9b682e347"
+      },
+      "evidence_binding_sha256": "e4e270a1d3041e15254fdd9f51104dafd68f6666c16e05eb7226ea66a4a8ddba",
+      "check_id": "tox-quality",
+      "check_profile_sha256": "bbe4fcf9b38b448b92e469a811cb7c5ac0ee09cb396e1df5ecc9d5fb75c5bcd4",
+      "commit_oid": "7777777777777777777777777777777777777777",
+      "tree_oid": "4444444444444444444444444444444444444444",
+      "conclusion": "success",
+      "terminal": true,
+      "descendants_closed": true,
+      "workspace_fence_closed": true
+    }
+  ],
+  "restart": {
+    "preflight_ref": {
+      "id": "restart-preflight",
+      "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    },
+    "operation_ref": {
+      "id": "restart-operation",
+      "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    },
+    "checkpoint_ref": {
+      "id": "restart-checkpoint",
+      "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    },
+    "candidate_oid": "7777777777777777777777777777777777777777",
+    "candidate_tree_oid": "4444444444444444444444444444444444444444",
+    "readiness_generation": 42,
+    "preflight_status": "ready",
+    "outcome": "candidate_ready",
+    "same_operation_reconciled": true,
+    "second_restart_issued": false,
+    "audit_closed": true,
+    "workspace_fence_closed": true
+  },
+  "post_restart_runtime": {
+    "evidence_ref": {
+      "id": "post-restart-runtime",
+      "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    },
+    "runtime_oid": "7777777777777777777777777777777777777777",
+    "runtime_tree_oid": "4444444444444444444444444444444444444444",
+    "runtime_instance_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "runtime_profile_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "restart_operation_ref": {
+      "id": "restart-operation",
+      "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    },
+    "restart_checkpoint_ref": {
+      "id": "restart-checkpoint",
+      "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    },
+    "readiness_generation": 42,
+    "readiness": "ready",
+    "clean_source_state": true,
+    "controller_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "device_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "workspace_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  },
+  "behaviour_probe": {
+    "evidence_ref": {
+      "id": "behaviour-probe",
+      "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    },
+    "tool": "binnacle_probe",
+    "contract_version": "1.1",
+    "request_sha256": "1717171717171717171717171717171717171717171717171717171717171717",
+    "runtime_instance_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "outcome": "observed_new",
+    "post_restart": true
+  },
+  "security_checks": [
+    {
+      "check_id": "audit_and_fences_closed",
+      "evidence_ref": {
+        "id": "security-audit-fences",
+        "sha256": "3131313131313131313131313131313131313131313131313131313131313131"
+      },
+      "conclusion": "pass",
+      "evidence_binding_sha256": "3fe6c20abd4dc79ec9738c145c68546b4e11c8da1db4ad79db9f3eb63c2b0d7a",
+      "acceptance_run_id": "acceptance-test-pass",
+      "policy_sha256": "519084976123ef1d280c77d5f2a44e9c821c82ccd488027bccfeca4d516e099d",
+      "merged_oid": "7777777777777777777777777777777777777777",
+      "merged_tree_oid": "4444444444444444444444444444444444444444",
+      "restart_operation_ref": {
+        "id": "restart-operation",
+        "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      },
+      "restart_checkpoint_ref": {
+        "id": "restart-checkpoint",
+        "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      },
+      "readiness_generation": 42,
+      "runtime_instance_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "runtime_profile_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "controller_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "device_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "workspace_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    {
+      "check_id": "credential_authority_closed",
+      "evidence_ref": {
+        "id": "security-credential-authority",
+        "sha256": "3232323232323232323232323232323232323232323232323232323232323232"
+      },
+      "conclusion": "pass",
+      "evidence_binding_sha256": "1287bde4014a3f2ea091fed7b62015ee648e5c764c8fbef61c231cd1fc0da9c6",
+      "acceptance_run_id": "acceptance-test-pass",
+      "policy_sha256": "519084976123ef1d280c77d5f2a44e9c821c82ccd488027bccfeca4d516e099d",
+      "merged_oid": "7777777777777777777777777777777777777777",
+      "merged_tree_oid": "4444444444444444444444444444444444444444",
+      "restart_operation_ref": {
+        "id": "restart-operation",
+        "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      },
+      "restart_checkpoint_ref": {
+        "id": "restart-checkpoint",
+        "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      },
+      "readiness_generation": 42,
+      "runtime_instance_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "runtime_profile_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "controller_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "device_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "workspace_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    {
+      "check_id": "no_generic_root_authority",
+      "evidence_ref": {
+        "id": "security-root-authority",
+        "sha256": "3333333333333333333333333333333333333333333333333333333333333333"
+      },
+      "conclusion": "pass",
+      "evidence_binding_sha256": "0f5db6599d131825d4bfa50a48fa4a73130d56dee9dd8a8c46e2ea7828e54ace",
+      "acceptance_run_id": "acceptance-test-pass",
+      "policy_sha256": "519084976123ef1d280c77d5f2a44e9c821c82ccd488027bccfeca4d516e099d",
+      "merged_oid": "7777777777777777777777777777777777777777",
+      "merged_tree_oid": "4444444444444444444444444444444444444444",
+      "restart_operation_ref": {
+        "id": "restart-operation",
+        "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      },
+      "restart_checkpoint_ref": {
+        "id": "restart-checkpoint",
+        "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      },
+      "readiness_generation": 42,
+      "runtime_instance_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "runtime_profile_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "controller_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "device_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "workspace_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    {
+      "check_id": "no_manual_effect_fallback",
+      "evidence_ref": {
+        "id": "security-manual-fallback",
+        "sha256": "3434343434343434343434343434343434343434343434343434343434343434"
+      },
+      "conclusion": "pass",
+      "evidence_binding_sha256": "8668a164807a4aa942b5c5fb6d2c2e28a840536e2a5e71b9c226d3fa6d53952f",
+      "acceptance_run_id": "acceptance-test-pass",
+      "policy_sha256": "519084976123ef1d280c77d5f2a44e9c821c82ccd488027bccfeca4d516e099d",
+      "merged_oid": "7777777777777777777777777777777777777777",
+      "merged_tree_oid": "4444444444444444444444444444444444444444",
+      "restart_operation_ref": {
+        "id": "restart-operation",
+        "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      },
+      "restart_checkpoint_ref": {
+        "id": "restart-checkpoint",
+        "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      },
+      "readiness_generation": 42,
+      "runtime_instance_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "runtime_profile_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "controller_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "device_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "workspace_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    {
+      "check_id": "no_reusable_credentials_disclosed",
+      "evidence_ref": {
+        "id": "security-credential-disclosure",
+        "sha256": "3535353535353535353535353535353535353535353535353535353535353535"
+      },
+      "conclusion": "pass",
+      "evidence_binding_sha256": "aab8e6c2b749eb44965de748f7a7c18ee5f5aa2456b0ef19e4b30d5517e7cdf7",
+      "acceptance_run_id": "acceptance-test-pass",
+      "policy_sha256": "519084976123ef1d280c77d5f2a44e9c821c82ccd488027bccfeca4d516e099d",
+      "merged_oid": "7777777777777777777777777777777777777777",
+      "merged_tree_oid": "4444444444444444444444444444444444444444",
+      "restart_operation_ref": {
+        "id": "restart-operation",
+        "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      },
+      "restart_checkpoint_ref": {
+        "id": "restart-checkpoint",
+        "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      },
+      "readiness_generation": 42,
+      "runtime_instance_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "runtime_profile_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "controller_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "device_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "workspace_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    {
+      "check_id": "no_workspace_boundary_escape",
+      "evidence_ref": {
+        "id": "security-workspace-boundary",
+        "sha256": "3636363636363636363636363636363636363636363636363636363636363636"
+      },
+      "conclusion": "pass",
+      "evidence_binding_sha256": "265ca02ead50c939564c9295fef1adcd9df643ee197c9f975058cf99b00ac15f",
+      "acceptance_run_id": "acceptance-test-pass",
+      "policy_sha256": "519084976123ef1d280c77d5f2a44e9c821c82ccd488027bccfeca4d516e099d",
+      "merged_oid": "7777777777777777777777777777777777777777",
+      "merged_tree_oid": "4444444444444444444444444444444444444444",
+      "restart_operation_ref": {
+        "id": "restart-operation",
+        "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      },
+      "restart_checkpoint_ref": {
+        "id": "restart-checkpoint",
+        "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      },
+      "readiness_generation": 42,
+      "runtime_instance_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "runtime_profile_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "controller_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "device_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "workspace_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    {
+      "check_id": "privileged_evidence_redacted",
+      "evidence_ref": {
+        "id": "security-privileged-redaction",
+        "sha256": "3737373737373737373737373737373737373737373737373737373737373737"
+      },
+      "conclusion": "pass",
+      "evidence_binding_sha256": "6f7fc88756d51387fcecd87e9c2b598a50b8a50ea6ed751b822ad7546c140d03",
+      "acceptance_run_id": "acceptance-test-pass",
+      "policy_sha256": "519084976123ef1d280c77d5f2a44e9c821c82ccd488027bccfeca4d516e099d",
+      "merged_oid": "7777777777777777777777777777777777777777",
+      "merged_tree_oid": "4444444444444444444444444444444444444444",
+      "restart_operation_ref": {
+        "id": "restart-operation",
+        "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      },
+      "restart_checkpoint_ref": {
+        "id": "restart-checkpoint",
+        "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      },
+      "readiness_generation": 42,
+      "runtime_instance_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "runtime_profile_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "controller_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "device_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "workspace_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    }
+  ],
+  "unresolved_refs": [],
+  "owner_review": {
+    "evidence_ref": {
+      "id": "owner-review",
+      "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    },
+    "acceptance_run_id": "acceptance-test-pass",
+    "policy_sha256": "519084976123ef1d280c77d5f2a44e9c821c82ccd488027bccfeca4d516e099d",
+    "reviewed_evidence_sha256": "e5d9b78894d9aec87669293feb0c0d28d223a4cb371c5454786bd06957e9f93e",
+    "outcome": "accepted",
+    "evidence_complete": true
+  }
+}
