@@ -209,7 +209,13 @@ def evaluate_phase10_manifest(
     _evaluate_security(_object_list(value["security_checks"]), policy, findings)
     if cast(list[object], value["unresolved_refs"]):
         findings.incomplete("unresolved_evidence_remains", "/unresolved_refs")
-    _evaluate_owner_review(_optional_object(value["owner_review"]), findings)
+    _evaluate_owner_review(
+        _optional_object(value["owner_review"]),
+        acceptance_run_id=cast(str, value["acceptance_run_id"]),
+        policy_sha256=policy.sha256,
+        reviewed_evidence_sha256=phase10_reviewed_evidence_sha256(value),
+        findings=findings,
+    )
 
     state = cast(str, value["state"])
     if state == "failed":
@@ -371,6 +377,11 @@ def _evaluate_candidate(
         findings.fail("candidate_push_oid_mismatch", f"{prefix}/push")
     if branch is not None and push["remote_ref"] != branch["ref"]:
         findings.fail("candidate_push_ref_mismatch", f"{prefix}/push/remote_ref")
+    if baseline is not None and push["remote_profile_sha256"] != baseline["remote_profile_sha256"]:
+        findings.fail(
+            "candidate_remote_profile_mismatch",
+            f"{prefix}/push/remote_profile_sha256",
+        )
     if candidate["hosted_head_oid"] != commit_oid:
         findings.fail("hosted_head_not_signed_candidate", f"{prefix}/hosted_head_oid")
 
@@ -467,6 +478,10 @@ def _evaluate_integration(
                 findings.incomplete("unexpected_required_ci_evidence", path)
         if evidence["repository"] != policy.repository:
             findings.fail("ci_repository_mismatch", f"{path}/repository")
+        if evidence["collector_commit_oid"] != policy.ci_attestation_collector_commit_oid:
+            findings.fail("ci_collector_commit_mismatch", f"{path}/collector_commit_oid")
+        if evidence["collector_sha256"] != policy.ci_attestation_collector_sha256:
+            findings.fail("ci_collector_bundle_mismatch", f"{path}/collector_sha256")
         if evidence["github_sha"] != evidence["checkout_oid"]:
             findings.incomplete("ci_github_sha_unbound", f"{path}/github_sha")
         if evidence["conclusion"] == "failure":
@@ -732,10 +747,34 @@ def _evaluate_security(
         findings.incomplete("required_security_checks_incomplete", "/security_checks")
 
 
-def _evaluate_owner_review(value: dict[str, Any] | None, findings: _Findings) -> None:
+def phase10_reviewed_evidence_sha256(manifest: Mapping[str, Any]) -> str:
+    """Hash the prospective run evidence while excluding the approval record itself."""
+
+    projection = dict(manifest)
+    projection["owner_review"] = None
+    return canonical_json_sha256(projection)
+
+
+def _evaluate_owner_review(
+    value: dict[str, Any] | None,
+    *,
+    acceptance_run_id: str,
+    policy_sha256: str,
+    reviewed_evidence_sha256: str,
+    findings: _Findings,
+) -> None:
     if value is None:
         findings.incomplete("owner_review_missing", "/owner_review")
         return
+    if value["acceptance_run_id"] != acceptance_run_id:
+        findings.incomplete("owner_review_run_mismatch", "/owner_review/acceptance_run_id")
+    if value["policy_sha256"] != policy_sha256:
+        findings.incomplete("owner_review_policy_mismatch", "/owner_review/policy_sha256")
+    if value["reviewed_evidence_sha256"] != reviewed_evidence_sha256:
+        findings.incomplete(
+            "owner_review_evidence_mismatch",
+            "/owner_review/reviewed_evidence_sha256",
+        )
     if value["outcome"] == "rejected":
         findings.fail("owner_review_rejected", "/owner_review/outcome")
     elif value["outcome"] == "pending":
@@ -779,4 +818,5 @@ __all__ = [
     "AcceptanceVerdict",
     "create_phase10_skeleton",
     "evaluate_phase10_manifest",
+    "phase10_reviewed_evidence_sha256",
 ]

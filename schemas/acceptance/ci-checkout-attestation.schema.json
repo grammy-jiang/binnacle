@@ -39,6 +39,12 @@
       "minimum": 1,
       "maximum": 1000
     },
+    "collector_commit_oid": {
+      "$ref": "#/$defs/oid"
+    },
+    "collector_sha256": {
+      "$ref": "#/$defs/digest"
+    },
     "event_candidate_oid": {
       "oneOf": [
         {
@@ -105,6 +111,8 @@
     "job_name",
     "run_id",
     "run_attempt",
+    "collector_commit_oid",
+    "collector_sha256",
     "event_candidate_oid",
     "event_base_oid",
     "event_after_oid",
@@ -119,6 +127,10 @@
     "oid": {
       "type": "string",
       "pattern": "^([0-9a-f]{40}|[0-9a-f]{64})$"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
     }
   }
 }

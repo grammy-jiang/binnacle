@@ -9,6 +9,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
+from binnacle.evaluation.ci_attestation import CiAttestationError
+from binnacle.evaluation.ci_attestation import (
+    ci_attestation_collector_sha256 as compute_ci_attestation_collector_sha256,
+)
 from binnacle.evaluation.digests import canonical_json_sha256
 
 PHASE10_POLICY_PATH = Path("spec/acceptance/phase10-policy.json")
@@ -19,6 +23,8 @@ _EXPECTED_POLICY_KEYS = frozenset(
         "acceptance_schema_sha256",
         "allowed_merge_methods",
         "ci_attestation_schema_sha256",
+        "ci_attestation_collector_commit_oid",
+        "ci_attestation_collector_sha256",
         "limits",
         "plan_version",
         "policy_id",
@@ -33,6 +39,7 @@ _EXPECTED_POLICY_KEYS = frozenset(
 _REPOSITORY_RE = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\Z")
 _BRANCH_REF_RE = re.compile(r"refs/heads/[A-Za-z0-9][A-Za-z0-9._/-]*\Z")
 _DIGEST_RE = re.compile(r"[0-9a-f]{64}\Z")
+_OID_RE = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})\Z")
 _EXPECTED_LIMIT_KEYS = frozenset(
     {
         "candidate_generations_max",
@@ -58,6 +65,8 @@ class Phase10Policy:
     plan_version: str
     acceptance_schema_sha256: str
     ci_attestation_schema_sha256: str
+    ci_attestation_collector_commit_oid: str
+    ci_attestation_collector_sha256: str
     repository: str
     protected_branch_ref: str
     allowed_merge_methods: tuple[str, ...]
@@ -103,10 +112,24 @@ def load_phase10_policy(repo_root: Path) -> Phase10Policy:
         "ci_attestation_schema_sha256",
         maximum=64,
     )
+    ci_attestation_collector_commit_oid = _bounded_string(
+        policy,
+        "ci_attestation_collector_commit_oid",
+        maximum=64,
+    )
+    ci_attestation_collector_sha256 = _bounded_string(
+        policy,
+        "ci_attestation_collector_sha256",
+        maximum=64,
+    )
     if _DIGEST_RE.fullmatch(acceptance_schema_sha256) is None:
         raise Phase10PolicyError("Phase 10 acceptance schema identity is invalid")
     if _DIGEST_RE.fullmatch(ci_attestation_schema_sha256) is None:
         raise Phase10PolicyError("Phase 10 CI attestation schema identity is invalid")
+    if _OID_RE.fullmatch(ci_attestation_collector_commit_oid) is None:
+        raise Phase10PolicyError("Phase 10 CI collector commit identity is invalid")
+    if _DIGEST_RE.fullmatch(ci_attestation_collector_sha256) is None:
+        raise Phase10PolicyError("Phase 10 CI collector bundle identity is invalid")
     allowed_merge_methods = _unique_strings(policy, "allowed_merge_methods", maximum=8)
     if not allowed_merge_methods or set(allowed_merge_methods) - {"merge", "squash", "rebase"}:
         raise Phase10PolicyError("Phase 10 merge policy is unsupported")
@@ -142,6 +165,12 @@ def load_phase10_policy(repo_root: Path) -> Phase10Policy:
     actual_ci_schema = _load_schema_sha256(repo_root, CI_ATTESTATION_SCHEMA_PATH)
     if actual_ci_schema != ci_attestation_schema_sha256:
         raise Phase10PolicyError("Phase 10 CI attestation schema identity is stale")
+    try:
+        actual_collector = compute_ci_attestation_collector_sha256(repo_root)
+    except CiAttestationError as exc:
+        raise Phase10PolicyError("Phase 10 CI collector bundle is missing or unsafe") from exc
+    if actual_collector != ci_attestation_collector_sha256:
+        raise Phase10PolicyError("Phase 10 CI collector bundle identity is stale")
 
     return Phase10Policy(
         policy_id=policy_id,
@@ -149,6 +178,8 @@ def load_phase10_policy(repo_root: Path) -> Phase10Policy:
         plan_version="phase10-self-hosting-acceptance-v1",
         acceptance_schema_sha256=acceptance_schema_sha256,
         ci_attestation_schema_sha256=ci_attestation_schema_sha256,
+        ci_attestation_collector_commit_oid=ci_attestation_collector_commit_oid,
+        ci_attestation_collector_sha256=ci_attestation_collector_sha256,
         repository=repository,
         protected_branch_ref=protected_branch_ref,
         allowed_merge_methods=allowed_merge_methods,

@@ -2,7 +2,7 @@
   "schema_version": "1.0",
   "acceptance_run_id": "acceptance-test-pass",
   "plan_version": "phase10-self-hosting-acceptance-v1",
-  "policy_sha256": "af8b9509a6c95c241e58e61edff77caa763e4a42287a33f5e0e75113d53fd568",
+  "policy_sha256": "c677c9ddc3954c1fc9cabbd85c2b46a9970dad2ad8ac5724d02c39def159bb41",
   "state": "passed",
   "readiness": {
     "evidence_ref": {
@@ -29,7 +29,8 @@
     "device_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
     "workspace_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
     "runtime_profile_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-    "commit_signer_sha256": "abababababababababababababababababababababababababababababababab"
+    "commit_signer_sha256": "abababababababababababababababababababababababababababababababab",
+    "remote_profile_sha256": "1616161616161616161616161616161616161616161616161616161616161616"
   },
   "branch": {
     "evidence_ref": {
@@ -104,7 +105,7 @@
       "candidate_generation": 1,
       "candidate_oid": "2222222222222222222222222222222222222222",
       "protected_base_oid": "1111111111111111111111111111111111111111",
-      "merge_policy_sha256": "af8b9509a6c95c241e58e61edff77caa763e4a42287a33f5e0e75113d53fd568",
+      "merge_policy_sha256": "c677c9ddc3954c1fc9cabbd85c2b46a9970dad2ad8ac5724d02c39def159bb41",
       "reviews": [
         {
           "evidence_ref": {
@@ -130,6 +131,8 @@
           "repository": "grammy-jiang/binnacle",
           "event_name": "pull_request",
           "run_attempt": 1,
+          "collector_commit_oid": "668a3b69af386894a6eedcd740634589b6bb1ccc",
+          "collector_sha256": "96dc2225a3a12e18341656b2cd5ea05b9458a52a9cb7fa77f98d84ce844f8ec7",
           "candidate_oid": "2222222222222222222222222222222222222222",
           "protected_base_oid": "1111111111111111111111111111111111111111",
           "checkout_oid": "3333333333333333333333333333333333333333",
@@ -155,6 +158,8 @@
           "repository": "grammy-jiang/binnacle",
           "event_name": "pull_request",
           "run_attempt": 1,
+          "collector_commit_oid": "668a3b69af386894a6eedcd740634589b6bb1ccc",
+          "collector_sha256": "96dc2225a3a12e18341656b2cd5ea05b9458a52a9cb7fa77f98d84ce844f8ec7",
           "candidate_oid": "2222222222222222222222222222222222222222",
           "protected_base_oid": "1111111111111111111111111111111111111111",
           "checkout_oid": "3333333333333333333333333333333333333333",
@@ -180,6 +185,8 @@
           "repository": "grammy-jiang/binnacle",
           "event_name": "pull_request",
           "run_attempt": 1,
+          "collector_commit_oid": "668a3b69af386894a6eedcd740634589b6bb1ccc",
+          "collector_sha256": "96dc2225a3a12e18341656b2cd5ea05b9458a52a9cb7fa77f98d84ce844f8ec7",
           "candidate_oid": "2222222222222222222222222222222222222222",
           "protected_base_oid": "1111111111111111111111111111111111111111",
           "checkout_oid": "3333333333333333333333333333333333333333",
@@ -205,6 +212,8 @@
           "repository": "grammy-jiang/binnacle",
           "event_name": "pull_request",
           "run_attempt": 1,
+          "collector_commit_oid": "668a3b69af386894a6eedcd740634589b6bb1ccc",
+          "collector_sha256": "96dc2225a3a12e18341656b2cd5ea05b9458a52a9cb7fa77f98d84ce844f8ec7",
           "candidate_oid": "2222222222222222222222222222222222222222",
           "protected_base_oid": "1111111111111111111111111111111111111111",
           "checkout_oid": "3333333333333333333333333333333333333333",
@@ -230,6 +239,8 @@
           "repository": "grammy-jiang/binnacle",
           "event_name": "pull_request",
           "run_attempt": 1,
+          "collector_commit_oid": "668a3b69af386894a6eedcd740634589b6bb1ccc",
+          "collector_sha256": "96dc2225a3a12e18341656b2cd5ea05b9458a52a9cb7fa77f98d84ce844f8ec7",
           "candidate_oid": "2222222222222222222222222222222222222222",
           "protected_base_oid": "1111111111111111111111111111111111111111",
           "checkout_oid": "3333333333333333333333333333333333333333",
@@ -422,6 +433,9 @@
       "id": "owner-review",
       "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
     },
+    "acceptance_run_id": "acceptance-test-pass",
+    "policy_sha256": "c677c9ddc3954c1fc9cabbd85c2b46a9970dad2ad8ac5724d02c39def159bb41",
+    "reviewed_evidence_sha256": "65072a60d73f70faab87cce0ae5788f0e58d09b25f6304aa7e283faf04c2f0c4",
     "outcome": "accepted",
     "evidence_complete": true
   }

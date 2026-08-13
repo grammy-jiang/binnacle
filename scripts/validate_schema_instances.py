@@ -385,6 +385,8 @@ def validate_phase10_acceptance_evidence() -> None:
         "job_name": "Test Python 3.13",
         "run_id": 1234,
         "run_attempt": 1,
+        "collector_commit_oid": "668a3b69af386894a6eedcd740634589b6bb1ccc",
+        "collector_sha256": "96dc2225a3a12e18341656b2cd5ea05b9458a52a9cb7fa77f98d84ce844f8ec7",
         "event_candidate_oid": "2" * 40,
         "event_base_oid": "1" * 40,
         "event_after_oid": None,

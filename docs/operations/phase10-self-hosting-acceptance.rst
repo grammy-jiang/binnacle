@@ -38,17 +38,20 @@ The frozen implementation consists of:
 * ``schemas/acceptance/ci-checkout-attestation.schema.json`` -- exact GitHub event and
   checkout identity record;
 * ``scripts/phase10_acceptance.py`` -- policy inspection, non-promoted skeleton creation,
-  and deterministic evaluation;
+  owner-review projection hashing, and deterministic evaluation;
 * ``scripts/ci_checkout_attestation.py`` -- shell-free reading of the actual checkout
   commit, tree, and parents in GitHub Actions;
+* ``.github/actions/phase10-checkout-attestation/action.yml`` -- immutable composite-action
+  entry point used before candidate-controlled setup, dependencies, or tests;
 * normal ``Contract validation`` and ``Python CI`` artifacts named
   ``phase10-checkout-*``; and
 * the checked-in positive, negative, and property-test fixtures under
   ``tests/fixtures/acceptance`` and ``tests``.
 
-The policy includes the canonical digests of both schemas, and its own SHA-256 is part of
-every run and integration generation.  A policy or schema change makes earlier evidence
-stale; do not edit a retained manifest merely to replace its policy hash.
+The policy includes the canonical digests of both schemas plus the exact collector commit
+and collector-bundle digest.  Its own SHA-256 is part of every run and integration
+generation.  A policy, schema, or collector change makes earlier evidence stale; do not
+edit a retained manifest merely to replace its policy hash.
 
 Repository validation
 ---------------------
@@ -84,12 +87,15 @@ Inspect the frozen policy identity separately:
 GitHub checkout attestation
 ---------------------------
 
-Every required GitHub job runs ``scripts/ci_checkout_attestation.py`` after its normal
-work, including after a preceding failure.  The workflow invokes fixed
-``/usr/bin/python3 -S`` and the script's narrow evaluation imports are standard-library
-only, so a failed dependency-install or environment-synchronization step cannot suppress
-the artifact.  The script independently reads ``HEAD``, ``HEAD^{tree}``, and the commit
-parents.  It then binds those facts to the bounded GitHub event payload and environment.
+Every required GitHub job invokes the collector through the exact commit-pinned
+``phase10-checkout-attestation`` action immediately after ``actions/checkout``.  The
+attestation is written under ``runner.temp`` and uploaded before Python setup,
+dependency installation, environment synchronization, tests, or any other
+candidate-controlled repository work.  The action invokes fixed
+``/usr/bin/python3 -I -S`` from its immutable action checkout, verifies the frozen
+collector-bundle digest, and independently reads ``HEAD``, ``HEAD^{tree}``, and the commit
+parents from the candidate checkout.  It then binds those facts, its collector commit, and
+its collector digest to the bounded GitHub event payload and environment.
 Each checkout fetches depth 2 so the integration commit's parents are present without
 fetching unbounded history; a depth-1 shallow checkout cannot provide parent evidence and
 must remain unbound.  The reader invokes the fixed ``/usr/bin/git`` binary with a fixed
@@ -110,9 +116,10 @@ For a push, ``checkout_kind`` is ``push_commit`` only when the event ``after`` O
 ``unbound`` and the CI step refuses success.  The JSON file is still uploaded after an
 unbound result so reviewers can diagnose the mismatch.
 
-An attestation proves checkout identity; it does not prove the job conclusion.  The
-acceptance manifest must bind both the downloaded attestation digest and the independently
-observed GitHub workflow/job conclusion to the same run ID and attempt.
+An attestation proves checkout and collector identity; it does not prove the later job
+conclusion.  The acceptance manifest must bind the downloaded attestation digest, frozen
+collector commit/digest, and independently observed GitHub workflow/job conclusion to the
+same run ID and attempt.
 
 Live campaign prerequisites
 ---------------------------
@@ -165,6 +172,10 @@ Candidate generations start at 1 and remain consecutive.  One candidate generati
 * a locally created commit, tree, parent, approved signer, and verified signature;
 * exact push target/ref/result plus remote observation; and
 * the hosted PR head at the same signed commit OID.
+
+The push evidence's ``remote_profile_sha256`` must exactly equal the protected remote
+profile captured in the baseline.  A successful push through a different remote profile
+is a failure, even when the destination ref happens to contain the expected OID.
 
 If source changes, the PR head moves, a correction is committed, a result belongs to an
 older source digest, or push truth cannot be reconciled, supersede that generation and
@@ -219,8 +230,19 @@ restricted recovery or uncertainty is ``INCOMPLETE``.  Then independently verify
 * the runtime instance differs from the baseline instance; and
 * the chosen safe semantic probe observes the changed behaviour on that new instance.
 
-Close the required security checks, unresolved-reference list, and owner review only after
-all evidence has been sanitized and correlated.
+Close the required security checks and unresolved-reference list only after all evidence
+has been sanitized and correlated.  Leave ``owner_review`` null while the evidence is
+still changing.  When the evidence projection is final, compute the exact review target:
+
+.. code-block:: console
+
+   uv run python scripts/phase10_acceptance.py review-digest \
+     --manifest /var/lib/binnacle/evaluation/phase10/<run-id>/run.json
+
+The owner approval record must repeat the manifest ``acceptance_run_id``, current frozen
+``policy_sha256``, and emitted ``reviewed_evidence_sha256``.  The digest covers the complete
+manifest with ``owner_review`` projected to null, so any later evidence change invalidates
+the approval without making the approval self-referential.
 
 Evaluate and retain the result
 ------------------------------
@@ -256,12 +278,17 @@ The substantive reviewer verifies all of the following against independent sourc
 * consecutive candidate and integration generations with no stale reference reuse;
 * signer, pushed head, PR head, protected base, review, and CI identities;
 * actual checkout commit/tree/parents from each required attestation artifact;
+* each attestation's collector commit and bundle digest against the frozen policy;
 * GitHub job conclusions for the recorded run IDs and attempts;
 * merge tree/parent/provenance and exact local update;
 * same-operation restart reconciliation, no duplicate restart, and runtime replacement;
 * changed behaviour on the post-restart instance;
 * closed audit/fence/credential/root-authority checks and an empty unresolved list; and
 * evidence sanitation and retention outside Git.
+
+The final approval is valid only for its exact acceptance run, policy, and reviewed
+evidence digest.  Recompute and repeat owner review after any evidence change; never copy
+an approval record from an earlier manifest projection.
 
 ``FAIL`` means a decisive invariant was violated.  ``INCOMPLETE`` means truth or required
 evidence is not closed.  Neither may be relabelled as ``PASS`` by narrative review.  Only

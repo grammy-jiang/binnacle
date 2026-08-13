@@ -4,10 +4,10 @@ Binnacle Phase 10 Detailed Implementation Plan
 :Phase: 10 -- Prove the Bootstrap self-hosting acceptance loop
 :Status: repository implementation complete; real acceptance run pending
 :Planning status: accepted evidence-independent design; real execution remains gated
-:Implementation status: policy/schema, evaluator, fixtures, CI attestation and operator
-                        procedure implemented without runtime authority
-                  by predecessor implementation/promotion exits and real development-Pi /
-                  real-ChatGPT evidence
+:Implementation status: policy/schema, evaluator, fixtures, trusted CI attestation and
+                        operator procedure implemented without runtime authority; later
+                        promotion remains gated by predecessor exits and real development-
+                        Pi / real-ChatGPT evidence
 :Roadmap: ``../bootstrap-implementation-plan.rst``
 :Index: ``index.rst``
 :Depends on: merged Phase 4 durable-operation kernel plan; merged Phase 6 development
@@ -368,13 +368,15 @@ The evidence-independent projection is now frozen in
 ``spec/acceptance/phase10-policy.json``,
 ``schemas/acceptance/phase10-run.schema.json`` and
 ``schemas/acceptance/ci-checkout-attestation.schema.json``.
-``scripts/phase10_acceptance.py`` creates a non-promoted skeleton and evaluates an
-operator-assembled closed manifest. ``scripts/ci_checkout_attestation.py`` is the only
-collector added by this phase; in ordinary GitHub jobs it reads the actual Git commit,
-tree and parents and binds them to the bounded event identity. Neither component has a
-runtime Tool, credential, Git mutation, service mutation or device-effect surface.
-The always-run collector uses fixed ``/usr/bin/python3 -S`` and lazy, standard-library-only
-imports so dependency provisioning failures still produce the bounded diagnostic artifact.
+``scripts/phase10_acceptance.py`` creates a non-promoted skeleton, emits the exact
+owner-review evidence digest, and evaluates an operator-assembled closed manifest.
+``scripts/ci_checkout_attestation.py`` is the only collector added by this phase; an exact
+commit-pinned composite action executes it immediately after checkout and uploads the
+record from ``runner.temp`` before candidate-controlled setup, dependencies, or tests.  It
+reads the actual Git commit, tree and parents and binds them to the bounded event identity.
+Neither component has a runtime Tool, credential, Git mutation, service mutation or
+device-effect surface.  The trusted action uses fixed ``/usr/bin/python3 -I -S``, lazy
+standard-library-only imports, and a policy-frozen collector commit and bundle digest.
 
 The operator/reviewer procedure is
 ``docs/operations/phase10-self-hosting-acceptance.rst``. The positive/negative fixtures
@@ -675,6 +677,10 @@ Before each candidate-generation push, bind:
 * dedicated repository SSH identity profile;
 * closed SSH/known-hosts/helper configuration;
 * operation/idempotency identity.
+
+The candidate push record carries the same protected-remote profile digest captured by the
+baseline.  The evaluator fails a push whose remote profile differs, even if its target OID
+and remote ref otherwise match.
 
 The local repository's mutable URL/config does not choose credential audience or push
 destination. Generic Phase 7 commands receive no repository SSH/GPG credential authority.
@@ -1318,6 +1324,13 @@ The final evidence package should allow an owner/reviewer to answer quickly:
 If these questions require reconstructing facts from an unbounded chat transcript, the
 evidence design is insufficient.
 
+The terminal owner approval is not a free-standing narrative assertion.  Its record binds
+the exact ``acceptance_run_id``, frozen policy SHA-256, and a canonical SHA-256 of the
+complete manifest with ``owner_review`` projected to null.  The operator obtains that last
+value with ``scripts/phase10_acceptance.py review-digest`` only after the evidence
+projection is closed.  Any later evidence change invalidates the approval and requires a
+new review; an approval from another run or policy cannot satisfy PASS.
+
 39. Tests for the acceptance evaluator
 --------------------------------------
 
@@ -1326,8 +1339,11 @@ Any implementation of evidence assembler/evaluator should have deterministic tes
 * missing required evidence -> INCOMPLETE;
 * wrong branch/base/head relationship -> FAIL;
 * wrong signer -> FAIL;
+* push through a remote profile different from the protected baseline -> FAIL;
 * review on old candidate head -> INCOMPLETE/FAIL according to repository policy, never PASS;
 * review bound to old protected base after base movement -> INCOMPLETE;
+* CI evidence from a collector commit or bundle not frozen by policy -> INCOMPLETE;
+* owner approval bound to a different run, policy or evidence projection -> INCOMPLETE;
 * CI green on old candidate/integration generation only -> INCOMPLETE;
 * workflow status names final candidate but actual checkout/tree is unbound/unavailable ->
   INCOMPLETE;

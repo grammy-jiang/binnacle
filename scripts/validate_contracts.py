@@ -1355,8 +1355,11 @@ def validate_phase10_acceptance_contract() -> None:
 
     cases = _fixture_cases_by_id(cases_document, context="Phase 10 evaluator fixture")
     required_cases = {
+        "ci-from-unreviewed-collector-fails",
         "complete-exact-chain-passes",
         "moved-pr-head-fails",
+        "owner-review-on-old-evidence-is-incomplete",
+        "push-through-wrong-remote-profile-fails",
         "review-on-old-candidate-is-incomplete",
         "review-on-old-base-is-incomplete",
         "ci-on-old-candidate-is-incomplete",
@@ -1369,24 +1372,126 @@ def validate_phase10_acceptance_contract() -> None:
     if missing_cases:
         fail(f"Phase 10 evaluator fixture is missing cases: {sorted(missing_cases)}")
 
+    collector_action = (
+        f"{policy.repository}/.github/actions/phase10-checkout-attestation@"
+        f"{policy.ci_attestation_collector_commit_oid}"
+    )
+    workflow_jobs = {
+        ROOT / ".github/workflows/contracts.yml": {
+            "validate-contracts": "validate-contracts",
+        },
+        ROOT / ".github/workflows/python.yml": {
+            "test": "Test Python ${{ matrix.python-version }}",
+            "quality": "Code, contract, dependency, and document quality",
+        },
+    }
+    for path, expected_jobs in workflow_jobs.items():
+        workflow = load_yaml(path)
+        if not isinstance(workflow, dict):
+            fail(f"{path.relative_to(ROOT)}: workflow must be an object")
+            continue
+        # PyYAML's YAML 1.1 resolver parses GitHub's top-level ``on`` key as
+        # boolean true. Only the jobs mapping is material to this invariant.
+        jobs = _mapping(
+            workflow.get("jobs"),
+            context=f"{path.relative_to(ROOT)}: jobs",
+        )
+        if jobs is None:
+            continue
+        if set(jobs) != set(expected_jobs):
+            fail(
+                f"{path.relative_to(ROOT)}: Phase 10 attestation job set differs "
+                "from the reviewed workflow"
+            )
+            continue
+        for job_id, expected_job_name in expected_jobs.items():
+            job = _mapping(jobs[job_id], context=f"{path.relative_to(ROOT)}: job {job_id}")
+            if job is None:
+                continue
+            steps = job.get("steps")
+            if not isinstance(steps, list) or not all(isinstance(step, dict) for step in steps):
+                fail(f"{path.relative_to(ROOT)}: job {job_id} steps are invalid")
+                continue
+            checkout_indexes = [
+                index
+                for index, step in enumerate(steps)
+                if isinstance(step.get("uses"), str)
+                and step["uses"].startswith("actions/checkout@")
+            ]
+            collector_indexes = [
+                index for index, step in enumerate(steps) if step.get("uses") == collector_action
+            ]
+            upload_indexes = [
+                index
+                for index, step in enumerate(steps)
+                if isinstance(step.get("uses"), str)
+                and step["uses"].startswith("actions/upload-artifact@")
+            ]
+            if (
+                len(checkout_indexes) != 1
+                or len(collector_indexes) != 1
+                or len(upload_indexes) != 1
+            ):
+                fail(
+                    f"{path.relative_to(ROOT)}: job {job_id} must contain exactly one "
+                    "checkout, trusted collector, and attestation upload"
+                )
+                continue
+            checkout_index = checkout_indexes[0]
+            collector_index = collector_indexes[0]
+            upload_index = upload_indexes[0]
+            if collector_index != checkout_index + 1 or upload_index != collector_index + 1:
+                fail(
+                    f"{path.relative_to(ROOT)}: job {job_id} must attest and upload "
+                    "immediately after checkout, before candidate-controlled work"
+                )
+            collector_step = steps[collector_index]
+            collector_inputs = _mapping(
+                collector_step.get("with"),
+                context=f"{path.relative_to(ROOT)}: job {job_id} collector inputs",
+            )
+            if collector_inputs is not None:
+                if collector_inputs.get("output") != (
+                    "${{ runner.temp }}/phase10-ci-checkout.json"
+                ):
+                    fail(
+                        f"{path.relative_to(ROOT)}: job {job_id} collector output must "
+                        "be outside the candidate checkout"
+                    )
+                if collector_inputs.get("job-name") != expected_job_name:
+                    fail(
+                        f"{path.relative_to(ROOT)}: job {job_id} collector job identity "
+                        "differs from the reviewed policy"
+                    )
+            upload_step = steps[upload_index]
+            upload_inputs = _mapping(
+                upload_step.get("with"),
+                context=f"{path.relative_to(ROOT)}: job {job_id} upload inputs",
+            )
+            if upload_inputs is not None:
+                if upload_inputs.get("path") != "${{ runner.temp }}/phase10-ci-checkout.json":
+                    fail(
+                        f"{path.relative_to(ROOT)}: job {job_id} uploads the wrong attestation path"
+                    )
+                if upload_inputs.get("if-no-files-found") != "error":
+                    fail(
+                        f"{path.relative_to(ROOT)}: job {job_id} permits a missing "
+                        "attestation artifact"
+                    )
+
     workflow_requirements = {
-        ROOT / ".github/workflows/contracts.yml": (
-            "/usr/bin/python3 -S scripts/ci_checkout_attestation.py",
-            "--job-name validate-contracts",
-            "actions/upload-artifact@",
-            "fetch-depth: 2",
-        ),
-        ROOT / ".github/workflows/python.yml": (
-            "/usr/bin/python3 -S scripts/ci_checkout_attestation.py",
-            "Code, contract, dependency, and document quality",
-            "Test Python ${{ matrix.python-version }}",
-            "actions/upload-artifact@",
-            "fetch-depth: 2",
+        ROOT / ".github/actions/phase10-checkout-attestation/action.yml": (
+            "/usr/bin/python3 -I -S",
+            'collector_root="${BINNACLE_ACTION_PATH}/../../.."',
+            '--collector-commit "${BINNACLE_ACTION_REF}"',
+            '--expected-collector-sha256 "${BINNACLE_COLLECTOR_SHA256}"',
+            policy.ci_attestation_collector_sha256,
         ),
         ROOT / "docs/operations/phase10-self-hosting-acceptance.rst": (
             "Evidence-independent repository implementation",
             "Real-device acceptance promotion",
             "scripts/phase10_acceptance.py",
+            "review-digest",
         ),
         ROOT / "scripts/ci_checkout_attestation.py": (
             '_GIT_BINARY = "/usr/bin/git"',
@@ -1398,8 +1503,9 @@ def validate_phase10_acceptance_contract() -> None:
             "def __getattr__",
         ),
         ROOT / "tests/integration/test_phase10_acceptance_cli.py": (
-            "test_checkout_command_runs_without_site_packages",
+            "test_checkout_command_runs_from_reviewed_bundle_in_isolated_stdlib_mode",
             '"/usr/bin/python3"',
+            '"-I"',
             '"-S"',
         ),
     }

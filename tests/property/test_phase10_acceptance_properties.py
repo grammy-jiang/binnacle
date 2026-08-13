@@ -13,6 +13,7 @@ from hypothesis import strategies as st
 from binnacle.evaluation.phase10_acceptance import (
     AcceptanceVerdict,
     evaluate_phase10_manifest,
+    phase10_reviewed_evidence_sha256,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -48,6 +49,9 @@ def test_ci_evidence_order_does_not_change_exact_pass(
     manifest["integration_generations"][0]["ci_evidence"] = [
         copy.deepcopy(original[index]) for index in order
     ]
+    manifest["owner_review"]["reviewed_evidence_sha256"] = phase10_reviewed_evidence_sha256(
+        manifest
+    )
 
     report = evaluate_phase10_manifest(manifest, repo_root=REPO_ROOT)
 

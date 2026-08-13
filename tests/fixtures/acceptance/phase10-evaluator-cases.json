@@ -88,6 +88,22 @@
       "code": "ci_checkout_tree_mismatch"
     },
     {
+      "id": "ci-from-unreviewed-collector-fails",
+      "operation": "replace",
+      "path": "/integration_generations/0/ci_evidence/0/collector_sha256",
+      "value": "8888888888888888888888888888888888888888888888888888888888888888",
+      "expected": "FAIL",
+      "code": "ci_collector_bundle_mismatch"
+    },
+    {
+      "id": "push-through-wrong-remote-profile-fails",
+      "operation": "replace",
+      "path": "/candidate_generations/0/push/remote_profile_sha256",
+      "value": "8888888888888888888888888888888888888888888888888888888888888888",
+      "expected": "FAIL",
+      "code": "candidate_remote_profile_mismatch"
+    },
+    {
       "id": "merge-result-tree-mismatch-fails",
       "operation": "replace",
       "path": "/github_merge/result_tree_oid",
@@ -205,6 +221,14 @@
       "value": "pending",
       "expected": "INCOMPLETE",
       "code": "owner_review_pending"
+    },
+    {
+      "id": "owner-review-on-old-evidence-is-incomplete",
+      "operation": "replace",
+      "path": "/owner_review/reviewed_evidence_sha256",
+      "value": "8888888888888888888888888888888888888888888888888888888888888888",
+      "expected": "INCOMPLETE",
+      "code": "owner_review_evidence_mismatch"
     }
   ]
 }

@@ -14,6 +14,9 @@ from scripts.ci_checkout_attestation import _git as attested_git
 from scripts.ci_checkout_attestation import main as attestation_main
 from scripts.phase10_acceptance import main as acceptance_main
 
+from binnacle.evaluation.phase10_acceptance import phase10_reviewed_evidence_sha256
+from binnacle.evaluation.phase10_policy import load_phase10_policy
+
 
 def _git(repo_root: Path, *arguments: str) -> str:
     result = subprocess.run(
@@ -93,6 +96,30 @@ def test_pass_fixture_satisfies_require_pass(repo_root: Path) -> None:
         )
         == 0
     )
+
+
+def test_review_digest_command_emits_exact_owner_review_binding(
+    repo_root: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    fixture = repo_root / "tests/fixtures/acceptance/phase10-pass.json"
+    manifest = _load_json(fixture)
+
+    assert (
+        acceptance_main(
+            [
+                "--repo-root",
+                str(repo_root),
+                "review-digest",
+                "--manifest",
+                str(fixture),
+            ]
+        )
+        == 0
+    )
+    output = capsys.readouterr().out.strip()
+    assert output == phase10_reviewed_evidence_sha256(manifest)
+    assert output == manifest["owner_review"]["reviewed_evidence_sha256"]
 
 
 def test_duplicate_manifest_key_is_rejected(
@@ -223,11 +250,12 @@ def test_attestation_git_ignores_ambient_path(
     assert attested_git(repo_root, "rev-parse", "--verify", "HEAD") == expected
 
 
-def test_checkout_command_runs_without_site_packages(
+def test_checkout_command_runs_from_reviewed_bundle_in_isolated_stdlib_mode(
     tmp_path: Path,
     repo_root: Path,
 ) -> None:
     head = _git(repo_root, "rev-parse", "HEAD")
+    policy = load_phase10_policy(repo_root)
     event_path = tmp_path / "event.json"
     event_path.write_text(
         json.dumps(
@@ -242,6 +270,7 @@ def test_checkout_command_runs_without_site_packages(
     result = subprocess.run(
         [
             "/usr/bin/python3",
+            "-I",
             "-S",
             "scripts/ci_checkout_attestation.py",
             "--repo",
@@ -252,6 +281,12 @@ def test_checkout_command_runs_without_site_packages(
             str(output),
             "--job-name",
             "dependency-free-attestation",
+            "--collector-commit",
+            policy.ci_attestation_collector_commit_oid,
+            "--expected-collector-commit",
+            policy.ci_attestation_collector_commit_oid,
+            "--expected-collector-sha256",
+            policy.ci_attestation_collector_sha256,
             "--created-at",
             "2026-08-13T00:00:00Z",
         ],
@@ -272,4 +307,64 @@ def test_checkout_command_runs_without_site_packages(
     )
 
     assert result.returncode == 0, result.stderr
-    assert _load_json(output)["checkout_kind"] == "push_commit"
+    value = _load_json(output)
+    assert value["checkout_kind"] == "push_commit"
+    assert value["collector_commit_oid"] == policy.ci_attestation_collector_commit_oid
+    assert value["collector_sha256"] == policy.ci_attestation_collector_sha256
+
+
+def test_checkout_command_rejects_unreviewed_collector_bundle(
+    tmp_path: Path,
+    repo_root: Path,
+) -> None:
+    head = _git(repo_root, "rev-parse", "HEAD")
+    policy = load_phase10_policy(repo_root)
+    event_path = tmp_path / "event.json"
+    event_path.write_text(
+        json.dumps(
+            {
+                "repository": {"full_name": "grammy-jiang/binnacle"},
+                "after": head,
+            }
+        ),
+        encoding="utf-8",
+    )
+    output = tmp_path / "attestation.json"
+    result = subprocess.run(
+        [
+            "/usr/bin/python3",
+            "-I",
+            "-S",
+            "scripts/ci_checkout_attestation.py",
+            "--repo",
+            str(repo_root),
+            "--event-path",
+            str(event_path),
+            "--output",
+            str(output),
+            "--job-name",
+            "dependency-free-attestation",
+            "--collector-commit",
+            policy.ci_attestation_collector_commit_oid,
+            "--expected-collector-sha256",
+            "8" * 64,
+        ],
+        cwd=repo_root,
+        env={
+            "PATH": "/usr/bin:/bin",
+            "GITHUB_REPOSITORY": "grammy-jiang/binnacle",
+            "GITHUB_EVENT_NAME": "push",
+            "GITHUB_WORKFLOW": "Python CI",
+            "GITHUB_SHA": head,
+            "GITHUB_RUN_ID": "123",
+            "GITHUB_RUN_ATTEMPT": "1",
+        },
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+
+    assert result.returncode == 2
+    assert "collector bundle differs from the reviewed identity" in result.stderr
+    assert not output.exists()

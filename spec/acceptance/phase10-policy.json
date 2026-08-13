@@ -1,9 +1,11 @@
 {
-  "acceptance_schema_sha256": "a6246ea78375851789d62929bd6c3650b991cc765c1f52d9bea2bfa6157c2c58",
+  "acceptance_schema_sha256": "31b6c8ee2fcc6a11ee3e7efd814fc441a8e1c2934de1e453be45d15626c49437",
   "allowed_merge_methods": [
     "squash"
   ],
-  "ci_attestation_schema_sha256": "a3ae8f5c5c7973fa948fab3b78cb75e91d9cbc045fe28229dd5a543e210d716d",
+  "ci_attestation_collector_commit_oid": "668a3b69af386894a6eedcd740634589b6bb1ccc",
+  "ci_attestation_collector_sha256": "96dc2225a3a12e18341656b2cd5ea05b9458a52a9cb7fa77f98d84ce844f8ec7",
+  "ci_attestation_schema_sha256": "6b7d2c6dff03870790dfb3e4ee6be5c93399e61d1bc7c67afea2969ea91e2760",
   "limits": {
     "candidate_generations_max": 64,
     "ci_evidence_per_integration_max": 64,

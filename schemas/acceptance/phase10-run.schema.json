@@ -361,6 +361,9 @@
         },
         "commit_signer_sha256": {
           "$ref": "#/$defs/digest"
+        },
+        "remote_profile_sha256": {
+          "$ref": "#/$defs/digest"
         }
       },
       "required": [
@@ -375,7 +378,8 @@
         "device_sha256",
         "workspace_sha256",
         "runtime_profile_sha256",
-        "commit_signer_sha256"
+        "commit_signer_sha256",
+        "remote_profile_sha256"
       ]
     },
     "branch": {
@@ -665,6 +669,12 @@
           "minimum": 1,
           "maximum": 1000
         },
+        "collector_commit_oid": {
+          "$ref": "#/$defs/oid"
+        },
+        "collector_sha256": {
+          "$ref": "#/$defs/digest"
+        },
         "candidate_oid": {
           "$ref": "#/$defs/oid"
         },
@@ -712,6 +722,8 @@
         "repository",
         "event_name",
         "run_attempt",
+        "collector_commit_oid",
+        "collector_sha256",
         "candidate_oid",
         "protected_base_oid",
         "checkout_oid",
@@ -1150,6 +1162,15 @@
         "evidence_ref": {
           "$ref": "#/$defs/evidenceRef"
         },
+        "acceptance_run_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "policy_sha256": {
+          "$ref": "#/$defs/digest"
+        },
+        "reviewed_evidence_sha256": {
+          "$ref": "#/$defs/digest"
+        },
         "outcome": {
           "enum": [
             "accepted",
@@ -1163,6 +1184,9 @@
       },
       "required": [
         "evidence_ref",
+        "acceptance_run_id",
+        "policy_sha256",
+        "reviewed_evidence_sha256",
         "outcome",
         "evidence_complete"
       ]

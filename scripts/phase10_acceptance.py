@@ -22,6 +22,7 @@ from binnacle.evaluation.phase10_acceptance import (  # noqa: E402
     AcceptanceVerdict,
     create_phase10_skeleton,
     evaluate_phase10_manifest,
+    phase10_reviewed_evidence_sha256,
 )
 from binnacle.evaluation.phase10_policy import (  # noqa: E402
     Phase10PolicyError,
@@ -109,6 +110,12 @@ def _parser() -> argparse.ArgumentParser:
     initialize.add_argument("--manifest", type=Path, required=True)
     initialize.add_argument("--run-id", required=True)
 
+    review_digest = subparsers.add_parser(
+        "review-digest",
+        help="Hash the exact evidence projection an owner approval must bind.",
+    )
+    review_digest.add_argument("--manifest", type=Path, required=True)
+
     evaluate = subparsers.add_parser("evaluate", help="Evaluate one closed evidence manifest.")
     evaluate.add_argument("--manifest", type=Path, required=True)
     evaluate.add_argument("--report", type=Path, default=None)
@@ -129,6 +136,8 @@ def main(argv: list[str] | None = None) -> int:
                 "schema_version": policy.schema_version,
                 "acceptance_schema_sha256": policy.acceptance_schema_sha256,
                 "ci_attestation_schema_sha256": policy.ci_attestation_schema_sha256,
+                "ci_attestation_collector_commit_oid": (policy.ci_attestation_collector_commit_oid),
+                "ci_attestation_collector_sha256": policy.ci_attestation_collector_sha256,
                 "repository": policy.repository,
                 "protected_branch_ref": policy.protected_branch_ref,
                 "allowed_merge_methods": list(policy.allowed_merge_methods),
@@ -157,6 +166,10 @@ def main(argv: list[str] | None = None) -> int:
             args.manifest,
             maximum=policy.limits["manifest_bytes_max"],
         )
+        if args.command == "review-digest":
+            evaluate_phase10_manifest(manifest, repo_root=args.repo_root)
+            print(phase10_reviewed_evidence_sha256(manifest))
+            return 0
         report = evaluate_phase10_manifest(manifest, repo_root=args.repo_root)
         report_value = report.as_dict()
         if args.report is not None:

@@ -4,17 +4,20 @@ from __future__ import annotations
 
 import copy
 import json
+import shutil
 from pathlib import Path
 from typing import Any, cast
 
 import pytest
 
 import binnacle.evaluation as evaluation_package
+from binnacle.evaluation.ci_attestation import CI_ATTESTATION_COLLECTOR_PATHS
 from binnacle.evaluation.phase10_acceptance import (
     AcceptanceManifestError,
     AcceptanceVerdict,
     create_phase10_skeleton,
     evaluate_phase10_manifest,
+    phase10_reviewed_evidence_sha256,
 )
 from binnacle.evaluation.phase10_policy import Phase10PolicyError, load_phase10_policy
 
@@ -80,12 +83,18 @@ def test_phase10_policy_is_frozen_and_canonical(repo_root: Path) -> None:
     policy = load_phase10_policy(repo_root)
 
     assert policy.policy_id == "binnacle-phase10-acceptance-v1"
-    assert policy.sha256 == "af8b9509a6c95c241e58e61edff77caa763e4a42287a33f5e0e75113d53fd568"
+    assert policy.sha256 == "c677c9ddc3954c1fc9cabbd85c2b46a9970dad2ad8ac5724d02c39def159bb41"
     assert policy.acceptance_schema_sha256 == (
-        "a6246ea78375851789d62929bd6c3650b991cc765c1f52d9bea2bfa6157c2c58"
+        "31b6c8ee2fcc6a11ee3e7efd814fc441a8e1c2934de1e453be45d15626c49437"
     )
     assert policy.ci_attestation_schema_sha256 == (
-        "a3ae8f5c5c7973fa948fab3b78cb75e91d9cbc045fe28229dd5a543e210d716d"
+        "6b7d2c6dff03870790dfb3e4ee6be5c93399e61d1bc7c67afea2969ea91e2760"
+    )
+    assert policy.ci_attestation_collector_commit_oid == (
+        "668a3b69af386894a6eedcd740634589b6bb1ccc"
+    )
+    assert policy.ci_attestation_collector_sha256 == (
+        "96dc2225a3a12e18341656b2cd5ea05b9458a52a9cb7fa77f98d84ce844f8ec7"
     )
     assert policy.repository == "grammy-jiang/binnacle"
     assert policy.protected_branch_ref == "refs/heads/master"
@@ -117,10 +126,10 @@ def test_phase10_skeleton_claims_no_live_evidence(repo_root: Path) -> None:
     }
 
 
-@pytest.mark.parametrize("case_index", range(25))
+@pytest.mark.parametrize("case_index", range(28))
 def test_phase10_evaluator_fixture(case_index: int, repo_root: Path) -> None:
     cases = _cases(repo_root)
-    assert len(cases) == 25
+    assert len(cases) == 28
     case = cases[case_index]
     manifest = _pass_manifest(repo_root)
     _apply_case(manifest, case)
@@ -234,6 +243,11 @@ _EVALUATOR_BRANCH_CASES: tuple[tuple[str, object, str], ...] = (
         "candidate_push_ref_mismatch",
     ),
     (
+        "/candidate_generations/0/push/remote_profile_sha256",
+        "8" * 64,
+        "candidate_remote_profile_mismatch",
+    ),
+    (
         "/integration_generations/0/candidate_generation",
         2,
         "integration_uses_stale_candidate_generation",
@@ -268,6 +282,16 @@ _EVALUATOR_BRANCH_CASES: tuple[tuple[str, object, str], ...] = (
         "/integration_generations/0/ci_evidence/0/repository",
         "attacker/other",
         "ci_repository_mismatch",
+    ),
+    (
+        "/integration_generations/0/ci_evidence/0/collector_commit_oid",
+        "8" * 40,
+        "ci_collector_commit_mismatch",
+    ),
+    (
+        "/integration_generations/0/ci_evidence/0/collector_sha256",
+        "8" * 64,
+        "ci_collector_bundle_mismatch",
     ),
     (
         "/integration_generations/0/ci_evidence/0/github_sha",
@@ -330,6 +354,13 @@ _EVALUATOR_BRANCH_CASES: tuple[tuple[str, object, str], ...] = (
     ("/security_checks/0/conclusion", "unavailable", "security_evidence_unavailable"),
     ("/owner_review/outcome", "rejected", "owner_review_rejected"),
     ("/owner_review/evidence_complete", False, "owner_review_evidence_incomplete"),
+    ("/owner_review/acceptance_run_id", "old-run", "owner_review_run_mismatch"),
+    ("/owner_review/policy_sha256", "8" * 64, "owner_review_policy_mismatch"),
+    (
+        "/owner_review/reviewed_evidence_sha256",
+        "8" * 64,
+        "owner_review_evidence_mismatch",
+    ),
 )
 
 
@@ -342,6 +373,10 @@ def test_phase10_evaluator_rejects_each_nonpassing_branch(
 ) -> None:
     manifest = _pass_manifest(repo_root)
     _apply_case(manifest, {"operation": "replace", "path": path, "value": value})
+    if path != "/owner_review/reviewed_evidence_sha256":
+        manifest["owner_review"]["reviewed_evidence_sha256"] = phase10_reviewed_evidence_sha256(
+            manifest
+        )
 
     report = evaluate_phase10_manifest(manifest, repo_root=repo_root)
 
@@ -464,6 +499,10 @@ def test_phase10_policy_rejects_missing_duplicate_and_contradictory_sources(
     ci_schema.write_bytes(
         (repo_root / "schemas/acceptance/ci-checkout-attestation.schema.json").read_bytes()
     )
+    for relative in CI_ATTESTATION_COLLECTOR_PATHS:
+        target = tmp_path / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(repo_root / relative, target)
     policy_path.write_text(json.dumps(policy), encoding="utf-8")
     assert load_phase10_policy(tmp_path).sha256 == load_phase10_policy(repo_root).sha256
 
