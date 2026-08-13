@@ -1,0 +1,1171 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://binnacle.dev/schemas/acceptance/phase10-run.schema.json",
+  "title": "Binnacle Phase 10 self-hosting acceptance run v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "acceptance_run_id": {
+      "$ref": "#/$defs/identifier"
+    },
+    "plan_version": {
+      "const": "phase10-self-hosting-acceptance-v1"
+    },
+    "policy_sha256": {
+      "$ref": "#/$defs/digest"
+    },
+    "state": {
+      "$ref": "#/$defs/runState"
+    },
+    "readiness": {
+      "$ref": "#/$defs/readiness"
+    },
+    "baseline": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/baseline"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "branch": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/branch"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "candidate_generations": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "$ref": "#/$defs/candidateGeneration"
+      }
+    },
+    "final_candidate_generation": {
+      "oneOf": [
+        {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 64
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "integration_generations": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "$ref": "#/$defs/integrationGeneration"
+      }
+    },
+    "final_integration_generation": {
+      "oneOf": [
+        {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 64
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "failure_exercise": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/failureExercise"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "github_pr": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/githubPullRequest"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "github_merge": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/githubMerge"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "local_update": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/localUpdate"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "post_merge_local_checks": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "$ref": "#/$defs/postMergeCheck"
+      }
+    },
+    "restart": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/restart"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "post_restart_runtime": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/postRestartRuntime"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "behaviour_probe": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/behaviourProbe"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "security_checks": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "$ref": "#/$defs/securityCheck"
+      }
+    },
+    "unresolved_refs": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "$ref": "#/$defs/evidenceRef"
+      }
+    },
+    "owner_review": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ownerReview"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "schema_version",
+    "acceptance_run_id",
+    "plan_version",
+    "policy_sha256",
+    "state",
+    "readiness",
+    "baseline",
+    "branch",
+    "candidate_generations",
+    "final_candidate_generation",
+    "integration_generations",
+    "final_integration_generation",
+    "failure_exercise",
+    "github_pr",
+    "github_merge",
+    "local_update",
+    "post_merge_local_checks",
+    "restart",
+    "post_restart_runtime",
+    "behaviour_probe",
+    "security_checks",
+    "unresolved_refs",
+    "owner_review"
+  ],
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]*$"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "oid": {
+      "type": "string",
+      "pattern": "^([0-9a-f]{40}|[0-9a-f]{64})$"
+    },
+    "gitRef": {
+      "type": "string",
+      "minLength": 12,
+      "maxLength": 512,
+      "pattern": "^refs/(heads|remotes)/[A-Za-z0-9][A-Za-z0-9._/-]*$"
+    },
+    "evidenceRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "sha256": {
+          "$ref": "#/$defs/digest"
+        }
+      },
+      "required": [
+        "id",
+        "sha256"
+      ]
+    },
+    "nullableEvidenceRef": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/evidenceRef"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "runState": {
+      "enum": [
+        "planned",
+        "readiness_verifying",
+        "baseline_ready",
+        "branch_ready",
+        "change_in_progress",
+        "local_checks_in_progress",
+        "local_checks_ready",
+        "candidate_signed",
+        "candidate_pushed",
+        "hosted_review_in_progress",
+        "candidate_superseded",
+        "integration_verifying",
+        "integration_stale",
+        "hosted_merge_ready",
+        "hosted_merged",
+        "local_update_ready",
+        "merged_checks_in_progress",
+        "merged_checks_ready",
+        "restart_preflight_ready",
+        "restart_in_progress",
+        "reconnecting",
+        "runtime_verified",
+        "behaviour_verified",
+        "evidence_closing",
+        "passed",
+        "failed",
+        "incomplete"
+      ]
+    },
+    "verificationStatus": {
+      "enum": [
+        "verified",
+        "unavailable",
+        "stale",
+        "failed"
+      ]
+    },
+    "readiness": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "evidence_ref": {
+          "$ref": "#/$defs/nullableEvidenceRef"
+        },
+        "real_chatgpt_connection": {
+          "$ref": "#/$defs/verificationStatus"
+        },
+        "real_development_pi": {
+          "$ref": "#/$defs/verificationStatus"
+        },
+        "predecessor_promotions": {
+          "$ref": "#/$defs/verificationStatus"
+        },
+        "baseline_coherence": {
+          "$ref": "#/$defs/verificationStatus"
+        }
+      },
+      "required": [
+        "evidence_ref",
+        "real_chatgpt_connection",
+        "real_development_pi",
+        "predecessor_promotions",
+        "baseline_coherence"
+      ]
+    },
+    "baseline": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "evidence_ref": {
+          "$ref": "#/$defs/evidenceRef"
+        },
+        "runtime_oid": {
+          "$ref": "#/$defs/oid"
+        },
+        "runtime_tree_oid": {
+          "$ref": "#/$defs/oid"
+        },
+        "runtime_instance_sha256": {
+          "$ref": "#/$defs/digest"
+        },
+        "repository_head_oid": {
+          "$ref": "#/$defs/oid"
+        },
+        "protected_base_oid": {
+          "$ref": "#/$defs/oid"
+        },
+        "repository_clean": {
+          "type": "boolean"
+        },
+        "controller_sha256": {
+          "$ref": "#/$defs/digest"
+        },
+        "device_sha256": {
+          "$ref": "#/$defs/digest"
+        },
+        "workspace_sha256": {
+          "$ref": "#/$defs/digest"
+        },
+        "runtime_profile_sha256": {
+          "$ref": "#/$defs/digest"
+        },
+        "commit_signer_sha256": {
+          "$ref": "#/$defs/digest"
+        }
+      },
+      "required": [
+        "evidence_ref",
+        "runtime_oid",
+        "runtime_tree_oid",
+        "runtime_instance_sha256",
+        "repository_head_oid",
+        "protected_base_oid",
+        "repository_clean",
+        "controller_sha256",
+        "device_sha256",
+        "workspace_sha256",
+        "runtime_profile_sha256",
+        "commit_signer_sha256"
+      ]
+    },
+    "branch": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "evidence_ref": {
+          "$ref": "#/$defs/evidenceRef"
+        },
+        "ref": {
+          "$ref": "#/$defs/gitRef"
+        },
+        "created_from_oid": {
+          "$ref": "#/$defs/oid"
+        },
+        "observed_oid": {
+          "$ref": "#/$defs/oid"
+        },
+        "protected_branch_mutated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "evidence_ref",
+        "ref",
+        "created_from_oid",
+        "observed_oid",
+        "protected_branch_mutated"
+      ]
+    },
+    "checkConclusion": {
+      "enum": [
+        "success",
+        "failure",
+        "uncertain"
+      ]
+    },
+    "localCheck": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "evidence_ref": {
+          "$ref": "#/$defs/evidenceRef"
+        },
+        "source_content_sha256": {
+          "$ref": "#/$defs/digest"
+        },
+        "conclusion": {
+          "$ref": "#/$defs/checkConclusion"
+        },
+        "terminal": {
+          "type": "boolean"
+        },
+        "descendants_closed": {
+          "type": "boolean"
+        },
+        "workspace_fence_closed": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "evidence_ref",
+        "source_content_sha256",
+        "conclusion",
+        "terminal",
+        "descendants_closed",
+        "workspace_fence_closed"
+      ]
+    },
+    "statusDiff": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "evidence_ref": {
+          "$ref": "#/$defs/evidenceRef"
+        },
+        "parent_oid": {
+          "$ref": "#/$defs/oid"
+        },
+        "branch_ref": {
+          "$ref": "#/$defs/gitRef"
+        },
+        "diff_sha256": {
+          "$ref": "#/$defs/digest"
+        },
+        "repository_safety_sha256": {
+          "$ref": "#/$defs/digest"
+        },
+        "unexpected_paths": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "evidence_ref",
+        "parent_oid",
+        "branch_ref",
+        "diff_sha256",
+        "repository_safety_sha256",
+        "unexpected_paths"
+      ]
+    },
+    "signedCommit": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "evidence_ref": {
+          "$ref": "#/$defs/evidenceRef"
+        },
+        "oid": {
+          "$ref": "#/$defs/oid"
+        },
+        "tree_oid": {
+          "$ref": "#/$defs/oid"
+        },
+        "parent_oid": {
+          "$ref": "#/$defs/oid"
+        },
+        "signer_sha256": {
+          "$ref": "#/$defs/digest"
+        },
+        "signature_verified": {
+          "type": "boolean"
+        },
+        "source_content_sha256": {
+          "$ref": "#/$defs/digest"
+        }
+      },
+      "required": [
+        "evidence_ref",
+        "oid",
+        "tree_oid",
+        "parent_oid",
+        "signer_sha256",
+        "signature_verified",
+        "source_content_sha256"
+      ]
+    },
+    "push": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "evidence_ref": {
+          "$ref": "#/$defs/evidenceRef"
+        },
+        "target_oid": {
+          "$ref": "#/$defs/oid"
+        },
+        "remote_observed_oid": {
+          "$ref": "#/$defs/oid"
+        },
+        "remote_ref": {
+          "$ref": "#/$defs/gitRef"
+        },
+        "remote_profile_sha256": {
+          "$ref": "#/$defs/digest"
+        },
+        "conclusion": {
+          "$ref": "#/$defs/checkConclusion"
+        }
+      },
+      "required": [
+        "evidence_ref",
+        "target_oid",
+        "remote_observed_oid",
+        "remote_ref",
+        "remote_profile_sha256",
+        "conclusion"
+      ]
+    },
+    "candidateGeneration": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "generation": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 64
+        },
+        "source_content_sha256": {
+          "$ref": "#/$defs/digest"
+        },
+        "change_scope_sha256": {
+          "$ref": "#/$defs/digest"
+        },
+        "local_checks": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/localCheck"
+          }
+        },
+        "status_diff": {
+          "$ref": "#/$defs/statusDiff"
+        },
+        "signed_commit": {
+          "$ref": "#/$defs/signedCommit"
+        },
+        "push": {
+          "$ref": "#/$defs/push"
+        },
+        "hosted_head_oid": {
+          "$ref": "#/$defs/oid"
+        },
+        "superseded_reason_ref": {
+          "$ref": "#/$defs/nullableEvidenceRef"
+        }
+      },
+      "required": [
+        "generation",
+        "source_content_sha256",
+        "change_scope_sha256",
+        "local_checks",
+        "status_diff",
+        "signed_commit",
+        "push",
+        "hosted_head_oid",
+        "superseded_reason_ref"
+      ]
+    },
+    "reviewEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "evidence_ref": {
+          "$ref": "#/$defs/evidenceRef"
+        },
+        "candidate_oid": {
+          "$ref": "#/$defs/oid"
+        },
+        "protected_base_oid": {
+          "$ref": "#/$defs/oid"
+        },
+        "substantive": {
+          "type": "boolean"
+        },
+        "clean": {
+          "type": "boolean"
+        },
+        "unresolved_actionable_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000
+        }
+      },
+      "required": [
+        "evidence_ref",
+        "candidate_oid",
+        "protected_base_oid",
+        "substantive",
+        "clean",
+        "unresolved_actionable_count"
+      ]
+    },
+    "ciEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "evidence_ref": {
+          "$ref": "#/$defs/evidenceRef"
+        },
+        "workflow_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "run_id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "job_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "repository": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 256,
+          "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+        },
+        "event_name": {
+          "const": "pull_request"
+        },
+        "run_attempt": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000
+        },
+        "candidate_oid": {
+          "$ref": "#/$defs/oid"
+        },
+        "protected_base_oid": {
+          "$ref": "#/$defs/oid"
+        },
+        "checkout_oid": {
+          "$ref": "#/$defs/oid"
+        },
+        "github_sha": {
+          "$ref": "#/$defs/oid"
+        },
+        "checkout_tree_oid": {
+          "$ref": "#/$defs/oid"
+        },
+        "checkout_parent_oids": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/oid"
+          }
+        },
+        "checkout_kind": {
+          "enum": [
+            "pull_request_integration",
+            "unbound"
+          ]
+        },
+        "conclusion": {
+          "$ref": "#/$defs/checkConclusion"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "attestation_sha256": {
+          "$ref": "#/$defs/digest"
+        }
+      },
+      "required": [
+        "evidence_ref",
+        "workflow_name",
+        "run_id",
+        "job_name",
+        "repository",
+        "event_name",
+        "run_attempt",
+        "candidate_oid",
+        "protected_base_oid",
+        "checkout_oid",
+        "github_sha",
+        "checkout_tree_oid",
+        "checkout_parent_oids",
+        "checkout_kind",
+        "conclusion",
+        "required",
+        "attestation_sha256"
+      ]
+    },
+    "integrationGeneration": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "generation": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 64
+        },
+        "candidate_generation": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 64
+        },
+        "candidate_oid": {
+          "$ref": "#/$defs/oid"
+        },
+        "protected_base_oid": {
+          "$ref": "#/$defs/oid"
+        },
+        "merge_policy_sha256": {
+          "$ref": "#/$defs/digest"
+        },
+        "reviews": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "items": {
+            "$ref": "#/$defs/reviewEvidence"
+          }
+        },
+        "ci_evidence": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/ciEvidence"
+          }
+        },
+        "expected_integration_tree_oid": {
+          "$ref": "#/$defs/oid"
+        },
+        "superseded_reason_ref": {
+          "$ref": "#/$defs/nullableEvidenceRef"
+        }
+      },
+      "required": [
+        "generation",
+        "candidate_generation",
+        "candidate_oid",
+        "protected_base_oid",
+        "merge_policy_sha256",
+        "reviews",
+        "ci_evidence",
+        "expected_integration_tree_oid",
+        "superseded_reason_ref"
+      ]
+    },
+    "failureExercise": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "evidence_ref": {
+          "$ref": "#/$defs/evidenceRef"
+        },
+        "kind": {
+          "enum": [
+            "test_failure_corrected",
+            "command_cancelled",
+            "broken_candidate_recovered"
+          ]
+        },
+        "outcome": {
+          "enum": [
+            "reconciled",
+            "uncertain",
+            "unsafe"
+          ]
+        },
+        "descendants_closed": {
+          "type": "boolean"
+        },
+        "workspace_fence_closed": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "evidence_ref",
+        "kind",
+        "outcome",
+        "descendants_closed",
+        "workspace_fence_closed"
+      ]
+    },
+    "githubPullRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "evidence_ref": {
+          "$ref": "#/$defs/evidenceRef"
+        },
+        "repository": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 256,
+          "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+        },
+        "number": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "head_ref": {
+          "$ref": "#/$defs/gitRef"
+        },
+        "base_ref": {
+          "$ref": "#/$defs/gitRef"
+        },
+        "head_oid": {
+          "$ref": "#/$defs/oid"
+        },
+        "base_oid": {
+          "$ref": "#/$defs/oid"
+        }
+      },
+      "required": [
+        "evidence_ref",
+        "repository",
+        "number",
+        "head_ref",
+        "base_ref",
+        "head_oid",
+        "base_oid"
+      ]
+    },
+    "githubMerge": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "evidence_ref": {
+          "$ref": "#/$defs/evidenceRef"
+        },
+        "method": {
+          "enum": [
+            "merge",
+            "squash",
+            "rebase"
+          ]
+        },
+        "candidate_oid": {
+          "$ref": "#/$defs/oid"
+        },
+        "accepted_base_oid": {
+          "$ref": "#/$defs/oid"
+        },
+        "result_oid": {
+          "$ref": "#/$defs/oid"
+        },
+        "result_tree_oid": {
+          "$ref": "#/$defs/oid"
+        },
+        "parent_oids": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/oid"
+          }
+        },
+        "expected_integration_tree_oid": {
+          "$ref": "#/$defs/oid"
+        },
+        "provenance_verified": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "evidence_ref",
+        "method",
+        "candidate_oid",
+        "accepted_base_oid",
+        "result_oid",
+        "result_tree_oid",
+        "parent_oids",
+        "expected_integration_tree_oid",
+        "provenance_verified"
+      ]
+    },
+    "localUpdate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "evidence_ref": {
+          "$ref": "#/$defs/evidenceRef"
+        },
+        "head_oid": {
+          "$ref": "#/$defs/oid"
+        },
+        "tree_oid": {
+          "$ref": "#/$defs/oid"
+        },
+        "branch_ref": {
+          "$ref": "#/$defs/gitRef"
+        },
+        "repository_clean": {
+          "type": "boolean"
+        },
+        "through_phase8_semantics": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "evidence_ref",
+        "head_oid",
+        "tree_oid",
+        "branch_ref",
+        "repository_clean",
+        "through_phase8_semantics"
+      ]
+    },
+    "postMergeCheck": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "evidence_ref": {
+          "$ref": "#/$defs/evidenceRef"
+        },
+        "commit_oid": {
+          "$ref": "#/$defs/oid"
+        },
+        "tree_oid": {
+          "$ref": "#/$defs/oid"
+        },
+        "conclusion": {
+          "$ref": "#/$defs/checkConclusion"
+        },
+        "terminal": {
+          "type": "boolean"
+        },
+        "descendants_closed": {
+          "type": "boolean"
+        },
+        "workspace_fence_closed": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "evidence_ref",
+        "commit_oid",
+        "tree_oid",
+        "conclusion",
+        "terminal",
+        "descendants_closed",
+        "workspace_fence_closed"
+      ]
+    },
+    "restart": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "preflight_ref": {
+          "$ref": "#/$defs/evidenceRef"
+        },
+        "operation_ref": {
+          "$ref": "#/$defs/evidenceRef"
+        },
+        "checkpoint_ref": {
+          "$ref": "#/$defs/evidenceRef"
+        },
+        "candidate_oid": {
+          "$ref": "#/$defs/oid"
+        },
+        "candidate_tree_oid": {
+          "$ref": "#/$defs/oid"
+        },
+        "preflight_status": {
+          "enum": [
+            "ready",
+            "blocked",
+            "uncertain"
+          ]
+        },
+        "outcome": {
+          "enum": [
+            "candidate_ready",
+            "rolled_back",
+            "restricted_recovery",
+            "failed",
+            "uncertain"
+          ]
+        },
+        "same_operation_reconciled": {
+          "type": "boolean"
+        },
+        "second_restart_issued": {
+          "type": "boolean"
+        },
+        "audit_closed": {
+          "type": "boolean"
+        },
+        "workspace_fence_closed": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "preflight_ref",
+        "operation_ref",
+        "checkpoint_ref",
+        "candidate_oid",
+        "candidate_tree_oid",
+        "preflight_status",
+        "outcome",
+        "same_operation_reconciled",
+        "second_restart_issued",
+        "audit_closed",
+        "workspace_fence_closed"
+      ]
+    },
+    "postRestartRuntime": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "evidence_ref": {
+          "$ref": "#/$defs/evidenceRef"
+        },
+        "runtime_oid": {
+          "$ref": "#/$defs/oid"
+        },
+        "runtime_tree_oid": {
+          "$ref": "#/$defs/oid"
+        },
+        "runtime_instance_sha256": {
+          "$ref": "#/$defs/digest"
+        },
+        "readiness": {
+          "enum": [
+            "ready",
+            "restricted",
+            "unavailable"
+          ]
+        },
+        "clean_source_state": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "evidence_ref",
+        "runtime_oid",
+        "runtime_tree_oid",
+        "runtime_instance_sha256",
+        "readiness",
+        "clean_source_state"
+      ]
+    },
+    "behaviourProbe": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "evidence_ref": {
+          "$ref": "#/$defs/evidenceRef"
+        },
+        "tool": {
+          "$ref": "#/$defs/identifier"
+        },
+        "contract_version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32
+        },
+        "request_sha256": {
+          "$ref": "#/$defs/digest"
+        },
+        "runtime_instance_sha256": {
+          "$ref": "#/$defs/digest"
+        },
+        "outcome": {
+          "enum": [
+            "observed_new",
+            "observed_old",
+            "unavailable"
+          ]
+        },
+        "post_restart": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "evidence_ref",
+        "tool",
+        "contract_version",
+        "request_sha256",
+        "runtime_instance_sha256",
+        "outcome",
+        "post_restart"
+      ]
+    },
+    "securityCheck": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "check_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "evidence_ref": {
+          "$ref": "#/$defs/evidenceRef"
+        },
+        "conclusion": {
+          "enum": [
+            "pass",
+            "fail",
+            "unavailable"
+          ]
+        }
+      },
+      "required": [
+        "check_id",
+        "evidence_ref",
+        "conclusion"
+      ]
+    },
+    "ownerReview": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "evidence_ref": {
+          "$ref": "#/$defs/evidenceRef"
+        },
+        "outcome": {
+          "enum": [
+            "accepted",
+            "pending",
+            "rejected"
+          ]
+        },
+        "evidence_complete": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "evidence_ref",
+        "outcome",
+        "evidence_complete"
+      ]
+    }
+  }
+}

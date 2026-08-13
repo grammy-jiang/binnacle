@@ -49,6 +49,23 @@ jobs:
       - name: Run tests
         run: uv run --python "${{ matrix.python-version }}" pytest
 
+      - name: Attest exact checkout identity
+        if: ${{ always() }}
+        run: >-
+          python3 scripts/ci_checkout_attestation.py
+          --output phase10-ci-checkout.json
+          --job-name "Test Python ${{ matrix.python-version }}"
+
+      - name: Upload checkout attestation
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: >-
+            phase10-checkout-${{ github.run_id }}-test-python-${{ matrix.python-version }}-${{ github.run_attempt }}
+          path: phase10-ci-checkout.json
+          if-no-files-found: error
+          retention-days: 30
+
   quality:
     name: Code, contract, dependency, and document quality
     runs-on: ubuntu-24.04
@@ -91,6 +108,8 @@ jobs:
           scripts/verify_execution_supervisor.py
           scripts/verify_git_credential_broker.py
           scripts/verify_privileged_broker.py
+          scripts/ci_checkout_attestation.py
+          scripts/phase10_acceptance.py
 
       - name: Enforce import boundaries
         run: uv run lint-imports
@@ -120,6 +139,8 @@ jobs:
           uv run python scripts/verify_execution_supervisor.py --help
           uv run python scripts/verify_git_credential_broker.py --help
           uv run python scripts/verify_privileged_broker.py --help
+          uv run python scripts/ci_checkout_attestation.py --help
+          uv run python scripts/phase10_acceptance.py --help
           uv run binnacle db --help
           uv run binnacle kernel --help
           uv run binnacle audit --help
@@ -137,3 +158,20 @@ jobs:
 
       - name: Validate repository and documentation hygiene
         run: uv run pre-commit run --all-files
+
+      - name: Attest exact checkout identity
+        if: ${{ always() }}
+        run: >-
+          python3 scripts/ci_checkout_attestation.py
+          --output phase10-ci-checkout.json
+          --job-name "Code, contract, dependency, and document quality"
+
+      - name: Upload checkout attestation
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: >-
+            phase10-checkout-${{ github.run_id }}-python-quality-${{ github.run_attempt }}
+          path: phase10-ci-checkout.json
+          if-no-files-found: error
+          retention-days: 30

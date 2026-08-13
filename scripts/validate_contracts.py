@@ -23,6 +23,15 @@ if str(SOURCE_ROOT) not in sys.path:
     # Validate bindings against the checked-out implementation in that context.
     sys.path.insert(0, str(SOURCE_ROOT))
 
+from binnacle.evaluation.phase10_acceptance import (  # noqa: E402
+    AcceptanceVerdict,
+    evaluate_phase10_manifest,
+)
+from binnacle.evaluation.phase10_policy import (  # noqa: E402
+    Phase10PolicyError,
+    load_phase10_policy,
+)
+
 ERRORS: list[str] = []
 MERGE_TAG = "tag:yaml.org,2002:merge"
 PHASE9_TOOL_CLASSES = {
@@ -1292,12 +1301,112 @@ def validate_bootstrap_self_hosting_scope_alignment() -> None:
                 )
 
 
+def validate_phase10_acceptance_contract() -> None:
+    """Keep the Phase 10 evaluator, schemas, fixtures, CI, and procedure coherent."""
+
+    try:
+        policy = load_phase10_policy(ROOT)
+    except Phase10PolicyError as exc:
+        fail(f"Phase 10 policy: {exc}")
+        return
+    if policy.repository != "grammy-jiang/binnacle":
+        fail("Phase 10 policy repository differs from the reviewed repository")
+    if policy.protected_branch_ref != "refs/heads/master":
+        fail("Phase 10 policy protected branch differs from refs/heads/master")
+
+    schema = load_json(ROOT / "schemas/acceptance/phase10-run.schema.json")
+    manifest = load_json(ROOT / "tests/fixtures/acceptance/phase10-pass.json")
+    cases_document = load_json(ROOT / "tests/fixtures/acceptance/phase10-evaluator-cases.json")
+    if not isinstance(schema, dict) or not isinstance(manifest, dict):
+        return
+
+    expected_limits = {
+        "candidate_generations_max": schema.get("properties", {})
+        .get("candidate_generations", {})
+        .get("maxItems"),
+        "integration_generations_max": schema.get("properties", {})
+        .get("integration_generations", {})
+        .get("maxItems"),
+        "security_checks_max": schema.get("properties", {})
+        .get("security_checks", {})
+        .get("maxItems"),
+        "ci_evidence_per_integration_max": schema.get("$defs", {})
+        .get("integrationGeneration", {})
+        .get("properties", {})
+        .get("ci_evidence", {})
+        .get("maxItems"),
+        "evidence_reference_id_bytes_max": schema.get("$defs", {})
+        .get("identifier", {})
+        .get("maxLength"),
+    }
+    for name, schema_limit in expected_limits.items():
+        if policy.limits.get(name) != schema_limit:
+            fail(f"Phase 10 policy {name} differs from acceptance schema")
+
+    if manifest.get("policy_sha256") != policy.sha256:
+        fail("Phase 10 PASS fixture policy identity is stale")
+    try:
+        report = evaluate_phase10_manifest(manifest, repo_root=ROOT)
+    except Exception as exc:  # noqa: BLE001 - aggregate validation failures
+        fail(f"Phase 10 PASS fixture could not be evaluated: {exc}")
+    else:
+        if report.verdict is not AcceptanceVerdict.PASS:
+            fail("Phase 10 PASS fixture does not produce PASS")
+
+    cases = _fixture_cases_by_id(cases_document, context="Phase 10 evaluator fixture")
+    required_cases = {
+        "complete-exact-chain-passes",
+        "moved-pr-head-fails",
+        "review-on-old-candidate-is-incomplete",
+        "review-on-old-base-is-incomplete",
+        "ci-on-old-candidate-is-incomplete",
+        "ci-with-wrong-parents-is-incomplete",
+        "ci-tree-mismatch-fails",
+        "stale-policy-is-incomplete",
+        "unresolved-effect-is-incomplete",
+    }
+    missing_cases = required_cases - set(cases)
+    if missing_cases:
+        fail(f"Phase 10 evaluator fixture is missing cases: {sorted(missing_cases)}")
+
+    workflow_requirements = {
+        ROOT / ".github/workflows/contracts.yml": (
+            "python3 scripts/ci_checkout_attestation.py",
+            "--job-name validate-contracts",
+            "actions/upload-artifact@",
+        ),
+        ROOT / ".github/workflows/python.yml": (
+            "python3 scripts/ci_checkout_attestation.py",
+            "Code, contract, dependency, and document quality",
+            "Test Python ${{ matrix.python-version }}",
+            "actions/upload-artifact@",
+        ),
+        ROOT / "docs/operations/phase10-self-hosting-acceptance.rst": (
+            "Evidence-independent repository implementation",
+            "Real-device acceptance promotion",
+            "scripts/phase10_acceptance.py",
+        ),
+    }
+    for path, markers in workflow_requirements.items():
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            fail(f"{path.relative_to(ROOT)}: Phase 10 integration file is unavailable: {exc}")
+            continue
+        for marker in markers:
+            if marker not in text:
+                fail(f"{path.relative_to(ROOT)}: missing Phase 10 marker {marker!r}")
+
+
 def validate_repository_vocabulary() -> None:
     paths = [
         *ROOT.glob("docs/**/*.md"),
+        *ROOT.glob("docs/**/*.rst"),
         *ROOT.glob("spec/**/*.yaml"),
+        *ROOT.glob("spec/**/*.json"),
         *ROOT.glob("schemas/**/*.json"),
         *ROOT.glob("tests/fixtures/**/*.yaml"),
+        *ROOT.glob("tests/fixtures/**/*.json"),
     ]
     for path in paths:
         text = path.read_text(encoding="utf-8")
@@ -1314,6 +1423,7 @@ def main() -> int:
     validate_parse_and_schemas()
     validate_bootstrap_command_profile_alignment()
     validate_bootstrap_self_hosting_scope_alignment()
+    validate_phase10_acceptance_contract()
     validate_tool_manifest()
     validate_phase9_privileged_contracts()
     validate_revision_support_contract()

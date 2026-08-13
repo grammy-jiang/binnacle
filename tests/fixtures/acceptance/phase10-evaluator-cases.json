@@ -1,0 +1,210 @@
+{
+  "cases": [
+    {
+      "id": "complete-exact-chain-passes",
+      "operation": "none",
+      "path": "",
+      "expected": "PASS",
+      "code": null
+    },
+    {
+      "id": "missing-required-field-is-schema-error",
+      "operation": "remove",
+      "path": "/restart",
+      "expected": "ERROR",
+      "code": null
+    },
+    {
+      "id": "wrong-signer-fails",
+      "operation": "replace",
+      "path": "/candidate_generations/0/signed_commit/signer_sha256",
+      "value": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+      "expected": "FAIL",
+      "code": "candidate_signer_mismatch"
+    },
+    {
+      "id": "moved-pr-head-fails",
+      "operation": "replace",
+      "path": "/github_pr/head_oid",
+      "value": "8888888888888888888888888888888888888888",
+      "expected": "FAIL",
+      "code": "github_pr_head_mismatch"
+    },
+    {
+      "id": "review-on-old-candidate-is-incomplete",
+      "operation": "replace",
+      "path": "/integration_generations/0/reviews/0/candidate_oid",
+      "value": "8888888888888888888888888888888888888888",
+      "expected": "INCOMPLETE",
+      "code": "review_bound_to_stale_integration"
+    },
+    {
+      "id": "review-on-old-base-is-incomplete",
+      "operation": "replace",
+      "path": "/integration_generations/0/reviews/0/protected_base_oid",
+      "value": "8888888888888888888888888888888888888888",
+      "expected": "INCOMPLETE",
+      "code": "review_bound_to_stale_integration"
+    },
+    {
+      "id": "ci-on-old-candidate-is-incomplete",
+      "operation": "replace",
+      "path": "/integration_generations/0/ci_evidence/0/candidate_oid",
+      "value": "8888888888888888888888888888888888888888",
+      "expected": "INCOMPLETE",
+      "code": "ci_bound_to_stale_integration"
+    },
+    {
+      "id": "unbound-ci-checkout-is-incomplete",
+      "operation": "replace",
+      "path": "/integration_generations/0/ci_evidence/0/checkout_kind",
+      "value": "unbound",
+      "expected": "INCOMPLETE",
+      "code": "ci_checkout_integration_unbound"
+    },
+    {
+      "id": "ci-with-wrong-parents-is-incomplete",
+      "operation": "replace",
+      "path": "/integration_generations/0/ci_evidence/0/checkout_parent_oids",
+      "value": [
+        "2222222222222222222222222222222222222222"
+      ],
+      "expected": "INCOMPLETE",
+      "code": "ci_checkout_parents_unbound"
+    },
+    {
+      "id": "missing-required-ci-job-is-incomplete",
+      "operation": "remove",
+      "path": "/integration_generations/0/ci_evidence/4",
+      "expected": "INCOMPLETE",
+      "code": "required_ci_job_evidence_missing"
+    },
+    {
+      "id": "ci-tree-mismatch-fails",
+      "operation": "replace",
+      "path": "/integration_generations/0/ci_evidence/0/checkout_tree_oid",
+      "value": "8888888888888888888888888888888888888888",
+      "expected": "FAIL",
+      "code": "ci_checkout_tree_mismatch"
+    },
+    {
+      "id": "merge-result-tree-mismatch-fails",
+      "operation": "replace",
+      "path": "/github_merge/result_tree_oid",
+      "value": "8888888888888888888888888888888888888888",
+      "expected": "FAIL",
+      "code": "hosted_merge_tree_mismatch"
+    },
+    {
+      "id": "squash-parent-mismatch-fails",
+      "operation": "replace",
+      "path": "/github_merge/parent_oids",
+      "value": [
+        "8888888888888888888888888888888888888888"
+      ],
+      "expected": "FAIL",
+      "code": "squash_merge_parent_mismatch"
+    },
+    {
+      "id": "merge-provenance-unavailable-is-incomplete",
+      "operation": "replace",
+      "path": "/github_merge/provenance_verified",
+      "value": false,
+      "expected": "INCOMPLETE",
+      "code": "merge_provenance_unverified"
+    },
+    {
+      "id": "local-update-mismatch-fails",
+      "operation": "replace",
+      "path": "/local_update/head_oid",
+      "value": "8888888888888888888888888888888888888888",
+      "expected": "FAIL",
+      "code": "local_update_identity_mismatch"
+    },
+    {
+      "id": "missing-post-merge-checks-is-incomplete",
+      "operation": "replace",
+      "path": "/post_merge_local_checks",
+      "value": [],
+      "expected": "INCOMPLETE",
+      "code": "post_merge_local_checks_missing"
+    },
+    {
+      "id": "candidate-rollback-fails",
+      "operation": "replace",
+      "path": "/restart/outcome",
+      "value": "rolled_back",
+      "expected": "FAIL",
+      "code": "restart_candidate_not_running"
+    },
+    {
+      "id": "duplicate-restart-fails",
+      "operation": "replace",
+      "path": "/restart/second_restart_issued",
+      "value": true,
+      "expected": "FAIL",
+      "code": "duplicate_restart_issued"
+    },
+    {
+      "id": "wrong-runtime-tree-fails",
+      "operation": "replace",
+      "path": "/post_restart_runtime/runtime_tree_oid",
+      "value": "8888888888888888888888888888888888888888",
+      "expected": "FAIL",
+      "code": "post_restart_runtime_identity_mismatch"
+    },
+    {
+      "id": "old-behaviour-fails",
+      "operation": "replace",
+      "path": "/behaviour_probe/outcome",
+      "value": "observed_old",
+      "expected": "FAIL",
+      "code": "changed_behaviour_absent"
+    },
+    {
+      "id": "unresolved-effect-is-incomplete",
+      "operation": "replace",
+      "path": "/unresolved_refs",
+      "value": [
+        {
+          "id": "uncertain-operation",
+          "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        }
+      ],
+      "expected": "INCOMPLETE",
+      "code": "unresolved_evidence_remains"
+    },
+    {
+      "id": "uncertain-cancellation-is-incomplete",
+      "operation": "replace",
+      "path": "/failure_exercise/outcome",
+      "value": "uncertain",
+      "expected": "INCOMPLETE",
+      "code": "failure_exercise_uncertain"
+    },
+    {
+      "id": "credential-leak-fails",
+      "operation": "replace",
+      "path": "/security_checks/4/conclusion",
+      "value": "fail",
+      "expected": "FAIL",
+      "code": "security_invariant_failed"
+    },
+    {
+      "id": "stale-policy-is-incomplete",
+      "operation": "replace",
+      "path": "/policy_sha256",
+      "value": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "expected": "INCOMPLETE",
+      "code": "policy_identity_stale"
+    },
+    {
+      "id": "owner-review-pending-is-incomplete",
+      "operation": "replace",
+      "path": "/owner_review/outcome",
+      "value": "pending",
+      "expected": "INCOMPLETE",
+      "code": "owner_review_pending"
+    }
+  ]
+}

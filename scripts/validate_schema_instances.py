@@ -367,6 +367,40 @@ def validate_phase9_contracts() -> None:
     )
 
 
+def validate_phase10_acceptance_evidence() -> None:
+    run_ref = "https://binnacle.dev/schemas/acceptance/phase10-run.schema.json"
+    manifest = load_json(ROOT / "tests/fixtures/acceptance/phase10-pass.json")
+    expect_valid("Phase 10 closed acceptance manifest", run_ref, manifest)
+
+    missing_policy = dict(manifest)
+    del missing_policy["policy_sha256"]
+    expect_invalid("Phase 10 manifest requires policy identity", run_ref, missing_policy)
+
+    attestation_ref = "https://binnacle.dev/schemas/acceptance/ci-checkout-attestation.schema.json"
+    attestation = {
+        "schema_version": "1.0",
+        "repository": "grammy-jiang/binnacle",
+        "event_name": "pull_request",
+        "workflow_name": "Python CI",
+        "job_name": "Test Python 3.13",
+        "run_id": 1234,
+        "run_attempt": 1,
+        "event_candidate_oid": "2" * 40,
+        "event_base_oid": "1" * 40,
+        "event_after_oid": None,
+        "github_sha": "3" * 40,
+        "checkout_oid": "3" * 40,
+        "checkout_tree_oid": "4" * 40,
+        "checkout_parent_oids": ["1" * 40, "2" * 40],
+        "checkout_kind": "pull_request_integration",
+        "created_at": "2026-08-13T00:00:00Z",
+    }
+    expect_valid("Phase 10 exact checkout attestation", attestation_ref, attestation)
+    missing_tree = dict(attestation)
+    del missing_tree["checkout_tree_oid"]
+    expect_invalid("Phase 10 attestation requires checkout tree", attestation_ref, missing_tree)
+
+
 def main() -> int:
     validate_numeric_facts()
     validate_idempotency_keys()
@@ -375,6 +409,7 @@ def main() -> int:
     validate_wire_error_fixture()
     validate_uncertain_retry()
     validate_phase9_contracts()
+    validate_phase10_acceptance_evidence()
 
     if ERRORS:
         print("Representative schema validation failed:", file=sys.stderr)

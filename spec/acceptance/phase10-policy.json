@@ -1,0 +1,44 @@
+{
+  "acceptance_schema_sha256": "a6246ea78375851789d62929bd6c3650b991cc765c1f52d9bea2bfa6157c2c58",
+  "allowed_merge_methods": [
+    "squash"
+  ],
+  "ci_attestation_schema_sha256": "a3ae8f5c5c7973fa948fab3b78cb75e91d9cbc045fe28229dd5a543e210d716d",
+  "limits": {
+    "candidate_generations_max": 64,
+    "ci_evidence_per_integration_max": 64,
+    "evidence_reference_id_bytes_max": 160,
+    "integration_generations_max": 64,
+    "manifest_bytes_max": 1048576,
+    "security_checks_max": 32
+  },
+  "plan_version": "phase10-self-hosting-acceptance-v1",
+  "policy_id": "binnacle-phase10-acceptance-v1",
+  "protected_branch_ref": "refs/heads/master",
+  "repository": "grammy-jiang/binnacle",
+  "required_ci_jobs": {
+    "Contract validation": [
+      "validate-contracts"
+    ],
+    "Python CI": [
+      "Code, contract, dependency, and document quality",
+      "Test Python 3.11",
+      "Test Python 3.12",
+      "Test Python 3.13"
+    ]
+  },
+  "required_security_checks": [
+    "audit_and_fences_closed",
+    "credential_authority_closed",
+    "no_generic_root_authority",
+    "no_manual_effect_fallback",
+    "no_reusable_credentials_disclosed",
+    "no_workspace_boundary_escape",
+    "privileged_evidence_redacted"
+  ],
+  "required_workflows": [
+    "Contract validation",
+    "Python CI"
+  ],
+  "schema_version": "1.0"
+}

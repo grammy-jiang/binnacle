@@ -1,7 +1,7 @@
 Binnacle Bootstrap Implementation Index
 =======================================
 
-:Status: Active implementation-planning index
+:Status: Detailed plans complete; repository implementation through Phase 10; live gates remain
 :Primary roadmap: ``../bootstrap-implementation-plan.rst``
 :Scope: Bootstrap V1 detailed engineering plans
 
@@ -133,6 +133,16 @@ Phase map
 |       |                                                      |                      | acceptance requires all prior implementation |
 |       |                                                      |                      | gates plus real ChatGPT                      |
 +-------+------------------------------------------------------+----------------------+----------------------------------------------+
+
+Current Phase 10 implementation state
+-------------------------------------
+
+The evidence-independent Phase 10 repository slice is implemented: frozen policy and
+closed schemas, an authority-free evaluator, adversarial fixtures/property tests, exact
+GitHub checkout attestation in every required CI job, and an operator/reviewer procedure.
+The separate real ChatGPT-on-Pi acceptance campaign remains ``INCOMPLETE`` until it is run
+with current predecessor promotion evidence.  Missing live evidence does not block the
+repository implementation and does not count as Bootstrap ``PASS``.
 
 Required structure of every detailed phase plan
 -----------------------------------------------

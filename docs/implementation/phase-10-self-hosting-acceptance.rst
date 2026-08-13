@@ -2,8 +2,10 @@ Binnacle Phase 10 Detailed Implementation Plan
 ===============================================
 
 :Phase: 10 -- Prove the Bootstrap self-hosting acceptance loop
-:Status: provisional
-:Planning status: evidence-independent acceptance design; real execution remains gated
+:Status: repository implementation complete; real acceptance run pending
+:Planning status: accepted evidence-independent design; real execution remains gated
+:Implementation status: policy/schema, evaluator, fixtures, CI attestation and operator
+                        procedure implemented without runtime authority
                   by predecessor implementation/promotion exits and real development-Pi /
                   real-ChatGPT evidence
 :Roadmap: ``../bootstrap-implementation-plan.rst``
@@ -357,6 +359,24 @@ It must not:
 If no new evidence-assembler code is required, the run may be evaluated from existing
 operation snapshots plus a reviewed acceptance fixture/report procedure. Phase 10 should
 not add a Tool solely to make the checklist cosmetically convenient.
+
+6.1 Implemented repository projection
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The evidence-independent projection is now frozen in
+``spec/acceptance/phase10-policy.json``,
+``schemas/acceptance/phase10-run.schema.json`` and
+``schemas/acceptance/ci-checkout-attestation.schema.json``.
+``scripts/phase10_acceptance.py`` creates a non-promoted skeleton and evaluates an
+operator-assembled closed manifest. ``scripts/ci_checkout_attestation.py`` is the only
+collector added by this phase; in ordinary GitHub jobs it reads the actual Git commit,
+tree and parents and binds them to the bounded event identity. Neither component has a
+runtime Tool, credential, Git mutation, service mutation or device-effect surface.
+
+The operator/reviewer procedure is
+``docs/operations/phase10-self-hosting-acceptance.rst``. The positive/negative fixtures
+and property tests under ``tests/fixtures/acceptance`` and ``tests`` freeze moved-head,
+moved-base, wrong-checkout-tree and stale-generation behaviour before the later live run.
 
 7. Selecting the real acceptance change
 ----------------------------------------
@@ -1453,6 +1473,11 @@ Cleanup cannot retroactively rewrite a failed/uncertain effect.
 
 Phase 10 implementation/execution should proceed in this order:
 
+The repository implementation in this revision completes items 1 through 5.  Those items
+are deliberately independent of real Pi and ChatGPT evidence.  Items 6 onward form the
+later real-device campaign and remain promotion-gated; their absence does not reopen or
+block the completed repository implementation.
+
 #. Freeze/review Phase 10 evidence schema, candidate/integration-generation rules and
    pass/fail matrix.
 #. Implement only the small evidence assembler/evaluator if existing retained snapshots are
@@ -1530,6 +1555,9 @@ Scrutinize especially:
 
 48. Plan acceptance checklist
 -----------------------------
+
+This is the historical gate used for the Phase 10 planning-only pull request.  It is not a
+restriction on the later repository implementation pull request described in section 46.
 
 This planning PR may merge when:
 
