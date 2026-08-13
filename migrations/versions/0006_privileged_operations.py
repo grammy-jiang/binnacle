@@ -491,7 +491,7 @@ def _create_preparation_triggers() -> None:
               AND operation.tool_name='privileged_prepare'
               AND operation.state='succeeded'
               AND operation.terminality='terminal'
-              AND operation.effect_knowledge='known_no_effect'
+              AND operation.effect_knowledge='known_effect'
               AND policy.decision='allow'
               AND policy.controller_id=operation.controller_id
               AND policy.controller_epoch=operation.controller_epoch

@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Protocol
 
+from binnacle.domain.operation import OperationSnapshot
 from binnacle.domain.privileged import (
     BrokerAcceptanceReceipt,
     BrokerBindingSnapshot,
@@ -23,6 +24,12 @@ from binnacle.domain.privileged_observation import (
     ServiceInspectionResult,
     VerifiedRuntimeSlot,
 )
+from binnacle.domain.privileged_restart import (
+    PrivilegedRestartPreparation,
+    PrivilegedRestartRecord,
+    RestartAuthorisationRequest,
+)
+from binnacle.domain.workspace import WorkspaceFence
 
 
 class PrivilegedTicketVerifier(Protocol):
@@ -105,8 +112,25 @@ class RuntimeSlotInspectionPort(Protocol):
     async def lkg(self) -> VerifiedRuntimeSlot | None: ...
 
 
+class PrivilegedApplicationRepository(Protocol):
+    """Application-owned preparation, ticket binding, fence, and reservation evidence."""
+
+    async def store_restart_preparation(
+        self,
+        preparation: PrivilegedRestartPreparation,
+    ) -> PrivilegedRestartPreparation: ...
+
+    async def authorise_restart(
+        self,
+        request: RestartAuthorisationRequest,
+    ) -> tuple[OperationSnapshot, WorkspaceFence, PrivilegedRestartRecord]: ...
+
+    async def get_restart(self, operation_id: str) -> PrivilegedRestartRecord | None: ...
+
+
 __all__ = [
     "PackageObservationPort",
+    "PrivilegedApplicationRepository",
     "PrivilegedBrokerPort",
     "PrivilegedEvidenceStore",
     "PrivilegedTicketVerifier",

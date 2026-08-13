@@ -144,7 +144,7 @@ def _seed_package_operation(
         operation_id=prepare_operation_id,
         contract="privileged_prepare",
         state="succeeded",
-        effect_knowledge="known_no_effect",
+        effect_knowledge="known_effect",
         terminality="terminal",
     )
     _insert_policy(

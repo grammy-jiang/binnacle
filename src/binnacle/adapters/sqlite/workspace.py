@@ -448,17 +448,30 @@ class SqliteWorkspaceRepository:
                           ON wo.operation_id=f.active_operation_id
                         LEFT JOIN command_operations co
                           ON co.operation_id=f.active_operation_id
+                        LEFT JOIN git_operations go
+                          ON go.operation_id=f.active_operation_id
+                        LEFT JOIN privileged_operations po
+                          ON po.operation_id=f.active_operation_id
                         LEFT JOIN operations o ON o.operation_id=f.active_operation_id
                         WHERE f.active_operation_id IS NOT NULL
                           AND (o.operation_id IS NULL
-                               OR (wo.operation_id IS NULL AND co.operation_id IS NULL)
-                               OR (wo.operation_id IS NOT NULL AND co.operation_id IS NOT NULL)
+                               OR ((wo.operation_id IS NOT NULL) +
+                                   (co.operation_id IS NOT NULL) +
+                                   (go.operation_id IS NOT NULL) +
+                                   (po.operation_id IS NOT NULL)) != 1
                                OR (wo.operation_id IS NOT NULL AND
                                    (wo.workspace_id!=f.workspace_id OR
                                     f.active_contract!=('workspace_' || wo.mutation_kind)))
                                OR (co.operation_id IS NOT NULL AND
                                    (co.workspace_id!=f.workspace_id OR
                                     co.closure_state!='pending'))
+                               OR (go.operation_id IS NOT NULL AND
+                                   (go.workspace_id!=f.workspace_id OR
+                                    go.state='terminal'))
+                               OR (po.operation_id IS NOT NULL AND
+                                   (po.workspace_id!=f.workspace_id OR
+                                    po.workspace_fence_version!=f.fence_version OR
+                                    po.action='package_install' OR po.state='terminal'))
                                OR o.operation_contract!=f.active_contract
                                OR o.state IN ('received','rejected'))
                         """

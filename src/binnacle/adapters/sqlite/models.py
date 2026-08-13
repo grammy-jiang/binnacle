@@ -1177,6 +1177,200 @@ class GitRemoteEvidenceModel(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
+class PrivilegedPreparationModel(Base):
+    __tablename__ = "privileged_preparations"
+    __table_args__ = (
+        UniqueConstraint(
+            "prepared_evidence_sha256",
+            name="uq_privileged_preparations_evidence",
+        ),
+        UniqueConstraint(
+            "execution_nonce_sha256",
+            name="uq_privileged_preparations_nonce",
+        ),
+        UniqueConstraint(
+            "consumed_by_operation_id",
+            name="uq_privileged_preparations_consumer",
+        ),
+    )
+
+    prepare_operation_id: Mapped[str] = mapped_column(
+        String(160),
+        ForeignKey(
+            "operations.operation_id",
+            name="fk_privileged_preparations_operation",
+        ),
+        primary_key=True,
+    )
+    session_id: Mapped[str | None] = mapped_column(
+        String(160),
+        ForeignKey(
+            "development_sessions.session_id",
+            name="fk_privileged_preparations_session",
+        ),
+    )
+    workspace_id: Mapped[str | None] = mapped_column(
+        String(160),
+        ForeignKey(
+            "registered_workspaces.workspace_id",
+            name="fk_privileged_preparations_workspace",
+        ),
+    )
+    action: Mapped[str] = mapped_column(String(32), nullable=False)
+    target_profile_id: Mapped[str] = mapped_column(String(96), nullable=False)
+    target_profile_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    maximum_effect: Mapped[str] = mapped_column(String(32), nullable=False)
+    normalized_request_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    current_state_binding_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    prepared_evidence_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    execution_nonce_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    package_transaction_plan_sha256: Mapped[str | None] = mapped_column(String(64))
+    service_profile_sha256: Mapped[str | None] = mapped_column(String(64))
+    candidate_verification_reference: Mapped[str | None] = mapped_column(String(160))
+    candidate_verification_sha256: Mapped[str | None] = mapped_column(String(64))
+    candidate_slot_id: Mapped[str | None] = mapped_column(String(160))
+    lkg_slot_id: Mapped[str | None] = mapped_column(String(160))
+    schema_heads_sha256: Mapped[str | None] = mapped_column(String(64))
+    runtime_layout_sha256: Mapped[str | None] = mapped_column(String(64))
+    deployed_peer_set_sha256: Mapped[str | None] = mapped_column(String(64))
+    state: Mapped[str] = mapped_column(String(16), nullable=False)
+    consumed_by_operation_id: Mapped[str | None] = mapped_column(
+        String(160),
+        ForeignKey(
+            "operations.operation_id",
+            name="fk_privileged_preparations_consumer",
+        ),
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class PrivilegedOperationModel(Base):
+    __tablename__ = "privileged_operations"
+    __table_args__ = (
+        UniqueConstraint(
+            "prepare_operation_id",
+            name="uq_privileged_operations_preparation",
+        ),
+        UniqueConstraint("ticket_id", name="uq_privileged_operations_ticket_id"),
+        UniqueConstraint(
+            "ticket_sha256",
+            name="uq_privileged_operations_ticket_digest",
+        ),
+        UniqueConstraint("ticket_nonce_sha256", name="uq_privileged_operations_nonce"),
+    )
+
+    operation_id: Mapped[str] = mapped_column(
+        String(160),
+        ForeignKey("operations.operation_id", name="fk_privileged_operations_operation"),
+        primary_key=True,
+    )
+    prepare_operation_id: Mapped[str] = mapped_column(
+        String(160),
+        ForeignKey(
+            "privileged_preparations.prepare_operation_id",
+            name="fk_privileged_operations_preparation",
+        ),
+        nullable=False,
+    )
+    session_id: Mapped[str | None] = mapped_column(
+        String(160),
+        ForeignKey("development_sessions.session_id", name="fk_privileged_operations_session"),
+    )
+    workspace_id: Mapped[str | None] = mapped_column(
+        String(160),
+        ForeignKey("registered_workspaces.workspace_id", name="fk_privileged_operations_workspace"),
+    )
+    workspace_fence_version: Mapped[int | None] = mapped_column(Integer)
+    reservation_generation: Mapped[int] = mapped_column(Integer, nullable=False)
+    action: Mapped[str] = mapped_column(String(32), nullable=False)
+    maximum_effect: Mapped[str] = mapped_column(String(32), nullable=False)
+    target_profile_id: Mapped[str] = mapped_column(String(96), nullable=False)
+    target_profile_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    broker_profile_id: Mapped[str] = mapped_column(String(96), nullable=False)
+    broker_profile_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    prepared_evidence_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    current_state_binding_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    policy_decision_id: Mapped[str] = mapped_column(
+        String(160),
+        ForeignKey("policy_decisions.policy_decision_id", name="fk_privileged_operations_policy"),
+        nullable=False,
+    )
+    policy_evidence_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    ticket_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    ticket_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    ticket_nonce_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    ticket_issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    ticket_expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    broker_acceptance_state: Mapped[str] = mapped_column(String(24), nullable=False)
+    broker_evidence_generation: Mapped[int] = mapped_column(Integer, nullable=False)
+    broker_acceptance_evidence_sha256: Mapped[str | None] = mapped_column(String(64))
+    package_transaction_plan_sha256: Mapped[str | None] = mapped_column(String(64))
+    service_profile_sha256: Mapped[str | None] = mapped_column(String(64))
+    candidate_verification_reference: Mapped[str | None] = mapped_column(String(160))
+    candidate_verification_sha256: Mapped[str | None] = mapped_column(String(64))
+    candidate_slot_id: Mapped[str | None] = mapped_column(String(160))
+    lkg_slot_id: Mapped[str | None] = mapped_column(String(160))
+    restart_checkpoint_sha256: Mapped[str | None] = mapped_column(String(64))
+    schema_heads_sha256: Mapped[str | None] = mapped_column(String(64))
+    runtime_layout_sha256: Mapped[str | None] = mapped_column(String(64))
+    deployed_peer_set_sha256: Mapped[str | None] = mapped_column(String(64))
+    candidate_outcome: Mapped[str] = mapped_column(String(24), nullable=False)
+    rollback_outcome: Mapped[str] = mapped_column(String(24), nullable=False)
+    broker_closure_state: Mapped[str] = mapped_column(String(24), nullable=False)
+    broker_closure_evidence_sha256: Mapped[str | None] = mapped_column(String(64))
+    audit_closure_state: Mapped[str] = mapped_column(String(24), nullable=False)
+    audit_closure_evidence_sha256: Mapped[str | None] = mapped_column(String(64))
+    fence_closure_state: Mapped[str] = mapped_column(String(16), nullable=False)
+    fence_release_evidence_sha256: Mapped[str | None] = mapped_column(String(64))
+    state: Mapped[str] = mapped_column(String(24), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    broker_decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_reconciled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class PrivilegedEffectReservationModel(Base):
+    __tablename__ = "privileged_effect_reservations"
+    __table_args__ = (
+        UniqueConstraint(
+            "reservation_generation",
+            name="uq_privileged_effect_reservation_generation",
+        ),
+        UniqueConstraint(
+            "active_slot",
+            name="uq_privileged_effect_reservation_active_slot",
+        ),
+    )
+
+    operation_id: Mapped[str] = mapped_column(
+        String(160),
+        ForeignKey(
+            "privileged_operations.operation_id",
+            name="fk_privileged_effect_reservations_operation",
+        ),
+        primary_key=True,
+    )
+    workspace_id: Mapped[str | None] = mapped_column(
+        String(160),
+        ForeignKey(
+            "registered_workspaces.workspace_id",
+            name="fk_privileged_effect_reservations_workspace",
+        ),
+    )
+    workspace_fence_version: Mapped[int | None] = mapped_column(Integer)
+    reservation_generation: Mapped[int] = mapped_column(Integer, nullable=False)
+    active_slot: Mapped[int | None] = mapped_column(Integer)
+    state: Mapped[str] = mapped_column(String(24), nullable=False)
+    closure_evidence_sha256: Mapped[str | None] = mapped_column(String(64))
+    acquired_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    released_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 Index("ix_operations_state", OperationModel.state, OperationModel.updated_at)
 Index("ix_bindings_operation", IdempotencyBindingModel.operation_id)
 Index("ix_payload_owner", PayloadObjectModel.controller_id, PayloadObjectModel.controller_epoch)
@@ -1205,6 +1399,11 @@ Index(
     CommandOperationModel.acceptance_state,
 )
 Index("ix_git_operations_session", GitOperationModel.session_id, GitOperationModel.state)
+Index(
+    "ix_privileged_operations_state",
+    PrivilegedOperationModel.state,
+    PrivilegedOperationModel.updated_at,
+)
 Index(
     "uq_git_stages_active_member",
     GitOperationStageModel.operation_id,

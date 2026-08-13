@@ -771,7 +771,7 @@ def _verify_privileged_invariants(connection: sqlite3.Connection) -> None:
                OR prepare_operation.tool_name!='privileged_prepare'
                OR prepare_operation.state!='succeeded'
                OR prepare_operation.terminality!='terminal'
-               OR prepare_operation.effect_knowledge!='known_no_effect'
+               OR prepare_operation.effect_knowledge!='known_effect'
                OR prepare_policy.decision!='allow'
                OR prepare_policy.controller_id!=prepare_operation.controller_id
                OR prepare_policy.controller_epoch!=prepare_operation.controller_epoch
