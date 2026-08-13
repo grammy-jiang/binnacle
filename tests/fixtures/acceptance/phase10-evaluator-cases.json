@@ -48,26 +48,73 @@
     },
     {
       "id": "ci-on-old-candidate-is-incomplete",
-      "operation": "replace",
-      "path": "/integration_generations/0/ci_evidence/0/candidate_oid",
-      "value": "8888888888888888888888888888888888888888",
+      "operation": "batch",
+      "operations": [
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/0/candidate_oid",
+          "value": "8888888888888888888888888888888888888888"
+        },
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/0/attestation/event_candidate_oid",
+          "value": "8888888888888888888888888888888888888888"
+        },
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/0/attestation_sha256",
+          "value": "aac711d2ac7ac965a93e8a28296b847925411145b0b27c152f52b064a2087a5c"
+        }
+      ],
       "expected": "INCOMPLETE",
       "code": "ci_bound_to_stale_integration"
     },
     {
       "id": "unbound-ci-checkout-is-incomplete",
-      "operation": "replace",
-      "path": "/integration_generations/0/ci_evidence/0/checkout_kind",
-      "value": "unbound",
+      "operation": "batch",
+      "operations": [
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/0/checkout_kind",
+          "value": "unbound"
+        },
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/0/attestation/checkout_kind",
+          "value": "unbound"
+        },
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/0/attestation_sha256",
+          "value": "e7010d5c96ce740dd2578b69ab44458df5719621c61c9149ea856104e6ac1c7e"
+        }
+      ],
       "expected": "INCOMPLETE",
       "code": "ci_checkout_integration_unbound"
     },
     {
       "id": "ci-with-wrong-parents-is-incomplete",
-      "operation": "replace",
-      "path": "/integration_generations/0/ci_evidence/0/checkout_parent_oids",
-      "value": [
-        "2222222222222222222222222222222222222222"
+      "operation": "batch",
+      "operations": [
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/0/checkout_parent_oids",
+          "value": [
+            "2222222222222222222222222222222222222222"
+          ]
+        },
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/0/attestation/checkout_parent_oids",
+          "value": [
+            "2222222222222222222222222222222222222222"
+          ]
+        },
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/0/attestation_sha256",
+          "value": "7ee53bbb86242c53a50a44771337e7d19552ba6832598e2b48e0cc6cc9e25d80"
+        }
       ],
       "expected": "INCOMPLETE",
       "code": "ci_checkout_parents_unbound"
@@ -94,6 +141,22 @@
       "value": "8888888888888888888888888888888888888888888888888888888888888888",
       "expected": "FAIL",
       "code": "ci_collector_bundle_mismatch"
+    },
+    {
+      "id": "reused-ci-attestation-fails",
+      "operation": "replace",
+      "path": "/integration_generations/0/ci_evidence/1/attestation_sha256",
+      "value": "7a442bbbbd86b4de2470eb7122f1d63045320743863ce375ffa0fa35d734a0d8",
+      "expected": "FAIL",
+      "code": "ci_attestation_reused"
+    },
+    {
+      "id": "relabelled-ci-attestation-fails",
+      "operation": "replace",
+      "path": "/integration_generations/0/ci_evidence/0/attestation/workflow_name",
+      "value": "Python CI",
+      "expected": "FAIL",
+      "code": "ci_attestation_identity_mismatch"
     },
     {
       "id": "push-through-wrong-remote-profile-fails",
@@ -168,6 +231,14 @@
       "value": "8888888888888888888888888888888888888888",
       "expected": "FAIL",
       "code": "post_restart_runtime_identity_mismatch"
+    },
+    {
+      "id": "post-restart-runtime-profile-mismatch-fails",
+      "operation": "replace",
+      "path": "/post_restart_runtime/runtime_profile_sha256",
+      "value": "8888888888888888888888888888888888888888888888888888888888888888",
+      "expected": "FAIL",
+      "code": "post_restart_runtime_profile_mismatch"
     },
     {
       "id": "old-behaviour-fails",

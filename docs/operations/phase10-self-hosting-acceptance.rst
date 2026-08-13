@@ -117,9 +117,13 @@ For a push, ``checkout_kind`` is ``push_commit`` only when the event ``after`` O
 unbound result so reviewers can diagnose the mismatch.
 
 An attestation proves checkout and collector identity; it does not prove the later job
-conclusion.  The acceptance manifest must bind the downloaded attestation digest, frozen
-collector commit/digest, and independently observed GitHub workflow/job conclusion to the
-same run ID and attempt.
+conclusion.  Preserve the exact parsed attestation object in the acceptance manifest and
+recompute the uploaded artifact digest from canonical JSON plus its trailing newline.
+Every workflow/job/run/attempt, repository/event, collector, candidate/base, GitHub SHA,
+checkout OID/tree/parents, and checkout-kind field in the surrounding CI record must equal
+the embedded attestation.  Each required job needs a distinct attestation digest; one
+artifact cannot be copied under several job labels.  Independently observe the GitHub job
+conclusion for that same run ID and attempt.
 
 Live campaign prerequisites
 ---------------------------
@@ -198,8 +202,9 @@ If the candidate moves, return to the complete candidate process and then create
 integration generation.  If only the protected base moves, create a new integration
 generation and repeat base-aware review and CI.  Old review, CI, checkout, or expected-tree
 evidence cannot satisfy the new generation.  The evaluator compares evidence-reference IDs
-and digests and also compares every checkout-attestation digest, so relabelling an old
-artifact remains stale.
+and digests, verifies each embedded checkout-attestation artifact, and rejects duplicate
+attestation digests, so relabelling one artifact as another job or as a new generation
+cannot satisfy the gate.
 
 Hosted merge and local update
 -----------------------------
@@ -227,6 +232,7 @@ restricted recovery or uncertainty is ``INCOMPLETE``.  Then independently verify
 
 * the post-restart runtime OID and tree equal the hosted merged result;
 * the source state is clean;
+* the post-restart runtime profile equals the frozen baseline runtime profile;
 * the runtime instance differs from the baseline instance; and
 * the chosen safe semantic probe observes the changed behaviour on that new instance.
 
@@ -279,9 +285,12 @@ The substantive reviewer verifies all of the following against independent sourc
 * signer, pushed head, PR head, protected base, review, and CI identities;
 * actual checkout commit/tree/parents from each required attestation artifact;
 * each attestation's collector commit and bundle digest against the frozen policy;
+* the canonical artifact digest is unique per required job and every embedded attestation
+  field equals the independently recorded CI identity;
 * GitHub job conclusions for the recorded run IDs and attempts;
 * merge tree/parent/provenance and exact local update;
-* same-operation restart reconciliation, no duplicate restart, and runtime replacement;
+* same-operation restart reconciliation, no duplicate restart, baseline runtime-profile
+  continuity, and runtime-instance replacement;
 * changed behaviour on the post-restart instance;
 * closed audit/fence/credential/root-authority checks and an empty unresolved list; and
 * evidence sanitation and retention outside Git.

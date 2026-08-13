@@ -798,6 +798,13 @@ For the final integration generation record:
 * terminal conclusion and required job/check conclusions;
 * retry/attempt identity when a transient infrastructure failure is rerun.
 
+The acceptance record embeds the exact parsed checkout-attestation object for every
+required job and its SHA-256 over canonical JSON plus the artifact's trailing newline.  The
+evaluator recomputes that digest, requires a distinct artifact digest for every required
+job in one integration generation, and requires every surrounding CI identity field to
+equal its attested counterpart.  Changing labels around an artifact therefore cannot turn
+one successful job into evidence for another required job.
+
 Do **not** assume a workflow API ``head_sha`` or PR-head field equals the commit actually
 checked out by ``actions/checkout``. Required workflows need bounded attestation/log/artifact
 or an equivalent authoritative source that proves the checked commit/tree/base/candidate.
@@ -1021,7 +1028,8 @@ Before probing changed behaviour, prove at minimum:
 * clean/expected source state;
 * exact source/workspace/root/mount identity;
 * exact Python/environment/lock/package identity expected for selected candidate;
-* config/policy/manifest/service-profile identities;
+* config/policy/manifest/service-profile identities, including equality between the
+  post-restart runtime-profile digest and the frozen baseline runtime-profile digest;
 * loaded service composition where Phase 9 exposes it;
 * application DB compatibility generation where applicable;
 * device ID/epoch;
@@ -1343,6 +1351,8 @@ Any implementation of evidence assembler/evaluator should have deterministic tes
 * review on old candidate head -> INCOMPLETE/FAIL according to repository policy, never PASS;
 * review bound to old protected base after base movement -> INCOMPLETE;
 * CI evidence from a collector commit or bundle not frozen by policy -> INCOMPLETE;
+* embedded CI attestation digest differs from the canonical artifact bytes -> FAIL;
+* one attestation artifact is reused or relabelled as a different required job -> FAIL;
 * owner approval bound to a different run, policy or evidence projection -> INCOMPLETE;
 * CI green on old candidate/integration generation only -> INCOMPLETE;
 * workflow status names final candidate but actual checkout/tree is unbound/unavailable ->
@@ -1362,6 +1372,7 @@ Any implementation of evidence assembler/evaluator should have deterministic tes
 * post-merge local checks absent/red/uncertain -> INCOMPLETE/FAIL, never PASS;
 * local update target != post-restart runtime revision -> FAIL;
 * runtime tree != hosted/tested integration tree -> FAIL;
+* post-restart runtime profile differs from the frozen baseline profile -> FAIL;
 * candidate rollback despite hosted merge -> FAIL for Phase 10 candidate success;
 * runtime revision correct but behaviour probe absent -> INCOMPLETE;
 * runtime revision correct but behaviour definitively old/wrong -> FAIL;

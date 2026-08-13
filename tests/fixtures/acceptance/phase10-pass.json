@@ -2,7 +2,7 @@
   "schema_version": "1.0",
   "acceptance_run_id": "acceptance-test-pass",
   "plan_version": "phase10-self-hosting-acceptance-v1",
-  "policy_sha256": "c677c9ddc3954c1fc9cabbd85c2b46a9970dad2ad8ac5724d02c39def159bb41",
+  "policy_sha256": "7581e01da4cb29494671f4e3ae2d114d6790b4eebd71ef68f766b437154b25dd",
   "state": "passed",
   "readiness": {
     "evidence_ref": {
@@ -105,7 +105,7 @@
       "candidate_generation": 1,
       "candidate_oid": "2222222222222222222222222222222222222222",
       "protected_base_oid": "1111111111111111111111111111111111111111",
-      "merge_policy_sha256": "c677c9ddc3954c1fc9cabbd85c2b46a9970dad2ad8ac5724d02c39def159bb41",
+      "merge_policy_sha256": "7581e01da4cb29494671f4e3ae2d114d6790b4eebd71ef68f766b437154b25dd",
       "reviews": [
         {
           "evidence_ref": {
@@ -145,7 +145,30 @@
           "checkout_kind": "pull_request_integration",
           "conclusion": "success",
           "required": true,
-          "attestation_sha256": "2121212121212121212121212121212121212121212121212121212121212121"
+          "attestation": {
+            "schema_version": "1.0",
+            "repository": "grammy-jiang/binnacle",
+            "event_name": "pull_request",
+            "workflow_name": "Contract validation",
+            "job_name": "validate-contracts",
+            "run_id": 1001,
+            "run_attempt": 1,
+            "collector_commit_oid": "668a3b69af386894a6eedcd740634589b6bb1ccc",
+            "collector_sha256": "96dc2225a3a12e18341656b2cd5ea05b9458a52a9cb7fa77f98d84ce844f8ec7",
+            "event_candidate_oid": "2222222222222222222222222222222222222222",
+            "event_base_oid": "1111111111111111111111111111111111111111",
+            "event_after_oid": null,
+            "github_sha": "3333333333333333333333333333333333333333",
+            "checkout_oid": "3333333333333333333333333333333333333333",
+            "checkout_tree_oid": "4444444444444444444444444444444444444444",
+            "checkout_parent_oids": [
+              "1111111111111111111111111111111111111111",
+              "2222222222222222222222222222222222222222"
+            ],
+            "checkout_kind": "pull_request_integration",
+            "created_at": "2026-01-01T00:00:01Z"
+          },
+          "attestation_sha256": "7a442bbbbd86b4de2470eb7122f1d63045320743863ce375ffa0fa35d734a0d8"
         },
         {
           "evidence_ref": {
@@ -172,7 +195,30 @@
           "checkout_kind": "pull_request_integration",
           "conclusion": "success",
           "required": true,
-          "attestation_sha256": "2221212121212121212121212121212121212121212121212121212121212121"
+          "attestation": {
+            "schema_version": "1.0",
+            "repository": "grammy-jiang/binnacle",
+            "event_name": "pull_request",
+            "workflow_name": "Python CI",
+            "job_name": "Code, contract, dependency, and document quality",
+            "run_id": 1002,
+            "run_attempt": 1,
+            "collector_commit_oid": "668a3b69af386894a6eedcd740634589b6bb1ccc",
+            "collector_sha256": "96dc2225a3a12e18341656b2cd5ea05b9458a52a9cb7fa77f98d84ce844f8ec7",
+            "event_candidate_oid": "2222222222222222222222222222222222222222",
+            "event_base_oid": "1111111111111111111111111111111111111111",
+            "event_after_oid": null,
+            "github_sha": "3333333333333333333333333333333333333333",
+            "checkout_oid": "3333333333333333333333333333333333333333",
+            "checkout_tree_oid": "4444444444444444444444444444444444444444",
+            "checkout_parent_oids": [
+              "1111111111111111111111111111111111111111",
+              "2222222222222222222222222222222222222222"
+            ],
+            "checkout_kind": "pull_request_integration",
+            "created_at": "2026-01-01T00:00:02Z"
+          },
+          "attestation_sha256": "00ca6727e2dbb68542237b975b6fb609aba78a96e9115f11854347eaa6abeb64"
         },
         {
           "evidence_ref": {
@@ -199,7 +245,30 @@
           "checkout_kind": "pull_request_integration",
           "conclusion": "success",
           "required": true,
-          "attestation_sha256": "2321212121212121212121212121212121212121212121212121212121212121"
+          "attestation": {
+            "schema_version": "1.0",
+            "repository": "grammy-jiang/binnacle",
+            "event_name": "pull_request",
+            "workflow_name": "Python CI",
+            "job_name": "Test Python 3.11",
+            "run_id": 1002,
+            "run_attempt": 1,
+            "collector_commit_oid": "668a3b69af386894a6eedcd740634589b6bb1ccc",
+            "collector_sha256": "96dc2225a3a12e18341656b2cd5ea05b9458a52a9cb7fa77f98d84ce844f8ec7",
+            "event_candidate_oid": "2222222222222222222222222222222222222222",
+            "event_base_oid": "1111111111111111111111111111111111111111",
+            "event_after_oid": null,
+            "github_sha": "3333333333333333333333333333333333333333",
+            "checkout_oid": "3333333333333333333333333333333333333333",
+            "checkout_tree_oid": "4444444444444444444444444444444444444444",
+            "checkout_parent_oids": [
+              "1111111111111111111111111111111111111111",
+              "2222222222222222222222222222222222222222"
+            ],
+            "checkout_kind": "pull_request_integration",
+            "created_at": "2026-01-01T00:00:03Z"
+          },
+          "attestation_sha256": "8d25186bb8fcba10c051ac8d0527a13ac5bd4768b36ef7b7eaaf7c12fe9698e2"
         },
         {
           "evidence_ref": {
@@ -226,7 +295,30 @@
           "checkout_kind": "pull_request_integration",
           "conclusion": "success",
           "required": true,
-          "attestation_sha256": "2421212121212121212121212121212121212121212121212121212121212121"
+          "attestation": {
+            "schema_version": "1.0",
+            "repository": "grammy-jiang/binnacle",
+            "event_name": "pull_request",
+            "workflow_name": "Python CI",
+            "job_name": "Test Python 3.12",
+            "run_id": 1002,
+            "run_attempt": 1,
+            "collector_commit_oid": "668a3b69af386894a6eedcd740634589b6bb1ccc",
+            "collector_sha256": "96dc2225a3a12e18341656b2cd5ea05b9458a52a9cb7fa77f98d84ce844f8ec7",
+            "event_candidate_oid": "2222222222222222222222222222222222222222",
+            "event_base_oid": "1111111111111111111111111111111111111111",
+            "event_after_oid": null,
+            "github_sha": "3333333333333333333333333333333333333333",
+            "checkout_oid": "3333333333333333333333333333333333333333",
+            "checkout_tree_oid": "4444444444444444444444444444444444444444",
+            "checkout_parent_oids": [
+              "1111111111111111111111111111111111111111",
+              "2222222222222222222222222222222222222222"
+            ],
+            "checkout_kind": "pull_request_integration",
+            "created_at": "2026-01-01T00:00:04Z"
+          },
+          "attestation_sha256": "eeab487570d4b8a63d30f7d4029a5c5b6922c696483576323e011a6a8be39fea"
         },
         {
           "evidence_ref": {
@@ -253,7 +345,30 @@
           "checkout_kind": "pull_request_integration",
           "conclusion": "success",
           "required": true,
-          "attestation_sha256": "2521212121212121212121212121212121212121212121212121212121212121"
+          "attestation": {
+            "schema_version": "1.0",
+            "repository": "grammy-jiang/binnacle",
+            "event_name": "pull_request",
+            "workflow_name": "Python CI",
+            "job_name": "Test Python 3.13",
+            "run_id": 1002,
+            "run_attempt": 1,
+            "collector_commit_oid": "668a3b69af386894a6eedcd740634589b6bb1ccc",
+            "collector_sha256": "96dc2225a3a12e18341656b2cd5ea05b9458a52a9cb7fa77f98d84ce844f8ec7",
+            "event_candidate_oid": "2222222222222222222222222222222222222222",
+            "event_base_oid": "1111111111111111111111111111111111111111",
+            "event_after_oid": null,
+            "github_sha": "3333333333333333333333333333333333333333",
+            "checkout_oid": "3333333333333333333333333333333333333333",
+            "checkout_tree_oid": "4444444444444444444444444444444444444444",
+            "checkout_parent_oids": [
+              "1111111111111111111111111111111111111111",
+              "2222222222222222222222222222222222222222"
+            ],
+            "checkout_kind": "pull_request_integration",
+            "created_at": "2026-01-01T00:00:05Z"
+          },
+          "attestation_sha256": "70ea96fb1671325a076804e7ba44cf56f6c7d5a7bebb2d8587a7f76e53e00e05"
         }
       ],
       "expected_integration_tree_oid": "4444444444444444444444444444444444444444",
@@ -354,6 +469,7 @@
     "runtime_oid": "7777777777777777777777777777777777777777",
     "runtime_tree_oid": "4444444444444444444444444444444444444444",
     "runtime_instance_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "runtime_profile_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
     "readiness": "ready",
     "clean_source_state": true
   },
@@ -434,8 +550,8 @@
       "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
     },
     "acceptance_run_id": "acceptance-test-pass",
-    "policy_sha256": "c677c9ddc3954c1fc9cabbd85c2b46a9970dad2ad8ac5724d02c39def159bb41",
-    "reviewed_evidence_sha256": "65072a60d73f70faab87cce0ae5788f0e58d09b25f6304aa7e283faf04c2f0c4",
+    "policy_sha256": "7581e01da4cb29494671f4e3ae2d114d6790b4eebd71ef68f766b437154b25dd",
+    "reviewed_evidence_sha256": "4117549fabb46e82880937c6fdc5c1fdef98b20f64869bea76115024a4a7ac51",
     "outcome": "accepted",
     "evidence_complete": true
   }

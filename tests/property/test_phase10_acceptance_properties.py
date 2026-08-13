@@ -10,6 +10,7 @@ from typing import Any, cast
 from hypothesis import given
 from hypothesis import strategies as st
 
+from binnacle.evaluation.digests import canonical_json_bytes, sha256_bytes
 from binnacle.evaluation.phase10_acceptance import (
     AcceptanceVerdict,
     evaluate_phase10_manifest,
@@ -17,6 +18,9 @@ from binnacle.evaluation.phase10_acceptance import (
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+_DISTINCT_CI_PAIRS = tuple(
+    (source, target) for source in range(5) for target in range(5) if source != target
+)
 
 
 def _pass_manifest(repo_root: Path) -> dict[str, Any]:
@@ -70,11 +74,38 @@ def test_similarly_named_duplicate_ci_job_cannot_replace_required_job(
     duplicate_source = evidence[(index + 1) % len(evidence)]
     evidence[index]["job_name"] = duplicate_source["job_name"]
     evidence[index]["workflow_name"] = duplicate_source["workflow_name"]
+    evidence[index]["attestation"]["job_name"] = duplicate_source["job_name"]
+    evidence[index]["attestation"]["workflow_name"] = duplicate_source["workflow_name"]
+    evidence[index]["attestation_sha256"] = sha256_bytes(
+        canonical_json_bytes(evidence[index]["attestation"]) + b"\n"
+    )
 
     report = evaluate_phase10_manifest(manifest, repo_root=REPO_ROOT)
 
     assert report.verdict is AcceptanceVerdict.INCOMPLETE
     assert "required_ci_job_evidence_missing" in {finding.code for finding in report.findings}
+
+
+@given(pair=st.sampled_from(_DISTINCT_CI_PAIRS))
+def test_one_ci_attestation_cannot_be_relabelled_as_another_required_job(
+    pair: tuple[int, int],
+) -> None:
+    manifest = _pass_manifest(REPO_ROOT)
+    source_index, target_index = pair
+    evidence = manifest["integration_generations"][0]["ci_evidence"]
+    evidence[target_index]["attestation"] = copy.deepcopy(evidence[source_index]["attestation"])
+    evidence[target_index]["attestation_sha256"] = evidence[source_index]["attestation_sha256"]
+    manifest["owner_review"]["reviewed_evidence_sha256"] = phase10_reviewed_evidence_sha256(
+        manifest
+    )
+
+    report = evaluate_phase10_manifest(manifest, repo_root=REPO_ROOT)
+
+    assert report.verdict is AcceptanceVerdict.FAIL
+    assert {finding.code for finding in report.findings} >= {
+        "ci_attestation_reused",
+        "ci_attestation_identity_mismatch",
+    }
 
 
 @given(

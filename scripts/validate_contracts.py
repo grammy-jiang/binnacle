@@ -1315,10 +1315,25 @@ def validate_phase10_acceptance_contract() -> None:
         fail("Phase 10 policy protected branch differs from refs/heads/master")
 
     schema = load_json(ROOT / "schemas/acceptance/phase10-run.schema.json")
+    ci_attestation_schema = load_json(
+        ROOT / "schemas/acceptance/ci-checkout-attestation.schema.json"
+    )
     manifest = load_json(ROOT / "tests/fixtures/acceptance/phase10-pass.json")
     cases_document = load_json(ROOT / "tests/fixtures/acceptance/phase10-evaluator-cases.json")
-    if not isinstance(schema, dict) or not isinstance(manifest, dict):
+    if (
+        not isinstance(schema, dict)
+        or not isinstance(ci_attestation_schema, dict)
+        or not isinstance(manifest, dict)
+    ):
         return
+
+    embedded_attestation = schema.get("$defs", {}).get("ciCheckoutAttestation")
+    expected_embedded_attestation = {
+        name: ci_attestation_schema[name]
+        for name in ("type", "additionalProperties", "properties", "required")
+    }
+    if embedded_attestation != expected_embedded_attestation:
+        fail("Phase 10 run schema embeds a stale CI checkout-attestation contract")
 
     expected_limits = {
         "candidate_generations_max": schema.get("properties", {})
@@ -1356,6 +1371,8 @@ def validate_phase10_acceptance_contract() -> None:
     cases = _fixture_cases_by_id(cases_document, context="Phase 10 evaluator fixture")
     required_cases = {
         "ci-from-unreviewed-collector-fails",
+        "relabelled-ci-attestation-fails",
+        "reused-ci-attestation-fails",
         "complete-exact-chain-passes",
         "moved-pr-head-fails",
         "owner-review-on-old-evidence-is-incomplete",
@@ -1366,6 +1383,7 @@ def validate_phase10_acceptance_contract() -> None:
         "ci-with-wrong-parents-is-incomplete",
         "ci-tree-mismatch-fails",
         "stale-policy-is-incomplete",
+        "post-restart-runtime-profile-mismatch-fails",
         "unresolved-effect-is-incomplete",
     }
     missing_cases = required_cases - set(cases)

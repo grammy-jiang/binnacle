@@ -11,7 +11,7 @@ from typing import Any, cast
 
 from jsonschema import Draft202012Validator, FormatChecker  # type: ignore[import-untyped]
 
-from binnacle.evaluation.digests import canonical_json_sha256
+from binnacle.evaluation.digests import canonical_json_bytes, canonical_json_sha256, sha256_bytes
 from binnacle.evaluation.phase10_policy import (
     PHASE10_SCHEMA_PATH,
     Phase10Policy,
@@ -467,11 +467,41 @@ def _evaluate_integration(
             findings.incomplete("review_findings_unresolved", f"{path}/unresolved_actionable_count")
 
     observed_jobs: dict[str, set[str]] = {}
+    observed_attestations: set[str] = set()
     expected_tree = integration["expected_integration_tree_oid"]
     ci_evidence = _object_list(integration["ci_evidence"])
     for index, evidence in enumerate(ci_evidence):
         path = f"{prefix}/ci_evidence/{index}"
         workflow = cast(str, evidence["workflow_name"])
+        attestation = _object(evidence["attestation"])
+        attestation_sha256 = cast(str, evidence["attestation_sha256"])
+        if attestation_sha256 in observed_attestations:
+            findings.fail("ci_attestation_reused", f"{path}/attestation_sha256")
+        observed_attestations.add(attestation_sha256)
+        if sha256_bytes(canonical_json_bytes(attestation) + b"\n") != attestation_sha256:
+            findings.fail("ci_attestation_digest_mismatch", f"{path}/attestation_sha256")
+        attestation_bindings = (
+            ("workflow_name", "workflow_name"),
+            ("job_name", "job_name"),
+            ("run_id", "run_id"),
+            ("run_attempt", "run_attempt"),
+            ("repository", "repository"),
+            ("event_name", "event_name"),
+            ("collector_commit_oid", "collector_commit_oid"),
+            ("collector_sha256", "collector_sha256"),
+            ("candidate_oid", "event_candidate_oid"),
+            ("protected_base_oid", "event_base_oid"),
+            ("github_sha", "github_sha"),
+            ("checkout_oid", "checkout_oid"),
+            ("checkout_tree_oid", "checkout_tree_oid"),
+            ("checkout_parent_oids", "checkout_parent_oids"),
+            ("checkout_kind", "checkout_kind"),
+        )
+        if attestation["event_after_oid"] is not None or any(
+            evidence[evidence_name] != attestation[attestation_name]
+            for evidence_name, attestation_name in attestation_bindings
+        ):
+            findings.fail("ci_attestation_identity_mismatch", f"{path}/attestation")
         if evidence["required"]:
             observed_jobs.setdefault(workflow, set()).add(cast(str, evidence["job_name"]))
             if workflow not in policy.required_ci_jobs:
@@ -688,6 +718,14 @@ def _evaluate_restart_and_runtime(
         or runtime["runtime_tree_oid"] != github_merge["result_tree_oid"]
     ):
         findings.fail("post_restart_runtime_identity_mismatch", "/post_restart_runtime")
+    if (
+        baseline is not None
+        and runtime["runtime_profile_sha256"] != baseline["runtime_profile_sha256"]
+    ):
+        findings.fail(
+            "post_restart_runtime_profile_mismatch",
+            "/post_restart_runtime/runtime_profile_sha256",
+        )
     if (
         baseline is not None
         and runtime["runtime_instance_sha256"] == baseline["runtime_instance_sha256"]

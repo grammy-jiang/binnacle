@@ -634,6 +634,129 @@
         "unresolved_actionable_count"
       ]
     },
+    "ciCheckoutAttestation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1.0"
+        },
+        "repository": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 256,
+          "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+        },
+        "event_name": {
+          "enum": [
+            "pull_request",
+            "push"
+          ]
+        },
+        "workflow_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "job_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "run_id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "run_attempt": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000
+        },
+        "collector_commit_oid": {
+          "$ref": "#/$defs/oid"
+        },
+        "collector_sha256": {
+          "$ref": "#/$defs/digest"
+        },
+        "event_candidate_oid": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/oid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "event_base_oid": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/oid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "event_after_oid": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/oid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "github_sha": {
+          "$ref": "#/$defs/oid"
+        },
+        "checkout_oid": {
+          "$ref": "#/$defs/oid"
+        },
+        "checkout_tree_oid": {
+          "$ref": "#/$defs/oid"
+        },
+        "checkout_parent_oids": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/oid"
+          }
+        },
+        "checkout_kind": {
+          "enum": [
+            "pull_request_integration",
+            "push_commit",
+            "unbound"
+          ]
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "schema_version",
+        "repository",
+        "event_name",
+        "workflow_name",
+        "job_name",
+        "run_id",
+        "run_attempt",
+        "collector_commit_oid",
+        "collector_sha256",
+        "event_candidate_oid",
+        "event_base_oid",
+        "event_after_oid",
+        "github_sha",
+        "checkout_oid",
+        "checkout_tree_oid",
+        "checkout_parent_oids",
+        "checkout_kind",
+        "created_at"
+      ]
+    },
     "ciEvidence": {
       "type": "object",
       "additionalProperties": false,
@@ -710,6 +833,9 @@
         "required": {
           "type": "boolean"
         },
+        "attestation": {
+          "$ref": "#/$defs/ciCheckoutAttestation"
+        },
         "attestation_sha256": {
           "$ref": "#/$defs/digest"
         }
@@ -733,6 +859,7 @@
         "checkout_kind",
         "conclusion",
         "required",
+        "attestation",
         "attestation_sha256"
       ]
     },
@@ -1069,6 +1196,9 @@
         "runtime_instance_sha256": {
           "$ref": "#/$defs/digest"
         },
+        "runtime_profile_sha256": {
+          "$ref": "#/$defs/digest"
+        },
         "readiness": {
           "enum": [
             "ready",
@@ -1085,6 +1215,7 @@
         "runtime_oid",
         "runtime_tree_oid",
         "runtime_instance_sha256",
+        "runtime_profile_sha256",
         "readiness",
         "clean_source_state"
       ]

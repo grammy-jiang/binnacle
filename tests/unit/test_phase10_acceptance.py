@@ -64,6 +64,10 @@ def _apply_case(document: dict[str, Any], case: dict[str, Any]) -> None:
     operation = case["operation"]
     if operation == "none":
         return
+    if operation == "batch":
+        for nested_case in cast(list[dict[str, Any]], case["operations"]):
+            _apply_case(document, nested_case)
+        return
     parent, token = _pointer_parent(document, cast(str, case["path"]))
     if isinstance(parent, list):
         index = int(token)
@@ -83,9 +87,9 @@ def test_phase10_policy_is_frozen_and_canonical(repo_root: Path) -> None:
     policy = load_phase10_policy(repo_root)
 
     assert policy.policy_id == "binnacle-phase10-acceptance-v1"
-    assert policy.sha256 == "c677c9ddc3954c1fc9cabbd85c2b46a9970dad2ad8ac5724d02c39def159bb41"
+    assert policy.sha256 == "7581e01da4cb29494671f4e3ae2d114d6790b4eebd71ef68f766b437154b25dd"
     assert policy.acceptance_schema_sha256 == (
-        "31b6c8ee2fcc6a11ee3e7efd814fc441a8e1c2934de1e453be45d15626c49437"
+        "4bad2c4bf113fc0d749cca4637e5981686122ce9217d2622a903fea54ba520dc"
     )
     assert policy.ci_attestation_schema_sha256 == (
         "6b7d2c6dff03870790dfb3e4ee6be5c93399e61d1bc7c67afea2969ea91e2760"
@@ -126,10 +130,10 @@ def test_phase10_skeleton_claims_no_live_evidence(repo_root: Path) -> None:
     }
 
 
-@pytest.mark.parametrize("case_index", range(28))
+@pytest.mark.parametrize("case_index", range(31))
 def test_phase10_evaluator_fixture(case_index: int, repo_root: Path) -> None:
     cases = _cases(repo_root)
-    assert len(cases) == 28
+    assert len(cases) == 31
     case = cases[case_index]
     manifest = _pass_manifest(repo_root)
     _apply_case(manifest, case)
@@ -303,6 +307,16 @@ _EVALUATOR_BRANCH_CASES: tuple[tuple[str, object, str], ...] = (
         "Unreviewed CI",
         "unexpected_required_ci_evidence",
     ),
+    (
+        "/integration_generations/0/ci_evidence/0/attestation_sha256",
+        "8" * 64,
+        "ci_attestation_digest_mismatch",
+    ),
+    (
+        "/integration_generations/0/ci_evidence/0/attestation/workflow_name",
+        "Python CI",
+        "ci_attestation_identity_mismatch",
+    ),
     ("/failure_exercise/outcome", "unsafe", "failure_exercise_unsafe"),
     (
         "/failure_exercise/descendants_closed",
@@ -343,6 +357,11 @@ _EVALUATOR_BRANCH_CASES: tuple[tuple[str, object, str], ...] = (
         "/post_restart_runtime/runtime_instance_sha256",
         "0" * 64,
         "runtime_instance_not_replaced",
+    ),
+    (
+        "/post_restart_runtime/runtime_profile_sha256",
+        "8" * 64,
+        "post_restart_runtime_profile_mismatch",
     ),
     ("/behaviour_probe/outcome", "unavailable", "changed_behaviour_unavailable"),
     ("/behaviour_probe/post_restart", False, "behaviour_probe_not_post_restart"),
