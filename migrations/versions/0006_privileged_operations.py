@@ -277,7 +277,7 @@ def upgrade() -> None:
             name="ck_privileged_operations_states",
         ),
         sa.CheckConstraint(
-            "(broker_closure_state='complete')=(broker_closure_evidence_sha256 IS NOT NULL) "
+            "(broker_closure_state='pending')=(broker_closure_evidence_sha256 IS NULL) "
             "AND (audit_closure_state='complete')=(audit_closure_evidence_sha256 IS NOT NULL) "
             "AND (fence_closure_state='released')="
             "(fence_release_evidence_sha256 IS NOT NULL)",
@@ -674,7 +674,10 @@ def _create_operation_triggers() -> None:
             (OLD.restart_checkpoint_sha256 IS NOT NULL AND
              NEW.restart_checkpoint_sha256 IS NOT OLD.restart_checkpoint_sha256) OR
             (OLD.broker_closure_evidence_sha256 IS NOT NULL AND
-             NEW.broker_closure_evidence_sha256 IS NOT OLD.broker_closure_evidence_sha256) OR
+             (NEW.broker_closure_evidence_sha256 IS NULL OR
+              (NEW.broker_closure_state=OLD.broker_closure_state AND
+               NEW.broker_closure_evidence_sha256 IS NOT
+                 OLD.broker_closure_evidence_sha256))) OR
             (OLD.audit_closure_evidence_sha256 IS NOT NULL AND
              NEW.audit_closure_evidence_sha256 IS NOT OLD.audit_closure_evidence_sha256) OR
             (OLD.fence_release_evidence_sha256 IS NOT NULL AND

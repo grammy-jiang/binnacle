@@ -30,11 +30,12 @@ from binnacle.domain.privileged import (
     PrivilegedTicketRoutingIdentity,
     canonical_timestamp,
 )
+from binnacle.ports.privileged import PrivilegedBrokerUnavailable
 
 _Decoded = TypeVar("_Decoded")
 
 
-class PrivilegedClientError(RuntimeError):
+class PrivilegedClientError(PrivilegedBrokerUnavailable):
     """The broker is unavailable, incompatible, or returned invalid evidence."""
 
 

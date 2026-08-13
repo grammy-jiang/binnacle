@@ -454,10 +454,11 @@ def test_uncertain_privileged_effect_retains_the_global_reservation(
             UPDATE privileged_operations
             SET broker_acceptance_state='accepted',broker_evidence_generation=1,
                 broker_acceptance_evidence_sha256=?,broker_decided_at=?,
-                broker_closure_state='uncertain',state='uncertain',updated_at=?
+                broker_closure_state='uncertain',broker_closure_evidence_sha256=?,
+                state='uncertain',updated_at=?
             WHERE operation_id=?
             """,
-            (_digest("accepted"), NOW, NOW, operation_id),
+            (_digest("accepted"), NOW, _digest("uncertain"), NOW, operation_id),
         )
         connection.execute(
             "UPDATE operations SET state='uncertain',effect_knowledge='uncertain',"

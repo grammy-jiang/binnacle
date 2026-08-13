@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 
 from sqlalchemy import func, select, text, update
 from sqlalchemy.engine import CursorResult
@@ -24,6 +25,7 @@ from binnacle.adapters.sqlite.operation_store import SqliteOperationStore, _utc
 from binnacle.domain.development_session import ActivationClosure, DevelopmentSessionState
 from binnacle.domain.operation import (
     EffectKnowledge,
+    OperationError,
     OperationSnapshot,
     OperationState,
     TransitionRequest,
@@ -31,7 +33,10 @@ from binnacle.domain.operation import (
 )
 from binnacle.domain.privileged import (
     BrokerAcceptanceState,
+    BrokerBindingSnapshot,
+    BrokerExecutionState,
     PrivilegedAction,
+    PrivilegedEffectKnowledge,
     PrivilegedMaximumEffect,
 )
 from binnacle.domain.privileged_restart import (
@@ -275,6 +280,247 @@ class SqlitePrivilegedApplicationRepository:
                 ) from exc
             return self._record(operation, state)
 
+    async def mark_restart_dispatched(
+        self,
+        operation_id: str,
+        *,
+        dispatched_at: datetime,
+    ) -> PrivilegedRestartRecord:
+        if dispatched_at.tzinfo is None or dispatched_at.utcoffset() is None:
+            raise PrivilegedApplicationStoreError("restart dispatch time is naive")
+        async with self._runtime.session_factory() as session:
+            await session.execute(text("BEGIN IMMEDIATE"))
+            try:
+                operation = await session.get(PrivilegedOperationModel, operation_id)
+                phase4 = await session.get(OperationModel, operation_id)
+                reservation = await session.get(PrivilegedEffectReservationModel, operation_id)
+                if operation is None or phase4 is None or reservation is None:
+                    raise PrivilegedApplicationStoreError("restart dispatch evidence is incomplete")
+                updated_at = _utc(operation.updated_at)
+                if updated_at is None or dispatched_at < updated_at:
+                    raise PrivilegedApplicationStoreError("restart dispatch time regressed")
+                if (
+                    operation.state != PrivilegedOperationState.PREPARED.value
+                    or operation.broker_acceptance_state != BrokerAcceptanceState.UNRESOLVED.value
+                    or reservation.state != PrivilegedReservationState.HELD.value
+                ):
+                    raise PrivilegedApplicationStoreError(
+                        "restart dispatch marker conflicts with retained state"
+                    )
+                phase4_snapshot = await self._operations._snapshot(session, phase4)
+                running = transition(
+                    phase4_snapshot,
+                    TransitionRequest(
+                        expected_state_version=phase4_snapshot.state_version,
+                        to_state=OperationState.RUNNING,
+                        effect_knowledge=EffectKnowledge.NONE,
+                        reason_code="privileged_dispatch_committed",
+                        occurred_at=dispatched_at,
+                    ),
+                )
+                phase4_result = await session.execute(
+                    update(OperationModel)
+                    .where(
+                        OperationModel.operation_id == phase4_snapshot.operation_id,
+                        OperationModel.state == OperationState.AUTHORISED.value,
+                        OperationModel.state_version == phase4_snapshot.state_version,
+                    )
+                    .values(**SqliteOperationStore._operation_update_values(running))
+                )
+                self._require_one_row(
+                    phase4_result,
+                    "privileged dispatch Phase 4 CAS failed",
+                )
+                session.add(
+                    OperationTransitionModel(
+                        operation_id=phase4_snapshot.operation_id,
+                        state_version=running.state_version,
+                        from_state=phase4_snapshot.state.value,
+                        to_state=running.state.value,
+                        effect_knowledge=running.effect_knowledge.value,
+                        terminality=running.terminality.value,
+                        reason_code="privileged_dispatch_committed",
+                        error_code=None,
+                        recorded_at=running.updated_at,
+                        runtime_build_sha256=running.intent.runtime_build_sha256,
+                    )
+                )
+                await session.flush()
+                operation.state = PrivilegedOperationState.DISPATCHED.value
+                operation.updated_at = dispatched_at
+                await session.flush()
+                await session.commit()
+                return self._record(operation, PrivilegedReservationState.HELD)
+            except IntegrityError as exc:
+                await session.rollback()
+                raise PrivilegedApplicationStoreError(
+                    "restart dispatch marker violated durable authority"
+                ) from exc
+            except Exception:
+                await session.rollback()
+                raise
+
+    async def record_broker_snapshot(
+        self,
+        snapshot: BrokerBindingSnapshot,
+        *,
+        reconciled_at: datetime,
+    ) -> PrivilegedRestartRecord:
+        if reconciled_at.tzinfo is None or reconciled_at.utcoffset() is None:
+            raise PrivilegedApplicationStoreError("restart reconciliation time is naive")
+        async with self._runtime.session_factory() as session:
+            await session.execute(text("BEGIN IMMEDIATE"))
+            try:
+                operation = await session.get(
+                    PrivilegedOperationModel,
+                    snapshot.identity.operation_id,
+                )
+                phase4 = await session.get(OperationModel, snapshot.identity.operation_id)
+                reservation = await session.get(
+                    PrivilegedEffectReservationModel,
+                    snapshot.identity.operation_id,
+                )
+                if operation is None or phase4 is None or reservation is None:
+                    raise PrivilegedApplicationStoreError(
+                        "restart reconciliation evidence is incomplete"
+                    )
+                self._require_broker_identity(operation, phase4, snapshot)
+                phase4_snapshot = await self._operations._snapshot(session, phase4)
+                updated_at = _utc(operation.updated_at)
+                if updated_at is None or reconciled_at < updated_at:
+                    raise PrivilegedApplicationStoreError("restart reconciliation time regressed")
+                current_state = PrivilegedOperationState(operation.state)
+                current_acceptance = BrokerAcceptanceState(operation.broker_acceptance_state)
+                if snapshot.evidence_generation < operation.broker_evidence_generation:
+                    raise PrivilegedApplicationStoreError("broker evidence generation regressed")
+                if (
+                    current_acceptance is not BrokerAcceptanceState.UNRESOLVED
+                    and snapshot.acceptance_state is not current_acceptance
+                ):
+                    raise PrivilegedApplicationStoreError("broker acceptance decision changed")
+                if (
+                    operation.broker_acceptance_evidence_sha256 is not None
+                    and snapshot.acceptance_evidence_sha256
+                    != operation.broker_acceptance_evidence_sha256
+                ):
+                    raise PrivilegedApplicationStoreError("broker acceptance evidence changed")
+                if (
+                    snapshot.acceptance_state is not BrokerAcceptanceState.UNRESOLVED
+                    and current_state is PrivilegedOperationState.PREPARED
+                ):
+                    raise PrivilegedApplicationStoreError(
+                        "broker accepted before the durable dispatch marker"
+                    )
+                if snapshot.acceptance_state is BrokerAcceptanceState.SEALED_NO_ACCEPT:
+                    raise PrivilegedApplicationStoreError(
+                        "broker no-accept requires atomic terminal closure"
+                    )
+
+                next_state, next_reservation = self._reconciled_states(
+                    current_state,
+                    snapshot,
+                )
+                if next_reservation is not PrivilegedReservationState(reservation.state):
+                    reservation.state = next_reservation.value
+                    reservation.updated_at = reconciled_at
+                    await session.flush()
+
+                if (
+                    next_state
+                    in {
+                        PrivilegedOperationState.UNCERTAIN,
+                        PrivilegedOperationState.RESTRICTED_RECOVERY,
+                    }
+                    and phase4_snapshot.state is not OperationState.UNCERTAIN
+                ):
+                    uncertain = transition(
+                        phase4_snapshot,
+                        TransitionRequest(
+                            expected_state_version=phase4_snapshot.state_version,
+                            to_state=OperationState.UNCERTAIN,
+                            effect_knowledge=EffectKnowledge.UNCERTAIN,
+                            reason_code="privileged_broker_uncertain",
+                            error=OperationError(
+                                "operation_uncertain",
+                                "Privileged broker effect requires retained reconciliation.",
+                                "reconcile",
+                            ),
+                            occurred_at=reconciled_at,
+                        ),
+                    )
+                    phase4_result = await session.execute(
+                        update(OperationModel)
+                        .where(
+                            OperationModel.operation_id == phase4_snapshot.operation_id,
+                            OperationModel.state == phase4_snapshot.state.value,
+                            OperationModel.state_version == phase4_snapshot.state_version,
+                        )
+                        .values(**SqliteOperationStore._operation_update_values(uncertain))
+                    )
+                    self._require_one_row(
+                        phase4_result,
+                        "privileged Phase 4 uncertainty CAS failed",
+                    )
+                    session.add(
+                        OperationTransitionModel(
+                            operation_id=phase4_snapshot.operation_id,
+                            state_version=uncertain.state_version,
+                            from_state=phase4_snapshot.state.value,
+                            to_state=uncertain.state.value,
+                            effect_knowledge=uncertain.effect_knowledge.value,
+                            terminality=uncertain.terminality.value,
+                            reason_code="privileged_broker_uncertain",
+                            error_code="operation_uncertain",
+                            recorded_at=uncertain.updated_at,
+                            runtime_build_sha256=(uncertain.intent.runtime_build_sha256),
+                        )
+                    )
+                    await session.flush()
+
+                closure_state, closure_evidence = self._broker_closure(
+                    next_state,
+                    snapshot,
+                )
+                operation.broker_acceptance_state = snapshot.acceptance_state.value
+                operation.broker_evidence_generation = snapshot.evidence_generation
+                operation.broker_acceptance_evidence_sha256 = snapshot.acceptance_evidence_sha256
+                operation.broker_decided_at = snapshot.accepted_at or snapshot.sealed_at
+                operation.broker_closure_state = closure_state
+                operation.broker_closure_evidence_sha256 = closure_evidence
+                operation.state = next_state.value
+                operation.updated_at = reconciled_at
+                operation.last_reconciled_at = reconciled_at
+                await session.flush()
+                await session.commit()
+                return self._record(operation, next_reservation)
+            except IntegrityError as exc:
+                await session.rollback()
+                raise PrivilegedApplicationStoreError(
+                    "broker evidence violated restart authority"
+                ) from exc
+            except Exception:
+                await session.rollback()
+                raise
+
+    async def restart_recovery_pending(self) -> bool:
+        async with self._runtime.session_factory() as session:
+            count = (
+                await session.execute(
+                    select(func.count())
+                    .select_from(PrivilegedOperationModel)
+                    .where(
+                        PrivilegedOperationModel.action.in_(
+                            (
+                                PrivilegedAction.SERVICE_RESTART.value,
+                                PrivilegedAction.CONTROLLED_RESTART.value,
+                            )
+                        ),
+                        PrivilegedOperationModel.state != PrivilegedOperationState.TERMINAL.value,
+                    )
+                )
+            ).scalar_one()
+            return int(count) > 0
+
     @staticmethod
     def _validate_admission(
         request: RestartAuthorisationRequest,
@@ -314,6 +560,80 @@ class SqlitePrivilegedApplicationRepository:
             or fence.acquired_at is not None
         ):
             raise PrivilegedApplicationStoreError("restart workspace fence is busy")
+
+    @staticmethod
+    def _require_broker_identity(
+        operation: PrivilegedOperationModel,
+        phase4: OperationModel,
+        snapshot: BrokerBindingSnapshot,
+    ) -> None:
+        identity = snapshot.identity
+        issued_at = _utc(operation.ticket_issued_at)
+        expires_at = _utc(operation.ticket_expires_at)
+        if (
+            identity.operation_id != operation.operation_id
+            or identity.ticket_id != operation.ticket_id
+            or identity.ticket_sha256 != operation.ticket_sha256
+            or identity.ticket_nonce_sha256 != operation.ticket_nonce_sha256
+            or identity.action.value != operation.action
+            or identity.target_profile_id != operation.target_profile_id
+            or identity.target_profile_sha256 != operation.target_profile_sha256
+            or identity.broker_profile_sha256 != operation.broker_profile_sha256
+            or identity.request_fingerprint_sha256 != phase4.request_fingerprint_sha256
+            or identity.current_state_binding_sha256 != operation.current_state_binding_sha256
+            or identity.policy_evidence_sha256 != operation.policy_evidence_sha256
+            or identity.issued_at != issued_at
+            or identity.expires_at != expires_at
+        ):
+            raise PrivilegedApplicationStoreError(
+                "broker snapshot differs from the retained ticket"
+            )
+
+    @staticmethod
+    def _reconciled_states(
+        current: PrivilegedOperationState,
+        snapshot: BrokerBindingSnapshot,
+    ) -> tuple[PrivilegedOperationState, PrivilegedReservationState]:
+        if current is PrivilegedOperationState.TERMINAL:
+            return current, PrivilegedReservationState.RELEASED
+        if current is PrivilegedOperationState.RESTRICTED_RECOVERY:
+            return current, PrivilegedReservationState.RESTRICTED_RECOVERY
+        if current is PrivilegedOperationState.UNCERTAIN:
+            if snapshot.execution_state is BrokerExecutionState.RESTRICTED_RECOVERY:
+                return (
+                    PrivilegedOperationState.RESTRICTED_RECOVERY,
+                    PrivilegedReservationState.RESTRICTED_RECOVERY,
+                )
+            return current, PrivilegedReservationState.UNCERTAIN
+        if snapshot.execution_state is BrokerExecutionState.UNCERTAIN:
+            return PrivilegedOperationState.UNCERTAIN, PrivilegedReservationState.UNCERTAIN
+        if snapshot.execution_state is BrokerExecutionState.RESTRICTED_RECOVERY:
+            return (
+                PrivilegedOperationState.RESTRICTED_RECOVERY,
+                PrivilegedReservationState.RESTRICTED_RECOVERY,
+            )
+        if snapshot.acceptance_state is BrokerAcceptanceState.UNRESOLVED:
+            return current, PrivilegedReservationState.HELD
+        if current is PrivilegedOperationState.DISPATCHED:
+            return PrivilegedOperationState.RECONCILING, PrivilegedReservationState.HELD
+        return current, PrivilegedReservationState.HELD
+
+    @staticmethod
+    def _broker_closure(
+        state: PrivilegedOperationState,
+        snapshot: BrokerBindingSnapshot,
+    ) -> tuple[str, str | None]:
+        if state is PrivilegedOperationState.UNCERTAIN:
+            return "uncertain", snapshot.result_evidence_sha256
+        if state is PrivilegedOperationState.RESTRICTED_RECOVERY:
+            return "restricted_recovery", snapshot.result_evidence_sha256
+        if snapshot.execution_state is BrokerExecutionState.TERMINAL:
+            return "complete", snapshot.result_evidence_sha256
+        if snapshot.effect_knowledge is PrivilegedEffectKnowledge.UNCERTAIN:
+            raise PrivilegedApplicationStoreError(
+                "open broker execution reports contradictory uncertainty"
+            )
+        return "pending", None
 
     @staticmethod
     def _policy_model(

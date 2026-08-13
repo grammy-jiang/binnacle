@@ -28,8 +28,17 @@ from binnacle.domain.operation import (
     TransitionRequest,
 )
 from binnacle.domain.policy import PolicyDecision, PolicyDecisionValue
-from binnacle.domain.privileged import PrivilegedAction, PrivilegedMaximumEffect, PrivilegedTicket
+from binnacle.domain.privileged import (
+    BrokerAcceptanceState,
+    BrokerBindingSnapshot,
+    BrokerExecutionState,
+    PrivilegedAction,
+    PrivilegedEffectKnowledge,
+    PrivilegedMaximumEffect,
+    PrivilegedTicket,
+)
 from binnacle.domain.privileged_restart import (
+    PrivilegedOperationState,
     PrivilegedPreparationState,
     PrivilegedReservationState,
     PrivilegedRestartPreparation,
@@ -252,6 +261,32 @@ def _ticket(
     )
 
 
+def _broker_snapshot(
+    ticket: PrivilegedTicket,
+    *,
+    execution_state: BrokerExecutionState = BrokerExecutionState.ACCEPTED_PRE_EFFECT,
+    effect_knowledge: PrivilegedEffectKnowledge = PrivilegedEffectKnowledge.NONE,
+    result_evidence_sha256: str | None = None,
+) -> BrokerBindingSnapshot:
+    return BrokerBindingSnapshot(
+        identity=ticket.routing_identity,
+        acceptance_state=BrokerAcceptanceState.ACCEPTED,
+        evidence_generation=1,
+        acceptance_evidence_sha256=_digest("broker-accepted"),
+        execution_state=execution_state,
+        effect_knowledge=effect_knowledge,
+        result_evidence_sha256=result_evidence_sha256,
+        accepted_at=ticket.issued_at + timedelta(milliseconds=100),
+        sealed_at=None,
+        closed_at=(
+            ticket.issued_at + timedelta(milliseconds=200)
+            if execution_state is BrokerExecutionState.TERMINAL
+            else None
+        ),
+        last_reconciled_at=None,
+    )
+
+
 @pytest.mark.anyio
 async def test_restart_admission_atomically_binds_policy_fence_ticket_and_reservation(
     tmp_path: Path,
@@ -319,8 +354,10 @@ async def test_restart_admission_atomically_binds_policy_fence_ticket_and_reserv
         assert fence.active_operation_id == operation.operation_id
         assert fence.active_contract == "binnacle_restart"
         assert retained.ticket_sha256 == ticket.ticket_sha256
+        assert retained.state is PrivilegedOperationState.PREPARED
         assert retained.reservation_state is PrivilegedReservationState.HELD
         assert await repository.get_restart(operation.operation_id) == retained
+        assert await repository.restart_recovery_pending()
         await SqliteWorkspaceRepository(runtime).verify_integrity()
         async with runtime.engine.connect() as connection:
             assert (
@@ -332,6 +369,46 @@ async def test_restart_admission_atomically_binds_policy_fence_ticket_and_reserv
                     {"operation_id": prepare_operation.operation_id},
                 )
             ).one() == ("consumed", operation.operation_id)
+
+        accepted = _broker_snapshot(ticket)
+        with pytest.raises(
+            PrivilegedApplicationStoreError,
+            match="before the durable dispatch marker",
+        ):
+            await repository.record_broker_snapshot(
+                accepted,
+                reconciled_at=ticket.issued_at + timedelta(seconds=1),
+            )
+
+        dispatched = await repository.mark_restart_dispatched(
+            operation.operation_id,
+            dispatched_at=ticket.issued_at + timedelta(seconds=1),
+        )
+        assert dispatched.state is PrivilegedOperationState.DISPATCHED
+        reconciled = await repository.record_broker_snapshot(
+            accepted,
+            reconciled_at=ticket.issued_at + timedelta(seconds=2),
+        )
+        assert reconciled.state is PrivilegedOperationState.RECONCILING
+        assert reconciled.broker_acceptance_state is BrokerAcceptanceState.ACCEPTED
+
+        uncertain = _broker_snapshot(
+            ticket,
+            execution_state=BrokerExecutionState.UNCERTAIN,
+            effect_knowledge=PrivilegedEffectKnowledge.UNCERTAIN,
+            result_evidence_sha256=_digest("uncertain-broker-result"),
+        )
+        retained_uncertain = await repository.record_broker_snapshot(
+            uncertain,
+            reconciled_at=ticket.issued_at + timedelta(seconds=3),
+        )
+        assert retained_uncertain.state is PrivilegedOperationState.UNCERTAIN
+        assert retained_uncertain.reservation_state is PrivilegedReservationState.UNCERTAIN
+        phase4_uncertain = await operations.get_operation(operation.operation_id)
+        assert phase4_uncertain is not None
+        assert phase4_uncertain.state is OperationState.UNCERTAIN
+        assert phase4_uncertain.effect_knowledge is EffectKnowledge.UNCERTAIN
+        await SqliteWorkspaceRepository(runtime).verify_integrity()
 
 
 @pytest.mark.anyio

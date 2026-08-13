@@ -23,6 +23,7 @@ from binnacle.adapters.linux import (
 )
 from binnacle.adapters.payload.filesystem import FilesystemPayloadStore
 from binnacle.adapters.policy.bootstrap import BootstrapPolicyEngine
+from binnacle.adapters.privileged_ipc.client import PrivilegedClient, PrivilegedClientSettings
 from binnacle.adapters.probe_workspace import (
     LinuxProbeWorkspace,
     ProbeWorkspaceEffectBoundary,
@@ -37,6 +38,7 @@ from binnacle.adapters.sqlite.engine import (
 )
 from binnacle.adapters.sqlite.operation_store import SqliteOperationStore
 from binnacle.adapters.sqlite.payload import SqlitePayloadMetadataRepository
+from binnacle.adapters.sqlite.privileged import SqlitePrivilegedApplicationRepository
 from binnacle.adapters.sqlite.probe_workspace import SqliteProbeWorkspaceRepository
 from binnacle.application import BinnacleApplication, CompatibilityUseCases
 from binnacle.application.boundary import (
@@ -48,6 +50,7 @@ from binnacle.application.boundary import (
 )
 from binnacle.application.kernel_health import KernelAvailability, KernelHealth
 from binnacle.application.operations import OperationCoordinator
+from binnacle.application.privileged_reconciliation import PrivilegedRestartReconciler
 from binnacle.application.probe_workspace import (
     ProbeOperationAuthoriser,
     ProbeOperationBoundaryVerifier,
@@ -57,7 +60,10 @@ from binnacle.application.probe_workspace import (
     ProbeWorkspaceService,
     ProbeWorkspaceUseCases,
 )
-from binnacle.application.reconciliation import OperationReconciler
+from binnacle.application.reconciliation import (
+    CompositeSpecializedOperationReconciler,
+    OperationReconciler,
+)
 from binnacle.application.trusted_time import TrustedTimeGuard
 from binnacle.config import BinnacleSettings
 from binnacle.contracts import ContractRegistry
@@ -331,13 +337,26 @@ async def compose_operation_kernel(
         gate = ConsequentialBoundaryGate()
         trusted_time_guard = TrustedTimeGuard(source=selected_trusted_time_source, store=store)
         trusted_time_available = await trusted_time_guard.accept_startup_snapshot(trusted_time)
+        privileged_repository = SqlitePrivilegedApplicationRepository(database)
+        privileged_reconciler = PrivilegedRestartReconciler(
+            repository=privileged_repository,
+            broker=PrivilegedClient(PrivilegedClientSettings()),
+        )
+        specialized_reconciler = CompositeSpecializedOperationReconciler(
+            *(
+                (probe_reconciler, privileged_reconciler)
+                if probe_reconciler is not None
+                else (privileged_reconciler,)
+            )
+        )
         reconciler = OperationReconciler(
             store=store,
             obligations=obligations,
             gate=gate,
-            specialized_reconciler=probe_reconciler,
+            specialized_reconciler=specialized_reconciler,
         )
         await reconciler.reconcile_startup(open_when_healthy=False)
+        privileged_recovery_pending = await privileged_repository.restart_recovery_pending()
         surviving = await obligations.scan()
         latched, generation, recovered = await store.audit_failure_state()
         stored_recovery_evidence = await store.audit_recovery_evidence_sha256()
@@ -369,7 +388,11 @@ async def compose_operation_kernel(
             )
         if not trusted_time_available:
             reason_values.append("trusted_time_unavailable")
-        kernel_available = audit_available and trusted_time_available
+        if privileged_recovery_pending:
+            reason_values.append("privileged_restart_recovery_required")
+        kernel_available = (
+            audit_available and trusted_time_available and not privileged_recovery_pending
+        )
         availability = (
             KernelAvailability.AVAILABLE if kernel_available else KernelAvailability.UNAVAILABLE
         )

@@ -32,6 +32,10 @@ from binnacle.domain.privileged_restart import (
 from binnacle.domain.workspace import WorkspaceFence
 
 
+class PrivilegedBrokerUnavailable(RuntimeError):
+    """The authenticated broker boundary cannot return trustworthy evidence."""
+
+
 class PrivilegedTicketVerifier(Protocol):
     """Verify receiver-owned ticket authority before durable acceptance."""
 
@@ -127,11 +131,28 @@ class PrivilegedApplicationRepository(Protocol):
 
     async def get_restart(self, operation_id: str) -> PrivilegedRestartRecord | None: ...
 
+    async def mark_restart_dispatched(
+        self,
+        operation_id: str,
+        *,
+        dispatched_at: datetime,
+    ) -> PrivilegedRestartRecord: ...
+
+    async def record_broker_snapshot(
+        self,
+        snapshot: BrokerBindingSnapshot,
+        *,
+        reconciled_at: datetime,
+    ) -> PrivilegedRestartRecord: ...
+
+    async def restart_recovery_pending(self) -> bool: ...
+
 
 __all__ = [
     "PackageObservationPort",
     "PrivilegedApplicationRepository",
     "PrivilegedBrokerPort",
+    "PrivilegedBrokerUnavailable",
     "PrivilegedEvidenceStore",
     "PrivilegedTicketVerifier",
     "RestartPreflightPort",
