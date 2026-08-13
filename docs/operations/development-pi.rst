@@ -60,6 +60,10 @@ The development profile uses these fixed paths and identities:
    /var/lib/binnacle-privileged/evidence.db
    /run/binnacle-privileged
    /opt/binnacle-privileged
+   /srv/binnacle-runtime
+   /srv/binnacle-runtime/slots
+   /srv/binnacle-runtime/.staging
+   /srv/binnacle-runtime/current
 
    application user and primary group: binnacle
    source-read supplementary group: binnacle-dev
@@ -91,6 +95,12 @@ broker config, database, and separately installed runtime are ``root:root`` and 
 read or replaced by the application, executor, command, or credential identities.  The
 socket parent is directly under root-owned ``/run``, never under application-owned
 ``/run/binnacle``.
+
+The runtime root and ``slots`` child are ``root:binnacle`` ``0750``; the private
+``.staging`` child is ``root:root`` ``0700``.  Complete slots are published
+``root:binnacle`` ``0550`` with only ``0440`` data and ``0550`` traversable/executable
+members.  ``current`` is a root-owned relative selector.  The service identity can read a
+selected complete slot but cannot create, replace, rename, or remove any slot or selector.
 
 Prepare the reviewed checkout
 -----------------------------
@@ -331,9 +341,13 @@ regular files from the same reviewed immutable installation.  Never run the muta
 checkout, its ``.venv``, or ``scripts/verify_privileged_broker.py`` as root against
 authoritative host state.
 
-The repository currently implements only durable accept-or-seal evidence, authenticated
-framing, retained lookup/sealing, and the read-only installed verifier.  Configuration
-must contain this exact default-disabled profile:
+The repository currently implements durable accept-or-seal evidence, authenticated
+framing, retained lookup/sealing, the read-only installed verifier, and uncomposed
+root-side primitives for exact no-overwrite slot publication and selector compare-and-swap.
+Those filesystem primitives do not authorize themselves: the production broker still has
+no start handler and no caller can invoke them without the future retained restart intent,
+Phase 6 mutation fence, selected systemd adapter, and promotion gates.  Configuration must
+contain this exact default-disabled profile:
 
 .. code-block:: toml
 
@@ -363,7 +377,8 @@ tree outside protected host roots:
 
 The generator creates a new manifest with exclusive-create semantics and refuses installed
 ``/opt``, ``/etc``, ``/run``, ``/var`` and runtime-selector trees.  It is not an installer:
-an owner-reviewed, atomic root-owned publication procedure remains required before promotion.
+an owner-reviewed root procedure must still bind the verified export, retain the broker
+intent, and invoke the uncomposed publication primitive before promotion.
 No package-manager, systemd, runtime-selector, restart, rollback, or reboot effect handler
 is composed.  The socket and service therefore remain disabled while the immutable artifact
 installation/publication procedure, selected adapters, candidate-Pi evidence, and human

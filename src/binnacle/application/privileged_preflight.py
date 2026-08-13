@@ -117,6 +117,7 @@ class RuntimeIdentityBuilder:
                 python_version=evidence.python_version,
                 environment_root=evidence.environment_root,
                 environment_sha256=evidence.environment_sha256,
+                runtime_slot_identity_sha256=(None if slot is None else slot.slot_identity_sha256),
                 lock_sha256=evidence.lock_sha256,
                 build_sha256=evidence.build_sha256,
                 config_sha256=evidence.config_sha256,
@@ -275,6 +276,8 @@ class RestartPreflightEvaluator:
 
         controlled = kind is RestartPreflightKind.CONTROLLED_SELF
         if controlled:
+            if runtime is not None and runtime.runtime_slot_identity_sha256 is None:
+                reasons.add(RestartPreflightReason.CURRENT_RUNTIME_UNAVAILABLE)
             if (
                 lkg_slot is None
                 or lkg_slot.role is not RuntimeSlotRole.LKG

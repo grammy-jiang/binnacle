@@ -68,6 +68,7 @@ class RuntimeSlotManifest:
     deployed_peer_set_sha256: str
     migration_heads_sha256: str
     layout_sha256: str
+    candidate_verification_sha256: str
     completed_at: datetime
     directories: tuple[str, ...]
     files: tuple[RuntimeSlotFile, ...]
@@ -88,6 +89,7 @@ class RuntimeSlotManifest:
             (self.deployed_peer_set_sha256, "runtime slot deployed-peer set"),
             (self.migration_heads_sha256, "runtime slot migration heads"),
             (self.layout_sha256, "runtime slot layout"),
+            (self.candidate_verification_sha256, "runtime slot candidate verification"),
         ):
             _require_sha256(value, name)
         try:
@@ -154,10 +156,16 @@ class FilesystemRuntimeSlotInspector:
         return self.inspect_sync(slot_id)
 
     async def current(self) -> VerifiedRuntimeSlot | None:
+        return self.current_sync()
+
+    def current_sync(self) -> VerifiedRuntimeSlot | None:
         slot_id = self._selector_slot_id()
         return None if slot_id is None else self.inspect_sync(slot_id)
 
     async def lkg(self) -> VerifiedRuntimeSlot | None:
+        return self.lkg_sync()
+
+    def lkg_sync(self) -> VerifiedRuntimeSlot | None:
         matches = [slot for slot in self._inspect_all() if slot.state is RuntimeSlotState.LKG]
         if len(matches) > 1:
             raise RuntimeSlotVerificationError("multiple complete LKG slots exist")
@@ -209,6 +217,7 @@ class FilesystemRuntimeSlotInspector:
                 deployed_peer_set_sha256=manifest.deployed_peer_set_sha256,
                 migration_heads_sha256=manifest.migration_heads_sha256,
                 layout_sha256=manifest.layout_sha256,
+                candidate_verification_sha256=manifest.candidate_verification_sha256,
                 complete_manifest_sha256=manifest.complete_manifest_sha256,
                 byte_count=manifest.byte_count,
                 inode_count=manifest.inode_count,
@@ -414,6 +423,7 @@ class FilesystemRuntimeSlotInspector:
 
 def _manifest_from_document(value: object) -> RuntimeSlotManifest:
     expected = {
+        "candidate_verification_sha256",
         "completed_at",
         "config_sha256",
         "deployed_peer_set_sha256",
@@ -486,6 +496,7 @@ def _manifest_from_document(value: object) -> RuntimeSlotManifest:
         deployed_peer_set_sha256=value["deployed_peer_set_sha256"],
         migration_heads_sha256=value["migration_heads_sha256"],
         layout_sha256=value["layout_sha256"],
+        candidate_verification_sha256=value["candidate_verification_sha256"],
         completed_at=completed_at,
         directories=tuple(directories),
         files=tuple(parsed_files),
@@ -497,6 +508,7 @@ def _manifest_from_document(value: object) -> RuntimeSlotManifest:
 
 def canonical_runtime_slot_manifest_bytes(manifest: RuntimeSlotManifest) -> bytes:
     document = {
+        "candidate_verification_sha256": manifest.candidate_verification_sha256,
         "completed_at": canonical_timestamp(manifest.completed_at),
         "config_sha256": manifest.config_sha256,
         "deployed_peer_set_sha256": manifest.deployed_peer_set_sha256,

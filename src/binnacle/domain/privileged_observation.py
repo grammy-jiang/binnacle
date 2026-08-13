@@ -349,6 +349,7 @@ class RuntimeIdentity:
     python_version: str
     environment_root: str
     environment_sha256: str
+    runtime_slot_identity_sha256: str | None
     lock_sha256: str
     build_sha256: str
     config_sha256: str
@@ -385,6 +386,8 @@ class RuntimeIdentity:
             (self.deployed_peer_set_sha256, "runtime deployed-peer set"),
         ):
             _require_sha256(value, name)
+        if self.runtime_slot_identity_sha256 is not None:
+            _require_sha256(self.runtime_slot_identity_sha256, "runtime slot identity")
         _require_absolute_path(self.python_executable, "runtime Python executable")
         _require_absolute_path(self.environment_root, "runtime environment root")
         _require_bounded_text(self.python_version, "runtime Python version", 128)
@@ -415,6 +418,7 @@ class VerifiedRuntimeSlot:
     deployed_peer_set_sha256: str
     migration_heads_sha256: str
     layout_sha256: str
+    candidate_verification_sha256: str
     complete_manifest_sha256: str
     byte_count: int
     inode_count: int
@@ -441,6 +445,7 @@ class VerifiedRuntimeSlot:
             (self.deployed_peer_set_sha256, "slot deployed-peer set"),
             (self.migration_heads_sha256, "slot migration heads"),
             (self.layout_sha256, "slot layout"),
+            (self.candidate_verification_sha256, "slot candidate verification"),
             (self.complete_manifest_sha256, "slot complete manifest"),
         ):
             _require_sha256(value, name)

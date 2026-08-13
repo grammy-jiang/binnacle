@@ -347,6 +347,7 @@ def upgrade() -> None:
         sa.Column("deployed_peer_set_sha256", sa.String(length=64), nullable=False),
         sa.Column("migration_heads_sha256", sa.String(length=64), nullable=False),
         sa.Column("layout_sha256", sa.String(length=64), nullable=False),
+        sa.Column("candidate_verification_sha256", sa.String(length=64), nullable=False),
         sa.Column("complete_manifest_sha256", sa.String(length=64), nullable=True),
         sa.Column("byte_count", sa.Integer(), nullable=False),
         sa.Column("inode_count", sa.Integer(), nullable=False),
@@ -380,6 +381,7 @@ def upgrade() -> None:
                     "deployed_peer_set_sha256",
                     "migration_heads_sha256",
                     "layout_sha256",
+                    "candidate_verification_sha256",
                 )
             )
             + " AND (complete_manifest_sha256 IS NULL OR "
@@ -827,7 +829,9 @@ def upgrade() -> None:
             NEW.service_definition_sha256!=OLD.service_definition_sha256 OR
             NEW.deployed_peer_set_sha256!=OLD.deployed_peer_set_sha256 OR
             NEW.migration_heads_sha256!=OLD.migration_heads_sha256 OR
-            NEW.layout_sha256!=OLD.layout_sha256 OR NEW.byte_count!=OLD.byte_count OR
+            NEW.layout_sha256!=OLD.layout_sha256 OR
+            NEW.candidate_verification_sha256!=OLD.candidate_verification_sha256 OR
+            NEW.byte_count!=OLD.byte_count OR
             NEW.inode_count!=OLD.inode_count OR NEW.created_at!=OLD.created_at
           THEN RAISE(ABORT, 'privileged runtime slot identity changed') END;
           SELECT CASE WHEN NEW.updated_at<OLD.updated_at OR

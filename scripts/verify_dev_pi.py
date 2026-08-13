@@ -55,6 +55,9 @@ PRIVILEGED_EXECUTABLE = PRIVILEGED_INSTALL_ROOT / "bin/binnacle-privileged-broke
 PRIVILEGED_VERIFY_EXECUTABLE = PRIVILEGED_INSTALL_ROOT / "bin/binnacle-privileged-verify"
 PRIVILEGED_ARTIFACT_MANIFEST = PRIVILEGED_INSTALL_ROOT / "artifact-manifest.json"
 PRIVILEGED_TMPFILES_PATH = Path("/etc/tmpfiles.d/binnacle-privileged.conf")
+RUNTIME_SLOT_ROOT = Path("/srv/binnacle-runtime")
+RUNTIME_SLOT_DIRECTORY = RUNTIME_SLOT_ROOT / "slots"
+RUNTIME_SLOT_STAGING = RUNTIME_SLOT_ROOT / ".staging"
 CANONICAL_REPO = Path("/srv/binnacle-dev/repo")
 _MAX_CONFIG_BYTES = 65_536
 _FULL_GIT_SHA = re.compile(r"[0-9a-f]{40}")
@@ -1192,6 +1195,9 @@ def _privileged_foundation_checks() -> list[VerificationCheck]:
             "persistent": PRIVILEGED_PERSISTENT_ROOT.stat(follow_symlinks=False),
             "runtime": PRIVILEGED_RUNTIME_ROOT.stat(follow_symlinks=False),
             "install": PRIVILEGED_INSTALL_ROOT.stat(follow_symlinks=False),
+            "runtime-slot-root": RUNTIME_SLOT_ROOT.stat(follow_symlinks=False),
+            "runtime-slot-directory": RUNTIME_SLOT_DIRECTORY.stat(follow_symlinks=False),
+            "runtime-slot-staging": RUNTIME_SLOT_STAGING.stat(follow_symlinks=False),
         }
         config_file = PRIVILEGED_CONFIG_FILE.stat(follow_symlinks=False)
         database = PRIVILEGED_DATABASE.stat(follow_symlinks=False)
@@ -1291,6 +1297,32 @@ def _privileged_foundation_checks() -> list[VerificationCheck]:
             stat.S_IMODE(paths["install"].st_mode),
         )
         == (0, 0, 0o755)
+        and (
+            paths["runtime-slot-root"].st_uid,
+            paths["runtime-slot-root"].st_gid,
+            stat.S_IMODE(paths["runtime-slot-root"].st_mode),
+        )
+        == (0, application_group.gr_gid, 0o750)
+        and (
+            paths["runtime-slot-directory"].st_uid,
+            paths["runtime-slot-directory"].st_gid,
+            stat.S_IMODE(paths["runtime-slot-directory"].st_mode),
+        )
+        == (0, application_group.gr_gid, 0o750)
+        and (
+            paths["runtime-slot-staging"].st_uid,
+            paths["runtime-slot-staging"].st_gid,
+            stat.S_IMODE(paths["runtime-slot-staging"].st_mode),
+        )
+        == (0, 0, 0o700)
+        and len(
+            {
+                paths["runtime-slot-root"].st_dev,
+                paths["runtime-slot-directory"].st_dev,
+                paths["runtime-slot-staging"].st_dev,
+            }
+        )
+        == 1
         and all(
             stat.S_ISREG(metadata.st_mode)
             and not stat.S_ISLNK(metadata.st_mode)
@@ -1356,6 +1388,9 @@ def _privileged_foundation_checks() -> list[VerificationCheck]:
             "d /var/lib/binnacle-privileged 0700 root root -",
             "d /etc/binnacle-privileged 0700 root root -",
             "d /opt/binnacle-privileged 0755 root root -",
+            "d /srv/binnacle-runtime 0750 root binnacle -",
+            "d /srv/binnacle-runtime/slots 0750 root binnacle -",
+            "d /srv/binnacle-runtime/.staging 0700 root root -",
         }
     )
     return [

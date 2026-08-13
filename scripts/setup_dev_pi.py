@@ -85,6 +85,11 @@ PRIVILEGED_ROOT_PATHS = (
     (Path("/opt/binnacle-privileged"), 0o755),
 )
 PRIVILEGED_RUNTIME_PATHS = ((Path("/run/binnacle-privileged"), 0o750),)
+RUNTIME_SLOT_ROOT_PATHS = (
+    (Path("/srv/binnacle-runtime"), 0o750),
+    (Path("/srv/binnacle-runtime/slots"), 0o750),
+)
+RUNTIME_SLOT_PRIVATE_PATHS = ((Path("/srv/binnacle-runtime/.staging"), 0o700),)
 SYSTEM_PATHS = (
     *ROOT_PROTECTED_PATHS,
     *SERVICE_STATE_PATHS,
@@ -99,6 +104,8 @@ SYSTEM_PATHS = (
     *GIT_CREDENTIAL_RUNTIME_PRIVATE_PATHS,
     *PRIVILEGED_ROOT_PATHS,
     *PRIVILEGED_RUNTIME_PATHS,
+    *RUNTIME_SLOT_ROOT_PATHS,
+    *RUNTIME_SLOT_PRIVATE_PATHS,
 )
 
 
@@ -176,6 +183,7 @@ def build_setup_plan(repo: Path) -> SetupPlan:
         "create separate executor config/state/output/runtime ownership roots",
         "create separate credential config/state/runtime ownership roots",
         "create root-owned privileged config/state/runtime/installation roots",
+        "create root-owned immutable runtime-slot and private staging roots",
         "install application/executor/credential/privileged service, socket, "
         "and tmpfiles assets atomically",
         "leave executor, credential, and privileged sockets/services disabled until promotion",
@@ -278,6 +286,10 @@ def apply_setup(repo: Path, *, enable: bool) -> SetupPlan:
         _ensure_protected_directory(path, uid=0, gid=0, mode=mode)
     for path, mode in PRIVILEGED_RUNTIME_PATHS:
         _ensure_protected_directory(path, uid=0, gid=privileged_client_gid, mode=mode)
+    for path, mode in RUNTIME_SLOT_ROOT_PATHS:
+        _ensure_protected_directory(path, uid=0, gid=service_gid, mode=mode)
+    for path, mode in RUNTIME_SLOT_PRIVATE_PATHS:
+        _ensure_protected_directory(path, uid=0, gid=0, mode=mode)
 
     for name in (
         SERVICE_NAME,

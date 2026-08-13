@@ -325,6 +325,12 @@ def test_restart_slot_and_selector_recovery_evidence_is_monotonic(
             role="candidate",
             state="complete",
         )
+        with pytest.raises(sqlite3.IntegrityError, match="runtime slot identity changed"):
+            connection.execute(
+                "UPDATE privileged_runtime_slots SET candidate_verification_sha256=? "
+                "WHERE slot_id='candidate-slot'",
+                ("9" * 64,),
+            )
         connection.execute(
             """
             INSERT INTO privileged_restart_checkpoints VALUES (
@@ -420,7 +426,7 @@ def _insert_slot(
     connection.execute(
         """
         INSERT INTO privileged_runtime_slots VALUES (
-          ?,?,? ,?,?, ?,?,?,?,?, ?,?,?,?, ?,4096,64,CURRENT_TIMESTAMP,
+          ?,?,? ,?,?, ?,?,?,?,?, ?,?,?,?,?, ?,4096,64,CURRENT_TIMESTAMP,
           CURRENT_TIMESTAMP,CURRENT_TIMESTAMP
         )
         """,
@@ -440,5 +446,6 @@ def _insert_slot(
             "2" * 64,
             "3" * 64,
             "4" * 64,
+            "5" * 64,
         ),
     )

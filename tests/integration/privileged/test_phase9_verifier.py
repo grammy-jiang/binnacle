@@ -215,7 +215,7 @@ def _insert_slot(
     connection.execute(
         """
         INSERT INTO privileged_runtime_slots VALUES (
-          ?,?,?,'lkg',?, ?,?,?,?,?, ?,?,?,?, ?,4096,64,CURRENT_TIMESTAMP,
+          ?,?,?,'lkg',?, ?,?,?,?,?, ?,?,?,?,?, ?,4096,64,CURRENT_TIMESTAMP,
           CURRENT_TIMESTAMP,CURRENT_TIMESTAMP
         )
         """,
@@ -234,5 +234,6 @@ def _insert_slot(
             "2" * 64,
             "3" * 64,
             "4" * 64,
+            "5" * 64,
         ),
     )

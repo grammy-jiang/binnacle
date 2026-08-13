@@ -83,6 +83,7 @@ def _install_slot(
         deployed_peer_set_sha256=SHA_A,
         migration_heads_sha256=SHA_B,
         layout_sha256=SHA_C,
+        candidate_verification_sha256=SHA_A,
         completed_at=NOW,
         directories=("bin", "lib", "lib/binnacle"),
         files=files,
@@ -466,7 +467,7 @@ async def test_runtime_slot_rejects_duplicate_invalid_and_unavailable_manifest(
 
     raw = path.read_text(encoding="utf-8")
     path.chmod(0o640)
-    path.write_text(raw.replace('{"completed_at":', '{"completed_at":"x","completed_at":', 1))
+    path.write_text(raw.replace('"completed_at":', '"completed_at":"x","completed_at":', 1))
     path.chmod(0o440)
     with pytest.raises(RuntimeSlotVerificationError, match="invalid JSON"):
         await inspector.inspect("slot-0001")

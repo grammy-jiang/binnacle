@@ -53,6 +53,9 @@ def test_privileged_units_and_tmpfiles_freeze_root_boundary(repo_root: Path) -> 
         "d /var/lib/binnacle-privileged 0700 root root -",
         "d /etc/binnacle-privileged 0700 root root -",
         "d /opt/binnacle-privileged 0755 root root -",
+        "d /srv/binnacle-runtime 0750 root binnacle -",
+        "d /srv/binnacle-runtime/slots 0750 root binnacle -",
+        "d /srv/binnacle-runtime/.staging 0700 root root -",
     } <= set(tmpfiles.splitlines())
 
 
@@ -63,6 +66,13 @@ def test_setup_declares_separate_privileged_roots_and_assets(repo_root: Path) ->
         (Path("/opt/binnacle-privileged"), 0o755),
     ) == setup_dev_pi.PRIVILEGED_ROOT_PATHS
     assert ((Path("/run/binnacle-privileged"), 0o750),) == setup_dev_pi.PRIVILEGED_RUNTIME_PATHS
+    assert (
+        (Path("/srv/binnacle-runtime"), 0o750),
+        (Path("/srv/binnacle-runtime/slots"), 0o750),
+    ) == setup_dev_pi.RUNTIME_SLOT_ROOT_PATHS
+    assert ((Path("/srv/binnacle-runtime/.staging"), 0o700),) == (
+        setup_dev_pi.RUNTIME_SLOT_PRIVATE_PATHS
+    )
     pyproject = (repo_root / "pyproject.toml").read_text(encoding="utf-8")
     assert 'binnacle-privileged-broker = "binnacle.privileged_broker.__main__:main"' in pyproject
 
@@ -81,11 +91,17 @@ def _install_foundation_paths(
     persistent = tmp_path / "var/lib/binnacle-privileged"
     runtime = tmp_path / "run/binnacle-privileged"
     install = tmp_path / "opt/binnacle-privileged"
+    runtime_slots = tmp_path / "srv/binnacle-runtime"
+    slot_directory = runtime_slots / "slots"
+    slot_staging = runtime_slots / ".staging"
     for path, mode in (
         (config, 0o700),
         (persistent, 0o700),
         (runtime, 0o750),
         (install, 0o755),
+        (runtime_slots, 0o750),
+        (slot_directory, 0o750),
+        (slot_staging, 0o700),
     ):
         path.mkdir(parents=True, exist_ok=True)
         path.chmod(mode)
@@ -102,6 +118,16 @@ def _install_foundation_paths(
             fields = list(observed)
             fields[4] = 0
             fields[5] = 1202
+            return os.stat_result(fields)
+        if path in {runtime_slots, slot_directory}:
+            fields = list(observed)
+            fields[4] = 0
+            fields[5] = 1201
+            return os.stat_result(fields)
+        if path == slot_staging:
+            fields = list(observed)
+            fields[4] = 0
+            fields[5] = 0
             return os.stat_result(fields)
         if not any(path == root or path.is_relative_to(root) for root in root_owned_paths):
             return observed
@@ -128,7 +154,10 @@ def _install_foundation_paths(
         "d /run/binnacle-privileged 0750 root binnacle-privileged-client -\n"
         "d /var/lib/binnacle-privileged 0700 root root -\n"
         "d /etc/binnacle-privileged 0700 root root -\n"
-        "d /opt/binnacle-privileged 0755 root root -\n",
+        "d /opt/binnacle-privileged 0755 root root -\n"
+        "d /srv/binnacle-runtime 0750 root binnacle -\n"
+        "d /srv/binnacle-runtime/slots 0750 root binnacle -\n"
+        "d /srv/binnacle-runtime/.staging 0700 root root -\n",
         encoding="utf-8",
     )
     monkeypatch.setattr(verify_dev_pi, "PRIVILEGED_CONFIG_DIRECTORY", config)
@@ -142,6 +171,9 @@ def _install_foundation_paths(
     monkeypatch.setattr(verify_dev_pi, "PRIVILEGED_VERIFY_EXECUTABLE", verify_executable)
     monkeypatch.setattr(verify_dev_pi, "PRIVILEGED_ARTIFACT_MANIFEST", artifact_manifest)
     monkeypatch.setattr(verify_dev_pi, "PRIVILEGED_TMPFILES_PATH", tmpfiles)
+    monkeypatch.setattr(verify_dev_pi, "RUNTIME_SLOT_ROOT", runtime_slots)
+    monkeypatch.setattr(verify_dev_pi, "RUNTIME_SLOT_DIRECTORY", slot_directory)
+    monkeypatch.setattr(verify_dev_pi, "RUNTIME_SLOT_STAGING", slot_staging)
     monkeypatch.setattr(
         verify_dev_pi,
         "EXPECTED_PRIVILEGED_READ_WRITE_PATHS",

@@ -54,6 +54,7 @@ def _slot(
         deployed_peer_set_sha256=SHA_A,
         migration_heads_sha256=SHA_B,
         layout_sha256=SHA_C,
+        candidate_verification_sha256=SHA_B,
         complete_manifest_sha256=SHA_A,
         byte_count=10_000,
         inode_count=100,
@@ -146,6 +147,7 @@ def test_runtime_identity_binds_complete_active_slot() -> None:
 
     assert runtime.source_state_sha256 == _slot().source_sha256
     assert runtime.environment_sha256 == _slot().environment_sha256
+    assert runtime.runtime_slot_identity_sha256 == _slot().slot_identity_sha256
     assert len(runtime.runtime_identity_sha256) == 64
 
 
@@ -246,6 +248,29 @@ def test_controlled_restart_preflight_binds_candidate_lkg_and_test_evidence() ->
     assert result.candidate_slot_identity_sha256 == candidate.slot_identity_sha256
     assert set(result.predicted_impacts) == set(RestartImpact)
     assert len(result.observation_sha256) == 64
+
+
+def test_controlled_preflight_rejects_a_runtime_not_bound_to_a_complete_slot() -> None:
+    runtime = RuntimeIdentityBuilder().build(_runtime_evidence(), slot=None)
+    service = replace(_service(), runtime_identity_sha256=runtime.runtime_identity_sha256)
+    result = RestartPreflightEvaluator().inspect(
+        kind=RestartPreflightKind.CONTROLLED_SELF,
+        facts=_facts(),
+        service=service,
+        runtime=runtime,
+        lkg_slot=_slot(
+            slot_id="slot-lkg",
+            role=RuntimeSlotRole.LKG,
+            state=RuntimeSlotState.LKG,
+        ),
+        candidate_slot=_slot(state=RuntimeSlotState.COMPLETE),
+        candidate_verification_sha256=SHA_C,
+        candidate_verification_fresh=True,
+        candidate_tested_state_matches=True,
+        observed_at=NOW,
+    )
+
+    assert result.reason_codes == (RestartPreflightReason.CURRENT_RUNTIME_UNAVAILABLE,)
 
 
 def test_preflight_reports_every_common_blocker_without_authorizing() -> None:
