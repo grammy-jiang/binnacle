@@ -154,6 +154,13 @@ class PrivilegedApplicationRepository(Protocol):
 
     async def restart_recovery_pending(self) -> bool: ...
 
+    async def close_restart_before_dispatch(
+        self,
+        operation_id: str,
+        *,
+        closed_at: datetime,
+    ) -> tuple[OperationSnapshot, WorkspaceFence, PrivilegedRestartRecord]: ...
+
     async def close_restart_no_accept(
         self,
         request: RestartNoAcceptClosureRequest,

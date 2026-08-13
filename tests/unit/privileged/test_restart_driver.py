@@ -10,6 +10,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -215,6 +216,71 @@ async def test_exact_runtime_verifier_accepts_only_correlated_selected_identity(
     assert result.outcome is RestartDriverOutcome.SUCCEEDED
     assert result.effect_started is False
     assert result.boundary_receipt_sha256 is None
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("missing_runtime", (False, True))
+async def test_exact_runtime_verifier_polls_active_service_until_readiness(
+    missing_runtime: bool,
+) -> None:
+    checkpoint = _checkpoint()
+    transient = _observation(checkpoint)
+    transient = replace(
+        transient,
+        service=replace(
+            transient.service,
+            application_ready=None if missing_runtime else False,
+            runtime_identity_sha256=(
+                None if missing_runtime else transient.service.runtime_identity_sha256
+            ),
+        ),
+        runtime=None if missing_runtime else transient.runtime,
+    )
+    sleep = AsyncMock()
+    verifier = ExactRestartRuntimeVerifier(
+        probe=_Probe(transient, _observation(checkpoint)),
+        monotonic=lambda: 0.0,
+        sleep=sleep,
+    )
+
+    result = await verifier.verify(
+        checkpoint,
+        expected_slot=checkpoint.intent.candidate_slot,
+    )
+
+    assert result.outcome is RestartDriverOutcome.SUCCEEDED
+    sleep.assert_awaited_once_with(0.25)
+
+
+@pytest.mark.anyio
+async def test_exact_runtime_verifier_fails_definitive_identity_before_readiness() -> None:
+    checkpoint = _checkpoint()
+    observation = _observation(checkpoint)
+    assert observation.runtime is not None
+    runtime = replace(observation.runtime, config_sha256=_digest("wrong-config"))
+    observation = replace(
+        observation,
+        service=replace(
+            observation.service,
+            application_ready=False,
+            runtime_identity_sha256=runtime.runtime_identity_sha256,
+        ),
+        runtime=runtime,
+    )
+    sleep = AsyncMock()
+    verifier = ExactRestartRuntimeVerifier(
+        probe=_Probe(observation),
+        monotonic=lambda: 0.0,
+        sleep=sleep,
+    )
+
+    result = await verifier.verify(
+        checkpoint,
+        expected_slot=checkpoint.intent.candidate_slot,
+    )
+
+    assert result.outcome is RestartDriverOutcome.FAILED
+    sleep.assert_not_awaited()
 
 
 @pytest.mark.anyio

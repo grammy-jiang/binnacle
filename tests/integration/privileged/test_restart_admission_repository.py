@@ -562,6 +562,88 @@ async def test_restart_admission_rolls_back_all_writes_when_reservation_is_busy(
 
 
 @pytest.mark.anyio
+async def test_pre_dispatch_closure_atomically_releases_restart_authority(
+    tmp_path: Path,
+    repo_root: Path,
+) -> None:
+    async with operation_runtime(tmp_path, repo_root) as (runtime, operations):
+        await _active_session(runtime, operations)
+        prepare = await _qualifying_prepare_operation(operations, key="c")
+        preparation = _preparation(
+            prepare_operation_id=prepare.operation_id,
+            nonce="5" * 64,
+            suffix="before-dispatch",
+        )
+        repository = SqlitePrivilegedApplicationRepository(runtime)
+        await repository.store_restart_preparation(preparation)
+        operation = await _received_operation(
+            operations,
+            key="d",
+            contract="binnacle_restart",
+            target_sha256=SHA_B,
+        )
+        ticket = _ticket(
+            operation,
+            preparation,
+            nonce="5" * 64,
+            ticket_id="ticket-before-dispatch",
+        )
+        await repository.authorise_restart(
+            RestartAuthorisationRequest(
+                operation=operation,
+                preparation=preparation,
+                decision=_decision(operation.operation_id),
+                ticket=ticket,
+                expected_fence_version=1,
+                required_scope_digest=None,
+                authorised_at=ticket.issued_at,
+            )
+        )
+        closed_at = ticket.issued_at + timedelta(seconds=1)
+
+        failed, fence, closed = await repository.close_restart_before_dispatch(
+            operation.operation_id,
+            closed_at=closed_at,
+        )
+
+        assert failed.state is OperationState.FAILED
+        assert failed.effect_knowledge is EffectKnowledge.KNOWN_NO_EFFECT
+        assert failed.error is not None
+        assert failed.error.code == "reconciliation_unavailable"
+        assert fence.fence_version == 3
+        assert fence.active_operation_id is None
+        assert closed.state is PrivilegedOperationState.TERMINAL
+        assert closed.reservation_state is PrivilegedReservationState.RELEASED
+        assert closed.broker_acceptance_state is BrokerAcceptanceState.UNRESOLVED
+        assert not await repository.restart_recovery_pending()
+        async with runtime.engine.connect() as connection:
+            retained = (
+                await connection.execute(
+                    text(
+                        "SELECT broker_evidence_generation,candidate_outcome,"
+                        "rollback_outcome,broker_closure_state,audit_closure_state,"
+                        "fence_closure_state FROM privileged_operations "
+                        "WHERE operation_id=:operation_id"
+                    ),
+                    {"operation_id": operation.operation_id},
+                )
+            ).one()
+        assert retained == (0, "failed", "not_started", "not_required", "not_required", "released")
+        await SqliteWorkspaceRepository(runtime).verify_integrity()
+
+        repeated = await repository.close_restart_before_dispatch(
+            operation.operation_id,
+            closed_at=closed_at,
+        )
+        assert repeated == (failed, fence, closed)
+        with pytest.raises(PrivilegedApplicationStoreError, match="conflicts"):
+            await repository.close_restart_before_dispatch(
+                operation.operation_id,
+                closed_at=closed_at + timedelta(seconds=1),
+            )
+
+
+@pytest.mark.anyio
 async def test_no_accept_closure_atomically_releases_operation_reservation_and_fence(
     tmp_path: Path,
     repo_root: Path,

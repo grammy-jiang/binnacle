@@ -526,6 +526,252 @@ class SqlitePrivilegedApplicationRepository:
             ).scalar_one()
             return int(count) > 0
 
+    async def close_restart_before_dispatch(
+        self,
+        operation_id: str,
+        *,
+        closed_at: datetime,
+    ) -> tuple[OperationSnapshot, WorkspaceFence, PrivilegedRestartRecord]:
+        """Atomically unwind authority that never crossed the dispatch marker."""
+
+        if closed_at.tzinfo is None or closed_at.utcoffset() is None:
+            raise PrivilegedApplicationStoreError("restart pre-dispatch closure time is naive")
+        async with self._runtime.session_factory() as session:
+            await session.execute(text("BEGIN IMMEDIATE"))
+            try:
+                operation = await session.get(PrivilegedOperationModel, operation_id)
+                phase4 = await session.get(OperationModel, operation_id)
+                reservation = await session.get(
+                    PrivilegedEffectReservationModel,
+                    operation_id,
+                )
+                if operation is None or phase4 is None or reservation is None:
+                    raise PrivilegedApplicationStoreError(
+                        "restart pre-dispatch evidence is incomplete"
+                    )
+                if (
+                    operation.action
+                    not in {
+                        PrivilegedAction.SERVICE_RESTART.value,
+                        PrivilegedAction.CONTROLLED_RESTART.value,
+                    }
+                    or operation.workspace_id is None
+                    or operation.workspace_fence_version is None
+                ):
+                    raise PrivilegedApplicationStoreError(
+                        "restart pre-dispatch workspace authority is absent"
+                    )
+                operation_updated_at = _utc(operation.updated_at)
+                if operation_updated_at is None or closed_at < operation_updated_at:
+                    raise PrivilegedApplicationStoreError(
+                        "restart pre-dispatch closure time regressed"
+                    )
+                fence = await session.get(
+                    WorkspaceMutationFenceModel,
+                    operation.workspace_id,
+                )
+                if fence is None:
+                    raise PrivilegedApplicationStoreError(
+                        "restart pre-dispatch workspace fence is absent"
+                    )
+                phase4_snapshot = await self._operations._snapshot(session, phase4)
+                closure_evidence = canonical_sha256(
+                    {
+                        "closed_at": canonical_timestamp(closed_at),
+                        "closure_kind": "restart_before_dispatch",
+                        "operation_id": operation_id,
+                        "ticket_sha256": operation.ticket_sha256,
+                        "workspace_fence_version": operation.workspace_fence_version,
+                        "workspace_id": operation.workspace_id,
+                    }
+                )
+                if operation.state == PrivilegedOperationState.TERMINAL.value:
+                    operation_closed_at = _utc(operation.closed_at)
+                    reservation_released_at = _utc(reservation.released_at)
+                    if (
+                        operation.broker_acceptance_state != BrokerAcceptanceState.UNRESOLVED.value
+                        or operation.broker_evidence_generation != 0
+                        or operation.broker_acceptance_evidence_sha256 is not None
+                        or operation.broker_decided_at is not None
+                        or operation.restart_checkpoint_sha256 is not None
+                        or operation.broker_closure_state != "not_required"
+                        or operation.broker_closure_evidence_sha256 is not None
+                        or operation.audit_closure_state != "not_required"
+                        or operation.audit_closure_evidence_sha256 is not None
+                        or operation.fence_closure_state != "released"
+                        or operation.fence_release_evidence_sha256 != closure_evidence
+                        or (
+                            operation.action == PrivilegedAction.SERVICE_RESTART.value
+                            and (
+                                operation.candidate_outcome != "not_applicable"
+                                or operation.rollback_outcome != "not_applicable"
+                            )
+                        )
+                        or (
+                            operation.action == PrivilegedAction.CONTROLLED_RESTART.value
+                            and (
+                                operation.candidate_outcome != "failed"
+                                or operation.rollback_outcome != "not_started"
+                            )
+                        )
+                        or operation_closed_at != closed_at
+                        or phase4_snapshot.state is not OperationState.FAILED
+                        or phase4_snapshot.effect_knowledge is not EffectKnowledge.KNOWN_NO_EFFECT
+                        or phase4_snapshot.error is None
+                        or phase4_snapshot.error.code != "reconciliation_unavailable"
+                        or reservation.state != PrivilegedReservationState.RELEASED.value
+                        or reservation.closure_evidence_sha256 != closure_evidence
+                        or reservation_released_at != closed_at
+                        or fence.fence_version != operation.workspace_fence_version + 1
+                        or fence.active_operation_id is not None
+                        or fence.active_contract is not None
+                        or fence.acquired_at is not None
+                    ):
+                        raise PrivilegedApplicationStoreError(
+                            "restart pre-dispatch closure conflicts with retained evidence"
+                        )
+                    await session.commit()
+                    return (
+                        phase4_snapshot,
+                        WorkspaceFence(
+                            workspace_id=fence.workspace_id,
+                            fence_version=fence.fence_version,
+                            active_operation_id=None,
+                            active_contract=None,
+                        ),
+                        self._record(operation, PrivilegedReservationState.RELEASED),
+                    )
+                if (
+                    operation.state != PrivilegedOperationState.PREPARED.value
+                    or operation.broker_acceptance_state != BrokerAcceptanceState.UNRESOLVED.value
+                    or operation.broker_evidence_generation != 0
+                    or operation.broker_acceptance_evidence_sha256 is not None
+                    or operation.broker_decided_at is not None
+                    or operation.restart_checkpoint_sha256 is not None
+                    or operation.broker_closure_state != "pending"
+                    or operation.broker_closure_evidence_sha256 is not None
+                    or operation.audit_closure_state != "pending"
+                    or operation.audit_closure_evidence_sha256 is not None
+                    or operation.fence_closure_state != "held"
+                    or operation.fence_release_evidence_sha256 is not None
+                    or phase4_snapshot.state is not OperationState.AUTHORISED
+                    or phase4_snapshot.effect_knowledge is not EffectKnowledge.NONE
+                    or reservation.state != PrivilegedReservationState.HELD.value
+                    or fence.fence_version != operation.workspace_fence_version
+                    or fence.active_operation_id != operation_id
+                    or fence.active_contract != phase4_snapshot.intent.operation_contract
+                    or fence.acquired_at is None
+                ):
+                    raise PrivilegedApplicationStoreError(
+                        "restart pre-dispatch closure lacks exact retained authority"
+                    )
+
+                reservation.state = PrivilegedReservationState.RELEASED.value
+                reservation.active_slot = None
+                reservation.closure_evidence_sha256 = closure_evidence
+                reservation.released_at = closed_at
+                reservation.updated_at = closed_at
+                await session.flush()
+
+                failed = transition(
+                    phase4_snapshot,
+                    TransitionRequest(
+                        expected_state_version=phase4_snapshot.state_version,
+                        to_state=OperationState.FAILED,
+                        effect_knowledge=EffectKnowledge.KNOWN_NO_EFFECT,
+                        reason_code="restart_before_dispatch",
+                        error=OperationError(
+                            "reconciliation_unavailable",
+                            "Authorised operation did not reach the durable dispatch marker.",
+                        ),
+                        occurred_at=closed_at,
+                    ),
+                )
+                phase4_result = await session.execute(
+                    update(OperationModel)
+                    .where(
+                        OperationModel.operation_id == phase4_snapshot.operation_id,
+                        OperationModel.state == OperationState.AUTHORISED.value,
+                        OperationModel.state_version == phase4_snapshot.state_version,
+                    )
+                    .values(**SqliteOperationStore._operation_update_values(failed))
+                )
+                self._require_one_row(
+                    phase4_result,
+                    "restart pre-dispatch Phase 4 CAS failed",
+                )
+                session.add(
+                    OperationTransitionModel(
+                        operation_id=phase4_snapshot.operation_id,
+                        state_version=failed.state_version,
+                        from_state=phase4_snapshot.state.value,
+                        to_state=failed.state.value,
+                        effect_knowledge=failed.effect_knowledge.value,
+                        terminality=failed.terminality.value,
+                        reason_code="restart_before_dispatch",
+                        error_code="reconciliation_unavailable",
+                        recorded_at=failed.updated_at,
+                        runtime_build_sha256=failed.intent.runtime_build_sha256,
+                    )
+                )
+                await session.flush()
+
+                released_fence_version = operation.workspace_fence_version + 1
+                fence_result = await session.execute(
+                    update(WorkspaceMutationFenceModel)
+                    .where(
+                        WorkspaceMutationFenceModel.workspace_id == operation.workspace_id,
+                        WorkspaceMutationFenceModel.fence_version
+                        == operation.workspace_fence_version,
+                        WorkspaceMutationFenceModel.active_operation_id == operation_id,
+                        WorkspaceMutationFenceModel.active_contract
+                        == phase4_snapshot.intent.operation_contract,
+                        WorkspaceMutationFenceModel.acquired_at.is_not(None),
+                    )
+                    .values(
+                        fence_version=released_fence_version,
+                        active_operation_id=None,
+                        active_contract=None,
+                        acquired_at=None,
+                        updated_at=closed_at,
+                    )
+                )
+                self._require_one_row(
+                    fence_result,
+                    "restart pre-dispatch fence release CAS failed",
+                )
+
+                if operation.action == PrivilegedAction.CONTROLLED_RESTART.value:
+                    operation.candidate_outcome = "failed"
+                operation.broker_closure_state = "not_required"
+                operation.audit_closure_state = "not_required"
+                operation.fence_closure_state = "released"
+                operation.fence_release_evidence_sha256 = closure_evidence
+                operation.state = PrivilegedOperationState.TERMINAL.value
+                operation.closed_at = closed_at
+                operation.updated_at = closed_at
+                operation.last_reconciled_at = closed_at
+                await session.flush()
+                await session.commit()
+                return (
+                    failed,
+                    WorkspaceFence(
+                        workspace_id=operation.workspace_id,
+                        fence_version=released_fence_version,
+                        active_operation_id=None,
+                        active_contract=None,
+                    ),
+                    self._record(operation, PrivilegedReservationState.RELEASED),
+                )
+            except IntegrityError as exc:
+                await session.rollback()
+                raise PrivilegedApplicationStoreError(
+                    "restart pre-dispatch closure violated durable authority"
+                ) from exc
+            except Exception:
+                await session.rollback()
+                raise
+
     async def close_restart_no_accept(
         self,
         request: RestartNoAcceptClosureRequest,

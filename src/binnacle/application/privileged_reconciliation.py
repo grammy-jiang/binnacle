@@ -21,6 +21,7 @@ from binnacle.domain.privileged import (
     PrivilegedEffectKnowledge,
 )
 from binnacle.domain.privileged_restart import (
+    PrivilegedOperationState,
     RestartAcceptedClosureRequest,
     RestartNoAcceptClosureRequest,
 )
@@ -311,11 +312,20 @@ class PrivilegedRestartReconciler:
             raise PrivilegedRestartReconciliationError(
                 "restart repository returned a foreign operation"
             )
+        before_dispatch = (
+            operation.state is OperationState.AUTHORISED
+            and retained.state is PrivilegedOperationState.PREPARED
+            and retained.broker_acceptance_state is BrokerAcceptanceState.UNRESOLVED
+        )
         try:
             snapshot = await self._broker.get(operation.operation_id)
         except PrivilegedBrokerUnavailable:
+            if before_dispatch:
+                return await self._close_before_dispatch(operation.operation_id)
             return operation
         if snapshot is None:
+            if before_dispatch:
+                return await self._close_before_dispatch(operation.operation_id)
             return operation
         if snapshot.acceptance_state is BrokerAcceptanceState.SEALED_NO_ACCEPT:
             if self._no_accept_audit_closure is None:
@@ -356,6 +366,13 @@ class PrivilegedRestartReconciler:
             reconciled_at=self._clock(),
         )
         return operation
+
+    async def _close_before_dispatch(self, operation_id: str) -> OperationSnapshot:
+        closed, _, _ = await self._repository.close_restart_before_dispatch(
+            operation_id,
+            closed_at=self._clock(),
+        )
+        return closed
 
     async def reconcile_terminal_closures(self) -> tuple[OperationSnapshot, ...]:
         return ()

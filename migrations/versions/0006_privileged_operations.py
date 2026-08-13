@@ -260,7 +260,7 @@ def upgrade() -> None:
             "(state IN ('reconciling','uncertain','restricted_recovery') "
             "AND broker_acceptance_state='accepted') OR "
             "(state='terminal' "
-            "AND broker_acceptance_state IN ('accepted','sealed_no_accept'))",
+            "AND broker_acceptance_state IN ('unresolved','accepted','sealed_no_accept'))",
             name="ck_privileged_operations_state_acceptance",
         ),
         sa.CheckConstraint(
@@ -268,8 +268,8 @@ def upgrade() -> None:
             "AND rollback_outcome IN "
             "('not_applicable','not_started','pending','ready','failed','uncertain') "
             "AND broker_closure_state IN "
-            "('pending','complete','uncertain','restricted_recovery') "
-            "AND audit_closure_state IN ('pending','obligation','complete') "
+            "('pending','not_required','complete','uncertain','restricted_recovery') "
+            "AND audit_closure_state IN ('pending','not_required','obligation','complete') "
             "AND fence_closure_state IN ('not_applicable','held','released') "
             "AND state IN "
             "('prepared','dispatched','reconciling','terminal','uncertain',"
@@ -277,7 +277,8 @@ def upgrade() -> None:
             name="ck_privileged_operations_states",
         ),
         sa.CheckConstraint(
-            "(broker_closure_state='pending')=(broker_closure_evidence_sha256 IS NULL) "
+            "(broker_closure_state IN ('pending','not_required'))="
+            "(broker_closure_evidence_sha256 IS NULL) "
             "AND (audit_closure_state='complete')=(audit_closure_evidence_sha256 IS NOT NULL) "
             "AND (fence_closure_state='released')="
             "(fence_release_evidence_sha256 IS NOT NULL)",
@@ -331,13 +332,21 @@ def upgrade() -> None:
             "(state='restricted_recovery' "
             "AND broker_closure_state='restricted_recovery' "
             "AND broker_acceptance_state='accepted' AND closed_at IS NULL) OR "
-            "(state='terminal' AND broker_acceptance_state!='unresolved' "
+            "(state='terminal' AND closed_at IS NOT NULL "
+            "AND fence_closure_state IN ('not_applicable','released') AND (("
+            "broker_acceptance_state!='unresolved' "
             "AND broker_closure_state='complete' AND audit_closure_state='complete' "
-            "AND fence_closure_state IN ('not_applicable','released') "
             "AND (action!='controlled_restart' OR "
             "broker_acceptance_state='sealed_no_accept' OR "
-            "restart_checkpoint_sha256 IS NOT NULL) "
-            "AND closed_at IS NOT NULL)",
+            "restart_checkpoint_sha256 IS NOT NULL)) OR ("
+            "broker_acceptance_state='unresolved' AND broker_evidence_generation=0 "
+            "AND broker_acceptance_evidence_sha256 IS NULL AND broker_decided_at IS NULL "
+            "AND restart_checkpoint_sha256 IS NULL "
+            "AND broker_closure_state='not_required' "
+            "AND audit_closure_state='not_required' AND fence_closure_state='released' "
+            "AND ((action='service_restart' AND candidate_outcome='not_applicable' "
+            "AND rollback_outcome='not_applicable') OR (action='controlled_restart' "
+            "AND candidate_outcome='failed' AND rollback_outcome='not_started'))))) ",
             name="ck_privileged_operations_terminal",
         ),
         sa.ForeignKeyConstraint(
@@ -703,14 +712,14 @@ def _create_operation_triggers() -> None:
                NEW.rollback_outcome IN ('ready','failed'))) OR
             NOT (NEW.broker_closure_state=OLD.broker_closure_state OR
               (OLD.broker_closure_state='pending' AND NEW.broker_closure_state IN
-               ('complete','uncertain','restricted_recovery')) OR
+               ('not_required','complete','uncertain','restricted_recovery')) OR
               (OLD.broker_closure_state='uncertain' AND
                NEW.broker_closure_state IN ('complete','restricted_recovery')) OR
               (OLD.broker_closure_state='restricted_recovery' AND
                NEW.broker_closure_state='complete')) OR
             NOT (NEW.audit_closure_state=OLD.audit_closure_state OR
               (OLD.audit_closure_state='pending' AND
-               NEW.audit_closure_state IN ('obligation','complete')) OR
+               NEW.audit_closure_state IN ('not_required','obligation','complete')) OR
               (OLD.audit_closure_state='obligation' AND
                NEW.audit_closure_state='complete')) OR
             NOT (NEW.fence_closure_state=OLD.fence_closure_state OR

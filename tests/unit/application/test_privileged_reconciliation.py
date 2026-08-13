@@ -21,6 +21,7 @@ from binnacle.application.privileged_reconciliation import (
 from binnacle.domain.audit import AuditAppendResult, AuditTail
 from binnacle.domain.operation import (
     EffectKnowledge,
+    OperationError,
     OperationSnapshot,
     OperationState,
     TransitionRequest,
@@ -36,6 +37,7 @@ from binnacle.domain.privileged import (
     PrivilegedAction,
     PrivilegedEffectKnowledge,
 )
+from binnacle.domain.privileged_restart import PrivilegedOperationState
 from binnacle.ports.audit import AuditJournal, AuditObligation, AuditObligationStore
 from binnacle.ports.privileged import (
     PrivilegedApplicationRepository,
@@ -53,9 +55,9 @@ def _operation() -> OperationSnapshot:
     )
 
 
-def _running_operation() -> OperationSnapshot:
+def _authorised_operation() -> OperationSnapshot:
     received = _operation()
-    authorised = transition(
+    return transition(
         received,
         TransitionRequest(
             expected_state_version=received.state_version,
@@ -65,6 +67,10 @@ def _running_operation() -> OperationSnapshot:
             occurred_at=NOW,
         ),
     )
+
+
+def _running_operation() -> OperationSnapshot:
+    authorised = _authorised_operation()
     return transition(
         authorised,
         TransitionRequest(
@@ -115,6 +121,7 @@ def _terminal_snapshot(
 def _dependencies(
     *,
     retained: bool = True,
+    retained_state: PrivilegedOperationState = PrivilegedOperationState.DISPATCHED,
     snapshot: BrokerBindingSnapshot | None = None,
     broker_error: Exception | None = None,
     audit_closure: RestartNoAcceptAuditClosure | None = None,
@@ -125,8 +132,10 @@ def _dependencies(
     AsyncMock,
     AsyncMock,
     AsyncMock,
+    AsyncMock,
 ]:
     record_snapshot = AsyncMock()
+    close_before_dispatch = AsyncMock()
     close_no_accept = AsyncMock()
     close_accepted = AsyncMock()
     repository = cast(
@@ -134,10 +143,17 @@ def _dependencies(
         SimpleNamespace(
             get_restart=AsyncMock(
                 return_value=(
-                    SimpleNamespace(operation_id="operation:fixture") if retained else None
+                    SimpleNamespace(
+                        operation_id="operation:fixture",
+                        state=retained_state,
+                        broker_acceptance_state=BrokerAcceptanceState.UNRESOLVED,
+                    )
+                    if retained
+                    else None
                 )
             ),
             record_broker_snapshot=record_snapshot,
+            close_restart_before_dispatch=close_before_dispatch,
             close_restart_no_accept=close_no_accept,
             close_restart_accepted=close_accepted,
         ),
@@ -156,6 +172,7 @@ def _dependencies(
         ),
         record_snapshot,
         broker_get,
+        close_before_dispatch,
         close_no_accept,
         close_accepted,
     )
@@ -163,27 +180,39 @@ def _dependencies(
 
 @pytest.mark.anyio
 async def test_non_privileged_operation_falls_through_to_other_reconcilers() -> None:
-    reconciler, record, broker_get, close_no_accept, close_accepted = _dependencies(retained=False)
+    reconciler, record, broker_get, close_before, close_no_accept, close_accepted = _dependencies(
+        retained=False
+    )
 
     assert await reconciler.reconcile(_operation()) is None
     broker_get.assert_not_awaited()
     record.assert_not_awaited()
+    close_before.assert_not_awaited()
     close_no_accept.assert_not_awaited()
     close_accepted.assert_not_awaited()
 
 
 @pytest.mark.anyio
 async def test_missing_or_unavailable_broker_keeps_restart_recovery_closed() -> None:
-    operation = _operation()
-    missing, missing_record, _, missing_close, missing_accepted = _dependencies(snapshot=None)
-    unavailable, unavailable_record, _, unavailable_close, unavailable_accepted = _dependencies(
-        broker_error=PrivilegedBrokerUnavailable("broker unavailable")
+    operation = _running_operation()
+    missing, missing_record, _, missing_before, missing_close, missing_accepted = _dependencies(
+        snapshot=None
     )
+    (
+        unavailable,
+        unavailable_record,
+        _,
+        unavailable_before,
+        unavailable_close,
+        unavailable_accepted,
+    ) = _dependencies(broker_error=PrivilegedBrokerUnavailable("broker unavailable"))
 
     assert await missing.reconcile(operation) is operation
     assert await unavailable.reconcile(operation) is operation
     missing_record.assert_not_awaited()
     unavailable_record.assert_not_awaited()
+    missing_before.assert_not_awaited()
+    unavailable_before.assert_not_awaited()
     missing_close.assert_not_awaited()
     unavailable_close.assert_not_awaited()
     missing_accepted.assert_not_awaited()
@@ -191,13 +220,53 @@ async def test_missing_or_unavailable_broker_keeps_restart_recovery_closed() -> 
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize(
+    "broker_error",
+    (None, PrivilegedBrokerUnavailable("broker unavailable")),
+)
+async def test_pre_dispatch_restart_closes_without_broker_evidence(
+    broker_error: Exception | None,
+) -> None:
+    operation = _authorised_operation()
+    closed_operation = transition(
+        operation,
+        TransitionRequest(
+            expected_state_version=operation.state_version,
+            to_state=OperationState.FAILED,
+            effect_knowledge=EffectKnowledge.KNOWN_NO_EFFECT,
+            reason_code="restart_before_dispatch",
+            error=OperationError(
+                "reconciliation_unavailable",
+                "Authorised operation did not reach the durable dispatch marker.",
+            ),
+            occurred_at=NOW,
+        ),
+    )
+    reconciler, record, _, close_before, close_no_accept, close_accepted = _dependencies(
+        snapshot=None,
+        broker_error=broker_error,
+        retained_state=PrivilegedOperationState.PREPARED,
+    )
+    close_before.return_value = (closed_operation, object(), object())
+
+    assert await reconciler.reconcile(operation) is closed_operation
+    close_before.assert_awaited_once_with(operation.operation_id, closed_at=NOW)
+    record.assert_not_awaited()
+    close_no_accept.assert_not_awaited()
+    close_accepted.assert_not_awaited()
+
+
+@pytest.mark.anyio
 async def test_exact_accepted_snapshot_is_recorded_without_generic_closure() -> None:
-    operation = _operation()
+    operation = _running_operation()
     snapshot = binding_snapshot()
-    reconciler, record, _, close_no_accept, close_accepted = _dependencies(snapshot=snapshot)
+    reconciler, record, _, close_before, close_no_accept, close_accepted = _dependencies(
+        snapshot=snapshot
+    )
 
     assert await reconciler.reconcile(operation) is operation
     record.assert_awaited_once_with(snapshot, reconciled_at=NOW)
+    close_before.assert_not_awaited()
     close_no_accept.assert_not_awaited()
     close_accepted.assert_not_awaited()
     assert await reconciler.reconcile_terminal_closures() == ()
@@ -205,7 +274,7 @@ async def test_exact_accepted_snapshot_is_recorded_without_generic_closure() -> 
 
 @pytest.mark.anyio
 async def test_no_accept_snapshot_waits_for_atomic_terminal_closure() -> None:
-    operation = _operation()
+    operation = _running_operation()
     accepted = binding_snapshot()
     sealed = replace(
         accepted,
@@ -218,17 +287,20 @@ async def test_no_accept_snapshot_waits_for_atomic_terminal_closure() -> None:
         sealed_at=NOW,
         closed_at=NOW,
     )
-    reconciler, record, _, close_no_accept, close_accepted = _dependencies(snapshot=sealed)
+    reconciler, record, _, close_before, close_no_accept, close_accepted = _dependencies(
+        snapshot=sealed
+    )
 
     assert await reconciler.reconcile(operation) is operation
     record.assert_not_awaited()
+    close_before.assert_not_awaited()
     close_no_accept.assert_not_awaited()
     close_accepted.assert_not_awaited()
 
 
 @pytest.mark.anyio
 async def test_no_accept_snapshot_closes_only_after_durable_audit_evidence() -> None:
-    operation = _operation()
+    operation = _running_operation()
     accepted = binding_snapshot()
     sealed = replace(
         accepted,
@@ -250,7 +322,7 @@ async def test_no_accept_snapshot_closes_only_after_durable_audit_evidence() -> 
         RestartNoAcceptAuditClosure,
         SimpleNamespace(record_no_accept=audit_record),
     )
-    reconciler, record, _, close_no_accept, close_accepted = _dependencies(
+    reconciler, record, _, close_before, close_no_accept, close_accepted = _dependencies(
         snapshot=sealed,
         audit_closure=audit_closure,
     )
@@ -264,12 +336,13 @@ async def test_no_accept_snapshot_closes_only_after_durable_audit_evidence() -> 
     assert request.audit_closure_evidence_sha256 == SHA_C
     assert request.closed_at == NOW
     record.assert_not_awaited()
+    close_before.assert_not_awaited()
     close_accepted.assert_not_awaited()
 
 
 @pytest.mark.anyio
 async def test_accepted_terminal_snapshot_closes_only_after_exact_audit_evidence() -> None:
-    operation = _operation()
+    operation = _running_operation()
     terminal = _terminal_snapshot()
     closed_operation = replace(operation, state=operation.state)
     audit_record = AsyncMock(return_value=SHA_C)
@@ -277,7 +350,7 @@ async def test_accepted_terminal_snapshot_closes_only_after_exact_audit_evidence
         RestartAcceptedAuditClosure,
         SimpleNamespace(record_accepted=audit_record),
     )
-    reconciler, record, _, close_no_accept, close_accepted = _dependencies(
+    reconciler, record, _, close_before, close_no_accept, close_accepted = _dependencies(
         snapshot=terminal,
         accepted_audit_closure=audit_closure,
     )
@@ -291,6 +364,7 @@ async def test_accepted_terminal_snapshot_closes_only_after_exact_audit_evidence
     assert request.audit_closure_evidence_sha256 == SHA_C
     assert request.closed_at == NOW
     record.assert_not_awaited()
+    close_before.assert_not_awaited()
     close_no_accept.assert_not_awaited()
 
 

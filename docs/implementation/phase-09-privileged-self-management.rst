@@ -418,6 +418,14 @@ application connection outside this gate is not no-effect proof.
 A seal for the operation binding also rejects every alternate-ticket attempt for that
 operation. It cannot be bypassed by allocating a different ticket ID or digest.
 
+The application-side ``authorised``/``prepared`` state before the durable privileged
+dispatch marker is a separate zero-effect boundary: no broker handler may yet have been
+sent. Replacement recovery atomically fails the Phase 4 operation as
+``restart_before_dispatch``, releases its reservation and workspace fence, and retains a
+terminal privileged record whose broker and post-effect audit closures are explicitly
+``not_required``. It does not fabricate a broker no-accept seal. Once the durable dispatch
+marker exists, this local closure is forbidden and the accept-or-seal rules above apply.
+
 8.4 Post-accept recovery
 ~~~~~~~~~~~~~~~~~~~~~~~~
 

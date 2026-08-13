@@ -266,14 +266,7 @@ class ExactRestartRuntimeVerifier:
                 reason="selected_slot_identity_mismatch",
             )
         if service.active_state == "active" and service.sub_state == "running":
-            if selected is None or runtime is None or service.application_ready is not True:
-                return ExactRestartRuntimeVerifier._failure(
-                    checkpoint,
-                    expected_slot,
-                    observation,
-                    reason="active_runtime_readiness_mismatch",
-                )
-            if not ExactRestartRuntimeVerifier._matches(
+            if runtime is not None and not ExactRestartRuntimeVerifier._matches(
                 checkpoint,
                 slot=expected_slot,
                 service=service,
@@ -285,6 +278,8 @@ class ExactRestartRuntimeVerifier:
                     observation,
                     reason="runtime_identity_mismatch",
                 )
+            if selected is None or runtime is None or service.application_ready is not True:
+                return None
             return RestartDriverResult(
                 outcome=RestartDriverOutcome.SUCCEEDED,
                 effect_started=False,
