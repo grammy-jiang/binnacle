@@ -863,6 +863,18 @@ async def test_accepted_closure_atomically_releases_checkpoint_audit_and_fence_t
 
         repeated = await repository.close_restart_accepted(request)
         assert repeated == (terminal, fence, closed)
+        if outcome is BrokerRestartOutcome.CANDIDATE_READY:
+            with pytest.raises(PrivilegedApplicationStoreError, match="conflicts"):
+                await repository.close_restart_accepted(
+                    RestartAcceptedClosureRequest(
+                        snapshot=replace(
+                            snapshot,
+                            lkg_promotion_evidence_sha256=_digest("different-lkg-promotion"),
+                        ),
+                        audit_closure_evidence_sha256=(audit_closure_evidence_sha256),
+                        closed_at=request.closed_at,
+                    )
+                )
         conflicting_audit = _digest("different-accepted-audit")
         conflicting_snapshot = (
             replace(snapshot, lkg_promotion_audit_sha256=conflicting_audit)
