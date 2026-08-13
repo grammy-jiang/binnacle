@@ -28,6 +28,7 @@ from binnacle.domain.privileged_restart import (
     PrivilegedRestartPreparation,
     PrivilegedRestartRecord,
     RestartAuthorisationRequest,
+    RestartNoAcceptClosureRequest,
 )
 from binnacle.domain.workspace import WorkspaceFence
 
@@ -146,6 +147,11 @@ class PrivilegedApplicationRepository(Protocol):
     ) -> PrivilegedRestartRecord: ...
 
     async def restart_recovery_pending(self) -> bool: ...
+
+    async def close_restart_no_accept(
+        self,
+        request: RestartNoAcceptClosureRequest,
+    ) -> tuple[OperationSnapshot, WorkspaceFence, PrivilegedRestartRecord]: ...
 
 
 __all__ = [

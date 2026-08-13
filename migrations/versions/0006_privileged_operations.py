@@ -334,7 +334,9 @@ def upgrade() -> None:
             "(state='terminal' AND broker_acceptance_state!='unresolved' "
             "AND broker_closure_state='complete' AND audit_closure_state='complete' "
             "AND fence_closure_state IN ('not_applicable','released') "
-            "AND (action!='controlled_restart' OR restart_checkpoint_sha256 IS NOT NULL) "
+            "AND (action!='controlled_restart' OR "
+            "broker_acceptance_state='sealed_no_accept' OR "
+            "restart_checkpoint_sha256 IS NOT NULL) "
             "AND closed_at IS NOT NULL)",
             name="ck_privileged_operations_terminal",
         ),

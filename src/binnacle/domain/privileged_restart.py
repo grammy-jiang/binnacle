@@ -14,7 +14,10 @@ from binnacle.domain.operation import OperationSnapshot, OperationState
 from binnacle.domain.policy import PolicyDecision
 from binnacle.domain.privileged import (
     BrokerAcceptanceState,
+    BrokerBindingSnapshot,
+    BrokerExecutionState,
     PrivilegedAction,
+    PrivilegedEffectKnowledge,
     PrivilegedMaximumEffect,
     PrivilegedTicket,
 )
@@ -322,6 +325,32 @@ class RestartAuthorisationRequest:
             raise PrivilegedRestartError("restart policy evidence and ticket differ")
 
 
+@dataclass(frozen=True, slots=True)
+class RestartNoAcceptClosureRequest:
+    snapshot: BrokerBindingSnapshot
+    audit_closure_evidence_sha256: str
+    closed_at: datetime
+
+    def __post_init__(self) -> None:
+        _require_sha256(
+            self.audit_closure_evidence_sha256,
+            "restart no-accept audit closure",
+        )
+        _require_aware(self.closed_at, "restart no-accept closure")
+        snapshot = self.snapshot
+        if (
+            snapshot.acceptance_state is not BrokerAcceptanceState.SEALED_NO_ACCEPT
+            or snapshot.execution_state is not BrokerExecutionState.TERMINAL
+            or snapshot.effect_knowledge is not PrivilegedEffectKnowledge.KNOWN_NO_SUBEFFECT
+            or snapshot.result_evidence_sha256 is None
+            or snapshot.sealed_at is None
+            or snapshot.closed_at is None
+            or self.closed_at < snapshot.sealed_at
+            or self.closed_at < snapshot.closed_at
+        ):
+            raise PrivilegedRestartError("restart no-accept closure evidence is contradictory")
+
+
 def _require_sha256(value: str, name: str) -> None:
     if _SHA256_RE.fullmatch(value) is None:
         raise PrivilegedRestartError(f"{name} must be a lowercase SHA-256 digest")
@@ -350,4 +379,5 @@ __all__ = [
     "PrivilegedRestartPreparation",
     "PrivilegedRestartRecord",
     "RestartAuthorisationRequest",
+    "RestartNoAcceptClosureRequest",
 ]

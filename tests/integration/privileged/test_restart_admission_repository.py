@@ -43,6 +43,7 @@ from binnacle.domain.privileged_restart import (
     PrivilegedReservationState,
     PrivilegedRestartPreparation,
     RestartAuthorisationRequest,
+    RestartNoAcceptClosureRequest,
 )
 from binnacle.ports.development_session import SessionAuthorisationRequest
 from binnacle.ports.operation_store import CreateOrFindRequest
@@ -287,6 +288,24 @@ def _broker_snapshot(
     )
 
 
+def _sealed_snapshot(ticket: PrivilegedTicket) -> BrokerBindingSnapshot:
+    closed_at = ticket.issued_at + timedelta(seconds=1)
+    evidence = _digest("broker-no-accept")
+    return BrokerBindingSnapshot(
+        identity=ticket.routing_identity,
+        acceptance_state=BrokerAcceptanceState.SEALED_NO_ACCEPT,
+        evidence_generation=1,
+        acceptance_evidence_sha256=evidence,
+        execution_state=BrokerExecutionState.TERMINAL,
+        effect_knowledge=PrivilegedEffectKnowledge.KNOWN_NO_SUBEFFECT,
+        result_evidence_sha256=evidence,
+        accepted_at=None,
+        sealed_at=closed_at,
+        closed_at=closed_at,
+        last_reconciled_at=None,
+    )
+
+
 @pytest.mark.anyio
 async def test_restart_admission_atomically_binds_policy_fence_ticket_and_reservation(
     tmp_path: Path,
@@ -501,6 +520,78 @@ async def test_restart_admission_rolls_back_all_writes_when_reservation_is_busy(
             ).scalar_one()
         assert preparation_row == ("available", None)
         assert policy_count == 0
+
+
+@pytest.mark.anyio
+async def test_no_accept_closure_atomically_releases_operation_reservation_and_fence(
+    tmp_path: Path,
+    repo_root: Path,
+) -> None:
+    async with operation_runtime(tmp_path, repo_root) as (runtime, operations):
+        await _active_session(runtime, operations)
+        prepare = await _qualifying_prepare_operation(operations, key="8")
+        preparation = _preparation(
+            prepare_operation_id=prepare.operation_id,
+            nonce="3" * 64,
+            suffix="no-accept",
+        )
+        repository = SqlitePrivilegedApplicationRepository(runtime)
+        await repository.store_restart_preparation(preparation)
+        operation = await _received_operation(
+            operations,
+            key="9",
+            contract="binnacle_restart",
+            target_sha256=SHA_B,
+        )
+        ticket = _ticket(
+            operation,
+            preparation,
+            nonce="3" * 64,
+            ticket_id="ticket-no-accept",
+        )
+        await repository.authorise_restart(
+            RestartAuthorisationRequest(
+                operation=operation,
+                preparation=preparation,
+                decision=_decision(operation.operation_id),
+                ticket=ticket,
+                expected_fence_version=1,
+                required_scope_digest=None,
+                authorised_at=ticket.issued_at,
+            )
+        )
+        await repository.mark_restart_dispatched(
+            operation.operation_id,
+            dispatched_at=ticket.issued_at + timedelta(milliseconds=500),
+        )
+        request = RestartNoAcceptClosureRequest(
+            snapshot=_sealed_snapshot(ticket),
+            audit_closure_evidence_sha256=_digest("no-accept-audit-closure"),
+            closed_at=ticket.issued_at + timedelta(seconds=2),
+        )
+
+        failed, fence, closed = await repository.close_restart_no_accept(request)
+
+        assert failed.state is OperationState.FAILED
+        assert failed.effect_knowledge is EffectKnowledge.KNOWN_NO_EFFECT
+        assert fence.fence_version == 3
+        assert fence.active_operation_id is None
+        assert closed.state is PrivilegedOperationState.TERMINAL
+        assert closed.reservation_state is PrivilegedReservationState.RELEASED
+        assert closed.broker_acceptance_state is BrokerAcceptanceState.SEALED_NO_ACCEPT
+        assert not await repository.restart_recovery_pending()
+        await SqliteWorkspaceRepository(runtime).verify_integrity()
+
+        repeated = await repository.close_restart_no_accept(request)
+        assert repeated == (failed, fence, closed)
+        with pytest.raises(PrivilegedApplicationStoreError, match="conflicts"):
+            await repository.close_restart_no_accept(
+                RestartNoAcceptClosureRequest(
+                    snapshot=request.snapshot,
+                    audit_closure_evidence_sha256=_digest("different-audit-closure"),
+                    closed_at=request.closed_at,
+                )
+            )
 
 
 def _transition_to_authorised(operation: OperationSnapshot) -> TransitionRequest:
