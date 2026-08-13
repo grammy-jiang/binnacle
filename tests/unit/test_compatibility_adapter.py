@@ -94,7 +94,7 @@ def test_compiled_profile_contains_no_fabricated_host_evidence(
 def test_compiled_profile_parses_complete_snapshot() -> None:
     profile = _reader(
         {
-            "profile_version": "1.2.0",
+            "profile_version": "1.3.0",
             "observed_protocol_revision": "2026-07-28",
             "observations": [
                 {"axis": "protocol_revision", "status": "not-tested", "summary": "None."}

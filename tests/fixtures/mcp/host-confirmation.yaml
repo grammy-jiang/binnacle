@@ -1,6 +1,6 @@
 schema_version: "1.1"
 contract: HOST-CONFIRMATION-PROFILE
-contract_version: "1.1.0"
+contract_version: "1.2.0"
 
 cases:
   - id: hc0-binnacle-probe
@@ -229,3 +229,43 @@ cases:
     expect:
       profile_gate: fail
       error: confirmation_fatigue_obscures_distinct_effects
+
+  - id: hc2-privileged-restart-valid
+    kind: positive
+    tool: binnacle_restart
+    confirmation_class: HC2
+    preparation:
+      prepare_tool: privileged_prepare
+      prepared_operation_id: prep-privileged-1
+      execution_nonce: DDDDDDDDDDDDDDDDDDDDDD
+      exact_state_binding_sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+      candidate_slot_identity_sha256: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+      lkg_slot_identity_sha256: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+    host_observation:
+      exact_view_shown: true
+      owner_confirmed: true
+      shown_additional_fields:
+        - privilege
+        - destructive_effect
+        - external_effective_destination
+        - credential_use
+        - audit_or_recovery_impact
+    expect:
+      profile_gate: pass
+      preparation_is_server_authority: false
+      exact_local_policy_ticket_and_broker_acceptance_still_required: true
+
+  - id: hc2-privileged-preparation-is-not-confirmation
+    kind: negative
+    tool: package_install
+    confirmation_class: HC2
+    preparation:
+      prepare_tool: privileged_prepare
+      prepared_operation_id: prep-privileged-2
+      exact_view_available: true
+    host_observation:
+      owner_confirmed: false
+    expect:
+      profile_gate: fail
+      execute_request_sent: false
+      broker_acceptance_created: false

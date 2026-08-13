@@ -84,11 +84,13 @@ jobs:
         run: >-
           uv run mypy src/binnacle tests
           scripts/mcp_evaluation.py
+          scripts/build_privileged_artifact_manifest.py
           scripts/setup_dev_pi.py
           scripts/verify_dev_pi.py
           scripts/verify_operation_kernel.py
           scripts/verify_execution_supervisor.py
           scripts/verify_git_credential_broker.py
+          scripts/verify_privileged_broker.py
 
       - name: Enforce import boundaries
         run: uv run lint-imports
@@ -111,21 +113,27 @@ jobs:
       - name: Validate operational CLI entry points
         run: |
           uv run python scripts/mcp_evaluation.py --help
+          uv run python scripts/build_privileged_artifact_manifest.py --help
           uv run python scripts/setup_dev_pi.py --help
           uv run python scripts/verify_dev_pi.py --help
           uv run python scripts/verify_operation_kernel.py --help
           uv run python scripts/verify_execution_supervisor.py --help
           uv run python scripts/verify_git_credential_broker.py --help
+          uv run python scripts/verify_privileged_broker.py --help
           uv run binnacle db --help
           uv run binnacle kernel --help
           uv run binnacle audit --help
           uv run binnacle executor --help
+          uv run binnacle-privileged-broker --help
+          uv run binnacle-privileged-verify --help
 
       - name: Exercise isolated latest migration and read-only verification
         run: |
           uv run python scripts/verify_operation_kernel.py --temporary --output json
           uv run python scripts/verify_execution_supervisor.py --temporary --output json
           uv run python scripts/verify_git_credential_broker.py --temporary --output json
+          uv run python scripts/verify_privileged_broker.py --temporary \
+            --require-default-disabled --output json
 
       - name: Validate repository and documentation hygiene
         run: uv run pre-commit run --all-files

@@ -1,1 +1,2670 @@
-{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://binnacle.dev/schemas/mcp/bootstrap-outputs.schema.json","title":"Binnacle bootstrap Tool output schemas","$defs":{"binnacle_probe.output.v1_1":{"type":"object","oneOf":[{"allOf":[{"$ref":"https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/successEnvelope"},{"properties":{"tool":{"properties":{"name":{"const":"binnacle_probe"},"contract_version":{"const":"1.1"}}},"data":{"type":"object","additionalProperties":false,"properties":{"build_version":{"type":"string","minLength":1,"maxLength":64},"build_sha256":{"$ref":"https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/sha256"},"device_id":{"$ref":"https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/identifier"},"protocol_revision":{"type":"string","minLength":1,"maxLength":32},"protocol_era":{"enum":["legacy","modern"]},"tool_manifest":{"type":"object","additionalProperties":false,"properties":{"id":{"$ref":"https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/identifier"},"version":{"type":"string","minLength":1,"maxLength":64},"sha256":{"$ref":"https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/sha256"}},"required":["id","version","sha256"]},"catalogue_phase":{"enum":["compatibility-core","compatibility-write-probe","v1-readonly","v1-operational"]},"catalogue_sha256":{"$ref":"https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/sha256"},"request_correlation_id":{"$ref":"https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/identifier"}},"required":["build_version","build_sha256","device_id","protocol_revision","protocol_era","tool_manifest","catalogue_phase","catalogue_sha256","request_correlation_id"]}}}]},{"allOf":[{"$ref":"https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/executionErrorEnvelope"},{"properties":{"tool":{"properties":{"name":{"const":"binnacle_probe"},"contract_version":{"const":"1.1"}}}}}]}]},"system_inspect.output.v1_1":{"type":"object","oneOf":[{"allOf":[{"$ref":"https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/successEnvelope"},{"properties":{"tool":{"properties":{"name":{"const":"system_inspect"},"contract_version":{"const":"1.1"}}},"data":{"type":"object","additionalProperties":false,"properties":{"hostname":{"type":"string","minLength":1,"maxLength":255},"returned_sections":{"type":"array","minItems":1,"maxItems":8,"uniqueItems":true,"items":{"enum":["os","kernel","architecture","uptime","cpu","memory","filesystems","binnacle_service"]}},"sections":{"type":"object","additionalProperties":false,"properties":{"os":{"type":"string","minLength":1,"maxLength":256},"kernel":{"type":"string","minLength":1,"maxLength":256},"architecture":{"type":"string","minLength":1,"maxLength":64},"uptime":{"type":"integer","minimum":0},"cpu":{"type":"object","additionalProperties":false,"properties":{"count":{"type":"integer","minimum":1}},"required":["count"]},"memory":{"type":"object","additionalProperties":false,"properties":{"total_bytes":{"type":"integer","minimum":0},"available_bytes":{"type":"integer","minimum":0}},"required":["total_bytes","available_bytes"]},"filesystems":{"type":"array","maxItems":128,"items":{"type":"object","additionalProperties":false,"properties":{"mount_point":{"type":"string","minLength":1,"maxLength":1024},"filesystem_type":{"type":"string","minLength":1,"maxLength":64},"source":{"oneOf":[{"type":"string","maxLength":512},{"type":"null"}]},"total_bytes":{"type":"integer","minimum":0},"available_bytes":{"type":"integer","minimum":0}},"required":["mount_point","filesystem_type","source","total_bytes","available_bytes"]}},"binnacle_service":{"type":"object","additionalProperties":false,"properties":{"state":{"enum":["active","inactive","failed","unknown"]}},"required":["state"]}}}},"required":["hostname","returned_sections","sections"],"allOf":[{"if":{"properties":{"returned_sections":{"contains":{"const":"os"}}}},"then":{"properties":{"sections":{"required":["os"]}}}},{"if":{"properties":{"returned_sections":{"contains":{"const":"kernel"}}}},"then":{"properties":{"sections":{"required":["kernel"]}}}},{"if":{"properties":{"returned_sections":{"contains":{"const":"architecture"}}}},"then":{"properties":{"sections":{"required":["architecture"]}}}},{"if":{"properties":{"returned_sections":{"contains":{"const":"uptime"}}}},"then":{"properties":{"sections":{"required":["uptime"]}}}},{"if":{"properties":{"returned_sections":{"contains":{"const":"cpu"}}}},"then":{"properties":{"sections":{"required":["cpu"]}}}},{"if":{"properties":{"returned_sections":{"contains":{"const":"memory"}}}},"then":{"properties":{"sections":{"required":["memory"]}}}},{"if":{"properties":{"returned_sections":{"contains":{"const":"filesystems"}}}},"then":{"properties":{"sections":{"required":["filesystems"]}}}},{"if":{"properties":{"returned_sections":{"contains":{"const":"binnacle_service"}}}},"then":{"properties":{"sections":{"required":["binnacle_service"]}}}}]}}}]},{"allOf":[{"$ref":"https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/executionErrorEnvelope"},{"properties":{"tool":{"properties":{"name":{"const":"system_inspect"},"contract_version":{"const":"1.1"}}}}}]}]},"probe_result_formats.output.v1_1":{"type":"object","oneOf":[{"allOf":[{"$ref":"https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/successEnvelope"},{"properties":{"tool":{"properties":{"name":{"const":"probe_result_formats"},"contract_version":{"const":"1.1"}}},"data":{"type":"object","additionalProperties":false,"properties":{"string_value":{"type":"string","maxLength":256},"integer_value":{"type":"integer"},"boolean_value":{"type":"boolean"},"nullable_value":{"oneOf":[{"type":"string","maxLength":256},{"type":"null"}]},"array_values":{"type":"array","maxItems":16,"items":{"type":"integer"}},"nested":{"type":"object","additionalProperties":false,"properties":{"name":{"type":"string","maxLength":64},"enabled":{"type":"boolean"}},"required":["name","enabled"]},"warning_included":{"type":"boolean"}},"required":["string_value","integer_value","boolean_value","nullable_value","array_values","nested","warning_included"]}}}]},{"allOf":[{"$ref":"https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/executionErrorEnvelope"},{"properties":{"tool":{"properties":{"name":{"const":"probe_result_formats"},"contract_version":{"const":"1.1"}}}}}]}]},"probe_error.output.v1_1":{"type":"object","oneOf":[{"allOf":[{"$ref":"https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/successEnvelope"},{"properties":{"tool":{"properties":{"name":{"const":"probe_error"},"contract_version":{"const":"1.1"}}},"data":{"type":"object","additionalProperties":false,"properties":{"case":{"const":"bounded_delay"},"delay_ms":{"type":"integer","minimum":1,"maximum":10000},"completed":{"const":true}},"required":["case","delay_ms","completed"]}}}]},{"allOf":[{"$ref":"https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/executionErrorEnvelope"},{"properties":{"tool":{"properties":{"name":{"const":"probe_error"},"contract_version":{"const":"1.1"}}}}}]}]},"compatibility_report.output.v1_1":{"type":"object","oneOf":[{"allOf":[{"$ref":"https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/successEnvelope"},{"properties":{"tool":{"properties":{"name":{"const":"compatibility_report"},"contract_version":{"const":"1.1"}}},"data":{"type":"object","additionalProperties":false,"properties":{"profile_version":{"type":"string","minLength":1,"maxLength":64},"observed_protocol_revision":{"oneOf":[{"type":"string","maxLength":32},{"type":"null"}]},"observations":{"type":"array","maxItems":256,"items":{"type":"object","additionalProperties":false,"properties":{"axis":{"$ref":"https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/identifier"},"status":{"enum":["observed-supported","observed-limited","declared-unexercised","not-declared","test-failed","host-policy-blocked","server-not-implemented","not-tested","unsupported-by-design","unstable","expired","not-applicable"]},"summary":{"type":"string","minLength":1,"maxLength":1000}},"required":["axis","status","summary"]}},"evidence_bundle_sha256":{"oneOf":[{"$ref":"https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/sha256"},{"type":"null"}]},"limitations":{"type":"array","maxItems":64,"items":{"type":"string","minLength":1,"maxLength":1000}}},"required":["profile_version","observed_protocol_revision","observations","evidence_bundle_sha256","limitations"]}}}]},{"allOf":[{"$ref":"https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/executionErrorEnvelope"},{"properties":{"tool":{"properties":{"name":{"const":"compatibility_report"},"contract_version":{"const":"1.1"}}}}}]}]},"probe_workspace_prepare.output.v1_1":{"type":"object","oneOf":[{"allOf":[{"$ref":"https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/successEnvelope"},{"properties":{"tool":{"properties":{"name":{"const":"probe_workspace_prepare"},"contract_version":{"const":"1.1"}}},"data":{"type":"object","additionalProperties":false,"properties":{"prepared_operation_id":{"$ref":"https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/identifier"},"execution_nonce":{"type":"string","minLength":22,"maxLength":172,"pattern":"^[A-Za-z0-9_-]+$"},"expires_at":{"$ref":"https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/timestamp"},"operation":{"enum":["write","cleanup"]},"relative_path":{"type":"string","minLength":1,"maxLength":512},"normalized_input_sha256":{"$ref":"https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/sha256"},"maximum_effect":{"type":"string","minLength":1,"maxLength":1000}},"required":["prepared_operation_id","execution_nonce","expires_at","operation","relative_path","normalized_input_sha256","maximum_effect"]}}}]},{"allOf":[{"$ref":"https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/executionErrorEnvelope"},{"properties":{"tool":{"properties":{"name":{"const":"probe_workspace_prepare"},"contract_version":{"const":"1.1"}}}}}]}]},"probe_workspace_write.output.v1_1":{"type":"object","oneOf":[{"allOf":[{"$ref":"https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/successEnvelope"},{"properties":{"tool":{"properties":{"name":{"const":"probe_workspace_write"},"contract_version":{"const":"1.1"}}},"data":{"type":"object","additionalProperties":false,"properties":{"relative_path":{"type":"string","minLength":1,"maxLength":512},"byte_count":{"type":"integer","minimum":0,"maximum":65536},"content_sha256":{"$ref":"https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/sha256"},"artifact_id":{"$ref":"https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/identifier"},"created":{"const":true}},"required":["relative_path","byte_count","content_sha256","artifact_id","created"]}}}]},{"allOf":[{"$ref":"https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/executionErrorEnvelope"},{"properties":{"tool":{"properties":{"name":{"const":"probe_workspace_write"},"contract_version":{"const":"1.1"}}}}}]}]},"probe_workspace_cleanup.output.v1_1":{"type":"object","oneOf":[{"allOf":[{"$ref":"https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/successEnvelope"},{"properties":{"tool":{"properties":{"name":{"const":"probe_workspace_cleanup"},"contract_version":{"const":"1.1"}}},"data":{"type":"object","additionalProperties":false,"properties":{"relative_path":{"type":"string","minLength":1,"maxLength":512},"artifact_id":{"$ref":"https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/identifier"},"content_sha256":{"$ref":"https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/sha256"},"removed":{"type":"boolean"},"already_missing":{"type":"boolean"}},"required":["relative_path","artifact_id","content_sha256","removed","already_missing"],"oneOf":[{"properties":{"removed":{"const":true},"already_missing":{"const":false}},"required":["removed","already_missing"]},{"properties":{"removed":{"const":false},"already_missing":{"const":true}},"required":["removed","already_missing"]}]}}}]},{"allOf":[{"$ref":"https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/executionErrorEnvelope"},{"properties":{"tool":{"properties":{"name":{"const":"probe_workspace_cleanup"},"contract_version":{"const":"1.1"}}}}}]}]}}}
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://binnacle.dev/schemas/mcp/bootstrap-outputs.schema.json",
+  "title": "Binnacle bootstrap Tool output schemas",
+  "$defs": {
+    "binnacle_probe.output.v1_1": {
+      "type": "object",
+      "oneOf": [
+        {
+          "allOf": [
+            {
+              "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/successEnvelope"
+            },
+            {
+              "properties": {
+                "tool": {
+                  "properties": {
+                    "name": {
+                      "const": "binnacle_probe"
+                    },
+                    "contract_version": {
+                      "const": "1.1"
+                    }
+                  }
+                },
+                "data": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "build_version": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64
+                    },
+                    "build_sha256": {
+                      "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/sha256"
+                    },
+                    "device_id": {
+                      "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/identifier"
+                    },
+                    "protocol_revision": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 32
+                    },
+                    "protocol_era": {
+                      "enum": [
+                        "legacy",
+                        "modern"
+                      ]
+                    },
+                    "tool_manifest": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/identifier"
+                        },
+                        "version": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 64
+                        },
+                        "sha256": {
+                          "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/sha256"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "version",
+                        "sha256"
+                      ]
+                    },
+                    "catalogue_phase": {
+                      "enum": [
+                        "compatibility-core",
+                        "compatibility-write-probe",
+                        "v1-readonly",
+                        "v1-operational"
+                      ]
+                    },
+                    "catalogue_sha256": {
+                      "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/sha256"
+                    },
+                    "request_correlation_id": {
+                      "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/identifier"
+                    }
+                  },
+                  "required": [
+                    "build_version",
+                    "build_sha256",
+                    "device_id",
+                    "protocol_revision",
+                    "protocol_era",
+                    "tool_manifest",
+                    "catalogue_phase",
+                    "catalogue_sha256",
+                    "request_correlation_id"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/executionErrorEnvelope"
+            },
+            {
+              "properties": {
+                "tool": {
+                  "properties": {
+                    "name": {
+                      "const": "binnacle_probe"
+                    },
+                    "contract_version": {
+                      "const": "1.1"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "system_inspect.output.v1_1": {
+      "type": "object",
+      "oneOf": [
+        {
+          "allOf": [
+            {
+              "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/successEnvelope"
+            },
+            {
+              "properties": {
+                "tool": {
+                  "properties": {
+                    "name": {
+                      "const": "system_inspect"
+                    },
+                    "contract_version": {
+                      "const": "1.1"
+                    }
+                  }
+                },
+                "data": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "hostname": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 255
+                    },
+                    "returned_sections": {
+                      "type": "array",
+                      "minItems": 1,
+                      "maxItems": 8,
+                      "uniqueItems": true,
+                      "items": {
+                        "enum": [
+                          "os",
+                          "kernel",
+                          "architecture",
+                          "uptime",
+                          "cpu",
+                          "memory",
+                          "filesystems",
+                          "binnacle_service"
+                        ]
+                      }
+                    },
+                    "sections": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "os": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 256
+                        },
+                        "kernel": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 256
+                        },
+                        "architecture": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 64
+                        },
+                        "uptime": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "cpu": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "count": {
+                              "type": "integer",
+                              "minimum": 1
+                            }
+                          },
+                          "required": [
+                            "count"
+                          ]
+                        },
+                        "memory": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "total_bytes": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "available_bytes": {
+                              "type": "integer",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "total_bytes",
+                            "available_bytes"
+                          ]
+                        },
+                        "filesystems": {
+                          "type": "array",
+                          "maxItems": 128,
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                              "mount_point": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 1024
+                              },
+                              "filesystem_type": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 64
+                              },
+                              "source": {
+                                "oneOf": [
+                                  {
+                                    "type": "string",
+                                    "maxLength": 512
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "total_bytes": {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              "available_bytes": {
+                                "type": "integer",
+                                "minimum": 0
+                              }
+                            },
+                            "required": [
+                              "mount_point",
+                              "filesystem_type",
+                              "source",
+                              "total_bytes",
+                              "available_bytes"
+                            ]
+                          }
+                        },
+                        "binnacle_service": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "state": {
+                              "enum": [
+                                "active",
+                                "inactive",
+                                "failed",
+                                "unknown"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "state"
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "required": [
+                    "hostname",
+                    "returned_sections",
+                    "sections"
+                  ],
+                  "allOf": [
+                    {
+                      "if": {
+                        "properties": {
+                          "returned_sections": {
+                            "contains": {
+                              "const": "os"
+                            }
+                          }
+                        }
+                      },
+                      "then": {
+                        "properties": {
+                          "sections": {
+                            "required": [
+                              "os"
+                            ]
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "if": {
+                        "properties": {
+                          "returned_sections": {
+                            "contains": {
+                              "const": "kernel"
+                            }
+                          }
+                        }
+                      },
+                      "then": {
+                        "properties": {
+                          "sections": {
+                            "required": [
+                              "kernel"
+                            ]
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "if": {
+                        "properties": {
+                          "returned_sections": {
+                            "contains": {
+                              "const": "architecture"
+                            }
+                          }
+                        }
+                      },
+                      "then": {
+                        "properties": {
+                          "sections": {
+                            "required": [
+                              "architecture"
+                            ]
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "if": {
+                        "properties": {
+                          "returned_sections": {
+                            "contains": {
+                              "const": "uptime"
+                            }
+                          }
+                        }
+                      },
+                      "then": {
+                        "properties": {
+                          "sections": {
+                            "required": [
+                              "uptime"
+                            ]
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "if": {
+                        "properties": {
+                          "returned_sections": {
+                            "contains": {
+                              "const": "cpu"
+                            }
+                          }
+                        }
+                      },
+                      "then": {
+                        "properties": {
+                          "sections": {
+                            "required": [
+                              "cpu"
+                            ]
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "if": {
+                        "properties": {
+                          "returned_sections": {
+                            "contains": {
+                              "const": "memory"
+                            }
+                          }
+                        }
+                      },
+                      "then": {
+                        "properties": {
+                          "sections": {
+                            "required": [
+                              "memory"
+                            ]
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "if": {
+                        "properties": {
+                          "returned_sections": {
+                            "contains": {
+                              "const": "filesystems"
+                            }
+                          }
+                        }
+                      },
+                      "then": {
+                        "properties": {
+                          "sections": {
+                            "required": [
+                              "filesystems"
+                            ]
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "if": {
+                        "properties": {
+                          "returned_sections": {
+                            "contains": {
+                              "const": "binnacle_service"
+                            }
+                          }
+                        }
+                      },
+                      "then": {
+                        "properties": {
+                          "sections": {
+                            "required": [
+                              "binnacle_service"
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/executionErrorEnvelope"
+            },
+            {
+              "properties": {
+                "tool": {
+                  "properties": {
+                    "name": {
+                      "const": "system_inspect"
+                    },
+                    "contract_version": {
+                      "const": "1.1"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "probe_result_formats.output.v1_1": {
+      "type": "object",
+      "oneOf": [
+        {
+          "allOf": [
+            {
+              "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/successEnvelope"
+            },
+            {
+              "properties": {
+                "tool": {
+                  "properties": {
+                    "name": {
+                      "const": "probe_result_formats"
+                    },
+                    "contract_version": {
+                      "const": "1.1"
+                    }
+                  }
+                },
+                "data": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "string_value": {
+                      "type": "string",
+                      "maxLength": 256
+                    },
+                    "integer_value": {
+                      "type": "integer"
+                    },
+                    "boolean_value": {
+                      "type": "boolean"
+                    },
+                    "nullable_value": {
+                      "oneOf": [
+                        {
+                          "type": "string",
+                          "maxLength": 256
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "array_values": {
+                      "type": "array",
+                      "maxItems": 16,
+                      "items": {
+                        "type": "integer"
+                      }
+                    },
+                    "nested": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "maxLength": 64
+                        },
+                        "enabled": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "enabled"
+                      ]
+                    },
+                    "warning_included": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "string_value",
+                    "integer_value",
+                    "boolean_value",
+                    "nullable_value",
+                    "array_values",
+                    "nested",
+                    "warning_included"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/executionErrorEnvelope"
+            },
+            {
+              "properties": {
+                "tool": {
+                  "properties": {
+                    "name": {
+                      "const": "probe_result_formats"
+                    },
+                    "contract_version": {
+                      "const": "1.1"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "probe_error.output.v1_1": {
+      "type": "object",
+      "oneOf": [
+        {
+          "allOf": [
+            {
+              "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/successEnvelope"
+            },
+            {
+              "properties": {
+                "tool": {
+                  "properties": {
+                    "name": {
+                      "const": "probe_error"
+                    },
+                    "contract_version": {
+                      "const": "1.1"
+                    }
+                  }
+                },
+                "data": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "case": {
+                      "const": "bounded_delay"
+                    },
+                    "delay_ms": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 10000
+                    },
+                    "completed": {
+                      "const": true
+                    }
+                  },
+                  "required": [
+                    "case",
+                    "delay_ms",
+                    "completed"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/executionErrorEnvelope"
+            },
+            {
+              "properties": {
+                "tool": {
+                  "properties": {
+                    "name": {
+                      "const": "probe_error"
+                    },
+                    "contract_version": {
+                      "const": "1.1"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "compatibility_report.output.v1_1": {
+      "type": "object",
+      "oneOf": [
+        {
+          "allOf": [
+            {
+              "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/successEnvelope"
+            },
+            {
+              "properties": {
+                "tool": {
+                  "properties": {
+                    "name": {
+                      "const": "compatibility_report"
+                    },
+                    "contract_version": {
+                      "const": "1.1"
+                    }
+                  }
+                },
+                "data": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "profile_version": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64
+                    },
+                    "observed_protocol_revision": {
+                      "oneOf": [
+                        {
+                          "type": "string",
+                          "maxLength": 32
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "observations": {
+                      "type": "array",
+                      "maxItems": 256,
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "axis": {
+                            "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/identifier"
+                          },
+                          "status": {
+                            "enum": [
+                              "observed-supported",
+                              "observed-limited",
+                              "declared-unexercised",
+                              "not-declared",
+                              "test-failed",
+                              "host-policy-blocked",
+                              "server-not-implemented",
+                              "not-tested",
+                              "unsupported-by-design",
+                              "unstable",
+                              "expired",
+                              "not-applicable"
+                            ]
+                          },
+                          "summary": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 1000
+                          }
+                        },
+                        "required": [
+                          "axis",
+                          "status",
+                          "summary"
+                        ]
+                      }
+                    },
+                    "evidence_bundle_sha256": {
+                      "oneOf": [
+                        {
+                          "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/sha256"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "limitations": {
+                      "type": "array",
+                      "maxItems": 64,
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1000
+                      }
+                    }
+                  },
+                  "required": [
+                    "profile_version",
+                    "observed_protocol_revision",
+                    "observations",
+                    "evidence_bundle_sha256",
+                    "limitations"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/executionErrorEnvelope"
+            },
+            {
+              "properties": {
+                "tool": {
+                  "properties": {
+                    "name": {
+                      "const": "compatibility_report"
+                    },
+                    "contract_version": {
+                      "const": "1.1"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "probe_workspace_prepare.output.v1_1": {
+      "type": "object",
+      "oneOf": [
+        {
+          "allOf": [
+            {
+              "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/successEnvelope"
+            },
+            {
+              "properties": {
+                "tool": {
+                  "properties": {
+                    "name": {
+                      "const": "probe_workspace_prepare"
+                    },
+                    "contract_version": {
+                      "const": "1.1"
+                    }
+                  }
+                },
+                "data": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "prepared_operation_id": {
+                      "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/identifier"
+                    },
+                    "execution_nonce": {
+                      "type": "string",
+                      "minLength": 22,
+                      "maxLength": 172,
+                      "pattern": "^[A-Za-z0-9_-]+$"
+                    },
+                    "expires_at": {
+                      "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/timestamp"
+                    },
+                    "operation": {
+                      "enum": [
+                        "write",
+                        "cleanup"
+                      ]
+                    },
+                    "relative_path": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 512
+                    },
+                    "normalized_input_sha256": {
+                      "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/sha256"
+                    },
+                    "maximum_effect": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1000
+                    }
+                  },
+                  "required": [
+                    "prepared_operation_id",
+                    "execution_nonce",
+                    "expires_at",
+                    "operation",
+                    "relative_path",
+                    "normalized_input_sha256",
+                    "maximum_effect"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/executionErrorEnvelope"
+            },
+            {
+              "properties": {
+                "tool": {
+                  "properties": {
+                    "name": {
+                      "const": "probe_workspace_prepare"
+                    },
+                    "contract_version": {
+                      "const": "1.1"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "probe_workspace_write.output.v1_1": {
+      "type": "object",
+      "oneOf": [
+        {
+          "allOf": [
+            {
+              "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/successEnvelope"
+            },
+            {
+              "properties": {
+                "tool": {
+                  "properties": {
+                    "name": {
+                      "const": "probe_workspace_write"
+                    },
+                    "contract_version": {
+                      "const": "1.1"
+                    }
+                  }
+                },
+                "data": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "relative_path": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 512
+                    },
+                    "byte_count": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 65536
+                    },
+                    "content_sha256": {
+                      "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/sha256"
+                    },
+                    "artifact_id": {
+                      "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/identifier"
+                    },
+                    "created": {
+                      "const": true
+                    }
+                  },
+                  "required": [
+                    "relative_path",
+                    "byte_count",
+                    "content_sha256",
+                    "artifact_id",
+                    "created"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/executionErrorEnvelope"
+            },
+            {
+              "properties": {
+                "tool": {
+                  "properties": {
+                    "name": {
+                      "const": "probe_workspace_write"
+                    },
+                    "contract_version": {
+                      "const": "1.1"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "probe_workspace_cleanup.output.v1_1": {
+      "type": "object",
+      "oneOf": [
+        {
+          "allOf": [
+            {
+              "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/successEnvelope"
+            },
+            {
+              "properties": {
+                "tool": {
+                  "properties": {
+                    "name": {
+                      "const": "probe_workspace_cleanup"
+                    },
+                    "contract_version": {
+                      "const": "1.1"
+                    }
+                  }
+                },
+                "data": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "relative_path": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 512
+                    },
+                    "artifact_id": {
+                      "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/identifier"
+                    },
+                    "content_sha256": {
+                      "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/sha256"
+                    },
+                    "removed": {
+                      "type": "boolean"
+                    },
+                    "already_missing": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "relative_path",
+                    "artifact_id",
+                    "content_sha256",
+                    "removed",
+                    "already_missing"
+                  ],
+                  "oneOf": [
+                    {
+                      "properties": {
+                        "removed": {
+                          "const": true
+                        },
+                        "already_missing": {
+                          "const": false
+                        }
+                      },
+                      "required": [
+                        "removed",
+                        "already_missing"
+                      ]
+                    },
+                    {
+                      "properties": {
+                        "removed": {
+                          "const": false
+                        },
+                        "already_missing": {
+                          "const": true
+                        }
+                      },
+                      "required": [
+                        "removed",
+                        "already_missing"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/executionErrorEnvelope"
+            },
+            {
+              "properties": {
+                "tool": {
+                  "properties": {
+                    "name": {
+                      "const": "probe_workspace_cleanup"
+                    },
+                    "contract_version": {
+                      "const": "1.1"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "phase9NullableSha256": {
+      "oneOf": [
+        {
+          "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/sha256"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "phase9NullableTimestamp": {
+      "oneOf": [
+        {
+          "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/timestamp"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "phase9PackageTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-z0-9][a-z0-9+.-]*$"
+        },
+        "architecture": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"
+        },
+        "requested_version": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "architecture",
+        "requested_version"
+      ]
+    },
+    "phase9PackageTransactionPlanView": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "plan_version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "transaction_plan_sha256": {
+          "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/sha256"
+        },
+        "package_profile_sha256": {
+          "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/sha256"
+        },
+        "repository_metadata_sha256": {
+          "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/sha256"
+        },
+        "artifact_set_sha256": {
+          "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/sha256"
+        },
+        "dependency_closure_sha256": {
+          "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/sha256"
+        },
+        "maintainer_script_set_sha256": {
+          "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/sha256"
+        },
+        "installed_prestate_sha256": {
+          "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/sha256"
+        },
+        "members": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "architecture": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "action": {
+                "enum": [
+                  "install",
+                  "upgrade",
+                  "configure"
+                ]
+              },
+              "requested": {
+                "type": "boolean"
+              },
+              "old_version": {
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 160
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "target_version": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160
+              },
+              "origin_sha256": {
+                "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/sha256"
+              },
+              "artifact_sha256": {
+                "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/sha256"
+              },
+              "download_bytes": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100000000000
+              },
+              "installed_bytes": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100000000000
+              },
+              "maintainer_scripts": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "name",
+              "architecture",
+              "action",
+              "requested",
+              "old_version",
+              "target_version",
+              "origin_sha256",
+              "artifact_sha256",
+              "download_bytes",
+              "installed_bytes",
+              "maintainer_scripts"
+            ]
+          }
+        },
+        "download_bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000000000
+        },
+        "installed_bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000000000
+        },
+        "prepared_at": {
+          "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/timestamp"
+        },
+        "expires_at": {
+          "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/timestamp"
+        }
+      },
+      "required": [
+        "plan_version",
+        "transaction_plan_sha256",
+        "package_profile_sha256",
+        "repository_metadata_sha256",
+        "artifact_set_sha256",
+        "dependency_closure_sha256",
+        "maintainer_script_set_sha256",
+        "installed_prestate_sha256",
+        "members",
+        "download_bytes",
+        "installed_bytes",
+        "prepared_at",
+        "expires_at"
+      ]
+    },
+    "phase9PrivilegedPreparationData": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "prepared_operation_id": {
+          "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/identifier"
+        },
+        "execution_nonce": {
+          "type": "string",
+          "minLength": 22,
+          "maxLength": 172,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "device_id": {
+          "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/identifier"
+        },
+        "tool_name": {
+          "enum": [
+            "package_install",
+            "binnacle_service_restart",
+            "binnacle_restart"
+          ]
+        },
+        "contract_version": {
+          "const": "1.0"
+        },
+        "normalized_arguments": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "enum": [
+                "package_install",
+                "binnacle_service_restart",
+                "binnacle_restart"
+              ]
+            },
+            "target_profile_id": {
+              "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/identifier"
+            },
+            "package_target": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/phase9PackageTarget"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "candidate_verification_reference": {
+              "oneOf": [
+                {
+                  "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/identifier"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "action",
+            "target_profile_id",
+            "package_target",
+            "candidate_verification_reference"
+          ]
+        },
+        "target": {
+          "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/identifier"
+        },
+        "maximum_effect": {
+          "enum": [
+            "package_change",
+            "service_restart",
+            "controlled_restart"
+          ]
+        },
+        "information_class": {
+          "const": "restricted-result"
+        },
+        "destination": {
+          "const": "local-device:binnacle-privileged"
+        },
+        "expires_at": {
+          "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/timestamp"
+        },
+        "cancellation_and_recovery": {
+          "enum": [
+            "cancel_before_root_start_proves_no_subeffect; later cancellation requires retained reconciliation",
+            "application_disconnect_does_not_cancel_accepted_restart; query retained operation",
+            "candidate_failure_runs_broker_owned_lkg_recovery; ambiguous recovery becomes restricted"
+          ]
+        },
+        "privilege": {
+          "const": "root-broker-mediated"
+        },
+        "destructive_effect": {
+          "enum": [
+            "trusted package artifacts and maintainer scripts may change host state",
+            "fixed Binnacle service process is stopped and started",
+            "runtime selector changes and failed candidate may trigger LKG rollback"
+          ]
+        },
+        "external_effective_destination": {
+          "const": "none"
+        },
+        "credential_use": {
+          "const": "no-caller-credential"
+        },
+        "audit_or_recovery_impact": {
+          "enum": [
+            "broker acceptance and package subeffects remain retained until terminal audit closure",
+            "workspace mutation fence remains held through service restart and terminal audit closure",
+            "workspace mutation fence remains held through candidate verification, rollback, and terminal audit closure"
+          ]
+        },
+        "normalized_input_sha256": {
+          "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/sha256"
+        },
+        "current_state_binding_sha256": {
+          "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/sha256"
+        },
+        "prepared_evidence_sha256": {
+          "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/sha256"
+        },
+        "package_transaction_plan": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/phase9PackageTransactionPlanView"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "candidate_slot_identity_sha256": {
+          "$ref": "#/$defs/phase9NullableSha256"
+        },
+        "lkg_slot_identity_sha256": {
+          "$ref": "#/$defs/phase9NullableSha256"
+        },
+        "candidate_verification_sha256": {
+          "$ref": "#/$defs/phase9NullableSha256"
+        }
+      },
+      "required": [
+        "prepared_operation_id",
+        "execution_nonce",
+        "device_id",
+        "tool_name",
+        "contract_version",
+        "normalized_arguments",
+        "target",
+        "maximum_effect",
+        "information_class",
+        "destination",
+        "expires_at",
+        "cancellation_and_recovery",
+        "privilege",
+        "destructive_effect",
+        "external_effective_destination",
+        "credential_use",
+        "audit_or_recovery_impact",
+        "normalized_input_sha256",
+        "current_state_binding_sha256",
+        "prepared_evidence_sha256",
+        "package_transaction_plan",
+        "candidate_slot_identity_sha256",
+        "lkg_slot_identity_sha256",
+        "candidate_verification_sha256"
+      ],
+      "oneOf": [
+        {
+          "properties": {
+            "tool_name": {
+              "const": "package_install"
+            },
+            "maximum_effect": {
+              "const": "package_change"
+            },
+            "normalized_arguments": {
+              "properties": {
+                "action": {
+                  "const": "package_install"
+                },
+                "package_target": {
+                  "$ref": "#/$defs/phase9PackageTarget"
+                },
+                "candidate_verification_reference": {
+                  "type": "null"
+                }
+              }
+            },
+            "cancellation_and_recovery": {
+              "const": "cancel_before_root_start_proves_no_subeffect; later cancellation requires retained reconciliation"
+            },
+            "destructive_effect": {
+              "const": "trusted package artifacts and maintainer scripts may change host state"
+            },
+            "audit_or_recovery_impact": {
+              "const": "broker acceptance and package subeffects remain retained until terminal audit closure"
+            },
+            "package_transaction_plan": {
+              "$ref": "#/$defs/phase9PackageTransactionPlanView"
+            },
+            "candidate_slot_identity_sha256": {
+              "type": "null"
+            },
+            "lkg_slot_identity_sha256": {
+              "type": "null"
+            },
+            "candidate_verification_sha256": {
+              "type": "null"
+            }
+          }
+        },
+        {
+          "properties": {
+            "tool_name": {
+              "const": "binnacle_service_restart"
+            },
+            "maximum_effect": {
+              "const": "service_restart"
+            },
+            "normalized_arguments": {
+              "properties": {
+                "action": {
+                  "const": "binnacle_service_restart"
+                },
+                "package_target": {
+                  "type": "null"
+                },
+                "candidate_verification_reference": {
+                  "type": "null"
+                }
+              }
+            },
+            "cancellation_and_recovery": {
+              "const": "application_disconnect_does_not_cancel_accepted_restart; query retained operation"
+            },
+            "destructive_effect": {
+              "const": "fixed Binnacle service process is stopped and started"
+            },
+            "audit_or_recovery_impact": {
+              "const": "workspace mutation fence remains held through service restart and terminal audit closure"
+            },
+            "package_transaction_plan": {
+              "type": "null"
+            },
+            "candidate_slot_identity_sha256": {
+              "type": "null"
+            },
+            "lkg_slot_identity_sha256": {
+              "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/sha256"
+            },
+            "candidate_verification_sha256": {
+              "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/sha256"
+            }
+          }
+        },
+        {
+          "properties": {
+            "tool_name": {
+              "const": "binnacle_restart"
+            },
+            "maximum_effect": {
+              "const": "controlled_restart"
+            },
+            "normalized_arguments": {
+              "properties": {
+                "action": {
+                  "const": "binnacle_restart"
+                },
+                "package_target": {
+                  "type": "null"
+                },
+                "candidate_verification_reference": {
+                  "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/identifier"
+                }
+              }
+            },
+            "cancellation_and_recovery": {
+              "const": "candidate_failure_runs_broker_owned_lkg_recovery; ambiguous recovery becomes restricted"
+            },
+            "destructive_effect": {
+              "const": "runtime selector changes and failed candidate may trigger LKG rollback"
+            },
+            "audit_or_recovery_impact": {
+              "const": "workspace mutation fence remains held through candidate verification, rollback, and terminal audit closure"
+            },
+            "package_transaction_plan": {
+              "type": "null"
+            },
+            "candidate_slot_identity_sha256": {
+              "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/sha256"
+            },
+            "lkg_slot_identity_sha256": {
+              "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/sha256"
+            },
+            "candidate_verification_sha256": {
+              "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/sha256"
+            }
+          }
+        }
+      ]
+    },
+    "phase9PackageInspectionData": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "target": {
+          "$ref": "#/$defs/phase9PackageTarget"
+        },
+        "package_profile_sha256": {
+          "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/sha256"
+        },
+        "installed_version": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "candidate_version": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "repository_metadata_sha256": {
+          "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/sha256"
+        },
+        "repository_metadata_observed_at": {
+          "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/timestamp"
+        },
+        "repository_metadata_age_seconds": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 31536000
+        },
+        "package_database_locked": {
+          "type": "boolean"
+        },
+        "preparation_available": {
+          "type": "boolean"
+        },
+        "reason_codes": {
+          "type": "array",
+          "maxItems": 5,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "package_database_busy",
+              "package_not_available",
+              "repository_metadata_stale",
+              "profile_inactive",
+              "preparation_unsupported"
+            ]
+          }
+        },
+        "observed_at": {
+          "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/timestamp"
+        },
+        "observation_sha256": {
+          "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/sha256"
+        }
+      },
+      "required": [
+        "target",
+        "package_profile_sha256",
+        "installed_version",
+        "candidate_version",
+        "repository_metadata_sha256",
+        "repository_metadata_observed_at",
+        "repository_metadata_age_seconds",
+        "package_database_locked",
+        "preparation_available",
+        "reason_codes",
+        "observed_at",
+        "observation_sha256"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "preparation_available": {
+                "const": true
+              }
+            },
+            "required": [
+              "preparation_available"
+            ]
+          },
+          "then": {
+            "properties": {
+              "reason_codes": {
+                "maxItems": 0
+              },
+              "candidate_version": {
+                "type": "string"
+              },
+              "package_database_locked": {
+                "const": false
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "reason_codes": {
+                "minItems": 1
+              }
+            }
+          }
+        }
+      ]
+    },
+    "phase9ServiceInspectionData": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "service_profile_sha256": {
+          "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/sha256"
+        },
+        "service_unit": {
+          "const": "binnacle-dev.service"
+        },
+        "load_state": {
+          "enum": [
+            "loaded",
+            "not-found",
+            "masked",
+            "error"
+          ]
+        },
+        "active_state": {
+          "enum": [
+            "active",
+            "reloading",
+            "inactive",
+            "failed",
+            "activating",
+            "deactivating"
+          ]
+        },
+        "sub_state": {
+          "enum": [
+            "running",
+            "start",
+            "stop",
+            "dead",
+            "failed",
+            "exited",
+            "auto-restart"
+          ]
+        },
+        "result": {
+          "oneOf": [
+            {
+              "enum": [
+                "success",
+                "exit-code",
+                "signal",
+                "core-dump",
+                "timeout",
+                "watchdog",
+                "start-limit-hit",
+                "resources",
+                "protocol"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "main_pid": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2147483647
+        },
+        "main_process_started_at": {
+          "$ref": "#/$defs/phase9NullableTimestamp"
+        },
+        "application_ready": {
+          "oneOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "runtime_identity_sha256": {
+          "$ref": "#/$defs/phase9NullableSha256"
+        },
+        "last_restart_checkpoint_state": {
+          "oneOf": [
+            {
+              "enum": [
+                "prepared",
+                "checkpointed",
+                "service_stopped",
+                "candidate_selected",
+                "candidate_started",
+                "verifying",
+                "rollback_required",
+                "rollback_service_stopped",
+                "rollback_selected",
+                "rollback_started",
+                "terminal",
+                "restricted_recovery"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "observed_at": {
+          "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/timestamp"
+        },
+        "observation_sha256": {
+          "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/sha256"
+        }
+      },
+      "required": [
+        "service_profile_sha256",
+        "service_unit",
+        "load_state",
+        "active_state",
+        "sub_state",
+        "result",
+        "main_pid",
+        "main_process_started_at",
+        "application_ready",
+        "runtime_identity_sha256",
+        "last_restart_checkpoint_state",
+        "observed_at",
+        "observation_sha256"
+      ]
+    },
+    "phase9RestartPreflightData": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "simple_service",
+            "controlled_self"
+          ]
+        },
+        "available": {
+          "type": "boolean"
+        },
+        "reason_codes": {
+          "type": "array",
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "audit_unavailable",
+              "blocking_operation",
+              "uncertain_operation",
+              "command_execution_unsafe",
+              "source_changer_open",
+              "workspace_fence_held",
+              "git_effect_open",
+              "credential_effect_open",
+              "privileged_effect_open",
+              "package_mutation_open",
+              "prior_restart_unresolved",
+              "source_mutation_uncertain",
+              "current_runtime_unavailable",
+              "service_not_ready",
+              "schema_head_mismatch",
+              "peer_set_mismatch",
+              "lkg_unavailable",
+              "candidate_verification_missing",
+              "candidate_verification_stale",
+              "candidate_tested_state_mismatch"
+            ]
+          }
+        },
+        "predicted_impacts": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 4,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "connection_interrupted",
+              "application_process_replaced",
+              "runtime_selector_changed",
+              "rollback_may_run"
+            ]
+          }
+        },
+        "current_runtime_identity_sha256": {
+          "$ref": "#/$defs/phase9NullableSha256"
+        },
+        "current_service_observation_sha256": {
+          "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/sha256"
+        },
+        "lkg_slot_identity_sha256": {
+          "$ref": "#/$defs/phase9NullableSha256"
+        },
+        "candidate_slot_identity_sha256": {
+          "$ref": "#/$defs/phase9NullableSha256"
+        },
+        "candidate_verification_sha256": {
+          "$ref": "#/$defs/phase9NullableSha256"
+        },
+        "outstanding_state_sha256": {
+          "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/sha256"
+        },
+        "state_binding_sha256": {
+          "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/sha256"
+        },
+        "observed_at": {
+          "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/timestamp"
+        },
+        "observation_sha256": {
+          "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/sha256"
+        }
+      },
+      "required": [
+        "kind",
+        "available",
+        "reason_codes",
+        "predicted_impacts",
+        "current_runtime_identity_sha256",
+        "current_service_observation_sha256",
+        "lkg_slot_identity_sha256",
+        "candidate_slot_identity_sha256",
+        "candidate_verification_sha256",
+        "outstanding_state_sha256",
+        "state_binding_sha256",
+        "observed_at",
+        "observation_sha256"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "available": {
+                "const": true
+              }
+            },
+            "required": [
+              "available"
+            ]
+          },
+          "then": {
+            "properties": {
+              "reason_codes": {
+                "maxItems": 0
+              },
+              "current_runtime_identity_sha256": {
+                "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/sha256"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "reason_codes": {
+                "minItems": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "controlled_self"
+              },
+              "available": {
+                "const": true
+              }
+            },
+            "required": [
+              "kind",
+              "available"
+            ]
+          },
+          "then": {
+            "properties": {
+              "lkg_slot_identity_sha256": {
+                "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/sha256"
+              },
+              "candidate_slot_identity_sha256": {
+                "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/sha256"
+              },
+              "candidate_verification_sha256": {
+                "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/sha256"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "phase9RuntimeInspectionData": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "source_git_oid": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}(?:[0-9a-f]{24})?$"
+        },
+        "source_dirty_state": {
+          "enum": [
+            "clean",
+            "dirty",
+            "unknown"
+          ]
+        },
+        "source_state_sha256": {
+          "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/sha256"
+        },
+        "environment_sha256": {
+          "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/sha256"
+        },
+        "runtime_slot_identity_sha256": {
+          "$ref": "#/$defs/phase9NullableSha256"
+        },
+        "lock_sha256": {
+          "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/sha256"
+        },
+        "build_sha256": {
+          "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/sha256"
+        },
+        "config_sha256": {
+          "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/sha256"
+        },
+        "policy_sha256": {
+          "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/sha256"
+        },
+        "manifest_sha256": {
+          "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/sha256"
+        },
+        "service_profile_sha256": {
+          "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/sha256"
+        },
+        "device_id": {
+          "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/identifier"
+        },
+        "device_epoch": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "runtime_instance_id": {
+          "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/identifier"
+        },
+        "process_started_at": {
+          "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/timestamp"
+        },
+        "readiness_generation": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "schema_heads_sha256": {
+          "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/sha256"
+        },
+        "runtime_layout_sha256": {
+          "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/sha256"
+        },
+        "deployed_peer_set_sha256": {
+          "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/sha256"
+        },
+        "runtime_identity_sha256": {
+          "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/sha256"
+        }
+      },
+      "required": [
+        "source_git_oid",
+        "source_dirty_state",
+        "source_state_sha256",
+        "environment_sha256",
+        "runtime_slot_identity_sha256",
+        "lock_sha256",
+        "build_sha256",
+        "config_sha256",
+        "policy_sha256",
+        "manifest_sha256",
+        "service_profile_sha256",
+        "device_id",
+        "device_epoch",
+        "runtime_instance_id",
+        "process_started_at",
+        "readiness_generation",
+        "schema_heads_sha256",
+        "runtime_layout_sha256",
+        "deployed_peer_set_sha256",
+        "runtime_identity_sha256"
+      ]
+    },
+    "phase9EffectResultData": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "outcome": {
+          "enum": [
+            "package_installed",
+            "service_ready",
+            "candidate_ready",
+            "rollback_ready",
+            "no_subeffect",
+            "failed",
+            "uncertain",
+            "restricted_recovery"
+          ]
+        },
+        "effect_knowledge": {
+          "enum": [
+            "known_no_subeffect",
+            "known_effect",
+            "uncertain"
+          ]
+        },
+        "broker_evidence_generation": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "broker_evidence_sha256": {
+          "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/sha256"
+        },
+        "package_transaction_plan_sha256": {
+          "$ref": "#/$defs/phase9NullableSha256"
+        },
+        "installed_prestate_sha256": {
+          "$ref": "#/$defs/phase9NullableSha256"
+        },
+        "installed_poststate_sha256": {
+          "$ref": "#/$defs/phase9NullableSha256"
+        },
+        "restart_checkpoint_sha256": {
+          "$ref": "#/$defs/phase9NullableSha256"
+        },
+        "candidate_slot_identity_sha256": {
+          "$ref": "#/$defs/phase9NullableSha256"
+        },
+        "lkg_slot_identity_sha256": {
+          "$ref": "#/$defs/phase9NullableSha256"
+        },
+        "selected_runtime_slot_identity_sha256": {
+          "$ref": "#/$defs/phase9NullableSha256"
+        },
+        "runtime_identity_sha256": {
+          "$ref": "#/$defs/phase9NullableSha256"
+        }
+      },
+      "required": [
+        "outcome",
+        "effect_knowledge",
+        "broker_evidence_generation",
+        "broker_evidence_sha256",
+        "package_transaction_plan_sha256",
+        "installed_prestate_sha256",
+        "installed_poststate_sha256",
+        "restart_checkpoint_sha256",
+        "candidate_slot_identity_sha256",
+        "lkg_slot_identity_sha256",
+        "selected_runtime_slot_identity_sha256",
+        "runtime_identity_sha256"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "outcome": {
+                "const": "no_subeffect"
+              }
+            },
+            "required": [
+              "outcome"
+            ]
+          },
+          "then": {
+            "properties": {
+              "effect_knowledge": {
+                "const": "known_no_subeffect"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "outcome": {
+                "enum": [
+                  "package_installed",
+                  "service_ready",
+                  "candidate_ready",
+                  "rollback_ready"
+                ]
+              }
+            },
+            "required": [
+              "outcome"
+            ]
+          },
+          "then": {
+            "properties": {
+              "effect_knowledge": {
+                "const": "known_effect"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "outcome": {
+                "enum": [
+                  "uncertain",
+                  "restricted_recovery"
+                ]
+              }
+            },
+            "required": [
+              "outcome"
+            ]
+          },
+          "then": {
+            "properties": {
+              "effect_knowledge": {
+                "const": "uncertain"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "privileged_prepare.output.v1_0": {
+      "type": "object",
+      "oneOf": [
+        {
+          "allOf": [
+            {
+              "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/successEnvelope"
+            },
+            {
+              "properties": {
+                "tool": {
+                  "properties": {
+                    "name": {
+                      "const": "privileged_prepare"
+                    },
+                    "contract_version": {
+                      "const": "1.0"
+                    }
+                  }
+                },
+                "data": {
+                  "$ref": "#/$defs/phase9PrivilegedPreparationData"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/executionErrorEnvelope"
+            },
+            {
+              "properties": {
+                "tool": {
+                  "properties": {
+                    "name": {
+                      "const": "privileged_prepare"
+                    },
+                    "contract_version": {
+                      "const": "1.0"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "package_inspect.output.v1_0": {
+      "type": "object",
+      "oneOf": [
+        {
+          "allOf": [
+            {
+              "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/successEnvelope"
+            },
+            {
+              "properties": {
+                "tool": {
+                  "properties": {
+                    "name": {
+                      "const": "package_inspect"
+                    },
+                    "contract_version": {
+                      "const": "1.0"
+                    }
+                  }
+                },
+                "data": {
+                  "$ref": "#/$defs/phase9PackageInspectionData"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/executionErrorEnvelope"
+            },
+            {
+              "properties": {
+                "tool": {
+                  "properties": {
+                    "name": {
+                      "const": "package_inspect"
+                    },
+                    "contract_version": {
+                      "const": "1.0"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "package_install.output.v1_0": {
+      "type": "object",
+      "oneOf": [
+        {
+          "allOf": [
+            {
+              "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/successEnvelope"
+            },
+            {
+              "properties": {
+                "tool": {
+                  "properties": {
+                    "name": {
+                      "const": "package_install"
+                    },
+                    "contract_version": {
+                      "const": "1.0"
+                    }
+                  }
+                },
+                "data": {
+                  "$ref": "#/$defs/phase9EffectResultData",
+                  "properties": {
+                    "outcome": {
+                      "enum": [
+                        "package_installed",
+                        "no_subeffect",
+                        "failed",
+                        "uncertain",
+                        "restricted_recovery"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "outcome"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/executionErrorEnvelope"
+            },
+            {
+              "properties": {
+                "tool": {
+                  "properties": {
+                    "name": {
+                      "const": "package_install"
+                    },
+                    "contract_version": {
+                      "const": "1.0"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "binnacle_service_inspect.output.v1_0": {
+      "type": "object",
+      "oneOf": [
+        {
+          "allOf": [
+            {
+              "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/successEnvelope"
+            },
+            {
+              "properties": {
+                "tool": {
+                  "properties": {
+                    "name": {
+                      "const": "binnacle_service_inspect"
+                    },
+                    "contract_version": {
+                      "const": "1.0"
+                    }
+                  }
+                },
+                "data": {
+                  "$ref": "#/$defs/phase9ServiceInspectionData"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/executionErrorEnvelope"
+            },
+            {
+              "properties": {
+                "tool": {
+                  "properties": {
+                    "name": {
+                      "const": "binnacle_service_inspect"
+                    },
+                    "contract_version": {
+                      "const": "1.0"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "binnacle_service_restart.output.v1_0": {
+      "type": "object",
+      "oneOf": [
+        {
+          "allOf": [
+            {
+              "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/successEnvelope"
+            },
+            {
+              "properties": {
+                "tool": {
+                  "properties": {
+                    "name": {
+                      "const": "binnacle_service_restart"
+                    },
+                    "contract_version": {
+                      "const": "1.0"
+                    }
+                  }
+                },
+                "data": {
+                  "$ref": "#/$defs/phase9EffectResultData",
+                  "properties": {
+                    "outcome": {
+                      "enum": [
+                        "service_ready",
+                        "no_subeffect",
+                        "failed",
+                        "uncertain",
+                        "restricted_recovery"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "outcome"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/executionErrorEnvelope"
+            },
+            {
+              "properties": {
+                "tool": {
+                  "properties": {
+                    "name": {
+                      "const": "binnacle_service_restart"
+                    },
+                    "contract_version": {
+                      "const": "1.0"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "restart_preflight.output.v1_0": {
+      "type": "object",
+      "oneOf": [
+        {
+          "allOf": [
+            {
+              "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/successEnvelope"
+            },
+            {
+              "properties": {
+                "tool": {
+                  "properties": {
+                    "name": {
+                      "const": "restart_preflight"
+                    },
+                    "contract_version": {
+                      "const": "1.0"
+                    }
+                  }
+                },
+                "data": {
+                  "$ref": "#/$defs/phase9RestartPreflightData"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/executionErrorEnvelope"
+            },
+            {
+              "properties": {
+                "tool": {
+                  "properties": {
+                    "name": {
+                      "const": "restart_preflight"
+                    },
+                    "contract_version": {
+                      "const": "1.0"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "binnacle_restart.output.v1_0": {
+      "type": "object",
+      "oneOf": [
+        {
+          "allOf": [
+            {
+              "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/successEnvelope"
+            },
+            {
+              "properties": {
+                "tool": {
+                  "properties": {
+                    "name": {
+                      "const": "binnacle_restart"
+                    },
+                    "contract_version": {
+                      "const": "1.0"
+                    }
+                  }
+                },
+                "data": {
+                  "$ref": "#/$defs/phase9EffectResultData",
+                  "properties": {
+                    "outcome": {
+                      "enum": [
+                        "candidate_ready",
+                        "rollback_ready",
+                        "no_subeffect",
+                        "failed",
+                        "uncertain",
+                        "restricted_recovery"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "outcome"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/executionErrorEnvelope"
+            },
+            {
+              "properties": {
+                "tool": {
+                  "properties": {
+                    "name": {
+                      "const": "binnacle_restart"
+                    },
+                    "contract_version": {
+                      "const": "1.0"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "binnacle_runtime_inspect.output.v1_0": {
+      "type": "object",
+      "oneOf": [
+        {
+          "allOf": [
+            {
+              "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/successEnvelope"
+            },
+            {
+              "properties": {
+                "tool": {
+                  "properties": {
+                    "name": {
+                      "const": "binnacle_runtime_inspect"
+                    },
+                    "contract_version": {
+                      "const": "1.0"
+                    }
+                  }
+                },
+                "data": {
+                  "$ref": "#/$defs/phase9RuntimeInspectionData"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "https://binnacle.dev/schemas/mcp/binnacle-common.schema.json#/$defs/executionErrorEnvelope"
+            },
+            {
+              "properties": {
+                "tool": {
+                  "properties": {
+                    "name": {
+                      "const": "binnacle_runtime_inspect"
+                    },
+                    "contract_version": {
+                      "const": "1.0"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

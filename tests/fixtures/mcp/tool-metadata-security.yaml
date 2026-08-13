@@ -1,13 +1,13 @@
 schema_version: "1.1"
 contract: MCP-TOOL-MANIFEST
-contract_version: "1.1.0"
+contract_version: "1.2.0"
 
 cases:
   - id: source-manifest-resolves
     kind: positive
     manifest_path: spec/mcp/bootstrap-tool-manifest.yaml
     expect:
-      tool_count: 8
+      tool_count: 16
       all_schema_paths_exist: true
       all_json_pointers_resolve: true
       all_handlers_bound: true
@@ -122,6 +122,14 @@ cases:
         - probe_workspace_prepare
         - probe_workspace_write
         - probe_workspace_cleanup
+        - privileged_prepare
+        - package_inspect
+        - package_install
+        - binnacle_service_inspect
+        - binnacle_service_restart
+        - restart_preflight
+        - binnacle_restart
+        - binnacle_runtime_inspect
 
   - id: readonly-test-mode-exposes-declared-synthetic-only
     kind: positive
@@ -137,6 +145,23 @@ cases:
         - probe_workspace_write
         - probe_workspace_cleanup
       runtime_phase_expansion: false
+
+  - id: phase9-operational-source-contracts-default-disabled
+    kind: positive
+    catalogue_phase: v1-operational
+    runtime_promotion: disabled
+    expect:
+      visible: []
+      reviewed_source_contracts:
+        - privileged_prepare
+        - package_inspect
+        - package_install
+        - binnacle_service_inspect
+        - binnacle_service_restart
+        - restart_preflight
+        - binnacle_restart
+        - binnacle_runtime_inspect
+      host_reboot_present: false
 
   - id: write-probe-phase-has-preparation
     kind: positive

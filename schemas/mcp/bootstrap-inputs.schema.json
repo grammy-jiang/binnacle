@@ -1,1 +1,635 @@
-{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://binnacle.dev/schemas/mcp/bootstrap-inputs.schema.json","title":"Binnacle bootstrap Tool input schemas","$defs":{"idempotencyKey":{"type":"string","minLength":22,"maxLength":172,"pattern":"^(?:[a-f0-9]{32,128}|[A-Za-z0-9_-]{22,172})$"},"binnacle_probe.input.v1_1":{"type":"object","additionalProperties":false},"compatibility_report.input.v1_1":{"type":"object","additionalProperties":false},"system_inspect.input.v1_1":{"type":"object","additionalProperties":false,"properties":{"sections":{"type":"array","minItems":1,"maxItems":8,"uniqueItems":true,"items":{"enum":["os","kernel","architecture","uptime","cpu","memory","filesystems","binnacle_service"]}}}},"probe_result_formats.input.v1_1":{"type":"object","additionalProperties":false,"properties":{"include_warning":{"type":"boolean","default":false},"nullable_value":{"oneOf":[{"type":"string","maxLength":256},{"type":"null"}]},"array_length":{"type":"integer","minimum":0,"maximum":16,"default":3}}},"probe_error.input.v1_1":{"type":"object","additionalProperties":false,"properties":{"case":{"enum":["invalid_input","policy_rejection","known_execution_failure","timeout","uncertain_outcome","bounded_delay"]},"delay_ms":{"type":"integer","minimum":1,"maximum":10000}},"required":["case"],"allOf":[{"if":{"properties":{"case":{"const":"bounded_delay"}},"required":["case"]},"then":{"required":["delay_ms"]},"else":{"not":{"required":["delay_ms"]}}}]},"probe_workspace_prepare.input.v1_1":{"type":"object","additionalProperties":false,"properties":{"operation":{"enum":["write","cleanup"]},"relative_path":{"type":"string","minLength":1,"maxLength":512,"pattern":"^(?!/)(?![A-Za-z]:)(?!.*\\\\)(?!.*(?:^|/)\\.\\.(?:/|$))[^\\u0000\\r\\n:]+$"},"content_sha256":{"type":"string","pattern":"^[a-f0-9]{64}$"},"artifact_id":{"type":"string","minLength":1,"maxLength":160,"pattern":"^[A-Za-z0-9][A-Za-z0-9_.:-]*$"},"byte_count":{"type":"integer","minimum":0,"maximum":65536}},"required":["operation","relative_path","content_sha256"],"allOf":[{"if":{"properties":{"operation":{"const":"write"}},"required":["operation"]},"then":{"required":["byte_count"],"not":{"required":["artifact_id"]}}},{"if":{"properties":{"operation":{"const":"cleanup"}},"required":["operation"]},"then":{"required":["artifact_id"],"not":{"required":["byte_count"]}}}]},"probe_workspace_write.input.v1_1":{"type":"object","additionalProperties":false,"properties":{"prepared_operation_id":{"type":"string","minLength":1,"maxLength":160,"pattern":"^[A-Za-z0-9][A-Za-z0-9_.:-]*$"},"execution_nonce":{"type":"string","minLength":22,"maxLength":172,"pattern":"^[A-Za-z0-9_-]+$"},"idempotency_key":{"$ref":"#/$defs/idempotencyKey"},"relative_path":{"type":"string","minLength":1,"maxLength":512,"pattern":"^(?!/)(?![A-Za-z]:)(?!.*\\\\)(?!.*(?:^|/)\\.\\.(?:/|$))[^\\u0000\\r\\n:]+$"},"text":{"type":"string","maxLength":65536},"base64":{"type":"string","contentEncoding":"base64","maxLength":87384},"overwrite":{"const":false}},"required":["prepared_operation_id","execution_nonce","idempotency_key","relative_path","overwrite"],"oneOf":[{"required":["text"],"not":{"required":["base64"]}},{"required":["base64"],"not":{"required":["text"]}}]},"probe_workspace_cleanup.input.v1_1":{"type":"object","additionalProperties":false,"properties":{"prepared_operation_id":{"type":"string","minLength":1,"maxLength":160,"pattern":"^[A-Za-z0-9][A-Za-z0-9_.:-]*$"},"execution_nonce":{"type":"string","minLength":22,"maxLength":172,"pattern":"^[A-Za-z0-9_-]+$"},"idempotency_key":{"$ref":"#/$defs/idempotencyKey"},"relative_path":{"type":"string","minLength":1,"maxLength":512,"pattern":"^(?!/)(?![A-Za-z]:)(?!.*\\\\)(?!.*(?:^|/)\\.\\.(?:/|$))[^\\u0000\\r\\n:]+$"},"artifact_id":{"type":"string","minLength":1,"maxLength":160,"pattern":"^[A-Za-z0-9][A-Za-z0-9_.:-]*$"},"content_sha256":{"type":"string","pattern":"^[a-f0-9]{64}$"}},"required":["prepared_operation_id","execution_nonce","idempotency_key","relative_path","artifact_id","content_sha256"]}}}
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://binnacle.dev/schemas/mcp/bootstrap-inputs.schema.json",
+  "title": "Binnacle bootstrap Tool input schemas",
+  "$defs": {
+    "idempotencyKey": {
+      "type": "string",
+      "minLength": 22,
+      "maxLength": 172,
+      "pattern": "^(?:[a-f0-9]{32,128}|[A-Za-z0-9_-]{22,172})$"
+    },
+    "binnacle_probe.input.v1_1": {
+      "type": "object",
+      "additionalProperties": false
+    },
+    "compatibility_report.input.v1_1": {
+      "type": "object",
+      "additionalProperties": false
+    },
+    "system_inspect.input.v1_1": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sections": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "os",
+              "kernel",
+              "architecture",
+              "uptime",
+              "cpu",
+              "memory",
+              "filesystems",
+              "binnacle_service"
+            ]
+          }
+        }
+      }
+    },
+    "probe_result_formats.input.v1_1": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "include_warning": {
+          "type": "boolean",
+          "default": false
+        },
+        "nullable_value": {
+          "oneOf": [
+            {
+              "type": "string",
+              "maxLength": 256
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "array_length": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 16,
+          "default": 3
+        }
+      }
+    },
+    "probe_error.input.v1_1": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "case": {
+          "enum": [
+            "invalid_input",
+            "policy_rejection",
+            "known_execution_failure",
+            "timeout",
+            "uncertain_outcome",
+            "bounded_delay"
+          ]
+        },
+        "delay_ms": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10000
+        }
+      },
+      "required": [
+        "case"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "case": {
+                "const": "bounded_delay"
+              }
+            },
+            "required": [
+              "case"
+            ]
+          },
+          "then": {
+            "required": [
+              "delay_ms"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "delay_ms"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "probe_workspace_prepare.input.v1_1": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "operation": {
+          "enum": [
+            "write",
+            "cleanup"
+          ]
+        },
+        "relative_path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "pattern": "^(?!/)(?![A-Za-z]:)(?!.*\\\\)(?!.*(?:^|/)\\.\\.(?:/|$))[^\\u0000\\r\\n:]+$"
+        },
+        "content_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "artifact_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
+        },
+        "byte_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65536
+        }
+      },
+      "required": [
+        "operation",
+        "relative_path",
+        "content_sha256"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "operation": {
+                "const": "write"
+              }
+            },
+            "required": [
+              "operation"
+            ]
+          },
+          "then": {
+            "required": [
+              "byte_count"
+            ],
+            "not": {
+              "required": [
+                "artifact_id"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operation": {
+                "const": "cleanup"
+              }
+            },
+            "required": [
+              "operation"
+            ]
+          },
+          "then": {
+            "required": [
+              "artifact_id"
+            ],
+            "not": {
+              "required": [
+                "byte_count"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "probe_workspace_write.input.v1_1": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "prepared_operation_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
+        },
+        "execution_nonce": {
+          "type": "string",
+          "minLength": 22,
+          "maxLength": 172,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "idempotency_key": {
+          "$ref": "#/$defs/idempotencyKey"
+        },
+        "relative_path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "pattern": "^(?!/)(?![A-Za-z]:)(?!.*\\\\)(?!.*(?:^|/)\\.\\.(?:/|$))[^\\u0000\\r\\n:]+$"
+        },
+        "text": {
+          "type": "string",
+          "maxLength": 65536
+        },
+        "base64": {
+          "type": "string",
+          "contentEncoding": "base64",
+          "maxLength": 87384
+        },
+        "overwrite": {
+          "const": false
+        }
+      },
+      "required": [
+        "prepared_operation_id",
+        "execution_nonce",
+        "idempotency_key",
+        "relative_path",
+        "overwrite"
+      ],
+      "oneOf": [
+        {
+          "required": [
+            "text"
+          ],
+          "not": {
+            "required": [
+              "base64"
+            ]
+          }
+        },
+        {
+          "required": [
+            "base64"
+          ],
+          "not": {
+            "required": [
+              "text"
+            ]
+          }
+        }
+      ]
+    },
+    "probe_workspace_cleanup.input.v1_1": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "prepared_operation_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
+        },
+        "execution_nonce": {
+          "type": "string",
+          "minLength": 22,
+          "maxLength": 172,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "idempotency_key": {
+          "$ref": "#/$defs/idempotencyKey"
+        },
+        "relative_path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "pattern": "^(?!/)(?![A-Za-z]:)(?!.*\\\\)(?!.*(?:^|/)\\.\\.(?:/|$))[^\\u0000\\r\\n:]+$"
+        },
+        "artifact_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
+        },
+        "content_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      },
+      "required": [
+        "prepared_operation_id",
+        "execution_nonce",
+        "idempotency_key",
+        "relative_path",
+        "artifact_id",
+        "content_sha256"
+      ]
+    },
+    "phase9Identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
+    },
+    "phase9Sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "phase9ExecutionNonce": {
+      "type": "string",
+      "minLength": 22,
+      "maxLength": 172,
+      "pattern": "^[A-Za-z0-9_-]+$"
+    },
+    "phase9PackageTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-z0-9][a-z0-9+.-]*$"
+        },
+        "architecture": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"
+        },
+        "requested_version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9.+:~_-]*$"
+        }
+      },
+      "required": [
+        "name",
+        "architecture"
+      ]
+    },
+    "privileged_prepare.input.v1_0": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "enum": [
+            "package_install",
+            "binnacle_service_restart",
+            "binnacle_restart"
+          ]
+        },
+        "target_profile_id": {
+          "$ref": "#/$defs/phase9Identifier"
+        },
+        "package_target": {
+          "$ref": "#/$defs/phase9PackageTarget"
+        },
+        "candidate_verification_reference": {
+          "$ref": "#/$defs/phase9Identifier"
+        }
+      },
+      "required": [
+        "action",
+        "target_profile_id"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "action": {
+                "const": "package_install"
+              }
+            },
+            "required": [
+              "action"
+            ]
+          },
+          "then": {
+            "required": [
+              "package_target"
+            ],
+            "not": {
+              "required": [
+                "candidate_verification_reference"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "action": {
+                "const": "binnacle_service_restart"
+              }
+            },
+            "required": [
+              "action"
+            ]
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "package_target"
+                  ]
+                },
+                {
+                  "required": [
+                    "candidate_verification_reference"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "action": {
+                "const": "binnacle_restart"
+              }
+            },
+            "required": [
+              "action"
+            ]
+          },
+          "then": {
+            "required": [
+              "candidate_verification_reference"
+            ],
+            "not": {
+              "required": [
+                "package_target"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "package_inspect.input.v1_0": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "package_profile_id": {
+          "$ref": "#/$defs/phase9Identifier"
+        },
+        "target": {
+          "$ref": "#/$defs/phase9PackageTarget"
+        }
+      },
+      "required": [
+        "package_profile_id",
+        "target"
+      ]
+    },
+    "package_install.input.v1_0": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "prepared_operation_id": {
+          "$ref": "#/$defs/phase9Identifier"
+        },
+        "execution_nonce": {
+          "$ref": "#/$defs/phase9ExecutionNonce"
+        },
+        "idempotency_key": {
+          "$ref": "#/$defs/idempotencyKey"
+        },
+        "package_transaction_plan_sha256": {
+          "$ref": "#/$defs/phase9Sha256"
+        }
+      },
+      "required": [
+        "prepared_operation_id",
+        "execution_nonce",
+        "idempotency_key",
+        "package_transaction_plan_sha256"
+      ]
+    },
+    "binnacle_service_inspect.input.v1_0": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "service_profile_id": {
+          "$ref": "#/$defs/phase9Identifier"
+        }
+      },
+      "required": [
+        "service_profile_id"
+      ]
+    },
+    "binnacle_service_restart.input.v1_0": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "prepared_operation_id": {
+          "$ref": "#/$defs/phase9Identifier"
+        },
+        "execution_nonce": {
+          "$ref": "#/$defs/phase9ExecutionNonce"
+        },
+        "idempotency_key": {
+          "$ref": "#/$defs/idempotencyKey"
+        },
+        "preflight_state_binding_sha256": {
+          "$ref": "#/$defs/phase9Sha256"
+        }
+      },
+      "required": [
+        "prepared_operation_id",
+        "execution_nonce",
+        "idempotency_key",
+        "preflight_state_binding_sha256"
+      ]
+    },
+    "restart_preflight.input.v1_0": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "service_profile_id": {
+          "$ref": "#/$defs/phase9Identifier"
+        },
+        "kind": {
+          "enum": [
+            "service_restart",
+            "controlled_restart"
+          ]
+        },
+        "candidate_verification_reference": {
+          "$ref": "#/$defs/phase9Identifier"
+        }
+      },
+      "required": [
+        "service_profile_id",
+        "kind"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "controlled_restart"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "required": [
+              "candidate_verification_reference"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "candidate_verification_reference"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "binnacle_restart.input.v1_0": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "prepared_operation_id": {
+          "$ref": "#/$defs/phase9Identifier"
+        },
+        "execution_nonce": {
+          "$ref": "#/$defs/phase9ExecutionNonce"
+        },
+        "idempotency_key": {
+          "$ref": "#/$defs/idempotencyKey"
+        },
+        "preflight_state_binding_sha256": {
+          "$ref": "#/$defs/phase9Sha256"
+        },
+        "candidate_slot_identity_sha256": {
+          "$ref": "#/$defs/phase9Sha256"
+        },
+        "lkg_slot_identity_sha256": {
+          "$ref": "#/$defs/phase9Sha256"
+        },
+        "candidate_verification_sha256": {
+          "$ref": "#/$defs/phase9Sha256"
+        }
+      },
+      "required": [
+        "prepared_operation_id",
+        "execution_nonce",
+        "idempotency_key",
+        "preflight_state_binding_sha256",
+        "candidate_slot_identity_sha256",
+        "lkg_slot_identity_sha256",
+        "candidate_verification_sha256"
+      ]
+    },
+    "binnacle_runtime_inspect.input.v1_0": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "service_profile_id": {
+          "$ref": "#/$defs/phase9Identifier"
+        }
+      },
+      "required": [
+        "service_profile_id"
+      ]
+    }
+  }
+}

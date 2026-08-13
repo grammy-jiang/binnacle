@@ -40,7 +40,7 @@ def test_application_git_migration_is_exact_retained_and_default_empty(
             for table in tables
         }
 
-    assert revision == ("0005_git_operations",)
+    assert revision == ("0006_privileged_operations",)
     assert generation is None
     assert tables == {
         "git_operations",

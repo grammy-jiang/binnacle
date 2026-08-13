@@ -1,7 +1,7 @@
 # Binnacle MCP Tool Manifest and Metadata Integrity
 
 - **Status:** Draft implementation contract
-- **Contract version:** `1.1.0`
+- **Contract version:** `1.2.0`
 - **Source manifest:** `spec/mcp/bootstrap-tool-manifest.yaml`
 - **Canonical schemas:** `schemas/mcp/`
 - **Feature-design basis:** [`design.md`](design.md), V17
@@ -30,7 +30,7 @@ The manifest digest is not stored inside the bytes that it hashes. The release p
 ```json
 {
   "manifest_id": "binnacle-bootstrap-tools",
-  "manifest_version": "1.1.0",
+  "manifest_version": "1.2.0",
   "manifest_sha256": "<sha256 of canonical runtime manifest bytes>",
   "build_id": "<release build>",
   "build_artifact_sha256": "<artifact digest>",
@@ -91,7 +91,7 @@ A semantic change requires a new contract version and a reviewed manifest change
 | `compatibility-core` | Connect and test read-only fundamentals | `binnacle_probe`, `system_inspect`, `probe_result_formats`, `probe_error`, `compatibility_report` |
 | `compatibility-write-probe` | Test exact disposable write/cleanup flow | Core plus `probe_workspace_prepare`, `probe_workspace_write`, `probe_workspace_cleanup` |
 | `v1-readonly` | Promoted read-only Binnacle use | Promoted operational read Tools; synthetic probes hidden by default |
-| `v1-operational` | Promoted bounded mutation/administration | Only promoted operational Tools |
+| `v1-operational` | Reviewed bounded mutation/administration | Only independently promoted operational Tools; currently disabled |
 
 Synthetic compatibility Tools may be exposed during `v1-readonly` only when:
 
@@ -104,7 +104,8 @@ Filtering can only remove a manifest-authorized entry. Test mode cannot invent a
 
 ## 6. Bootstrap Contracts
 
-The bootstrap manifest contains exactly eight Tool contracts:
+The bootstrap manifest contains sixteen canonical Tool contracts. The first eight form
+the currently served compatibility projections:
 
 ```text
 binnacle_probe 1.1
@@ -116,6 +117,26 @@ probe_workspace_prepare 1.1
 probe_workspace_write 1.1
 probe_workspace_cleanup 1.1
 ```
+
+The remaining eight are the reviewed Phase 9 source contracts and resolve through the
+same schemas, policies, handler bindings, and compiler. They are assigned only to
+`v1-operational`, whose runtime promotion remains disabled pending candidate-Pi and real
+ChatGPT HC2 evidence:
+
+```text
+privileged_prepare 1.0
+package_inspect 1.0
+package_install 1.0
+binnacle_service_inspect 1.0
+binnacle_service_restart 1.0
+restart_preflight 1.0
+binnacle_restart 1.0
+binnacle_runtime_inspect 1.0
+```
+
+`host_reboot` is intentionally absent. Repository implementation and review may complete
+without live hardware or host evidence; those missing facts block runtime promotion, not
+canonical contract validation.
 
 `probe_workspace_cleanup` removes one exact artifact per call. Bulk cleanup or “all owned artifacts” would require a different contract version and owner-visible maximum effect.
 

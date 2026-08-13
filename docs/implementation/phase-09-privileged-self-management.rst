@@ -149,6 +149,9 @@ The working Phase 9 set is:
 former restarts the exact fixed service without changing the candidate/LKG runtime. The
 latter is the full self-management checkpoint, candidate-verification and rollback path.
 A request cannot downgrade a candidate-changing restart to the simple service operation.
+Its terminal broker result records an explicit ``service_ready``, ``failed`` or
+``no_subeffect`` disposition and the exact readiness/verification evidence where an
+effect started. Effect knowledge alone never implies that the restarted service is ready.
 
 Read-only inspection operations create no consequential Phase 4 effect unless a future
 contract explicitly requires one. Package installation, service restart, controlled
@@ -417,6 +420,14 @@ application connection outside this gate is not no-effect proof.
 
 A seal for the operation binding also rejects every alternate-ticket attempt for that
 operation. It cannot be bypassed by allocating a different ticket ID or digest.
+
+The application-side ``authorised``/``prepared`` state before the durable privileged
+dispatch marker is a separate zero-effect boundary: no broker handler may yet have been
+sent. Replacement recovery atomically fails the Phase 4 operation as
+``restart_before_dispatch``, releases its reservation and workspace fence, and retains a
+terminal privileged record whose broker and post-effect audit closures are explicitly
+``not_required``. It does not fabricate a broker no-accept seal. Once the durable dispatch
+marker exists, this local closure is forbidden and the accept-or-seal rules above apply.
 
 8.4 Post-accept recovery
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -743,6 +754,24 @@ manifest/service-definition runtime slot is durably materialized/verified. The p
 complete LKG is retained until new-slot promotion is durable.
 A candidate cannot destroy the only verified recovery slot before it has qualified.
 
+Promotion is a separate retained broker transition after candidate-ready closure. The
+replacement application first commits/reuses the exact terminal audit event, then sends
+that audit evidence digest to the broker's closed ``promote_restart_lkg`` request. In one
+broker transaction, the verified candidate becomes ``lkg``, the previous LKG becomes a
+retained ``prior`` slot, and promotion evidence binds the checkpoint result, verified
+selector receipt, audit digest and both before/after slot identities. Only the returned
+promotion snapshot may be used to close the application operation, release its reservation
+and release the workspace fence. A crash at any boundary reuses the audit event and exact
+promotion evidence; a candidate-ready checkpoint without promotion remains outstanding
+authority and blocks a new privileged acceptance or broker identity upgrade.
+
+The immutable slot manifest retains the slot's publication-time role/state and material
+identity; it is not rewritten during promotion. Current ``lkg``/``prior`` lifecycle truth
+comes from the same broker transaction that records promotion. Runtime inspection first
+verifies the immutable filesystem material and then requires every non-lifecycle field to
+match that authoritative retained record before projecting its current role/state. Thus a
+selected promoted candidate is observed as LKG without weakening immutable-slot evidence.
+
 The one bootstrap exception is the explicit offline owner initialization in section 34.4,
 which qualifies the already reviewed/current runtime as the first LKG using the same full
 build/test/runtime/readiness and durability predicates before any Phase 9 execute Tool is
@@ -897,6 +926,9 @@ Only exact verified ``candidate_ready`` can be reconciled as requested restart s
 The replacement application closes Phase 4 audit/operation obligations from broker
 evidence. Protected new-LKG slot promotion occurs only after required verification/audit
 closure and never destroys the previous LKG before durable promotion.
+The required order is terminal broker result -> durable application audit closure ->
+atomic broker LKG promotion -> atomic application/Phase 4/reservation/fence closure.
+Rollback/no-subeffect/failed terminal results do not run the LKG-promotion transition.
 
 19. Failed-candidate rollback
 -----------------------------
@@ -1433,6 +1465,11 @@ exact protected artifacts and units first, then build/select/start the compatibl
 and qualify a new complete LKG against peer-generated receipts. An old LKG bound to the
 previous peer set is not eligible for automatic rollback. MCP ``binnacle_restart`` never
 performs this multi-service upgrade.
+
+Retained terminal broker history remains integrity-verifiable across such an offline broker
+upgrade and does not itself pin the old build/profile/protocol identity. Exact old identity
+is required while unresolved/accepted nonterminal authority exists or while a terminal
+``candidate_ready`` checkpoint still lacks durable LKG-promotion evidence.
 
 34.6 Expected repository implementation set
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

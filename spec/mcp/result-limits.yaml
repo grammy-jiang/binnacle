@@ -1,6 +1,6 @@
 schema_version: "1.1"
 contract: MCP-LARGE-RESULTS
-contract_version: "1.1.0"
+contract_version: "1.2.0"
 
 limits:
   model_readable_content_bytes_max: 8192
@@ -139,3 +139,51 @@ storage_pressure:
   evict_recovery_or_uncertain_payload: forbidden
   new_large_result_when_capacity_unavailable: result_storage_unavailable
   protected_recovery_capacity_reserved: true
+
+phase9_tool_limits:
+  runtime_promotion: disabled
+  package_inspect:
+    mode: inline
+    structured_content_serialized_bytes_max: 16384
+    item_count_max: 1
+  binnacle_service_inspect:
+    mode: inline
+    structured_content_serialized_bytes_max: 16384
+    journal_lines_returned: 0
+  restart_preflight:
+    mode: inline
+    structured_content_serialized_bytes_max: 32768
+    reason_codes_max: 20
+  binnacle_runtime_inspect:
+    mode: inline
+    structured_content_serialized_bytes_max: 32768
+    protected_paths_or_values_returned: false
+  privileged_prepare:
+    mode: inline
+    structured_content_serialized_bytes_max: 65536
+    complete_tool_result_serialized_bytes_max: 98304
+    package_transaction_members_max: 64
+    complete_prepared_view_required: true
+    silent_plan_truncation: forbidden
+  package_install:
+    mode: inline
+    structured_content_serialized_bytes_max: 32768
+    raw_package_manager_output_returned: false
+  binnacle_service_restart:
+    mode: inline
+    structured_content_serialized_bytes_max: 32768
+    raw_systemd_output_returned: false
+  binnacle_restart:
+    mode: inline
+    structured_content_serialized_bytes_max: 32768
+    raw_systemd_or_privileged_output_returned: false
+  restricted_recovery:
+    safe_fields_only:
+      - operation_and_checkpoint_identity
+      - candidate_and_lkg_slot_identity_digests
+      - last_proven_service_and_runtime_state
+      - failed_or_uncertain_action_class
+      - bounded_safe_diagnostics
+      - static_operator_instruction_code
+      - evidence_digest
+    reusable_authority_or_raw_privileged_output: forbidden

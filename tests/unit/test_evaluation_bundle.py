@@ -218,7 +218,7 @@ def test_complete_unpromoted_manifest_verifies(
         repo_root=repo_root,
     )
 
-    assert report.case_count == 27
+    assert report.case_count == 63
     assert report.evidence_count == 1
     assert report.reviewed is True
     assert report.approved_for_promotion is False

@@ -75,6 +75,9 @@ def test_setup_grants_both_services_runtime_parent_traversal(
         "binnacle-git-credential-client": grp.struct_group(
             ("binnacle-git-credential-client", "x", 1205, [])
         ),
+        "binnacle-privileged-client": grp.struct_group(
+            ("binnacle-privileged-client", "x", 1206, [])
+        ),
     }
     users = {
         "binnacle": pwd.struct_passwd(("binnacle", "x", 1300, 1200, "", "/", "/usr/sbin/nologin")),
@@ -104,8 +107,14 @@ def test_setup_grants_both_services_runtime_parent_traversal(
 
     setup_dev_pi.apply_setup(tmp_path, enable=False)
 
+    assert (
+        "usermod",
+        "--append",
+        "--groups",
+        "binnacle-dev,binnacle-executor-client,binnacle-privileged-client",
+        "binnacle",
+    ) in commands
     expected_groups = "binnacle-dev,binnacle-executor-client"
-    assert ("usermod", "--append", "--groups", expected_groups, "binnacle") in commands
     assert (
         "usermod",
         "--append",

@@ -138,6 +138,38 @@ async def test_untrusted_startup_time_keeps_global_admission_closed(
 
 
 @pytest.mark.anyio
+async def test_retained_privileged_restart_keeps_global_admission_recovery_closed(
+    tmp_path: Path,
+    repo_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    paths = _paths(tmp_path)
+    paths.database.parent.mkdir(parents=True)
+    migrate_database(paths.database, repo_root)
+    _stub_identity(monkeypatch)
+
+    async def retained_restart(_repository: object) -> bool:
+        return True
+
+    monkeypatch.setattr(
+        "binnacle.composition.SqlitePrivilegedApplicationRepository.restart_recovery_pending",
+        retained_restart,
+    )
+
+    kernel = await compose_operation_kernel(
+        settings=BinnacleSettings(), project_root=repo_root, paths=paths
+    )
+    try:
+        assert kernel.health.availability.value == "unavailable"
+        assert kernel.health.reason_codes == ("privileged_restart_recovery_required",)
+        assert not kernel.health.consequential_admission_allowed
+        assert kernel.gate.state.value == "closed"
+        assert not await kernel.store.consequential_admission_enabled()
+    finally:
+        await kernel.close()
+
+
+@pytest.mark.anyio
 async def test_kernel_rejects_audit_cache_ahead_and_releases_database_lock(
     tmp_path: Path, repo_root: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

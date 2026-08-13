@@ -210,6 +210,11 @@ def _compatibility_baseline(
     for case in cases.get("cases", []):
         if not isinstance(case, dict):
             continue
+        case_id = case.get("case_id")
+        if isinstance(case_id, str) and case_id.startswith("phase9-"):
+            # Canonical repository-only cases must not change the baseline of either
+            # currently served compatibility projection before Phase 9 promotion.
+            continue
         axis = case.get("axis")
         if not isinstance(axis, str) or axis in seen:
             continue

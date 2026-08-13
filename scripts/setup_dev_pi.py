@@ -35,6 +35,10 @@ GIT_CREDENTIAL_USER = "binnacle-git-credential"
 GIT_CREDENTIAL_GROUP = "binnacle-git-credential"
 GIT_CREDENTIAL_CLIENT_GROUP = "binnacle-git-credential-client"
 GIT_CREDENTIAL_TMPFILES_NAME = "binnacle-git-credential.conf"
+PRIVILEGED_SERVICE_NAME = "binnacle-privileged.service"
+PRIVILEGED_SOCKET_NAME = "binnacle-privileged.socket"
+PRIVILEGED_CLIENT_GROUP = "binnacle-privileged-client"
+PRIVILEGED_TMPFILES_NAME = "binnacle-privileged.conf"
 PROBE_ROOT = Path("/var/lib/binnacle/probe-workspace")
 SUPPORTED_PROBE_FILESYSTEM_TYPES = frozenset({"ext4"})
 ROOT_PROTECTED_PATHS = (
@@ -75,6 +79,17 @@ GIT_CREDENTIAL_ROOT_PATHS = (
 GIT_CREDENTIAL_STATE_PATHS = ((Path("/var/lib/binnacle-git-credential/state"), 0o700),)
 GIT_CREDENTIAL_RUNTIME_ROOT_PATHS = ((Path("/run/binnacle-git-credential"), 0o710),)
 GIT_CREDENTIAL_RUNTIME_PRIVATE_PATHS = ((Path("/run/binnacle-git-credential/private"), 0o700),)
+PRIVILEGED_ROOT_PATHS = (
+    (Path("/etc/binnacle-privileged"), 0o700),
+    (Path("/var/lib/binnacle-privileged"), 0o700),
+    (Path("/opt/binnacle-privileged"), 0o755),
+)
+PRIVILEGED_RUNTIME_PATHS = ((Path("/run/binnacle-privileged"), 0o750),)
+RUNTIME_SLOT_ROOT_PATHS = (
+    (Path("/srv/binnacle-runtime"), 0o750),
+    (Path("/srv/binnacle-runtime/slots"), 0o750),
+)
+RUNTIME_SLOT_PRIVATE_PATHS = ((Path("/srv/binnacle-runtime/.staging"), 0o700),)
 SYSTEM_PATHS = (
     *ROOT_PROTECTED_PATHS,
     *SERVICE_STATE_PATHS,
@@ -87,6 +102,10 @@ SYSTEM_PATHS = (
     *GIT_CREDENTIAL_STATE_PATHS,
     *GIT_CREDENTIAL_RUNTIME_ROOT_PATHS,
     *GIT_CREDENTIAL_RUNTIME_PRIVATE_PATHS,
+    *PRIVILEGED_ROOT_PATHS,
+    *PRIVILEGED_RUNTIME_PATHS,
+    *RUNTIME_SLOT_ROOT_PATHS,
+    *RUNTIME_SLOT_PRIVATE_PATHS,
 )
 
 
@@ -155,15 +174,19 @@ def build_setup_plan(repo: Path) -> SetupPlan:
         _check_probe_mount_profile(repo),
     )
     actions = (
-        "ensure distinct application, executor, credential, client, and development groups",
+        "ensure distinct application, executor, credential, privileged-client, "
+        "and development groups",
         "ensure distinct non-root application, executor, and credential service users",
         "ensure binnacle has supplementary source-read group binnacle-dev",
         "grant application connect and executor parent-traverse access through the client group",
         "protect configuration/evaluation and create narrow application-owned kernel/probe state",
         "create separate executor config/state/output/runtime ownership roots",
         "create separate credential config/state/runtime ownership roots",
-        "install application/executor/credential service, socket, and tmpfiles assets atomically",
-        "leave executor and credential sockets/services disabled until candidate-Pi promotion",
+        "create root-owned privileged config/state/runtime/installation roots",
+        "create root-owned immutable runtime-slot and private staging roots",
+        "install application/executor/credential/privileged service, socket, "
+        "and tmpfiles assets atomically",
+        "leave executor, credential, and privileged sockets/services disabled until promotion",
         "run systemctl daemon-reload",
     )
     return SetupPlan(checks=checks, actions=actions)
@@ -184,6 +207,7 @@ def apply_setup(repo: Path, *, enable: bool) -> SetupPlan:
     _ensure_group(EXECUTOR_CLIENT_GROUP)
     _ensure_group(GIT_CREDENTIAL_GROUP)
     _ensure_group(GIT_CREDENTIAL_CLIENT_GROUP)
+    _ensure_group(PRIVILEGED_CLIENT_GROUP)
     _ensure_user(SERVICE_USER, SERVICE_GROUP)
     _ensure_user(EXECUTOR_USER, EXECUTOR_GROUP)
     _ensure_user(GIT_CREDENTIAL_USER, GIT_CREDENTIAL_GROUP)
@@ -192,7 +216,7 @@ def apply_setup(repo: Path, *, enable: bool) -> SetupPlan:
             "usermod",
             "--append",
             "--groups",
-            f"{DEVELOPMENT_GROUP},{EXECUTOR_CLIENT_GROUP}",
+            f"{DEVELOPMENT_GROUP},{EXECUTOR_CLIENT_GROUP},{PRIVILEGED_CLIENT_GROUP}",
             SERVICE_USER,
         ],
         check=True,
@@ -235,6 +259,7 @@ def apply_setup(repo: Path, *, enable: bool) -> SetupPlan:
     credential_gid = grp.getgrnam(GIT_CREDENTIAL_GROUP).gr_gid
     credential_uid = pwd.getpwnam(GIT_CREDENTIAL_USER).pw_uid
     credential_client_gid = grp.getgrnam(GIT_CREDENTIAL_CLIENT_GROUP).gr_gid
+    privileged_client_gid = grp.getgrnam(PRIVILEGED_CLIENT_GROUP).gr_gid
     for path, mode in ROOT_PROTECTED_PATHS:
         _ensure_protected_directory(path, uid=0, gid=service_gid, mode=mode)
     for path, mode in SERVICE_STATE_PATHS:
@@ -257,6 +282,14 @@ def apply_setup(repo: Path, *, enable: bool) -> SetupPlan:
         _ensure_protected_directory(path, uid=0, gid=credential_client_gid, mode=mode)
     for path, mode in GIT_CREDENTIAL_RUNTIME_PRIVATE_PATHS:
         _ensure_protected_directory(path, uid=credential_uid, gid=credential_gid, mode=mode)
+    for path, mode in PRIVILEGED_ROOT_PATHS:
+        _ensure_protected_directory(path, uid=0, gid=0, mode=mode)
+    for path, mode in PRIVILEGED_RUNTIME_PATHS:
+        _ensure_protected_directory(path, uid=0, gid=privileged_client_gid, mode=mode)
+    for path, mode in RUNTIME_SLOT_ROOT_PATHS:
+        _ensure_protected_directory(path, uid=0, gid=service_gid, mode=mode)
+    for path, mode in RUNTIME_SLOT_PRIVATE_PATHS:
+        _ensure_protected_directory(path, uid=0, gid=0, mode=mode)
 
     for name in (
         SERVICE_NAME,
@@ -264,6 +297,8 @@ def apply_setup(repo: Path, *, enable: bool) -> SetupPlan:
         EXECUTOR_SOCKET_NAME,
         GIT_CREDENTIAL_SERVICE_NAME,
         GIT_CREDENTIAL_SOCKET_NAME,
+        PRIVILEGED_SERVICE_NAME,
+        PRIVILEGED_SOCKET_NAME,
     ):
         source = repo / "deploy/systemd" / name
         destination = Path("/etc/systemd/system") / name
@@ -278,8 +313,17 @@ def apply_setup(repo: Path, *, enable: bool) -> SetupPlan:
         Path("/etc/tmpfiles.d") / GIT_CREDENTIAL_TMPFILES_NAME,
         mode=0o644,
     )
+    _atomic_install(
+        repo / "deploy/tmpfiles.d" / PRIVILEGED_TMPFILES_NAME,
+        Path("/etc/tmpfiles.d") / PRIVILEGED_TMPFILES_NAME,
+        mode=0o644,
+    )
     subprocess.run(
         ["systemd-tmpfiles", "--create", f"/etc/tmpfiles.d/{EXECUTOR_TMPFILES_NAME}"],
+        check=True,
+    )
+    subprocess.run(
+        ["systemd-tmpfiles", "--create", f"/etc/tmpfiles.d/{PRIVILEGED_TMPFILES_NAME}"],
         check=True,
     )
     subprocess.run(
@@ -350,6 +394,9 @@ def _check_repository(repo: Path) -> Check:
         canonical / "deploy/systemd" / GIT_CREDENTIAL_SERVICE_NAME,
         canonical / "deploy/systemd" / GIT_CREDENTIAL_SOCKET_NAME,
         canonical / "deploy/tmpfiles.d" / GIT_CREDENTIAL_TMPFILES_NAME,
+        canonical / "deploy/systemd" / PRIVILEGED_SERVICE_NAME,
+        canonical / "deploy/systemd" / PRIVILEGED_SOCKET_NAME,
+        canonical / "deploy/tmpfiles.d" / PRIVILEGED_TMPFILES_NAME,
     )
     if not required[0].exists() or any(not path.is_file() for path in required[1:]):
         return Check("repository", "fail", "repository is missing required tracked inputs")
@@ -368,6 +415,7 @@ def _check_identity_compatibility() -> Check:
         EXECUTOR_CLIENT_GROUP,
         GIT_CREDENTIAL_GROUP,
         GIT_CREDENTIAL_CLIENT_GROUP,
+        PRIVILEGED_CLIENT_GROUP,
     ):
         try:
             observed = grp.getgrnam(name)
@@ -382,7 +430,11 @@ def _check_identity_compatibility() -> Check:
             "fail",
             "application, executor, credential, client, and development need distinct group IDs",
         )
-    for protected_group_name in (GIT_CREDENTIAL_GROUP, GIT_CREDENTIAL_CLIENT_GROUP):
+    for protected_group_name in (
+        GIT_CREDENTIAL_GROUP,
+        GIT_CREDENTIAL_CLIENT_GROUP,
+        PRIVILEGED_CLIENT_GROUP,
+    ):
         protected_group = groups.get(protected_group_name)
         if protected_group is not None and tuple(
             candidate.gr_name for candidate in _same_gid_groups(protected_group)
@@ -467,6 +519,15 @@ def _check_identity_compatibility() -> Check:
                 "identities",
                 "fail",
                 "Git credential-broker client group contains an unexpected identity",
+            )
+    privileged_clients = groups.get(PRIVILEGED_CLIENT_GROUP)
+    if privileged_clients is not None:
+        effective_privileged_clients = _effective_group_members(privileged_clients)
+        if effective_privileged_clients - {SERVICE_USER}:
+            return Check(
+                "identities",
+                "fail",
+                "privileged-broker client group contains an unexpected identity",
             )
     return Check("identities", "pass", "existing identities are compatible or absent")
 

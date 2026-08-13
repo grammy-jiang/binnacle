@@ -1,7 +1,7 @@
 # Binnacle MCP Interface Design
 
 - **Status:** Draft — bootstrap interface before live ChatGPT validation
-- **Contract version:** `1.1.0`
+- **Contract version:** `1.2.0`
 - **Feature-design basis:** [`design.md`](design.md), V17
 - **Compatibility evidence:** [`mcp-profile.md`](mcp-profile.md)
 - **Revision contract:** [`mcp-revision-support.md`](mcp-revision-support.md)
@@ -160,6 +160,22 @@ It requires the same preparation, idempotency, controller, policy, and HOST-prof
 
 - Mutating/destructive within the disposable probe root; normal-result; HC1 profile gate.
 - Contract `1.1`.
+
+### 6.9 Reviewed Phase 9 contracts (not runtime-promoted)
+
+The canonical manifest also defines `privileged_prepare`, `package_inspect`,
+`package_install`, `binnacle_service_inspect`, `binnacle_service_restart`,
+`restart_preflight`, `binnacle_restart`, and `binnacle_runtime_inspect`, all at contract
+`1.0`. Their closed schemas and HC0/HC2 classifications are implementation-review inputs;
+they are not present in either served compatibility catalogue and the `v1-operational`
+projection remains disabled.
+
+Consequential Phase 9 execution requires exact preparation, controller/device/session and
+current-state binding, Phase 4 lifecycle/audit truth, protected profiles, broker ticket and
+acceptance, retained idempotency, and—where applicable—the Phase 6 workspace fence,
+tested candidate, complete candidate/LKG slots, checkpoint, and exact runtime verification.
+Missing real Raspberry Pi or ChatGPT evidence blocks later runtime promotion only.
+`host_reboot` has no Tool contract.
 
 ## 7. Preparation and Confirmation Boundary
 
