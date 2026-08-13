@@ -48,6 +48,7 @@ from binnacle.domain.privileged_restart import (
     RestartAcceptedClosureRequest,
     RestartAuthorisationRequest,
     RestartNoAcceptClosureRequest,
+    ServiceRestartAcceptedClosureRequest,
 )
 from binnacle.ports.development_session import SessionAuthorisationRequest
 from binnacle.ports.operation_store import CreateOrFindRequest
@@ -183,16 +184,22 @@ def _preparation(
     prepare_operation_id: str,
     nonce: str = "1" * 64,
     suffix: str = "first",
+    action: PrivilegedAction = PrivilegedAction.CONTROLLED_RESTART,
 ) -> PrivilegedRestartPreparation:
     nonce_sha256 = hashlib.sha256(bytes.fromhex(nonce)).hexdigest()
+    maximum_effect = (
+        PrivilegedMaximumEffect.SERVICE_RESTART
+        if action is PrivilegedAction.SERVICE_RESTART
+        else PrivilegedMaximumEffect.CONTROLLED_RESTART
+    )
     return PrivilegedRestartPreparation(
         prepare_operation_id=prepare_operation_id,
         session_id="session-fixture",
         workspace_id="workspace-fixture",
-        action=PrivilegedAction.CONTROLLED_RESTART,
+        action=action,
         target_profile_id="service-profile",
         target_profile_sha256=SHA_B,
-        maximum_effect=PrivilegedMaximumEffect.CONTROLLED_RESTART,
+        maximum_effect=maximum_effect,
         normalized_request_sha256=SHA_C,
         current_state_binding_sha256=SHA_A,
         prepared_evidence_sha256=_digest(f"prepared:{suffix}"),
@@ -200,7 +207,9 @@ def _preparation(
         service_profile_sha256=SHA_B,
         candidate_verification_reference="verification-fixture",
         candidate_verification_sha256=SHA_C,
-        candidate_slot_id="candidate-slot",
+        candidate_slot_id=(
+            "candidate-slot" if action is PrivilegedAction.CONTROLLED_RESTART else None
+        ),
         lkg_slot_id="lkg-slot",
         schema_heads_sha256=SHA_A,
         runtime_layout_sha256=SHA_B,
@@ -235,6 +244,11 @@ def _ticket(
     nonce: str = "1" * 64,
     ticket_id: str = "ticket-fixture",
 ) -> PrivilegedTicket:
+    operation_contract = (
+        "binnacle_service_restart"
+        if preparation.action is PrivilegedAction.SERVICE_RESTART
+        else "binnacle_restart"
+    )
     return PrivilegedTicket(
         operation_id=operation.operation_id,
         ticket_id=ticket_id,
@@ -242,16 +256,16 @@ def _ticket(
         controller_identity_sha256=owner_digest(operation.owner),
         device_id="device-fixture",
         device_epoch=1,
-        operation_contract="binnacle_restart",
+        operation_contract=operation_contract,
         operation_contract_version="v1",
         broker_profile_id="privileged-broker",
         broker_profile_version="v1",
         broker_profile_sha256=SHA_D,
-        action=PrivilegedAction.CONTROLLED_RESTART,
+        action=preparation.action,
         target_profile_id=preparation.target_profile_id,
         target_profile_sha256=preparation.target_profile_sha256,
         request_fingerprint_sha256=SHA_C,
-        maximum_effect=PrivilegedMaximumEffect.CONTROLLED_RESTART,
+        maximum_effect=preparation.maximum_effect,
         current_state_binding_sha256=preparation.current_state_binding_sha256,
         policy_evidence_reference=f"policy-{operation.operation_id}",
         policy_evidence_sha256=SHA_E,
@@ -359,6 +373,27 @@ def _accepted_terminal_snapshot(
             if outcome is BrokerRestartOutcome.CANDIDATE_READY
             else None
         ),
+    )
+
+
+def _accepted_service_terminal_snapshot(
+    ticket: PrivilegedTicket,
+    *,
+    effect_knowledge: PrivilegedEffectKnowledge,
+) -> BrokerBindingSnapshot:
+    closed_at = ticket.issued_at + timedelta(seconds=1)
+    return BrokerBindingSnapshot(
+        identity=ticket.routing_identity,
+        acceptance_state=BrokerAcceptanceState.ACCEPTED,
+        evidence_generation=3,
+        acceptance_evidence_sha256=_digest("service-restart-accepted"),
+        execution_state=BrokerExecutionState.TERMINAL,
+        effect_knowledge=effect_knowledge,
+        result_evidence_sha256=_digest(f"service-restart-terminal:{effect_knowledge.value}"),
+        accepted_at=ticket.issued_at + timedelta(milliseconds=100),
+        sealed_at=None,
+        closed_at=closed_at,
+        last_reconciled_at=None,
     )
 
 
@@ -727,6 +762,127 @@ async def test_no_accept_closure_atomically_releases_operation_reservation_and_f
                 RestartNoAcceptClosureRequest(
                     snapshot=request.snapshot,
                     audit_closure_evidence_sha256=_digest("different-audit-closure"),
+                    closed_at=request.closed_at,
+                )
+            )
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("effect_knowledge", "expected_state", "expected_knowledge", "error_code"),
+    (
+        (
+            PrivilegedEffectKnowledge.KNOWN_EFFECT,
+            OperationState.SUCCEEDED,
+            EffectKnowledge.KNOWN_EFFECT,
+            None,
+        ),
+        (
+            PrivilegedEffectKnowledge.KNOWN_NO_SUBEFFECT,
+            OperationState.FAILED,
+            EffectKnowledge.KNOWN_NO_EFFECT,
+            "effect_not_started",
+        ),
+    ),
+)
+async def test_accepted_service_restart_closure_releases_audit_reservation_and_fence(
+    tmp_path: Path,
+    repo_root: Path,
+    effect_knowledge: PrivilegedEffectKnowledge,
+    expected_state: OperationState,
+    expected_knowledge: EffectKnowledge,
+    error_code: str | None,
+) -> None:
+    async with operation_runtime(tmp_path, repo_root) as (runtime, operations):
+        await _active_session(runtime, operations)
+        prepare = await _qualifying_prepare_operation(operations, key="e")
+        preparation = _preparation(
+            prepare_operation_id=prepare.operation_id,
+            nonce="6" * 64,
+            suffix=f"service-{effect_knowledge.value}",
+            action=PrivilegedAction.SERVICE_RESTART,
+        )
+        repository = SqlitePrivilegedApplicationRepository(runtime)
+        await repository.store_restart_preparation(preparation)
+        operation = await _received_operation(
+            operations,
+            key="f",
+            contract="binnacle_service_restart",
+            target_sha256=SHA_B,
+        )
+        ticket = _ticket(
+            operation,
+            preparation,
+            nonce="6" * 64,
+            ticket_id=f"ticket-service-{effect_knowledge.value}",
+        )
+        await repository.authorise_restart(
+            RestartAuthorisationRequest(
+                operation=operation,
+                preparation=preparation,
+                decision=_decision(operation.operation_id),
+                ticket=ticket,
+                expected_fence_version=1,
+                required_scope_digest=None,
+                authorised_at=ticket.issued_at,
+            )
+        )
+        await repository.mark_restart_dispatched(
+            operation.operation_id,
+            dispatched_at=ticket.issued_at + timedelta(milliseconds=500),
+        )
+        snapshot = _accepted_service_terminal_snapshot(
+            ticket,
+            effect_knowledge=effect_knowledge,
+        )
+        request = ServiceRestartAcceptedClosureRequest(
+            snapshot=snapshot,
+            audit_closure_evidence_sha256=_digest(
+                f"service-restart-audit:{effect_knowledge.value}"
+            ),
+            closed_at=ticket.issued_at + timedelta(seconds=2),
+        )
+
+        terminal, fence, closed = await repository.close_service_restart_accepted(request)
+
+        assert terminal.state is expected_state
+        assert terminal.effect_knowledge is expected_knowledge
+        assert (None if terminal.error is None else terminal.error.code) == error_code
+        assert fence.fence_version == 3
+        assert fence.active_operation_id is None
+        assert closed.state is PrivilegedOperationState.TERMINAL
+        assert closed.reservation_state is PrivilegedReservationState.RELEASED
+        assert closed.broker_acceptance_state is BrokerAcceptanceState.ACCEPTED
+        assert not await repository.restart_recovery_pending()
+        async with runtime.engine.connect() as connection:
+            retained = (
+                await connection.execute(
+                    text(
+                        "SELECT restart_checkpoint_sha256,candidate_outcome,"
+                        "rollback_outcome,broker_closure_state,audit_closure_state,"
+                        "fence_closure_state FROM privileged_operations "
+                        "WHERE operation_id=:operation_id"
+                    ),
+                    {"operation_id": operation.operation_id},
+                )
+            ).one()
+        assert retained == (
+            None,
+            "not_applicable",
+            "not_applicable",
+            "complete",
+            "complete",
+            "released",
+        )
+        await SqliteWorkspaceRepository(runtime).verify_integrity()
+
+        repeated = await repository.close_service_restart_accepted(request)
+        assert repeated == (terminal, fence, closed)
+        with pytest.raises(PrivilegedApplicationStoreError, match="conflicts"):
+            await repository.close_service_restart_accepted(
+                ServiceRestartAcceptedClosureRequest(
+                    snapshot=snapshot,
+                    audit_closure_evidence_sha256=_digest("different-service-audit"),
                     closed_at=request.closed_at,
                 )
             )

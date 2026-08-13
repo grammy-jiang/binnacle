@@ -51,6 +51,7 @@ from binnacle.domain.privileged_restart import (
     RestartAcceptedClosureRequest,
     RestartAuthorisationRequest,
     RestartNoAcceptClosureRequest,
+    ServiceRestartAcceptedClosureRequest,
 )
 from binnacle.domain.workspace import WorkspaceFence
 
@@ -987,6 +988,259 @@ class SqlitePrivilegedApplicationRepository:
                 await session.rollback()
                 raise
 
+    async def close_service_restart_accepted(
+        self,
+        request: ServiceRestartAcceptedClosureRequest,
+    ) -> tuple[OperationSnapshot, WorkspaceFence, PrivilegedRestartRecord]:
+        """Atomically close accepted fixed-service, audit, reservation, and fence truth."""
+
+        snapshot = request.snapshot
+        operation_id = snapshot.identity.operation_id
+        async with self._runtime.session_factory() as session:
+            await session.execute(text("BEGIN IMMEDIATE"))
+            try:
+                operation = await session.get(PrivilegedOperationModel, operation_id)
+                phase4 = await session.get(OperationModel, operation_id)
+                reservation = await session.get(
+                    PrivilegedEffectReservationModel,
+                    operation_id,
+                )
+                if operation is None or phase4 is None or reservation is None:
+                    raise PrivilegedApplicationStoreError(
+                        "accepted service restart closure evidence is incomplete"
+                    )
+                if (
+                    operation.workspace_id is None
+                    or operation.workspace_fence_version is None
+                    or operation.action != PrivilegedAction.SERVICE_RESTART.value
+                    or operation.candidate_slot_id is not None
+                    or operation.restart_checkpoint_sha256 is not None
+                ):
+                    raise PrivilegedApplicationStoreError(
+                        "accepted service restart closure authority is absent"
+                    )
+                operation_updated_at = _utc(operation.updated_at)
+                if operation_updated_at is None or request.closed_at < operation_updated_at:
+                    raise PrivilegedApplicationStoreError(
+                        "accepted service restart closure time regressed"
+                    )
+                fence = await session.get(
+                    WorkspaceMutationFenceModel,
+                    operation.workspace_id,
+                )
+                if fence is None:
+                    raise PrivilegedApplicationStoreError(
+                        "accepted service restart workspace fence is absent"
+                    )
+                self._require_broker_identity(operation, phase4, snapshot)
+                if snapshot.evidence_generation < operation.broker_evidence_generation:
+                    raise PrivilegedApplicationStoreError(
+                        "accepted service restart evidence generation regressed"
+                    )
+                current_acceptance = BrokerAcceptanceState(operation.broker_acceptance_state)
+                if current_acceptance is BrokerAcceptanceState.SEALED_NO_ACCEPT:
+                    raise PrivilegedApplicationStoreError(
+                        "sealed privileged work cannot close as accepted"
+                    )
+                phase4_snapshot = await self._operations._snapshot(session, phase4)
+                final_state, effect_knowledge, reason_code, error = (
+                    self._accepted_service_phase4_outcome(snapshot.effect_knowledge)
+                )
+                fence_evidence = canonical_sha256(
+                    {
+                        "audit_closure_evidence_sha256": (request.audit_closure_evidence_sha256),
+                        "broker_acceptance_evidence_sha256": (snapshot.acceptance_evidence_sha256),
+                        "broker_result_evidence_sha256": snapshot.result_evidence_sha256,
+                        "closed_at": canonical_timestamp(request.closed_at),
+                        "effect_knowledge": snapshot.effect_knowledge,
+                        "operation_id": operation_id,
+                        "service_profile_sha256": operation.service_profile_sha256,
+                        "ticket_sha256": operation.ticket_sha256,
+                        "workspace_fence_version": operation.workspace_fence_version,
+                        "workspace_id": operation.workspace_id,
+                    }
+                )
+                if operation.state == PrivilegedOperationState.TERMINAL.value:
+                    operation_closed_at = _utc(operation.closed_at)
+                    broker_decided_at = _utc(operation.broker_decided_at)
+                    reservation_released_at = _utc(reservation.released_at)
+                    if (
+                        current_acceptance is not BrokerAcceptanceState.ACCEPTED
+                        or operation.broker_evidence_generation != snapshot.evidence_generation
+                        or operation.broker_acceptance_evidence_sha256
+                        != snapshot.acceptance_evidence_sha256
+                        or broker_decided_at != snapshot.accepted_at
+                        or operation.restart_checkpoint_sha256 is not None
+                        or operation.candidate_outcome != "not_applicable"
+                        or operation.rollback_outcome != "not_applicable"
+                        or operation.broker_closure_state != "complete"
+                        or operation.broker_closure_evidence_sha256
+                        != snapshot.result_evidence_sha256
+                        or operation.audit_closure_state != "complete"
+                        or operation.audit_closure_evidence_sha256
+                        != request.audit_closure_evidence_sha256
+                        or operation.fence_closure_state != "released"
+                        or operation.fence_release_evidence_sha256 != fence_evidence
+                        or operation_closed_at != request.closed_at
+                        or phase4_snapshot.state is not final_state
+                        or phase4_snapshot.effect_knowledge is not effect_knowledge
+                        or reservation.state != PrivilegedReservationState.RELEASED.value
+                        or reservation.closure_evidence_sha256 != fence_evidence
+                        or reservation_released_at != request.closed_at
+                        or fence.fence_version != operation.workspace_fence_version + 1
+                        or fence.active_operation_id is not None
+                        or fence.active_contract is not None
+                        or fence.acquired_at is not None
+                    ):
+                        raise PrivilegedApplicationStoreError(
+                            "accepted service restart closure conflicts with retained evidence"
+                        )
+                    await session.commit()
+                    return (
+                        phase4_snapshot,
+                        WorkspaceFence(
+                            workspace_id=fence.workspace_id,
+                            fence_version=fence.fence_version,
+                            active_operation_id=None,
+                            active_contract=None,
+                        ),
+                        self._record(operation, PrivilegedReservationState.RELEASED),
+                    )
+                if (
+                    current_acceptance
+                    not in {
+                        BrokerAcceptanceState.UNRESOLVED,
+                        BrokerAcceptanceState.ACCEPTED,
+                    }
+                    or operation.state
+                    not in {
+                        PrivilegedOperationState.DISPATCHED.value,
+                        PrivilegedOperationState.RECONCILING.value,
+                        PrivilegedOperationState.UNCERTAIN.value,
+                        PrivilegedOperationState.RESTRICTED_RECOVERY.value,
+                    }
+                    or reservation.state
+                    not in {
+                        PrivilegedReservationState.HELD.value,
+                        PrivilegedReservationState.UNCERTAIN.value,
+                        PrivilegedReservationState.RESTRICTED_RECOVERY.value,
+                    }
+                    or fence.fence_version != operation.workspace_fence_version
+                    or fence.active_operation_id != operation_id
+                    or fence.active_contract != phase4_snapshot.intent.operation_contract
+                    or fence.acquired_at is None
+                ):
+                    raise PrivilegedApplicationStoreError(
+                        "accepted service restart closure lacks exact retained authority"
+                    )
+
+                reservation.state = PrivilegedReservationState.RELEASED.value
+                reservation.active_slot = None
+                reservation.closure_evidence_sha256 = fence_evidence
+                reservation.released_at = request.closed_at
+                reservation.updated_at = request.closed_at
+                await session.flush()
+
+                closed = transition(
+                    phase4_snapshot,
+                    TransitionRequest(
+                        expected_state_version=phase4_snapshot.state_version,
+                        to_state=final_state,
+                        effect_knowledge=effect_knowledge,
+                        reason_code=reason_code,
+                        error=error,
+                        occurred_at=request.closed_at,
+                    ),
+                )
+                phase4_result = await session.execute(
+                    update(OperationModel)
+                    .where(
+                        OperationModel.operation_id == phase4_snapshot.operation_id,
+                        OperationModel.state == phase4_snapshot.state.value,
+                        OperationModel.state_version == phase4_snapshot.state_version,
+                    )
+                    .values(**SqliteOperationStore._operation_update_values(closed))
+                )
+                self._require_one_row(
+                    phase4_result,
+                    "accepted service restart Phase 4 closure CAS failed",
+                )
+                session.add(
+                    OperationTransitionModel(
+                        operation_id=phase4_snapshot.operation_id,
+                        state_version=closed.state_version,
+                        from_state=phase4_snapshot.state.value,
+                        to_state=closed.state.value,
+                        effect_knowledge=closed.effect_knowledge.value,
+                        terminality=closed.terminality.value,
+                        reason_code=reason_code,
+                        error_code=None if error is None else error.code,
+                        recorded_at=closed.updated_at,
+                        runtime_build_sha256=closed.intent.runtime_build_sha256,
+                    )
+                )
+                await session.flush()
+
+                released_fence_version = operation.workspace_fence_version + 1
+                fence_result = await session.execute(
+                    update(WorkspaceMutationFenceModel)
+                    .where(
+                        WorkspaceMutationFenceModel.workspace_id == operation.workspace_id,
+                        WorkspaceMutationFenceModel.fence_version
+                        == operation.workspace_fence_version,
+                        WorkspaceMutationFenceModel.active_operation_id == operation_id,
+                        WorkspaceMutationFenceModel.active_contract
+                        == phase4_snapshot.intent.operation_contract,
+                        WorkspaceMutationFenceModel.acquired_at.is_not(None),
+                    )
+                    .values(
+                        fence_version=released_fence_version,
+                        active_operation_id=None,
+                        active_contract=None,
+                        acquired_at=None,
+                        updated_at=request.closed_at,
+                    )
+                )
+                self._require_one_row(
+                    fence_result,
+                    "accepted service restart fence release CAS failed",
+                )
+
+                operation.broker_acceptance_state = BrokerAcceptanceState.ACCEPTED.value
+                operation.broker_evidence_generation = snapshot.evidence_generation
+                operation.broker_acceptance_evidence_sha256 = snapshot.acceptance_evidence_sha256
+                operation.broker_decided_at = snapshot.accepted_at
+                operation.broker_closure_state = "complete"
+                operation.broker_closure_evidence_sha256 = snapshot.result_evidence_sha256
+                operation.audit_closure_state = "complete"
+                operation.audit_closure_evidence_sha256 = request.audit_closure_evidence_sha256
+                operation.fence_closure_state = "released"
+                operation.fence_release_evidence_sha256 = fence_evidence
+                operation.state = PrivilegedOperationState.TERMINAL.value
+                operation.closed_at = request.closed_at
+                operation.updated_at = request.closed_at
+                operation.last_reconciled_at = request.closed_at
+                await session.flush()
+                await session.commit()
+                return (
+                    closed,
+                    WorkspaceFence(
+                        workspace_id=operation.workspace_id,
+                        fence_version=released_fence_version,
+                        active_operation_id=None,
+                        active_contract=None,
+                    ),
+                    self._record(operation, PrivilegedReservationState.RELEASED),
+                )
+            except IntegrityError as exc:
+                await session.rollback()
+                raise PrivilegedApplicationStoreError(
+                    "accepted service restart closure violated durable authority"
+                ) from exc
+            except Exception:
+                await session.rollback()
+                raise
+
     async def close_restart_accepted(
         self,
         request: RestartAcceptedClosureRequest,
@@ -1347,6 +1601,31 @@ class SqlitePrivilegedApplicationRepository:
                 "open broker execution reports contradictory uncertainty"
             )
         return "pending", None
+
+    @staticmethod
+    def _accepted_service_phase4_outcome(
+        effect_knowledge: PrivilegedEffectKnowledge,
+    ) -> tuple[OperationState, EffectKnowledge, str, OperationError | None]:
+        if effect_knowledge is PrivilegedEffectKnowledge.KNOWN_EFFECT:
+            return (
+                OperationState.SUCCEEDED,
+                EffectKnowledge.KNOWN_EFFECT,
+                "privileged_service_ready",
+                None,
+            )
+        if effect_knowledge is PrivilegedEffectKnowledge.KNOWN_NO_SUBEFFECT:
+            return (
+                OperationState.FAILED,
+                EffectKnowledge.KNOWN_NO_EFFECT,
+                "privileged_effect_not_started",
+                OperationError(
+                    "effect_not_started",
+                    "The broker accepted the service restart but proved no root subeffect started.",
+                ),
+            )
+        raise PrivilegedApplicationStoreError(
+            "accepted service restart lacks terminal effect truth"
+        )
 
     @staticmethod
     def _accepted_phase4_outcome(

@@ -512,6 +512,42 @@ class RestartNoAcceptClosureRequest:
 
 
 @dataclass(frozen=True, slots=True)
+class ServiceRestartAcceptedClosureRequest:
+    """Application-side terminal closure for an accepted fixed-service restart."""
+
+    snapshot: BrokerBindingSnapshot
+    audit_closure_evidence_sha256: str
+    closed_at: datetime
+
+    def __post_init__(self) -> None:
+        _require_sha256(
+            self.audit_closure_evidence_sha256,
+            "service restart accepted audit closure",
+        )
+        _require_aware(self.closed_at, "service restart accepted closure")
+        snapshot = self.snapshot
+        if (
+            snapshot.identity.action is not PrivilegedAction.SERVICE_RESTART
+            or snapshot.acceptance_state is not BrokerAcceptanceState.ACCEPTED
+            or snapshot.execution_state is not BrokerExecutionState.TERMINAL
+            or snapshot.effect_knowledge
+            not in {
+                PrivilegedEffectKnowledge.KNOWN_NO_SUBEFFECT,
+                PrivilegedEffectKnowledge.KNOWN_EFFECT,
+            }
+            or snapshot.result_evidence_sha256 is None
+            or snapshot.accepted_at is None
+            or snapshot.closed_at is None
+            or snapshot.restart_checkpoint_sha256 is not None
+            or self.closed_at < snapshot.accepted_at
+            or self.closed_at < snapshot.closed_at
+        ):
+            raise PrivilegedRestartError(
+                "service restart accepted closure evidence is contradictory"
+            )
+
+
+@dataclass(frozen=True, slots=True)
 class RestartAcceptedClosureRequest:
     """Application-side terminal closure for exact accepted broker effect truth."""
 
@@ -593,4 +629,5 @@ __all__ = [
     "RestartAcceptedClosureRequest",
     "RestartAuthorisationRequest",
     "RestartNoAcceptClosureRequest",
+    "ServiceRestartAcceptedClosureRequest",
 ]

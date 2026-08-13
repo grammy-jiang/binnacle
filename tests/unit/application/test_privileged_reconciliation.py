@@ -37,7 +37,10 @@ from binnacle.domain.privileged import (
     PrivilegedAction,
     PrivilegedEffectKnowledge,
 )
-from binnacle.domain.privileged_restart import PrivilegedOperationState
+from binnacle.domain.privileged_restart import (
+    PrivilegedOperationState,
+    ServiceRestartAcceptedClosureRequest,
+)
 from binnacle.ports.audit import AuditJournal, AuditObligation, AuditObligationStore
 from binnacle.ports.privileged import (
     PrivilegedApplicationRepository,
@@ -118,6 +121,26 @@ def _terminal_snapshot(
     )
 
 
+def _terminal_service_snapshot(
+    *,
+    effect_knowledge: PrivilegedEffectKnowledge = PrivilegedEffectKnowledge.KNOWN_EFFECT,
+) -> BrokerBindingSnapshot:
+    accepted = binding_snapshot()
+    return replace(
+        accepted,
+        identity=replace(
+            accepted.identity,
+            action=PrivilegedAction.SERVICE_RESTART,
+        ),
+        evidence_generation=3,
+        execution_state=BrokerExecutionState.TERMINAL,
+        effect_knowledge=effect_knowledge,
+        result_evidence_sha256=SHA_C,
+        accepted_at=NOW,
+        closed_at=NOW,
+    )
+
+
 def _dependencies(
     *,
     retained: bool = True,
@@ -157,6 +180,7 @@ def _dependencies(
             close_restart_before_dispatch=close_before_dispatch,
             close_restart_no_accept=close_no_accept,
             close_restart_accepted=close_accepted,
+            close_service_restart_accepted=close_accepted,
         ),
     )
     broker_get = AsyncMock(return_value=snapshot)
@@ -389,6 +413,35 @@ async def test_accepted_terminal_snapshot_closes_only_after_exact_audit_evidence
 
 
 @pytest.mark.anyio
+async def test_accepted_service_restart_uses_checkpoint_free_terminal_closure() -> None:
+    operation = _running_operation()
+    terminal = _terminal_service_snapshot()
+    closed_operation = replace(operation, state=operation.state)
+    audit_record = AsyncMock(return_value=SHA_C)
+    audit_closure = cast(
+        RestartAcceptedAuditClosure,
+        SimpleNamespace(record_accepted=audit_record),
+    )
+    reconciler, record, _, close_before, close_no_accept, close_accepted = _dependencies(
+        snapshot=terminal,
+        accepted_audit_closure=audit_closure,
+    )
+    close_accepted.return_value = (closed_operation, object(), object())
+
+    assert await reconciler.reconcile(operation) is closed_operation
+    audit_record.assert_awaited_once_with(operation, terminal)
+    assert close_accepted.await_args is not None
+    request = close_accepted.await_args.args[0]
+    assert isinstance(request, ServiceRestartAcceptedClosureRequest)
+    assert request.snapshot is terminal
+    assert request.audit_closure_evidence_sha256 == SHA_C
+    assert request.closed_at == NOW
+    record.assert_not_awaited()
+    close_before.assert_not_awaited()
+    close_no_accept.assert_not_awaited()
+
+
+@pytest.mark.anyio
 async def test_candidate_ready_keeps_authority_closed_when_promotion_is_unavailable() -> None:
     operation = _running_operation()
     terminal = _terminal_snapshot()
@@ -498,6 +551,73 @@ async def test_audit_closure_appends_then_reuses_exact_terminal_evidence() -> No
     assert await closure.record_accepted(operation, snapshot) == SHA_C
     append.assert_awaited_once()
     assert update_tail.await_count == 2
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("broker_knowledge", "new_state", "effect_knowledge", "reason_code"),
+    (
+        (
+            PrivilegedEffectKnowledge.KNOWN_EFFECT,
+            "succeeded",
+            "known_effect",
+            "privileged_service_ready",
+        ),
+        (
+            PrivilegedEffectKnowledge.KNOWN_NO_SUBEFFECT,
+            "failed",
+            "known_no_effect",
+            "privileged_effect_not_started",
+        ),
+    ),
+)
+async def test_audit_closure_records_terminal_service_restart_without_checkpoint(
+    broker_knowledge: PrivilegedEffectKnowledge,
+    new_state: str,
+    effect_knowledge: str,
+    reason_code: str,
+) -> None:
+    operation = _running_operation()
+    snapshot = _terminal_service_snapshot(effect_knowledge=broker_knowledge)
+    append = AsyncMock(
+        return_value=AuditAppendResult(
+            sequence=2,
+            event_hash=SHA_C,
+            canonical_bytes=b"audit-fixture",
+        )
+    )
+    journal = cast(
+        AuditJournal,
+        SimpleNamespace(
+            tail=AuditTail(2, SHA_C),
+            append=append,
+            append_emergency=AsyncMock(),
+            find_operation_state_evidence=AsyncMock(return_value=None),
+        ),
+    )
+    closure = PrivilegedRestartAuditClosure(
+        audit=journal,
+        obligations=cast(AuditObligationStore, SimpleNamespace(scan=AsyncMock(return_value=()))),
+        store=SimpleNamespace(
+            update_audit_tail_cache=AsyncMock(),
+            latch_audit_failure=AsyncMock(),
+        ),
+        closure_health=AsyncMock(return_value=True),
+        clock=lambda: NOW,
+        monotonic_ns=lambda: 123,
+    )
+
+    assert await closure.record_accepted(operation, snapshot) == SHA_C
+    assert append.await_args is not None
+    assert append.await_args.args[0].payload == {
+        "kind": "operation.state_changed",
+        "old_state": "running",
+        "new_state": new_state,
+        "state_version": operation.state_version + 1,
+        "effect_knowledge": effect_knowledge,
+        "result_digest": SHA_C,
+        "reason_code": reason_code,
+    }
 
 
 @pytest.mark.anyio

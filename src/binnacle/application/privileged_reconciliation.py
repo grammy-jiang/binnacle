@@ -18,12 +18,14 @@ from binnacle.domain.privileged import (
     BrokerBindingSnapshot,
     BrokerExecutionState,
     BrokerRestartOutcome,
+    PrivilegedAction,
     PrivilegedEffectKnowledge,
 )
 from binnacle.domain.privileged_restart import (
     PrivilegedOperationState,
     RestartAcceptedClosureRequest,
     RestartNoAcceptClosureRequest,
+    ServiceRestartAcceptedClosureRequest,
 )
 from binnacle.ports.audit import AuditJournal, AuditObligationStore
 from binnacle.ports.privileged import (
@@ -245,6 +247,30 @@ class PrivilegedRestartAuditClosure:
             raise PrivilegedRestartReconciliationError(
                 "accepted audit closure received open broker truth"
             )
+        if snapshot.identity.action is PrivilegedAction.SERVICE_RESTART:
+            if snapshot.restart_checkpoint_sha256 is not None:
+                raise PrivilegedRestartReconciliationError(
+                    "service restart audit closure carries controlled-restart truth"
+                )
+            if snapshot.effect_knowledge is PrivilegedEffectKnowledge.KNOWN_EFFECT:
+                return (
+                    OperationState.SUCCEEDED,
+                    EffectKnowledge.KNOWN_EFFECT,
+                    "privileged_service_ready",
+                )
+            if snapshot.effect_knowledge is PrivilegedEffectKnowledge.KNOWN_NO_SUBEFFECT:
+                return (
+                    OperationState.FAILED,
+                    EffectKnowledge.KNOWN_NO_EFFECT,
+                    "privileged_effect_not_started",
+                )
+            raise PrivilegedRestartReconciliationError(
+                "service restart audit closure lacks terminal effect truth"
+            )
+        if snapshot.identity.action is not PrivilegedAction.CONTROLLED_RESTART:
+            raise PrivilegedRestartReconciliationError(
+                "accepted audit closure received a non-restart action"
+            )
         mapping = {
             BrokerRestartOutcome.CANDIDATE_READY: (
                 OperationState.SUCCEEDED,
@@ -353,6 +379,15 @@ class PrivilegedRestartReconciler:
                 operation,
                 snapshot,
             )
+            if snapshot.identity.action is PrivilegedAction.SERVICE_RESTART:
+                closed, _, _ = await self._repository.close_service_restart_accepted(
+                    ServiceRestartAcceptedClosureRequest(
+                        snapshot=snapshot,
+                        audit_closure_evidence_sha256=audit_evidence_sha256,
+                        closed_at=self._clock(),
+                    )
+                )
+                return closed
             if snapshot.restart_outcome is BrokerRestartOutcome.CANDIDATE_READY:
                 try:
                     snapshot = await self._broker.promote_restart_lkg(
