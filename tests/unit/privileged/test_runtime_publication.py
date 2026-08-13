@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import stat
 from collections.abc import Callable
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
@@ -195,6 +196,37 @@ def test_materialize_candidate_is_exact_durable_and_idempotent(tmp_path: Path) -
     assert len(receipt.receipt_sha256) == 64
     assert not tuple((runtime / ".staging").iterdir())
     assert (runtime / "slots/slot-0001/bin/binnacle").read_bytes().startswith(b"#!")
+
+
+def test_materialize_seals_private_stage_only_after_atomic_publish(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    publisher, runtime, export = _publisher(tmp_path)
+    manifest = _manifest(export)
+    rename_noreplace = publisher._rename_noreplace
+
+    def verify_stage_then_rename(
+        *,
+        source_parent: Path,
+        source_name: str,
+        target_parent: Path,
+        target_name: str,
+    ) -> None:
+        source_mode = stat.S_IMODE((source_parent / source_name).stat().st_mode)
+        assert source_mode == 0o700
+        rename_noreplace(
+            source_parent=source_parent,
+            source_name=source_name,
+            target_parent=target_parent,
+            target_name=target_name,
+        )
+
+    monkeypatch.setattr(publisher, "_rename_noreplace", verify_stage_then_rename)
+
+    publisher.materialize_candidate(_request(manifest))
+
+    assert stat.S_IMODE((runtime / "slots" / manifest.slot_id).stat().st_mode) == 0o550
 
 
 def test_materialize_rejects_tamper_extra_symlink_and_wrong_mode(tmp_path: Path) -> None:

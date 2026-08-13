@@ -295,6 +295,7 @@ class FilesystemRuntimeSlotPublisher:
         staging_parent = self._settings.runtime_root / _STAGING_DIRECTORY
         stage_name = f"slot-{secrets.token_hex(16)}"
         stage_path = staging_parent / stage_name
+        stage_descriptor: int | None = None
         published = False
         try:
             os.mkdir(stage_path, 0o700)
@@ -305,6 +306,7 @@ class FilesystemRuntimeSlotPublisher:
             )
             self._copy_export(manifest, stage_path, expected_source=source_metadata)
             self._verify_export_tree(manifest)
+            stage_descriptor = _open_directory(stage_path)
             self._rename_noreplace(
                 source_parent=staging_parent,
                 source_name=stage_name,
@@ -312,6 +314,9 @@ class FilesystemRuntimeSlotPublisher:
                 target_name=manifest.slot_id,
             )
             published = True
+            os.fchmod(stage_descriptor, 0o550)
+            os.fsync(stage_descriptor)
+            _fsync_directory(staging_parent)
             _fsync_directory(self._settings.runtime_root / _SLOTS_DIRECTORY)
         except FileExistsError:
             existing = self._existing_slot(manifest.slot_id)
@@ -327,6 +332,8 @@ class FilesystemRuntimeSlotPublisher:
                 ) from exc
             raise RuntimeSlotPublicationError("runtime slot publication failed") from exc
         finally:
+            if stage_descriptor is not None:
+                os.close(stage_descriptor)
             if not published and stage_path.exists():
                 _remove_private_stage(stage_path)
 
@@ -605,7 +612,10 @@ class FilesystemRuntimeSlotPublisher:
                 self._settings.expected_runtime_owner_uid,
                 self._settings.expected_runtime_group_gid,
             )
-            os.fchmod(stage_fd, 0o550)
+            # The private staging root remains owner-writable until rename.  Linux may
+            # reject moving a sealed directory for an unprivileged owner; the held
+            # descriptor is sealed and fsynced immediately after the atomic publish.
+            os.fchmod(stage_fd, 0o700)
             os.fsync(stage_fd)
         except OSError as exc:
             raise RuntimeSlotPublicationError("runtime export copy failed") from exc
