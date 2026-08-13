@@ -1,5 +1,5 @@
 {
-  "acceptance_schema_sha256": "4bad2c4bf113fc0d749cca4637e5981686122ce9217d2622a903fea54ba520dc",
+  "acceptance_schema_sha256": "f62f5d6a9c530f482d0a75ded71c082dd2b52620ec27ff00a491db025fc876c6",
   "allowed_merge_methods": [
     "squash"
   ],
@@ -17,6 +17,79 @@
   "plan_version": "phase10-self-hosting-acceptance-v1",
   "policy_id": "binnacle-phase10-acceptance-v1",
   "protected_branch_ref": "refs/heads/master",
+  "required_local_check_profiles": {
+    "pre-commit-all-files": {
+      "argv": [
+        "uv",
+        "run",
+        "pre-commit",
+        "run",
+        "--all-files"
+      ],
+      "covers": [
+        "repository-hygiene"
+      ]
+    },
+    "tox-py311": {
+      "argv": [
+        "uv",
+        "run",
+        "tox",
+        "run",
+        "-e",
+        "py311"
+      ],
+      "covers": [
+        "python-tests"
+      ]
+    },
+    "tox-py312": {
+      "argv": [
+        "uv",
+        "run",
+        "tox",
+        "run",
+        "-e",
+        "py312"
+      ],
+      "covers": [
+        "python-tests"
+      ]
+    },
+    "tox-py313": {
+      "argv": [
+        "uv",
+        "run",
+        "tox",
+        "run",
+        "-e",
+        "py313"
+      ],
+      "covers": [
+        "python-tests"
+      ]
+    },
+    "tox-quality": {
+      "argv": [
+        "uv",
+        "run",
+        "tox",
+        "run",
+        "-e",
+        "quality"
+      ],
+      "covers": [
+        "contract-schema-validation",
+        "dependency-security-audit",
+        "documentation-validation",
+        "generated-registry-validation",
+        "import-boundary-validation",
+        "isolated-migration-verifier-exercises",
+        "operational-cli-smoke",
+        "python-lint-format-type-validation"
+      ]
+    }
+  },
   "repository": "grammy-jiang/binnacle",
   "required_ci_jobs": {
     "Contract validation": [

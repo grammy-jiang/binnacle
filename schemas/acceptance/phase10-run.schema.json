@@ -421,6 +421,12 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "check_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "check_profile_sha256": {
+          "$ref": "#/$defs/digest"
+        },
         "evidence_ref": {
           "$ref": "#/$defs/evidenceRef"
         },
@@ -441,6 +447,8 @@
         }
       },
       "required": [
+        "check_id",
+        "check_profile_sha256",
         "evidence_ref",
         "source_content_sha256",
         "conclusion",
@@ -838,6 +846,29 @@
         },
         "attestation_sha256": {
           "$ref": "#/$defs/digest"
+        },
+        "github_artifact_api_ref": {
+          "$ref": "#/$defs/evidenceRef"
+        },
+        "github_artifact_id": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "github_artifact_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"
+        },
+        "github_artifact_archive_sha256": {
+          "$ref": "#/$defs/digest"
+        },
+        "github_artifact_archive_base64": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 65536,
+          "pattern": "^[A-Za-z0-9+/]+={0,2}$"
         }
       },
       "required": [
@@ -860,7 +891,12 @@
         "conclusion",
         "required",
         "attestation",
-        "attestation_sha256"
+        "attestation_sha256",
+        "github_artifact_api_ref",
+        "github_artifact_id",
+        "github_artifact_name",
+        "github_artifact_archive_sha256",
+        "github_artifact_archive_base64"
       ]
     },
     "integrationGeneration": {
@@ -1086,6 +1122,12 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "check_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "check_profile_sha256": {
+          "$ref": "#/$defs/digest"
+        },
         "evidence_ref": {
           "$ref": "#/$defs/evidenceRef"
         },
@@ -1109,6 +1151,8 @@
         }
       },
       "required": [
+        "check_id",
+        "check_profile_sha256",
         "evidence_ref",
         "commit_oid",
         "tree_oid",
@@ -1136,6 +1180,11 @@
         },
         "candidate_tree_oid": {
           "$ref": "#/$defs/oid"
+        },
+        "readiness_generation": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
         },
         "preflight_status": {
           "enum": [
@@ -1172,6 +1221,7 @@
         "checkpoint_ref",
         "candidate_oid",
         "candidate_tree_oid",
+        "readiness_generation",
         "preflight_status",
         "outcome",
         "same_operation_reconciled",
@@ -1199,6 +1249,17 @@
         "runtime_profile_sha256": {
           "$ref": "#/$defs/digest"
         },
+        "restart_operation_ref": {
+          "$ref": "#/$defs/evidenceRef"
+        },
+        "restart_checkpoint_ref": {
+          "$ref": "#/$defs/evidenceRef"
+        },
+        "readiness_generation": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
         "readiness": {
           "enum": [
             "ready",
@@ -1216,6 +1277,9 @@
         "runtime_tree_oid",
         "runtime_instance_sha256",
         "runtime_profile_sha256",
+        "restart_operation_ref",
+        "restart_checkpoint_ref",
+        "readiness_generation",
         "readiness",
         "clean_source_state"
       ]

@@ -174,6 +174,12 @@ on the protected base at integration time. PASS therefore binds an immutable
 ``(candidate_generation, candidate_oid, protected_base_oid, merge_policy_digest,
 expected_integration_tree_oid)``.
 
+When the signed candidate commit's parent is that same ``protected_base_oid``, the signed
+candidate tree must equal ``expected_integration_tree_oid``.  The direct same-base case may
+not rely only on later CI or squash-result tree equality while the signed commit records a
+different tree.  A different protected base is handled by a fresh integration generation
+and its separately derived integration tree.
+
 The final substantive review is correlated to both the exact candidate OID and exact base
 OID. Required CI must prove what integration object/tree it actually checked; a workflow's
 reported PR head SHA alone is not accepted as proof that ``actions/checkout`` or another
@@ -571,9 +577,11 @@ For each command record:
 * descendant cleanup result;
 * workspace-fence closure.
 
-At minimum run the repository's current focused tests plus the normal quality gate
-appropriate to the selected change. The actual repository at execution time determines
-commands through its reviewed development profile.
+Run the complete repository profile frozen by the Phase 10 policy: ``tox-py311``,
+``tox-py312``, ``tox-py313``, ``tox-quality``, and ``pre-commit-all-files``.  Each evidence
+record includes the exact check ID and canonical digest of its command-and-coverage
+profile.  Focused tests may run in addition, but cannot replace any frozen check at either
+candidate or post-merge identity.
 
 Every new candidate generation created after review remediation repeats the **complete**
 required local Phase 7 chain. A previous generation's green local checks are not inherited.
@@ -798,12 +806,16 @@ For the final integration generation record:
 * terminal conclusion and required job/check conclusions;
 * retry/attempt identity when a transient infrastructure failure is rerun.
 
-The acceptance record embeds the exact parsed checkout-attestation object for every
-required job and its SHA-256 over canonical JSON plus the artifact's trailing newline.  The
-evaluator recomputes that digest, requires a distinct artifact digest for every required
-job in one integration generation, and requires every surrounding CI identity field to
-equal its attested counterpart.  Changing labels around an artifact therefore cannot turn
-one successful job into evidence for another required job.
+For every required job, the acceptance record retains a sanitized evidence reference for
+an authenticated GitHub artifact-API lookup, the numeric artifact ID, exact expected name,
+GitHub-reported archive SHA-256, and the exact downloaded ZIP bytes.  The evaluator
+recomputes the ZIP digest, opens its sole bounded canonical
+``phase10-ci-checkout.json`` member, and requires that object to equal the separately
+embedded attestation.  It also verifies the canonical attestation digest and every
+surrounding CI identity field.  API references, artifact IDs, ZIP digests, and attestation
+digests are distinct per required job and cannot be reused in a later integration
+generation.  Changing manifest labels or recomputing only an embedded object/digest
+therefore cannot turn one uploaded artifact into evidence for another job.
 
 Do **not** assume a workflow API ``head_sha`` or PR-head field equals the commit actually
 checked out by ``actions/checkout``. Required workflows need bounded attestation/log/artifact
@@ -973,6 +985,7 @@ Request exactly one Phase 9 controlled restart with a stable idempotency key bou
 * restart-owned Phase 6 workspace fence ID/generation;
 * Phase 9 broker acceptance evidence;
 * exact restart checkpoint ID/digest;
+* readiness generation owned by that accepted restart operation/checkpoint;
 * exact hosted merged candidate OID and result-tree OID;
 * final candidate/integration-generation provenance reference;
 * retained LKG ``VerifiedRuntimeSlot`` identity;
@@ -1035,7 +1048,9 @@ Before probing changed behaviour, prove at minimum:
 * device ID/epoch;
 * readiness generation/runtime instance distinct from pre-restart instance;
 * no fail-restricted startup state;
-* exact retained restart operation shows candidate success, not hidden rollback.
+* exact retained restart operation shows candidate success, not hidden rollback; and
+* the post-restart observation repeats the accepted restart operation reference,
+  checkpoint reference, and readiness generation exactly.
 
 Systemd ``active`` or local source HEAD alone is insufficient.
 
@@ -1258,7 +1273,7 @@ representative shape is:
      candidate_generations[]:
        generation
        source_content_ref
-       local_check_refs[]
+       local_checks[] (check_id, check_profile_digest, evidence_ref)
        status_diff_ref
        signed_commit_oid
        signer_ref
@@ -1289,10 +1304,11 @@ representative shape is:
      github_merge_parent_oids[]
      github_merge_method_ref
      local_update_ref
-     post_merge_local_check_refs[]
+     post_merge_local_checks[] (check_id, check_profile_digest, evidence_ref)
      restart_operation_ref
      restart_checkpoint_ref
-     post_restart_runtime_ref
+     restart_readiness_generation
+     post_restart_runtime_ref (restart operation/checkpoint/readiness generation bound)
      behaviour_probe_ref
      security_check_refs[]
      unresolved_refs[]

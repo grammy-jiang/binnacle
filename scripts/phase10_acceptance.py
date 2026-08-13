@@ -144,6 +144,7 @@ def main(argv: list[str] | None = None) -> int:
                 "required_ci_jobs": {
                     workflow: list(jobs) for workflow, jobs in policy.required_ci_jobs.items()
                 },
+                "required_local_check_profiles": dict(policy.required_local_check_profiles),
                 "required_security_checks": list(policy.required_security_checks),
                 "required_workflows": list(policy.required_workflows),
                 "limits": dict(policy.limits),

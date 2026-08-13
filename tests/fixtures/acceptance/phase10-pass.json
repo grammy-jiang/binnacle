@@ -2,7 +2,7 @@
   "schema_version": "1.0",
   "acceptance_run_id": "acceptance-test-pass",
   "plan_version": "phase10-self-hosting-acceptance-v1",
-  "policy_sha256": "7581e01da4cb29494671f4e3ae2d114d6790b4eebd71ef68f766b437154b25dd",
+  "policy_sha256": "befe3236b9d4561e4dc31680b2a7b099c2ea412db08d042760fce7f3a273de27",
   "state": "passed",
   "readiness": {
     "evidence_ref": {
@@ -50,9 +50,63 @@
       "local_checks": [
         {
           "evidence_ref": {
-            "id": "candidate-1-local-check",
+            "id": "candidate-1-local-check-pre-commit-all-files",
             "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
           },
+          "check_id": "pre-commit-all-files",
+          "check_profile_sha256": "8d0df0f1fa5a46b49c6818014883b090459d8d28a17f1a02d72cc688fe8eda0d",
+          "source_content_sha256": "1212121212121212121212121212121212121212121212121212121212121212",
+          "conclusion": "success",
+          "terminal": true,
+          "descendants_closed": true,
+          "workspace_fence_closed": true
+        },
+        {
+          "evidence_ref": {
+            "id": "candidate-1-local-check-tox-py311",
+            "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+          },
+          "check_id": "tox-py311",
+          "check_profile_sha256": "4dece11d8e8b3b913153f694a2164cd26a146dbeb8a231abbe4284a55aa7b358",
+          "source_content_sha256": "1212121212121212121212121212121212121212121212121212121212121212",
+          "conclusion": "success",
+          "terminal": true,
+          "descendants_closed": true,
+          "workspace_fence_closed": true
+        },
+        {
+          "evidence_ref": {
+            "id": "candidate-1-local-check-tox-py312",
+            "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+          },
+          "check_id": "tox-py312",
+          "check_profile_sha256": "5fb0f8fe71689fe1d736d9d415c7016d160bf90d276791324af0e33c53d43598",
+          "source_content_sha256": "1212121212121212121212121212121212121212121212121212121212121212",
+          "conclusion": "success",
+          "terminal": true,
+          "descendants_closed": true,
+          "workspace_fence_closed": true
+        },
+        {
+          "evidence_ref": {
+            "id": "candidate-1-local-check-tox-py313",
+            "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+          },
+          "check_id": "tox-py313",
+          "check_profile_sha256": "1c1dd54faf731a284dd35899c1f3ec429f23a6c5936f57c18816b0d6a9f0340c",
+          "source_content_sha256": "1212121212121212121212121212121212121212121212121212121212121212",
+          "conclusion": "success",
+          "terminal": true,
+          "descendants_closed": true,
+          "workspace_fence_closed": true
+        },
+        {
+          "evidence_ref": {
+            "id": "candidate-1-local-check-tox-quality",
+            "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+          },
+          "check_id": "tox-quality",
+          "check_profile_sha256": "bbe4fcf9b38b448b92e469a811cb7c5ac0ee09cb396e1df5ecc9d5fb75c5bcd4",
           "source_content_sha256": "1212121212121212121212121212121212121212121212121212121212121212",
           "conclusion": "success",
           "terminal": true,
@@ -105,7 +159,7 @@
       "candidate_generation": 1,
       "candidate_oid": "2222222222222222222222222222222222222222",
       "protected_base_oid": "1111111111111111111111111111111111111111",
-      "merge_policy_sha256": "7581e01da4cb29494671f4e3ae2d114d6790b4eebd71ef68f766b437154b25dd",
+      "merge_policy_sha256": "befe3236b9d4561e4dc31680b2a7b099c2ea412db08d042760fce7f3a273de27",
       "reviews": [
         {
           "evidence_ref": {
@@ -168,7 +222,15 @@
             "checkout_kind": "pull_request_integration",
             "created_at": "2026-01-01T00:00:01Z"
           },
-          "attestation_sha256": "7a442bbbbd86b4de2470eb7122f1d63045320743863ce375ffa0fa35d734a0d8"
+          "attestation_sha256": "7a442bbbbd86b4de2470eb7122f1d63045320743863ce375ffa0fa35d734a0d8",
+          "github_artifact_api_ref": {
+            "id": "github-artifact-api-9001",
+            "sha256": "1111111111111111111111111111111111111111111111111111111111111111"
+          },
+          "github_artifact_id": 9001,
+          "github_artifact_name": "phase10-checkout-1001-contracts-1",
+          "github_artifact_archive_sha256": "0028ab2a4a8ca110a2dcb9d287d3a04882603e792977f7f94661f5f41f2d935e",
+          "github_artifact_archive_base64": "UEsDBBQAAAAIAACAn1s5lLGOawEAAFkDAAAYAAAAcGhhc2UxMC1jaS1jaGVja291dC5qc29ulVJNb9swDL3vVww+N53kD1nOtX+hpw6DQVF0osaWUllOUQz776OaGO12cgleJD0+Pj3yd4FHwlNYUn9y3hb74ryMYx/pZaE59c4nOkRILvji7gMaXEZWG+Nz5Rki+XeCudj/LOTGYIpyYxS/PrVLkeimtt4YWW0YR8IUYo9hmtz6X6U0VEZ1MFRa6a4GRWTRtrVQVd3ozihjJCL+wzAfoWwUV3fKIstroAJZktRVLVWjTIm2IRCN6ZgCmhI6NO0AbTt02uoaSdf1oAnbzBoJEtkeEvOVolQ7ITkfhdjnlE+MoUv2F4ZE8Srb8zzXawPzascXnL/WInjrLPe/EWyex0rgYaL/9ovfDi4dF5Nt+tpGPQezMl5gfBe2w+BTBEwzv0c6h9nxBN4YwSs8TW+7Zwf+8MM47wFHyqDFs5mJpjM7Kq/n/DkpBJ9mXqMJ+gvFOe8/e3YvuOg1xNMwhte1/cOt6/ebjoz98+0vUEsBAh4DFAAAAAgAAICfWzmUsY5rAQAAWQMAABgAAAAAAAAAAQAAAKSBAAAAAHBoYXNlMTAtY2ktY2hlY2tvdXQuanNvblBLBQYAAAAAAQABAEYAAAChAQAAAAA="
         },
         {
           "evidence_ref": {
@@ -218,7 +280,15 @@
             "checkout_kind": "pull_request_integration",
             "created_at": "2026-01-01T00:00:02Z"
           },
-          "attestation_sha256": "00ca6727e2dbb68542237b975b6fb609aba78a96e9115f11854347eaa6abeb64"
+          "attestation_sha256": "00ca6727e2dbb68542237b975b6fb609aba78a96e9115f11854347eaa6abeb64",
+          "github_artifact_api_ref": {
+            "id": "github-artifact-api-9002",
+            "sha256": "2222222222222222222222222222222222222222222222222222222222222222"
+          },
+          "github_artifact_id": 9002,
+          "github_artifact_name": "phase10-checkout-1002-python-quality-1",
+          "github_artifact_archive_sha256": "e006809c425c99130dfa8ed525ea3e267cea35c776c78fb099c274e8014645fe",
+          "github_artifact_archive_base64": "UEsDBBQAAAAIAACAn1v6FfwohAEAAG0DAAAYAAAAcGhhc2UxMC1jaS1jaGVja291dC5qc29ulVM9b9wwDN37KwzNTutP2b41U7cOnRoUBkXRd8rZkiPLCYyg/71UL0bTTg6hRRLf49Mj9SrwQnh1a+ivxmpxEvM6jr2np5WW0Bsb6OwhGGdF+jfVmZhZHoz3yBk82T8Eizg9iPxgMEVxMMTPd+WCJ3pTWx2MqNaNI2Fwvkc3TWZ/r5QtlEp2MJStbLsKJJFG3VSZLKu67ZRUKkfEfxiWCxS1ZHQnNbK8GkrIC8rbssplLVWBuibIatUxBdQFdKiaAZpm6FrdVkhtVQ0tYRNZPUEg3UNgviIr5F2W8/qeZae4ih+cQ8/RXxgC+Ztsy/3cjxUsux0fcP6GRbDaaK7/RnC4HzuBhYn+my++O5twWVW06WMT9ejUznjvNKUJOhs8YEgTTTNZTRa3NGHRiXa4TqwgeVphNGFjtKfZLYb7szGeB3yatrtHA/b8RRlrAUeKSatlqwNNM/ud3/bx6XmWFalYeMgm6J/JL/F3sKOfMwa9OH8dRveyi/u2hYuzyf1X8evTb1BLAQIeAxQAAAAIAACAn1v6FfwohAEAAG0DAAAYAAAAAAAAAAEAAACkgQAAAABwaGFzZTEwLWNpLWNoZWNrb3V0Lmpzb25QSwUGAAAAAAEAAQBGAAAAugEAAAAA"
         },
         {
           "evidence_ref": {
@@ -268,7 +338,15 @@
             "checkout_kind": "pull_request_integration",
             "created_at": "2026-01-01T00:00:03Z"
           },
-          "attestation_sha256": "8d25186bb8fcba10c051ac8d0527a13ac5bd4768b36ef7b7eaaf7c12fe9698e2"
+          "attestation_sha256": "8d25186bb8fcba10c051ac8d0527a13ac5bd4768b36ef7b7eaaf7c12fe9698e2",
+          "github_artifact_api_ref": {
+            "id": "github-artifact-api-9003",
+            "sha256": "3333333333333333333333333333333333333333333333333333333333333333"
+          },
+          "github_artifact_id": 9003,
+          "github_artifact_name": "phase10-checkout-1002-test-python-3.11-1",
+          "github_artifact_archive_sha256": "8f15ad7efe7c76f3949c5edf36bf3bfc8712b745132fa38f9c4a3844eee37bc3",
+          "github_artifact_archive_base64": "UEsDBBQAAAAIAACAn1uIYokWagEAAE0DAAAYAAAAcGhhc2UxMC1jaS1jaGVja291dC5qc29ulZJNU8MgEIbv/gqHs1XyRUivnrx56EnHySywabEJVEJ0Oo7/3cU248cp7nABdp99edl3pneo936K7d46w9bsMPV9G/BlwjG21kXcBojWO3b1neptyiwWxs/KAwR0X4CRrR9ZtjAIkS8M9vSjXQyIZ7Xlwkhqfd+jjj602g+Dnd8rhIRCiQa6QgrZlCAQjTZ1yUVRVrJRQqlMa/2LMO4grwRVN8JokldBAVmOmSzKTFRC5dpUCLxSDSGgyqHRqu6grrtGGllqlGXZSdR1ogaEiKaFSLyc52LFM1obztdpFQ+Ug6/JX+gihpNsR/85HysYZzv+4fypVoMz1lD/M2Dxf8wABwP+mS+629q4m1Sy6X8T9ezVTNwQ6fL+GHfeXRbXX5IDHvxoyf8j3dMAD8Nx9WzBbW+UdQ50jylpcmRlxOFAfmanfXpaxnl+xUYaogHaVwxjmn5y7JpT0ZsP+673b3Pzc9/bO/Zx8QlQSwECHgMUAAAACAAAgJ9biGKJFmoBAABNAwAAGAAAAAAAAAABAAAApIEAAAAAcGhhc2UxMC1jaS1jaGVja291dC5qc29uUEsFBgAAAAABAAEARgAAAKABAAAAAA=="
         },
         {
           "evidence_ref": {
@@ -318,7 +396,15 @@
             "checkout_kind": "pull_request_integration",
             "created_at": "2026-01-01T00:00:04Z"
           },
-          "attestation_sha256": "eeab487570d4b8a63d30f7d4029a5c5b6922c696483576323e011a6a8be39fea"
+          "attestation_sha256": "eeab487570d4b8a63d30f7d4029a5c5b6922c696483576323e011a6a8be39fea",
+          "github_artifact_api_ref": {
+            "id": "github-artifact-api-9004",
+            "sha256": "4444444444444444444444444444444444444444444444444444444444444444"
+          },
+          "github_artifact_id": 9004,
+          "github_artifact_name": "phase10-checkout-1002-test-python-3.12-1",
+          "github_artifact_archive_sha256": "63d3e1d22a10b3f4fe527165835a2664fc411a03cc07906977f7e2e5a5140127",
+          "github_artifact_archive_base64": "UEsDBBQAAAAIAACAn1vXV31qbQEAAE0DAAAYAAAAcGhhc2UxMC1jaS1jaGVja291dC5qc29ulZKxctwgEIb7PIWH2nZAQghd68pdClfJZDQLrO7wSXBByJ6bjN/dS+40cVLJOzTA7vcvP/ub2QPaY1xyf/TBsR07LePYJ/y14Jx7HzLuE2QfA7v9mxp9yaw3xsfKEyQMfwAz2/1gYmMQotoY7OcHuZwQr93KjVG6jeOINsfU2zhNfn2vUhpqozoYaq10J0EhOutayVUtG90ZZYyw1v5DmA9QNYqqO+UstddADaJCoWspVKNMZV2DwBvTEQKaCjpr2gHadui009KilnLQaNtCTQgZXQ+ZeBWv1B0XtJ4435Ulv1MOvhR/YciYLm0H+s/12MC82vEJ5y+1FoLzjvSvgM3/sQICTPjffNHd3ufDYopNn5uo52hW4hORbr6d8yGGm/peFMWEpzh78v9M9zTA03S+e/YQ9l+NDwHsiCVpCWRlxulEforLvjxNcF7dspmGaIL+BdNcpp8cu+dU9BrTcRjj6yp+1X14ZG9f3gFQSwECHgMUAAAACAAAgJ9b11d9am0BAABNAwAAGAAAAAAAAAABAAAApIEAAAAAcGhhc2UxMC1jaS1jaGVja291dC5qc29uUEsFBgAAAAABAAEARgAAAKMBAAAAAA=="
         },
         {
           "evidence_ref": {
@@ -368,7 +454,15 @@
             "checkout_kind": "pull_request_integration",
             "created_at": "2026-01-01T00:00:05Z"
           },
-          "attestation_sha256": "70ea96fb1671325a076804e7ba44cf56f6c7d5a7bebb2d8587a7f76e53e00e05"
+          "attestation_sha256": "70ea96fb1671325a076804e7ba44cf56f6c7d5a7bebb2d8587a7f76e53e00e05",
+          "github_artifact_api_ref": {
+            "id": "github-artifact-api-9005",
+            "sha256": "5555555555555555555555555555555555555555555555555555555555555555"
+          },
+          "github_artifact_id": 9005,
+          "github_artifact_name": "phase10-checkout-1002-test-python-3.13-1",
+          "github_artifact_archive_sha256": "4dc815209fa44e057e0e36ae446f99fb660bc5cd32a03ca413e4cc3acb8105ef",
+          "github_artifact_archive_base64": "UEsDBBQAAAAIAACAn1sAybg1bAEAAE0DAAAYAAAAcGhhc2UxMC1jaS1jaGVja291dC5qc29ulZK7buswDIb3PkWhuRfJF1nO2qnbGTqdg8KgJDpRY0s5stwiKPrupZoYvUwuocUm+ZH69b8ys0OzD3Pq9s5btmGHeRi6iP9nnFLnfMJthOSCZ1efpcHlynJlfO08QET/AZjY5h8TK4MQxcpgj1/GpYh43rZaGXnbMAxoUoidCePolvtKqaDUsoW+VFK1FUhEa2xTcVlWtWq11FoYY74Rph0UtaTuVlpD69VQgihQqLISspa6MLZG4LVuCQF1Aa3RTQ9N07fKqsqgqqpeoWkyNSIktB0k4hW8kNdc0HngfJNP/Zdq8DnrC33CeFrb03suvzVMixy/UP7Ua8BbZ2n+GbD6PRaAhxF/+ItyW5d2s84y/c5RT0EvxAciXf45pl3wl+WNyNmIhzA50v9IeTLwOB6vnxz47a123oMZMBfNnqRMOB5IT3H6zlcTnBdXbCITjdA9Y5yy+0mxG05NLyHu+yG8LMPPc+/u2dvFO1BLAQIeAxQAAAAIAACAn1sAybg1bAEAAE0DAAAYAAAAAAAAAAEAAACkgQAAAABwaGFzZTEwLWNpLWNoZWNrb3V0Lmpzb25QSwUGAAAAAAEAAQBGAAAAogEAAAAA"
         }
       ],
       "expected_integration_tree_oid": "4444444444444444444444444444444444444444",
@@ -428,9 +522,67 @@
   "post_merge_local_checks": [
     {
       "evidence_ref": {
-        "id": "post-merge-check",
+        "id": "post-merge-check-pre-commit-all-files",
         "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
       },
+      "check_id": "pre-commit-all-files",
+      "check_profile_sha256": "8d0df0f1fa5a46b49c6818014883b090459d8d28a17f1a02d72cc688fe8eda0d",
+      "commit_oid": "7777777777777777777777777777777777777777",
+      "tree_oid": "4444444444444444444444444444444444444444",
+      "conclusion": "success",
+      "terminal": true,
+      "descendants_closed": true,
+      "workspace_fence_closed": true
+    },
+    {
+      "evidence_ref": {
+        "id": "post-merge-check-tox-py311",
+        "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      },
+      "check_id": "tox-py311",
+      "check_profile_sha256": "4dece11d8e8b3b913153f694a2164cd26a146dbeb8a231abbe4284a55aa7b358",
+      "commit_oid": "7777777777777777777777777777777777777777",
+      "tree_oid": "4444444444444444444444444444444444444444",
+      "conclusion": "success",
+      "terminal": true,
+      "descendants_closed": true,
+      "workspace_fence_closed": true
+    },
+    {
+      "evidence_ref": {
+        "id": "post-merge-check-tox-py312",
+        "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      },
+      "check_id": "tox-py312",
+      "check_profile_sha256": "5fb0f8fe71689fe1d736d9d415c7016d160bf90d276791324af0e33c53d43598",
+      "commit_oid": "7777777777777777777777777777777777777777",
+      "tree_oid": "4444444444444444444444444444444444444444",
+      "conclusion": "success",
+      "terminal": true,
+      "descendants_closed": true,
+      "workspace_fence_closed": true
+    },
+    {
+      "evidence_ref": {
+        "id": "post-merge-check-tox-py313",
+        "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      },
+      "check_id": "tox-py313",
+      "check_profile_sha256": "1c1dd54faf731a284dd35899c1f3ec429f23a6c5936f57c18816b0d6a9f0340c",
+      "commit_oid": "7777777777777777777777777777777777777777",
+      "tree_oid": "4444444444444444444444444444444444444444",
+      "conclusion": "success",
+      "terminal": true,
+      "descendants_closed": true,
+      "workspace_fence_closed": true
+    },
+    {
+      "evidence_ref": {
+        "id": "post-merge-check-tox-quality",
+        "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      },
+      "check_id": "tox-quality",
+      "check_profile_sha256": "bbe4fcf9b38b448b92e469a811cb7c5ac0ee09cb396e1df5ecc9d5fb75c5bcd4",
       "commit_oid": "7777777777777777777777777777777777777777",
       "tree_oid": "4444444444444444444444444444444444444444",
       "conclusion": "success",
@@ -454,6 +606,7 @@
     },
     "candidate_oid": "7777777777777777777777777777777777777777",
     "candidate_tree_oid": "4444444444444444444444444444444444444444",
+    "readiness_generation": 42,
     "preflight_status": "ready",
     "outcome": "candidate_ready",
     "same_operation_reconciled": true,
@@ -470,6 +623,15 @@
     "runtime_tree_oid": "4444444444444444444444444444444444444444",
     "runtime_instance_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
     "runtime_profile_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "restart_operation_ref": {
+      "id": "restart-operation",
+      "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    },
+    "restart_checkpoint_ref": {
+      "id": "restart-checkpoint",
+      "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    },
+    "readiness_generation": 42,
     "readiness": "ready",
     "clean_source_state": true
   },
@@ -550,8 +712,8 @@
       "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
     },
     "acceptance_run_id": "acceptance-test-pass",
-    "policy_sha256": "7581e01da4cb29494671f4e3ae2d114d6790b4eebd71ef68f766b437154b25dd",
-    "reviewed_evidence_sha256": "4117549fabb46e82880937c6fdc5c1fdef98b20f64869bea76115024a4a7ac51",
+    "policy_sha256": "befe3236b9d4561e4dc31680b2a7b099c2ea412db08d042760fce7f3a273de27",
+    "reviewed_evidence_sha256": "a00096d03ae361c6c31912f9caa9f4cdb281c511f129e0d8f6e9bece2825fc25",
     "outcome": "accepted",
     "evidence_complete": true
   }

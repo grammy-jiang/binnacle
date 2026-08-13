@@ -1360,6 +1360,30 @@ def validate_phase10_acceptance_contract() -> None:
 
     if manifest.get("policy_sha256") != policy.sha256:
         fail("Phase 10 PASS fixture policy identity is stale")
+    required_local_profiles = dict(policy.required_local_check_profiles)
+    local_check_collections: list[tuple[str, object]] = [
+        (
+            f"candidate_generations[{index}].local_checks",
+            candidate.get("local_checks") if isinstance(candidate, dict) else None,
+        )
+        for index, candidate in enumerate(manifest.get("candidate_generations", []))
+    ]
+    local_check_collections.append(
+        ("post_merge_local_checks", manifest.get("post_merge_local_checks"))
+    )
+    for context, raw_checks in local_check_collections:
+        if not isinstance(raw_checks, list) or not all(
+            isinstance(check, dict) for check in raw_checks
+        ):
+            fail(f"Phase 10 PASS fixture {context} is invalid")
+            continue
+        observed_profiles = {
+            check.get("check_id"): check.get("check_profile_sha256") for check in raw_checks
+        }
+        if len(observed_profiles) != len(raw_checks):
+            fail(f"Phase 10 PASS fixture {context} contains duplicate check IDs")
+        if observed_profiles != required_local_profiles:
+            fail(f"Phase 10 PASS fixture {context} differs from the frozen local profile")
     try:
         report = evaluate_phase10_manifest(manifest, repo_root=ROOT)
     except Exception as exc:  # noqa: BLE001 - aggregate validation failures
@@ -1382,6 +1406,12 @@ def validate_phase10_acceptance_contract() -> None:
         "ci-on-old-candidate-is-incomplete",
         "ci-with-wrong-parents-is-incomplete",
         "ci-tree-mismatch-fails",
+        "uploaded-artifact-digest-mismatch-fails",
+        "malformed-uploaded-artifact-fails",
+        "same-base-signed-tree-mismatch-fails",
+        "candidate-local-profile-incomplete-is-incomplete",
+        "post-merge-local-profile-incomplete-is-incomplete",
+        "runtime-restart-generation-mismatch-fails",
         "stale-policy-is-incomplete",
         "post-restart-runtime-profile-mismatch-fails",
         "unresolved-effect-is-incomplete",
@@ -1401,6 +1431,19 @@ def validate_phase10_acceptance_contract() -> None:
         ROOT / ".github/workflows/python.yml": {
             "test": "Test Python ${{ matrix.python-version }}",
             "quality": "Code, contract, dependency, and document quality",
+        },
+    }
+    artifact_prefix = "phase10-checkout-${{ github.run_id }}"
+    artifact_attempt = "${{ github.run_attempt }}"
+    workflow_artifact_names = {
+        ROOT / ".github/workflows/contracts.yml": {
+            "validate-contracts": f"{artifact_prefix}-contracts-{artifact_attempt}",
+        },
+        ROOT / ".github/workflows/python.yml": {
+            "test": (
+                f"{artifact_prefix}-test-python-${{{{ matrix.python-version }}}}-{artifact_attempt}"
+            ),
+            "quality": f"{artifact_prefix}-python-quality-{artifact_attempt}",
         },
     }
     for path, expected_jobs in workflow_jobs.items():
@@ -1487,6 +1530,11 @@ def validate_phase10_acceptance_contract() -> None:
                 context=f"{path.relative_to(ROOT)}: job {job_id} upload inputs",
             )
             if upload_inputs is not None:
+                if upload_inputs.get("name") != workflow_artifact_names[path][job_id]:
+                    fail(
+                        f"{path.relative_to(ROOT)}: job {job_id} uploads an "
+                        "unexpected attestation artifact name"
+                    )
                 if upload_inputs.get("path") != "${{ runner.temp }}/phase10-ci-checkout.json":
                     fail(
                         f"{path.relative_to(ROOT)}: job {job_id} uploads the wrong attestation path"
@@ -1510,6 +1558,10 @@ def validate_phase10_acceptance_contract() -> None:
             "Real-device acceptance promotion",
             "scripts/phase10_acceptance.py",
             "review-digest",
+            "github_artifact_api_ref",
+            "tox-py311",
+            "same-base signed-tree equality",
+            "same-operation/checkpoint/readiness-generation",
         ),
         ROOT / "scripts/ci_checkout_attestation.py": (
             '_GIT_BINARY = "/usr/bin/git"',

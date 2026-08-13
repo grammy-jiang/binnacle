@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
+import io
 import json
+import zipfile
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -168,7 +172,7 @@ def evaluate_phase10_manifest(
         findings=findings,
     )
     if final_candidate is not None:
-        _evaluate_candidate(final_candidate, baseline, branch, findings)
+        _evaluate_candidate(final_candidate, baseline, branch, policy, findings)
         _reject_reused_candidate_evidence(candidates, final_candidate, findings)
 
     integrations = _object_list(value["integration_generations"])
@@ -335,12 +339,19 @@ def _evaluate_candidate(
     candidate: dict[str, Any],
     baseline: dict[str, Any] | None,
     branch: dict[str, Any] | None,
+    policy: Phase10Policy,
     findings: _Findings,
 ) -> None:
     generation = cast(int, candidate["generation"])
     prefix = f"/candidate_generations/{generation - 1}"
     source_digest = candidate["source_content_sha256"]
     checks = _object_list(candidate["local_checks"])
+    _evaluate_local_check_profile(
+        checks,
+        policy=policy,
+        prefix=f"{prefix}/local_checks",
+        findings=findings,
+    )
     for index, check in enumerate(checks):
         check_path = f"{prefix}/local_checks/{index}"
         if check["source_content_sha256"] != source_digest:
@@ -468,13 +479,52 @@ def _evaluate_integration(
 
     observed_jobs: dict[str, set[str]] = {}
     observed_attestations: set[str] = set()
+    observed_artifact_ids: set[int] = set()
+    observed_artifact_archives: set[str] = set()
+    observed_artifact_api_ref_ids: set[str] = set()
+    observed_artifact_api_ref_digests: set[str] = set()
     expected_tree = integration["expected_integration_tree_oid"]
+    commit = _object(candidate["signed_commit"])
+    if (
+        commit["parent_oid"] == integration["protected_base_oid"]
+        and commit["tree_oid"] != expected_tree
+    ):
+        findings.fail("same_base_signed_tree_mismatch", f"{prefix}/expected_integration_tree_oid")
     ci_evidence = _object_list(integration["ci_evidence"])
     for index, evidence in enumerate(ci_evidence):
         path = f"{prefix}/ci_evidence/{index}"
         workflow = cast(str, evidence["workflow_name"])
         attestation = _object(evidence["attestation"])
         attestation_sha256 = cast(str, evidence["attestation_sha256"])
+        artifact_name = cast(str, evidence["github_artifact_name"])
+        artifact_id = cast(int, evidence["github_artifact_id"])
+        artifact_archive_sha256 = cast(str, evidence["github_artifact_archive_sha256"])
+        artifact_api_ref = _object(evidence["github_artifact_api_ref"])
+        artifact_api_identity = (
+            _ref_id(artifact_api_ref),
+            cast(str, artifact_api_ref["sha256"]),
+        )
+        if (
+            artifact_api_identity[0] in observed_artifact_api_ref_ids
+            or artifact_api_identity[1] in observed_artifact_api_ref_digests
+        ):
+            findings.fail("ci_artifact_reused", f"{path}/github_artifact_api_ref")
+        observed_artifact_api_ref_ids.add(artifact_api_identity[0])
+        observed_artifact_api_ref_digests.add(artifact_api_identity[1])
+        if artifact_id in observed_artifact_ids:
+            findings.fail("ci_artifact_reused", f"{path}/github_artifact_id")
+        observed_artifact_ids.add(artifact_id)
+        if artifact_archive_sha256 in observed_artifact_archives:
+            findings.fail("ci_artifact_reused", f"{path}/github_artifact_archive_sha256")
+        observed_artifact_archives.add(artifact_archive_sha256)
+        expected_artifact_name = _expected_artifact_name(evidence)
+        if artifact_name != expected_artifact_name:
+            findings.fail("ci_artifact_name_mismatch", f"{path}/github_artifact_name")
+        archive_payload = _decode_artifact_archive(evidence, path, findings)
+        if archive_payload is not None:
+            artifact_attestation = _attestation_from_archive(archive_payload, path, findings)
+            if artifact_attestation is not None and artifact_attestation != attestation:
+                findings.fail("ci_artifact_attestation_mismatch", f"{path}/attestation")
         if attestation_sha256 in observed_attestations:
             findings.fail("ci_attestation_reused", f"{path}/attestation_sha256")
         observed_attestations.add(attestation_sha256)
@@ -561,7 +611,15 @@ def _integration_evidence_identities(integration: dict[str, Any]) -> set[tuple[s
         values.update(_evidence_ref_identities(review["evidence_ref"]))
     for evidence in _object_list(integration["ci_evidence"]):
         values.update(_evidence_ref_identities(evidence["evidence_ref"]))
+        values.update(_evidence_ref_identities(evidence["github_artifact_api_ref"]))
         values.add(("attestation_sha256", cast(str, evidence["attestation_sha256"])))
+        values.add(("github_artifact_id", str(evidence["github_artifact_id"])))
+        values.add(
+            (
+                "github_artifact_archive_sha256",
+                cast(str, evidence["github_artifact_archive_sha256"]),
+            )
+        )
     return values
 
 
@@ -661,6 +719,12 @@ def _evaluate_hosted_and_local_chain(
 
     if not post_merge_checks:
         findings.incomplete("post_merge_local_checks_missing", "/post_merge_local_checks")
+    _evaluate_local_check_profile(
+        post_merge_checks,
+        policy=policy,
+        prefix="/post_merge_local_checks",
+        findings=findings,
+    )
     for index, check in enumerate(post_merge_checks):
         path = f"/post_merge_local_checks/{index}"
         _evaluate_check_truth(check, path, findings)
@@ -668,6 +732,88 @@ def _evaluate_hosted_and_local_chain(
             check["commit_oid"] != result_oid or check["tree_oid"] != result_tree
         ):
             findings.fail("post_merge_check_identity_mismatch", path)
+
+
+def _evaluate_local_check_profile(
+    checks: list[dict[str, Any]],
+    *,
+    policy: Phase10Policy,
+    prefix: str,
+    findings: _Findings,
+) -> None:
+    observed: dict[str, str] = {}
+    for index, check in enumerate(checks):
+        check_id = cast(str, check["check_id"])
+        if check_id in observed:
+            findings.fail("duplicate_local_check", f"{prefix}/{index}/check_id")
+        observed[check_id] = cast(str, check["check_profile_sha256"])
+    required = dict(policy.required_local_check_profiles)
+    if set(observed) != set(required):
+        findings.incomplete("required_local_check_profile_incomplete", prefix)
+    for check_id in set(observed) & set(required):
+        if observed[check_id] != required[check_id]:
+            findings.fail("local_check_profile_mismatch", prefix)
+
+
+def _expected_artifact_name(evidence: dict[str, Any]) -> str:
+    run_id = evidence["run_id"]
+    attempt = evidence["run_attempt"]
+    job_name = evidence["job_name"]
+    suffixes = {
+        "validate-contracts": "contracts",
+        "Code, contract, dependency, and document quality": "python-quality",
+        "Test Python 3.11": "test-python-3.11",
+        "Test Python 3.12": "test-python-3.12",
+        "Test Python 3.13": "test-python-3.13",
+    }
+    suffix = suffixes.get(cast(str, job_name), "invalid-required-job")
+    return f"phase10-checkout-{run_id}-{suffix}-{attempt}"
+
+
+def _decode_artifact_archive(
+    evidence: dict[str, Any],
+    path: str,
+    findings: _Findings,
+) -> bytes | None:
+    encoded = cast(str, evidence["github_artifact_archive_base64"])
+    try:
+        archive = base64.b64decode(encoded, validate=True)
+    except (binascii.Error, ValueError):
+        findings.fail("ci_artifact_archive_invalid", f"{path}/github_artifact_archive_base64")
+        return None
+    if sha256_bytes(archive) != evidence["github_artifact_archive_sha256"]:
+        findings.fail(
+            "ci_artifact_archive_digest_mismatch",
+            f"{path}/github_artifact_archive_sha256",
+        )
+        return None
+    return archive
+
+
+def _attestation_from_archive(
+    archive: bytes,
+    path: str,
+    findings: _Findings,
+) -> dict[str, Any] | None:
+    try:
+        with zipfile.ZipFile(io.BytesIO(archive)) as bundle:
+            members = bundle.infolist()
+            if (
+                len(members) != 1
+                or members[0].filename != "phase10-ci-checkout.json"
+                or members[0].is_dir()
+                or members[0].file_size > 16_384
+            ):
+                raise ValueError("artifact member inventory is not exact")
+            raw = bundle.read(members[0])
+        value = json.loads(raw, object_pairs_hook=_unique_object)
+    except Exception:  # noqa: BLE001 - untrusted bounded ZIP/JSON must fail closed
+        findings.fail("ci_artifact_archive_invalid", f"{path}/github_artifact_archive_base64")
+        return None
+    if not isinstance(value, dict) or canonical_json_bytes(value) + b"\n" != raw:
+        findings.fail("ci_artifact_archive_invalid", f"{path}/github_artifact_archive_base64")
+        return None
+    return cast(dict[str, Any], value)
 
 
 def _evaluate_restart_and_runtime(
@@ -707,6 +853,12 @@ def _evaluate_restart_and_runtime(
     if runtime is None:
         findings.incomplete("post_restart_runtime_missing", "/post_restart_runtime")
         return None
+    if restart is not None and (
+        runtime["restart_operation_ref"] != restart["operation_ref"]
+        or runtime["restart_checkpoint_ref"] != restart["checkpoint_ref"]
+        or runtime["readiness_generation"] != restart["readiness_generation"]
+    ):
+        findings.fail("post_restart_runtime_restart_mismatch", "/post_restart_runtime")
     if runtime["readiness"] == "restricted":
         findings.fail("post_restart_runtime_restricted", "/post_restart_runtime/readiness")
     elif runtime["readiness"] == "unavailable":
@@ -825,6 +977,15 @@ def _object(value: object) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise AssertionError("schema-validated object is not a mapping")
     return cast(dict[str, Any], value)
+
+
+def _unique_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    value: dict[str, object] = {}
+    for key, item in pairs:
+        if key in value:
+            raise ValueError("duplicate artifact attestation field")
+        value[key] = item
+    return value
 
 
 def _optional_object(value: object) -> dict[str, Any] | None:

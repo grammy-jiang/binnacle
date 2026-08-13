@@ -87,9 +87,9 @@ def test_phase10_policy_is_frozen_and_canonical(repo_root: Path) -> None:
     policy = load_phase10_policy(repo_root)
 
     assert policy.policy_id == "binnacle-phase10-acceptance-v1"
-    assert policy.sha256 == "7581e01da4cb29494671f4e3ae2d114d6790b4eebd71ef68f766b437154b25dd"
+    assert policy.sha256 == "befe3236b9d4561e4dc31680b2a7b099c2ea412db08d042760fce7f3a273de27"
     assert policy.acceptance_schema_sha256 == (
-        "4bad2c4bf113fc0d749cca4637e5981686122ce9217d2622a903fea54ba520dc"
+        "f62f5d6a9c530f482d0a75ded71c082dd2b52620ec27ff00a491db025fc876c6"
     )
     assert policy.ci_attestation_schema_sha256 == (
         "6b7d2c6dff03870790dfb3e4ee6be5c93399e61d1bc7c67afea2969ea91e2760"
@@ -108,6 +108,16 @@ def test_phase10_policy_is_frozen_and_canonical(repo_root: Path) -> None:
         "Test Python 3.11",
         "Test Python 3.12",
         "Test Python 3.13",
+    )
+    assert tuple(policy.required_local_check_profiles) == (
+        "pre-commit-all-files",
+        "tox-py311",
+        "tox-py312",
+        "tox-py313",
+        "tox-quality",
+    )
+    assert policy.required_local_check_profiles["tox-quality"] == (
+        "bbe4fcf9b38b448b92e469a811cb7c5ac0ee09cb396e1df5ecc9d5fb75c5bcd4"
     )
 
 
@@ -130,10 +140,10 @@ def test_phase10_skeleton_claims_no_live_evidence(repo_root: Path) -> None:
     }
 
 
-@pytest.mark.parametrize("case_index", range(31))
+@pytest.mark.parametrize("case_index", range(37))
 def test_phase10_evaluator_fixture(case_index: int, repo_root: Path) -> None:
     cases = _cases(repo_root)
-    assert len(cases) == 31
+    assert len(cases) == 37
     case = cases[case_index]
     manifest = _pass_manifest(repo_root)
     _apply_case(manifest, case)
@@ -210,6 +220,11 @@ _EVALUATOR_BRANCH_CASES: tuple[tuple[str, object, str], ...] = (
         "required_check_fence_open",
     ),
     (
+        "/candidate_generations/0/local_checks/0/check_profile_sha256",
+        "8" * 64,
+        "local_check_profile_mismatch",
+    ),
+    (
         "/candidate_generations/0/status_diff/unexpected_paths",
         True,
         "candidate_contains_unexpected_paths",
@@ -238,6 +253,11 @@ _EVALUATOR_BRANCH_CASES: tuple[tuple[str, object, str], ...] = (
         "/candidate_generations/0/signed_commit/signature_verified",
         False,
         "candidate_signature_unverified",
+    ),
+    (
+        "/candidate_generations/0/signed_commit/tree_oid",
+        "8" * 40,
+        "same_base_signed_tree_mismatch",
     ),
     ("/candidate_generations/0/push/conclusion", "failure", "candidate_push_failed"),
     ("/candidate_generations/0/push/conclusion", "uncertain", "candidate_push_uncertain"),
@@ -317,6 +337,11 @@ _EVALUATOR_BRANCH_CASES: tuple[tuple[str, object, str], ...] = (
         "Python CI",
         "ci_attestation_identity_mismatch",
     ),
+    (
+        "/integration_generations/0/ci_evidence/0/github_artifact_archive_sha256",
+        "8" * 64,
+        "ci_artifact_archive_digest_mismatch",
+    ),
     ("/failure_exercise/outcome", "unsafe", "failure_exercise_unsafe"),
     (
         "/failure_exercise/descendants_closed",
@@ -344,6 +369,11 @@ _EVALUATOR_BRANCH_CASES: tuple[tuple[str, object, str], ...] = (
     ("/local_update/repository_clean", False, "local_update_repository_dirty"),
     ("/local_update/through_phase8_semantics", False, "local_update_bypassed_phase8"),
     ("/local_update/branch_ref", "refs/heads/other", "local_update_branch_mismatch"),
+    (
+        "/post_merge_local_checks/0/check_profile_sha256",
+        "8" * 64,
+        "local_check_profile_mismatch",
+    ),
     ("/restart/preflight_status", "blocked", "restart_preflight_blocked"),
     ("/restart/preflight_status", "uncertain", "restart_preflight_uncertain"),
     ("/restart/outcome", "restricted_recovery", "restart_outcome_unresolved"),
@@ -362,6 +392,21 @@ _EVALUATOR_BRANCH_CASES: tuple[tuple[str, object, str], ...] = (
         "/post_restart_runtime/runtime_profile_sha256",
         "8" * 64,
         "post_restart_runtime_profile_mismatch",
+    ),
+    (
+        "/post_restart_runtime/restart_operation_ref/id",
+        "other-restart-operation",
+        "post_restart_runtime_restart_mismatch",
+    ),
+    (
+        "/post_restart_runtime/restart_checkpoint_ref/id",
+        "other-restart-checkpoint",
+        "post_restart_runtime_restart_mismatch",
+    ),
+    (
+        "/post_restart_runtime/readiness_generation",
+        43,
+        "post_restart_runtime_restart_mismatch",
     ),
     ("/behaviour_probe/outcome", "unavailable", "changed_behaviour_unavailable"),
     ("/behaviour_probe/post_restart", False, "behaviour_probe_not_post_restart"),
@@ -498,6 +543,8 @@ def test_phase10_policy_rejects_missing_duplicate_and_contradictory_sources(
         {**policy, "allowed_merge_methods": ["octopus"]},
         {**policy, "required_workflows": ["Python CI"]},
         {**policy, "required_security_checks": []},
+        {**policy, "required_local_check_profiles": {}},
+        {**policy, "required_local_check_profiles": {"tox-invalid": {"argv": [], "covers": []}}},
         {**policy, "limits": {**policy["limits"], "manifest_bytes_max": 1_048_577}},
         {**policy, "policy_id": ""},
         {**policy, "repository": "not-a-repository"},

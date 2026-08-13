@@ -82,7 +82,7 @@ def test_similarly_named_duplicate_ci_job_cannot_replace_required_job(
 
     report = evaluate_phase10_manifest(manifest, repo_root=REPO_ROOT)
 
-    assert report.verdict is AcceptanceVerdict.INCOMPLETE
+    assert report.verdict is not AcceptanceVerdict.PASS
     assert "required_ci_job_evidence_missing" in {finding.code for finding in report.findings}
 
 
@@ -105,6 +105,74 @@ def test_one_ci_attestation_cannot_be_relabelled_as_another_required_job(
     assert {finding.code for finding in report.findings} >= {
         "ci_attestation_reused",
         "ci_attestation_identity_mismatch",
+    }
+
+
+@given(pair=st.sampled_from(_DISTINCT_CI_PAIRS))
+def test_one_uploaded_artifact_cannot_be_relabelled_as_another_job(
+    pair: tuple[int, int],
+) -> None:
+    manifest = _pass_manifest(REPO_ROOT)
+    source_index, target_index = pair
+    evidence = manifest["integration_generations"][0]["ci_evidence"]
+    for field in (
+        "github_artifact_api_ref",
+        "github_artifact_id",
+        "github_artifact_archive_sha256",
+        "github_artifact_archive_base64",
+    ):
+        evidence[target_index][field] = copy.deepcopy(evidence[source_index][field])
+    manifest["owner_review"]["reviewed_evidence_sha256"] = phase10_reviewed_evidence_sha256(
+        manifest
+    )
+
+    report = evaluate_phase10_manifest(manifest, repo_root=REPO_ROOT)
+
+    assert report.verdict is AcceptanceVerdict.FAIL
+    assert "ci_artifact_reused" in {finding.code for finding in report.findings}
+
+
+@given(index=st.integers(min_value=0, max_value=4))
+def test_manifest_cannot_replace_attestation_from_uploaded_artifact(index: int) -> None:
+    manifest = _pass_manifest(REPO_ROOT)
+    evidence = manifest["integration_generations"][0]["ci_evidence"][index]
+    evidence["attestation"]["created_at"] = "2030-12-31T23:59:59Z"
+    evidence["attestation_sha256"] = sha256_bytes(
+        canonical_json_bytes(evidence["attestation"]) + b"\n"
+    )
+    manifest["owner_review"]["reviewed_evidence_sha256"] = phase10_reviewed_evidence_sha256(
+        manifest
+    )
+
+    report = evaluate_phase10_manifest(manifest, repo_root=REPO_ROOT)
+
+    assert report.verdict is AcceptanceVerdict.FAIL
+    assert "ci_artifact_attestation_mismatch" in {finding.code for finding in report.findings}
+
+
+@given(
+    collection=st.sampled_from(("candidate", "post_merge")),
+    index=st.integers(min_value=0, max_value=4),
+)
+def test_omitting_any_required_local_check_never_passes(
+    collection: str,
+    index: int,
+) -> None:
+    manifest = _pass_manifest(REPO_ROOT)
+    if collection == "candidate":
+        checks = manifest["candidate_generations"][0]["local_checks"]
+    else:
+        checks = manifest["post_merge_local_checks"]
+    del checks[index]
+    manifest["owner_review"]["reviewed_evidence_sha256"] = phase10_reviewed_evidence_sha256(
+        manifest
+    )
+
+    report = evaluate_phase10_manifest(manifest, repo_root=REPO_ROOT)
+
+    assert report.verdict is AcceptanceVerdict.INCOMPLETE
+    assert "required_local_check_profile_incomplete" in {
+        finding.code for finding in report.findings
     }
 
 

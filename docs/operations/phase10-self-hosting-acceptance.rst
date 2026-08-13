@@ -33,7 +33,8 @@ Repository-owned acceptance assets
 The frozen implementation consists of:
 
 * ``spec/acceptance/phase10-policy.json`` -- exact repository/protected branch, merge
-  method, required workflow/job names, security checks, and reviewed bounds;
+  method, required workflow/job names, local check profiles, security checks, and reviewed
+  bounds;
 * ``schemas/acceptance/phase10-run.schema.json`` -- closed acceptance-run record;
 * ``schemas/acceptance/ci-checkout-attestation.schema.json`` -- exact GitHub event and
   checkout identity record;
@@ -56,27 +57,24 @@ edit a retained manifest merely to replace its policy hash.
 Repository validation
 ---------------------
 
-Before publishing a repository change, run the same complete gate used by CI:
+Before publishing a repository change, run the exact complete local profile frozen in the
+policy.  The profile intentionally names the ``tox`` environments rather than accepting a
+free-form claim that some equivalent test ran:
 
 .. code-block:: console
 
-   uv sync --frozen --python 3.13
-   uv run pytest
-   uv run ruff check .
-   uv run ruff format --check .
-   uv run mypy src/binnacle tests \
-     scripts/mcp_evaluation.py scripts/build_privileged_artifact_manifest.py \
-     scripts/setup_dev_pi.py scripts/verify_dev_pi.py \
-     scripts/verify_operation_kernel.py scripts/verify_execution_supervisor.py \
-     scripts/verify_git_credential_broker.py scripts/verify_privileged_broker.py \
-     scripts/ci_checkout_attestation.py scripts/phase10_acceptance.py
-   uv run lint-imports
-   uv run pip-audit
-   uv run rstcheck --recursive docs
-   uv run python scripts/compile_mcp_registry.py --check
-   uv run python scripts/validate_contracts.py
-   uv run python scripts/validate_schema_instances.py
+   uv run tox run -e py311
+   uv run tox run -e py312
+   uv run tox run -e py313
+   uv run tox run -e quality
    uv run pre-commit run --all-files
+
+``tox-quality`` includes lint, format, type, import-boundary, dependency/security,
+documentation, contract/schema, generated-registry, verifier/migration, and operational
+CLI validation.  Every candidate and post-merge run records the exact
+``pre-commit-all-files``, ``tox-py311``, ``tox-py312``, ``tox-py313``, and ``tox-quality``
+check IDs plus the canonical policy digest of each command-and-coverage profile.  A
+missing, duplicate, renamed, or differently hashed check cannot satisfy the gate.
 
 Inspect the frozen policy identity separately:
 
@@ -117,13 +115,21 @@ For a push, ``checkout_kind`` is ``push_commit`` only when the event ``after`` O
 unbound result so reviewers can diagnose the mismatch.
 
 An attestation proves checkout and collector identity; it does not prove the later job
-conclusion.  Preserve the exact parsed attestation object in the acceptance manifest and
-recompute the uploaded artifact digest from canonical JSON plus its trailing newline.
+conclusion.  For each required job, use the authenticated GitHub Actions API to retain a
+sanitized artifact-metadata observation, including its numeric artifact ID, exact expected
+name, and GitHub-reported SHA-256.  Record that observation's evidence reference in
+``github_artifact_api_ref``.  Download that exact artifact, recompute the SHA-256 of the
+original ZIP bytes, require equality with the API digest, and preserve those exact bytes in
+``github_artifact_archive_base64``.  The archive must contain only the bounded canonical
+``phase10-ci-checkout.json`` member.  The evaluator opens the ZIP again and requires its
+object to equal the separately embedded attestation byte-for-byte after canonical parsing.
+
 Every workflow/job/run/attempt, repository/event, collector, candidate/base, GitHub SHA,
 checkout OID/tree/parents, and checkout-kind field in the surrounding CI record must equal
-the embedded attestation.  Each required job needs a distinct attestation digest; one
-artifact cannot be copied under several job labels.  Independently observe the GitHub job
-conclusion for that same run ID and attempt.
+that archived attestation.  Artifact API references, numeric IDs, archive digests, and
+attestation digests must be distinct per required job; copying one uploaded artifact under
+another label or into a later integration generation is a failure.  Independently observe
+the GitHub job conclusion for that same run ID and attempt.
 
 Live campaign prerequisites
 ---------------------------
@@ -198,6 +204,11 @@ candidate OID, protected-base OID, expected integration tree, and policy SHA-256
 * zero unresolved actionable findings; and
 * every exact required workflow/job result plus its checkout-attestation artifact.
 
+When the signed candidate's parent is that same protected base, its signed tree must equal
+the expected synthetic integration tree.  This closes the direct same-base path before CI
+or a later squash merge can attest a different tree.  A moved protected base instead
+requires a new integration generation and its separately computed merge tree.
+
 If the candidate moves, return to the complete candidate process and then create a new
 integration generation.  If only the protected base moves, create a new integration
 generation and repeat base-aware review and CI.  Old review, CI, checkout, or expected-tree
@@ -217,7 +228,7 @@ integration tree.
 
 Update the Pi checkout through the promoted Phase 8 semantics, not a manual shell shortcut.
 Record the exact resulting OID/tree, clean state, and repeat the complete required local
-checks on that exact merged tree.
+five-check policy profile on that exact merged tree.
 
 Restart, runtime, and behaviour
 -------------------------------
@@ -225,6 +236,11 @@ Restart, runtime, and behaviour
 Run Phase 9 restart preflight and the controlled restart for the exact merged OID/tree.
 After connection loss, reconnect and reconcile the same retained operation.  Never issue a
 second restart to obtain a cleaner result.
+
+The restart record includes the retained operation reference, checkpoint reference, and
+monotonic readiness generation observed by that operation.  Post-restart runtime evidence
+must repeat all three exactly.  Runtime readiness from another restart, checkpoint, or
+generation cannot promote this candidate even if its OID happens to match.
 
 Record whether the candidate became ready, rolled back, entered restricted recovery,
 failed, or remains uncertain.  A rollback or failed candidate is a Phase 10 ``FAIL``;
@@ -285,12 +301,14 @@ The substantive reviewer verifies all of the following against independent sourc
 * signer, pushed head, PR head, protected base, review, and CI identities;
 * actual checkout commit/tree/parents from each required attestation artifact;
 * each attestation's collector commit and bundle digest against the frozen policy;
-* the canonical artifact digest is unique per required job and every embedded attestation
-  field equals the independently recorded CI identity;
+* each authenticated artifact API observation, numeric artifact ID, original ZIP digest,
+  and archived attestation is unique per required job, and the downloaded bytes reproduce
+  the API digest and embedded object;
 * GitHub job conclusions for the recorded run IDs and attempts;
-* merge tree/parent/provenance and exact local update;
-* same-operation restart reconciliation, no duplicate restart, baseline runtime-profile
-  continuity, and runtime-instance replacement;
+* same-base signed-tree equality, merge tree/parent/provenance, exact local update, and the
+  complete frozen local check profile at both candidate and merged identities;
+* same-operation/checkpoint/readiness-generation restart reconciliation, no duplicate
+  restart, baseline runtime-profile continuity, and runtime-instance replacement;
 * changed behaviour on the post-restart instance;
 * closed audit/fence/credential/root-authority checks and an empty unresolved list; and
 * evidence sanitation and retention outside Git.

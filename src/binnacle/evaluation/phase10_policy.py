@@ -26,6 +26,7 @@ _EXPECTED_POLICY_KEYS = frozenset(
         "ci_attestation_collector_commit_oid",
         "ci_attestation_collector_sha256",
         "limits",
+        "required_local_check_profiles",
         "plan_version",
         "policy_id",
         "protected_branch_ref",
@@ -40,6 +41,7 @@ _REPOSITORY_RE = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\Z")
 _BRANCH_REF_RE = re.compile(r"refs/heads/[A-Za-z0-9][A-Za-z0-9._/-]*\Z")
 _DIGEST_RE = re.compile(r"[0-9a-f]{64}\Z")
 _OID_RE = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})\Z")
+_IDENTIFIER_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]*\Z")
 _EXPECTED_LIMIT_KEYS = frozenset(
     {
         "candidate_generations_max",
@@ -72,6 +74,7 @@ class Phase10Policy:
     allowed_merge_methods: tuple[str, ...]
     required_workflows: tuple[str, ...]
     required_ci_jobs: Mapping[str, tuple[str, ...]]
+    required_local_check_profiles: Mapping[str, str]
     required_security_checks: tuple[str, ...]
     limits: Mapping[str, int]
     sha256: str
@@ -144,6 +147,31 @@ def load_phase10_policy(repo_root: Path) -> Phase10Policy:
             context=f"required_ci_jobs.{workflow}",
             maximum=32,
         )
+    raw_local_profiles = policy.get("required_local_check_profiles")
+    if not isinstance(raw_local_profiles, dict) or not 1 <= len(raw_local_profiles) <= 64:
+        raise Phase10PolicyError("Phase 10 required local check profiles are invalid")
+    local_profiles: dict[str, str] = {}
+    for check_id, raw_profile in raw_local_profiles.items():
+        if (
+            not isinstance(check_id, str)
+            or _IDENTIFIER_RE.fullmatch(check_id) is None
+            or not isinstance(raw_profile, dict)
+            or set(raw_profile) != {"argv", "covers"}
+        ):
+            raise Phase10PolicyError("Phase 10 local check profile is invalid")
+        argv = raw_profile.get("argv")
+        if (
+            not isinstance(argv, list)
+            or not 1 <= len(argv) <= 32
+            or not all(isinstance(item, str) and item for item in argv)
+        ):
+            raise Phase10PolicyError(f"Phase 10 local check argv is invalid: {check_id}")
+        _canonical_string_list(
+            raw_profile.get("covers"),
+            context=f"required_local_check_profiles.{check_id}.covers",
+            maximum=32,
+        )
+        local_profiles[check_id] = canonical_json_sha256(raw_profile)
     security_checks = _unique_strings(policy, "required_security_checks", maximum=32)
     if not workflows or not security_checks:
         raise Phase10PolicyError("Phase 10 required evidence sets may not be empty")
@@ -185,6 +213,7 @@ def load_phase10_policy(repo_root: Path) -> Phase10Policy:
         allowed_merge_methods=allowed_merge_methods,
         required_workflows=workflows,
         required_ci_jobs=jobs,
+        required_local_check_profiles=local_profiles,
         required_security_checks=security_checks,
         limits=limits,
         sha256=canonical_json_sha256(policy),
