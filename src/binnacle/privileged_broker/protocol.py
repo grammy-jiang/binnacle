@@ -20,11 +20,23 @@ from binnacle.domain.privileged import (
     BrokerAcceptanceState,
     BrokerBindingSnapshot,
     BrokerExecutionState,
+    BrokerRestartCheckpointState,
+    BrokerRestartOutcome,
     PrivilegedAction,
     PrivilegedEffectKnowledge,
     PrivilegedTicketRoutingIdentity,
     canonical_timestamp,
 )
+from binnacle.domain.privileged_observation import (
+    RestartImpact,
+    RestartPreflightKind,
+    RestartPreflightReason,
+    RestartPreflightResult,
+    RuntimeSlotRole,
+    RuntimeSlotState,
+    VerifiedRuntimeSlot,
+)
+from binnacle.domain.privileged_restart import PrivilegedRestartCheckpointIntent
 
 _HEADER: Final = struct.Struct("!I")
 _PEER_CREDENTIALS: Final = struct.Struct("3i")
@@ -103,7 +115,7 @@ def validate_request(value: Mapping[str, object]) -> None:
     common = {"protocol_id", "protocol_version", "request_id", "type"}
     specific = {
         "hello": set(),
-        "start_privileged": {"ticket"},
+        "start_privileged": {"restart_intent", "ticket"},
         "get_binding": {"operation_id"},
         "seal_no_accept": {
             "identity",
@@ -321,6 +333,14 @@ def binding_snapshot_to_wire(value: BrokerBindingSnapshot) -> dict[str, object]:
         "sealed_at": _optional_timestamp_to_wire(value.sealed_at),
         "closed_at": _optional_timestamp_to_wire(value.closed_at),
         "last_reconciled_at": _optional_timestamp_to_wire(value.last_reconciled_at),
+        "restart_checkpoint_sha256": value.restart_checkpoint_sha256,
+        "restart_checkpoint_state": (
+            None if value.restart_checkpoint_state is None else value.restart_checkpoint_state.value
+        ),
+        "restart_outcome": (None if value.restart_outcome is None else value.restart_outcome.value),
+        "candidate_slot_id": value.candidate_slot_id,
+        "lkg_slot_id": value.lkg_slot_id,
+        "selected_runtime_slot_id": value.selected_runtime_slot_id,
     }
 
 
@@ -337,6 +357,12 @@ def binding_snapshot_from_wire(value: object) -> BrokerBindingSnapshot:
         "sealed_at",
         "closed_at",
         "last_reconciled_at",
+        "restart_checkpoint_sha256",
+        "restart_checkpoint_state",
+        "restart_outcome",
+        "candidate_slot_id",
+        "lkg_slot_id",
+        "selected_runtime_slot_id",
     }
     if not isinstance(value, dict) or set(value) != fields:
         raise PrivilegedProtocolError("privileged binding snapshot fields are invalid")
@@ -353,9 +379,212 @@ def binding_snapshot_from_wire(value: object) -> BrokerBindingSnapshot:
             sealed_at=_optional_timestamp(value, "sealed_at"),
             closed_at=_optional_timestamp(value, "closed_at"),
             last_reconciled_at=_optional_timestamp(value, "last_reconciled_at"),
+            restart_checkpoint_sha256=_optional_text(value, "restart_checkpoint_sha256"),
+            restart_checkpoint_state=(
+                None
+                if value["restart_checkpoint_state"] is None
+                else BrokerRestartCheckpointState(_text(value, "restart_checkpoint_state"))
+            ),
+            restart_outcome=(
+                None
+                if value["restart_outcome"] is None
+                else BrokerRestartOutcome(_text(value, "restart_outcome"))
+            ),
+            candidate_slot_id=_optional_text(value, "candidate_slot_id"),
+            lkg_slot_id=_optional_text(value, "lkg_slot_id"),
+            selected_runtime_slot_id=_optional_text(value, "selected_runtime_slot_id"),
         )
     except ValueError as exc:
         raise PrivilegedProtocolError("privileged binding snapshot is invalid") from exc
+
+
+def restart_checkpoint_intent_to_wire(
+    value: PrivilegedRestartCheckpointIntent,
+) -> dict[str, object]:
+    return {
+        "operation_id": value.operation_id,
+        "ticket_id": value.ticket_id,
+        "ticket_sha256": value.ticket_sha256,
+        "service_profile_sha256": value.service_profile_sha256,
+        "workspace_id": value.workspace_id,
+        "workspace_fence_version": value.workspace_fence_version,
+        "preflight": _preflight_to_wire(value.preflight),
+        "candidate_slot": _runtime_slot_to_wire(value.candidate_slot),
+        "lkg_slot": _runtime_slot_to_wire(value.lkg_slot),
+        "restart_deadline_seconds": value.restart_deadline_seconds,
+        "created_at": canonical_timestamp(value.created_at),
+        "intent_sha256": value.intent_sha256,
+    }
+
+
+def restart_checkpoint_intent_from_wire(value: object) -> PrivilegedRestartCheckpointIntent:
+    fields = {
+        "operation_id",
+        "ticket_id",
+        "ticket_sha256",
+        "service_profile_sha256",
+        "workspace_id",
+        "workspace_fence_version",
+        "preflight",
+        "candidate_slot",
+        "lkg_slot",
+        "restart_deadline_seconds",
+        "created_at",
+        "intent_sha256",
+    }
+    if not isinstance(value, dict) or set(value) != fields:
+        raise PrivilegedProtocolError("restart checkpoint intent fields are invalid")
+    try:
+        intent = PrivilegedRestartCheckpointIntent(
+            operation_id=_text(value, "operation_id"),
+            ticket_id=_text(value, "ticket_id"),
+            ticket_sha256=_text(value, "ticket_sha256"),
+            service_profile_sha256=_text(value, "service_profile_sha256"),
+            workspace_id=_text(value, "workspace_id"),
+            workspace_fence_version=_integer(value, "workspace_fence_version"),
+            preflight=_preflight_from_wire(value["preflight"]),
+            candidate_slot=_runtime_slot_from_wire(value["candidate_slot"]),
+            lkg_slot=_runtime_slot_from_wire(value["lkg_slot"]),
+            restart_deadline_seconds=_integer(value, "restart_deadline_seconds"),
+            created_at=_timestamp(value, "created_at"),
+        )
+    except ValueError as exc:
+        raise PrivilegedProtocolError("restart checkpoint intent is invalid") from exc
+    if _text(value, "intent_sha256") != intent.intent_sha256:
+        raise PrivilegedProtocolError("restart checkpoint intent digest does not match")
+    return intent
+
+
+def _preflight_to_wire(value: RestartPreflightResult) -> dict[str, object]:
+    return {
+        "kind": value.kind.value,
+        "available": value.available,
+        "reason_codes": [item.value for item in value.reason_codes],
+        "predicted_impacts": [item.value for item in value.predicted_impacts],
+        "current_runtime_identity_sha256": value.current_runtime_identity_sha256,
+        "current_service_observation_sha256": value.current_service_observation_sha256,
+        "lkg_slot_identity_sha256": value.lkg_slot_identity_sha256,
+        "candidate_slot_identity_sha256": value.candidate_slot_identity_sha256,
+        "candidate_verification_sha256": value.candidate_verification_sha256,
+        "outstanding_state_sha256": value.outstanding_state_sha256,
+        "state_binding_sha256": value.state_binding_sha256,
+        "observed_at": canonical_timestamp(value.observed_at),
+    }
+
+
+def _preflight_from_wire(value: object) -> RestartPreflightResult:
+    fields = {
+        "kind",
+        "available",
+        "reason_codes",
+        "predicted_impacts",
+        "current_runtime_identity_sha256",
+        "current_service_observation_sha256",
+        "lkg_slot_identity_sha256",
+        "candidate_slot_identity_sha256",
+        "candidate_verification_sha256",
+        "outstanding_state_sha256",
+        "state_binding_sha256",
+        "observed_at",
+    }
+    if not isinstance(value, dict) or set(value) != fields:
+        raise PrivilegedProtocolError("restart preflight fields are invalid")
+    reasons = value["reason_codes"]
+    impacts = value["predicted_impacts"]
+    available = value["available"]
+    if (
+        not isinstance(reasons, list)
+        or not all(isinstance(item, str) for item in reasons)
+        or not isinstance(impacts, list)
+        or not all(isinstance(item, str) for item in impacts)
+        or not isinstance(available, bool)
+    ):
+        raise PrivilegedProtocolError("restart preflight collections are invalid")
+    return RestartPreflightResult(
+        kind=RestartPreflightKind(_text(value, "kind")),
+        available=available,
+        reason_codes=tuple(RestartPreflightReason(item) for item in reasons),
+        predicted_impacts=tuple(RestartImpact(item) for item in impacts),
+        current_runtime_identity_sha256=_optional_text(value, "current_runtime_identity_sha256"),
+        current_service_observation_sha256=_text(value, "current_service_observation_sha256"),
+        lkg_slot_identity_sha256=_optional_text(value, "lkg_slot_identity_sha256"),
+        candidate_slot_identity_sha256=_optional_text(value, "candidate_slot_identity_sha256"),
+        candidate_verification_sha256=_optional_text(value, "candidate_verification_sha256"),
+        outstanding_state_sha256=_text(value, "outstanding_state_sha256"),
+        state_binding_sha256=_text(value, "state_binding_sha256"),
+        observed_at=_timestamp(value, "observed_at"),
+    )
+
+
+def _runtime_slot_to_wire(value: VerifiedRuntimeSlot) -> dict[str, object]:
+    return {
+        "slot_id": value.slot_id,
+        "slot_generation": value.slot_generation,
+        "slot_path": value.slot_path,
+        "role": value.role.value,
+        "state": value.state.value,
+        "source_sha256": value.source_sha256,
+        "environment_sha256": value.environment_sha256,
+        "config_sha256": value.config_sha256,
+        "policy_sha256": value.policy_sha256,
+        "manifest_sha256": value.manifest_sha256,
+        "service_definition_sha256": value.service_definition_sha256,
+        "deployed_peer_set_sha256": value.deployed_peer_set_sha256,
+        "migration_heads_sha256": value.migration_heads_sha256,
+        "layout_sha256": value.layout_sha256,
+        "candidate_verification_sha256": value.candidate_verification_sha256,
+        "complete_manifest_sha256": value.complete_manifest_sha256,
+        "byte_count": value.byte_count,
+        "inode_count": value.inode_count,
+        "completed_at": canonical_timestamp(value.completed_at),
+    }
+
+
+def _runtime_slot_from_wire(value: object) -> VerifiedRuntimeSlot:
+    fields = {
+        "slot_id",
+        "slot_generation",
+        "slot_path",
+        "role",
+        "state",
+        "source_sha256",
+        "environment_sha256",
+        "config_sha256",
+        "policy_sha256",
+        "manifest_sha256",
+        "service_definition_sha256",
+        "deployed_peer_set_sha256",
+        "migration_heads_sha256",
+        "layout_sha256",
+        "candidate_verification_sha256",
+        "complete_manifest_sha256",
+        "byte_count",
+        "inode_count",
+        "completed_at",
+    }
+    if not isinstance(value, dict) or set(value) != fields:
+        raise PrivilegedProtocolError("restart runtime slot fields are invalid")
+    return VerifiedRuntimeSlot(
+        slot_id=_text(value, "slot_id"),
+        slot_generation=_integer(value, "slot_generation"),
+        slot_path=_text(value, "slot_path"),
+        role=RuntimeSlotRole(_text(value, "role")),
+        state=RuntimeSlotState(_text(value, "state")),
+        source_sha256=_text(value, "source_sha256"),
+        environment_sha256=_text(value, "environment_sha256"),
+        config_sha256=_text(value, "config_sha256"),
+        policy_sha256=_text(value, "policy_sha256"),
+        manifest_sha256=_text(value, "manifest_sha256"),
+        service_definition_sha256=_text(value, "service_definition_sha256"),
+        deployed_peer_set_sha256=_text(value, "deployed_peer_set_sha256"),
+        migration_heads_sha256=_text(value, "migration_heads_sha256"),
+        layout_sha256=_text(value, "layout_sha256"),
+        candidate_verification_sha256=_text(value, "candidate_verification_sha256"),
+        complete_manifest_sha256=_text(value, "complete_manifest_sha256"),
+        byte_count=_integer(value, "byte_count"),
+        inode_count=_integer(value, "inode_count"),
+        completed_at=_timestamp(value, "completed_at"),
+    )
 
 
 def _text(value: Mapping[str, object], name: str) -> str:
@@ -444,6 +673,8 @@ __all__ = [
     "read_frame",
     "request_envelope",
     "require_peer",
+    "restart_checkpoint_intent_from_wire",
+    "restart_checkpoint_intent_to_wire",
     "routing_identity_from_wire",
     "routing_identity_to_wire",
     "success_response",

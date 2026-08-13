@@ -261,6 +261,7 @@ async def test_typed_operations_encode_and_decode_exact_evidence() -> None:
     message_type, fields = client.requests[0]
     assert message_type == "start_privileged"
     assert isinstance(fields["ticket"], dict)
+    assert fields["restart_intent"] is None
 
 
 @pytest.mark.anyio

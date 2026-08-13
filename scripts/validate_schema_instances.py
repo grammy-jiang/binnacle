@@ -53,11 +53,11 @@ def expect_invalid(name: str, ref: str, instance: Any) -> None:
         ERRORS.append(f"{name}: expected invalid but validation passed")
 
 
-def success(tool: str, data: dict[str, Any]) -> dict[str, Any]:
+def success(tool: str, data: dict[str, Any], *, version: str = "1.1") -> dict[str, Any]:
     return {
         "schema_version": "1.1",
         "call_status": "succeeded",
-        "tool": {"name": tool, "contract_version": "1.1"},
+        "tool": {"name": tool, "contract_version": version},
         "request_id": f"request-{tool}",
         "data": data,
         "operation": None,
@@ -263,6 +263,110 @@ def validate_uncertain_retry() -> None:
     )
 
 
+def validate_phase9_contracts() -> None:
+    inputs = "https://binnacle.dev/schemas/mcp/bootstrap-inputs.schema.json#/$defs/"
+    outputs = "https://binnacle.dev/schemas/mcp/bootstrap-outputs.schema.json#/$defs/"
+    digest = "a" * 64
+    other_digest = "b" * 64
+
+    expect_valid(
+        "Phase 9 package preparation is closed and exact",
+        inputs + "privileged_prepare.input.v1_0",
+        {
+            "action": "package_install",
+            "target_profile_id": "development-packages",
+            "package_target": {
+                "name": "ripgrep",
+                "architecture": "arm64",
+                "requested_version": "14.1.1-1",
+            },
+        },
+    )
+    expect_invalid(
+        "Phase 9 service preparation rejects package substitution",
+        inputs + "privileged_prepare.input.v1_0",
+        {
+            "action": "binnacle_service_restart",
+            "target_profile_id": "development-service",
+            "package_target": {"name": "ripgrep", "architecture": "arm64"},
+        },
+    )
+    expect_invalid(
+        "Phase 9 controlled restart requires every prepared binding",
+        inputs + "binnacle_restart.input.v1_0",
+        {
+            "prepared_operation_id": "prepare-1",
+            "execution_nonce": "ABCDEFGHIJKLMNOPQRSTUV",
+            "idempotency_key": "00112233445566778899aabbccddeeff",
+            "preflight_state_binding_sha256": digest,
+        },
+    )
+
+    package_effect = {
+        "outcome": "package_installed",
+        "effect_knowledge": "known_effect",
+        "broker_evidence_generation": 1,
+        "broker_evidence_sha256": digest,
+        "package_transaction_plan_sha256": other_digest,
+        "installed_prestate_sha256": digest,
+        "installed_poststate_sha256": other_digest,
+        "restart_checkpoint_sha256": None,
+        "candidate_slot_identity_sha256": None,
+        "lkg_slot_identity_sha256": None,
+        "selected_runtime_slot_identity_sha256": None,
+        "runtime_identity_sha256": None,
+    }
+    expect_valid(
+        "Phase 9 exact package effect result",
+        outputs + "package_install.output.v1_0",
+        success("package_install", package_effect, version="1.0"),
+    )
+    expect_invalid(
+        "package_install cannot report a restart candidate outcome",
+        outputs + "package_install.output.v1_0",
+        success(
+            "package_install",
+            {**package_effect, "outcome": "candidate_ready"},
+            version="1.0",
+        ),
+    )
+
+    preflight = {
+        "kind": "controlled_self",
+        "available": True,
+        "reason_codes": [],
+        "predicted_impacts": [
+            "application_process_replaced",
+            "connection_interrupted",
+            "rollback_may_run",
+            "runtime_selector_changed",
+        ],
+        "current_runtime_identity_sha256": digest,
+        "current_service_observation_sha256": other_digest,
+        "lkg_slot_identity_sha256": digest,
+        "candidate_slot_identity_sha256": other_digest,
+        "candidate_verification_sha256": digest,
+        "outstanding_state_sha256": other_digest,
+        "state_binding_sha256": digest,
+        "observed_at": "2026-08-13T00:00:00Z",
+        "observation_sha256": other_digest,
+    }
+    expect_valid(
+        "Phase 9 available controlled preflight has complete evidence",
+        outputs + "restart_preflight.output.v1_0",
+        success("restart_preflight", preflight, version="1.0"),
+    )
+    expect_invalid(
+        "Phase 9 available preflight cannot retain a blocking reason",
+        outputs + "restart_preflight.output.v1_0",
+        success(
+            "restart_preflight",
+            {**preflight, "reason_codes": ["audit_unavailable"]},
+            version="1.0",
+        ),
+    )
+
+
 def main() -> int:
     validate_numeric_facts()
     validate_idempotency_keys()
@@ -270,6 +374,7 @@ def main() -> int:
     validate_cleanup_outcomes()
     validate_wire_error_fixture()
     validate_uncertain_retry()
+    validate_phase9_contracts()
 
     if ERRORS:
         print("Representative schema validation failed:", file=sys.stderr)

@@ -17,6 +17,7 @@ from binnacle.adapters.privileged_ipc.protocol import (
     read_frame,
     request_envelope,
     require_peer,
+    restart_checkpoint_intent_to_wire,
     routing_identity_to_wire,
     validate_response,
     write_frame,
@@ -30,6 +31,7 @@ from binnacle.domain.privileged import (
     PrivilegedTicketRoutingIdentity,
     canonical_timestamp,
 )
+from binnacle.domain.privileged_restart import PrivilegedRestartCheckpointIntent
 from binnacle.ports.privileged import PrivilegedBrokerUnavailable
 
 _Decoded = TypeVar("_Decoded")
@@ -90,8 +92,20 @@ class PrivilegedClient:
             )
         )
 
-    async def start(self, ticket: PrivilegedTicket) -> BrokerAcceptanceReceipt:
-        value = await self._exchange("start_privileged", ticket=ticket.to_wire())
+    async def start(
+        self,
+        ticket: PrivilegedTicket,
+        restart_intent: PrivilegedRestartCheckpointIntent | None = None,
+    ) -> BrokerAcceptanceReceipt:
+        value = await self._exchange(
+            "start_privileged",
+            ticket=ticket.to_wire(),
+            restart_intent=(
+                None
+                if restart_intent is None
+                else restart_checkpoint_intent_to_wire(restart_intent)
+            ),
+        )
         return _decode_result(lambda: acceptance_receipt_from_wire(value))
 
     async def get(self, operation_id: str) -> BrokerBindingSnapshot | None:

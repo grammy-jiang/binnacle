@@ -25,8 +25,10 @@ from binnacle.domain.privileged_observation import (
     VerifiedRuntimeSlot,
 )
 from binnacle.domain.privileged_restart import (
+    PrivilegedRestartCheckpointIntent,
     PrivilegedRestartPreparation,
     PrivilegedRestartRecord,
+    RestartAcceptedClosureRequest,
     RestartAuthorisationRequest,
     RestartNoAcceptClosureRequest,
 )
@@ -67,7 +69,11 @@ class PrivilegedBrokerPort(Protocol):
 
     async def hello(self) -> PrivilegedBrokerHello: ...
 
-    async def start(self, ticket: PrivilegedTicket) -> BrokerAcceptanceReceipt: ...
+    async def start(
+        self,
+        ticket: PrivilegedTicket,
+        restart_intent: PrivilegedRestartCheckpointIntent | None = None,
+    ) -> BrokerAcceptanceReceipt: ...
 
     async def get(self, operation_id: str) -> BrokerBindingSnapshot | None: ...
 
@@ -151,6 +157,11 @@ class PrivilegedApplicationRepository(Protocol):
     async def close_restart_no_accept(
         self,
         request: RestartNoAcceptClosureRequest,
+    ) -> tuple[OperationSnapshot, WorkspaceFence, PrivilegedRestartRecord]: ...
+
+    async def close_restart_accepted(
+        self,
+        request: RestartAcceptedClosureRequest,
     ) -> tuple[OperationSnapshot, WorkspaceFence, PrivilegedRestartRecord]: ...
 
 

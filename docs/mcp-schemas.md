@@ -1,7 +1,7 @@
 # Binnacle Canonical MCP Schemas and Operation Lifecycle
 
 - **Status:** Draft implementation contract
-- **Contract version:** `1.1.0`
+- **Contract version:** `1.2.0`
 - **Common schema:** `schemas/mcp/binnacle-common.schema.json`
 - **Bootstrap inputs:** `schemas/mcp/bootstrap-inputs.schema.json`
 - **Bootstrap outputs:** `schemas/mcp/bootstrap-outputs.schema.json`
@@ -144,6 +144,19 @@ The bootstrap schema registry contains:
 - `probe_workspace_prepare` `1.1`;
 - `probe_workspace_write` `1.1`;
 - `probe_workspace_cleanup` `1.1`.
+
+The same registry also contains closed, unpromoted Phase 9 definitions for:
+
+- `privileged_prepare` `1.0`;
+- `package_inspect` and `package_install` `1.0`;
+- `binnacle_service_inspect` and `binnacle_service_restart` `1.0`;
+- `restart_preflight` and `binnacle_restart` `1.0`;
+- `binnacle_runtime_inspect` `1.0`.
+
+Their presence makes schema/manifest/policy review reproducible without exposing the
+`v1-operational` catalogue. The preparation result contains the exact bounded HC2 view;
+restricted effect results contain only retained safe evidence and never raw privileged
+output or reusable authority material.
 
 The preparation Tool is read-only and creates a short-lived state binding. It returns `prepared_operation_id` and `execution_nonce`. Those values are not owner authority; the execute Tool still requires controller authentication, current local policy, exact input matching, host-profile treatment, and idempotency identity.
 

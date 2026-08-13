@@ -1,6 +1,6 @@
 schema_version: "1.1"
 manifest_id: binnacle-bootstrap-tools
-manifest_version: "1.1.0"
+manifest_version: "1.2.0"
 canonicalization_profile: binnacle-manifest-json-v1
 runtime_digest_record: detached-release-evidence
 
@@ -208,5 +208,176 @@ tools:
     annotations:
       readOnlyHint: false
       destructiveHint: true
+      idempotentHint: true
+      openWorldHint: false
+
+  - name: privileged_prepare
+    title: Prepare one exact privileged operation
+    contract_version: "1.0"
+    description: >-
+      Use before package_install, binnacle_service_restart, or binnacle_restart to
+      prepare one no-effect, short-lived operation bound to the exact device, protected
+      profile, current state, maximum effect, and recovery disclosure. Do not treat the
+      preparation or execution nonce as owner approval. It performs no package-manager,
+      systemd, runtime-selector, or reboot effect and returns the complete HC2 review
+      view required by the selected execute Tool.
+    input_schema_ref: schemas/mcp/bootstrap-inputs.schema.json#/$defs/privileged_prepare.input.v1_0
+    output_schema_ref: schemas/mcp/bootstrap-outputs.schema.json#/$defs/privileged_prepare.output.v1_0
+    handler_binding: binnacle.privileged_tools.privileged_prepare_v1_0
+    information_class: normal-result
+    confirmation_class: HC0
+    phases: [v1-operational]
+    annotations:
+      readOnlyHint: true
+      destructiveHint: false
+      idempotentHint: false
+      openWorldHint: false
+
+  - name: package_inspect
+    title: Inspect one allowed development package
+    contract_version: "1.0"
+    description: >-
+      Use for bounded installed, candidate, trusted-repository freshness, package-lock,
+      and preparation-availability facts for one package allowed by the protected
+      package profile. It never refreshes package metadata or invokes a package effect.
+      Do not use for arbitrary package-manager queries, repository changes, removals,
+      downgrades, or unrestricted package listings.
+    input_schema_ref: schemas/mcp/bootstrap-inputs.schema.json#/$defs/package_inspect.input.v1_0
+    output_schema_ref: schemas/mcp/bootstrap-outputs.schema.json#/$defs/package_inspect.output.v1_0
+    handler_binding: binnacle.privileged_tools.package_inspect_v1_0
+    information_class: normal-result
+    confirmation_class: HC0
+    phases: [v1-operational]
+    annotations:
+      readOnlyHint: true
+      destructiveHint: false
+      idempotentHint: true
+      openWorldHint: false
+
+  - name: package_install
+    title: Install one exact prepared package closure
+    contract_version: "1.0"
+    description: >-
+      Use only after privileged_prepare and owner confirmation to execute the exact
+      immutable package transaction plan against unchanged trusted repository metadata,
+      artifacts, solver closure, installed pre-state, and protected package profile.
+      It cannot accept caller-supplied options, shell text, removals, downgrades, or an
+      unprepared dependency change. Reconnect and same-key retry return retained truth;
+      uncertain or partial effects are never blindly repeated.
+    input_schema_ref: schemas/mcp/bootstrap-inputs.schema.json#/$defs/package_install.input.v1_0
+    output_schema_ref: schemas/mcp/bootstrap-outputs.schema.json#/$defs/package_install.output.v1_0
+    handler_binding: binnacle.privileged_tools.package_install_v1_0
+    information_class: restricted-result
+    confirmation_class: HC2
+    phases: [v1-operational]
+    annotations:
+      readOnlyHint: false
+      destructiveHint: true
+      idempotentHint: true
+      openWorldHint: false
+
+  - name: binnacle_service_inspect
+    title: Inspect the fixed Binnacle development service
+    contract_version: "1.0"
+    description: >-
+      Use for bounded normalized systemd state, correlated application readiness,
+      runtime identity digest, and last controlled-restart checkpoint state for the
+      single protected Binnacle development service profile. It cannot inspect arbitrary
+      units or journals, and systemd active is never reported as application readiness.
+    input_schema_ref: schemas/mcp/bootstrap-inputs.schema.json#/$defs/binnacle_service_inspect.input.v1_0
+    output_schema_ref: schemas/mcp/bootstrap-outputs.schema.json#/$defs/binnacle_service_inspect.output.v1_0
+    handler_binding: binnacle.privileged_tools.binnacle_service_inspect_v1_0
+    information_class: normal-result
+    confirmation_class: HC0
+    phases: [v1-operational]
+    annotations:
+      readOnlyHint: true
+      destructiveHint: false
+      idempotentHint: true
+      openWorldHint: false
+
+  - name: binnacle_service_restart
+    title: Restart the unchanged Binnacle service
+    contract_version: "1.0"
+    description: >-
+      Use only after restart_preflight, privileged_prepare, and owner confirmation to
+      stop and start the fixed Binnacle development service while source, environment,
+      configuration, policy, manifest, service definition, and runtime selection remain
+      unchanged. It owns the exclusive workspace fence until retained broker evidence,
+      runtime verification, audit, and terminal closure agree. Use binnacle_restart for
+      any candidate or runtime-selector change.
+    input_schema_ref: schemas/mcp/bootstrap-inputs.schema.json#/$defs/binnacle_service_restart.input.v1_0
+    output_schema_ref: schemas/mcp/bootstrap-outputs.schema.json#/$defs/binnacle_service_restart.output.v1_0
+    handler_binding: binnacle.privileged_tools.binnacle_service_restart_v1_0
+    information_class: restricted-result
+    confirmation_class: HC2
+    phases: [v1-operational]
+    annotations:
+      readOnlyHint: false
+      destructiveHint: true
+      idempotentHint: true
+      openWorldHint: false
+
+  - name: restart_preflight
+    title: Inspect Binnacle restart readiness
+    contract_version: "1.0"
+    description: >-
+      Use for an advisory point-in-time view of blocking operations, independently
+      supervised work, workspace fences, Git, credential, package, privileged, audit,
+      schema-head, peer-set, runtime, tested-candidate, and complete LKG evidence for a
+      simple or controlled restart. It grants no authority and cannot close admission
+      races; every execute Tool must reacquire the fence and revalidate the exact state.
+    input_schema_ref: schemas/mcp/bootstrap-inputs.schema.json#/$defs/restart_preflight.input.v1_0
+    output_schema_ref: schemas/mcp/bootstrap-outputs.schema.json#/$defs/restart_preflight.output.v1_0
+    handler_binding: binnacle.privileged_tools.restart_preflight_v1_0
+    information_class: normal-result
+    confirmation_class: HC0
+    phases: [v1-operational]
+    annotations:
+      readOnlyHint: true
+      destructiveHint: false
+      idempotentHint: true
+      openWorldHint: false
+
+  - name: binnacle_restart
+    title: Activate one tested Binnacle runtime with LKG recovery
+    contract_version: "1.0"
+    description: >-
+      Use only after restart_preflight, privileged_prepare, and owner confirmation to
+      activate one exact isolated, terminally verified candidate runtime slot. The root
+      broker checkpoints the complete candidate and LKG generations before stop,
+      verifies exact post-start identity, and owns rollback without depending on the
+      candidate application. Candidate failure with proven LKG recovery is reported as
+      rollback_ready, never success; ambiguous recovery becomes restricted.
+    input_schema_ref: schemas/mcp/bootstrap-inputs.schema.json#/$defs/binnacle_restart.input.v1_0
+    output_schema_ref: schemas/mcp/bootstrap-outputs.schema.json#/$defs/binnacle_restart.output.v1_0
+    handler_binding: binnacle.privileged_tools.binnacle_restart_v1_0
+    information_class: restricted-result
+    confirmation_class: HC2
+    phases: [v1-operational]
+    annotations:
+      readOnlyHint: false
+      destructiveHint: true
+      idempotentHint: true
+      openWorldHint: false
+
+  - name: binnacle_runtime_inspect
+    title: Inspect sanitized Binnacle runtime identity
+    contract_version: "1.0"
+    description: >-
+      Use for bounded sanitized source, dirty-state, environment, runtime-slot, lock,
+      build, configuration, policy, manifest, service-profile, schema-head, layout,
+      peer-set, device, process, and readiness identities. It returns digests and safe
+      identifiers only, never raw environment values, credentials, protected paths,
+      configuration values, or peer secrets.
+    input_schema_ref: schemas/mcp/bootstrap-inputs.schema.json#/$defs/binnacle_runtime_inspect.input.v1_0
+    output_schema_ref: schemas/mcp/bootstrap-outputs.schema.json#/$defs/binnacle_runtime_inspect.output.v1_0
+    handler_binding: binnacle.privileged_tools.binnacle_runtime_inspect_v1_0
+    information_class: normal-result
+    confirmation_class: HC0
+    phases: [v1-operational]
+    annotations:
+      readOnlyHint: true
+      destructiveHint: false
       idempotentHint: true
       openWorldHint: false

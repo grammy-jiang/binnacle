@@ -18,12 +18,12 @@ def test_frozen_profile_and_all_cases_cross_validate(repo_root: Path) -> None:
     cases = load_evaluation_cases(repo_root, profile=profile)
 
     assert profile.schema_version == "1.1"
-    assert profile.sha256 == "b7924a27eca3223cf1853afed15343c87de23645cf3e73cfe0753acce67deaa5"
+    assert profile.sha256 == "cf94e6057bf55876d0b6d27613f36ef1b650ac11dcd8619c4d765eb7c2f93e89"
     assert profile.case_manifest.sha256 == (
-        "1748a8374a0faf6e44d33e8c5a861e07f32a69be6725d13d048e67b9e0e05e23"
+        "b0fe3fc8204eb18f611c662c9772bc9554fee39e322c3f29f7b043730e5ee7af"
     )
     assert len(profile.canonical_statuses) == 12
-    assert len(cases.cases) == 27
+    assert len(cases.cases) == 63
     assert cases.require("endpoint-connect").axis == "connectivity"
     assert cases.require("latency-context-cost").risk_class == "latency_and_context_cost"
     assert cases.require("endpoint-connect").allows_status("server-not-implemented") is False

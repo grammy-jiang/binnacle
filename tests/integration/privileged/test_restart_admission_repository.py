@@ -32,6 +32,8 @@ from binnacle.domain.privileged import (
     BrokerAcceptanceState,
     BrokerBindingSnapshot,
     BrokerExecutionState,
+    BrokerRestartCheckpointState,
+    BrokerRestartOutcome,
     PrivilegedAction,
     PrivilegedEffectKnowledge,
     PrivilegedMaximumEffect,
@@ -42,6 +44,7 @@ from binnacle.domain.privileged_restart import (
     PrivilegedPreparationState,
     PrivilegedReservationState,
     PrivilegedRestartPreparation,
+    RestartAcceptedClosureRequest,
     RestartAuthorisationRequest,
     RestartNoAcceptClosureRequest,
 )
@@ -303,6 +306,42 @@ def _sealed_snapshot(ticket: PrivilegedTicket) -> BrokerBindingSnapshot:
         sealed_at=closed_at,
         closed_at=closed_at,
         last_reconciled_at=None,
+    )
+
+
+def _accepted_terminal_snapshot(
+    ticket: PrivilegedTicket,
+    *,
+    outcome: BrokerRestartOutcome,
+) -> BrokerBindingSnapshot:
+    closed_at = ticket.issued_at + timedelta(seconds=1)
+    selected_slot_id = {
+        BrokerRestartOutcome.CANDIDATE_READY: "candidate-slot",
+        BrokerRestartOutcome.ROLLBACK_READY: "lkg-slot",
+        BrokerRestartOutcome.NO_SUBEFFECT: None,
+    }[outcome]
+    return BrokerBindingSnapshot(
+        identity=ticket.routing_identity,
+        acceptance_state=BrokerAcceptanceState.ACCEPTED,
+        evidence_generation=8,
+        acceptance_evidence_sha256=_digest("broker-accepted-terminal"),
+        execution_state=BrokerExecutionState.TERMINAL,
+        effect_knowledge=(
+            PrivilegedEffectKnowledge.KNOWN_NO_SUBEFFECT
+            if outcome is BrokerRestartOutcome.NO_SUBEFFECT
+            else PrivilegedEffectKnowledge.KNOWN_EFFECT
+        ),
+        result_evidence_sha256=_digest(f"broker-terminal:{outcome.value}"),
+        accepted_at=ticket.issued_at + timedelta(milliseconds=100),
+        sealed_at=None,
+        closed_at=closed_at,
+        last_reconciled_at=None,
+        restart_checkpoint_sha256=_digest("restart-checkpoint"),
+        restart_checkpoint_state=BrokerRestartCheckpointState.TERMINAL,
+        restart_outcome=outcome,
+        candidate_slot_id="candidate-slot",
+        lkg_slot_id="lkg-slot",
+        selected_runtime_slot_id=selected_slot_id,
     )
 
 
@@ -589,6 +628,142 @@ async def test_no_accept_closure_atomically_releases_operation_reservation_and_f
                 RestartNoAcceptClosureRequest(
                     snapshot=request.snapshot,
                     audit_closure_evidence_sha256=_digest("different-audit-closure"),
+                    closed_at=request.closed_at,
+                )
+            )
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    (
+        "outcome",
+        "expected_state",
+        "expected_knowledge",
+        "candidate_outcome",
+        "rollback_outcome",
+        "error_code",
+    ),
+    (
+        (
+            BrokerRestartOutcome.CANDIDATE_READY,
+            OperationState.SUCCEEDED,
+            EffectKnowledge.KNOWN_EFFECT,
+            "ready",
+            "not_started",
+            None,
+        ),
+        (
+            BrokerRestartOutcome.ROLLBACK_READY,
+            OperationState.FAILED,
+            EffectKnowledge.KNOWN_EFFECT,
+            "failed",
+            "ready",
+            "restart_rolled_back",
+        ),
+        (
+            BrokerRestartOutcome.NO_SUBEFFECT,
+            OperationState.FAILED,
+            EffectKnowledge.KNOWN_NO_EFFECT,
+            "failed",
+            "not_started",
+            "effect_not_started",
+        ),
+    ),
+)
+async def test_accepted_closure_atomically_releases_checkpoint_audit_and_fence_truth(
+    tmp_path: Path,
+    repo_root: Path,
+    outcome: BrokerRestartOutcome,
+    expected_state: OperationState,
+    expected_knowledge: EffectKnowledge,
+    candidate_outcome: str,
+    rollback_outcome: str,
+    error_code: str | None,
+) -> None:
+    async with operation_runtime(tmp_path, repo_root) as (runtime, operations):
+        await _active_session(runtime, operations)
+        prepare = await _qualifying_prepare_operation(operations, key="a")
+        preparation = _preparation(
+            prepare_operation_id=prepare.operation_id,
+            nonce="4" * 64,
+            suffix=f"accepted-{outcome.value}",
+        )
+        repository = SqlitePrivilegedApplicationRepository(runtime)
+        await repository.store_restart_preparation(preparation)
+        operation = await _received_operation(
+            operations,
+            key="b",
+            contract="binnacle_restart",
+            target_sha256=SHA_B,
+        )
+        ticket = _ticket(
+            operation,
+            preparation,
+            nonce="4" * 64,
+            ticket_id=f"ticket-{outcome.value}",
+        )
+        await repository.authorise_restart(
+            RestartAuthorisationRequest(
+                operation=operation,
+                preparation=preparation,
+                decision=_decision(operation.operation_id),
+                ticket=ticket,
+                expected_fence_version=1,
+                required_scope_digest=None,
+                authorised_at=ticket.issued_at,
+            )
+        )
+        await repository.mark_restart_dispatched(
+            operation.operation_id,
+            dispatched_at=ticket.issued_at + timedelta(milliseconds=500),
+        )
+        snapshot = _accepted_terminal_snapshot(ticket, outcome=outcome)
+        request = RestartAcceptedClosureRequest(
+            snapshot=snapshot,
+            audit_closure_evidence_sha256=_digest(f"accepted-audit-closure:{outcome.value}"),
+            closed_at=ticket.issued_at + timedelta(seconds=2),
+        )
+
+        terminal, fence, closed = await repository.close_restart_accepted(request)
+
+        assert terminal.state is expected_state
+        assert terminal.effect_knowledge is expected_knowledge
+        assert (None if terminal.error is None else terminal.error.code) == error_code
+        assert fence.fence_version == 3
+        assert fence.active_operation_id is None
+        assert closed.state is PrivilegedOperationState.TERMINAL
+        assert closed.reservation_state is PrivilegedReservationState.RELEASED
+        assert closed.broker_acceptance_state is BrokerAcceptanceState.ACCEPTED
+        assert not await repository.restart_recovery_pending()
+        async with runtime.engine.connect() as connection:
+            retained = (
+                await connection.execute(
+                    text(
+                        "SELECT restart_checkpoint_sha256,candidate_outcome,"
+                        "rollback_outcome,broker_closure_state,audit_closure_state,"
+                        "fence_closure_state FROM privileged_operations "
+                        "WHERE operation_id=:operation_id"
+                    ),
+                    {"operation_id": operation.operation_id},
+                )
+            ).one()
+        assert retained == (
+            snapshot.restart_checkpoint_sha256,
+            candidate_outcome,
+            rollback_outcome,
+            "complete",
+            "complete",
+            "released",
+        )
+        await SqliteWorkspaceRepository(runtime).verify_integrity()
+
+        repeated = await repository.close_restart_accepted(request)
+        assert repeated == (terminal, fence, closed)
+        with pytest.raises(PrivilegedApplicationStoreError, match="conflicts"):
+            await repository.close_restart_accepted(
+                RestartAcceptedClosureRequest(
+                    snapshot=snapshot,
+                    audit_closure_evidence_sha256=_digest("different-accepted-audit"),
                     closed_at=request.closed_at,
                 )
             )

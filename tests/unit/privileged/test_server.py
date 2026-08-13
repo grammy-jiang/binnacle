@@ -105,6 +105,7 @@ async def test_default_service_reports_identity_and_rejects_new_effects() -> Non
                 "request-start",
                 "start_privileged",
                 ticket=privileged_ticket().to_wire(),
+                restart_intent=None,
             )
         )
 
@@ -156,7 +157,10 @@ async def test_explicit_test_handler_can_accept_exact_ticket() -> None:
     store = _Store()
     accepted: list[PrivilegedTicket] = []
 
-    async def start(ticket: PrivilegedTicket) -> BrokerAcceptanceReceipt:
+    async def start(
+        ticket: PrivilegedTicket, restart_intent: object | None
+    ) -> BrokerAcceptanceReceipt:
+        assert restart_intent is None
         accepted.append(ticket)
         return await store.accept_once(ticket)
 
@@ -170,6 +174,7 @@ async def test_explicit_test_handler_can_accept_exact_ticket() -> None:
             "request-start",
             "start_privileged",
             ticket=privileged_ticket().to_wire(),
+            restart_intent=None,
         )
     )
 
@@ -181,6 +186,7 @@ async def test_explicit_test_handler_can_accept_exact_ticket() -> None:
             {
                 "type": "start_privileged",
                 "ticket": "not-an-object",
+                "restart_intent": None,
             }
         )
 
@@ -277,6 +283,7 @@ async def test_connection_sanitizes_rejection_and_missing_peer(
             "request-start",
             "start_privileged",
             ticket=privileged_ticket().to_wire(),
+            restart_intent=None,
         )
 
     async def record_response(

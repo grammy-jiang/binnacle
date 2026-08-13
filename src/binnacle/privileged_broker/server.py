@@ -16,9 +16,11 @@ from binnacle.domain.privileged import (
     PRIVILEGED_PROTOCOL_VERSION,
     BrokerAcceptanceReceipt,
     BrokerNoAcceptReason,
+    PrivilegedAction,
     PrivilegedError,
     PrivilegedTicket,
 )
+from binnacle.domain.privileged_restart import PrivilegedRestartCheckpointIntent
 from binnacle.ports.privileged import PrivilegedEvidenceStore
 from binnacle.privileged_broker.protocol import (
     PrivilegedProtocolError,
@@ -27,6 +29,7 @@ from binnacle.privileged_broker.protocol import (
     error_response,
     read_frame,
     require_peer,
+    restart_checkpoint_intent_from_wire,
     routing_identity_from_wire,
     success_response,
     validate_request,
@@ -39,7 +42,10 @@ _READ_TIMEOUT_SECONDS: Final = 10.0
 _WRITE_TIMEOUT_SECONDS: Final = 10.0
 _IDENTIFIER: Final = re.compile(r"[A-Za-z0-9._:-]{1,160}\Z")
 ProtocolResult = Mapping[str, object] | None
-StartHandler = Callable[[PrivilegedTicket], Awaitable[BrokerAcceptanceReceipt]]
+StartHandler = Callable[
+    [PrivilegedTicket, PrivilegedRestartCheckpointIntent | None],
+    Awaitable[BrokerAcceptanceReceipt],
+]
 
 
 class PrivilegedServerError(RuntimeError):
@@ -108,9 +114,20 @@ class PrivilegedBrokerService:
             ticket_value = request["ticket"]
             if not isinstance(ticket_value, dict):
                 raise PrivilegedProtocolError("privileged ticket must be one object")
-            return acceptance_receipt_to_wire(
-                await self._start_handler(PrivilegedTicket.from_wire(ticket_value))
+            ticket = PrivilegedTicket.from_wire(ticket_value)
+            restart_value = request["restart_intent"]
+            restart_intent = (
+                None
+                if restart_value is None
+                else restart_checkpoint_intent_from_wire(restart_value)
             )
+            if (ticket.action is PrivilegedAction.CONTROLLED_RESTART) != (
+                restart_intent is not None
+            ):
+                raise PrivilegedProtocolError(
+                    "privileged restart intent shape differs from the ticket action"
+                )
+            return acceptance_receipt_to_wire(await self._start_handler(ticket, restart_intent))
         if message_type == "get_binding":
             operation_id = _operation_id(request)
             snapshot = await self._store.get(operation_id)

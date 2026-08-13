@@ -1,0 +1,235 @@
+schema_version: "1.1"
+contract: PRIVILEGED-OPERATIONS
+contract_version: "1.0.0"
+runtime_promotion: disabled
+
+tools:
+  privileged_prepare:
+    operation_contract: privileged_prepare
+    operation_contract_version: "1.0"
+    action: prepare_only
+    consequential: false
+    maximum_effect: no_effect_preparation
+    information_class: normal-result
+    confirmation_class: HC0
+    idempotency_key_required: false
+    prepares:
+      - package_install
+      - binnacle_service_restart
+      - binnacle_restart
+  package_inspect:
+    operation_contract: package_inspect
+    operation_contract_version: "1.0"
+    action: package_inspect
+    consequential: false
+    maximum_effect: observation
+    information_class: normal-result
+    confirmation_class: HC0
+    idempotency_key_required: false
+  package_install:
+    operation_contract: package_install
+    operation_contract_version: "1.0"
+    action: package_install
+    consequential: true
+    maximum_effect: package_change
+    information_class: restricted-result
+    confirmation_class: HC2
+    idempotency_key_required: true
+    preparation_required: privileged_prepare
+  binnacle_service_inspect:
+    operation_contract: binnacle_service_inspect
+    operation_contract_version: "1.0"
+    action: service_inspect
+    consequential: false
+    maximum_effect: observation
+    information_class: normal-result
+    confirmation_class: HC0
+    idempotency_key_required: false
+  binnacle_service_restart:
+    operation_contract: binnacle_service_restart
+    operation_contract_version: "1.0"
+    action: service_restart
+    consequential: true
+    maximum_effect: service_restart
+    information_class: restricted-result
+    confirmation_class: HC2
+    idempotency_key_required: true
+    preparation_required: privileged_prepare
+    preflight_required: restart_preflight
+  restart_preflight:
+    operation_contract: restart_preflight
+    operation_contract_version: "1.0"
+    action: restart_preflight
+    consequential: false
+    maximum_effect: observation
+    information_class: normal-result
+    confirmation_class: HC0
+    idempotency_key_required: false
+    advisory_only: true
+  binnacle_restart:
+    operation_contract: binnacle_restart
+    operation_contract_version: "1.0"
+    action: controlled_restart
+    consequential: true
+    maximum_effect: controlled_restart
+    information_class: restricted-result
+    confirmation_class: HC2
+    idempotency_key_required: true
+    preparation_required: privileged_prepare
+    preflight_required: restart_preflight
+  binnacle_runtime_inspect:
+    operation_contract: binnacle_runtime_inspect
+    operation_contract_version: "1.0"
+    action: runtime_inspect
+    consequential: false
+    maximum_effect: observation
+    information_class: normal-result
+    confirmation_class: HC0
+    idempotency_key_required: false
+
+prepare_execute:
+  preparation_grants_authority: false
+  execution_nonce:
+    server_generated: true
+    minimum_random_bits: 128
+    stored_as_digest: true
+    single_use: true
+  expiry_required: true
+  exact_bindings:
+    - authenticated_controller_and_epoch
+    - device_and_epoch
+    - development_session
+    - tool_and_contract_version
+    - normalized_action_and_target
+    - protected_target_profile_and_digest
+    - maximum_effect
+    - current_state_binding
+    - policy_and_build_identity
+    - operation_specific_evidence
+  final_revalidation:
+    - preparation_available_and_unexpired
+    - same_execution_nonce
+    - same_request_fingerprint
+    - same_current_state_binding
+    - same_protected_profiles
+    - audit_and_recovery_healthy
+  bypass_routes_forbidden:
+    - direct_execute
+    - cached_metadata
+    - grouped_or_batch_invocation
+    - mcp_task
+    - reconnect_with_new_identity
+    - another_conversation
+    - argument_action_target_or_device_substitution
+
+package_install:
+  plan_required: PackageTransactionPlan
+  host_contract_member_limit: 64
+  larger_closure_behavior: preparation_unsupported
+  plan_exact_bindings:
+    - package_manager_profile_and_executable
+    - repository_profile_and_metadata_snapshot
+    - requested_package_version_and_architecture
+    - complete_canonical_action_closure
+    - old_and_target_version_per_member
+    - origin_and_artifact_identity_per_member
+    - maintainer_script_package_set
+    - dependency_closure
+    - installed_prestate
+    - byte_ceiling
+    - plan_version_and_expiry
+  allowed_member_actions:
+    - install
+    - upgrade
+    - configure
+  forbidden_member_actions:
+    - remove
+    - downgrade
+    - unrelated_upgrade
+  root_start_requires_exact_plan_reproduction: true
+  caller_supplied_argv_options_or_environment: forbidden
+  metadata_solver_artifact_or_prestate_drift: known_no_subeffect
+  partial_or_ambiguous_transaction: uncertain_no_blind_retry
+
+restart:
+  fixed_service_unit: binnacle-dev.service
+  simple_service_restart:
+    runtime_selector_change: forbidden
+    source_environment_config_policy_manifest_change: forbidden
+    exact_post_start_runtime_verification: required
+  controlled_restart:
+    candidate_verification_terminal_success: required
+    candidate_and_lkg_complete_slots: required
+    schema_or_runtime_layout_change: forbidden
+    deployed_peer_change: forbidden
+    checkpoint_durable_before_service_stop: true
+    root_broker_continues_without_application: true
+    candidate_success_requires_exact_runtime_identity: true
+    rollback_owned_by_root_broker: true
+    rollback_ready_is_candidate_success: false
+    ambiguous_selector_start_or_runtime_truth: restricted_recovery
+  workspace_coordination:
+    exclusive_change_guard: required
+    durable_mutation_fence: required
+    fence_survives_application_replacement: true
+    terminal_audit_closure_before_release: true
+
+broker_acceptance:
+  application_call_start_is_root_acceptance: false
+  immutable_ticket_per_operation: true
+  accept_or_seal_exactly_one_winner: true
+  accepted_work_survives_ticket_and_session_expiry: true
+  empty_broker_store_proves_no_effect: false
+  subeffect_intent_before_effect: required
+  retained_receipt_before_response: required
+  ambiguous_effect_blocks_repeat: true
+
+terminal_truth:
+  candidate_ready: succeeded_known_effect
+  rollback_ready: failed_known_effect
+  no_subeffect: failed_known_no_effect
+  failed: failed_known_effect_or_partial
+  uncertain: uncertain_retains_reservations_and_fence
+  restricted_recovery: restricted_retains_reservations_and_fence
+
+safe_error_codes:
+  - privileged_profile_unavailable
+  - privileged_ticket_invalid
+  - privileged_ticket_expired
+  - privileged_ticket_replay_conflict
+  - privileged_no_accept_proven
+  - broker_unavailable
+  - broker_evidence_unavailable
+  - package_transaction_plan_changed
+  - package_transaction_busy
+  - package_partial_or_uncertain
+  - service_profile_mismatch
+  - restart_preflight_blocked
+  - restart_checkpoint_failed
+  - lkg_runtime_slot_unavailable
+  - candidate_environment_unsupported
+  - restart_candidate_failed
+  - restart_rolled_back
+  - restart_rollback_failed
+  - restart_restricted_recovery
+  - runtime_identity_mismatch
+  - candidate_verification_missing
+  - candidate_verification_stale
+  - candidate_tested_state_mismatch
+  - candidate_schema_change_unsupported
+  - candidate_peer_change_unsupported
+  - peer_build_protocol_mismatch
+  - privileged_effect_uncertain
+
+disclosure:
+  reusable_credentials: forbidden
+  raw_privileged_stderr: forbidden
+  protected_paths_and_configuration_values: forbidden
+  other_controller_identity_or_payload: forbidden
+  bounded_safe_identifiers_digests_counts_and_states: allowed
+
+host_reboot:
+  manifest_entry_present: false
+  operation_contract_present: false
+  broker_profile_action_allowed: false
+  promotion_requires_separate_contract_and_evidence: true

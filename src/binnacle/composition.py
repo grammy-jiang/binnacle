@@ -50,7 +50,10 @@ from binnacle.application.boundary import (
 )
 from binnacle.application.kernel_health import KernelAvailability, KernelHealth
 from binnacle.application.operations import OperationCoordinator
-from binnacle.application.privileged_reconciliation import PrivilegedRestartReconciler
+from binnacle.application.privileged_reconciliation import (
+    PrivilegedRestartAuditClosure,
+    PrivilegedRestartReconciler,
+)
 from binnacle.application.probe_workspace import (
     ProbeOperationAuthoriser,
     ProbeOperationBoundaryVerifier,
@@ -338,9 +341,17 @@ async def compose_operation_kernel(
         trusted_time_guard = TrustedTimeGuard(source=selected_trusted_time_source, store=store)
         trusted_time_available = await trusted_time_guard.accept_startup_snapshot(trusted_time)
         privileged_repository = SqlitePrivilegedApplicationRepository(database)
+        privileged_audit_closure = PrivilegedRestartAuditClosure(
+            audit=audit,
+            obligations=obligations,
+            store=store,
+            closure_health=probe_closure_health,
+        )
         privileged_reconciler = PrivilegedRestartReconciler(
             repository=privileged_repository,
             broker=PrivilegedClient(PrivilegedClientSettings()),
+            no_accept_audit_closure=privileged_audit_closure,
+            accepted_audit_closure=privileged_audit_closure,
         )
         specialized_reconciler = CompositeSpecializedOperationReconciler(
             *(

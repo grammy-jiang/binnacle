@@ -1,6 +1,6 @@
 schema_version: "1.1"
 contract: HOST-CONFIRMATION-PROFILE
-contract_version: "1.1.0"
+contract_version: "1.2.0"
 authority_boundary:
   server_verifiable_owner_click: false
   local_policy_remains_authoritative: true
@@ -57,6 +57,14 @@ initial_tool_classification:
   probe_workspace_prepare: HC0
   probe_workspace_write: HC1
   probe_workspace_cleanup: HC1
+  privileged_prepare: HC0
+  package_inspect: HC0
+  package_install: HC2
+  binnacle_service_inspect: HC0
+  binnacle_service_restart: HC2
+  restart_preflight: HC0
+  binnacle_restart: HC2
+  binnacle_runtime_inspect: HC0
 
 information_rules:
   normal-result:
@@ -82,6 +90,32 @@ prepare_execute:
   exact_input_match_required: true
   current_state_revalidation_required: true
   preparation_is_owner_authority: false
+
+privileged_prepare_execute:
+  prepare_tool: privileged_prepare
+  execute_tools:
+    - package_install
+    - binnacle_service_restart
+    - binnacle_restart
+  prepared_operation_id_required: true
+  execution_nonce_required: true
+  expiry_required: true
+  exact_input_match_required: true
+  exact_action_target_device_and_profile_match_required: true
+  current_state_revalidation_required: true
+  development_session_required: true
+  phase4_operation_and_audit_required: true
+  phase6_workspace_fence_required_for_restart: true
+  broker_ticket_and_acceptance_required: true
+  preparation_is_owner_authority: false
+  retained_retry_only: true
+  uncertain_effect_auto_retry: false
+
+unpromoted:
+  host_reboot:
+    manifest_entry_present: false
+    confirmation_class_reserved: HC2
+    real_host_and_device_evidence_required_before_contract_creation: true
 
 non_bypassable_routes:
   - direct_tool_call

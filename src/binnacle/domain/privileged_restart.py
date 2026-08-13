@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import re
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import datetime
 from enum import StrEnum
 from typing import Final
@@ -16,10 +16,20 @@ from binnacle.domain.privileged import (
     BrokerAcceptanceState,
     BrokerBindingSnapshot,
     BrokerExecutionState,
+    BrokerRestartCheckpointState,
+    BrokerRestartOutcome,
     PrivilegedAction,
     PrivilegedEffectKnowledge,
     PrivilegedMaximumEffect,
     PrivilegedTicket,
+    canonical_sha256,
+)
+from binnacle.domain.privileged_observation import (
+    RestartPreflightKind,
+    RestartPreflightResult,
+    RuntimeSlotRole,
+    RuntimeSlotState,
+    VerifiedRuntimeSlot,
 )
 
 _SHA256_RE: Final = re.compile(r"[0-9a-f]{64}\Z")
@@ -262,6 +272,156 @@ class PrivilegedRestartRecord:
 
 
 @dataclass(frozen=True, slots=True)
+class PrivilegedRestartCheckpointIntent:
+    """Exact application-signed inputs retained before a controlled root restart."""
+
+    operation_id: str
+    ticket_id: str
+    ticket_sha256: str
+    service_profile_sha256: str
+    workspace_id: str
+    workspace_fence_version: int
+    preflight: RestartPreflightResult
+    candidate_slot: VerifiedRuntimeSlot
+    lkg_slot: VerifiedRuntimeSlot
+    restart_deadline_seconds: int
+    created_at: datetime
+
+    def __post_init__(self) -> None:
+        for value, name in (
+            (self.operation_id, "checkpoint operation"),
+            (self.ticket_id, "checkpoint ticket"),
+            (self.workspace_id, "checkpoint workspace"),
+        ):
+            _require_identity(value, name)
+        for value, name in (
+            (self.ticket_sha256, "checkpoint ticket"),
+            (self.service_profile_sha256, "checkpoint service profile"),
+        ):
+            _require_sha256(value, name)
+        _require_aware(self.created_at, "checkpoint creation")
+        if self.workspace_fence_version < 1:
+            raise PrivilegedRestartError("checkpoint workspace fence is invalid")
+        if not 1 <= self.restart_deadline_seconds <= 900:
+            raise PrivilegedRestartError("checkpoint restart deadline is invalid")
+        if (
+            self.preflight.kind is not RestartPreflightKind.CONTROLLED_SELF
+            or not self.preflight.available
+            or self.preflight.reason_codes
+            or self.preflight.observed_at > self.created_at
+        ):
+            raise PrivilegedRestartError(
+                "checkpoint preflight is not an available controlled restart"
+            )
+        if (
+            self.candidate_slot.role is not RuntimeSlotRole.CANDIDATE
+            or self.candidate_slot.state is not RuntimeSlotState.COMPLETE
+            or self.lkg_slot.role is not RuntimeSlotRole.LKG
+            or self.lkg_slot.state is not RuntimeSlotState.LKG
+            or self.candidate_slot.slot_id == self.lkg_slot.slot_id
+        ):
+            raise PrivilegedRestartError("checkpoint candidate or LKG slot is ineligible")
+        if (
+            self.preflight.candidate_slot_identity_sha256
+            != self.candidate_slot.slot_identity_sha256
+            or self.preflight.lkg_slot_identity_sha256 != self.lkg_slot.slot_identity_sha256
+            or self.preflight.candidate_verification_sha256
+            != self.candidate_slot.candidate_verification_sha256
+        ):
+            raise PrivilegedRestartError("checkpoint slots differ from retained preflight")
+        candidate_compatibility = (
+            self.candidate_slot.config_sha256,
+            self.candidate_slot.policy_sha256,
+            self.candidate_slot.manifest_sha256,
+            self.candidate_slot.service_definition_sha256,
+            self.candidate_slot.deployed_peer_set_sha256,
+            self.candidate_slot.migration_heads_sha256,
+            self.candidate_slot.layout_sha256,
+        )
+        lkg_compatibility = (
+            self.lkg_slot.config_sha256,
+            self.lkg_slot.policy_sha256,
+            self.lkg_slot.manifest_sha256,
+            self.lkg_slot.service_definition_sha256,
+            self.lkg_slot.deployed_peer_set_sha256,
+            self.lkg_slot.migration_heads_sha256,
+            self.lkg_slot.layout_sha256,
+        )
+        if candidate_compatibility != lkg_compatibility:
+            raise PrivilegedRestartError(
+                "checkpoint candidate and LKG generations are incompatible"
+            )
+
+    @property
+    def intent_sha256(self) -> str:
+        return canonical_sha256(asdict(self))
+
+
+@dataclass(frozen=True, slots=True)
+class PrivilegedRestartCheckpointSnapshot:
+    """Bounded root-owned checkpoint used for deterministic restart recovery."""
+
+    intent: PrivilegedRestartCheckpointIntent
+    checkpoint_sha256: str
+    evidence_generation: int
+    state: BrokerRestartCheckpointState
+    outcome: BrokerRestartOutcome
+    selected_slot_id: str | None
+    result_evidence_sha256: str | None
+    service_stopped_at: datetime | None
+    closed_at: datetime | None
+    updated_at: datetime
+
+    def __post_init__(self) -> None:
+        _require_sha256(self.checkpoint_sha256, "restart checkpoint")
+        if self.evidence_generation < 1:
+            raise PrivilegedRestartError("restart checkpoint generation is invalid")
+        for timestamp, name in (
+            (self.service_stopped_at, "restart service stop"),
+            (self.closed_at, "restart checkpoint closure"),
+        ):
+            if timestamp is not None:
+                _require_aware(timestamp, name)
+        _require_aware(self.updated_at, "restart checkpoint update")
+        if self.updated_at < self.intent.created_at:
+            raise PrivilegedRestartError("restart checkpoint update time regressed")
+        if self.result_evidence_sha256 is not None:
+            _require_sha256(self.result_evidence_sha256, "restart result evidence")
+        if self.selected_slot_id is not None:
+            _require_identity(self.selected_slot_id, "selected restart slot")
+            if self.selected_slot_id not in {
+                self.intent.candidate_slot.slot_id,
+                self.intent.lkg_slot.slot_id,
+            }:
+                raise PrivilegedRestartError("restart checkpoint selected a foreign slot")
+        terminal = self.state is BrokerRestartCheckpointState.TERMINAL
+        restricted = self.state is BrokerRestartCheckpointState.RESTRICTED_RECOVERY
+        if terminal != (self.closed_at is not None and self.result_evidence_sha256 is not None):
+            raise PrivilegedRestartError("restart checkpoint terminal evidence is contradictory")
+        if restricted and self.result_evidence_sha256 is None:
+            raise PrivilegedRestartError("restricted restart checkpoint lacks result evidence")
+        if not (terminal or restricted) and self.outcome is not BrokerRestartOutcome.PENDING:
+            raise PrivilegedRestartError("open restart checkpoint carries a terminal outcome")
+        if terminal and self.outcome not in {
+            BrokerRestartOutcome.CANDIDATE_READY,
+            BrokerRestartOutcome.ROLLBACK_READY,
+            BrokerRestartOutcome.NO_SUBEFFECT,
+            BrokerRestartOutcome.FAILED,
+        }:
+            raise PrivilegedRestartError("terminal restart checkpoint outcome is invalid")
+        if restricted and self.outcome is not BrokerRestartOutcome.RESTRICTED_RECOVERY:
+            raise PrivilegedRestartError("restricted restart checkpoint outcome is invalid")
+        if self.outcome is BrokerRestartOutcome.CANDIDATE_READY and (
+            self.selected_slot_id != self.intent.candidate_slot.slot_id
+        ):
+            raise PrivilegedRestartError("candidate-ready checkpoint did not select candidate")
+        if self.outcome is BrokerRestartOutcome.ROLLBACK_READY and (
+            self.selected_slot_id != self.intent.lkg_slot.slot_id
+        ):
+            raise PrivilegedRestartError("rollback-ready checkpoint did not select LKG")
+
+
+@dataclass(frozen=True, slots=True)
 class RestartAuthorisationRequest:
     operation: OperationSnapshot
     preparation: PrivilegedRestartPreparation
@@ -351,6 +511,49 @@ class RestartNoAcceptClosureRequest:
             raise PrivilegedRestartError("restart no-accept closure evidence is contradictory")
 
 
+@dataclass(frozen=True, slots=True)
+class RestartAcceptedClosureRequest:
+    """Application-side terminal closure for exact accepted broker effect truth."""
+
+    snapshot: BrokerBindingSnapshot
+    audit_closure_evidence_sha256: str
+    closed_at: datetime
+
+    def __post_init__(self) -> None:
+        _require_sha256(
+            self.audit_closure_evidence_sha256,
+            "restart accepted audit closure",
+        )
+        _require_aware(self.closed_at, "restart accepted closure")
+        snapshot = self.snapshot
+        if (
+            snapshot.acceptance_state is not BrokerAcceptanceState.ACCEPTED
+            or snapshot.execution_state is not BrokerExecutionState.TERMINAL
+            or snapshot.result_evidence_sha256 is None
+            or snapshot.accepted_at is None
+            or snapshot.closed_at is None
+            or snapshot.restart_checkpoint_sha256 is None
+            or snapshot.restart_checkpoint_state is not BrokerRestartCheckpointState.TERMINAL
+            or snapshot.restart_outcome
+            not in {
+                BrokerRestartOutcome.CANDIDATE_READY,
+                BrokerRestartOutcome.ROLLBACK_READY,
+                BrokerRestartOutcome.NO_SUBEFFECT,
+                BrokerRestartOutcome.FAILED,
+            }
+            or self.closed_at < snapshot.accepted_at
+            or self.closed_at < snapshot.closed_at
+        ):
+            raise PrivilegedRestartError("restart accepted closure evidence is contradictory")
+        expected_knowledge = (
+            PrivilegedEffectKnowledge.KNOWN_NO_SUBEFFECT
+            if snapshot.restart_outcome is BrokerRestartOutcome.NO_SUBEFFECT
+            else PrivilegedEffectKnowledge.KNOWN_EFFECT
+        )
+        if snapshot.effect_knowledge is not expected_knowledge:
+            raise PrivilegedRestartError("restart accepted effect knowledge is contradictory")
+
+
 def _require_sha256(value: str, name: str) -> None:
     if _SHA256_RE.fullmatch(value) is None:
         raise PrivilegedRestartError(f"{name} must be a lowercase SHA-256 digest")
@@ -375,9 +578,12 @@ __all__ = [
     "PrivilegedOperationState",
     "PrivilegedPreparationState",
     "PrivilegedReservationState",
+    "PrivilegedRestartCheckpointIntent",
+    "PrivilegedRestartCheckpointSnapshot",
     "PrivilegedRestartError",
     "PrivilegedRestartPreparation",
     "PrivilegedRestartRecord",
+    "RestartAcceptedClosureRequest",
     "RestartAuthorisationRequest",
     "RestartNoAcceptClosureRequest",
 ]

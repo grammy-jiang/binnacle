@@ -3,14 +3,30 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import socket
 import struct
 from typing import cast
 
 import pytest
-from tests.phase9_support import acceptance_receipt, binding_snapshot, privileged_ticket
+from tests.phase9_support import (
+    acceptance_receipt,
+    binding_snapshot,
+    controlled_restart_intent_and_ticket,
+    privileged_ticket,
+)
 
-from binnacle.domain.privileged import MAX_PRIVILEGED_FRAME_BYTES, PrivilegedError, PrivilegedTicket
+from binnacle.domain.privileged import (
+    MAX_PRIVILEGED_FRAME_BYTES,
+    BrokerAcceptanceState,
+    BrokerBindingSnapshot,
+    BrokerExecutionState,
+    BrokerRestartCheckpointState,
+    BrokerRestartOutcome,
+    PrivilegedEffectKnowledge,
+    PrivilegedError,
+    PrivilegedTicket,
+)
 from binnacle.privileged_broker.protocol import (
     PeerCredentials,
     PrivilegedProtocolError,
@@ -24,6 +40,8 @@ from binnacle.privileged_broker.protocol import (
     read_frame,
     request_envelope,
     require_peer,
+    restart_checkpoint_intent_from_wire,
+    restart_checkpoint_intent_to_wire,
     routing_identity_from_wire,
     routing_identity_to_wire,
     success_response,
@@ -216,3 +234,59 @@ def test_wire_decoders_reject_invalid_enums_times_and_scalar_types() -> None:
     ):
         with pytest.raises(PrivilegedProtocolError):
             binding_snapshot_from_wire(invalid)
+
+
+def test_restart_checkpoint_and_terminal_binding_wire_round_trip() -> None:
+    intent, ticket = controlled_restart_intent_and_ticket()
+    document = restart_checkpoint_intent_to_wire(intent)
+    assert restart_checkpoint_intent_from_wire(document) == intent
+
+    binding = BrokerBindingSnapshot(
+        identity=ticket.routing_identity,
+        acceptance_state=BrokerAcceptanceState.ACCEPTED,
+        evidence_generation=8,
+        acceptance_evidence_sha256="a" * 64,
+        execution_state=BrokerExecutionState.TERMINAL,
+        effect_knowledge=PrivilegedEffectKnowledge.KNOWN_EFFECT,
+        result_evidence_sha256="b" * 64,
+        accepted_at=ticket.issued_at,
+        sealed_at=None,
+        closed_at=ticket.issued_at,
+        last_reconciled_at=ticket.issued_at,
+        restart_checkpoint_sha256=intent.intent_sha256,
+        restart_checkpoint_state=BrokerRestartCheckpointState.TERMINAL,
+        restart_outcome=BrokerRestartOutcome.CANDIDATE_READY,
+        candidate_slot_id=intent.candidate_slot.slot_id,
+        lkg_slot_id=intent.lkg_slot.slot_id,
+        selected_runtime_slot_id=intent.candidate_slot.slot_id,
+    )
+    assert binding_snapshot_from_wire(binding_snapshot_to_wire(binding)) == binding
+
+
+def test_restart_checkpoint_wire_rejects_nested_widening_and_tampering() -> None:
+    intent, _ticket = controlled_restart_intent_and_ticket()
+    document = restart_checkpoint_intent_to_wire(intent)
+    invalid_documents: list[object] = [
+        {**document, "extra": None},
+        {**document, "intent_sha256": "0" * 64},
+        {**document, "workspace_fence_version": True},
+        {**document, "created_at": "2026-08-13T01:02:03"},
+    ]
+
+    preflight = cast(dict[str, object], copy.deepcopy(document["preflight"]))
+    invalid_documents.append({**document, "preflight": {**preflight, "available": "yes"}})
+    invalid_documents.append({**document, "preflight": {**preflight, "reason_codes": "none"}})
+    invalid_documents.append({**document, "preflight": {**preflight, "predicted_impacts": [7]}})
+    invalid_documents.append({**document, "preflight": {**preflight, "kind": "unreviewed"}})
+
+    candidate = cast(dict[str, object], copy.deepcopy(document["candidate_slot"]))
+    invalid_documents.append({**document, "candidate_slot": {**candidate, "extra": None}})
+    invalid_documents.append({**document, "candidate_slot": {**candidate, "slot_generation": True}})
+    invalid_documents.append({**document, "candidate_slot": {**candidate, "role": "lkg"}})
+    invalid_documents.append(
+        {**document, "candidate_slot": {**candidate, "completed_at": "not-a-time"}}
+    )
+
+    for invalid in invalid_documents:
+        with pytest.raises(PrivilegedProtocolError):
+            restart_checkpoint_intent_from_wire(invalid)

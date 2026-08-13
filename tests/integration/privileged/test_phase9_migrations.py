@@ -235,7 +235,7 @@ def test_subeffect_state_and_receipts_are_monotonic(
             """
             INSERT INTO privileged_subeffects VALUES (
               'operation-1',1,'subeffect-1','package_transaction',?,'intent_recorded',
-              'none',NULL,NULL,NULL,CURRENT_TIMESTAMP,NULL,NULL,CURRENT_TIMESTAMP
+              'none','pending',NULL,NULL,NULL,CURRENT_TIMESTAMP,NULL,NULL,CURRENT_TIMESTAMP
             )
             """,
             (DIGEST_A,),
@@ -254,7 +254,7 @@ def test_subeffect_state_and_receipts_are_monotonic(
             """
             UPDATE privileged_subeffects
             SET state='terminal',result_evidence_sha256=?,closed_at=CURRENT_TIMESTAMP,
-                updated_at=CURRENT_TIMESTAMP
+                outcome='succeeded',updated_at=CURRENT_TIMESTAMP
             WHERE operation_id='operation-1' AND subeffect_generation=1
             """,
             (DIGEST_C,),
@@ -333,12 +333,31 @@ def test_restart_slot_and_selector_recovery_evidence_is_monotonic(
             )
         connection.execute(
             """
-            INSERT INTO privileged_restart_checkpoints VALUES (
-              'operation-1',?,'workspace-1',7,'candidate-slot','lkg-slot',NULL,
-              ?,?,?,?,'prepared',NULL,CURRENT_TIMESTAMP,NULL,NULL,CURRENT_TIMESTAMP
+            INSERT INTO privileged_restart_checkpoints (
+              operation_id,service_profile_sha256,workspace_id,workspace_fence_version,
+              evidence_generation,candidate_slot_id,lkg_slot_id,selected_slot_id,
+              current_runtime_identity_sha256,current_service_observation_sha256,
+              outstanding_state_sha256,preflight_state_binding_sha256,preflight_observed_at,
+              candidate_verification_sha256,peer_set_sha256,schema_heads_sha256,
+              restart_deadline_seconds,checkpoint_sha256,state,outcome,result_evidence_sha256,
+              created_at,service_stopped_at,closed_at,updated_at
+            ) VALUES (
+              'operation-1',?,'workspace-1',7,1,'candidate-slot','lkg-slot',NULL,
+              ?,?,?,?,CURRENT_TIMESTAMP,?,?,?,120,?,'prepared','pending',NULL,
+              CURRENT_TIMESTAMP,NULL,NULL,CURRENT_TIMESTAMP
             )
             """,
-            (DIGEST_A, DIGEST_B, DIGEST_C, "d" * 64, "e" * 64),
+            (
+                DIGEST_A,
+                DIGEST_B,
+                DIGEST_C,
+                "d" * 64,
+                "e" * 64,
+                "4" * 64,
+                "1" * 64,
+                "2" * 64,
+                "5" * 64,
+            ),
         )
         connection.execute(
             "UPDATE privileged_restart_checkpoints SET state='checkpointed',"
@@ -353,6 +372,14 @@ def test_restart_slot_and_selector_recovery_evidence_is_monotonic(
             "UPDATE privileged_restart_checkpoints SET state='candidate_selected',"
             "selected_slot_id='candidate-slot',updated_at=CURRENT_TIMESTAMP "
             "WHERE operation_id='operation-1'"
+        )
+        connection.execute(
+            "UPDATE privileged_restart_checkpoints SET state='rollback_required',"
+            "updated_at=CURRENT_TIMESTAMP WHERE operation_id='operation-1'"
+        )
+        connection.execute(
+            "UPDATE privileged_restart_checkpoints SET state='rollback_service_stopped',"
+            "updated_at=CURRENT_TIMESTAMP WHERE operation_id='operation-1'"
         )
         connection.execute(
             "UPDATE privileged_restart_checkpoints SET state='rollback_selected',"

@@ -19,6 +19,9 @@ zones:
     model_visible: false
   hardware-effect:
     model_visible: false
+  privileged-broker:
+    model_visible: false
+    authority_source: authenticated_peer_exact_ticket_and_protected_profile
   model-visible-result:
     model_visible: true
     authority_source: explicit_information_contract
@@ -42,6 +45,15 @@ forbidden_edges:
   - from: untrusted-content
     to: mediated-egress
     unless: exact_prepared_operation
+  - from: untrusted-content
+    to: privileged-broker
+    unless: exact_privileged_preparation_phase4_operation_and_broker_ticket
+  - from: local-mutation
+    to: privileged-broker
+    unless: exclusive_workspace_change_guard_and_durable_mutation_fence
+  - from: privileged-broker
+    to: model-visible-result
+    unless: exact_information_contract_and_sanitized_bounded_evidence
 
 server_data_reference:
   required_fields:
@@ -147,3 +159,43 @@ policy_change:
 host_boundary:
   cross_server_after_normal_model_disclosure: not_locally_enforceable
   restricted_data_requires_owner_only_or_validated_host_contract: true
+
+privileged_self_management_extension:
+  extension_version: "1.0.0"
+  runtime_promotion: disabled
+  observations:
+    zone: observation
+    tools:
+      - package_inspect
+      - binnacle_service_inspect
+      - restart_preflight
+      - binnacle_runtime_inspect
+  preparation:
+    zone: control-plane
+    tool: privileged_prepare
+    effect: no_effect
+    grants_authority: false
+  consequential_tools:
+    zone: privileged-broker
+    tools:
+      - package_install
+      - binnacle_service_restart
+      - binnacle_restart
+    exact_preparation_required: true
+    exact_phase4_operation_required: true
+    exact_broker_ticket_required: true
+    exact_protected_profile_required: true
+    raw_model_text_or_manifest_annotation_grants_authority: false
+  fixed_targets:
+    systemd_unit: binnacle-dev.service
+    runtime_selector: /srv/binnacle-runtime/current
+    package_names: protected_profile_only
+  denied_surfaces:
+    - arbitrary_root_command
+    - arbitrary_root_path
+    - arbitrary_systemd_unit
+    - arbitrary_package_option
+    - raw_systemd_or_package_output
+    - raw_credentials
+    - protected_configuration_values
+    - host_reboot

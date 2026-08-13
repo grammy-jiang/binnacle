@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import hashlib
+import importlib
+import inspect
 import json
 import sys
 from collections.abc import Mapping
@@ -17,6 +19,27 @@ from jsonschema import Draft202012Validator
 ROOT = Path(__file__).resolve().parents[1]
 ERRORS: list[str] = []
 MERGE_TAG = "tag:yaml.org,2002:merge"
+PHASE9_TOOL_CLASSES = {
+    "privileged_prepare": ("normal-result", "HC0"),
+    "package_inspect": ("normal-result", "HC0"),
+    "package_install": ("restricted-result", "HC2"),
+    "binnacle_service_inspect": ("normal-result", "HC0"),
+    "binnacle_service_restart": ("restricted-result", "HC2"),
+    "restart_preflight": ("normal-result", "HC0"),
+    "binnacle_restart": ("restricted-result", "HC2"),
+    "binnacle_runtime_inspect": ("normal-result", "HC0"),
+}
+EXPECTED_MANIFEST_TOOLS = (
+    "binnacle_probe",
+    "system_inspect",
+    "probe_result_formats",
+    "probe_error",
+    "compatibility_report",
+    "probe_workspace_prepare",
+    "probe_workspace_write",
+    "probe_workspace_cleanup",
+    *PHASE9_TOOL_CLASSES,
+)
 
 
 class UniqueKeyLoader(yaml.SafeLoader):
@@ -355,10 +378,14 @@ def validate_tool_manifest() -> None:
     if not isinstance(tools, list):
         fail("bootstrap Tool manifest must contain a tools array")
         return
-    if len(tools) != 8:
-        fail(f"bootstrap Tool manifest must contain exactly 8 Tools, found {len(tools)}")
+    if len(tools) != len(EXPECTED_MANIFEST_TOOLS):
+        fail(
+            "bootstrap Tool manifest must contain exactly "
+            f"{len(EXPECTED_MANIFEST_TOOLS)} Tools, found {len(tools)}"
+        )
 
     names: set[str] = set()
+    ordered_names: list[str] = []
     classes: dict[str, str] = {}
     for tool in tools:
         if not isinstance(tool, dict):
@@ -371,7 +398,21 @@ def validate_tool_manifest() -> None:
         if name in names:
             fail(f"duplicate Tool name: {name}")
         names.add(name)
+        ordered_names.append(name)
         classes[name] = str(tool.get("confirmation_class"))
+
+        binding = tool.get("handler_binding")
+        if not isinstance(binding, str) or "." not in binding:
+            fail(f"{name}: missing or invalid handler_binding")
+        else:
+            module_name, _, attribute_name = binding.rpartition(".")
+            try:
+                handler = getattr(importlib.import_module(module_name), attribute_name)
+            except (ImportError, AttributeError) as exc:
+                fail(f"{name}: handler_binding is unavailable: {type(exc).__name__}")
+            else:
+                if not inspect.iscoroutinefunction(handler):
+                    fail(f"{name}: handler_binding is not async")
 
         for field in ("input_schema_ref", "output_schema_ref"):
             ref = tool.get(field)
@@ -391,6 +432,9 @@ def validate_tool_manifest() -> None:
             except (KeyError, IndexError, ValueError):
                 fail(f"{name}: {field} pointer does not resolve: {ref}")
 
+    if tuple(ordered_names) != EXPECTED_MANIFEST_TOOLS:
+        fail("bootstrap Tool manifest order or names differ from the reviewed contract")
+
     host_policy = load_yaml(ROOT / "spec/policy/host-confirmation-classes.yaml")
     if isinstance(host_policy, dict):
         initial = host_policy.get("initial_tool_classification")
@@ -402,6 +446,189 @@ def validate_tool_manifest() -> None:
 
     if "manifest_sha256" in manifest or "signature" in manifest:
         fail("source Tool manifest must not contain its own digest/signature")
+
+
+def validate_phase9_privileged_contracts() -> None:
+    """Cross-check the unpromoted Phase 9 surface without enabling a runtime catalogue."""
+
+    manifest = load_yaml(ROOT / "spec/mcp/bootstrap-tool-manifest.yaml")
+    operation = load_yaml(ROOT / "spec/operation/privileged-operations.yaml")
+    host = load_yaml(ROOT / "spec/policy/host-confirmation-classes.yaml")
+    capability = load_yaml(ROOT / "spec/policy/capability-zones.yaml")
+    profiles = load_yaml(ROOT / "spec/policy/privileged-profiles.yaml")
+    limits = load_yaml(ROOT / "spec/mcp/result-limits.yaml")
+    evaluation = load_yaml(ROOT / "spec/mcp/evaluation-profile.yaml")
+    documents = (manifest, operation, host, capability, profiles, limits, evaluation)
+    if not all(isinstance(document, dict) for document in documents):
+        return
+    assert isinstance(manifest, dict)
+    assert isinstance(operation, dict)
+    assert isinstance(host, dict)
+    assert isinstance(capability, dict)
+    assert isinstance(profiles, dict)
+    assert isinstance(limits, dict)
+    assert isinstance(evaluation, dict)
+
+    raw_tools = manifest.get("tools")
+    if not isinstance(raw_tools, list):
+        return
+    manifest_tools = {
+        tool.get("name"): tool
+        for tool in raw_tools
+        if isinstance(tool, dict) and isinstance(tool.get("name"), str)
+    }
+    operation_tools = _mapping(
+        operation.get("tools"),
+        context="privileged operations: tools",
+    )
+    host_classes = _mapping(
+        host.get("initial_tool_classification"),
+        context="host confirmation: initial_tool_classification",
+    )
+    if operation_tools is None or host_classes is None:
+        return
+
+    for tool_name, (information_class, confirmation_class) in PHASE9_TOOL_CLASSES.items():
+        source = _mapping(
+            manifest_tools.get(tool_name),
+            context=f"Phase 9 manifest Tool {tool_name}",
+        )
+        contract = _mapping(
+            operation_tools.get(tool_name),
+            context=f"privileged operation {tool_name}",
+        )
+        if source is None or contract is None:
+            continue
+        _require_values(
+            source,
+            {
+                "contract_version": "1.0",
+                "information_class": information_class,
+                "confirmation_class": confirmation_class,
+                "phases": ["v1-operational"],
+            },
+            context=f"Phase 9 manifest Tool {tool_name}",
+        )
+        _require_values(
+            contract,
+            {
+                "operation_contract_version": "1.0",
+                "information_class": information_class,
+                "confirmation_class": confirmation_class,
+            },
+            context=f"privileged operation {tool_name}",
+        )
+        if host_classes.get(tool_name) != confirmation_class:
+            fail(f"host confirmation class differs for Phase 9 Tool {tool_name}")
+
+    if set(operation_tools) != set(PHASE9_TOOL_CLASSES):
+        fail("privileged operation Tool set is not the exact reviewed Phase 9 set")
+    if "host_reboot" in manifest_tools or "host_reboot" in operation_tools:
+        fail("host_reboot must remain absent from manifest and operation contracts")
+    if operation.get("runtime_promotion") != "disabled":
+        fail("privileged operation runtime promotion must remain disabled")
+    if profiles.get("runtime_promotion") != "disabled":
+        fail("privileged profile runtime promotion must remain disabled")
+
+    privileged_prepare_execute = _mapping(
+        host.get("privileged_prepare_execute"),
+        context="host confirmation: privileged_prepare_execute",
+    )
+    _require_values(
+        privileged_prepare_execute,
+        {
+            "prepare_tool": "privileged_prepare",
+            "execute_tools": [
+                "package_install",
+                "binnacle_service_restart",
+                "binnacle_restart",
+            ],
+            "preparation_is_owner_authority": False,
+            "retained_retry_only": True,
+            "uncertain_effect_auto_retry": False,
+        },
+        context="host confirmation: privileged_prepare_execute",
+    )
+
+    extension = _mapping(
+        capability.get("privileged_self_management_extension"),
+        context="capability policy: privileged_self_management_extension",
+    )
+    _require_values(
+        extension,
+        {"extension_version": "1.0.0", "runtime_promotion": "disabled"},
+        context="capability policy: privileged_self_management_extension",
+    )
+    promotion = _mapping(
+        profiles.get("promotion_gates"),
+        context="privileged profiles: promotion_gates",
+    )
+    _require_values(
+        promotion,
+        {
+            "evidence_missing_does_not_block_repository_implementation": True,
+            "v1_operational_catalogue_enabled": False,
+        },
+        context="privileged profiles: promotion_gates",
+    )
+
+    phase9_limits = _mapping(
+        limits.get("phase9_tool_limits"),
+        context="result limits: phase9_tool_limits",
+    )
+    if phase9_limits is not None:
+        missing_limits = set(PHASE9_TOOL_CLASSES) - set(phase9_limits)
+        if missing_limits:
+            fail(f"Phase 9 result limits are missing Tools: {sorted(missing_limits)}")
+        if phase9_limits.get("runtime_promotion") != "disabled":
+            fail("Phase 9 result-limit runtime promotion must remain disabled")
+
+    evaluation_phase9 = _mapping(
+        evaluation.get("phase9_privileged_self_management"),
+        context="evaluation profile: phase9_privileged_self_management",
+    )
+    _require_values(
+        evaluation_phase9,
+        {
+            "repository_implementation_may_complete_without_live_host_or_pi_evidence": True,
+            "runtime_promotion": "disabled",
+            "runtime_promotion_requires_candidate_pi_evidence": True,
+            "runtime_promotion_requires_real_chatgpt_hc2_evidence": True,
+            "v1_operational_tools_default_visible": False,
+            "host_reboot_contract_absent": True,
+        },
+        context="evaluation profile: phase9_privileged_self_management",
+    )
+    if evaluation_phase9 is not None:
+        categories = _mapping(
+            evaluation_phase9.get("category_risk_classes"),
+            context="evaluation profile: Phase 9 category_risk_classes",
+        )
+        expected_categories = {
+            "selection_rendering": ("tool_selection_and_result_rendering", 10),
+            "confirmation_entitlement": ("confirmation_and_entitlement", 5),
+            "execute_retry_cancel": ("write_cancellation_retry_cache_confirmation", 20),
+            "concurrency_race_reconnect": (
+                "concurrency_race_reconnect_instability",
+                20,
+            ),
+        }
+        if categories is not None and set(categories) != set(expected_categories):
+            fail("Phase 9 evaluation category set differs from the reviewed contract")
+        if categories is not None:
+            for category, (risk_class, minimum_attempts) in expected_categories.items():
+                values = _mapping(
+                    categories.get(category),
+                    context=f"evaluation profile: Phase 9 category {category}",
+                )
+                _require_values(
+                    values,
+                    {
+                        "risk_class": risk_class,
+                        "minimum_attempts": minimum_attempts,
+                    },
+                    context=f"evaluation profile: Phase 9 category {category}",
+                )
 
 
 def validate_revision_support_contract() -> None:
@@ -1082,6 +1309,7 @@ def main() -> int:
     validate_bootstrap_command_profile_alignment()
     validate_bootstrap_self_hosting_scope_alignment()
     validate_tool_manifest()
+    validate_phase9_privileged_contracts()
     validate_revision_support_contract()
     validate_evaluation_contract()
     validate_audit_release_and_results()

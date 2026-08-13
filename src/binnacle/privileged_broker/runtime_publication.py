@@ -134,7 +134,7 @@ class RuntimeSelectorActivationRequest:
                 "initial runtime selector publication unexpectedly has a preimage"
             )
         if self.operation_id is not None:
-            _require_token(self.operation_id, "runtime selector operation")
+            _require_operation_id(self.operation_id, "runtime selector operation")
         if self.expected_current_slot_id is not None:
             _require_token(self.expected_current_slot_id, "expected runtime slot")
         _require_token(self.target_slot_id, "target runtime slot")
@@ -169,7 +169,7 @@ class RuntimeSelectorActivationReceipt:
         if self.selector_generation < 1:
             raise RuntimeSlotPublicationError("runtime selector receipt generation is invalid")
         if self.operation_id is not None:
-            _require_token(self.operation_id, "runtime selector receipt operation")
+            _require_operation_id(self.operation_id, "runtime selector receipt operation")
         if self.previous_slot_id is not None:
             _require_token(self.previous_slot_id, "runtime selector previous slot")
         _require_token(self.selected_slot_id, "runtime selector selected slot")
@@ -995,6 +995,23 @@ def _require_token(value: str, name: str) -> None:
         not 1 <= len(encoded) <= 160
         or not value[0].isalnum()
         or any(character not in "abcdefghijklmnopqrstuvwxyz0123456789._-" for character in value)
+        or ".." in value
+    ):
+        raise RuntimeSlotPublicationError(f"{name} identity is invalid")
+
+
+def _require_operation_id(value: str, name: str) -> None:
+    try:
+        encoded = value.encode("ascii")
+    except UnicodeEncodeError as exc:
+        raise RuntimeSlotPublicationError(f"{name} identity is invalid") from exc
+    if (
+        not 1 <= len(encoded) <= 160
+        or not value[0].isalnum()
+        or any(
+            character not in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._:-"
+            for character in value
+        )
         or ".." in value
     ):
         raise RuntimeSlotPublicationError(f"{name} identity is invalid")

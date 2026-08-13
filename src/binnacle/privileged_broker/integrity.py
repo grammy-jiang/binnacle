@@ -130,7 +130,7 @@ def _verify(
     _verify_subeffects(connection, high_water)
     package_plans = _verify_package_plans(connection)
     runtime_slots = _verify_runtime_slots(connection)
-    restart_checkpoints = _verify_restart_checkpoints(connection)
+    restart_checkpoints = _verify_restart_checkpoints(connection, high_water)
     selector_generations = _verify_selector_generations(connection)
     orphan_events = int(
         connection.execute(
@@ -338,11 +338,12 @@ def _verify_runtime_slots(connection: sqlite3.Connection) -> int:
     return len(rows)
 
 
-def _verify_restart_checkpoints(connection: sqlite3.Connection) -> int:
+def _verify_restart_checkpoints(connection: sqlite3.Connection, high_water: int) -> int:
     rows = tuple(
         connection.execute(
             """
             SELECT checkpoint.*, binding.action, binding.acceptance_state,
+                   binding.execution_state, binding.result_evidence_sha256 AS binding_result,
                    candidate.state AS candidate_state, lkg.state AS lkg_state
             FROM privileged_restart_checkpoints checkpoint
             LEFT JOIN privileged_operation_bindings binding
@@ -357,15 +358,39 @@ def _verify_restart_checkpoints(connection: sqlite3.Connection) -> int:
     )
     complete_states = {"complete", "active", "lkg", "prior"}
     for row in rows:
+        state = str(row["state"])
+        outcome = str(row["outcome"])
         if (
             row["acceptance_state"] != "accepted"
             or row["action"] != "controlled_restart"
             or row["candidate_slot_id"] == row["lkg_slot_id"]
             or row["candidate_state"] not in complete_states
             or row["lkg_state"] not in {"lkg", "prior"}
+            or not 1 <= _integer(row["evidence_generation"]) <= high_water
         ):
             raise PrivilegedBrokerIntegrityError(
                 "privileged restart checkpoint lacks accepted complete slot evidence"
+            )
+        terminal = state == "terminal"
+        restricted = state == "restricted_recovery"
+        expected_outcomes = (
+            {"candidate_ready", "rollback_ready", "no_subeffect", "failed"}
+            if terminal
+            else ({"restricted_recovery"} if restricted else {"pending"})
+        )
+        if outcome not in expected_outcomes:
+            raise PrivilegedBrokerIntegrityError(
+                "privileged restart checkpoint outcome is contradictory"
+            )
+        expected_binding_state = (
+            "terminal" if terminal else ("restricted_recovery" if restricted else None)
+        )
+        if expected_binding_state is not None and (
+            row["execution_state"] != expected_binding_state
+            or row["binding_result"] != row["result_evidence_sha256"]
+        ):
+            raise PrivilegedBrokerIntegrityError(
+                "privileged restart checkpoint and binding closure differ"
             )
     return len(rows)
 

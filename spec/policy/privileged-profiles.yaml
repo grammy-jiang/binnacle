@@ -1,0 +1,136 @@
+schema_version: "1.1"
+policy_id: privileged-profiles
+policy_version: "1.0.0"
+runtime_promotion: disabled
+
+common:
+  protected_configuration: true
+  model_supplied_profile_fields: forbidden
+  profile_digest_required: true
+  active_requires_candidate_pi_evidence: true
+  unknown_platform_fact_behavior: inactive
+  affected_preparations_invalidated_on_change: true
+
+privileged_broker_profile:
+  profile_type: PrivilegedBrokerProfile
+  fixed_protocol_id: binnacle-privileged
+  fixed_protocol_version: v1
+  fixed_socket_path: /run/binnacle-privileged/broker.sock
+  broker_identity:
+    uid: 0
+    gid: 0
+  application_peer_identity:
+    unprivileged: true
+    exact_uid_gid_required: true
+    executor_git_credential_and_other_peers_forbidden: true
+  allowed_actions:
+    - controlled_restart
+    - package_inspect
+    - package_install
+    - restart_preflight
+    - runtime_inspect
+    - service_inspect
+    - service_restart
+  forbidden_actions:
+    - host_reboot
+    - arbitrary_command
+    - arbitrary_path
+    - arbitrary_systemd_unit
+    - arbitrary_package_option
+  exact_limits:
+    maximum_frame_bytes: 1048576
+    request_deadline_seconds_max: 300
+    maximum_requests_per_minute_max: 600
+  protected_roots:
+    evidence: /var/lib/binnacle-privileged
+    checkpoints: /var/lib/binnacle-privileged
+    runtime: /run/binnacle-privileged
+    install: /opt/binnacle-privileged
+  executable_path: /opt/binnacle-privileged/bin/binnacle-privileged-broker
+  migration_head: 0001_privileged_evidence
+  required_digests:
+    - evidence_mount_identity_sha256
+    - checkpoint_mount_identity_sha256
+    - executable_sha256
+    - ticket_verification_key_reference_sha256
+    - service_hardening_sha256
+    - capability_evidence_sha256
+  ticket_integrity_algorithms:
+    - ed25519
+    - hmac-sha256
+
+binnacle_service_profile:
+  profile_type: BinnacleServiceProfile
+  fixed_service_unit: binnacle-dev.service
+  fixed_workspace_root: /srv/binnacle
+  fixed_runtime_root: /srv/binnacle-runtime
+  fixed_selector: /srv/binnacle-runtime/current
+  fixed_slot_root: /srv/binnacle-runtime/slots
+  exact_unprivileged_service_uid_gid_required: true
+  slot_limits:
+    maximum_bytes_range: [1048576, 100000000000]
+    maximum_inodes_range: [1000, 10000000]
+    retained_slots_range: [3, 16]
+  required_complete_generation_members:
+    - source
+    - isolated_environment
+    - lock
+    - protected_configuration
+    - policy
+    - promoted_manifest
+    - effective_service_definition
+    - migration_heads
+    - deployed_peer_set
+    - runtime_layout
+    - candidate_verification
+  migration_heads:
+    application: 0006_privileged_operations
+    executor: 0002_git_members
+    git_credential: 0001_credential_evidence
+    privileged: 0001_privileged_evidence
+  restart_deadline_seconds_range: [1, 900]
+  service_active_is_readiness: false
+  runtime_identity_exact_match_required: true
+  lkg_independent_of_mutable_workspace_and_shared_environment: true
+  selector_publication:
+    exact_compare_and_swap: true
+    generation_ledger_required: true
+    fsync_before_visibility: true
+    ambiguous_receipt: restricted_recovery
+
+package_profile:
+  profile_type: PackageProfile
+  executable_absolute_and_digest_bound: true
+  repository_profile_digest_required: true
+  allowed_package_names_explicit: true
+  dependencies_allowed_only_with_complete_closure: true
+  version_pin_required: true
+  removals_allowed: false
+  downgrades_allowed: false
+  unrelated_upgrades_allowed: false
+  repository_metadata_maximum_age_seconds_range: [60, 604800]
+  maximum_download_bytes_range: [1048576, 20000000000]
+  maximum_install_seconds_range: [1, 3600]
+  maximum_output_bytes_range: [1024, 20000000]
+  initial_member_actions:
+    - configure
+    - install
+    - upgrade
+  root_execution:
+    shell: forbidden
+    caller_argv_options: forbidden
+    caller_environment: forbidden
+    noninteractive_closed_environment: required
+    exact_prepared_versions_and_artifacts: required
+    repository_refresh_during_inspection_or_execute: forbidden
+
+promotion_gates:
+  repository_implementation_and_ci: required
+  exact_head_substantive_review: required
+  candidate_pi_effective_boundary_evidence: required_for_runtime_promotion
+  real_chatgpt_hc2_evidence: required_for_runtime_promotion
+  evidence_missing_does_not_block_repository_implementation: true
+  served_catalogues_while_missing:
+    - compatibility-core
+    - compatibility-write-probe
+  v1_operational_catalogue_enabled: false

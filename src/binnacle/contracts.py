@@ -217,19 +217,19 @@ EXPECTED_TOOL_METADATA_SHA256 = MappingProxyType(
 EXPECTED_SOURCE_MANIFEST = MappingProxyType(
     {
         "id": "binnacle-bootstrap-tools",
-        "version": "1.1.0",
-        "sha256": "e2e28381067e4445c03abb5217e36c6efa63a58c3906ec1684fffa41b9e6acc1",
+        "version": "1.2.0",
+        "sha256": "6e92e1d0c04cc56bf381935a0dc4bc6b9c9a43663593c49a23c79583866e83e0",
     }
 )
 EXPECTED_REGISTRY_IDENTITIES = MappingProxyType(
     {
         "schema_registry_sha256": (
-            "042e862b1222641b573e2725aca24592be80a1cdd8d66214e1bc5f1f5ce9dfb1"
+            "956d110eb1167031b039bc1f2c1250298d00a25219725f9a643dff9101fc68ab"
         ),
         "revision_contract_sha256": (
             "8207b7e9ea90aec37ec3bd6f2c0e688fcc0a928d234c4fee1f22a270ae787bd0"
         ),
-        "evaluation_profile_version": "1.2.0",
+        "evaluation_profile_version": "1.3.0",
         "catalogue_sha256": ("9ecb9823da48b65bd168930e2c3a6650eaf0d0af149ef98fd3a6d36fd873194a"),
     }
 )

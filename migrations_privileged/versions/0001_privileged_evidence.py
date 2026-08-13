@@ -204,6 +204,7 @@ def upgrade() -> None:
         sa.Column("intent_sha256", sa.String(length=64), nullable=False),
         sa.Column("state", sa.String(length=24), nullable=False),
         sa.Column("effect_knowledge", sa.String(length=24), nullable=False),
+        sa.Column("outcome", sa.String(length=16), nullable=False),
         sa.Column("effect_reference", sa.String(length=160), nullable=True),
         sa.Column("boundary_receipt_sha256", sa.String(length=64), nullable=True),
         sa.Column("result_evidence_sha256", sa.String(length=64), nullable=True),
@@ -233,14 +234,18 @@ def upgrade() -> None:
         ),
         sa.CheckConstraint(
             "(state IN ('planned','intent_recorded') AND effect_knowledge='none' "
+            "AND outcome='pending' "
             "AND started_at IS NULL AND closed_at IS NULL) OR "
             "(state IN ('started','reconciling') AND effect_knowledge='known_effect' "
+            "AND outcome='pending' "
             "AND started_at IS NOT NULL AND closed_at IS NULL) OR "
             "(state='terminal' AND effect_knowledge IN "
             "('known_no_subeffect','known_effect') AND closed_at IS NOT NULL "
+            "AND outcome IN ('succeeded','failed') "
             "AND result_evidence_sha256 IS NOT NULL) OR "
             "(state IN ('uncertain','restricted_recovery') "
-            "AND effect_knowledge='uncertain' AND started_at IS NOT NULL)",
+            "AND effect_knowledge='uncertain' AND outcome='uncertain' "
+            "AND started_at IS NOT NULL)",
             name="ck_privileged_subeffects_state",
         ),
         sa.ForeignKeyConstraint(
@@ -427,21 +432,31 @@ def upgrade() -> None:
         sa.Column("service_profile_sha256", sa.String(length=64), nullable=False),
         sa.Column("workspace_id", sa.String(length=160), nullable=False),
         sa.Column("workspace_fence_version", sa.Integer(), nullable=False),
+        sa.Column("evidence_generation", sa.Integer(), nullable=False),
         sa.Column("candidate_slot_id", sa.String(length=160), nullable=False),
         sa.Column("lkg_slot_id", sa.String(length=160), nullable=False),
         sa.Column("selected_slot_id", sa.String(length=160), nullable=True),
+        sa.Column("current_runtime_identity_sha256", sa.String(length=64), nullable=False),
+        sa.Column("current_service_observation_sha256", sa.String(length=64), nullable=False),
+        sa.Column("outstanding_state_sha256", sa.String(length=64), nullable=False),
+        sa.Column("preflight_state_binding_sha256", sa.String(length=64), nullable=False),
+        sa.Column("preflight_observed_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("candidate_verification_sha256", sa.String(length=64), nullable=False),
         sa.Column("peer_set_sha256", sa.String(length=64), nullable=False),
         sa.Column("schema_heads_sha256", sa.String(length=64), nullable=False),
+        sa.Column("restart_deadline_seconds", sa.Integer(), nullable=False),
         sa.Column("checkpoint_sha256", sa.String(length=64), nullable=False),
         sa.Column("state", sa.String(length=32), nullable=False),
+        sa.Column("outcome", sa.String(length=32), nullable=False),
         sa.Column("result_evidence_sha256", sa.String(length=64), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("service_stopped_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("closed_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.CheckConstraint(
-            "workspace_fence_version>=1 AND updated_at>=created_at "
+            "workspace_fence_version>=1 AND evidence_generation>=1 "
+            "AND restart_deadline_seconds BETWEEN 1 AND 900 AND updated_at>=created_at "
+            "AND preflight_observed_at<=created_at "
             "AND (service_stopped_at IS NULL OR service_stopped_at>=created_at) "
             "AND (closed_at IS NULL OR closed_at>=created_at)",
             name="ck_privileged_restart_checkpoints_time",
@@ -451,6 +466,10 @@ def upgrade() -> None:
                 _digest(column)
                 for column in (
                     "service_profile_sha256",
+                    "current_runtime_identity_sha256",
+                    "current_service_observation_sha256",
+                    "outstanding_state_sha256",
+                    "preflight_state_binding_sha256",
                     "candidate_verification_sha256",
                     "peer_set_sha256",
                     "schema_heads_sha256",
@@ -463,19 +482,32 @@ def upgrade() -> None:
             name="ck_privileged_restart_checkpoints_digests",
         ),
         sa.CheckConstraint(
-            "(state IN ('prepared','checkpointed') AND service_stopped_at IS NULL "
+            "(state IN ('prepared','checkpointed') AND outcome='pending' "
+            "AND service_stopped_at IS NULL "
             "AND selected_slot_id IS NULL AND closed_at IS NULL) OR "
-            "(state='service_stopped' AND service_stopped_at IS NOT NULL "
+            "(state='service_stopped' AND outcome='pending' AND service_stopped_at IS NOT NULL "
             "AND selected_slot_id IS NULL AND closed_at IS NULL) OR "
             "(state IN ('candidate_selected','candidate_started','verifying') "
+            "AND outcome='pending' "
             "AND service_stopped_at IS NOT NULL AND selected_slot_id=candidate_slot_id "
             "AND closed_at IS NULL) OR "
+            "(state='rollback_required' AND outcome='pending' "
+            "AND service_stopped_at IS NOT NULL "
+            "AND (selected_slot_id IS NULL OR selected_slot_id=candidate_slot_id) "
+            "AND closed_at IS NULL) OR "
+            "(state='rollback_service_stopped' AND outcome='pending' "
+            "AND service_stopped_at IS NOT NULL "
+            "AND (selected_slot_id IS NULL OR selected_slot_id=candidate_slot_id) "
+            "AND closed_at IS NULL) OR "
             "(state IN ('rollback_selected','rollback_started') "
+            "AND outcome='pending' "
             "AND service_stopped_at IS NOT NULL AND selected_slot_id=lkg_slot_id "
             "AND closed_at IS NULL) OR "
-            "(state='restricted_recovery' AND service_stopped_at IS NOT NULL "
+            "(state='restricted_recovery' "
+            "AND outcome='restricted_recovery' AND result_evidence_sha256 IS NOT NULL "
             "AND closed_at IS NULL) OR "
             "(state='terminal' AND closed_at IS NOT NULL "
+            "AND outcome IN ('candidate_ready','rollback_ready','no_subeffect','failed') "
             "AND result_evidence_sha256 IS NOT NULL)",
             name="ck_privileged_restart_checkpoints_state",
         ),
@@ -692,6 +724,7 @@ def upgrade() -> None:
             OR NOT (NEW.effect_knowledge=OLD.effect_knowledge OR
               (OLD.effect_knowledge='none' AND NEW.effect_knowledge IN
                ('known_no_subeffect','known_effect','uncertain')) OR
+              (OLD.effect_knowledge='known_effect' AND NEW.effect_knowledge='uncertain') OR
               (OLD.effect_knowledge='uncertain' AND NEW.effect_knowledge IN
                ('known_no_subeffect','known_effect')))
           THEN RAISE(ABORT, 'privileged acceptance evidence regressed') END;
@@ -750,6 +783,7 @@ def upgrade() -> None:
              NEW.boundary_receipt_sha256 IS NOT OLD.boundary_receipt_sha256) OR
             (OLD.result_evidence_sha256 IS NOT NULL AND
              NEW.result_evidence_sha256 IS NOT OLD.result_evidence_sha256) OR
+            (OLD.outcome!='pending' AND NEW.outcome!=OLD.outcome) OR
             (OLD.started_at IS NOT NULL AND NEW.started_at IS NOT OLD.started_at) OR
             (OLD.closed_at IS NOT NULL AND NEW.closed_at IS NOT OLD.closed_at) OR
             NOT (
@@ -857,10 +891,17 @@ def upgrade() -> None:
             NEW.service_profile_sha256!=OLD.service_profile_sha256 OR
             NEW.workspace_id!=OLD.workspace_id OR
             NEW.workspace_fence_version!=OLD.workspace_fence_version OR
+            NEW.evidence_generation<OLD.evidence_generation OR
             NEW.candidate_slot_id!=OLD.candidate_slot_id OR NEW.lkg_slot_id!=OLD.lkg_slot_id OR
+            NEW.current_runtime_identity_sha256!=OLD.current_runtime_identity_sha256 OR
+            NEW.current_service_observation_sha256!=OLD.current_service_observation_sha256 OR
+            NEW.outstanding_state_sha256!=OLD.outstanding_state_sha256 OR
+            NEW.preflight_state_binding_sha256!=OLD.preflight_state_binding_sha256 OR
+            NEW.preflight_observed_at!=OLD.preflight_observed_at OR
             NEW.candidate_verification_sha256!=OLD.candidate_verification_sha256 OR
             NEW.peer_set_sha256!=OLD.peer_set_sha256 OR
             NEW.schema_heads_sha256!=OLD.schema_heads_sha256 OR
+            NEW.restart_deadline_seconds!=OLD.restart_deadline_seconds OR
             NEW.checkpoint_sha256!=OLD.checkpoint_sha256 OR NEW.created_at!=OLD.created_at
           THEN RAISE(ABORT, 'privileged restart checkpoint identity changed') END;
           SELECT CASE WHEN NEW.updated_at<OLD.updated_at OR
@@ -873,6 +914,7 @@ def upgrade() -> None:
                NEW.selected_slot_id IS NEW.lkg_slot_id)) OR
             (OLD.result_evidence_sha256 IS NOT NULL AND
              NEW.result_evidence_sha256 IS NOT OLD.result_evidence_sha256) OR
+            (OLD.outcome!='pending' AND NEW.outcome!=OLD.outcome) OR
             (OLD.service_stopped_at IS NOT NULL AND
              NEW.service_stopped_at IS NOT OLD.service_stopped_at) OR
             (OLD.closed_at IS NOT NULL AND NEW.closed_at IS NOT OLD.closed_at) OR
@@ -882,13 +924,17 @@ def upgrade() -> None:
               (OLD.state='checkpointed' AND NEW.state IN
                ('service_stopped','terminal','restricted_recovery')) OR
               (OLD.state='service_stopped' AND NEW.state IN
-               ('candidate_selected','rollback_selected','restricted_recovery')) OR
+               ('candidate_selected','rollback_required','restricted_recovery')) OR
               (OLD.state='candidate_selected' AND NEW.state IN
-               ('candidate_started','rollback_selected','restricted_recovery')) OR
+               ('candidate_started','rollback_required','restricted_recovery')) OR
               (OLD.state='candidate_started' AND NEW.state IN
-               ('verifying','rollback_selected','restricted_recovery')) OR
+               ('verifying','rollback_required','restricted_recovery')) OR
               (OLD.state='verifying' AND NEW.state IN
-               ('terminal','rollback_selected','restricted_recovery')) OR
+               ('terminal','rollback_required','restricted_recovery')) OR
+              (OLD.state='rollback_required' AND NEW.state IN
+               ('rollback_service_stopped','restricted_recovery')) OR
+              (OLD.state='rollback_service_stopped' AND NEW.state IN
+               ('rollback_selected','restricted_recovery')) OR
               (OLD.state='rollback_selected' AND NEW.state IN
                ('rollback_started','restricted_recovery')) OR
               (OLD.state='rollback_started' AND NEW.state IN

@@ -10,8 +10,14 @@ from binnacle.domain.privileged import (
     BinnacleServiceProfile,
     BrokerAcceptanceDisposition,
     BrokerAcceptanceReceipt,
+    BrokerAcceptanceState,
+    BrokerBindingSnapshot,
+    BrokerExecutionState,
+    BrokerRestartCheckpointState,
+    BrokerRestartOutcome,
     PackageProfile,
     PrivilegedAction,
+    PrivilegedBrokerHello,
     PrivilegedBrokerProfile,
     PrivilegedEffectKnowledge,
     PrivilegedError,
@@ -161,8 +167,13 @@ def test_protected_profiles_are_closed_and_digest_stable() -> None:
 
     invalid: tuple[Callable[[], object], ...] = (
         lambda: replace(broker, broker_uid=1),
+        lambda: replace(broker, application_peer_uid=0),
         lambda: replace(broker, allowed_actions=tuple(reversed(broker.allowed_actions))),
         lambda: replace(broker, migration_head="0002_unknown"),
+        lambda: replace(broker, maximum_frame_bytes=1_000),
+        lambda: replace(broker, request_deadline_seconds=0),
+        lambda: replace(broker, maximum_requests_per_minute=0),
+        lambda: replace(broker, ticket_integrity_algorithm="none"),
         lambda: replace(
             broker,
             allowed_actions=tuple(
@@ -174,10 +185,21 @@ def test_protected_profiles_are_closed_and_digest_stable() -> None:
         ),
         lambda: replace(service, service_unit="ssh.service"),
         lambda: replace(service, current_selector="/tmp/current"),
+        lambda: replace(service, local_recovery_marker="/tmp/recovery.json"),
+        lambda: replace(service, maximum_slot_bytes=1),
+        lambda: replace(service, maximum_slot_inodes=1),
+        lambda: replace(service, maximum_retained_slots=2),
+        lambda: replace(service, service_uid=0),
+        lambda: replace(service, restart_deadline_seconds=0),
         lambda: replace(service, executor_migration_head="0001_executor_evidence"),
         lambda: replace(package, removals_allowed=True),
         lambda: replace(package, allowed_packages=("git", "git")),
+        lambda: replace(package, allowed_packages=("bad package",)),
         lambda: replace(package, executable_path="apt-get"),
+        lambda: replace(package, repository_metadata_maximum_age_seconds=1),
+        lambda: replace(package, maximum_download_bytes=1),
+        lambda: replace(package, maximum_install_seconds=0),
+        lambda: replace(package, maximum_output_bytes=1),
     )
     for construct in invalid:
         with pytest.raises(PrivilegedError):
@@ -206,6 +228,8 @@ def test_privileged_ticket_is_exact_consequential_and_time_bounded() -> None:
         lambda: replace(ticket, expires_at=ticket.issued_at + timedelta(seconds=301)),
         lambda: replace(ticket, issued_at=ticket.issued_at.replace(tzinfo=None)),
         lambda: replace(ticket, integrity_algorithm="none"),
+        lambda: replace(ticket, integrity_proof="short"),
+        lambda: replace(ticket, integrity_proof="x" * 31 + "é"),
     )
     for construct in invalid:
         with pytest.raises(PrivilegedError):
@@ -239,3 +263,141 @@ def test_acceptance_receipts_bind_effect_truth() -> None:
     assert len(conflict.receipt_sha256) == 64
     with pytest.raises(PrivilegedError, match="effect truth"):
         replace(accepted, effect_knowledge=PrivilegedEffectKnowledge.UNCERTAIN)
+
+
+def test_broker_hello_rejects_protocol_and_readiness_widening() -> None:
+    hello = PrivilegedBrokerHello(
+        protocol_id="binnacle-privileged",
+        protocol_version="v1",
+        build_sha256=DIGEST_A,
+        profile_sha256=DIGEST_B,
+        broker_instance_id="broker:fixture",
+        broker_generation=1,
+        backend_ready=False,
+        readiness="disabled",
+    )
+    assert hello.readiness == "disabled"
+    invalid: tuple[Callable[[], object], ...] = (
+        lambda: replace(hello, protocol_version="future"),
+        lambda: replace(hello, broker_generation=0),
+        lambda: replace(hello, readiness="promoted"),
+    )
+    for construct in invalid:
+        with pytest.raises(PrivilegedError):
+            construct()
+
+
+def _controlled_terminal_binding() -> BrokerBindingSnapshot:
+    ticket = replace(
+        _ticket(),
+        operation_contract="binnacle_restart",
+        action=PrivilegedAction.CONTROLLED_RESTART,
+        maximum_effect=PrivilegedMaximumEffect.CONTROLLED_RESTART,
+    )
+    return BrokerBindingSnapshot(
+        identity=ticket.routing_identity,
+        acceptance_state=BrokerAcceptanceState.ACCEPTED,
+        evidence_generation=1,
+        acceptance_evidence_sha256=DIGEST_A,
+        execution_state=BrokerExecutionState.TERMINAL,
+        effect_knowledge=PrivilegedEffectKnowledge.KNOWN_EFFECT,
+        result_evidence_sha256=DIGEST_B,
+        accepted_at=ticket.issued_at,
+        sealed_at=None,
+        closed_at=ticket.issued_at + timedelta(seconds=1),
+        last_reconciled_at=ticket.issued_at + timedelta(seconds=1),
+        restart_checkpoint_sha256=DIGEST_C,
+        restart_checkpoint_state=BrokerRestartCheckpointState.TERMINAL,
+        restart_outcome=BrokerRestartOutcome.CANDIDATE_READY,
+        candidate_slot_id="candidate-slot",
+        lkg_slot_id="lkg-slot",
+        selected_runtime_slot_id="candidate-slot",
+    )
+
+
+def test_restart_binding_projection_is_exact_and_fail_closed() -> None:
+    binding = _controlled_terminal_binding()
+    assert binding.restart_outcome is BrokerRestartOutcome.CANDIDATE_READY
+
+    valid_variants = (
+        replace(
+            binding,
+            restart_outcome=BrokerRestartOutcome.ROLLBACK_READY,
+            selected_runtime_slot_id="lkg-slot",
+        ),
+        replace(
+            binding,
+            effect_knowledge=PrivilegedEffectKnowledge.KNOWN_NO_SUBEFFECT,
+            restart_outcome=BrokerRestartOutcome.NO_SUBEFFECT,
+            selected_runtime_slot_id=None,
+        ),
+        replace(
+            binding,
+            execution_state=BrokerExecutionState.UNCERTAIN,
+            effect_knowledge=PrivilegedEffectKnowledge.UNCERTAIN,
+            closed_at=None,
+            restart_checkpoint_state=BrokerRestartCheckpointState.UNCERTAIN,
+            restart_outcome=BrokerRestartOutcome.UNCERTAIN,
+        ),
+        replace(
+            binding,
+            execution_state=BrokerExecutionState.RESTRICTED_RECOVERY,
+            effect_knowledge=PrivilegedEffectKnowledge.UNCERTAIN,
+            closed_at=None,
+            restart_checkpoint_state=BrokerRestartCheckpointState.RESTRICTED_RECOVERY,
+            restart_outcome=BrokerRestartOutcome.RESTRICTED_RECOVERY,
+        ),
+    )
+    assert len(valid_variants) == 4
+
+    package_identity = _ticket().routing_identity
+    invalid: tuple[Callable[[], object], ...] = (
+        lambda: replace(binding, evidence_generation=-1),
+        lambda: replace(binding, accepted_at=None),
+        lambda: replace(binding, acceptance_evidence_sha256=None),
+        lambda: replace(binding, execution_state=BrokerExecutionState.NOT_ACCEPTED),
+        lambda: replace(binding, effect_knowledge=PrivilegedEffectKnowledge.NONE),
+        lambda: replace(binding, closed_at=None),
+        lambda: replace(binding, result_evidence_sha256=None),
+        lambda: replace(
+            binding,
+            execution_state=BrokerExecutionState.ACCEPTED_PRE_EFFECT,
+            effect_knowledge=PrivilegedEffectKnowledge.NONE,
+            result_evidence_sha256=DIGEST_B,
+            closed_at=None,
+        ),
+        lambda: replace(binding, restart_outcome=BrokerRestartOutcome.PENDING),
+        lambda: replace(binding, restart_outcome=None),
+        lambda: replace(binding, selected_runtime_slot_id="foreign-slot"),
+        lambda: replace(binding, identity=package_identity),
+        lambda: replace(binding, lkg_slot_id="candidate-slot"),
+        lambda: replace(
+            binding,
+            execution_state=BrokerExecutionState.ACCEPTED_PRE_EFFECT,
+            effect_knowledge=PrivilegedEffectKnowledge.NONE,
+            result_evidence_sha256=None,
+            closed_at=None,
+        ),
+        lambda: replace(
+            valid_variants[2],
+            execution_state=BrokerExecutionState.RESTRICTED_RECOVERY,
+        ),
+        lambda: replace(
+            valid_variants[3],
+            execution_state=BrokerExecutionState.UNCERTAIN,
+        ),
+        lambda: replace(binding, selected_runtime_slot_id="lkg-slot"),
+        lambda: replace(
+            valid_variants[0],
+            selected_runtime_slot_id="candidate-slot",
+        ),
+        lambda: replace(
+            binding,
+            effect_knowledge=PrivilegedEffectKnowledge.KNOWN_EFFECT,
+            restart_outcome=BrokerRestartOutcome.NO_SUBEFFECT,
+            selected_runtime_slot_id=None,
+        ),
+    )
+    for construct in invalid:
+        with pytest.raises(PrivilegedError):
+            construct()

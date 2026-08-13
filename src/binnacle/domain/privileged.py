@@ -92,6 +92,36 @@ class PrivilegedEffectKnowledge(StrEnum):
     UNCERTAIN = "uncertain"
 
 
+class BrokerRestartCheckpointState(StrEnum):
+    """Durable root-side controlled-restart progression."""
+
+    PREPARED = "prepared"
+    CHECKPOINTED = "checkpointed"
+    SERVICE_STOPPED = "service_stopped"
+    CANDIDATE_SELECTED = "candidate_selected"
+    CANDIDATE_STARTED = "candidate_started"
+    VERIFYING = "verifying"
+    ROLLBACK_REQUIRED = "rollback_required"
+    ROLLBACK_SERVICE_STOPPED = "rollback_service_stopped"
+    ROLLBACK_SELECTED = "rollback_selected"
+    ROLLBACK_STARTED = "rollback_started"
+    TERMINAL = "terminal"
+    UNCERTAIN = "uncertain"
+    RESTRICTED_RECOVERY = "restricted_recovery"
+
+
+class BrokerRestartOutcome(StrEnum):
+    """Bounded restart result; never infer it from service presence alone."""
+
+    PENDING = "pending"
+    CANDIDATE_READY = "candidate_ready"
+    ROLLBACK_READY = "rollback_ready"
+    NO_SUBEFFECT = "no_subeffect"
+    FAILED = "failed"
+    UNCERTAIN = "uncertain"
+    RESTRICTED_RECOVERY = "restricted_recovery"
+
+
 @dataclass(frozen=True, slots=True)
 class PrivilegedBrokerHello:
     """Authenticated broker identity and fail-closed readiness projection."""
@@ -602,6 +632,12 @@ class BrokerBindingSnapshot:
     sealed_at: datetime | None
     closed_at: datetime | None
     last_reconciled_at: datetime | None
+    restart_checkpoint_sha256: str | None = None
+    restart_checkpoint_state: BrokerRestartCheckpointState | None = None
+    restart_outcome: BrokerRestartOutcome | None = None
+    candidate_slot_id: str | None = None
+    lkg_slot_id: str | None = None
+    selected_runtime_slot_id: str | None = None
 
     def __post_init__(self) -> None:
         if self.evidence_generation < 0:
@@ -662,6 +698,77 @@ class BrokerBindingSnapshot:
             PrivilegedEffectKnowledge.KNOWN_EFFECT,
         }:
             raise PrivilegedError("terminal broker execution effect truth is invalid")
+        restart_values = (
+            self.restart_checkpoint_state,
+            self.restart_outcome,
+            self.candidate_slot_id,
+            self.lkg_slot_id,
+        )
+        has_restart = self.restart_checkpoint_sha256 is not None
+        if has_restart != all(value is not None for value in restart_values):
+            raise PrivilegedError("broker restart checkpoint projection is incomplete")
+        if not has_restart:
+            if self.selected_runtime_slot_id is not None:
+                raise PrivilegedError("broker binding selects a slot without a checkpoint")
+            return
+        assert self.restart_checkpoint_sha256 is not None
+        assert self.restart_checkpoint_state is not None
+        assert self.restart_outcome is not None
+        assert self.candidate_slot_id is not None
+        assert self.lkg_slot_id is not None
+        _require_sha256(self.restart_checkpoint_sha256, "restart checkpoint")
+        _require_ticket_id(self.candidate_slot_id, "candidate slot")
+        _require_ticket_id(self.lkg_slot_id, "LKG slot")
+        if self.identity.action is not PrivilegedAction.CONTROLLED_RESTART:
+            raise PrivilegedError("non-controlled broker binding carries a restart checkpoint")
+        if self.candidate_slot_id == self.lkg_slot_id:
+            raise PrivilegedError("broker checkpoint candidate and LKG slots are identical")
+        if self.selected_runtime_slot_id is not None:
+            _require_ticket_id(self.selected_runtime_slot_id, "selected runtime slot")
+            if self.selected_runtime_slot_id not in {
+                self.candidate_slot_id,
+                self.lkg_slot_id,
+            }:
+                raise PrivilegedError("broker checkpoint selected an unbound runtime slot")
+        expected_outcome = {
+            BrokerRestartCheckpointState.TERMINAL: {
+                BrokerRestartOutcome.CANDIDATE_READY,
+                BrokerRestartOutcome.ROLLBACK_READY,
+                BrokerRestartOutcome.NO_SUBEFFECT,
+                BrokerRestartOutcome.FAILED,
+            },
+            BrokerRestartCheckpointState.UNCERTAIN: {BrokerRestartOutcome.UNCERTAIN},
+            BrokerRestartCheckpointState.RESTRICTED_RECOVERY: {
+                BrokerRestartOutcome.RESTRICTED_RECOVERY
+            },
+        }.get(self.restart_checkpoint_state, {BrokerRestartOutcome.PENDING})
+        if self.restart_outcome not in expected_outcome:
+            raise PrivilegedError("broker restart state and outcome disagree")
+        if self.restart_checkpoint_state is BrokerRestartCheckpointState.TERMINAL and (
+            self.execution_state is not BrokerExecutionState.TERMINAL
+        ):
+            raise PrivilegedError("terminal restart checkpoint has an open broker binding")
+        if self.restart_checkpoint_state is BrokerRestartCheckpointState.UNCERTAIN and (
+            self.execution_state is not BrokerExecutionState.UNCERTAIN
+        ):
+            raise PrivilegedError("uncertain restart checkpoint has different broker truth")
+        if self.restart_checkpoint_state is BrokerRestartCheckpointState.RESTRICTED_RECOVERY and (
+            self.execution_state is not BrokerExecutionState.RESTRICTED_RECOVERY
+        ):
+            raise PrivilegedError("restricted restart checkpoint has different broker truth")
+        if self.restart_outcome is BrokerRestartOutcome.CANDIDATE_READY and (
+            self.selected_runtime_slot_id != self.candidate_slot_id
+        ):
+            raise PrivilegedError("candidate-ready restart did not select the candidate slot")
+        if self.restart_outcome is BrokerRestartOutcome.ROLLBACK_READY and (
+            self.selected_runtime_slot_id != self.lkg_slot_id
+        ):
+            raise PrivilegedError("rollback-ready restart did not select the LKG slot")
+        if self.restart_outcome is BrokerRestartOutcome.NO_SUBEFFECT and (
+            self.selected_runtime_slot_id is not None
+            or self.effect_knowledge is not PrivilegedEffectKnowledge.KNOWN_NO_SUBEFFECT
+        ):
+            raise PrivilegedError("no-subeffect restart carries contradictory effect truth")
 
 
 @dataclass(frozen=True, slots=True)
@@ -792,6 +899,8 @@ __all__ = [
     "BrokerBindingSnapshot",
     "BrokerExecutionState",
     "BrokerNoAcceptReason",
+    "BrokerRestartCheckpointState",
+    "BrokerRestartOutcome",
     "PackageProfile",
     "PrivilegedAction",
     "PrivilegedBrokerHello",

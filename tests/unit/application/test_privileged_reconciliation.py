@@ -12,16 +12,31 @@ from tests.phase4_support import NOW, intent, owner
 from tests.phase9_support import SHA_C, binding_snapshot
 
 from binnacle.application.privileged_reconciliation import (
+    PrivilegedRestartAuditClosure,
     PrivilegedRestartReconciler,
+    PrivilegedRestartReconciliationError,
+    RestartAcceptedAuditClosure,
     RestartNoAcceptAuditClosure,
 )
-from binnacle.domain.operation import OperationSnapshot, new_received_operation
+from binnacle.domain.audit import AuditAppendResult, AuditTail
+from binnacle.domain.operation import (
+    EffectKnowledge,
+    OperationSnapshot,
+    OperationState,
+    TransitionRequest,
+    new_received_operation,
+    transition,
+)
 from binnacle.domain.privileged import (
     BrokerAcceptanceState,
     BrokerBindingSnapshot,
     BrokerExecutionState,
+    BrokerRestartCheckpointState,
+    BrokerRestartOutcome,
+    PrivilegedAction,
     PrivilegedEffectKnowledge,
 )
+from binnacle.ports.audit import AuditJournal, AuditObligation, AuditObligationStore
 from binnacle.ports.privileged import (
     PrivilegedApplicationRepository,
     PrivilegedBrokerPort,
@@ -38,15 +53,82 @@ def _operation() -> OperationSnapshot:
     )
 
 
+def _running_operation() -> OperationSnapshot:
+    received = _operation()
+    authorised = transition(
+        received,
+        TransitionRequest(
+            expected_state_version=received.state_version,
+            to_state=OperationState.AUTHORISED,
+            effect_knowledge=EffectKnowledge.NONE,
+            reason_code="policy_allowed",
+            occurred_at=NOW,
+        ),
+    )
+    return transition(
+        authorised,
+        TransitionRequest(
+            expected_state_version=authorised.state_version,
+            to_state=OperationState.RUNNING,
+            effect_knowledge=EffectKnowledge.NONE,
+            reason_code="privileged_dispatch_committed",
+            occurred_at=NOW,
+        ),
+    )
+
+
+def _terminal_snapshot(
+    outcome: BrokerRestartOutcome = BrokerRestartOutcome.CANDIDATE_READY,
+) -> BrokerBindingSnapshot:
+    accepted = binding_snapshot()
+    selected = {
+        BrokerRestartOutcome.CANDIDATE_READY: "candidate-slot",
+        BrokerRestartOutcome.ROLLBACK_READY: "lkg-slot",
+        BrokerRestartOutcome.NO_SUBEFFECT: None,
+        BrokerRestartOutcome.FAILED: "lkg-slot",
+    }[outcome]
+    return replace(
+        accepted,
+        identity=replace(
+            accepted.identity,
+            action=PrivilegedAction.CONTROLLED_RESTART,
+        ),
+        evidence_generation=8,
+        execution_state=BrokerExecutionState.TERMINAL,
+        effect_knowledge=(
+            PrivilegedEffectKnowledge.KNOWN_NO_SUBEFFECT
+            if outcome is BrokerRestartOutcome.NO_SUBEFFECT
+            else PrivilegedEffectKnowledge.KNOWN_EFFECT
+        ),
+        result_evidence_sha256=SHA_C,
+        accepted_at=NOW,
+        closed_at=NOW,
+        restart_checkpoint_sha256=SHA_C,
+        restart_checkpoint_state=BrokerRestartCheckpointState.TERMINAL,
+        restart_outcome=outcome,
+        candidate_slot_id="candidate-slot",
+        lkg_slot_id="lkg-slot",
+        selected_runtime_slot_id=selected,
+    )
+
+
 def _dependencies(
     *,
     retained: bool = True,
     snapshot: BrokerBindingSnapshot | None = None,
     broker_error: Exception | None = None,
     audit_closure: RestartNoAcceptAuditClosure | None = None,
-) -> tuple[PrivilegedRestartReconciler, AsyncMock, AsyncMock, AsyncMock]:
+    accepted_audit_closure: RestartAcceptedAuditClosure | None = None,
+) -> tuple[
+    PrivilegedRestartReconciler,
+    AsyncMock,
+    AsyncMock,
+    AsyncMock,
+    AsyncMock,
+]:
     record_snapshot = AsyncMock()
     close_no_accept = AsyncMock()
+    close_accepted = AsyncMock()
     repository = cast(
         PrivilegedApplicationRepository,
         SimpleNamespace(
@@ -57,6 +139,7 @@ def _dependencies(
             ),
             record_broker_snapshot=record_snapshot,
             close_restart_no_accept=close_no_accept,
+            close_restart_accepted=close_accepted,
         ),
     )
     broker_get = AsyncMock(return_value=snapshot)
@@ -68,29 +151,32 @@ def _dependencies(
             repository=repository,
             broker=broker,
             no_accept_audit_closure=audit_closure,
+            accepted_audit_closure=accepted_audit_closure,
             clock=lambda: NOW,
         ),
         record_snapshot,
         broker_get,
         close_no_accept,
+        close_accepted,
     )
 
 
 @pytest.mark.anyio
 async def test_non_privileged_operation_falls_through_to_other_reconcilers() -> None:
-    reconciler, record, broker_get, close_no_accept = _dependencies(retained=False)
+    reconciler, record, broker_get, close_no_accept, close_accepted = _dependencies(retained=False)
 
     assert await reconciler.reconcile(_operation()) is None
     broker_get.assert_not_awaited()
     record.assert_not_awaited()
     close_no_accept.assert_not_awaited()
+    close_accepted.assert_not_awaited()
 
 
 @pytest.mark.anyio
 async def test_missing_or_unavailable_broker_keeps_restart_recovery_closed() -> None:
     operation = _operation()
-    missing, missing_record, _, missing_close = _dependencies(snapshot=None)
-    unavailable, unavailable_record, _, unavailable_close = _dependencies(
+    missing, missing_record, _, missing_close, missing_accepted = _dependencies(snapshot=None)
+    unavailable, unavailable_record, _, unavailable_close, unavailable_accepted = _dependencies(
         broker_error=PrivilegedBrokerUnavailable("broker unavailable")
     )
 
@@ -100,17 +186,20 @@ async def test_missing_or_unavailable_broker_keeps_restart_recovery_closed() -> 
     unavailable_record.assert_not_awaited()
     missing_close.assert_not_awaited()
     unavailable_close.assert_not_awaited()
+    missing_accepted.assert_not_awaited()
+    unavailable_accepted.assert_not_awaited()
 
 
 @pytest.mark.anyio
 async def test_exact_accepted_snapshot_is_recorded_without_generic_closure() -> None:
     operation = _operation()
     snapshot = binding_snapshot()
-    reconciler, record, _, close_no_accept = _dependencies(snapshot=snapshot)
+    reconciler, record, _, close_no_accept, close_accepted = _dependencies(snapshot=snapshot)
 
     assert await reconciler.reconcile(operation) is operation
     record.assert_awaited_once_with(snapshot, reconciled_at=NOW)
     close_no_accept.assert_not_awaited()
+    close_accepted.assert_not_awaited()
     assert await reconciler.reconcile_terminal_closures() == ()
 
 
@@ -129,11 +218,12 @@ async def test_no_accept_snapshot_waits_for_atomic_terminal_closure() -> None:
         sealed_at=NOW,
         closed_at=NOW,
     )
-    reconciler, record, _, close_no_accept = _dependencies(snapshot=sealed)
+    reconciler, record, _, close_no_accept, close_accepted = _dependencies(snapshot=sealed)
 
     assert await reconciler.reconcile(operation) is operation
     record.assert_not_awaited()
     close_no_accept.assert_not_awaited()
+    close_accepted.assert_not_awaited()
 
 
 @pytest.mark.anyio
@@ -160,7 +250,7 @@ async def test_no_accept_snapshot_closes_only_after_durable_audit_evidence() -> 
         RestartNoAcceptAuditClosure,
         SimpleNamespace(record_no_accept=audit_record),
     )
-    reconciler, record, _, close_no_accept = _dependencies(
+    reconciler, record, _, close_no_accept, close_accepted = _dependencies(
         snapshot=sealed,
         audit_closure=audit_closure,
     )
@@ -174,3 +264,143 @@ async def test_no_accept_snapshot_closes_only_after_durable_audit_evidence() -> 
     assert request.audit_closure_evidence_sha256 == SHA_C
     assert request.closed_at == NOW
     record.assert_not_awaited()
+    close_accepted.assert_not_awaited()
+
+
+@pytest.mark.anyio
+async def test_accepted_terminal_snapshot_closes_only_after_exact_audit_evidence() -> None:
+    operation = _operation()
+    terminal = _terminal_snapshot()
+    closed_operation = replace(operation, state=operation.state)
+    audit_record = AsyncMock(return_value=SHA_C)
+    audit_closure = cast(
+        RestartAcceptedAuditClosure,
+        SimpleNamespace(record_accepted=audit_record),
+    )
+    reconciler, record, _, close_no_accept, close_accepted = _dependencies(
+        snapshot=terminal,
+        accepted_audit_closure=audit_closure,
+    )
+    close_accepted.return_value = (closed_operation, object(), object())
+
+    assert await reconciler.reconcile(operation) is closed_operation
+    audit_record.assert_awaited_once_with(operation, terminal)
+    assert close_accepted.await_args is not None
+    request = close_accepted.await_args.args[0]
+    assert request.snapshot is terminal
+    assert request.audit_closure_evidence_sha256 == SHA_C
+    assert request.closed_at == NOW
+    record.assert_not_awaited()
+    close_no_accept.assert_not_awaited()
+
+
+@pytest.mark.anyio
+async def test_audit_closure_appends_then_reuses_exact_terminal_evidence() -> None:
+    operation = _running_operation()
+    snapshot = _terminal_snapshot()
+    append = AsyncMock(
+        return_value=AuditAppendResult(
+            sequence=2,
+            event_hash=SHA_C,
+            canonical_bytes=b"audit-fixture",
+        )
+    )
+    find = AsyncMock(return_value=None)
+    emergency = AsyncMock()
+    journal = cast(
+        AuditJournal,
+        SimpleNamespace(
+            tail=AuditTail(2, SHA_C),
+            append=append,
+            append_emergency=emergency,
+            find_operation_state_evidence=find,
+        ),
+    )
+    scan = AsyncMock(return_value=())
+    obligations = cast(AuditObligationStore, SimpleNamespace(scan=scan))
+    update_tail = AsyncMock()
+    latch = AsyncMock()
+    closure = PrivilegedRestartAuditClosure(
+        audit=journal,
+        obligations=obligations,
+        store=SimpleNamespace(
+            update_audit_tail_cache=update_tail,
+            latch_audit_failure=latch,
+        ),
+        closure_health=AsyncMock(return_value=True),
+        clock=lambda: NOW,
+        monotonic_ns=lambda: 123,
+    )
+
+    assert await closure.record_accepted(operation, snapshot) == SHA_C
+    assert append.await_args is not None
+    draft = append.await_args.args[0]
+    assert draft.payload == {
+        "kind": "operation.state_changed",
+        "old_state": "running",
+        "new_state": "succeeded",
+        "state_version": operation.state_version + 1,
+        "effect_knowledge": "known_effect",
+        "result_digest": SHA_C,
+        "reason_code": "privileged_candidate_ready",
+    }
+    assert {item["name"] for item in draft.safe_facts} == {
+        "privileged_ticket_sha256",
+        "broker_acceptance_evidence_sha256",
+        "restart_checkpoint_sha256",
+        "restart_outcome",
+        "selected_runtime_slot_id",
+    }
+    update_tail.assert_awaited_once_with(AuditTail(2, SHA_C))
+    emergency.assert_not_awaited()
+    latch.assert_not_awaited()
+
+    find.return_value = SHA_C
+    assert await closure.record_accepted(operation, snapshot) == SHA_C
+    append.assert_awaited_once()
+    assert update_tail.await_count == 2
+
+
+@pytest.mark.anyio
+async def test_audit_closure_retains_fence_when_health_or_append_is_unavailable() -> None:
+    operation = _running_operation()
+    snapshot = _terminal_snapshot(BrokerRestartOutcome.ROLLBACK_READY)
+    append = AsyncMock(side_effect=OSError("journal unavailable"))
+    emergency = AsyncMock()
+    journal = cast(
+        AuditJournal,
+        SimpleNamespace(
+            tail=AuditTail(0, None),
+            append=append,
+            append_emergency=emergency,
+            find_operation_state_evidence=AsyncMock(return_value=None),
+        ),
+    )
+    obligation_scan = AsyncMock(
+        return_value=(AuditObligation("1", "obl-fixture", operation.operation_id, 3),)
+    )
+    obligations = cast(
+        AuditObligationStore,
+        SimpleNamespace(scan=obligation_scan),
+    )
+    latch = AsyncMock()
+    closure = PrivilegedRestartAuditClosure(
+        audit=journal,
+        obligations=obligations,
+        store=SimpleNamespace(
+            update_audit_tail_cache=AsyncMock(),
+            latch_audit_failure=latch,
+        ),
+        closure_health=AsyncMock(return_value=True),
+        clock=lambda: NOW,
+    )
+
+    with pytest.raises(PrivilegedRestartReconciliationError, match="recovery"):
+        await closure.record_accepted(operation, snapshot)
+    append.assert_not_awaited()
+
+    obligation_scan.return_value = ()
+    with pytest.raises(PrivilegedRestartReconciliationError, match="persisted"):
+        await closure.record_accepted(operation, snapshot)
+    latch.assert_awaited_once_with("privileged_restart_audit_unavailable")
+    emergency.assert_awaited_once()
