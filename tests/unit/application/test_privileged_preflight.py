@@ -16,6 +16,7 @@ from binnacle.application.privileged_preflight import (
     RuntimeIdentityEvidence,
 )
 from binnacle.domain.privileged_observation import (
+    CandidateVerificationEvidence,
     RestartImpact,
     RestartPreflightKind,
     RestartPreflightReason,
@@ -38,6 +39,7 @@ def _slot(
     slot_id: str = "slot-0001",
     role: RuntimeSlotRole = RuntimeSlotRole.CANDIDATE,
     state: RuntimeSlotState = RuntimeSlotState.ACTIVE,
+    candidate_verification_sha256: str = SHA_B,
 ) -> VerifiedRuntimeSlot:
     return VerifiedRuntimeSlot(
         slot_id=slot_id,
@@ -54,11 +56,37 @@ def _slot(
         deployed_peer_set_sha256=SHA_A,
         migration_heads_sha256=SHA_B,
         layout_sha256=SHA_C,
-        candidate_verification_sha256=SHA_B,
+        candidate_verification_sha256=candidate_verification_sha256,
         complete_manifest_sha256=SHA_A,
         byte_count=10_000,
         inode_count=100,
         completed_at=NOW - timedelta(hours=1),
+    )
+
+
+def _candidate_verification(
+    *,
+    terminal_success: bool = True,
+    completed_at: datetime = NOW - timedelta(hours=2),
+    expires_at: datetime = NOW + timedelta(hours=1),
+) -> CandidateVerificationEvidence:
+    return CandidateVerificationEvidence(
+        source_sha256=SHA_A,
+        environment_sha256=SHA_B,
+        config_sha256=SHA_C,
+        policy_sha256=SHA_A,
+        manifest_sha256=SHA_B,
+        service_definition_sha256=SHA_C,
+        deployed_peer_set_sha256=SHA_A,
+        migration_heads_sha256=SHA_B,
+        runtime_layout_sha256=SHA_C,
+        verification_profile_sha256=SHA_A,
+        command_plan_sha256=SHA_B,
+        phase7_operation_id="operation_fixture",
+        phase7_execution_set_sha256=SHA_C,
+        terminal_success=terminal_success,
+        completed_at=completed_at,
+        expires_at=expires_at,
     )
 
 
@@ -229,7 +257,11 @@ def test_restart_survivable_non_source_command_does_not_block_preflight() -> Non
 
 def test_controlled_restart_preflight_binds_candidate_lkg_and_test_evidence() -> None:
     lkg = _slot(slot_id="slot-lkg", role=RuntimeSlotRole.LKG, state=RuntimeSlotState.LKG)
-    candidate = _slot(state=RuntimeSlotState.COMPLETE)
+    verification = _candidate_verification()
+    candidate = _slot(
+        state=RuntimeSlotState.COMPLETE,
+        candidate_verification_sha256=verification.evidence_sha256,
+    )
     result = RestartPreflightEvaluator().inspect(
         kind=RestartPreflightKind.CONTROLLED_SELF,
         facts=_facts(),
@@ -237,9 +269,7 @@ def test_controlled_restart_preflight_binds_candidate_lkg_and_test_evidence() ->
         runtime=_runtime(),
         lkg_slot=lkg,
         candidate_slot=candidate,
-        candidate_verification_sha256=SHA_C,
-        candidate_verification_fresh=True,
-        candidate_tested_state_matches=True,
+        candidate_verification=verification,
         observed_at=NOW,
     )
 
@@ -263,10 +293,11 @@ def test_controlled_preflight_rejects_a_runtime_not_bound_to_a_complete_slot() -
             role=RuntimeSlotRole.LKG,
             state=RuntimeSlotState.LKG,
         ),
-        candidate_slot=_slot(state=RuntimeSlotState.COMPLETE),
-        candidate_verification_sha256=SHA_C,
-        candidate_verification_fresh=True,
-        candidate_tested_state_matches=True,
+        candidate_slot=_slot(
+            state=RuntimeSlotState.COMPLETE,
+            candidate_verification_sha256=_candidate_verification().evidence_sha256,
+        ),
+        candidate_verification=_candidate_verification(),
         observed_at=NOW,
     )
 
@@ -322,19 +353,21 @@ def test_preflight_reports_every_common_blocker_without_authorizing() -> None:
 
 
 def test_controlled_preflight_reports_missing_stale_or_mismatched_evidence() -> None:
+    verification = _candidate_verification(
+        terminal_success=False,
+        expires_at=NOW - timedelta(seconds=1),
+    )
     result = RestartPreflightEvaluator().inspect(
         kind=RestartPreflightKind.CONTROLLED_SELF,
         facts=_facts(),
         service=_service(),
         runtime=_runtime(),
-        candidate_verification_sha256=SHA_C,
-        candidate_verification_fresh=False,
-        candidate_tested_state_matches=False,
+        candidate_slot=_slot(state=RuntimeSlotState.COMPLETE),
+        candidate_verification=verification,
         observed_at=NOW,
     )
 
     assert set(result.reason_codes) == {
-        RestartPreflightReason.CANDIDATE_VERIFICATION_MISSING,
         RestartPreflightReason.CANDIDATE_VERIFICATION_STALE,
         RestartPreflightReason.CANDIDATE_TESTED_STATE_MISMATCH,
         RestartPreflightReason.LKG_UNAVAILABLE,
@@ -360,7 +393,31 @@ def test_preflight_facts_reject_unbounded_or_contradictory_state(
         factory()
 
 
-def test_preflight_rejects_future_observations_and_bad_candidate_digest() -> None:
+def test_controlled_preflight_rejects_mismatched_candidate_verification_digest() -> None:
+    verification = _candidate_verification()
+    result = RestartPreflightEvaluator().inspect(
+        kind=RestartPreflightKind.CONTROLLED_SELF,
+        facts=_facts(),
+        service=_service(),
+        runtime=_runtime(),
+        lkg_slot=_slot(
+            slot_id="slot-lkg",
+            role=RuntimeSlotRole.LKG,
+            state=RuntimeSlotState.LKG,
+        ),
+        candidate_slot=_slot(
+            state=RuntimeSlotState.COMPLETE,
+            candidate_verification_sha256=SHA_C,
+        ),
+        candidate_verification=verification,
+        observed_at=NOW,
+    )
+
+    assert result.available is False
+    assert result.reason_codes == (RestartPreflightReason.CANDIDATE_TESTED_STATE_MISMATCH,)
+
+
+def test_preflight_rejects_future_observations_and_verification_completion() -> None:
     evaluator = RestartPreflightEvaluator()
     with pytest.raises(PrivilegedPreflightError, match="future"):
         evaluator.inspect(
@@ -370,12 +427,15 @@ def test_preflight_rejects_future_observations_and_bad_candidate_digest() -> Non
             runtime=_runtime(),
             observed_at=NOW,
         )
-    with pytest.raises(PrivilegedPreflightError, match="digest"):
+    with pytest.raises(PrivilegedPreflightError, match="after the preflight"):
         evaluator.inspect(
             kind=RestartPreflightKind.CONTROLLED_SELF,
             facts=_facts(),
             service=_service(),
             runtime=_runtime(),
-            candidate_verification_sha256="bad",
+            candidate_verification=_candidate_verification(
+                completed_at=NOW + timedelta(seconds=1),
+                expires_at=NOW + timedelta(hours=1),
+            ),
             observed_at=NOW,
         )

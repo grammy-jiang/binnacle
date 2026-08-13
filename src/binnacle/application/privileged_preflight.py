@@ -9,6 +9,7 @@ from typing import Final
 
 from binnacle.domain.privileged import canonical_sha256
 from binnacle.domain.privileged_observation import (
+    CandidateVerificationEvidence,
     RestartImpact,
     RestartPreflightKind,
     RestartPreflightReason,
@@ -209,16 +210,16 @@ class RestartPreflightEvaluator:
         runtime: RuntimeIdentity | None,
         lkg_slot: VerifiedRuntimeSlot | None = None,
         candidate_slot: VerifiedRuntimeSlot | None = None,
-        candidate_verification_sha256: str | None = None,
-        candidate_verification_fresh: bool = False,
-        candidate_tested_state_matches: bool = False,
+        candidate_verification: CandidateVerificationEvidence | None = None,
         observed_at: datetime,
     ) -> RestartPreflightResult:
         _require_aware(observed_at)
         if facts.observed_at > observed_at or service.observed_at > observed_at:
             raise PrivilegedPreflightError("restart preflight uses observations from the future")
-        if candidate_verification_sha256 is not None:
-            _require_sha256(candidate_verification_sha256)
+        if candidate_verification is not None and candidate_verification.completed_at > observed_at:
+            raise PrivilegedPreflightError(
+                "candidate verification completion is after the preflight observation"
+            )
 
         reasons: set[RestartPreflightReason] = set()
         if not facts.audit_healthy:
@@ -284,16 +285,26 @@ class RestartPreflightEvaluator:
                 or lkg_slot.state is not RuntimeSlotState.LKG
             ):
                 reasons.add(RestartPreflightReason.LKG_UNAVAILABLE)
-            if candidate_verification_sha256 is None or candidate_slot is None:
+            if candidate_verification is None or candidate_slot is None:
                 reasons.add(RestartPreflightReason.CANDIDATE_VERIFICATION_MISSING)
             elif (
                 candidate_slot.role is not RuntimeSlotRole.CANDIDATE
                 or candidate_slot.state is not RuntimeSlotState.COMPLETE
             ):
                 reasons.add(RestartPreflightReason.CANDIDATE_TESTED_STATE_MISMATCH)
-            if candidate_verification_sha256 is not None and not candidate_verification_fresh:
+            if (
+                candidate_verification is not None
+                and candidate_verification.expires_at <= observed_at
+            ):
                 reasons.add(RestartPreflightReason.CANDIDATE_VERIFICATION_STALE)
-            if candidate_verification_sha256 is not None and not candidate_tested_state_matches:
+            if (
+                candidate_verification is not None
+                and candidate_slot is not None
+                and not _candidate_verification_matches_slot(
+                    candidate_verification,
+                    candidate_slot,
+                )
+            ):
                 reasons.add(RestartPreflightReason.CANDIDATE_TESTED_STATE_MISMATCH)
 
         impacts = {
@@ -309,7 +320,11 @@ class RestartPreflightEvaluator:
             if not controlled or candidate_slot is None
             else candidate_slot.slot_identity_sha256
         )
-        verification_sha256 = candidate_verification_sha256 if controlled else None
+        verification_sha256 = (
+            candidate_verification.evidence_sha256
+            if controlled and candidate_verification is not None
+            else None
+        )
         state_binding = canonical_sha256(
             {
                 "candidate_slot_identity_sha256": candidate_sha256,
@@ -347,6 +362,35 @@ def _count_reason(
 ) -> None:
     if value:
         reasons.add(reason)
+
+
+def _candidate_verification_matches_slot(
+    evidence: CandidateVerificationEvidence,
+    slot: VerifiedRuntimeSlot,
+) -> bool:
+    return evidence.terminal_success and (
+        evidence.source_sha256,
+        evidence.environment_sha256,
+        evidence.config_sha256,
+        evidence.policy_sha256,
+        evidence.manifest_sha256,
+        evidence.service_definition_sha256,
+        evidence.deployed_peer_set_sha256,
+        evidence.migration_heads_sha256,
+        evidence.runtime_layout_sha256,
+        evidence.evidence_sha256,
+    ) == (
+        slot.source_sha256,
+        slot.environment_sha256,
+        slot.config_sha256,
+        slot.policy_sha256,
+        slot.manifest_sha256,
+        slot.service_definition_sha256,
+        slot.deployed_peer_set_sha256,
+        slot.migration_heads_sha256,
+        slot.layout_sha256,
+        slot.candidate_verification_sha256,
+    )
 
 
 def _require_sha256(value: str) -> None:

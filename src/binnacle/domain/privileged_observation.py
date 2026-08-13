@@ -93,6 +93,54 @@ class RestartImpact(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
+class CandidateVerificationEvidence:
+    """Retained terminal verification bound to one exact candidate state."""
+
+    source_sha256: str
+    environment_sha256: str
+    config_sha256: str
+    policy_sha256: str
+    manifest_sha256: str
+    service_definition_sha256: str
+    deployed_peer_set_sha256: str
+    migration_heads_sha256: str
+    runtime_layout_sha256: str
+    verification_profile_sha256: str
+    command_plan_sha256: str
+    phase7_operation_id: str
+    phase7_execution_set_sha256: str
+    terminal_success: bool
+    completed_at: datetime
+    expires_at: datetime
+
+    def __post_init__(self) -> None:
+        for value, name in (
+            (self.source_sha256, "candidate source"),
+            (self.environment_sha256, "candidate environment"),
+            (self.config_sha256, "candidate config"),
+            (self.policy_sha256, "candidate policy"),
+            (self.manifest_sha256, "candidate manifest"),
+            (self.service_definition_sha256, "candidate service definition"),
+            (self.deployed_peer_set_sha256, "candidate deployed-peer set"),
+            (self.migration_heads_sha256, "candidate migration heads"),
+            (self.runtime_layout_sha256, "candidate runtime layout"),
+            (self.verification_profile_sha256, "candidate verification profile"),
+            (self.command_plan_sha256, "candidate command plan"),
+            (self.phase7_execution_set_sha256, "candidate Phase 7 execution set"),
+        ):
+            _require_sha256(value, name)
+        _require_token(self.phase7_operation_id, "candidate Phase 7 operation")
+        _require_utc(self.completed_at, "candidate verification completion time")
+        _require_utc(self.expires_at, "candidate verification expiry")
+        if not self.completed_at < self.expires_at:
+            raise PrivilegedObservationError("candidate verification expiry is invalid")
+
+    @property
+    def evidence_sha256(self) -> str:
+        return canonical_sha256(asdict(self))
+
+
+@dataclass(frozen=True, slots=True)
 class PackageTarget:
     name: str
     architecture: str
@@ -583,6 +631,7 @@ def _require_utc(value: datetime, name: str) -> None:
 
 
 __all__ = [
+    "CandidateVerificationEvidence",
     "PackageAction",
     "PackageInspectionReason",
     "PackageInspectionResult",
