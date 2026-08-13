@@ -765,6 +765,79 @@
         "created_at"
       ]
     },
+    "githubArtifactApiObservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "repository": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 256,
+          "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+        },
+        "id": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"
+        },
+        "size_in_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 49152
+        },
+        "url": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        },
+        "archive_download_url": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        },
+        "expired": {
+          "type": "boolean"
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "workflow_run": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "head_sha": {
+              "$ref": "#/$defs/oid"
+            }
+          },
+          "required": [
+            "id",
+            "head_sha"
+          ]
+        }
+      },
+      "required": [
+        "repository",
+        "id",
+        "name",
+        "size_in_bytes",
+        "url",
+        "archive_download_url",
+        "expired",
+        "digest",
+        "workflow_run"
+      ]
+    },
     "ciEvidence": {
       "type": "object",
       "additionalProperties": false,
@@ -850,6 +923,9 @@
         "github_artifact_api_ref": {
           "$ref": "#/$defs/evidenceRef"
         },
+        "github_artifact_api_observation": {
+          "$ref": "#/$defs/githubArtifactApiObservation"
+        },
         "github_artifact_id": {
           "type": "integer",
           "minimum": 1,
@@ -893,6 +969,7 @@
         "attestation",
         "attestation_sha256",
         "github_artifact_api_ref",
+        "github_artifact_api_observation",
         "github_artifact_id",
         "github_artifact_name",
         "github_artifact_archive_sha256",

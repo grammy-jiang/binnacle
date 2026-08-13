@@ -1,5 +1,5 @@
 {
-  "acceptance_schema_sha256": "f62f5d6a9c530f482d0a75ded71c082dd2b52620ec27ff00a491db025fc876c6",
+  "acceptance_schema_sha256": "c04e393621671271918a28eea3a16d5e5fb8185aed7e3f8c9180a59513044855",
   "allowed_merge_methods": [
     "squash"
   ],

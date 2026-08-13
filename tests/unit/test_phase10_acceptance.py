@@ -40,6 +40,39 @@ def _pass_manifest(repo_root: Path) -> dict[str, Any]:
     return _load_json(repo_root / "tests/fixtures/acceptance/phase10-pass.json")
 
 
+def _append_candidate_generation(
+    manifest: dict[str, Any],
+    *,
+    parent_oid: str,
+    tree_oid: str,
+) -> None:
+    first = manifest["candidate_generations"][0]
+    first["superseded_reason_ref"] = {"id": "candidate-1-superseded", "sha256": "e" * 64}
+    second = copy.deepcopy(first)
+    second["generation"] = 2
+    second["superseded_reason_ref"] = None
+    second["status_diff"]["parent_oid"] = parent_oid
+    second["signed_commit"]["oid"] = "6" * 40
+    second["signed_commit"]["tree_oid"] = tree_oid
+    second["signed_commit"]["parent_oid"] = parent_oid
+    second["push"]["target_oid"] = "6" * 40
+    second["push"]["remote_observed_oid"] = "6" * 40
+    second["hosted_head_oid"] = "6" * 40
+    references = [
+        second["status_diff"]["evidence_ref"],
+        second["signed_commit"]["evidence_ref"],
+        second["push"]["evidence_ref"],
+        *(check["evidence_ref"] for check in second["local_checks"]),
+    ]
+    for index, reference in enumerate(references, start=1):
+        reference["id"] = f"candidate-2-evidence-{index}"
+        reference["sha256"] = f"{index:064x}"
+    manifest["candidate_generations"].append(second)
+    manifest["final_candidate_generation"] = 2
+    manifest["integration_generations"][0]["candidate_generation"] = 2
+    manifest["integration_generations"][0]["candidate_oid"] = "6" * 40
+
+
 def _cases(repo_root: Path) -> list[dict[str, Any]]:
     value = _load_json(repo_root / "tests/fixtures/acceptance/phase10-evaluator-cases.json")
     cases = value["cases"]
@@ -87,9 +120,9 @@ def test_phase10_policy_is_frozen_and_canonical(repo_root: Path) -> None:
     policy = load_phase10_policy(repo_root)
 
     assert policy.policy_id == "binnacle-phase10-acceptance-v1"
-    assert policy.sha256 == "befe3236b9d4561e4dc31680b2a7b099c2ea412db08d042760fce7f3a273de27"
+    assert policy.sha256 == "69a6be229696e42fdc7cfa665e54a080388d1e27180a1e3542727bf8f7385242"
     assert policy.acceptance_schema_sha256 == (
-        "f62f5d6a9c530f482d0a75ded71c082dd2b52620ec27ff00a491db025fc876c6"
+        "c04e393621671271918a28eea3a16d5e5fb8185aed7e3f8c9180a59513044855"
     )
     assert policy.ci_attestation_schema_sha256 == (
         "6b7d2c6dff03870790dfb3e4ee6be5c93399e61d1bc7c67afea2969ea91e2760"
@@ -140,10 +173,10 @@ def test_phase10_skeleton_claims_no_live_evidence(repo_root: Path) -> None:
     }
 
 
-@pytest.mark.parametrize("case_index", range(38))
+@pytest.mark.parametrize("case_index", range(40))
 def test_phase10_evaluator_fixture(case_index: int, repo_root: Path) -> None:
     cases = _cases(repo_root)
-    assert len(cases) == 38
+    assert len(cases) == 40
     case = cases[case_index]
     manifest = _pass_manifest(repo_root)
     _apply_case(manifest, case)
@@ -343,6 +376,11 @@ _EVALUATOR_BRANCH_CASES: tuple[tuple[str, object, str], ...] = (
         "ci_attestation_identity_mismatch",
     ),
     (
+        "/integration_generations/0/ci_evidence/0/github_artifact_api_ref/sha256",
+        "8" * 64,
+        "ci_artifact_api_observation_digest_mismatch",
+    ),
+    (
         "/integration_generations/0/ci_evidence/0/github_artifact_archive_sha256",
         "8" * 64,
         "ci_artifact_archive_digest_mismatch",
@@ -526,6 +564,34 @@ def test_generation_selection_requires_exact_consecutive_latest_generation(repo_
         "final_candidate_generation_superseded",
         "prior_candidate_generation_not_superseded",
     }
+
+
+def test_later_candidate_must_reach_integration_base_through_prior_generations(
+    repo_root: Path,
+) -> None:
+    disconnected = _pass_manifest(repo_root)
+    _append_candidate_generation(disconnected, parent_oid="7" * 40, tree_oid="4" * 40)
+
+    disconnected_report = evaluate_phase10_manifest(disconnected, repo_root=repo_root)
+
+    assert disconnected_report.verdict is AcceptanceVerdict.FAIL
+    assert "candidate_lineage_disconnected" in {
+        finding.code for finding in disconnected_report.findings
+    }
+
+    connected_wrong_tree = _pass_manifest(repo_root)
+    first_oid = connected_wrong_tree["candidate_generations"][0]["signed_commit"]["oid"]
+    _append_candidate_generation(
+        connected_wrong_tree,
+        parent_oid=first_oid,
+        tree_oid="8" * 40,
+    )
+
+    connected_report = evaluate_phase10_manifest(connected_wrong_tree, repo_root=repo_root)
+
+    codes = {finding.code for finding in connected_report.findings}
+    assert "candidate_lineage_disconnected" not in codes
+    assert "same_base_signed_tree_mismatch" in codes
 
 
 def test_phase10_policy_rejects_missing_duplicate_and_contradictory_sources(

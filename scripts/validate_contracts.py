@@ -1335,6 +1335,30 @@ def validate_phase10_acceptance_contract() -> None:
     if embedded_attestation != expected_embedded_attestation:
         fail("Phase 10 run schema embeds a stale CI checkout-attestation contract")
 
+    definitions = schema.get("$defs", {})
+    artifact_observation = definitions.get("githubArtifactApiObservation", {})
+    expected_artifact_observation_fields = {
+        "repository",
+        "id",
+        "name",
+        "size_in_bytes",
+        "url",
+        "archive_download_url",
+        "expired",
+        "digest",
+        "workflow_run",
+    }
+    if (
+        not isinstance(artifact_observation, dict)
+        or artifact_observation.get("additionalProperties") is not False
+        or set(artifact_observation.get("required", [])) != expected_artifact_observation_fields
+        or set(artifact_observation.get("properties", {})) != expected_artifact_observation_fields
+    ):
+        fail("Phase 10 run schema does not close the authenticated artifact API observation")
+    ci_evidence_schema = definitions.get("ciEvidence", {})
+    if "github_artifact_api_observation" not in ci_evidence_schema.get("required", []):
+        fail("Phase 10 CI evidence does not require authenticated artifact API metadata")
+
     expected_limits = {
         "candidate_generations_max": schema.get("properties", {})
         .get("candidate_generations", {})
@@ -1413,6 +1437,8 @@ def validate_phase10_acceptance_contract() -> None:
         "post-merge-local-profile-incomplete-is-incomplete",
         "runtime-restart-generation-mismatch-fails",
         "baseline-protected-base-mismatch-fails",
+        "artifact-api-metadata-mismatch-fails",
+        "candidate-lineage-disconnected-fails",
         "stale-policy-is-incomplete",
         "post-restart-runtime-profile-mismatch-fails",
         "unresolved-effect-is-incomplete",

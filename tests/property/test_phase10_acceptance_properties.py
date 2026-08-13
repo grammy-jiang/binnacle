@@ -10,7 +10,7 @@ from typing import Any, cast
 from hypothesis import given
 from hypothesis import strategies as st
 
-from binnacle.evaluation.digests import canonical_json_bytes, sha256_bytes
+from binnacle.evaluation.digests import canonical_json_bytes, canonical_json_sha256, sha256_bytes
 from binnacle.evaluation.phase10_acceptance import (
     AcceptanceVerdict,
     evaluate_phase10_manifest,
@@ -117,6 +117,7 @@ def test_one_uploaded_artifact_cannot_be_relabelled_as_another_job(
     evidence = manifest["integration_generations"][0]["ci_evidence"]
     for field in (
         "github_artifact_api_ref",
+        "github_artifact_api_observation",
         "github_artifact_id",
         "github_artifact_archive_sha256",
         "github_artifact_archive_base64",
@@ -148,6 +149,56 @@ def test_manifest_cannot_replace_attestation_from_uploaded_artifact(index: int) 
 
     assert report.verdict is AcceptanceVerdict.FAIL
     assert "ci_artifact_attestation_mismatch" in {finding.code for finding in report.findings}
+
+
+@given(
+    field=st.sampled_from(
+        (
+            "repository",
+            "id",
+            "name",
+            "size_in_bytes",
+            "url",
+            "archive_download_url",
+            "expired",
+            "digest",
+            "workflow_run.id",
+            "workflow_run.head_sha",
+        )
+    )
+)
+def test_artifact_api_observation_must_bind_downloaded_archive_metadata(field: str) -> None:
+    manifest = _pass_manifest(REPO_ROOT)
+    evidence = manifest["integration_generations"][0]["ci_evidence"][0]
+    observation = evidence["github_artifact_api_observation"]
+    replacements: dict[str, object] = {
+        "repository": "attacker/other",
+        "id": 9999,
+        "name": "wrong-artifact",
+        "size_in_bytes": 1,
+        "url": "https://api.github.com/repos/grammy-jiang/binnacle/actions/artifacts/9999",
+        "archive_download_url": (
+            "https://api.github.com/repos/grammy-jiang/binnacle/actions/artifacts/9999/zip"
+        ),
+        "expired": True,
+        "digest": f"sha256:{'8' * 64}",
+        "workflow_run.id": 9999,
+        "workflow_run.head_sha": "8" * 40,
+    }
+    if "." in field:
+        parent, child = field.split(".", 1)
+        observation[parent][child] = replacements[field]
+    else:
+        observation[field] = replacements[field]
+    evidence["github_artifact_api_ref"]["sha256"] = canonical_json_sha256(observation)
+    manifest["owner_review"]["reviewed_evidence_sha256"] = phase10_reviewed_evidence_sha256(
+        manifest
+    )
+
+    report = evaluate_phase10_manifest(manifest, repo_root=REPO_ROOT)
+
+    assert report.verdict is AcceptanceVerdict.FAIL
+    assert "ci_artifact_api_metadata_mismatch" in {finding.code for finding in report.findings}
 
 
 @given(
@@ -221,6 +272,13 @@ def test_new_candidate_generation_cannot_reuse_prior_local_evidence() -> None:
     second = copy.deepcopy(first)
     second["generation"] = 2
     second["superseded_reason_ref"] = None
+    prior_oid = first["signed_commit"]["oid"]
+    second["status_diff"]["parent_oid"] = prior_oid
+    second["signed_commit"]["oid"] = "6" * 40
+    second["signed_commit"]["parent_oid"] = prior_oid
+    second["push"]["target_oid"] = "6" * 40
+    second["push"]["remote_observed_oid"] = "6" * 40
+    second["hosted_head_oid"] = "6" * 40
     candidate_refs = [
         second["status_diff"]["evidence_ref"],
         second["signed_commit"]["evidence_ref"],
@@ -231,6 +289,10 @@ def test_new_candidate_generation_cannot_reuse_prior_local_evidence() -> None:
         evidence_ref["id"] = f"renamed-candidate-2-evidence-{index}"
     manifest["candidate_generations"].append(second)
     manifest["final_candidate_generation"] = 2
+    manifest["integration_generations"][0]["candidate_generation"] = 2
+    manifest["integration_generations"][0]["candidate_oid"] = "6" * 40
+    manifest["github_pr"]["head_oid"] = "6" * 40
+    manifest["github_merge"]["candidate_oid"] = "6" * 40
 
     report = evaluate_phase10_manifest(manifest, repo_root=REPO_ROOT)
 

@@ -174,11 +174,15 @@ on the protected base at integration time. PASS therefore binds an immutable
 ``(candidate_generation, candidate_oid, protected_base_oid, merge_policy_digest,
 expected_integration_tree_oid)``.
 
-When the signed candidate commit's parent is that same ``protected_base_oid``, the signed
-candidate tree must equal ``expected_integration_tree_oid``.  The direct same-base case may
-not rely only on later CI or squash-result tree equality while the signed commit records a
-different tree.  A different protected base is handled by a fresh integration generation
-and its separately derived integration tree.
+The evaluator follows the final signed candidate's parent through earlier candidate
+generations until it reaches the candidate-lineage base.  Every non-base parent must be an
+earlier signed candidate OID; a missing, forward, cyclic, duplicate, or otherwise
+disconnected lineage fails.  When that lineage base equals the integration generation's
+``protected_base_oid``, the final signed candidate tree must equal
+``expected_integration_tree_oid`` even when its immediate parent is an earlier candidate.
+A later moved protected base may instead produce a separately derived integration tree,
+but the candidate lineage must still terminate at the original coherent baseline (or be
+rebuilt directly from the new integration base).
 
 The final substantive review is correlated to both the exact candidate OID and exact base
 OID. Required CI must prove what integration object/tree it actually checked; a workflow's
@@ -809,10 +813,13 @@ For the final integration generation record:
 * terminal conclusion and required job/check conclusions;
 * retry/attempt identity when a transient infrastructure failure is rerun.
 
-For every required job, the acceptance record retains a sanitized evidence reference for
-an authenticated GitHub artifact-API lookup, the numeric artifact ID, exact expected name,
-GitHub-reported archive SHA-256, and the exact downloaded ZIP bytes.  The evaluator
-recomputes the ZIP digest, opens its sole bounded canonical
+For every required job, the acceptance record embeds the sanitized authenticated GitHub
+artifact-API observation and binds its canonical digest to
+``github_artifact_api_ref``.  The observation contains the repository, numeric ID, exact
+name, byte size, canonical metadata/download URLs, expiry state, ``sha256:`` archive
+digest, and workflow-run ID/head SHA.  The evaluator cross-checks all of those fields with
+the surrounding CI identity and exact decoded ZIP, recomputes the ZIP digest, and opens
+its sole bounded canonical
 ``phase10-ci-checkout.json`` member, and requires that object to equal the separately
 embedded attestation.  It also verifies the canonical attestation digest and every
 surrounding CI identity field.  API references, artifact IDs, ZIP digests, and attestation

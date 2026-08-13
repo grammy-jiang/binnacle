@@ -74,6 +74,26 @@
           "operation": "replace",
           "path": "/integration_generations/0/ci_evidence/0/github_artifact_archive_base64",
           "value": "UEsDBBQAAAAIAAAAIQDm2qNXawEAAFkDAAAYAAAAcGhhc2UxMC1jaS1jaGVja291dC5qc29ulVLLctwgELznK1I6ZxPQA6G95hd8siulGobRLl4J1gity5XKv2fwrmwnJ7mLC9DT0zTzu8Aj4SksqT85b4t9cV7GsY/0tNCceucTHSIkF3zx7Z0aXGZWG/Gx8gyR/KvAXOwfCrkRLFFuRPHrQ7sUiW5u643IbsM4EqYQewzT5Nb3KqWhMqqDodJKdzUoIou2rYWq6kZ3RhkjEfEfhfkIZaO4ulMW2V4DFciSpK5qqRplSrQNgWhMxxLQlNChaQdo26HTVtdIuq4HTdhm1UiQyPaQWK8UpdoJyetOiH1e8p45dMn5wpAoXm17/s/12MC8xvGJ5K+1CN46y/1vAnoj3gQ8TPTffPHdwaXjYnJMn5uox2BWxQuMr8Z2GHyKgGnm+0jnMDv+gRdm8AhP08vu0YE//DDOe8CRMmnxHGai6cyJyus+P04KwbuZx2iC/kJxzvPPmX0XXPQc4mkYw/Pa/uet69ebj8z98+UvUEsBAhQDFAAAAAgAAAAhAObao1drAQAAWQMAABgAAAAAAAAAAAAAAIABAAAAAHBoYXNlMTAtY2ktY2hlY2tvdXQuanNvblBLBQYAAAAAAQABAEYAAAChAQAAAAA="
+        },
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/0/github_artifact_api_observation/size_in_bytes",
+          "value": 509
+        },
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/0/github_artifact_api_observation/digest",
+          "value": "sha256:51cb30c045858f61a6099e519093e536c98d28862ade702a6d9b6d512f764b8f"
+        },
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/0/github_artifact_api_observation/workflow_run/head_sha",
+          "value": "8888888888888888888888888888888888888888"
+        },
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/0/github_artifact_api_ref/sha256",
+          "value": "88aa5dc3833204ec2cca4b357de903c9cda2d0922d728dda5c45891c72cb3bbf"
         }
       ],
       "expected": "INCOMPLETE",
@@ -107,6 +127,21 @@
           "operation": "replace",
           "path": "/integration_generations/0/ci_evidence/0/github_artifact_archive_base64",
           "value": "UEsDBBQAAAAIAAAAIQCDUPBXZgEAAEgDAAAYAAAAcGhhc2UxMC1jaS1jaGVja291dC5qc29ulVJNb+MgEL33V1Q+N1vwB8a59i/0tKvKGoZxQmNDinGqarX/fYcm1nZv7ogDw8x783jwu8Aj4SksqT85b4t9sXgTFt49/KsElwvVxviKPEMk/0kwF/tfhdwYTFFujOLly7gUiW5q642R1YZxJEwh9himya33VUpDZVQHQ6WV7mpQRBZtWwtV1Y3ujDJGIuJ/DPMRykYxulMWWV4DFciSpK5qqRplSrQNgWhMxxTQlNChaQdo26HTVtdIuq4HTdhm1kiQyPaQmK8UpdoJyetZiH1e8if30CX7C0OieJXtl3Fcjw3Mqx3fcP6KRfDWWZ5/I9j8HiuBh4kYd2Y9faS3hebEtYNLx8Vkm773o16DWRkvMH4K22HwKQKmmeuRzmF2/AIf3HGIME0fu1cH/vBonPeAI+WmxbOZiaYzOyqveb6cFIKzmb/RBP2F4uyCz579EAx6D/E0jOF9Hf90m3p/05F7/9z9BVBLAQIUAxQAAAAIAAAAIQCDUPBXZgEAAEgDAAAYAAAAAAAAAAAAAACAAQAAAABwaGFzZTEwLWNpLWNoZWNrb3V0Lmpzb25QSwUGAAAAAAEAAQBGAAAAnAEAAAAA"
+        },
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/0/github_artifact_api_observation/size_in_bytes",
+          "value": 504
+        },
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/0/github_artifact_api_observation/digest",
+          "value": "sha256:197fbe4aeb2f1be2cd7ee86f7fcb6c7fa86473a25efe1738520955de0a37b10f"
+        },
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/0/github_artifact_api_ref/sha256",
+          "value": "bfcf4ad0b3171a531254bcf036a1ce54124088571a79c58b00e5a83fd467d9e7"
         }
       ],
       "expected": "INCOMPLETE",
@@ -144,6 +179,21 @@
           "operation": "replace",
           "path": "/integration_generations/0/ci_evidence/0/github_artifact_archive_base64",
           "value": "UEsDBBQAAAAIAAAAIQD01KTvZwEAAC4DAAAYAAAAcGhhc2UxMC1jaS1jaGVja291dC5qc29ulVLLctswDLznKzo61wmpB0X52l/oqZ2OBgQhm7FEuhRlj6fTfw+YWG3ak4LBheRisVzgV4FHwlNYUn9y3hb74ryMYx/p50Jz6p1PdIiQXPDF57/Q4DKy2hjvK88Qyb8SzMX+e1FujOLHO44Uie4S6o2RJYRxJEwh9himya2fUEpDZVQHQ6WV7mpQRBZtWwtV1Y3ujDJGIuI/DPMRykZxdacssrwGKpAlSV3VUjXKlGgbAtGYjimgKaFD0w7QtkOnra6RdF0PmrDNrJEgke0hMV8pSrUTkvOrEPuc8htj6JJNgyFRfJPteUjrtYF5tUNujD+UCN46y/3vBJvnsRJ4mOi/peG3g0vHxWSbPrYmz8GsjBcYX4XtMPgUAdPM75HOYXY8gRsjeC+n6bZ7duAPT8Z5DzhSBi2ezUw0ndlR+XbOn5NC8GnmNZqgv1Cc81KzZ4+Ci64hnoYxXNf2X+5dP911ZOzvhxdQSwECFAMUAAAACAAAACEA9NSk72cBAAAuAwAAGAAAAAAAAAAAAAAAgAEAAAAAcGhhc2UxMC1jaS1jaGVja291dC5qc29uUEsFBgAAAAABAAEARgAAAJ0BAAAAAA=="
+        },
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/0/github_artifact_api_observation/size_in_bytes",
+          "value": 505
+        },
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/0/github_artifact_api_observation/digest",
+          "value": "sha256:06c302876428c50998e665cec0ed0a451e8f984b50107b0a2394bf4ec2de2f00"
+        },
+        {
+          "operation": "replace",
+          "path": "/integration_generations/0/ci_evidence/0/github_artifact_api_ref/sha256",
+          "value": "aa7a3309d38f8e5d28379ca23e0ce4ef90b8418b67c61d34425e9de5d70f5b7f"
         }
       ],
       "expected": "INCOMPLETE",
@@ -394,6 +444,32 @@
       "value": "8888888888888888888888888888888888888888",
       "expected": "FAIL",
       "code": "baseline_protected_base_mismatch"
+    },
+    {
+      "id": "artifact-api-metadata-mismatch-fails",
+      "operation": "replace",
+      "path": "/integration_generations/0/ci_evidence/0/github_artifact_api_observation/id",
+      "value": 9999,
+      "expected": "FAIL",
+      "code": "ci_artifact_api_metadata_mismatch"
+    },
+    {
+      "id": "candidate-lineage-disconnected-fails",
+      "operation": "batch",
+      "operations": [
+        {
+          "operation": "replace",
+          "path": "/candidate_generations/0/status_diff/parent_oid",
+          "value": "8888888888888888888888888888888888888888"
+        },
+        {
+          "operation": "replace",
+          "path": "/candidate_generations/0/signed_commit/parent_oid",
+          "value": "8888888888888888888888888888888888888888"
+        }
+      ],
+      "expected": "FAIL",
+      "code": "candidate_lineage_disconnected"
     }
   ]
 }

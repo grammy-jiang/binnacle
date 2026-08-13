@@ -186,6 +186,8 @@ def evaluate_phase10_manifest(
         _evaluate_integration(
             final_integration,
             final_candidate,
+            candidates,
+            baseline,
             policy,
             findings,
         )
@@ -451,6 +453,8 @@ def _candidate_evidence_identities(candidate: dict[str, Any]) -> set[tuple[str, 
 def _evaluate_integration(
     integration: dict[str, Any],
     candidate: dict[str, Any] | None,
+    candidates: list[dict[str, Any]],
+    baseline: dict[str, Any] | None,
     policy: Phase10Policy,
     findings: _Findings,
 ) -> None:
@@ -491,10 +495,17 @@ def _evaluate_integration(
     observed_artifact_api_ref_digests: set[str] = set()
     expected_tree = integration["expected_integration_tree_oid"]
     commit = _object(candidate["signed_commit"])
-    if (
-        commit["parent_oid"] == integration["protected_base_oid"]
-        and commit["tree_oid"] != expected_tree
-    ):
+    integration_base_oid = cast(str, integration["protected_base_oid"])
+    lineage_base_oid = _candidate_lineage_base(candidates, candidate, findings)
+    recognized_lineage_bases = {integration_base_oid}
+    if baseline is not None:
+        recognized_lineage_bases.add(cast(str, baseline["repository_head_oid"]))
+    if lineage_base_oid is not None and lineage_base_oid not in recognized_lineage_bases:
+        findings.fail(
+            "candidate_lineage_disconnected",
+            f"/candidate_generations/{candidate_generation - 1}/signed_commit/parent_oid",
+        )
+    if lineage_base_oid == integration_base_oid and commit["tree_oid"] != expected_tree:
         findings.fail("same_base_signed_tree_mismatch", f"{prefix}/expected_integration_tree_oid")
     ci_evidence = _object_list(integration["ci_evidence"])
     for index, evidence in enumerate(ci_evidence):
@@ -506,6 +517,7 @@ def _evaluate_integration(
         artifact_id = cast(int, evidence["github_artifact_id"])
         artifact_archive_sha256 = cast(str, evidence["github_artifact_archive_sha256"])
         artifact_api_ref = _object(evidence["github_artifact_api_ref"])
+        artifact_api_observation = _object(evidence["github_artifact_api_observation"])
         artifact_api_identity = (
             _ref_id(artifact_api_ref),
             cast(str, artifact_api_ref["sha256"]),
@@ -517,6 +529,56 @@ def _evaluate_integration(
             findings.fail("ci_artifact_reused", f"{path}/github_artifact_api_ref")
         observed_artifact_api_ref_ids.add(artifact_api_identity[0])
         observed_artifact_api_ref_digests.add(artifact_api_identity[1])
+        if canonical_json_sha256(artifact_api_observation) != artifact_api_identity[1]:
+            findings.fail(
+                "ci_artifact_api_observation_digest_mismatch",
+                f"{path}/github_artifact_api_ref/sha256",
+            )
+        if artifact_api_observation["repository"] != evidence["repository"]:
+            findings.fail(
+                "ci_artifact_api_metadata_mismatch",
+                f"{path}/github_artifact_api_observation/repository",
+            )
+        if artifact_api_observation["id"] != artifact_id:
+            findings.fail(
+                "ci_artifact_api_metadata_mismatch",
+                f"{path}/github_artifact_api_observation/id",
+            )
+        if artifact_api_observation["name"] != artifact_name:
+            findings.fail(
+                "ci_artifact_api_metadata_mismatch",
+                f"{path}/github_artifact_api_observation/name",
+            )
+        if artifact_api_observation["expired"]:
+            findings.fail(
+                "ci_artifact_api_metadata_mismatch",
+                f"{path}/github_artifact_api_observation/expired",
+            )
+        if artifact_api_observation["digest"] != f"sha256:{artifact_archive_sha256}":
+            findings.fail(
+                "ci_artifact_api_metadata_mismatch",
+                f"{path}/github_artifact_api_observation/digest",
+            )
+        workflow_run = _object(artifact_api_observation["workflow_run"])
+        if (
+            workflow_run["id"] != evidence["run_id"]
+            or workflow_run["head_sha"] != evidence["candidate_oid"]
+        ):
+            findings.fail(
+                "ci_artifact_api_metadata_mismatch",
+                f"{path}/github_artifact_api_observation/workflow_run",
+            )
+        expected_api_url = (
+            f"https://api.github.com/repos/{evidence['repository']}/actions/artifacts/{artifact_id}"
+        )
+        if (
+            artifact_api_observation["url"] != expected_api_url
+            or artifact_api_observation["archive_download_url"] != f"{expected_api_url}/zip"
+        ):
+            findings.fail(
+                "ci_artifact_api_metadata_mismatch",
+                f"{path}/github_artifact_api_observation/url",
+            )
         if artifact_id in observed_artifact_ids:
             findings.fail("ci_artifact_reused", f"{path}/github_artifact_id")
         observed_artifact_ids.add(artifact_id)
@@ -528,6 +590,11 @@ def _evaluate_integration(
             findings.fail("ci_artifact_name_mismatch", f"{path}/github_artifact_name")
         archive_payload = _decode_artifact_archive(evidence, path, findings)
         if archive_payload is not None:
+            if artifact_api_observation["size_in_bytes"] != len(archive_payload):
+                findings.fail(
+                    "ci_artifact_api_metadata_mismatch",
+                    f"{path}/github_artifact_api_observation/size_in_bytes",
+                )
             artifact_attestation = _attestation_from_archive(archive_payload, path, findings)
             if artifact_attestation is not None and artifact_attestation != attestation:
                 findings.fail("ci_artifact_attestation_mismatch", f"{path}/attestation")
@@ -591,6 +658,50 @@ def _evaluate_integration(
         required_jobs = set(policy.required_ci_jobs[workflow])
         if observed_jobs.get(workflow, set()) != required_jobs:
             findings.incomplete("required_ci_job_evidence_missing", f"{prefix}/ci_evidence")
+
+
+def _candidate_lineage_base(
+    candidates: list[dict[str, Any]],
+    final_candidate: dict[str, Any],
+    findings: _Findings,
+) -> str | None:
+    """Follow signed parent OIDs through earlier generations and return the lineage root."""
+
+    commits: dict[str, tuple[int, dict[str, Any]]] = {}
+    duplicate_oids: set[str] = set()
+    for index, candidate in enumerate(candidates):
+        commit = _object(candidate["signed_commit"])
+        oid = cast(str, commit["oid"])
+        if oid in commits:
+            duplicate_oids.add(oid)
+        commits[oid] = (index, commit)
+    if duplicate_oids:
+        findings.fail("candidate_lineage_duplicate_oid", "/candidate_generations")
+        return None
+
+    current_index = cast(int, final_candidate["generation"]) - 1
+    current = _object(final_candidate["signed_commit"])
+    seen: set[str] = set()
+    while True:
+        oid = cast(str, current["oid"])
+        if oid in seen:
+            findings.fail(
+                "candidate_lineage_disconnected",
+                f"/candidate_generations/{current_index}/signed_commit/parent_oid",
+            )
+            return None
+        seen.add(oid)
+        parent_oid = cast(str, current["parent_oid"])
+        parent = commits.get(parent_oid)
+        if parent is None:
+            return parent_oid
+        if parent[0] >= current_index:
+            findings.fail(
+                "candidate_lineage_disconnected",
+                f"/candidate_generations/{current_index}/signed_commit/parent_oid",
+            )
+            return None
+        current_index, current = parent
 
 
 def _reject_reused_integration_evidence(

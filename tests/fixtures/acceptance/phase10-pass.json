@@ -2,7 +2,7 @@
   "schema_version": "1.0",
   "acceptance_run_id": "acceptance-test-pass",
   "plan_version": "phase10-self-hosting-acceptance-v1",
-  "policy_sha256": "befe3236b9d4561e4dc31680b2a7b099c2ea412db08d042760fce7f3a273de27",
+  "policy_sha256": "69a6be229696e42fdc7cfa665e54a080388d1e27180a1e3542727bf8f7385242",
   "state": "passed",
   "readiness": {
     "evidence_ref": {
@@ -159,7 +159,7 @@
       "candidate_generation": 1,
       "candidate_oid": "2222222222222222222222222222222222222222",
       "protected_base_oid": "1111111111111111111111111111111111111111",
-      "merge_policy_sha256": "befe3236b9d4561e4dc31680b2a7b099c2ea412db08d042760fce7f3a273de27",
+      "merge_policy_sha256": "69a6be229696e42fdc7cfa665e54a080388d1e27180a1e3542727bf8f7385242",
       "reviews": [
         {
           "evidence_ref": {
@@ -225,7 +225,21 @@
           "attestation_sha256": "7a442bbbbd86b4de2470eb7122f1d63045320743863ce375ffa0fa35d734a0d8",
           "github_artifact_api_ref": {
             "id": "github-artifact-api-9001",
-            "sha256": "1111111111111111111111111111111111111111111111111111111111111111"
+            "sha256": "6920e8ae187eda24d48f18e143ffc6a346d49aead7f1edd260a4830d3bbd1c96"
+          },
+          "github_artifact_api_observation": {
+            "repository": "grammy-jiang/binnacle",
+            "id": 9001,
+            "name": "phase10-checkout-1001-contracts-1",
+            "size_in_bytes": 509,
+            "url": "https://api.github.com/repos/grammy-jiang/binnacle/actions/artifacts/9001",
+            "archive_download_url": "https://api.github.com/repos/grammy-jiang/binnacle/actions/artifacts/9001/zip",
+            "expired": false,
+            "digest": "sha256:0028ab2a4a8ca110a2dcb9d287d3a04882603e792977f7f94661f5f41f2d935e",
+            "workflow_run": {
+              "id": 1001,
+              "head_sha": "2222222222222222222222222222222222222222"
+            }
           },
           "github_artifact_id": 9001,
           "github_artifact_name": "phase10-checkout-1001-contracts-1",
@@ -283,7 +297,21 @@
           "attestation_sha256": "00ca6727e2dbb68542237b975b6fb609aba78a96e9115f11854347eaa6abeb64",
           "github_artifact_api_ref": {
             "id": "github-artifact-api-9002",
-            "sha256": "2222222222222222222222222222222222222222222222222222222222222222"
+            "sha256": "1c8a891af45ea6beea837a3d0d5884c01d898cbb80bcf2e0495c216982501838"
+          },
+          "github_artifact_api_observation": {
+            "repository": "grammy-jiang/binnacle",
+            "id": 9002,
+            "name": "phase10-checkout-1002-python-quality-1",
+            "size_in_bytes": 534,
+            "url": "https://api.github.com/repos/grammy-jiang/binnacle/actions/artifacts/9002",
+            "archive_download_url": "https://api.github.com/repos/grammy-jiang/binnacle/actions/artifacts/9002/zip",
+            "expired": false,
+            "digest": "sha256:e006809c425c99130dfa8ed525ea3e267cea35c776c78fb099c274e8014645fe",
+            "workflow_run": {
+              "id": 1002,
+              "head_sha": "2222222222222222222222222222222222222222"
+            }
           },
           "github_artifact_id": 9002,
           "github_artifact_name": "phase10-checkout-1002-python-quality-1",
@@ -341,7 +369,21 @@
           "attestation_sha256": "8d25186bb8fcba10c051ac8d0527a13ac5bd4768b36ef7b7eaaf7c12fe9698e2",
           "github_artifact_api_ref": {
             "id": "github-artifact-api-9003",
-            "sha256": "3333333333333333333333333333333333333333333333333333333333333333"
+            "sha256": "acda13a386d5ae385c9122bfc587b87858cb9a21987a1a700f2a6a9b9014e4b8"
+          },
+          "github_artifact_api_observation": {
+            "repository": "grammy-jiang/binnacle",
+            "id": 9003,
+            "name": "phase10-checkout-1002-test-python-3.11-1",
+            "size_in_bytes": 508,
+            "url": "https://api.github.com/repos/grammy-jiang/binnacle/actions/artifacts/9003",
+            "archive_download_url": "https://api.github.com/repos/grammy-jiang/binnacle/actions/artifacts/9003/zip",
+            "expired": false,
+            "digest": "sha256:8f15ad7efe7c76f3949c5edf36bf3bfc8712b745132fa38f9c4a3844eee37bc3",
+            "workflow_run": {
+              "id": 1002,
+              "head_sha": "2222222222222222222222222222222222222222"
+            }
           },
           "github_artifact_id": 9003,
           "github_artifact_name": "phase10-checkout-1002-test-python-3.11-1",
@@ -399,7 +441,21 @@
           "attestation_sha256": "eeab487570d4b8a63d30f7d4029a5c5b6922c696483576323e011a6a8be39fea",
           "github_artifact_api_ref": {
             "id": "github-artifact-api-9004",
-            "sha256": "4444444444444444444444444444444444444444444444444444444444444444"
+            "sha256": "3fe2e7ef3b3f27f2bce863e87c5e1ab512d860a593e2f1a74b3adc783672c6c1"
+          },
+          "github_artifact_api_observation": {
+            "repository": "grammy-jiang/binnacle",
+            "id": 9004,
+            "name": "phase10-checkout-1002-test-python-3.12-1",
+            "size_in_bytes": 511,
+            "url": "https://api.github.com/repos/grammy-jiang/binnacle/actions/artifacts/9004",
+            "archive_download_url": "https://api.github.com/repos/grammy-jiang/binnacle/actions/artifacts/9004/zip",
+            "expired": false,
+            "digest": "sha256:63d3e1d22a10b3f4fe527165835a2664fc411a03cc07906977f7e2e5a5140127",
+            "workflow_run": {
+              "id": 1002,
+              "head_sha": "2222222222222222222222222222222222222222"
+            }
           },
           "github_artifact_id": 9004,
           "github_artifact_name": "phase10-checkout-1002-test-python-3.12-1",
@@ -457,7 +513,21 @@
           "attestation_sha256": "70ea96fb1671325a076804e7ba44cf56f6c7d5a7bebb2d8587a7f76e53e00e05",
           "github_artifact_api_ref": {
             "id": "github-artifact-api-9005",
-            "sha256": "5555555555555555555555555555555555555555555555555555555555555555"
+            "sha256": "9a8212e20ecf4da7677eb1e32a05a61600ffb7c76963deae30ac21613b292fc5"
+          },
+          "github_artifact_api_observation": {
+            "repository": "grammy-jiang/binnacle",
+            "id": 9005,
+            "name": "phase10-checkout-1002-test-python-3.13-1",
+            "size_in_bytes": 510,
+            "url": "https://api.github.com/repos/grammy-jiang/binnacle/actions/artifacts/9005",
+            "archive_download_url": "https://api.github.com/repos/grammy-jiang/binnacle/actions/artifacts/9005/zip",
+            "expired": false,
+            "digest": "sha256:4dc815209fa44e057e0e36ae446f99fb660bc5cd32a03ca413e4cc3acb8105ef",
+            "workflow_run": {
+              "id": 1002,
+              "head_sha": "2222222222222222222222222222222222222222"
+            }
           },
           "github_artifact_id": 9005,
           "github_artifact_name": "phase10-checkout-1002-test-python-3.13-1",
@@ -712,8 +782,8 @@
       "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
     },
     "acceptance_run_id": "acceptance-test-pass",
-    "policy_sha256": "befe3236b9d4561e4dc31680b2a7b099c2ea412db08d042760fce7f3a273de27",
-    "reviewed_evidence_sha256": "a00096d03ae361c6c31912f9caa9f4cdb281c511f129e0d8f6e9bece2825fc25",
+    "policy_sha256": "69a6be229696e42fdc7cfa665e54a080388d1e27180a1e3542727bf8f7385242",
+    "reviewed_evidence_sha256": "b0242808f8a44dd2fcfebd09c8e6b371541ed56121baf0eb0ffa120897ded887",
     "outcome": "accepted",
     "evidence_complete": true
   }

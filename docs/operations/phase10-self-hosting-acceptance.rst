@@ -116,11 +116,13 @@ unbound result so reviewers can diagnose the mismatch.
 
 An attestation proves checkout and collector identity; it does not prove the later job
 conclusion.  For each required job, use the authenticated GitHub Actions API to retain a
-sanitized artifact-metadata observation, including its numeric artifact ID, exact expected
-name, and GitHub-reported SHA-256.  Record that observation's evidence reference in
-``github_artifact_api_ref``.  Download that exact artifact, recompute the SHA-256 of the
-original ZIP bytes, require equality with the API digest, and preserve those exact bytes in
-``github_artifact_archive_base64``.  The archive must contain only the bounded canonical
+sanitized artifact-metadata observation: repository, numeric artifact ID, exact expected
+name, byte size, canonical API/download URLs, expiry state, GitHub-reported ``sha256:``
+digest, and workflow-run ID/head SHA.  Embed that closed observation and record its
+canonical SHA-256 in ``github_artifact_api_ref``.  Download that exact artifact, recompute
+the SHA-256 of the original ZIP bytes, require equality with the API digest and byte size,
+and preserve those exact bytes in ``github_artifact_archive_base64``.  The archive must
+contain only the bounded canonical
 ``phase10-ci-checkout.json`` member.  The evaluator opens the ZIP again and requires its
 object to equal the separately embedded attestation byte-for-byte after canonical parsing.
 
@@ -211,10 +213,14 @@ candidate OID, protected-base OID, expected integration tree, and policy SHA-256
 * zero unresolved actionable findings; and
 * every exact required workflow/job result plus its checkout-attestation artifact.
 
-When the signed candidate's parent is that same protected base, its signed tree must equal
-the expected synthetic integration tree.  This closes the direct same-base path before CI
-or a later squash merge can attest a different tree.  A moved protected base instead
-requires a new integration generation and its separately computed merge tree.
+Follow the final signed candidate's parent through earlier candidate generations to its
+lineage base.  Each non-base parent must equal an earlier generation's signed OID; a
+missing, forward, cyclic, duplicate, or otherwise disconnected link fails.  When the
+lineage base is the integration protected base, the final signed tree must equal the
+expected synthetic integration tree even when the immediate parent is an earlier
+candidate.  A moved protected base instead requires a new integration generation and its
+separately computed merge tree; the old candidate chain must still terminate at the
+coherent original baseline, or a fresh candidate must be rebuilt from the new base.
 
 If the candidate moves, return to the complete candidate process and then create a new
 integration generation.  If only the protected base moves, create a new integration
@@ -305,16 +311,19 @@ The substantive reviewer verifies all of the following against independent sourc
 
 * manifest and policy digests;
 * clean baseline repository HEAD equality with the independently observed protected base;
-* consecutive candidate and integration generations with no stale reference reuse;
+* consecutive candidate and integration generations with no stale reference reuse and a
+  signed parent lineage terminating at the coherent candidate base;
 * signer, pushed head, PR head, protected base, review, and CI identities;
 * actual checkout commit/tree/parents from each required attestation artifact;
 * each attestation's collector commit and bundle digest against the frozen policy;
-* each authenticated artifact API observation, numeric artifact ID, original ZIP digest,
-  and archived attestation is unique per required job, and the downloaded bytes reproduce
-  the API digest and embedded object;
+* each embedded authenticated artifact API observation has a matching canonical evidence
+  digest and exact repository/ID/name/size/URL/expiry/archive/run/head bindings; each
+  original ZIP digest and archived attestation is unique per required job, and the
+  downloaded bytes reproduce the API digest, size, and embedded object;
 * GitHub job conclusions for the recorded run IDs and attempts;
-* same-base signed-tree equality, merge tree/parent/provenance, exact local update, and the
-  complete frozen local check profile at both candidate and merged identities;
+* lineage-aware same-base signed-tree equality, merge tree/parent/provenance, exact local
+  update, and the complete frozen local check profile at both candidate and merged
+  identities;
 * same-operation/checkpoint/readiness-generation restart reconciliation, no duplicate
   restart, baseline runtime-profile continuity, and runtime-instance replacement;
 * changed behaviour on the post-restart instance;
