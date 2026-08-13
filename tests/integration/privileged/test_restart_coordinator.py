@@ -21,6 +21,7 @@ from binnacle.domain.privileged import (
     PrivilegedAction,
     PrivilegedTicket,
 )
+from binnacle.domain.privileged_observation import RuntimeSlotRole, RuntimeSlotState
 from binnacle.domain.privileged_restart import PrivilegedRestartCheckpointIntent
 from binnacle.privileged_broker.integrity import verify_privileged_broker_connection
 from binnacle.privileged_broker.restart import (
@@ -180,12 +181,48 @@ async def test_candidate_success_closes_exact_checkpoint_and_binding(
         assert checkpoint.selected_slot_id == intent.candidate_slot.slot_id
         assert binding.execution_state is BrokerExecutionState.TERMINAL
         assert binding.restart_checkpoint_sha256 == checkpoint.checkpoint_sha256
+        assert binding.lkg_promotion_evidence_sha256 is None
+        with closing(sqlite3.connect(database)) as connection:
+            pending_report = verify_privileged_broker_connection(connection)
+        assert pending_report.outstanding_accepted_bindings == 1
         assert driver.calls == [
             "service_stop",
             "candidate_select",
             "candidate_start",
             "candidate_verify",
         ]
+        assert checkpoint.closed_at is not None
+        promotion_audit = _digest("candidate-ready-audit-closure")
+        promoted_at = checkpoint.closed_at + timedelta(seconds=1)
+        with pytest.raises(PrivilegedStoreConflict, match="lacks audited"):
+            await store.promote_restart_lkg(
+                ticket.operation_id,
+                audit_closure_evidence_sha256=promotion_audit,
+                promoted_at=checkpoint.closed_at - timedelta(microseconds=1),
+            )
+        promoted = await store.promote_restart_lkg(
+            ticket.operation_id,
+            audit_closure_evidence_sha256=promotion_audit,
+            promoted_at=promoted_at,
+        )
+        assert promoted.lkg_promotion_audit_sha256 == promotion_audit
+        assert promoted.lkg_promotion_evidence_sha256 is not None
+        assert promoted.lkg_promoted_at == promoted_at
+        retained_checkpoint = await store.get_restart_checkpoint(ticket.operation_id)
+        assert retained_checkpoint is not None
+        assert retained_checkpoint.intent == intent
+        replay = await store.promote_restart_lkg(
+            ticket.operation_id,
+            audit_closure_evidence_sha256=promotion_audit,
+            promoted_at=promoted_at + timedelta(seconds=1),
+        )
+        assert replay == promoted
+        with pytest.raises(PrivilegedStoreConflict, match="replay differs"):
+            await store.promote_restart_lkg(
+                ticket.operation_id,
+                audit_closure_evidence_sha256=_digest("different-audit-closure"),
+                promoted_at=promoted_at,
+            )
         with closing(sqlite3.connect(database)) as connection:
             rows = tuple(
                 connection.execute(
@@ -193,14 +230,130 @@ async def test_candidate_success_closes_exact_checkpoint_and_binding(
                     "FROM privileged_selector_generations ORDER BY selector_generation"
                 )
             )
+            slots = tuple(
+                connection.execute(
+                    "SELECT slot_id,role,state FROM privileged_runtime_slots "
+                    "ORDER BY slot_generation"
+                )
+            )
+            selector_requested_at = datetime.fromisoformat(
+                connection.execute(
+                    "SELECT created_at FROM privileged_selector_generations "
+                    "WHERE selector_generation=2"
+                ).fetchone()[0]
+            )
             report = verify_privileged_broker_connection(connection)
         assert rows == (
             (1, "lkg-slot", "verified"),
             (2, "candidate-slot", "verified"),
         )
+        assert slots == (
+            ("lkg-slot", "prior", "prior"),
+            ("candidate-slot", "lkg", "lkg"),
+        )
         assert report.selector_generations == 2
+        assert report.outstanding_accepted_bindings == 0
+        selector_replay = await store.begin_selector_change(
+            operation_id=ticket.operation_id,
+            expected_current_slot_id=intent.lkg_slot.slot_id,
+            target_slot_id=intent.candidate_slot.slot_id,
+            requested_at=selector_requested_at,
+        )
+        assert (
+            selector_replay.request.target_slot_identity_sha256
+            == intent.candidate_slot.slot_identity_sha256
+        )
+        next_lkg = replace(
+            intent.candidate_slot,
+            role=RuntimeSlotRole.LKG,
+            state=RuntimeSlotState.LKG,
+        )
+        next_candidate = replace(
+            intent.candidate_slot,
+            slot_id="candidate-slot-next",
+            slot_generation=3,
+            slot_path="/srv/binnacle-runtime/slots/candidate-slot-next",
+            source_sha256=_digest("next-source"),
+            environment_sha256=_digest("next-environment"),
+            candidate_verification_sha256=_digest("next-verification"),
+            complete_manifest_sha256=_digest("next-complete-manifest"),
+        )
+        next_preflight = replace(
+            intent.preflight,
+            current_runtime_identity_sha256=next_lkg.slot_identity_sha256,
+            current_service_observation_sha256=_digest("next-service-observation"),
+            lkg_slot_identity_sha256=next_lkg.slot_identity_sha256,
+            candidate_slot_identity_sha256=next_candidate.slot_identity_sha256,
+            candidate_verification_sha256=(next_candidate.candidate_verification_sha256),
+            outstanding_state_sha256=_digest("next-outstanding"),
+            state_binding_sha256=_digest("next-state-binding"),
+            observed_at=now - timedelta(milliseconds=200),
+        )
+        next_issued_at = now - timedelta(milliseconds=100)
+        next_ticket = replace(
+            ticket,
+            operation_id="operation:restart-next",
+            ticket_id="ticket:restart-next",
+            nonce="2" * 64,
+            request_fingerprint_sha256=_digest("next-request"),
+            current_state_binding_sha256=next_preflight.state_binding_sha256,
+            operation_specific_evidence_sha256=_digest("next-preparation"),
+            issued_at=next_issued_at,
+        )
+        next_intent = PrivilegedRestartCheckpointIntent(
+            operation_id=next_ticket.operation_id,
+            ticket_id=next_ticket.ticket_id,
+            ticket_sha256=next_ticket.ticket_sha256,
+            service_profile_sha256=next_ticket.target_profile_sha256,
+            workspace_id=intent.workspace_id,
+            workspace_fence_version=intent.workspace_fence_version + 1,
+            preflight=next_preflight,
+            candidate_slot=next_candidate,
+            lkg_slot=next_lkg,
+            restart_deadline_seconds=intent.restart_deadline_seconds,
+            created_at=next_issued_at,
+        )
+        await store.accept_once(next_ticket)
+        next_checkpoint = await store.create_restart_checkpoint(
+            ticket=next_ticket,
+            intent=next_intent,
+        )
+        assert next_checkpoint.intent.lkg_slot == next_lkg
+        await store.advance_restart_checkpoint(
+            operation_id=next_ticket.operation_id,
+            expected_state=BrokerRestartCheckpointState.CHECKPOINTED,
+            next_state=BrokerRestartCheckpointState.TERMINAL,
+            selected_slot_id=None,
+            outcome=BrokerRestartOutcome.NO_SUBEFFECT,
+            result_evidence_sha256=_digest("next-no-subeffect"),
+            recorded_at=max(next_checkpoint.updated_at, promoted_at) + timedelta(seconds=1),
+        )
     finally:
         await store.close()
+
+    upgraded = await open_privileged_store(
+        settings=PrivilegedStoreSettings(
+            path=database,
+            runtime_directory=runtime,
+            verify_permissions=False,
+        ),
+        identity=PrivilegedStoreIdentity(
+            broker_instance_id="broker-upgraded",
+            boot_id_sha256=_digest("new-boot"),
+            protocol_version="v2",
+            build_sha256=_digest("new-build"),
+            profile_sha256=_digest("new-profile"),
+        ),
+        ticket_verifier=_Verifier(),
+        acceptance_enabled=True,
+    )
+    try:
+        assert upgraded.readiness == "ready"
+        retained = await upgraded.get(ticket.operation_id)
+        assert retained is not None
+        assert retained.lkg_promotion_audit_sha256 == promotion_audit
+    finally:
+        await upgraded.close()
 
 
 @pytest.mark.anyio
@@ -245,6 +398,59 @@ async def test_candidate_failure_restores_and_verifies_exact_lkg(
         )
     finally:
         await store.close()
+
+
+@pytest.mark.anyio
+async def test_pending_candidate_promotion_pins_exact_broker_identity(
+    tmp_path: Path,
+    repo_root: Path,
+) -> None:
+    now = datetime.now(UTC)
+    database = tmp_path / "evidence.db"
+    runtime = tmp_path / "run"
+    runtime.mkdir()
+    _migrate(database, repo_root)
+    intent, ticket = _intent_and_ticket(now)
+    store = await _open(database, runtime, now=now, instance="broker-1")
+    await _bootstrap_selector(store, intent, now=now)
+    await PrivilegedRestartCoordinator(
+        store=store,
+        driver=_Driver(now),
+        clock=lambda: now,
+    ).start(ticket, intent)
+    checkpoint = await store.get_restart_checkpoint(ticket.operation_id)
+    assert checkpoint is not None and checkpoint.closed_at is not None
+    await store.close()
+
+    with pytest.raises(PrivilegedStoreError, match=r"outstanding.*exact identity"):
+        await open_privileged_store(
+            settings=PrivilegedStoreSettings(
+                path=database,
+                runtime_directory=runtime,
+                verify_permissions=False,
+            ),
+            identity=PrivilegedStoreIdentity(
+                broker_instance_id="broker-upgraded",
+                boot_id_sha256=_digest("new-boot"),
+                protocol_version="v2",
+                build_sha256=_digest("new-build"),
+                profile_sha256=_digest("new-profile"),
+            ),
+            ticket_verifier=_Verifier(),
+            acceptance_enabled=True,
+        )
+
+    recovery = await _open(database, runtime, now=now, instance="broker-recovery")
+    try:
+        assert recovery.readiness == "restricted_recovery"
+        promoted = await recovery.promote_restart_lkg(
+            ticket.operation_id,
+            audit_closure_evidence_sha256=_digest("recovered-audit-closure"),
+            promoted_at=checkpoint.closed_at + timedelta(seconds=1),
+        )
+        assert promoted.lkg_promotion_evidence_sha256 is not None
+    finally:
+        await recovery.close()
 
 
 @pytest.mark.anyio

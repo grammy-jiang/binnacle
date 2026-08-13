@@ -231,10 +231,15 @@ def _insert_slot(
     generation: int,
     state: str,
 ) -> None:
+    role = {
+        "complete": "candidate",
+        "lkg": "lkg",
+        "prior": "prior",
+    }[state]
     connection.execute(
         """
         INSERT INTO privileged_runtime_slots VALUES (
-          ?,?,?,'lkg',?, ?,?,?,?,?, ?,?,?,?,?, ?,4096,64,CURRENT_TIMESTAMP,
+          ?,?,?,?, ?, ?,?,?,?,?, ?,?,?,?,?, ?,4096,64,CURRENT_TIMESTAMP,
           CURRENT_TIMESTAMP,CURRENT_TIMESTAMP
         )
         """,
@@ -242,6 +247,7 @@ def _insert_slot(
             slot_id,
             generation,
             f"/srv/binnacle-runtime/slots/{slot_id}",
+            role,
             state,
             "a" * 64,
             "b" * 64,

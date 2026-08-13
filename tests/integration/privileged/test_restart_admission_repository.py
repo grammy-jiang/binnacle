@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from dataclasses import replace
 from datetime import timedelta
 from pathlib import Path
 
@@ -313,6 +314,7 @@ def _accepted_terminal_snapshot(
     ticket: PrivilegedTicket,
     *,
     outcome: BrokerRestartOutcome,
+    audit_closure_evidence_sha256: str | None = None,
 ) -> BrokerBindingSnapshot:
     closed_at = ticket.issued_at + timedelta(seconds=1)
     selected_slot_id = {
@@ -342,6 +344,21 @@ def _accepted_terminal_snapshot(
         candidate_slot_id="candidate-slot",
         lkg_slot_id="lkg-slot",
         selected_runtime_slot_id=selected_slot_id,
+        lkg_promotion_audit_sha256=(
+            audit_closure_evidence_sha256
+            if outcome is BrokerRestartOutcome.CANDIDATE_READY
+            else None
+        ),
+        lkg_promotion_evidence_sha256=(
+            _digest("broker-lkg-promotion")
+            if outcome is BrokerRestartOutcome.CANDIDATE_READY
+            else None
+        ),
+        lkg_promoted_at=(
+            closed_at + timedelta(milliseconds=100)
+            if outcome is BrokerRestartOutcome.CANDIDATE_READY
+            else None
+        ),
     )
 
 
@@ -799,10 +816,15 @@ async def test_accepted_closure_atomically_releases_checkpoint_audit_and_fence_t
             operation.operation_id,
             dispatched_at=ticket.issued_at + timedelta(milliseconds=500),
         )
-        snapshot = _accepted_terminal_snapshot(ticket, outcome=outcome)
+        audit_closure_evidence_sha256 = _digest(f"accepted-audit-closure:{outcome.value}")
+        snapshot = _accepted_terminal_snapshot(
+            ticket,
+            outcome=outcome,
+            audit_closure_evidence_sha256=audit_closure_evidence_sha256,
+        )
         request = RestartAcceptedClosureRequest(
             snapshot=snapshot,
-            audit_closure_evidence_sha256=_digest(f"accepted-audit-closure:{outcome.value}"),
+            audit_closure_evidence_sha256=audit_closure_evidence_sha256,
             closed_at=ticket.issued_at + timedelta(seconds=2),
         )
 
@@ -841,11 +863,17 @@ async def test_accepted_closure_atomically_releases_checkpoint_audit_and_fence_t
 
         repeated = await repository.close_restart_accepted(request)
         assert repeated == (terminal, fence, closed)
+        conflicting_audit = _digest("different-accepted-audit")
+        conflicting_snapshot = (
+            replace(snapshot, lkg_promotion_audit_sha256=conflicting_audit)
+            if outcome is BrokerRestartOutcome.CANDIDATE_READY
+            else snapshot
+        )
         with pytest.raises(PrivilegedApplicationStoreError, match="conflicts"):
             await repository.close_restart_accepted(
                 RestartAcceptedClosureRequest(
-                    snapshot=snapshot,
-                    audit_closure_evidence_sha256=_digest("different-accepted-audit"),
+                    snapshot=conflicting_snapshot,
+                    audit_closure_evidence_sha256=conflicting_audit,
                     closed_at=request.closed_at,
                 )
             )

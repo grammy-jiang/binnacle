@@ -50,6 +50,7 @@ class _Store:
         self.snapshot: BrokerBindingSnapshot | None = binding_snapshot()
         self.receipt = acceptance_receipt()
         self.seal_calls: list[tuple[BrokerNoAcceptReason, datetime, datetime]] = []
+        self.promotion_calls: list[tuple[str, str, datetime]] = []
         self.closed = False
 
     async def accept_once(self, ticket: PrivilegedTicket) -> BrokerAcceptanceReceipt:
@@ -71,6 +72,17 @@ class _Store:
     async def get(self, operation_id: str) -> BrokerBindingSnapshot | None:
         if self.snapshot is None or operation_id != self.snapshot.identity.operation_id:
             return None
+        return self.snapshot
+
+    async def promote_restart_lkg(
+        self,
+        operation_id: str,
+        *,
+        audit_closure_evidence_sha256: str,
+        promoted_at: datetime,
+    ) -> BrokerBindingSnapshot:
+        assert self.snapshot is not None
+        self.promotion_calls.append((operation_id, audit_closure_evidence_sha256, promoted_at))
         return self.snapshot
 
     async def close(self) -> None:
@@ -133,12 +145,23 @@ async def test_recovery_get_and_seal_remain_available_without_backend() -> None:
             retain_until=(NOW + timedelta(days=1)).isoformat(timespec="microseconds"),
         )
     )
+    promotion_result = await service.dispatch(
+        request_envelope(
+            "request-promote",
+            "promote_restart_lkg",
+            operation_id=ticket.operation_id,
+            audit_closure_evidence_sha256=SHA_C,
+            promoted_at=NOW.isoformat(timespec="microseconds"),
+        )
+    )
 
     assert binding_snapshot_from_wire(get_result) == store.snapshot
     assert acceptance_receipt_from_wire(seal_result) == store.receipt
+    assert binding_snapshot_from_wire(promotion_result) == store.snapshot
     assert store.seal_calls == [
         (BrokerNoAcceptReason.REPLACEMENT_RECOVERY, NOW, NOW + timedelta(days=1))
     ]
+    assert store.promotion_calls == [(ticket.operation_id, SHA_C, NOW)]
 
     assert (
         await service.dispatch(

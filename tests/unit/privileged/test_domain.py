@@ -318,6 +318,15 @@ def _controlled_terminal_binding() -> BrokerBindingSnapshot:
 def test_restart_binding_projection_is_exact_and_fail_closed() -> None:
     binding = _controlled_terminal_binding()
     assert binding.restart_outcome is BrokerRestartOutcome.CANDIDATE_READY
+    assert binding.closed_at is not None
+    closed_at = binding.closed_at
+    promoted = replace(
+        binding,
+        lkg_promotion_audit_sha256=DIGEST_A,
+        lkg_promotion_evidence_sha256=DIGEST_C,
+        lkg_promoted_at=closed_at + timedelta(seconds=1),
+    )
+    assert promoted.lkg_promotion_evidence_sha256 == DIGEST_C
 
     valid_variants = (
         replace(
@@ -396,6 +405,16 @@ def test_restart_binding_projection_is_exact_and_fail_closed() -> None:
             effect_knowledge=PrivilegedEffectKnowledge.KNOWN_EFFECT,
             restart_outcome=BrokerRestartOutcome.NO_SUBEFFECT,
             selected_runtime_slot_id=None,
+        ),
+        lambda: replace(promoted, lkg_promotion_evidence_sha256=None),
+        lambda: replace(
+            promoted,
+            restart_outcome=BrokerRestartOutcome.ROLLBACK_READY,
+            selected_runtime_slot_id="lkg-slot",
+        ),
+        lambda: replace(
+            promoted,
+            lkg_promoted_at=closed_at - timedelta(microseconds=1),
         ),
     )
     for construct in invalid:

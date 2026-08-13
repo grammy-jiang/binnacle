@@ -43,7 +43,15 @@ _PEER_CREDENTIALS: Final = struct.Struct("3i")
 _MAX_JSON_DEPTH: Final = 8
 _MAX_JSON_NODES: Final = 4_096
 _MAX_CONTAINER_ITEMS: Final = 256
-_REQUEST_TYPES: Final = frozenset({"hello", "start_privileged", "get_binding", "seal_no_accept"})
+_REQUEST_TYPES: Final = frozenset(
+    {
+        "hello",
+        "start_privileged",
+        "get_binding",
+        "promote_restart_lkg",
+        "seal_no_accept",
+    }
+)
 
 
 class PrivilegedProtocolError(RuntimeError):
@@ -117,6 +125,11 @@ def validate_request(value: Mapping[str, object]) -> None:
         "hello": set(),
         "start_privileged": {"restart_intent", "ticket"},
         "get_binding": {"operation_id"},
+        "promote_restart_lkg": {
+            "operation_id",
+            "audit_closure_evidence_sha256",
+            "promoted_at",
+        },
         "seal_no_accept": {
             "identity",
             "reason",
@@ -341,6 +354,9 @@ def binding_snapshot_to_wire(value: BrokerBindingSnapshot) -> dict[str, object]:
         "candidate_slot_id": value.candidate_slot_id,
         "lkg_slot_id": value.lkg_slot_id,
         "selected_runtime_slot_id": value.selected_runtime_slot_id,
+        "lkg_promotion_audit_sha256": value.lkg_promotion_audit_sha256,
+        "lkg_promotion_evidence_sha256": value.lkg_promotion_evidence_sha256,
+        "lkg_promoted_at": _optional_timestamp_to_wire(value.lkg_promoted_at),
     }
 
 
@@ -363,6 +379,9 @@ def binding_snapshot_from_wire(value: object) -> BrokerBindingSnapshot:
         "candidate_slot_id",
         "lkg_slot_id",
         "selected_runtime_slot_id",
+        "lkg_promotion_audit_sha256",
+        "lkg_promotion_evidence_sha256",
+        "lkg_promoted_at",
     }
     if not isinstance(value, dict) or set(value) != fields:
         raise PrivilegedProtocolError("privileged binding snapshot fields are invalid")
@@ -393,6 +412,9 @@ def binding_snapshot_from_wire(value: object) -> BrokerBindingSnapshot:
             candidate_slot_id=_optional_text(value, "candidate_slot_id"),
             lkg_slot_id=_optional_text(value, "lkg_slot_id"),
             selected_runtime_slot_id=_optional_text(value, "selected_runtime_slot_id"),
+            lkg_promotion_audit_sha256=_optional_text(value, "lkg_promotion_audit_sha256"),
+            lkg_promotion_evidence_sha256=_optional_text(value, "lkg_promotion_evidence_sha256"),
+            lkg_promoted_at=_optional_timestamp(value, "lkg_promoted_at"),
         )
     except ValueError as exc:
         raise PrivilegedProtocolError("privileged binding snapshot is invalid") from exc

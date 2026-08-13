@@ -396,6 +396,9 @@ def upgrade() -> None:
         ),
         sa.CheckConstraint(
             "role IN ('candidate','lkg','prior') AND "
+            "((role='candidate' AND state IN ('staging','complete','active','restricted')) OR "
+            "(role='lkg' AND state IN ('lkg','restricted')) OR "
+            "(role='prior' AND state IN ('prior','restricted'))) AND "
             "((state='staging' AND completed_at IS NULL "
             "AND complete_manifest_sha256 IS NULL) OR "
             "(state IN ('complete','active','lkg','prior') "
@@ -449,16 +452,21 @@ def upgrade() -> None:
         sa.Column("state", sa.String(length=32), nullable=False),
         sa.Column("outcome", sa.String(length=32), nullable=False),
         sa.Column("result_evidence_sha256", sa.String(length=64), nullable=True),
+        sa.Column("lkg_promotion_audit_sha256", sa.String(length=64), nullable=True),
+        sa.Column("lkg_promotion_evidence_sha256", sa.String(length=64), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("service_stopped_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("closed_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("lkg_promoted_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.CheckConstraint(
             "workspace_fence_version>=1 AND evidence_generation>=1 "
             "AND restart_deadline_seconds BETWEEN 1 AND 900 AND updated_at>=created_at "
             "AND preflight_observed_at<=created_at "
             "AND (service_stopped_at IS NULL OR service_stopped_at>=created_at) "
-            "AND (closed_at IS NULL OR closed_at>=created_at)",
+            "AND (closed_at IS NULL OR closed_at>=created_at) "
+            "AND (lkg_promoted_at IS NULL OR "
+            "(closed_at IS NOT NULL AND lkg_promoted_at>=closed_at))",
             name="ck_privileged_restart_checkpoints_time",
         ),
         sa.CheckConstraint(
@@ -478,6 +486,10 @@ def upgrade() -> None:
             )
             + " AND (result_evidence_sha256 IS NULL OR "
             + _digest("result_evidence_sha256")
+            + ") AND (lkg_promotion_audit_sha256 IS NULL OR "
+            + _digest("lkg_promotion_audit_sha256")
+            + ") AND (lkg_promotion_evidence_sha256 IS NULL OR "
+            + _digest("lkg_promotion_evidence_sha256")
             + ")",
             name="ck_privileged_restart_checkpoints_digests",
         ),
@@ -510,6 +522,18 @@ def upgrade() -> None:
             "AND outcome IN ('candidate_ready','rollback_ready','no_subeffect','failed') "
             "AND result_evidence_sha256 IS NOT NULL)",
             name="ck_privileged_restart_checkpoints_state",
+        ),
+        sa.CheckConstraint(
+            "(outcome='candidate_ready' AND state='terminal' "
+            "AND selected_slot_id=candidate_slot_id AND "
+            "((lkg_promotion_audit_sha256 IS NULL "
+            "AND lkg_promotion_evidence_sha256 IS NULL AND lkg_promoted_at IS NULL) OR "
+            "(lkg_promotion_audit_sha256 IS NOT NULL "
+            "AND lkg_promotion_evidence_sha256 IS NOT NULL "
+            "AND lkg_promoted_at IS NOT NULL))) OR "
+            "(outcome!='candidate_ready' AND lkg_promotion_audit_sha256 IS NULL "
+            "AND lkg_promotion_evidence_sha256 IS NULL AND lkg_promoted_at IS NULL)",
+            name="ck_privileged_restart_lkg_promotion",
         ),
         sa.ForeignKeyConstraint(
             ["operation_id"],
@@ -856,7 +880,7 @@ def upgrade() -> None:
         BEGIN
           SELECT CASE WHEN NEW.slot_id!=OLD.slot_id OR
             NEW.slot_generation!=OLD.slot_generation OR NEW.slot_path!=OLD.slot_path OR
-            NEW.role!=OLD.role OR NEW.source_sha256!=OLD.source_sha256 OR
+            NEW.source_sha256!=OLD.source_sha256 OR
             NEW.environment_sha256!=OLD.environment_sha256 OR
             NEW.config_sha256!=OLD.config_sha256 OR NEW.policy_sha256!=OLD.policy_sha256 OR
             NEW.manifest_sha256!=OLD.manifest_sha256 OR
@@ -872,12 +896,15 @@ def upgrade() -> None:
             (OLD.complete_manifest_sha256 IS NOT NULL AND
              NEW.complete_manifest_sha256 IS NOT OLD.complete_manifest_sha256) OR
             (OLD.completed_at IS NOT NULL AND NEW.completed_at IS NOT OLD.completed_at) OR
-            NOT (NEW.state=OLD.state OR
+            NOT ((NEW.role=OLD.role AND (NEW.state=OLD.state OR
               (OLD.state='staging' AND NEW.state IN ('complete','restricted')) OR
-              (OLD.state='complete' AND NEW.state IN ('active','lkg','prior','restricted')) OR
-              (OLD.state='active' AND NEW.state IN ('lkg','prior','restricted')) OR
-              (OLD.state='lkg' AND NEW.state IN ('prior','restricted')) OR
-              (OLD.state='prior' AND NEW.state='restricted'))
+              (OLD.state='complete' AND NEW.state IN ('active','restricted')) OR
+              (OLD.state='active' AND NEW.state='restricted') OR
+              (OLD.state IN ('lkg','prior') AND NEW.state='restricted'))) OR
+              (OLD.role='candidate' AND OLD.state IN ('complete','active') AND
+               NEW.role='lkg' AND NEW.state='lkg') OR
+              (OLD.role='lkg' AND OLD.state='lkg' AND
+               NEW.role='prior' AND NEW.state='prior'))
           THEN RAISE(ABORT, 'privileged runtime slot evidence regressed') END;
         END
         """
@@ -914,6 +941,12 @@ def upgrade() -> None:
                NEW.selected_slot_id IS NEW.lkg_slot_id)) OR
             (OLD.result_evidence_sha256 IS NOT NULL AND
              NEW.result_evidence_sha256 IS NOT OLD.result_evidence_sha256) OR
+            (OLD.lkg_promotion_audit_sha256 IS NOT NULL AND
+             NEW.lkg_promotion_audit_sha256 IS NOT OLD.lkg_promotion_audit_sha256) OR
+            (OLD.lkg_promotion_evidence_sha256 IS NOT NULL AND
+             NEW.lkg_promotion_evidence_sha256 IS NOT OLD.lkg_promotion_evidence_sha256) OR
+            (OLD.lkg_promoted_at IS NOT NULL AND
+             NEW.lkg_promoted_at IS NOT OLD.lkg_promoted_at) OR
             (OLD.outcome!='pending' AND NEW.outcome!=OLD.outcome) OR
             (OLD.service_stopped_at IS NOT NULL AND
              NEW.service_stopped_at IS NOT OLD.service_stopped_at) OR

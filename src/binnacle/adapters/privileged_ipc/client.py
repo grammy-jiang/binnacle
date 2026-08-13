@@ -112,6 +112,21 @@ class PrivilegedClient:
         value = await self._exchange("get_binding", operation_id=operation_id)
         return None if value is None else _decode_result(lambda: binding_snapshot_from_wire(value))
 
+    async def promote_restart_lkg(
+        self,
+        operation_id: str,
+        *,
+        audit_closure_evidence_sha256: str,
+        promoted_at: datetime,
+    ) -> BrokerBindingSnapshot:
+        value = await self._exchange(
+            "promote_restart_lkg",
+            operation_id=operation_id,
+            audit_closure_evidence_sha256=audit_closure_evidence_sha256,
+            promoted_at=canonical_timestamp(promoted_at),
+        )
+        return _decode_result(lambda: binding_snapshot_from_wire(value))
+
     async def seal_no_accept(
         self,
         *,

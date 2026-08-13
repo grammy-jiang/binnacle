@@ -295,3 +295,73 @@ async def test_default_disabled_store_allows_sealing_but_not_new_acceptance(
             await store.accept_once(second)
     finally:
         await store.close()
+
+
+@pytest.mark.anyio
+async def test_terminal_history_allows_broker_identity_upgrade(
+    tmp_path: Path,
+    repo_root: Path,
+) -> None:
+    now = datetime.now(UTC)
+    database, store = await _open(tmp_path, repo_root, now=now)
+    ticket = _ticket(now)
+    await store.seal_no_accept(
+        identity=ticket.routing_identity,
+        reason=BrokerNoAcceptReason.DISPATCH_CANCELLED,
+        trusted_time_at=now,
+        retain_until=now + timedelta(days=1),
+    )
+    await store.close()
+
+    upgraded = await open_privileged_store(
+        settings=PrivilegedStoreSettings(
+            path=database,
+            runtime_directory=tmp_path / "run",
+            verify_permissions=False,
+        ),
+        identity=PrivilegedStoreIdentity(
+            broker_instance_id="broker-instance-upgraded",
+            boot_id_sha256=DIGEST_B,
+            protocol_version="v2",
+            build_sha256=DIGEST_A,
+            profile_sha256=DIGEST_B,
+        ),
+        ticket_verifier=_validator(now),
+        acceptance_enabled=False,
+    )
+    try:
+        assert upgraded.readiness == "disabled"
+        retained = await upgraded.get(ticket.operation_id)
+        assert retained is not None
+        assert retained.acceptance_state is BrokerAcceptanceState.SEALED_NO_ACCEPT
+    finally:
+        await upgraded.close()
+
+
+@pytest.mark.anyio
+async def test_outstanding_authority_pins_exact_broker_identity(
+    tmp_path: Path,
+    repo_root: Path,
+) -> None:
+    now = datetime.now(UTC)
+    database, store = await _open(tmp_path, repo_root, now=now)
+    await store.accept_once(_ticket(now))
+    await store.close()
+
+    with pytest.raises(PrivilegedStoreError, match=r"outstanding.*exact identity"):
+        await open_privileged_store(
+            settings=PrivilegedStoreSettings(
+                path=database,
+                runtime_directory=tmp_path / "run",
+                verify_permissions=False,
+            ),
+            identity=PrivilegedStoreIdentity(
+                broker_instance_id="broker-instance-upgraded",
+                boot_id_sha256=DIGEST_B,
+                protocol_version="v2",
+                build_sha256=DIGEST_A,
+                profile_sha256=DIGEST_B,
+            ),
+            ticket_verifier=_validator(now),
+            acceptance_enabled=True,
+        )

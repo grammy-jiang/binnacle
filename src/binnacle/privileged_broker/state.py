@@ -200,8 +200,21 @@ class SqlitePrivilegedEvidenceStore:
                 if not self._acceptance_enabled or self._readiness != "ready":
                     raise PrivilegedStoreError("privileged acceptance remains disabled")
                 active = await self._fetchone(
-                    "SELECT operation_id FROM privileged_operation_bindings "
-                    "WHERE active_slot=1 AND operation_id!=? LIMIT 1",
+                    """
+                    SELECT binding.operation_id
+                    FROM privileged_operation_bindings binding
+                    LEFT JOIN privileged_restart_checkpoints checkpoint
+                      ON checkpoint.operation_id=binding.operation_id
+                    WHERE binding.operation_id!=? AND (
+                      binding.active_slot=1 OR (
+                        binding.acceptance_state='accepted'
+                        AND binding.execution_state='terminal'
+                        AND checkpoint.outcome='candidate_ready'
+                        AND checkpoint.lkg_promotion_evidence_sha256 IS NULL
+                      )
+                    )
+                    LIMIT 1
+                    """,
                     (identity.operation_id,),
                 )
                 if active is not None:
@@ -440,10 +453,11 @@ class SqlitePrivilegedEvidenceStore:
                       preflight_state_binding_sha256,preflight_observed_at,
                       candidate_verification_sha256,
                       peer_set_sha256,schema_heads_sha256,restart_deadline_seconds,
-                      checkpoint_sha256,state,outcome,result_evidence_sha256,created_at,
-                      service_stopped_at,closed_at,updated_at
-                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'checkpointed','pending',NULL,
-                              ?,NULL,NULL,?)
+                      checkpoint_sha256,state,outcome,result_evidence_sha256,
+                      lkg_promotion_audit_sha256,lkg_promotion_evidence_sha256,
+                      created_at,service_stopped_at,closed_at,lkg_promoted_at,updated_at
+                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'checkpointed','pending',
+                              NULL,NULL,NULL,?,NULL,NULL,NULL,?)
                     """,
                     (
                         ticket.operation_id,
@@ -890,6 +904,167 @@ class SqlitePrivilegedEvidenceStore:
         rows = tuple(await cursor.fetchall())
         await cursor.close()
         return tuple(str(row[0]) for row in rows)
+
+    async def promote_restart_lkg(
+        self,
+        operation_id: str,
+        *,
+        audit_closure_evidence_sha256: str,
+        promoted_at: datetime,
+    ) -> BrokerBindingSnapshot:
+        """Durably promote an audited candidate and retain the previous LKG."""
+
+        _require_digest(audit_closure_evidence_sha256, "LKG promotion audit closure")
+        _require_aware(promoted_at, "LKG promotion time")
+        async with self._acceptance_gate:
+            await self._begin()
+            try:
+                checkpoint = await self._required_restart_checkpoint(operation_id)
+                binding = await self._required_binding(operation_id)
+                retained_audit = _optional_text(checkpoint["lkg_promotion_audit_sha256"])
+                if retained_audit is not None:
+                    if (
+                        retained_audit != audit_closure_evidence_sha256
+                        or checkpoint["lkg_promotion_evidence_sha256"] is None
+                        or checkpoint["lkg_promoted_at"] is None
+                    ):
+                        raise PrivilegedStoreConflict("LKG promotion replay differs")
+                    await self._connection.commit()
+                    return self._snapshot(binding, checkpoint=checkpoint)
+                closed_at = _optional_timestamp(checkpoint["closed_at"])
+                if (
+                    binding["acceptance_state"] != BrokerAcceptanceState.ACCEPTED.value
+                    or binding["execution_state"] != BrokerExecutionState.TERMINAL.value
+                    or checkpoint["state"] != BrokerRestartCheckpointState.TERMINAL.value
+                    or checkpoint["outcome"] != BrokerRestartOutcome.CANDIDATE_READY.value
+                    or checkpoint["selected_slot_id"] != checkpoint["candidate_slot_id"]
+                    or closed_at is None
+                    or promoted_at < closed_at
+                ):
+                    raise PrivilegedStoreConflict(
+                        "LKG promotion lacks audited candidate-ready authority"
+                    )
+                selector = await self._fetchone(
+                    "SELECT * FROM privileged_selector_generations "
+                    "WHERE operation_id=? AND new_slot_id=? "
+                    "ORDER BY selector_generation DESC LIMIT 1",
+                    (operation_id, str(checkpoint["candidate_slot_id"])),
+                )
+                if (
+                    selector is None
+                    or selector["state"] != "verified"
+                    or selector["verification_evidence_sha256"] is None
+                ):
+                    raise PrivilegedStoreConflict(
+                        "LKG promotion lacks verified candidate selector evidence"
+                    )
+                candidate_row = await self._fetchone(
+                    "SELECT * FROM privileged_runtime_slots WHERE slot_id=?",
+                    (str(checkpoint["candidate_slot_id"]),),
+                )
+                lkg_row = await self._fetchone(
+                    "SELECT * FROM privileged_runtime_slots WHERE slot_id=?",
+                    (str(checkpoint["lkg_slot_id"]),),
+                )
+                if candidate_row is None or lkg_row is None:
+                    raise PrivilegedStoreConflict("LKG promotion slot evidence is absent")
+                candidate = self._runtime_slot(candidate_row)
+                prior_lkg = self._runtime_slot(lkg_row)
+                if (
+                    candidate.role is not RuntimeSlotRole.CANDIDATE
+                    or candidate.state not in {RuntimeSlotState.COMPLETE, RuntimeSlotState.ACTIVE}
+                    or prior_lkg.role is not RuntimeSlotRole.LKG
+                    or prior_lkg.state is not RuntimeSlotState.LKG
+                ):
+                    raise PrivilegedStoreConflict("LKG promotion slot lifecycle is contradictory")
+                generation = await self._next_evidence_generation(promoted_at)
+                promoted_candidate = self._runtime_slot(
+                    candidate_row,
+                    role=RuntimeSlotRole.LKG,
+                    state=RuntimeSlotState.LKG,
+                )
+                demoted_lkg = self._runtime_slot(
+                    lkg_row,
+                    role=RuntimeSlotRole.PRIOR,
+                    state=RuntimeSlotState.PRIOR,
+                )
+                promotion_evidence_sha256 = canonical_sha256(
+                    {
+                        "audit_closure_evidence_sha256": audit_closure_evidence_sha256,
+                        "candidate_source_slot_identity_sha256": (candidate.slot_identity_sha256),
+                        "checkpoint_sha256": checkpoint["checkpoint_sha256"],
+                        "checkpoint_result_evidence_sha256": checkpoint["result_evidence_sha256"],
+                        "evidence_generation": generation,
+                        "new_lkg_slot_identity_sha256": (promoted_candidate.slot_identity_sha256),
+                        "operation_id": operation_id,
+                        "previous_lkg_slot_identity_sha256": prior_lkg.slot_identity_sha256,
+                        "retained_prior_slot_identity_sha256": demoted_lkg.slot_identity_sha256,
+                        "selector_generation": _integer(selector["selector_generation"]),
+                        "selector_verification_evidence_sha256": selector[
+                            "verification_evidence_sha256"
+                        ],
+                    }
+                )
+                timestamp = canonical_timestamp(promoted_at)
+                demoted = await self._connection.execute(
+                    "UPDATE privileged_runtime_slots SET role='prior',state='prior',updated_at=? "
+                    "WHERE slot_id=? AND role='lkg' AND state='lkg'",
+                    (timestamp, prior_lkg.slot_id),
+                )
+                if demoted.rowcount != 1:
+                    raise PrivilegedStoreConflict("previous LKG demotion winner changed")
+                await demoted.close()
+                promoted = await self._connection.execute(
+                    "UPDATE privileged_runtime_slots SET role='lkg',state='lkg',updated_at=? "
+                    "WHERE slot_id=? AND role='candidate' AND state IN ('complete','active')",
+                    (timestamp, candidate.slot_id),
+                )
+                if promoted.rowcount != 1:
+                    raise PrivilegedStoreConflict("candidate LKG promotion winner changed")
+                await promoted.close()
+                updated = await self._connection.execute(
+                    """
+                    UPDATE privileged_restart_checkpoints
+                    SET evidence_generation=?,lkg_promotion_audit_sha256=?,
+                        lkg_promotion_evidence_sha256=?,lkg_promoted_at=?,updated_at=?
+                    WHERE operation_id=? AND state='terminal' AND outcome='candidate_ready'
+                      AND lkg_promotion_audit_sha256 IS NULL
+                    """,
+                    (
+                        generation,
+                        audit_closure_evidence_sha256,
+                        promotion_evidence_sha256,
+                        timestamp,
+                        timestamp,
+                        operation_id,
+                    ),
+                )
+                if updated.rowcount != 1:
+                    raise PrivilegedStoreConflict("LKG promotion evidence winner changed")
+                await updated.close()
+                binding_updated = await self._connection.execute(
+                    "UPDATE privileged_operation_bindings "
+                    "SET last_reconciled_at=?,updated_at=? WHERE operation_id=?",
+                    (timestamp, timestamp, operation_id),
+                )
+                if binding_updated.rowcount != 1:
+                    raise PrivilegedStoreConflict("LKG promotion binding disappeared")
+                await binding_updated.close()
+                await self._append_event(
+                    generation=generation,
+                    event_id=f"lkg_promoted_{canonical_sha256(operation_id)[:24]}",
+                    operation_id=operation_id,
+                    event_type="restart.lkg_promoted",
+                    event_sha256=promotion_evidence_sha256,
+                    recorded_at=promoted_at,
+                )
+                checkpoint = await self._required_restart_checkpoint(operation_id)
+                binding = await self._required_binding(operation_id)
+                await self._connection.commit()
+                return self._snapshot(binding, checkpoint=checkpoint)
+            except BaseException:
+                await self._connection.rollback()
+                raise
 
     async def begin_restart_subeffect(
         self,
@@ -1422,8 +1597,19 @@ class SqlitePrivilegedEvidenceStore:
         )
         if candidate_row is None or lkg_row is None:
             raise PrivilegedStoreError("restart checkpoint slot evidence is absent")
-        candidate = self._runtime_slot(candidate_row)
-        lkg = self._runtime_slot(lkg_row)
+        # A successful candidate is later promoted in-place and the previous LKG is
+        # demoted.  The checkpoint nevertheless retains the immutable pre-restart
+        # role/state identities that were signed into its original intent.
+        candidate = self._runtime_slot(
+            candidate_row,
+            role=RuntimeSlotRole.CANDIDATE,
+            state=RuntimeSlotState.COMPLETE,
+        )
+        lkg = self._runtime_slot(
+            lkg_row,
+            role=RuntimeSlotRole.LKG,
+            state=RuntimeSlotState.LKG,
+        )
         created_at = _timestamp(row["created_at"])
         current_runtime = _optional_text(row["current_runtime_identity_sha256"])
         if current_runtime is None:
@@ -1488,9 +1674,30 @@ class SqlitePrivilegedEvidenceStore:
         )
         if slot_row is None:
             raise PrivilegedStoreError("selector target slot evidence is absent")
-        slot = self._runtime_slot(slot_row)
         initial = bool(row["initial_bootstrap"])
         operation_id = _optional_text(row["operation_id"])
+        if initial:
+            slot = self._runtime_slot(
+                slot_row,
+                role=RuntimeSlotRole.LKG,
+                state=RuntimeSlotState.LKG,
+            )
+        else:
+            if operation_id is None:
+                raise PrivilegedStoreError("selector operation identity is absent")
+            checkpoint = await self._required_restart_checkpoint(operation_id)
+            new_slot_id = str(row["new_slot_id"])
+            if new_slot_id == str(checkpoint["candidate_slot_id"]):
+                role = RuntimeSlotRole.CANDIDATE
+                state = RuntimeSlotState.COMPLETE
+            elif new_slot_id == str(checkpoint["lkg_slot_id"]):
+                role = RuntimeSlotRole.LKG
+                state = RuntimeSlotState.LKG
+            else:
+                raise PrivilegedStoreError(
+                    "selector target is outside its retained restart checkpoint"
+                )
+            slot = self._runtime_slot(slot_row, role=role, state=state)
         request = RuntimeSelectorActivationRequest(
             selector_generation=_integer(row["selector_generation"]),
             operation_id=operation_id,
@@ -1509,7 +1716,12 @@ class SqlitePrivilegedEvidenceStore:
         )
 
     @staticmethod
-    def _runtime_slot(row: sqlite3.Row) -> VerifiedRuntimeSlot:
+    def _runtime_slot(
+        row: sqlite3.Row,
+        *,
+        role: RuntimeSlotRole | None = None,
+        state: RuntimeSlotState | None = None,
+    ) -> VerifiedRuntimeSlot:
         completed_at = _optional_timestamp(row["completed_at"])
         manifest = _optional_text(row["complete_manifest_sha256"])
         if completed_at is None or manifest is None:
@@ -1518,8 +1730,8 @@ class SqlitePrivilegedEvidenceStore:
             slot_id=str(row["slot_id"]),
             slot_generation=_integer(row["slot_generation"]),
             slot_path=str(row["slot_path"]),
-            role=RuntimeSlotRole(str(row["role"])),
-            state=RuntimeSlotState(str(row["state"])),
+            role=RuntimeSlotRole(str(row["role"])) if role is None else role,
+            state=RuntimeSlotState(str(row["state"])) if state is None else state,
             source_sha256=str(row["source_sha256"]),
             environment_sha256=str(row["environment_sha256"]),
             config_sha256=str(row["config_sha256"]),
@@ -1682,6 +1894,19 @@ class SqlitePrivilegedEvidenceStore:
             selected_runtime_slot_id=(
                 None if checkpoint is None else _optional_text(checkpoint["selected_slot_id"])
             ),
+            lkg_promotion_audit_sha256=(
+                None
+                if checkpoint is None
+                else _optional_text(checkpoint["lkg_promotion_audit_sha256"])
+            ),
+            lkg_promotion_evidence_sha256=(
+                None
+                if checkpoint is None
+                else _optional_text(checkpoint["lkg_promotion_evidence_sha256"])
+            ),
+            lkg_promoted_at=(
+                None if checkpoint is None else _optional_timestamp(checkpoint["lkg_promoted_at"])
+            ),
         )
 
 
@@ -1702,7 +1927,7 @@ async def open_privileged_store(
                 uri=True,
             )
             try:
-                report = verify_privileged_broker_connection(integrity_connection)
+                verify_privileged_broker_connection(integrity_connection)
             finally:
                 integrity_connection.close()
         except (PrivilegedBrokerIntegrityError, sqlite3.Error) as exc:
@@ -1718,30 +1943,39 @@ async def open_privileged_store(
         if meta is None or _integer(meta["schema_generation"]) != 1:
             raise PrivilegedStoreError("privileged metadata is absent or incompatible")
         initialized = str(meta["build_sha256"]) != _ZERO_DIGEST
-        retained_bindings = (
-            report.unresolved_bindings + report.accepted_bindings + report.sealed_bindings
+        outstanding = await _single_integer(
+            connection,
+            """
+            SELECT COUNT(*)
+            FROM privileged_operation_bindings binding
+            LEFT JOIN privileged_restart_checkpoints checkpoint
+              ON checkpoint.operation_id=binding.operation_id
+            WHERE binding.acceptance_state='unresolved' OR (
+              binding.acceptance_state='accepted' AND (
+                binding.execution_state!='terminal' OR (
+                  checkpoint.outcome='candidate_ready'
+                  AND checkpoint.lkg_promotion_evidence_sha256 IS NULL
+                )
+              )
+            )
+            """,
         )
         if (
             initialized
-            and retained_bindings
+            and outstanding
             and (
                 str(meta["build_sha256"]) != identity.build_sha256
                 or str(meta["profile_sha256"]) != identity.profile_sha256
                 or str(meta["protocol_version"]) != identity.protocol_version
             )
         ):
-            raise PrivilegedStoreError("retained privileged evidence requires exact identity")
-        outstanding = await _single_integer(
-            connection,
-            "SELECT COUNT(*) FROM privileged_operation_bindings "
-            "WHERE acceptance_state='accepted' AND execution_state!='terminal'",
-        )
+            raise PrivilegedStoreError("outstanding privileged authority requires exact identity")
         readiness = (
             "restricted_recovery"
             if outstanding
             else ("ready" if acceptance_enabled else "disabled")
         )
-        now = datetime.now(UTC)
+        now = max(datetime.now(UTC), _timestamp(meta["updated_at"]))
         await connection.execute("BEGIN IMMEDIATE")
         await connection.execute(
             """

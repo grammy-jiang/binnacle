@@ -353,6 +353,18 @@ class PrivilegedRestartReconciler:
                 operation,
                 snapshot,
             )
+            if snapshot.restart_outcome is BrokerRestartOutcome.CANDIDATE_READY:
+                try:
+                    snapshot = await self._broker.promote_restart_lkg(
+                        operation.operation_id,
+                        audit_closure_evidence_sha256=audit_evidence_sha256,
+                        promoted_at=self._clock(),
+                    )
+                except PrivilegedBrokerUnavailable:
+                    # The durable audit event is idempotent.  Keep the application
+                    # reservation/fence closed until the broker can bind it to the
+                    # protected LKG transition and return that exact evidence.
+                    return operation
             closed, _, _ = await self._repository.close_restart_accepted(
                 RestartAcceptedClosureRequest(
                     snapshot=snapshot,

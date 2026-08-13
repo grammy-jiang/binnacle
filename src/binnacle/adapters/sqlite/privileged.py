@@ -824,6 +824,7 @@ class SqlitePrivilegedApplicationRepository:
                         "broker_acceptance_evidence_sha256": (snapshot.acceptance_evidence_sha256),
                         "broker_result_evidence_sha256": snapshot.result_evidence_sha256,
                         "closed_at": canonical_timestamp(request.closed_at),
+                        "lkg_promotion_evidence_sha256": (snapshot.lkg_promotion_evidence_sha256),
                         "operation_id": operation_id,
                         "ticket_sha256": operation.ticket_sha256,
                         "workspace_fence_version": operation.workspace_fence_version,

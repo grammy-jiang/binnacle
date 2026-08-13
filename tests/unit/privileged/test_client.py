@@ -271,11 +271,20 @@ async def test_get_and_seal_encode_exact_recovery_identity() -> None:
     client = _ResultClient(
         {
             "get_binding": binding_snapshot_to_wire(snapshot),
+            "promote_restart_lkg": binding_snapshot_to_wire(snapshot),
             "seal_no_accept": acceptance_receipt_to_wire(receipt),
         }
     )
 
     assert await client.get(snapshot.identity.operation_id) == snapshot
+    assert (
+        await client.promote_restart_lkg(
+            snapshot.identity.operation_id,
+            audit_closure_evidence_sha256=SHA_C,
+            promoted_at=NOW,
+        )
+        == snapshot
+    )
     assert (
         await client.seal_no_accept(
             identity=snapshot.identity,
@@ -289,7 +298,15 @@ async def test_get_and_seal_encode_exact_recovery_identity() -> None:
         "get_binding",
         {"operation_id": snapshot.identity.operation_id},
     )
-    message_type, fields = client.requests[1]
+    assert client.requests[1] == (
+        "promote_restart_lkg",
+        {
+            "operation_id": snapshot.identity.operation_id,
+            "audit_closure_evidence_sha256": SHA_C,
+            "promoted_at": NOW.isoformat(timespec="microseconds"),
+        },
+    )
+    message_type, fields = client.requests[2]
     assert message_type == "seal_no_accept"
     assert fields["reason"] == "replacement_recovery"
     assert isinstance(fields["identity"], dict)

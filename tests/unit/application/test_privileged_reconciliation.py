@@ -124,6 +124,7 @@ def _dependencies(
     retained_state: PrivilegedOperationState = PrivilegedOperationState.DISPATCHED,
     snapshot: BrokerBindingSnapshot | None = None,
     broker_error: Exception | None = None,
+    promotion_error: Exception | None = None,
     audit_closure: RestartNoAcceptAuditClosure | None = None,
     accepted_audit_closure: RestartAcceptedAuditClosure | None = None,
 ) -> tuple[
@@ -161,7 +162,23 @@ def _dependencies(
     broker_get = AsyncMock(return_value=snapshot)
     if broker_error is not None:
         broker_get.side_effect = broker_error
-    broker = cast(PrivilegedBrokerPort, SimpleNamespace(get=broker_get))
+    promoted_snapshot = (
+        replace(
+            snapshot,
+            lkg_promotion_audit_sha256=SHA_C,
+            lkg_promotion_evidence_sha256=SHA_C,
+            lkg_promoted_at=NOW,
+        )
+        if snapshot is not None and snapshot.restart_outcome is BrokerRestartOutcome.CANDIDATE_READY
+        else snapshot
+    )
+    promote_lkg = AsyncMock(return_value=promoted_snapshot)
+    if promotion_error is not None:
+        promote_lkg.side_effect = promotion_error
+    broker = cast(
+        PrivilegedBrokerPort,
+        SimpleNamespace(get=broker_get, promote_restart_lkg=promote_lkg),
+    )
     return (
         PrivilegedRestartReconciler(
             repository=repository,
@@ -360,12 +377,60 @@ async def test_accepted_terminal_snapshot_closes_only_after_exact_audit_evidence
     audit_record.assert_awaited_once_with(operation, terminal)
     assert close_accepted.await_args is not None
     request = close_accepted.await_args.args[0]
-    assert request.snapshot is terminal
+    assert request.snapshot is not terminal
+    assert request.snapshot.lkg_promotion_audit_sha256 == SHA_C
+    assert request.snapshot.lkg_promotion_evidence_sha256 == SHA_C
+    assert request.snapshot.lkg_promoted_at == NOW
     assert request.audit_closure_evidence_sha256 == SHA_C
     assert request.closed_at == NOW
     record.assert_not_awaited()
     close_before.assert_not_awaited()
     close_no_accept.assert_not_awaited()
+
+
+@pytest.mark.anyio
+async def test_candidate_ready_keeps_authority_closed_when_promotion_is_unavailable() -> None:
+    operation = _running_operation()
+    terminal = _terminal_snapshot()
+    audit_record = AsyncMock(return_value=SHA_C)
+    audit_closure = cast(
+        RestartAcceptedAuditClosure,
+        SimpleNamespace(record_accepted=audit_record),
+    )
+    reconciler, record, _, close_before, close_no_accept, close_accepted = _dependencies(
+        snapshot=terminal,
+        promotion_error=PrivilegedBrokerUnavailable("promotion unavailable"),
+        accepted_audit_closure=audit_closure,
+    )
+
+    assert await reconciler.reconcile(operation) is operation
+    audit_record.assert_awaited_once_with(operation, terminal)
+    record.assert_not_awaited()
+    close_before.assert_not_awaited()
+    close_no_accept.assert_not_awaited()
+    close_accepted.assert_not_awaited()
+
+
+@pytest.mark.anyio
+async def test_rollback_ready_closes_without_lkg_promotion() -> None:
+    operation = _running_operation()
+    terminal = _terminal_snapshot(BrokerRestartOutcome.ROLLBACK_READY)
+    closed_operation = replace(operation, state=operation.state)
+    audit_record = AsyncMock(return_value=SHA_C)
+    audit_closure = cast(
+        RestartAcceptedAuditClosure,
+        SimpleNamespace(record_accepted=audit_record),
+    )
+    reconciler, _, _, _, _, close_accepted = _dependencies(
+        snapshot=terminal,
+        promotion_error=AssertionError("rollback must not promote"),
+        accepted_audit_closure=audit_closure,
+    )
+    close_accepted.return_value = (closed_operation, object(), object())
+
+    assert await reconciler.reconcile(operation) is closed_operation
+    assert close_accepted.await_args is not None
+    assert close_accepted.await_args.args[0].snapshot is terminal
 
 
 @pytest.mark.anyio

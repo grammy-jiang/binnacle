@@ -132,6 +132,13 @@ class PrivilegedBrokerService:
             operation_id = _operation_id(request)
             snapshot = await self._store.get(operation_id)
             return None if snapshot is None else binding_snapshot_to_wire(snapshot)
+        if message_type == "promote_restart_lkg":
+            snapshot = await self._store.promote_restart_lkg(
+                _operation_id(request),
+                audit_closure_evidence_sha256=_text(request, "audit_closure_evidence_sha256"),
+                promoted_at=_timestamp(request, "promoted_at"),
+            )
+            return binding_snapshot_to_wire(snapshot)
         if message_type == "seal_no_accept":
             try:
                 reason = BrokerNoAcceptReason(_text(request, "reason"))

@@ -638,6 +638,9 @@ class BrokerBindingSnapshot:
     candidate_slot_id: str | None = None
     lkg_slot_id: str | None = None
     selected_runtime_slot_id: str | None = None
+    lkg_promotion_audit_sha256: str | None = None
+    lkg_promotion_evidence_sha256: str | None = None
+    lkg_promoted_at: datetime | None = None
 
     def __post_init__(self) -> None:
         if self.evidence_generation < 0:
@@ -707,8 +710,19 @@ class BrokerBindingSnapshot:
         has_restart = self.restart_checkpoint_sha256 is not None
         if has_restart != all(value is not None for value in restart_values):
             raise PrivilegedError("broker restart checkpoint projection is incomplete")
+        promotion_values = (
+            self.lkg_promotion_audit_sha256,
+            self.lkg_promotion_evidence_sha256,
+            self.lkg_promoted_at,
+        )
+        if any(value is not None for value in promotion_values) != all(
+            value is not None for value in promotion_values
+        ):
+            raise PrivilegedError("broker LKG promotion projection is incomplete")
         if not has_restart:
-            if self.selected_runtime_slot_id is not None:
+            if self.selected_runtime_slot_id is not None or any(
+                value is not None for value in promotion_values
+            ):
                 raise PrivilegedError("broker binding selects a slot without a checkpoint")
             return
         assert self.restart_checkpoint_sha256 is not None
@@ -769,6 +783,24 @@ class BrokerBindingSnapshot:
             or self.effect_knowledge is not PrivilegedEffectKnowledge.KNOWN_NO_SUBEFFECT
         ):
             raise PrivilegedError("no-subeffect restart carries contradictory effect truth")
+        promoted = self.lkg_promotion_evidence_sha256 is not None
+        if promoted:
+            assert self.lkg_promotion_audit_sha256 is not None
+            assert self.lkg_promotion_evidence_sha256 is not None
+            assert self.lkg_promoted_at is not None
+            _require_sha256(self.lkg_promotion_audit_sha256, "LKG promotion audit")
+            _require_sha256(self.lkg_promotion_evidence_sha256, "LKG promotion evidence")
+            if (
+                self.restart_outcome is not BrokerRestartOutcome.CANDIDATE_READY
+                or self.execution_state is not BrokerExecutionState.TERMINAL
+                or self.closed_at is None
+                or self.lkg_promoted_at < self.closed_at
+            ):
+                raise PrivilegedError("broker LKG promotion truth is contradictory")
+        elif self.restart_outcome is not BrokerRestartOutcome.CANDIDATE_READY and any(
+            value is not None for value in promotion_values
+        ):
+            raise PrivilegedError("non-candidate restart carries LKG promotion evidence")
 
 
 @dataclass(frozen=True, slots=True)

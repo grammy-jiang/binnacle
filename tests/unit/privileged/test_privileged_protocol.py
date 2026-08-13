@@ -73,6 +73,16 @@ def test_request_and_response_envelopes_are_closed_and_correlated() -> None:
     validate_request(request)
     response = success_response(request, {"readiness": "disabled"})
     validate_response(response, request_id="req-fixture")
+    promote = request_envelope(
+        "req-promote",
+        "promote_restart_lkg",
+        operation_id="operation:restart",
+        audit_closure_evidence_sha256="a" * 64,
+        promoted_at="2026-08-13T01:02:03.000000+00:00",
+    )
+    validate_request(promote)
+    with pytest.raises(PrivilegedProtocolError, match="fields"):
+        validate_request({**promote, "extra": None})
 
     for invalid in (
         {**request, "extra": True},
@@ -259,6 +269,9 @@ def test_restart_checkpoint_and_terminal_binding_wire_round_trip() -> None:
         candidate_slot_id=intent.candidate_slot.slot_id,
         lkg_slot_id=intent.lkg_slot.slot_id,
         selected_runtime_slot_id=intent.candidate_slot.slot_id,
+        lkg_promotion_audit_sha256="c" * 64,
+        lkg_promotion_evidence_sha256="d" * 64,
+        lkg_promoted_at=ticket.issued_at,
     )
     assert binding_snapshot_from_wire(binding_snapshot_to_wire(binding)) == binding
 

@@ -552,6 +552,13 @@ class RestartAcceptedClosureRequest:
         )
         if snapshot.effect_knowledge is not expected_knowledge:
             raise PrivilegedRestartError("restart accepted effect knowledge is contradictory")
+        if snapshot.restart_outcome is BrokerRestartOutcome.CANDIDATE_READY and (
+            snapshot.lkg_promotion_audit_sha256 != self.audit_closure_evidence_sha256
+            or snapshot.lkg_promotion_evidence_sha256 is None
+            or snapshot.lkg_promoted_at is None
+            or self.closed_at < snapshot.lkg_promoted_at
+        ):
+            raise PrivilegedRestartError("candidate-ready closure lacks post-audit LKG promotion")
 
 
 def _require_sha256(value: str, name: str) -> None:

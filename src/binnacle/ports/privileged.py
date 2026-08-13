@@ -61,6 +61,14 @@ class PrivilegedEvidenceStore(Protocol):
 
     async def get(self, operation_id: str) -> BrokerBindingSnapshot | None: ...
 
+    async def promote_restart_lkg(
+        self,
+        operation_id: str,
+        *,
+        audit_closure_evidence_sha256: str,
+        promoted_at: datetime,
+    ) -> BrokerBindingSnapshot: ...
+
     async def close(self) -> None: ...
 
 
@@ -76,6 +84,14 @@ class PrivilegedBrokerPort(Protocol):
     ) -> BrokerAcceptanceReceipt: ...
 
     async def get(self, operation_id: str) -> BrokerBindingSnapshot | None: ...
+
+    async def promote_restart_lkg(
+        self,
+        operation_id: str,
+        *,
+        audit_closure_evidence_sha256: str,
+        promoted_at: datetime,
+    ) -> BrokerBindingSnapshot: ...
 
     async def seal_no_accept(
         self,

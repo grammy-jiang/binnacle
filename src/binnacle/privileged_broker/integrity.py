@@ -132,6 +132,14 @@ def _verify(
     runtime_slots = _verify_runtime_slots(connection)
     restart_checkpoints = _verify_restart_checkpoints(connection, high_water)
     selector_generations = _verify_selector_generations(connection)
+    pending_lkg_promotions = frozenset(
+        str(row[0])
+        for row in connection.execute(
+            "SELECT operation_id FROM privileged_restart_checkpoints "
+            "WHERE state='terminal' AND outcome='candidate_ready' "
+            "AND lkg_promotion_evidence_sha256 IS NULL"
+        )
+    )
     orphan_events = int(
         connection.execute(
             "SELECT COUNT(*) FROM privileged_evidence_events event "
@@ -162,7 +170,11 @@ def _verify(
         unresolved_bindings=sum(row["acceptance_state"] == "unresolved" for row in bindings),
         accepted_bindings=sum(row["acceptance_state"] == "accepted" for row in bindings),
         outstanding_accepted_bindings=sum(
-            row["acceptance_state"] == "accepted" and row["execution_state"] != "terminal"
+            row["acceptance_state"] == "accepted"
+            and (
+                row["execution_state"] != "terminal"
+                or str(row["operation_id"]) in pending_lkg_promotions
+            )
             for row in bindings
         ),
         sealed_bindings=sum(row["acceptance_state"] == "sealed_no_accept" for row in bindings),
@@ -335,6 +347,21 @@ def _verify_runtime_slots(connection: sqlite3.Connection) -> int:
         raise PrivilegedBrokerIntegrityError("multiple privileged runtime slots are active")
     if sum(row["state"] == "lkg" for row in rows) > 1:
         raise PrivilegedBrokerIntegrityError("multiple privileged runtime slots are LKG")
+    if any(
+        (row["role"], row["state"])
+        not in {
+            ("candidate", "staging"),
+            ("candidate", "complete"),
+            ("candidate", "active"),
+            ("candidate", "restricted"),
+            ("lkg", "lkg"),
+            ("lkg", "restricted"),
+            ("prior", "prior"),
+            ("prior", "restricted"),
+        }
+        for row in rows
+    ):
+        raise PrivilegedBrokerIntegrityError("privileged runtime slot role and state differ")
     return len(rows)
 
 
@@ -344,7 +371,10 @@ def _verify_restart_checkpoints(connection: sqlite3.Connection, high_water: int)
             """
             SELECT checkpoint.*, binding.action, binding.acceptance_state,
                    binding.execution_state, binding.result_evidence_sha256 AS binding_result,
-                   candidate.state AS candidate_state, lkg.state AS lkg_state
+                   candidate.role AS candidate_role,
+                   candidate.state AS candidate_state,
+                   lkg.role AS lkg_role,
+                   lkg.state AS lkg_state
             FROM privileged_restart_checkpoints checkpoint
             LEFT JOIN privileged_operation_bindings binding
               ON binding.operation_id=checkpoint.operation_id
@@ -381,6 +411,53 @@ def _verify_restart_checkpoints(connection: sqlite3.Connection, high_water: int)
         if outcome not in expected_outcomes:
             raise PrivilegedBrokerIntegrityError(
                 "privileged restart checkpoint outcome is contradictory"
+            )
+        promotion_values = (
+            row["lkg_promotion_audit_sha256"],
+            row["lkg_promotion_evidence_sha256"],
+            row["lkg_promoted_at"],
+        )
+        promoted = all(value is not None for value in promotion_values)
+        if any(value is not None for value in promotion_values) != promoted:
+            raise PrivilegedBrokerIntegrityError(
+                "privileged restart LKG promotion evidence is incomplete"
+            )
+        if promoted:
+            if (
+                outcome != "candidate_ready"
+                or row["candidate_role"] not in {"lkg", "prior"}
+                or row["candidate_state"] not in {"lkg", "prior"}
+                or row["candidate_role"] != row["candidate_state"]
+                or row["lkg_role"] != "prior"
+                or row["lkg_state"] != "prior"
+                or row["closed_at"] is None
+                or row["lkg_promoted_at"] < row["closed_at"]
+            ):
+                raise PrivilegedBrokerIntegrityError(
+                    "privileged restart LKG promotion lifecycle is contradictory"
+                )
+            event = connection.execute(
+                "SELECT operation_id,event_type,event_sha256 "
+                "FROM privileged_evidence_events WHERE evidence_generation=?",
+                (_integer(row["evidence_generation"]),),
+            ).fetchone()
+            if (
+                event is None
+                or event["operation_id"] != row["operation_id"]
+                or event["event_type"] != "restart.lkg_promoted"
+                or event["event_sha256"] != row["lkg_promotion_evidence_sha256"]
+            ):
+                raise PrivilegedBrokerIntegrityError(
+                    "privileged restart LKG promotion lacks its exact evidence event"
+                )
+        elif outcome == "candidate_ready" and (
+            row["candidate_role"] != "candidate"
+            or row["candidate_state"] not in {"complete", "active"}
+            or row["lkg_role"] != "lkg"
+            or row["lkg_state"] != "lkg"
+        ):
+            raise PrivilegedBrokerIntegrityError(
+                "candidate-ready checkpoint lacks a pending LKG promotion"
             )
         expected_binding_state = (
             "terminal" if terminal else ("restricted_recovery" if restricted else None)
