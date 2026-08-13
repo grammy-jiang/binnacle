@@ -87,7 +87,9 @@ GitHub checkout attestation
 Every required GitHub job runs ``scripts/ci_checkout_attestation.py`` after its normal
 work, including after a preceding failure.  The script independently reads ``HEAD``,
 ``HEAD^{tree}``, and the commit parents.  It then binds those facts to the bounded GitHub
-event payload and environment.
+event payload and environment.  Each checkout fetches depth 2 so the integration commit's
+parents are present without fetching unbounded history; a depth-1 shallow checkout cannot
+provide parent evidence and must remain unbound.
 
 For a pull request, ``checkout_kind`` is ``pull_request_integration`` only when all of the
 following are exact:

@@ -1374,12 +1374,14 @@ def validate_phase10_acceptance_contract() -> None:
             "python3 scripts/ci_checkout_attestation.py",
             "--job-name validate-contracts",
             "actions/upload-artifact@",
+            "fetch-depth: 2",
         ),
         ROOT / ".github/workflows/python.yml": (
             "python3 scripts/ci_checkout_attestation.py",
             "Code, contract, dependency, and document quality",
             "Test Python ${{ matrix.python-version }}",
             "actions/upload-artifact@",
+            "fetch-depth: 2",
         ),
         ROOT / "docs/operations/phase10-self-hosting-acceptance.rst": (
             "Evidence-independent repository implementation",
