@@ -2,13 +2,24 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any, cast
 
 _OID_RE = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})\Z")
+_DIGEST_RE = re.compile(r"[0-9a-f]{64}\Z")
+_MAX_COLLECTOR_FILE_BYTES = 1_048_576
+CI_ATTESTATION_COLLECTOR_PATHS = (
+    "scripts/ci_checkout_attestation.py",
+    "src/binnacle/__init__.py",
+    "src/binnacle/evaluation/__init__.py",
+    "src/binnacle/evaluation/ci_attestation.py",
+    "src/binnacle/evaluation/digests.py",
+)
 
 
 class CiAttestationError(ValueError):
@@ -37,6 +48,8 @@ def build_ci_checkout_attestation(
     event: Mapping[str, Any],
     environment: Mapping[str, str],
     checkout: GitCheckoutIdentity,
+    collector_commit_oid: str,
+    collector_sha256: str,
     job_name: str,
     created_at: datetime | None = None,
 ) -> dict[str, object]:
@@ -48,6 +61,9 @@ def build_ci_checkout_attestation(
     github_sha = _required_oid_environment(environment, "GITHUB_SHA")
     run_id = _required_positive_integer(environment, "GITHUB_RUN_ID")
     run_attempt = _required_positive_integer(environment, "GITHUB_RUN_ATTEMPT", maximum=1000)
+    collector_commit_oid = _require_oid(collector_commit_oid, "collector commit")
+    if _DIGEST_RE.fullmatch(collector_sha256) is None:
+        raise CiAttestationError("collector bundle digest is invalid")
     if not job_name or len(job_name.encode("utf-8")) > 256:
         raise CiAttestationError("CI job name is missing or too large")
     event_repository = _required_mapping(event, "repository")
@@ -84,6 +100,8 @@ def build_ci_checkout_attestation(
         "job_name": job_name,
         "run_id": run_id,
         "run_attempt": run_attempt,
+        "collector_commit_oid": collector_commit_oid,
+        "collector_sha256": collector_sha256,
         "event_candidate_oid": candidate_oid,
         "event_base_oid": base_oid,
         "event_after_oid": after_oid,
@@ -100,6 +118,26 @@ def ci_attestation_is_bound(value: Mapping[str, object]) -> bool:
     """Return whether the record proves the reviewed event-to-checkout relationship."""
 
     return value.get("checkout_kind") in {"pull_request_integration", "push_commit"}
+
+
+def ci_attestation_collector_sha256(repo_root: Path) -> str:
+    """Hash the exact standard-library-only collector bundle with path separation."""
+
+    root = repo_root.resolve()
+    records: list[bytes] = []
+    for relative in CI_ATTESTATION_COLLECTOR_PATHS:
+        path = root / relative
+        if path.is_symlink() or not path.is_file():
+            raise CiAttestationError(f"collector member is missing or unsafe: {relative}")
+        try:
+            size = path.stat().st_size
+            if not 1 <= size <= _MAX_COLLECTOR_FILE_BYTES:
+                raise CiAttestationError(f"collector member is unbounded: {relative}")
+            content_sha256 = hashlib.sha256(path.read_bytes()).hexdigest()
+        except OSError as exc:
+            raise CiAttestationError(f"collector member is unavailable: {relative}") from exc
+        records.append(relative.encode("utf-8") + b"\0" + content_sha256.encode("ascii") + b"\n")
+    return hashlib.sha256(b"".join(records)).hexdigest()
 
 
 def _required_environment(
@@ -160,8 +198,10 @@ def _require_oid(value: str, name: str) -> str:
 
 
 __all__ = [
+    "CI_ATTESTATION_COLLECTOR_PATHS",
     "CiAttestationError",
     "GitCheckoutIdentity",
     "build_ci_checkout_attestation",
+    "ci_attestation_collector_sha256",
     "ci_attestation_is_bound",
 ]

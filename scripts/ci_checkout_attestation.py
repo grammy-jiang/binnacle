@@ -22,6 +22,7 @@ from binnacle.evaluation.ci_attestation import (  # noqa: E402
     CiAttestationError,
     GitCheckoutIdentity,
     build_ci_checkout_attestation,
+    ci_attestation_collector_sha256,
     ci_attestation_is_bound,
 )
 from binnacle.evaluation.digests import canonical_json_bytes  # noqa: E402
@@ -157,6 +158,9 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--event-path", type=Path, default=None)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--job-name", required=True)
+    parser.add_argument("--collector-commit", default=None)
+    parser.add_argument("--expected-collector-commit", default=None)
+    parser.add_argument("--expected-collector-sha256", default=None)
     parser.add_argument("--allow-unbound", action="store_true")
     parser.add_argument("--created-at", default=None, help=argparse.SUPPRESS)
     return parser
@@ -177,10 +181,29 @@ def main(argv: list[str] | None = None) -> int:
             if args.created_at
             else None
         )
+        collector_commit_oid = args.collector_commit or _git(
+            ROOT,
+            "rev-parse",
+            "--verify",
+            "HEAD",
+        )
+        collector_sha256 = ci_attestation_collector_sha256(ROOT)
+        if (
+            args.expected_collector_commit is not None
+            and collector_commit_oid != args.expected_collector_commit
+        ):
+            raise CiAttestationError("collector commit differs from the reviewed identity")
+        if (
+            args.expected_collector_sha256 is not None
+            and collector_sha256 != args.expected_collector_sha256
+        ):
+            raise CiAttestationError("collector bundle differs from the reviewed identity")
         value = build_ci_checkout_attestation(
             event=_read_event(event_path),
             environment=os.environ,
             checkout=_checkout(args.repo.resolve()),
+            collector_commit_oid=collector_commit_oid,
+            collector_sha256=collector_sha256,
             job_name=args.job_name,
             created_at=created_at,
         )
