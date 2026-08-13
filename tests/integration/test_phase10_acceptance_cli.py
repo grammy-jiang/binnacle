@@ -10,6 +10,7 @@ from typing import Any, cast
 
 import pytest
 from jsonschema import Draft202012Validator, FormatChecker  # type: ignore[import-untyped]
+from scripts.ci_checkout_attestation import _git as attested_git
 from scripts.ci_checkout_attestation import main as attestation_main
 from scripts.phase10_acceptance import main as acceptance_main
 
@@ -206,3 +207,17 @@ def test_checkout_command_refuses_overwrite(
 
     assert result == 2
     assert output.read_text(encoding="utf-8") == "existing\n"
+
+
+def test_attestation_git_ignores_ambient_path(
+    tmp_path: Path,
+    repo_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    expected = _git(repo_root, "rev-parse", "--verify", "HEAD")
+    attacker = tmp_path / "git"
+    attacker.write_text("#!/bin/sh\nexit 99\n", encoding="utf-8")
+    attacker.chmod(0o755)
+    monkeypatch.setenv("PATH", str(tmp_path))
+
+    assert attested_git(repo_root, "rev-parse", "--verify", "HEAD") == expected

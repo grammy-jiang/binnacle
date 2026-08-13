@@ -27,6 +27,7 @@ from binnacle.evaluation.ci_attestation import (  # noqa: E402
 from binnacle.evaluation.digests import canonical_json_bytes  # noqa: E402
 
 _MAX_EVENT_BYTES = 4_194_304
+_GIT_BINARY = "/usr/bin/git"
 
 
 def _read_event(path: Path) -> dict[str, Any]:
@@ -69,14 +70,18 @@ def _unique_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
 
 def _git(repo: Path, *arguments: str) -> str:
     environment = {
-        "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+        "PATH": "/usr/bin:/bin",
+        "HOME": "/nonexistent",
+        "XDG_CONFIG_HOME": "/nonexistent",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
         "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_NO_REPLACE_OBJECTS": "1",
         "GIT_TERMINAL_PROMPT": "0",
         "LC_ALL": "C",
     }
     try:
         result = subprocess.run(
-            ["git", "-c", "core.hooksPath=/dev/null", *arguments],
+            [_GIT_BINARY, "-c", "core.hooksPath=/dev/null", *arguments],
             cwd=repo,
             env=environment,
             check=True,

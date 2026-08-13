@@ -164,7 +164,7 @@ def _unique_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
     value: dict[str, object] = {}
     for key, item in pairs:
         if key in value:
-            raise ValueError("duplicate Phase 10 policy field")
+            raise ValueError("duplicate Phase 10 JSON object field")
         value[key] = item
     return value
 

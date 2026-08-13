@@ -1388,6 +1388,11 @@ def validate_phase10_acceptance_contract() -> None:
             "Real-device acceptance promotion",
             "scripts/phase10_acceptance.py",
         ),
+        ROOT / "scripts/ci_checkout_attestation.py": (
+            '_GIT_BINARY = "/usr/bin/git"',
+            '"GIT_CONFIG_GLOBAL": "/dev/null"',
+            '"GIT_NO_REPLACE_OBJECTS": "1"',
+        ),
     }
     for path, markers in workflow_requirements.items():
         try:

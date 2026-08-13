@@ -89,7 +89,10 @@ work, including after a preceding failure.  The script independently reads ``HEA
 ``HEAD^{tree}``, and the commit parents.  It then binds those facts to the bounded GitHub
 event payload and environment.  Each checkout fetches depth 2 so the integration commit's
 parents are present without fetching unbounded history; a depth-1 shallow checkout cannot
-provide parent evidence and must remain unbound.
+provide parent evidence and must remain unbound.  The reader invokes the fixed
+``/usr/bin/git`` binary with a fixed executable path, no system/global Git configuration,
+and replacement objects disabled so earlier workflow environment changes cannot substitute
+the identity reader or its object view.
 
 For a pull request, ``checkout_kind`` is ``pull_request_integration`` only when all of the
 following are exact:
