@@ -484,8 +484,11 @@ Before branch creation, collect an exact baseline:
   expose candidate/base/actual-checkout/tree evidence and which merge methods are accepted.
 
 The baseline must be internally coherent. Repository HEAD used to create the feature
-branch must equal the baseline commit bound into the run. Runtime revision may differ only
-if the documented development topology permits it and the exact relationship is captured.
+branch must equal both the baseline commit bound into the run and the independently
+observed protected-base OID.  A stale local protected-branch checkout cannot seed the
+accepted feature branch merely because later integration evidence records the newer base.
+Runtime revision may differ only if the documented development topology permits it and the
+exact relationship is captured.
 
 10. Development-session admission
 ---------------------------------
@@ -1109,7 +1112,8 @@ PASS requires **all** of:
 
 #. real ChatGPT connected to the real selected development Pi under expected controller and
    compatibility profile;
-#. exact baseline/runtime/repository/run correlation recorded;
+#. exact baseline/runtime/repository/run correlation recorded, including local repository
+   HEAD equality with the independently observed protected base before branch creation;
 #. one real feature branch created from expected base without protected-master direct
    mutation;
 #. one real bounded source behaviour change made through Phase 6;
@@ -1362,6 +1366,8 @@ Any implementation of evidence assembler/evaluator should have deterministic tes
 
 * missing required evidence -> INCOMPLETE;
 * wrong branch/base/head relationship -> FAIL;
+* baseline local repository HEAD differs from the independently observed protected base ->
+  FAIL;
 * wrong signer -> FAIL;
 * push through a remote profile different from the protected baseline -> FAIL;
 * review on old candidate head -> INCOMPLETE/FAIL according to repository policy, never PASS;

@@ -141,7 +141,8 @@ Do not begin the real campaign until all of these are current:
 * the selected real development Pi and exact runtime instance are known;
 * every Phase 3 through Phase 9 implementation and promotion gate needed by the chosen
   change is satisfied;
-* the repository baseline is clean and the protected base OID is observed independently;
+* the repository baseline is clean, the protected base OID is observed independently, and
+  the local repository HEAD exactly equals that protected base before branch creation;
 * the accepted signer, controller, device, workspace, and runtime-profile identities have
   bounded evidence references; and
 * no retained operation, audit closure, workspace fence, credential lease, restart, or
@@ -182,6 +183,12 @@ Candidate generations start at 1 and remain consecutive.  One candidate generati
 * a locally created commit, tree, parent, approved signer, and verified signature;
 * exact push target/ref/result plus remote observation; and
 * the hosted PR head at the same signed commit OID.
+
+The baseline's clean local ``repository_head_oid`` must equal its independently observed
+``protected_base_oid`` before the feature branch is created.  Branch origin and the first
+signed candidate parent must equal that coherent OID.  A stale local protected-branch
+checkout cannot be repaired by recording a newer base only in the later integration
+generation.
 
 The push evidence's ``remote_profile_sha256`` must exactly equal the protected remote
 profile captured in the baseline.  A successful push through a different remote profile
@@ -297,6 +304,7 @@ Reviewer closure
 The substantive reviewer verifies all of the following against independent sources:
 
 * manifest and policy digests;
+* clean baseline repository HEAD equality with the independently observed protected base;
 * consecutive candidate and integration generations with no stale reference reuse;
 * signer, pushed head, PR head, protected base, review, and CI identities;
 * actual checkout commit/tree/parents from each required attestation artifact;

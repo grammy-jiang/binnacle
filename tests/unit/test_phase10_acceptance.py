@@ -140,10 +140,10 @@ def test_phase10_skeleton_claims_no_live_evidence(repo_root: Path) -> None:
     }
 
 
-@pytest.mark.parametrize("case_index", range(37))
+@pytest.mark.parametrize("case_index", range(38))
 def test_phase10_evaluator_fixture(case_index: int, repo_root: Path) -> None:
     cases = _cases(repo_root)
-    assert len(cases) == 37
+    assert len(cases) == 38
     case = cases[case_index]
     manifest = _pass_manifest(repo_root)
     _apply_case(manifest, case)
@@ -193,6 +193,11 @@ _EVALUATOR_BRANCH_CASES: tuple[tuple[str, object, str], ...] = (
     ("/state", "hosted_merged", "run_not_terminally_closed"),
     ("/readiness/real_development_pi", "failed", "readiness_verification_failed"),
     ("/baseline/repository_clean", False, "baseline_repository_dirty"),
+    (
+        "/baseline/protected_base_oid",
+        "8" * 40,
+        "baseline_protected_base_mismatch",
+    ),
     ("/branch/protected_branch_mutated", True, "protected_branch_mutated"),
     ("/branch/ref", "refs/heads/master", "feature_branch_is_protected_branch"),
     ("/branch/observed_oid", "8" * 40, "feature_branch_oid_mismatch"),

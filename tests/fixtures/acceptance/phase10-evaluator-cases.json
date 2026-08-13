@@ -386,6 +386,14 @@
       ],
       "expected": "FAIL",
       "code": "ci_artifact_archive_invalid"
+    },
+    {
+      "id": "baseline-protected-base-mismatch-fails",
+      "operation": "replace",
+      "path": "/baseline/protected_base_oid",
+      "value": "8888888888888888888888888888888888888888",
+      "expected": "FAIL",
+      "code": "baseline_protected_base_mismatch"
     }
   ]
 }

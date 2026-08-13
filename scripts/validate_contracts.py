@@ -1412,6 +1412,7 @@ def validate_phase10_acceptance_contract() -> None:
         "candidate-local-profile-incomplete-is-incomplete",
         "post-merge-local-profile-incomplete-is-incomplete",
         "runtime-restart-generation-mismatch-fails",
+        "baseline-protected-base-mismatch-fails",
         "stale-policy-is-incomplete",
         "post-restart-runtime-profile-mismatch-fails",
         "unresolved-effect-is-incomplete",

@@ -200,6 +200,20 @@ def test_candidate_identity_permutation_never_passes(field: str) -> None:
     assert report.verdict is not AcceptanceVerdict.PASS
 
 
+@given(field=st.sampled_from(("repository_head_oid", "protected_base_oid")))
+def test_incoherent_baseline_head_and_protected_base_never_passes(field: str) -> None:
+    manifest = _pass_manifest(REPO_ROOT)
+    manifest["baseline"][field] = "8" * 40
+    manifest["owner_review"]["reviewed_evidence_sha256"] = phase10_reviewed_evidence_sha256(
+        manifest
+    )
+
+    report = evaluate_phase10_manifest(manifest, repo_root=REPO_ROOT)
+
+    assert report.verdict is AcceptanceVerdict.FAIL
+    assert "baseline_protected_base_mismatch" in {finding.code for finding in report.findings}
+
+
 def test_new_candidate_generation_cannot_reuse_prior_local_evidence() -> None:
     manifest = _pass_manifest(REPO_ROOT)
     first = manifest["candidate_generations"][0]

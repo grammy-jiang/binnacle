@@ -279,8 +279,14 @@ def _evaluate_baseline_and_branch(
 ) -> None:
     if baseline is None:
         findings.incomplete("baseline_missing", "/baseline")
-    elif not baseline["repository_clean"]:
-        findings.fail("baseline_repository_dirty", "/baseline/repository_clean")
+    else:
+        if not baseline["repository_clean"]:
+            findings.fail("baseline_repository_dirty", "/baseline/repository_clean")
+        if baseline["repository_head_oid"] != baseline["protected_base_oid"]:
+            findings.fail(
+                "baseline_protected_base_mismatch",
+                "/baseline/protected_base_oid",
+            )
     if branch is None:
         findings.incomplete("feature_branch_missing", "/branch")
         return
