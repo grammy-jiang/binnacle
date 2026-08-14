@@ -26,7 +26,7 @@ Until the first real connection is tested:
 | Workspace type/policy | Unknown |
 | Connection method | Secure/private tunnel candidate; unvalidated |
 | Authentication profile | Unknown |
-| Binnacle build/configuration | Not implemented |
+| Binnacle build/configuration | Locally implemented; not deployed/evaluated; exact candidate build/configuration unknown |
 | MCP SDK/tunnel agent | Not selected |
 | Server-supported revisions | `2026-07-28`, `2025-11-25`, `2025-06-18`, `2025-03-26` |
 | Revision requested/negotiated by ChatGPT | Unknown |
@@ -40,6 +40,12 @@ Until the first real connection is tested:
 | Resources, MRTR/elicitation, Tasks | Unknown |
 | Owner-only/model-visible boundary | Unknown |
 | Result-size, latency, context cost | Unknown |
+
+The repository contains the local MCP server, deployment and evaluation machinery,
+contract validators, and compatibility evidence tooling. That implementation status does
+not identify an exact build running on a Raspberry Pi and does not supply real ChatGPT
+compatibility evidence. No host-dependent axis is promoted until an exact deployed
+candidate completes the frozen evaluation and its evidence is reviewed.
 
 No unknown value is treated as support.
 
@@ -174,4 +180,7 @@ The first Raspberry Pi deployment should execute the frozen cases in this order:
 7. optional Resources, MRTR, and Tasks probes;
 8. information boundary, cross-server observation, latency, and context cost.
 
-The resulting manifest populates this profile. Until then, the validation state remains `not-tested` or `server-not-implemented` as applicable.
+The resulting manifest populates this profile. Until then, host compatibility axes remain
+`not-tested`. `server-not-implemented` is reserved for a required probe that is genuinely
+absent from the local server; it is not shorthand for a missing deployment or missing
+Raspberry Pi/ChatGPT evidence.

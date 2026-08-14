@@ -138,6 +138,31 @@ def test_phase8_inventory_names_the_implemented_git_verifier(repo_root: Path) ->
     assert "scripts/verify_git_profile.py" not in inventory
 
 
+def test_mcp_profile_separates_local_implementation_from_live_evidence(
+    repo_root: Path,
+) -> None:
+    profile = (repo_root / "docs/mcp-profile.md").read_text(encoding="utf-8")
+    assert (
+        "| Binnacle build/configuration | Locally implemented; not deployed/evaluated; "
+        "exact candidate build/configuration unknown |"
+    ) in profile
+    assert "| Binnacle build/configuration | Not implemented |" not in profile
+    for fail_closed_axis in (
+        "| Authentication profile | Unknown |",
+        "| Revision requested/negotiated by ChatGPT | Unknown |",
+        "| Tool discovery and refresh | Unknown |",
+        "| Structured/text result handling | Unknown |",
+        "| Write/modify entitlement | Unknown; live test required |",
+        "| Host confirmation behaviour | Unknown |",
+        "| Idempotency/retry/reconnect/cancellation | Unknown |",
+    ):
+        assert fail_closed_axis in profile
+    assert "No unknown value is treated as support." in profile
+    normalized_profile = " ".join(profile.split())
+    assert "does not supply real ChatGPT compatibility evidence" in normalized_profile
+    assert "server-not-implemented` is reserved for a required probe" in normalized_profile
+
+
 def test_verify_python_rejects_an_unsupported_version(repo_root: Path) -> None:
     result = subprocess.run(
         ["make", "--no-print-directory", "verify-python", "PYTHON=3.10"],
