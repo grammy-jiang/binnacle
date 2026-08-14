@@ -535,6 +535,31 @@ The safe pre-promotion posture is:
    move_enabled = false
    delete_enabled = false
 
+The Bootstrap Phase 6 mutation profile additionally requires an empty extended-attribute
+set.  SELinux-labelled roots (including ``security.selinux``), POSIX ACLs, capabilities,
+and all other xattrs keep mutation disabled with
+``workspace_xattrs_unsupported``.  An unavailable xattr inspection keeps it disabled with
+``workspace_xattr_check_unavailable``.  Binnacle does not strip, copy, or relabel those
+attributes.  Read-only workspace operations may remain qualified independently.
+
+Before any later Pi promotion, record the exact target-root qualification on the Pi:
+
+.. code-block:: console
+
+   uv run python -c 'import os,sys; p="/srv/binnacle-dev/repo"; a=os.listxattr(p); print(a or "supported: no xattrs"); sys.exit(1 if a else 0)'
+
+A non-zero result is the expected fail-closed negative profile, not permission to remove a
+label.  The ordinary CI suite includes this simulated negative-profile test:
+
+.. code-block:: console
+
+   uv run pytest tests/integration/test_workspace_xattr_profile.py
+
+That test asserts the host's actual qualification and simulated ``security.selinux``,
+``security.capability``, ACL, arbitrary-user-xattr, and inspection-unavailable cases.  It
+is part of ``make verify``.  Real Pi output remains promotion evidence; its absence does
+not block this evidence-independent implementation and review.
+
 Do not set ``enabled = true`` on the deployed service yet.  Production ``binnacle serve``
 does not load this profile or register Phase 6 MCP handlers; it continues to expose the
 exact five-Tool core.  The base unit also intentionally retains a read-only source

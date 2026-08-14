@@ -40,6 +40,7 @@ from binnacle.ports.workspace import (
     WorkspaceAuthorisationRequest,
     WorkspaceCreateIntent,
     WorkspaceEffectNotStarted,
+    WorkspaceEffectUncertain,
     WorkspaceEntry,
     WorkspaceFilesystem,
     WorkspaceInspectRequest,
@@ -388,6 +389,14 @@ class WorkspaceMutationBoundaryVerifier:
         self._filesystem = filesystem
 
     async def verify(self, request: OperationBoundaryCheck) -> BoundaryCheckResult:
+        readiness = await self._filesystem.mutation_readiness()
+        if not readiness.available:
+            reason = readiness.reason_code
+            if reason is None:
+                raise WorkspaceCapabilityUnavailable(
+                    "workspace mutation readiness contract violated"
+                )
+            return BoundaryCheckResult(False, reason)
         record = await self._repository.get_operation(request.operation_id)
         if record is None:
             return BoundaryCheckResult(False, "workspace_operation_missing")
@@ -468,6 +477,13 @@ class WorkspaceMutationEffectBoundary:
                 effect_knowledge=EffectKnowledge.KNOWN_NO_EFFECT,
                 terminal_state=OperationState.FAILED,
                 reason_code="workspace_effect_not_started",
+            )
+        except WorkspaceEffectUncertain:
+            return EffectStartReceipt(
+                crossing=BoundaryCrossing.UNCERTAIN,
+                effect_knowledge=EffectKnowledge.UNCERTAIN,
+                terminal_state=OperationState.UNCERTAIN,
+                reason_code="workspace_effect_uncertain",
             )
         return EffectStartReceipt(
             crossing=BoundaryCrossing.CROSSED,

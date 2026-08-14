@@ -27,6 +27,20 @@ class WorkspaceEffectUncertain(RuntimeError):
 
 
 @dataclass(frozen=True, slots=True)
+class WorkspaceMutationReadiness:
+    """Qualification of the active filesystem profile for Phase 6 mutations."""
+
+    available: bool
+    reason_code: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.available != (self.reason_code is None):
+            raise ValueError("workspace mutation readiness and reason disagree")
+        if self.reason_code is not None and not self.reason_code:
+            raise ValueError("workspace mutation readiness reason must not be empty")
+
+
+@dataclass(frozen=True, slots=True)
 class RegisteredWorkspaceSnapshot:
     workspace_id: str
     profile_sha256: str
@@ -235,6 +249,8 @@ class WorkspaceFilesystem(Protocol):
 
     async def root_identity(self) -> WorkspaceRootIdentity: ...
 
+    async def mutation_readiness(self) -> WorkspaceMutationReadiness: ...
+
     async def verify_scope_no_submounts(self, relative_path: str) -> None: ...
 
     async def inspect(self, request: WorkspaceInspectRequest) -> WorkspaceEntry: ...
@@ -260,6 +276,7 @@ __all__ = [
     "WorkspaceInspectRequest",
     "WorkspaceListRequest",
     "WorkspaceListing",
+    "WorkspaceMutationReadiness",
     "WorkspaceOperationRecord",
     "WorkspaceReadRequest",
     "WorkspaceReadResult",

@@ -18,6 +18,7 @@ from binnacle.adapters.workspace import (
 )
 from binnacle.domain.workspace import (
     ContentReadPermit,
+    WorkspaceMutationKind,
     WorkspaceObjectKind,
     WorkspaceRootIdentity,
     canonical_sha256,
@@ -32,6 +33,15 @@ from binnacle.ports.workspace import (
 )
 
 PROFILE_SHA256 = "a" * 64
+
+
+@pytest.fixture(autouse=True)
+def _model_supported_unlabelled_workspace_profile(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Run positive behavior tests as the supported no-xattr Bootstrap profile."""
+
+    monkeypatch.setattr(os, "listxattr", lambda _descriptor: [])
 
 
 def _root(tmp_path: Path, name: str = "workspace") -> Path:
@@ -375,24 +385,33 @@ async def test_linux_workspace_write_rejects_unsupported_metadata(
             )
         )
 
+    supported_listxattr = os.listxattr
     try:
         target.chmod(0o666)
         with pytest.raises(WorkspaceEffectNotStarted, match="metadata_unsupported"):
             await write_from_current("wrong-mode")
 
         target.chmod(0o644)
-        monkeypatch.setattr(os, "listxattr", lambda _descriptor: ["security.capability"])
+
+        def target_xattrs(descriptor: int) -> list[str]:
+            if os.fstat(descriptor).st_ino == target.stat().st_ino:
+                return ["security.capability"]
+            return supported_listxattr(descriptor)
+
+        monkeypatch.setattr(os, "listxattr", target_xattrs)
         with pytest.raises(WorkspaceEffectNotStarted, match="xattrs_unsupported"):
             await write_from_current("has-xattr")
 
-        def unavailable_xattrs(_descriptor: int) -> list[str]:
-            raise OSError("xattrs unavailable")
+        def unavailable_xattrs(descriptor: int) -> list[str]:
+            if os.fstat(descriptor).st_ino == target.stat().st_ino:
+                raise OSError("xattrs unavailable")
+            return supported_listxattr(descriptor)
 
         monkeypatch.setattr(os, "listxattr", unavailable_xattrs)
         with pytest.raises(WorkspaceEffectNotStarted, match="xattr_check_unavailable"):
             await write_from_current("xattr-unavailable")
 
-        monkeypatch.undo()
+        monkeypatch.setattr(os, "listxattr", supported_listxattr)
         (root / "alias").hardlink_to(target)
         with pytest.raises(WorkspaceEffectNotStarted, match="not_started"):
             await workspace.write(
@@ -459,6 +478,179 @@ async def test_linux_workspace_parent_fsync_failure_after_effect_is_uncertain(
                         expected_mount_identity_sha256=identity.mount.digest_sha256,
                     )
                 )
+    finally:
+        await workspace.close()
+
+
+@pytest.mark.anyio
+async def test_linux_workspace_automatic_staging_xattr_is_uncertain(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = _root(tmp_path)
+    workspace = _workspace(root)
+    identity = await workspace.initialize()
+    root_inode = root.stat().st_ino
+    supported_listxattr = os.listxattr
+
+    def automatic_staging_label(descriptor: int) -> list[str]:
+        if os.fstat(descriptor).st_ino != root_inode:
+            return ["security.selinux"]
+        return supported_listxattr(descriptor)
+
+    monkeypatch.setattr(os, "listxattr", automatic_staging_label)
+    operation_id = "automatic-staging-label"
+    staging = workspace.staging_reference(
+        operation_id=operation_id,
+        mutation_kind=WorkspaceMutationKind.CREATE,
+        relative_path="target",
+    )
+    try:
+        with pytest.raises(WorkspaceEffectUncertain, match="staging_result_uncertain"):
+            await workspace.create(
+                WorkspaceCreateIntent(
+                    operation_id=operation_id,
+                    relative_path="target",
+                    kind=WorkspaceObjectKind.REGULAR_FILE,
+                    content=b"content",
+                    mode=0o644,
+                    expected_root_identity_sha256=identity.identity_sha256,
+                    expected_mount_identity_sha256=identity.mount.digest_sha256,
+                )
+            )
+        assert (root / staging).is_file()
+        assert not (root / "target").exists()
+    finally:
+        await workspace.close()
+
+
+@pytest.mark.anyio
+async def test_linux_workspace_staging_cleanup_failure_remains_uncertain(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = _root(tmp_path)
+    workspace = _workspace(root)
+    identity = await workspace.initialize()
+    root_inode = root.stat().st_ino
+    real_close = os.close
+    staging_descriptor: int | None = None
+    close_failed = False
+
+    def automatic_staging_label(descriptor: int) -> list[str]:
+        nonlocal staging_descriptor
+        if os.fstat(descriptor).st_ino != root_inode:
+            staging_descriptor = descriptor
+            return ["security.selinux"]
+        return []
+
+    def fail_staging_close_once(descriptor: int) -> None:
+        nonlocal close_failed
+        if descriptor == staging_descriptor and not close_failed:
+            close_failed = True
+            raise OSError("injected staging close failure")
+        real_close(descriptor)
+
+    monkeypatch.setattr(os, "listxattr", automatic_staging_label)
+    monkeypatch.setattr(os, "close", fail_staging_close_once)
+    try:
+        with pytest.raises(WorkspaceEffectUncertain, match="staging_result_uncertain"):
+            await workspace.create(
+                WorkspaceCreateIntent(
+                    operation_id="staging-close-failure",
+                    relative_path="target",
+                    kind=WorkspaceObjectKind.REGULAR_FILE,
+                    content=b"content",
+                    mode=0o644,
+                    expected_root_identity_sha256=identity.identity_sha256,
+                    expected_mount_identity_sha256=identity.mount.digest_sha256,
+                )
+            )
+        assert close_failed
+        assert not (root / "target").exists()
+    finally:
+        if staging_descriptor is not None:
+            real_close(staging_descriptor)
+        await workspace.close()
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("mutation", ["directory", "file", "write"])
+@pytest.mark.parametrize("labelled_profile_object", ["root", "parent"])
+async def test_linux_workspace_post_effect_profile_change_is_uncertain(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    mutation: str,
+    labelled_profile_object: str,
+) -> None:
+    root = _root(tmp_path)
+    parent = root / "nested"
+    parent.mkdir()
+    target = parent / "target"
+    target.write_bytes(b"old")
+    workspace = _workspace(root)
+    identity = await workspace.initialize()
+    current = await _inspect_file(workspace, identity, "nested/target")
+    parent_inode = parent.stat().st_ino
+    labelled_inode = root.stat().st_ino if labelled_profile_object == "root" else parent_inode
+    supported_listxattr = os.listxattr
+    real_fsync = os.fsync
+    effect_published = False
+
+    def observe_parent_fsync(descriptor: int) -> None:
+        nonlocal effect_published
+        real_fsync(descriptor)
+        if os.fstat(descriptor).st_ino == parent_inode:
+            effect_published = True
+
+    def raced_xattrs(descriptor: int) -> list[str]:
+        if effect_published and os.fstat(descriptor).st_ino == labelled_inode:
+            return ["security.selinux"]
+        return supported_listxattr(descriptor)
+
+    monkeypatch.setattr(os, "fsync", observe_parent_fsync)
+    monkeypatch.setattr(os, "listxattr", raced_xattrs)
+    try:
+        with pytest.raises(WorkspaceEffectUncertain, match="uncertain"):
+            if mutation == "directory":
+                await workspace.create(
+                    WorkspaceCreateIntent(
+                        operation_id=f"post-effect-{labelled_profile_object}-directory",
+                        relative_path="nested/new-directory",
+                        kind=WorkspaceObjectKind.DIRECTORY,
+                        content=b"",
+                        mode=0o755,
+                        expected_root_identity_sha256=identity.identity_sha256,
+                        expected_mount_identity_sha256=identity.mount.digest_sha256,
+                    )
+                )
+            elif mutation == "file":
+                await workspace.create(
+                    WorkspaceCreateIntent(
+                        operation_id=f"post-effect-{labelled_profile_object}-file",
+                        relative_path="nested/new-file",
+                        kind=WorkspaceObjectKind.REGULAR_FILE,
+                        content=b"new",
+                        mode=0o644,
+                        expected_root_identity_sha256=identity.identity_sha256,
+                        expected_mount_identity_sha256=identity.mount.digest_sha256,
+                    )
+                )
+            else:
+                await workspace.write(
+                    WorkspaceWriteIntent(
+                        operation_id=f"post-effect-{labelled_profile_object}-write",
+                        relative_path="nested/target",
+                        content=b"new",
+                        expected_object_version=current.object_version,
+                        expected_content_sha256=current.object_identity.content_sha256 or "",
+                        expected_root_identity_sha256=identity.identity_sha256,
+                        expected_mount_identity_sha256=identity.mount.digest_sha256,
+                    )
+                )
+        readiness = await workspace.mutation_readiness()
+        assert not readiness.available
+        assert readiness.reason_code == "workspace_xattrs_unsupported"
     finally:
         await workspace.close()
 

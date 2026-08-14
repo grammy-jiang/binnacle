@@ -34,6 +34,15 @@ from binnacle.ports.workspace import (
 PROFILE_SHA256 = "a" * 64
 
 
+@pytest.fixture(autouse=True)
+def _model_supported_unlabelled_workspace_profile(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Run positive behavior tests as the supported no-xattr Bootstrap profile."""
+
+    monkeypatch.setattr(os, "listxattr", lambda _descriptor: [])
+
+
 def _root(tmp_path: Path) -> Path:
     root = tmp_path / "workspace"
     root.mkdir(mode=0o700)
