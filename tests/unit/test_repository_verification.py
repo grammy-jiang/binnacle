@@ -160,7 +160,7 @@ def test_mcp_profile_separates_local_implementation_from_live_evidence(
     assert "No unknown value is treated as support." in profile
     normalized_profile = " ".join(profile.split())
     assert "does not supply real ChatGPT compatibility evidence" in normalized_profile
-    assert "server-not-implemented` is reserved for a required probe" in normalized_profile
+    assert "`server-not-implemented` is reserved for a required probe" in normalized_profile
 
 
 def test_verify_python_rejects_an_unsupported_version(repo_root: Path) -> None:
