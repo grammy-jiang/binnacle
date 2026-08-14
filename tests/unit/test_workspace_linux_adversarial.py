@@ -18,6 +18,7 @@ from binnacle.adapters.workspace import (
 )
 from binnacle.domain.workspace import (
     ContentReadPermit,
+    WorkspaceMutationKind,
     WorkspaceObjectKind,
     WorkspaceRootIdentity,
     canonical_sha256,
@@ -40,14 +41,7 @@ def _model_supported_unlabelled_workspace_profile(
 ) -> None:
     """Run positive behavior tests as the supported no-xattr Bootstrap profile."""
 
-    real_listxattr = os.listxattr
-
-    def without_selinux_label(descriptor: int) -> list[str]:
-        return [
-            attribute for attribute in real_listxattr(descriptor) if attribute != "security.selinux"
-        ]
-
-    monkeypatch.setattr(os, "listxattr", without_selinux_label)
+    monkeypatch.setattr(os, "listxattr", lambda _descriptor: [])
 
 
 def _root(tmp_path: Path, name: str = "workspace") -> Path:
@@ -484,6 +478,129 @@ async def test_linux_workspace_parent_fsync_failure_after_effect_is_uncertain(
                         expected_mount_identity_sha256=identity.mount.digest_sha256,
                     )
                 )
+    finally:
+        await workspace.close()
+
+
+@pytest.mark.anyio
+async def test_linux_workspace_automatic_staging_xattr_is_uncertain(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = _root(tmp_path)
+    workspace = _workspace(root)
+    identity = await workspace.initialize()
+    root_inode = root.stat().st_ino
+    supported_listxattr = os.listxattr
+
+    def automatic_staging_label(descriptor: int) -> list[str]:
+        if os.fstat(descriptor).st_ino != root_inode:
+            return ["security.selinux"]
+        return supported_listxattr(descriptor)
+
+    monkeypatch.setattr(os, "listxattr", automatic_staging_label)
+    operation_id = "automatic-staging-label"
+    staging = workspace.staging_reference(
+        operation_id=operation_id,
+        mutation_kind=WorkspaceMutationKind.CREATE,
+        relative_path="target",
+    )
+    try:
+        with pytest.raises(WorkspaceEffectUncertain, match="staging_result_uncertain"):
+            await workspace.create(
+                WorkspaceCreateIntent(
+                    operation_id=operation_id,
+                    relative_path="target",
+                    kind=WorkspaceObjectKind.REGULAR_FILE,
+                    content=b"content",
+                    mode=0o644,
+                    expected_root_identity_sha256=identity.identity_sha256,
+                    expected_mount_identity_sha256=identity.mount.digest_sha256,
+                )
+            )
+        assert (root / staging).is_file()
+        assert not (root / "target").exists()
+    finally:
+        await workspace.close()
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("mutation", ["directory", "file", "write"])
+@pytest.mark.parametrize("labelled_profile_object", ["root", "parent"])
+async def test_linux_workspace_post_effect_profile_change_is_uncertain(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    mutation: str,
+    labelled_profile_object: str,
+) -> None:
+    root = _root(tmp_path)
+    parent = root / "nested"
+    parent.mkdir()
+    target = parent / "target"
+    target.write_bytes(b"old")
+    workspace = _workspace(root)
+    identity = await workspace.initialize()
+    current = await _inspect_file(workspace, identity, "nested/target")
+    parent_inode = parent.stat().st_ino
+    labelled_inode = root.stat().st_ino if labelled_profile_object == "root" else parent_inode
+    supported_listxattr = os.listxattr
+    real_fsync = os.fsync
+    effect_published = False
+
+    def observe_parent_fsync(descriptor: int) -> None:
+        nonlocal effect_published
+        real_fsync(descriptor)
+        if os.fstat(descriptor).st_ino == parent_inode:
+            effect_published = True
+
+    def raced_xattrs(descriptor: int) -> list[str]:
+        if effect_published and os.fstat(descriptor).st_ino == labelled_inode:
+            return ["security.selinux"]
+        return supported_listxattr(descriptor)
+
+    monkeypatch.setattr(os, "fsync", observe_parent_fsync)
+    monkeypatch.setattr(os, "listxattr", raced_xattrs)
+    try:
+        with pytest.raises(WorkspaceEffectUncertain, match="uncertain"):
+            if mutation == "directory":
+                await workspace.create(
+                    WorkspaceCreateIntent(
+                        operation_id=f"post-effect-{labelled_profile_object}-directory",
+                        relative_path="nested/new-directory",
+                        kind=WorkspaceObjectKind.DIRECTORY,
+                        content=b"",
+                        mode=0o755,
+                        expected_root_identity_sha256=identity.identity_sha256,
+                        expected_mount_identity_sha256=identity.mount.digest_sha256,
+                    )
+                )
+            elif mutation == "file":
+                await workspace.create(
+                    WorkspaceCreateIntent(
+                        operation_id=f"post-effect-{labelled_profile_object}-file",
+                        relative_path="nested/new-file",
+                        kind=WorkspaceObjectKind.REGULAR_FILE,
+                        content=b"new",
+                        mode=0o644,
+                        expected_root_identity_sha256=identity.identity_sha256,
+                        expected_mount_identity_sha256=identity.mount.digest_sha256,
+                    )
+                )
+            else:
+                await workspace.write(
+                    WorkspaceWriteIntent(
+                        operation_id=f"post-effect-{labelled_profile_object}-write",
+                        relative_path="nested/target",
+                        content=b"new",
+                        expected_object_version=current.object_version,
+                        expected_content_sha256=current.object_identity.content_sha256 or "",
+                        expected_root_identity_sha256=identity.identity_sha256,
+                        expected_mount_identity_sha256=identity.mount.digest_sha256,
+                    )
+                )
+        readiness = await workspace.mutation_readiness()
+        assert not readiness.available
+        assert readiness.reason_code == "workspace_xattrs_unsupported"
     finally:
         await workspace.close()
 

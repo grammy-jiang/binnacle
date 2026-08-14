@@ -40,6 +40,7 @@ from binnacle.ports.workspace import (
     WorkspaceAuthorisationRequest,
     WorkspaceCreateIntent,
     WorkspaceEffectNotStarted,
+    WorkspaceEffectUncertain,
     WorkspaceEntry,
     WorkspaceFilesystem,
     WorkspaceInspectRequest,
@@ -474,6 +475,13 @@ class WorkspaceMutationEffectBoundary:
                 effect_knowledge=EffectKnowledge.KNOWN_NO_EFFECT,
                 terminal_state=OperationState.FAILED,
                 reason_code="workspace_effect_not_started",
+            )
+        except WorkspaceEffectUncertain:
+            return EffectStartReceipt(
+                crossing=BoundaryCrossing.UNCERTAIN,
+                effect_knowledge=EffectKnowledge.UNCERTAIN,
+                terminal_state=OperationState.UNCERTAIN,
+                reason_code="workspace_effect_uncertain",
             )
         return EffectStartReceipt(
             crossing=BoundaryCrossing.CROSSED,

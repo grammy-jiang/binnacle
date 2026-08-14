@@ -60,6 +60,7 @@ from binnacle.ports.workspace import (
     WorkspaceAuthorisationRequest,
     WorkspaceCreateIntent,
     WorkspaceEffectReceipt,
+    WorkspaceEffectUncertain,
     WorkspaceEntry,
     WorkspaceInspectRequest,
     WorkspaceListing,
@@ -743,6 +744,35 @@ async def test_effect_boundary_dispatches_only_closed_create_and_write_shapes() 
         )
     )
     assert write.crossing is BoundaryCrossing.CROSSED
+
+
+@pytest.mark.anyio
+async def test_effect_boundary_classifies_adapter_uncertainty() -> None:
+    class UncertainFilesystem(FixtureFilesystem):
+        async def create(self, intent: WorkspaceCreateIntent) -> WorkspaceEffectReceipt:
+            del intent
+            raise WorkspaceEffectUncertain("workspace_staging_result_uncertain")
+
+    receipt = await WorkspaceMutationEffectBoundary(UncertainFilesystem()).start(
+        EffectRequest(
+            "op_create",
+            3,
+            "workspace_create",
+            {
+                "relative_path": "src/file.py",
+                "kind": "regular_file",
+                "content": b"content",
+                "mode": 0o644,
+                "root_identity_sha256": DIGEST,
+                "mount_identity_sha256": DIGEST,
+            },
+        )
+    )
+
+    assert receipt.crossing is BoundaryCrossing.UNCERTAIN
+    assert receipt.effect_knowledge is EffectKnowledge.UNCERTAIN
+    assert receipt.terminal_state is OperationState.UNCERTAIN
+    assert receipt.reason_code == "workspace_effect_uncertain"
 
 
 @pytest.mark.anyio

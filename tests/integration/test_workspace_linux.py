@@ -40,14 +40,7 @@ def _model_supported_unlabelled_workspace_profile(
 ) -> None:
     """Run positive behavior tests as the supported no-xattr Bootstrap profile."""
 
-    real_listxattr = os.listxattr
-
-    def without_selinux_label(descriptor: int) -> list[str]:
-        return [
-            attribute for attribute in real_listxattr(descriptor) if attribute != "security.selinux"
-        ]
-
-    monkeypatch.setattr(os, "listxattr", without_selinux_label)
+    monkeypatch.setattr(os, "listxattr", lambda _descriptor: [])
 
 
 def _root(tmp_path: Path) -> Path:

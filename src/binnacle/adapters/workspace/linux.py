@@ -619,6 +619,7 @@ class LinuxWorkspace:
                 finally:
                     os.close(descriptor)
                 self._assert_root_path_current()
+                self._require_post_effect_profile_supported(root, parent)
                 return self._effect_receipt(
                     intent.operation_id,
                     WorkspaceMutationKind.CREATE,
@@ -652,6 +653,7 @@ class LinuxWorkspace:
         )
         root: int | None = None
         published = False
+        staging_created = False
         try:
             root = self._open_root_checked()
             parent, name = self._open_parent(root, relative_path)
@@ -659,6 +661,7 @@ class LinuxWorkspace:
                 self._require_descriptor_xattrs_supported(parent)
                 self._require_absent(parent, name)
                 staging_fd = self._create_staging(parent, staging, intent.content, intent.mode)
+                staging_created = True
                 os.close(staging_fd)
                 self._assert_root_path_current()
                 try:
@@ -675,6 +678,7 @@ class LinuxWorkspace:
                     expected_mode=intent.mode,
                 )
                 self._assert_root_path_current()
+                self._require_post_effect_profile_supported(root, parent)
                 return self._effect_receipt(
                     intent.operation_id,
                     WorkspaceMutationKind.CREATE,
@@ -684,10 +688,16 @@ class LinuxWorkspace:
                 )
             finally:
                 os.close(parent)
-        except WorkspaceEffectNotStarted:
+        except WorkspaceEffectUncertain:
+            raise
+        except WorkspaceEffectNotStarted as exc:
+            if staging_created:
+                raise WorkspaceEffectUncertain(
+                    "workspace_create_staging_retained_uncertain"
+                ) from exc
             raise
         except Exception as exc:
-            if published:
+            if published or staging_created:
                 raise WorkspaceEffectUncertain("workspace_create_file_result_uncertain") from exc
             raise WorkspaceEffectNotStarted("workspace_create_file_not_started") from exc
         finally:
@@ -697,6 +707,7 @@ class LinuxWorkspace:
     def _write(self, intent: WorkspaceWriteIntent) -> WorkspaceEffectReceipt:
         root: int | None = None
         published = False
+        staging_created = False
         try:
             relative_path = self._allowed_path(intent.relative_path)
             self._assert_request_bindings(
@@ -744,6 +755,7 @@ class LinuxWorkspace:
                     intent.content,
                     replacement_mode,
                 )
+                staging_created = True
                 os.close(staging_fd)
                 # Re-open and reproduce the exact expected version immediately before rename.
                 current = self._open_regular_at(parent, name)
@@ -777,6 +789,7 @@ class LinuxWorkspace:
                     expected_mode=replacement_mode,
                 )
                 self._assert_root_path_current()
+                self._require_post_effect_profile_supported(root, parent)
                 return self._effect_receipt(
                     intent.operation_id,
                     WorkspaceMutationKind.WRITE,
@@ -786,14 +799,20 @@ class LinuxWorkspace:
                 )
             finally:
                 os.close(parent)
-        except WorkspaceEffectNotStarted:
+        except WorkspaceEffectUncertain:
+            raise
+        except WorkspaceEffectNotStarted as exc:
+            if staging_created:
+                raise WorkspaceEffectUncertain(
+                    "workspace_write_staging_retained_uncertain"
+                ) from exc
             raise
         except FileNotFoundError as exc:
-            if published:
+            if published or staging_created:
                 raise WorkspaceEffectUncertain("workspace_write_result_uncertain") from exc
             raise WorkspaceEffectNotStarted("workspace_write_target_missing") from exc
         except Exception as exc:
-            if published:
+            if published or staging_created:
                 raise WorkspaceEffectUncertain("workspace_write_result_uncertain") from exc
             raise WorkspaceEffectNotStarted("workspace_write_not_started") from exc
         finally:
@@ -827,9 +846,11 @@ class LinuxWorkspace:
             ):
                 raise WorkspaceFilesystemError("workspace staging verification failed")
             return descriptor
-        except Exception:
+        except Exception as exc:
             os.close(descriptor)
-            raise
+            if isinstance(exc, WorkspaceEffectUncertain):
+                raise
+            raise WorkspaceEffectUncertain("workspace_staging_result_uncertain") from exc
 
     def _verify_final_regular(
         self,
@@ -1082,7 +1103,15 @@ class LinuxWorkspace:
     def _require_verified_result_xattrs_supported(self, descriptor: int) -> None:
         reason = self._xattr_profile_reason(descriptor)
         if reason is not None:
+            self._mutation_unavailable_reason = reason
             raise WorkspaceFilesystemError(reason)
+
+    def _require_post_effect_profile_supported(self, root: int, parent: int) -> None:
+        for descriptor in (root, parent):
+            reason = self._xattr_profile_reason(descriptor)
+            if reason is not None:
+                self._mutation_unavailable_reason = reason
+                raise WorkspaceFilesystemError(reason)
 
     def _require_absent(self, parent: int, name: str) -> None:
         try:

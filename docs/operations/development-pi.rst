@@ -549,7 +549,7 @@ Before any later Pi promotion, record the exact target-root qualification on the
    uv run python -c 'import os,sys; p="/srv/binnacle-dev/repo"; a=os.listxattr(p); print(a or "supported: no xattrs"); sys.exit(1 if a else 0)'
 
 A non-zero result is the expected fail-closed negative profile, not permission to remove a
-label.  A SELinux-labelled CI/negative-profile lane runs:
+label.  The ordinary CI suite includes this simulated negative-profile test:
 
 .. code-block:: console
 

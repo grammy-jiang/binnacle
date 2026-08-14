@@ -1289,6 +1289,11 @@ nested metadata or a profile change after readiness.  Read-only inspect/list/rea
 remain available when mutation is disabled; no session may acquire mutation authority
 from that fact.
 
+Creating the reserved staging inode crosses an internal filesystem-effect boundary.  Any
+failure after that point is classified as uncertain unless cleanup and its durability can
+be proved.  After publication, the result, root, and parent are revalidated immediately;
+a profile violation is latched and the mutation is likewise classified as uncertain.
+
 This profile never strips, ignores, copies, or synthesizes attributes.  In particular it
 never copies ``security.capability`` and never attempts SELinux relabelling from the
 unprivileged application process.  Supporting SELinux later requires a separately reviewed
