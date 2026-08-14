@@ -390,4 +390,6 @@ commands =
     binnacle kernel --help
     binnacle audit --help
     binnacle executor --help
+    binnacle-privileged-broker --help
+    binnacle-privileged-verify --help
 """

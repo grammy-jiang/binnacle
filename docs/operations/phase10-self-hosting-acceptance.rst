@@ -59,9 +59,16 @@ evidence stale; do not edit a retained manifest merely to replace its policy has
 Repository validation
 ---------------------
 
-Before publishing a repository change, run the exact complete local profile frozen in the
-policy.  The profile intentionally names the ``tox`` environments rather than accepting a
-free-form claim that some equivalent test ran:
+Before publishing a repository change, run the canonical entry point from the repository
+root:
+
+.. code-block:: console
+
+   make verify
+
+That target runs the exact complete local profile frozen in the policy.  The underlying
+profile intentionally names the ``tox`` environments rather than accepting a free-form
+claim that some equivalent test ran:
 
 .. code-block:: console
 
