@@ -9,6 +9,7 @@ import hashlib
 import os
 import stat
 from collections.abc import Sequence
+from contextlib import suppress
 from pathlib import Path
 from typing import NoReturn
 
@@ -853,7 +854,10 @@ class LinuxWorkspace:
                 raise WorkspaceFilesystemError("workspace staging verification failed")
             return descriptor
         except Exception as exc:
-            os.close(descriptor)
+            # The staging inode already exists, so cleanup failure cannot
+            # downgrade effect knowledge. Preserve the uncertain result.
+            with suppress(OSError):
+                os.close(descriptor)
             if isinstance(exc, WorkspaceEffectUncertain):
                 raise
             raise WorkspaceEffectUncertain("workspace_staging_result_uncertain") from exc

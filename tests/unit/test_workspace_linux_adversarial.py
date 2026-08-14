@@ -525,6 +525,56 @@ async def test_linux_workspace_automatic_staging_xattr_is_uncertain(
 
 
 @pytest.mark.anyio
+async def test_linux_workspace_staging_cleanup_failure_remains_uncertain(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = _root(tmp_path)
+    workspace = _workspace(root)
+    identity = await workspace.initialize()
+    root_inode = root.stat().st_ino
+    real_close = os.close
+    staging_descriptor: int | None = None
+    close_failed = False
+
+    def automatic_staging_label(descriptor: int) -> list[str]:
+        nonlocal staging_descriptor
+        if os.fstat(descriptor).st_ino != root_inode:
+            staging_descriptor = descriptor
+            return ["security.selinux"]
+        return []
+
+    def fail_staging_close_once(descriptor: int) -> None:
+        nonlocal close_failed
+        if descriptor == staging_descriptor and not close_failed:
+            close_failed = True
+            raise OSError("injected staging close failure")
+        real_close(descriptor)
+
+    monkeypatch.setattr(os, "listxattr", automatic_staging_label)
+    monkeypatch.setattr(os, "close", fail_staging_close_once)
+    try:
+        with pytest.raises(WorkspaceEffectUncertain, match="staging_result_uncertain"):
+            await workspace.create(
+                WorkspaceCreateIntent(
+                    operation_id="staging-close-failure",
+                    relative_path="target",
+                    kind=WorkspaceObjectKind.REGULAR_FILE,
+                    content=b"content",
+                    mode=0o644,
+                    expected_root_identity_sha256=identity.identity_sha256,
+                    expected_mount_identity_sha256=identity.mount.digest_sha256,
+                )
+            )
+        assert close_failed
+        assert not (root / "target").exists()
+    finally:
+        if staging_descriptor is not None:
+            real_close(staging_descriptor)
+        await workspace.close()
+
+
+@pytest.mark.anyio
 @pytest.mark.parametrize("mutation", ["directory", "file", "write"])
 @pytest.mark.parametrize("labelled_profile_object", ["root", "parent"])
 async def test_linux_workspace_post_effect_profile_change_is_uncertain(
