@@ -124,6 +124,16 @@ def test_production_python_has_no_optimization_sensitive_assertions(repo_root: P
     assert assertions == []
 
 
+def test_phase8_inventory_names_the_implemented_git_verifier(repo_root: Path) -> None:
+    inventory = (repo_root / "docs/implementation/phase-08-git-development.rst").read_text(
+        encoding="utf-8"
+    )
+    verifier = "scripts/verify_git_credential_broker.py"
+    assert verifier in inventory
+    assert (repo_root / verifier).is_file()
+    assert "scripts/verify_git_profile.py" not in inventory
+
+
 def test_verify_python_rejects_an_unsupported_version(repo_root: Path) -> None:
     result = subprocess.run(
         ["make", "--no-print-directory", "verify-python", "PYTHON=3.10"],
