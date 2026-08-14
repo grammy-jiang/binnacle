@@ -384,12 +384,9 @@ class FileAuditJournal:
         async with self._append_lock:
             events = self._read_verified_events()
             for event in reversed(events):
-                payload = event["payload"]
-                assert isinstance(payload, dict)
-                safe_facts = event["safe_facts"]
-                assert isinstance(safe_facts, list)
-                correlations = event["correlation_ids"]
-                assert isinstance(correlations, list)
+                payload = self._event_mapping(event, "payload")
+                safe_facts = self._event_list(event, "safe_facts")
+                correlations = self._event_list(event, "correlation_ids")
                 version_matches = any(
                     isinstance(item, dict)
                     and item.get("name") == "running_state_version"
@@ -422,10 +419,8 @@ class FileAuditJournal:
 
         async with self._append_lock:
             for event in reversed(self._read_verified_events()):
-                payload = event["payload"]
-                assert isinstance(payload, dict)
-                safe_facts = event["safe_facts"]
-                assert isinstance(safe_facts, list)
+                payload = self._event_mapping(event, "payload")
+                safe_facts = self._event_list(event, "safe_facts")
                 running_version_matches = any(
                     isinstance(item, dict)
                     and item.get("name") == "running_state_version"
@@ -454,10 +449,8 @@ class FileAuditJournal:
         async with self._append_lock:
             events = self._read_verified_events()
             for event in reversed(events):
-                payload = event["payload"]
-                assert isinstance(payload, dict)
-                safe_facts = event["safe_facts"]
-                assert isinstance(safe_facts, list)
+                payload = self._event_mapping(event, "payload")
+                safe_facts = self._event_list(event, "safe_facts")
                 generation_matches = any(
                     isinstance(item, dict)
                     and item.get("name") == "audit_failure_generation"
@@ -480,17 +473,14 @@ class FileAuditJournal:
         async with self._append_lock:
             recoveries: dict[str, AuditObligationRecovery] = {}
             for event in self._read_verified_events():
-                payload = event["payload"]
-                assert isinstance(payload, dict)
+                payload = self._event_mapping(event, "payload")
                 if (
                     payload.get("kind") != "recovery.completed"
                     or payload.get("phase") != "audit_obligation_closure"
                 ):
                     continue
-                safe_facts = event["safe_facts"]
-                correlations = event["correlation_ids"]
-                assert isinstance(safe_facts, list)
-                assert isinstance(correlations, list)
+                safe_facts = self._event_list(event, "safe_facts")
+                correlations = self._event_list(event, "correlation_ids")
                 event_generation = self._safe_fact(safe_facts, "audit_failure_generation")
                 if event_generation != generation:
                     continue
@@ -530,10 +520,8 @@ class FileAuditJournal:
 
         async with self._append_lock:
             for event in reversed(self._read_verified_events()):
-                payload = event["payload"]
-                safe_facts = event["safe_facts"]
-                assert isinstance(payload, dict)
-                assert isinstance(safe_facts, list)
+                payload = self._event_mapping(event, "payload")
+                safe_facts = self._event_list(event, "safe_facts")
                 if (
                     payload.get("kind") == "audit.verification_passed"
                     and payload.get("reason_code") == "exact_generation_recovered"
@@ -541,6 +529,20 @@ class FileAuditJournal:
                 ):
                     return str(event["event_hash"])
             return None
+
+    @staticmethod
+    def _event_mapping(event: Mapping[str, object], field: str) -> dict[str, object]:
+        value = event.get(field)
+        if not isinstance(value, dict):
+            raise AuditIntegrityError(f"audit event {field} must be an object")
+        return value
+
+    @staticmethod
+    def _event_list(event: Mapping[str, object], field: str) -> list[object]:
+        value = event.get(field)
+        if not isinstance(value, list):
+            raise AuditIntegrityError(f"audit event {field} must be an array")
+        return value
 
     @staticmethod
     def _safe_fact(safe_facts: list[object], name: str) -> object | None:

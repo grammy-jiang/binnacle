@@ -36,7 +36,9 @@ class FileAuditObligationStore:
         self._directory.mkdir(parents=True, exist_ok=True, mode=0o750)
         if self._directory.is_symlink() or not self._directory.is_dir():
             raise AuditObligationError("audit obligation directory is unsafe")
-        os.chmod(self._directory, 0o750)
+        # The service group needs traversal/read access, while group/other write
+        # remains forbidden and individual obligation markers remain mode 0600.
+        os.chmod(self._directory, 0o750)  # nosec B103
 
     def _final_path(self, obligation_id: str) -> Path:
         if not _IDENTIFIER.fullmatch(obligation_id):

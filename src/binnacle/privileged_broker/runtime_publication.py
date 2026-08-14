@@ -314,7 +314,9 @@ class FilesystemRuntimeSlotPublisher:
                 target_name=manifest.slot_id,
             )
             published = True
-            os.fchmod(stage_descriptor, 0o550)
+            # Published slots are immutable to owner/group but must remain
+            # readable and traversable by the runtime service group.
+            os.fchmod(stage_descriptor, 0o550)  # nosec B103
             os.fsync(stage_descriptor)
             _fsync_directory(staging_parent)
             _fsync_directory(self._settings.runtime_root / _SLOTS_DIRECTORY)
@@ -603,7 +605,9 @@ class FilesystemRuntimeSlotPublisher:
                         self._settings.expected_runtime_owner_uid,
                         self._settings.expected_runtime_group_gid,
                     )
-                    os.fchmod(descriptor, 0o550)
+                    # Runtime subdirectories need owner/group traversal without
+                    # granting either identity write authority after publication.
+                    os.fchmod(descriptor, 0o550)  # nosec B103
                     os.fsync(descriptor)
                 finally:
                     os.close(descriptor)

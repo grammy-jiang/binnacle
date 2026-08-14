@@ -227,6 +227,7 @@ def test_materialize_seals_private_stage_only_after_atomic_publish(
     publisher.materialize_candidate(_request(manifest))
 
     assert stat.S_IMODE((runtime / "slots" / manifest.slot_id).stat().st_mode) == 0o550
+    assert stat.S_IMODE((runtime / "slots" / manifest.slot_id / "bin").stat().st_mode) == 0o550
 
 
 def test_materialize_rejects_tamper_extra_symlink_and_wrong_mode(tmp_path: Path) -> None:

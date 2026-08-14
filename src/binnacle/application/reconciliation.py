@@ -481,13 +481,15 @@ class OperationReconciler:
                     ),
                 ),
             )
-        assert operation.effect_reference is not None
-        assert operation.effect_reference_digest is not None
+        reference = operation.effect_reference
+        reference_digest = operation.effect_reference_digest
+        if reference is None or reference_digest is None:
+            raise RuntimeError("operation effect reference projection is incomplete")
         observation = await self._effect_reconciler.reconcile(
             EffectReference(
                 operation.operation_id,
-                operation.effect_reference,
-                operation.effect_reference_digest,
+                reference,
+                reference_digest,
             )
         )
         error = None

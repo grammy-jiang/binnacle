@@ -524,7 +524,8 @@ class SqliteOperationStore:
             ):
                 return None
             prepared_expires_at = _utc(binding.prepared_expires_at)
-            assert prepared_expires_at is not None
+            if prepared_expires_at is None:
+                raise OperationStoreError("prepared execution expiration is absent")
             return PreparedExecutionRecord(
                 prepared_operation_id=binding.prepared_operation_id,
                 prepared_expires_at=prepared_expires_at,

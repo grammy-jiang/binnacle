@@ -28,6 +28,13 @@ repos:
         files: '\.(md|markdown)$'
         additional_dependencies:
           - "@mermaid-js/mermaid-cli@11.16.0"
+      - id: bandit
+        name: bandit
+        description: Scan production Python for unsuppressed security findings
+        entry: bandit --recursive src/binnacle
+        language: system
+        pass_filenames: false
+        always_run: true
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:

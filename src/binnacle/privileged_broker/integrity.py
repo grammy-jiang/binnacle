@@ -151,10 +151,11 @@ def _verify(
     if orphan_events:
         raise PrivilegedBrokerIntegrityError("privileged event has no retained binding")
 
-    active_states = "('intent_recorded','started','reconciling','restricted_recovery')"
+    active_states = ("intent_recorded", "started", "reconciling", "restricted_recovery")
     active_subeffects = int(
         connection.execute(
-            f"SELECT COUNT(*) FROM privileged_subeffects WHERE state IN {active_states}"
+            "SELECT COUNT(*) FROM privileged_subeffects WHERE state IN (?,?,?,?)",
+            active_states,
         ).fetchone()[0]
     )
     uncertain_subeffects = int(

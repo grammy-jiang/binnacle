@@ -769,23 +769,31 @@ class BrokerBindingSnapshot:
             ):
                 raise PrivilegedError("broker binding selects a slot without a checkpoint")
             return
-        assert self.restart_checkpoint_sha256 is not None
-        assert self.restart_checkpoint_state is not None
-        assert self.restart_outcome is not None
-        assert self.candidate_slot_id is not None
-        assert self.lkg_slot_id is not None
-        _require_sha256(self.restart_checkpoint_sha256, "restart checkpoint")
-        _require_ticket_id(self.candidate_slot_id, "candidate slot")
-        _require_ticket_id(self.lkg_slot_id, "LKG slot")
+        restart_checkpoint_sha256 = self.restart_checkpoint_sha256
+        restart_checkpoint_state = self.restart_checkpoint_state
+        restart_outcome = self.restart_outcome
+        candidate_slot_id = self.candidate_slot_id
+        lkg_slot_id = self.lkg_slot_id
+        if (
+            restart_checkpoint_sha256 is None
+            or restart_checkpoint_state is None
+            or restart_outcome is None
+            or candidate_slot_id is None
+            or lkg_slot_id is None
+        ):
+            raise PrivilegedError("broker restart checkpoint projection is incomplete")
+        _require_sha256(restart_checkpoint_sha256, "restart checkpoint")
+        _require_ticket_id(candidate_slot_id, "candidate slot")
+        _require_ticket_id(lkg_slot_id, "LKG slot")
         if self.identity.action is not PrivilegedAction.CONTROLLED_RESTART:
             raise PrivilegedError("non-controlled broker binding carries a restart checkpoint")
-        if self.candidate_slot_id == self.lkg_slot_id:
+        if candidate_slot_id == lkg_slot_id:
             raise PrivilegedError("broker checkpoint candidate and LKG slots are identical")
         if self.selected_runtime_slot_id is not None:
             _require_ticket_id(self.selected_runtime_slot_id, "selected runtime slot")
             if self.selected_runtime_slot_id not in {
-                self.candidate_slot_id,
-                self.lkg_slot_id,
+                candidate_slot_id,
+                lkg_slot_id,
             }:
                 raise PrivilegedError("broker checkpoint selected an unbound runtime slot")
         expected_outcome = {
@@ -799,49 +807,50 @@ class BrokerBindingSnapshot:
             BrokerRestartCheckpointState.RESTRICTED_RECOVERY: {
                 BrokerRestartOutcome.RESTRICTED_RECOVERY
             },
-        }.get(self.restart_checkpoint_state, {BrokerRestartOutcome.PENDING})
-        if self.restart_outcome not in expected_outcome:
+        }.get(restart_checkpoint_state, {BrokerRestartOutcome.PENDING})
+        if restart_outcome not in expected_outcome:
             raise PrivilegedError("broker restart state and outcome disagree")
-        if self.restart_checkpoint_state is BrokerRestartCheckpointState.TERMINAL and (
+        if restart_checkpoint_state is BrokerRestartCheckpointState.TERMINAL and (
             self.execution_state is not BrokerExecutionState.TERMINAL
         ):
             raise PrivilegedError("terminal restart checkpoint has an open broker binding")
-        if self.restart_checkpoint_state is BrokerRestartCheckpointState.UNCERTAIN and (
+        if restart_checkpoint_state is BrokerRestartCheckpointState.UNCERTAIN and (
             self.execution_state is not BrokerExecutionState.UNCERTAIN
         ):
             raise PrivilegedError("uncertain restart checkpoint has different broker truth")
-        if self.restart_checkpoint_state is BrokerRestartCheckpointState.RESTRICTED_RECOVERY and (
+        if restart_checkpoint_state is BrokerRestartCheckpointState.RESTRICTED_RECOVERY and (
             self.execution_state is not BrokerExecutionState.RESTRICTED_RECOVERY
         ):
             raise PrivilegedError("restricted restart checkpoint has different broker truth")
-        if self.restart_outcome is BrokerRestartOutcome.CANDIDATE_READY and (
-            self.selected_runtime_slot_id != self.candidate_slot_id
+        if restart_outcome is BrokerRestartOutcome.CANDIDATE_READY and (
+            self.selected_runtime_slot_id != candidate_slot_id
         ):
             raise PrivilegedError("candidate-ready restart did not select the candidate slot")
-        if self.restart_outcome is BrokerRestartOutcome.ROLLBACK_READY and (
-            self.selected_runtime_slot_id != self.lkg_slot_id
+        if restart_outcome is BrokerRestartOutcome.ROLLBACK_READY and (
+            self.selected_runtime_slot_id != lkg_slot_id
         ):
             raise PrivilegedError("rollback-ready restart did not select the LKG slot")
-        if self.restart_outcome is BrokerRestartOutcome.NO_SUBEFFECT and (
+        if restart_outcome is BrokerRestartOutcome.NO_SUBEFFECT and (
             self.selected_runtime_slot_id is not None
             or self.effect_knowledge is not PrivilegedEffectKnowledge.KNOWN_NO_SUBEFFECT
         ):
             raise PrivilegedError("no-subeffect restart carries contradictory effect truth")
-        promoted = self.lkg_promotion_evidence_sha256 is not None
-        if promoted:
-            assert self.lkg_promotion_audit_sha256 is not None
-            assert self.lkg_promotion_evidence_sha256 is not None
-            assert self.lkg_promoted_at is not None
-            _require_sha256(self.lkg_promotion_audit_sha256, "LKG promotion audit")
-            _require_sha256(self.lkg_promotion_evidence_sha256, "LKG promotion evidence")
+        promotion_audit_sha256 = self.lkg_promotion_audit_sha256
+        promotion_evidence_sha256 = self.lkg_promotion_evidence_sha256
+        promoted_at = self.lkg_promoted_at
+        if promotion_evidence_sha256 is not None:
+            if promotion_audit_sha256 is None or promoted_at is None:
+                raise PrivilegedError("broker LKG promotion projection is incomplete")
+            _require_sha256(promotion_audit_sha256, "LKG promotion audit")
+            _require_sha256(promotion_evidence_sha256, "LKG promotion evidence")
             if (
-                self.restart_outcome is not BrokerRestartOutcome.CANDIDATE_READY
+                restart_outcome is not BrokerRestartOutcome.CANDIDATE_READY
                 or self.execution_state is not BrokerExecutionState.TERMINAL
                 or self.closed_at is None
-                or self.lkg_promoted_at < self.closed_at
+                or promoted_at < self.closed_at
             ):
                 raise PrivilegedError("broker LKG promotion truth is contradictory")
-        elif self.restart_outcome is not BrokerRestartOutcome.CANDIDATE_READY and any(
+        elif restart_outcome is not BrokerRestartOutcome.CANDIDATE_READY and any(
             value is not None for value in promotion_values
         ):
             raise PrivilegedError("non-candidate restart carries LKG promotion evidence")

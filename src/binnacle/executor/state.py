@@ -14,6 +14,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from types import MappingProxyType
 from typing import Final
 from urllib.parse import quote
 
@@ -45,6 +46,24 @@ from binnacle.executor.integrity import (
 
 EXECUTOR_REVISION: Final = "0002_git_members"
 _ZERO_DIGEST: Final = "0" * 64
+_EXECUTION_LIST_QUERY_PREFIX: Final = "SELECT * FROM execution_records WHERE operation_id IN ("
+_EXECUTION_LIST_QUERY_SUFFIX: Final = ") ORDER BY accepted_at, operation_id"
+_IDENTITY_ROW_QUERIES: Final = MappingProxyType(
+    {
+        "execution_records": (
+            "SELECT * FROM execution_records WHERE operation_id = ? OR ticket_id = ? "
+            "OR ticket_sha256 = ? OR nonce_sha256 = ? LIMIT 1"
+        ),
+        "pending_cancel_intents": (
+            "SELECT * FROM pending_cancel_intents WHERE operation_id = ? OR ticket_id = ? "
+            "OR ticket_sha256 = ? OR nonce_sha256 = ? LIMIT 1"
+        ),
+        "no_accept_tombstones": (
+            "SELECT * FROM no_accept_tombstones WHERE operation_id = ? OR ticket_id = ? "
+            "OR ticket_sha256 = ? OR nonce_sha256 = ? LIMIT 1"
+        ),
+    }
+)
 
 
 class ExecutorStoreError(RuntimeError):
@@ -653,9 +672,11 @@ class SqliteExecutorEvidenceStore:
             raise ExecutionError("executor list request exceeds the reviewed limit")
         async with self._acceptance_gate:
             placeholders = ",".join("?" for _ in operation_ids)
+            # Only a bounded count of literal DB-API placeholders is interpolated;
+            # every operation identifier remains a separately bound value.
+            query = _EXECUTION_LIST_QUERY_PREFIX + placeholders + _EXECUTION_LIST_QUERY_SUFFIX
             cursor = await self._connection.execute(
-                f"SELECT * FROM execution_records WHERE operation_id IN ({placeholders}) "
-                "ORDER BY accepted_at, operation_id",
+                query,
                 operation_ids,
             )
             rows = await cursor.fetchall()
@@ -970,15 +991,12 @@ class SqliteExecutorEvidenceStore:
         table: str,
         identity: TicketRoutingIdentity,
     ) -> sqlite3.Row | None:
-        if table not in {
-            "execution_records",
-            "pending_cancel_intents",
-            "no_accept_tombstones",
-        }:
-            raise AssertionError("unreviewed executor identity table")
+        try:
+            query = _IDENTITY_ROW_QUERIES[table]
+        except KeyError:
+            raise AssertionError("unreviewed executor identity table") from None
         return await self._fetchone(
-            f"SELECT * FROM {table} WHERE operation_id = ? OR ticket_id = ? "
-            "OR ticket_sha256 = ? OR nonce_sha256 = ? LIMIT 1",
+            query,
             (
                 identity.operation_id,
                 identity.ticket_id,

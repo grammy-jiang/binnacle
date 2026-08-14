@@ -1883,12 +1883,8 @@ class SqlitePrivilegedApplicationRepository:
         expires_at = _utc(model.ticket_expires_at)
         created_at = _utc(model.created_at)
         updated_at = _utc(model.updated_at)
-        if None in {issued_at, expires_at, created_at, updated_at}:
+        if issued_at is None or expires_at is None or created_at is None or updated_at is None:
             raise PrivilegedApplicationStoreError("restart operation timestamps are absent")
-        assert issued_at is not None
-        assert expires_at is not None
-        assert created_at is not None
-        assert updated_at is not None
         return PrivilegedRestartRecord(
             operation_id=model.operation_id,
             prepare_operation_id=model.prepare_operation_id,

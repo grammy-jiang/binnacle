@@ -45,7 +45,8 @@ CiApiLookup = Callable[[str, int, int, str, str], Mapping[str, Any] | None]
 class AcceptanceVerdict(StrEnum):
     """Only terminal evaluator outcomes permitted by the Phase 10 plan."""
 
-    PASS = "PASS"
+    # This is a public evaluator verdict label, never a credential.
+    PASS = "PASS"  # nosec B105
     FAIL = "FAIL"
     INCOMPLETE = "INCOMPLETE"
 
