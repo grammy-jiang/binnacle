@@ -278,9 +278,15 @@ class LinuxWorkspace:
         return WorkspaceMutationReadiness(available=reason is None, reason_code=reason)
 
     def _require_mutation_ready(self) -> None:
-        self._require_initialized()
-        if self._mutation_unavailable_reason is not None:
-            raise WorkspaceEffectNotStarted(self._mutation_unavailable_reason)
+        try:
+            readiness = self._current_mutation_readiness()
+        except WorkspaceFilesystemError as exc:
+            raise WorkspaceEffectNotStarted("workspace_mutation_not_started") from exc
+        if not readiness.available:
+            reason = readiness.reason_code
+            if reason is None:
+                raise WorkspaceFilesystemError("workspace mutation readiness contract violated")
+            raise WorkspaceEffectNotStarted(reason)
 
     def _require_initialized(self) -> WorkspaceRootIdentity:
         if self._root_fd is None or self._root_identity is None:

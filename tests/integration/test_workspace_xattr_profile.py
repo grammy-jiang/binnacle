@@ -34,13 +34,24 @@ async def test_host_xattr_profile_is_reported_during_mutation_readiness(
     tmp_path: Path,
 ) -> None:
     root = _root(tmp_path)
-    attributes = os.listxattr(root)
+    try:
+        attributes = os.listxattr(root)
+        inspection_available = True
+    except OSError:
+        attributes = []
+        inspection_available = False
     workspace = _workspace(root)
     await workspace.initialize()
     try:
         readiness = await workspace.mutation_readiness()
-        assert readiness.available == (not attributes)
-        assert readiness.reason_code == (None if not attributes else "workspace_xattrs_unsupported")
+        if not inspection_available:
+            assert not readiness.available
+            assert readiness.reason_code == "workspace_xattr_check_unavailable"
+        else:
+            assert readiness.available == (not attributes)
+            assert readiness.reason_code == (
+                None if not attributes else "workspace_xattrs_unsupported"
+            )
     finally:
         await workspace.close()
 
@@ -128,5 +139,38 @@ async def test_new_root_xattrs_latch_mutation_closed_until_reinitialization(
     await workspace.initialize()
     try:
         assert (await workspace.mutation_readiness()).available
+    finally:
+        await workspace.close()
+
+
+@pytest.mark.anyio
+async def test_create_rechecks_root_xattrs_without_a_separate_readiness_call(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = _root(tmp_path)
+    attributes: list[str] = []
+    monkeypatch.setattr(os, "listxattr", lambda _descriptor: list(attributes))
+    workspace = _workspace(root)
+    identity = await workspace.initialize()
+    attributes.append("security.selinux")
+    try:
+        with pytest.raises(WorkspaceEffectNotStarted) as captured:
+            await workspace.create(
+                WorkspaceCreateIntent(
+                    operation_id="live-root-recheck",
+                    relative_path="blocked",
+                    kind=WorkspaceObjectKind.REGULAR_FILE,
+                    content=b"blocked",
+                    mode=0o644,
+                    expected_root_identity_sha256=identity.identity_sha256,
+                    expected_mount_identity_sha256=identity.mount.digest_sha256,
+                )
+            )
+        assert captured.value.reason_code == "workspace_xattrs_unsupported"
+        assert not (root / "blocked").exists()
+        assert (await workspace.mutation_readiness()).reason_code == (
+            "workspace_xattrs_unsupported"
+        )
     finally:
         await workspace.close()
