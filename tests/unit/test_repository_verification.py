@@ -142,25 +142,59 @@ def test_mcp_profile_separates_local_implementation_from_live_evidence(
     repo_root: Path,
 ) -> None:
     profile = (repo_root / "docs/mcp-profile.md").read_text(encoding="utf-8")
-    assert (
-        "| Binnacle build/configuration | Locally implemented; not deployed/evaluated; "
-        "exact candidate build/configuration unknown |"
-    ) in profile
+    initial_profile = profile.split("## 2. Initial Unknown Profile", maxsplit=1)[1].split(
+        "The repository contains", maxsplit=1
+    )[0]
+    actual_rows: dict[str, str] = {}
+    for line in initial_profile.splitlines():
+        if not line.startswith("| ") or line in {"| Field | Value |", "| --- | --- |"}:
+            continue
+        field, value = (cell.strip() for cell in line.strip("|").split("|", maxsplit=1))
+        actual_rows[field] = value
+    assert actual_rows == {
+        "ChatGPT product/surface": "ChatGPT web",
+        "Plan": "Pro",
+        "Workspace type/policy": "Unknown",
+        "Connection method": "Secure/private tunnel candidate; unvalidated",
+        "Authentication profile": "Unknown",
+        "Binnacle build/configuration": (
+            "Locally implemented; not deployed/evaluated; "
+            "exact candidate build/configuration unknown"
+        ),
+        "MCP SDK/tunnel agent": "Not selected",
+        "Server-supported revisions": ("`2026-07-28`, `2025-11-25`, `2025-06-18`, `2025-03-26`"),
+        "Revision requested/negotiated by ChatGPT": "Unknown",
+        "Client capabilities": "Unknown",
+        "Tool discovery and refresh": "Unknown",
+        "Structured/text result handling": "Unknown",
+        "Read entitlement": "Unknown",
+        "Write/modify entitlement": "Unknown; live test required",
+        "Host confirmation behaviour": "Unknown",
+        "Idempotency/retry/reconnect/cancellation": "Unknown",
+        "Resources, MRTR/elicitation, Tasks": "Unknown",
+        "Owner-only/model-visible boundary": "Unknown",
+        "Result-size, latency, context cost": "Unknown",
+    }
     assert "| Binnacle build/configuration | Not implemented |" not in profile
-    for fail_closed_axis in (
-        "| Authentication profile | Unknown |",
-        "| Revision requested/negotiated by ChatGPT | Unknown |",
-        "| Tool discovery and refresh | Unknown |",
-        "| Structured/text result handling | Unknown |",
-        "| Write/modify entitlement | Unknown; live test required |",
-        "| Host confirmation behaviour | Unknown |",
-        "| Idempotency/retry/reconnect/cancellation | Unknown |",
-    ):
-        assert fail_closed_axis in profile
     assert "No unknown value is treated as support." in profile
     normalized_profile = " ".join(profile.split())
     assert "does not supply real ChatGPT compatibility evidence" in normalized_profile
-    assert "`server-not-implemented` is reserved for a required probe" in normalized_profile
+    assert (
+        "generated compatibility baseline uses the frozen per-axis classifications"
+        in normalized_profile
+    )
+    assert (
+        "`not-tested`, `server-not-implemented`, `declared-unexercised`, or "
+        "`not-applicable`" in normalized_profile
+    )
+    assert (
+        "No axis is promoted to `observed-supported` or `observed-limited` without "
+        "reviewed live evidence" in normalized_profile
+    )
+    assert (
+        "`server-not-implemented` identifies a required probe absent from the selected "
+        "local server profile" in normalized_profile
+    )
 
 
 def test_verify_python_rejects_an_unsupported_version(repo_root: Path) -> None:

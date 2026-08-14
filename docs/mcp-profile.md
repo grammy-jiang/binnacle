@@ -180,7 +180,10 @@ The first Raspberry Pi deployment should execute the frozen cases in this order:
 7. optional Resources, MRTR, and Tasks probes;
 8. information boundary, cross-server observation, latency, and context cost.
 
-The resulting manifest populates this profile. Until then, host compatibility axes remain
-`not-tested`. `server-not-implemented` is reserved for a required probe that is genuinely
-absent from the local server; it is not shorthand for a missing deployment or missing
-Raspberry Pi/ChatGPT evidence.
+The resulting manifest populates this profile. Before a live run, the generated
+compatibility baseline uses the frozen per-axis classifications: `not-tested`,
+`server-not-implemented`, `declared-unexercised`, or `not-applicable`, as applicable. No
+axis is promoted to `observed-supported` or `observed-limited` without reviewed live
+evidence. `server-not-implemented` identifies a required probe absent from the selected
+local server profile; it is not shorthand for a missing deployment or missing Raspberry
+Pi/ChatGPT evidence.
