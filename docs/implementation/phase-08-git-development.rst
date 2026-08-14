@@ -1637,7 +1637,7 @@ A likely implementation file set is:
    deploy/tmpfiles.d/binnacle-git-credential.conf
    scripts/setup_dev_pi.py
    scripts/verify_dev_pi.py
-   scripts/verify_git_profile.py
+   scripts/verify_git_credential_broker.py
    docs/security/git-development.md
    docs/operations/development-pi.rst
    .github/workflows/python.yml
@@ -1653,6 +1653,8 @@ change only for a genuine selected dependency. Do not create empty layers merely
 this sketch. Reuse Phase 4/6/7 ports where they already provide the required seam, and
 extend the canonical manifest/schema/evaluation sources above rather than inventing a
 parallel ``spec/mcp/manifest.yaml`` or per-Tool schema tree.
+The implemented credential-broker verifier in this inventory supersedes the earlier
+planned profile-verifier name and is the script exercised by local and CI validation.
 
 35. Protected configuration and persistence
 -------------------------------------------
