@@ -187,7 +187,8 @@ def decode_probe_content(
         except UnicodeEncodeError as exc:
             raise ProbeWorkspaceError("probe text is not valid UTF-8") from exc
     else:
-        assert encoded_base64 is not None
+        if encoded_base64 is None:
+            raise ProbeWorkspaceError("probe base64 content is absent")
         try:
             content = base64.b64decode(encoded_base64, validate=True)
         except (ValueError, binascii.Error) as exc:

@@ -13,7 +13,9 @@ command.  It runs the pytest and branch-coverage suite on Python 3.11, 3.12, and
 then runs the complete quality profile and every pre-commit hook.  The quality profile
 contains Ruff lint and formatting, strict MyPy, Import Linter, ``pip-audit``, recursive
 RST validation, generated-registry and contract/schema checks, operational CLI smoke
-checks, and the isolated Phase 04, 07, 08, and 09 verifier workflows.
+checks, the isolated Phase 04, 07, 08, and 09 verifier workflows, and a recursive Bandit
+scan of production Python.  Bandit runs as an always-on system pre-commit hook in both
+this command and the GitHub quality job; any new unsuppressed finding fails the gate.
 
 The narrower ``make verify-python PYTHON=3.11`` and ``make verify-quality`` targets are
 diagnostic entry points, not substitutes for the complete pre-push command.  The attested

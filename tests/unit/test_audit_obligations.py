@@ -24,6 +24,7 @@ async def test_publish_scan_remove_is_canonical_and_durable(tmp_path: Path) -> N
     await store.initialize()
     await store.publish(_obligation())
     path = tmp_path / "obligations/obl-fixture.json"
+    assert os.stat(path.parent).st_mode & 0o777 == 0o750
     assert path.read_bytes() == (
         b'{"obligation_id":"obl-fixture","operation_id":"op-fixture",'
         b'"running_state_version":3,"schema_version":"1"}'

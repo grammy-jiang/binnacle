@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import configparser
 import json
 import re
@@ -82,6 +83,45 @@ def test_attested_ci_jobs_match_the_canonical_tox_profile(repo_root: Path) -> No
             remote_quality.extend(_normalise_commands(run))
 
     assert Counter(remote_quality) == Counter(local_quality)
+
+
+def test_bandit_is_a_canonical_local_and_ci_gate(repo_root: Path) -> None:
+    project = tomllib.loads((repo_root / "pyproject.toml").read_text(encoding="utf-8"))
+    quality_dependencies = project["dependency-groups"]["quality"]
+    assert any(dependency.startswith("bandit[") for dependency in quality_dependencies)
+
+    pre_commit = cast(
+        dict[str, Any],
+        yaml.safe_load((repo_root / ".pre-commit-config.yaml").read_text(encoding="utf-8")),
+    )
+    local_repository = next(
+        repository for repository in pre_commit["repos"] if repository["repo"] == "local"
+    )
+    bandit = next(hook for hook in local_repository["hooks"] if hook["id"] == "bandit")
+    assert bandit["entry"] == "bandit --recursive src/binnacle"
+    assert bandit["language"] == "system"
+    assert bandit["pass_filenames"] is False
+    assert bandit["always_run"] is True
+
+    workflow = cast(
+        dict[str, Any],
+        yaml.safe_load((repo_root / ".github/workflows/python.yml").read_text(encoding="utf-8")),
+    )
+    quality_commands = {step.get("run") for step in workflow["jobs"]["quality"]["steps"]}
+    assert "uv run pre-commit run --all-files" in quality_commands
+    assert _dry_run(repo_root, "verify")[-1] == "uv run pre-commit run --all-files"
+
+
+def test_production_python_has_no_optimization_sensitive_assertions(repo_root: Path) -> None:
+    assertions: list[str] = []
+    for path in sorted((repo_root / "src/binnacle").rglob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        assertions.extend(
+            f"{path.relative_to(repo_root)}:{node.lineno}"
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Assert)
+        )
+    assert assertions == []
 
 
 def test_verify_python_rejects_an_unsupported_version(repo_root: Path) -> None:

@@ -7,6 +7,7 @@ import json
 import sqlite3
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from types import MappingProxyType
 from typing import Final
 
 from binnacle.domain.execution import (
@@ -31,6 +32,37 @@ EXPECTED_EXECUTOR_TABLES: Final = frozenset(
         "git_read_generations",
         "git_members",
         "git_read_no_accept_tombstones",
+    }
+)
+_UNPROMOTED_GIT_COUNT_QUERIES: Final = (
+    "SELECT COUNT(*) FROM git_read_generations",
+    "SELECT COUNT(*) FROM git_members",
+    "SELECT COUNT(*) FROM git_read_no_accept_tombstones",
+)
+_ACCEPTANCE_HOME_QUERIES: Final = (
+    "SELECT COUNT(*) FROM execution_records left_row "
+    "JOIN pending_cancel_intents right_row ON "
+    "left_row.operation_id=right_row.operation_id OR "
+    "left_row.ticket_id=right_row.ticket_id OR "
+    "left_row.ticket_sha256=right_row.ticket_sha256 OR "
+    "left_row.nonce_sha256=right_row.nonce_sha256",
+    "SELECT COUNT(*) FROM execution_records left_row "
+    "JOIN no_accept_tombstones right_row ON "
+    "left_row.operation_id=right_row.operation_id OR "
+    "left_row.ticket_id=right_row.ticket_id OR "
+    "left_row.ticket_sha256=right_row.ticket_sha256 OR "
+    "left_row.nonce_sha256=right_row.nonce_sha256",
+    "SELECT COUNT(*) FROM pending_cancel_intents left_row "
+    "JOIN no_accept_tombstones right_row ON "
+    "left_row.operation_id=right_row.operation_id OR "
+    "left_row.ticket_id=right_row.ticket_id OR "
+    "left_row.ticket_sha256=right_row.ticket_sha256 OR "
+    "left_row.nonce_sha256=right_row.nonce_sha256",
+)
+_ROUTING_TABLE_QUERIES: Final = MappingProxyType(
+    {
+        "pending_cancel_intents": ("SELECT * FROM pending_cancel_intents ORDER BY operation_id"),
+        "no_accept_tombstones": ("SELECT * FROM no_accept_tombstones ORDER BY operation_id"),
     }
 )
 
@@ -135,12 +167,8 @@ def _verify_executor_connection(
 def _verify_unpromoted_git_tables(connection: sqlite3.Connection) -> None:
     """Phase 8 handlers are unavailable; retained Git rows therefore fail closed."""
 
-    for table in (
-        "git_read_generations",
-        "git_members",
-        "git_read_no_accept_tombstones",
-    ):
-        if int(connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]):
+    for query in _UNPROMOTED_GIT_COUNT_QUERIES:
+        if int(connection.execute(query).fetchone()[0]):
             raise ExecutorIntegrityError("unpromoted Git executor evidence is present")
 
 
@@ -167,23 +195,8 @@ def _verify_event_sequence(connection: sqlite3.Connection, high_water: int) -> N
 
 
 def _verify_acceptance_homes(connection: sqlite3.Connection) -> None:
-    identity_match = (
-        "left_row.operation_id=right_row.operation_id OR "
-        "left_row.ticket_id=right_row.ticket_id OR "
-        "left_row.ticket_sha256=right_row.ticket_sha256 OR "
-        "left_row.nonce_sha256=right_row.nonce_sha256"
-    )
-    pairs = (
-        ("execution_records", "pending_cancel_intents"),
-        ("execution_records", "no_accept_tombstones"),
-        ("pending_cancel_intents", "no_accept_tombstones"),
-    )
-    for left, right in pairs:
-        count = int(
-            connection.execute(
-                f"SELECT COUNT(*) FROM {left} left_row JOIN {right} right_row ON {identity_match}"
-            ).fetchone()[0]
-        )
+    for query in _ACCEPTANCE_HOME_QUERIES:
+        count = int(connection.execute(query).fetchone()[0])
         if count:
             raise ExecutorIntegrityError("executor acceptance identities have multiple homes")
 
@@ -269,7 +282,11 @@ def _verify_routing_rows(
     table: str,
     high_water: int,
 ) -> int:
-    rows = tuple(connection.execute(f"SELECT * FROM {table} ORDER BY operation_id"))
+    try:
+        query = _ROUTING_TABLE_QUERIES[table]
+    except KeyError as exc:
+        raise ExecutorIntegrityError("executor routing table is not reviewed") from exc
+    rows = tuple(connection.execute(query))
     for row in rows:
         TicketRoutingIdentity(
             operation_id=str(row["operation_id"]),

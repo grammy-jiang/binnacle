@@ -40,6 +40,7 @@ test = [
   "pytest-cov>=7,<8",
 ]
 quality = [
+  "bandit[toml]>=1.9.4,<2",
   "import-linter>=2,<3",
   "mypy>=1.19,<2",
   "pip-audit>=2.10,<3",
