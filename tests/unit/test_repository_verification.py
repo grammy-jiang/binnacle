@@ -125,9 +125,13 @@ def test_production_python_has_no_optimization_sensitive_assertions(repo_root: P
 
 
 def test_phase8_inventory_names_the_implemented_git_verifier(repo_root: Path) -> None:
-    inventory = (repo_root / "docs/implementation/phase-08-git-development.rst").read_text(
+    document = (repo_root / "docs/implementation/phase-08-git-development.rst").read_text(
         encoding="utf-8"
     )
+    section_start = document.index("34. Repository layout and implementation seams")
+    inventory_start = document.index(".. code-block:: text", section_start)
+    inventory_end = document.index("\n\nThe exact credential service assets", inventory_start)
+    inventory = document[inventory_start:inventory_end]
     verifier = "scripts/verify_git_credential_broker.py"
     assert verifier in inventory
     assert (repo_root / verifier).is_file()
