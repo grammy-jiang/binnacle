@@ -115,21 +115,10 @@ the exact clean candidate:
    cd /srv/binnacle-dev/repo
    git status --short
    git rev-parse --verify HEAD
-   uv sync --frozen --python 3.13
-   uv run python scripts/compile_mcp_registry.py --check
-   uv run pytest
-   uv run ruff check .
-   uv run ruff format --check .
-   uv run mypy src/binnacle tests scripts/mcp_evaluation.py \
-     scripts/build_privileged_artifact_manifest.py scripts/setup_dev_pi.py \
-     scripts/verify_dev_pi.py scripts/verify_operation_kernel.py \
-     scripts/verify_execution_supervisor.py scripts/verify_git_credential_broker.py \
-     scripts/verify_privileged_broker.py scripts/ci_checkout_attestation.py \
-     scripts/phase10_acceptance.py
-   uv run lint-imports
-   uv run pip-audit
-   uv run python scripts/validate_contracts.py
-   uv run python scripts/validate_schema_instances.py
+   make verify
+
+``make verify`` is the canonical clean-checkout and pre-push profile.  Its exact contents
+and CI relationship are documented in ``docs/operations/local-verification.rst``.
 
 Record the Git commit, clean/dirty state, Python and ``uv`` versions, and resolved MCP,
 FastMCP, and Uvicorn versions.  A dirty candidate is a different evaluation profile.
