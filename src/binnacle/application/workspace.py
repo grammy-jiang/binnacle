@@ -388,6 +388,12 @@ class WorkspaceMutationBoundaryVerifier:
         self._filesystem = filesystem
 
     async def verify(self, request: OperationBoundaryCheck) -> BoundaryCheckResult:
+        readiness = await self._filesystem.mutation_readiness()
+        if not readiness.available:
+            return BoundaryCheckResult(
+                False,
+                readiness.reason_code or "workspace_mutation_profile_unavailable",
+            )
         record = await self._repository.get_operation(request.operation_id)
         if record is None:
             return BoundaryCheckResult(False, "workspace_operation_missing")

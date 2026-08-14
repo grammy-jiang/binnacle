@@ -34,6 +34,22 @@ from binnacle.ports.workspace import (
 PROFILE_SHA256 = "a" * 64
 
 
+@pytest.fixture(autouse=True)
+def _model_supported_unlabelled_workspace_profile(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Run positive behavior tests as the supported no-xattr Bootstrap profile."""
+
+    real_listxattr = os.listxattr
+
+    def without_selinux_label(descriptor: int) -> list[str]:
+        return [
+            attribute for attribute in real_listxattr(descriptor) if attribute != "security.selinux"
+        ]
+
+    monkeypatch.setattr(os, "listxattr", without_selinux_label)
+
+
 def _root(tmp_path: Path) -> Path:
     root = tmp_path / "workspace"
     root.mkdir(mode=0o700)

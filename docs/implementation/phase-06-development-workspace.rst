@@ -1270,6 +1270,30 @@ Preserve reviewed ordinary executable/non-executable mode where safe. Reject spe
 setuid/setgid/capability-bearing, unsupported ACL/xattr, wrong ownership, multiply-linked,
 or mount-crossing targets.
 
+Bootstrap extended-attribute profile
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The Bootstrap Linux **mutation** profile supports only workspace roots, parents, staging
+objects, and mutation targets with an empty extended-attribute set.  This deliberately
+places SELinux-labelled workspaces outside the supported mutation profile: an automatically
+assigned ``security.selinux`` label disables mutation with the stable reason
+``workspace_xattrs_unsupported``.  The same reason covers POSIX ACL xattrs, ``user.*``
+metadata, and every other present xattr.  If xattrs cannot be inspected, mutation is
+disabled as ``workspace_xattr_check_unavailable``.
+
+``LinuxWorkspace.initialize()`` qualifies the pinned root, and
+``mutation_readiness()`` rechecks it at the operation's final-boundary admission and
+latches a failure closed until an explicit close/reinitialize cycle.  Parent,
+existing-target, staging, and post-publication checks remain defense in depth against
+nested metadata or a profile change after readiness.  Read-only inspect/list/read can
+remain available when mutation is disabled; no session may acquire mutation authority
+from that fact.
+
+This profile never strips, ignores, copies, or synthesizes attributes.  In particular it
+never copies ``security.capability`` and never attempts SELinux relabelling from the
+unprivileged application process.  Supporting SELinux later requires a separately reviewed
+MAC-label policy and correctly privileged relabel boundary; it is not a profile toggle.
+
 Linux pathname replacement is not inode CAS against uncooperative external writer between
 check and rename. Exact serialization guarantee is for Binnacle-coordinated writers via
 shared fence. Immediate revalidation narrows race; pre-start mount mismatch blocks start;

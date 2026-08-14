@@ -64,6 +64,7 @@ from binnacle.ports.workspace import (
     WorkspaceInspectRequest,
     WorkspaceListing,
     WorkspaceListRequest,
+    WorkspaceMutationReadiness,
     WorkspaceOperationRecord,
     WorkspaceReadRequest,
     WorkspaceReadResult,
@@ -107,12 +108,17 @@ class FixtureFilesystem:
         self.read_count = 0
         self.create_count = 0
         self.verified_scopes: list[str] = []
+        self.mutation_unavailable_reason: str | None = None
 
     async def initialize(self) -> WorkspaceRootIdentity:
         return self.root
 
     async def root_identity(self) -> WorkspaceRootIdentity:
         return self.root
+
+    async def mutation_readiness(self) -> WorkspaceMutationReadiness:
+        reason = self.mutation_unavailable_reason
+        return WorkspaceMutationReadiness(available=reason is None, reason_code=reason)
 
     async def verify_scope_no_submounts(self, relative_path: str) -> None:
         self.verified_scopes.append(relative_path)
@@ -814,3 +820,41 @@ async def test_boundary_reports_missing_and_path_mismatch_without_filesystem_eff
         )
     )
     assert wrong_path.reason_code == "workspace_boundary_path_mismatch"
+
+
+@pytest.mark.anyio
+async def test_boundary_returns_stable_mutation_profile_readiness_reason() -> None:
+    filesystem = FixtureFilesystem()
+    filesystem.mutation_unavailable_reason = "workspace_xattrs_unsupported"
+    operation = _received_operation()
+    record = _workspace_record(operation)
+    repository = FixtureWorkspaceRepository(
+        root=filesystem.root,
+        operation=operation,
+        record=record,
+    )
+    verifier = WorkspaceMutationBoundaryVerifier(
+        repository=cast(WorkspaceRepository, repository),
+        filesystem=filesystem,
+    )
+
+    result = await verifier.verify(
+        OperationBoundaryCheck(
+            operation.operation_id, 3, _coordinated_request(operation).boundary_predicates
+        )
+    )
+
+    assert not result.allowed
+    assert result.reason_code == "workspace_xattrs_unsupported"
+
+
+@pytest.mark.parametrize(
+    ("available", "reason"),
+    [(True, "workspace_xattrs_unsupported"), (False, None), (False, "")],
+)
+def test_workspace_mutation_readiness_rejects_contradictory_state(
+    available: bool,
+    reason: str | None,
+) -> None:
+    with pytest.raises(ValueError, match=r"readiness|reason"):
+        WorkspaceMutationReadiness(available=available, reason_code=reason)

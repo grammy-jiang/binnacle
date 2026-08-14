@@ -34,6 +34,22 @@ from binnacle.ports.workspace import (
 PROFILE_SHA256 = "a" * 64
 
 
+@pytest.fixture(autouse=True)
+def _model_supported_unlabelled_workspace_profile(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Run positive behavior tests as the supported no-xattr Bootstrap profile."""
+
+    real_listxattr = os.listxattr
+
+    def without_selinux_label(descriptor: int) -> list[str]:
+        return [
+            attribute for attribute in real_listxattr(descriptor) if attribute != "security.selinux"
+        ]
+
+    monkeypatch.setattr(os, "listxattr", without_selinux_label)
+
+
 def _root(tmp_path: Path, name: str = "workspace") -> Path:
     root = tmp_path / name
     root.mkdir(mode=0o700)
@@ -375,24 +391,33 @@ async def test_linux_workspace_write_rejects_unsupported_metadata(
             )
         )
 
+    supported_listxattr = os.listxattr
     try:
         target.chmod(0o666)
         with pytest.raises(WorkspaceEffectNotStarted, match="metadata_unsupported"):
             await write_from_current("wrong-mode")
 
         target.chmod(0o644)
-        monkeypatch.setattr(os, "listxattr", lambda _descriptor: ["security.capability"])
+
+        def target_xattrs(descriptor: int) -> list[str]:
+            if os.fstat(descriptor).st_ino == target.stat().st_ino:
+                return ["security.capability"]
+            return supported_listxattr(descriptor)
+
+        monkeypatch.setattr(os, "listxattr", target_xattrs)
         with pytest.raises(WorkspaceEffectNotStarted, match="xattrs_unsupported"):
             await write_from_current("has-xattr")
 
-        def unavailable_xattrs(_descriptor: int) -> list[str]:
-            raise OSError("xattrs unavailable")
+        def unavailable_xattrs(descriptor: int) -> list[str]:
+            if os.fstat(descriptor).st_ino == target.stat().st_ino:
+                raise OSError("xattrs unavailable")
+            return supported_listxattr(descriptor)
 
         monkeypatch.setattr(os, "listxattr", unavailable_xattrs)
         with pytest.raises(WorkspaceEffectNotStarted, match="xattr_check_unavailable"):
             await write_from_current("xattr-unavailable")
 
-        monkeypatch.undo()
+        monkeypatch.setattr(os, "listxattr", supported_listxattr)
         (root / "alias").hardlink_to(target)
         with pytest.raises(WorkspaceEffectNotStarted, match="not_started"):
             await workspace.write(

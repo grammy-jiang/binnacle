@@ -35,6 +35,7 @@ from binnacle.ports.workspace import (
     WorkspaceInspectRequest,
     WorkspaceListing,
     WorkspaceListRequest,
+    WorkspaceMutationReadiness,
     WorkspaceReadRequest,
     WorkspaceReadResult,
     WorkspaceWriteIntent,
@@ -49,6 +50,8 @@ _DEFAULT_MAX_PREFLIGHT_ENTRIES = 100_000
 _CLOSED_CREATE_MODES = frozenset({0o644, 0o755})
 _CLOSED_REPLACE_MODES = frozenset({0o600, 0o640, 0o644, 0o700, 0o750, 0o755})
 _RENAME_NOREPLACE = 1
+_XATTRS_UNSUPPORTED = "workspace_xattrs_unsupported"
+_XATTR_CHECK_UNAVAILABLE = "workspace_xattr_check_unavailable"
 
 
 class WorkspaceFilesystemError(RuntimeError):
@@ -126,6 +129,7 @@ class LinuxWorkspace:
         self._proc_root = proc_root
         self._root_fd: int | None = None
         self._root_identity: WorkspaceRootIdentity | None = None
+        self._mutation_unavailable_reason: str | None = None
         self._lifecycle_lock = asyncio.Lock()
 
     async def initialize(self) -> WorkspaceRootIdentity:
@@ -138,6 +142,9 @@ class LinuxWorkspace:
 
     async def root_identity(self) -> WorkspaceRootIdentity:
         return await asyncio.to_thread(self._current_root_identity)
+
+    async def mutation_readiness(self) -> WorkspaceMutationReadiness:
+        return await asyncio.to_thread(self._current_mutation_readiness)
 
     async def verify_scope_no_submounts(self, relative_path: str) -> None:
         normalized = self._normalize_scope(relative_path)
@@ -199,6 +206,7 @@ class LinuxWorkspace:
         descriptor: int | None = None
         try:
             descriptor, info, mount = self._open_configured_root()
+            mutation_unavailable_reason = self._xattr_profile_reason(descriptor)
             mode = stat.S_IMODE(info.st_mode)
             if info.st_uid != os.geteuid() or mode & 0o022:
                 raise WorkspaceFilesystemError(
@@ -230,6 +238,7 @@ class LinuxWorkspace:
             )
             self._root_fd = descriptor
             self._root_identity = identity
+            self._mutation_unavailable_reason = mutation_unavailable_reason
             descriptor = None
             self._verify_scope_no_submounts("")
             return identity
@@ -244,6 +253,7 @@ class LinuxWorkspace:
         descriptor = self._root_fd
         self._root_fd = None
         self._root_identity = None
+        self._mutation_unavailable_reason = None
         if descriptor is not None:
             os.close(descriptor)
 
@@ -252,6 +262,25 @@ class LinuxWorkspace:
         descriptor = self._open_root_checked()
         os.close(descriptor)
         return expected
+
+    def _current_mutation_readiness(self) -> WorkspaceMutationReadiness:
+        self._require_initialized()
+        reason = self._mutation_unavailable_reason
+        if reason is None:
+            descriptor = self._open_root_checked()
+            try:
+                reason = self._xattr_profile_reason(descriptor)
+            finally:
+                os.close(descriptor)
+            if reason is not None:
+                # Reopening requires an explicit close/initialize qualification cycle.
+                self._mutation_unavailable_reason = reason
+        return WorkspaceMutationReadiness(available=reason is None, reason_code=reason)
+
+    def _require_mutation_ready(self) -> None:
+        self._require_initialized()
+        if self._mutation_unavailable_reason is not None:
+            raise WorkspaceEffectNotStarted(self._mutation_unavailable_reason)
 
     def _require_initialized(self) -> WorkspaceRootIdentity:
         if self._root_fd is None or self._root_identity is None:
@@ -536,6 +565,7 @@ class LinuxWorkspace:
                 expected_root_identity_sha256=intent.expected_root_identity_sha256,
                 expected_mount_identity_sha256=intent.expected_mount_identity_sha256,
             )
+            self._require_mutation_ready()
             validate_identifier(intent.operation_id, name="operation_id")
             if intent.mode not in _CLOSED_CREATE_MODES:
                 raise WorkspaceEffectNotStarted("workspace_create_mode_unsupported")
@@ -565,6 +595,7 @@ class LinuxWorkspace:
             root = self._open_root_checked()
             parent, name = self._open_parent(root, relative_path)
             try:
+                self._require_descriptor_xattrs_supported(parent)
                 self._require_absent(parent, name)
                 self._assert_root_path_current()
                 try:
@@ -583,6 +614,7 @@ class LinuxWorkspace:
                     info = os.fstat(descriptor)
                     if stat.S_IMODE(info.st_mode) != intent.mode:
                         raise WorkspaceFilesystemError("created workspace directory mode changed")
+                    self._require_verified_result_xattrs_supported(descriptor)
                     entry = self._entry(relative_path, descriptor, info=info)
                 finally:
                     os.close(descriptor)
@@ -624,6 +656,7 @@ class LinuxWorkspace:
             root = self._open_root_checked()
             parent, name = self._open_parent(root, relative_path)
             try:
+                self._require_descriptor_xattrs_supported(parent)
                 self._require_absent(parent, name)
                 staging_fd = self._create_staging(parent, staging, intent.content, intent.mode)
                 os.close(staging_fd)
@@ -673,6 +706,7 @@ class LinuxWorkspace:
             validate_identifier(intent.operation_id, name="operation_id")
             validate_sha256(intent.expected_object_version, name="expected_object_version")
             validate_sha256(intent.expected_content_sha256, name="expected_content_sha256")
+            self._require_mutation_ready()
             if len(intent.content) > self._maximum_mutation_bytes:
                 raise WorkspaceEffectNotStarted("workspace_write_content_too_large")
             staging = self.staging_reference(
@@ -683,6 +717,7 @@ class LinuxWorkspace:
             root = self._open_root_checked()
             parent, name = self._open_parent(root, relative_path)
             try:
+                self._require_descriptor_xattrs_supported(parent)
                 current = self._open_regular_at(parent, name)
                 try:
                     current_info, current_digest = self._stable_regular_digest(
@@ -777,6 +812,7 @@ class LinuxWorkspace:
             raise WorkspaceEffectNotStarted("workspace_staging_collision") from exc
         try:
             self._verify_fd_mount(descriptor, self._require_initialized().mount)
+            self._require_descriptor_xattrs_supported(descriptor)
             self._write_all(descriptor, content)
             os.fchmod(descriptor, mode)
             os.fsync(descriptor)
@@ -812,6 +848,7 @@ class LinuxWorkspace:
             )
             if digest != expected_content_sha256 or stat.S_IMODE(info.st_mode) != expected_mode:
                 raise WorkspaceFilesystemError("workspace mutation result verification failed")
+            self._require_verified_result_xattrs_supported(descriptor)
             return self._entry(relative_path, descriptor, info=info, content_sha256=digest)
         finally:
             os.close(descriptor)
@@ -1025,12 +1062,27 @@ class LinuxWorkspace:
             or mode not in _CLOSED_REPLACE_MODES
         ):
             raise WorkspaceEffectNotStarted("workspace_write_metadata_unsupported")
+        self._require_descriptor_xattrs_supported(descriptor)
+
+    @staticmethod
+    def _xattr_profile_reason(descriptor: int) -> str | None:
+        if not hasattr(os, "listxattr"):
+            return _XATTR_CHECK_UNAVAILABLE
         try:
             attributes = os.listxattr(descriptor)
-        except OSError as exc:
-            raise WorkspaceEffectNotStarted("workspace_write_xattr_check_unavailable") from exc
-        if attributes:
-            raise WorkspaceEffectNotStarted("workspace_write_xattrs_unsupported")
+        except OSError:
+            return _XATTR_CHECK_UNAVAILABLE
+        return _XATTRS_UNSUPPORTED if attributes else None
+
+    def _require_descriptor_xattrs_supported(self, descriptor: int) -> None:
+        reason = self._xattr_profile_reason(descriptor)
+        if reason is not None:
+            raise WorkspaceEffectNotStarted(reason)
+
+    def _require_verified_result_xattrs_supported(self, descriptor: int) -> None:
+        reason = self._xattr_profile_reason(descriptor)
+        if reason is not None:
+            raise WorkspaceFilesystemError(reason)
 
     def _require_absent(self, parent: int, name: str) -> None:
         try:
