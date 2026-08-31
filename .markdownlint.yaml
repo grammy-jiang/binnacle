@@ -1,0 +1,5 @@
+# markdownlint configuration (consumed by markdownlint-cli2 via pre-commit).
+# Rule reference:
+# https://github.com/DavidAnson/markdownlint/blob/main/doc/Rules.md
+default: true # enable all rules, then relax below
+MD013: false # no fixed line-length limit -- prose, tables, and links wrap freely

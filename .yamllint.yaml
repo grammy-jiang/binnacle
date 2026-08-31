@@ -1,0 +1,17 @@
+# yamllint configuration -- https://yamllint.readthedocs.io/
+# Relaxed defaults: long lines and missing "---" are warnings, not errors, so
+# everyday YAML (incl. this repo's .pre-commit-config.yaml) passes cleanly.
+extends: default
+
+rules:
+  line-length:
+    max: 120
+    level: warning
+  document-start: disable
+  truthy:
+    check-keys: false # allow bare on:/off: keys (e.g. GitHub Actions)
+  comments:
+    min-spaces-from-content: 1
+  indentation:
+    spaces: 2
+    indent-sequences: consistent
