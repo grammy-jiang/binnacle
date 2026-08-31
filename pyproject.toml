@@ -1,0 +1,47 @@
+[project]
+name = "binnacle"
+version = "1.0.0"
+description = "MCP server that lets AI agents work on a Raspberry Pi."
+requires-python = ">=3.10"
+dependencies = [
+    "fastmcp==4.0.0b5", # beta pin -- revisit when 4.0 goes stable
+    "uvicorn[standard]>=0.52.4",
+]
+
+[dependency-groups]
+test = [
+    "httpx2>=2.12.0",
+    "hypothesis>=6.167.1",
+    "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
+    "pytest-randomly>=4.1.0",
+    "pytest-timeout>=2.4.0",
+    "pytest-xdist>=3.8.0",
+]
+lint = [
+    "bandit>=1.9.4",
+    "import-linter>=2.14",
+    "mypy>=2.3.1",
+    "pip-audit>=2.10.1",
+    "ruff>=0.16.5",
+]
+dev = [
+    { include-group = "test" },
+    { include-group = "lint" },
+    "mutmut>=3.7.0",
+    "tox>=4.61.1",
+    "tox-uv>=1.36.0",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+# A hung test (the job tools spawn real subprocesses) fails instead of
+# freezing a tox run; 60 s is far above any test's honest runtime.
+timeout = 60
+
+[tool.mypy]
+# The floor of requires-python: catches APIs newer than the oldest
+# supported interpreter (e.g. PurePath.full_match, 3.13-only).
+python_version = "3.10"

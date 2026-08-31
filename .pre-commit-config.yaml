@@ -30,3 +30,45 @@ repos:
     rev: v8.30.1
     hooks:
       - id: gitleaks
+  # Ruff -- lint (with autofix) and format; official hook repo, rev kept in
+  # step with the ruff version pinned in uv.lock.
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.5
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
+  # Bandit -- security lint; official hook repo, rev kept in step with uv.lock.
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.9.4
+    hooks:
+      - id: bandit
+  # uv -- keeps uv.lock in step with pyproject.toml (re-locks on drift);
+  # official hook repo, rev kept in step with the uv version in uv.lock.
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    rev: 0.12.7
+    hooks:
+      - id: uv-lock
+  # Codespell -- typo checker for code and prose; official hook repo.
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.4.3
+    hooks:
+      - id: codespell
+        exclude: ^uv\.lock$
+  # Local hooks on purpose: an isolated hook env cannot see the project's
+  # dependencies, the uv environment can. pip-audit checks the locked
+  # dependency set against the OSV vulnerability database (network call), so
+  # it fires only when uv.lock changes, never on ordinary commits.
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy
+        entry: uv run --no-sync mypy
+        language: system
+        types: [python]
+      - id: pip-audit
+        name: pip-audit
+        entry: uv run --no-sync pip-audit --progress-spinner off
+        language: system
+        files: ^uv\.lock$
+        pass_filenames: false
