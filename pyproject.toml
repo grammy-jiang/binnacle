@@ -17,6 +17,7 @@ dependencies = [
 
 [project.scripts]
 binnacle = "binnacle.cli:main"
+binnacle-watchdog = "binnacle.watchdog_cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

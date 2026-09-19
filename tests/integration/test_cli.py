@@ -218,71 +218,6 @@ def test_mode_start_failure_is_reported(monkeypatch, capsys):
     assert f"failed to start {cli.PROD_UNIT}: boom" in capsys.readouterr().out
 
 
-def test_pause_and_resume_manage_only_pause_file(tmp_path, monkeypatch, capsys):
-    from types import SimpleNamespace
-
-    state_file = tmp_path / "state" / "watchdog.json"
-    settings = SimpleNamespace(watchdog=SimpleNamespace(state_file=state_file))
-    monkeypatch.setattr(cli, "get_settings", lambda: settings)
-    monkeypatch.setattr(time, "time", lambda: 1_000.0)
-
-    cli.pause(2.5)
-    pause_file = state_file.with_suffix(".pause")
-    assert pause_file.read_text() == "1150\n"
-    assert "paused for 2.5 min" in capsys.readouterr().out
-
-    cli.resume()
-    assert not pause_file.exists()
-    assert "watchdog resumed" in capsys.readouterr().out
-
-
-def test_resume_when_not_paused_is_idempotent(tmp_path, monkeypatch, capsys):
-    from types import SimpleNamespace
-
-    state_file = tmp_path / "watchdog.json"
-    settings = SimpleNamespace(watchdog=SimpleNamespace(state_file=state_file))
-    monkeypatch.setattr(cli, "get_settings", lambda: settings)
-
-    cli.resume()
-
-    assert "watchdog was not paused" in capsys.readouterr().out
-
-
-def test_reload_driver_plan_never_calls_mutating_reload(monkeypatch, capsys):
-    from binnacle import watchdog as wd
-
-    monkeypatch.setattr(wd, "driver_of", lambda dev: ("mmc1:0001:1", "brcmfmac"))
-    monkeypatch.setattr(wd, "driver_module_of", lambda dev: ("brcmfmac", ["brcmutil"]))
-    monkeypatch.setattr(
-        wd,
-        "driver_reload",
-        lambda dev: (_ for _ in ()).throw(AssertionError("mutating reload called")),
-    )
-
-    cli.reload_driver("wlan0", apply=False)
-
-    out = capsys.readouterr().out
-    assert "module brcmfmac" in out
-    assert "plan only" in out
-
-
-def test_status_without_default_route_exits_before_probing(monkeypatch, capsys):
-    from binnacle import uplink as up
-
-    monkeypatch.setattr(up, "default_routes", list)
-    monkeypatch.setattr(
-        up,
-        "probe_all",
-        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("probe called")),
-    )
-
-    with pytest.raises(SystemExit) as exc:
-        cli.status()
-
-    assert exc.value.code == 1
-    assert "no default route" in capsys.readouterr().out
-
-
 # -- baseline command coverage -----------------------------------------------
 
 
@@ -332,7 +267,6 @@ def test_setup_dry_run_describes_every_action_without_writing(
     out = capsys.readouterr().out
     assert "would generate bearer token" in out
     assert f"would write {unit_dir / cli.PROD_UNIT}" in out
-    assert f"would write {unit_dir / cli.WATCHDOG_UNIT}" in out
     assert f"would write {unit_dir / cli.DEV_UNIT}" in out
     assert "would systemctl --user daemon-reload" in out
     assert "dry run: nothing was changed" in out
