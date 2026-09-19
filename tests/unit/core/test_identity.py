@@ -80,3 +80,25 @@ def test_remembered_sessions_are_lru_bounded(monkeypatch):
     assert identity.resolve(_context(session_id="one")) is None
     assert identity.resolve(_context(session_id="two")) == "client-two"
     assert identity.resolve(_context(session_id="three")) == "client-three"
+
+
+def test_meta_identity_without_session_is_returned_but_not_remembered():
+    identity = ClientIdentity()
+    context = SimpleNamespace(
+        fastmcp_context=None,
+        message=SimpleNamespace(
+            params=SimpleNamespace(
+                meta={"io.modelcontextprotocol/clientInfo": {"name": "Stateless"}}
+            )
+        ),
+    )
+
+    assert identity.resolve(context) == "Stateless"
+    assert list(identity._sessions.values()) == []
+
+
+def test_legacy_session_without_client_params_shape_falls_back_cleanly():
+    identity = ClientIdentity()
+    context = _context(session=SimpleNamespace())
+
+    assert identity.resolve(context) is None

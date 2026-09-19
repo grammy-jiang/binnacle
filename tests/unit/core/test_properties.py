@@ -235,3 +235,45 @@ def test_human_size_is_a_string_with_a_unit(n: int):
     assert s.endswith((" bytes", " KB", " MB"))
     if n < 1024:
         assert s == f"{n} bytes"
+
+
+def test_class_regex_falls_back_if_stdlib_wrapper_shape_changes(monkeypatch):
+    monkeypatch.setattr(paths, "_unwrap_fnmatch_translation", lambda translated: None)
+    assert paths._class_regex("abc") == "[abc]"
+
+
+def test_glob_regex_converts_regex_compile_error_to_value_error(monkeypatch):
+    paths._glob_regex.cache_clear()
+
+    def boom(*args, **kwargs):
+        raise paths.re.error("synthetic regex failure")
+
+    monkeypatch.setattr(paths.re, "compile", boom)
+    with pytest.raises(ValueError) as exc:
+        paths._glob_regex("*.py")
+    assert "synthetic regex failure" in str(exc.value)
+    paths._glob_regex.cache_clear()
+
+
+def test_nearby_hint_handles_outside_missing_empty_and_large_directory(
+    tmp_path, monkeypatch
+):
+    root = tmp_path / "allowed"
+    root.mkdir()
+    monkeypatch.setattr(paths, "ALLOWED_ROOTS", (root,))
+
+    assert paths.nearby_hint(tmp_path / "outside") == ""
+    assert paths.nearby_hint(root / "missing") == ""
+
+    empty = root / "empty"
+    empty.mkdir()
+    assert "is empty" in paths.nearby_hint(empty)
+
+    crowded = root / "crowded"
+    crowded.mkdir()
+    for i in range(12):
+        (crowded / f"f{i:02}.txt").write_text("x")
+    hint = paths.nearby_hint(crowded)
+    assert "f00.txt" in hint
+    assert "…" in hint
+    assert "list_files" in hint
