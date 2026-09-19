@@ -9,12 +9,10 @@
     ],
     "legacy_oversize": {
       "scripts/usage_breakdown.py": 578,
-      "src/binnacle/doctor.py": 808,
       "src/binnacle/indexed_retrieval.py": 1272,
       "src/binnacle/logstats.py": 699,
       "src/binnacle/watchdog.py": 4046,
       "tests/integration/test_jobs.py": 1000,
-      "tests/system/test_doctor.py": 726,
       "tests/system/test_uplink.py": 560,
       "tests/system/test_watchdog.py": 4018
     }
