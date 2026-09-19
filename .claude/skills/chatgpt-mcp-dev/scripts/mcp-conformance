@@ -1,0 +1,460 @@
+#!/usr/bin/env python3
+"""Run a deterministic MCP conformance probe against a local client, or report.
+
+The verdict comes from the wire: the probe server records every JSON-RPC method
+the client sends, and only that record is read. No agent output is ever parsed,
+so the result does not depend on a model understanding the question.
+
+Two fixed phases per client, because clients discover differently:
+
+* **eager** — some clients list everything when a session opens. Claude Code
+  sends `resources/list` and `prompts/list` on connect, which settles the
+  question before the model does anything.
+* **lazy** — others only look when something asks. Codex lists resources only
+  when its `list_mcp_resources` tool runs, so an eager-only probe would score it
+  as having no resources, which is wrong.
+
+Phase A opens a session with a trivial fixed prompt and measures connect-time
+discovery. Phase B sends one more fixed prompt naming each operation, which
+gives a lazy client a reason to look. Both prompts are constant strings and
+neither reply is read; they exist only to make the client act.
+
+Limit worth knowing: this measures what is reachable programmatically. A purely
+graphical surface — a resource picker in a desktop app, a slash-command menu
+that only populates in a TUI — cannot be driven this way, so a `no` here means
+"not reachable from a scripted session", and a GUI client still needs one manual
+check before you record it as unsupported.
+
+Usage:
+  mcp-conformance run claude          probe one client end to end
+  mcp-conformance run codex copilot   probe several
+  mcp-conformance report              print the verdict table from the log
+  mcp-conformance report --json       machine-readable
+  mcp-conformance reset               clear the log
+
+`run` needs `mcp-conformance-server` already listening (default
+http://127.0.0.1:8899/mcp); start it with:
+
+    mcp-conformance-server --reset &
+
+Each `run` configures the client, starts one throwaway session, then removes the
+configuration again. Add a client by extending CLIENTS below: give it a way to
+register an HTTP MCP server, a way to start a session, and a way to clean up.
+"""
+
+import argparse
+import json
+import os
+import shutil
+import subprocess
+import sys
+import time
+from collections import OrderedDict
+from pathlib import Path
+
+LOG = Path(
+    os.environ.get(
+        "MCP_CONFORMANCE_LOG", Path.home() / ".local/share/mcp-conformance/calls.jsonl"
+    )
+)
+URL = os.environ.get("MCP_CONFORMANCE_URL", "http://127.0.0.1:8899/mcp")
+NAME = "conformance-probe"
+
+# What each method proves. A client that never calls a group's methods does not
+# consume that primitive, whatever its documentation says.
+GROUPS = OrderedDict(
+    [
+        ("tools", ["tools/list", "tools/call"]),
+        ("resources", ["resources/list", "resources/read"]),
+        ("resource templates", ["resources/templates/list"]),
+        ("prompts", ["prompts/list", "prompts/get"]),
+    ]
+)
+
+
+def sh(cmd: "list[str]", timeout: int = 180, **kw) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        cmd, capture_output=True, text=True, timeout=timeout, check=False, **kw
+    )
+
+
+# Fixed prompts. Constant strings on purpose: the point is to make the client
+# act, not to have a conversation. Neither reply is read.
+PROMPT_EAGER = "reply with the single word ok"
+PROMPT_LAZY = (
+    "Using ONLY the conformance-probe MCP server, attempt all five, and skip "
+    "silently any you cannot do. Do not use curl or any shell command. "
+    "1) list its tools. "
+    '2) call probe_types with exactly text="alpha", count=42, flag=true, '
+    'items=["a","b"]. '
+    "3) list its resources and read probe://card. "
+    "4) list its resource templates and read probe://item/beta. "
+    '5) list its prompts and get probe_prompt with topic="gamma".'
+)
+
+# What a correct client should send. The report compares these against what the
+# probe server actually recorded, so "called the method" and "called it right"
+# are separate verdicts.
+EXPECTED = {
+    "tool arguments": {
+        "method": "tools/call",
+        "target": "probe_types",
+        "args": {
+            "text": ("alpha", "str"),
+            "count": (42, "int"),
+            "flag": (True, "bool"),
+            "items": (["a", "b"], "list"),
+        },
+    },
+    "template substitution": {
+        "method": "resources/read",
+        "target": "probe://item/beta",
+    },
+    "prompt arguments": {
+        "method": "prompts/get",
+        "target": "probe_prompt",
+        "args": {"topic": ("gamma", "str")},
+    },
+}
+
+
+# --- per-client drivers -----------------------------------------------------
+#
+# Each entry: bin, setup(url), session(prompt), teardown().
+# `session` runs one real session; its output is deliberately ignored.
+
+
+def copilot_setup(url: str) -> None:
+    cfg = Path.home() / ".copilot" / "mcp-config.json"
+    cfg.parent.mkdir(parents=True, exist_ok=True)
+    backup = cfg.with_suffix(".json.conformance-backup")
+    if cfg.exists() and not backup.exists():
+        shutil.copy2(cfg, backup)
+    cfg.write_text(
+        json.dumps({"mcpServers": {NAME: {"type": "http", "url": url}}}, indent=2)
+    )
+
+
+def copilot_teardown() -> None:
+    cfg = Path.home() / ".copilot" / "mcp-config.json"
+    backup = cfg.with_suffix(".json.conformance-backup")
+    if backup.exists():
+        shutil.move(backup, cfg)
+    elif cfg.exists():
+        cfg.unlink()
+
+
+CLIENTS = {
+    "claude": {
+        "bin": "claude",
+        "setup": lambda url: sh(
+            ["claude", "mcp", "add", "--transport", "http", NAME, url]
+        ),
+        "session": lambda prompt: sh(
+            ["claude", "-p", prompt, "--permission-mode", "bypassPermissions"],
+            timeout=300,
+        ),
+        # Prompts are user-controlled, so the model cannot reach them. Drive the
+        # host's own command form instead; arguments follow space-separated.
+        "invoke_prompt": lambda: sh(
+            [
+                "claude",
+                "-p",
+                f"/mcp__{NAME}__probe_prompt gamma",
+                "--permission-mode",
+                "bypassPermissions",
+            ],
+            timeout=300,
+        ),
+        "teardown": lambda: sh(["claude", "mcp", "remove", NAME]),
+    },
+    "codex": {
+        "bin": "codex",
+        "setup": lambda url: sh(["codex", "mcp", "add", NAME, "--url", url]),
+        "session": lambda prompt: sh(
+            [
+                "codex",
+                "exec",
+                "--skip-git-repo-check",
+                "--sandbox",
+                "read-only",
+                prompt,
+            ],
+            timeout=300,
+        ),
+        "teardown": lambda: sh(["codex", "mcp", "remove", NAME]),
+    },
+    "copilot": {
+        "bin": "copilot",
+        "setup": lambda url: copilot_setup(url),
+        "session": lambda prompt: sh(
+            ["copilot", "-p", prompt, "--allow-all-tools"], timeout=300
+        ),
+        "teardown": lambda: copilot_teardown(),
+    },
+}
+
+
+# --- log reading ------------------------------------------------------------
+
+
+def read_log() -> "list[dict]":
+    if not LOG.exists():
+        return []
+    rows = []
+    for line in LOG.read_text(encoding="utf-8").splitlines():
+        try:
+            rows.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    return rows
+
+
+def check_fidelity(calls: "list[dict]") -> dict:
+    """Compare recorded calls against EXPECTED: right target, right arguments.
+
+    Returns one entry per check: "ok", "wrong: …", or "not attempted".
+    """
+    result = {}
+    for label, want in EXPECTED.items():
+        matches = [c for c in calls if c["method"] == want["method"]]
+        if not matches:
+            result[label] = "not attempted"
+            continue
+        on_target = [c for c in matches if c.get("target") == want["target"]]
+        if not on_target:
+            seen = ", ".join(sorted({str(c.get("target")) for c in matches}))
+            result[label] = f"wrong target (saw {seen})"
+            continue
+        if "args" not in want:
+            result[label] = "ok"
+            continue
+        problems = []
+        for call in on_target:
+            got = call.get("args") or {}
+            problems = []
+            for key, (value, typename) in want["args"].items():
+                if key not in got:
+                    problems.append(f"{key} missing")
+                elif got[key]["type"] != typename:
+                    problems.append(f"{key} sent as {got[key]['type']} not {typename}")
+                elif got[key]["value"] != value:
+                    problems.append(f"{key}={got[key]['value']!r} not {value!r}")
+            extra = set(got) - set(want["args"])
+            problems += [f"unexpected {k}" for k in sorted(extra)]
+            if not problems:
+                break  # one clean call is enough
+        result[label] = "ok" if not problems else "wrong: " + "; ".join(problems)
+    return result
+
+
+def summarise(rows: "list[dict]") -> dict:
+    out: dict = {}
+    current = None  # set by the runner's begin/end markers
+    for r in rows:
+        if r.get("marker") == "begin":
+            current = r["runner_client"]
+            continue
+        if r.get("marker") == "end":
+            current = None
+            continue
+        # Attribute to the client the runner was driving; fall back to what the
+        # client called itself, which the modern era does not report.
+        who = current or r.get("client") or "unknown"
+        c = out.setdefault(
+            who,
+            {
+                "version": None,
+                "protocols": [],
+                "eras": [],
+                "self_id": [],
+                "methods": {},
+                "schemes": {},
+                "calls": [],
+                "first": r["t"],
+                "last": r["t"],
+            },
+        )
+        if r.get("version"):
+            c["version"] = r["version"]
+        said = r.get("client")
+        if said and said != "unknown" and said not in c.setdefault("self_id", []):
+            c["self_id"].append(said)
+        proto = r.get("protocol")
+        if proto and proto not in c["protocols"]:
+            c["protocols"].append(proto)
+        era = r.get("era")
+        if era and era not in c.setdefault("eras", []):
+            c["eras"].append(era)
+        c["methods"][r["method"]] = c["methods"].get(r["method"], 0) + 1
+        if r.get("target") or r.get("args"):
+            c["calls"].append(
+                {
+                    "method": r["method"],
+                    "target": r.get("target"),
+                    "args": r.get("args"),
+                }
+            )
+        target = r.get("target") or ""
+        if "://" in target:
+            scheme = target.split("://", 1)[0]
+            c["schemes"][scheme] = c["schemes"].get(scheme, 0) + 1
+        c["first"], c["last"] = min(c["first"], r["t"]), max(c["last"], r["t"])
+    for c in out.values():
+        verdict = {}
+        for group, methods in GROUPS.items():
+            verdict[group] = any(c["methods"].get(m) for m in methods)
+        # A host that only ever reads ui:// resources implements MCP Apps, not
+        # data resources. Keep the two apart — they are different features.
+        schemes = c["schemes"]
+        if verdict["resources"] and set(schemes) == {"ui"}:
+            verdict["resources"] = "ui-only"
+        verdict["mcp apps"] = bool(schemes.get("ui"))
+        c["verdict"] = verdict
+        c["fidelity"] = check_fidelity(c["calls"])
+    return out
+
+
+def mark(v) -> str:
+    return {True: "yes", False: "no", "ui-only": "UI-only"}.get(v, str(v))
+
+
+def report(as_json: bool, detail: bool = False) -> None:
+    data = summarise(read_log())
+    if not data:
+        print(f"No calls recorded in {LOG}. Start the probe server and run a client.")
+        return
+    if as_json:
+        print(json.dumps(data, indent=2))
+        return
+    cols = list(GROUPS) + ["mcp apps"]
+    width = max(len(c) for c in data)
+    head = f"{'client':{width}}  " + "  ".join(f"{c:>18}" for c in cols)
+    print(head)
+    print("-" * len(head))
+    for name in sorted(data):
+        c = data[name]
+        row = f"{name:{width}}  " + "  ".join(
+            f"{mark(c['verdict'][col]):>18}" for col in cols
+        )
+        print(row)
+    print()
+    print("did it call them correctly (right target, right argument types)?")
+    fcols = list(EXPECTED)
+    fhead = f"{'client':{width}}  " + "  ".join(f"{c:>22}" for c in fcols)
+    print(fhead)
+    print("-" * len(fhead))
+    for name in sorted(data):
+        f = data[name]["fidelity"]
+        print(f"{name:{width}}  " + "  ".join(f"{f[col][:22]:>22}" for col in fcols))
+    print()
+    for name in sorted(data):
+        c = data[name]
+        ver = f" {c['version']}" if c["version"] else ""
+        eras = "+".join(c.get("eras") or []) or "?"
+        protos = ", ".join(c["protocols"]) or "unstated"
+        methods = ", ".join(f"{m}x{n}" for m, n in sorted(c["methods"].items()))
+        said = "/".join(c.get("self_id") or []) or "(silent)"
+        print(f"{name}{ver}  era: {eras}  protocol: {protos}  self-id: {said}")
+        print(f"    {methods}")
+        if c["schemes"]:
+            print(
+                "    resource schemes: "
+                + ", ".join(f"{k}://x{v}" for k, v in sorted(c["schemes"].items()))
+            )
+        if detail:
+            for call in c["calls"]:
+                args = call.get("args")
+                shown = ""
+                if args:
+                    shown = " " + ", ".join(
+                        f"{k}={v['value']!r}:{v['type']}" for k, v in args.items()
+                    )
+                print(f"    {call['method']} {call['target'] or ''}{shown}")
+
+
+# --- run --------------------------------------------------------------------
+
+
+def marker(client: str, edge: str) -> None:
+    """Write a boundary into the same log the probe server appends to.
+
+    The modern era is stateless and sends no clientInfo, so attributing calls by
+    what the client says about itself stops working there. The runner already
+    knows which client it is driving, so it brackets each client's phases and
+    the report attributes by time window instead.
+    """
+    LOG.parent.mkdir(parents=True, exist_ok=True)
+    with LOG.open("a", encoding="utf-8") as fh:
+        fh.write(
+            json.dumps({"t": time.time(), "marker": edge, "runner_client": client})
+            + "\n"
+        )
+
+
+def run(names: "list[str]") -> None:
+    for name in names:
+        spec = CLIENTS.get(name)
+        if not spec:
+            print(
+                f"mcp-conformance: unknown client {name!r}; "
+                f"known: {', '.join(CLIENTS)}",
+                file=sys.stderr,
+            )
+            continue
+        if not shutil.which(spec["bin"]):
+            print(f"{name}: {spec['bin']} not on PATH — skipped")
+            continue
+        print(f"{name}: configuring…", flush=True)
+        spec["setup"](URL)
+        marker(name, "begin")
+        try:
+            for phase, prompt in (("eager", PROMPT_EAGER), ("lazy", PROMPT_LAZY)):
+                print(f"{name}: {phase} phase…", flush=True)
+                t0 = time.time()
+                spec["session"](prompt)
+                print(f"{name}: {phase} done in {time.time() - t0:.0f}s", flush=True)
+            # Third phase, only where the host has a command form for prompts:
+            # the model cannot invoke a user-controlled primitive.
+            if spec.get("invoke_prompt"):
+                print(f"{name}: prompt-command phase…", flush=True)
+                t0 = time.time()
+                spec["invoke_prompt"]()
+                print(
+                    f"{name}: prompt-command done in {time.time() - t0:.0f}s",
+                    flush=True,
+                )
+        finally:
+            marker(name, "end")
+            spec["teardown"]()
+    print()
+    report(as_json=False, detail=True)
+
+
+def main() -> None:
+    p = argparse.ArgumentParser(prog="mcp-conformance")
+    sub = p.add_subparsers(dest="cmd", required=True)
+    r = sub.add_parser("run", help="probe one or more clients")
+    r.add_argument("clients", nargs="+", choices=list(CLIENTS))
+    rep = sub.add_parser("report", help="print the verdict from the log")
+    rep.add_argument("--json", action="store_true")
+    rep.add_argument(
+        "--detail",
+        action="store_true",
+        help="show every recorded call with its arguments",
+    )
+    sub.add_parser("reset", help="clear the log")
+    args = p.parse_args()
+
+    if args.cmd == "reset":
+        if LOG.exists():
+            LOG.unlink()
+        print(f"cleared {LOG}")
+    elif args.cmd == "report":
+        report(args.json, args.detail)
+    else:
+        run(args.clients)
+
+
+if __name__ == "__main__":
+    main()

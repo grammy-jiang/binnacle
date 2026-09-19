@@ -1,0 +1,295 @@
+#!/usr/bin/env python3
+"""Send a message in a ChatGPT chat from the terminal and print the reply.
+
+The browser half of an end-to-end MCP test: type a prompt into an existing
+conversation (or a new one), approve any connector confirmation cards,
+wait for the assistant to finish, and print its final message. Pair it
+with the server journal to prove a tool call went ChatGPT -> tunnel ->
+server and back.
+
+Drives the system Google Chrome through Playwright in a throwaway profile
+that is logged in by injecting the browser's own chatgpt.com cookies (see
+chatgpt_cookies.py). Runs headed: Cloudflare challenges headless Chrome.
+Needs a desktop session (DISPLAY) and a Python with the `playwright`
+package; the default interpreter is ~/.local/share/chatgpt-mcp-dev/pwvenv/bin/python, override with
+CHATGPT_SEND_PYTHON.
+
+    chatgpt-send --chat <id|url> "message"          # existing conversation
+    chatgpt-send --new "message"                    # new chat; prints its URL
+    chatgpt-send --project g-p-<id> "message"       # new chat inside a Project
+    [--timeout 180] [--browser chrome|chromium|auto] [--json]
+
+Exit 0 with the reply on stdout; non-zero with a reason otherwise.
+"""
+
+import argparse
+import contextlib
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import time
+
+import chatgpt_cookies
+import chatgpt_session as cs
+
+# Only the connector confirmation card's approve button; "Run code" and the
+# like on code blocks must not match.
+CONFIRM_BUTTON = re.compile(r"^(Confirm|Allow|Approve)$", re.IGNORECASE)
+
+
+def _reexec_with_playwright() -> None:
+    """Re-run under an interpreter that has playwright, if this one lacks it."""
+    try:
+        import playwright  # noqa: F401
+    except ImportError:
+        cs.set_prog("chatgpt-send")
+        py = os.path.expanduser(
+            os.environ.get(
+                "CHATGPT_SEND_PYTHON",
+                "~/.local/share/chatgpt-mcp-dev/pwvenv/bin/python",
+            )
+        )
+        # A venv python is usually a symlink to the system one, so compare by
+        # path and guard against looping with a marker variable.
+        if not os.path.exists(py) or os.environ.get("CHATGPT_SEND_REEXEC"):
+            cs.fail(
+                f"the playwright package is missing in {sys.executable}; create it with "
+                "`uv venv --system-site-packages ~/.local/share/chatgpt-mcp-dev/pwvenv && uv pip install --python ~/.local/share/chatgpt-mcp-dev/pwvenv/bin/python playwright`"
+            )
+        env = dict(
+            os.environ,
+            PYTHONPATH=os.path.dirname(os.path.abspath(__file__)),
+            CHATGPT_SEND_REEXEC="1",
+        )
+        # Intentional process replacement with a selected local interpreter; no shell.
+        os.execve(py, [py, os.path.abspath(__file__), *sys.argv[1:]], env)  # nosec
+
+
+def chat_url(chat: str | None, project: str | None = None) -> str:
+    if project:
+        # A message typed on the project page starts a new chat INSIDE the
+        # project, so its instructions apply. Accepts a g-p-... id.
+        m = re.search(r"(g-p-[0-9a-f]{32})", project)
+        if not m:
+            cs.fail(f"not a project id: {project!r} (use `chatgpt-project list`)")
+        return f"https://chatgpt.com/g/{m.group(1)}/project"
+    if not chat:
+        return "https://chatgpt.com/"
+    m = re.search(
+        r"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})", chat
+    )
+    if not m:
+        cs.fail(f"not a conversation id or URL: {chat!r}")
+    return f"https://chatgpt.com/c/{m.group(1)}"
+
+
+def _ensure_display() -> None:
+    """A headed browser needs a display; a post-reboot shell may lack DISPLAY.
+
+    Fill in the desktop session's variables when they are missing, so the
+    tool works from any shell on this Pi without the caller exporting them.
+    """
+    xdg = os.environ.setdefault("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
+    if not os.environ.get("DISPLAY") and os.path.exists("/tmp/.X11-unix/X0"):
+        os.environ["DISPLAY"] = ":0"
+    if not os.environ.get("WAYLAND_DISPLAY") and os.path.exists(f"{xdg}/wayland-0"):
+        os.environ["WAYLAND_DISPLAY"] = "wayland-0"
+    xauth = os.path.expanduser("~/.Xauthority")
+    if not os.environ.get("XAUTHORITY") and os.path.exists(xauth):
+        os.environ["XAUTHORITY"] = xauth
+
+
+@contextlib.contextmanager
+def _display(visible: bool):
+    """Give Chrome a display. Default: an Xvfb virtual screen, so nothing
+    appears on the user's monitor yet Cloudflare still sees a real headed
+    browser (headless is challenged). --visible uses the on-screen display.
+    Falls back to the on-screen display if Xvfb is unavailable.
+    """
+    xvfb = None if visible else shutil.which("Xvfb")
+    if not xvfb:
+        if not visible:
+            print(
+                "chatgpt-send: Xvfb not found; running on the on-screen display "
+                "(sudo apt install xvfb to run invisibly)",
+                file=sys.stderr,
+            )
+        _ensure_display()
+        yield
+        return
+    n = 99
+    while os.path.exists(f"/tmp/.X11-unix/X{n}"):
+        n += 1
+    proc = subprocess.Popen(
+        [xvfb, f":{n}", "-screen", "0", "1280x1024x24", "-nolisten", "tcp"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    saved = {k: os.environ.get(k) for k in ("DISPLAY", "WAYLAND_DISPLAY")}
+    try:
+        for _ in range(100):
+            if os.path.exists(f"/tmp/.X11-unix/X{n}"):
+                break
+            time.sleep(0.05)
+        else:
+            raise RuntimeError("Xvfb did not create its socket")
+        os.environ["DISPLAY"] = f":{n}"
+        os.environ.pop("WAYLAND_DISPLAY", None)  # force X11 on the virtual screen
+        os.environ.setdefault("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
+        yield
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+
+
+def run(
+    chat: str | None,
+    message: str,
+    browser: str,
+    timeout_s: float,
+    visible: bool = False,
+    project: str | None = None,
+) -> dict:
+    from playwright.sync_api import TimeoutError as PWTimeout
+    from playwright.sync_api import sync_playwright
+
+    cookies = chatgpt_cookies.export(
+        cs.pick_browser(browser)
+    )  # keyring, before display
+    with _display(visible), sync_playwright() as p:
+        b = p.chromium.launch(
+            channel="chrome", headless=False, args=["--window-size=1200,900"]
+        )
+        ctx = b.new_context(viewport={"width": 1200, "height": 900})
+        ctx.add_cookies(cookies)
+        page = ctx.new_page()
+        page.goto(
+            chat_url(chat, project), wait_until="domcontentloaded", timeout=60_000
+        )
+        try:
+            composer = page.locator("#prompt-textarea")
+            composer.wait_for(state="visible", timeout=60_000)
+        except PWTimeout:
+            b.close()
+            cs.fail(
+                f"composer did not appear at {page.url} (logged out, or Cloudflare?)"
+            )
+
+        before = page.locator('[data-message-author-role="assistant"]').count()
+        composer.click()
+        composer.fill(message)
+        page.keyboard.press("Enter")
+
+        deadline = time.monotonic() + timeout_s
+        last_text, stable_since = "", None
+        confirmations = 0
+        buttons_seen: set[str] = set()  # debug: what the page offered while waiting
+        while time.monotonic() < deadline:
+            try:
+                for t in page.get_by_role("button").all_inner_texts():
+                    t = " ".join(t.split())
+                    if 0 < len(t) <= 40:
+                        buttons_seen.add(t)
+            except PWTimeout:
+                pass
+            # Connector write actions surface a confirmation card; approve it.
+            approve = page.get_by_role("button", name=CONFIRM_BUTTON)
+            if approve.count() and approve.first.is_visible():
+                try:
+                    approve.first.click(timeout=2_000)
+                    confirmations += 1
+                    time.sleep(0.5)
+                except PWTimeout:
+                    pass  # overlay in the way; try again next loop
+            generating = page.locator('[data-testid="stop-button"]').count() > 0
+            msgs = page.locator('[data-message-author-role="assistant"]')
+            n = msgs.count()
+            try:
+                # Short timeout: the message list re-renders while streaming and
+                # a node can vanish between count() and inner_text().
+                text = msgs.nth(n - 1).inner_text(timeout=2_000) if n > before else ""
+            except PWTimeout:
+                text = last_text
+            if not generating and text and text == last_text:
+                if stable_since is None:
+                    stable_since = time.monotonic()
+                elif time.monotonic() - stable_since > 2.0:
+                    break
+            else:
+                stable_since = None
+            last_text = text
+            time.sleep(0.5)
+        else:
+            b.close()
+            cs.fail(
+                f"no complete reply within {timeout_s:g} s (last seen: {last_text[:200]!r})"
+            )
+
+        result = {
+            "url": page.url,
+            "confirmations_clicked": confirmations,
+            "buttons_seen": sorted(buttons_seen),
+            "reply": last_text,
+        }
+        b.close()
+        return result
+
+
+def main() -> None:
+    _reexec_with_playwright()
+    ap = argparse.ArgumentParser(
+        prog="chatgpt-send", description=__doc__.split("\n\n")[0]
+    )
+    g = ap.add_mutually_exclusive_group(required=True)
+    g.add_argument("--chat", help="conversation id or https://chatgpt.com/c/<id> URL")
+    g.add_argument("--new", action="store_true", help="start a new conversation")
+    g.add_argument(
+        "--project",
+        help="start a new conversation inside this Project (g-p-... id; see chatgpt-project list)",
+    )
+    ap.add_argument("message")
+    ap.add_argument(
+        "--timeout", type=float, default=180.0, help="seconds to wait for the reply"
+    )
+    ap.add_argument("--browser", choices=["auto", "chromium", "chrome"], default="auto")
+    ap.add_argument(
+        "--json", action="store_true", help="print {url, confirmations_clicked, reply}"
+    )
+    ap.add_argument(
+        "--visible",
+        action="store_true",
+        help="show the browser on screen (default: invisible via Xvfb)",
+    )
+    args = ap.parse_args()
+    cs.set_prog("chatgpt-send")
+
+    result = run(
+        None if (args.new or args.project) else args.chat,
+        args.message,
+        args.browser,
+        args.timeout,
+        args.visible,
+        args.project,
+    )
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    else:
+        print(
+            f"[{result['url']}] confirmations clicked: {result['confirmations_clicked']}"
+        )
+        print(result["reply"])
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,198 @@
+#!/usr/bin/env python3
+"""Check which MCP protocol eras a server speaks.
+
+MCP splits into two eras, and they are not two dialects of one handshake:
+
+* **legacy** — 2024-11-05, 2025-03-26, 2025-06-18, 2025-11-25. Negotiated with
+  an `initialize` request; the server answers with the version it agreed to,
+  and the session carries an `Mcp-Session-Id`.
+* **modern** — 2026-07-28. No handshake at all. Each request is stateless and
+  self-describing: an `mcp-protocol-version` header, an `mcp-method` header that
+  must match the body's method (and `mcp-name` for a tool call), plus a
+  `params._meta` envelope carrying `io.modelcontextprotocol/protocolVersion` and
+  `io.modelcontextprotocol/clientCapabilities`.
+
+Because of that split, asking for 2026-07-28 inside an `initialize` is not a
+modern request — a correct server answers with its latest *handshake* version
+instead, which looks like a downgrade but is right. This script therefore probes
+each era the way that era is meant to be spoken.
+
+Usage:
+  mcp-era-check                                  # default http://127.0.0.1:8000/mcp
+  mcp-era-check --url http://127.0.0.1:8901/mcp
+  mcp-era-check --token-file ~/.config/binnacle/token
+  mcp-era-check --json
+
+Exit 0 if at least one era works, 1 if none does.
+"""
+
+import argparse
+import json
+import urllib.error
+import urllib.parse
+import urllib.request
+from pathlib import Path
+
+LEGACY_VERSIONS = ["2024-11-05", "2025-03-26", "2025-06-18", "2025-11-25"]
+MODERN_VERSION = "2026-07-28"
+META_KEY_VERSION = "io.modelcontextprotocol/protocolVersion"
+META_KEY_CAPS = "io.modelcontextprotocol/clientCapabilities"
+
+
+def post(url: str, headers: dict, payload: dict, timeout: int = 20):
+    if urllib.parse.urlsplit(url).scheme.lower() not in {"http", "https"}:
+        return 0, "unsupported URL scheme", {}
+    body = json.dumps(payload).encode()
+    head = {
+        "Content-Type": "application/json",
+        "Accept": "application/json, text/event-stream",
+        **headers,
+    }
+    req = urllib.request.Request(url, data=body, headers=head, method="POST")
+    try:
+        with urllib.request.urlopen(  # nosec
+            req, timeout=timeout
+        ) as r:
+            return r.status, r.read().decode(), dict(r.headers)
+    except urllib.error.HTTPError as e:
+        return e.code, e.read().decode()[:400], dict(e.headers or {})
+    except OSError as e:  # connection refused, timeout, TLS failures
+        return 0, f"{type(e).__name__}: {e}", {}
+
+
+def parse_body(text: str) -> dict:
+    """Accept both a plain JSON body and an SSE `data:` frame."""
+    for line in text.splitlines():
+        line = line.strip()
+        if line.startswith("data:"):
+            line = line[5:].strip()
+        if line.startswith("{"):
+            try:
+                return json.loads(line)
+            except json.JSONDecodeError:
+                continue
+    return {}
+
+
+def probe_legacy(url: str, auth: dict, version: str) -> dict:
+    status, text, _ = post(
+        url,
+        auth,
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": version,
+                "capabilities": {},
+                "clientInfo": {"name": "mcp-era-check", "version": "1"},
+            },
+        },
+    )
+    data = parse_body(text)
+    agreed = (data.get("result") or {}).get("protocolVersion")
+    err = (data.get("error") or {}).get("message")
+    return {
+        "requested": version,
+        "agreed": agreed,
+        "http": status,
+        "error": err if not agreed else None,
+    }
+
+
+def probe_modern(url: str, auth: dict) -> dict:
+    meta = {META_KEY_VERSION: MODERN_VERSION, META_KEY_CAPS: {}}
+    headers = {
+        **auth,
+        "mcp-protocol-version": MODERN_VERSION,
+        "mcp-method": "tools/list",
+    }
+    status, text, _ = post(
+        url,
+        headers,
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/list",
+            "params": {"_meta": meta},
+        },
+    )
+    data = parse_body(text)
+    tools = [t.get("name") for t in (data.get("result") or {}).get("tools", [])]
+    err = (data.get("error") or {}).get("message")
+    return {
+        "version": MODERN_VERSION,
+        "http": status,
+        "tools": tools,
+        "error": err if not tools else None,
+    }
+
+
+def main() -> None:
+    p = argparse.ArgumentParser(prog="mcp-era-check")
+    p.add_argument("--url", default="http://127.0.0.1:8000/mcp")
+    p.add_argument(
+        "--token-file",
+        type=Path,
+        default=Path.home() / ".config" / "binnacle" / "token",
+        help="file holding a bearer token; ignored if missing",
+    )
+    p.add_argument("--json", action="store_true")
+    args = p.parse_args()
+
+    auth = {}
+    if args.token_file.exists():
+        token = args.token_file.read_text(encoding="utf-8").strip()
+        if token:
+            if not token.lower().startswith("bearer "):
+                token = "Bearer " + token
+            auth["Authorization"] = token
+
+    legacy = [probe_legacy(args.url, auth, v) for v in LEGACY_VERSIONS]
+    modern = probe_modern(args.url, auth)
+
+    if args.json:
+        print(
+            json.dumps({"url": args.url, "legacy": legacy, "modern": modern}, indent=2)
+        )
+    else:
+        print(f"{args.url}\n")
+        print("legacy era (initialize handshake)")
+        for r in legacy:
+            ok = r["agreed"] == r["requested"]
+            note = r["agreed"] or f"FAILED — {r['error'] or 'HTTP ' + str(r['http'])}"
+            print(
+                f"  request {r['requested']}  ->  {note}"
+                + ("" if ok else "   (not the version asked for)")
+            )
+        print("\nmodern era (stateless, no handshake)")
+        if modern["tools"]:
+            print(
+                f"  {MODERN_VERSION}  ->  ok, {len(modern['tools'])} tools: "
+                + ", ".join(modern["tools"][:6])
+            )
+        else:
+            print(
+                f"  {MODERN_VERSION}  ->  FAILED — "
+                + (modern["error"] or f"HTTP {modern['http']}")
+            )
+        any_legacy = any(r["agreed"] for r in legacy)
+        both = any_legacy and bool(modern["tools"])
+        print(
+            "\nverdict: "
+            + (
+                "dual-era"
+                if both
+                else "legacy only"
+                if any_legacy
+                else "modern only"
+                if modern["tools"]
+                else "no era answered"
+            )
+        )
+
+    raise SystemExit(0 if (any(r["agreed"] for r in legacy) or modern["tools"]) else 1)
+
+
+if __name__ == "__main__":
+    main()

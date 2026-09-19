@@ -1,0 +1,142 @@
+#!/usr/bin/env python3
+"""Refresh a ChatGPT MCP connector's cached tool list from the terminal.
+
+Terminal equivalent of the per-connector "Refresh" button under
+Settings -> Plugins -> <connector> -> Information, for every ChatGPT MCP
+project. Fully automatic: it discovers your connectors live and resolves a
+name to its link id itself — nothing to register by hand.
+
+It reuses the logged-in ChatGPT session a local Chromium/Chrome profile already
+holds (see the chatgpt_session module), lists connectors via
+.../connectors/links/list_accessible, then POSTs .../connectors/mcp/refresh_actions
+for the chosen connector. Nothing is written to disk.
+
+Usage:
+  chatgpt-refresh <name>            refresh the connector whose name matches
+                                    (case-insensitive; exact, else unique substring)
+  chatgpt-refresh --list            list your connectors (name -> link id)
+  chatgpt-refresh --link-id <id>    refresh by raw link id, skipping discovery
+  [--browser chromium|chrome|auto]  which profile's session to use (default auto)
+  [--no-retry]                      fail at once on HTTP 424 instead of retrying
+
+Requirements: run as the desktop user (needs the session D-Bus + GNOME keyring),
+with the chosen browser logged in to chatgpt.com. The session cookie lasts
+~months; when it expires, just log in to ChatGPT again in the browser.
+Exit 0 on success; non-zero with a one-line reason otherwise.
+"""
+
+import argparse
+import sys
+import time
+
+import chatgpt_session as cs
+
+
+def connectors(session: "cs.Session") -> "list[dict]":
+    status, data = session.call(
+        "/backend-api/aip/connectors/links/list_accessible",
+        method="POST",
+        payload={"principals": [{"type": "USER", "id": session.user_id}]},
+    )
+    if status != 200:
+        cs.fail(f"could not list connectors (HTTP {status}): {data.get('error', '')}")
+    return [
+        {
+            "name": lk.get("name"),
+            "link_id": lk.get("id"),
+            "actions": lk.get("actions") or [],
+        }
+        for lk in data.get("links", [])
+    ]
+
+
+# ChatGPT answers 424 (mcp_error: "Connection timed out" / "Connection failed")
+# when its tunnel service cannot reach the MCP server yet -- typically in the
+# seconds after the tunnel client restarts and re-registers its poller. That
+# window closes on its own, so a few spaced retries turn it into a pass.
+RETRY_424_ATTEMPTS = 5
+RETRY_424_DELAY_S = 10
+
+
+def refresh(
+    session: "cs.Session",
+    link_id: str,
+    attempts: int = RETRY_424_ATTEMPTS,
+    delay_s: float = RETRY_424_DELAY_S,
+) -> "list[str]":
+    for attempt in range(1, attempts + 1):
+        status, data = session.call(
+            "/backend-api/aip/connectors/mcp/refresh_actions",
+            method="POST",
+            payload={"link_id": link_id},
+        )
+        if status == 200:
+            return [a.get("name") for a in data.get("actions", [])]
+        if status == 424 and attempt < attempts:
+            print(
+                f"chatgpt-refresh: ChatGPT could not reach the server yet "
+                f"(HTTP 424, attempt {attempt}/{attempts}); retrying in "
+                f"{delay_s:g} s",
+                file=sys.stderr,
+            )
+            time.sleep(delay_s)
+            continue
+        cs.fail(f"refresh failed (HTTP {status}): {data.get('error', '')}")
+    raise AssertionError("unreachable")  # every path above returns or fails
+
+
+def resolve(query: str, found: "list[dict]") -> "tuple[str, str]":
+    q = query.casefold()
+    exact = [c for c in found if (c["name"] or "").casefold() == q]
+    hits = exact or [c for c in found if q in (c["name"] or "").casefold()]
+    if not hits:
+        names = ", ".join(sorted(repr(c["name"]) for c in found))
+        cs.fail(f"no connector matches {query!r}. Known: {names}")
+    if len(hits) > 1:
+        names = ", ".join(sorted(repr(c["name"]) for c in hits))
+        cs.fail(f"{query!r} is ambiguous — matches: {names}")
+    return hits[0]["name"], hits[0]["link_id"]
+
+
+def main() -> None:
+    p = argparse.ArgumentParser(
+        prog="chatgpt-refresh",
+        description="Refresh a ChatGPT MCP connector's tool list.",
+    )
+    p.add_argument("name", nargs="?", help="connector name (exact or unique substring)")
+    p.add_argument("--list", action="store_true", help="list your connectors and exit")
+    p.add_argument("--link-id", help="refresh by raw link id, skipping discovery")
+    p.add_argument("--browser", choices=["auto", "chromium", "chrome"], default="auto")
+    p.add_argument(
+        "--no-retry",
+        action="store_true",
+        help="fail at once on HTTP 424 (default: retry a few times)",
+    )
+    args = p.parse_args()
+
+    cs.set_prog("chatgpt-refresh")
+
+    if not args.list and not args.name and not args.link_id:
+        p.error("give a connector name, or --list, or --link-id")
+
+    session = cs.Session(args.browser)
+
+    if args.list:
+        rows = sorted(connectors(session), key=lambda c: (c["name"] or "").casefold())
+        width = max((len(c["name"] or "") for c in rows), default=0)
+        for c in rows:
+            print(f"{c['name']:{width}}  {c['link_id']}  ({len(c['actions'])} tools)")
+        return
+
+    if args.link_id:
+        label, link_id = args.link_id, args.link_id
+    else:
+        label, link_id = resolve(args.name, connectors(session))
+
+    attempts = 1 if args.no_retry else RETRY_424_ATTEMPTS
+    tools = refresh(session, link_id, attempts=attempts)
+    print(f"Refreshed {label}. Tools now: " + ", ".join(tools))
+
+
+if __name__ == "__main__":
+    main()

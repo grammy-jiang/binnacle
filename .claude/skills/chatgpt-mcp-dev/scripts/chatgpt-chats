@@ -1,0 +1,309 @@
+#!/usr/bin/env python3
+"""List and clean up ChatGPT conversations from the terminal.
+
+Built for MCP development: full-loop testing creates throwaway chats that
+clutter the chat list, and this removes them without touching real ones.
+
+The safe way to do that is to record each test chat's id when it is created —
+a browser tab on a chat shows it as https://chatgpt.com/c/<id> — and delete
+exactly those ids later:
+
+    chatgpt-chats --track https://chatgpt.com/c/<id> --note "write test"
+    chatgpt-chats --tracked                 # review what is queued
+    chatgpt-chats --tracked --delete        # back up, delete, clear the ledger
+
+That is exact: only chats explicitly recorded as test artifacts are ever
+deleted. Conversation metadata has no field marking a chat as a test, so the
+--match fallback (title substring) is for chats that were never tracked; it
+stays a dry run until you add --delete, and it is easy to misfire — your chat
+list is mostly real conversations, and deleting is not reversible.
+
+Guard rails: deleting always needs an explicit selector (--tracked, --match or
+--id) plus --delete; there is no "delete everything" mode; every conversation is
+backed up in full (JSON) to ~/.local/share/chatgpt-chats/backups/ before it goes;
+--match refuses patterns under 3 characters and more than --max-delete hits
+without --yes.
+
+Usage:
+  chatgpt-chats                            list recent conversations
+  chatgpt-chats --track <id|url> [--note]  record a chat as a test artifact
+  chatgpt-chats --tracked [--delete]       review / clean up tracked chats
+  chatgpt-chats --untrack <id|url>         drop from the ledger, delete nothing
+  chatgpt-chats --match TEXT [--delete]    fallback: select by title substring
+  chatgpt-chats --id <id> --delete         delete one conversation
+  [--limit N] [--browser chromium|chrome|auto]
+
+Exit 0 on success; non-zero with a one-line reason otherwise.
+"""
+
+import argparse
+import json
+import re
+from datetime import datetime, timezone
+from pathlib import Path
+
+import chatgpt_session as cs
+
+STATE_DIR = Path.home() / ".local" / "share" / "chatgpt-chats"
+BACKUP_DIR = STATE_DIR / "backups"
+LEDGER = STATE_DIR / "test-chats.json"
+MIN_PATTERN = 3
+ID_RE = re.compile(
+    r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", re.IGNORECASE
+)
+
+
+# --- ledger of test chats ---------------------------------------------------
+
+
+def parse_id(value: str) -> str:
+    """Accept a bare conversation id or a https://chatgpt.com/c/<id> URL."""
+    m = ID_RE.search(value)
+    if not m:
+        cs.fail(
+            f"{value!r} does not contain a conversation id "
+            "(expected an id or a https://chatgpt.com/c/<id> URL)"
+        )
+    return m.group(0).lower()
+
+
+def load_ledger() -> "list[dict]":
+    if not LEDGER.exists():
+        return []
+    try:
+        return json.loads(LEDGER.read_text(encoding="utf-8")).get("chats", [])
+    except (json.JSONDecodeError, AttributeError) as e:
+        cs.fail(f"ledger {LEDGER} is corrupt: {e}")
+
+
+def save_ledger(chats: "list[dict]") -> None:
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    LEDGER.write_text(json.dumps({"chats": chats}, indent=2) + "\n", encoding="utf-8")
+
+
+# --- conversations ----------------------------------------------------------
+
+
+def list_conversations(session: "cs.Session", limit: int) -> "list[dict]":
+    out, offset = [], 0
+    while len(out) < limit:
+        page = min(100, limit - len(out))
+        status, data = session.call(
+            f"/backend-api/conversations?offset={offset}&limit={page}&order=updated"
+        )
+        if status != 200:
+            cs.fail(
+                f"could not list conversations (HTTP {status}): {data.get('error', '')}"
+            )
+        items = data.get("items", [])
+        out.extend(items)
+        offset += len(items)
+        if len(items) < page or offset >= data.get("total", 0):
+            break
+    return out[:limit]
+
+
+def when(item: dict) -> str:
+    return ((item.get("update_time") or "")[:19].replace("T", " ")) or "?"
+
+
+def show(items: "list[dict]") -> None:
+    for c in items:
+        print(f"  {when(c)}  {c.get('id')}  {c.get('title')!r}")
+
+
+def back_up(session: "cs.Session", cid: str) -> "Path | None":
+    """Save a conversation's full content. None if it no longer exists."""
+    status, data = session.call(f"/backend-api/conversation/{cid}", raw=True)
+    if status == 404:
+        return None
+    if status != 200:
+        cs.fail(
+            f"refusing to delete {cid}: could not fetch it for backup (HTTP {status})"
+        )
+    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    path = BACKUP_DIR / f"{stamp}_{cid}.json"
+    path.write_text(data, encoding="utf-8")
+    return path
+
+
+def delete(session: "cs.Session", cid: str) -> None:
+    status, data = session.call(
+        f"/backend-api/conversation/{cid}",
+        method="PATCH",
+        payload={"is_visible": False},
+    )
+    if status != 200 or not data.get("success"):
+        cs.fail(f"delete failed for {cid} (HTTP {status}): {data.get('error', '')}")
+
+
+def remove(session: "cs.Session", cid: str, label: str) -> bool:
+    """Back up and delete one conversation. False if it was already gone."""
+    path = back_up(session, cid)
+    if path is None:
+        print(f"  already gone: {label}")
+        return False
+    delete(session, cid)
+    print(f"  deleted {label} (backup: {path})")
+    return True
+
+
+# --- CLI --------------------------------------------------------------------
+
+
+def main() -> None:
+    p = argparse.ArgumentParser(
+        prog="chatgpt-chats",
+        description="List and clean up ChatGPT conversations.",
+        epilog="Deletion is irreversible: it always needs an explicit selector plus --delete.",
+    )
+    p.add_argument(
+        "--track", metavar="ID_OR_URL", help="record a chat as a test artifact"
+    )
+    p.add_argument("--note", help="note to store with --track")
+    p.add_argument(
+        "--untrack", metavar="ID_OR_URL", help="drop from the ledger, delete nothing"
+    )
+    p.add_argument("--tracked", action="store_true", help="act on tracked test chats")
+    p.add_argument(
+        "--match", help="select by title substring (case-insensitive, min 3 chars)"
+    )
+    p.add_argument("--id", dest="conv_id", help="select one conversation by id")
+    p.add_argument(
+        "--delete",
+        action="store_true",
+        help="actually delete the selected conversations (backs up first)",
+    )
+    p.add_argument(
+        "--yes", action="store_true", help="allow --match to exceed --max-delete"
+    )
+    p.add_argument(
+        "--max-delete",
+        type=int,
+        default=5,
+        help="refuse a --match deleting more than this many (default 5)",
+    )
+    p.add_argument(
+        "--limit", type=int, default=30, help="how many conversations to scan"
+    )
+    p.add_argument("--browser", choices=["auto", "chromium", "chrome"], default="auto")
+    args = p.parse_args()
+
+    cs.set_prog("chatgpt-chats")
+
+    # Ledger edits need no network.
+    if args.track:
+        cid = parse_id(args.track)
+        chats = load_ledger()
+        if any(c["id"] == cid for c in chats):
+            print(f"Already tracked: {cid}")
+            return
+        chats.append(
+            {
+                "id": cid,
+                "note": args.note or "",
+                "tracked_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            }
+        )
+        save_ledger(chats)
+        print(f"Tracked {cid}" + (f" — {args.note}" if args.note else ""))
+        return
+
+    if args.untrack:
+        cid = parse_id(args.untrack)
+        chats = load_ledger()
+        kept = [c for c in chats if c["id"] != cid]
+        if len(kept) == len(chats):
+            cs.fail(f"{cid} is not tracked")
+        save_ledger(kept)
+        print(f"Untracked {cid} (the conversation itself was not touched)")
+        return
+
+    if args.delete and not (args.tracked or args.match or args.conv_id):
+        p.error("--delete needs a selector: --tracked, --match PATTERN, or --id ID")
+    if args.match is not None and len(args.match) < MIN_PATTERN:
+        cs.fail(
+            f"--match must be at least {MIN_PATTERN} characters "
+            "(too broad a pattern risks deleting real conversations)"
+        )
+
+    session = cs.Session(args.browser)
+
+    # Tracked test chats: exact ids, so no pattern-matching risk.
+    if args.tracked:
+        chats = load_ledger()
+        if not chats:
+            print(
+                "No tracked test chats. Record one with: chatgpt-chats --track <id|url>"
+            )
+            return
+        titles = {
+            c.get("id"): c.get("title") for c in list_conversations(session, args.limit)
+        }
+        if not args.delete:
+            print(f"Tracked test chats ({len(chats)}) — dry run, nothing changed:")
+            for c in chats:
+                title = titles.get(c["id"], "(not in recent list)")
+                note = f" — {c['note']}" if c.get("note") else ""
+                print(f"  {c['id']}  {title!r}{note}")
+            print("\nRe-run with --delete to remove them (each is backed up first).")
+            return
+        print(f"Deleting {len(chats)} tracked test chat(s), backing up each first:")
+        for c in chats:
+            label = repr(titles.get(c["id"], c["id"]))
+            remove(session, c["id"], label)
+        save_ledger([])
+        print(f"\nDone. Ledger cleared. Backups in {BACKUP_DIR}")
+        return
+
+    convs = list_conversations(session, args.limit)
+
+    if args.conv_id:
+        selected = [c for c in convs if c.get("id") == args.conv_id]
+        if not selected:
+            cs.fail(
+                f"conversation {args.conv_id} not found in the last {args.limit} "
+                "(raise --limit if it is older)"
+            )
+    elif args.match:
+        needle = args.match.casefold()
+        selected = [c for c in convs if needle in (c.get("title") or "").casefold()]
+    else:
+        print(f"Recent conversations (showing {len(convs)}):")
+        show(convs)
+        print(
+            "\nTrack a test chat as you create it:  chatgpt-chats --track <id|url>"
+            "\nThen clean up exactly those:          chatgpt-chats --tracked --delete"
+        )
+        return
+
+    if not selected:
+        print("Nothing matched. No conversations were changed.")
+        return
+
+    if not args.delete:
+        print(
+            f"Would delete {len(selected)} conversation(s) — dry run, nothing changed:"
+        )
+        show(selected)
+        print("\nRe-run with --delete to remove them (each is backed up first).")
+        return
+
+    if args.match and len(selected) > args.max_delete and not args.yes:
+        print(
+            f"Refusing to delete {len(selected)} conversations at once "
+            f"(--max-delete is {args.max_delete}):"
+        )
+        show(selected)
+        print("\nNarrow the pattern, or pass --yes if this list is really correct.")
+        raise SystemExit(1)
+
+    print(f"Deleting {len(selected)} conversation(s), backing up each first:")
+    for c in selected:
+        remove(session, c["id"], repr(c.get("title")))
+    print(f"\nDone. Backups in {BACKUP_DIR}")
+
+
+if __name__ == "__main__":
+    main()

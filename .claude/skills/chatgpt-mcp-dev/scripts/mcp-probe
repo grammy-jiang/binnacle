@@ -1,0 +1,175 @@
+#!/usr/bin/env python3
+"""Report which MCP methods each client actually called, from the server log.
+
+This is the measuring instrument for client-conformance testing: it answers
+"did this client really call prompts/list?" from the server's own record,
+rather than from what the client says it did.
+
+It reads the journal for a systemd user unit whose MCP server runs FastMCP's
+LoggingMiddleware with include_payloads=True, reassembles the payload lines that
+the console renderer wraps, and attributes every `method=` to the client named
+in the nearest preceding `initialize`. Clients are told apart by the
+`clientInfo.name` they send: ChatGPT identifies as `openai-mcp`, a FastMCP
+Python client as `mcp`, and so on — so a local test client's calls are never
+mistaken for the host's.
+
+Usage:
+  mcp-probe                          last 10 minutes of binnacle-mcp
+  mcp-probe --since "-1 hour"
+  mcp-probe --unit some-other-mcp
+  mcp-probe --primitives             summarise which primitives each client used
+
+Exit 0 always; it only reads.
+"""
+
+import argparse
+import json
+import re
+import subprocess
+import sys
+from collections import Counter, defaultdict
+
+CLIENT_RE = re.compile(r'"clientInfo":\{"name":"([A-Za-z0-9_.@/-]+)')
+METHOD_RE = re.compile(r"method=([a-z]+(?:/[a-z]+)*)")
+URI_RE = re.compile(r'"uri":"([a-z][a-z0-9+.-]*)://')
+
+# Which methods evidence which MCP primitive.
+PRIMITIVES = {
+    "tools": ("tools/list", "tools/call"),
+    "resources": ("resources/list", "resources/templates/list", "resources/read"),
+    "prompts": ("prompts/list", "prompts/get"),
+}
+
+KNOWN_CLIENTS = {
+    "openai-mcp": "ChatGPT",
+    "mcp": "FastMCP Python client (local tests)",
+    "claude-ai": "Claude",
+    "claude-code": "Claude Code",
+}
+
+
+def records(unit: str, since: str, until: "str | None") -> "list[tuple[int, str]]":
+    cmd = [
+        "journalctl",
+        "--user",
+        "-u",
+        f"{unit}.service",
+        "--since",
+        since,
+        "-o",
+        "json",
+        "--no-pager",
+    ]
+    if until:
+        cmd += ["--until", until]
+    proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    if proc.returncode != 0:
+        print(
+            f"mcp-probe: journalctl failed: {proc.stderr.strip()[:200]}",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+    out = []
+    for line in proc.stdout.splitlines():
+        try:
+            d = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        ts = int(d.get("__REALTIME_TIMESTAMP", 0)) // 1_000_000
+        # journald can hand back "MESSAGE": null as well as omit the field.
+        msg = d.get("MESSAGE") or ""
+        if isinstance(msg, list):  # journald can hand back a byte array
+            msg = "".join(chr(b) for b in msg)
+        out.append((ts, msg))
+    return out
+
+
+def attribute(recs: "list[tuple[int, str]]") -> "tuple[dict, dict, dict]":
+    """Return (method counts, time span, resource-URI schemes) per client.
+
+    A payload is wrapped across several log records, so clientInfo is matched
+    against a rolling buffer of recent text rather than a single line. Each
+    method is credited to the most recent client seen, which is correct because
+    every request opens with its own initialize.
+    """
+    counts: dict[str, Counter] = defaultdict(Counter)
+    schemes: dict[str, Counter] = defaultdict(Counter)
+    span: dict[str, list] = {}
+    current = "unknown"
+    buf = ""
+    for ts, msg in recs:
+        buf = (buf + msg.strip())[-4000:]
+        found = CLIENT_RE.findall(buf)
+        if found and found[-1] != current:
+            current = found[-1]
+            buf = ""  # consumed; avoid re-matching the same handshake
+        for scheme in URI_RE.findall(buf):
+            schemes[current][scheme] += 1
+            buf = ""  # consumed
+        for method in METHOD_RE.findall(msg):
+            counts[current][method] += 1
+            s = span.setdefault(current, [ts, ts])
+            s[0], s[1] = min(s[0], ts), max(s[1], ts)
+    return counts, span, schemes
+
+
+def fmt_time(ts: int) -> str:
+    import datetime
+
+    return (
+        datetime.datetime.fromtimestamp(ts, tz=datetime.timezone.utc)
+        .astimezone()
+        .strftime("%H:%M:%S")
+    )
+
+
+def main() -> None:
+    p = argparse.ArgumentParser(
+        prog="mcp-probe", description="Which MCP methods did each client call?"
+    )
+    p.add_argument(
+        "--unit", default="binnacle-mcp", help="systemd user unit (no .service)"
+    )
+    p.add_argument("--since", default="-10 min", help="journalctl --since value")
+    p.add_argument("--until", help="journalctl --until value")
+    p.add_argument(
+        "--primitives",
+        action="store_true",
+        help="summarise which MCP primitives each client exercised",
+    )
+    args = p.parse_args()
+
+    counts, span, schemes = attribute(records(args.unit, args.since, args.until))
+    if not counts:
+        print(f"No MCP activity in {args.unit} since {args.since}.")
+        return
+
+    # Each request is logged twice (request_start and request_success), so halve.
+    print(f"MCP method usage — unit {args.unit}, since {args.since}\n")
+    for client in sorted(counts, key=lambda c: -sum(counts[c].values())):
+        label = KNOWN_CLIENTS.get(client, client)
+        lo, hi = span.get(client, [0, 0])
+        print(f"{client}  ({label})   {fmt_time(lo)}–{fmt_time(hi)}")
+        for method, n in sorted(counts[client].items()):
+            print(f"    {method:26} {max(1, n // 2):>4}")
+        if args.primitives:
+            sch = schemes.get(client, Counter())
+            ui_only = bool(sch.get("ui")) and not any(k for k in sch if k != "ui")
+            marks = []
+            for name, methods in PRIMITIVES.items():
+                ok = any(counts[client].get(m) for m in methods)
+                if name == "resources" and ok and ui_only:
+                    marks.append("resources=UI-ONLY")
+                else:
+                    marks.append(f"{name}={'YES' if ok else 'no'}")
+            print(f"    -> primitives exercised: {'  '.join(marks)}")
+            if sch:
+                print(
+                    "       resource URI schemes: "
+                    + ", ".join(f"{k}:// x{v}" for k, v in sorted(sch.items()))
+                )
+        print()
+
+
+if __name__ == "__main__":
+    main()

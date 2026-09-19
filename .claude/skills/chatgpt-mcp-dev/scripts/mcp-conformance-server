@@ -1,0 +1,262 @@
+#!/usr/bin/env python3
+"""A disposable MCP server that records what a client does with it.
+
+Exposes one of every primitive, then writes a JSON line for each JSON-RPC method
+a client calls. `mcp-conformance` reads that log and prints a verdict, so a
+client's capabilities are established from the wire, never from an agent's prose.
+
+The measurement does not depend on the model reasoning about anything: MCP
+clients run their own discovery (`tools/list`, `resources/list`,
+`resources/templates/list`, `prompts/list`) when a session starts, so merely
+starting a session with any trivial prompt is enough.
+
+Run:
+  mcp-conformance-server                    # 127.0.0.1:8899, log to default path
+  mcp-conformance-server --port 9001 --log /tmp/probe.jsonl
+  mcp-conformance-server --reset            # truncate the log first
+
+No auth, loopback only — it is a throwaway fixture, not a service.
+"""
+
+import argparse
+import json
+import logging
+import time
+from pathlib import Path
+
+from fastmcp import FastMCP
+from fastmcp.apps import AppConfig
+from fastmcp.server.middleware import Middleware
+
+DEFAULT_LOG = Path.home() / ".local" / "share" / "mcp-conformance" / "calls.jsonl"
+log = logging.getLogger(__name__)
+
+# Canaries let a use-path test tell a real read from a guess. They are fixed on
+# purpose: the log is the evidence, so they only need to be unguessable-ish.
+RESOURCE_CANARY = "r7c41e90"
+TEMPLATE_CANARY = "t2b95af1"
+PROMPT_CANARY = "p8d13c62"
+
+mcp = FastMCP(
+    "mcp-conformance",
+    instructions=(
+        "A conformance probe. Every primitive here exists to be counted, not "
+        "used for real work."
+    ),
+)
+
+
+class Recorder(Middleware):
+    """Append one JSON line per request, tagged with the calling client."""
+
+    def __init__(self, path: Path):
+        self.path = path
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.client = "unknown"
+
+    def _write(self, **fields) -> None:
+        with self.path.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps({"t": time.time(), **fields}) + "\n")
+
+    @staticmethod
+    def _as_dict(msg) -> dict:
+        """Serialise a request message to a plain dict.
+
+        Field names and nesting move between SDK versions, so reading attributes
+        off the model is brittle — mcp 1.x and 2.x disagree about where
+        `protocolVersion` and `clientInfo` live. Dumping once and reading keys
+        survives both.
+        """
+        for attempt in ("model_dump", "dict"):
+            fn = getattr(msg, attempt, None)
+            if callable(fn):
+                try:
+                    d = fn(by_alias=True)
+                    return d if isinstance(d, dict) else {}
+                except TypeError:
+                    try:
+                        d = fn()
+                        return d if isinstance(d, dict) else {}
+                    except Exception as exc:
+                        log.debug("message dump fallback failed", exc_info=exc)
+                except Exception as exc:
+                    log.debug("message dump failed", exc_info=exc)
+        return {}
+
+    @classmethod
+    def _handshake_fields(cls, msg) -> "tuple[str | None, str | None, str | None]":
+        """(client name, client version, protocolVersion) from an initialize."""
+        d = cls._as_dict(msg)
+        params = d.get("params") if isinstance(d.get("params"), dict) else d
+        info = params.get("clientInfo") or {}
+        if not isinstance(info, dict):
+            info = {}
+        return info.get("name"), info.get("version"), params.get("protocolVersion")
+
+    @staticmethod
+    def _modern_meta(msg) -> dict:
+        """Return the modern-era `_meta` envelope, or an empty dict.
+
+        There is no initialize in the modern era: a 2026-07-28 client announces
+        its version *and* its identity inside `params._meta`, under namespaced
+        keys. Looking only at a top-level `clientInfo` therefore sees nothing
+        and every modern client appears anonymous.
+        """
+        meta = getattr(msg, "meta", None) or getattr(msg, "_meta", None)
+        if meta is None:
+            params = getattr(msg, "params", None)
+            meta = getattr(params, "meta", None) if params else None
+        return meta if isinstance(meta, dict) else {}
+
+    async def on_message(self, context, call_next):
+        method = getattr(context, "method", None) or "?"
+        # One Recorder serves every connection, so identity must be re-read at
+        # each session start or a previous client's name leaks into the next.
+        if method in ("initialize", "server/discover"):
+            self.client = "unknown"
+        meta = self._modern_meta(getattr(context, "message", None))
+        modern = meta.get("io.modelcontextprotocol/protocolVersion")
+        if modern:
+            info = meta.get("io.modelcontextprotocol/clientInfo") or {}
+            if isinstance(info, dict) and info.get("name"):
+                self.client = info["name"]
+            self._write(
+                method=method,
+                client=self.client,
+                protocol=modern,
+                era="modern",
+                version=(info or {}).get("version"),
+            )
+            return await call_next(context)
+        if method == "initialize":
+            # The version a client asks for places it in an era: 2025-11-25 and
+            # earlier are legacy, 2026-07-28 is modern.
+            name, version, proto = self._handshake_fields(
+                getattr(context, "message", None)
+            )
+            if name:
+                self.client = name
+            self._write(
+                method=method,
+                client=self.client,
+                version=version,
+                protocol=proto,
+                era="legacy",
+            )
+        else:
+            msg = getattr(context, "message", None)
+            target = None
+            for attr in ("uri", "name"):
+                value = getattr(msg, attr, None) if msg else None
+                if value is not None:
+                    target = str(value)
+                    break
+            # Record the arguments exactly as they arrived, with their JSON
+            # types, so the report can show whether a client passed 5 or "5",
+            # dropped an optional, or invented a field.
+            raw = getattr(msg, "arguments", None) if msg else None
+            args = None
+            if isinstance(raw, dict):
+                args = {
+                    k: {"value": v, "type": type(v).__name__} for k, v in raw.items()
+                }
+            self._write(method=method, client=self.client, target=target, args=args)
+        return await call_next(context)
+
+
+# --- one of every primitive ------------------------------------------------
+
+
+@mcp.tool(annotations={"readOnlyHint": True, "openWorldHint": False})
+def probe_ping() -> str:
+    """Return pong. Present so the client has at least one tool to list."""
+    return "pong"
+
+
+@mcp.tool(
+    annotations={"readOnlyHint": False, "destructiveHint": True, "openWorldHint": False}
+)
+def probe_write(text: str) -> str:
+    """A no-op write tool, for checking how a client treats destructive hints."""
+    return f"pretended to write {len(text)} characters"
+
+
+@mcp.tool(annotations={"readOnlyHint": True, "openWorldHint": False})
+def probe_types(
+    text: str, count: int, flag: bool, items: "list[str] | None" = None
+) -> dict:
+    """Echo back the arguments received, to check argument fidelity.
+
+    Call it with exactly text="alpha", count=42, flag=true, items=["a","b"].
+    The recorder stores the JSON type of each argument, so the report can show
+    whether a client sent 42 or "42", coerced the boolean, or dropped the
+    optional list.
+    """
+    return {"text": text, "count": count, "flag": flag, "items": items}
+
+
+@mcp.resource("probe://card", name="Probe card", mime_type="text/plain")
+def probe_card() -> str:
+    """Data resource. Reading it proves the client consumes resources as data."""
+    return f"resource canary: {RESOURCE_CANARY}\n"
+
+
+@mcp.resource("probe://item/{name}", name="Probe item", mime_type="text/plain")
+def probe_item(name: str) -> str:
+    """Resource template."""
+    return f"template canary: {TEMPLATE_CANARY} (name={name})\n"
+
+
+@mcp.prompt(
+    name="probe_prompt",
+    title="Probe prompt",
+    description="Template that carries a canary.",
+)
+def probe_prompt(topic: str = "anything") -> str:
+    """Prompt. Getting it proves the client consumes prompts."""
+    return f"Discussing {topic}. Prompt canary: {PROMPT_CANARY}."
+
+
+PROBE_UI = (
+    '<div id="root">probe component</div>'
+    "<script>document.getElementById('root').textContent = "
+    "'MCP Apps component loaded';</script>"
+)
+
+
+@mcp.resource("ui://probe/panel", name="Probe panel", app=AppConfig())
+def probe_panel() -> str:
+    """MCP Apps UI resource — a different feature from probe://card."""
+    return PROBE_UI
+
+
+@mcp.tool(
+    annotations={"readOnlyHint": True, "openWorldHint": False},
+    app=AppConfig(resource_uri="ui://probe/panel"),
+)
+def probe_show_panel() -> dict:
+    """Render the probe UI component, for hosts that implement MCP Apps."""
+    return {"status": "ok"}
+
+
+def main() -> None:
+    p = argparse.ArgumentParser(prog="mcp-conformance-server")
+    p.add_argument("--host", default="127.0.0.1")
+    p.add_argument("--port", type=int, default=8899)
+    p.add_argument("--log", type=Path, default=DEFAULT_LOG)
+    p.add_argument("--reset", action="store_true", help="truncate the log first")
+    args = p.parse_args()
+
+    if args.reset and args.log.exists():
+        args.log.unlink()
+
+    mcp.add_middleware(Recorder(args.log))
+    print(
+        f"probe server on http://{args.host}:{args.port}/mcp  log={args.log}",
+        flush=True,
+    )
+    mcp.run(transport="http", host=args.host, port=args.port, show_banner=False)
+
+
+if __name__ == "__main__":
+    main()

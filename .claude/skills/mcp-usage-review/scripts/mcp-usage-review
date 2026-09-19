@@ -1,0 +1,315 @@
+#!/usr/bin/env python3
+"""Drive one measurement round of the MCP usage review loop.
+
+    mcp-usage-review report --since 2026-09-04 [--until D] [--save-baseline] [--force]
+                            [--repo ~/Projects/binnacle] [--out docs/usage-analysis-<today>.md]
+    mcp-usage-review baselines [--repo ...]        # list saved baselines
+
+`report` runs the repo's scripts/usage_breakdown.py (ChatGPT-attributed,
+test traffic excluded), loads the newest docs/usage-baselines/*.json, and
+writes a draft analysis doc: numbers and deltas filled in, narrative left
+as marked prompts. `--save-baseline` also stores this round's JSON as the
+next baseline. Exit 0 with the doc path on stdout.
+"""
+
+import argparse
+import json
+import os
+import subprocess
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+DEFAULT_REPO = Path.home() / "Projects" / "binnacle"
+
+
+def fail(msg: str) -> None:
+    print(f"mcp-usage-review: {msg}", file=sys.stderr)
+    raise SystemExit(1)
+
+
+def run_breakdown(repo: Path, since: str, until: str | None) -> dict:
+    py = repo / ".venv" / "bin" / "python"
+    cmd = [
+        str(py),
+        str(repo / "scripts" / "usage_breakdown.py"),
+        "--since",
+        since,
+        "--json",
+    ]
+    if until:
+        cmd += ["--until", until]
+    proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    if proc.returncode != 0:
+        fail(f"usage_breakdown failed: {proc.stderr.strip()[-400:]}")
+    return json.loads(proc.stdout)
+
+
+def newest_baseline(repo: Path) -> tuple[Path | None, dict | None]:
+    d = repo / "docs" / "usage-baselines"
+    files = sorted(d.glob("*.json")) if d.exists() else []
+    if not files:
+        return None, None
+    return files[-1], json.loads(files[-1].read_text())
+
+
+def pct(n: int, total: int) -> str:
+    return f"{100 * n / total:.1f}%" if total else "-"
+
+
+def delta(new: float, old: float | None) -> str:
+    if old is None:
+        return ""
+    d = new - old
+    return f" ({'+' if d >= 0 else ''}{d:g})"
+
+
+def table(rows: list[list[str]]) -> str:
+    w = [max(len(r[i]) for r in rows) for i in range(len(rows[0]))]
+    out = ["| " + " | ".join(c.ljust(w[i]) for i, c in enumerate(rows[0])) + " |"]
+    out.append("| " + " | ".join("-" * w[i] for i in range(len(rows[0]))) + " |")
+    for r in rows[1:]:
+        out.append("| " + " | ".join(c.ljust(w[i]) for i, c in enumerate(r)) + " |")
+    return "\n".join(out)
+
+
+def _read_file_line(cur: dict | None, base: dict | None) -> str:
+    if not cur:
+        return "no read_file data in this window"
+    keys = (
+        ("calls", "calls"),
+        ("distinct_files", "distinct files"),
+        ("reads_per_file_max", "max reads of one file"),
+        ("whole_file_reads", "whole-file reads"),
+        ("span_median", "median slice (lines)"),
+        ("span_p90", "p90 slice"),
+        ("longest_same_file_run", "longest same-file run"),
+        ("sequential_continuations", "sequential continuations"),
+    )
+    parts = []
+    for k, label in keys:
+        v = cur.get(k, 0)
+        parts.append(f"{label} {v}{delta(v, (base or {}).get(k))}")
+    return "; ".join(parts) + "."
+
+
+def _listings(rep: dict | None) -> int:
+    """job_status calls without a job_id; older baselines lack the key, derive it."""
+    if not rep:
+        return 0
+    js = rep.get("job_status", {})
+    if "listings" in js:
+        return js["listings"]
+    return max(rep.get("tools", {}).get("job_status", 0) - js.get("calls", 0), 0)
+
+
+def rc_bg(rep: dict | None) -> int:
+    return (rep or {}).get("run_command", {}).get("background", 0)
+
+
+def _turns_line(cur: dict | None, base: dict | None) -> str:
+    if not cur:
+        return "no turn data (tunnel log missing or no wfr_ ids in the window)"
+    base = base or {}
+    return (
+        f"{cur['turns']} turns, {cur['calls']} forwarded calls; calls per turn median "
+        f"{cur['calls_per_turn_median']}{delta(cur['calls_per_turn_median'], base.get('calls_per_turn_median'))}, "
+        f"p90 {cur['calls_per_turn_p90']}{delta(cur['calls_per_turn_p90'], base.get('calls_per_turn_p90'))}, "
+        f"max {cur['calls_per_turn_max']}{delta(cur['calls_per_turn_max'], base.get('calls_per_turn_max'))}; "
+        f"gap between calls inside a turn median {cur['gap_median_s']} s"
+        f"{delta(cur['gap_median_s'], base.get('gap_median_s'))}, p90 {cur['gap_p90_s']} s"
+        f"{delta(cur['gap_p90_s'], base.get('gap_p90_s'))}. One `wfr_` id is one serial agent turn; "
+        "forwarded calls include every RPC, so the total exceeds the attributed tool calls."
+    )
+
+
+def render(cur: dict, base: dict | None, base_path: Path | None, today: str) -> str:
+    window = cur["since"] + (f" to {cur['until']}" if cur.get("until") else " onward")
+    bwin = (
+        f"{base['since']}"
+        + (f" to {base['until']}" if base and base.get("until") else "")
+        if base
+        else "none"
+    )
+    lines = [
+        f"# Usage analysis, {today} — window {window}",
+        "",
+        "Source: `scripts/usage_breakdown.py` over the `binnacle-mcp` journal, calls",
+        "attributed to ChatGPT via the tunnel log, nonce-marked test traffic excluded.",
+        f"Baseline for deltas: `{base_path.name if base_path else 'none'}` ({bwin}).",
+        "",
+        "## 1. Tool mix",
+        "",
+    ]
+    tot, btot = cur["tool_calls"], (base or {}).get("tool_calls", 0)
+    rows = [["Tool", "Calls", "Share", "Baseline share"]]
+    for tool in sorted(
+        set(cur["tools"]) | set((base or {}).get("tools", {})),
+        key=lambda t: -cur["tools"].get(t, 0),
+    ):
+        n = cur["tools"].get(t := tool, 0)
+        bn = (base or {}).get("tools", {}).get(t, 0)
+        rows.append([t, str(n), pct(n, tot), pct(bn, btot) if base else "-"])
+    lines += [
+        f"Total tool calls: {tot}" + (f" (baseline {btot})" if base else ""),
+        "",
+        table(rows),
+        "",
+    ]
+    lines += ["Per day: " + ", ".join(f"{d} {n}" for d, n in cur["days"].items()), ""]
+
+    js, bjs = cur["job_status"], (base or {}).get("job_status", {})
+    lines += [
+        "## 2. job_status polling",
+        "",
+        (
+            f"{js['calls']} calls on {js['jobs']} jobs; median {js['median_per_job']} per job"
+            f"{delta(js['median_per_job'], bjs.get('median_per_job'))}, max {js['max_per_job']}"
+            f"{delta(js['max_per_job'], bjs.get('max_per_job'))}."
+        ),
+        (
+            f"Listings without a job_id: {_listings(cur)}"
+            f"{delta(_listings(cur), _listings(base) if base else None)} "
+            "(a habit, not a poll; run_command's synchronous result says no job was created)."
+        ),
+        "",
+        "## 2b. Calls per turn",
+        "",
+        _turns_line(cur.get("turns"), (base or {}).get("turns")),
+        "",
+        "## 3. New-parameter uptake",
+        "",
+    ]
+    up = cur["param_uptake"]
+    lines += [", ".join(f"`{k}` {v}" for k, v in sorted(up.items())) or "none", ""]
+    lines += [
+        f"`run_command.background=true` {rc_bg(cur)}{delta(rc_bg(cur), rc_bg(base) if base else None)}",
+        "",
+    ]
+    lines += [
+        "> Zero uptake with an unchanged metric means the model never noticed the",
+        "> parameter: fix the tool description before touching code.",
+        "",
+    ]
+
+    rc, brc = cur["run_command"], (base or {}).get("run_command", {})
+    rows = [["Trait", "Calls", "Share of run_command", "Baseline"]]
+    for k in sorted(
+        set(rc["traits"]) | set(brc.get("traits", {})),
+        key=lambda k: -rc["traits"].get(k, 0),
+    ):
+        n = rc["traits"].get(k, 0)
+        bn = brc.get("traits", {}).get(k)
+        rows.append(
+            [
+                k,
+                str(n),
+                pct(n, rc["calls"]),
+                f"{bn} ({pct(bn, brc.get('calls', 0))})" if bn is not None else "-",
+            ]
+        )
+    lines += [
+        "## 4. run_command traits",
+        "",
+        f"{rc['calls']} run_command calls with a visible command.",
+        "",
+        table(rows),
+        "",
+    ]
+    lines += [
+        "`hand-tail` is what `run_command.tail_lines` replaces; `hand-head` (first lines) has no",
+        "parameter. `grep-on-files` counts a grep that starts a segment, not one after a pipe",
+        "(rule fixed 2026-09-13; earlier baselines used a looser rule, compare the grep line).",
+        "",
+    ]
+    g, bg = cur["grep"], (base or {}).get("grep", {})
+    lines += [
+        (
+            f"grep: {g.get('direct_on_files', 0)} on files"
+            f"{delta(g.get('direct_on_files', 0), bg.get('direct_on_files'))}, "
+            f"{g.get('pipeline_filter', 0)} filtering command output"
+            f"{delta(g.get('pipeline_filter', 0), bg.get('pipeline_filter'))}."
+        ),
+        "",
+        "## 5. read_file slices",
+        "",
+        _read_file_line(cur.get("read_file"), (base or {}).get("read_file")),
+        "",
+        "## 6. git subcommands",
+        "",
+        ", ".join(f"{k} {v}" for k, v in cur["git_subcommands"].items()) or "none",
+        "",
+        "## 7. Reading of the numbers",
+        "",
+        "<!-- FILL: what moved, what did not, and the mechanism behind each (batching,",
+        "     anchored reads, pipeline filtering). Sample raw commands before naming a",
+        "     category; see the skill's references/process-lessons.md. -->",
+        "",
+        "## 8. Candidates, ranked by calls absorbed",
+        "",
+        "<!-- FILL: one line each: target count, mechanism, what it cannot fix. Check the",
+        "     tool's current schema first. Deferred by the user in earlier rounds: git",
+        "     read tools, read_file(revision), run_python, hiding search_text. -->",
+        "",
+    ]
+    return "\n".join(lines)
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(
+        prog="mcp-usage-review", description="MCP usage review loop."
+    )
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    rep = sub.add_parser("report", help="measure a window and draft the analysis doc")
+    rep.add_argument("--since", required=True)
+    rep.add_argument("--until")
+    rep.add_argument("--repo", type=Path, default=DEFAULT_REPO)
+    rep.add_argument(
+        "--out", type=Path, help="doc path (default docs/usage-analysis-<today>.md)"
+    )
+    rep.add_argument(
+        "--save-baseline", action="store_true", help="also store this round's JSON"
+    )
+    rep.add_argument(
+        "--stdout", action="store_true", help="print the doc instead of writing it"
+    )
+    rep.add_argument("--force", action="store_true", help="overwrite an existing doc")
+    bl = sub.add_parser("baselines", help="list saved baselines")
+    bl.add_argument("--repo", type=Path, default=DEFAULT_REPO)
+    a = ap.parse_args()
+
+    repo = a.repo.expanduser()
+    if a.cmd == "baselines":
+        d = repo / "docs" / "usage-baselines"
+        for f in sorted(d.glob("*.json")) if d.exists() else []:
+            b = json.loads(f.read_text())
+            print(
+                f"{f.name}  window {b['since']}..{b.get('until') or ''}  calls {b['tool_calls']}"
+            )
+        return
+
+    today = datetime.now(timezone.utc).astimezone().date().isoformat()
+    cur = run_breakdown(repo, a.since, a.until)
+    base_path, base = newest_baseline(repo)
+    doc = render(cur, base, base_path, today)
+    if a.stdout:
+        print(doc)
+    else:
+        out = a.out or repo / "docs" / f"usage-analysis-{today}.md"
+        if out.exists() and not a.force:
+            fail(
+                f"{out} exists; pass --force to overwrite it or --out for another path"
+            )
+        out.write_text(doc + "\n")
+        print(out)
+    if a.save_baseline:
+        bdir = repo / "docs" / "usage-baselines"
+        bdir.mkdir(parents=True, exist_ok=True)
+        bpath = bdir / f"{today}.json"
+        bpath.write_text(json.dumps(cur, indent=2) + "\n")
+        print(f"baseline saved: {bpath}", file=sys.stderr)
+
+
+if __name__ == "__main__":
+    os.environ.setdefault("PYTHONUNBUFFERED", "1")
+    main()
