@@ -102,7 +102,7 @@ ignore-words-list = "aci"
 
 [tool.deptry]
 # The dist name is binnacle-mcp; the import package is binnacle.
-known_first_party = ["binnacle"]
+known_first_party = ["binnacle", "scripts"]
 # Agent tooling with its own conventions and imports, not server code.
 extend_exclude = ["\\.claude", "\\.tox", "build", "dist"]
 

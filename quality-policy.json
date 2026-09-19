@@ -8,7 +8,6 @@
       "tests"
     ],
     "legacy_oversize": {
-      "scripts/usage_breakdown.py": 578,
       "src/binnacle/watchdog.py": 4046,
       "tests/integration/test_jobs.py": 1000,
       "tests/system/test_watchdog.py": 4018
