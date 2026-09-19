@@ -1,0 +1,224 @@
+# Logging: what the journal records, and how to review the server from it
+
+Status 2026-09-13. Code: `src/binnacle/logging_middleware.py` (request and
+tool records), `src/binnacle/jobs.py` (job records), `src/binnacle/server.py`
+(startup record, root handler format), `src/binnacle/callctx.py` (the call
+id shared by the middleware and the job store). Readers:
+`src/binnacle/logstats.py` (`binnacle stats`) and `scripts/usage_breakdown.py`
+(the `mcp-usage-review` measurement). Both read every line shape back to
+2026-08-29.
+
+## 1. Two line shapes in one journal
+
+| Source | Logger | Handler | Shape in `journalctl -o cat` |
+| --- | --- | --- | --- |
+| fastmcp `LoggingMiddleware` (our `RequestLoggingMiddleware` subclass) | `fastmcp.middleware.logging` | fastmcp's rich handler | `[MM/DD/YY HH:MM:SS] INFO     event=request_start   logging.py:122` plus indented continuation lines wrapped at about 36 columns, anywhere, including inside tokens; the timestamp is printed once per second |
+| fastmcp itself | `fastmcp.server.server` | rich handler | `[..] Error calling tool 'read_file'`, `Invalid arguments for tool ...` |
+| binnacle (`binnacle.results`, `binnacle.jobs`, `binnacle.server`) and the MCP SDK (`mcp.*`) | root | `logging.basicConfig` | one line, never wrapped: `INFO: event=...` until 2026-09-13, then `2026-09-13T22:40:11.123 INFO: event=...` (local time, milliseconds) |
+| uvicorn | `uvicorn.*` | uvicorn's own | `INFO:     127.0.0.1:52674 - "POST /mcp HTTP/1.1" 200 OK`, `Application startup complete.`, `WatchFiles detected changes in ...` |
+
+The root-handler timestamp was added because `-o cat` output has no
+journald timestamp and the rich timestamp only lands on the first record
+of each second; the parsers carried the last seen rich timestamp over to
+every plain line, so a job or result line could be attributed to the wrong
+second.
+
+## 2. Inventory of records (after this change; "since" is the first day in the journal)
+
+| event | Emitted by | Fields | Since |
+| --- | --- | --- | --- |
+| `request_start` | `RequestLoggingMiddleware` (fastmcp base) | `method source payload(500 chars) payload_type request_id session client [tool]` | 08-29 (`request_id session client tool` from 09-02) |
+| `request_success` | same | `method source duration_ms request_id session client [tool]` | 08-29 |
+| `request_error` | same, level ERROR | `method source duration_ms error=<text> request_id session client [tool]` | 08-29 |
+| `notification_start` / `notification_success` | same | `method source payload ...` | 08-29 |
+| `tool_call` | `ToolLoggingMiddleware` | `call tool client session request_id [turn] [oai_session] args_chars args=<json, 500 chars>` | 09-13 |
+| `tool_result` | `ToolLoggingMiddleware`; level WARNING when `is_error=True` | `call tool client session request_id [turn] [oai_session] duration_ms is_error` then either `content_chars structured_bytes est_tokens` plus the lifted result keys, or `error_class error=<text, 200 chars>` | 09-02 (`tool client request_id is_error content_chars` only, never fired on an error) |
+| `job_start` | `jobs.start_job` | `job_id pid command(60 chars, repr) workdir call` | 09-02 (`call` from 09-13) |
+| `search_budget_hit` | `tools.search_text`; INFO | `call result_bytes result_budget_bytes returned_entries total_matches names_only` | 09-19 |
+| `job_listing` | `tools.job_status`; INFO | `call recorded_jobs returned_jobs running_jobs history_limit command_preview_chars` | 09-19 |
+| `job_status_timing` | `tools.job_status`; INFO | `call job_id wait_requested_s dispatch_ms state_ms read_log_ms process_scan_ms impl_ms state processes log_bytes` | 09-19 |
+| `job_exit` | `jobs.record_exit` (the request thread, or the reaper thread for a job that outlived its wait) | `job_id exit_code signal runtime_s log_bytes` | 09-02 (`runtime_s log_bytes` from 09-13) |
+| `job_exit_unrecorded` | `jobs.record_exit`, level WARNING, job dir vanished before the exit was written | `job_id exit_code signal` | 09-02 |
+| `jobs_pruned` | `jobs._prune`, on every prune that removed or skipped something | `removed skipped_running keep_newest reserve effective_keep` | 09-02 (`reserve effective_keep` from 09-19) |
+| `config` | `server.log_effective_config`, once per (re)start | `pid version roots jobs_dir keep_newest client_tools rg_bin` | 09-02 (`pid version` from 09-13) |
+
+Lifted result keys (`RESULT_KEYS`, only when the tool's `structured_content`
+has them; list-valued `entries`, `jobs`, `processes` are logged as their
+length): `job_id state exit_code signal background_job truncated count
+total_lines start_line end_line lines_clipped kind output_bytes log_bytes
+quiet waited_s replacements action bytes`. Booleans are `true`/`false`,
+absent values `null`; `is_error` keeps its 09-02 spelling `True`/`False`.
+
+Argument JSON in `tool_call` is compact, non-string values first and strings
+shortest first, so `wait_seconds`, `tail_lines`, `start_line`, `path` stay
+visible when a long `command` or `content` runs past the 500-char clip
+(`request_start` clips the payload as a whole and loses those keys in 70%
+of run_command calls, docs/tool-cost-2026-09-13.md §4). `args_chars` is the
+unclipped length.
+
+Not logged, by design: the bearer token (a header; `get_http_headers()`
+strips `authorization`), any result text (`tool_result` carries sizes and
+scalar facts only), the values of `X-Openai-Session` (hashed) and
+`X-Openai-Subject` (dropped).
+
+## 3. What the 2026-09-02 round claimed, checked against code and journal
+
+| Claim | Found |
+| --- | --- |
+| request ids on middleware lines | Present. For ChatGPT every one is `request_id=0`: it opens a new MCP session per call (1762 sessions today), so only `(session, request_id)` pairs a start with its success. |
+| job lifecycle lines | Present (`job_start`, `job_exit`, `jobs_pruned`, `job_exit_unrecorded`). |
+| resolved client name | Present (`client=openai-mcp`, `claude-code`, `codex-mcp-client`, `mcp`; one variant `openai-mcp (Codex)` has a space). |
+| response summaries | Present but useless: `content_chars` measured the one-line summary (median 126 chars for run_command) because the payload is `structured_content`; and no line was ever written for an error (0 `is_error=True` in 15 days against 29 `request_error`), because errors reach the middleware as exceptions. |
+| startup config line | Present; 122 in the last two days, one per `--reload` (the uvicorn watcher reloads on any `.py` save under the repo, `tests/` included). |
+
+## 4. What a review needs, and where it comes from now
+
+| Need | Before | Now |
+| --- | --- | --- |
+| Correlate one call across lines | `(session, request_id)` on the rich lines only; `job_start` unlinked | `call=` on `tool_call`, `tool_result`, `job_start`; `job_id=` on the run_command result, the job lines and the `job_status`/`stop_job` arguments |
+| Correlate with a ChatGPT turn | Timestamp match (±2 s) against the tunnel log's `cmd_request_id` | `turn=wfr_<turn>/<call>` from the request's `X-Request-Id` (the same id the tunnel logs); the part before `/` is one agent turn |
+| Per-call latency | `duration_ms` on `request_success`, paired by order or id | `duration_ms` on `tool_result` |
+| Size of what the model receives | Not measurable | `content_chars` (text blocks) + `structured_bytes` (compact JSON, UTF-8) + `est_tokens` = (chars)/4 (an estimate; no tokenizer) |
+| Error classification | `request_error` text, ERROR level, class unknown | `is_error=True error_class=ToolError` (or NotFoundError, ValidationError, ...) `error=message` at WARNING; cancellations are recorded too |
+| Truncation and clipping | Nothing | `truncated` (all four file/search tools and run_command's head/tail clip or `tail_lines` drop), `lines_clipped`, `start_line/end_line/total_lines` (read_file window), `count` vs `entries` (search cap), `output_bytes` vs the clip; `tail_lines`, `max_results` visible in `args` |
+| Background jobs and outcomes | `job_start`/`job_exit` by `job_id`, exit code only | `background_job=true` and `state` on the result; `job_exit` adds `runtime_s`, `log_bytes`; `job_start` names the call |
+| Client identity | `client=` on rich lines | `client=` on every plain line too; `oai_session=` (12-hex SHA-256 prefix of `X-Openai-Session`) groups calls of one ChatGPT session |
+| Restarts | uvicorn's `Application startup complete` | plus `config pid=... version=...` |
+
+Measured on the live headers (loopback capture, 2026-09-13 22:20): the tunnel
+forwards `X-Request-Id: wfr_<turn>/<call>`, `Mcp-Method`, `Mcp-Name`,
+`Mcp-Protocol-Version`, `Traceparent`/`Tracestate`, `X-Datadog-Trace-Id`
+(one per turn), `X-Datadog-Parent-Id` (one per call), `X-Openai-Session`
+(one value across the sampled turn), `X-Openai-Subject`, `X-Openai-Pod-Uid`,
+`X-Forwarded-Client-Cert`, `X-Origin-Ingress-Name`. No header carries the
+ChatGPT conversation id. Local agents send none of these.
+
+## 5. Record format, from the live journal (2026-09-13 22:36, `scripts/mcp_client.py`)
+
+```text
+2026-09-13T22:36:10.162 INFO: event=tool_call call=682a831a7f11 tool=read_file client=mcp session=93b248d2fabe request_id=2 args_chars=53 args={"end_line":5,"path":"~/Projects/binnacle/README.md"}
+2026-09-13T22:36:10.165 INFO: event=tool_result call=682a831a7f11 tool=read_file client=mcp session=93b248d2fabe request_id=2 duration_ms=2.43 is_error=False content_chars=105 structured_bytes=444 est_tokens=137 truncated=false total_lines=7 start_line=1 end_line=5 kind=text bytes=284
+2026-09-13T22:36:12.358 INFO: event=tool_call call=d6d5fa0c10f0 tool=run_command client=mcp session=9accc7183c0a request_id=2 args_chars=40 args={"workdir":"/tmp","command":"printf hi"}
+2026-09-13T22:36:12.362 INFO: event=job_start job_id=23ba8dcd6ae3 pid=1005608 command='printf hi' workdir=/tmp call=d6d5fa0c10f0
+2026-09-13T22:36:12.364 INFO: event=job_exit job_id=23ba8dcd6ae3 exit_code=0 signal=None runtime_s=0.002 log_bytes=2
+2026-09-13T22:36:12.364 INFO: event=tool_result call=d6d5fa0c10f0 tool=run_command client=mcp session=9accc7183c0a request_id=2 duration_ms=5.90 is_error=False content_chars=126 structured_bytes=244 est_tokens=92 job_id=23ba8dcd6ae3 state=exited exit_code=0 background_job=false truncated=false output_bytes=2
+2026-09-13T22:36:14.349 INFO: event=tool_call call=40700a1bc25e tool=read_file client=mcp session=cd316d7fc612 request_id=2 args_chars=22 args={"path":"/etc/passwd"}
+2026-09-13T22:36:14.350 WARNING: event=tool_result call=40700a1bc25e tool=read_file client=mcp session=cd316d7fc612 request_id=2 duration_ms=1.52 is_error=True error_class=ToolError error=Path outside allowed roots (/home/grammy-jiang/Projects, /tmp): /etc/passwd
+```text
+
+A request that carries the tunnel's headers (here a direct HTTP call sending
+them; a ChatGPT call looks the same with a real `wfr_` id) adds the two
+correlation fields after `request_id=`:
+
+```text
+2026-09-13T22:36:37.715 INFO: event=tool_call call=3ca0a738d533 tool=read_file client=mcp session=8314e3d09386 request_id=2 turn=wfr_headertest0000/ab12 oai_session=71334a33b178 args_chars=53 args={"end_line":2,"path":"~/Projects/binnacle/README.md"}
+```text
+
+A job that outlives its wait window: the result says `state=running
+background_job=true`, and the `job_exit` line arrives later, written by
+the reaper thread (in-memory example, 2026-09-13 22:26):
+
+```text
+2026-09-13T22:26:54.491 INFO: event=job_start job_id=4b00d564522e pid=980398 command='sleep 3; echo done' workdir=/tmp call=2a94f3464a7d
+2026-09-13T22:26:55.490 INFO: event=tool_result call=2a94f3464a7d tool=run_command client=mcp session=eb2e79f66ef5 request_id=10 duration_ms=1003.19 is_error=False content_chars=97 structured_bytes=227 est_tokens=81 job_id=4b00d564522e state=running background_job=true truncated=false output_bytes=0
+2026-09-13T22:26:57.495 INFO: event=job_exit job_id=4b00d564522e exit_code=0 signal=None runtime_s=3.003 log_bytes=5
+```text
+
+First measurement the new fields allowed: a `job_status` call without a
+`job_id` (the recent-jobs listing, 51 jobs) returned `structured_bytes=12327
+est_tokens=3087`; ChatGPT made 50 such calls in one week
+(docs/usage-analysis-2026-09-06.md).
+
+## 6. Review recipes
+
+```text
+# every call with its size and outcome, one line each
+journalctl --user -u binnacle-mcp --since -1day -o cat | grep 'event=tool_result'
+# one ChatGPT turn end to end
+journalctl --user -u binnacle-mcp --since -1day -o cat | grep 'turn=wfr_01a09ab0ab6a7b8483396aba1bde22d1'
+# errors by class
+journalctl --user -u binnacle-mcp --since -7days -o cat | grep -o 'tool=[a-z_]* .*error_class=[A-Za-z]*' | sed 's/ .* error_class=/ /' | sort | uniq -c
+# the largest results
+journalctl --user -u binnacle-mcp --since -7days -o cat | grep -o 'tool=[a-z_]* .*est_tokens=[0-9]*' | sed -E 's/ .* est_tokens=/ /' | sort -k2 -n | tail
+# a job from spawn to exit
+journalctl --user -u binnacle-mcp --since -1day -o cat | grep 'job_id=e0e329ac0185'
+```
+
+`binnacle stats --since="-7 days"` adds: result size by tool (est_tokens
+n / p50 / p90 / max / total), truncated results by tool, tool errors by
+class, job exits by code, run_command results that became jobs, ChatGPT
+turns with calls per turn. `scripts/usage_breakdown.py --json` adds
+`results` (per tool: calls, est_tokens median/p90/max/total, truncated,
+errors; errors_by_class; latency_ms; became_jobs; job_exits) and
+`turns_journal`; the existing keys are unchanged and the baselines in
+`docs/usage-baselines/` stay comparable.
+
+## 7. Still not in the journal
+
+- True token counts: `est_tokens` is chars/4 (no tokenizer dependency).
+- The ChatGPT conversation id and the user's prompt: no header carries them.
+- Whether ChatGPT gave up on a call (its 60 s cap): only the tunnel log
+  (`poll failed`) sees that side; a `tool_call` without a `tool_result`
+  means the server never answered (crash or reload mid-call).
+- Rejected authentication: uvicorn access lines (`401 Unauthorized`) only.
+
+## 8. Proposed settings (module constants in `logging_middleware.py` until config.py is free)
+
+| Constant | Value | Meaning |
+| --- | --- | --- |
+| `ARGS_MAX_CHARS` | 500 | clip of `args=` (same as the rich payload clip) |
+| `ERROR_MAX_CHARS` | 200 | clip of `error=` |
+| `HEADER_MAX_CHARS` | 80 | clip of a lifted header value |
+| `CORRELATION_HEADERS` | `{"x-request-id": "turn"}` | headers copied verbatim |
+| `HASHED_HEADERS` | `{"x-openai-session": "oai_session"}` | headers logged as a SHA-256 prefix |
+| `RESULT_KEYS`, `RESULT_LIST_KEYS` | see §2 | `structured_content` keys lifted into `tool_result` |
+
+## 9. Parser compatibility
+
+`logstats.parse` recognizes both plain shapes (`INFO: event=` and the
+timestamped form) as records of their own; rich records parse as before.
+`analyze` fills the new `Stats` fields only from lines that carry the new
+keys (an old `tool_result` line has no `est_tokens` and counts nowhere),
+so a window before 2026-09-13 renders as it did. `usage_breakdown.py`
+counts a call once: the `tool_call` record wins over the `request_start`
+record with the same `(session, request_id)`, and a window without
+`tool_call` records takes the old path unchanged (verified: identical JSON
+for 2026-09-12..13 before and after the change). Tests:
+`tests/integration/test_logging.py`, `tests/unit/core/test_logstats.py`, `tests/scripts/test_usage_breakdown.py`.
+
+## 10. Indexed-context pilot records (2026-09-19)
+
+The development `search_text('@context ...')` pilot adds dedicated single-line
+telemetry without changing `tool_call`/`tool_result`.
+
+| event | Fields |
+| --- | --- |
+| `search_dispatch` | `call mode path_hash pattern_chars` (`mode` is `exact` or `indexed`) |
+| `index_context` | `call root_hash query_hash query_chars head generation cold_open open_ms reconcile_ms freshness_ms changed_files deleted_files hashed_files query_ms surface_ms total_ms files nodes edges db_bytes related_items direct_items package_items package_bytes package_est_tokens evidence_hashes` |
+| `index_context_error` | `call root_hash phase error_class error total_ms` |
+
+`query_hash`, `root_hash`, `path_hash`, and `evidence_hashes` are short SHA-256
+prefixes used only for grouping/correlation. Query text and result excerpts are not
+added to these telemetry records. `evidence_hashes` lets the pilot analyzer match a
+later `read_file` or file-scoped exact search to an indexed candidate without logging
+the returned source text.
+
+The startup `config` record also carries `indexed_context`, `indexed_reconcile`, and
+`indexed_max_open`, so a review can prove which service configuration produced a
+measurement window.
+
+Review normally with:
+
+```text
+binnacle stats --since "7 days ago"
+```
+
+The existing stats command automatically appends an indexed-context section when
+these records are present. For detailed JSON/per-call rows, use:
+
+```text
+scripts/analyze_indexed_pilot.py --since '7 days ago' --json
+```
+
+Both use the same `binnacle.logstats` analysis code. See
+`docs/indexed-context-pilot.md` for interpretation and rollout/rollback policy.

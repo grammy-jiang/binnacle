@@ -3,3 +3,5 @@
 # https://github.com/DavidAnson/markdownlint/blob/main/doc/Rules.md
 default: true # enable all rules, then relax below
 MD013: false # no fixed line-length limit -- prose, tables, and links wrap freely
+MD024:
+  siblings_only: true # allow repeated Problem/Change/Effect under different sections
