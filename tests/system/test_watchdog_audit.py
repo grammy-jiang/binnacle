@@ -332,21 +332,11 @@ def test_no_route_rung_waits_the_longer_threshold():
 
 
 def test_the_suite_never_changes_the_host():
-    """The conftest guard refuses mutating commands; a real `nmcli
-    connection up` from a test fails the test (the 2026-09-13 23:49 lesson)."""
-    import subprocess as sp
-
-    proc = sp.run(
-        ["nmcli", "-t", "-f", "DEVICE", "device", "status"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert "blocked" not in proc.stderr  # a read-only command still runs
-    # tests/ is an explicit local package, so this import cannot resolve to
-    # a third-party package that also happens to be named tests.
+    """Classify read-only nmcli as safe and mutating nmcli as forbidden
+    without requiring NetworkManager to exist on the test host."""
     from tests.conftest import _is_mutating
 
+    assert not _is_mutating(["nmcli", "-t", "-f", "DEVICE", "device", "status"])
     assert _is_mutating(["nmcli", "connection", "up", "id", "x", "ifname", "wlan1"])
     assert _is_mutating(["sudo", "-n", "sh", "-c", "echo 0 > /sys/x"])
     assert _is_mutating(["systemctl", "--user", "restart", "binnacle-tunnel.service"])

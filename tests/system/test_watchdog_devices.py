@@ -10,6 +10,7 @@ from tests.watchdog_support import (
     healthy,
     kinds,
     nm_fake,
+    patch_usb_node_of,
     pref,
     wd,
     wd_hardware,
@@ -37,9 +38,8 @@ def test_observe_devices_collects_link_and_usb_facts(tmp_path, monkeypatch):
     node.mkdir()
     (node / "speed").write_text("480\n")
     monkeypatch.setattr(wd_hardware, "USB_DEVICES", tmp_path)
-    monkeypatch.setattr(
-        wd,
-        "usb_node_of",
+    patch_usb_node_of(
+        monkeypatch,
         lambda dev: ("2-1", "0bda:8812") if dev == "wlan1" else (None, None),
     )
     run, _ = nm_fake(

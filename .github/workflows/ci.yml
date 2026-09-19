@@ -75,6 +75,7 @@ jobs:
       - name: Prepare Binnacle test host
         run: |
           mkdir -p "$HOME/.config/binnacle" "$HOME/Projects"
+          ln -s "$GITHUB_WORKSPACE" "$HOME/Projects/binnacle"
           printf 'Bearer ci-test-token\n' > "$HOME/.config/binnacle/token"
           chmod 600 "$HOME/.config/binnacle/token"
 
@@ -108,6 +109,7 @@ jobs:
       - name: Prepare Binnacle test host
         run: |
           mkdir -p "$HOME/.config/binnacle" "$HOME/Projects"
+          ln -s "$GITHUB_WORKSPACE" "$HOME/Projects/binnacle"
           printf 'Bearer ci-test-token\n' > "$HOME/.config/binnacle/token"
           chmod 600 "$HOME/.config/binnacle/token"
 

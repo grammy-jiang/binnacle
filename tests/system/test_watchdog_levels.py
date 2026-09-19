@@ -24,6 +24,7 @@ from tests.watchdog_support import (
     routes_demoted,
     usb_devices,
     wd,
+    wd_actions,
     wedged,
 )
 
@@ -104,7 +105,7 @@ def test_usb_link_repair_backs_off_and_gives_up():
     run, _ = recording_nmcli()
     fired: list[float] = []
     now = 0.0
-    with mock.patch.object(wd, "usb_reset_device", return_value=(True, "ok")):
+    with mock.patch.object(wd_actions, "usb_reset_device", return_value=(True, "ok")):
         for _ in range(6):
             while True:
                 now += 30.0
