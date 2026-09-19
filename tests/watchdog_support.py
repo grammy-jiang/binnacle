@@ -13,7 +13,9 @@ from binnacle.ops.watchdog import actions as wd_actions
 from binnacle.ops.watchdog import cycle as wd_cycle
 from binnacle.ops.watchdog import hardware as wd_hardware
 from binnacle.ops.watchdog import inventory as wd_inventory
+from binnacle.ops.watchdog import maintenance as wd_maintenance
 from binnacle.ops.watchdog import network as wd_network
+from binnacle.ops.watchdog import services as wd_services
 from binnacle.ops.watchdog import tunnel as wd_tunnel
 from binnacle.uplink import ProbeResult, Route
 
@@ -48,6 +50,7 @@ __all__ = [
     "obs",
     "outage",
     "pairwise",
+    "patch_http_alive",
     "patch_usb_node_of",
     "pref",
     "preference_demotion",
@@ -70,6 +73,19 @@ WLAN1 = Route(dev="wlan1", gateway="192.168.50.1", src="192.168.50.197", metric=
 WLAN0 = Route(dev="wlan0", gateway="192.168.50.1", src="192.168.50.222", metric=600)
 
 ROUTES = [WLAN1, WLAN0]
+
+
+def patch_http_alive(monkeypatch, func) -> None:
+    """Patch HTTP health at the real post-refactor service/tunnel seams."""
+
+    observe = wd_services.observe_services
+    monkeypatch.setattr(
+        wd_maintenance,
+        "observe_services",
+        lambda policy, run: observe(policy, run, alive=func),
+    )
+    monkeypatch.setattr(wd_tunnel, "http_alive", func)
+    monkeypatch.setattr(wd, "http_alive", func, raising=False)
 
 
 def patch_usb_node_of(monkeypatch, func) -> None:

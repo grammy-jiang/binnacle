@@ -16,6 +16,7 @@ from tests.watchdog_support import (
     json,
     kinds,
     nm_fake,
+    patch_http_alive,
     patch_usb_node_of,
     routes_demoted,
     socket_fake,
@@ -322,7 +323,7 @@ def test_cycle_line_carries_the_tunnel_device_and_the_fast_pulse(
     monkeypatch.setattr(wd.uplink, "read_default_routes", lambda run: (THREE, True))
     monkeypatch.setattr(wd.uplink, "probe_all", lambda rs, **kw: all_healthy())
     patch_usb_node_of(monkeypatch, lambda dev: (None, None))
-    monkeypatch.setattr(wd, "http_alive", lambda url, timeout=5.0: True)
+    patch_http_alive(monkeypatch, lambda url, timeout=5.0: True)
     inner, calls = nm_fake()
     run = socket_fake(inner, ss=SS_ON_WLAN2)
     state = wd.State()

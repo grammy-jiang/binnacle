@@ -17,6 +17,7 @@ from tests.watchdog_support import (
     mock,
     nm_fake,
     pairwise,
+    patch_http_alive,
     patch_usb_node_of,
     pref,
     recording_nmcli,
@@ -387,7 +388,7 @@ def test_cycle_observes_devices_records_levels_and_issues(tmp_path, monkeypatch)
     )
     patch_usb_node_of(monkeypatch, lambda dev: (None, None))
     # the service rung is on here: never let it probe the host's real server
-    monkeypatch.setattr(wd, "http_alive", lambda url, timeout=5.0: True)
+    patch_http_alive(monkeypatch, lambda url, timeout=5.0: True)
     run, calls = nm_fake(
         profiles="wlan1:Occom-USB\n",
         connections=(
