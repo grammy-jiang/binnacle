@@ -46,7 +46,6 @@
     "temporary_floors": {
       "unit": {
         "src/binnacle/indexed_retrieval.py": 33.01,
-        "src/binnacle/indexed_surface.py": 21.73,
         "src/binnacle/logstats.py": 79.57
       },
       "full": {
