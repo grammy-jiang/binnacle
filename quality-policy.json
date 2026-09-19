@@ -10,7 +10,6 @@
     "legacy_oversize": {
       "scripts/usage_breakdown.py": 578,
       "src/binnacle/indexed_retrieval.py": 1272,
-      "src/binnacle/logstats.py": 699,
       "src/binnacle/watchdog.py": 4046,
       "tests/integration/test_jobs.py": 1000,
       "tests/system/test_watchdog.py": 4018
@@ -42,8 +41,7 @@
     ],
     "temporary_floors": {
       "unit": {
-        "src/binnacle/indexed_retrieval.py": 33.01,
-        "src/binnacle/logstats.py": 79.57
+        "src/binnacle/indexed_retrieval.py": 33.01
       },
       "full": {
         "src/binnacle/cli.py": 84.76,

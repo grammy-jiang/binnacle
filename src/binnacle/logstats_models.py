@@ -1,0 +1,68 @@
+"""Data models for journal usage statistics."""
+
+from collections import Counter, defaultdict
+from dataclasses import dataclass, field
+from typing import Any
+
+
+@dataclass
+class Record:
+    event: str
+    body: str
+    day: str | None = None
+    time: str | None = None
+
+
+@dataclass
+class IndexedContextStats:
+    successes: int = 0
+    errors: int = 0
+    error_phases: Counter = field(default_factory=Counter)
+    pilot_versions: Counter = field(default_factory=Counter)
+    schema_versions: Counter = field(default_factory=Counter)
+    parser_versions: Counter = field(default_factory=Counter)
+    cold_opens: int = 0
+    changed_files: int = 0
+    evidence_opened: int = 0
+    evidence_reads: int = 0
+    evidence_file_searches: int = 0
+    result_tokens: list[int] = field(default_factory=list)
+    package_est_tokens: list[int] = field(default_factory=list)
+    package_bytes: list[int] = field(default_factory=list)
+    package_items: list[int] = field(default_factory=list)
+    total_ms: list[float] = field(default_factory=list)
+    reconcile_ms: list[float] = field(default_factory=list)
+    query_ms: list[float] = field(default_factory=list)
+    followup_calls: list[int] = field(default_factory=list)
+    followup_exact_searches: list[int] = field(default_factory=list)
+    followup_reads: list[int] = field(default_factory=list)
+    followup_result_tokens: list[int] = field(default_factory=list)
+    investigation_result_tokens: list[int] = field(default_factory=list)
+    rows: list[dict[str, Any]] = field(default_factory=list)
+
+
+@dataclass
+class Stats:
+    records: int = 0
+    startups: int = 0
+    events: Counter = field(default_factory=Counter)
+    methods: Counter = field(default_factory=Counter)
+    tools: Counter = field(default_factory=Counter)
+    clients: Counter = field(default_factory=Counter)
+    commands: Counter = field(default_factory=Counter)
+    areas: Counter = field(default_factory=Counter)
+    per_day: Counter = field(default_factory=Counter)
+    per_hour: Counter = field(default_factory=Counter)
+    durations: dict = field(default_factory=lambda: defaultdict(list))
+    errors: list = field(default_factory=list)
+    # From the single-line tool_call / tool_result / job_exit records
+    # (2026-09-13 on; earlier windows leave these empty).
+    results: Counter = field(default_factory=Counter)  # tool -> sized results
+    result_tokens: dict = field(default_factory=lambda: defaultdict(list))
+    call_durations: dict = field(default_factory=lambda: defaultdict(list))
+    truncated: Counter = field(default_factory=Counter)  # tool -> truncated=true
+    tool_errors: Counter = field(default_factory=Counter)  # "tool: class" -> n
+    background_jobs: int = 0
+    job_exits: Counter = field(default_factory=Counter)  # exit code / signal -> n
+    turn_calls: Counter = field(default_factory=Counter)  # tunnel turn -> calls
+    indexed: IndexedContextStats = field(default_factory=IndexedContextStats)
