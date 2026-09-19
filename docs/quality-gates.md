@@ -9,11 +9,10 @@ The target is at most 500 physical lines per Python module, with a warning from
 451 lines onward. The rule applies to production code, repository scripts, and
 tests.
 
-Existing modules that were already over 500 lines when this policy was adopted
-are recorded in `quality-policy.json`. They are technical debt, not exceptions:
-they may not grow beyond their recorded ceiling. Once one falls to 500 lines or
-less, its baseline entry must be removed. A new module above 500 lines fails
-immediately.
+The hardening migration is complete: `quality-policy.json` currently contains
+no legacy oversized-module entries. The ratchet mechanism remains available
+only to make an explicitly reviewed migration safe; a new module above 500
+lines fails immediately.
 
 Run:
 
@@ -62,11 +61,11 @@ Core logic modules must reach at least 95 percent branch coverage from
 `tests/unit` alone. Other production modules must reach at least 90 percent
 branch coverage from the full appropriate test suite.
 
-The current classification and temporary ratchet floors are in
-`quality-policy.json`. A temporary floor means only that an existing weak module
-cannot regress while it is being improved. It is not the acceptance target.
-When a module reaches its final target, the checker requires the obsolete floor
-to be removed.
+The current classification is in `quality-policy.json`. There are no
+temporary ratchet floors: the final 95/90 targets apply directly to every
+production module. The checker still supports temporary floors as a migration
+mechanism, but introducing one requires an explicit quality-policy change and
+does not change the final acceptance target.
 
 Generate and check the reports with:
 
@@ -84,8 +83,9 @@ python scripts/check_coverage_policy.py \
   --full-json /tmp/binnacle-full-coverage.json
 ```
 
-`--strict` ignores temporary floors and shows whether every module already meets
-the final 95/90 policy. The `coverage-policy` tox environment runs the same gate.
+`--strict` ignores any migration floor that may be introduced in the future.
+With the current policy it is equivalent to the normal check. The
+`coverage-policy` tox environment runs the same per-module gate.
 
 ## Test kinds
 

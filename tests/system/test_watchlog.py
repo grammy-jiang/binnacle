@@ -117,3 +117,124 @@ def test_tunnel_polls_and_the_chatgpt_summary(tmp_path):
     )
     assert watchlog.window_of([]) is None
     assert watchlog.tunnel_polls(tmp_path / "missing.log", *window) == []
+
+
+def test_event_when_and_rfc3339_reject_invalid_timestamps():
+    assert watchlog.Event("not-a-time", "INFO", "cycle").when is None
+    assert watchlog._rfc3339("not-a-time") is None
+    parsed = watchlog._rfc3339("2026-09-14T15:52:40.123456789+10:00")
+    assert parsed is not None
+    assert parsed.microsecond == 123456
+
+
+def test_fetch_journal_builds_window_arguments(monkeypatch):
+    import subprocess
+
+    seen = {}
+
+    def fake_run(args, **kwargs):
+        seen.update(args=args, kwargs=kwargs)
+        return subprocess.CompletedProcess(args, 0, stdout="a\nb\n", stderr="")
+
+    monkeypatch.setattr(watchlog.subprocess, "run", fake_run)
+
+    assert watchlog.fetch_journal("watchdog.service", "-2 hours", "now") == ["a", "b"]
+    assert "--since=-2 hours" in seen["args"]
+    assert "--until=now" in seen["args"]
+    assert seen["kwargs"]["timeout"] == 120
+
+
+def test_parse_handles_bare_level_and_rejects_bad_event_name():
+    events = watchlog.parse(
+        [
+            "WARNING: event=action_skipped cycle=1 dev=wlan1 kind=reset reason=active",
+            "INFO: event=- invalid",
+        ]
+    )
+
+    assert len(events) == 1
+    assert events[0].ts == ""
+    assert events[0].level == "WARNING"
+    assert events[0].name == "action_skipped"
+
+
+def test_short_formats_less_common_operational_events():
+    cases = [
+        (
+            "uplink_driver_reload",
+            {"dev": "wlan0", "attempt": "2", "ok": "True", "detail": "done"},
+            "driver reload attempt 2",
+        ),
+        (
+            "service_restart_deferred",
+            {"unit": "tunnel", "via": "wlan1", "reason": "busy"},
+            "deferred",
+        ),
+        (
+            "action_skipped",
+            {"dev": "wlan0", "kind": "reset", "reason": "became active"},
+            "reset skipped",
+        ),
+        ("fast_path_stalled", {"age_s": "80"}, "fast path stalled"),
+        ("fast_path_hung", {"age_s": "700"}, "fast path hung"),
+        ("fast_path_restarted", {"reason": "dead"}, "thread restarted"),
+        ("uplink_issue", {"dev": "wlan1", "issue": "slow"}, "issue: slow"),
+        ("uplink_issue_cleared", {"dev": "wlan1"}, "issue cleared"),
+        (
+            "inventory_host",
+            {"cycle": "1", "flags": "ok", "radio": "on"},
+            "host: flags=ok radio=on",
+        ),
+        (
+            "paused",
+            {"skipped_services": "tunnel", "until": "later"},
+            "paused: skipped tunnel",
+        ),
+        ("unknown_event", {"cycle": "1", "x": "y"}, "x=y"),
+    ]
+    for name, fields, expected in cases:
+        text = watchlog._short(watchlog.Event("", "INFO", name, fields))
+        assert expected in text
+
+
+def test_tunnel_polls_skips_bad_json_and_compares_naive_timestamps(tmp_path):
+    from datetime import datetime, timezone
+
+    log = tmp_path / "tunnel.log"
+    log.write_text(
+        '{"msg":"poll failed; backing off"\n'
+        '{"time":"bad","msg":"poll failed; backing off"}\n'
+        '{"time":"2026-09-14T15:52:40","msg":"poll failed; backing off"}\n'
+        '{"time":"2026-09-14T15:53:00","msg":"poller recovered; polling operational"}\n'
+        '{"time":"2026-09-14T16:30:00","msg":"poll failed; backing off"}\n'
+    )
+    since = datetime(2026, 9, 14, 15, 50, tzinfo=timezone.utc)
+    until = datetime(2026, 9, 14, 16, 0, tzinfo=timezone.utc)
+
+    polls = watchlog.tunnel_polls(log, since, until)
+
+    assert [kind for _, kind in polls] == ["down", "up"]
+    assert all(when.tzinfo is None for when, _ in polls)
+
+
+def test_render_accounts_initial_grade_issues_and_watchdog_errors():
+    lines = [
+        (
+            "2026-09-14T10:00:00+10:00 INFO: event=transition cycle=1 "
+            "dev=wlan1 from=healthy to=wedged after_s=60 detail=dead"
+        ),
+        (
+            "2026-09-14T10:01:00+10:00 WARNING: event=uplink_issue cycle=2 "
+            "dev=wlan1 issue=usb_slow"
+        ),
+        (
+            "2026-09-14T10:02:00+10:00 ERROR: event=watchdog_cycle_error "
+            "cycle=3 error=boom"
+        ),
+        "INFO: event=transition cycle=4 dev=wlan2 from=- to=healthy after_s=-",
+    ]
+    out = watchlog.render(watchlog.parse(lines))
+
+    assert "healthy 1 min" in out and "wedged 2 min" in out
+    assert "issues raised: 1; last: wlan1: usb_slow" in out
+    assert "watchdog trouble: 1 hung/error cycles" in out

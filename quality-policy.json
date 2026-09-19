@@ -40,12 +40,7 @@
     ],
     "temporary_floors": {
       "unit": {},
-      "full": {
-        "src/binnacle/cli.py": 84.76,
-        "src/binnacle/doctor.py": 83.36,
-        "src/binnacle/watchdog_cli.py": 48.0,
-        "src/binnacle/watchlog.py": 85.47
-      }
+      "full": {}
     }
   }
 }

@@ -339,3 +339,119 @@ def test_stats_only_loads_webmin_history_when_requested(monkeypatch, capsys):
     second = capsys.readouterr().out
     assert "USAGE" in second and "RESOURCES" in second
     assert loads == [("-1 hour", "now")]
+
+
+def test_tunnel_health_url_reads_current_url_file_and_handles_bad_config(
+    tmp_path, monkeypatch
+):
+    config = tmp_path / "tunnel.json"
+    url_file = tmp_path / "health.url"
+    url_file.write_text("http://127.0.0.1:1234\n")
+    config.write_text(f'{{"health": {{"url_file": "{url_file}"}}}}')
+    monkeypatch.setattr(cli, "TUNNEL_CONFIG", config)
+
+    assert cli._tunnel_health_url() == "http://127.0.0.1:1234"
+
+    config.write_text("{}")
+    assert cli._tunnel_health_url() is None
+
+
+def test_parse_rfc3339_accepts_plain_iso_date():
+    assert cli._parse_rfc3339("2026-09-03").date().isoformat() == "2026-09-03"
+
+
+def test_systemctl_wrapper_and_unit_state(monkeypatch):
+    seen = []
+
+    def fake_run(argv, **kwargs):
+        seen.append((argv, kwargs))
+        return subprocess.CompletedProcess(argv, 0, stdout="active\n", stderr="")
+
+    monkeypatch.setattr(cli.subprocess, "run", fake_run)
+
+    proc = cli._systemctl("is-active", "demo.service", check=False)
+    assert proc.stdout.strip() == "active"
+    assert seen[0][0] == ["systemctl", "--user", "is-active", "demo.service"]
+    assert seen[0][1]["check"] is False
+    assert cli._unit_state("demo.service") == "active"
+
+
+def test_setup_real_path_writes_token_unit_and_runs_safe_boundaries(
+    tmp_path, monkeypatch, capsys
+):
+    token = tmp_path / "config" / "token"
+    unit_dir = tmp_path / "units"
+    tunnel = tmp_path / "tunnel.json"
+    monkeypatch.setattr(cli, "TOKEN_FILE", token)
+    monkeypatch.setattr(cli, "UNIT_DIR", unit_dir)
+    monkeypatch.setattr(cli, "TUNNEL_CONFIG", tunnel)
+    monkeypatch.setattr(
+        cli.shutil,
+        "which",
+        lambda name: (
+            "/usr/bin/binnacle"
+            if name == "binnacle"
+            else "/usr/bin/tunnel-client"
+            if name == "tunnel-client"
+            else None
+        ),
+    )
+    systemctl = []
+    monkeypatch.setattr(
+        cli,
+        "_systemctl",
+        lambda *args, **kwargs: (
+            systemctl.append(args) or subprocess.CompletedProcess(list(args), 0, "", "")
+        ),
+    )
+    loginctl = []
+    monkeypatch.setattr(
+        cli.subprocess,
+        "run",
+        lambda argv, **kwargs: (
+            loginctl.append(argv) or subprocess.CompletedProcess(argv, 0, "", "")
+        ),
+    )
+
+    cli.setup(port=8123, dry_run=False)
+
+    assert token.exists()
+    unit = unit_dir / cli.PROD_UNIT
+    assert unit.exists()
+    assert "8123" in unit.read_text()
+    assert ("daemon-reload",) in systemctl
+    assert ("enable", "--now", cli.PROD_UNIT) in systemctl
+    assert loginctl == [["loginctl", "enable-linger"]]
+    out = capsys.readouterr().out
+    assert "server side is configured" in out
+    assert "write it from your tunnel account settings" in out
+
+
+def test_setup_keeps_existing_token_and_tunnel_config(tmp_path, monkeypatch, capsys):
+    token = tmp_path / "token"
+    token.write_text("Bearer existing\n")
+    tunnel = tmp_path / "tunnel.json"
+    tunnel.write_text("{}")
+    monkeypatch.setattr(cli, "TOKEN_FILE", token)
+    monkeypatch.setattr(cli, "UNIT_DIR", tmp_path / "units")
+    monkeypatch.setattr(cli, "TUNNEL_CONFIG", tunnel)
+    monkeypatch.setattr(
+        cli.shutil,
+        "which",
+        lambda name: "/usr/bin/tool",
+    )
+
+    cli.setup(dry_run=True)
+
+    out = capsys.readouterr().out
+    assert f"keep existing token at {token}" in out
+    assert f"keep existing tunnel config at {tunnel}" in out
+
+
+def test_main_dispatches_cyclopts_app(monkeypatch):
+    called = []
+    monkeypatch.setattr(cli, "app", lambda: called.append(True))
+
+    cli.main()
+
+    assert called == [True]

@@ -57,10 +57,10 @@ uv run pytest tests/contracts -q
 uv run pytest tests/system -q
 ```
 
-Run with the branch-coverage gate:
+Run the authoritative per-module branch-coverage gate:
 
 ```bash
-uv run pytest tests/ -q --cov --cov-fail-under=86.9
+uv run tox -e coverage-policy
 ```
 
 Run the supported Python matrix:
@@ -72,7 +72,7 @@ uv run tox
 Before a baseline or merge commit, run:
 
 ```bash
-uv run pytest tests/ -q --cov --cov-fail-under=86.9
+uv run tox -e coverage-policy
 uv run pre-commit run --all-files
 ```
 
@@ -83,26 +83,23 @@ discovery must never collect those copies.
 ## Coverage policy
 
 Coverage is a regression signal, not a target to game. The authoritative gate
-is now per module: core logic must reach at least 95% branch coverage from the
-unit suite alone; every other production module must reach at least 90% branch
-coverage from the full appropriate suite. Repository-average coverage remains a
-trend metric only and cannot make a weak module pass.
+is per module: core logic must reach at least 95% branch coverage from the unit
+suite alone; every other production module must reach at least 90% branch
+coverage from the full appropriate suite. Repository-average coverage remains
+a trend metric only and cannot make a weak module pass.
 
-The executable policy, current ratchet floors, and module classification live
-in `quality-policy.json`; `docs/quality-gates.md` documents the full workflow.
-New tests should focus on meaningful public behaviour, error handling,
-concurrency, state transitions, and regressions seen in real use.
+The executable policy and module classification live in `quality-policy.json`;
+`docs/quality-gates.md` documents the full workflow. There are currently no
+temporary coverage floors: every core module satisfies the 95% unit-branch
+target and every other production module satisfies the 90% full-suite branch
+target.
 
-The 2026-09-19 baseline review started at 613 tests and 88.24% branch coverage.
-The review then added focused identity and CLI command tests; run the coverage
-command above for the current exact count and percentage rather than copying a
-potentially stale number into release notes.
-
-The largest remaining coverage gap is indexed-retrieval fallback and error
-behaviour. CLI coverage is also deliberately incomplete where a path is only
-thin process-launch glue. Improvements should test user-visible behaviour,
-failure handling, or a real regression rather than private implementation
-details.
+The hardening round finished with 190 unit tests and 726 tests in the full
+suite. Those counts are a dated baseline, not a permanent target; run the gate
+for the current result. New tests should continue to focus on meaningful
+behaviour, error handling, fault injection, concurrency, state transitions,
+and regressions seen in real use rather than on mechanically increasing a
+percentage.
 
 ## Property and mutation testing
 
@@ -131,17 +128,19 @@ A test that needs intentional physical hardware interaction is a manual
 validation procedure and should be documented separately rather than hidden in
 the automated pytest suite.
 
-## Large scenario suites
+## Watchdog scenario suites
 
-`tests/system/test_watchdog.py` is intentionally retained as one scenario
-suite during this baseline cleanup. It has extensive shared fixtures and
-encodes a long sequence of network failure and recovery regressions. Splitting
-it only by file size would duplicate setup and obscure scenario relationships.
+The original 4,000-line watchdog scenario module was split only after the
+watchdog POC gained stable production boundaries under
+`binnacle.ops.watchdog`. The system tests now follow those responsibilities:
+policy, USB recovery, NetworkManager preference, device observation, service
+repair, fast-path failover, tunnel affinity, concurrency, and audit
+regressions.
 
-The better trigger for splitting it is a corresponding decomposition of
-``binnacle.watchdog` into stable policy, host-observation, action, and lifecycle
-boundaries. Until then, section headings inside the module remain the local
-navigation mechanism.
+Shared fakes live in `tests/watchdog_support.py`; individual scenario modules
+remain below the repository's 500-line hard limit. This is the preferred
+pattern for future large suites: create a real production seam first, then let
+the tests follow that seam instead of splitting by arbitrary line ranges.
 
 ## Baseline review findings
 
@@ -159,16 +158,8 @@ the former flat `tests/` directory as a permanent design.
 - Repository analysis programs and their tests are paired under `scripts/`
   and `tests/scripts/`.
 
-The review intentionally did **not** split `test_watchdog.py` merely because it
-is large. Its size reflects the current size of `binnacle.watchdog`; a future
-production-code decomposition should create stable seams first, and the tests
-can then follow those seams.
-
-Known follow-up debt:
-
-1. `binnacle.indexed_retrieval` has meaningful fallback/error branches still
-   below the rest of the package's coverage.
-2. `binnacle.cli` contains process-launch and host-control glue that should be
-   covered when a concrete behavioural contract or regression warrants it.
-3. Large `doctor` and `watchdog` modules should eventually be decomposed in
-   production code; test-file decomposition should follow, not lead, that work.
+The hardening review subsequently decomposed the oversized production modules
+and their corresponding large test suites. `quality-policy.json` now has no
+legacy module-size exceptions and no temporary coverage floors. The automated
+gates therefore represent the final policy directly rather than a migration
+baseline.
