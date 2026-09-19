@@ -9,7 +9,6 @@
     ],
     "legacy_oversize": {
       "scripts/usage_breakdown.py": 578,
-      "src/binnacle/indexed_retrieval.py": 1272,
       "src/binnacle/watchdog.py": 4046,
       "tests/integration/test_jobs.py": 1000,
       "tests/system/test_watchdog.py": 4018
@@ -32,7 +31,11 @@
       "src/binnacle/callctx.py",
       "src/binnacle/config.py",
       "src/binnacle/identity.py",
+      "src/binnacle/indexed_parse.py",
+      "src/binnacle/indexed_query.py",
+      "src/binnacle/indexed_refresh.py",
       "src/binnacle/indexed_retrieval.py",
+      "src/binnacle/indexed_store.py",
       "src/binnacle/indexed_surface.py",
       "src/binnacle/logstats.py",
       "src/binnacle/paths.py",
@@ -40,9 +43,7 @@
       "src/binnacle/visibility.py"
     ],
     "temporary_floors": {
-      "unit": {
-        "src/binnacle/indexed_retrieval.py": 33.01
-      },
+      "unit": {},
       "full": {
         "src/binnacle/cli.py": 84.76,
         "src/binnacle/doctor.py": 83.36,

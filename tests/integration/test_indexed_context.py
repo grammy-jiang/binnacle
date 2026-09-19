@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import re
 import subprocess
 from pathlib import Path
@@ -12,8 +11,6 @@ from fastmcp.tools.base import ToolResult
 from binnacle.callctx import current_call
 from binnacle.config import IndexedContextSettings
 from binnacle.indexed_context import IndexedContextService
-from binnacle.indexed_retrieval import PersistentRelationIndex
-from binnacle.indexed_surface import to_search_payload
 from binnacle.tools import search_text as st
 
 
@@ -47,87 +44,8 @@ def make_repo(tmp_path: Path) -> Path:
     return root
 
 
-def table_rows(index: PersistentRelationIndex, table: str) -> set[tuple]:
-    columns = {
-        "nodes": "node_id,path,kind,symbol,start_line,end_line,body",
-        "definitions": "name,node_id,path",
-        "refs": "source_node,name,relation,path",
-        "identifiers": "name,node_id,path",
-        "edges": "source_node,target_node,relation,ref_name",
-    }[table]
-    return {tuple(row) for row in index.db.execute(f"SELECT {columns} FROM {table}")}
-
-
 def settings(tmp_path: Path) -> IndexedContextSettings:
     return IndexedContextSettings(enabled=True, index_dir=tmp_path / "indexes")
-
-
-def test_persistent_reopen_keeps_ranking_and_generation(tmp_path: Path):
-    root = make_repo(tmp_path)
-    db = tmp_path / "index.db"
-    query = "documented storage normalization durable incoming data"
-    first = PersistentRelationIndex(root, db)
-    rank1 = first.retrieve_files(query, 10)
-    stats1 = first.stats()
-    first.close()
-
-    reopened = PersistentRelationIndex(root, db)
-    rank2 = reopened.retrieve_files(query, 10)
-    fresh = reopened.freshness()
-    stats2 = reopened.stats()
-    reopened.close()
-
-    assert rank1 == rank2
-    assert stats1["nodes"] > 0 and stats1["edges"] > 0
-    assert stats1["generation"] == stats2["generation"] == 1
-    assert fresh["changed"] == [] and fresh["deleted"] == [] and fresh["hashes"] == 0
-
-
-def test_incremental_python_edit_matches_clean_rebuild(tmp_path: Path):
-    root = make_repo(tmp_path)
-    inc = PersistentRelationIndex(root, tmp_path / "inc.db")
-    source = root / "src" / "app.py"
-    source.write_text(
-        source.read_text() + "\n\ndef quasar_sentinel(value: str) -> str:\n"
-        '    """Transform a unique quasar sentinel for parity validation."""\n'
-        "    return normalize_value(value)\n"
-    )
-    result = inc.update_paths(["src/app.py"])
-    assert result["changed_files"] == 1 and result["hashed_files"] == 1
-    assert result["generation"] == 2
-
-    full = PersistentRelationIndex(root, tmp_path / "full.db")
-    for table in ("nodes", "definitions", "refs", "identifiers", "edges"):
-        assert table_rows(inc, table) == table_rows(full, table)
-
-    query = "unique quasar sentinel parity transformation"
-    assert inc.retrieve_files(query, 10) == full.retrieve_files(query, 10)
-    assert inc.retrieve_files(query, 10)[0] == "src/app.py"
-    inc.close()
-    full.close()
-
-
-def test_context_package_budget_and_existing_search_shape(tmp_path: Path):
-    root = make_repo(tmp_path)
-    index = PersistentRelationIndex(root, tmp_path / "index.db")
-    query = "documented storage normalization retry configuration behavior"
-    package = index.context_package(query, max_bytes=8_500)
-    payload = to_search_payload(root, "@context " + query, package)
-
-    assert package["structured_bytes"] <= 8_500
-    assert package["item_count"] <= 10
-    assert payload["path"] == str(root.resolve())
-    assert payload["count"] == len(payload["entries"])
-    assert payload["truncated"] is True
-    assert all(
-        {"file", "line", "text", "context_first_line", "context"} <= set(entry)
-        for entry in payload["entries"]
-    )
-    assert (
-        len(json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode())
-        < 10_000
-    )
-    index.close()
 
 
 def test_service_emits_review_grade_telemetry_and_absolute_paths(
