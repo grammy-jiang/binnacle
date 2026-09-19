@@ -10,11 +10,12 @@ services, kernel modules, routes, or power state.
 | Directory | Responsibility | Typical examples |
 | --- | --- | --- |
 | `tests/unit/tools/` | One MCP tool or a small local helper in isolation | file read/write/edit/list/search |
-| `tests/unit/core/` | Pure or mostly local core logic shared across tools | text handling, visibility, statistics, property tests |
-| `tests/integration/` | Multiple Binnacle components cooperating across an internal boundary | HTTP auth, CLI, jobs, logging, indexed context |
-| `tests/contracts/` | Externally visible protocol and schema contracts | MCP annotations, descriptions, output schemas |
+| `tests/unit/core/` | Pure or mostly local core logic shared across tools | text handling, indexed logic, statistics, property tests |
+| `tests/integration/` | Multiple Binnacle components cooperating across an internal boundary | authenticated HTTP MCP, config loading, CLI, jobs, logging, indexed context, state-machine flows |
+| `tests/contracts/` | Externally visible protocol and schema contracts | MCP annotations, input validation, visibility, descriptions, output schemas |
 | `tests/system/` | Raspberry Pi/Linux system behaviour modelled with fakes or guarded probes | doctor, uplink, watchdog, Webmin statistics |
 | `tests/scripts/` | Repository maintenance and analysis scripts | usage analysis, indexed-pilot analysis |
+| `tests/live/` | Explicit opt-in read-only checks against the deployed Raspberry Pi | active server unit, authenticated localhost MCP smoke |
 
 `tests/conftest.py` is intentionally global. Its autouse safety fixture blocks
 host-mutating subprocess commands so an accidental test cannot change the
@@ -28,13 +29,20 @@ its dependencies.
 - Use `unit/` when one module can be exercised without a live service or a
   multi-component workflow.
 - Use `integration/` when the value comes from components working together,
-  even if sockets or external services are replaced with local fakes.
+  including authenticated HTTP workflows, configuration precedence, packaging,
+  concurrency, or model/state-machine sequences.
 - Use `contracts/` when a failure means an MCP client could observe an
   incompatible API, schema, annotation, or description.
 - Use `system/` for behaviour that represents Linux, networking, services, or
   Raspberry Pi host state. These tests still must not mutate the real host.
 - Use `scripts/` only for code under `scripts/`; production package behaviour
   belongs in one of the other groups.
+- Use `live/` only for read-only checks against the actually deployed host.
+  Every live test must skip unless `BINNACLE_LIVE=1` is explicitly set.
+
+The user-scenario and failure-mode inventory is `docs/test-scenarios.md`. Use
+that matrix when adding or reviewing a workflow: coverage percentage alone does
+not prove that the real user path or failure boundary is represented.
 
 A regression test belongs beside the behaviour it protects. Historical context
 may be kept in the test docstring when it explains a non-obvious requirement,
@@ -55,6 +63,14 @@ uv run pytest tests/unit -q
 uv run pytest tests/integration -q
 uv run pytest tests/contracts -q
 uv run pytest tests/system -q
+uv run pytest tests/scripts -q
+```
+
+Run the opt-in read-only deployment smoke only when you intentionally want to
+check the current Raspberry Pi deployment:
+
+```bash
+BINNACLE_LIVE=1 uv run pytest tests/live -q
 ```
 
 Run the authoritative per-module branch-coverage gate:
