@@ -74,10 +74,11 @@ jobs:
 
       - name: Prepare Binnacle test host
         run: |
-          mkdir -p "$HOME/.config/binnacle" "$HOME/Projects"
-          ln -s "$GITHUB_WORKSPACE" "$HOME/Projects/binnacle"
+          mkdir -p "$HOME/.config/binnacle"
           printf 'Bearer ci-test-token\n' > "$HOME/.config/binnacle/token"
           chmod 600 "$HOME/.config/binnacle/token"
+          repo_parent=$(dirname "$GITHUB_WORKSPACE")
+          printf '[roots]\ndefault_root = "%s"\nextra_roots = ["/tmp"]\n'             "$repo_parent" > "$HOME/.config/binnacle/config.toml"
 
       - name: Run test suite
         run: uv run tox -e ${{ matrix.tox-env }} -- --ignore=tests/integration/test_wheel_artifact.py
@@ -108,10 +109,11 @@ jobs:
 
       - name: Prepare Binnacle test host
         run: |
-          mkdir -p "$HOME/.config/binnacle" "$HOME/Projects"
-          ln -s "$GITHUB_WORKSPACE" "$HOME/Projects/binnacle"
+          mkdir -p "$HOME/.config/binnacle"
           printf 'Bearer ci-test-token\n' > "$HOME/.config/binnacle/token"
           chmod 600 "$HOME/.config/binnacle/token"
+          repo_parent=$(dirname "$GITHUB_WORKSPACE")
+          printf '[roots]\ndefault_root = "%s"\nextra_roots = ["/tmp"]\n'             "$repo_parent" > "$HOME/.config/binnacle/config.toml"
 
       - name: Enforce per-module branch coverage
         run: uv run tox -e coverage-policy -- --ignore=tests/integration/test_wheel_artifact.py

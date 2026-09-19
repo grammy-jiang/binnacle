@@ -172,7 +172,7 @@ def test_usb_link_repair_can_be_disabled():
 def test_usb_level_reset_counts_its_own_attempts():
     run, _ = recording_nmcli()
     state = wd.State()
-    with mock.patch.object(wd, "usb_reset_device", return_value=(True, "ok")):
+    with mock.patch.object(wd_actions, "usb_reset_device", return_value=(True, "ok")):
         assert wd.apply_action(
             wd.Action("usb_reset", "wlan1", "level", tag="usb_speed"),
             ROUTES,
