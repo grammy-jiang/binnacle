@@ -1,0 +1,66 @@
+{
+  "since": "2026-09-01",
+  "until": "2026-09-03",
+  "scope": "ChatGPT (tunnel-matched)",
+  "tool_calls": 2243,
+  "tools": {
+    "run_command": 1409,
+    "job_status": 597,
+    "read_file": 196,
+    "search_text": 28,
+    "list_files": 10,
+    "stop_job": 3
+  },
+  "days": {
+    "09/01/26": 962,
+    "09/02/26": 1281
+  },
+  "job_status": {
+    "calls": 590,
+    "jobs": 116,
+    "median_per_job": 3,
+    "max_per_job": 33
+  },
+  "param_uptake": {
+    "run_command.wait_seconds": 464,
+    "job_status.tail_lines": 524,
+    "search_text.context_lines": 28
+  },
+  "run_command": {
+    "calls": 1409,
+    "traits": {
+      "python-heredoc": 651,
+      "grep": 367,
+      "grep-on-files": 363,
+      "git": 339,
+      "hand-tail/head": 233,
+      "ps/pgrep": 165
+    }
+  },
+  "grep": {
+    "direct_on_files": 235,
+    "pipeline_filter": 266
+  },
+  "git_subcommands": {
+    "status": 170,
+    "diff": 122,
+    "log": 98,
+    "show": 89,
+    "commit": 26,
+    "add": 14,
+    "tag": 10,
+    "ls-tree": 9,
+    "grep": 9,
+    "config": 4,
+    "fetch": 3,
+    "rev-parse": 3,
+    "rev-list": 3,
+    "cat-file": 2,
+    "clone": 1,
+    "init": 1,
+    "describe": 1,
+    "reset": 1,
+    "ls-files": 1,
+    "worktree": 1
+  }
+}

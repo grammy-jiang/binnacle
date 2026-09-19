@@ -1,0 +1,61 @@
+{
+  "since": "2026-09-04",
+  "until": "2026-09-06",
+  "scope": "ChatGPT (tunnel-matched)",
+  "tool_calls": 820,
+  "tools": {
+    "read_file": 492,
+    "run_command": 113,
+    "search_text": 104,
+    "job_status": 89,
+    "list_files": 22
+  },
+  "days": {
+    "09/04/26": 554,
+    "09/05/26": 266
+  },
+  "job_status": {
+    "calls": 39,
+    "jobs": 32,
+    "median_per_job": 1,
+    "max_per_job": 2
+  },
+  "param_uptake": {
+    "run_command.wait_seconds": 15,
+    "search_text.line_numbers": 88,
+    "search_text.context_lines": 77,
+    "run_command.tail_lines": 7,
+    "job_status.tail_lines": 73,
+    "job_status.wait_seconds": 5
+  },
+  "read_file": {
+    "calls": 492,
+    "distinct_files": 21,
+    "reads_per_file_max": 213,
+    "whole_file_reads": 5,
+    "span_median": 26,
+    "span_p90": 240,
+    "longest_same_file_run": 60,
+    "sequential_continuations": 55
+  },
+  "run_command": {
+    "calls": 113,
+    "traits": {
+      "python-heredoc": 65,
+      "git": 16
+    }
+  },
+  "grep": {
+    "direct_on_files": 0,
+    "pipeline_filter": 0
+  },
+  "git_subcommands": {
+    "status": 15,
+    "diff": 11,
+    "log": 8,
+    "commit": 6,
+    "add": 3,
+    "show": 2,
+    "branch": 1
+  }
+}
