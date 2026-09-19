@@ -1,0 +1,523 @@
+"""Disk-backed job store shared by run_command / job_status / stop_job.
+
+Design: docs/tools/run_command.md §6. Every command runs detached in its
+own process group with output spooled to disk, so a job survives
+`uvicorn --reload` and every state read comes from the filesystem, never
+from process memory (ChatGPT re-initializes per call — no session state).
+"""
+
+import json
+import logging
+import os
+import signal
+import subprocess
+import threading
+import time
+import uuid
+from pathlib import Path
+
+from binnacle.callctx import current_call
+from binnacle.config import get_settings
+
+logger = logging.getLogger("binnacle.jobs")
+
+JOBS_DIR = get_settings().jobs.dir
+KEEP_NEWEST = get_settings().jobs.keep_newest
+RUN_MAX_OUTPUT_CHARS = get_settings().jobs.max_output_chars
+WARMUP_S = get_settings().jobs.warmup_s
+
+# stop_job timings; module-level so tests can shrink the escalation wait.
+STOP_SIGTERM_GRACE_S = 5.0  # wait for a clean SIGTERM exit before SIGKILL
+STOP_SIGKILL_GRACE_S = 2.0  # wait for the forced exit to be recorded
+
+# Serialize the prune + launch + durable-meta sequence. Multiple MCP calls can
+# enter start_job concurrently through FastMCP's worker pool; without one store
+# lock they can prune the same slot and both create a new directory. RLock lets
+# start_job call _prune(), whose direct/test callers are protected too.
+_STORE_LOCK = threading.RLock()
+
+# stdout+stderr merge, interactivity neutered (Gemini's env hygiene set).
+_ENV_OVERRIDES = {
+    "PAGER": "cat",
+    "GIT_PAGER": "cat",
+    "GIT_TERMINAL_PROMPT": "0",
+    "PYTHONUNBUFFERED": "1",
+    "CI": "1",
+    "BINNACLE": "1",
+    "DEBIAN_FRONTEND": "noninteractive",
+}
+
+
+def _job_dir(job_id: str) -> Path:
+    return JOBS_DIR / job_id
+
+
+_META_REQUIRED = ("command", "workdir", "pid", "started_at")
+
+
+def _read_meta(job_id: str) -> dict | None:
+    """meta.json as a dict, or None if missing, unparsable, or incomplete.
+
+    A record the server was killed while writing can parse yet lack keys;
+    treating it as absent keeps job_status and the listing from crashing on
+    one bad directory (prune deletes it in time).
+    """
+    try:
+        meta = json.loads((_job_dir(job_id) / "meta.json").read_text())
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(meta, dict) or any(k not in meta for k in _META_REQUIRED):
+        return None
+    return meta
+
+
+def _write_meta(job_id: str, meta: dict) -> None:
+    """Atomically replace a job's durable metadata.
+
+    Readers run concurrently with reapers and stop/status calls. Writing
+    `meta.json` in place exposes a truncate/write window where `_read_meta()`
+    can observe invalid JSON and misclassify a real job as absent. Build the
+    complete JSON in a same-directory temporary file, then atomically replace
+    the target so readers see either the old or the new complete record.
+    """
+    d = _job_dir(job_id)
+    target = d / "meta.json"
+    temp = d / f".meta.{uuid.uuid4().hex}.tmp"
+    try:
+        temp.write_text(json.dumps(meta))
+        os.replace(temp, target)
+    finally:
+        temp.unlink(missing_ok=True)
+
+
+def _remove_job_dir(stale: Path) -> bool:
+    """Best-effort removal; a dir a concurrent prune already deleted is fine."""
+    try:
+        for f in stale.iterdir():
+            f.unlink(missing_ok=True)
+        stale.rmdir()
+    except OSError:
+        return False
+    return True
+
+
+def _prune(reserve: int = 0) -> None:
+    """Prune the base retention window, sparing stale jobs still running.
+
+    ``reserve`` removes slots from the *existing* window before a caller adds
+    new jobs. ``start_job`` uses one reserved slot, so KEEP_NEWEST=50 means the
+    new directory becomes the 50th base entry rather than a permanent 51st.
+    Older live jobs outside that base window remain protected exceptions.
+    """
+    reserve = max(0, reserve)
+    effective_keep = max(0, KEEP_NEWEST - reserve)
+    with _STORE_LOCK:
+        try:
+            dirs = sorted(
+                (d for d in JOBS_DIR.iterdir() if d.is_dir()),
+                key=lambda d: d.stat().st_mtime,
+                reverse=True,
+            )
+        except OSError:
+            return
+        removed = 0
+        skipped_running = 0
+        for stale in dirs[effective_keep:]:
+            # Never delete a live job: its process would keep running while
+            # job_status loses it and the reaper crashes on exit. Unreadable or
+            # malformed meta, exited, and unknown (process gone, exit never
+            # recorded) all stay deletable so garbage cannot become immortal.
+            try:
+                state = job_state(stale.name)
+            except KeyError:
+                state = None  # meta parsed but incomplete (e.g. killed mid-write)
+            if state is not None and state["state"] == "running":
+                skipped_running += 1
+                continue
+            if _remove_job_dir(stale):
+                removed += 1
+        if removed or skipped_running:
+            logger.info(
+                "event=jobs_pruned removed=%d skipped_running=%d keep_newest=%d "
+                "reserve=%d effective_keep=%d",
+                removed,
+                skipped_running,
+                KEEP_NEWEST,
+                reserve,
+                effective_keep,
+            )
+
+
+def _proc_stat_fields(pid: int) -> list[str] | None:
+    """Fields of /proc/<pid>/stat after the '(comm)' token, or None."""
+    try:
+        stat = Path(f"/proc/{pid}/stat").read_text()
+        return stat[stat.rindex(")") + 2 :].split()
+    except (OSError, ValueError):
+        return None
+
+
+def _proc_starttime(pid: int) -> int | None:
+    """Kernel start time (clock ticks since boot): the pid's identity."""
+    fields = _proc_stat_fields(pid)
+    try:
+        return int(fields[19]) if fields else None
+    except (IndexError, ValueError):
+        return None
+
+
+def _pid_alive(pid: int, starttime: int | None = None) -> bool:
+    """Is this pid alive AND still the process we launched?
+
+    Pids are reused. After a reload a job's pid can belong to an unrelated
+    process, which would read as "running" forever and, worse, let stop_job
+    signal that stranger. When the record carries the launch-time
+    `starttime`, require it to match; records without one (pre-2026-09-06)
+    fall back to existence.
+    """
+    current = _proc_starttime(pid)
+    if current is None:
+        return False
+    return starttime is None or current == starttime
+
+
+def _descendants(pid: int) -> set[int]:
+    """All live descendants of pid, via the /proc ppid chain.
+
+    Catches a child that called setsid() (own session, so outside the job's
+    process group) while its parent is still alive. A double-forked daemon
+    that reparented to init is not reachable this way and is a documented
+    limit.
+    """
+    children: dict[int, list[int]] = {}
+    for entry in os.scandir("/proc"):
+        if not entry.name.isdigit():
+            continue
+        fields = _proc_stat_fields(int(entry.name))
+        if not fields:
+            continue
+        try:
+            children.setdefault(int(fields[1]), []).append(int(entry.name))
+        except (IndexError, ValueError):
+            continue
+    out: set[int] = set()
+    stack = [pid]
+    while stack:
+        for c in children.get(stack.pop(), []):
+            if c not in out:
+                out.add(c)
+                stack.append(c)
+    return out
+
+
+def record_exit(job_id: str, proc: subprocess.Popen) -> None:
+    """Write an already-exited process's status to meta.json.
+
+    The exit is read from the in-memory Popen object (``proc.returncode``),
+    which is the authoritative record while the server lives; meta.json is
+    the durable copy for later, stateless job_status/stop_job calls (which
+    may run after a ``uvicorn --reload``). Whoever observed the exit calls
+    this: the run_command request thread for a command that finished within
+    its wait window, or the background reaper for one that outlived it.
+    Call only after the process has exited (``proc.returncode`` is set).
+    """
+    meta = _read_meta(job_id) or {}
+    rc = proc.returncode
+    if rc is not None and rc < 0:
+        meta["signal"] = -rc
+        meta["exit_code"] = None
+    else:
+        meta["exit_code"] = rc
+    meta["ended_at"] = time.time()
+    try:
+        _write_meta(job_id, meta)
+    except OSError:
+        # The job dir vanished (pruned or removed externally); there is
+        # nowhere to record the exit, and crashing helps nobody.
+        logger.warning(
+            "event=job_exit_unrecorded job_id=%s exit_code=%s signal=%s",
+            job_id,
+            meta.get("exit_code"),
+            meta.get("signal"),
+        )
+        return
+    try:
+        log_bytes = (_job_dir(job_id) / "out.log").stat().st_size
+    except OSError:
+        log_bytes = 0
+    started = meta.get("started_at")
+    logger.info(
+        "event=job_exit job_id=%s exit_code=%s signal=%s runtime_s=%s log_bytes=%d",
+        job_id,
+        meta.get("exit_code"),
+        meta.get("signal"),
+        round(meta["ended_at"] - started, 3)
+        if isinstance(started, (int, float))
+        else "-",
+        log_bytes,
+    )
+
+
+def reap_in_background(job_id: str, proc: subprocess.Popen) -> None:
+    """Watch a still-running job from a daemon thread and record its exit.
+
+    Used only when a command outlives its wait window and becomes a real
+    background job — the one case that needs a dedicated waiter. A
+    synchronous command is recorded inline by the request thread instead,
+    so the common path spawns no thread.
+    """
+
+    def _watch() -> None:
+        proc.wait()
+        record_exit(job_id, proc)
+
+    threading.Thread(target=_watch, daemon=True).start()
+
+
+def start_job(
+    command: str, workdir: Path, stdin: str | None
+) -> tuple[str, subprocess.Popen]:
+    # The whole reservation -> process launch -> complete meta sequence is one
+    # store transaction. A second concurrent start must see the first new job
+    # before deciding which old slot to prune.
+    with _STORE_LOCK:
+        JOBS_DIR.mkdir(parents=True, exist_ok=True)
+        _prune(reserve=1)
+        job_id = uuid.uuid4().hex[:12]
+        d = _job_dir(job_id)
+        d.mkdir(parents=True)
+        log = d / "out.log"
+        env = os.environ.copy()
+        env.update(_ENV_OVERRIDES)
+        # stdin goes through a spool file, not a pipe: a pipe write blocks once
+        # the 64 KiB buffer fills if the command never reads it, which would hold
+        # start_job (and run_command) until the command ends, defeating
+        # wait_seconds. A file has no such coupling and survives reloads too.
+        stdin_path = d / "stdin"
+        if stdin is not None:
+            stdin_path.write_bytes(stdin.encode("utf-8"))
+        # Popen dups the fds, so the parent's copies can close right away and the
+        # detached child keeps its own.
+        with (
+            open(log, "wb") as logf,
+            open(stdin_path, "rb")
+            if stdin is not None
+            else open(os.devnull, "rb") as inf,
+        ):
+            proc = subprocess.Popen(
+                ["bash", "-c", command],
+                cwd=str(workdir),
+                env=env,
+                stdin=inf,
+                stdout=logf,
+                stderr=subprocess.STDOUT,
+                start_new_session=True,  # own process group; survives across turns
+            )
+        _write_meta(
+            job_id,
+            {
+                "command": command,
+                "workdir": str(workdir),
+                "pid": proc.pid,
+                "pgid": proc.pid,  # start_new_session ⇒ pgid == pid
+                "starttime": _proc_starttime(proc.pid),  # pid identity, see _pid_alive
+                "started_at": time.time(),
+            },
+        )
+        # call= is the tool_call/tool_result id of the run_command that spawned
+        # this job (binnacle.callctx); "-" when started outside a tool call.
+        logger.info(
+            "event=job_start job_id=%s pid=%d command=%.60r workdir=%s call=%s",
+            job_id,
+            proc.pid,
+            command,
+            workdir,
+            current_call.get(),
+        )
+    # No watcher is spawned here: the caller waits on the process for its
+    # wait window and records the exit itself (record_exit), and only calls
+    # reap_in_background if the command outlives that window.
+    return job_id, proc
+
+
+def read_log(job_id: str) -> bytes:
+    try:
+        return (_job_dir(job_id) / "out.log").read_bytes()
+    except OSError:
+        return b""
+
+
+def clip_head_tail(text: str, limit: int = RUN_MAX_OUTPUT_CHARS) -> tuple[str, bool]:
+    if len(text) <= limit:
+        return text, False
+    head = limit // 2
+    tail = limit - head
+    omitted = len(text) - limit
+    # text[len(text) - tail:], not text[-tail:]: with tail == 0 the latter is
+    # the whole string (property test, 2026-09-13).
+    return (
+        f"{text[:head]}\n[… {omitted} chars elided …]\n{text[len(text) - tail :]}",
+        True,
+    )
+
+
+def job_state(job_id: str) -> dict | None:
+    """Full status derived from disk only. None if the job is unknown."""
+    meta = _read_meta(job_id)
+    if meta is None:
+        return None
+    now = time.time()
+    log_path = _job_dir(job_id) / "out.log"
+    try:
+        stat = log_path.stat()
+        log_bytes = stat.st_size
+        last_output_age = now - stat.st_mtime
+    except OSError:
+        log_bytes = 0
+        last_output_age = None
+    if "exit_code" in meta or "signal" in meta:
+        state = "exited"
+    elif _pid_alive(meta["pid"], meta.get("starttime")):
+        state = "running"
+    else:
+        state = "unknown"  # process gone but exit never recorded (server killed)
+    return {
+        "job_id": job_id,
+        "state": state,
+        "exit_code": meta.get("exit_code"),
+        "signal": meta.get("signal"),
+        "command": meta["command"],
+        "workdir": meta["workdir"],
+        "pid": meta["pid"],
+        "pgid": meta.get("pgid", meta["pid"]),
+        "started_at": meta["started_at"],
+        "ended_at": meta.get("ended_at"),
+        "runtime_s": round((meta.get("ended_at") or now) - meta["started_at"], 3),
+        "last_output_age_s": (
+            round(last_output_age, 1) if last_output_age is not None else None
+        ),
+        "log_bytes": log_bytes,
+        "log_path": str(log_path),
+    }
+
+
+_CLK_TCK = os.sysconf("SC_CLK_TCK")
+
+
+def _uptime_s() -> float:
+    try:
+        return float(Path("/proc/uptime").read_text().split()[0])
+    except (OSError, ValueError, IndexError):
+        return 0.0
+
+
+def job_processes(pgid: int, max_cmd_chars: int = 200) -> list[dict]:
+    """Live processes in the job's process group, from /proc (no ps needed).
+
+    ChatGPT polled its jobs' children with ``ps -p PID`` 150+ times in the
+    first week (docs/usage-analysis-2026-09-03.md); surfacing the group
+    here makes that a field instead of a shell round trip.
+    """
+    out: list[dict] = []
+    uptime = _uptime_s()
+    for entry in os.scandir("/proc"):
+        if not entry.name.isdigit():
+            continue
+        try:
+            stat = Path(entry.path, "stat").read_text()
+            # "pid (comm) state ppid pgrp session ..." -- comm may hold spaces.
+            rest = stat[stat.rindex(")") + 2 :].split()
+            if int(rest[2]) != pgid:
+                continue
+            cmdline = Path(entry.path, "cmdline").read_bytes()
+        except (OSError, ValueError, IndexError):
+            continue  # raced with exit
+        cmd = cmdline.replace(b"\0", b" ").decode(errors="replace").strip()
+        start_s = int(rest[19]) / _CLK_TCK
+        out.append(
+            {
+                "pid": int(entry.name),
+                "state": rest[0],
+                "etime_s": round(max(uptime - start_s, 0.0), 1),
+                "cpu_s": round((int(rest[11]) + int(rest[12])) / _CLK_TCK, 2),
+                "cmd": cmd[:max_cmd_chars],
+            }
+        )
+    out.sort(key=lambda p: p["pid"])
+    return out
+
+
+def list_jobs() -> list[dict]:
+    try:
+        ids = [d.name for d in JOBS_DIR.iterdir() if d.is_dir()]
+    except OSError:
+        return []
+    states = [s for jid in ids if (s := job_state(jid)) is not None]
+    states.sort(key=lambda s: s["started_at"], reverse=True)
+    return states
+
+
+def signal_group(pgid: int, sig: int) -> None:
+    os.killpg(pgid, sig)
+
+
+def _signal_job(pgid: int, strays: set[int], sig: int) -> None:
+    """Signal the job's process group, then any descendant outside it."""
+    signal_group(pgid, sig)
+    for pid in strays:
+        try:
+            os.kill(pid, sig)
+        except ProcessLookupError:
+            pass
+
+
+def await_exit(job_id: str, timeout: float) -> dict | None:
+    """Return the job's state, waiting up to ``timeout`` for it to be recorded.
+
+    Consumers (stop_job, job_status) hold no process handle, so they cannot
+    capture an exit themselves; only the waiter (the run_command thread or a
+    background reaper) records it. Between a background process dying and its
+    reaper writing meta.json there is a brief window where disk shows neither
+    "running" (pid gone) nor "exited" (not yet written), i.e. a false
+    "unknown". This bridges that window: it returns as soon as the state is
+    "exited", and otherwise returns the latest state at the timeout — so a
+    still-running job returns "running", and a truly orphaned one (its server
+    died, nobody left to record it) returns "unknown" after the wait.
+    """
+    deadline = time.monotonic() + timeout
+    interval = 0.02
+    while True:
+        st = job_state(job_id)
+        if st is None or st["state"] == "exited" or time.monotonic() >= deadline:
+            return st
+        time.sleep(min(interval, max(0.0, deadline - time.monotonic())))
+        interval = min(interval * 1.5, 0.5)
+
+
+def stop_job(job_id: str) -> dict | None:
+    state = job_state(job_id)
+    if state is None:
+        return None
+    if state["state"] != "running":
+        return state
+    pgid = state["pgid"]
+    # Collect descendants BEFORE signaling: a setsid()'d child is outside the
+    # group and only findable through its parent's ppid link while the
+    # parent lives. Group members are covered by killpg already.
+    group = {p["pid"] for p in job_processes(pgid)}
+    strays = _descendants(state["pid"]) - group
+    try:
+        _signal_job(pgid, strays, signal.SIGTERM)
+    except ProcessLookupError:
+        return await_exit(job_id, STOP_SIGKILL_GRACE_S)
+    # Wait for the recorded exit, not just for the pid to disappear: the
+    # reaper writes the exit (signal 15) a moment after the process dies, and
+    # returning before that would report a false "unknown".
+    st = await_exit(job_id, STOP_SIGTERM_GRACE_S)
+    if st is None or st["state"] == "exited":
+        return st
+    try:
+        _signal_job(pgid, strays, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    return await_exit(job_id, STOP_SIGKILL_GRACE_S)

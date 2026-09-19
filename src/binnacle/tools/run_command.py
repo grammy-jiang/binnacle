@@ -1,0 +1,199 @@
+"""run_command — run a shell command, wait-not-kill (yields a job_id).
+
+Spec: docs/tools/run_command.md. Shared job machinery: jobs.py.
+"""
+
+import subprocess
+import time
+from typing import Annotated
+
+from fastmcp import FastMCP
+from fastmcp.exceptions import ToolError
+from fastmcp.tools.base import ToolResult
+from pydantic import Field
+
+from binnacle import jobs
+from binnacle.config import get_settings
+from binnacle.paths import resolve_path
+
+RUN_WAIT_DEFAULT = get_settings().run_command.wait_default_s
+RUN_WAIT_MAX = get_settings().run_command.wait_max_s
+
+OUTPUT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "job_id": {"type": "string"},
+        "state": {"type": "string", "enum": ["exited", "running"]},
+        "exit_code": {"type": ["integer", "null"]},
+        "signal": {"type": ["integer", "null"]},
+        "output": {"type": "string"},
+        "truncated": {"type": "boolean"},
+        "output_bytes": {"type": "integer"},
+        "duration_s": {"type": "number"},
+        "runtime_s": {"type": "number"},
+        "log_path": {"type": "string"},
+        "workdir": {"type": "string"},
+        "background_job": {"type": "boolean"},
+    },
+    "required": ["job_id", "state"],
+}
+
+
+def _tail(text: str, n: int) -> tuple[str, int]:
+    """Last n lines of text and how many lines were dropped."""
+    lines = text.splitlines(keepends=True)
+    if len(lines) <= n:
+        return text, 0
+    return "".join(lines[-n:]), len(lines) - n
+
+
+def run_command_impl(
+    command: str,
+    workdir: str,
+    wait_seconds: int,
+    background: bool,
+    stdin: str | None,
+    tail_lines: int | None = None,
+) -> ToolResult:
+    resolved = resolve_path(workdir)
+    if not resolved.is_dir():
+        raise ToolError(
+            f"workdir is not a directory: {resolved}. "
+            f"Use a directory inside ~/Projects or /tmp."
+        )
+    wait_seconds = max(1, min(wait_seconds, RUN_WAIT_MAX))
+    deadline = time.time() + (jobs.WARMUP_S if background else wait_seconds)
+
+    try:
+        job_id, proc = jobs.start_job(command, resolved, stdin)
+    except OSError as e:
+        raise ToolError(
+            f"Could not start the job: {e}. The job spool {jobs.JOBS_DIR} must be "
+            f"writable; run `binnacle doctor`."
+        ) from e
+    # Wait on the process itself, in this request thread, up to the deadline.
+    # If it finishes, record the exit inline (the exit code is already in
+    # memory as proc.returncode) — so there is no window where a just-finished
+    # command reads as "running", and the common synchronous case spawns no
+    # thread. If it outlives the deadline, it has become a real background
+    # job; hand it to a watcher thread that records its exit later.
+    try:
+        proc.wait(timeout=max(0.0, deadline - time.time()))
+        jobs.record_exit(job_id, proc)
+    except subprocess.TimeoutExpired:
+        jobs.reap_in_background(job_id, proc)
+
+    state = jobs.job_state(job_id)
+    log_text = jobs.read_log(job_id).decode("utf-8", errors="replace")
+    dropped = 0
+    if tail_lines is not None:
+        log_text, dropped = _tail(log_text, tail_lines)
+    output, truncated = jobs.clip_head_tail(log_text)
+    if dropped:
+        output = (
+            f"[… {dropped} earlier lines omitted (tail_lines={tail_lines}) …]\n"
+            + output
+        )
+        truncated = True
+
+    if state and state["state"] == "exited":
+        payload = {
+            "job_id": job_id,
+            "state": "exited",
+            "exit_code": state["exit_code"],
+            "output": output,
+            "truncated": truncated,
+            "output_bytes": state["log_bytes"],
+            "duration_s": state["runtime_s"],
+            "log_path": state["log_path"],
+            "workdir": str(resolved),
+            "background_job": False,
+        }
+        if state["signal"] is not None:
+            payload["signal"] = state["signal"]
+        rc = state["exit_code"]
+        if state["signal"] is not None:
+            summary = f"Command killed by signal {state['signal']} after {state['runtime_s']} s."
+        elif rc == 0:
+            summary = f"Command exited 0 in {state['runtime_s']} s."
+        else:
+            summary = f"Command exited {rc} in {state['runtime_s']} s."
+        # The command finished inline; there is no lingering job. Say so, because
+        # models otherwise poll job_status to check (measured: 50 such no-arg
+        # calls in a week, docs/usage-analysis-2026-09-06.md).
+        summary += " It finished synchronously; no background job was created, so no job_status or stop_job is needed."
+        return ToolResult(content=summary, structured_content=payload)
+
+    # still running → hand back the job_id
+    payload = {
+        "job_id": job_id,
+        "state": "running",
+        "output": output,
+        "truncated": truncated,
+        "output_bytes": state["log_bytes"] if state else 0,
+        "runtime_s": state["runtime_s"] if state else 0,
+        "log_path": state["log_path"] if state else "",
+        "workdir": str(resolved),
+        "background_job": True,
+    }
+    reason = (
+        "started in background"
+        if background
+        else f"still running after {wait_seconds} s"
+    )
+    summary = (
+        f"Command {reason}; job_id={job_id}. "
+        f"Poll with job_status, cancel with stop_job."
+    )
+    return ToolResult(content=summary, structured_content=payload)
+
+
+def register(mcp: FastMCP) -> None:
+    @mcp.tool(
+        annotations={
+            "readOnlyHint": False,
+            "destructiveHint": True,
+            "openWorldHint": True,
+        },
+        output_schema=OUTPUT_SCHEMA,
+    )
+    def run_command(
+        command: Annotated[str, Field(description="Shell command, run as bash -c.")],
+        workdir: Annotated[
+            str,
+            Field(
+                description="Working directory; absolute (~ ok) or relative to ~/Projects. Must be inside ~/Projects or /tmp."
+            ),
+        ] = "~/Projects",
+        wait_seconds: Annotated[
+            int,
+            Field(
+                ge=1,
+                le=RUN_WAIT_MAX,
+                description="Seconds to wait before yielding a job_id (max 50).",
+            ),
+        ] = RUN_WAIT_DEFAULT,
+        background: Annotated[
+            bool,
+            Field(description="Return at once with a job_id after a 1 s warm-up."),
+        ] = False,
+        stdin: Annotated[
+            str | None, Field(description="Text piped to the command's stdin.")
+        ] = None,
+        tail_lines: Annotated[
+            int | None,
+            Field(
+                ge=1,
+                description="Return only the last N lines of output (no need to pipe through tail).",
+            ),
+        ] = None,
+    ) -> ToolResult:
+        """Run a shell command with bash -c; several commands can go in one
+        call (set -e; a && b). Waits up to wait_seconds; a command still
+        running then is not killed: you get a job_id for job_status and
+        stop_job. A command that finished created no job. Output merges
+        stdout and stderr.
+        """
+        return run_command_impl(
+            command, workdir, wait_seconds, background, stdin, tail_lines
+        )

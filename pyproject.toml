@@ -1,13 +1,28 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
 [project]
-name = "binnacle"
+name = "binnacle-mcp"
 version = "1.0.0"
 description = "MCP server that lets AI agents work on a Raspberry Pi."
 requires-python = ">=3.10"
 dependencies = [
+    "cyclopts>=4.23.3", # the CLI framework fastmcp's own CLI uses
     "fastmcp==4.0.0b5", # beta pin -- revisit when 4.0 goes stable
+    "pydantic>=2.13.5",
     "pydantic-settings>=2.15.0",
     "uvicorn[standard]>=0.52.4",
 ]
+
+[project.scripts]
+binnacle = "binnacle.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+binnacle = ["py.typed"]
 
 [dependency-groups]
 test = [
@@ -21,6 +36,7 @@ test = [
 ]
 lint = [
     "bandit>=1.9.4",
+    "deptry>=0.25.1",
     "import-linter>=2.14",
     "mypy>=2.3.1",
     "pip-audit>=2.10.1",
@@ -34,15 +50,68 @@ dev = [
     "tox-uv>=1.36.0",
 ]
 
-[tool.uv]
-package = false
-
 [tool.pytest.ini_options]
+# Constrain discovery to the managed suite; developer artifacts such as
+# mutation-testing copies must never be collected by default pytest.
+testpaths = ["tests"]
 # A hung test (the job tools spawn real subprocesses) fails instead of
 # freezing a tox run; 60 s is far above any test's honest runtime.
 timeout = 60
+
+[tool.coverage.run]
+# Branch coverage, measured at 87% on 2026-09-13 (350 tests). The gate runs
+# in tox (every interpreter) so a plain `pytest` stays fast; ratchet
+# fail_under up as the number rises, never down.
+branch = true
+source = ["binnacle"]
+
+[tool.coverage.report]
+# 86.9: the measured floor was 87.00% displayed / 86.99% exact, so an integer
+# 87 fails on rounding. Ratchet up as coverage rises; never down.
+fail_under = 86.9
+precision = 2
+show_missing = true
+skip_covered = true
+
+[tool.mutmut]
+# Mutation testing on demand, per module (hours for a full run on the Pi;
+# never a hook): `mutmut run` then `mutmut results`. src layout: mutmut copies
+# source_paths into ./mutants, runs the tests from inside ./mutants and puts
+# mutants/<source_path> first on sys.path -- so this must be "src", not
+# "src/binnacle": with the package directory itself as the entry,
+# `import binnacle` still resolves to the editable install and every mutant
+# "survives" (measured 2026-09-13: 24/24 on textio before this fix).
+source_paths = ["src"]
+pytest_add_cli_args_test_selection = ["tests/"]
+do_not_mutate = ["src/binnacle/cli.py"]
+# tests/test_descriptions.py reads the ChatGPT Project rules from the skill
+# references by repo-relative path; the suite runs inside ./mutants, so copy them.
+also_copy = [".claude/skills/chatgpt-mcp-dev/references/"]
+
+[tool.bandit]
+# B404/B603/B607: subprocess execution is this server's core mechanism --
+# run_command runs arbitrary shell by design (docs/agent-toolset-design.md
+# §6.7), list_files/search_text drive ripgrep, and the CLI drives systemctl.
+# B108: /tmp is a configured allowed root, not an insecure temp file.
+skips = ["B404", "B603", "B607", "B108"]
+
+[tool.codespell]
+# ACI = SWE-agent's "Agent-Computer Interface" (cited in docs/tools/read_file.md).
+ignore-words-list = "aci"
+
+[tool.deptry]
+# The dist name is binnacle-mcp; the import package is binnacle.
+known_first_party = ["binnacle"]
+# Agent tooling with its own conventions and imports, not server code.
+extend_exclude = ["\\.claude", "\\.tox", "build", "dist"]
+
+[tool.deptry.per_rule_ignores]
+# tests/ legitimately imports the test dependency group.
+DEP004 = ["pytest"]
 
 [tool.mypy]
 # The floor of requires-python: catches APIs newer than the oldest
 # supported interpreter (e.g. PurePath.full_match, 3.13-only).
 python_version = "3.10"
+# Teaches mypy pydantic's synthesized __init__ and Field() semantics.
+plugins = ["pydantic.mypy"]

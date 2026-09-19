@@ -356,3 +356,9 @@ $RECYCLE.BIN/
 *.lnk
 
 # End of https://www.toptal.com/developers/gitignore/api/git,macos,linux,windows,vim,emacs,visualstudiocode,python,dotenv,direnv
+
+# mutmut working copy
+mutants/
+
+# Claude Code ephemeral worktrees (local execution state, never source)
+.claude/worktrees/

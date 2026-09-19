@@ -25,6 +25,8 @@ repos:
     rev: v0.23.2
     hooks:
       - id: markdownlint-cli2
+        # Reference corpora preserve source formatting; project prose is linted.
+        exclude: ^\.claude/skills/.*/references/
   # Secret scanner -- blocks commits that contain credentials/tokens.
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.30.1
@@ -43,6 +45,8 @@ repos:
     rev: 1.9.4
     hooks:
       - id: bandit
+        args: ["-c", "pyproject.toml"]
+        exclude: ^tests/
   # uv -- keeps uv.lock in step with pyproject.toml (re-locks on drift);
   # official hook repo, rev kept in step with the uv version in uv.lock.
   - repo: https://github.com/astral-sh/uv-pre-commit
@@ -66,9 +70,17 @@ repos:
         entry: uv run --no-sync mypy
         language: system
         types: [python]
+        # Skill scripts are standalone tools with their own runtime/imports.
+        exclude: ^\.claude/skills/
       - id: pip-audit
         name: pip-audit
         entry: uv run --no-sync pip-audit --progress-spinner off
         language: system
         files: ^uv\.lock$
+        pass_filenames: false
+      - id: deptry
+        name: deptry
+        entry: uv run --no-sync deptry .
+        language: system
+        files: (\.py$|^pyproject\.toml$)
         pass_filenames: false
