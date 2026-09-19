@@ -1,67 +1,17 @@
-"""Bearer-token auth at the HTTP edge, through the ASGI app.
-
-Roadmap item 3 of 2026-08-31. Everything else in the suite talks to
-`server.mcp` in memory and never meets `StaticTokenVerifier`; the tunnel
-does, and so does every local agent. httpx2's ASGITransport drives
-`server.app` without a socket.
-
-The streamable-HTTP session manager only exists while the app's lifespan
-runs (measured 2026-09-13: without it the unauthenticated request still
-gets its 401, because auth sits in front, but an authenticated one raises
-"task group was not initialized"). Each test therefore opens the lifespan.
-"""
+"""Bearer auth and HTTP session lifecycle at the ASGI edge."""
 
 import asyncio
-import json
 
 import httpx2
 
 from binnacle import server
-
-INITIALIZE = {
-    "jsonrpc": "2.0",
-    "id": 1,
-    "method": "initialize",
-    "params": {
-        "protocolVersion": "2025-06-18",
-        "capabilities": {},
-        "clientInfo": {"name": "asgi-test", "version": "0"},
-    },
-}
-HEADERS = {
-    "Accept": "application/json, text/event-stream",
-    "Content-Type": "application/json",
-}
-
-
-def good_token() -> str:
-    """The token the app loaded at import: same file, same stripping."""
-    return (
-        server.TOKEN_FILE.read_text(encoding="utf-8")
-        .strip()
-        .removeprefix("Bearer ")
-        .strip()
-    )
-
-
-def with_app(coro_fn):
-    async def go():
-        async with server.app.router.lifespan_context(server.app):
-            transport = httpx2.ASGITransport(app=server.app)
-            async with httpx2.AsyncClient(
-                transport=transport, base_url="http://test"
-            ) as c:
-                return await coro_fn(c)
-
-    return asyncio.run(go())
-
-
-def sse_json(body: str) -> dict:
-    """First JSON-RPC message in a text/event-stream body."""
-    for line in body.splitlines():
-        if line.startswith("data:"):
-            return json.loads(line[5:].strip())
-    raise AssertionError(f"no data: line in {body[:200]!r}")
+from tests.integration.http_test_support import (
+    HEADERS,
+    INITIALIZE,
+    good_token,
+    sse_json,
+    with_app,
+)
 
 
 def test_initialize_without_a_token_is_401():
@@ -150,3 +100,39 @@ def test_load_token_rejects_empty_file(tmp_path, monkeypatch):
 
     with pytest.raises(RuntimeError, match="is empty"):
         server._load_token()
+
+
+def test_http_session_id_is_required_and_unknown_session_is_rejected():
+    async def go():
+        async with server.app.router.lifespan_context(server.app):
+            transport = httpx2.ASGITransport(app=server.app)
+            async with httpx2.AsyncClient(
+                transport=transport, base_url="http://test"
+            ) as c:
+                auth = {
+                    **HEADERS,
+                    "Authorization": f"Bearer {good_token()}",
+                }
+                init = await c.post("/mcp", json=INITIALIZE, headers=auth)
+                assert init.status_code == 200
+                assert init.headers.get("mcp-session-id")
+
+                request = {
+                    "jsonrpc": "2.0",
+                    "id": 50,
+                    "method": "tools/list",
+                    "params": {},
+                }
+                missing = await c.post("/mcp", json=request, headers=auth)
+                assert missing.status_code == 400
+                assert "Missing session ID" in missing.text
+
+                unknown = await c.post(
+                    "/mcp",
+                    json=request,
+                    headers={**auth, "mcp-session-id": "expired-session"},
+                )
+                assert unknown.status_code == 404
+                assert "Session not found" in unknown.text
+
+    asyncio.run(go())

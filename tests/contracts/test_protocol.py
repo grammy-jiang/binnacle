@@ -174,3 +174,13 @@ def test_path_outside_the_roots_is_a_tool_error_not_a_crash():
 def test_unknown_tool_is_a_protocol_error():
     r = call("no_such_tool")
     assert r.is_error
+
+
+def test_symlink_escape_is_rejected_through_mcp(tmp_path):
+    link = tmp_path / "escape"
+    link.symlink_to("/etc/passwd")
+
+    result = call("read_file", path=str(link))
+
+    assert result.is_error
+    assert "allowed roots" in text_of(result)

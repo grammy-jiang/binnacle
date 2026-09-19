@@ -35,8 +35,7 @@
       "src/binnacle/indexed_surface.py",
       "src/binnacle/logstats.py",
       "src/binnacle/paths.py",
-      "src/binnacle/textio.py",
-      "src/binnacle/visibility.py"
+      "src/binnacle/textio.py"
     ],
     "temporary_floors": {
       "unit": {},
