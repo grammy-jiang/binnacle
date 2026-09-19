@@ -7,14 +7,12 @@
       "scripts",
       "tests"
     ],
-    "legacy_oversize": {
-      "src/binnacle/watchdog.py": 4046,
-      "tests/system/test_watchdog.py": 4018
-    }
+    "legacy_oversize": {}
   },
   "architecture": {
     "src_root": "src",
     "watchdog_companion_modules": [
+      "binnacle.ops.watchdog",
       "binnacle.watchdog",
       "binnacle.watchdog_cli",
       "binnacle.watchdog_config",

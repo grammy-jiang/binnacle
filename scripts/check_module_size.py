@@ -36,8 +36,9 @@ def tracked_python_files(root: Path, roots: tuple[str, ...]) -> list[Path]:
     allowed = tuple(f"{name.rstrip('/')}/" for name in roots)
     out: list[Path] = []
     for raw in proc.stdout.splitlines():
-        if raw.startswith(allowed):
-            out.append(root / raw)
+        path = root / raw
+        if raw.startswith(allowed) and path.is_file():
+            out.append(path)
     return sorted(set(out))
 
 

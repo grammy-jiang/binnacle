@@ -81,13 +81,16 @@ def evaluate(
     forbidden = tuple(sorted(companion))
     errors: list[str] = []
 
+    def is_companion(module: str) -> bool:
+        return any(
+            module == item or module.startswith(item + ".") for item in forbidden
+        )
+
     for source, targets in sorted(imports.items()):
-        if source in companion:
+        if is_companion(source):
             continue
         for target in sorted(targets):
-            if any(
-                target == item or target.startswith(item + ".") for item in forbidden
-            ):
+            if is_companion(target):
                 errors.append(
                     f"{source} -> {target}: Binnacle core must not depend on "
                     "the watchdog companion"

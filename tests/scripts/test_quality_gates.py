@@ -152,3 +152,36 @@ def test_coverage_policy_requires_floor_cleanup_once_target_is_reached():
             "remove obsolete temporary unit floor 80.00%"
         )
     ]
+
+
+def test_architecture_treats_companion_submodules_as_one_way_boundary():
+    policy = {"architecture": {"watchdog_companion_modules": ["binnacle.ops.watchdog"]}}
+    imports = {
+        "binnacle.core": {"binnacle.ops.watchdog.policy"},
+        "binnacle.ops.watchdog.policy": {"binnacle.uplink"},
+    }
+
+    errors = architecture.evaluate(imports, policy)
+
+    assert errors == [
+        (
+            "binnacle.core -> binnacle.ops.watchdog.policy: "
+            "Binnacle core must not depend on the watchdog companion"
+        )
+    ]
+
+
+def test_module_size_file_discovery_ignores_deleted_tracked_paths(
+    tmp_path, monkeypatch
+):
+    root = tmp_path
+    existing = root / "src" / "kept.py"
+    existing.parent.mkdir()
+    existing.write_text("x\n")
+
+    class Proc:
+        stdout = "src/kept.py\nsrc/deleted.py\n"
+
+    monkeypatch.setattr(module_size.subprocess, "run", lambda *a, **k: Proc())
+
+    assert module_size.tracked_python_files(root, ("src",)) == [existing]
