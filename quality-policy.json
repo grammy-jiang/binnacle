@@ -9,7 +9,6 @@
     ],
     "legacy_oversize": {
       "src/binnacle/watchdog.py": 4046,
-      "tests/integration/test_jobs.py": 1000,
       "tests/system/test_watchdog.py": 4018
     }
   },
