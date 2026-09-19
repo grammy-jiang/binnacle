@@ -84,3 +84,15 @@ repos:
         language: system
         files: (\.py$|^pyproject\.toml$)
         pass_filenames: false
+      - id: module-size
+        name: module size ratchet
+        entry: uv run --no-sync python scripts/check_module_size.py
+        language: system
+        files: (\.py$|^quality-policy\.json$)
+        pass_filenames: false
+      - id: architecture
+        name: architecture boundaries
+        entry: uv run --no-sync python scripts/check_architecture.py
+        language: system
+        files: (^src/binnacle/.*\.py$|^quality-policy\.json$)
+        pass_filenames: false

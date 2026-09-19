@@ -82,10 +82,16 @@ discovery must never collect those copies.
 
 ## Coverage policy
 
-Coverage is a regression signal, not a target to game. The branch-coverage
-floor is currently `86.9%` and may only move upward. New tests should focus on
-meaningful public behaviour, error handling, concurrency, state transitions,
-and regressions seen in real use.
+Coverage is a regression signal, not a target to game. The authoritative gate
+is now per module: core logic must reach at least 95% branch coverage from the
+unit suite alone; every other production module must reach at least 90% branch
+coverage from the full appropriate suite. Repository-average coverage remains a
+trend metric only and cannot make a weak module pass.
+
+The executable policy, current ratchet floors, and module classification live
+in `quality-policy.json`; `docs/quality-gates.md` documents the full workflow.
+New tests should focus on meaningful public behaviour, error handling,
+concurrency, state transitions, and regressions seen in real use.
 
 The 2026-09-19 baseline review started at 613 tests and 88.24% branch coverage.
 The review then added focused identity and CLI command tests; run the coverage

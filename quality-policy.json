@@ -1,0 +1,66 @@
+{
+  "module_size": {
+    "warning_lines": 450,
+    "max_lines": 500,
+    "roots": [
+      "src",
+      "scripts",
+      "tests"
+    ],
+    "legacy_oversize": {
+      "scripts/usage_breakdown.py": 578,
+      "src/binnacle/doctor.py": 808,
+      "src/binnacle/indexed_retrieval.py": 1272,
+      "src/binnacle/jobs.py": 523,
+      "src/binnacle/logstats.py": 699,
+      "src/binnacle/watchdog.py": 4046,
+      "tests/integration/test_jobs.py": 1000,
+      "tests/system/test_doctor.py": 726,
+      "tests/system/test_uplink.py": 560,
+      "tests/system/test_watchdog.py": 4018
+    }
+  },
+  "architecture": {
+    "src_root": "src",
+    "watchdog_companion_modules": [
+      "binnacle.watchdog",
+      "binnacle.watchdog_cli",
+      "binnacle.watchdog_config",
+      "binnacle.watchdog_doctor",
+      "binnacle.watchlog"
+    ]
+  },
+  "coverage": {
+    "core_unit_target": 95.0,
+    "other_full_target": 90.0,
+    "core_modules": [
+      "src/binnacle/callctx.py",
+      "src/binnacle/config.py",
+      "src/binnacle/identity.py",
+      "src/binnacle/indexed_retrieval.py",
+      "src/binnacle/indexed_surface.py",
+      "src/binnacle/logstats.py",
+      "src/binnacle/paths.py",
+      "src/binnacle/textio.py",
+      "src/binnacle/visibility.py"
+    ],
+    "temporary_floors": {
+      "unit": {
+        "src/binnacle/identity.py": 92.3,
+        "src/binnacle/indexed_retrieval.py": 33.01,
+        "src/binnacle/indexed_surface.py": 21.73,
+        "src/binnacle/logstats.py": 79.57,
+        "src/binnacle/paths.py": 93.65
+      },
+      "full": {
+        "src/binnacle/cli.py": 84.76,
+        "src/binnacle/doctor.py": 83.36,
+        "src/binnacle/server.py": 85.0,
+        "src/binnacle/tools/list_files.py": 85.29,
+        "src/binnacle/uplink.py": 89.54,
+        "src/binnacle/watchdog_cli.py": 48.0,
+        "src/binnacle/watchlog.py": 85.47
+      }
+    }
+  }
+}
