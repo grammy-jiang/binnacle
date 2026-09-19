@@ -63,9 +63,10 @@ def log_effective_config() -> None:
 
 
 def _load_token() -> str:
-    token = (
-        TOKEN_FILE.read_text(encoding="utf-8").strip().removeprefix("Bearer ").strip()
-    )
+    raw = TOKEN_FILE.read_text(encoding="utf-8").strip()
+    if raw == "Bearer":
+        raise RuntimeError(f"Token file {TOKEN_FILE} is empty.")
+    token = raw.removeprefix("Bearer ").strip()
     if not token:
         raise RuntimeError(f"Token file {TOKEN_FILE} is empty.")
     return token

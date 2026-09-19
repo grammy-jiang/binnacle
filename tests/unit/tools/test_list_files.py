@@ -131,3 +131,77 @@ def test_path_is_file_hints_read_file(tmp_path):
 def test_outside_roots():
     with pytest.raises(ToolError, match="outside allowed roots"):
         lf.list_files_impl("/etc", None, 200, False)
+
+
+def test_file_entry_tolerates_a_vanished_path():
+    class Vanished:
+        def is_dir(self):
+            raise OSError("gone")
+
+    assert lf._file_entry(Vanished()) is None
+
+
+def test_glob_reports_missing_ripgrep(monkeypatch, tmp_path):
+    def missing(*args, **kwargs):
+        raise FileNotFoundError("rg")
+
+    monkeypatch.setattr(lf.subprocess, "run", missing)
+
+    with pytest.raises(ToolError, match="ripgrep"):
+        lf._glob_mode(tmp_path, "*.py", 20, False)
+
+
+def test_glob_reports_ripgrep_timeout(monkeypatch, tmp_path):
+    def timeout(*args, **kwargs):
+        raise lf.subprocess.TimeoutExpired(["rg"], 1)
+
+    monkeypatch.setattr(lf.subprocess, "run", timeout)
+
+    with pytest.raises(ToolError, match="timed out"):
+        lf._glob_mode(tmp_path, "*.py", 20, False)
+
+
+def test_glob_reports_ripgrep_error(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        lf.subprocess,
+        "run",
+        lambda *a, **k: lf.subprocess.CompletedProcess(
+            ["rg"], 2, stdout="", stderr="synthetic failure"
+        ),
+    )
+
+    with pytest.raises(ToolError, match="synthetic failure"):
+        lf._glob_mode(tmp_path, "*.py", 20, False)
+
+
+def test_glob_translates_invalid_pattern_error(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        lf.subprocess,
+        "run",
+        lambda *a, **k: lf.subprocess.CompletedProcess(
+            ["rg"], 0, stdout="one.py\n", stderr=""
+        ),
+    )
+    monkeypatch.setattr(
+        lf,
+        "full_match",
+        lambda *a, **k: (_ for _ in ()).throw(ValueError("bad glob")),
+    )
+
+    with pytest.raises(ToolError, match="Invalid glob pattern"):
+        lf._glob_mode(tmp_path, "*.py", 20, False)
+
+
+def test_glob_hidden_mode_passes_hidden_switch(monkeypatch, tmp_path):
+    seen = []
+
+    def fake_run(cmd, **kwargs):
+        seen.append(cmd)
+        return lf.subprocess.CompletedProcess(cmd, 1, stdout="", stderr="")
+
+    monkeypatch.setattr(lf.subprocess, "run", fake_run)
+
+    lf._glob_mode(tmp_path, "*.py", 20, True)
+
+    assert "--hidden" in seen[0]
+    assert "!**/.git/**" in seen[0]

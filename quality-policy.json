@@ -13,7 +13,6 @@
       "src/binnacle/logstats.py": 699,
       "src/binnacle/watchdog.py": 4046,
       "tests/integration/test_jobs.py": 1000,
-      "tests/system/test_uplink.py": 560,
       "tests/system/test_watchdog.py": 4018
     }
   },
@@ -49,9 +48,6 @@
       "full": {
         "src/binnacle/cli.py": 84.76,
         "src/binnacle/doctor.py": 83.36,
-        "src/binnacle/server.py": 85.0,
-        "src/binnacle/tools/list_files.py": 85.29,
-        "src/binnacle/uplink.py": 89.54,
         "src/binnacle/watchdog_cli.py": 48.0,
         "src/binnacle/watchlog.py": 85.47
       }

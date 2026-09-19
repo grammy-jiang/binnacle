@@ -127,3 +127,26 @@ def test_a_token_with_the_bearer_prefix_stripped_twice_still_fails():
 
     r = with_app(go)
     assert r.status_code == 401
+
+
+def test_version_falls_back_when_distribution_metadata_is_missing(monkeypatch):
+    monkeypatch.setattr(
+        server.importlib.metadata,
+        "version",
+        lambda name: (_ for _ in ()).throw(
+            server.importlib.metadata.PackageNotFoundError(name)
+        ),
+    )
+
+    assert server._version() == "?"
+
+
+def test_load_token_rejects_empty_file(tmp_path, monkeypatch):
+    token = tmp_path / "token"
+    token.write_text("Bearer   \n")
+    monkeypatch.setattr(server, "TOKEN_FILE", token)
+
+    import pytest
+
+    with pytest.raises(RuntimeError, match="is empty"):
+        server._load_token()
