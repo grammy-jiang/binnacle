@@ -545,6 +545,26 @@ Rule from this: a change to a unit template is not deployed until `setup`
 has been run on the host and the doctor is green; the doctor is what
 proves it, not the commit.
 
+Same night, a second drift, found through the issue lines the doctor
+prints: since 2026-09-16 14:37 the three USB profiles are bound by
+`802-11-wireless.mac-address` (an agent session with sudo did it, so that
+a swap of wlan1/wlan2 at boot does not swap their profiles) and carry no
+`connection.interface-name`; wlan0's two stay bound by interface-name.
+The watchdog knew only interface-name binding, so for four days the
+preference rung treated `Occom_1D36_5G-USB` (priority 20) as a candidate
+for wlan0 and wlan2 (three permanent issues, a failed `connection up` on
+wlan0 every 10 min, `ok=False` in 20 ms) and a wedge demotion of wlan1
+raised only its active profile (`others=-`), so the profile NM brought up
+next was not behind the demotion. `profile_details` now reads the MAC as
+well, `device_mac` reads the device's (`iw dev <dev> info`), and
+`profile_binding` resolves a profile to its device by interface-name or
+MAC: a MAC-bound profile is a candidate for its own device only, counts
+for the device-level demotion and the inventory line, and a profile bound
+to a MAC no observed device has is never a candidate. The user's rule for
+the radios, restated 2026-09-20: always the fast adapter first, the next
+one when it is down, the fast one again once it is back, and connectivity
+above everything.
+
 ### The journal as the record
 
 The watchdog's journal is written so a window of it, however short, can

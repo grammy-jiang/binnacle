@@ -14,6 +14,8 @@ from binnacle.ops.watchdog.hardware import (
 from binnacle.ops.watchdog.model import DeviceInfo
 from binnacle.ops.watchdog.network import (
     WifiProfile,
+    device_mac,
+    profile_binding,
     profile_details,
     profile_metric,
 )
@@ -35,9 +37,12 @@ def inventory_line(
     module, _ = driver_module_of(dev)
     params = module_params(module, param_names)
     bound = []
+    macs = {dev: device_mac(dev, run)}
     for p in profiles:
-        iface, _ = profile_details(p.name, run)
-        if iface == dev or p.device == dev:
+        if (
+            p.device == dev
+            or profile_binding(profile_details(p.name, run), macs) == dev
+        ):
             metric = profile_metric(p.name, run)
             bound.append(
                 f"{p.name}:prio{p.priority}:metric{metric}:{'auto' if p.autoconnect else 'manual'}"

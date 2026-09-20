@@ -242,3 +242,92 @@ def test_cycle_rescans_a_device_off_its_best_profile_on_the_interval(
     calls.clear()
     assert wd.cycle(state, policy, path, run=run) == []  # within the interval
     assert not any("wifi" in c and c[-1] == "yes" for c in calls)
+
+
+MAC_CONNECTIONS = (
+    "Occom-USB:802-11-wireless:wlan1:yes:0\n"
+    "Occom:802-11-wireless:wlan0:yes:0\n"
+    "Occom-5G-USB:802-11-wireless::yes:20\n"
+    "Occom-2.4G-USB2:802-11-wireless:wlan2:yes:0\n"
+)
+# This host since 2026-09-16: the USB profiles carry
+# 802-11-wireless.mac-address (nmcli escapes the colons) and no
+# interface-name; wlan0's profile is bound by interface-name.
+MAC_DETAILS = {
+    "Occom-USB": "\nOccom_2.4G\n00\\:0F\\:00\\:73\\:77\\:7F\n",
+    "Occom-5G-USB": "\nOccom_5G\n00\\:0F\\:00\\:73\\:77\\:7F\n",
+    "Occom-2.4G-USB2": "\nOccom_2.4G\n48\\:8A\\:D2\\:05\\:1A\\:14\n",
+    "Occom": "wlan0\nOccom_5G\n",
+}
+INFOS = {
+    "wlan1": "Interface wlan1\n\taddr 00:0f:00:73:77:7f\n\ttype managed\n",
+    "wlan2": "Interface wlan2\n\taddr 48:8a:d2:05:1a:14\n\ttype managed\n",
+    "wlan0": "Interface wlan0\n\taddr 2c:cf:67:c6:73:14\n\ttype managed\n",
+}
+
+
+def test_device_mac_reads_iw_info_and_lower_cases_it():
+    run, _ = nm_fake(infos=INFOS)
+    assert wd.device_mac("wlan1", run) == "00:0f:00:73:77:7f"
+    assert wd.device_mac("wlan9", run) == ""
+
+
+def test_profile_details_unescape_the_mac_address():
+    run, _ = nm_fake(details=MAC_DETAILS)
+    assert wd.profile_details("Occom-5G-USB", run) == wd.ProfileDetails(
+        "", "Occom_5G", "00:0f:00:73:77:7f"
+    )
+    assert wd.profile_details("Occom", run) == wd.ProfileDetails(
+        "wlan0", "Occom_5G", ""
+    )
+    assert wd.profile_details("Nope", run) == wd.ProfileDetails("", "", "")
+
+
+def test_profile_binding_resolves_interface_name_then_mac():
+    macs = {"wlan1": "00:0f:00:73:77:7f", "wlan0": "2c:cf:67:c6:73:14"}
+    assert wd.profile_binding(wd.ProfileDetails("wlan0", "x", ""), macs) == "wlan0"
+    assert (
+        wd.profile_binding(wd.ProfileDetails("", "x", "00:0f:00:73:77:7f"), macs)
+        == "wlan1"
+    )
+    assert (
+        wd.profile_binding(wd.ProfileDetails("", "x", "aa:bb:cc:dd:ee:ff"), macs) == "?"
+    )
+    assert wd.profile_binding(wd.ProfileDetails("", "x", ""), macs) == ""
+
+
+def test_mac_bound_profile_is_a_candidate_only_for_its_own_device():
+    """Before 2026-09-20 the MAC-bound 5 GHz USB profile (priority 20) was a
+    candidate for every device: three permanent issues and a failed
+    `connection up` on wlan0 every 10 min, refused by NetworkManager in
+    20 ms."""
+    run, _ = nm_fake(
+        connections=MAC_CONNECTIONS,
+        details=MAC_DETAILS,
+        infos=INFOS,
+        scans={"wlan1": "Occom_5G\n", "wlan0": "Occom_5G\n", "wlan2": "Occom_2.4G\n"},
+    )
+    prefs = wd.preferences(["wlan1", "wlan0", "wlan2"], run)
+    assert prefs["wlan1"] == wd.Preference("wlan1", "Occom-USB", "Occom-5G-USB", True)
+    assert prefs["wlan0"] == wd.Preference("wlan0", "Occom", None, False)
+    assert prefs["wlan2"] == wd.Preference("wlan2", "Occom-2.4G-USB2", None, False)
+
+
+def test_mac_bound_profiles_count_for_the_device_level_demotion():
+    run, _ = nm_fake(connections=MAC_CONNECTIONS, details=MAC_DETAILS, infos=INFOS)
+    assert wd.bound_profiles("wlan1", run) == ["Occom-USB", "Occom-5G-USB"]
+    assert wd.bound_profiles("wlan2", run) == ["Occom-2.4G-USB2"]
+    assert wd.bound_profiles("wlan0", run) == ["Occom"]
+
+
+def test_a_profile_bound_to_an_unknown_mac_is_never_a_candidate():
+    # No `iw dev info` answers: every MAC is unknown, so a MAC-bound profile
+    # is treated as bound elsewhere. Only the profile active on the device
+    # still counts as bound to it.
+    run, _ = nm_fake(
+        connections=MAC_CONNECTIONS, details=MAC_DETAILS, scans={"wlan0": "Occom_5G\n"}
+    )
+    assert wd.preferences(["wlan0"], run)["wlan0"] == wd.Preference(
+        "wlan0", "Occom", None, False
+    )
+    assert wd.bound_profiles("wlan1", run) == ["Occom-USB"]

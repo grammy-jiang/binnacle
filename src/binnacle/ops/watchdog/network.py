@@ -1,6 +1,6 @@
 """NetworkManager/Wi-Fi observations and profile helpers."""
 
-from collections.abc import Collection, Iterable
+from collections.abc import Collection, Iterable, Mapping
 from dataclasses import dataclass
 
 from binnacle.ops.watchdog.command import Run, _run
@@ -78,23 +78,66 @@ def wifi_profiles(run: Run = _run) -> list[WifiProfile]:
     return out
 
 
-def profile_details(name: str, run: Run = _run) -> tuple[str, str]:
-    """(interface-name, SSID) of a Wi-Fi profile; "" where unset."""
+@dataclass(frozen=True, slots=True)
+class ProfileDetails:
+    """How a Wi-Fi profile is bound and what it connects to; "" where unset."""
+
+    #: `connection.interface-name`
+    iface: str
+    ssid: str
+    #: `802-11-wireless.mac-address`, lower case. NetworkManager binds a
+    #: profile to a device by interface-name or by MAC; this host's USB
+    #: profiles use the MAC since 2026-09-16 so that a swap of wlan1/wlan2
+    #: at boot does not swap their profiles.
+    mac: str
+
+
+def profile_details(name: str, run: Run = _run) -> ProfileDetails:
+    """Interface-name, SSID and MAC binding of a Wi-Fi profile."""
     proc = run(
         "nmcli",
         "-t",
         "-g",
-        "connection.interface-name,802-11-wireless.ssid",
+        "connection.interface-name,802-11-wireless.ssid,802-11-wireless.mac-address",
         "connection",
         "show",
         name,
     )
     if proc.returncode != 0:
-        return "", ""
+        return ProfileDetails("", "", "")
     lines = proc.stdout.splitlines()
-    iface = lines[0].strip() if lines else ""
-    ssid = lines[1].strip() if len(lines) > 1 else ""
-    return iface, ssid
+
+    def field(i: int) -> str:
+        return _split_terse(lines[i].strip())[0] if len(lines) > i else ""
+
+    return ProfileDetails(field(0), field(1), field(2).lower())
+
+
+def device_mac(dev: str, run: Run = _run) -> str:
+    """The device's MAC address (`iw dev <dev> info`, lower case), "" when
+    unknown."""
+    proc = run("iw", "dev", dev, "info")
+    if proc.returncode != 0:
+        return ""
+    for raw in proc.stdout.splitlines():
+        parts = raw.split()
+        if len(parts) >= 2 and parts[0] == "addr":
+            return parts[1].lower()
+    return ""
+
+
+def profile_binding(details: ProfileDetails, macs: Mapping[str, str]) -> str:
+    """The device a profile is bound to: its interface-name, else the device
+    (of `macs`, dev -> MAC) whose MAC it names; "" when unbound, "?" when
+    bound to a MAC no observed device has. Until 2026-09-20 only the
+    interface-name counted, so for four days the MAC-bound 5 GHz USB
+    profile looked like a candidate for every device and a wedge demotion
+    of wlan1 raised only its active profile."""
+    if details.iface:
+        return details.iface
+    if details.mac:
+        return next((d for d, m in macs.items() if m and m == details.mac), "?")
+    return ""
 
 
 def profile_metric(name: str, run: Run = _run) -> int | None:
@@ -262,13 +305,17 @@ def wifi_radio_enabled(run: Run = _run) -> bool | None:
 
 
 def bound_profiles(dev: str, run: Run = _run) -> list[str]:
-    """Autoconnect Wi-Fi profiles whose interface-name is `dev`."""
+    """Autoconnect Wi-Fi profiles bound to `dev` (by interface-name or by
+    its MAC address) or active on it."""
     names: list[str] = []
+    macs = {dev: device_mac(dev, run)}
     for p in wifi_profiles(run):
         if not p.autoconnect or (p.device and p.device != dev):
             continue
-        iface, _ = profile_details(p.name, run)
-        if iface == dev:
+        if (
+            p.device == dev
+            or profile_binding(profile_details(p.name, run), macs) == dev
+        ):
             names.append(p.name)
     return names
 
@@ -277,15 +324,19 @@ def preferences(
     devs: Iterable[str], run: Run = _run, rescan_for: Collection[str] = ()
 ) -> dict[str, Preference]:
     """Per device: the active profile and, if NetworkManager holds a
-    strictly higher autoconnect-priority profile bound to that device (or
-    to no device), whether its network is in range. Profiles active on
-    another device are never candidates. One `connection show` plus one
-    lookup per higher-priority profile and one scan-list read per device
-    that has one -- nothing when every device is on its best profile."""
+    strictly higher autoconnect-priority profile bound to that device (by
+    interface-name or MAC) or to no device, whether its network is in
+    range. Profiles active on another device, or bound to another one, are
+    never candidates. One `connection show` plus one lookup per
+    higher-priority profile, one `iw dev info` per device, and one
+    scan-list read per device that has a candidate -- nothing else when
+    every device is on its best profile."""
+    devs = list(devs)
     profiles = wifi_profiles(run)
     if not profiles:
         return {}
     active = {p.device: p for p in profiles if p.device}
+    macs = {d: device_mac(d, run) for d in devs}
     out: dict[str, Preference] = {}
     for dev in devs:
         current = active.get(dev)
@@ -305,9 +356,9 @@ def preferences(
         )
         candidates: list[tuple[WifiProfile, str]] = []
         for p in better:
-            iface, ssid = profile_details(p.name, run)
-            if iface in ("", dev) and ssid:
-                candidates.append((p, ssid))
+            det = profile_details(p.name, run)
+            if profile_binding(det, macs) in ("", dev) and det.ssid:
+                candidates.append((p, det.ssid))
         current_name = current.name if current is not None else ""
         if not candidates:
             if current is not None:
