@@ -13,8 +13,9 @@ from typing import Annotated
 import cyclopts
 
 from binnacle import units
-from binnacle.cli import BACKUP_DIR, SERVER_UNIT, TUNNEL_UNIT, UNIT_DIR, _systemctl
+from binnacle.cli import BACKUP_DIR, SERVER_UNIT, UNIT_DIR, _systemctl
 from binnacle.config import get_settings
+from binnacle.tunnel_unit import TUNNEL_UNIT
 from binnacle.watchdog_config import get_watchdog_settings
 from binnacle.watchdog_unit import OWNER, WATCHDOG_UNIT, watchdog_unit_spec
 

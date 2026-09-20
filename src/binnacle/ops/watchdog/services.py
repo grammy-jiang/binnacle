@@ -237,7 +237,7 @@ def observe_services(
     tunnel_active = unit_active(policy.tunnel_unit, run)
     failures, since, last, forwarded = 0, None, None, None
     if policy.tunnel_log is not None and policy.tunnel_log.exists():
-        from binnacle.doctor import scan_tunnel_log
+        from binnacle.tunnel_doctor import scan_tunnel_log
 
         status = scan_tunnel_log(policy.tunnel_log)
         failures = status.trailing

@@ -15,7 +15,6 @@ def host(tmp_path, monkeypatch):
     token = tmp_path / "config" / "token"
     monkeypatch.setattr(cli, "UNIT_DIR", unit_dir)
     monkeypatch.setattr(cli, "TOKEN_FILE", token)
-    monkeypatch.setattr(cli, "TUNNEL_CONFIG", tmp_path / "tunnel.json")
     monkeypatch.setattr(cli, "BACKUP_DIR", tmp_path / "backups")
     calls: list[tuple[str, ...]] = []
     monkeypatch.setattr(
@@ -32,7 +31,6 @@ def host(tmp_path, monkeypatch):
             calls.append(tuple(argv)) or subprocess.CompletedProcess(argv, 0, "", "")
         ),
     )
-    monkeypatch.setattr(cli.shutil, "which", lambda name: None)  # no tunnel-client
     monkeypatch.setattr(cli, "_unit_state", lambda unit: "active")
     exe = tmp_path / "venv" / "bin" / "binnacle"
     exe.parent.mkdir(parents=True)
@@ -80,7 +78,7 @@ def test_setup_dev_writes_a_marked_unit_and_runs_the_safe_boundaries(host, capsy
     assert ("enable", "--now", cli.SERVER_UNIT) in host.calls
     assert ("loginctl", "enable-linger") in host.calls
     out = capsys.readouterr().out
-    assert "server side is configured" in out and "tunnel-client not found" in out
+    assert "server side is configured" in out and "binnacle-tunnel setup" in out
     drift = units.check_unit_drift(
         host.unit, "binnacle", cli.render_server_unit, "units", "binnacle setup"
     )
@@ -130,21 +128,15 @@ def test_setup_refuses_a_hand_written_unit_and_adopts_it_on_request(host, capsys
     assert "restart it at a quiet moment: `binnacle mode dev`" in out
 
 
-def test_setup_keeps_an_existing_token_and_tunnel_config(host, capsys, monkeypatch):
+def test_setup_keeps_an_existing_token(host, capsys):
     host.token.parent.mkdir(parents=True)
     host.token.write_text("Bearer existing\n")
-    (host.tmp / "tunnel.json").write_text("{}")
-    monkeypatch.setattr(
-        cli.shutil,
-        "which",
-        lambda name: "/usr/bin/tunnel-client" if name == "tunnel-client" else None,
-    )
 
     cli.setup(dev=host.repo, dry_run=True)
 
     out = capsys.readouterr().out
     assert f"would keep existing token at {host.token}" in out
-    assert f"would keep existing tunnel config at {host.tmp / 'tunnel.json'}" in out
+    assert "tunnel" not in out.lower().replace("binnacle-tunnel setup", "")
 
 
 def test_setup_reports_an_executable_it_cannot_resolve(host, capsys, monkeypatch):

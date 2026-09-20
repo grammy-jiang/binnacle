@@ -6,18 +6,14 @@ the token and the server's systemd user unit. The unit is one file,
 `binnacle-mcp.service`, whose content `setup` and `mode` render for the
 mode in use (development: the checkout with auto-reload; production: the
 installed `binnacle serve`), so the tunnel, the journal readers and the
-watchdog key on one name and the mode survives a reboot. The tunnel-client
-binary and every ChatGPT UI step stay manual by design.
+watchdog key on one name and the mode survives a reboot. The ChatGPT
+tunnel is the `binnacle-tunnel` companion's business; core keeps only its
+unit name, for `token rotate`.
 """
 
-import json
-import re
 import secrets
-import shutil
 import subprocess
-import time
 from collections.abc import Callable
-from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Literal
 
@@ -39,8 +35,8 @@ app = cyclopts.App(
 
 TOKEN_FILE = get_settings().auth.token_file
 UNIT_DIR = units.UNIT_DIR
+#: Restarted by `token rotate` when active; owned by the binnacle-tunnel companion.
 TUNNEL_UNIT = "binnacle-tunnel.service"
-TUNNEL_CONFIG = Path.home() / ".config" / "tunnel-client" / "binnacle.yaml"
 #: Copies of unit files taken before `setup` or `mode` rewrites them.
 BACKUP_DIR = get_settings().jobs.dir.parent / "unit-backups"
 MODES = ("dev", "prod")
@@ -58,74 +54,6 @@ def _write_token(path: Path | None = None) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(f"Bearer {secrets.token_urlsafe(32)}\n", encoding="utf-8")
     path.chmod(0o600)
-
-
-def _tunnel_health_url() -> str | None:
-    """The tunnel's local health base URL, from its config's health.url_file."""
-    try:
-        cfg = json.loads(TUNNEL_CONFIG.read_text(encoding="utf-8"))
-        url_file = Path(cfg["health"]["url_file"])
-        return url_file.read_text(encoding="utf-8").strip() or None
-    except (OSError, ValueError, KeyError, TypeError):
-        return None
-
-
-def _parse_rfc3339(text: str) -> datetime:
-    """fromisoformat that tolerates Go's nanosecond fractions and 'Z'."""
-    text = text.replace("Z", "+00:00")
-    m = re.match(r"^(.*T\d\d:\d\d:\d\d)(\.\d+)?(.*)$", text)
-    if m:
-        frac = (m.group(2) or ".0")[:7].ljust(7, "0")  # exactly 6 digits
-        text = f"{m.group(1)}{frac}{m.group(3)}"
-    return datetime.fromisoformat(text)
-
-
-def _wait_tunnel_ready(
-    since: float,
-    timeout_s: float = 30.0,
-    health_url: Callable[[], str | None] = _tunnel_health_url,
-) -> str:
-    """Block until the restarted tunnel reports ready and its MCP probe is ok.
-
-    Readiness is read from the tunnel's health server: /api/status must
-    come from an instance started after `since` (a stale url file still
-    points at the old instance) with channel "main" probe_status ok, and
-    /readyz must answer 200. Returns a one-line description of the outcome;
-    a timeout is reported, not raised, because the restart itself succeeded.
-    """
-    import urllib.error
-    import urllib.request
-
-    deadline = time.monotonic() + timeout_s
-    last = "health URL file not written yet"
-    while time.monotonic() < deadline:
-        base = health_url()
-        if base:
-            try:
-                with urllib.request.urlopen(base + "/api/status", timeout=2) as r:  # nosec B310
-                    status = json.loads(r.read())
-                started = _parse_rfc3339(status["started_at"]).timestamp()
-                probe = next(
-                    (
-                        c.get("probe_status")
-                        for c in status.get("channels", [])
-                        if c.get("name") == "main"
-                    ),
-                    None,
-                )
-                if started < since:
-                    last = "health URL still points at the previous tunnel instance"
-                elif probe != "ok":
-                    last = f"tunnel up, MCP probe status {probe!r}"
-                else:
-                    with urllib.request.urlopen(base + "/readyz", timeout=2) as r:  # nosec B310
-                        if r.status == 200:
-                            return f"tunnel ready ({base}, MCP probe ok)"
-                    last = "tunnel /readyz not 200"
-            except (OSError, ValueError, KeyError, TypeError) as e:
-                last = f"tunnel health not answering yet ({e.__class__.__name__})"
-        time.sleep(0.25)
-    return f"tunnel not ready after {timeout_s:g} s: {last}"
 
 
 def _systemctl(*args: str, check: bool = True) -> subprocess.CompletedProcess:
@@ -229,23 +157,7 @@ def setup(
             lambda: units.write_unit(unit_path, plan, BACKUP_DIR),
         )
 
-    # 3. Tunnel config, only when the tunnel-client binary is present.
-    tunnel_bin = shutil.which("tunnel-client")
-    if tunnel_bin is None:
-        actions.append(
-            "tunnel-client not found on PATH: skipping tunnel config; install "
-            "it and re-run `binnacle setup` to enable the tunnel"
-        )
-    elif TUNNEL_CONFIG.exists():
-        actions.append(f"keep existing tunnel config at {TUNNEL_CONFIG}")
-    else:
-        actions.append(
-            f"tunnel-client found at {tunnel_bin} but {TUNNEL_CONFIG} does not "
-            f"exist; write it from your tunnel account settings, then enable "
-            f"{TUNNEL_UNIT}"
-        )
-
-    # 4. Enable and start.
+    # 3. Enable and start.
     act("systemctl --user daemon-reload", lambda: _systemctl("daemon-reload"))
     act(
         f"systemctl --user enable --now {SERVER_UNIT}",
@@ -262,8 +174,8 @@ def setup(
     if dry_run:
         print("\ndry run: nothing was changed.")
         return
-    print("\nserver side is configured. Remaining manual steps: install")
-    print("tunnel-client (if missing) and add the connector in ChatGPT.")
+    print("\nserver side is configured. For ChatGPT, the tunnel is a separate")
+    print("companion: `binnacle-tunnel setup` once its profile is written.")
     if plan.action == "rewrite" and _unit_state(SERVER_UNIT) == "active":
         print(
             f"{SERVER_UNIT} is running on the previous unit file; restart it at "
@@ -368,12 +280,12 @@ def doctor(
 
     Checks: config and roots, token file, the systemd unit (active, the
     file `setup` writes, the process it started, no crash restarts,
-    linger), the running server's PATH (~/.local/bin,
-    ripgrep, bash), /mcp auth with and without the token, tunnel unit and
-    config, the uplink each default route provides, whether the tunnel's
-    poller is reaching OpenAI, the job spool, and recent journal errors.
-    Host-specific watchdog diagnostics live in the companion CLI. WARN lines
-    are degraded but working and do not change the exit code.
+    linger), the running server's PATH (~/.local/bin, ripgrep, bash),
+    /mcp auth with and without the token, the uplink each default route
+    provides, the job spool, and recent journal errors. The ChatGPT tunnel
+    and its poller are `binnacle-tunnel doctor`'s, the uplink watchdog is
+    `binnacle-watchdog doctor`'s. WARN lines are degraded but working and
+    do not change the exit code.
 
     Parameters
     ----------
@@ -391,8 +303,6 @@ def doctor(
         server_unit=SERVER_UNIT,
         unit_path=UNIT_DIR / SERVER_UNIT,
         render_unit=render_server_unit,
-        tunnel_unit=TUNNEL_UNIT,
-        tunnel_config=TUNNEL_CONFIG,
         token_file=TOKEN_FILE,
         server_url=f"http://{serve_cfg.host}:{serve_cfg.port}/mcp",
         user_bin=Path.home() / ".local" / "bin",
@@ -446,19 +356,19 @@ app.command(token_app)
 
 @token_app.command
 def rotate() -> None:
-    """Write a new token and restart the server and tunnel services."""
+    """Write a new token and restart the server and tunnel services.
+
+    The tunnel caches the token at startup and re-registers its poller with
+    OpenAI. Its unit (the binnacle-tunnel companion's) holds the restart
+    until the new instance answers /readyz and reports its MCP probe ok, so
+    a `chatgpt-refresh` right after this call has a chance.
+    """
     _write_token()
     print(f"wrote new token to {TOKEN_FILE}")
     for unit in (SERVER_UNIT, TUNNEL_UNIT):
         if _unit_state(unit) == "active":
-            started = time.time()
             _systemctl("restart", unit, check=False)
             print(f"restarted {unit}")
-            if unit == TUNNEL_UNIT:
-                # The tunnel caches the token at startup and re-registers its
-                # poller with OpenAI; return only once it can reach the server
-                # again, so a chatgpt-refresh right after this call has a chance.
-                print(_wait_tunnel_ready(started))
 
 
 def main() -> None:

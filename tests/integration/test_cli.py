@@ -60,13 +60,8 @@ def test_rotate_writes_prefixed_token_and_restarts_active_units(
 
     monkeypatch.setattr(cli, "_systemctl", fake_systemctl)
     monkeypatch.setattr(cli, "_unit_state", lambda u: states[u])
-    waited: list[float] = []
-    monkeypatch.setattr(
-        cli, "_wait_tunnel_ready", lambda since: waited.append(since) or "tunnel ready"
-    )
 
     cli.rotate()
-    assert len(waited) == 1  # once, after the tunnel restart
 
     assert f.read_text().startswith("Bearer ")
     assert f.read_text() != "old\n"
@@ -77,91 +72,8 @@ def test_rotate_writes_prefixed_token_and_restarts_active_units(
 
 # -- tunnel readiness wait (token rotate) -----------------------------------
 
-import json
-import threading
-import time
-from datetime import datetime, timezone
-from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pytest
-
-
-class _TunnelHealth(BaseHTTPRequestHandler):
-    started_at = ""
-    probe = "ok"
-    ready = 200
-
-    def do_GET(self):  # http.server API name
-        if self.path == "/api/status":
-            body = json.dumps(
-                {
-                    "started_at": self.started_at,
-                    "channels": [{"name": "main", "probe_status": self.probe}],
-                }
-            ).encode()
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(body)
-        elif self.path == "/readyz":
-            self.send_response(self.ready)
-            self.end_headers()
-        else:
-            self.send_response(404)
-            self.end_headers()
-
-    def log_message(self, format, *args):
-        pass
-
-
-@pytest.fixture()
-def tunnel_health():
-    srv = HTTPServer(("127.0.0.1", 0), _TunnelHealth)
-    threading.Thread(target=srv.serve_forever, daemon=True).start()
-    _TunnelHealth.probe, _TunnelHealth.ready = "ok", 200
-    yield f"http://127.0.0.1:{srv.server_address[1]}"
-    srv.shutdown()
-
-
-def _go_ts(t: float) -> str:
-    # Go's RFC 3339 with nanoseconds and a numeric offset, as tunnel-client emits.
-    return datetime.fromtimestamp(t, tz=timezone.utc).strftime(
-        "%Y-%m-%dT%H:%M:%S.123456789+00:00"
-    )
-
-
-def test_parse_rfc3339_go_nanoseconds():
-    dt = cli._parse_rfc3339("2026-09-03T09:09:23.956036578+10:00")
-    assert dt.isoformat() == "2026-09-03T09:09:23.956036+10:00"
-    assert cli._parse_rfc3339("2026-09-03T00:00:00Z").utcoffset().total_seconds() == 0
-
-
-def test_wait_tunnel_ready_fresh_instance(tunnel_health):
-    since = time.time()
-    _TunnelHealth.started_at = _go_ts(since + 1)
-    msg = cli._wait_tunnel_ready(since, timeout_s=5, health_url=lambda: tunnel_health)
-    assert msg.startswith("tunnel ready")
-
-
-def test_wait_tunnel_ready_stale_instance_times_out(tunnel_health):
-    since = time.time()
-    _TunnelHealth.started_at = _go_ts(since - 100)  # old instance still answering
-    msg = cli._wait_tunnel_ready(since, timeout_s=0.6, health_url=lambda: tunnel_health)
-    assert "not ready" in msg and "previous tunnel instance" in msg
-
-
-def test_wait_tunnel_ready_probe_failing_times_out(tunnel_health):
-    since = time.time()
-    _TunnelHealth.started_at = _go_ts(since + 1)
-    _TunnelHealth.probe = "error"
-    msg = cli._wait_tunnel_ready(since, timeout_s=0.6, health_url=lambda: tunnel_health)
-    assert "probe status 'error'" in msg
-
-
-def test_wait_tunnel_ready_no_health_url_times_out():
-    msg = cli._wait_tunnel_ready(time.time(), timeout_s=0.3, health_url=lambda: None)
-    assert "not ready" in msg and "not written" in msg
-
 
 # -- command glue and safe control paths ------------------------------------
 
@@ -245,25 +157,6 @@ def test_stats_only_loads_webmin_history_when_requested(monkeypatch, capsys):
     second = capsys.readouterr().out
     assert "USAGE" in second and "RESOURCES" in second
     assert loads == [("-1 hour", "now")]
-
-
-def test_tunnel_health_url_reads_current_url_file_and_handles_bad_config(
-    tmp_path, monkeypatch
-):
-    config = tmp_path / "tunnel.json"
-    url_file = tmp_path / "health.url"
-    url_file.write_text("http://127.0.0.1:1234\n")
-    config.write_text(f'{{"health": {{"url_file": "{url_file}"}}}}')
-    monkeypatch.setattr(cli, "TUNNEL_CONFIG", config)
-
-    assert cli._tunnel_health_url() == "http://127.0.0.1:1234"
-
-    config.write_text("{}")
-    assert cli._tunnel_health_url() is None
-
-
-def test_parse_rfc3339_accepts_plain_iso_date():
-    assert cli._parse_rfc3339("2026-09-03").date().isoformat() == "2026-09-03"
 
 
 def test_systemctl_wrapper_and_unit_state(monkeypatch):

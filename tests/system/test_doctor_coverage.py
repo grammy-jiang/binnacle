@@ -1,7 +1,6 @@
 """Coverage of doctor aggregation and low-level failure branches."""
 
 import subprocess
-from pathlib import Path
 
 from binnacle import doctor
 from binnacle import jobs as jobstore
@@ -94,34 +93,11 @@ def test_job_state_safe_hides_store_read_errors(monkeypatch):
     assert doctor._job_state_safe("gone") is None
 
 
-def test_tunnel_log_file_handles_missing_bad_and_valid_configs(tmp_path):
-    missing = tmp_path / "missing.json"
-    assert doctor._tunnel_log_file(missing) is None
-
-    bad = tmp_path / "bad.json"
-    bad.write_text("{")
-    assert doctor._tunnel_log_file(bad) is None
-
-    scalar = tmp_path / "scalar.json"
-    scalar.write_text('"not-a-dict"')
-    assert doctor._tunnel_log_file(scalar) is None
-
-    plain = tmp_path / "plain.json"
-    plain.write_text("{}")
-    assert doctor._tunnel_log_file(plain) is None
-
-    valid = tmp_path / "valid.json"
-    valid.write_text('{"log": {"file": "/tmp/tunnel.log"}}')
-    assert doctor._tunnel_log_file(valid) == Path("/tmp/tunnel.log")
-
-
 def test_run_all_composes_every_active_probe_check(tmp_path, monkeypatch):
     from types import SimpleNamespace
 
     dep = doctor.Deployment(
         server_unit="prod",
-        tunnel_unit="tunnel",
-        tunnel_config=tmp_path / "tunnel.json",
         token_file=tmp_path / "token",
         server_url="http://127.0.0.1:8000/mcp",
         user_bin=tmp_path / "bin",
@@ -148,17 +124,10 @@ def test_run_all_composes_every_active_probe_check(tmp_path, monkeypatch):
     monkeypatch.setattr(doctor.units, "check_unit_process", mark("units"))
     monkeypatch.setattr(doctor, "check_service_env", mark("service-env"))
     monkeypatch.setattr(doctor, "check_endpoint", mark("endpoint"))
-    monkeypatch.setattr(doctor, "check_tunnel", mark("tunnel"))
     monkeypatch.setattr(doctor, "check_uplink", mark("uplink"))
-    monkeypatch.setattr(doctor, "check_tunnel_poller", mark("poller"))
     monkeypatch.setattr(doctor, "check_boot", mark("boot"))
     monkeypatch.setattr(doctor, "check_jobs", mark("jobs"))
     monkeypatch.setattr(doctor, "check_journal", mark("journal"))
-    monkeypatch.setattr(
-        doctor,
-        "_tunnel_log_file",
-        lambda path: tmp_path / "tunnel.log",
-    )
 
     checks = doctor.run_all(dep, since="-2 hours", probe=True)
 
@@ -170,9 +139,7 @@ def test_run_all_composes_every_active_probe_check(tmp_path, monkeypatch):
         "units",
         "service-env",
         "endpoint",
-        "tunnel",
         "uplink",
-        "poller",
         "boot",
         "jobs",
         "journal",
@@ -186,8 +153,6 @@ def test_run_all_skips_optional_checks_when_inactive_and_local_only(
 
     dep = doctor.Deployment(
         server_unit="prod",
-        tunnel_unit="tunnel",
-        tunnel_config=tmp_path / "tunnel.json",
         token_file=tmp_path / "token",
         server_url="http://127.0.0.1:8000/mcp",
         user_bin=tmp_path / "bin",
@@ -204,10 +169,8 @@ def test_run_all_skips_optional_checks_when_inactive_and_local_only(
     monkeypatch.setattr(doctor, "check_token", lambda *a: [])
     monkeypatch.setattr(doctor, "check_units", lambda *a: ([], None))
     monkeypatch.setattr(doctor, "check_endpoint", lambda *a: [])
-    monkeypatch.setattr(doctor, "check_tunnel", lambda *a, **k: [])
     monkeypatch.setattr(doctor, "check_boot", list)
     monkeypatch.setattr(doctor, "check_jobs", lambda *a: [])
-    monkeypatch.setattr(doctor, "_tunnel_log_file", lambda path: None)
     monkeypatch.setattr(
         doctor,
         "check_uplink",

@@ -2,9 +2,11 @@
 
 Every check is a plain function that returns Check records, so the CLI
 only renders and the tests only need fakes for the outside world
-(systemctl, /proc, HTTP, the journal). Checks cover the whole chain a
-request takes, ChatGPT -> tunnel -> server -> tools -> shell, plus the
-failure modes seen in production:
+(systemctl, /proc, HTTP, the journal). Checks cover the server's side of
+the chain a request takes (server -> tools -> shell) plus the failure
+modes seen in production; the ChatGPT tunnel in front of it is the
+`binnacle-tunnel` companion's doctor, the uplink watchdog the
+`binnacle-watchdog` companion's:
 
 - config: settings load, configured roots exist.
 - token: present, mode 0600, non-empty, carries the "Bearer " prefix the
@@ -16,21 +18,18 @@ failure modes seen in production:
   PATH) holds ~/.local/bin, ripgrep, and bash.
 - endpoint: /mcp refuses a request without the token and accepts one
   with it, so a rotated-but-not-restarted token shows up here.
-- tunnel: unit active and ordered after the server unit, config points at
-  the server URL and at the token file, health endpoint answers.
 - uplink: the default route actually carries traffic, probed end to end
   per interface (gateway, DNS, TCP to the upstream host).
-- poller: the tunnel's own log shows it reaching OpenAI. This is the only
-  check that sees what ChatGPT sees.
 - driver: the daily wlan1 USB 3 stability sample (external cron job);
   skipped where that job does not exist.
 - jobs: spool directory writable; counts of running and orphaned jobs.
 - journal: errors and tracebacks in a recent window.
 
-The last three exist because every check above them is local. On
+The uplink check exists because every check above it is local. On
 2026-09-12 a wedged USB radio held the default route for 48 minutes:
 units active, endpoint answering, tunnel health port green, `doctor`
-all-ok -- and the connector unreachable from ChatGPT the whole time.
+all-ok -- and the connector unreachable from ChatGPT the whole time. The
+tunnel companion's poller check is the one that sees what ChatGPT sees.
 
 Status semantics: "fail" breaks a tool or the connection and exits 1;
 "warn" is degraded but working; "ok" carries the measured value.
@@ -56,21 +55,9 @@ from binnacle.doctor_common import (
     unit_state,
     warn,
 )
-from binnacle.doctor_connectivity import (
-    _tail_lines,
-    check_endpoint,
-    check_tunnel,
-    check_tunnel_poller,
-    check_uplink,
-    poller_status,
-    scan_tunnel_log,
-)
+from binnacle.doctor_connectivity import _tail_lines, check_endpoint, check_uplink
 
-__all__ = [
-    "_tail_lines",
-    "poller_status",
-    "scan_tunnel_log",
-]
+__all__ = ["_tail_lines"]
 
 # -- systemd helpers ---------------------------------------------------------
 
@@ -350,8 +337,6 @@ class Deployment:
     parameters its marker line records and report drift."""
 
     server_unit: str
-    tunnel_unit: str
-    tunnel_config: Path
     token_file: Path
     server_url: str
     user_bin: Path
@@ -399,16 +384,6 @@ def server_busy_reasons(
     return reasons
 
 
-def _tunnel_log_file(config_file: Path) -> Path | None:
-    """The tunnel's own log path, as its config declares it."""
-    try:
-        cfg = json.loads(config_file.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None
-    path = ((cfg.get("log") or {}).get("file")) if isinstance(cfg, dict) else None
-    return Path(path) if path else None
-
-
 def run_all(dep: Deployment, since: str = "-1 hour", probe: bool = True) -> list[Check]:
     """Every check, in the order a request travels.
 
@@ -438,19 +413,10 @@ def run_all(dep: Deployment, since: str = "-1 hour", probe: bool = True) -> list
         )
         checks += check_service_env(active, s.rg_bin, dep.user_bin)
     checks += check_endpoint(dep.server_url, dep.token_file)
-    checks += check_tunnel(
-        dep.tunnel_unit,
-        dep.tunnel_config,
-        dep.token_file,
-        dep.server_url,
-        server_unit=active,
-    )
-    # The uplink and the poller are the two checks that see past localhost.
+    # The uplink is the one check here that sees past localhost; the
+    # tunnel's poller, the other one, is `binnacle-tunnel doctor`'s.
     if probe:
         checks += check_uplink()
-    log_file = _tunnel_log_file(dep.tunnel_config)
-    if log_file is not None:
-        checks += check_tunnel_poller(log_file)
     checks += check_boot()
     checks += check_jobs(s.jobs.dir)
     if active:

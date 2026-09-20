@@ -75,14 +75,16 @@ metadata. A `chatgpt-refresh` within seconds of a tunnel restart can still
 return HTTP 424 while the poller re-registers with OpenAI; retry.
 
 `binnacle token rotate` restarts the server (blocking until it listens) and
-then the tunnel, and returns only when the tunnel's health server reports the
-new instance ready with its MCP probe ok. ChatGPT's own tunnel service may
+then the tunnel; the tunnel unit's own readiness wait (an ExecStartPost in
+the `binnacle-tunnel` companion's template) holds that restart until the
+new instance answers `/readyz` and reports its MCP probe ok, so a
+`chatgpt-refresh` right after has a chance. ChatGPT's own tunnel service may
 still need a few more seconds; `chatgpt-refresh` retries HTTP 424 by itself.
 
 `.venv/bin/binnacle doctor` checks the core chain (token, the unit: active,
 its file against what `setup` writes, the process it started, crash
-restarts, linger; service PATH, /mcp auth, tunnel config, uplink, tunnel
-poller, job spool, journal errors) and exits 1 on any FAIL; `--json` for machine output, `--no-probe`
+restarts, linger; service PATH, /mcp auth, uplink, job spool, journal
+errors) and exits 1 on any FAIL; `--json` for machine output, `--no-probe`
 to skip the network probes. Run it after touching the token, the units,
 `environment.d`, or the tunnel config. Checks live in
 `src/binnacle/doctor.py` with tests in `tests/system/test_doctor.py`. Since
@@ -91,7 +93,9 @@ watchdog loop and its fast-path heartbeat, the unit's command, the pause
 switch, `privileges`, the `driver` stability sample) live in
 `binnacle-watchdog doctor` (`src/binnacle/watchdog_doctor.py`, tests in
 `tests/system/test_watchdog_doctor.py` and
-`tests/system/test_watchdog_deploy.py`): run both.
+`tests/system/test_watchdog_deploy.py`), and since 2026-09-21 the tunnel's
+unit, profile, health port and poller checks live in `binnacle-tunnel
+doctor` (`src/binnacle/tunnel_doctor.py`): run all three.
 
 ## Uplink watchdog
 
@@ -116,7 +120,8 @@ So three checks look past localhost:
   and did not fail over. The TCP layer connects to the address DNS last
   returned, so a dead resolver is not reported as a dead path. A wedged
   *active* route is a FAIL. Code in `src/binnacle/uplink.py`.
-- `poller` — reads the tunnel's own log for a run of `poll failed; backing
+- `poller` (in `binnacle-tunnel doctor` since 2026-09-21) — reads the
+  tunnel's own log for a run of `poll failed; backing
   off` or `poll timed out; backing off` (both are the poller backing off;
   measured 2026-09-14, a wedged uplink shows as a run of timeouts ending
   in `poller recovered`; a single timeout is a blip). This is the only
@@ -616,6 +621,18 @@ readiness, not the poller's; step 3 tightens it to the main channel's
 `probe_status` (what `token rotate` waits for today) when that wait
 leaves core. Both doctors green, a ChatGPT call served right after, the
 watchdog's cycle line unchanged (`tunnel=ok`).
+Step 3 (2026-09-21): the tunnel checks, the poller check, the log scanner
+and `rotate`'s readiness wait left core for `tunnel_doctor.py`; core keeps
+the unit name for `rotate`, whose wait is now the unit's ExecStartPost,
+tightened to require the main channel's `probe_status` ok besides
+`/readyz`. `binnacle doctor` reports the server side only; the watchdog
+imports the log scanner from the tunnel companion. Deployed 00:24:37 the
+same night: the rewritten unit restarted through the gate in 0.3 s, the
+companion doctor 9 ok, the core doctor 23 ok, a ChatGPT call served, and
+the watchdog restarted through `deploy-check` to load the moved import.
+Three doctors now, one per owner: `binnacle doctor` (server),
+`binnacle-tunnel doctor` (ChatGPT's way in), `binnacle-watchdog doctor`
+(the uplink), each verifying its own unit file and process.
 Deployed 2026-09-20 23:47: `setup --dev <repo> --adopt` rewrote the
 server unit (diff: the marker line and the Description) without touching
 the running server, `binnacle-watchdog setup` replaced the watchdog's

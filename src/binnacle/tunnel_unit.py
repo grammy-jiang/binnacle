@@ -40,11 +40,12 @@ WorkingDirectory={home}
 EnvironmentFile={env_file}
 ExecStart={tunnel} run --profile-dir {profile_dir} --profile {profile}
 # Hold the unit in "activating" until the new instance's health server
-# answers /readyz (it rewrites its URL file on every start), so a
-# `systemctl restart` -- token rotate, the watchdog's failover -- returns to
-# a tunnel that polls. Bounded at 10 s and never failing the unit: a WAN
-# outage must not become a restart loop.
-ExecStartPost=/bin/bash -c 'm=$$(mktemp); end=$$((SECONDS+10)); while [ $$SECONDS -lt $$end ]; do if [ "{url_file}" -nt "$$m" ] && curl -fsS -m 1 "$$(cat "{url_file}")/readyz" >/dev/null 2>&1; then rm -f "$$m"; exit 0; fi; sleep 0.2; done; rm -f "$$m"; exit 0'
+# (it rewrites its URL file on every start) answers /readyz and reports the
+# main channel's MCP probe ok, so a `systemctl restart` -- token rotate, the
+# watchdog's failover -- returns to a tunnel that reaches the server.
+# Bounded at 10 s and never failing the unit: a WAN outage must not become
+# a restart loop.
+ExecStartPost=/bin/bash -c 'm=$$(mktemp); end=$$((SECONDS+10)); while [ $$SECONDS -lt $$end ]; do if [ "{url_file}" -nt "$$m" ] && u=$$(cat "{url_file}") && curl -fsS -m 1 "$$u/readyz" >/dev/null 2>&1 && curl -fsS -m 1 "$$u/api/status" 2>/dev/null | grep -qE "name.:[ ]*.main.[^}}]*probe_status.:[ ]*.ok"; then rm -f "$$m"; exit 0; fi; sleep 0.2; done; rm -f "$$m"; exit 0'
 Restart=always
 RestartSec=5
 UMask=0077
