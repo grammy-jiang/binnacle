@@ -291,3 +291,116 @@ def test_budget_errors_if_required_metadata_cannot_fit(monkeypatch):
     }
     with pytest.raises(ToolError, match="metadata exceeds"):
         st._enforce_result_budget(payload, names_only=False)
+
+
+# -- adaptive broad-result discovery (development pilot) -------------------
+
+
+def _enable_adaptive(monkeypatch, **overrides):
+    values = {
+        "adaptive_discovery_enabled": True,
+        "adaptive_detailed_files": 30,
+        "adaptive_total_files": 200,
+        "adaptive_representative_matches": 2,
+        "adaptive_snippet_chars": 180,
+    }
+    values.update(overrides)
+    for name, value in values.items():
+        monkeypatch.setattr(st.SEARCH_SETTINGS, name, value)
+
+
+def test_adaptive_enabled_does_not_change_small_payload(tmp_path, monkeypatch):
+    (tmp_path / "small.txt").write_text("alpha\nhit\nomega\n")
+    monkeypatch.setattr(st, "SEARCH_RESULT_MAX_BYTES", 65_536)
+
+    monkeypatch.setattr(st.SEARCH_SETTINGS, "adaptive_discovery_enabled", False)
+    before = search("hit", str(tmp_path), context_lines=1)
+
+    _enable_adaptive(monkeypatch)
+    after = search("hit", str(tmp_path), context_lines=1)
+
+    assert json.dumps(after, sort_keys=True) == json.dumps(before, sort_keys=True)
+
+
+def test_adaptive_discovery_replaces_only_budget_bound_content_result(
+    tmp_path, monkeypatch, caplog
+):
+    for file_index in range(40):
+        lines = [
+            f"alpha beta file={file_index} line={line} " + "x" * 180
+            for line in range(5)
+        ]
+        (tmp_path / f"f{file_index:02d}.txt").write_text("\n".join(lines) + "\n")
+
+    monkeypatch.setattr(st, "SEARCH_RESULT_MAX_BYTES", 8_192)
+    _enable_adaptive(
+        monkeypatch,
+        adaptive_detailed_files=5,
+        adaptive_total_files=40,
+        adaptive_representative_matches=2,
+        adaptive_snippet_chars=80,
+    )
+
+    token = current_call.set("adaptive-tool-test")
+    try:
+        with caplog.at_level("INFO", logger="binnacle.search_text"):
+            payload = search(
+                "alpha|beta",
+                str(tmp_path),
+                context_lines=1,
+                max_results=100,
+            )
+    finally:
+        current_call.reset(token)
+
+    detailed = [entry for entry in payload["entries"] if "line" in entry]
+    tail = [entry for entry in payload["entries"] if "line" not in entry]
+    assert payload["count"] == 200
+    assert payload["truncated"] is True
+    assert "Adaptive discovery" in payload["note"]
+    assert len(detailed) == 10
+    assert len(tail) == 35
+    assert all({"file", "line", "text", "count"} <= entry.keys() for entry in detailed)
+    assert all(set(entry) == {"file", "count"} for entry in tail)
+    assert compact_bytes(payload) <= 8_192
+    assert "event=search_adaptive_discovery" in caplog.text
+    assert "call=adaptive-tool-test" in caplog.text
+    assert "candidate_files=40" in caplog.text
+    assert "budget_trimmed=false" in caplog.text
+    assert "candidate_hashes=" in caplog.text
+    assert "detailed_hashes=" in caplog.text
+
+
+def test_adaptive_discovery_keeps_max_results_as_detailed_match_cap(
+    tmp_path, monkeypatch
+):
+    for file_index in range(12):
+        (tmp_path / f"f{file_index:02d}.txt").write_text(
+            "\n".join(
+                f"alpha beta gamma {file_index} {line} " + "z" * 250
+                for line in range(4)
+            )
+            + "\n"
+        )
+
+    monkeypatch.setattr(st, "SEARCH_RESULT_MAX_BYTES", 4_096)
+    _enable_adaptive(
+        monkeypatch,
+        adaptive_detailed_files=10,
+        adaptive_total_files=12,
+        adaptive_representative_matches=2,
+        adaptive_snippet_chars=60,
+    )
+
+    payload = search(
+        "alpha|beta|gamma",
+        str(tmp_path),
+        context_lines=3,
+        max_results=3,
+    )
+
+    detailed = [entry for entry in payload["entries"] if "line" in entry]
+    assert len(detailed) <= 3
+    assert payload["count"] == 48
+    assert any("line" not in entry for entry in payload["entries"])
+    assert compact_bytes(payload) <= 4_096

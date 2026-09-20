@@ -19,7 +19,7 @@ import os
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
@@ -93,6 +93,22 @@ class SearchTextSettings(BaseModel):
         50, description="Context lines each side for exactly 1 match."
     )
     auto_context_few: int = Field(15, description="For 2-3 matches.")
+    adaptive_discovery_enabled: bool = Field(
+        False,
+        description="Summarize broad budget-bound content searches by ranked file.",
+    )
+    adaptive_detailed_files: int = Field(30, ge=1, le=100)
+    adaptive_total_files: int = Field(200, ge=1, le=1_000)
+    adaptive_representative_matches: int = Field(2, ge=1, le=5)
+    adaptive_snippet_chars: int = Field(180, ge=40, le=1_000)
+
+    @model_validator(mode="after")
+    def validate_adaptive_file_counts(self) -> "SearchTextSettings":
+        if self.adaptive_total_files < self.adaptive_detailed_files:
+            raise ValueError(
+                "search_text.adaptive_total_files must be >= adaptive_detailed_files"
+            )
+        return self
 
 
 class IndexedContextSettings(BaseModel):

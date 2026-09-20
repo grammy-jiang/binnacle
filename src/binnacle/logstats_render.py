@@ -3,7 +3,7 @@
 from collections.abc import Sequence
 from typing import Any
 
-from binnacle.logstats_models import IndexedContextStats, Stats
+from binnacle.logstats_models import AdaptiveDiscoveryStats, IndexedContextStats, Stats
 
 
 def _pct(values: Sequence[int | float], q: float) -> float:
@@ -19,6 +19,47 @@ def _distribution(values: list[float]) -> dict[str, float]:
         "p50": _pct(values, 0.5),
         "p90": _pct(values, 0.9),
         "max": max(values),
+    }
+
+
+def adaptive_discovery_report(adaptive: AdaptiveDiscoveryStats) -> dict[str, Any]:
+    """JSON-friendly adaptive-discovery pilot summary."""
+    return {
+        "adaptive_calls": adaptive.calls,
+        "budget_trimmed": adaptive.budget_trimmed,
+        "candidate_open_conversion": (
+            adaptive.candidate_opened / adaptive.calls if adaptive.calls else 0.0
+        ),
+        "detailed_open_conversion": (
+            adaptive.detailed_opened / adaptive.calls if adaptive.calls else 0.0
+        ),
+        "candidate_reads": adaptive.candidate_reads,
+        "candidate_file_searches": adaptive.candidate_file_searches,
+        "detailed_reads": adaptive.detailed_reads,
+        "detailed_file_searches": adaptive.detailed_file_searches,
+        "trigger_bytes": _distribution([float(x) for x in adaptive.trigger_bytes]),
+        "result_bytes": _distribution([float(x) for x in adaptive.result_bytes]),
+        "result_tokens": _distribution([float(x) for x in adaptive.result_tokens]),
+        "total_matches": _distribution([float(x) for x in adaptive.total_matches]),
+        "matching_files": _distribution([float(x) for x in adaptive.matching_files]),
+        "detailed_files": _distribution([float(x) for x in adaptive.detailed_files]),
+        "candidate_files": _distribution([float(x) for x in adaptive.candidate_files]),
+        "representative_entries": _distribution(
+            [float(x) for x in adaptive.representative_entries]
+        ),
+        "tail_entries": _distribution([float(x) for x in adaptive.tail_entries]),
+        "followup_calls": _distribution([float(x) for x in adaptive.followup_calls]),
+        "followup_exact_searches": _distribution(
+            [float(x) for x in adaptive.followup_exact_searches]
+        ),
+        "followup_reads": _distribution([float(x) for x in adaptive.followup_reads]),
+        "followup_result_tokens": _distribution(
+            [float(x) for x in adaptive.followup_result_tokens]
+        ),
+        "investigation_result_tokens": _distribution(
+            [float(x) for x in adaptive.investigation_result_tokens]
+        ),
+        "rows": adaptive.rows,
     }
 
 
@@ -147,6 +188,38 @@ def render(st: Stats) -> str:
             f"{sum(per_turn)} tool calls; calls per turn median="
             f"{per_turn[len(per_turn) // 2]} max={per_turn[-1]}"
         )
+    if st.adaptive.calls:
+        adaptive = st.adaptive
+        out.append("\nadaptive search discovery pilot:")
+        out.append(
+            f"  calls={adaptive.calls} budget_trimmed={adaptive.budget_trimmed} "
+            f"candidate_opened={adaptive.candidate_opened} "
+            f"detailed_opened={adaptive.detailed_opened}"
+        )
+        out.append(
+            f"  candidate evidence: reads={adaptive.candidate_reads} "
+            f"file_searches={adaptive.candidate_file_searches}; "
+            f"detailed reads={adaptive.detailed_reads} "
+            f"file_searches={adaptive.detailed_file_searches}"
+        )
+        for label, values in (
+            ("trigger bytes", adaptive.trigger_bytes),
+            ("result bytes", adaptive.result_bytes),
+            ("result tokens", adaptive.result_tokens),
+            ("matching files", adaptive.matching_files),
+            ("candidate files", adaptive.candidate_files),
+            ("follow-up calls", adaptive.followup_calls),
+            ("follow-up exact", adaptive.followup_exact_searches),
+            ("follow-up reads", adaptive.followup_reads),
+            ("follow-up tokens", adaptive.followup_result_tokens),
+            ("investigation tokens", adaptive.investigation_result_tokens),
+        ):
+            if values:
+                out.append(
+                    f"  {label:20s} n={len(values):4d} p50={_pct(values, 0.5):8.1f} "
+                    f"p90={_pct(values, 0.9):8.1f} max={max(values):9.1f}"
+                )
+
     if st.indexed.successes or st.indexed.errors:
         idx = st.indexed
         out.append("\nindexed context pilot:")

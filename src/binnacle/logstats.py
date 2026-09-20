@@ -25,6 +25,7 @@ from collections import defaultdict, deque
 from pathlib import Path
 from typing import Any
 
+from binnacle.logstats_adaptive import analyze_adaptive_discovery
 from binnacle.logstats_io import fetch_journal
 from binnacle.logstats_models import IndexedContextStats, Record, Stats
 from binnacle.logstats_render import indexed_context_report, render
@@ -426,6 +427,7 @@ def analyze(records: list[Record], startups: int = 0) -> Stats:
             else:
                 st.job_exits[f.get("exit_code", "?")] += 1
     st.indexed = analyze_indexed_context(records)
+    st.adaptive = analyze_adaptive_discovery(records)
     return st
 
 

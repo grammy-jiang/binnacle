@@ -181,3 +181,35 @@ capabilities from the model.
 
 Repository default is disabled. Configuration, telemetry, review criteria, and
 rollback are in `docs/indexed-context-pilot.md`.
+
+## 7. Adaptive broad-result representation (development pilot)
+
+The public input/output schema is unchanged. Repository defaults keep this path
+disabled. When `search_text.adaptive_discovery_enabled=true`, an ordinary content
+search whose fully assembled structured payload would otherwise exceed
+`search_text.result_max_bytes` is represented as ranked file discovery instead of
+immediately taking the old match-prefix budget path.
+
+Adaptive `entries` reuse only shapes already allowed by `OUTPUT_SCHEMA`:
+
+- detailed representatives: `{file,line,text,count}`, where `count` is that file's
+  total match count;
+- ranked tail summaries: `{file,count}`.
+
+The default pilot policy returns representative matches for up to 30 ranked files,
+two representatives per file, clips representative `text` to 180 characters, and
+keeps compact file/count summaries for up to 200 ranked candidate files.
+`max_results` continues to cap detailed match entries; tail summaries are not match
+entries. `count` remains the total matching-line count and `truncated=true` records
+that matching detail was summarized.
+
+The existing 65,536-byte structured-result budget remains authoritative. If the
+adaptive result itself would exceed it, only a ranked entry prefix is kept with an
+adaptive-specific truthful note. `search_adaptive_discovery` telemetry records the
+pre-adaptive byte size, total matches/files, detailed/candidate files,
+representative/tail entry counts, final bytes and whether this final hard-budget
+trim occurred.
+
+Small results, `names_only`, explicit `@context`, and ordinary results already under
+the byte budget retain their previous behavior. See
+`docs/search-text-adaptive-discovery.md` for the pilot contract and rollback.

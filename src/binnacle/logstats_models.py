@@ -42,6 +42,33 @@ class IndexedContextStats:
 
 
 @dataclass
+class AdaptiveDiscoveryStats:
+    calls: int = 0
+    budget_trimmed: int = 0
+    candidate_opened: int = 0
+    detailed_opened: int = 0
+    candidate_reads: int = 0
+    candidate_file_searches: int = 0
+    detailed_reads: int = 0
+    detailed_file_searches: int = 0
+    trigger_bytes: list[int] = field(default_factory=list)
+    result_bytes: list[int] = field(default_factory=list)
+    result_tokens: list[int] = field(default_factory=list)
+    total_matches: list[int] = field(default_factory=list)
+    matching_files: list[int] = field(default_factory=list)
+    detailed_files: list[int] = field(default_factory=list)
+    candidate_files: list[int] = field(default_factory=list)
+    representative_entries: list[int] = field(default_factory=list)
+    tail_entries: list[int] = field(default_factory=list)
+    followup_calls: list[int] = field(default_factory=list)
+    followup_exact_searches: list[int] = field(default_factory=list)
+    followup_reads: list[int] = field(default_factory=list)
+    followup_result_tokens: list[int] = field(default_factory=list)
+    investigation_result_tokens: list[int] = field(default_factory=list)
+    rows: list[dict[str, Any]] = field(default_factory=list)
+
+
+@dataclass
 class Stats:
     records: int = 0
     startups: int = 0
@@ -66,3 +93,4 @@ class Stats:
     job_exits: Counter = field(default_factory=Counter)  # exit code / signal -> n
     turn_calls: Counter = field(default_factory=Counter)  # tunnel turn -> calls
     indexed: IndexedContextStats = field(default_factory=IndexedContextStats)
+    adaptive: AdaptiveDiscoveryStats = field(default_factory=AdaptiveDiscoveryStats)

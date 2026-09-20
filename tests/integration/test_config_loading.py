@@ -26,6 +26,7 @@ def test_defaults_load_without_config_file(tmp_path, monkeypatch):
     assert settings.serve.port == 8000
     assert settings.roots.extra_roots == (Path("/tmp"),)
     assert settings.jobs.keep_newest == 50
+    assert settings.search_text.adaptive_discovery_enabled is False
     assert settings.client_tools["openai-mcp"] == (
         "read_file",
         "list_files",
@@ -60,6 +61,11 @@ max_open_indexes = 4
 [search_text]
 timeout_s = 31
 result_max_bytes = 70000
+adaptive_discovery_enabled = true
+adaptive_detailed_files = 24
+adaptive_total_files = 180
+adaptive_representative_matches = 3
+adaptive_snippet_chars = 220
 """
     )
     monkeypatch.setenv(config.CONFIG_FILE_ENV, str(cfg))
@@ -76,6 +82,11 @@ result_max_bytes = 70000
     assert settings.indexed_context.max_open_indexes == 4
     assert settings.search_text.timeout_s == 31
     assert settings.search_text.result_max_bytes == 70000
+    assert settings.search_text.adaptive_discovery_enabled is True
+    assert settings.search_text.adaptive_detailed_files == 24
+    assert settings.search_text.adaptive_total_files == 180
+    assert settings.search_text.adaptive_representative_matches == 3
+    assert settings.search_text.adaptive_snippet_chars == 220
 
 
 def test_environment_overrides_toml(tmp_path, monkeypatch):
@@ -187,3 +198,22 @@ mode = "experimental"
     monkeypatch.setenv(config.CONFIG_FILE_ENV, str(cfg))
 
     assert config.Settings().serve.port == 8333
+
+
+def test_search_text_rejects_adaptive_total_below_detailed(tmp_path, monkeypatch):
+    clear_binnacle_env(monkeypatch)
+    cfg = tmp_path / "config.toml"
+    cfg.write_text(
+        """
+[search_text]
+adaptive_detailed_files = 30
+adaptive_total_files = 20
+"""
+    )
+    monkeypatch.setenv(config.CONFIG_FILE_ENV, str(cfg))
+
+    with pytest.raises(
+        ValidationError,
+        match="adaptive_total_files must be >= adaptive_detailed_files",
+    ):
+        config.Settings()

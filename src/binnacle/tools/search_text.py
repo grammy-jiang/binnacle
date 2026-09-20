@@ -24,12 +24,14 @@ from binnacle.config import get_settings
 from binnacle.indexed_context import PREFIX as INDEXED_CONTEXT_PREFIX
 from binnacle.indexed_context import get_indexed_context_service
 from binnacle.paths import full_match, nearby_hint, resolve_path
+from binnacle.search_text_adaptive import build_adaptive_result, log_adaptive_result
 
-SEARCH_MAX_RESULTS_DEFAULT = get_settings().search_text.max_results_default
-SEARCH_MAX_RESULTS_CAP = get_settings().search_text.max_results_cap
-SEARCH_TIMEOUT_S = get_settings().search_text.timeout_s
-SEARCH_MAX_LINE_CHARS = get_settings().search_text.max_line_chars
-SEARCH_RESULT_MAX_BYTES = get_settings().search_text.result_max_bytes
+SEARCH_SETTINGS = get_settings().search_text
+SEARCH_MAX_RESULTS_DEFAULT = SEARCH_SETTINGS.max_results_default
+SEARCH_MAX_RESULTS_CAP = SEARCH_SETTINGS.max_results_cap
+SEARCH_TIMEOUT_S = SEARCH_SETTINGS.timeout_s
+SEARCH_MAX_LINE_CHARS = SEARCH_SETTINGS.max_line_chars
+SEARCH_RESULT_MAX_BYTES = SEARCH_SETTINGS.result_max_bytes
 LINE_CLIP_MARK = "… [line truncated]"
 log = logging.getLogger("binnacle.search_text")
 AUTO_CONTEXT_SINGLE = get_settings().search_text.auto_context_single
@@ -373,6 +375,38 @@ def search_text_impl(
         )
     else:
         summary = f"Found {total} matches for {pattern!r} under {where}."
+
+    pre_budget_bytes = _structured_bytes(payload)
+    if (
+        SEARCH_SETTINGS.adaptive_discovery_enabled
+        and pre_budget_bytes > SEARCH_RESULT_MAX_BYTES
+    ):
+        adaptive = build_adaptive_result(
+            events,
+            root=resolved,
+            pattern=pattern,
+            glob=glob,
+            fixed_strings=fixed_strings,
+            max_match_entries=max_results,
+            settings=SEARCH_SETTINGS,
+            matches_glob=_matches_glob,
+            result_max_bytes=SEARCH_RESULT_MAX_BYTES,
+        )
+        if adaptive is not None:
+            payload = adaptive.payload
+            log_adaptive_result(
+                log,
+                call=current_call.get(),
+                trigger_bytes=pre_budget_bytes,
+                total_matches=total,
+                result=adaptive,
+                result_budget_bytes=SEARCH_RESULT_MAX_BYTES,
+            )
+            summary = (
+                f"Found {total} matches for {pattern!r} under {where}; "
+                f"adaptive discovery shows {adaptive.candidate_files} ranked files."
+            )
+            return ToolResult(content=summary, structured_content=payload)
 
     payload, budget_hit = _enforce_result_budget(payload, names_only=False)
     if budget_hit:
