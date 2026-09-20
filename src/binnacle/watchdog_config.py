@@ -251,7 +251,7 @@ class WatchdogSettings(BaseModel):
             "Unbind/bind the driver of a wedged or unavailable non-USB radio "
             "(the built-in one) through sysfs, on the USB reset schedule. Off "
             "until proven on the host: a reload that fails leaves the radio "
-            "dead until a reboot. `binnacle watchdog reload-driver --dev wlan0 --apply` "
+            "dead until a reboot. `binnacle-watchdog reload-driver --dev wlan0 --apply` "
             "tests it once by hand."
         ),
     )

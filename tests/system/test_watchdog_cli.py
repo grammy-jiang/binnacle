@@ -1,11 +1,21 @@
 """Tests for the host-specific watchdog companion CLI."""
 
 import time
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 from binnacle import watchdog_cli as cli
+
+
+def companion(tmp_path: Path) -> Path:
+    """A stand-in for the installed binnacle-watchdog console script."""
+    exe = tmp_path / "venv" / "bin" / "binnacle-watchdog"
+    exe.parent.mkdir(parents=True, exist_ok=True)
+    exe.write_text("#!/bin/sh\n")
+    exe.chmod(0o755)
+    return exe
 
 
 def test_pause_and_resume_manage_only_pause_file(tmp_path, monkeypatch, capsys):
@@ -74,7 +84,7 @@ def test_setup_dry_run_owns_only_watchdog_unit(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(
         cli.shutil,
         "which",
-        lambda name: "/usr/bin/binnacle-watchdog",
+        lambda name: str(companion(tmp_path)),
     )
 
     cli.setup(dry_run=True)
@@ -124,7 +134,7 @@ def test_doctor_uses_companion_checks_and_core_renderer(monkeypatch, capsys):
 
 def test_setup_real_path_writes_only_watchdog_unit(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(cli, "UNIT_DIR", tmp_path / "units")
-    monkeypatch.setattr(cli.shutil, "which", lambda name: "/usr/bin/binnacle-watchdog")
+    monkeypatch.setattr(cli.shutil, "which", lambda name: str(companion(tmp_path)))
     systemctl = []
     monkeypatch.setattr(
         cli,

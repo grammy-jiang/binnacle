@@ -5,6 +5,7 @@ still a POC. It may depend on Binnacle core modules; Binnacle core must not
 import or otherwise depend on this companion.
 """
 
+import os
 import shutil
 import subprocess
 import sys
@@ -51,10 +52,27 @@ WantedBy=default.target
 """
 
 
+def _companion_executable(argv0: str | None = None) -> Path:
+    """The absolute path the unit starts: `binnacle-watchdog` on PATH, else
+    the script running now. systemd refuses a unit whose ExecStart is a
+    relative path ("Neither a valid executable name nor an absolute path",
+    measured 2026-09-20), so a candidate that does not resolve to an
+    executable file is refused here instead of written."""
+    candidate = shutil.which("binnacle-watchdog") or argv0 or sys.argv[0]
+    path = Path(candidate).expanduser().resolve()
+    if not (path.is_file() and os.access(path, os.X_OK)):
+        print(
+            f"cannot resolve the binnacle-watchdog executable from {candidate!r}; "
+            "run setup through the installed command, e.g. "
+            "~/Projects/binnacle/.venv/bin/binnacle-watchdog setup"
+        )
+        raise SystemExit(1)
+    return path
+
+
 @app.command
 def setup(dry_run: bool = False) -> None:
     """Provision only the host-specific watchdog user service."""
-    watchdog_bin = shutil.which("binnacle-watchdog") or sys.argv[0]
     unit_path = UNIT_DIR / WATCHDOG_UNIT
     if unit_path.exists() and UNIT_MARKER not in unit_path.read_text(encoding="utf-8"):
         print(
@@ -62,6 +80,7 @@ def setup(dry_run: bool = False) -> None:
             "binnacle-watchdog setup (marker missing). Move it away first."
         )
         raise SystemExit(1)
+    watchdog_bin = str(_companion_executable())
 
     actions: list[tuple[str, object]] = []
 
@@ -112,6 +131,25 @@ def doctor(
     text, code = (core_doctor.render_json if as_json else core_doctor.render)(results)
     print(text)
     raise SystemExit(code)
+
+
+@app.command(name="deploy-check")
+def deploy_check(window_s: float = 60.0) -> None:
+    """Is this a quiet moment to restart the unit? Exit 0 when no demotion
+    is in flight, every grade is healthy, the last cycle is recent, and the
+    journal shows no fast failure or repair in the last WINDOW-S seconds;
+    exit 1 otherwise. The gate for a deploy: `binnacle-watchdog deploy-check
+    && systemctl --user restart binnacle-watchdog.service`."""
+    from binnacle import watchdog_doctor as checks
+
+    cfg = get_watchdog_settings()
+    report = checks.quiet_moment(
+        cfg.state_file, window_s, cfg.stale_after_s, WATCHDOG_UNIT
+    )
+    verdict = "quiet, a restart is safe now" if report.ok else "not quiet, wait"
+    print(f"deploy check: {verdict}")
+    print("\n".join(report.lines))
+    raise SystemExit(0 if report.ok else 1)
 
 
 @app.command

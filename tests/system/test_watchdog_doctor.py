@@ -324,6 +324,11 @@ def test_run_all_composes_host_specific_checks(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(
         watchdog_doctor,
+        "check_unit_command",
+        lambda unit: calls.append(("unit", unit)) or [doctor.ok("watchdog", "unit")],
+    )
+    monkeypatch.setattr(
+        watchdog_doctor,
         "check_pause",
         lambda path: calls.append(("pause", path)) or [],
     )
@@ -340,7 +345,7 @@ def test_run_all_composes_host_specific_checks(tmp_path, monkeypatch):
 
     checks = watchdog_doctor.run_all()
 
-    assert [c.group for c in checks] == ["uplink", "watchdog", "privileges"]
+    assert [c.group for c in checks] == ["uplink", "watchdog", "watchdog", "privileges"]
     assert calls[0] == (
         "uplink",
         {
@@ -350,7 +355,8 @@ def test_run_all_composes_host_specific_checks(tmp_path, monkeypatch):
         },
     )
     assert calls[1][1][0] == watchdog_doctor.WATCHDOG_UNIT
-    assert calls[2] == ("pause", settings.state_file.with_suffix(".pause"))
+    assert calls[2] == ("unit", watchdog_doctor.WATCHDOG_UNIT)
+    assert calls[3] == ("pause", settings.state_file.with_suffix(".pause"))
     assert calls[-1] == (
         "driver",
         (
@@ -379,6 +385,7 @@ def test_run_all_can_skip_network_probe(tmp_path, monkeypatch):
         lambda **kw: (_ for _ in ()).throw(AssertionError("uplink called")),
     )
     monkeypatch.setattr(watchdog_doctor, "check_watchdog", lambda *a, **k: [])
+    monkeypatch.setattr(watchdog_doctor, "check_unit_command", lambda *a: [])
     monkeypatch.setattr(watchdog_doctor, "check_pause", lambda *a: [])
     monkeypatch.setattr(watchdog_doctor, "check_privileges", list)
     monkeypatch.setattr(watchdog_doctor, "check_driver_stability", lambda *a: [])

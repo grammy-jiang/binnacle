@@ -112,7 +112,7 @@ class Policy:
     #: cadence.
     snapshot_interval_s: float = 600.0
     #: A file whose presence pauses every action (observation and logging
-    #: go on): `binnacle watchdog pause`. Its content is the expiry epoch.
+    #: go on): `binnacle-watchdog pause`. Its content is the expiry epoch.
     pause_file: Path | None = None
     #: System services under the uplink. NetworkManager inactive, failed or
     #: unresponsive for `service_failures_before_action` cycles, or
@@ -126,7 +126,7 @@ class Policy:
     #: so the repo default is empty.
     inventory_params: tuple[str, ...] = ()
     #: Observe, decide and log everything, apply nothing (the rehearsal
-    #: mode for a new build: `binnacle watchdog run --cycles 3 --dry-run`).
+    #: mode for a new build: `binnacle-watchdog run --cycles 3 --dry-run`).
     dry_run: bool = False
     #: The fast path (2026-09-14, the user: "under one minute"). A thread
     #: TCP-connects to the upstream through the active route every

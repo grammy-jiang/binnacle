@@ -67,12 +67,18 @@ then the tunnel, and returns only when the tunnel's health server reports the
 new instance ready with its MCP probe ok. ChatGPT's own tunnel service may
 still need a few more seconds; `chatgpt-refresh` retries HTTP 424 by itself.
 
-`.venv/bin/binnacle doctor` checks the whole chain (token, units, service
-PATH, /mcp auth, tunnel config, uplink, tunnel poller, watchdog, job spool,
-journal errors) and exits 1 on any FAIL; `--json` for machine output,
-`--no-probe` to skip the network probes. Run it after touching the token, the
-units, `environment.d`, or the tunnel config. Checks live in
-`src/binnacle/doctor.py` with tests in `tests/system/test_doctor.py`.
+`.venv/bin/binnacle doctor` checks the core chain (token, units, service
+PATH, /mcp auth, tunnel config, uplink, tunnel poller, job spool, journal
+errors) and exits 1 on any FAIL; `--json` for machine output, `--no-probe`
+to skip the network probes. Run it after touching the token, the units,
+`environment.d`, or the tunnel config. Checks live in
+`src/binnacle/doctor.py` with tests in `tests/system/test_doctor.py`. Since
+the CLI split of 2026-09-20 (commit c9cf565) the host-specific checks (the
+watchdog loop and its fast-path heartbeat, the unit's command, the pause
+switch, `privileges`, the `driver` stability sample) live in
+`binnacle-watchdog doctor` (`src/binnacle/watchdog_doctor.py`, tests in
+`tests/system/test_watchdog_doctor.py` and
+`tests/system/test_watchdog_deploy.py`): run both.
 
 ## Uplink watchdog
 
@@ -113,7 +119,7 @@ single fault**, and **every radio is brought back to its highest level** —
 wlan1 on its 5 GHz profile at USB 3 (5000 Mbit/s), wlan0 on its 5 GHz
 profile — step by step, never at the cost of the first rule.
 
-`binnacle-watchdog.service` runs `binnacle watchdog run` (30 s cycles).
+`binnacle-watchdog.service` runs `binnacle-watchdog run` (30 s cycles).
 Each cycle observes every Wi-Fi device NetworkManager manages, not only the
 ones with a default route: NM state (connected / connecting / disconnected
 / unavailable), active profile, band, channel width, tx rate, signal, the
@@ -200,7 +206,7 @@ Reviewed again the same night against every failure case we could name
   left the firmware bus down (`bus is down`, bind returned EIO) and the
   radio gone, and `modprobe -r brcmfmac_cyw brcmfmac; modprobe brcmfmac`
   brought it back in about ten seconds — so the rung reloads the module,
-  never touches sysfs bind. `binnacle watchdog reload-driver --dev wlan0
+  never touches sysfs bind. `binnacle-watchdog reload-driver --dev wlan0
   [--apply]` runs it by hand.
 - **The watchdog watches itself.** Each cycle runs in a worker thread
   with `cycle_timeout_s` (180 s); a hung cycle exits the process and
@@ -236,7 +242,7 @@ configuration, every fault, and a journal you can replay):
   flags and the temperature are in the `inventory_host` journal line. The
   classic cause of a USB adapter going quiet is the supply, and it was
   0x0 on 2026-09-13.
-- **Pause switch**: `binnacle watchdog pause [--minutes N]` writes an
+- **Pause switch**: `binnacle-watchdog pause [--minutes N]` writes an
   expiring file; the loop keeps observing and logging but takes no action
   (`event=paused ... skipped=...`), `doctor` warns, `resume` ends it. For
   when you rearrange radios or profiles by hand.
@@ -285,7 +291,7 @@ What the audit found and fixed:
   table (a failed `ip route` used to look like every radio losing its
   route at once), waits the longer threshold, touches one device per
   cycle, and reapplies the profile before it re-associates.
-- Deploys now rehearse: `binnacle watchdog run --cycles 3 --dry-run
+- Deploys now rehearse: `binnacle-watchdog run --cycles 3 --dry-run
   --state-file <scratch>` runs the whole observe-decide-log path on the
   live host and applies nothing; the unit is restarted only when no
   demotion is in flight (restarting mid-episode resets the transient
@@ -490,6 +496,55 @@ was re-associating or being reset), wlan0 carried the connector, and
 ChatGPT saw three failed polls each time. Different bands, same host: the
 common factor is the USB side (bus or supply), not the AP.
 
+### Sixth look (2026-09-20): the CLI split left the unit behind
+
+Commit c9cf565 (01:26) moved the watchdog out of `binnacle` into the
+companion command `binnacle-watchdog` (run, setup, status, history, doctor,
+deploy-check, pause, resume, usb-reset, reload-driver) and its unit template
+into `binnacle-watchdog setup`; `binnacle doctor` kept only the core chain.
+Nothing re-provisioned the host: at 21:10 the unit on disk (written
+2026-09-12) still had `ExecStart=.../binnacle watchdog run`, which by then
+exited 1 ("Unknown command"), while the loop started on 09-17 kept running
+the old code from memory. A restart of any kind (a crash, a hung cycle, a
+reboot) would have looped every 10 s with nothing to notice it: no cron job
+ran the doctor, and the doctor had no check for it. The old process was
+safe to leave running (its one function-level import, the tunnel-log
+scanner, runs every cycle and was cached on 09-17).
+
+Fixed the same night, in this order: (1) `binnacle-watchdog setup` through
+its **absolute path** rewrote the unit without touching the loop
+(`enable --now` leaves a running unit alone; `systemd-analyze --user verify`
+ok, MainPID unchanged); (2) the unit was restarted at 22:25:46, the first
+moment `deploy-check` called quiet, and took over at cycle 18808 with the
+counters carried; (3) the drift became visible and the pitfall impossible
+to repeat:
+
+- `binnacle-watchdog doctor` reads the unit's `ExecStart` and the main
+  process's command line (`check_unit_command`): FAIL when the unit starts
+  something other than `binnacle-watchdog run` or a binary that does not
+  exist, WARN when the running process was started from a different
+  command ("it runs the code installed when it started"), with the restart
+  command as the hint. Measured live before the restart: WARN for pid 1196.
+- `setup` resolves the executable to an absolute path and refuses one it
+  cannot resolve. Invoked through a relative path, the old code wrote
+  `ExecStart=.venv/bin/binnacle-watchdog run`, which systemd rejects as a
+  fatal unit error ("Neither a valid executable name nor an absolute
+  path"): a unit that does not even try to start. The tests had hidden
+  this by patching `shutil.which` to an absolute path.
+- `binnacle-watchdog deploy-check` encodes the deploy rule and exits 1 when
+  it is not a quiet moment (a demotion in flight, a grade not healthy, a
+  stale cycle, or a fast failure / repair / service restart in the last
+  60 s). The deploy is `binnacle-watchdog deploy-check && systemctl --user
+  restart binnacle-watchdog.service`; the first attempt at 22:24 was
+  refused for a single fast failure on wlan1 20 s earlier.
+- A daily cron job (`~/.local/bin/binnacle-watchdog-doctor.sh`, 03:40 via
+  `cron-report`) runs `binnacle-watchdog doctor --no-probe` and mails only
+  when a check fails.
+
+Rule from this: a change to a unit template is not deployed until `setup`
+has been run on the host and the doctor is green; the doctor is what
+proves it, not the commit.
+
 ### The journal as the record
 
 The watchdog's journal is written so a window of it, however short, can
@@ -544,7 +599,7 @@ correlates them, and `n` persists across restarts):
   whose device became the active route meanwhile), `fast_path_stalled` /
   `fast_path_restarted` / `fast_path_hung`.
 
-`binnacle watchdog history --since="-1 day" [--verbose]` reconstructs the
+`binnacle-watchdog history --since="-1 day" [--verbose]` reconstructs the
 timeline (starts, inventory changes, transitions, actions, issues,
 pauses; `--verbose` adds every declined decision and probe error) and
 sums it up: cycles and their duration, actions by kind, failovers and
@@ -584,10 +639,10 @@ appeared in its scan list. The USB-level and down-device rungs are covered
 by `tests/system/test_watchdog.py` (the fake NetworkManager `nm_fake`); they have
 not yet fired on real hardware.
 
-Tools: `binnacle watchdog status [--rescan]` probes both routes and prints
+Tools: `binnacle-watchdog status [--rescan]` probes both routes and prints
 every device's state, profile, band, width, rate, signal, USB link and
-pending preference, plus what is below its highest level; `binnacle
-watchdog usb-reset --dev wlan1 [--method port_reset] [--apply]` runs one
+pending preference, plus what is below its highest level; `binnacle-watchdog
+usb-reset --dev wlan1 [--method port_reset] [--apply]` runs one
 USB reset by hand; `doctor` shows the levels, warns per issue, and shows a
 demotion with its kind. `watchdog.evaluate` is pure, so the whole policy is
 tested without a network (`tests/system/test_watchdog.py`, `tests/system/test_uplink.py`).
@@ -658,7 +713,7 @@ rewrites `baseline.env` and `assets/8812au.conf` together, gated on the
 skill's own test suite (both files are restored if it fails). The job is
 silent while the streak grows and mails only when the streak breaks, when it
 promotes, or when it cannot sample; its ledger is
-`~/.local/state/rtl8812au/stability.log`. `binnacle doctor` surfaces the last
+`~/.local/state/rtl8812au/stability.log`. `binnacle-watchdog doctor` surfaces the last
 sample as the `driver` check and skips it on a host without the job.
 
 ## Logging
