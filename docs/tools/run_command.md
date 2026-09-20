@@ -115,8 +115,9 @@ flagged `quiet: true`. When `job_id` is omitted, the listing is compact:
 all running jobs plus the newest 20 non-running jobs, preserving newest-first
 order. Listing rows are `{job_id, state, exit_code, runtime_s, started_at,
 workdir, command}`; `command` is a one-line 160-source-character head+tail
-preview with an explicit omitted-character marker, while a single-job query
-continues to return the full command. The limits are server settings
+preview with an explicit omitted-character marker. A single-job query uses
+the same preview representation, so polling never re-sends an arbitrarily large
+launch command. The limits are server settings
 `jobs.listing_history_limit` and `jobs.listing_command_preview_chars`, not MCP
 parameters. `processes` (added 2026-09-03) lists the live
 members of the job's process group from `/proc` — `{pid, state, etime_s,

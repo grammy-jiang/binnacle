@@ -186,7 +186,7 @@ def job_status_impl(
         "log_tail": _tail(log_text, max(1, tail_lines)),
         "log_bytes": state["log_bytes"],
         "log_path": state["log_path"],
-        "command": state["command"],
+        "command": _command_preview(state["command"]),
         "workdir": state["workdir"],
         "processes": processes,
     }

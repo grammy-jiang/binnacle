@@ -127,6 +127,18 @@ def _listing_state(
     }
 
 
+def test_status_single_job_previews_long_command(monkeypatch):
+    monkeypatch.setattr(js, "LISTING_COMMAND_PREVIEW_CHARS", 40)
+    command = "printf ok; #" + "x" * 100 + "-TAIL"
+    job_id = run(command)["job_id"]
+
+    row = status(job_id)
+    assert row["workdir"]
+    assert row["command"].startswith("printf ok; #")
+    assert row["command"].endswith("-TAIL")
+    assert "chars omitted" in row["command"]
+
+
 def test_status_listing_keeps_all_running_plus_recent_history(monkeypatch):
     monkeypatch.setattr(js, "LISTING_HISTORY_LIMIT", 3)
     states = [
