@@ -15,7 +15,7 @@ concurrency:
 jobs:
   quality:
     name: Code quality
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - name: Check out repository
@@ -37,7 +37,7 @@ jobs:
 
   tests:
     name: Tests / Python ${{ matrix.python }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -85,7 +85,7 @@ jobs:
 
   coverage:
     name: Coverage policy / Python 3.13
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - name: Check out repository
