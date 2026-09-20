@@ -79,12 +79,13 @@ def test_token_empty_fails(tmp_path):
 # -- units -------------------------------------------------------------------
 
 
-def test_units_none_active_fails():
+def test_units_inactive_fails():
     checks, active = doctor.check_units(
-        "prod", "dev", run=fake_systemctl({}), linger=lambda: True
+        "prod", run=fake_systemctl({}), linger=lambda: True
     )
     assert active is None
     assert statuses(checks) == ["fail"]
+    assert "systemctl --user start prod" in checks[0].hint
 
 
 READY = {"NRestarts": "0", "ExecStartPost": "{ path=/bin/bash ; argv[]=... }"}
@@ -94,9 +95,9 @@ def _props(unit: str, **over: str) -> dict[str, str]:
     return {f"{unit}.{k}": v for k, v in {**READY, **over}.items()}
 
 
-def test_units_one_active_ok():
+def test_units_active_ok():
     run = fake_systemctl({"prod": "active"}, _props("prod"))
-    checks, active = doctor.check_units("prod", "dev", run=run, linger=lambda: True)
+    checks, active = doctor.check_units("prod", run=run, linger=lambda: True)
     assert active == "prod"
     assert statuses(checks) == ["ok", "ok", "ok", "ok"]
 
@@ -105,19 +106,13 @@ def test_units_without_readiness_gate_warns():
     # The restart noise of 2026-09-03: tunnel probed a port uvicorn had not
     # opened yet, because Type=simple counts the fork as "started".
     run = fake_systemctl({"prod": "active"}, _props("prod", ExecStartPost=""))
-    checks, _ = doctor.check_units("prod", "dev", run=run, linger=lambda: True)
+    checks, _ = doctor.check_units("prod", run=run, linger=lambda: True)
     assert checks[2].status == "warn" and "ExecStartPost" in checks[2].hint
-
-
-def test_units_both_active_fails():
-    run = fake_systemctl({"prod": "active", "dev": "active"}, _props("prod"))
-    checks, _ = doctor.check_units("prod", "dev", run=run, linger=lambda: True)
-    assert checks[0].status == "fail" and "Conflicts" in checks[0].hint
 
 
 def test_units_restarts_and_no_linger_warn():
     run = fake_systemctl({"dev": "active"}, _props("dev", NRestarts="3"))
-    checks, active = doctor.check_units("prod", "dev", run=run, linger=lambda: False)
+    checks, active = doctor.check_units("dev", run=run, linger=lambda: False)
     assert active == "dev"
     assert statuses(checks) == ["ok", "warn", "ok", "warn"]
     assert "3 time(s)" in checks[1].detail
@@ -125,8 +120,42 @@ def test_units_restarts_and_no_linger_warn():
 
 def test_units_linger_unknown_is_silent():
     run = fake_systemctl({"prod": "active"}, _props("prod"))
-    checks, _ = doctor.check_units("prod", "dev", run=run, linger=lambda: None)
+    checks, _ = doctor.check_units("prod", run=run, linger=lambda: None)
     assert len(checks) == 3
+
+
+def test_server_busy_reasons_report_jobs_and_calls(tmp_path, monkeypatch):
+    jobs_dir = tmp_path / "jobs"
+    (jobs_dir / "a1").mkdir(parents=True)
+    (jobs_dir / "b2").mkdir()
+    (jobs_dir / "note.txt").write_text("not a job")
+    monkeypatch.setattr(
+        doctor,
+        "_job_state_safe",
+        lambda job_id: {"state": "running" if job_id == "a1" else "exited"},
+    )
+    reasons = doctor.server_busy_reasons(
+        "prod",
+        jobs_dir,
+        fetch=lambda unit, since: "event=tool_call x\nevent=tool_call y\n",
+    )
+    assert reasons == [
+        "1 background job(s) running (a1); a unit restart kills them",
+        "2 tool call(s) in the last 30s; a restart fails the calls in flight",
+    ]
+
+
+def test_server_busy_reasons_quiet_and_unreadable_journal(tmp_path):
+    quiet = doctor.server_busy_reasons(
+        "prod", tmp_path / "missing", fetch=lambda unit, since: "event=cycle\n"
+    )
+    assert quiet == []
+
+    def boom(unit: str, since: str) -> str:
+        raise OSError("no journal")
+
+    reasons = doctor.server_busy_reasons("prod", tmp_path / "missing", fetch=boom)
+    assert len(reasons) == 1 and "journal unreadable" in reasons[0]
 
 
 # -- service environment -----------------------------------------------------

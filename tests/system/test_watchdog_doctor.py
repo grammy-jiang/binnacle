@@ -323,9 +323,19 @@ def test_run_all_composes_host_specific_checks(tmp_path, monkeypatch):
         ),
     )
     monkeypatch.setattr(
-        watchdog_doctor,
-        "check_unit_command",
-        lambda unit: calls.append(("unit", unit)) or [doctor.ok("watchdog", "unit")],
+        watchdog_doctor.units,
+        "check_unit_drift",
+        lambda path, owner, render, group, hint: (
+            calls.append(("drift", path.name, owner))
+            or [doctor.ok("watchdog", "drift")]
+        ),
+    )
+    monkeypatch.setattr(
+        watchdog_doctor.units,
+        "check_unit_process",
+        lambda unit, group, setup_hint, restart_hint: (
+            calls.append(("process", unit)) or [doctor.ok("watchdog", "process")]
+        ),
     )
     monkeypatch.setattr(
         watchdog_doctor,
@@ -345,7 +355,13 @@ def test_run_all_composes_host_specific_checks(tmp_path, monkeypatch):
 
     checks = watchdog_doctor.run_all()
 
-    assert [c.group for c in checks] == ["uplink", "watchdog", "watchdog", "privileges"]
+    assert [c.group for c in checks] == [
+        "uplink",
+        "watchdog",
+        "watchdog",
+        "watchdog",
+        "privileges",
+    ]
     assert calls[0] == (
         "uplink",
         {
@@ -355,8 +371,9 @@ def test_run_all_composes_host_specific_checks(tmp_path, monkeypatch):
         },
     )
     assert calls[1][1][0] == watchdog_doctor.WATCHDOG_UNIT
-    assert calls[2] == ("unit", watchdog_doctor.WATCHDOG_UNIT)
-    assert calls[3] == ("pause", settings.state_file.with_suffix(".pause"))
+    assert calls[2] == ("drift", watchdog_doctor.WATCHDOG_UNIT, "binnacle-watchdog")
+    assert calls[3] == ("process", watchdog_doctor.WATCHDOG_UNIT)
+    assert calls[4] == ("pause", settings.state_file.with_suffix(".pause"))
     assert calls[-1] == (
         "driver",
         (
@@ -385,7 +402,8 @@ def test_run_all_can_skip_network_probe(tmp_path, monkeypatch):
         lambda **kw: (_ for _ in ()).throw(AssertionError("uplink called")),
     )
     monkeypatch.setattr(watchdog_doctor, "check_watchdog", lambda *a, **k: [])
-    monkeypatch.setattr(watchdog_doctor, "check_unit_command", lambda *a: [])
+    monkeypatch.setattr(watchdog_doctor.units, "check_unit_drift", lambda *a: [])
+    monkeypatch.setattr(watchdog_doctor.units, "check_unit_process", lambda *a: [])
     monkeypatch.setattr(watchdog_doctor, "check_pause", lambda *a: [])
     monkeypatch.setattr(watchdog_doctor, "check_privileges", list)
     monkeypatch.setattr(watchdog_doctor, "check_driver_stability", lambda *a: [])

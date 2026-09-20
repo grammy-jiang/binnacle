@@ -72,28 +72,44 @@ def imports_of(path: Path, source: str) -> set[str]:
     return targets
 
 
+def _companion_groups(cfg: dict[str, Any]) -> dict[str, list[str]]:
+    """Companion groups: {group: [module prefixes]}. The pre-2026-09-21 key
+    `watchdog_companion_modules` still reads as the single `watchdog` group."""
+    if "companions" in cfg:
+        return {name: list(mods) for name, mods in cfg["companions"].items()}
+    return {"watchdog": list(cfg.get("watchdog_companion_modules", []))}
+
+
 def evaluate(
     imports: dict[str, set[str]],
     policy: dict[str, Any],
 ) -> list[str]:
     cfg = policy["architecture"]
-    companion = set(cfg["watchdog_companion_modules"])
-    forbidden = tuple(sorted(companion))
+    groups = _companion_groups(cfg)
+    allowed = {k: set(v) for k, v in cfg.get("companion_dependencies", {}).items()}
     errors: list[str] = []
 
-    def is_companion(module: str) -> bool:
-        return any(
-            module == item or module.startswith(item + ".") for item in forbidden
-        )
+    def group_of(module: str) -> str | None:
+        for name, prefixes in groups.items():
+            if any(module == p or module.startswith(p + ".") for p in prefixes):
+                return name
+        return None
 
     for source, targets in sorted(imports.items()):
-        if is_companion(source):
-            continue
+        source_group = group_of(source)
         for target in sorted(targets):
-            if is_companion(target):
+            target_group = group_of(target)
+            if target_group is None or target_group == source_group:
+                continue
+            if source_group is None:
                 errors.append(
                     f"{source} -> {target}: Binnacle core must not depend on "
-                    "the watchdog companion"
+                    f"the {target_group} companion"
+                )
+            elif target_group not in allowed.get(source_group, set()):
+                errors.append(
+                    f"{source} -> {target}: the {source_group} companion must "
+                    f"not depend on the {target_group} companion"
                 )
     return errors
 

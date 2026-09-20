@@ -1,17 +1,17 @@
-"""Deploy-time checks of the watchdog companion: does the unit start the
-command that exists, is the running process that command, may the unit be
-restarted now, and does `setup` write a path systemd accepts."""
+"""Deploy-time checks of the watchdog companion: may the unit be restarted
+now (`quiet_moment`, `deploy-check`), and does `setup` write a marked unit
+with an absolute path, adopt a hand-written one, and rewrite a legacy one.
+The generic unit checks live in tests/unit/core/test_units.py."""
 
 import json
-import os
 import subprocess
-import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
+from binnacle import units
 from binnacle import watchdog_cli as cli
 from binnacle import watchdog_doctor as wdoc
 
@@ -24,104 +24,6 @@ def companion(tmp_path: Path) -> Path:
     exe.write_text("#!/bin/sh\n")
     exe.chmod(0o755)
     return exe
-
-
-def exec_start(*argv: str) -> str:
-    return (
-        f"{{ path={argv[0]} ; argv[]={' '.join(argv)} ; ignore_errors=no ; "
-        "start_time=[n/a] ; stop_time=[n/a] ; pid=0 ; code=(null) ; status=0/0 }"
-    )
-
-
-def fake_show(props: dict[str, str]):
-    def run(*args: str) -> subprocess.CompletedProcess:
-        out = props.get(args[3], "") if args[0] == "show" else ""
-        return subprocess.CompletedProcess(list(args), 0, stdout=out + "\n", stderr="")
-
-    return run
-
-
-def test_exec_start_argv_parses_systemctl_show_output():
-    line = exec_start("/v/bin/binnacle-watchdog", "run")
-    assert wdoc.exec_start_argv(line) == ["/v/bin/binnacle-watchdog", "run"]
-    assert wdoc.exec_start_argv("") == []
-    assert wdoc.exec_start_argv("{ path=/x ; ignore_errors=no }") == []
-
-
-def test_proc_cmdline_reads_this_process():
-    argv = wdoc.proc_cmdline(os.getpid())
-    assert argv and "python" in Path(argv[0]).name
-
-
-def test_unit_command_ok_when_the_process_is_the_unit_command(tmp_path):
-    exe = companion(tmp_path)
-    run = fake_show({"ExecStart": exec_start(str(exe), "run"), "MainPID": "4242"})
-    checks = wdoc.check_unit_command(
-        UNIT, run=run, cmdline=lambda pid: ["/v/bin/python3", str(exe), "run"]
-    )
-    assert [c.status for c in checks] == ["ok"]
-    assert "pid 4242 is that command" in checks[0].detail
-
-
-def test_unit_command_warns_when_the_process_predates_the_unit(tmp_path):
-    exe = companion(tmp_path)
-    run = fake_show({"ExecStart": exec_start(str(exe), "run"), "MainPID": "1196"})
-    old = ["/v/bin/python3", "/v/bin/binnacle", "watchdog", "run"]
-    checks = wdoc.check_unit_command(UNIT, run=run, cmdline=lambda pid: old)
-    assert checks[0].status == "warn"
-    assert "binnacle watchdog run" in checks[0].detail
-    assert "deploy-check" in checks[0].hint
-
-
-def test_unit_command_fails_on_the_pre_split_command():
-    props = {
-        "ExecStart": exec_start("/v/bin/binnacle", "watchdog", "run"),
-        "MainPID": "1196",
-    }
-    checks = wdoc.check_unit_command(UNIT, run=fake_show(props), cmdline=lambda pid: [])
-    assert checks[0].status == "fail"
-    assert "will not come back after a restart" in checks[0].detail
-    assert "setup" in checks[0].hint
-
-
-def test_unit_command_fails_when_the_executable_is_missing(tmp_path):
-    missing = tmp_path / "gone" / "binnacle-watchdog"
-    props = {"ExecStart": exec_start(str(missing), "run"), "MainPID": "0"}
-    checks = wdoc.check_unit_command(UNIT, run=fake_show(props), cmdline=lambda pid: [])
-    assert checks[0].status == "fail"
-    assert "missing or not executable" in checks[0].detail
-
-
-def test_unit_command_fails_without_exec_start():
-    props = {
-        "ExecStart": "",
-        "LoadError": 'org.freedesktop.DBus.Error.FileNotFound "No such file"',
-    }
-    checks = wdoc.check_unit_command(UNIT, run=fake_show(props), cmdline=lambda pid: [])
-    assert checks[0].status == "fail"
-    assert "no ExecStart" in checks[0].detail and "No such file" in checks[0].detail
-
-
-def test_unit_command_ok_when_the_unit_is_not_running(tmp_path):
-    exe = companion(tmp_path)
-    props = {"ExecStart": exec_start(str(exe), "run"), "MainPID": "0"}
-
-    def no_pid(pid: int) -> list[str]:
-        raise AssertionError("no pid to read")
-
-    checks = wdoc.check_unit_command(UNIT, run=fake_show(props), cmdline=no_pid)
-    assert [c.status for c in checks] == ["ok"]
-
-
-def test_unit_command_warns_when_the_cmdline_is_unreadable(tmp_path):
-    exe = companion(tmp_path)
-    props = {"ExecStart": exec_start(str(exe), "run"), "MainPID": "77"}
-
-    def boom(pid: int) -> list[str]:
-        raise OSError("gone")
-
-    checks = wdoc.check_unit_command(UNIT, run=fake_show(props), cmdline=boom)
-    assert checks[0].status == "warn" and "pid 77" in checks[0].detail
 
 
 def state(tmp_path: Path, **over) -> Path:
@@ -253,10 +155,11 @@ def test_deploy_check_exits_one_when_not_quiet(tmp_path, monkeypatch, capsys):
 def test_setup_writes_the_resolved_absolute_path(tmp_path, monkeypatch):
     exe = companion(tmp_path)
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(cli.shutil, "which", lambda name: None)
-    monkeypatch.setattr(sys, "argv", ["venv/bin/binnacle-watchdog", "setup"])
+    monkeypatch.setattr(units.shutil, "which", lambda name: None)
+    monkeypatch.setattr(units.sys, "argv", ["venv/bin/binnacle-watchdog", "setup"])
     monkeypatch.setattr(cli, "UNIT_DIR", tmp_path / "units")
-    monkeypatch.setattr(cli, "_systemctl", lambda *a: None)
+    monkeypatch.setattr(cli, "BACKUP_DIR", tmp_path / "backups")
+    monkeypatch.setattr(cli, "_systemctl", lambda *a, **k: None)
     monkeypatch.setattr(cli.subprocess, "run", lambda argv, **kw: None)
 
     cli.setup()
@@ -264,12 +167,15 @@ def test_setup_writes_the_resolved_absolute_path(tmp_path, monkeypatch):
     text = (tmp_path / "units" / cli.WATCHDOG_UNIT).read_text()
     assert f"ExecStart={exe.resolve()} run" in text
     assert "ExecStart=venv/bin" not in text
+    assert units.read_marker(text) == units.Marker(
+        "binnacle-watchdog", {"watchdog": str(exe.resolve())}
+    )
 
 
 def test_setup_refuses_a_command_it_cannot_resolve(tmp_path, monkeypatch, capsys):
-    monkeypatch.setattr(cli.shutil, "which", lambda name: None)
+    monkeypatch.setattr(units.shutil, "which", lambda name: None)
     monkeypatch.setattr(
-        sys, "argv", [str(tmp_path / "no-such-binnacle-watchdog"), "setup"]
+        units.sys, "argv", [str(tmp_path / "no-such-binnacle-watchdog"), "setup"]
     )
     monkeypatch.setattr(cli, "UNIT_DIR", tmp_path / "units")
 
@@ -279,3 +185,58 @@ def test_setup_refuses_a_command_it_cannot_resolve(tmp_path, monkeypatch, capsys
     assert exc.value.code == 1
     assert "cannot resolve the binnacle-watchdog executable" in capsys.readouterr().out
     assert not (tmp_path / "units").exists()
+
+
+def test_setup_adopts_a_hand_written_unit_and_rewrites_a_legacy_one(
+    tmp_path, monkeypatch, capsys
+):
+    exe = companion(tmp_path)
+    monkeypatch.setattr(units, "resolve_executable", lambda name, **kw: exe)
+    unit_dir = tmp_path / "units"
+    unit_dir.mkdir()
+    unit = unit_dir / cli.WATCHDOG_UNIT
+    unit.write_text("[Unit]\nDescription=hand written\n")
+    monkeypatch.setattr(cli, "UNIT_DIR", unit_dir)
+    monkeypatch.setattr(cli, "BACKUP_DIR", tmp_path / "backups")
+    monkeypatch.setattr(cli, "_systemctl", lambda *a, **k: None)
+    monkeypatch.setattr(cli.subprocess, "run", lambda argv, **kw: None)
+
+    with pytest.raises(SystemExit):
+        cli.setup(dry_run=True)
+    out = capsys.readouterr().out
+    assert "refusing to overwrite" in out and "-Description=hand written" in out
+
+    cli.setup(adopt=True)
+    assert units.read_marker(unit.read_text()) == units.Marker(
+        "binnacle-watchdog", {"watchdog": str(exe)}
+    )
+    backups = list((tmp_path / "backups").iterdir())
+    assert len(backups) == 1
+    assert backups[0].read_text() == "[Unit]\nDescription=hand written\n"
+
+    # The pre-2026-09-20 marker is ours: rewritten without --adopt.
+    body = unit.read_text().split("\n", 1)[1]
+    unit.write_text("# Managed by `binnacle setup`\n" + body)
+    capsys.readouterr()
+    cli.setup()
+    assert units.read_marker(unit.read_text()).params == {"watchdog": str(exe)}
+    assert f"rewrite {unit}" in capsys.readouterr().out
+
+
+def test_watchdog_unit_renders_from_the_marker_parameters_and_needs_its_binary():
+    from binnacle import watchdog_unit
+
+    spec = watchdog_unit.watchdog_unit_spec({"watchdog": "/v/bin/binnacle-watchdog"})
+    assert (
+        spec.name == "binnacle-watchdog.service" and spec.owner == "binnacle-watchdog"
+    )
+    assert "ExecStart=/v/bin/binnacle-watchdog run\n" in spec.body
+    assert "Environment=PATH=" in spec.body and "Restart=always" in spec.body
+    text = watchdog_unit.render_watchdog_unit({"watchdog": "/v/bin/binnacle-watchdog"})
+    marker = units.read_marker(text)
+    assert marker == units.Marker(
+        "binnacle-watchdog", {"watchdog": "/v/bin/binnacle-watchdog"}
+    )
+    assert watchdog_unit.render_watchdog_unit(marker.params) == text
+    with pytest.raises(units.UnitError, match="needs the `watchdog` parameter"):
+        watchdog_unit.watchdog_unit_spec({})

@@ -18,16 +18,21 @@ cd binnacle
 
 uv sync --locked --group dev
 
-# Preview the machine changes first.
+# Preview the machine changes first: every action, and the unit diff.
 uv run binnacle setup --dev "$PWD" --dry-run
 
-# Create the bearer token and systemd user units.
+# Create the bearer token and the systemd user unit, in development mode
+# (this checkout with auto-reload). A hand-written unit is refused: review
+# the diff, then add --adopt to take it over (the old file is backed up).
 uv run binnacle setup --dev "$PWD"
 
-# For POC/development, run directly from this checkout with auto-reload.
+# Later, switch the same unit to the installed package without reload, or
+# back. A switch rewrites the unit and restarts it at a quiet moment.
+uv run binnacle mode prod
 uv run binnacle mode dev
 
-# Verify configuration, auth, service state, jobs and connectivity.
+# Verify configuration, auth, the unit (its content against what setup
+# writes, and the process it started), jobs and connectivity.
 uv run binnacle doctor
 ```
 

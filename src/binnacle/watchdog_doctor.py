@@ -5,7 +5,6 @@ must not import this module or any other watchdog companion module.
 """
 
 import json
-import os
 import re
 import subprocess
 import time
@@ -14,6 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+from binnacle import units
 from binnacle.doctor import (
     Check,
     Systemctl,
@@ -25,11 +25,9 @@ from binnacle.doctor import (
     unit_state,
     warn,
 )
-from binnacle.doctor_common import unit_property
 from binnacle.watchdog_config import get_watchdog_settings
+from binnacle.watchdog_unit import OWNER, WATCHDOG_UNIT, render_watchdog_unit
 from binnacle.watchlog import fetch_journal
-
-WATCHDOG_UNIT = "binnacle-watchdog.service"
 
 
 def check_pause(pause_file: Path) -> list[Check]:
@@ -275,95 +273,11 @@ def check_driver_stability(
     return out
 
 
-UNIT_COMMAND = "binnacle-watchdog"
-
 _QUIET_EVENTS = re.compile(
     r"event=(fast_failure|fast_failover|fast_failover_blocked|uplink_demoted|"
     r"uplink_reset|uplink_usb_reset|uplink_driver_reload|service_restart|"
     r"demote_failed|restore_failed|actions_failed)\b"
 )
-
-
-def exec_start_argv(value: str) -> list[str]:
-    """The argv[] of a `systemctl show -p ExecStart --value` line, such as
-    `{ path=/x/binnacle-watchdog ; argv[]=/x/binnacle-watchdog run ; ... }`."""
-    for part in value.strip().strip("{}").split(";"):
-        part = part.strip()
-        if part.startswith("argv[]="):
-            return part[len("argv[]=") :].split()
-    return []
-
-
-def proc_cmdline(pid: int) -> list[str]:
-    """The command line of a running process, from procfs."""
-    raw = Path(f"/proc/{pid}/cmdline").read_bytes()
-    return [a.decode(errors="replace") for a in raw.split(b"\0") if a]
-
-
-def check_unit_command(
-    unit: str,
-    command: str = UNIT_COMMAND,
-    run: Systemctl = systemctl,
-    cmdline: Callable[[int], list[str]] = proc_cmdline,
-) -> list[Check]:
-    """Does the unit start the companion command, does that command exist,
-    and is the running process that command?
-
-    The 2026-09-20 CLI split left the unit on disk starting the old
-    `binnacle watchdog run` (exit 1 by then) while the loop started before
-    the split kept running old code from memory: nothing failed until the
-    next restart, and nothing reported it. A process started from a
-    different command than the unit's runs the code installed when it
-    started, so it is reported until the unit is restarted."""
-    argv = exec_start_argv(unit_property(unit, "ExecStart", run))
-    if not argv:
-        reason = unit_property(unit, "LoadError", run)
-        return [
-            fail(
-                "watchdog",
-                f"{unit} has no ExecStart" + (f": {reason}" if reason else ""),
-                f"{command} setup (through its absolute path)",
-            )
-        ]
-    exe, shown = argv[0], " ".join(argv)
-    if Path(exe).name != command or argv[1:2] != ["run"]:
-        return [
-            fail(
-                "watchdog",
-                f"{unit} starts `{shown}`, not `{command} run`: "
-                "it will not come back after a restart",
-                f"{command} setup (through its absolute path), "
-                "then restart the unit at a quiet moment",
-            )
-        ]
-    if not (Path(exe).is_file() and os.access(exe, os.X_OK)):
-        return [
-            fail(
-                "watchdog",
-                f"{unit} starts {exe}, which is missing or not executable",
-                f"reinstall the package (uv sync), then {command} setup",
-            )
-        ]
-    try:
-        pid = int(unit_property(unit, "MainPID", run) or 0)
-    except ValueError:
-        pid = 0
-    if pid <= 0:
-        return [ok("watchdog", f"{unit} starts {shown}")]
-    try:
-        running = cmdline(pid)
-    except OSError as e:
-        return [warn("watchdog", f"cannot read the command line of pid {pid}: {e}")]
-    if running[-len(argv) :] == argv:
-        return [ok("watchdog", f"{unit} starts {shown}; pid {pid} is that command")]
-    return [
-        warn(
-            "watchdog",
-            f"pid {pid} was started as `{' '.join(running)}`, not the unit's "
-            f"`{shown}`: it runs the code installed when it started",
-            f"{command} deploy-check && systemctl --user restart {unit}",
-        )
-    ]
 
 
 @dataclass(slots=True)
@@ -471,7 +385,19 @@ def run_all(probe: bool = True) -> list[Check]:
         settings.stale_after_s,
         fast_interval_s=settings.fast_interval_s,
     )
-    checks += check_unit_command(WATCHDOG_UNIT)
+    checks += units.check_unit_drift(
+        units.UNIT_DIR / WATCHDOG_UNIT,
+        OWNER,
+        render_watchdog_unit,
+        "watchdog",
+        "binnacle-watchdog setup",
+    )
+    checks += units.check_unit_process(
+        WATCHDOG_UNIT,
+        "watchdog",
+        "binnacle-watchdog setup",
+        f"binnacle-watchdog deploy-check && systemctl --user restart {WATCHDOG_UNIT}",
+    )
     checks += check_pause(settings.state_file.with_suffix(".pause"))
     checks += check_privileges()
     checks += check_driver_stability(

@@ -1,9 +1,13 @@
 """binnacle command line -- serve, setup, mode, doctor, stats, token.
 
 The server itself lives in binnacle.server; this module only wires it to
-subcommands and provisions the deployment pieces that are ours to manage
-(token, systemd user units, tunnel config). The tunnel-client binary and
-every ChatGPT UI step stay manual by design.
+subcommands and provisions the deployment pieces that are ours to manage:
+the token and the server's systemd user unit. The unit is one file,
+`binnacle-mcp.service`, whose content `setup` and `mode` render for the
+mode in use (development: the checkout with auto-reload; production: the
+installed `binnacle serve`), so the tunnel, the journal readers and the
+watchdog key on one name and the mode survives a reboot. The tunnel-client
+binary and every ChatGPT UI step stay manual by design.
 """
 
 import json
@@ -11,7 +15,6 @@ import re
 import secrets
 import shutil
 import subprocess
-import sys
 import time
 from collections.abc import Callable
 from datetime import datetime
@@ -20,7 +23,14 @@ from typing import Annotated, Literal
 
 import cyclopts
 
+from binnacle import units
 from binnacle.config import get_settings
+from binnacle.server_unit import (
+    SERVER_UNIT,
+    render_server_unit,
+    server_params,
+    server_unit_spec,
+)
 
 app = cyclopts.App(
     name="binnacle",
@@ -28,14 +38,12 @@ app = cyclopts.App(
 )
 
 TOKEN_FILE = get_settings().auth.token_file
-UNIT_DIR = Path.home() / ".config" / "systemd" / "user"
-PROD_UNIT = "binnacle-mcp.service"
-DEV_UNIT = "binnacle-mcp-dev.service"
+UNIT_DIR = units.UNIT_DIR
 TUNNEL_UNIT = "binnacle-tunnel.service"
 TUNNEL_CONFIG = Path.home() / ".config" / "tunnel-client" / "binnacle.yaml"
-# Marks units this CLI generated; setup refuses to overwrite a unit
-# without it, so a hand-written unit is never clobbered.
-UNIT_MARKER = "# Managed by `binnacle setup`"
+#: Copies of unit files taken before `setup` or `mode` rewrites them.
+BACKUP_DIR = get_settings().jobs.dir.parent / "unit-backups"
+MODES = ("dev", "prod")
 
 
 def _write_token(path: Path | None = None) -> None:
@@ -50,50 +58,6 @@ def _write_token(path: Path | None = None) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(f"Bearer {secrets.token_urlsafe(32)}\n", encoding="utf-8")
     path.chmod(0o600)
-
-
-PROD_UNIT_TEMPLATE = """\
-{marker}
-[Unit]
-Description=Binnacle FastMCP server (production)
-After=network.target
-Conflicts={other}
-
-[Service]
-Type=simple
-ExecStart={binnacle} serve --host 127.0.0.1 --port {port}
-# Hold the unit in "activating" until the port answers, so After= dependents
-# (the tunnel) and `systemctl restart` callers see a server that is listening.
-ExecStartPost=/bin/bash -c 'for i in $(seq 1 300); do (exec 3<>/dev/tcp/127.0.0.1/{port}) 2>/dev/null && exit 0; sleep 0.1; done; echo "binnacle: port {port} not listening after 30 s" >&2; exit 1'
-Restart=always
-RestartSec=2
-UMask=0077
-
-[Install]
-WantedBy=default.target
-"""
-
-DEV_UNIT_TEMPLATE = """\
-{marker}
-[Unit]
-Description=Binnacle FastMCP server (development, repo + reload)
-After=network.target
-Conflicts={other}
-
-[Service]
-Type=simple
-WorkingDirectory={repo}
-ExecStart={repo}/.venv/bin/uvicorn binnacle.server:app --host 127.0.0.1 --port {port} --reload
-# Hold the unit in "activating" until the port answers, so After= dependents
-# (the tunnel) and `systemctl restart` callers see a server that is listening.
-ExecStartPost=/bin/bash -c 'for i in $(seq 1 300); do (exec 3<>/dev/tcp/127.0.0.1/{port}) 2>/dev/null && exit 0; sleep 0.1; done; echo "binnacle: port {port} not listening after 30 s" >&2; exit 1'
-Restart=on-failure
-RestartSec=2
-UMask=0077
-
-[Install]
-WantedBy=default.target
-"""
 
 
 def _tunnel_health_url() -> str | None:
@@ -205,22 +169,28 @@ def setup(
     dev: Path | None = None,
     port: int = get_settings().serve.port,
     dry_run: bool = False,
+    adopt: bool = False,
 ) -> None:
-    """Provision the server side: token, systemd user units, tunnel config.
+    """Provision the server side: the token and the systemd user unit.
 
     Parameters
     ----------
     dev
-        Path to a binnacle git checkout; also writes the development unit
-        (repo + --reload) pointing at it.
+        Path to a binnacle git checkout: the unit runs it with auto-reload
+        (development mode). Without it the unit runs the installed
+        `binnacle serve` (production mode).
     port
         Local port the server binds; the tunnel forwards to it.
     dry_run
-        Print every action instead of performing it.
+        Print every action, and the unit diff, instead of performing them.
+    adopt
+        Take over a unit file no binnacle setup command wrote (a hand-written
+        one), after reviewing the diff `--dry-run` shows. It is backed up
+        first.
     """
     actions: list[str] = []
 
-    def act(description: str, fn) -> None:
+    def act(description: str, fn: Callable[[], object]) -> None:
         actions.append(description)
         if not dry_run:
             fn()
@@ -231,42 +201,33 @@ def setup(
     else:
         actions.append(f"keep existing token at {TOKEN_FILE}")
 
-    # 2. Units. Refuse to overwrite a unit this CLI did not generate.
-    binnacle_bin = shutil.which("binnacle") or sys.argv[0]
-    units: list[tuple[str, str]] = [
-        (
-            PROD_UNIT,
-            PROD_UNIT_TEMPLATE.format(
-                marker=UNIT_MARKER, other=DEV_UNIT, binnacle=binnacle_bin, port=port
-            ),
-        ),
-    ]
-    if dev is not None:
-        repo = dev.expanduser().resolve()
-        units.append(
-            (
-                DEV_UNIT,
-                DEV_UNIT_TEMPLATE.format(
-                    marker=UNIT_MARKER, other=PROD_UNIT, repo=repo, port=port
-                ),
-            )
+    # 2. The unit, rendered for the mode; never over a stranger's file.
+    mode = "dev" if dev is not None else "prod"
+    try:
+        spec = server_unit_spec(
+            server_params(mode, dev, get_settings().serve.host, port)
         )
-    for unit_name, content in units:
-        unit_path = UNIT_DIR / unit_name
-        if unit_path.exists() and UNIT_MARKER not in unit_path.read_text(
-            encoding="utf-8"
-        ):
-            print(
-                f"refusing to overwrite {unit_path}: it was not generated by "
-                f"`binnacle setup` (marker missing). Move it away first."
-            )
-            raise SystemExit(1)
-
-        def write_unit(p: Path = unit_path, c: str = content) -> None:
-            p.parent.mkdir(parents=True, exist_ok=True)
-            p.write_text(c, encoding="utf-8")
-
-        act(f"write {unit_path}", write_unit)
+    except units.UnitError as e:
+        print(e)
+        raise SystemExit(1) from None
+    unit_path = UNIT_DIR / SERVER_UNIT
+    plan = units.plan_write(unit_path, spec, adopt=adopt)
+    if plan.diff:
+        print(plan.diff + "\n")
+    if plan.action == "refuse":
+        print(plan.reason)
+        raise SystemExit(1)
+    if plan.action == "unchanged":
+        actions.append(f"keep {unit_path} (already what setup writes, {mode} mode)")
+    else:
+        verb = "write" if plan.action == "create" else "rewrite"
+        act(
+            f"{verb} {unit_path} ({mode} mode; a copy of the old file goes to "
+            f"{BACKUP_DIR})"
+            if plan.action == "rewrite"
+            else f"{verb} {unit_path} ({mode} mode)",
+            lambda: units.write_unit(unit_path, plan, BACKUP_DIR),
+        )
 
     # 3. Tunnel config, only when the tunnel-client binary is present.
     tunnel_bin = shutil.which("tunnel-client")
@@ -287,8 +248,8 @@ def setup(
     # 4. Enable and start.
     act("systemctl --user daemon-reload", lambda: _systemctl("daemon-reload"))
     act(
-        f"systemctl --user enable --now {PROD_UNIT}",
-        lambda: _systemctl("enable", "--now", PROD_UNIT),
+        f"systemctl --user enable --now {SERVER_UNIT}",
+        lambda: _systemctl("enable", "--now", SERVER_UNIT),
     )
     act(
         "loginctl enable-linger (service survives logout and reboot)",
@@ -300,32 +261,101 @@ def setup(
         print(f"{prefix}{a}")
     if dry_run:
         print("\ndry run: nothing was changed.")
-    else:
-        print("\nserver side is configured. Remaining manual steps: install")
-        print("tunnel-client (if missing) and add the connector in ChatGPT.")
+        return
+    print("\nserver side is configured. Remaining manual steps: install")
+    print("tunnel-client (if missing) and add the connector in ChatGPT.")
+    if plan.action == "rewrite" and _unit_state(SERVER_UNIT) == "active":
+        print(
+            f"{SERVER_UNIT} is running on the previous unit file; restart it at "
+            f"a quiet moment: `binnacle mode {mode}`"
+        )
+
+
+def _current_marker() -> units.Marker | None:
+    unit_path = UNIT_DIR / SERVER_UNIT
+    if not unit_path.exists():
+        return None
+    return units.read_marker(unit_path.read_text(encoding="utf-8"))
 
 
 @app.command
-def mode(target: Literal["dev", "prod", "status"] = "status") -> None:
-    """Switch which instance owns the port: dev (repo) or prod (installed).
+def mode(
+    target: Literal["dev", "prod", "status"] = "status",
+    repo: Path | None = None,
+    force: bool = False,
+) -> None:
+    """Switch the unit between development (checkout + reload) and
+    production (installed, no reload), then restart it at a quiet moment.
 
-    The two units carry Conflicts= on each other, so starting one stops the
-    other; the explicit stop below keeps the outcome the same when the
-    Conflicts= line is missing from a hand-written unit. `status` only
-    reports. Run `chatgpt-refresh` afterwards when the two instances differ
-    in tool surface.
+    The unit keeps its name, so the tunnel, the journal readers and the
+    watchdog need no change and the mode survives a reboot. `status`
+    reports the mode the unit's marker line records and the unit's state.
+    `repo` is needed for `dev` only when the unit has never been in
+    development mode. The restart is refused while a background job is
+    running or a tool call arrived in the last 30 s, because a unit
+    restart kills the jobs in its cgroup and fails the calls in flight;
+    `--force` overrides. Run `chatgpt-refresh` afterwards when the two
+    instances differ in tool surface.
     """
+    marker = _current_marker()
     if target == "status":
-        for unit in (PROD_UNIT, DEV_UNIT):
-            print(f"{unit}: {_unit_state(unit)}")
+        state = _unit_state(SERVER_UNIT)
+        if marker is None:
+            print(f"{SERVER_UNIT}: {state}; not managed by `binnacle setup`")
+        elif marker.legacy:
+            print(f"{SERVER_UNIT}: {state}; pre-2026-09-20 marker, mode unknown")
+        else:
+            shown = ", ".join(f"{k}={v}" for k, v in marker.params.items())
+            print(
+                f"{SERVER_UNIT}: {state}; {marker.params.get('mode', '?')} mode ({shown})"
+            )
         return
-    start, stop = (DEV_UNIT, PROD_UNIT) if target == "dev" else (PROD_UNIT, DEV_UNIT)
-    _systemctl("stop", stop, check=False)
-    proc = _systemctl("start", start, check=False)
-    if proc.returncode != 0:
-        print(f"failed to start {start}: {proc.stderr.strip()}")
+    if marker is None or marker.legacy:
+        print(
+            f"{SERVER_UNIT} is not managed by `binnacle setup` (no marker with "
+            "parameters); run `binnacle setup [--dev <repo>] --adopt` first"
+        )
         raise SystemExit(1)
-    print(f"{target} mode: {start} is {_unit_state(start)}, {stop} stopped.")
+    known = marker.params
+    checkout = repo or (Path(known["repo"]) if "repo" in known else None)
+    if target == "dev" and checkout is None:
+        print("development mode needs the checkout: `binnacle mode dev --repo <path>`")
+        raise SystemExit(1)
+    try:
+        port = int(known.get("port") or get_settings().serve.port)
+        spec = server_unit_spec(
+            server_params(
+                target, checkout, known.get("host") or get_settings().serve.host, port
+            )
+        )
+    except units.UnitError as e:
+        print(e)
+        raise SystemExit(1) from None
+    unit_path = UNIT_DIR / SERVER_UNIT
+    plan = units.plan_write(unit_path, spec)
+    if plan.action == "refuse":
+        print(plan.reason)
+        raise SystemExit(1)
+    if not force:
+        from binnacle import doctor as checks
+
+        busy = checks.server_busy_reasons(SERVER_UNIT, get_settings().jobs.dir)
+        if busy:
+            print("not a quiet moment for a restart:")
+            for reason in busy:
+                print(f"  {reason}")
+            print("retry later, or pass --force")
+            raise SystemExit(1)
+    if plan.action == "rewrite":
+        if plan.diff:
+            print(plan.diff + "\n")
+        units.write_unit(unit_path, plan, BACKUP_DIR)
+        _systemctl("daemon-reload")
+    proc = _systemctl("restart", SERVER_UNIT, check=False)
+    if proc.returncode != 0:
+        print(f"failed to restart {SERVER_UNIT}: {proc.stderr.strip()}")
+        raise SystemExit(1)
+    print(f"{target} mode: {SERVER_UNIT} restarted and {_unit_state(SERVER_UNIT)}.")
 
 
 @app.command
@@ -336,8 +366,9 @@ def doctor(
 ) -> None:
     """Check the deployment end to end and exit 1 on any FAIL.
 
-    Checks: config and roots, token file, systemd units (one active, no
-    crash restarts, linger), the running server's PATH (~/.local/bin,
+    Checks: config and roots, token file, the systemd unit (active, the
+    file `setup` writes, the process it started, no crash restarts,
+    linger), the running server's PATH (~/.local/bin,
     ripgrep, bash), /mcp auth with and without the token, tunnel unit and
     config, the uplink each default route provides, whether the tunnel's
     poller is reaching OpenAI, the job spool, and recent journal errors.
@@ -357,8 +388,9 @@ def doctor(
 
     serve_cfg = get_settings().serve
     dep = checks.Deployment(
-        prod_unit=PROD_UNIT,
-        dev_unit=DEV_UNIT,
+        server_unit=SERVER_UNIT,
+        unit_path=UNIT_DIR / SERVER_UNIT,
+        render_unit=render_server_unit,
         tunnel_unit=TUNNEL_UNIT,
         tunnel_config=TUNNEL_CONFIG,
         token_file=TOKEN_FILE,
@@ -417,7 +449,7 @@ def rotate() -> None:
     """Write a new token and restart the server and tunnel services."""
     _write_token()
     print(f"wrote new token to {TOKEN_FILE}")
-    for unit in (PROD_UNIT, DEV_UNIT, TUNNEL_UNIT):
+    for unit in (SERVER_UNIT, TUNNEL_UNIT):
         if _unit_state(unit) == "active":
             started = time.time()
             _systemctl("restart", unit, check=False)

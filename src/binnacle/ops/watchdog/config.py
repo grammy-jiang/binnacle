@@ -100,7 +100,7 @@ class Policy:
     #: never acted on.
     tunnel_stale_after_s: float = 1800.0
     tunnel_log: Path | None = None
-    mcp_units: tuple[str, ...] = ("binnacle-mcp.service", "binnacle-mcp-dev.service")
+    mcp_units: tuple[str, ...] = ("binnacle-mcp.service",)
     tunnel_unit: str = "binnacle-tunnel.service"
     mcp_url: str = "http://127.0.0.1:8000/mcp"
     #: How often to look for a profile stuck at the demoted metric with no

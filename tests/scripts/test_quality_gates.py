@@ -86,6 +86,33 @@ def test_architecture_allows_watchdog_to_depend_on_core_but_not_reverse(tmp_path
     ]
 
 
+def test_architecture_groups_allow_only_declared_companion_dependencies():
+    imports = {
+        "binnacle.core": {"binnacle.tunnel_cli"},
+        "binnacle.watchdog": {"binnacle.tunnel_cli", "binnacle.uplink"},
+        "binnacle.tunnel_cli": {"binnacle.watchdog"},
+    }
+    policy = {
+        "architecture": {
+            "companions": {
+                "watchdog": ["binnacle.watchdog"],
+                "tunnel": ["binnacle.tunnel_cli"],
+            },
+            "companion_dependencies": {"watchdog": ["tunnel"]},
+        }
+    }
+    assert architecture.evaluate(imports, policy) == [
+        (
+            "binnacle.core -> binnacle.tunnel_cli: Binnacle core must not depend "
+            "on the tunnel companion"
+        ),
+        (
+            "binnacle.tunnel_cli -> binnacle.watchdog: the tunnel companion must "
+            "not depend on the watchdog companion"
+        ),
+    ]
+
+
 def test_architecture_resolves_relative_watchdog_import(tmp_path):
     path = tmp_path / "core.py"
     path.write_text("from . import watchdog\n")

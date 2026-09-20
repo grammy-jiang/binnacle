@@ -40,11 +40,11 @@ import json
 import os
 import shutil
 import subprocess
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from binnacle import jobs, logstats
+from binnacle import jobs, logstats, units
 from binnacle.config import CONFIG_FILE_ENV, DEFAULT_CONFIG_FILE, get_settings
 from binnacle.doctor_common import (
     Check,
@@ -162,36 +162,23 @@ def check_token(token_file: Path) -> list[Check]:
 
 
 def check_units(
-    prod_unit: str,
-    dev_unit: str,
+    unit: str,
     run: Systemctl = systemctl,
     linger: Callable[[], bool | None] = linger_enabled,
 ) -> tuple[list[Check], str | None]:
-    """Returns the checks and the name of the active server unit, if any."""
-    states = {u: unit_state(u, run) for u in (prod_unit, dev_unit)}
-    active = [u for u, s in states.items() if s == "active"]
-    summary = ", ".join(f"{u}: {s}" for u, s in states.items())
+    """Returns the checks and the server unit's name when it is active."""
+    state = unit_state(unit, run)
     out: list[Check] = []
-    if not active:
+    if state != "active":
         out.append(
             fail(
                 "units",
-                f"no server unit active ({summary})",
-                "run `binnacle mode prod`",
+                f"{unit} is {state}",
+                f"systemctl --user start {unit}, or `binnacle setup` if it is missing",
             )
         )
         return out, None
-    if len(active) > 1:
-        out.append(
-            fail(
-                "units",
-                f"both server units active ({summary}); they fight for the port",
-                "add Conflicts= to both units, then `binnacle mode prod|dev`",
-            )
-        )
-    else:
-        out.append(ok("units", f"server active ({summary})"))
-    unit = active[0]
+    out.append(ok("units", f"{unit} active"))
     restarts = unit_property(unit, "NRestarts", run)
     if restarts.isdigit() and int(restarts) > 0:
         out.append(
@@ -358,15 +345,58 @@ def check_journal(
 
 @dataclass(slots=True)
 class Deployment:
-    """Names the doctor needs; the CLI fills these from its constants."""
+    """Names the doctor needs; the CLI fills these from its constants.
+    `unit_path` and `render_unit` let it re-render the server unit from the
+    parameters its marker line records and report drift."""
 
-    prod_unit: str
-    dev_unit: str
+    server_unit: str
     tunnel_unit: str
     tunnel_config: Path
     token_file: Path
     server_url: str
     user_bin: Path
+    unit_path: Path | None = None
+    render_unit: Callable[[Mapping[str, str]], str] | None = None
+
+
+def server_busy_reasons(
+    unit: str,
+    jobs_dir: Path,
+    window: str = "-30s",
+    fetch: Callable[[str, str], str] = lambda u, s: logstats.fetch_journal(u, s),
+) -> list[str]:
+    """Why restarting the server unit now would hurt: background jobs it
+    would kill (they live in the unit's cgroup), and tool calls that
+    arrived inside `window` (a restart fails the calls in flight). Empty
+    means a quiet moment."""
+    reasons: list[str] = []
+    if jobs_dir.is_dir():
+        running = [
+            d.name
+            for d in sorted(jobs_dir.iterdir())
+            if d.is_dir()
+            and (s := _job_state_safe(d.name)) is not None
+            and s["state"] == "running"
+        ]
+        if running:
+            shown = ", ".join(running[:3]) + (" ..." if len(running) > 3 else "")
+            reasons.append(
+                f"{len(running)} background job(s) running ({shown}); a unit "
+                "restart kills them"
+            )
+    try:
+        calls = fetch(unit, window).count("event=tool_call")
+    except (OSError, subprocess.SubprocessError) as e:
+        reasons.append(
+            f"journal unreadable ({e}); cannot tell whether calls are in flight"
+        )
+        return reasons
+    if calls:
+        reasons.append(
+            f"{calls} tool call(s) in the last {window.lstrip('-')}; a restart "
+            "fails the calls in flight"
+        )
+    return reasons
 
 
 def _tunnel_log_file(config_file: Path) -> Path | None:
@@ -389,9 +419,23 @@ def run_all(dep: Deployment, since: str = "-1 hour", probe: bool = True) -> list
     checks: list[Check] = []
     checks += check_config()
     checks += check_token(dep.token_file)
-    unit_checks, active = check_units(dep.prod_unit, dep.dev_unit)
+    unit_checks, active = check_units(dep.server_unit)
     checks += unit_checks
+    if dep.unit_path is not None and dep.render_unit is not None:
+        checks += units.check_unit_drift(
+            dep.unit_path,
+            "binnacle",
+            dep.render_unit,
+            "units",
+            "binnacle setup [--dev <repo>]",
+        )
     if active:
+        checks += units.check_unit_process(
+            dep.server_unit,
+            "units",
+            "binnacle setup [--dev <repo>]",
+            "binnacle mode dev|prod (restarts at a quiet moment)",
+        )
         checks += check_service_env(active, s.rg_bin, dep.user_bin)
     checks += check_endpoint(dep.server_url, dep.token_file)
     checks += check_tunnel(

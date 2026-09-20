@@ -52,11 +52,7 @@ def test_rotate_writes_prefixed_token_and_restarts_active_units(
     f.write_text("old\n")
     monkeypatch.setattr(cli, "TOKEN_FILE", f)
     calls: list[tuple[str, ...]] = []
-    states = {
-        cli.PROD_UNIT: "active",
-        cli.DEV_UNIT: "inactive",
-        cli.TUNNEL_UNIT: "active",
-    }
+    states = {cli.SERVER_UNIT: "active", cli.TUNNEL_UNIT: "active"}
 
     def fake_systemctl(*args: str, check: bool = True) -> subprocess.CompletedProcess:
         calls.append(args)
@@ -74,9 +70,9 @@ def test_rotate_writes_prefixed_token_and_restarts_active_units(
 
     assert f.read_text().startswith("Bearer ")
     assert f.read_text() != "old\n"
-    assert calls == [("restart", cli.PROD_UNIT), ("restart", cli.TUNNEL_UNIT)]
+    assert calls == [("restart", cli.SERVER_UNIT), ("restart", cli.TUNNEL_UNIT)]
     out = capsys.readouterr().out
-    assert "wrote new token" in out and cli.DEV_UNIT not in out
+    assert "wrote new token" in out
 
 
 # -- tunnel readiness wait (token rotate) -----------------------------------
@@ -170,54 +166,6 @@ def test_wait_tunnel_ready_no_health_url_times_out():
 # -- command glue and safe control paths ------------------------------------
 
 
-def test_mode_status_reports_both_instances(monkeypatch, capsys):
-    states = {cli.PROD_UNIT: "active", cli.DEV_UNIT: "inactive"}
-    monkeypatch.setattr(cli, "_unit_state", lambda unit: states[unit])
-
-    cli.mode("status")
-
-    out = capsys.readouterr().out
-    assert f"{cli.PROD_UNIT}: active" in out
-    assert f"{cli.DEV_UNIT}: inactive" in out
-
-
-def test_mode_switch_stops_other_instance_before_start(monkeypatch, capsys):
-    calls = []
-
-    def fake_systemctl(*args: str, check: bool = True):
-        calls.append((args, check))
-        return subprocess.CompletedProcess(list(args), 0, "", "")
-
-    monkeypatch.setattr(cli, "_systemctl", fake_systemctl)
-    monkeypatch.setattr(
-        cli,
-        "_unit_state",
-        lambda unit: "active" if unit == cli.DEV_UNIT else "inactive",
-    )
-
-    cli.mode("dev")
-
-    assert calls == [
-        (("stop", cli.PROD_UNIT), False),
-        (("start", cli.DEV_UNIT), False),
-    ]
-    assert "dev mode" in capsys.readouterr().out
-
-
-def test_mode_start_failure_is_reported(monkeypatch, capsys):
-    def fake_systemctl(*args: str, check: bool = True):
-        code = 1 if args[0] == "start" else 0
-        return subprocess.CompletedProcess(list(args), code, "", "boom")
-
-    monkeypatch.setattr(cli, "_systemctl", fake_systemctl)
-
-    with pytest.raises(SystemExit) as exc:
-        cli.mode("prod")
-
-    assert exc.value.code == 1
-    assert f"failed to start {cli.PROD_UNIT}: boom" in capsys.readouterr().out
-
-
 # -- baseline command coverage -----------------------------------------------
 
 
@@ -243,48 +191,6 @@ def test_serve_uses_explicit_uvicorn_performance_stack(monkeypatch):
             },
         )
     ]
-
-
-def test_setup_dry_run_describes_every_action_without_writing(
-    tmp_path, monkeypatch, capsys
-):
-    token = tmp_path / "config" / "token"
-    unit_dir = tmp_path / "units"
-    tunnel = tmp_path / "tunnel.toml"
-    monkeypatch.setattr(cli, "TOKEN_FILE", token)
-    monkeypatch.setattr(cli, "UNIT_DIR", unit_dir)
-    monkeypatch.setattr(cli, "TUNNEL_CONFIG", tunnel)
-    monkeypatch.setattr(
-        cli.shutil,
-        "which",
-        lambda name: "/usr/bin/binnacle" if name == "binnacle" else None,
-    )
-
-    cli.setup(dev=tmp_path / "repo", port=9999, dry_run=True)
-
-    assert not token.exists()
-    assert not unit_dir.exists()
-    out = capsys.readouterr().out
-    assert "would generate bearer token" in out
-    assert f"would write {unit_dir / cli.PROD_UNIT}" in out
-    assert f"would write {unit_dir / cli.DEV_UNIT}" in out
-    assert "would systemctl --user daemon-reload" in out
-    assert "dry run: nothing was changed" in out
-
-
-def test_setup_refuses_to_overwrite_foreign_unit(tmp_path, monkeypatch, capsys):
-    unit_dir = tmp_path / "units"
-    unit_dir.mkdir()
-    foreign = unit_dir / cli.PROD_UNIT
-    foreign.write_text("[Service]\nExecStart=/something/else\n")
-    monkeypatch.setattr(cli, "UNIT_DIR", unit_dir)
-    monkeypatch.setattr(cli, "TOKEN_FILE", tmp_path / "token")
-
-    with pytest.raises(SystemExit) as exc:
-        cli.setup(dry_run=True)
-
-    assert exc.value.code == 1
-    assert "refusing to overwrite" in capsys.readouterr().out
 
 
 def test_doctor_passes_deployment_and_exit_code(monkeypatch, capsys):
@@ -374,78 +280,6 @@ def test_systemctl_wrapper_and_unit_state(monkeypatch):
     assert seen[0][0] == ["systemctl", "--user", "is-active", "demo.service"]
     assert seen[0][1]["check"] is False
     assert cli._unit_state("demo.service") == "active"
-
-
-def test_setup_real_path_writes_token_unit_and_runs_safe_boundaries(
-    tmp_path, monkeypatch, capsys
-):
-    token = tmp_path / "config" / "token"
-    unit_dir = tmp_path / "units"
-    tunnel = tmp_path / "tunnel.json"
-    monkeypatch.setattr(cli, "TOKEN_FILE", token)
-    monkeypatch.setattr(cli, "UNIT_DIR", unit_dir)
-    monkeypatch.setattr(cli, "TUNNEL_CONFIG", tunnel)
-    monkeypatch.setattr(
-        cli.shutil,
-        "which",
-        lambda name: (
-            "/usr/bin/binnacle"
-            if name == "binnacle"
-            else "/usr/bin/tunnel-client"
-            if name == "tunnel-client"
-            else None
-        ),
-    )
-    systemctl = []
-    monkeypatch.setattr(
-        cli,
-        "_systemctl",
-        lambda *args, **kwargs: (
-            systemctl.append(args) or subprocess.CompletedProcess(list(args), 0, "", "")
-        ),
-    )
-    loginctl = []
-    monkeypatch.setattr(
-        cli.subprocess,
-        "run",
-        lambda argv, **kwargs: (
-            loginctl.append(argv) or subprocess.CompletedProcess(argv, 0, "", "")
-        ),
-    )
-
-    cli.setup(port=8123, dry_run=False)
-
-    assert token.exists()
-    unit = unit_dir / cli.PROD_UNIT
-    assert unit.exists()
-    assert "8123" in unit.read_text()
-    assert ("daemon-reload",) in systemctl
-    assert ("enable", "--now", cli.PROD_UNIT) in systemctl
-    assert loginctl == [["loginctl", "enable-linger"]]
-    out = capsys.readouterr().out
-    assert "server side is configured" in out
-    assert "write it from your tunnel account settings" in out
-
-
-def test_setup_keeps_existing_token_and_tunnel_config(tmp_path, monkeypatch, capsys):
-    token = tmp_path / "token"
-    token.write_text("Bearer existing\n")
-    tunnel = tmp_path / "tunnel.json"
-    tunnel.write_text("{}")
-    monkeypatch.setattr(cli, "TOKEN_FILE", token)
-    monkeypatch.setattr(cli, "UNIT_DIR", tmp_path / "units")
-    monkeypatch.setattr(cli, "TUNNEL_CONFIG", tunnel)
-    monkeypatch.setattr(
-        cli.shutil,
-        "which",
-        lambda name: "/usr/bin/tool",
-    )
-
-    cli.setup(dry_run=True)
-
-    out = capsys.readouterr().out
-    assert f"keep existing token at {token}" in out
-    assert f"keep existing tunnel config at {tunnel}" in out
 
 
 def test_main_dispatches_cyclopts_app(monkeypatch):

@@ -5,8 +5,11 @@ OpenAI tunnel. `server.py` is assembly only; each tool lives in
 `tools/<name>.py` (a `register(mcp)` per module), mirroring its spec at
 `docs/tools/<name>.md`, with shared helpers `paths.py` (root guard),
 `textio.py` (decode/size), and `jobs.py` (disk-backed job store). Two user
-systemd services run it: `binnacle-mcp` (uvicorn `server:app --reload`,
-port 8000, reload also watches `tools/`) and `binnacle-tunnel`.
+systemd services run it: `binnacle-mcp` (one unit whose content
+`binnacle setup` and `binnacle mode` render for the mode in use;
+development mode, which this host runs, is this checkout under uvicorn
+`--reload` on port 8000, reload watching `tools/` too; production mode is
+the installed `binnacle serve` without reload) and `binnacle-tunnel`.
 
 v1 is complete: the full toolset is read_file, list_files, search_text,
 edit_file, write_file, run_command, job_status, stop_job (no `ping`; the
@@ -44,7 +47,13 @@ also means updating those registrations.
 Saving `server.py` auto-reloads uvicorn (watchfiles, ~1-2s) — reloading is NOT a
 manual step. A manual `systemctl --user restart binnacle-mcp` is only for changes
 the reload can't pick up: the token file, new dependencies, the systemd unit, or
-`binnacle.yaml` (restart `binnacle-tunnel` too for the last two).
+`binnacle.yaml` (restart `binnacle-tunnel` too for the last two). For the
+unit itself use `binnacle mode dev` (or `prod`): it re-renders the unit,
+reloads systemd and restarts at a quiet moment (no background job running,
+no tool call in the last 30 s; `--force` overrides), because a unit restart
+kills the jobs in its cgroup and fails the calls in flight. Since
+2026-09-21 the unit is written and verified by the managed-unit mechanism
+(`src/binnacle/units.py`, see the Uplink watchdog section's sixth look).
 
 The services get their `PATH` from the systemd user manager, which at boot has
 only the base system PATH. `~/.config/environment.d/50-path.conf` prepends
@@ -67,9 +76,10 @@ then the tunnel, and returns only when the tunnel's health server reports the
 new instance ready with its MCP probe ok. ChatGPT's own tunnel service may
 still need a few more seconds; `chatgpt-refresh` retries HTTP 424 by itself.
 
-`.venv/bin/binnacle doctor` checks the core chain (token, units, service
-PATH, /mcp auth, tunnel config, uplink, tunnel poller, job spool, journal
-errors) and exits 1 on any FAIL; `--json` for machine output, `--no-probe`
+`.venv/bin/binnacle doctor` checks the core chain (token, the unit: active,
+its file against what `setup` writes, the process it started, crash
+restarts, linger; service PATH, /mcp auth, tunnel config, uplink, tunnel
+poller, job spool, journal errors) and exits 1 on any FAIL; `--json` for machine output, `--no-probe`
 to skip the network probes. Run it after touching the token, the units,
 `environment.d`, or the tunnel config. Checks live in
 `src/binnacle/doctor.py` with tests in `tests/system/test_doctor.py`. Since
@@ -544,6 +554,53 @@ to repeat:
 Rule from this: a change to a unit template is not deployed until `setup`
 has been run on the host and the doctor is green; the doctor is what
 proves it, not the commit.
+
+**Managed units (2026-09-21, the user's "fix the dry-run refusal").** The
+same audit found the server and tunnel units hand-written since 09-03
+without a marker, so `binnacle setup --dry-run` refused them and nothing
+verified their content either. The 08-31 design had two server units
+(prod `binnacle serve`, dev uvicorn `--reload`, `Conflicts=` on each
+other, `binnacle mode` starting one and stopping the other); the host
+never ran it: for 17 days `binnacle-mcp.service` carried the prod name
+with the dev content, every journal reader, the tunnel's `After=` and the
+usage baselines key on that one name, and the design would have switched
+the host to prod mode on the next reboot (`setup` enables prod, `mode`
+never touched the enable state). Decision with the user (option one of
+two): **one unit, `binnacle-mcp.service`, whose content is rendered for
+the mode** -- dev is the exact command line the host ran hand-written
+(uvicorn `--reload --loop uvloop --http httptools`, WorkingDirectory the
+checkout, Restart=on-failure), prod is `binnacle serve` from the resolved
+executable (Restart=always; the checkout's venv until a pipx install
+exists, then run `setup` from that binary). `mode dev|prod` re-renders,
+writes, daemon-reloads and restarts at a quiet moment; the mode survives
+a reboot; the 09-02 lesson (a serving instance must not be hot-edited)
+is `mode prod` for the session. The mechanism is the core, client-neutral
+`src/binnacle/units.py`: a marker line records the owner and the
+parameters (`# Managed by binnacle (binnacle setup): mode=dev host=...
+port=8000 repo=...`), `plan_write` shows the diff and refuses a stranger's
+file unless `--adopt` (the old file is copied to
+`~/.local/state/binnacle/unit-backups/`), `resolve_executable` refuses a
+path systemd would reject, and two doctor checks every owner shares:
+`check_unit_drift` re-renders from the marker and diffs,
+`check_unit_process` compares the main process's command line with the
+unit's ExecStart. `binnacle doctor` runs them for the server unit,
+`binnacle-watchdog doctor` for the watchdog's (its `setup` uses the same
+module; the template lives in `watchdog_unit.py`, the server's in
+`server_unit.py`). The architecture policy now names companion groups
+(`companions`, `companion_dependencies`) so a tunnel companion can follow:
+step 2 is `binnacle-tunnel setup|doctor` adopting the tunnel unit (with
+a bounded ExecStartPost readiness wait), step 3 moves the tunnel checks
+and the readiness wait out of core, leaving core with the unit name only.
+Deployed 2026-09-20 23:47: `setup --dev <repo> --adopt` rewrote the
+server unit (diff: the marker line and the Description) without touching
+the running server, `binnacle-watchdog setup` replaced the watchdog's
+legacy marker, both doctors went green, and `binnacle mode dev` restarted
+the server at 23:48:05 through the quiet gate; a ChatGPT nonce call went
+through right after. A production round trip proved the other mode on this
+host: `mode prod` at 23:53:06 (`binnacle serve`, doctor 30 ok, a ChatGPT
+call served), `mode dev` back at 23:54:25 (the gate refused once for a
+call in flight, then let it through), auto-reload confirmed with a touch,
+and zero tunnel poll failures across the three restarts.
 
 Same night, a second drift, found through the issue lines the doctor
 prints: since 2026-09-16 14:37 the three USB profiles are bound by

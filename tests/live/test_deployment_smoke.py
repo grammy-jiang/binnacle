@@ -22,8 +22,7 @@ pytestmark = pytest.mark.skipif(
     reason="set BINNACLE_LIVE=1 to test the deployed host",
 )
 
-PROD_UNIT = "binnacle-mcp.service"
-DEV_UNIT = "binnacle-mcp-dev.service"
+SERVER_UNIT = "binnacle-mcp.service"
 
 
 def _unit_state(unit: str) -> str:
@@ -37,10 +36,8 @@ def _unit_state(unit: str) -> str:
     return proc.stdout.strip() or "unknown"
 
 
-def test_exactly_one_binnacle_server_unit_is_active():
-    states = {unit: _unit_state(unit) for unit in (PROD_UNIT, DEV_UNIT)}
-
-    assert list(states.values()).count("active") == 1, states
+def test_the_binnacle_server_unit_is_active():
+    assert _unit_state(SERVER_UNIT) == "active"
 
 
 def test_deployed_http_mcp_auth_initialize_and_tools_list():
@@ -145,5 +142,5 @@ def test_live_cli_mode_status_is_read_only_and_reports_both_units():
     )
 
     assert proc.returncode == 0, proc.stderr
-    assert PROD_UNIT in proc.stdout
-    assert DEV_UNIT in proc.stdout
+    assert SERVER_UNIT in proc.stdout
+    assert "mode" in proc.stdout

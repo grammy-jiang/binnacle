@@ -11,14 +11,20 @@
   },
   "architecture": {
     "src_root": "src",
-    "watchdog_companion_modules": [
-      "binnacle.ops.watchdog",
-      "binnacle.watchdog",
-      "binnacle.watchdog_cli",
-      "binnacle.watchdog_config",
-      "binnacle.watchdog_doctor",
-      "binnacle.watchlog"
-    ]
+    "companions": {
+      "watchdog": [
+        "binnacle.ops.watchdog",
+        "binnacle.watchdog",
+        "binnacle.watchdog_cli",
+        "binnacle.watchdog_config",
+        "binnacle.watchdog_doctor",
+        "binnacle.watchdog_unit",
+        "binnacle.watchlog"
+      ]
+    },
+    "companion_dependencies": {
+      "watchdog": []
+    }
   },
   "coverage": {
     "core_unit_target": 95.0,
@@ -35,7 +41,9 @@
       "src/binnacle/indexed_surface.py",
       "src/binnacle/logstats.py",
       "src/binnacle/paths.py",
-      "src/binnacle/textio.py"
+      "src/binnacle/server_unit.py",
+      "src/binnacle/textio.py",
+      "src/binnacle/units.py"
     ],
     "temporary_floors": {
       "unit": {},

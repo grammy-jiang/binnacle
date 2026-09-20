@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from binnacle import units
 from binnacle import watchdog_cli as cli
 
 
@@ -82,9 +83,7 @@ def test_status_without_default_route_exits_before_probing(monkeypatch, capsys):
 def test_setup_dry_run_owns_only_watchdog_unit(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(cli, "UNIT_DIR", tmp_path / "units")
     monkeypatch.setattr(
-        cli.shutil,
-        "which",
-        lambda name: str(companion(tmp_path)),
+        units, "resolve_executable", lambda name, **kw: companion(tmp_path)
     )
 
     cli.setup(dry_run=True)
@@ -104,6 +103,9 @@ def test_setup_refuses_foreign_watchdog_unit(tmp_path, monkeypatch, capsys):
     unit = unit_dir / cli.WATCHDOG_UNIT
     unit.write_text("[Service]\nExecStart=/something/else\n")
     monkeypatch.setattr(cli, "UNIT_DIR", unit_dir)
+    monkeypatch.setattr(
+        units, "resolve_executable", lambda name, **kw: companion(tmp_path)
+    )
 
     with pytest.raises(SystemExit) as exc:
         cli.setup(dry_run=True)
@@ -134,7 +136,10 @@ def test_doctor_uses_companion_checks_and_core_renderer(monkeypatch, capsys):
 
 def test_setup_real_path_writes_only_watchdog_unit(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(cli, "UNIT_DIR", tmp_path / "units")
-    monkeypatch.setattr(cli.shutil, "which", lambda name: str(companion(tmp_path)))
+    monkeypatch.setattr(cli, "BACKUP_DIR", tmp_path / "backups")
+    monkeypatch.setattr(
+        units, "resolve_executable", lambda name, **kw: companion(tmp_path)
+    )
     systemctl = []
     monkeypatch.setattr(
         cli,
@@ -204,7 +209,7 @@ def test_run_maps_watchdog_configuration_and_once_to_lifecycle(tmp_path, monkeyp
     policy = seen["policy"]
     assert policy.dry_run is True
     assert policy.mcp_url == "http://127.0.0.2:8123/mcp"
-    assert policy.mcp_units == (cli.PROD_UNIT, cli.DEV_UNIT)
+    assert policy.mcp_units == (cli.SERVER_UNIT,)
     assert policy.pause_file == cfg.state_file.with_suffix(".pause")
 
 

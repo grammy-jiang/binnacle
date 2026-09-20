@@ -119,13 +119,14 @@ def test_run_all_composes_every_active_probe_check(tmp_path, monkeypatch):
     from types import SimpleNamespace
 
     dep = doctor.Deployment(
-        prod_unit="prod",
-        dev_unit="dev",
+        server_unit="prod",
         tunnel_unit="tunnel",
         tunnel_config=tmp_path / "tunnel.json",
         token_file=tmp_path / "token",
         server_url="http://127.0.0.1:8000/mcp",
         user_bin=tmp_path / "bin",
+        unit_path=tmp_path / "prod.service",
+        render_unit=lambda params: "",
     )
     settings = SimpleNamespace(
         rg_bin="rg",
@@ -143,6 +144,8 @@ def test_run_all_composes_every_active_probe_check(tmp_path, monkeypatch):
         "check_units",
         lambda *a: ([doctor.ok("units", "ok")], "prod"),
     )
+    monkeypatch.setattr(doctor.units, "check_unit_drift", mark("units"))
+    monkeypatch.setattr(doctor.units, "check_unit_process", mark("units"))
     monkeypatch.setattr(doctor, "check_service_env", mark("service-env"))
     monkeypatch.setattr(doctor, "check_endpoint", mark("endpoint"))
     monkeypatch.setattr(doctor, "check_tunnel", mark("tunnel"))
@@ -163,6 +166,8 @@ def test_run_all_composes_every_active_probe_check(tmp_path, monkeypatch):
         "config",
         "token",
         "units",
+        "units",
+        "units",
         "service-env",
         "endpoint",
         "tunnel",
@@ -180,13 +185,12 @@ def test_run_all_skips_optional_checks_when_inactive_and_local_only(
     from types import SimpleNamespace
 
     dep = doctor.Deployment(
-        "prod",
-        "dev",
-        "tunnel",
-        tmp_path / "tunnel.json",
-        tmp_path / "token",
-        "http://127.0.0.1:8000/mcp",
-        tmp_path / "bin",
+        server_unit="prod",
+        tunnel_unit="tunnel",
+        tunnel_config=tmp_path / "tunnel.json",
+        token_file=tmp_path / "token",
+        server_url="http://127.0.0.1:8000/mcp",
+        user_bin=tmp_path / "bin",
     )
     monkeypatch.setattr(
         doctor,
