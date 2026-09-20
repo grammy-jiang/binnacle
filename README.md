@@ -34,6 +34,11 @@ uv run binnacle mode dev
 # Verify configuration, auth, the unit (its content against what setup
 # writes, and the process it started), jobs and connectivity.
 uv run binnacle doctor
+
+# ChatGPT only: the OpenAI tunnel unit belongs to its own companion, never
+# to `binnacle setup`; other agents reach the server without it.
+uv run binnacle-tunnel setup --dry-run
+uv run binnacle-tunnel doctor
 ```
 
 The local MCP endpoint is:

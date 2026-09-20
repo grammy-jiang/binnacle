@@ -18,6 +18,7 @@ dependencies = [
 [project.scripts]
 binnacle = "binnacle.cli:main"
 binnacle-watchdog = "binnacle.watchdog_cli:main"
+binnacle-tunnel = "binnacle.tunnel_cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

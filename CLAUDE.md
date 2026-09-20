@@ -38,7 +38,10 @@ header (both `mcp.extra_headers` and `mcp.discovery_extra_headers` in
 `~/.config/tunnel-client/binnacle.yaml` reference the file). The file holds
 `Bearer <token>` on one line: the tunnel forwards it verbatim as the header,
 and the server strips the prefix. To rotate: `.venv/bin/binnacle token rotate`
-(writes the file in that format and restarts both services). The three local
+(writes the file in that format and restarts both services). The tunnel
+unit itself belongs to the `binnacle-tunnel` companion (`setup`, `restart`,
+`doctor`; since 2026-09-21), because the tunnel is ChatGPT's way in and not
+part of the server: the other agents connect to port 8000 directly. The three local
 CLI agents below hold the token literally in their own configs, so a rotation
 also means updating those registrations.
 
@@ -588,9 +591,31 @@ unit's ExecStart. `binnacle doctor` runs them for the server unit,
 module; the template lives in `watchdog_unit.py`, the server's in
 `server_unit.py`). The architecture policy now names companion groups
 (`companions`, `companion_dependencies`) so a tunnel companion can follow:
-step 2 is `binnacle-tunnel setup|doctor` adopting the tunnel unit (with
-a bounded ExecStartPost readiness wait), step 3 moves the tunnel checks
-and the readiness wait out of core, leaving core with the unit name only.
+step 2 (2026-09-21) is the `binnacle-tunnel` companion (`tunnel_cli.py`,
+`tunnel_unit.py`, `tunnel_doctor.py`; the `tunnel` companion group, which
+the watchdog group may depend on and core may not) owning
+`binnacle-tunnel.service`: the template is the hand-written unit plus a
+bounded readiness wait (ExecStartPost polls the new instance's `/readyz`
+for up to 10 s and never fails the unit, so a `systemctl restart` returns
+to a tunnel that polls and a WAN outage cannot loop it; `$$` escapes the
+script's own variables from systemd's substitution), `setup` reads the
+profile config for the health URL file and refuses without the config or
+the env file, `restart` refuses while the tunnel forwarded a command or
+the server saw a tool call in the last 30 s, `doctor` puts the unit drift
+and process checks in front of the core tunnel checks, which step 3 moves
+here so that core keeps the unit name only. `resolve_executable` keeps
+symlinks rather than following them: `~/.local/bin/tunnel-client` is the
+stable name an upgrade repoints, the versioned target behind it is not.
+Deployed 2026-09-21 00:07: `binnacle-tunnel setup --adopt` rewrote the
+unit (diff: the marker, `After=` without the dev unit, the readiness
+wait; the ExecStart line unchanged) while the tunnel kept running, and
+`binnacle-tunnel restart` bounced it at 00:07:53 in 0.3 s: the new
+instance rewrote its URL file and answered `/readyz` 0.8 s before its
+"tunnel-client started" line, so the unit's wait is the health server's
+readiness, not the poller's; step 3 tightens it to the main channel's
+`probe_status` (what `token rotate` waits for today) when that wait
+leaves core. Both doctors green, a ChatGPT call served right after, the
+watchdog's cycle line unchanged (`tunnel=ok`).
 Deployed 2026-09-20 23:47: `setup --dev <repo> --adopt` rewrote the
 server unit (diff: the marker line and the Description) without touching
 the running server, `binnacle-watchdog setup` replaced the watchdog's

@@ -134,6 +134,17 @@ def test_resolve_executable_prefers_path_then_argv0(tmp_path, monkeypatch):
     assert units.resolve_executable("binnacle-x", which=lambda n: None) == exe.resolve()
 
 
+def test_resolve_executable_keeps_a_symlink_rather_than_its_target(tmp_path):
+    target = executable(tmp_path / "versioned", "tunnel-client")
+    link = tmp_path / "bin" / "tunnel-client"
+    link.parent.mkdir(parents=True, exist_ok=True)
+    link.symlink_to(target)
+    assert units.resolve_executable("tunnel-client", which=lambda n: str(link)) == link
+    assert (
+        units.resolve_executable("tunnel-client", which=lambda n: str(link)) != target
+    )
+
+
 def test_resolve_executable_refuses_what_it_cannot_run(tmp_path):
     with pytest.raises(
         units.UnitError, match="cannot resolve the binnacle-x executable"

@@ -20,10 +20,18 @@
         "binnacle.watchdog_doctor",
         "binnacle.watchdog_unit",
         "binnacle.watchlog"
+      ],
+      "tunnel": [
+        "binnacle.tunnel_cli",
+        "binnacle.tunnel_doctor",
+        "binnacle.tunnel_unit"
       ]
     },
     "companion_dependencies": {
-      "watchdog": []
+      "watchdog": [
+        "tunnel"
+      ],
+      "tunnel": []
     }
   },
   "coverage": {

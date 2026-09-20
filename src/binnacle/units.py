@@ -174,9 +174,11 @@ def resolve_executable(
     running now. systemd rejects a relative ExecStart as a fatal unit error
     ("Neither a valid executable name nor an absolute path", measured
     2026-09-20) and never even tries to start the unit, so a candidate that
-    does not resolve to an executable file is refused here instead."""
+    does not resolve to an executable file is refused here instead.
+    Symlinks are kept, not followed: `~/.local/bin/tunnel-client` is the
+    stable name an upgrade repoints, the versioned target behind it is not."""
     candidate = which(name) or argv0 or sys.argv[0]
-    path = Path(candidate).expanduser().resolve()
+    path = Path(os.path.abspath(Path(candidate).expanduser()))
     if not (path.is_file() and os.access(path, os.X_OK)):
         raise UnitError(
             f"cannot resolve the {name} executable from {candidate!r}; run setup "
