@@ -12,6 +12,7 @@ dependencies = [
     "fastmcp==4.0.0b5", # beta pin -- revisit when 4.0 goes stable
     "pydantic>=2.13.5",
     "pydantic-settings>=2.15.0",
+    "tiktoken>=0.14.0",
     "uvicorn[standard]>=0.52.4",
 ]
 

@@ -14,8 +14,9 @@ docs/logging.md.
   has the duration, the outcome (error class and message; errors reach
   this middleware as exceptions, so the 2026-09-02 version never saw
   one), the size the model actually receives (text chars, structured JSON
-  bytes, a chars/4 token estimate) and the tools' own outcome and
-  truncation facts lifted from ``structured_content``. The call line has
+  bytes, a chars/4 token estimate, and optionally a configured tokenizer
+  count) and the tools' own outcome and truncation facts lifted from
+  ``structured_content``. The call line has
   the tunnel's ``X-Request-Id`` (``wfr_<turn>/<call>``, measured
   2026-09-13), which ties a journal record to one ChatGPT turn.
 """
@@ -32,7 +33,9 @@ from fastmcp.server.middleware import CallNext, Middleware, MiddlewareContext
 from fastmcp.server.middleware.logging import LoggingMiddleware
 
 from binnacle.callctx import current_call, current_call_started
+from binnacle.config import get_settings
 from binnacle.identity import ClientIdentity
+from binnacle.token_telemetry import TokenCounter
 
 # Proposed settings (module constants until config.py is free to edit).
 ARGS_MAX_CHARS = 500  # same clip as the request_start payload
@@ -199,20 +202,28 @@ def _header_fields() -> dict[str, str]:
     return fields
 
 
-def _result_fields(result: Any) -> dict[str, str]:
+def _result_fields(
+    result: Any, token_counter: TokenCounter | None = None
+) -> dict[str, str]:
     """Sizes of what the client receives, plus the tool's own outcome facts."""
-    content_chars = sum(
-        len(getattr(block, "text", "") or "")
+    content_parts = [
+        getattr(block, "text", "") or ""
         for block in (getattr(result, "content", None) or [])
-    )
+    ]
+    content_chars = sum(len(part) for part in content_parts)
     structured = getattr(result, "structured_content", None)
     structured_text = _compact_json(structured) if structured is not None else ""
     fields = {
         "content_chars": str(content_chars),
         "structured_bytes": str(len(structured_text.encode("utf-8"))),
-        # chars / 4: an estimate, not a tokenizer count.
+        # chars / 4: an estimate retained for historical comparability.
         "est_tokens": str((content_chars + len(structured_text)) // 4),
     }
+    if token_counter is not None:
+        tokenizer_tokens = token_counter.count((*content_parts, structured_text))
+        if tokenizer_tokens is not None:
+            fields["tokenizer_tokens"] = str(tokenizer_tokens)
+            fields["tokenizer_encoding"] = _token(token_counter.encoding, 40)
     if isinstance(structured, dict):
         for key in RESULT_KEYS:
             if key in structured:
@@ -234,6 +245,13 @@ class ToolLoggingMiddleware(Middleware):
     def __init__(self, identity: ClientIdentity) -> None:
         self._identity = identity
         self._logger = logging.getLogger("binnacle.results")
+        tokenizer = get_settings().telemetry.tokenizer
+        self._token_counter = TokenCounter(
+            enabled=tokenizer.enabled,
+            encoding=tokenizer.encoding,
+            client_prefixes=tokenizer.client_prefixes,
+        )
+        self._token_counter.prepare()
 
     def _log(self, event: str, level: int, *parts: dict[str, str]) -> None:
         try:
@@ -297,7 +315,10 @@ class ToolLoggingMiddleware(Middleware):
             current_call.reset(token)
         is_error = bool(getattr(result, "is_error", False))
         fields = {"duration_ms": _duration_ms(start), "is_error": str(is_error)}
-        fields.update(_result_fields(result))
+        token_counter = (
+            self._token_counter if self._token_counter.applies(who["client"]) else None
+        )
+        fields.update(_result_fields(result, token_counter))
         if is_error:
             text = "".join(
                 getattr(block, "text", "") or ""

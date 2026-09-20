@@ -26,6 +26,9 @@ def test_defaults_load_without_config_file(tmp_path, monkeypatch):
     assert settings.serve.port == 8000
     assert settings.roots.extra_roots == (Path("/tmp"),)
     assert settings.jobs.keep_newest == 50
+    assert settings.telemetry.tokenizer.enabled is False
+    assert settings.telemetry.tokenizer.encoding == "o200k_base"
+    assert settings.telemetry.tokenizer.client_prefixes == ("openai-mcp",)
     assert settings.search_text.adaptive_discovery_enabled is False
     assert settings.client_tools["openai-mcp"] == (
         "read_file",
@@ -54,6 +57,11 @@ extra_roots = ["/tmp", "/var/tmp"]
 keep_newest = 7
 listing_history_limit = 3
 
+[telemetry.tokenizer]
+enabled = true
+encoding = "o200k_base"
+client_prefixes = ["openai-mcp", "codex"]
+
 [indexed_context]
 enabled = true
 max_open_indexes = 4
@@ -78,6 +86,9 @@ adaptive_snippet_chars = 220
     assert settings.roots.extra_roots == (Path("/tmp"), Path("/var/tmp"))
     assert settings.jobs.keep_newest == 7
     assert settings.jobs.listing_history_limit == 3
+    assert settings.telemetry.tokenizer.enabled is True
+    assert settings.telemetry.tokenizer.encoding == "o200k_base"
+    assert settings.telemetry.tokenizer.client_prefixes == ("openai-mcp", "codex")
     assert settings.indexed_context.enabled is True
     assert settings.indexed_context.max_open_indexes == 4
     assert settings.search_text.timeout_s == 31
@@ -100,6 +111,9 @@ port = 8123
 [jobs]
 keep_newest = 8
 
+[telemetry.tokenizer]
+enabled = false
+
 [indexed_context]
 enabled = false
 """
@@ -107,12 +121,14 @@ enabled = false
     monkeypatch.setenv(config.CONFIG_FILE_ENV, str(cfg))
     monkeypatch.setenv("BINNACLE_SERVE__PORT", "9456")
     monkeypatch.setenv("BINNACLE_JOBS__KEEP_NEWEST", "11")
+    monkeypatch.setenv("BINNACLE_TELEMETRY__TOKENIZER__ENABLED", "true")
     monkeypatch.setenv("BINNACLE_INDEXED_CONTEXT__ENABLED", "true")
 
     settings = config.Settings()
 
     assert settings.serve.port == 9456
     assert settings.jobs.keep_newest == 11
+    assert settings.telemetry.tokenizer.enabled is True
     assert settings.indexed_context.enabled is True
 
 

@@ -48,7 +48,8 @@ def log_effective_config() -> None:
     logger.info(
         "event=config pid=%d version=%s roots=%s jobs_dir=%s keep_newest=%d "
         "client_tools=%s rg_bin=%s indexed_context=%s indexed_reconcile=%s "
-        "indexed_max_open=%d",
+        "indexed_max_open=%d tokenizer_enabled=%s tokenizer_encoding=%s "
+        "tokenizer_clients=%s",
         os.getpid(),
         _version(),
         [str(r) for r in s.roots.allowed],
@@ -59,6 +60,9 @@ def log_effective_config() -> None:
         str(s.indexed_context.enabled).lower(),
         str(s.indexed_context.reconcile_on_query).lower(),
         s.indexed_context.max_open_indexes,
+        str(s.telemetry.tokenizer.enabled).lower(),
+        s.telemetry.tokenizer.encoding,
+        ",".join(s.telemetry.tokenizer.client_prefixes),
     )
 
 

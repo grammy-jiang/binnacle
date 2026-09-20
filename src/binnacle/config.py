@@ -60,6 +60,31 @@ class ServeSettings(BaseModel):
     port: int = 8000
 
 
+class TokenizerTelemetrySettings(BaseModel):
+    """Optional model-tokenizer accounting in tool-result telemetry."""
+
+    enabled: bool = Field(
+        False,
+        description="Count result payload tokens for matching clients.",
+    )
+    encoding: str = Field(
+        "o200k_base",
+        min_length=1,
+        description="tiktoken encoding used for result-payload accounting.",
+    )
+    client_prefixes: tuple[str, ...] = Field(
+        default=("openai-mcp",),
+        min_length=1,
+        description="Client-name prefixes whose results receive tokenizer counts.",
+    )
+
+
+class TelemetrySettings(BaseModel):
+    tokenizer: TokenizerTelemetrySettings = Field(
+        default_factory=TokenizerTelemetrySettings
+    )
+
+
 class ReadFileSettings(BaseModel):
     """read_file windowing (spec docs/tools/read_file.md)."""
 
@@ -183,6 +208,7 @@ class Settings(BaseSettings):
     roots: RootsSettings = Field(default_factory=RootsSettings)
     auth: AuthSettings = Field(default_factory=AuthSettings)
     serve: ServeSettings = Field(default_factory=ServeSettings)
+    telemetry: TelemetrySettings = Field(default_factory=TelemetrySettings)
     read_file: ReadFileSettings = Field(default_factory=ReadFileSettings)
     list_files: ListFilesSettings = Field(default_factory=ListFilesSettings)
     search_text: SearchTextSettings = Field(default_factory=SearchTextSettings)

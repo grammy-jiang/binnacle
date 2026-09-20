@@ -286,6 +286,36 @@ def test_effective_config_line(caplog):
     assert "indexed_context=" in lines[0]
     assert "indexed_reconcile=" in lines[0]
     assert "indexed_max_open=" in lines[0]
+    assert "tokenizer_enabled=" in lines[0]
+    assert "tokenizer_encoding=" in lines[0]
+    assert "tokenizer_clients=" in lines[0]
+
+
+def test_result_fields_add_configured_tokenizer_measurement():
+    from fastmcp.tools.base import ToolResult
+
+    class FakeCounter:
+        encoding = "o200k_base"
+
+        def __init__(self):
+            self.parts = ()
+
+        def count(self, parts):
+            self.parts = tuple(parts)
+            return 23
+
+    counter = FakeCounter()
+    result = ToolResult(
+        content="Read 1 line.",
+        structured_content={"content": "alpha"},
+    )
+
+    fields = logging_middleware._result_fields(result, counter)
+
+    assert fields["tokenizer_tokens"] == "23"
+    assert fields["tokenizer_encoding"] == "o200k_base"
+    assert counter.parts[0] == "Read 1 line."
+    assert '"content":"alpha"' in counter.parts[1]
 
 
 def test_result_fields_never_leak_content():

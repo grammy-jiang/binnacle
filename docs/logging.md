@@ -1,6 +1,6 @@
 # Logging: what the journal records, and how to review the server from it
 
-Status 2026-09-13. Code: `src/binnacle/logging_middleware.py` (request and
+Status 2026-09-21. Code: `src/binnacle/logging_middleware.py` (request and
 tool records), `src/binnacle/jobs.py` (job records), `src/binnacle/server.py`
 (startup record, root handler format), `src/binnacle/callctx.py` (the call
 id shared by the middleware and the job store). Readers:
@@ -32,7 +32,7 @@ second.
 | `request_error` | same, level ERROR | `method source duration_ms error=<text> request_id session client [tool]` | 08-29 |
 | `notification_start` / `notification_success` | same | `method source payload ...` | 08-29 |
 | `tool_call` | `ToolLoggingMiddleware` | `call tool client session request_id [turn] [oai_session] args_chars args=<json, 500 chars>` | 09-13 |
-| `tool_result` | `ToolLoggingMiddleware`; level WARNING when `is_error=True` | `call tool client session request_id [turn] [oai_session] duration_ms is_error` then either `content_chars structured_bytes est_tokens` plus the lifted result keys, or `error_class error=<text, 200 chars>` | 09-02 (`tool client request_id is_error content_chars` only, never fired on an error) |
+| `tool_result` | `ToolLoggingMiddleware`; level WARNING when `is_error=True` | `call tool client session request_id [turn] [oai_session] duration_ms is_error` then either `content_chars structured_bytes est_tokens [tokenizer_tokens tokenizer_encoding]` plus the lifted result keys, or `error_class error=<text, 200 chars>` | 09-02 (`tool client request_id is_error content_chars` only, never fired on an error); tokenizer fields from 09-21 when enabled |
 | `job_start` | `jobs.start_job` | `job_id pid command(60 chars, repr) workdir call` | 09-02 (`call` from 09-13) |
 | `search_budget_hit` | `tools.search_text`; INFO | `call result_bytes result_budget_bytes returned_entries total_matches names_only` | 09-19 |
 | `job_listing` | `tools.job_status`; INFO | `call recorded_jobs returned_jobs running_jobs history_limit command_preview_chars` | 09-19 |
@@ -78,7 +78,7 @@ scalar facts only), the values of `X-Openai-Session` (hashed) and
 | Correlate one call across lines | `(session, request_id)` on the rich lines only; `job_start` unlinked | `call=` on `tool_call`, `tool_result`, `job_start`; `job_id=` on the run_command result, the job lines and the `job_status`/`stop_job` arguments |
 | Correlate with a ChatGPT turn | Timestamp match (±2 s) against the tunnel log's `cmd_request_id` | `turn=wfr_<turn>/<call>` from the request's `X-Request-Id` (the same id the tunnel logs); the part before `/` is one agent turn |
 | Per-call latency | `duration_ms` on `request_success`, paired by order or id | `duration_ms` on `tool_result` |
-| Size of what the model receives | Not measurable | `content_chars` (text blocks) + `structured_bytes` (compact JSON, UTF-8) + `est_tokens` = (chars)/4 (an estimate; no tokenizer) |
+| Size of what the model receives | Not measurable | `content_chars` (text blocks) + `structured_bytes` (compact JSON, UTF-8) + historical `est_tokens` = chars/4; when tokenizer telemetry is enabled for the client, `tokenizer_tokens` is the configured tokenizer count and `tokenizer_encoding` names the encoding |
 | Error classification | `request_error` text, ERROR level, class unknown | `is_error=True error_class=ToolError` (or NotFoundError, ValidationError, ...) `error=message` at WARNING; cancellations are recorded too |
 | Truncation and clipping | Nothing | `truncated` (all four file/search tools and run_command's head/tail clip or `tail_lines` drop), `lines_clipped`, `start_line/end_line/total_lines` (read_file window), `count` vs `entries` (search cap), `output_bytes` vs the clip; `tail_lines`, `max_results` visible in `args` |
 | Background jobs and outcomes | `job_start`/`job_exit` by `job_id`, exit code only | `background_job=true` and `state` on the result; `job_exit` adds `runtime_s`, `log_bytes`; `job_start` names the call |
@@ -155,14 +155,39 @@ errors; errors_by_class; latency_ms; became_jobs; job_exits) and
 
 ## 7. Still not in the journal
 
-- True token counts: `est_tokens` is chars/4 (no tokenizer dependency).
+- Full ChatGPT request/accounting tokens. `tokenizer_tokens` counts only the
+  result payload text blocks plus compact structured JSON with the configured
+  encoding. It deliberately excludes MCP/JSON-RPC/message framing, tool schemas,
+  prior conversation context, and any provider-side accounting.
 - The ChatGPT conversation id and the user's prompt: no header carries them.
 - Whether ChatGPT gave up on a call (its 60 s cap): only the tunnel log
   (`poll failed`) sees that side; a `tool_call` without a `tool_result`
   means the server never answered (crash or reload mid-call).
 - Rejected authentication: uvicorn access lines (`401 Unauthorized`) only.
 
-## 8. Proposed settings (module constants in `logging_middleware.py` until config.py is free)
+## 8. Result-tokenizer telemetry
+
+Tokenizer accounting is opt-in and configuration-driven:
+
+```toml
+[telemetry.tokenizer]
+enabled = true
+encoding = "o200k_base"
+client_prefixes = ["openai-mcp"]
+```
+
+The repository default is disabled. When disabled, Binnacle does not import
+`tiktoken` or load an encoding. When enabled, the middleware prepares the
+encoding on a daemon thread so a cold/cache-miss tokenizer load cannot delay an
+MCP response. Until preparation succeeds, normal tool results continue without
+the optional tokenizer fields. Load/count failures are telemetry warnings only.
+
+`client_prefixes` prevents an OpenAI tokenizer count from being presented on a
+Claude or other provider's results by default. The fields are explicitly named
+`tokenizer_tokens` and `tokenizer_encoding`: they measure the payload under that
+encoding, not the provider's complete billed/context token count.
+
+## 9. Logging constants
 
 | Constant | Value | Meaning |
 | --- | --- | --- |
