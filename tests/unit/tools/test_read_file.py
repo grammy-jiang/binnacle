@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 from fastmcp.exceptions import ToolError
 
+from binnacle import paths
 from binnacle.tools import read_file as rf
 
 
@@ -129,7 +130,7 @@ def test_nul_and_at_prefix_sanitized(tmp_path):
 
 def test_relative_resolves_against_default_root():
     p = read("binnacle/README.md", 1, 3)
-    assert p["path"] == str(Path.home() / "Projects/binnacle/README.md")
+    assert p["path"] == str(paths.DEFAULT_ROOT / "binnacle/README.md")
 
 
 # -- errors ----------------------------------------------------------------
