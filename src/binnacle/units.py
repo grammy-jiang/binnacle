@@ -168,7 +168,7 @@ def write_unit(
 def resolve_executable(
     name: str,
     argv0: str | None = None,
-    which: Callable[[str], str | None] = shutil.which,
+    which: Callable[[str], str | None] | None = None,
 ) -> Path:
     """The absolute path a unit may start: `name` on PATH, else the script
     running now. systemd rejects a relative ExecStart as a fatal unit error
@@ -177,7 +177,8 @@ def resolve_executable(
     does not resolve to an executable file is refused here instead.
     Symlinks are kept, not followed: `~/.local/bin/tunnel-client` is the
     stable name an upgrade repoints, the versioned target behind it is not."""
-    candidate = which(name) or argv0 or sys.argv[0]
+    finder = which or shutil.which
+    candidate = finder(name) or argv0 or sys.argv[0]
     path = Path(os.path.abspath(Path(candidate).expanduser()))
     if not (path.is_file() and os.access(path, os.X_OK)):
         raise UnitError(
