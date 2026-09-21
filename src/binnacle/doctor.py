@@ -37,6 +37,7 @@ Status semantics: "fail" breaks a tool or the connection and exits 1;
 
 import json
 import os
+import re
 import shutil
 import subprocess
 from collections.abc import Callable, Iterable, Mapping
@@ -305,6 +306,11 @@ def _job_state_safe(job_id: str) -> dict | None:
         return None
 
 
+_JOURNAL_ERROR = re.compile(
+    r"^(?:\d{4}-\d{2}-\d{2}T\S+\s+)?(?:ERROR|CRITICAL):(?:\s|$)|^(?:\[[^]]+\]\s+)?\s*(?:ERROR|CRITICAL)\s+event="
+)
+
+
 def check_journal(
     unit: str,
     since: str,
@@ -314,7 +320,7 @@ def check_journal(
         text = fetch(unit, since)
     except SystemExit as e:
         return [warn("journal", f"journal unavailable: {e}")]
-    errors = sum(1 for line in text.splitlines() if "ERROR" in line)
+    errors = sum(1 for line in text.splitlines() if _JOURNAL_ERROR.match(line))
     tracebacks = sum(1 for line in text.splitlines() if line.startswith("Traceback"))
     if not errors and not tracebacks:
         return [ok("journal", f"no errors in the {unit} journal since {since}")]
@@ -322,7 +328,7 @@ def check_journal(
         warn(
             "journal",
             f"{errors} error line(s) and {tracebacks} traceback(s) since {since}",
-            f"journalctl --user -u {unit} --since='{since}' -p err",
+            f"journalctl --user -u {unit} --since='{since}' --no-pager -o cat",
         )
     ]
 

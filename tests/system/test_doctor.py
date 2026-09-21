@@ -295,9 +295,34 @@ def test_journal_clean_ok():
 
 
 def test_journal_errors_warn():
-    text = "ERROR event=request_error\nTraceback (most recent call last):\n  x\n"
+    text = "ERROR: server failure\nTraceback (most recent call last):\n  x\n"
     (c,) = doctor.check_journal("u", "-1 hour", fetch=lambda u, s: text)
     assert c.status == "warn" and "1 error line(s) and 1 traceback(s)" in c.detail
+
+
+def test_journal_fastmcp_rich_error_warns():
+    text = (
+        "[09/22/26 05:29:59] INFO     event=request_start\n"
+        "                    ERROR    event=request_error                  logging.py:122\n"
+    )
+    (c,) = doctor.check_journal("u", "-1 hour", fetch=lambda u, s: text)
+    assert c.status == "warn" and "1 error line(s)" in c.detail
+
+
+def test_journal_error_words_inside_payload_do_not_warn():
+    text = (
+        'payload={"command":"grep -E ERROR|Traceback file.log"}\n'
+        '2026-09-22T09:35:00.234 INFO: event=tool_call args={"pattern":"ERROR"}\n'
+        "                             ERROR|WARNING|Traceback\n"
+    )
+    (c,) = doctor.check_journal("u", "-1 hour", fetch=lambda u, s: text)
+    assert c.status == "ok"
+
+
+def test_journal_structured_root_error_warns():
+    text = "2026-09-22T09:35:00.234 ERROR: event=server_failure reason=boom\n"
+    (c,) = doctor.check_journal("u", "-1 hour", fetch=lambda u, s: text)
+    assert c.status == "warn" and "1 error line(s)" in c.detail
 
 
 def test_journal_unavailable_warns():
