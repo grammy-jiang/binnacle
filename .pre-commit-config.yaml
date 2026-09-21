@@ -91,6 +91,12 @@ repos:
         language: system
         files: (\.py$|^quality-policy\.json$)
         pass_filenames: false
+      - id: ai-readability
+        name: AI readability warnings
+        entry: uv run --no-sync python scripts/check_ai_readability.py
+        language: system
+        files: (^src/binnacle/.*\.py$|^quality-policy\.json$)
+        pass_filenames: false
       - id: architecture
         name: architecture boundaries
         entry: uv run --no-sync python scripts/check_architecture.py

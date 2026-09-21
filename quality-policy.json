@@ -57,5 +57,13 @@
       "unit": {},
       "full": {}
     }
+  },
+  "ai_readability": {
+    "warning_lines": 100,
+    "strong_warning_lines": 120,
+    "severe_warning_lines": 150,
+    "roots": [
+      "src/binnacle"
+    ]
   }
 }

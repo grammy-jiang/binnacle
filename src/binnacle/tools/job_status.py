@@ -120,6 +120,32 @@ def _elapsed_ms(start: float) -> float:
     return (_PERF_COUNTER() - start) * 1_000
 
 
+def _listing_result() -> ToolResult:
+    states = jobs.list_jobs()
+    rows, running = _listing_rows(states)
+    if not states:
+        summary = "No jobs recorded."
+    elif len(rows) == len(states):
+        summary = f"{len(rows)} job(s), newest first."
+    else:
+        summary = (
+            f"{len(rows)} of {len(states)} job(s) shown, newest first: "
+            f"all {running} running plus up to {LISTING_HISTORY_LIMIT} recent "
+            "non-running jobs."
+        )
+    log.info(
+        "event=job_listing call=%s recorded_jobs=%s returned_jobs=%s "
+        "running_jobs=%s history_limit=%s command_preview_chars=%s",
+        current_call.get(),
+        len(states),
+        len(rows),
+        running,
+        LISTING_HISTORY_LIMIT,
+        LISTING_COMMAND_PREVIEW_CHARS,
+    )
+    return ToolResult(content=summary, structured_content={"jobs": rows})
+
+
 def job_status_impl(
     job_id: str | None, tail_lines: int, wait_seconds: int = 0
 ) -> ToolResult:
@@ -127,29 +153,7 @@ def job_status_impl(
     call_start = current_call_started.get()
     dispatch_ms = (impl_start - call_start) * 1_000 if call_start is not None else None
     if job_id is None:
-        states = jobs.list_jobs()
-        rows, running = _listing_rows(states)
-        if not states:
-            summary = "No jobs recorded."
-        elif len(rows) == len(states):
-            summary = f"{len(rows)} job(s), newest first."
-        else:
-            summary = (
-                f"{len(rows)} of {len(states)} job(s) shown, newest first: "
-                f"all {running} running plus up to {LISTING_HISTORY_LIMIT} recent "
-                "non-running jobs."
-            )
-        log.info(
-            "event=job_listing call=%s recorded_jobs=%s returned_jobs=%s "
-            "running_jobs=%s history_limit=%s command_preview_chars=%s",
-            current_call.get(),
-            len(states),
-            len(rows),
-            running,
-            LISTING_HISTORY_LIMIT,
-            LISTING_COMMAND_PREVIEW_CHARS,
-        )
-        return ToolResult(content=summary, structured_content={"jobs": rows})
+        return _listing_result()
 
     wait_seconds = max(0, min(wait_seconds, WAIT_MAX))
     state_start = _PERF_COUNTER()

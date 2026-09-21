@@ -2,6 +2,7 @@
 
 import logging
 import time
+from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from binnacle.ops.watchdog.command import Run, _run
@@ -72,6 +73,256 @@ def reset_device(dev: str, profile: str | None, run: Run = _run) -> bool:
     return True
 
 
+@dataclass
+class _ActionContext:
+    action: Action
+    routes: list[Route]
+    state: State
+    run: Run
+    now: float
+    policy: Policy
+    profiles: dict[str, str]
+    cycle_n: int
+    before: str
+    started: float
+
+    def took_ms(self) -> float:
+        return (time.perf_counter() - self.started) * 1000
+
+
+def _apply_demote(ctx: _ActionContext) -> bool:
+    action = ctx.action
+    profile = ctx.profiles.get(action.dev)
+    route = next((r for r in ctx.routes if r.dev == action.dev), None)
+    if profile is None or route is None:
+        log.error("event=demote_skipped dev=%s reason=no_profile", action.dev)
+        return False
+    metric = action.metric or 900
+    names = [n for n in bound_profiles(action.dev, ctx.run) if n != profile]
+    if action.tag == "preference" and action.profile and action.profile not in names:
+        names.append(action.profile)
+
+    others: dict[str, int] = {}
+    for name in names:
+        original = profile_metric(name, ctx.run)
+        if original is None:
+            log.error(
+                "event=demote_skipped dev=%s profile=%s reason=metric_unknown",
+                action.dev,
+                name,
+            )
+            return False
+        others[name] = original
+
+    raised: list[str] = []
+    for name in others:
+        if not _modify_metric(name, metric, ctx.run):
+            for done in raised:
+                _modify_metric(done, others[done], ctx.run)
+            return False
+        raised.append(name)
+
+    if not set_route_metric(profile, action.dev, metric, ctx.run):
+        _modify_metric(profile, route.metric, ctx.run)
+        for done in raised:
+            _modify_metric(done, others[done], ctx.run)
+        log.error(
+            "event=demote_failed cycle=%s dev=%s profile=%s reverted=%s duration_ms=%.0f",
+            ctx.cycle_n,
+            action.dev,
+            profile,
+            ",".join(raised) or "-",
+            ctx.took_ms(),
+        )
+        return False
+
+    kind = action.tag if action.tag in ("preference", "usb_speed") else "wedged"
+    target = action.profile if action.tag == "preference" else ""
+    ctx.state.demoted[action.dev] = Demotion(
+        dev=action.dev,
+        profile=profile,
+        original_metric=route.metric,
+        since=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        reason=action.reason,
+        kind=kind,
+        target=target or "",
+        target_metric=others.get(target) if target else None,
+        since_ts=ctx.now,
+        others=others,
+    )
+    ctx.state.failures[action.dev] = 0
+    ctx.state.failure_since.pop(action.dev, None)
+    if kind == "wedged":
+        ctx.state.usb_attempts.pop(action.dev, None)
+        times = recent_wedges(ctx.state, action.dev, ctx.policy, ctx.now)
+        times.append(ctx.now)
+        ctx.state.wedge_times[action.dev] = times
+    log.warning(
+        "event=uplink_demoted cycle=%s dev=%s before=%s trigger=%s metric=%s->%s kind=%s "
+        "profile=%s others=%s duration_ms=%.0f reason=%s",
+        ctx.cycle_n,
+        action.dev,
+        ctx.before,
+        action.trigger,
+        route.metric,
+        action.metric,
+        kind,
+        profile,
+        ",".join(sorted(others)) or "-",
+        ctx.took_ms(),
+        action.reason,
+    )
+    return True
+
+
+def _apply_restore(ctx: _ActionContext) -> bool:
+    action = ctx.action
+    demotion = ctx.state.demoted.get(action.dev)
+    if demotion is None:
+        return False
+    to_restore = dict(demotion.others)
+    if demotion.target and demotion.target_metric is not None:
+        to_restore.setdefault(demotion.target, demotion.target_metric)
+    okay = _modify_metric(demotion.profile, demotion.original_metric, ctx.run)
+    for name, original in to_restore.items():
+        okay = _modify_metric(name, original, ctx.run) and okay
+    if not okay or not _reapply(action.dev, ctx.run):
+        log.error(
+            "event=restore_failed cycle=%s dev=%s profile=%s duration_ms=%.0f",
+            ctx.cycle_n,
+            action.dev,
+            demotion.profile,
+            ctx.took_ms(),
+        )
+        return False
+    del ctx.state.demoted[action.dev]
+    ctx.state.successes[action.dev] = 0
+    ctx.state.usb_attempts.pop(action.dev, None)
+    ctx.state.fast_demoted_streak.pop(action.dev, None)
+    ctx.state.fast_demoted_last_fail.pop(action.dev, None)
+    log.warning(
+        "event=uplink_restored cycle=%s dev=%s before=%s metric=%s kind=%s "
+        "profile=%s others=%s demoted_for_s=%.0f duration_ms=%.0f reason=%s",
+        ctx.cycle_n,
+        action.dev,
+        ctx.before,
+        demotion.original_metric,
+        demotion.kind,
+        demotion.profile,
+        ",".join(sorted(to_restore)) or "-",
+        ctx.now - demotion.since_ts if demotion.since_ts else -1.0,
+        ctx.took_ms(),
+        action.reason,
+    )
+    return True
+
+
+def _apply_reset(ctx: _ActionContext) -> bool:
+    action = ctx.action
+    ctx.state.last_reset[action.dev] = ctx.now
+    if action.tag == "no_route":
+        profile_name = action.profile or ctx.profiles.get(action.dev)
+        if profile_name and profile_never_default(profile_name, ctx.run):
+            log.info(
+                "event=reset_skipped cycle=%s dev=%s profile=%s reason=never_default",
+                ctx.cycle_n,
+                action.dev,
+                profile_name,
+            )
+            return False
+        if _reapply(action.dev, ctx.run):
+            log.warning(
+                "event=uplink_reapply cycle=%s dev=%s before=%s profile=%s "
+                "duration_ms=%.0f reason=%s",
+                ctx.cycle_n,
+                action.dev,
+                ctx.before,
+                profile_name,
+                ctx.took_ms(),
+                action.reason,
+            )
+            return True
+    if action.tag == "preference":
+        ctx.state.prefer_attempts[action.dev] = (
+            ctx.state.prefer_attempts.get(action.dev, 0) + 1
+        )
+        ctx.state.last_prefer[action.dev] = ctx.now
+    profile = action.profile or ctx.profiles.get(action.dev)
+    okay = reset_device(action.dev, profile, ctx.run)
+    if action.tag == "fallback" and action.dev in ctx.state.demoted:
+        ctx.state.demoted[action.dev].kind = "wedged"
+        ctx.state.demoted[
+            action.dev
+        ].reason = f"{action.reason}; escalates as a wedge from here"
+    log.warning(
+        "event=uplink_reset cycle=%s dev=%s before=%s trigger=%s ok=%s tag=%s profile=%s "
+        "duration_ms=%.0f reason=%s",
+        ctx.cycle_n,
+        action.dev,
+        ctx.before,
+        action.trigger,
+        okay,
+        action.tag,
+        profile,
+        ctx.took_ms(),
+        action.reason,
+    )
+    return okay
+
+
+def _apply_reload(ctx: _ActionContext) -> bool:
+    action = ctx.action
+    attempt = ctx.state.reload_attempts.get(action.dev, 0) + 1
+    ctx.state.reload_attempts[action.dev] = attempt
+    ctx.state.last_reload[action.dev] = ctx.now
+    okay, detail = driver_reload(action.dev, ctx.run)
+    log.warning(
+        "event=uplink_driver_reload cycle=%s dev=%s before=%s attempt=%s ok=%s "
+        "duration_ms=%.0f reason=%s detail=%s",
+        ctx.cycle_n,
+        action.dev,
+        ctx.before,
+        attempt,
+        okay,
+        ctx.took_ms(),
+        action.reason,
+        detail,
+    )
+    return okay
+
+
+def _apply_usb_reset(ctx: _ActionContext) -> bool:
+    action = ctx.action
+    if action.tag == "usb_speed":
+        attempt = ctx.state.usb_speed_attempts.get(action.dev, 0) + 1
+        ctx.state.usb_speed_attempts[action.dev] = attempt
+        ctx.state.last_usb_speed_reset[action.dev] = ctx.now
+        wait = usb_backoff(ctx.policy.usb_speed_schedule, attempt)
+    else:
+        attempt = ctx.state.usb_attempts.get(action.dev, 0) + 1
+        ctx.state.usb_attempts[action.dev] = attempt
+        ctx.state.last_usb_reset[action.dev] = ctx.now
+        wait = usb_backoff(ctx.policy.usb_reset_schedule, attempt + 1)
+    method = usb_reset_method(ctx.policy, attempt)
+    okay, detail = usb_reset_device(action.dev, ctx.policy, ctx.run, method=method)
+    log.warning(
+        "event=uplink_usb_reset cycle=%s dev=%s before=%s attempt=%s method=%s ok=%s "
+        "tag=%s next_in_s=%.0f duration_ms=%.0f reason=%s detail=%s",
+        ctx.cycle_n,
+        action.dev,
+        ctx.before,
+        attempt,
+        method,
+        okay,
+        action.tag,
+        wait,
+        ctx.took_ms(),
+        action.reason,
+        detail,
+    )
+    return okay
+
+
 def apply_action(
     action: Action,
     routes: list[Route],
@@ -80,253 +331,26 @@ def apply_action(
     now: float | None = None,
     policy: Policy = DEFAULT_POLICY,
 ) -> bool:
-    """Carry out one action and record it in `state`.
-
-    Every outcome is logged with the cycle number, what the device looked
-    like before (`before=`), how long the commands took and the result.
-    """
-    now = time.time() if now is None else now
-    profiles = device_profiles(run)
-    n = state.cycle_n
-    before = state.last_grade.get(action.dev, "-")
-    started = time.perf_counter()
-
-    def took() -> float:
-        return (time.perf_counter() - started) * 1000
-
-    if action.kind == "demote":
-        profile = profiles.get(action.dev)
-        route = next((r for r in routes if r.dev == action.dev), None)
-        if profile is None or route is None:
-            log.error("event=demote_skipped dev=%s reason=no_profile", action.dev)
-            return False
-        metric = action.metric or 900
-        # Device-level: raise every profile bound to the device (and the
-        # target of a preference move) first, so whatever NetworkManager
-        # brings up after the repair still waits for the probes. No move
-        # without knowing how to undo it.
-        names = [n for n in bound_profiles(action.dev, run) if n != profile]
-        if (
-            action.tag == "preference"
-            and action.profile
-            and action.profile not in names
-        ):
-            names.append(action.profile)
-        others: dict[str, int] = {}
-        for name in names:
-            original = profile_metric(name, run)
-            if original is None:
-                log.error(
-                    "event=demote_skipped dev=%s profile=%s reason=metric_unknown",
-                    action.dev,
-                    name,
-                )
-                return False
-            others[name] = original
-        raised: list[str] = []
-        for name in others:
-            if not _modify_metric(name, metric, run):
-                for done in raised:
-                    _modify_metric(done, others[done], run)
-                return False
-            raised.append(name)
-        if not set_route_metric(profile, action.dev, metric, run):
-            # The modify may have landed before the reapply failed: put the
-            # active profile back too, or it sits at 900 with no record.
-            _modify_metric(profile, route.metric, run)
-            for done in raised:
-                _modify_metric(done, others[done], run)
-            log.error(
-                "event=demote_failed cycle=%s dev=%s profile=%s reverted=%s duration_ms=%.0f",
-                n,
-                action.dev,
-                profile,
-                ",".join(raised) or "-",
-                took(),
-            )
-            return False
-        kind = action.tag if action.tag in ("preference", "usb_speed") else "wedged"
-        target = action.profile if action.tag == "preference" else ""
-        state.demoted[action.dev] = Demotion(
-            dev=action.dev,
-            profile=profile,
-            original_metric=route.metric,
-            since=datetime.now(timezone.utc).isoformat(timespec="seconds"),
-            reason=action.reason,
-            kind=kind,
-            target=target or "",
-            target_metric=others.get(target) if target else None,
-            since_ts=now,
-            others=others,
-        )
-        state.failures[action.dev] = 0
-        state.failure_since.pop(action.dev, None)
-        if kind == "wedged":
-            # A new episode: the USB schedule starts over, and the flap
-            # damping remembers the wedge.
-            state.usb_attempts.pop(action.dev, None)
-            times = recent_wedges(state, action.dev, policy, now)
-            times.append(now)
-            state.wedge_times[action.dev] = times
-        log.warning(
-            "event=uplink_demoted cycle=%s dev=%s before=%s trigger=%s metric=%s->%s kind=%s "
-            "profile=%s others=%s duration_ms=%.0f reason=%s",
-            n,
-            action.dev,
-            before,
-            action.trigger,
-            route.metric,
-            action.metric,
-            kind,
-            profile,
-            ",".join(sorted(others)) or "-",
-            took(),
-            action.reason,
-        )
-        return True
-
-    if action.kind == "restore":
-        demotion = state.demoted.get(action.dev)
-        if demotion is None:
-            return False
-        to_restore = dict(demotion.others)
-        if demotion.target and demotion.target_metric is not None:
-            to_restore.setdefault(demotion.target, demotion.target_metric)
-        okay = _modify_metric(demotion.profile, demotion.original_metric, run)
-        for name, original in to_restore.items():
-            okay = _modify_metric(name, original, run) and okay
-        if not okay or not _reapply(action.dev, run):
-            log.error(
-                "event=restore_failed cycle=%s dev=%s profile=%s duration_ms=%.0f",
-                n,
-                action.dev,
-                demotion.profile,
-                took(),
-            )
-            return False
-        del state.demoted[action.dev]
-        state.successes[action.dev] = 0
-        state.usb_attempts.pop(action.dev, None)
-        state.fast_demoted_streak.pop(action.dev, None)
-        state.fast_demoted_last_fail.pop(action.dev, None)
-        log.warning(
-            "event=uplink_restored cycle=%s dev=%s before=%s metric=%s kind=%s "
-            "profile=%s others=%s demoted_for_s=%.0f duration_ms=%.0f reason=%s",
-            n,
-            action.dev,
-            before,
-            demotion.original_metric,
-            demotion.kind,
-            demotion.profile,
-            ",".join(sorted(to_restore)) or "-",
-            now - demotion.since_ts if demotion.since_ts else -1.0,
-            took(),
-            action.reason,
-        )
-        return True
-
-    if action.kind == "reset":
-        state.last_reset[action.dev] = now
-        if action.tag == "no_route":
-            profile_name = action.profile or profiles.get(action.dev)
-            if profile_name and profile_never_default(profile_name, run):
-                log.info(
-                    "event=reset_skipped cycle=%s dev=%s profile=%s reason=never_default",
-                    n,
-                    action.dev,
-                    profile_name,
-                )
-                return False
-            if _reapply(action.dev, run):
-                log.warning(
-                    "event=uplink_reapply cycle=%s dev=%s before=%s profile=%s "
-                    "duration_ms=%.0f reason=%s",
-                    n,
-                    action.dev,
-                    before,
-                    profile_name,
-                    took(),
-                    action.reason,
-                )
-                return True
-        if action.tag == "preference":
-            state.prefer_attempts[action.dev] = (
-                state.prefer_attempts.get(action.dev, 0) + 1
-            )
-            state.last_prefer[action.dev] = now
-        profile = action.profile or profiles.get(action.dev)
-        okay = reset_device(action.dev, profile, run)
-        if action.tag == "fallback" and action.dev in state.demoted:
-            # The move is undone; from here a device that stays dead is a
-            # wedge and gets the USB schedule like any other.
-            state.demoted[action.dev].kind = "wedged"
-            state.demoted[
-                action.dev
-            ].reason = f"{action.reason}; escalates as a wedge from here"
-        log.warning(
-            "event=uplink_reset cycle=%s dev=%s before=%s trigger=%s ok=%s tag=%s profile=%s "
-            "duration_ms=%.0f reason=%s",
-            n,
-            action.dev,
-            before,
-            action.trigger,
-            okay,
-            action.tag,
-            profile,
-            took(),
-            action.reason,
-        )
-        return okay
-
-    if action.kind == "reload":
-        attempt = state.reload_attempts.get(action.dev, 0) + 1
-        state.reload_attempts[action.dev] = attempt
-        state.last_reload[action.dev] = now
-        okay, detail = driver_reload(action.dev, run)
-        log.warning(
-            "event=uplink_driver_reload cycle=%s dev=%s before=%s attempt=%s ok=%s "
-            "duration_ms=%.0f reason=%s detail=%s",
-            n,
-            action.dev,
-            before,
-            attempt,
-            okay,
-            took(),
-            action.reason,
-            detail,
-        )
-        return okay
-
-    if action.kind == "usb_reset":
-        # Count the attempt whether or not it works: a failing sudo or a
-        # vanished node must still advance the schedule, never storm.
-        if action.tag == "usb_speed":
-            attempt = state.usb_speed_attempts.get(action.dev, 0) + 1
-            state.usb_speed_attempts[action.dev] = attempt
-            state.last_usb_speed_reset[action.dev] = now
-            wait = usb_backoff(policy.usb_speed_schedule, attempt)
-        else:
-            attempt = state.usb_attempts.get(action.dev, 0) + 1
-            state.usb_attempts[action.dev] = attempt
-            state.last_usb_reset[action.dev] = now
-            wait = usb_backoff(policy.usb_reset_schedule, attempt + 1)
-        method = usb_reset_method(policy, attempt)
-        okay, detail = usb_reset_device(action.dev, policy, run, method=method)
-        log.warning(
-            "event=uplink_usb_reset cycle=%s dev=%s before=%s attempt=%s method=%s ok=%s "
-            "tag=%s next_in_s=%.0f duration_ms=%.0f reason=%s detail=%s",
-            n,
-            action.dev,
-            before,
-            attempt,
-            method,
-            okay,
-            action.tag,
-            wait,
-            took(),
-            action.reason,
-            detail,
-        )
-        return okay
-
-    return False
+    """Carry out one action and record it in state."""
+    resolved_now = time.time() if now is None else now
+    ctx = _ActionContext(
+        action=action,
+        routes=routes,
+        state=state,
+        run=run,
+        now=resolved_now,
+        policy=policy,
+        profiles=device_profiles(run),
+        cycle_n=state.cycle_n,
+        before=state.last_grade.get(action.dev, "-"),
+        started=time.perf_counter(),
+    )
+    handlers = {
+        "demote": _apply_demote,
+        "restore": _apply_restore,
+        "reset": _apply_reset,
+        "reload": _apply_reload,
+        "usb_reset": _apply_usb_reset,
+    }
+    handler = handlers.get(action.kind)
+    return handler(ctx) if handler is not None else False

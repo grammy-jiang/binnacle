@@ -213,6 +213,7 @@ dev = [
     { name = "httpx2" },
     { name = "hypothesis" },
     { name = "import-linter" },
+    { name = "lizard" },
     { name = "mutmut" },
     { name = "mypy" },
     { name = "pip-audit" },
@@ -230,6 +231,7 @@ lint = [
     { name = "bandit" },
     { name = "deptry" },
     { name = "import-linter" },
+    { name = "lizard" },
     { name = "mypy" },
     { name = "pip-audit" },
     { name = "ruff" },
@@ -261,6 +263,7 @@ dev = [
     { name = "httpx2", specifier = ">=2.12.0" },
     { name = "hypothesis", specifier = ">=6.167.1" },
     { name = "import-linter", specifier = ">=2.14" },
+    { name = "lizard", specifier = ">=1.24.0" },
     { name = "mutmut", specifier = ">=3.7.0" },
     { name = "mypy", specifier = ">=2.3.1" },
     { name = "pip-audit", specifier = ">=2.10.1" },
@@ -278,6 +281,7 @@ lint = [
     { name = "bandit", specifier = ">=1.9.4" },
     { name = "deptry", specifier = ">=0.25.1" },
     { name = "import-linter", specifier = ">=2.14" },
+    { name = "lizard", specifier = ">=1.24.0" },
     { name = "mypy", specifier = ">=2.3.1" },
     { name = "pip-audit", specifier = ">=2.10.1" },
     { name = "ruff", specifier = ">=0.16.5" },
@@ -1833,6 +1837,19 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/45/98/7a1a5f31fd5c7ba93e963b168e244b8e3dd705b3d2a718e3c3307583bf57/linkify_it_py-2.2.0.tar.gz", hash = "sha256:907acd2d17ac1fbb9ddb62c8957ccbd6158cac602231a15c3b0cd1e215f03cee", size = 32939, upload-time = "2026-08-29T07:07:08.305Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/13/d4/1152d1c7ab42d8b908be64fd200ddc870dc9d4925e951198702084aa1a7d/linkify_it_py-2.2.0-py3-none-any.whl", hash = "sha256:3adc40eb5af300b2605fcfdb968c24e1d780a90f1f2221af7c15e5111e94d443", size = 21971, upload-time = "2026-08-29T07:07:07.164Z" },
+]
+
+[[package]]
+name = "lizard"
+version = "1.24.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pathspec" },
+    { name = "pygments" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/a5/c9/97837b967a1a6bb64acb0e1738e19a154393ae1a9a448b9958176be5b10a/lizard-1.24.0.tar.gz", hash = "sha256:2e88a7af9d23a98d3f4a30767134361bd4b7dde02c410209c6c72732a43bbb65", size = 102329, upload-time = "2026-08-19T00:04:05.28Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/60/c1/1da7937391a7e67edfb33bb3cd6d3426a7027cf3dd904ecb29c2b4416e78/lizard-1.24.0-py2.py3-none-any.whl", hash = "sha256:a688bc607a891ff4a7836826f25742dc9c1bf648da3075dbd495e199e8848602", size = 111418, upload-time = "2026-08-19T00:04:03.569Z" },
 ]
 
 [[package]]
