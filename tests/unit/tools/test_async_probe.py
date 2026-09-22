@@ -62,3 +62,8 @@ def test_seed_delay_creates_a_controlled_dependency_window():
     result = asyncio.run(async_probe.seed_impl("unit", 0.1)).structured_content
     assert time.monotonic() - started >= 0.09
     assert result["delay_s"] == 0.1
+
+
+def test_mutating_probe_uses_same_async_wait_core():
+    result = asyncio.run(async_probe.wait_impl("unit", "mut-x", 0.1))
+    assert result.structured_content["label"] == "mut-x"

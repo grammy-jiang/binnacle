@@ -127,6 +127,37 @@ def register(mcp: FastMCP) -> None:
         _event("end", "capabilities", probe_id)
         return payload
 
+    @mcp.tool(
+        annotations={
+            "readOnlyHint": False,
+            "destructiveHint": True,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        }
+    )
+    async def async_probe_mutating_wait(
+        probe_id: PROBE_ID,
+        label: Annotated[
+            str,
+            Field(
+                min_length=1,
+                max_length=32,
+                pattern=r"^[A-Za-z0-9._-]+$",
+                description="Short label distinguishing waits in the same trial.",
+            ),
+        ],
+        delay_s: Annotated[
+            float,
+            Field(
+                ge=0.1,
+                le=10.0,
+                description="Seconds to keep this harmless annotated-write call unresolved.",
+            ),
+        ],
+    ) -> ToolResult:
+        """Harmless wait annotated as destructive to test Chat approval/scheduling."""
+        return await wait_impl(probe_id, f"mut-{label}", delay_s)
+
     @mcp.tool(annotations=annotations)
     async def async_probe_wait(
         probe_id: PROBE_ID,
