@@ -230,8 +230,20 @@ wall time). Fast-path instrumentation also passed the performance gate: median p
 from 17.216 to 16.696 ms for a literal no-context workload and 42.762 to 39.536 ms for a
 regex+context workload; the only median p95 increase was 19.157 to 19.640 ms (~2.5%).
 
-The event deliberately records `rg_stdout_chars`, not a byte count: rg currently returns a
-Python text string, and re-encoding a pathological ~162 MB output merely for telemetry
-would create another expensive full-buffer pass. Phase B does not implement streaming rg
-JSON, glob caching, context-generation changes or adaptive scan reuse; those remain future
-optimization hypotheses after an observation window.
+The original Phase-B materialized backend remains available as
+`search_text.exact_execution="materialized"` for rollback and A/B work. The repository
+default is now `streaming`: rg stdout stays as bytes, JSONL is parsed incrementally with
+`orjson`, glob acceptance is cached once per file, and only already-accepted match events
+are retained for the existing adaptive ranker. The MCP schema, rg query semantics, context
+policy, adaptive ranking, budgets, and result wording remain unchanged.
+
+Streaming telemetry uses `pipeline=streaming`, `rg_stdout_bytes`, `rg_wall_ms`,
+`stream_cpu_ms`, and glob-cache/rejected-event counters; materialized historical records
+keep their earlier `rg_stdout_chars`, parse, and collect timings. `binnacle stats` renders
+both generations separately when a window spans the migration.
+
+Controlled A/B on this Raspberry Pi 5 showed no fast-path regression. Two medium historical
+runs were ~3.6–4.3x faster with ~59% lower peak RSS; two broad historical runs were
+~14–17x faster with peak RSS falling from ~1.10 GiB to ~91 MiB. Those ratios are evidence
+for this host/workload, not a universal performance promise. Complete structured payload
+SHA-256 values matched between backends for the controlled medium and broad cases.

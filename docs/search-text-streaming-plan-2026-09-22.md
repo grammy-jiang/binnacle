@@ -565,5 +565,14 @@ pre-existing adaptive-result-budget failures already present on the materialized
 Tests that intentionally monkeypatch materialized internal seams are explicitly pinned to
 the materialized backend; streaming has its own error-lifecycle tests.
 
-The next gates are full pre-commit, full pytest baseline-equivalence, then a live shadow
-period with local `exact_execution=streaming` before the repository default is flipped.
+Full pre-commit passed, and full pytest completed with 969 passed / 3 skipped / the same
+three pre-existing adaptive-result-budget failures as the materialized baseline. A live
+shadow MCP on a separate port then exercised normal, auto-context, broad/adaptive, and
+invalid-regex requests with `exact_execution=streaming`; all returned the expected public
+semantics and emitted exactly-one streaming terminal summaries. The broad shadow call
+showed 12,826 rg events but only 214 actual glob matcher calls, with adaptive receiving
+2,644 already-accepted match events and performing zero second-pass glob checks.
+
+After these gates the repository default is flipped to `streaming`. The materialized backend
+remains supported via `search_text.exact_execution="materialized"` as an immediate rollback
+for at least one observation/release window.

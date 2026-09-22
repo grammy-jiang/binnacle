@@ -31,6 +31,7 @@ def test_defaults_load_without_config_file(tmp_path, monkeypatch):
     assert settings.telemetry.tokenizer.enabled is False
     assert settings.telemetry.tokenizer.encoding == "o200k_base"
     assert settings.telemetry.tokenizer.client_prefixes == ("openai-mcp",)
+    assert settings.search_text.exact_execution == "streaming"
     assert settings.search_text.adaptive_discovery_enabled is False
     assert settings.client_tools["openai-mcp"] == (
         "read_file",

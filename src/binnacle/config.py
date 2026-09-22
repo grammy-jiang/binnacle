@@ -108,7 +108,7 @@ class SearchTextSettings(BaseModel):
     """search_text caps and auto-context (spec docs/tools/search_text.md)."""
 
     exact_execution: Literal["materialized", "streaming"] = Field(
-        "materialized",
+        "streaming",
         description="Exact-search ingestion backend; streaming is the optimized path.",
     )
     max_results_default: int = 100
