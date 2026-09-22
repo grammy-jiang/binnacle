@@ -121,6 +121,14 @@ def _prune(reserve: int = 0) -> None:
             )
 
 
+def _termination_reason(meta: dict, rc: int | None) -> str:
+    if meta.get("stop_requested"):
+        return "stop_requested"
+    if rc is not None and rc < 0:
+        return "signal"
+    return "normal_exit"
+
+
 def record_exit(job_id: str, proc: subprocess.Popen) -> None:
     """Write an already-exited process's status to meta.json.
 
@@ -140,6 +148,7 @@ def record_exit(job_id: str, proc: subprocess.Popen) -> None:
     else:
         meta["exit_code"] = rc
     meta["ended_at"] = time.time()
+    meta["termination_reason"] = _termination_reason(meta, rc)
     try:
         _write_meta(job_id, meta)
     except OSError:
@@ -186,7 +195,12 @@ def reap_in_background(job_id: str, proc: subprocess.Popen) -> None:
 
 
 def start_job(
-    command: str, workdir: Path, stdin: str | None
+    command: str,
+    workdir: Path,
+    stdin: str | None,
+    *,
+    owner_instance_id: str | None = None,
+    boot_id: str | None = None,
 ) -> tuple[str, subprocess.Popen]:
     # The whole reservation -> process launch -> complete meta sequence is one
     # store transaction. A second concurrent start must see the first new job
@@ -224,17 +238,21 @@ def start_job(
                 stderr=subprocess.STDOUT,
                 start_new_session=True,  # own process group; survives across turns
             )
-        _write_meta(
-            job_id,
-            {
-                "command": command,
-                "workdir": str(workdir),
-                "pid": proc.pid,
-                "pgid": proc.pid,  # start_new_session ⇒ pgid == pid
-                "starttime": _proc_starttime(proc.pid),  # pid identity, see _pid_alive
-                "started_at": time.time(),
-            },
-        )
+        meta = {
+            "command": command,
+            "workdir": str(workdir),
+            "pid": proc.pid,
+            "pgid": proc.pid,  # start_new_session ⇒ pgid == pid
+            "starttime": _proc_starttime(proc.pid),  # pid identity, see _pid_alive
+            "started_at": time.time(),
+        }
+        if owner_instance_id is not None:
+            meta.update(
+                schema_version=2,
+                owner_instance_id=owner_instance_id,
+                boot_id=boot_id,
+            )
+        _write_meta(job_id, meta)
         # call= is the tool_call/tool_result id of the run_command that spawned
         # this job (binnacle.callctx); "-" when started outside a tool call.
         logger.info(
@@ -300,6 +318,9 @@ def job_state(job_id: str) -> dict | None:
         "pgid": meta.get("pgid", meta["pid"]),
         "started_at": meta["started_at"],
         "ended_at": meta.get("ended_at"),
+        "termination_reason": meta.get("termination_reason"),
+        "owner_instance_id": meta.get("owner_instance_id"),
+        "boot_id": meta.get("boot_id"),
         "runtime_s": round((meta.get("ended_at") or now) - meta["started_at"], 3),
         "last_output_age_s": (
             round(last_output_age, 1) if last_output_age is not None else None
@@ -314,6 +335,42 @@ def list_jobs() -> list[dict]:
     states = [s for jid in ids if (s := job_state(jid)) is not None]
     states.sort(key=lambda s: s["started_at"], reverse=True)
     return states
+
+
+def mark_stop_requested(job_id: str) -> None:
+    meta = _read_meta(job_id)
+    if meta is None or "exit_code" in meta or "signal" in meta:
+        return
+    meta["stop_requested"] = True
+    _write_meta(job_id, meta)
+
+
+def _record_interruption(job_id: str, meta: dict, reason: str) -> None:
+    meta["exit_code"] = None
+    meta["signal"] = None
+    meta["ended_at"] = time.time()
+    meta["termination_reason"] = reason
+    _write_meta(job_id, meta)
+    logger.warning("event=job_interrupted job_id=%s reason=%s", job_id, reason)
+
+
+def recover_previous_owner(current_owner: str, current_boot: str) -> int:
+    """Finalize non-terminal manager-owned records from an earlier owner/boot."""
+    recovered = 0
+    for job_id in job_store.list_job_ids(JOBS_DIR):
+        meta = _read_meta(job_id)
+        if meta is None or meta.get("schema_version") != 2:
+            continue
+        if "exit_code" in meta or "signal" in meta:
+            continue
+        previous_owner = meta.get("owner_instance_id")
+        previous_boot = meta.get("boot_id")
+        if previous_owner == current_owner:
+            continue
+        reason = "host_reboot" if previous_boot != current_boot else "owner_restart"
+        _record_interruption(job_id, meta, reason)
+        recovered += 1
+    return recovered
 
 
 def _signal_job(pgid: int, strays: set[int], sig: int) -> None:
