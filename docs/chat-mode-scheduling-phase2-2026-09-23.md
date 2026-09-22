@@ -1,5 +1,12 @@
 # ChatGPT Chat mode MCP scheduling - phase 2 results
 
+> **Refinement after this report:** a later unequal-duration production test
+> showed a roughly five-wide **sliding in-flight window**, not a rigid
+> five-call batch. Independent calls with already-known arguments may refill
+> freed slots while a slow call remains outstanding. The barrier described
+> below is specifically for **dependent continuation** that needs an early
+> result to construct the next call.
+
 Date: 2026-09-23, Australia/Sydney
 
 Scope: ordinary ChatGPT Chat mode with the real Raspberry Pi MCP connector.
@@ -303,3 +310,35 @@ Still uncertain:
 These are empirical ChatGPT product behaviors measured on 2026-09-23. The probe
 suite should remain on the isolated analysis branch so the properties can be
 re-measured after product changes.
+
+## Sliding-window refinement
+
+Probe widthbarrier-083431-12829 used only production read-only tools. It asked
+for one job_status(wait=8) plus five independent read_file calls.
+
+The status call started at 08:34:48.486. Four reads started at
+08:34:48.746-08:34:48.772 and completed by 08:34:48.797. The fifth read then
+started at 08:34:49.594, while the status call remained unresolved until
+08:34:56.503.
+
+This proves that five is best described as an observed maximum number of
+read-only calls simultaneously in flight. It is not a hard five-call logical
+round. Independent queued work can refill a slot before the slowest call ends.
+
+The Project instruction tested earlier used the phrase "at most five per
+tool-call round". That wording was useful for the three-call A/B test but is
+overly conservative for larger independent sets. A refined candidate for a
+future A/B test is:
+
+    With Raspberry Pi MCP, issue independent read-only tool calls concurrently.
+    Keep up to five in flight and continue independent calls as slots free.
+    Do not repeat a completed tool call. Keep non-read-only calls separate.
+
+This revised wording is a hypothesis derived from the mechanism test; it has not
+yet received the same Project-level A/B validation as the earlier wording.
+
+The distinction that remains important is dependency. A production control
+(barrier4-082451-12200) made an unpredictable token available before a blocking
+job_status completed, but the search requiring that token did not begin until
+after the status call returned. Independent refill works; result-dependent
+continuation across the slow call was not observed.

@@ -1,5 +1,12 @@
 # ChatGPT Chat mode asynchronous MCP orchestration — results
 
+> **Later refinement:** phase-2 production controls showed that the read-only
+> scheduler is not a rigid whole-batch barrier. It maintains roughly five
+> independent calls in flight and may refill a freed slot while another slow
+> call remains outstanding. The negative async result in this report applies to
+> **dependent continuation**: a later call that must consume an early result was
+> not started across a still-running slow call.
+
 **Date:** 2026-09-23 (Australia/Sydney)
 **Client under test:** ChatGPT Chat mode, real chatgpt.com browser session
 **MCP client name:** `openai-mcp`
@@ -238,3 +245,22 @@ This strengthens, rather than weakens, the value of:
   the long synchronous barrier.
 
 A full durable workflow engine is not required by this finding.
+
+## Later scheduling correction
+
+Subsequent production-only testing refined two statements in this report.
+
+First, five is an observed in-flight width for independent read-only calls, not
+a rigid per-round call count. In probe widthbarrier-083431-12829, one
+job_status(wait=8) and four fast reads occupied the first five slots. After the
+fast reads completed, a sixth independent read started while the slow status
+call still had about seven seconds left. Independent known work can therefore
+refill free slots.
+
+Second, real run_command calls are non-read-only and were observed to serialize
+rather than share the read-only parallel lane. Multiple long jobs can still run
+concurrently after successive quick background launches return their job ids.
+
+These refinements do not change the core negative result: calls that require an
+early result to construct a dependent next action did not start while another
+slow call in the same dependency sequence remained unresolved.
