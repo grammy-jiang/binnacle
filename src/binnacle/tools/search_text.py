@@ -32,32 +32,7 @@ AUTO_CONTEXT_FEW = get_settings().search_text.auto_context_few
 RG_BIN = get_settings().rg_bin
 
 
-OUTPUT_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "path": {"type": "string"},
-        "pattern": {"type": "string"},
-        "entries": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "file": {"type": "string"},
-                    "line": {"type": "integer"},
-                    "text": {"type": "string"},
-                    "context_first_line": {"type": "integer"},
-                    "context": {"type": "string"},
-                    "count": {"type": "integer"},
-                },
-                "required": ["file"],
-            },
-        },
-        "count": {"type": "integer"},
-        "truncated": {"type": "boolean"},
-        "note": {"type": "string"},
-    },
-    "required": ["path", "pattern", "count", "truncated"],
-}
+from binnacle.search_text_schema import OUTPUT_SCHEMA
 
 
 def _clip(text: str) -> str:
