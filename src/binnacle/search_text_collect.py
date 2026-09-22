@@ -12,7 +12,13 @@ def clip(text: str, max_chars: int, mark: str) -> str:
     return text[:max_chars] + mark if len(text) > max_chars else text
 
 
-def matches_glob(file_path: str, root: Path, glob: str | None) -> bool:
+def matches_glob(
+    file_path: str,
+    root: Path,
+    glob: str | None,
+    *,
+    matcher=full_match,
+) -> bool:
     if not glob:
         return True
     pattern = glob if "/" in glob else f"**/{glob}"
@@ -25,7 +31,7 @@ def matches_glob(file_path: str, root: Path, glob: str | None) -> bool:
     except ValueError:
         rel = PurePath(file_path)
     try:
-        return full_match(rel, pattern)
+        return matcher(rel, pattern)
     except ValueError as exc:
         raise CodedToolError("invalid_glob", f"Invalid glob pattern {glob!r}: {exc}")
 

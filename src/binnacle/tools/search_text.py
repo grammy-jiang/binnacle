@@ -2,6 +2,7 @@
 
 import hashlib
 import logging
+import subprocess as _subprocess
 import time
 from pathlib import Path
 from typing import Any
@@ -14,7 +15,7 @@ from binnacle.config import get_settings
 from binnacle.errors import CodedToolError
 from binnacle.indexed_context import PREFIX as INDEXED_CONTEXT_PREFIX
 from binnacle.indexed_context import get_indexed_context_service
-from binnacle.paths import nearby_hint, resolve_path
+from binnacle.paths import full_match, nearby_hint, resolve_path
 from binnacle.search_text_adaptive import (
     build_adaptive_result,
     log_adaptive_result,
@@ -34,9 +35,7 @@ from binnacle.search_text_collect import (
 from binnacle.search_text_collect import (
     collect as _collect_impl,
 )
-from binnacle.search_text_collect import (
-    matches_glob as _matches_glob,
-)
+from binnacle.search_text_collect import matches_glob as _matches_glob_impl
 from binnacle.search_text_rg import run_rg as _run_rg_impl
 from binnacle.search_text_telemetry import AdaptiveWork, ExactSearchMetrics
 
@@ -51,6 +50,7 @@ log = logging.getLogger("binnacle.search_text")
 AUTO_CONTEXT_SINGLE = get_settings().search_text.auto_context_single
 AUTO_CONTEXT_FEW = get_settings().search_text.auto_context_few
 RG_BIN = get_settings().rg_bin
+subprocess = _subprocess  # compatibility seam for existing tests/extensions
 from binnacle.search_text_schema import OUTPUT_SCHEMA
 
 
@@ -96,6 +96,10 @@ def _run_rg(
         timeout_s=SEARCH_TIMEOUT_S,
         metrics=metrics,
     )
+
+
+def _matches_glob(file_path: str, root: Path, glob: str | None) -> bool:
+    return _matches_glob_impl(file_path, root, glob, matcher=full_match)
 
 
 def _collect(

@@ -100,6 +100,38 @@ class JobTelemetryStats:
 
 
 @dataclass
+class ExactSearchStats:
+    dispatches: int = 0
+    summaries: int = 0
+    errors: int = 0
+    strategies: Counter = field(default_factory=Counter)
+    budget_outcomes: Counter = field(default_factory=Counter)
+    error_codes: Counter = field(default_factory=Counter)
+    rg_calls_total: int = 0
+    auto_context: int = 0
+    impl_ms: list[float] = field(default_factory=list)
+    rg_subprocess_ms: list[float] = field(default_factory=list)
+    rg_parse_ms: list[float] = field(default_factory=list)
+    collect_ms: list[float] = field(default_factory=list)
+    context_attach_ms: list[float] = field(default_factory=list)
+    adaptive_ms: list[float] = field(default_factory=list)
+    budget_ms: list[float] = field(default_factory=list)
+    rg_stdout_chars: list[int] = field(default_factory=list)
+    rg_events: list[int] = field(default_factory=list)
+    rg_match_events: list[int] = field(default_factory=list)
+    rg_context_events: list[int] = field(default_factory=list)
+    collect_glob_checks: list[int] = field(default_factory=list)
+    collect_glob_rejected: list[int] = field(default_factory=list)
+    accepted_matches: list[int] = field(default_factory=list)
+    accepted_files: list[int] = field(default_factory=list)
+    returned_entries: list[int] = field(default_factory=list)
+    adaptive_match_events: list[int] = field(default_factory=list)
+    adaptive_glob_checks: list[int] = field(default_factory=list)
+    events_per_accepted_match: list[float] = field(default_factory=list)
+    chars_per_returned_entry: list[float] = field(default_factory=list)
+
+
+@dataclass
 class Stats:
     records: int = 0
     startups: int = 0
@@ -133,3 +165,4 @@ class Stats:
     indexed: IndexedContextStats = field(default_factory=IndexedContextStats)
     adaptive: AdaptiveDiscoveryStats = field(default_factory=AdaptiveDiscoveryStats)
     jobs: JobTelemetryStats = field(default_factory=JobTelemetryStats)
+    exact_search: ExactSearchStats = field(default_factory=ExactSearchStats)
