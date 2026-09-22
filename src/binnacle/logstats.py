@@ -28,6 +28,11 @@ from binnacle.logstats_io import fetch_journal
 from binnacle.logstats_jobs import analyze_job_telemetry
 from binnacle.logstats_models import IndexedContextStats, Record, Stats
 from binnacle.logstats_render import indexed_context_report, render
+from binnacle.logstats_tools import (
+    analyze_tool_call,
+    analyze_tool_config,
+    analyze_tool_result,
+)
 
 _REC_START = re.compile(
     r"^\s*(?:\[(\d{2}/\d{2}/\d{2}) (\d{2}:\d{2}:\d{2})\] )?(?:INFO|ERROR|WARNING)\s+event=(\w+)"
@@ -416,8 +421,11 @@ def analyze(records: list[Record], startups: int = 0) -> Stats:
             f = plain_fields(r.body)
             if "turn" in f:
                 st.turn_calls[f["turn"].split("/")[0]] += 1
+            analyze_tool_call(st, f, _json_args(r.body))
+        elif r.event == "tool_config":
+            analyze_tool_config(st, plain_fields(r.body))
         elif r.event == "tool_result":
-            _analyze_result(st, plain_fields(r.body))
+            analyze_tool_result(st, plain_fields(r.body))
         elif r.event == "job_exit":
             f = plain_fields(r.body)
             signal = f.get("signal")
@@ -429,22 +437,3 @@ def analyze(records: list[Record], startups: int = 0) -> Stats:
     st.adaptive = analyze_adaptive_discovery(records)
     st.jobs = analyze_job_telemetry(records, plain_fields)
     return st
-
-
-def _analyze_result(st: Stats, f: dict[str, str]) -> None:
-    """One tool_result record. Lines before 2026-09-13 carry only the
-    summary's content_chars and no est_tokens; they count nowhere here."""
-    tool = f.get("tool", "?")
-    if f.get("est_tokens", "").isdigit():
-        st.results[tool] += 1
-        st.result_tokens[tool].append(int(f["est_tokens"]))
-    if f.get("truncated") == "true":
-        st.truncated[tool] += 1
-    try:
-        st.call_durations[tool].append(float(f["duration_ms"]))
-    except (KeyError, ValueError):
-        pass
-    if f.get("is_error") == "True":
-        st.tool_errors[f"{tool}: {f.get('error_class', '?')}"] += 1
-    if f.get("background_job") == "true":
-        st.background_jobs += 1

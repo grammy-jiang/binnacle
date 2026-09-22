@@ -9,11 +9,11 @@ import mimetypes
 from typing import Annotated
 
 from fastmcp import FastMCP
-from fastmcp.exceptions import ToolError
 from fastmcp.tools.base import ToolResult
 from pydantic import Field
 
 from binnacle.config import get_settings
+from binnacle.errors import CodedToolError
 from binnacle.paths import nearby_hint, resolve_path
 from binnacle.textio import decode_text, human_size
 
@@ -63,21 +63,27 @@ OUTPUT_SCHEMA = {
 def read_file_impl(path: str, start_line: int, end_line: int | None) -> ToolResult:
     resolved = resolve_path(path)
     if not resolved.exists():
-        raise ToolError(f"File not found: {resolved}.{nearby_hint(resolved.parent)}")
+        raise CodedToolError(
+            "file_not_found",
+            f"File not found: {resolved}.{nearby_hint(resolved.parent)}",
+        )
     if resolved.is_dir():
-        raise ToolError(
-            f"Path is a directory, not a file: {resolved}. Use list_files to browse it."
+        raise CodedToolError(
+            "path_is_directory",
+            f"Path is a directory, not a file: {resolved}. Use list_files to browse it.",
         )
     size = resolved.stat().st_size
     if size > READ_MAX_FILE_BYTES:
-        raise ToolError(
+        raise CodedToolError(
+            "file_too_large",
             f"File is {human_size(size)}; the limit is "
             f"{READ_MAX_FILE_BYTES // (1024 * 1024)} MB. "
-            f"Use run_command (tail, sed -n, grep) to sample it."
+            f"Use run_command (tail, sed -n, grep) to sample it.",
         )
     if end_line is not None and start_line > end_line:
-        raise ToolError(
-            f"start_line ({start_line}) is greater than end_line ({end_line})."
+        raise CodedToolError(
+            "range_invalid",
+            f"start_line ({start_line}) is greater than end_line ({end_line}).",
         )
 
     decoded = decode_text(resolved.read_bytes(), resolved)
@@ -116,8 +122,9 @@ def read_file_impl(path: str, start_line: int, end_line: int | None) -> ToolResu
             },
         )
     if start_line > total_lines:
-        raise ToolError(
-            f"start_line {start_line} exceeds total_lines {total_lines} of {resolved}."
+        raise CodedToolError(
+            "range_past_end",
+            f"start_line {start_line} exceeds total_lines {total_lines} of {resolved}.",
         )
 
     notes: list[str] = []

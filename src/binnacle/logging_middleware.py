@@ -28,6 +28,7 @@ import time
 import uuid
 from typing import Any
 
+from fastmcp.exceptions import ToolError
 from fastmcp.server.dependencies import get_http_headers
 from fastmcp.server.middleware import CallNext, Middleware, MiddlewareContext
 from fastmcp.server.middleware.logging import LoggingMiddleware
@@ -71,8 +72,18 @@ RESULT_KEYS = (
     "log_bytes",
     "quiet",
     "waited_s",
+    "runtime_s",
+    "last_output_age_s",
+    "fits_in_one_call",
+    "lossy",
+    "next_start_line",
+    "mime_guess",
+    "mode",
     "replacements",
+    "match",
+    "first_change_line",
     "action",
+    "previous_bytes",
     "bytes",
 )
 #: List-valued keys logged as their length.
@@ -308,17 +319,19 @@ class ToolLoggingMiddleware(Middleware):
             # Tool errors (ToolError, validation, a hidden tool) arrive here
             # as exceptions and become isError results only at the wire;
             # a cancelled request lands here too and is worth a record.
-            self._log(
-                "tool_result",
-                logging.WARNING,
-                who,
-                {
-                    "duration_ms": _duration_ms(start),
-                    "is_error": "True",
-                    "error_class": _token(type(e).__name__, 64),
-                    "error": _text(e, ERROR_MAX_CHARS),
-                },
-            )
+            error_fields = {
+                "duration_ms": _duration_ms(start),
+                "is_error": "True",
+                "error_class": _token(
+                    "ToolError" if isinstance(e, ToolError) else type(e).__name__, 64
+                ),
+            }
+            error_code = getattr(e, "telemetry_code", None)
+            if isinstance(error_code, str) and error_code:
+                error_fields["error_code"] = _token(error_code, 64)
+            # error= remains the final free-text field for historical parsers.
+            error_fields["error"] = _text(e, ERROR_MAX_CHARS)
+            self._log("tool_result", logging.WARNING, who, error_fields)
             raise
         finally:
             current_call_started.reset(started_token)

@@ -1,11 +1,4 @@
-"""search_text — regex content search over files (ripgrep backend).
-
-Spec: docs/tools/search_text.md. rg does the ignore-respecting walk and
-matching (--json stream); the include-glob filter runs in Python because
-rg's positive --glob overrides ignore logic (R1 lesson). Smart-case is
-fixed behavior. Few matches gain automatic context (Gemini's
-SWEBench-measured design).
-"""
+"""Regex search with ripgrep plus indexed/adaptive discovery (see docs/tools/search_text.md)."""
 
 import hashlib
 import json
@@ -15,12 +8,12 @@ from pathlib import Path, PurePath
 from typing import Annotated, Any
 
 from fastmcp import FastMCP
-from fastmcp.exceptions import ToolError
 from fastmcp.tools.base import ToolResult
 from pydantic import Field
 
 from binnacle.callctx import current_call
 from binnacle.config import get_settings
+from binnacle.errors import CodedToolError
 from binnacle.indexed_context import PREFIX as INDEXED_CONTEXT_PREFIX
 from binnacle.indexed_context import get_indexed_context_service
 from binnacle.paths import full_match, nearby_hint, resolve_path
@@ -154,9 +147,10 @@ def _enforce_result_budget(
     empty = candidate(0)
     if _structured_bytes(empty) <= SEARCH_RESULT_MAX_BYTES:
         return empty, True
-    raise ToolError(
+    raise CodedToolError(
+        "response_budget_exceeded",
         "Search result metadata exceeds the configured response budget. "
-        "Use a shorter pattern or a more specific path."
+        "Use a shorter pattern or a more specific path.",
     )
 
 
@@ -175,18 +169,21 @@ def _run_rg(
             cmd, capture_output=True, text=True, timeout=SEARCH_TIMEOUT_S, check=False
         )
     except FileNotFoundError:
-        raise ToolError(
-            "ripgrep (rg) is not available; use run_command (grep -rn) instead."
+        raise CodedToolError(
+            "rg_missing",
+            "ripgrep (rg) is not available; use run_command (grep -rn) instead.",
         )
     except subprocess.TimeoutExpired:
-        raise ToolError(
+        raise CodedToolError(
+            "rg_timeout",
             f"Search timed out after {SEARCH_TIMEOUT_S} s. Narrow the scope "
-            f"with a more specific path or a glob filter."
+            f"with a more specific path or a glob filter.",
         )
     if proc.returncode == 2 or (proc.returncode not in (0, 1) and proc.stderr):
-        raise ToolError(
+        raise CodedToolError(
+            "rg_rejected",
             f"ripgrep rejected the search: {proc.stderr.strip()[-300:]}. "
-            f"Fix the pattern, or use fixed_strings for literal text."
+            f"Fix the pattern, or use fixed_strings for literal text.",
         )
     events = []
     for line in proc.stdout.splitlines():
@@ -212,7 +209,7 @@ def _matches_glob(file_path: str, root: Path, glob: str | None) -> bool:
     try:
         return full_match(rel, pattern)
     except ValueError as e:
-        raise ToolError(f"Invalid glob pattern {glob!r}: {e}")
+        raise CodedToolError("invalid_glob", f"Invalid glob pattern {glob!r}: {e}")
 
 
 def _collect(
@@ -273,10 +270,15 @@ def search_text_impl(
     line_numbers: bool = False,
 ) -> ToolResult:
     if not pattern:
-        raise ToolError("The 'pattern' parameter must be non-empty.")
+        raise CodedToolError(
+            "empty_pattern", "The 'pattern' parameter must be non-empty."
+        )
     resolved = resolve_path(path)
     if not resolved.exists():
-        raise ToolError(f"Path not found: {resolved}.{nearby_hint(resolved.parent)}")
+        raise CodedToolError(
+            "path_not_found",
+            f"Path not found: {resolved}.{nearby_hint(resolved.parent)}",
+        )
     max_results = max(1, min(max_results, SEARCH_MAX_RESULTS_CAP))
 
     indexed_mode = not fixed_strings and pattern.startswith(INDEXED_CONTEXT_PREFIX)
@@ -289,9 +291,10 @@ def search_text_impl(
     )
     if indexed_mode:
         if glob is not None or names_only or context_lines not in (None, 0):
-            raise ToolError(
+            raise CodedToolError(
+                "indexed_args_invalid",
                 "@context uses a fixed bounded context package; omit glob, "
-                "context_lines and names_only. Use ordinary regex mode for those controls."
+                "context_lines and names_only. Use ordinary regex mode for those controls.",
             )
         return get_indexed_context_service().search(pattern, resolved)
 
@@ -299,7 +302,6 @@ def search_text_impl(
     events, _ = _run_rg(resolved, pattern, fixed_strings, explicit_context)
     matches, line_map, total, truncated = _collect(events, resolved, glob, max_results)
 
-    # Auto-context (Gemini's design): few matches, none asked for, not names_only.
     if (
         not names_only
         and context_lines is None

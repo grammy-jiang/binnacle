@@ -197,6 +197,7 @@ def test_tool_error_is_a_result_line_with_its_class(caplog):
     result = _fields(results[0])
     assert result["is_error"] == "True"
     assert result["error_class"] == "ToolError"
+    assert result["error_code"] == "path_outside_root"
     assert (
         results[0].endswith(
             "error=Path outside allowed roots (/home/grammy-jiang/Projects, /tmp): /etc/passwd"
@@ -359,6 +360,18 @@ def test_effective_config_line(caplog):
     assert "tokenizer_enabled=" in lines[0]
     assert "tokenizer_encoding=" in lines[0]
     assert "tokenizer_clients=" in lines[0]
+    tool_lines = [
+        r.getMessage() for r in caplog.records if "event=tool_config" in r.getMessage()
+    ]
+    assert len(tool_lines) == 6
+    by_tool = {_fields(line)["tool"]: _fields(line) for line in tool_lines}
+    assert by_tool["read_file"]["max_chars"] == "24000"
+    assert by_tool["search_text"]["result_max_bytes"] == "65536"
+    assert by_tool["run_command"]["wait_max_s"] == "50"
+    assert by_tool["jobs"]["warmup_s"] == "1.0"
+    assert by_tool["jobs"]["configured_owner"] in {"auto", "embedded", "manager"}
+    assert by_tool["jobs"]["effective_owner"] in {"embedded", "manager"}
+    assert by_tool["jobs"]["stop_sigterm_grace_s"] == "5.0"
 
 
 def test_result_fields_add_configured_tokenizer_measurement():

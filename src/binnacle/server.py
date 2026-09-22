@@ -12,6 +12,7 @@ import os
 from fastmcp import FastMCP
 from fastmcp.server.auth import StaticTokenVerifier
 
+from binnacle import jobs
 from binnacle.config import get_settings
 from binnacle.identity import ClientIdentity
 from binnacle.logging_middleware import (
@@ -42,6 +43,11 @@ def _version() -> str:
         return "?"
 
 
+def _log_tool_config(tool: str, **fields: object) -> None:
+    rendered = " ".join(f"{key}={value}" for key, value in fields.items())
+    logger.info("event=tool_config tool=%s %s", tool, rendered)
+
+
 def log_effective_config() -> None:
     """One journal line per (re)start naming the settings that change behavior."""
     s = get_settings()
@@ -67,6 +73,57 @@ def log_effective_config() -> None:
         str(s.telemetry.tokenizer.enabled).lower(),
         s.telemetry.tokenizer.encoding,
         ",".join(s.telemetry.tokenizer.client_prefixes),
+    )
+    _log_tool_config(
+        "read_file",
+        max_lines=s.read_file.max_lines,
+        max_chars=s.read_file.max_chars,
+        max_line_chars=s.read_file.max_line_chars,
+        max_file_bytes=s.read_file.max_file_bytes,
+    )
+    _log_tool_config(
+        "list_files",
+        max_results_default=s.list_files.max_results_default,
+        max_results_cap=s.list_files.max_results_cap,
+        rg_timeout_s=s.list_files.rg_timeout_s,
+        rg_bin=s.rg_bin,
+    )
+    _log_tool_config(
+        "search_text",
+        max_results_default=s.search_text.max_results_default,
+        max_results_cap=s.search_text.max_results_cap,
+        timeout_s=s.search_text.timeout_s,
+        max_line_chars=s.search_text.max_line_chars,
+        result_max_bytes=s.search_text.result_max_bytes,
+        auto_context_single=s.search_text.auto_context_single,
+        auto_context_few=s.search_text.auto_context_few,
+        adaptive_enabled=str(s.search_text.adaptive_discovery_enabled).lower(),
+        adaptive_detailed_files=s.search_text.adaptive_detailed_files,
+        adaptive_total_files=s.search_text.adaptive_total_files,
+        adaptive_representative_matches=s.search_text.adaptive_representative_matches,
+        adaptive_snippet_chars=s.search_text.adaptive_snippet_chars,
+    )
+    _log_tool_config(
+        "run_command",
+        wait_default_s=s.run_command.wait_default_s,
+        wait_max_s=s.run_command.wait_max_s,
+        auto_background_clients=len(s.run_command.auto_background_patterns),
+    )
+    _log_tool_config(
+        "jobs",
+        configured_owner=s.jobs.owner,
+        effective_owner=jobs.OWNER_MODE,
+        keep_newest=s.jobs.keep_newest,
+        listing_history_limit=s.jobs.listing_history_limit,
+        listing_command_preview_chars=s.jobs.listing_command_preview_chars,
+        max_output_chars=s.jobs.max_output_chars,
+        warmup_s=s.jobs.warmup_s,
+        quiet_after_s=s.jobs.quiet_after_s,
+        stop_sigterm_grace_s=jobs.STOP_SIGTERM_GRACE_S,
+        stop_sigkill_grace_s=jobs.STOP_SIGKILL_GRACE_S,
+    )
+    _log_tool_config(
+        "edit_file", snippet_context_lines=s.edit_file.snippet_context_lines
     )
 
 

@@ -11,11 +11,11 @@ from pathlib import Path
 from typing import Annotated
 
 from fastmcp import FastMCP
-from fastmcp.exceptions import ToolError
 from fastmcp.tools.base import ToolResult
 from pydantic import Field
 
 from binnacle.config import get_settings
+from binnacle.errors import CodedToolError
 from binnacle.paths import full_match, nearby_hint, resolve_path
 
 LIST_MAX_RESULTS_DEFAULT = get_settings().list_files.max_results_default
@@ -105,20 +105,23 @@ def _glob_mode(
             check=False,
         )
     except FileNotFoundError:
-        raise ToolError(
+        raise CodedToolError(
+            "rg_missing",
             "ripgrep (rg) is not available on this system; "
-            "use run_command (find, ls) instead."
+            "use run_command (find, ls) instead.",
         )
     except subprocess.TimeoutExpired:
-        raise ToolError(
+        raise CodedToolError(
+            "rg_timeout",
             f"Glob search timed out after {RG_TIMEOUT_S} s in {root}. "
-            f"Narrow the glob or point path at a subdirectory."
+            f"Narrow the glob or point path at a subdirectory.",
         )
     if proc.returncode not in (0, 1):
         stderr = proc.stderr.strip()[-300:]
-        raise ToolError(
+        raise CodedToolError(
+            "rg_failed",
             f"ripgrep failed in {root}: {stderr or 'unknown error'}. "
-            f"Use run_command (find, ls) as a fallback."
+            f"Use run_command (find, ls) as a fallback.",
         )
 
     try:
@@ -128,7 +131,7 @@ def _glob_mode(
             if line and full_match(line, pattern)
         ]
     except ValueError as e:
-        raise ToolError(f"Invalid glob pattern {glob!r}: {e}")
+        raise CodedToolError("invalid_glob", f"Invalid glob pattern {glob!r}: {e}")
     truncated = len(lines) > max_results
     entries = []
     for line in lines[:max_results]:
@@ -171,12 +174,14 @@ def list_files_impl(
 ) -> ToolResult:
     resolved = resolve_path(path)
     if not resolved.exists():
-        raise ToolError(
-            f"Directory not found: {resolved}.{nearby_hint(resolved.parent)}"
+        raise CodedToolError(
+            "directory_not_found",
+            f"Directory not found: {resolved}.{nearby_hint(resolved.parent)}",
         )
     if not resolved.is_dir():
-        raise ToolError(
-            f"Path is a file, not a directory: {resolved}. Use read_file to read it."
+        raise CodedToolError(
+            "path_is_file",
+            f"Path is a file, not a directory: {resolved}. Use read_file to read it.",
         )
     max_results = max(1, min(max_results, LIST_MAX_RESULTS_CAP))
     if glob:

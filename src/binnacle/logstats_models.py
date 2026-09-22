@@ -120,6 +120,13 @@ class Stats:
     call_durations: dict = field(default_factory=lambda: defaultdict(list))
     truncated: Counter = field(default_factory=Counter)  # tool -> truncated=true
     tool_errors: Counter = field(default_factory=Counter)  # "tool: class" -> n
+    error_codes: Counter = field(default_factory=Counter)  # "tool: stable_code" -> n
+    read_file_requests: Counter = field(default_factory=Counter)
+    read_file_outcomes: Counter = field(default_factory=Counter)
+    read_file_lines_clipped: int = 0
+    list_files_requests: Counter = field(default_factory=Counter)
+    tool_config_variants: dict = field(default_factory=lambda: defaultdict(Counter))
+    tool_config_latest: dict[str, str] = field(default_factory=dict)
     background_jobs: int = 0
     job_exits: Counter = field(default_factory=Counter)  # exit code / signal -> n
     turn_calls: Counter = field(default_factory=Counter)  # tunnel turn -> calls

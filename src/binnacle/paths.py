@@ -9,9 +9,8 @@ import re
 from functools import lru_cache
 from pathlib import Path, PurePath, PurePosixPath
 
-from fastmcp.exceptions import ToolError
-
 from binnacle.config import get_settings
+from binnacle.errors import CodedToolError
 
 DEFAULT_ROOT = get_settings().roots.default_root
 ALLOWED_ROOTS = get_settings().roots.allowed
@@ -31,10 +30,14 @@ def resolve_path(raw: str) -> Path:
         # expanduser() raises RuntimeError for `~nosuchuser`; resolve() can
         # raise OSError on pathological names. Found by the property test
         # 2026-09-13: either would reach the client as an internal error.
-        raise ToolError(f"Cannot resolve path {raw!r}: {e}") from None
+        raise CodedToolError(
+            "path_resolve_failed", f"Cannot resolve path {raw!r}: {e}"
+        ) from None
     if not any(resolved.is_relative_to(root) for root in ALLOWED_ROOTS):
         roots = ", ".join(str(r) for r in ALLOWED_ROOTS)
-        raise ToolError(f"Path outside allowed roots ({roots}): {resolved}")
+        raise CodedToolError(
+            "path_outside_root", f"Path outside allowed roots ({roots}): {resolved}"
+        )
     return resolved
 
 

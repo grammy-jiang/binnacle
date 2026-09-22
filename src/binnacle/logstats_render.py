@@ -174,6 +174,32 @@ def render(st: Stats) -> str:
         out.append("\ntool errors by class:")
         for name, n in st.tool_errors.most_common():
             out.append(f"  {name:40s} {n}")
+    if st.error_codes:
+        out.append("\ntool errors by stable code:")
+        for name, n in st.error_codes.most_common():
+            out.append(f"  {name:48s} {n}")
+    if st.read_file_requests:
+        req = ", ".join(
+            f"{key}={value}" for key, value in st.read_file_requests.most_common()
+        )
+        outcomes = ", ".join(
+            f"{key}={value}" for key, value in st.read_file_outcomes.most_common()
+        )
+        out.append(f"\nread_file behavior: requests {req}")
+        if outcomes:
+            out.append(
+                f"  outcomes: {outcomes}; lines_clipped={st.read_file_lines_clipped}"
+            )
+    if st.list_files_requests:
+        req = ", ".join(
+            f"{key}={value}" for key, value in st.list_files_requests.most_common()
+        )
+        out.append(f"\nlist_files behavior: requests {req}")
+    if st.tool_config_latest:
+        out.append("\neffective tool config (latest record in window):")
+        for tool in sorted(st.tool_config_latest):
+            variants = len(st.tool_config_variants[tool])
+            out.append(f"  {tool}: variants={variants} {st.tool_config_latest[tool]}")
     if st.job_exits:
         exits = ", ".join(f"{k}: {v}" for k, v in st.job_exits.most_common())
         out.append(f"\njob exits by code (job_exit lines): {exits}")

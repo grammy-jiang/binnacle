@@ -1,6 +1,6 @@
 # Tool telemetry review — 2026-09-22
 
-Status: review/design only. No production tool behavior changed by this review.
+Status: review baseline; Phase A implemented on `feature/tool-telemetry-phase-a`.
 
 ## 1. Objective
 
@@ -272,3 +272,11 @@ The next implementation should therefore **not** be “make every tool look like
 `run_command`”. The correct target is a common high-quality telemetry baseline plus
 specialized events only where the tool contains hidden internal decisions that matter to
 performance or retrieval quality.
+
+## 9. Phase A implementation note
+
+Phase A follows the review recommendation without adding read/list-specific per-call event
+families. It adds shared scalar lifting, startup `tool_config` provenance, a
+`CodedToolError` telemetry code carried through the existing ToolError contract, and stats
+aggregation for stable error reasons and read/list behavior. Exact-search phase timing is
+unchanged and remains Phase B.
