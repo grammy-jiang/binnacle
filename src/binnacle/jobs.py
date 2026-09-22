@@ -409,6 +409,10 @@ def stop_job_embedded(job_id: str) -> dict | None:
     if state is None:
         return None
     if state["state"] != "running":
+        if state["state"] == "unknown":
+            meta = _read_meta(job_id)
+            if meta is not None and meta.get("stop_requested"):
+                return await_exit(job_id, STOP_SIGKILL_GRACE_S)
         return state
     pgid = state["pgid"]
     # Collect descendants BEFORE signaling: a setsid()'d child is outside the

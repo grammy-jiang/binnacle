@@ -259,3 +259,26 @@ adaptive_total_files = 20
         match="adaptive_total_files must be >= adaptive_detailed_files",
     ):
         config.Settings()
+
+
+def test_run_command_rejects_empty_auto_background_client_key():
+    with pytest.raises(
+        ValidationError, match="auto_background_patterns keys must be non-empty"
+    ):
+        config.RunCommandSettings(auto_background_patterns={"": ("pytest",)})
+
+
+def test_should_auto_background_covers_client_prefix_matching():
+    settings = config.RunCommandSettings(
+        auto_background_patterns={
+            "openai-mcp": (r"pytest", r"tox"),
+            "other": (r"never",),
+        }
+    )
+
+    assert settings.should_auto_background(None, "pytest -q") is False
+    assert settings.should_auto_background("openai-mcp(ChatGPT)", "pytest -q") is True
+    assert (
+        settings.should_auto_background("openai-mcp(ChatGPT)", "python app.py") is False
+    )
+    assert settings.should_auto_background("unmatched-client", "pytest -q") is False

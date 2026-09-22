@@ -114,9 +114,16 @@ def stop_job(job_id: str) -> dict | None:
     from binnacle import job_client, jobs
 
     state = jobs.job_state(job_id)
-    if state is None or state["state"] != "running":
-        return state
+    if state is None:
+        return None
     meta = jobs._read_meta(job_id)
+    if state["state"] == "unknown" and meta is not None and meta.get("stop_requested"):
+        # Another concurrent stop may have killed the process just before its
+        # reaper persisted the terminal state. Wait for that durable record
+        # instead of exposing the transient post-death ``unknown`` window.
+        return jobs.await_exit(job_id, jobs.STOP_SIGKILL_GRACE_S)
+    if state["state"] != "running":
+        return state
     if (
         meta is not None
         and meta.get("schema_version") == 2

@@ -172,3 +172,22 @@ def test_stdout_eof_does_not_disable_absolute_timeout(tmp_path):
     assert exc.value.telemetry_code == "rg_timeout"
     assert stream.stats.timed_out is True
     assert stream._proc is not None and stream._proc.poll() is not None
+
+
+def test_iteration_before_start_is_rejected(tmp_path):
+    stream = RgJsonStream(tmp_path, "x", False, 0, rg_bin="rg", timeout_s=1)
+    with pytest.raises(RuntimeError, match="entered before iteration"):
+        next(iter(stream))
+
+
+def test_unstarted_stream_helpers_and_close_are_safe(tmp_path):
+    stream = RgJsonStream(tmp_path, "x", False, 0, rg_bin="rg", timeout_s=1)
+    assert stream._stderr_tail() == ""
+    stream._record_timing()
+    assert stream.stats.wall_ms == 0 and stream.stats.stream_cpu_ms == 0
+    stream._finish()
+    assert stream._finished is True
+
+    unopened = RgJsonStream(tmp_path, "x", False, 0, rg_bin="rg", timeout_s=1)
+    unopened.close()
+    assert unopened._finished is True

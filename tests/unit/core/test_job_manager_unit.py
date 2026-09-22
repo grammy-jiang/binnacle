@@ -45,3 +45,8 @@ def test_job_manager_unit_rejects_bad_mode_and_missing_binary():
         job_manager_unit.job_manager_params("staging", None)
     with pytest.raises(units.UnitError, match="needs the `jobs` executable"):
         job_manager_unit.job_manager_unit_spec({"mode": "prod"})
+
+    with pytest.raises(units.UnitError, match="development mode needs the checkout"):
+        job_manager_unit.job_manager_params("dev", None)
+    with pytest.raises(units.UnitError, match="unknown jobs mode"):
+        job_manager_unit.job_manager_unit_spec({"mode": "staging", "jobs": "/bin/true"})

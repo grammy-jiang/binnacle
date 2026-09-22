@@ -45,3 +45,19 @@ def test_unreadable_or_invalid_main_pid_fails_safe():
     assert not doctor_jobs.server_uses_manager(
         "mcp.service", run=fake_systemctl("active"), environ=lambda pid: None
     )
+
+
+def test_nonpositive_main_pid_and_missing_proc_environment_fail_safe():
+    assert not doctor_jobs.server_uses_manager(
+        "mcp.service", run=fake_systemctl("active", "0"), environ=lambda pid: b""
+    )
+    assert doctor_jobs._read_process_environ(2**30) is None
+
+
+def test_busy_reasons_with_no_jobs_and_no_calls_is_empty(tmp_path):
+    assert (
+        doctor_jobs.server_busy_reasons(
+            "mcp.service", tmp_path / "missing", fetch=lambda unit, window: ""
+        )
+        == []
+    )
