@@ -166,6 +166,7 @@ def test_setup_reports_an_executable_it_cannot_resolve(host, capsys, monkeypatch
 
 
 def quiet(monkeypatch, reasons: list[str] | None = None) -> None:
+    monkeypatch.setattr(cli.doctor_jobs, "server_uses_manager", lambda unit: True)
     monkeypatch.setattr(
         doctor, "server_busy_reasons", lambda *args, **kwargs: reasons or []
     )
@@ -216,6 +217,23 @@ def test_mode_switch_rewrites_reloads_and_restarts_at_a_quiet_moment(
     marker = units.read_marker(host.unit.read_text())
     assert marker is not None and marker.params["mode"] == "dev"
     assert host.calls == [("daemon-reload",), ("restart", cli.SERVER_UNIT)]
+
+
+def test_mode_first_upgrade_still_protects_embedded_jobs(host, capsys, monkeypatch):
+    cli.setup(dev=host.repo, port=8000)
+    capsys.readouterr()
+    monkeypatch.setattr(cli.doctor_jobs, "server_uses_manager", lambda unit: False)
+    seen = {}
+
+    def busy(*args, **kwargs):
+        seen.update(kwargs)
+        return ["1 legacy background job(s) running"]
+
+    monkeypatch.setattr(doctor, "server_busy_reasons", busy)
+    with pytest.raises(SystemExit):
+        cli.mode("prod")
+    assert seen["include_jobs"] is True
+    assert "legacy background job" in capsys.readouterr().out
 
 
 def test_mode_embedded_rollback_still_blocks_on_running_jobs(host, capsys, monkeypatch):

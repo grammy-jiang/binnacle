@@ -19,7 +19,7 @@ from typing import Annotated, Literal
 
 import cyclopts
 
-from binnacle import units
+from binnacle import doctor_jobs, units
 from binnacle.config import get_settings
 from binnacle.job_manager_unit import (
     JOBS_UNIT,
@@ -98,6 +98,70 @@ def serve(
     )
 
 
+def _setup_unit_plans(
+    mode: str, dev: Path | None, port: int, adopt: bool
+) -> tuple[list[tuple[Path, units.UnitSpec]], dict[str, units.WritePlan]]:
+    try:
+        server_spec = server_unit_spec(
+            server_params(mode, dev, get_settings().serve.host, port)
+        )
+        jobs_spec = job_manager_unit_spec(job_manager_params(mode, dev))
+    except units.UnitError as exc:
+        print(exc)
+        raise SystemExit(1) from None
+    unit_plans = [
+        (UNIT_DIR / JOBS_UNIT, jobs_spec),
+        (UNIT_DIR / SERVER_UNIT, server_spec),
+    ]
+    planned: dict[str, units.WritePlan] = {}
+    for unit_path, spec in unit_plans:
+        plan = units.plan_write(unit_path, spec, adopt=adopt)
+        planned[spec.name] = plan
+        if plan.diff:
+            print(plan.diff + "\n")
+        if plan.action == "refuse":
+            print(plan.reason)
+            raise SystemExit(1)
+    return unit_plans, planned
+
+
+def _apply_setup_units(
+    unit_plans: list[tuple[Path, units.UnitSpec]],
+    planned: dict[str, units.WritePlan],
+    mode: str,
+    act: Callable[[str, Callable[[], object]], None],
+    actions: list[str],
+) -> None:
+    for unit_path, spec in unit_plans:
+        plan = planned[spec.name]
+        if plan.action == "unchanged":
+            actions.append(f"keep {unit_path} (already what setup writes, {mode} mode)")
+            continue
+        verb = "write" if plan.action == "create" else "rewrite"
+        description = f"{verb} {unit_path} ({mode} mode)"
+        if plan.action == "rewrite":
+            description = (
+                f"{verb} {unit_path} ({mode} mode; a copy of the old file goes to "
+                f"{BACKUP_DIR})"
+            )
+        act(description, partial(units.write_unit, unit_path, plan, BACKUP_DIR))
+
+
+def _print_setup_restart_hints(planned: dict[str, units.WritePlan], mode: str) -> None:
+    jobs_plan = planned[JOBS_UNIT]
+    if jobs_plan.action == "rewrite" and _unit_state(JOBS_UNIT) == "active":
+        print(
+            f"{JOBS_UNIT} is running the previous unit/code; leave it running while "
+            "jobs are active and restart it at a quiet moment."
+        )
+    server_plan = planned[SERVER_UNIT]
+    if server_plan.action == "rewrite" and _unit_state(SERVER_UNIT) == "active":
+        print(
+            f"{SERVER_UNIT} is running on the previous unit file; restart it at "
+            f"a quiet moment: `binnacle mode {mode}`"
+        )
+
+
 @app.command
 def setup(
     dev: Path | None = None,
@@ -129,54 +193,15 @@ def setup(
         if not dry_run:
             fn()
 
-    # 1. Token (0600, referenced by the server and by the tunnel config).
     if not TOKEN_FILE.exists():
         act(f"generate bearer token at {TOKEN_FILE} (mode 0600)", _write_token)
     else:
         actions.append(f"keep existing token at {TOKEN_FILE}")
 
-    # 2. Render both managed units before writing either one.
     mode = "dev" if dev is not None else "prod"
-    try:
-        server_spec = server_unit_spec(
-            server_params(mode, dev, get_settings().serve.host, port)
-        )
-        jobs_spec = job_manager_unit_spec(job_manager_params(mode, dev))
-    except units.UnitError as e:
-        print(e)
-        raise SystemExit(1) from None
+    unit_plans, planned = _setup_unit_plans(mode, dev, port, adopt)
+    _apply_setup_units(unit_plans, planned, mode, act, actions)
 
-    unit_plans = [
-        (UNIT_DIR / JOBS_UNIT, jobs_spec),
-        (UNIT_DIR / SERVER_UNIT, server_spec),
-    ]
-    planned: dict[str, units.WritePlan] = {}
-    for unit_path, spec in unit_plans:
-        plan = units.plan_write(unit_path, spec, adopt=adopt)
-        planned[spec.name] = plan
-        if plan.diff:
-            print(plan.diff + "\n")
-        if plan.action == "refuse":
-            print(plan.reason)
-            raise SystemExit(1)
-
-    # 3. Write both unit files. The jobs unit is written first so the server can
-    # safely switch to manager ownership after daemon-reload.
-    for unit_path, spec in unit_plans:
-        plan = planned[spec.name]
-        if plan.action == "unchanged":
-            actions.append(f"keep {unit_path} (already what setup writes, {mode} mode)")
-            continue
-        verb = "write" if plan.action == "create" else "rewrite"
-        act(
-            f"{verb} {unit_path} ({mode} mode; a copy of the old file goes to "
-            f"{BACKUP_DIR})"
-            if plan.action == "rewrite"
-            else f"{verb} {unit_path} ({mode} mode)",
-            partial(units.write_unit, unit_path, plan, BACKUP_DIR),
-        )
-
-    # 4. Load once, start the stable job owner first, then the MCP control plane.
     act("systemctl --user daemon-reload", lambda: _systemctl("daemon-reload"))
     act(
         f"systemctl --user enable --now {JOBS_UNIT}",
@@ -192,26 +217,14 @@ def setup(
     )
 
     prefix = "would " if dry_run else ""
-    for a in actions:
-        print(f"{prefix}{a}")
+    for action in actions:
+        print(f"{prefix}{action}")
     if dry_run:
         print("\ndry run: nothing was changed.")
         return
     print("\nserver side is configured. For ChatGPT, the tunnel is a separate")
     print("companion: `binnacle-tunnel setup` once its profile is written.")
-
-    jobs_plan = planned[JOBS_UNIT]
-    if jobs_plan.action == "rewrite" and _unit_state(JOBS_UNIT) == "active":
-        print(
-            f"{JOBS_UNIT} is running the previous unit/code; leave it running while "
-            "jobs are active and restart it at a quiet moment."
-        )
-    server_plan = planned[SERVER_UNIT]
-    if server_plan.action == "rewrite" and _unit_state(SERVER_UNIT) == "active":
-        print(
-            f"{SERVER_UNIT} is running on the previous unit file; restart it at "
-            f"a quiet moment: `binnacle mode {mode}`"
-        )
+    _print_setup_restart_hints(planned, mode)
 
 
 def _current_marker() -> units.Marker | None:
@@ -288,10 +301,12 @@ def mode(
         from binnacle import doctor as checks
 
         job_settings = get_settings().jobs
+        include_jobs = (
+            job_settings.owner == "embedded"
+            or not doctor_jobs.server_uses_manager(SERVER_UNIT)
+        )
         busy = checks.server_busy_reasons(
-            SERVER_UNIT,
-            job_settings.dir,
-            include_jobs=job_settings.owner == "embedded",
+            SERVER_UNIT, job_settings.dir, include_jobs=include_jobs
         )
         if busy:
             print("not a quiet moment for a restart:")
