@@ -101,6 +101,7 @@ def test_names_only_and_budget_outcome_are_orthogonal(tmp_path, caplog, monkeypa
 
 def test_adaptive_summary_includes_second_scan_work(tmp_path, caplog, monkeypatch):
     (tmp_path / "a.py").write_text(("hit " + "x" * 200 + "\n") * 80)
+    monkeypatch.setattr(st.SEARCH_SETTINGS, "adaptive_discovery_enabled", True)
     monkeypatch.setattr(st, "SEARCH_RESULT_MAX_BYTES", 2_048)
     token = current_call.set("exact-adaptive")
     try:
@@ -194,6 +195,7 @@ def test_adaptive_attempt_can_fall_back_to_ordinary_budget(
     tmp_path, caplog, monkeypatch
 ):
     (tmp_path / "many.txt").write_text(("hit " + "x" * 100 + "\n") * 80)
+    monkeypatch.setattr(st.SEARCH_SETTINGS, "adaptive_discovery_enabled", True)
     monkeypatch.setattr(st, "SEARCH_RESULT_MAX_BYTES", 2048)
     monkeypatch.setattr(st, "build_adaptive_result", lambda *a, **k: None)
     token = current_call.set("exact-adaptive-fallback")
