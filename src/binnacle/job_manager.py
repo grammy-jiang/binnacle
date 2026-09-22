@@ -13,6 +13,7 @@ import os
 import socket
 import socketserver
 import subprocess
+import time
 import uuid
 from pathlib import Path
 from typing import Any, cast
@@ -44,6 +45,13 @@ def _notify_systemd_ready() -> None:
         log.exception("event=job_manager_notify_error")
 
 
+def _package_version() -> str:
+    try:
+        return importlib.metadata.version("binnacle-mcp")
+    except importlib.metadata.PackageNotFoundError:
+        return "?"
+
+
 def _boot_id() -> str:
     try:
         return Path("/proc/sys/kernel/random/boot_id").read_text().strip()
@@ -58,23 +66,42 @@ class _ThreadingUnixServer(socketserver.ThreadingMixIn, socketserver.UnixStreamS
 class _Handler(socketserver.StreamRequestHandler):
     def handle(self) -> None:
         manager = cast(JobManager, self.server.manager)  # type: ignore[attr-defined]
+        request: dict[str, Any] = {}
+        response: dict[str, Any] = {}
         try:
             raw = self.rfile.readline()
-            request = json.loads(raw)
-            if not isinstance(request, dict):
+            decoded = json.loads(raw)
+            if not isinstance(decoded, dict):
                 raise TypeError("request must be a JSON object")
+            request = decoded
             response = manager.dispatch(request)
         except (json.JSONDecodeError, ValueError, KeyError, TypeError) as exc:
+            log.warning(
+                "event=job_manager_request_invalid op=%s call=%s error_class=%s",
+                request.get("op", "?"),
+                request.get("call_id", "-"),
+                type(exc).__name__,
+            )
             response = {"ok": False, "error": f"invalid job-manager request: {exc}"}
-        except Exception:  # isolate one malformed/failed request
-            log.exception("event=job_manager_request_error")
+        except Exception as exc:  # isolate one malformed/failed request
+            log.exception(
+                "event=job_manager_request_error op=%s call=%s error_class=%s",
+                request.get("op", "?"),
+                request.get("call_id", "-"),
+                type(exc).__name__,
+            )
             response = {"ok": False, "error": "internal job-manager error"}
         try:
             self.wfile.write(
                 json.dumps(response, separators=(",", ":")).encode() + b"\n"
             )
         except (BrokenPipeError, ConnectionResetError):
-            log.info("event=job_manager_client_disconnected")
+            log.info(
+                "event=job_manager_client_disconnected op=%s call=%s job_id=%s",
+                request.get("op", "?"),
+                request.get("call_id", "-"),
+                response.get("job_id", "-"),
+            )
 
 
 class JobManager:
@@ -95,16 +122,12 @@ class JobManager:
             return {"ok": False, "error": "unsupported job-manager protocol version"}
         op = request.get("op")
         if op == "ping":
-            try:
-                package_version = importlib.metadata.version("binnacle-mcp")
-            except importlib.metadata.PackageNotFoundError:
-                package_version = "?"
             return {
                 "ok": True,
                 "version": PROTOCOL_VERSION,
                 "owner_instance_id": self.owner_instance_id,
                 "boot_id": self.boot_id,
-                "package_version": package_version,
+                "package_version": _package_version(),
                 "pid": os.getpid(),
             }
         if op == "start":
@@ -114,6 +137,7 @@ class JobManager:
         return {"ok": False, "error": f"unknown job-manager operation {op!r}"}
 
     def _start(self, request: dict[str, Any]) -> dict[str, Any]:
+        impl_started = time.perf_counter()
         command = request["command"]
         workdir = Path(request["workdir"])
         stdin = request.get("stdin")
@@ -127,6 +151,7 @@ class JobManager:
             raise ValueError("wait_seconds outside manager bounds")
 
         token = current_call.set(call_id)
+        launch_started = time.perf_counter()
         try:
             job_id, proc = jobs.start_job(
                 command,
@@ -139,6 +164,7 @@ class JobManager:
             return {"ok": False, "error": f"could not start job: {exc}"}
         finally:
             current_call.reset(token)
+        launch_ms = (time.perf_counter() - launch_started) * 1000
 
         try:
             proc.wait(timeout=wait_seconds)
@@ -146,20 +172,47 @@ class JobManager:
         except subprocess.TimeoutExpired:
             jobs.reap_in_background(job_id, proc)
         state = jobs.job_state(job_id)
+        returned_state = state["state"] if state else "unknown"
+        log.info(
+            "event=job_owner_timing op=start call=%s job_id=%s owner_instance=%s "
+            "wait_s=%s launch_ms=%.2f impl_ms=%.2f state=%s",
+            call_id,
+            job_id,
+            self.owner_instance_id[:12],
+            wait_seconds,
+            launch_ms,
+            (time.perf_counter() - impl_started) * 1000,
+            returned_state,
+        )
         return {
             "ok": True,
             "job_id": job_id,
-            "state": state["state"] if state else "unknown",
+            "state": returned_state,
         }
 
     def _stop(self, request: dict[str, Any]) -> dict[str, Any]:
+        impl_started = time.perf_counter()
         job_id = request["job_id"]
+        call_id = str(request.get("call_id") or "-")
         if not isinstance(job_id, str):
             raise TypeError("job_id must be a string")
-        job_owner.mark_stop_requested(job_id)
-        state = jobs.stop_job_embedded(job_id)
+        token = current_call.set(call_id)
+        try:
+            job_owner.mark_stop_requested(job_id)
+            state = jobs.stop_job_embedded(job_id)
+        finally:
+            current_call.reset(token)
         if state is None:
             return {"ok": False, "error": f"no job with id {job_id!r}"}
+        log.info(
+            "event=job_owner_timing op=stop call=%s job_id=%s owner_instance=%s "
+            "impl_ms=%.2f state=%s",
+            call_id,
+            job_id,
+            self.owner_instance_id[:12],
+            (time.perf_counter() - impl_started) * 1000,
+            state["state"],
+        )
         return {"ok": True, "job_id": job_id, "state": state["state"]}
 
     def prepare(self) -> int:
@@ -185,11 +238,14 @@ class JobManager:
         os.chmod(self.socket_path, 0o600)
         _notify_systemd_ready()
         log.info(
-            "event=job_manager_start pid=%d owner=%s boot=%s recovered=%d socket=%s",
+            "event=job_manager_start pid=%d owner=%s boot=%s recovered=%d "
+            "protocol=%d package_version=%s socket=%s",
             os.getpid(),
             self.owner_instance_id[:12],
             self.boot_id,
             recovered,
+            PROTOCOL_VERSION,
+            _package_version(),
             self.socket_path,
         )
         try:

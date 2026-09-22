@@ -69,6 +69,37 @@ class AdaptiveDiscoveryStats:
 
 
 @dataclass
+class JobTelemetryStats:
+    dispatches: int = 0
+    dispatch_errors: int = 0
+    owners: Counter = field(default_factory=Counter)
+    handoffs: Counter = field(default_factory=Counter)
+    owner_roundtrip_ms: list[float] = field(default_factory=list)
+    requested_wait_s: list[float] = field(default_factory=list)
+    effective_wait_s: list[float] = field(default_factory=list)
+    manager_launch_ms: list[float] = field(default_factory=list)
+    manager_start_impl_ms: list[float] = field(default_factory=list)
+    owner_transport_overhead_ms: list[float] = field(default_factory=list)
+    manager_stop_impl_ms: list[float] = field(default_factory=list)
+    job_runtime_s: list[float] = field(default_factory=list)
+    exit_reasons: Counter = field(default_factory=Counter)
+    stop_requests: int = 0
+    stop_escalations: int = 0
+    interruptions: Counter = field(default_factory=Counter)
+    manager_starts: int = 0
+    manager_recovered: int = 0
+    manager_disconnects: int = 0
+    disconnect_ops: Counter = field(default_factory=Counter)
+    manager_invalid_requests: int = 0
+    manager_request_errors: int = 0
+    job_status_calls: int = 0
+    job_status_wait_calls: int = 0
+    job_status_running_after_wait: int = 0
+    job_status_state_ms: list[float] = field(default_factory=list)
+    job_status_wait_state_ms: list[float] = field(default_factory=list)
+
+
+@dataclass
 class Stats:
     records: int = 0
     startups: int = 0
@@ -94,3 +125,4 @@ class Stats:
     turn_calls: Counter = field(default_factory=Counter)  # tunnel turn -> calls
     indexed: IndexedContextStats = field(default_factory=IndexedContextStats)
     adaptive: AdaptiveDiscoveryStats = field(default_factory=AdaptiveDiscoveryStats)
+    jobs: JobTelemetryStats = field(default_factory=JobTelemetryStats)

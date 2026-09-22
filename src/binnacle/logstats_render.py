@@ -3,6 +3,7 @@
 from collections.abc import Sequence
 from typing import Any
 
+from binnacle.logstats_jobs import render_job_telemetry
 from binnacle.logstats_models import AdaptiveDiscoveryStats, IndexedContextStats, Stats
 
 
@@ -112,7 +113,6 @@ def render(st: Stats) -> str:
     else:
         out.append("requests: 0")
     out.append(f"server startups in window: {st.startups}")
-
     out.append("\ntools/call by tool:")
     for name, n in st.tools.most_common():
         out.append(f"  {name:24s} {n}")
@@ -181,6 +181,7 @@ def render(st: Stats) -> str:
         out.append(
             f"run_command results that became background jobs: {st.background_jobs}"
         )
+    out.extend(render_job_telemetry(st.jobs))
     if st.turn_calls:
         per_turn = sorted(st.turn_calls.values())
         out.append(

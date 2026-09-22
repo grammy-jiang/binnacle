@@ -103,6 +103,13 @@ out of forks of the repository. Invalid regular expressions fail configuration l
 The running-result summary deliberately tells the agent to continue independent work and
 call `job_status` once when the result is actually needed, rather than encouraging polling.
 
+Every successful call also emits `run_command_dispatch`, recording the selected owner,
+requested/bounded/effective wait, explicit/automatic background decision, handoff reason,
+owner round-trip duration, command hash/size and returned state. These are internal
+telemetry only; the MCP result schema is unchanged. Start/exit lifecycle records carry the
+same `call`, `job_id`, owner instance and command hash so the history remains directly
+joinable across MCP restarts.
+
 `background_job` and the summary tail were added 2026-09-06: a synchronous
 finish appends "It finished synchronously; no background job was created,
 so no job_status or stop_job is needed." Evidence: models polled

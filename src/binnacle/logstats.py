@@ -1,9 +1,7 @@
 """Usage statistics from the server's journal (`binnacle stats`).
 
-Parses the rich-wrapped LoggingMiddleware records that binnacle-mcp writes
-to the user journal and aggregates them: request and tool mix, latency
-percentiles, clients, run_command verbs, target areas, timeline, errors.
-Stdlib only; journalctl is the single external process.
+Parses MCP/jobs journals into request, tool, latency, command, target, timeline,
+error, and durable-job statistics. Stdlib only; journalctl is the external process.
 
 Parsing notes learned the hard way: a record may start mid-second as an
 *indented* ``INFO event=`` line (rich omits the repeated timestamp), the
@@ -27,6 +25,7 @@ from typing import Any
 
 from binnacle.logstats_adaptive import analyze_adaptive_discovery
 from binnacle.logstats_io import fetch_journal
+from binnacle.logstats_jobs import analyze_job_telemetry
 from binnacle.logstats_models import IndexedContextStats, Record, Stats
 from binnacle.logstats_render import indexed_context_report, render
 
@@ -428,6 +427,7 @@ def analyze(records: list[Record], startups: int = 0) -> Stats:
                 st.job_exits[f.get("exit_code", "?")] += 1
     st.indexed = analyze_indexed_context(records)
     st.adaptive = analyze_adaptive_discovery(records)
+    st.jobs = analyze_job_telemetry(records, plain_fields)
     return st
 
 

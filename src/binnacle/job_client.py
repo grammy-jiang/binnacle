@@ -75,9 +75,14 @@ def start(
     )
 
 
-def stop(socket_path: Path, job_id: str) -> dict[str, Any]:
+def stop(socket_path: Path, job_id: str, *, call_id: str = "-") -> dict[str, Any]:
     return _request(
         socket_path,
-        {"version": PROTOCOL_VERSION, "op": "stop", "job_id": job_id},
+        {
+            "version": PROTOCOL_VERSION,
+            "op": "stop",
+            "job_id": job_id,
+            "call_id": call_id,
+        },
         timeout_s=10.0,
     )

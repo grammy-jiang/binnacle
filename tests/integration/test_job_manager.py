@@ -228,17 +228,25 @@ def test_socket_permissions_are_private(manager):
     assert os.stat(socket_path).st_mode & 0o777 == 0o600
 
 
-def test_mcp_job_tools_keep_contract_through_manager(manager, monkeypatch):
+def test_mcp_job_tools_keep_contract_through_manager(manager, monkeypatch, caplog):
     _, socket_path, _ = manager
     monkeypatch.setattr(jobs, "OWNER_MODE", "manager")
     monkeypatch.setattr(jobs, "MANAGER_SOCKET", socket_path)
     monkeypatch.setattr(jobs, "WARMUP_S", 0.05)
 
-    fast = run("printf through-manager")
+    with caplog.at_level("INFO"):
+        fast = run("printf through-manager")
     assert fast["state"] == "exited"
     assert fast["exit_code"] == 0
     assert fast["output"] == "through-manager"
     assert fast["background_job"] is False
+    dispatch = next(
+        record.getMessage()
+        for record in caplog.records
+        if "event=run_command_dispatch" in record.getMessage()
+    )
+    assert "owner=manager owner_instance=owner-new" in dispatch
+    assert "handoff_reason=synchronous" in dispatch
 
     background = run("sleep 30", background=True)
     assert background["state"] == "running"
@@ -250,13 +258,24 @@ def test_mcp_job_tools_keep_contract_through_manager(manager, monkeypatch):
     assert final["signal"] == 15
 
 
-def test_run_command_reports_manager_unavailable_cleanly(tmp_path, monkeypatch):
+def test_run_command_reports_manager_unavailable_cleanly(tmp_path, monkeypatch, caplog):
     monkeypatch.setattr(jobs, "OWNER_MODE", "manager")
     monkeypatch.setattr(jobs, "MANAGER_SOCKET", tmp_path / "missing.sock")
-    with pytest.raises(
-        ToolError, match="Could not start the job.*job manager unavailable"
+    with (
+        caplog.at_level("WARNING", logger="binnacle.run_command"),
+        pytest.raises(
+            ToolError, match="Could not start the job.*job manager unavailable"
+        ),
     ):
         run("true")
+    line = next(
+        record.getMessage()
+        for record in caplog.records
+        if "event=run_command_dispatch_error" in record.getMessage()
+    )
+    assert "owner=manager" in line
+    assert "error_class=JobManagerError" in line
+    assert "command_hash=" in line and "owner_roundtrip_ms=" in line
 
 
 def test_two_manager_stop_requests_agree(manager):
@@ -373,6 +392,42 @@ def test_disconnected_client_does_not_dump_handler_traceback(manager, caplog):
                 break
             time.sleep(0.01)
     assert any(
-        "event=job_manager_client_disconnected" in record.getMessage()
+        "event=job_manager_client_disconnected op=start call=disconnect-test job_id="
+        in record.getMessage()
+        for record in caplog.records
+    )
+
+
+def test_invalid_manager_request_logs_operation_and_call(manager, caplog):
+    _, socket_path, _ = manager
+    request = {"version": 1, "op": "stop", "call_id": "bad-call"}
+    with (
+        caplog.at_level("WARNING", logger="binnacle.job_manager"),
+        socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client,
+    ):
+        client.connect(str(socket_path))
+        client.sendall(json.dumps(request).encode() + b"\n")
+        response = json.loads(client.makefile("rb").readline())
+    assert response["ok"] is False
+    assert any(
+        "event=job_manager_request_invalid op=stop call=bad-call error_class=KeyError"
+        in record.getMessage()
+        for record in caplog.records
+    )
+
+
+def test_non_object_json_is_reported_as_invalid_request(manager, caplog):
+    _, socket_path, _ = manager
+    with (
+        caplog.at_level("WARNING", logger="binnacle.job_manager"),
+        socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client,
+    ):
+        client.connect(str(socket_path))
+        client.sendall(b"[]\n")
+        response = json.loads(client.makefile("rb").readline())
+    assert response["ok"] is False
+    assert any(
+        "event=job_manager_request_invalid op=? call=- error_class=TypeError"
+        in record.getMessage()
         for record in caplog.records
     )

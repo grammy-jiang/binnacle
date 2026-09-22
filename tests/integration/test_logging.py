@@ -71,7 +71,7 @@ def test_tool_call_start_context_is_reset_after_call(caplog):
     assert current_call_started.get() is None
 
 
-def test_auto_background_policy_uses_middleware_client(monkeypatch):
+def test_auto_background_policy_uses_middleware_client(monkeypatch, caplog):
     info = mcp.types.Implementation(name="openai-mcp-test", version="1")
     monkeypatch.setattr(
         rc,
@@ -82,10 +82,11 @@ def test_auto_background_policy_uses_middleware_client(monkeypatch):
     assert current_client.get() is None
 
     started_at = time.monotonic()
-    (result,) = _run(
-        ("run_command", {"command": "sleep 2", "workdir": "/tmp"}),
-        client_info=info,
-    )
+    with caplog.at_level("INFO"):
+        (result,) = _run(
+            ("run_command", {"command": "sleep 2", "workdir": "/tmp"}),
+            client_info=info,
+        )
     elapsed = time.monotonic() - started_at
     payload = result.structured_content
     assert payload is not None
@@ -93,6 +94,16 @@ def test_auto_background_policy_uses_middleware_client(monkeypatch):
     assert elapsed < 1
     assert current_client.get() is None
     assert current_argument_names.get() == frozenset()
+    dispatch = _fields(_messages(caplog, "run_command_dispatch")[-1])
+    assert dispatch["job_id"] == payload["job_id"]
+    assert dispatch["owner"] == "embedded"
+    assert dispatch["requested_wait_s"] == dispatch["bounded_wait_s"] == "30"
+    assert float(dispatch["effective_wait_s"]) == 0.05
+    assert dispatch["background_arg"] == "omitted"
+    assert dispatch["auto_background"] == "true"
+    assert dispatch["handoff_reason"] == "auto_background"
+    assert float(dispatch["owner_roundtrip_ms"]) > 0
+    assert re.fullmatch(r"[0-9a-f]{12}", dispatch["command_hash"])
     sj.stop_job_impl(payload["job_id"])
 
 
@@ -286,7 +297,7 @@ def test_job_start_outside_a_tool_call_has_no_call_id(caplog, tmp_path, monkeypa
         jobs.record_exit(job_id, proc)  # what the run_command thread does inline
     messages = [r.getMessage() for r in caplog.records]
     assert any(
-        f"event=job_start job_id={job_id}" in m and m.endswith(" call=-")
+        f"event=job_start job_id={job_id}" in m and " call=- owner=embedded " in m
         for m in messages
     )
     assert any(f"event=job_exit job_id={job_id} exit_code=0" in m for m in messages)

@@ -50,10 +50,22 @@ def mark_stop_requested(job_id: str) -> None:
         if meta is None or "exit_code" in meta or "signal" in meta:
             return
         meta["stop_requested"] = True
+        meta["stop_call_id"] = current_call.get()
         jobs._write_meta(job_id, meta)
+    logger.info(
+        "event=job_stop_requested job_id=%s call=%s origin_call=%s "
+        "owner_instance=%s command_hash=%s",
+        job_id,
+        current_call.get(),
+        meta.get("call_id", "-"),
+        str(meta.get("owner_instance_id") or "-")[:12],
+        meta.get("command_hash", "-"),
+    )
 
 
-def _record_interruption(job_id: str, meta: dict, reason: str) -> None:
+def _record_interruption(
+    job_id: str, meta: dict, reason: str, current_owner: str
+) -> None:
     from binnacle import jobs
 
     meta["exit_code"] = None
@@ -61,7 +73,16 @@ def _record_interruption(job_id: str, meta: dict, reason: str) -> None:
     meta["ended_at"] = time.time()
     meta["termination_reason"] = reason
     jobs._write_meta(job_id, meta)
-    logger.warning("event=job_interrupted job_id=%s reason=%s", job_id, reason)
+    logger.warning(
+        "event=job_interrupted job_id=%s reason=%s call=%s previous_owner=%s "
+        "current_owner=%s command_hash=%s",
+        job_id,
+        reason,
+        meta.get("call_id", "-"),
+        str(meta.get("owner_instance_id") or "-")[:12],
+        current_owner[:12],
+        meta.get("command_hash", "-"),
+    )
 
 
 def recover_previous_owner(current_owner: str, current_boot: str) -> int:
@@ -83,7 +104,7 @@ def recover_previous_owner(current_owner: str, current_boot: str) -> int:
             reason = "stop_requested"
         else:
             reason = "host_reboot" if previous_boot != current_boot else "owner_restart"
-        _record_interruption(job_id, meta, reason)
+        _record_interruption(job_id, meta, reason, current_owner)
         recovered += 1
     return recovered
 
@@ -101,6 +122,7 @@ def stop_job(job_id: str) -> dict | None:
         and meta.get("schema_version") == 2
         and meta.get("owner_instance_id")
     ):
-        job_client.stop(jobs.MANAGER_SOCKET, job_id)
+        job_client.stop(jobs.MANAGER_SOCKET, job_id, call_id=current_call.get())
         return jobs.job_state(job_id)
+    mark_stop_requested(job_id)
     return jobs.stop_job_embedded(job_id)

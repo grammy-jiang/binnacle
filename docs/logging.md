@@ -33,12 +33,22 @@ second.
 | `notification_start` / `notification_success` | same | `method source payload ...` | 08-29 |
 | `tool_call` | `ToolLoggingMiddleware` | `call tool client session request_id [turn] [oai_session] args_chars args=<json, 500 chars>` | 09-13 |
 | `tool_result` | `ToolLoggingMiddleware`; level WARNING when `is_error=True` | `call tool client session request_id [turn] [oai_session] duration_ms is_error` then either `content_chars structured_bytes est_tokens [tokenizer_tokens tokenizer_encoding]` plus the lifted result keys, or `error_class error=<text, 200 chars>` | 09-02 (`tool client request_id is_error content_chars` only, never fired on an error); tokenizer fields from 09-21 when enabled |
-| `job_start` | `binnacle-jobs.service` via `jobs.start_job` | `job_id pid command(60 chars, repr) workdir call` | 09-02 (`call` from 09-13) |
+| `job_start` | `jobs.start_job` in the selected owner | `job_id pid command(60 chars, repr) workdir call owner owner_instance command_hash command_chars` | 09-02; owner/hash fields from 09-22 |
 | `search_budget_hit` | `tools.search_text`; INFO | `call result_bytes result_budget_bytes returned_entries total_matches names_only` | 09-19 |
 | `job_listing` | `tools.job_status`; INFO | `call recorded_jobs returned_jobs running_jobs history_limit command_preview_chars` | 09-19 |
 | `job_status_timing` | `tools.job_status`; INFO | `call job_id wait_requested_s dispatch_ms state_ms read_log_ms process_scan_ms impl_ms state processes log_bytes` | 09-19 |
-| `job_exit` | `binnacle-jobs.service` via `jobs.record_exit` | `job_id exit_code signal reason runtime_s log_bytes` | 09-02 (`runtime_s log_bytes` from 09-13) |
-| `job_exit_unrecorded` | `jobs.record_exit`, level WARNING, job dir vanished before the exit was written | `job_id exit_code signal` | 09-02 |
+| `run_command_dispatch` | `tools.run_command`; INFO, one per successful call | `call client job_id owner owner_instance requested_wait_s bounded_wait_s effective_wait_s background_arg auto_background handoff_reason owner_roundtrip_ms command_hash command_chars state` | 09-22 |
+| `run_command_dispatch_error` | `tools.run_command`; WARNING when owner dispatch fails | same policy/owner/timing fields plus `error_class` | 09-22 |
+| `job_owner_timing` | stable job manager; INFO | `op call job_id owner_instance`, start: `wait_s launch_ms impl_ms state`; stop: `impl_ms state` | 09-22 |
+| `job_stop_requested` | ownership layer; INFO | `job_id call origin_call owner_instance command_hash` | 09-22 |
+| `job_stop_escalate` | process owner; WARNING | `job_id call signal=SIGKILL grace_s` | 09-22 |
+| `job_interrupted` | manager recovery; WARNING | `job_id reason call previous_owner current_owner command_hash` | 09-22 |
+| `job_manager_start` | `binnacle-jobs`; INFO | `pid owner boot recovered protocol package_version socket` | 09-22 |
+| `job_manager_client_disconnected` | `binnacle-jobs`; INFO | `op call job_id`; client disappeared after work was accepted/completed | 09-22 |
+| `job_manager_request_invalid` | `binnacle-jobs`; WARNING | `op call error_class` | 09-22 |
+| `job_manager_request_error` | `binnacle-jobs`; ERROR with traceback | `op call error_class` | 09-22 |
+| `job_exit` | `jobs.record_exit` in the selected owner | `job_id exit_code signal reason runtime_s log_bytes call owner owner_instance command_hash` | 09-02; correlation/owner fields from 09-22 |
+| `job_exit_unrecorded` | `jobs.record_exit`, WARNING | `job_id exit_code signal call owner owner_instance command_hash` | 09-02; correlation fields from 09-22 |
 | `jobs_pruned` | `binnacle-jobs.service` via `jobs._prune`, on every prune that removed or skipped something | `removed skipped_running keep_newest reserve effective_keep` | 09-02 (`reserve effective_keep` from 09-19) |
 | `config` | `server.log_effective_config`, once per (re)start | `pid version roots jobs_dir keep_newest client_tools rg_bin` | 09-02 (`pid version` from 09-13) |
 
@@ -81,8 +91,8 @@ scalar facts only), the values of `X-Openai-Session` (hashed) and
 | Size of what the model receives | Not measurable | `content_chars` (text blocks) + `structured_bytes` (compact JSON, UTF-8) + historical `est_tokens` = chars/4; when tokenizer telemetry is enabled for the client, `tokenizer_tokens` is the configured tokenizer count and `tokenizer_encoding` names the encoding |
 | Error classification | `request_error` text, ERROR level, class unknown | `is_error=True error_class=ToolError` (or NotFoundError, ValidationError, ...) `error=message` at WARNING; cancellations are recorded too |
 | Truncation and clipping | Nothing | `truncated` (all four file/search tools and run_command's head/tail clip or `tail_lines` drop), `lines_clipped`, `start_line/end_line/total_lines` (read_file window), `count` vs `entries` (search cap), `output_bytes` vs the clip; `tail_lines`, `max_results` visible in `args` |
-| Background jobs and outcomes | `job_start`/`job_exit` by `job_id`, exit code only | `background_job=true` and `state` on the result; `job_exit` adds `runtime_s`, `log_bytes`; `job_start` names the call |
-| Automatic background policy | None | `run_command_auto_background` records `call`, resolved `client`, and a 12-hex command hash when deployment-local policy changes a call's initial wait; the configured regex is not logged |
+| Background jobs and outcomes | `job_start`/`job_exit` by `job_id`, exit code only | `run_command_dispatch` records owner/wait/handoff decision; `job_start` and `job_exit` retain call/hash/owner correlation; `job_exit` records runtime, bytes and reason |
+| Automatic background policy | None | `run_command_auto_background` records the trigger; `run_command_dispatch` records requested/bounded/effective wait and the final `handoff_reason`, so later analysis does not need to reconstruct old policy configuration |
 | Client identity | `client=` on rich lines | `client=` on every plain line too; `oai_session=` (12-hex SHA-256 prefix of `X-Openai-Session`) groups calls of one ChatGPT session |
 | Restarts | uvicorn's `Application startup complete` | plus `config pid=... version=...` |
 
@@ -94,7 +104,38 @@ forwards `X-Request-Id: wfr_<turn>/<call>`, `Mcp-Method`, `Mcp-Name`,
 `X-Forwarded-Client-Cert`, `X-Origin-Ingress-Name`. No header carries the
 ChatGPT conversation id. Local agents send none of these.
 
-## 5. Record format, from the live journal (2026-09-13 22:36, `scripts/mcp_client.py`)
+## 5. Durable run-command telemetry (2026-09-22)
+
+The durable owner adds one explicit decision record per `run_command`. This is intentionally
+separate from `tool_result`: the latter says what the MCP client received, while
+`run_command_dispatch` says **why** the execution path returned synchronously or handed a
+job back. `owner_roundtrip_ms` includes the configured foreground wait; it is not labelled
+as IPC latency. `job_owner_timing launch_ms` measures the manager's process-launch path.
+
+The stable correlation chain is:
+
+```text
+tool_call(call)
+  -> run_command_dispatch(call, job_id, command_hash)
+  -> job_start(call, job_id, owner_instance, command_hash)
+  -> tool_result(call, job_id)
+  -> job_status/stop_job(job_id)
+  -> job_exit(job_id, original call, owner_instance, command_hash)
+```
+
+The full command remains in the tool arguments and durable job record; telemetry uses a
+12-hex SHA-256 prefix for aggregation so repeated command families can be measured without
+copying full command text into every lifecycle line. Stop escalation, owner recovery and
+client disconnects are separate events because they are operationally different failure
+boundaries.
+
+`binnacle stats` merges the MCP and jobs journals and reports dispatch/handoff counts,
+owner mix, requested/effective waits, owner roundtrip and paired transport-overhead
+percentiles, manager launch/stop timings, job runtime percentiles, job-status blocking
+wait totals, exit reasons, stop escalation, recoveries and client disconnects.
+CPU/RSS/IO sampling is deliberately not part of this telemetry pass.
+
+## 6. Record format, from the live journal (2026-09-13 22:36, `scripts/mcp_client.py`)
 
 ```text
 2026-09-13T22:36:10.162 INFO: event=tool_call call=682a831a7f11 tool=read_file client=mcp session=93b248d2fabe request_id=2 args_chars=53 args={"end_line":5,"path":"~/Projects/binnacle/README.md"}
@@ -131,7 +172,7 @@ First measurement the new fields allowed: a `job_status` call without a
 est_tokens=3087`; ChatGPT made 50 such calls in one week
 (docs/usage-analysis-2026-09-06.md).
 
-## 6. Review recipes
+## 7. Review recipes
 
 ```text
 # every MCP call with its size and outcome, one line each
@@ -155,7 +196,13 @@ errors; errors_by_class; latency_ms; became_jobs; job_exits) and
 `turns_journal`; the existing keys are unchanged and the baselines in
 `docs/usage-baselines/` stay comparable.
 
-## 7. Still not in the journal
+## 8. Still not in the journal
+
+Per-job CPU seconds, peak RSS, disk IO and thermal/throttling samples are intentionally
+not added by the durable-owner telemetry pass. Wall runtime and process snapshots are
+available today; resource accounting should be added only when there is a stable per-job
+accounting boundary (for example a later cgroup design), rather than by introducing a
+high-frequency sampler now.
 
 - Full ChatGPT request/accounting tokens. `tokenizer_tokens` counts only the
   result payload text blocks plus compact structured JSON with the configured
@@ -167,7 +214,7 @@ errors; errors_by_class; latency_ms; became_jobs; job_exits) and
   means the server never answered (crash or reload mid-call).
 - Rejected authentication: uvicorn access lines (`401 Unauthorized`) only.
 
-## 8. Result-tokenizer telemetry
+## 9. Result-tokenizer telemetry
 
 Tokenizer accounting is opt-in and configuration-driven:
 
@@ -189,7 +236,7 @@ Claude or other provider's results by default. The fields are explicitly named
 `tokenizer_tokens` and `tokenizer_encoding`: they measure the payload under that
 encoding, not the provider's complete billed/context token count.
 
-## 9. Logging constants
+## 10. Logging constants
 
 | Constant | Value | Meaning |
 | --- | --- | --- |
@@ -200,7 +247,7 @@ encoding, not the provider's complete billed/context token count.
 | `HASHED_HEADERS` | `{"x-openai-session": "oai_session"}` | headers logged as a SHA-256 prefix |
 | `RESULT_KEYS`, `RESULT_LIST_KEYS` | see §2 | `structured_content` keys lifted into `tool_result` |
 
-## 9. Parser compatibility
+## 11. Parser compatibility
 
 `logstats.parse` recognizes both plain shapes (`INFO: event=` and the
 timestamped form) as records of their own; rich records parse as before.
@@ -213,7 +260,7 @@ record with the same `(session, request_id)`, and a window without
 for 2026-09-12..13 before and after the change). Tests:
 `tests/integration/test_logging.py`, `tests/unit/core/test_logstats.py`, `tests/scripts/test_usage_breakdown.py`.
 
-## 10. Indexed-context pilot records (2026-09-19)
+## 12. Indexed-context pilot records (2026-09-19)
 
 The development `search_text('@context ...')` pilot adds dedicated single-line
 telemetry without changing `tool_call`/`tool_result`.

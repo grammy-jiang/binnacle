@@ -3,8 +3,7 @@
 Spec: docs/tools/run_command.md. Shared job machinery: jobs.py.
 """
 
-import hashlib
-import logging
+import time
 from typing import Annotated
 
 from fastmcp import FastMCP
@@ -16,11 +15,11 @@ from binnacle import job_owner, jobs
 from binnacle.callctx import current_argument_names, current_call, current_client
 from binnacle.config import get_settings
 from binnacle.paths import resolve_path
+from binnacle.run_command_telemetry import DispatchPlan
 
 RUN_SETTINGS = get_settings().run_command
 RUN_WAIT_DEFAULT = RUN_SETTINGS.wait_default_s
 RUN_WAIT_MAX = RUN_SETTINGS.wait_max_s
-log = logging.getLogger("binnacle.run_command")
 
 OUTPUT_SCHEMA = {
     "type": "object",
@@ -50,6 +49,20 @@ def _tail(text: str, n: int) -> tuple[str, int]:
     return "".join(lines[-n:]), len(lines) - n
 
 
+def _shaped_output(job_id: str, tail_lines: int | None) -> tuple[str, bool]:
+    log_text = jobs.read_log(job_id).decode("utf-8", errors="replace")
+    dropped = 0
+    if tail_lines is not None:
+        log_text, dropped = _tail(log_text, tail_lines)
+    output, truncated = jobs.clip_head_tail(log_text)
+    if not dropped:
+        return output, truncated
+    return (
+        f"[… {dropped} earlier lines omitted (tail_lines={tail_lines}) …]\n" + output,
+        True,
+    )
+
+
 def run_command_impl(
     command: str,
     workdir: str,
@@ -64,39 +77,38 @@ def run_command_impl(
             f"workdir is not a directory: {resolved}. "
             f"Use a directory inside ~/Projects or /tmp."
         )
-    wait_seconds = max(1, min(wait_seconds, RUN_WAIT_MAX))
-    client = current_client.get()
-    auto_background = (
-        not background
-        and "background" not in current_argument_names.get()
-        and RUN_SETTINGS.should_auto_background(client, command)
+    plan = DispatchPlan.build(
+        command=command,
+        wait_seconds=wait_seconds,
+        background=background,
+        argument_names=current_argument_names.get(),
+        client=current_client.get(),
+        settings=RUN_SETTINGS,
+        warmup_s=jobs.WARMUP_S,
+        wait_max_s=RUN_WAIT_MAX,
+        owner=jobs.OWNER_MODE,
     )
-    effective_background = background or auto_background
-    if auto_background:
-        log.info(
-            "event=run_command_auto_background call=%s client=%s command_hash=%s",
-            current_call.get(),
-            client or "-",
-            hashlib.sha256(command.encode()).hexdigest()[:12],
-        )
-    initial_wait = jobs.WARMUP_S if effective_background else float(wait_seconds)
+    call_id = current_call.get()
+    plan.log_auto_background(call_id)
+    owner_started = time.perf_counter()
     try:
-        job_id = job_owner.start_and_wait(command, resolved, stdin, initial_wait)
-    except (OSError, RuntimeError) as e:
-        raise ToolError(f"Could not start the job: {e}. Run `binnacle doctor`.") from e
-
-    state = jobs.job_state(job_id)
-    log_text = jobs.read_log(job_id).decode("utf-8", errors="replace")
-    dropped = 0
-    if tail_lines is not None:
-        log_text, dropped = _tail(log_text, tail_lines)
-    output, truncated = jobs.clip_head_tail(log_text)
-    if dropped:
-        output = (
-            f"[… {dropped} earlier lines omitted (tail_lines={tail_lines}) …]\n"
-            + output
+        job_id = job_owner.start_and_wait(
+            command, resolved, stdin, plan.effective_wait_s
         )
-        truncated = True
+    except (OSError, RuntimeError) as exc:
+        plan.log_error(call_id, (time.perf_counter() - owner_started) * 1000, exc)
+        raise ToolError(
+            f"Could not start the job: {exc}. Run `binnacle doctor`."
+        ) from exc
+
+    owner_roundtrip_ms = (time.perf_counter() - owner_started) * 1000
+    state = jobs.job_state(job_id)
+    returned_state = state["state"] if state else "unknown"
+    owner_instance = str((state or {}).get("owner_instance_id") or "-")[:12]
+    plan.log_success(
+        call_id, job_id, returned_state, owner_roundtrip_ms, owner_instance
+    )
+    output, truncated = _shaped_output(job_id, tail_lines)
 
     if state and state["state"] == "exited":
         payload = {
@@ -140,10 +152,10 @@ def run_command_impl(
     }
     reason = (
         "started in background by local policy"
-        if auto_background
+        if plan.auto_background
         else "started in background"
-        if background
-        else f"still running after {wait_seconds} s"
+        if plan.background_requested
+        else f"still running after {plan.bounded_wait_s} s"
     )
     summary = (
         f"Command {reason}; job_id={job_id}. Continue independent work; "

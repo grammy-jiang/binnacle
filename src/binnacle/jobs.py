@@ -6,6 +6,7 @@ own process group with output spooled to disk, so a job survives
 from process memory (ChatGPT re-initializes per call — no session state).
 """
 
+import hashlib
 import logging
 import os
 import signal
@@ -172,10 +173,15 @@ def record_exit(job_id: str, proc: subprocess.Popen) -> None:
             # The job dir vanished (pruned or removed externally); there is
             # nowhere to record the exit, and crashing helps nobody.
             logger.warning(
-                "event=job_exit_unrecorded job_id=%s exit_code=%s signal=%s",
+                "event=job_exit_unrecorded job_id=%s exit_code=%s signal=%s "
+                "call=%s owner=%s owner_instance=%s command_hash=%s",
                 job_id,
                 meta.get("exit_code"),
                 meta.get("signal"),
+                meta.get("call_id", "-"),
+                meta.get("owner", "embedded"),
+                str(meta.get("owner_instance_id") or "-")[:12],
+                meta.get("command_hash", "-"),
             )
             return
     try:
@@ -184,7 +190,8 @@ def record_exit(job_id: str, proc: subprocess.Popen) -> None:
         log_bytes = 0
     started = meta.get("started_at")
     logger.info(
-        "event=job_exit job_id=%s exit_code=%s signal=%s reason=%s runtime_s=%s log_bytes=%d",
+        "event=job_exit job_id=%s exit_code=%s signal=%s reason=%s runtime_s=%s "
+        "log_bytes=%d call=%s owner=%s owner_instance=%s command_hash=%s",
         job_id,
         meta.get("exit_code"),
         meta.get("signal"),
@@ -193,6 +200,10 @@ def record_exit(job_id: str, proc: subprocess.Popen) -> None:
         if isinstance(started, (int, float))
         else "-",
         log_bytes,
+        meta.get("call_id", "-"),
+        meta.get("owner", "embedded"),
+        str(meta.get("owner_instance_id") or "-")[:12],
+        meta.get("command_hash", "-"),
     )
 
 
@@ -256,6 +267,9 @@ def start_job(
                 stderr=subprocess.STDOUT,
                 start_new_session=True,  # own process group; survives across turns
             )
+        call_id = current_call.get()
+        command_hash = hashlib.sha256(command.encode()).hexdigest()[:12]
+        owner = "manager" if owner_instance_id is not None else "embedded"
         meta = {
             "command": command,
             "workdir": str(workdir),
@@ -263,6 +277,9 @@ def start_job(
             "pgid": proc.pid,  # start_new_session ⇒ pgid == pid
             "starttime": _proc_starttime(proc.pid),  # pid identity, see _pid_alive
             "started_at": time.time(),
+            "call_id": call_id,
+            "command_hash": command_hash,
+            "owner": owner,
         }
         if owner_instance_id is not None:
             meta.update(
@@ -271,15 +288,20 @@ def start_job(
                 boot_id=boot_id,
             )
         _write_meta(job_id, meta)
-        # call= is the tool_call/tool_result id of the run_command that spawned
-        # this job (binnacle.callctx); "-" when started outside a tool call.
+        # Keep command/workdir/call in their historical order for old journal
+        # consumers; append structured telemetry afterwards.
         logger.info(
-            "event=job_start job_id=%s pid=%d command=%.60r workdir=%s call=%s",
+            "event=job_start job_id=%s pid=%d command=%.60r workdir=%s call=%s "
+            "owner=%s owner_instance=%s command_hash=%s command_chars=%d",
             job_id,
             proc.pid,
             command,
             workdir,
-            current_call.get(),
+            call_id,
+            owner,
+            owner_instance_id[:12] if owner_instance_id else "-",
+            command_hash,
+            len(command),
         )
     # No watcher is spawned here: the caller waits on the process for its
     # wait window and records the exit itself (record_exit), and only calls
@@ -329,6 +351,9 @@ def job_state(job_id: str) -> dict | None:
         "termination_reason": meta.get("termination_reason"),
         "owner_instance_id": meta.get("owner_instance_id"),
         "boot_id": meta.get("boot_id"),
+        "call_id": meta.get("call_id"),
+        "command_hash": meta.get("command_hash"),
+        "owner": meta.get("owner"),
         "runtime_s": round((meta.get("ended_at") or now) - meta["started_at"], 3),
         "last_output_age_s": (
             round(last_output_age, 1) if last_output_age is not None else None
@@ -401,6 +426,12 @@ def stop_job_embedded(job_id: str) -> dict | None:
     st = await_exit(job_id, STOP_SIGTERM_GRACE_S)
     if st is None or st["state"] == "exited":
         return st
+    logger.warning(
+        "event=job_stop_escalate job_id=%s call=%s signal=SIGKILL grace_s=%s",
+        job_id,
+        current_call.get(),
+        STOP_SIGTERM_GRACE_S,
+    )
     try:
         _signal_job(pgid, strays, signal.SIGKILL)
     except ProcessLookupError:
