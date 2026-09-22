@@ -3,6 +3,7 @@
 from fastmcp import FastMCP
 
 from . import (
+    async_probe,
     edit_file,
     job_status,
     list_files,
@@ -15,6 +16,7 @@ from . import (
 
 
 def register_all(mcp: FastMCP) -> None:
+    async_probe.register(mcp)
     read_file.register(mcp)
     list_files.register(mcp)
     search_text.register(mcp)
