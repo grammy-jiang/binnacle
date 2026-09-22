@@ -129,3 +129,20 @@ def test_early_break_context_exit_reaps_child(tmp_path):
             break
     assert stream._proc is not None and stream._proc.poll() is not None
     assert not os.path.exists(f"/proc/{stream.pid}")
+
+
+def test_completed_child_is_not_timed_out_by_slow_consumer(tmp_path):
+    rg = executable(
+        tmp_path,
+        "import json\n"
+        "for i in range(50):\n"
+        " print(json.dumps({'type':'match','data':{'i':i}}), flush=True)\n",
+    )
+    stream = RgJsonStream(tmp_path, "x", False, 0, rg_bin=str(rg), timeout_s=0.1)
+    with stream:
+        events = []
+        for item in stream:
+            events.append(item)
+            time.sleep(0.01)
+    assert len(events) == 50
+    assert stream.stats.timed_out is False

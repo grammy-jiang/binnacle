@@ -116,8 +116,9 @@ def test_adaptive_summary_includes_second_scan_work(tmp_path, caplog, monkeypatc
     assert float(f["adaptive_ms"]) >= 0
 
 
-def test_exact_error_still_emits_terminal_summary(tmp_path, caplog):
+def test_exact_error_still_emits_terminal_summary(tmp_path, caplog, monkeypatch):
     (tmp_path / "a.py").write_text("alpha\n")
+    monkeypatch.setattr(st, "EXACT_EXECUTION", "materialized")
     token = current_call.set("exact-error")
     try:
         with (
@@ -212,6 +213,7 @@ def test_coded_exact_failures_emit_one_correlated_terminal_summary(
     tmp_path, caplog, monkeypatch, code
 ):
     (tmp_path / "a.txt").write_text("alpha\n")
+    monkeypatch.setattr(st, "EXACT_EXECUTION", "materialized")
 
     if code in {"rg_missing", "rg_timeout"}:
 
@@ -315,3 +317,22 @@ def test_streaming_summary_uses_versioned_pipeline_fields(
     assert int(f["glob_rejected_events"]) >= 1
     assert int(f["adaptive_retained_match_events"]) == 2
     assert f["rg_stdout_chars"] == "0"
+
+
+def test_streaming_error_summary_keeps_pipeline_and_rg_attempt(
+    tmp_path, caplog, monkeypatch
+):
+    monkeypatch.setattr(st, "EXACT_EXECUTION", "streaming")
+    token = current_call.set("exact-stream-error")
+    try:
+        with (
+            caplog.at_level("INFO", logger="binnacle.search_text"),
+            pytest.raises(ToolError, match="ripgrep rejected"),
+        ):
+            run_exact(tmp_path, "(")
+    finally:
+        current_call.reset(token)
+    f = fields(exact_line(caplog))
+    assert f["pipeline"] == "streaming"
+    assert f["outcome"] == "error" and f["error_code"] == "rg_rejected"
+    assert f["rg_calls"] == "1"

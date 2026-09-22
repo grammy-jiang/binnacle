@@ -74,6 +74,8 @@ def _scan_streaming(
     max_line_chars: int,
     clip_mark: str,
 ) -> ExactScanResult:
+    metrics.pipeline = "streaming"
+    metrics.rg_calls += 1
     reducer = ExactStreamReducer(
         resolved,
         glob,
@@ -82,18 +84,22 @@ def _scan_streaming(
         clip_mark=clip_mark,
         matches_glob=matches_glob,
     )
-    with RgJsonStream(
+    stream = RgJsonStream(
         resolved,
         pattern,
         fixed_strings,
         context,
         rg_bin=rg_bin,
         timeout_s=timeout_s,
-    ) as stream:
-        for event in stream:
-            reducer.consume(event)
+    )
+    try:
+        with stream:
+            for event in stream:
+                reducer.consume(event)
+    finally:
+        _update_stream_metrics(metrics, stream)
     result = reducer.result()
-    _update_common_metrics(metrics, stream, reducer, result)
+    _update_reducer_metrics(metrics, reducer, result)
     return ExactScanResult(
         result.matches,
         result.line_map,
@@ -104,9 +110,7 @@ def _scan_streaming(
     )
 
 
-def _update_common_metrics(metrics, stream, reducer, result) -> None:
-    metrics.pipeline = "streaming"
-    metrics.rg_calls += 1
+def _update_stream_metrics(metrics, stream) -> None:
     metrics.rg_events += stream.stats.events
     metrics.rg_match_events += stream.stats.match_events
     metrics.rg_context_events += stream.stats.context_events
@@ -115,6 +119,9 @@ def _update_common_metrics(metrics, stream, reducer, result) -> None:
     metrics.rg_stdout_bytes += stream.stats.stdout_bytes
     metrics.rg_wall_ms += stream.stats.wall_ms
     metrics.stream_cpu_ms += stream.stats.stream_cpu_ms
+
+
+def _update_reducer_metrics(metrics, reducer, result) -> None:
     metrics.glob_cache_hits += reducer.glob_cache_hits
     metrics.glob_cache_misses += reducer.glob_cache_misses
     metrics.glob_rejected_files += reducer.glob_rejected_files

@@ -105,13 +105,14 @@ class RgJsonStream:
         return self
 
     def _on_timeout(self) -> None:
-        self._timeout_fired.set()
         proc = self._proc
-        if proc is not None and proc.poll() is None:
-            try:
-                proc.kill()
-            except ProcessLookupError:
-                pass
+        if proc is None or proc.poll() is not None:
+            return
+        self._timeout_fired.set()
+        try:
+            proc.kill()
+        except ProcessLookupError:
+            pass
 
     def __iter__(self) -> Iterator[dict]:
         proc = self._proc

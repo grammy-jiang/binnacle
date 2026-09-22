@@ -496,3 +496,74 @@ Proceed with V1 exactly as staged above. The evidence is unusually strong:
 The safest high-value implementation is therefore **binary streaming, a single-pass reducer, and a per-file glob cache**, with existing
 adaptive ranking retained behind an accepted-match
 compatibility bridge.
+
+## 15. Implementation validation (feature/search-streaming)
+
+The implementation through S7 preserved the materialized backend as the repository
+default while adding the streaming backend behind `search_text.exact_execution`.
+
+### 15.1 Process and reducer correctness
+
+- `RgJsonStream` has dedicated coverage for bytes JSONL, malformed records, missing rg,
+  timeout kill/reap, consumer exceptions, large stderr without pipe deadlock, rg rejection,
+  early consumer exit, and the case where rg exits before the deadline but the Python
+  consumer intentionally drains buffered output slowly.
+- The timeout watchdog marks a timeout **only when the child is still alive at the
+  deadline**. This preserves the previous subprocess timeout meaning as closely as possible
+  without incorrectly timing out post-exit Python processing.
+- `ExactStreamReducer` is property-tested against the materialized collector across
+  generated match/context/begin/end streams, glob/no-glob, and different max-result caps.
+- Normal, names-only, explicit-context, auto-context, truncation, and adaptive searches have
+  materialized/streaming equivalence tests. The adaptive bridge passes only already-accepted
+  match events with `glob=None` to the existing ranking implementation.
+
+### 15.2 Fast-path A/B
+
+Four alternating rounds, 80 measured calls after warm-up per workload, same commit and
+search target:
+
+| Workload | Materialized p50 | Streaming p50 | Result |
+| --- | ---: | ---: | --- |
+| literal `event=`, `*.py`, context=0 | 16.48–16.99 ms | 12.39–12.59 ms | streaming faster |
+| regex `event=|logger`, `*.py`, context=2 | 40.78–41.35 ms | 15.30–15.97 ms | streaming much faster |
+
+No watchdog/timer regression is visible; the `<1 ms / <=5%` no-regression gate is passed
+with large margin.
+
+### 15.3 Medium historical workload
+
+Two fresh-process alternating runs, identical structured payload SHA
+`ceb3fdc73ef1bdb9d226fa7442694b0a1a9be17b951af333900d096f0cd761e1`:
+
+| Backend | Wall time | Peak RSS |
+| --- | ---: | ---: |
+| materialized | 1508.9–1516.5 ms | 202,960–203,504 KiB |
+| streaming | 385.4–414.6 ms | 83,568–84,064 KiB |
+
+This is ~3.6–3.9x faster with ~59% lower peak RSS, passing the conservative >=2x gate.
+
+### 15.4 Broad historical workload
+
+Two fresh-process alternating runs, identical structured payload SHA
+`1c5c67ffc66efd8eeb43a3f3bb8cfed059f4a6197350f5d6db78518b4f2e4194`, identical
+`count=2464`, 135 returned entries, and `truncated=true`:
+
+| Backend | Wall time | Peak RSS |
+| --- | ---: | ---: |
+| materialized | 19,958–20,715 ms | 1,099,456–1,102,112 KiB |
+| streaming | 1,486.7–1,561.1 ms | 90,368–91,232 KiB |
+
+The measured speedup is ~12.8–13.9x and peak RSS is ~92% lower. The release gates require
+only >=2x and >=60% RSS reduction, so the implementation exceeds both by a wide margin.
+These ratios are observations on this host/workload, not a universal performance promise.
+
+### 15.5 Streaming as the prospective default
+
+Running the search-related test surface with
+`BINNACLE_SEARCH_TEXT__EXACT_EXECUTION=streaming` now leaves only the same three
+pre-existing adaptive-result-budget failures already present on the materialized baseline.
+Tests that intentionally monkeypatch materialized internal seams are explicitly pinned to
+the materialized backend; streaming has its own error-lifecycle tests.
+
+The next gates are full pre-commit, full pytest baseline-equivalence, then a live shadow
+period with local `exact_execution=streaming` before the repository default is flipped.
