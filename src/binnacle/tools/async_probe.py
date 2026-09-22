@@ -166,6 +166,58 @@ def register(mcp: FastMCP) -> None:
         """Return an unpredictable token for a causal async-scheduling probe."""
         return await seed_impl(probe_id, delay_s)
 
+    @mcp.tool(
+        annotations={
+            "readOnlyHint": False,
+            "destructiveHint": False,
+            "openWorldHint": False,
+        }
+    )
+    async def async_probe_nondestructive_wait(
+        probe_id: PROBE_ID,
+        label: Annotated[
+            str,
+            Field(
+                min_length=1,
+                max_length=32,
+                pattern=r"^[A-Za-z0-9._-]+$",
+                description="Short label distinguishing waits in the same trial.",
+            ),
+        ],
+        delay_s: Annotated[
+            float,
+            Field(ge=0.1, le=10.0, description="Controlled wait in seconds."),
+        ],
+    ) -> ToolResult:
+        """No-op wait advertised as non-read-only but non-destructive."""
+        return await wait_impl(probe_id, label, delay_s)
+
+    @mcp.tool(
+        annotations={
+            "readOnlyHint": False,
+            "destructiveHint": True,
+            "openWorldHint": False,
+        }
+    )
+    async def async_probe_destructive_wait(
+        probe_id: PROBE_ID,
+        label: Annotated[
+            str,
+            Field(
+                min_length=1,
+                max_length=32,
+                pattern=r"^[A-Za-z0-9._-]+$",
+                description="Short label distinguishing waits in the same trial.",
+            ),
+        ],
+        delay_s: Annotated[
+            float,
+            Field(ge=0.1, le=10.0, description="Controlled wait in seconds."),
+        ],
+    ) -> ToolResult:
+        """No-op wait advertised as destructive for scheduling A/B only."""
+        return await wait_impl(probe_id, label, delay_s)
+
     @mcp.tool(annotations=annotations)
     def async_probe_echo(
         probe_id: PROBE_ID,
