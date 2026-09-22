@@ -33,13 +33,13 @@ second.
 | `notification_start` / `notification_success` | same | `method source payload ...` | 08-29 |
 | `tool_call` | `ToolLoggingMiddleware` | `call tool client session request_id [turn] [oai_session] args_chars args=<json, 500 chars>` | 09-13 |
 | `tool_result` | `ToolLoggingMiddleware`; level WARNING when `is_error=True` | `call tool client session request_id [turn] [oai_session] duration_ms is_error` then either `content_chars structured_bytes est_tokens [tokenizer_tokens tokenizer_encoding]` plus the lifted result keys, or `error_class error=<text, 200 chars>` | 09-02 (`tool client request_id is_error content_chars` only, never fired on an error); tokenizer fields from 09-21 when enabled |
-| `job_start` | `jobs.start_job` | `job_id pid command(60 chars, repr) workdir call` | 09-02 (`call` from 09-13) |
+| `job_start` | `binnacle-jobs.service` via `jobs.start_job` | `job_id pid command(60 chars, repr) workdir call` | 09-02 (`call` from 09-13) |
 | `search_budget_hit` | `tools.search_text`; INFO | `call result_bytes result_budget_bytes returned_entries total_matches names_only` | 09-19 |
 | `job_listing` | `tools.job_status`; INFO | `call recorded_jobs returned_jobs running_jobs history_limit command_preview_chars` | 09-19 |
 | `job_status_timing` | `tools.job_status`; INFO | `call job_id wait_requested_s dispatch_ms state_ms read_log_ms process_scan_ms impl_ms state processes log_bytes` | 09-19 |
-| `job_exit` | `jobs.record_exit` (the request thread, or the reaper thread for a job that outlived its wait) | `job_id exit_code signal runtime_s log_bytes` | 09-02 (`runtime_s log_bytes` from 09-13) |
+| `job_exit` | `binnacle-jobs.service` via `jobs.record_exit` | `job_id exit_code signal reason runtime_s log_bytes` | 09-02 (`runtime_s log_bytes` from 09-13) |
 | `job_exit_unrecorded` | `jobs.record_exit`, level WARNING, job dir vanished before the exit was written | `job_id exit_code signal` | 09-02 |
-| `jobs_pruned` | `jobs._prune`, on every prune that removed or skipped something | `removed skipped_running keep_newest reserve effective_keep` | 09-02 (`reserve effective_keep` from 09-19) |
+| `jobs_pruned` | `binnacle-jobs.service` via `jobs._prune`, on every prune that removed or skipped something | `removed skipped_running keep_newest reserve effective_keep` | 09-02 (`reserve effective_keep` from 09-19) |
 | `config` | `server.log_effective_config`, once per (re)start | `pid version roots jobs_dir keep_newest client_tools rg_bin` | 09-02 (`pid version` from 09-13) |
 
 Lifted result keys (`RESULT_KEYS`, only when the tool's `structured_content`
@@ -115,9 +115,10 @@ correlation fields after `request_id=`:
 2026-09-13T22:36:37.715 INFO: event=tool_call call=3ca0a738d533 tool=read_file client=mcp session=8314e3d09386 request_id=2 turn=wfr_headertest0000/ab12 oai_session=71334a33b178 args_chars=53 args={"end_line":2,"path":"~/Projects/binnacle/README.md"}
 ```text
 
-A job that outlives its wait window: the result says `state=running
-background_job=true`, and the `job_exit` line arrives later, written by
-the reaper thread (in-memory example, 2026-09-13 22:26):
+Historical embedded-owner example (2026-09-13): a job that outlived its wait
+window returned `state=running background_job=true`, and its `job_exit` arrived later
+from the in-process reaper. Current managed deployments emit the same lifecycle events
+from `binnacle-jobs.service`; `binnacle stats` merges the MCP and jobs journals.
 
 ```text
 2026-09-13T22:26:54.491 INFO: event=job_start job_id=4b00d564522e pid=980398 command='sleep 3; echo done' workdir=/tmp call=2a94f3464a7d
@@ -133,7 +134,7 @@ est_tokens=3087`; ChatGPT made 50 such calls in one week
 ## 6. Review recipes
 
 ```text
-# every call with its size and outcome, one line each
+# every MCP call with its size and outcome, one line each
 journalctl --user -u binnacle-mcp --since -1day -o cat | grep 'event=tool_result'
 # one ChatGPT turn end to end
 journalctl --user -u binnacle-mcp --since -1day -o cat | grep 'turn=wfr_01a09ab0ab6a7b8483396aba1bde22d1'

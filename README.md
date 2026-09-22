@@ -21,18 +21,19 @@ uv sync --locked --group dev
 # Preview the machine changes first: every action, and the unit diff.
 uv run binnacle setup --dev "$PWD" --dry-run
 
-# Create the bearer token and the systemd user unit, in development mode
-# (this checkout with auto-reload). A hand-written unit is refused: review
+# Create the bearer token plus the MCP and durable-jobs systemd user units.
+# The MCP checkout auto-reloads in development; the jobs owner stays stable.
+# A hand-written unit is refused: review
 # the diff, then add --adopt to take it over (the old file is backed up).
 uv run binnacle setup --dev "$PWD"
 
-# Later, switch the same unit to the installed package without reload, or
-# back. A switch rewrites the unit and restarts it at a quiet moment.
+# Later, switch the MCP unit to the installed package without reload, or
+# back. The durable jobs service is a sibling and is not restarted by mode.
 uv run binnacle mode prod
 uv run binnacle mode dev
 
-# Verify configuration, auth, the unit (its content against what setup
-# writes, and the process it started), jobs and connectivity.
+# Verify configuration, auth, both managed units/processes, the private
+# jobs socket, durable job state, and connectivity.
 uv run binnacle doctor
 
 # ChatGPT only: the OpenAI tunnel unit belongs to its own companion, never

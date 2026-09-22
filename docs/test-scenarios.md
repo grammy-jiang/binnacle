@@ -45,7 +45,8 @@ system observations, and deployment smoke tests must use their real boundary.
 | status wait, timeout, tailing, quiet flag, process listing | Integration | `test_jobs_lifecycle.py`, `test_jobs.py` |
 | stop sends TERM then KILL when required and covers the process group | Integration | `test_jobs_lifecycle.py` |
 | already-exited/double/concurrent stop is idempotent | Integration / state-machine | lifecycle suite, `test_jobs_state_machine.py` |
-| malformed metadata, missing log, PID reuse, server-reload orphan | Integration | lifecycle/store suites |
+| malformed metadata, missing log, PID reuse, legacy orphan compatibility | Integration | lifecycle/store suites |
+| MCP reload/restart leaves manager-owned jobs running; manager restart and old boot are durably classified | Integration / systemd POC | `test_job_manager.py`, durable-ownership systemd gate |
 | concurrent starts/prunes/readers do not corrupt the store | Integration concurrency | `test_jobs_store.py` |
 | randomized start/status/list/stop sequences preserve terminal-state invariants | Model-based integration | `test_jobs_state_machine.py` |
 | output truncation preserves full log on disk | Integration | `test_jobs.py` |

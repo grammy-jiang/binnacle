@@ -40,6 +40,7 @@ def host(tmp_path, monkeypatch):
     return SimpleNamespace(
         unit_dir=unit_dir,
         unit=unit_dir / cli.SERVER_UNIT,
+        jobs_unit=unit_dir / cli.JOBS_UNIT,
         token=token,
         calls=calls,
         exe=exe,
@@ -54,8 +55,10 @@ def test_setup_dev_dry_run_writes_nothing_and_describes_the_plan(host, capsys):
     out = capsys.readouterr().out
     assert not host.token.exists() and not host.unit_dir.exists()
     assert "would generate bearer token" in out
+    assert f"would write {host.jobs_unit} (dev mode)" in out
     assert f"would write {host.unit} (dev mode)" in out
     assert "would systemctl --user daemon-reload" in out
+    assert f"would systemctl --user enable --now {cli.JOBS_UNIT}" in out
     assert f"would systemctl --user enable --now {cli.SERVER_UNIT}" in out
     assert "dry run: nothing was changed" in out
     assert host.calls == []
@@ -68,13 +71,18 @@ def test_setup_dev_writes_a_marked_unit_and_runs_the_safe_boundaries(host, capsy
     marker = units.read_marker(text)
     assert marker is not None and marker.owner == "binnacle"
     assert marker.params["mode"] == "dev" and marker.params["port"] == "8123"
+    assert marker.params["jobs_owner"] == "manager"
     assert marker.params["repo"] == str(host.repo.resolve())
     assert (
         f"ExecStart={host.repo.resolve()}/.venv/bin/uvicorn binnacle.server:app "
         "--host 127.0.0.1 --port 8123 --reload --loop uvloop --http httptools\n"
     ) in text
+    jobs_text = host.jobs_unit.read_text()
+    assert f"ExecStart={host.repo.resolve()}/.venv/bin/binnacle-jobs\n" in jobs_text
+    assert "Restart=always" in jobs_text and "KillMode=control-group" in jobs_text
     assert host.token.read_text().startswith("Bearer ")
     assert ("daemon-reload",) in host.calls
+    assert ("enable", "--now", cli.JOBS_UNIT) in host.calls
     assert ("enable", "--now", cli.SERVER_UNIT) in host.calls
     assert ("loginctl", "enable-linger") in host.calls
     out = capsys.readouterr().out
@@ -91,6 +99,7 @@ def test_setup_prod_uses_the_installed_executable(host):
     text = host.unit.read_text()
     assert f"ExecStart={host.exe} serve --host 127.0.0.1 --port 8000\n" in text
     assert "Restart=always" in text and "WorkingDirectory" not in text
+    assert f"ExecStart={host.exe}\n" in host.jobs_unit.read_text()
     marker = units.read_marker(text)
     assert marker is not None and marker.params["mode"] == "prod"
 
@@ -102,6 +111,7 @@ def test_setup_reports_an_unchanged_unit(host, capsys):
     cli.setup(dev=host.repo, port=8000, dry_run=True)
 
     out = capsys.readouterr().out
+    assert f"would keep {host.jobs_unit} (already what setup writes, dev mode)" in out
     assert f"would keep {host.unit} (already what setup writes, dev mode)" in out
     assert "---" not in out
 
@@ -157,7 +167,7 @@ def test_setup_reports_an_executable_it_cannot_resolve(host, capsys, monkeypatch
 
 def quiet(monkeypatch, reasons: list[str] | None = None) -> None:
     monkeypatch.setattr(
-        doctor, "server_busy_reasons", lambda unit, jobs_dir: reasons or []
+        doctor, "server_busy_reasons", lambda *args, **kwargs: reasons or []
     )
 
 
@@ -175,7 +185,7 @@ def test_mode_status_reports_the_marker(host, capsys):
     cli.mode("status")
     out = capsys.readouterr().out
     assert (
-        f"{cli.SERVER_UNIT}: active; dev mode (mode=dev, host=127.0.0.1, port=8000, repo="
+        f"{cli.SERVER_UNIT}: active; dev mode (mode=dev, host=127.0.0.1, port=8000, jobs_owner=manager, repo="
         in out
     )
 
@@ -206,6 +216,34 @@ def test_mode_switch_rewrites_reloads_and_restarts_at_a_quiet_moment(
     marker = units.read_marker(host.unit.read_text())
     assert marker is not None and marker.params["mode"] == "dev"
     assert host.calls == [("daemon-reload",), ("restart", cli.SERVER_UNIT)]
+
+
+def test_mode_embedded_rollback_still_blocks_on_running_jobs(host, capsys, monkeypatch):
+    from types import SimpleNamespace
+
+    cli.setup(dev=host.repo, port=8000)
+    capsys.readouterr()
+    original = cli.get_settings
+    settings = original()
+    monkeypatch.setattr(
+        cli,
+        "get_settings",
+        lambda: SimpleNamespace(
+            serve=settings.serve,
+            jobs=SimpleNamespace(dir=settings.jobs.dir, owner="embedded"),
+        ),
+    )
+    seen = {}
+
+    def busy(*args, **kwargs):
+        seen.update(kwargs)
+        return ["1 background job(s) running"]
+
+    monkeypatch.setattr(doctor, "server_busy_reasons", busy)
+    with pytest.raises(SystemExit):
+        cli.mode("prod")
+    assert seen["include_jobs"] is True
+    assert "background job" in capsys.readouterr().out
 
 
 def test_mode_refuses_a_busy_moment_unless_forced(host, capsys, monkeypatch):

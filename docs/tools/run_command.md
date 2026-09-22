@@ -2,15 +2,16 @@
 
 | | |
 | --- | --- |
-| **Status** | Implemented (`tools/run_command.py`, `tools/job_status.py`, `tools/stop_job.py`, shared `jobs.py`); unit gate (17 tests) and the shell/jobs ChatGPT checkpoint passed 2026-08-30 — see §8 |
+| **Status** | Implemented (`tools/run_command.py`, `tools/job_status.py`, `tools/stop_job.py`, durable `job_store.py`, stable `binnacle-jobs` owner); original unit gate and later durable-ownership gates passed — see §7–§8 |
 | **Parent** | `docs/agent-toolset-design.md` §7.4–7.6 |
 | **Method** | Survey of Gemini `run_shell_command`+background tools, Codex `exec_command`/`write_stdin` (source), Copilot `bash` family (fixtures/changelog/leak), Claude Code Bash (docs/self) → decisions → spec |
 
 These three tools share one disk-backed job model, so they are specified
 together. The design was fixed in the parent doc (§5.4, §7.4): a call
 waits up to `wait_seconds` (≤ 50, under ChatGPT's 60 s ceiling) and
-**never kills at the wait boundary** — it hands back a `job_id`; the job
-keeps running detached and survives `uvicorn --reload`.
+**never kills at the wait boundary** — it hands back a `job_id`. On managed
+systemd installs, a sibling `binnacle-jobs.service` owns command processes, so
+MCP hot reloads and full `binnacle-mcp.service` restarts do not terminate them.
 
 ## 1. Survey highlights
 
@@ -38,7 +39,7 @@ stdin from the `stdin` param, no PTY.
 
 | Decision | From | Rejected |
 | --- | --- | --- |
-| Every command launches **detached** (`start_new_session=True`, own process group), stdout+stderr merged into one spool file `~/.local/state/binnacle/jobs/<job_id>/out.log`; `meta.json` at launch, `exit` written by the reaping path | Gemini/Codex/Copilot detach discipline; the parent doc's reload-survival contract | in-process `subprocess` held by uvicorn (dies on reload) |
+| Every command launches under the stable local job owner (`binnacle-jobs.service` on managed systemd installs), with `start_new_session=True`, merged stdout+stderr in `~/.local/state/binnacle/jobs/<job_id>/out.log`, and atomic durable metadata | Gemini/Codex/Copilot detach discipline plus the measured MCP-restart failure of the old embedded owner | command ownership inside the reloadable/restartable MCP process; one systemd unit per short command |
 | `run_command` waits up to `wait_seconds` (default 30, clamp 1–50) polling the spool; finishes → full result, still running → `{job_id, state: running, partial_output}` | Codex yield / Copilot initial_wait; ChatGPT 60 s cap | kill-at-timeout (Gemini) |
 | `background: true` → return `job_id` after a 1 s warm-up (surfaces immediate errors) | Gemini `is_background` + `delay_ms` | fire-and-forget with no warm-up |
 | Deployment-local `run_command.auto_background_patterns` can apply that same warm-up to matching commands for a client-name prefix; repository default is empty | 2026-09-22 production latency review: 77 real long commands spent ~39.8 min in foreground wait before yielding | hard-coded command names or repository-owned ChatGPT preferences |
@@ -154,42 +155,47 @@ command}]}`, using the compact all-running + recent-history policy above.
 SIGKILL after 5 s) and its whole process group. An already-finished job
 returns its final state without error.
 **Input**: `job_id` (required). **Result**: `{job_id, state, exit_code?,
-signal?}`. Already-exited → returns the final state, no error
-(idempotent). Waits for the reaper to record the exit before returning
-(via `jobs.await_exit`), so a stopped job reports `state: "exited",
-signal: 15`, never a transient `unknown` from reading disk before the exit
-was written (2026-09-06). A job whose server died has no reaper to record
-it, so stopping it returns `unknown` after the wait — honest, since its
-exit code cannot be recovered.
+signal?}`. Already-terminal → returns the durable final state without contacting
+the owner (idempotent). A running manager-owned job is stopped by the stable
+owner, which records the final signal/status before the tool returns. If the
+job owner itself restarts, unfinished v2 records are durably classified as
+`owner_restart`; records from a previous host boot become `host_reboot`, instead
+of falling into an ambiguous `unknown` state. Legacy v1 records retain the old
+reader/stop behavior during the migration window.
 
-## 6. Shared implementation (`tools/jobs.py`)
+## 6. Shared implementation
 
-`~/.local/state/binnacle/jobs/<job_id>/` holds `out.log` (merged stream)
-and `meta.json` (`command, workdir, pid, pgid, started_at, [exit_code],
-[signal], [ended_at]`). Every metadata update is assembled in a unique temporary
-file in the same job directory and committed with atomic `os.replace`, so concurrent
-status/stop/list readers see an old complete record or the new complete record, never
-a truncate/write intermediate state. Launch: `subprocess.Popen(["bash", "-c", command],
-cwd, env, stdin=PIPE-or-DEVNULL, stdout=log, stderr=STDOUT,
-start_new_session=True)`. Exit recording has one owner, whoever waited on
-the process: a command that finishes within its wait window is recorded
-inline by the run_command request thread (`record_exit`, from the
-in-memory `proc.returncode`); a command that outlives the window is handed
-to a background reaper thread (`reap_in_background`). So the common
-synchronous case spawns no thread and cannot race its own exit.
-`stop_job` and `job_status` hold no process handle, so they read what the
-recorder wrote and call `await_exit` to wait through the brief window
-between a process dying and its reaper writing `meta.json`. A job whose
-process is gone but whose `meta.json` still lacks an exit (server killed
-mid-run, no reaper left) is reported `state: "unknown"`. `job_status`
-derives liveness from `/proc/<pid>` + `meta.json`. The retention base window is
-`jobs.keep_newest` (50 by default). Before a launch, `start_job` atomically reserves
-one slot by pruning existing non-running dirs to `keep_newest - 1`, then creates
-the new job, starts the process, and writes complete launch metadata under the same
-process-local store lock. Concurrent MCP calls therefore cannot share one reserved
-slot. A job older than the base window is never deleted while it is still running,
-so the physical store may temporarily exceed 50 only by those protected stale-running
-exceptions. The compact recent-jobs listing cap is independent of disk retention.
+Managed systemd deployments separate the MCP control plane from process ownership:
+
+```text
+systemd --user
+├── binnacle-mcp.service   # FastMCP / uvicorn; may reload or restart
+└── binnacle-jobs.service  # stable command owner; never auto-reloads
+```
+
+The MCP talks to the owner through a private AF_UNIX socket under
+`$XDG_RUNTIME_DIR/binnacle/`. The manager launches `bash -c` with the same command
+environment, cwd, stdin spool and output spool used by the original implementation. A
+fast command may still finish synchronously inside `run_command`; a command that outlives
+the foreground window remains owned and reaped by the manager after the MCP call returns.
+
+`~/.local/state/binnacle/jobs/<job_id>/` remains the durable source of truth. It contains
+`out.log`, optional `stdin`, and atomically replaced `meta.json`. Manager-owned v2 metadata
+adds an owner instance id, Linux boot id and terminal `termination_reason`. On manager
+startup, unfinished records from an earlier owner on the same boot become
+`owner_restart`; records from an earlier boot become `host_reboot`. Existing v1 metadata
+remains readable during migration.
+
+The manager is intentionally a single long-lived service rather than one systemd unit per
+command. Production measurements found 7,307 synchronous `run_command` results in seven
+days with p50 about 117 ms, while a per-command systemd unit cost roughly 30–100 ms. The
+full manager path adds about 3.84 ms at p50 and 4.44 ms at p95 in the 2026-09-22 worktree
+benchmark, under the 5 ms acceptance gate.
+
+The original process-group/descendant stop implementation remains inside the stable owner
+for this migration, keeping the existing TERM→KILL, `setsid()`-child, PID-reuse and
+concurrent-stop contracts separate from the ownership change. `job_status` continues to
+read durable state and `/proc` directly, so status does not depend on an MCP session.
 
 ## 7. Test checklist (tests/integration/test_jobs.py)
 
@@ -210,9 +216,9 @@ replaced; 200 KiB unread `stdin` returns at `wait_seconds` (spool file, not
 a pipe) and stdin is delivered; a `setsid` child dies with the job; a
 record whose pid was reused by an unrelated live process reads `unknown`
 and `stop_job` does not signal it, a matching `starttime` reads `running`,
-a legacy record without one falls back to existence; a reload orphan (no
-watcher) is `running` while alive, `unknown` after, and `stop_job` reports
-`unknown` without inventing a signal; an unwritable spool is a clean
+a legacy record without one falls back to existence; the legacy embedded-owner
+orphan case remains covered for backwards compatibility, while manager-owned unfinished
+records recover as `owner_restart`/`host_reboot`; an unwritable spool is a clean
 ToolError; `wait_seconds` above the max is clamped; two concurrent stops
 both report `exited`/15. list newest-first; `quiet` flag on a sleeping job; tail
 respects `tail_lines`; `wait_seconds` returns soon after the job exits, or

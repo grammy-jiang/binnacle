@@ -11,7 +11,7 @@ from fastmcp.exceptions import ToolError
 from fastmcp.tools.base import ToolResult
 from pydantic import Field
 
-from binnacle import jobs
+from binnacle import job_owner
 
 OUTPUT_SCHEMA = {
     "type": "object",
@@ -26,7 +26,12 @@ OUTPUT_SCHEMA = {
 
 
 def stop_job_impl(job_id: str) -> ToolResult:
-    result = jobs.stop_job(job_id)
+    try:
+        result = job_owner.stop_job(job_id)
+    except RuntimeError as exc:
+        raise ToolError(
+            f"Could not stop the job: {exc}. Run `binnacle doctor`."
+        ) from exc
     if result is None:
         raise ToolError(
             f"No job with id {job_id!r}. Call job_status without a job_id to list recent jobs."
@@ -40,8 +45,12 @@ def stop_job_impl(job_id: str) -> ToolResult:
     if result["state"] == "exited":
         if result["signal"] is not None:
             summary = f"Job {job_id} stopped (signal {result['signal']})."
-        else:
+        elif result["exit_code"] is not None:
             summary = f"Job {job_id} already exited {result['exit_code']}."
+        elif result.get("termination_reason"):
+            summary = f"Job {job_id} was interrupted ({result['termination_reason']})."
+        else:
+            summary = f"Job {job_id} ended without a recorded exit status."
     else:
         summary = f"Job {job_id} is in state {result['state']}."
     return ToolResult(content=summary, structured_content=payload)

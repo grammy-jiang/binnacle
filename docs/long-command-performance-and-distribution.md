@@ -203,11 +203,11 @@ the sequential mode.
 
 ## 9. Reliability constraints discovered in production
 
-Background jobs survive a development-worker reload as OS processes, but a job whose old
-reaper disappears can later have `state=unknown` because final exit metadata was not
-recorded. Increasing background/distributed execution makes durable exit ownership more
-important. Fix that reliability gap before treating distributed child jobs as a production
-quality gate.
+The original embedded owner could lose final exit metadata when its uvicorn worker
+reloaded. The durable local-ownership work replaces that dependency with a stable sibling
+`binnacle-jobs.service`; manager-owned jobs survive MCP reload/restart, while manager/host
+interruptions are classified as `owner_restart` or `host_reboot`. Distributed execution
+remains deferred until this local ownership layer has production evidence.
 
 ## 10. Implementation order
 

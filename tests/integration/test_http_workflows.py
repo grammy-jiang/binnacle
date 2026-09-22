@@ -127,12 +127,12 @@ def test_authenticated_http_background_job_status_and_stop(tmp_path):
         with_session(go, client_name="scenario-audit")
     finally:
         if job_id:
-            from binnacle import jobs
+            from binnacle import job_owner, jobs
 
             try:
                 state = jobs.job_state(job_id)
                 if state.get("state") == "running":
-                    jobs.stop_job(job_id)
+                    job_owner.stop_job(job_id)
             except (KeyError, OSError):
                 pass
 

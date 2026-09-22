@@ -26,6 +26,7 @@ def test_defaults_load_without_config_file(tmp_path, monkeypatch):
     assert settings.serve.port == 8000
     assert settings.roots.extra_roots == (Path("/tmp"),)
     assert settings.jobs.keep_newest == 50
+    assert settings.jobs.owner == "auto"
     assert settings.run_command.auto_background_patterns == {}
     assert settings.telemetry.tokenizer.enabled is False
     assert settings.telemetry.tokenizer.encoding == "o200k_base"

@@ -13,13 +13,14 @@ def clean_env(config_file) -> dict[str, str]:
     return env
 
 
-def test_distribution_exposes_both_console_entry_points():
+def test_distribution_exposes_runtime_console_entry_points():
     dist = importlib.metadata.distribution("binnacle-mcp")
     scripts = {
         ep.name: ep.value for ep in dist.entry_points if ep.group == "console_scripts"
     }
 
     assert scripts["binnacle"] == "binnacle.cli:main"
+    assert scripts["binnacle-jobs"] == "binnacle.job_manager:main"
     assert scripts["binnacle-watchdog"] == "binnacle.watchdog_cli:main"
 
 

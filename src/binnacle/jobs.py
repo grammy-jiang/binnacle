@@ -17,6 +17,7 @@ from pathlib import Path
 from binnacle import job_store
 from binnacle.callctx import current_call
 from binnacle.config import get_settings
+from binnacle.job_output import clip_head_tail as job_output_clip_head_tail
 from binnacle.job_process import (
     _descendants,
     _pid_alive,
@@ -31,8 +32,21 @@ JOBS_DIR = get_settings().jobs.dir
 KEEP_NEWEST = get_settings().jobs.keep_newest
 RUN_MAX_OUTPUT_CHARS = get_settings().jobs.max_output_chars
 WARMUP_S = get_settings().jobs.warmup_s
-OWNER_MODE = get_settings().jobs.owner
+_OWNER_SETTING = get_settings().jobs.owner
 MANAGER_SOCKET = get_settings().jobs.socket_path
+
+
+def _resolve_owner_mode() -> str:
+    if _OWNER_SETTING != "auto":
+        return _OWNER_SETTING
+    return (
+        "manager"
+        if os.environ.get("BINNACLE_MANAGED_DEPLOYMENT") == "1"
+        else "embedded"
+    )
+
+
+OWNER_MODE = _resolve_owner_mode()
 
 # stop_job timings; module-level so tests can shrink the escalation wait.
 STOP_SIGTERM_GRACE_S = 5.0  # wait for a clean SIGTERM exit before SIGKILL
@@ -142,37 +156,39 @@ def record_exit(job_id: str, proc: subprocess.Popen) -> None:
     its wait window, or the background reaper for one that outlived it.
     Call only after the process has exited (``proc.returncode`` is set).
     """
-    meta = _read_meta(job_id) or {}
     rc = proc.returncode
-    if rc is not None and rc < 0:
-        meta["signal"] = -rc
-        meta["exit_code"] = None
-    else:
-        meta["exit_code"] = rc
-    meta["ended_at"] = time.time()
-    meta["termination_reason"] = _termination_reason(meta, rc)
-    try:
-        _write_meta(job_id, meta)
-    except OSError:
-        # The job dir vanished (pruned or removed externally); there is
-        # nowhere to record the exit, and crashing helps nobody.
-        logger.warning(
-            "event=job_exit_unrecorded job_id=%s exit_code=%s signal=%s",
-            job_id,
-            meta.get("exit_code"),
-            meta.get("signal"),
-        )
-        return
+    with _STORE_LOCK:
+        meta = _read_meta(job_id) or {}
+        if rc is not None and rc < 0:
+            meta["signal"] = -rc
+            meta["exit_code"] = None
+        else:
+            meta["exit_code"] = rc
+        meta["ended_at"] = time.time()
+        meta["termination_reason"] = _termination_reason(meta, rc)
+        try:
+            _write_meta(job_id, meta)
+        except OSError:
+            # The job dir vanished (pruned or removed externally); there is
+            # nowhere to record the exit, and crashing helps nobody.
+            logger.warning(
+                "event=job_exit_unrecorded job_id=%s exit_code=%s signal=%s",
+                job_id,
+                meta.get("exit_code"),
+                meta.get("signal"),
+            )
+            return
     try:
         log_bytes = (_job_dir(job_id) / "out.log").stat().st_size
     except OSError:
         log_bytes = 0
     started = meta.get("started_at")
     logger.info(
-        "event=job_exit job_id=%s exit_code=%s signal=%s runtime_s=%s log_bytes=%d",
+        "event=job_exit job_id=%s exit_code=%s signal=%s reason=%s runtime_s=%s log_bytes=%d",
         job_id,
         meta.get("exit_code"),
         meta.get("signal"),
+        meta.get("termination_reason"),
         round(meta["ended_at"] - started, 3)
         if isinstance(started, (int, float))
         else "-",
@@ -271,48 +287,12 @@ def start_job(
     return job_id, proc
 
 
-def start_and_wait(
-    command: str, workdir: Path, stdin: str | None, wait_seconds: float
-) -> str:
-    """Start a job through the configured owner and wait through its first window."""
-    if OWNER_MODE == "manager":
-        from binnacle import job_client
-
-        response = job_client.start(
-            MANAGER_SOCKET,
-            command=command,
-            workdir=workdir,
-            stdin=stdin,
-            wait_seconds=wait_seconds,
-            call_id=current_call.get(),
-        )
-        return str(response["job_id"])
-
-    job_id, proc = start_job(command, workdir, stdin)
-    try:
-        proc.wait(timeout=wait_seconds)
-        record_exit(job_id, proc)
-    except subprocess.TimeoutExpired:
-        reap_in_background(job_id, proc)
-    return job_id
-
-
 def read_log(job_id: str) -> bytes:
     return job_store.read_log(JOBS_DIR, job_id)
 
 
 def clip_head_tail(text: str, limit: int = RUN_MAX_OUTPUT_CHARS) -> tuple[str, bool]:
-    if len(text) <= limit:
-        return text, False
-    head = limit // 2
-    tail = limit - head
-    omitted = len(text) - limit
-    # text[len(text) - tail:], not text[-tail:]: with tail == 0 the latter is
-    # the whole string (property test, 2026-09-13).
-    return (
-        f"{text[:head]}\n[… {omitted} chars elided …]\n{text[len(text) - tail :]}",
-        True,
-    )
+    return job_output_clip_head_tail(text, limit)
 
 
 def job_state(job_id: str) -> dict | None:
@@ -363,42 +343,6 @@ def list_jobs() -> list[dict]:
     states = [s for jid in ids if (s := job_state(jid)) is not None]
     states.sort(key=lambda s: s["started_at"], reverse=True)
     return states
-
-
-def mark_stop_requested(job_id: str) -> None:
-    meta = _read_meta(job_id)
-    if meta is None or "exit_code" in meta or "signal" in meta:
-        return
-    meta["stop_requested"] = True
-    _write_meta(job_id, meta)
-
-
-def _record_interruption(job_id: str, meta: dict, reason: str) -> None:
-    meta["exit_code"] = None
-    meta["signal"] = None
-    meta["ended_at"] = time.time()
-    meta["termination_reason"] = reason
-    _write_meta(job_id, meta)
-    logger.warning("event=job_interrupted job_id=%s reason=%s", job_id, reason)
-
-
-def recover_previous_owner(current_owner: str, current_boot: str) -> int:
-    """Finalize non-terminal manager-owned records from an earlier owner/boot."""
-    recovered = 0
-    for job_id in job_store.list_job_ids(JOBS_DIR):
-        meta = _read_meta(job_id)
-        if meta is None or meta.get("schema_version") != 2:
-            continue
-        if "exit_code" in meta or "signal" in meta:
-            continue
-        previous_owner = meta.get("owner_instance_id")
-        previous_boot = meta.get("boot_id")
-        if previous_owner == current_owner:
-            continue
-        reason = "host_reboot" if previous_boot != current_boot else "owner_restart"
-        _record_interruption(job_id, meta, reason)
-        recovered += 1
-    return recovered
 
 
 def _signal_job(pgid: int, strays: set[int], sig: int) -> None:
@@ -462,16 +406,3 @@ def stop_job_embedded(job_id: str) -> dict | None:
     except ProcessLookupError:
         pass
     return await_exit(job_id, STOP_SIGKILL_GRACE_S)
-
-
-def stop_job(job_id: str) -> dict | None:
-    """Stop through the manager for manager-owned jobs; retain legacy compatibility."""
-    meta = _read_meta(job_id)
-    if meta is None:
-        return None
-    if meta.get("schema_version") == 2 and meta.get("owner_instance_id"):
-        from binnacle import job_client
-
-        job_client.stop(MANAGER_SOCKET, job_id)
-        return job_state(job_id)
-    return stop_job_embedded(job_id)

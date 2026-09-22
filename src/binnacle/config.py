@@ -213,11 +213,12 @@ def _default_jobs_socket() -> Path:
 class JobsSettings(BaseModel):
     """Disk-backed job store and local ownership backend."""
 
-    owner: Literal["embedded", "manager"] = Field(
-        "embedded",
+    owner: Literal["auto", "embedded", "manager"] = Field(
+        "auto",
         description=(
-            "Process owner for run_command jobs. Managed systemd deployments use "
-            "manager; embedded remains the rollback/test path."
+            "Process owner for run_command jobs. auto uses the manager in a "
+            "binnacle-setup managed deployment and embedded otherwise; explicit "
+            "embedded remains the rollback/test path."
         ),
     )
     socket_path: Path = Field(

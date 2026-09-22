@@ -12,7 +12,7 @@ from fastmcp.exceptions import ToolError
 from fastmcp.tools.base import ToolResult
 from pydantic import Field
 
-from binnacle import jobs
+from binnacle import job_owner, jobs
 from binnacle.callctx import current_argument_names, current_call, current_client
 from binnacle.config import get_settings
 from binnacle.paths import resolve_path
@@ -81,7 +81,7 @@ def run_command_impl(
         )
     initial_wait = jobs.WARMUP_S if effective_background else float(wait_seconds)
     try:
-        job_id = jobs.start_and_wait(command, resolved, stdin, initial_wait)
+        job_id = job_owner.start_and_wait(command, resolved, stdin, initial_wait)
     except (OSError, RuntimeError) as e:
         raise ToolError(f"Could not start the job: {e}. Run `binnacle doctor`.") from e
 

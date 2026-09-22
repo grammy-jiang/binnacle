@@ -353,6 +353,8 @@ def test_server_unit_dev_mode_runs_the_checkout_with_reload():
         "--host 127.0.0.1 --port 8000 --reload --loop uvloop --http httptools\n"
     ) in spec.body
     assert "Restart=on-failure" in spec.body and "/dev/tcp/127.0.0.1/8000" in spec.body
+    assert "Wants=binnacle-jobs.service" in spec.body
+    assert "Environment=BINNACLE_MANAGED_DEPLOYMENT=1" in spec.body
     assert "development: checkout with auto-reload" in spec.body
 
 
@@ -391,6 +393,7 @@ def test_server_params_remember_the_checkout_and_resolve_the_executable(
         "mode": "dev",
         "host": "127.0.0.1",
         "port": "8000",
+        "jobs_owner": "manager",
         "repo": str(repo.resolve()),
     }
     exe = executable(tmp_path, "binnacle")
@@ -399,6 +402,7 @@ def test_server_params_remember_the_checkout_and_resolve_the_executable(
         "mode": "prod",
         "host": "127.0.0.1",
         "port": "8000",
+        "jobs_owner": "manager",
         "repo": str(repo.resolve()),
         "binnacle": str(exe),
     }

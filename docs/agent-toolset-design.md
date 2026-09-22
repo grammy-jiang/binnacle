@@ -280,7 +280,7 @@ From `client-conformance.md` (2026-08-30, developer mode, Pro account):
 | 60 s hard timeout | Every tool returns in < 50 s by construction. `run_command` returns at `wait_seconds ≤ 50` and **never kills the process when the wait expires**: the call returns partial output plus a `job_id`, and `job_status` continues from there — Codex's `exec_command` → `session_id` contract, adapted to a stateless server. |
 | Response budget | Structured-first results: `structuredContent` conforming to a declared `outputSchema`, plus a one-line text summary — never duplicated JSON (§7.12). Server-side head+tail truncation with an explicit elision marker and original size. Conservative caps, tuned after measurement (§10). |
 | 5000-token schema, 30–40 tool ceiling | v1 = 8 tools. Terse descriptions. No decorative parameters. |
-| Stateless, session-per-call | No server session state. `workdir` is an explicit parameter. Job state lives on disk (also survives `uvicorn --reload`). |
+| Stateless, session-per-call | No server session state. `workdir` is explicit. Job state lives on disk and managed installs use a stable sibling job-owner service, so MCP reload/restart does not own command lifetime. |
 | `readOnlyHint` is the confirmation gate | Every read tool carries `readOnlyHint: true`. Never mislabel: a tool that can mutate must not carry it — the annotation is an honor contract, and mislabeling would bypass the user's only approval gate. |
 | Sequential + slow round trips | Slightly coarser tools than a local CLI: `search_text` returns context lines in one call; `job_status` returns state *and* log tail; errors carry the data needed for the next call. |
 | Errors reach the model (T9) | Every `ToolError` states what went wrong *and* what to call instead. |
@@ -332,7 +332,7 @@ model family ≠ same behavior — Rev. 3). The provenance of every choice:
 | v1 element | Origin | Why it won |
 | --- | --- | --- |
 | `run_command` wait-not-kill + poll | Codex unified exec | The only execution shape that fits a hard 60 s client cap without ever losing work. |
-| Disk-backed jobs with list / tail / stop | Copilot's `read_bash` / `stop_bash` / `list_bash`; Gemini's background tools | Poll-friendly; survives `uvicorn --reload`. |
+| Disk-backed jobs with list / tail / stop | Copilot's `read_bash` / `stop_bash` / `list_bash`; Gemini's background tools | Poll-friendly; stable owner survives MCP reload/restart. |
 | `job_status.last_output_age_s` + `quiet` flag | Gemini's shell inactivity timeout, repurposed | Tells ChatGPT when polling is pointless. |
 | `read_file` line ranges | Claude Code `Read` | Token-efficient under the response budget. |
 | `edit_file` str-replace, uniqueness errors, `replace_all` | Claude Code `Edit` / Copilot `edit` / Gemini `replace` — the 3:1 majority | Portable JSON input; errors double as instructions. |
@@ -455,13 +455,14 @@ Rev. 5 naming criteria (§6.8).
 Implementation contract (this is what makes wait-not-kill possible on a
 server that restarts on every save): **every** command launches detached
 (`setsid`, or a `systemd-run --user` transient unit), stdout+stderr
-redirected to `~/.local/state/binnacle/jobs/<job_id>/out.log`, `meta.json`
-(command, workdir, pid, start time) written at launch, `exit` (code) written
-by a wrapper on completion. `run_command` itself just waits up to
-`wait_seconds` reading the spool, so a call that hands back a `job_id` hands
-the same disk-backed job to `job_status`, and `uvicorn --reload` loses
-nothing. This is Codex's `exec_command` → `session_id` design with state on
-disk instead of in-process PTYs (which a reloading dev server cannot keep);
+redirected to `~/.local/state/binnacle/jobs/<job_id>/out.log`, with atomic
+metadata written at launch and completion. On managed systemd installs the
+stable sibling `binnacle-jobs.service` owns the command and its waiter while
+FastMCP remains a restartable control plane. `run_command` waits only through
+its configured foreground window; a returned `job_id` continues to name the
+same disk-backed job across MCP reloads and full MCP service restarts. This is
+Codex's `exec_command` → `session_id` design with durable state plus a local
+execution owner instead of in-process PTYs;
 v1 jobs are therefore non-interactive — no `write_stdin` equivalent until
 Phase 2 (§9).
 

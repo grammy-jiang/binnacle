@@ -105,13 +105,16 @@ def test_serve_uses_explicit_uvicorn_performance_stack(monkeypatch):
     ]
 
 
-def test_doctor_passes_deployment_and_exit_code(monkeypatch, capsys):
+def test_doctor_passes_deployment_and_exit_code(tmp_path, monkeypatch, capsys):
     from types import SimpleNamespace
 
     monkeypatch.setattr(
         cli,
         "get_settings",
-        lambda: SimpleNamespace(serve=SimpleNamespace(host="127.0.0.1", port=8123)),
+        lambda: SimpleNamespace(
+            serve=SimpleNamespace(host="127.0.0.1", port=8123),
+            jobs=SimpleNamespace(socket_path=tmp_path / "jobs.sock"),
+        ),
     )
     seen = {}
 
@@ -129,6 +132,8 @@ def test_doctor_passes_deployment_and_exit_code(monkeypatch, capsys):
     assert seen["since"] == "-2 hours"
     assert seen["probe"] is False
     assert seen["dep"].server_url == "http://127.0.0.1:8123/mcp"
+    assert seen["dep"].jobs_unit == cli.JOBS_UNIT
+    assert seen["dep"].jobs_socket is not None
     assert capsys.readouterr().out.strip() == "healthy"
 
 
@@ -157,6 +162,24 @@ def test_stats_only_loads_webmin_history_when_requested(monkeypatch, capsys):
     second = capsys.readouterr().out
     assert "USAGE" in second and "RESOURCES" in second
     assert loads == [("-1 hour", "now")]
+
+
+def test_stats_default_merges_mcp_and_jobs_journals(monkeypatch, capsys):
+    from binnacle import logstats
+
+    seen = []
+    monkeypatch.setattr(
+        logstats,
+        "fetch_journal",
+        lambda unit, since, until: seen.append(unit) or "journal",
+    )
+    monkeypatch.setattr(logstats, "parse", lambda raw: ([], []))
+    monkeypatch.setattr(logstats, "analyze", lambda records, startups: "analysis")
+    monkeypatch.setattr(logstats, "render", lambda analysis: "USAGE")
+
+    cli.stats(system_resources=False)
+    assert seen == [("binnacle-mcp", cli.JOBS_UNIT)]
+    assert "binnacle-mcp,binnacle-jobs.service" in capsys.readouterr().out
 
 
 def test_systemctl_wrapper_and_unit_state(monkeypatch):

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import socket
 import threading
 import time
 from pathlib import Path
@@ -256,3 +257,91 @@ def test_run_command_reports_manager_unavailable_cleanly(tmp_path, monkeypatch):
         ToolError, match="Could not start the job.*job manager unavailable"
     ):
         run("true")
+
+
+def test_two_manager_stop_requests_agree(manager):
+    _, socket_path, _ = manager
+    started = job_client.start(
+        socket_path,
+        command="sleep 30",
+        workdir=Path("/tmp"),
+        stdin=None,
+        wait_seconds=0.05,
+        call_id="double-stop",
+    )
+    job_id = started["job_id"]
+    barrier = threading.Barrier(3)
+    results = []
+    errors = []
+
+    def do_stop():
+        try:
+            barrier.wait()
+            results.append(job_client.stop(socket_path, job_id))
+        except Exception as exc:  # noqa: BLE001 - the test records both callers
+            errors.append(exc)
+
+    threads = [threading.Thread(target=do_stop) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    barrier.wait()
+    for thread in threads:
+        thread.join()
+
+    assert errors == []
+    assert len(results) == 2 and all(r["state"] == "exited" for r in results)
+    final = jobs.job_state(job_id)
+    assert final is not None and final["termination_reason"] == "stop_requested"
+
+
+def test_interrupted_job_has_useful_public_summary(tmp_path, monkeypatch):
+    from binnacle.tools import job_status as status_tool
+    from binnacle.tools import stop_job as stop_tool
+
+    store = tmp_path / "jobs"
+    monkeypatch.setattr(jobs, "JOBS_DIR", store)
+    _unfinished(store, "interrupted01", boot="boot-a", owner="owner-a")
+    runtime = JobManager(
+        tmp_path / "run" / "jobs.sock",
+        owner_instance_id="owner-b",
+        boot_id="boot-a",
+    )
+    assert runtime.prepare() == 1
+
+    status_result = status_tool.job_status_impl("interrupted01", 20)
+    assert "interrupted (owner_restart)" in str(status_result.content)
+    stop_result = stop_tool.stop_job_impl("interrupted01")
+    assert "interrupted (owner_restart)" in str(stop_result.content)
+
+
+def test_systemd_notify_ready_uses_notify_socket(tmp_path, monkeypatch):
+    from binnacle import job_manager as manager_module
+
+    path = tmp_path / "notify.sock"
+    listener = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+    listener.bind(str(path))
+    listener.settimeout(1)
+    monkeypatch.setenv("NOTIFY_SOCKET", str(path))
+    try:
+        manager_module._notify_systemd_ready()
+        payload = listener.recv(200)
+    finally:
+        listener.close()
+    assert b"READY=1" in payload
+    assert b"Binnacle job manager ready" in payload
+
+
+def test_owner_auto_selects_manager_only_for_managed_deployment(monkeypatch):
+    monkeypatch.setattr(jobs, "_OWNER_SETTING", "auto")
+    monkeypatch.delenv("BINNACLE_MANAGED_DEPLOYMENT", raising=False)
+    assert jobs._resolve_owner_mode() == "embedded"
+    monkeypatch.setenv("BINNACLE_MANAGED_DEPLOYMENT", "1")
+    assert jobs._resolve_owner_mode() == "manager"
+
+
+def test_explicit_owner_setting_overrides_managed_marker(monkeypatch):
+    monkeypatch.setenv("BINNACLE_MANAGED_DEPLOYMENT", "1")
+    monkeypatch.setattr(jobs, "_OWNER_SETTING", "embedded")
+    assert jobs._resolve_owner_mode() == "embedded"
+    monkeypatch.setattr(jobs, "_OWNER_SETTING", "manager")
+    assert jobs._resolve_owner_mode() == "manager"

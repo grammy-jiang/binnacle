@@ -530,3 +530,24 @@ Do not combine this migration with:
 
 The sole goal is durable local ownership across MCP lifecycle changes with minimal latency
 and no client-visible regression.
+
+## 18. Implementation validation
+
+The isolated worktree implementation selected the stable sibling manager design. The
+following evidence was collected before any production MCP change:
+
+- storage extraction preserved the existing job contract suite;
+- isolated manager integration covered fast/slow commands, shell expansion, 200 KiB stdin,
+  stop/reap, concurrent stop, socket permissions, call correlation, owner recovery, and
+  host-boot recovery;
+- a real temporary systemd jobs service owned the command cgroup while an independent
+  frontend service was restarted; the command remained alive;
+- SIGKILL of the temporary jobs service caused systemd to clean its command cgroup, restart
+  the manager, and recover the unfinished record as `owner_restart`;
+- a simulated previous-boot record recovered as `host_reboot`;
+- full `run_command_impl('true')` A/B (120 measured iterations after warm-up) recorded
+  embedded p50 10.054 ms / p95 16.287 ms and manager p50 13.893 ms / p95 20.731 ms,
+  an added p50 3.840 ms and p95 4.444 ms, passing the <5 ms p50 acceptance gate.
+
+The temporary POC systemd units and isolated state/socket paths were removed after the
+checks; the production MCP service was not changed during these tests.

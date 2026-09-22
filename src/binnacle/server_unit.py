@@ -19,7 +19,8 @@ OWNER = "binnacle"
 SERVER_UNIT_TEMPLATE = """\
 [Unit]
 Description=Binnacle FastMCP server ({description})
-After=network.target
+After=network.target binnacle-jobs.service
+Wants=binnacle-jobs.service
 
 [Service]
 Type=simple
@@ -29,6 +30,7 @@ Type=simple
 ExecStartPost=/bin/bash -c 'for i in $(seq 1 300); do (exec 3<>/dev/tcp/127.0.0.1/{port}) 2>/dev/null && exit 0; sleep 0.1; done; echo "binnacle: port {port} not listening after 30 s" >&2; exit 1'
 Restart={restart}
 RestartSec=2
+Environment=BINNACLE_MANAGED_DEPLOYMENT=1
 UMask=0077
 
 [Install]
@@ -79,7 +81,12 @@ def render_server_unit(params: Mapping[str, str]) -> str:
 
 
 def server_params(mode: str, repo: Path | None, host: str, port: int) -> dict[str, str]:
-    params = {"mode": mode, "host": host, "port": str(port)}
+    params = {
+        "mode": mode,
+        "host": host,
+        "port": str(port),
+        "jobs_owner": "manager",
+    }
     if repo is not None:
         # Recorded in every mode, so `mode dev` after `mode prod` needs no
         # --repo: the marker remembers the checkout.

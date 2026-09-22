@@ -198,11 +198,14 @@ def job_status_impl(
         payload["waited_s"] = waited
     if state["state"] == "exited":
         rc = state["exit_code"]
-        detail = (
-            f"killed by signal {state['signal']}"
-            if state["signal"] is not None
-            else f"exited {rc}"
-        )
+        if state["signal"] is not None:
+            detail = f"killed by signal {state['signal']}"
+        elif rc is not None:
+            detail = f"exited {rc}"
+        elif state.get("termination_reason"):
+            detail = f"interrupted ({state['termination_reason']})"
+        else:
+            detail = "ended without a recorded exit status"
         summary = f"Job {job_id} {detail} after {state['runtime_s']} s."
     elif quiet:
         summary = (

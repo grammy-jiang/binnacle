@@ -1,38 +1,13 @@
-"""Deployment health checks behind `binnacle doctor`.
+"""Deployment health checks behind ``binnacle doctor``.
 
-Every check is a plain function that returns Check records, so the CLI
-only renders and the tests only need fakes for the outside world
-(systemctl, /proc, HTTP, the journal). Checks cover the server's side of
-the chain a request takes (server -> tools -> shell) plus the failure
-modes seen in production; the ChatGPT tunnel in front of it is the
-`binnacle-tunnel` companion's doctor, the uplink watchdog the
-`binnacle-watchdog` companion's:
+Checks follow the request path: configuration/roots, token, managed services and
+their live processes/environments, local MCP authentication, uplink, boot/linger,
+durable jobs, and recent journal failures. The ChatGPT tunnel and uplink watchdog
+keep their own companion doctors. Each check returns a plain ``Check`` record so
+the CLI only renders and tests can fake systemctl, procfs, HTTP, and journal IO.
 
-- config: settings load, configured roots exist.
-- token: present, mode 0600, non-empty, carries the "Bearer " prefix the
-  tunnel forwards verbatim.
-- units: exactly one server unit active, a port-readiness ExecStartPost, no
-  crash-loop restarts, linger.
-- service environment: the running server's PATH (read from /proc, not
-  from the manager, because a unit started at boot keeps the pre-login
-  PATH) holds ~/.local/bin, ripgrep, and bash.
-- endpoint: /mcp refuses a request without the token and accepts one
-  with it, so a rotated-but-not-restarted token shows up here.
-- uplink: the default route actually carries traffic, probed end to end
-  per interface (gateway, DNS, TCP to the upstream host).
-- driver: the daily wlan1 USB 3 stability sample (external cron job);
-  skipped where that job does not exist.
-- jobs: spool directory writable; counts of running and orphaned jobs.
-- journal: errors and tracebacks in a recent window.
-
-The uplink check exists because every check above it is local. On
-2026-09-12 a wedged USB radio held the default route for 48 minutes:
-units active, endpoint answering, tunnel health port green, `doctor`
-all-ok -- and the connector unreachable from ChatGPT the whole time. The
-tunnel companion's poller check is the one that sees what ChatGPT sees.
-
-Status semantics: "fail" breaks a tool or the connection and exits 1;
-"warn" is degraded but working; "ok" carries the measured value.
+``fail`` breaks a tool/connection and exits 1; ``warn`` is degraded but working;
+``ok`` carries the measured value.
 """
 
 import json
@@ -44,7 +19,8 @@ from collections.abc import Callable, Iterable, Mapping
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from binnacle import jobs, logstats, units
+from binnacle import doctor_jobs as _doctor_jobs
+from binnacle import logstats, units
 from binnacle.config import CONFIG_FILE_ENV, DEFAULT_CONFIG_FILE, get_settings
 from binnacle.doctor_common import (
     Check,
@@ -57,8 +33,32 @@ from binnacle.doctor_common import (
     warn,
 )
 from binnacle.doctor_connectivity import _tail_lines, check_endpoint, check_uplink
+from binnacle.job_manager_doctor import check_job_manager
 
-__all__ = ["_tail_lines"]
+__all__ = ["_job_state_safe", "_tail_lines", "server_busy_reasons"]
+
+
+def _job_state_safe(job_id: str) -> dict | None:
+    return _doctor_jobs._job_state_safe(job_id)
+
+
+def server_busy_reasons(
+    unit: str,
+    jobs_dir: Path,
+    window: str = "-30s",
+    fetch: Callable[[str, str], str] = lambda u, s: logstats.fetch_journal(u, s),
+    *,
+    include_jobs: bool = True,
+) -> list[str]:
+    return _doctor_jobs.server_busy_reasons(
+        unit,
+        jobs_dir,
+        window,
+        fetch,
+        include_jobs=include_jobs,
+        state_reader=_job_state_safe,
+    )
+
 
 # -- systemd helpers ---------------------------------------------------------
 
@@ -299,13 +299,6 @@ def check_jobs(jobs_dir: Path) -> list[Check]:
     return out
 
 
-def _job_state_safe(job_id: str) -> dict | None:
-    try:
-        return jobs.job_state(job_id)
-    except (KeyError, OSError):
-        return None
-
-
 _JOURNAL_ERROR = re.compile(
     r"^(?:\d{4}-\d{2}-\d{2}T\S+\s+)?(?:ERROR|CRITICAL):(?:\s|$)|^(?:\[[^]]+\]\s+)?\s*(?:ERROR|CRITICAL)\s+event="
 )
@@ -348,46 +341,10 @@ class Deployment:
     user_bin: Path
     unit_path: Path | None = None
     render_unit: Callable[[Mapping[str, str]], str] | None = None
-
-
-def server_busy_reasons(
-    unit: str,
-    jobs_dir: Path,
-    window: str = "-30s",
-    fetch: Callable[[str, str], str] = lambda u, s: logstats.fetch_journal(u, s),
-) -> list[str]:
-    """Why restarting the server unit now would hurt: background jobs it
-    would kill (they live in the unit's cgroup), and tool calls that
-    arrived inside `window` (a restart fails the calls in flight). Empty
-    means a quiet moment."""
-    reasons: list[str] = []
-    if jobs_dir.is_dir():
-        running = [
-            d.name
-            for d in sorted(jobs_dir.iterdir())
-            if d.is_dir()
-            and (s := _job_state_safe(d.name)) is not None
-            and s["state"] == "running"
-        ]
-        if running:
-            shown = ", ".join(running[:3]) + (" ..." if len(running) > 3 else "")
-            reasons.append(
-                f"{len(running)} background job(s) running ({shown}); a unit "
-                "restart kills them"
-            )
-    try:
-        calls = fetch(unit, window).count("event=tool_call")
-    except (OSError, subprocess.SubprocessError) as e:
-        reasons.append(
-            f"journal unreadable ({e}); cannot tell whether calls are in flight"
-        )
-        return reasons
-    if calls:
-        reasons.append(
-            f"{calls} tool call(s) in the last {window.lstrip('-')}; a restart "
-            "fails the calls in flight"
-        )
-    return reasons
+    jobs_unit: str | None = None
+    jobs_unit_path: Path | None = None
+    render_jobs_unit: Callable[[Mapping[str, str]], str] | None = None
+    jobs_socket: Path | None = None
 
 
 def run_all(dep: Deployment, since: str = "-1 hour", probe: bool = True) -> list[Check]:
@@ -418,6 +375,27 @@ def run_all(dep: Deployment, since: str = "-1 hour", probe: bool = True) -> list
             "binnacle mode dev|prod (restarts at a quiet moment)",
         )
         checks += check_service_env(active, s.rg_bin, dep.user_bin)
+
+    jobs_active: str | None = None
+    if dep.jobs_unit is not None and dep.jobs_socket is not None:
+        manager_checks, jobs_active = check_job_manager(dep.jobs_unit, dep.jobs_socket)
+        checks += manager_checks
+        if dep.jobs_unit_path is not None and dep.render_jobs_unit is not None:
+            checks += units.check_unit_drift(
+                dep.jobs_unit_path,
+                "binnacle",
+                dep.render_jobs_unit,
+                "jobs-service",
+                "binnacle setup",
+            )
+        if jobs_active:
+            checks += units.check_unit_process(
+                jobs_active,
+                "jobs-service",
+                "binnacle setup",
+                "restart binnacle-jobs.service only when no jobs are running",
+            )
+            checks += check_service_env(jobs_active, s.rg_bin, dep.user_bin)
     checks += check_endpoint(dep.server_url, dep.token_file)
     # The uplink is the one check here that sees past localhost; the
     # tunnel's poller, the other one, is `binnacle-tunnel doctor`'s.
@@ -427,6 +405,8 @@ def run_all(dep: Deployment, since: str = "-1 hour", probe: bool = True) -> list
     checks += check_jobs(s.jobs.dir)
     if active:
         checks += check_journal(active, since)
+    if jobs_active:
+        checks += check_journal(jobs_active, since)
     return checks
 
 

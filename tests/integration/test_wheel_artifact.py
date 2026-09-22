@@ -48,4 +48,5 @@ def test_wheel_contains_runtime_package_typing_marker_and_entry_points(tmp_path)
         )
         entries = archive.read(entry_points).decode()
         assert "binnacle = binnacle.cli:main" in entries
+        assert "binnacle-jobs = binnacle.job_manager:main" in entries
         assert "binnacle-watchdog = binnacle.watchdog_cli:main" in entries

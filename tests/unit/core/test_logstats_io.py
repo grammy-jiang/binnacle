@@ -21,6 +21,18 @@ def test_fetch_journal_builds_window_and_returns_stdout(monkeypatch):
     assert kwargs["check"] is False
 
 
+def test_fetch_journal_accepts_multiple_units(monkeypatch):
+    seen = []
+
+    def run(cmd, **kwargs):
+        seen.append(cmd)
+        return subprocess.CompletedProcess(cmd, 0, stdout="merged\n", stderr="")
+
+    monkeypatch.setattr(logstats_io.subprocess, "run", run)
+    assert logstats_io.fetch_journal(("mcp", "jobs"), "-1 hour") == "merged\n"
+    assert seen[0][:6] == ["journalctl", "--user", "-u", "mcp", "-u", "jobs"]
+
+
 def test_fetch_journal_without_until_and_failure(monkeypatch):
     monkeypatch.setattr(
         logstats_io.subprocess,

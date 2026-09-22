@@ -2,11 +2,10 @@
 
 The server itself lives in binnacle.server; this module only wires it to
 subcommands and provisions the deployment pieces that are ours to manage:
-the token and the server's systemd user unit. The unit is one file,
-`binnacle-mcp.service`, whose content `setup` and `mode` render for the
-mode in use (development: the checkout with auto-reload; production: the
-installed `binnacle serve`), so the tunnel, the journal readers and the
-watchdog key on one name and the mode survives a reboot. The ChatGPT
+the token and Binnacle's systemd user units. `binnacle-mcp.service` is the
+restartable MCP control plane; `binnacle-jobs.service` is the stable command
+owner. Development runs the MCP checkout with auto-reload while production
+runs installed `binnacle serve`; the job owner never auto-reloads. The ChatGPT
 tunnel is the `binnacle-tunnel` companion's business; core keeps only its
 unit name, for `token rotate`.
 """
@@ -14,6 +13,7 @@ unit name, for `token rotate`.
 import secrets
 import subprocess
 from collections.abc import Callable
+from functools import partial
 from pathlib import Path
 from typing import Annotated, Literal
 
@@ -21,6 +21,12 @@ import cyclopts
 
 from binnacle import units
 from binnacle.config import get_settings
+from binnacle.job_manager_unit import (
+    JOBS_UNIT,
+    job_manager_params,
+    job_manager_unit_spec,
+    render_job_manager_unit,
+)
 from binnacle.server_unit import (
     SERVER_UNIT,
     render_server_unit,
@@ -99,7 +105,7 @@ def setup(
     dry_run: bool = False,
     adopt: bool = False,
 ) -> None:
-    """Provision the server side: the token and the systemd user unit.
+    """Provision the server side: token, MCP unit, and stable jobs unit.
 
     Parameters
     ----------
@@ -129,42 +135,59 @@ def setup(
     else:
         actions.append(f"keep existing token at {TOKEN_FILE}")
 
-    # 2. The unit, rendered for the mode; never over a stranger's file.
+    # 2. Render both managed units before writing either one.
     mode = "dev" if dev is not None else "prod"
     try:
-        spec = server_unit_spec(
+        server_spec = server_unit_spec(
             server_params(mode, dev, get_settings().serve.host, port)
         )
+        jobs_spec = job_manager_unit_spec(job_manager_params(mode, dev))
     except units.UnitError as e:
         print(e)
         raise SystemExit(1) from None
-    unit_path = UNIT_DIR / SERVER_UNIT
-    plan = units.plan_write(unit_path, spec, adopt=adopt)
-    if plan.diff:
-        print(plan.diff + "\n")
-    if plan.action == "refuse":
-        print(plan.reason)
-        raise SystemExit(1)
-    if plan.action == "unchanged":
-        actions.append(f"keep {unit_path} (already what setup writes, {mode} mode)")
-    else:
+
+    unit_plans = [
+        (UNIT_DIR / JOBS_UNIT, jobs_spec),
+        (UNIT_DIR / SERVER_UNIT, server_spec),
+    ]
+    planned: dict[str, units.WritePlan] = {}
+    for unit_path, spec in unit_plans:
+        plan = units.plan_write(unit_path, spec, adopt=adopt)
+        planned[spec.name] = plan
+        if plan.diff:
+            print(plan.diff + "\n")
+        if plan.action == "refuse":
+            print(plan.reason)
+            raise SystemExit(1)
+
+    # 3. Write both unit files. The jobs unit is written first so the server can
+    # safely switch to manager ownership after daemon-reload.
+    for unit_path, spec in unit_plans:
+        plan = planned[spec.name]
+        if plan.action == "unchanged":
+            actions.append(f"keep {unit_path} (already what setup writes, {mode} mode)")
+            continue
         verb = "write" if plan.action == "create" else "rewrite"
         act(
             f"{verb} {unit_path} ({mode} mode; a copy of the old file goes to "
             f"{BACKUP_DIR})"
             if plan.action == "rewrite"
             else f"{verb} {unit_path} ({mode} mode)",
-            lambda: units.write_unit(unit_path, plan, BACKUP_DIR),
+            partial(units.write_unit, unit_path, plan, BACKUP_DIR),
         )
 
-    # 3. Enable and start.
+    # 4. Load once, start the stable job owner first, then the MCP control plane.
     act("systemctl --user daemon-reload", lambda: _systemctl("daemon-reload"))
+    act(
+        f"systemctl --user enable --now {JOBS_UNIT}",
+        lambda: _systemctl("enable", "--now", JOBS_UNIT),
+    )
     act(
         f"systemctl --user enable --now {SERVER_UNIT}",
         lambda: _systemctl("enable", "--now", SERVER_UNIT),
     )
     act(
-        "loginctl enable-linger (service survives logout and reboot)",
+        "loginctl enable-linger (services survive logout and reboot)",
         lambda: subprocess.run(["loginctl", "enable-linger"], check=True),
     )
 
@@ -176,7 +199,15 @@ def setup(
         return
     print("\nserver side is configured. For ChatGPT, the tunnel is a separate")
     print("companion: `binnacle-tunnel setup` once its profile is written.")
-    if plan.action == "rewrite" and _unit_state(SERVER_UNIT) == "active":
+
+    jobs_plan = planned[JOBS_UNIT]
+    if jobs_plan.action == "rewrite" and _unit_state(JOBS_UNIT) == "active":
+        print(
+            f"{JOBS_UNIT} is running the previous unit/code; leave it running while "
+            "jobs are active and restart it at a quiet moment."
+        )
+    server_plan = planned[SERVER_UNIT]
+    if server_plan.action == "rewrite" and _unit_state(SERVER_UNIT) == "active":
         print(
             f"{SERVER_UNIT} is running on the previous unit file; restart it at "
             f"a quiet moment: `binnacle mode {mode}`"
@@ -203,11 +234,10 @@ def mode(
     watchdog need no change and the mode survives a reboot. `status`
     reports the mode the unit's marker line records and the unit's state.
     `repo` is needed for `dev` only when the unit has never been in
-    development mode. The restart is refused while a background job is
-    running or a tool call arrived in the last 30 s, because a unit
-    restart kills the jobs in its cgroup and fails the calls in flight;
-    `--force` overrides. Run `chatgpt-refresh` afterwards when the two
-    instances differ in tool surface.
+    development mode. With durable manager ownership, background commands
+    do not block an MCP restart; recent tool calls still do. If the local
+    rollback setting explicitly selects the embedded owner, running jobs
+    remain blockers because they share the MCP cgroup. `--force` overrides.
     """
     marker = _current_marker()
     if target == "status":
@@ -229,6 +259,12 @@ def mode(
         )
         raise SystemExit(1)
     known = marker.params
+    if known.get("jobs_owner") != "manager":
+        print(
+            f"{SERVER_UNIT} predates durable job ownership; run `binnacle setup "
+            "[--dev <repo>]` before switching mode"
+        )
+        raise SystemExit(1)
     checkout = repo or (Path(known["repo"]) if "repo" in known else None)
     if target == "dev" and checkout is None:
         print("development mode needs the checkout: `binnacle mode dev --repo <path>`")
@@ -251,7 +287,12 @@ def mode(
     if not force:
         from binnacle import doctor as checks
 
-        busy = checks.server_busy_reasons(SERVER_UNIT, get_settings().jobs.dir)
+        job_settings = get_settings().jobs
+        busy = checks.server_busy_reasons(
+            SERVER_UNIT,
+            job_settings.dir,
+            include_jobs=job_settings.owner == "embedded",
+        )
         if busy:
             print("not a quiet moment for a restart:")
             for reason in busy:
@@ -303,6 +344,10 @@ def doctor(
         server_unit=SERVER_UNIT,
         unit_path=UNIT_DIR / SERVER_UNIT,
         render_unit=render_server_unit,
+        jobs_unit=JOBS_UNIT,
+        jobs_unit_path=UNIT_DIR / JOBS_UNIT,
+        render_jobs_unit=render_job_manager_unit,
+        jobs_socket=get_settings().jobs.socket_path,
         token_file=TOKEN_FILE,
         server_url=f"http://{serve_cfg.host}:{serve_cfg.port}/mcp",
         user_bin=Path.home() / ".local" / "bin",
@@ -338,9 +383,15 @@ def stats(
     """
     from binnacle import logstats
 
-    records, startups = logstats.parse(logstats.fetch_journal(unit, since, until))
+    journal_units: str | tuple[str, str] = unit
+    if unit in {"binnacle-mcp", SERVER_UNIT}:
+        journal_units = (unit, JOBS_UNIT)
+    records, startups = logstats.parse(
+        logstats.fetch_journal(journal_units, since, until)
+    )
+    shown_units = ",".join(journal_units) if isinstance(journal_units, tuple) else unit
     print(
-        f"binnacle stats -- unit {unit}, since {since}"
+        f"binnacle stats -- unit {shown_units}, since {since}"
         + (f", until {until}" if until else "")
     )
     print(logstats.render(logstats.analyze(records, startups)))
