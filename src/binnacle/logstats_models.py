@@ -103,6 +103,7 @@ class JobTelemetryStats:
 class ExactSearchStats:
     dispatches: int = 0
     summaries: int = 0
+    pipelines: Counter = field(default_factory=Counter)
     errors: int = 0
     strategies: Counter = field(default_factory=Counter)
     budget_outcomes: Counter = field(default_factory=Counter)
@@ -117,6 +118,14 @@ class ExactSearchStats:
     adaptive_ms: list[float] = field(default_factory=list)
     budget_ms: list[float] = field(default_factory=list)
     rg_stdout_chars: list[int] = field(default_factory=list)
+    rg_stdout_bytes: list[int] = field(default_factory=list)
+    rg_wall_ms: list[float] = field(default_factory=list)
+    stream_cpu_ms: list[float] = field(default_factory=list)
+    glob_cache_hits: list[int] = field(default_factory=list)
+    glob_cache_misses: list[int] = field(default_factory=list)
+    glob_rejected_files: list[int] = field(default_factory=list)
+    glob_rejected_events: list[int] = field(default_factory=list)
+    adaptive_retained_match_events: list[int] = field(default_factory=list)
     rg_events: list[int] = field(default_factory=list)
     rg_match_events: list[int] = field(default_factory=list)
     rg_context_events: list[int] = field(default_factory=list)
@@ -129,6 +138,7 @@ class ExactSearchStats:
     adaptive_glob_checks: list[int] = field(default_factory=list)
     events_per_accepted_match: list[float] = field(default_factory=list)
     chars_per_returned_entry: list[float] = field(default_factory=list)
+    bytes_per_returned_entry: list[float] = field(default_factory=list)
 
 
 @dataclass

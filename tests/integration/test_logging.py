@@ -367,6 +367,7 @@ def test_effective_config_line(caplog):
     by_tool = {_fields(line)["tool"]: _fields(line) for line in tool_lines}
     assert by_tool["read_file"]["max_chars"] == "24000"
     assert by_tool["search_text"]["result_max_bytes"] == "65536"
+    assert by_tool["search_text"]["exact_execution"] in {"materialized", "streaming"}
     assert by_tool["run_command"]["wait_max_s"] == "50"
     assert by_tool["jobs"]["warmup_s"] == "1.0"
     assert by_tool["jobs"]["configured_owner"] in {"auto", "embedded", "manager"}

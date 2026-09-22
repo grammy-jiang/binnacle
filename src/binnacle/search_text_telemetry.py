@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
+
+from binnacle.errors import CodedToolError
 
 Strategy = Literal["normal", "names_only", "adaptive"]
 
@@ -22,6 +25,7 @@ class ExactSearchMetrics:
     call: str
     scope: str
     context_requested: str
+    pipeline: str = "materialized"
     started_ns: int = 0
     strategy: Strategy = "normal"
     budget_outcome: str = "none"
@@ -37,6 +41,14 @@ class ExactSearchMetrics:
     adaptive_ms: float = 0.0
     budget_ms: float = 0.0
     rg_stdout_chars: int = 0
+    rg_stdout_bytes: int = 0
+    rg_wall_ms: float = 0.0
+    stream_cpu_ms: float = 0.0
+    glob_cache_hits: int = 0
+    glob_cache_misses: int = 0
+    glob_rejected_files: int = 0
+    glob_rejected_events: int = 0
+    adaptive_retained_match_events: int = 0
     rg_events: int = 0
     rg_match_events: int = 0
     rg_context_events: int = 0
@@ -86,10 +98,14 @@ class ExactSearchMetrics:
         impl_ms = self.elapsed_ms(self.started_ns) if self.started_ns else 0.0
         logger.info(
             "event=search_exact call=%s outcome=%s error_code=%s strategy=%s "
-            "budget_outcome=%s scope=%s rg_calls=%d auto_context=%s context_requested=%s "
+            "budget_outcome=%s scope=%s pipeline=%s rg_calls=%d auto_context=%s "
+            "context_requested=%s "
             "effective_context=%d rg_subprocess_ms=%.2f rg_parse_ms=%.2f "
             "collect_ms=%.2f context_attach_ms=%.2f adaptive_ms=%.2f "
-            "budget_ms=%.2f impl_ms=%.2f rg_stdout_chars=%d rg_events=%d "
+            "budget_ms=%.2f impl_ms=%.2f rg_stdout_chars=%d rg_stdout_bytes=%d "
+            "rg_wall_ms=%.2f stream_cpu_ms=%.2f glob_cache_hits=%d "
+            "glob_cache_misses=%d glob_rejected_files=%d glob_rejected_events=%d "
+            "adaptive_retained_match_events=%d rg_events=%d "
             "rg_match_events=%d rg_context_events=%d rg_begin_events=%d "
             "rg_bad_json=%d collect_event_candidates=%d collect_glob_checks=%d "
             "collect_glob_rejected=%d accepted_matches=%d accepted_files=%d "
@@ -104,6 +120,7 @@ class ExactSearchMetrics:
             self.strategy,
             self.budget_outcome,
             self.scope,
+            self.pipeline,
             self.rg_calls,
             str(self.auto_context).lower(),
             self.context_requested,
@@ -116,6 +133,14 @@ class ExactSearchMetrics:
             self.budget_ms,
             impl_ms,
             self.rg_stdout_chars,
+            self.rg_stdout_bytes,
+            self.rg_wall_ms,
+            self.stream_cpu_ms,
+            self.glob_cache_hits,
+            self.glob_cache_misses,
+            self.glob_rejected_files,
+            self.glob_rejected_events,
+            self.adaptive_retained_match_events,
             self.rg_events,
             self.rg_match_events,
             self.rg_context_events,
@@ -139,3 +164,43 @@ class ExactSearchMetrics:
             self.result_bytes,
             str(self.final_truncated).lower(),
         )
+
+
+def timed_attach_context(
+    attach: Callable[[list[dict], dict[str, dict[int, str]], int, bool], None],
+    matches: list[dict],
+    line_map: dict[str, dict[int, str]],
+    span: int,
+    line_numbers: bool,
+    metrics: ExactSearchMetrics,
+) -> None:
+    started_ns = time.perf_counter_ns()
+    try:
+        attach(matches, line_map, span, line_numbers)
+    finally:
+        metrics.context_attach_ms += ExactSearchMetrics.elapsed_ms(started_ns)
+
+
+def fit_budget_with_metrics(
+    payload: dict[str, Any],
+    *,
+    names_only: bool,
+    metrics: ExactSearchMetrics,
+    structured_bytes: Callable[[dict[str, Any]], int],
+    enforce: Callable[..., Any],
+    pre_bytes: int | None = None,
+):
+    if pre_bytes is None:
+        pre_bytes = structured_bytes(payload)
+    metrics.pre_budget_bytes = pre_bytes
+    started_ns = time.perf_counter_ns()
+    try:
+        outcome = enforce(payload, names_only=names_only, initial_bytes=pre_bytes)
+    except CodedToolError:
+        metrics.budget_outcome = "metadata_error"
+        raise
+    finally:
+        metrics.budget_ms += ExactSearchMetrics.elapsed_ms(started_ns)
+    metrics.budget_outcome = outcome.kind
+    metrics.result_bytes = outcome.result_bytes
+    return outcome

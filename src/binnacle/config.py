@@ -107,6 +107,10 @@ class ListFilesSettings(BaseModel):
 class SearchTextSettings(BaseModel):
     """search_text caps and auto-context (spec docs/tools/search_text.md)."""
 
+    exact_execution: Literal["materialized", "streaming"] = Field(
+        "materialized",
+        description="Exact-search ingestion backend; streaming is the optimized path.",
+    )
     max_results_default: int = 100
     max_results_cap: int = 1_000
     timeout_s: int = 20

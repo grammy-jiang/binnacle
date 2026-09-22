@@ -90,6 +90,7 @@ def log_effective_config() -> None:
     )
     _log_tool_config(
         "search_text",
+        exact_execution=s.search_text.exact_execution,
         max_results_default=s.search_text.max_results_default,
         max_results_cap=s.search_text.max_results_cap,
         timeout_s=s.search_text.timeout_s,

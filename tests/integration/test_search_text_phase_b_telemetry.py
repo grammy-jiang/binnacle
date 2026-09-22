@@ -288,3 +288,30 @@ def test_terminal_summary_does_not_repeat_path_pattern_or_match_text(tmp_path, c
     assert secret_pattern not in line
     assert secret_text not in line
     assert str(secret_path) not in line
+
+
+def test_streaming_summary_uses_versioned_pipeline_fields(
+    tmp_path, caplog, monkeypatch
+):
+    (tmp_path / "keep.py").write_text("before\nhit\nafter\nhit2\n")
+    (tmp_path / "skip.txt").write_text("hit\n")
+    monkeypatch.setattr(st, "EXACT_EXECUTION", "streaming")
+    token = current_call.set("exact-stream")
+    try:
+        with caplog.at_level("INFO", logger="binnacle.search_text"):
+            result = run_exact(tmp_path, "hit", glob="*.py", context_lines=1)
+    finally:
+        current_call.reset(token)
+
+    assert result.structured_content["count"] == 2
+    f = fields(exact_line(caplog))
+    assert f["pipeline"] == "streaming"
+    assert int(f["rg_stdout_bytes"]) > 0
+    assert float(f["rg_wall_ms"]) >= 0
+    assert float(f["stream_cpu_ms"]) >= 0
+    assert int(f["glob_cache_misses"]) >= 2
+    assert int(f["glob_cache_hits"]) >= 1
+    assert int(f["glob_rejected_files"]) == 1
+    assert int(f["glob_rejected_events"]) >= 1
+    assert int(f["adaptive_retained_match_events"]) == 2
+    assert f["rg_stdout_chars"] == "0"

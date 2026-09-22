@@ -12,6 +12,16 @@ MatchGlob = Callable[[str, Path, str | None], bool]
 
 
 @dataclass
+class ExactScanResult:
+    matches: list[dict]
+    line_map: dict[str, dict[int, str]]
+    total: int
+    truncated: bool
+    adaptive_events: list[dict]
+    adaptive_glob: str | None
+
+
+@dataclass
 class StreamScanResult:
     matches: list[dict]
     line_map: dict[str, dict[int, str]]

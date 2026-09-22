@@ -36,13 +36,24 @@ from binnacle.search_text_collect import (
     collect as _collect_impl,
 )
 from binnacle.search_text_collect import matches_glob as _matches_glob_impl
+from binnacle.search_text_pipeline import scan_exact as _scan_exact_impl
 from binnacle.search_text_rg import run_rg as _run_rg_impl
-from binnacle.search_text_telemetry import AdaptiveWork, ExactSearchMetrics
+from binnacle.search_text_telemetry import (
+    AdaptiveWork,
+    ExactSearchMetrics,
+)
+from binnacle.search_text_telemetry import (
+    fit_budget_with_metrics as _fit_budget_metrics,
+)
+from binnacle.search_text_telemetry import (
+    timed_attach_context as _timed_attach_context_impl,
+)
 
 SEARCH_SETTINGS = get_settings().search_text
 SEARCH_MAX_RESULTS_DEFAULT = SEARCH_SETTINGS.max_results_default
 SEARCH_MAX_RESULTS_CAP = SEARCH_SETTINGS.max_results_cap
 SEARCH_TIMEOUT_S = SEARCH_SETTINGS.timeout_s
+EXACT_EXECUTION = SEARCH_SETTINGS.exact_execution
 SEARCH_MAX_LINE_CHARS = SEARCH_SETTINGS.max_line_chars
 SEARCH_RESULT_MAX_BYTES = SEARCH_SETTINGS.result_max_bytes
 LINE_CLIP_MARK = "… [line truncated]"
@@ -53,13 +64,8 @@ RG_BIN = get_settings().rg_bin
 subprocess = _subprocess  # compatibility seam for existing tests/extensions
 from binnacle.search_text_schema import OUTPUT_SCHEMA
 
-
-def _structured_bytes(payload: dict[str, Any]) -> int:
-    return _budget_structured_bytes(payload)
-
-
-def _entry_count(payload: dict[str, Any]) -> int:
-    return _budget_entry_count(payload)
+_structured_bytes = _budget_structured_bytes
+_entry_count = _budget_entry_count
 
 
 def _enforce_result_budget_rich(
@@ -136,18 +142,32 @@ def _attach_context(
     )
 
 
-def _timed_attach_context(
-    matches: list[dict],
-    line_map: dict[str, dict[int, str]],
-    span: int,
-    line_numbers: bool,
+def _scan_exact(
+    resolved: Path,
+    pattern: str,
+    glob: str | None,
+    fixed_strings: bool,
+    context: int,
+    max_results: int,
     metrics: ExactSearchMetrics,
-) -> None:
-    started_ns = time.perf_counter_ns()
-    try:
-        _attach_context(matches, line_map, span, line_numbers)
-    finally:
-        metrics.context_attach_ms += ExactSearchMetrics.elapsed_ms(started_ns)
+):
+    return _scan_exact_impl(
+        EXACT_EXECUTION,
+        resolved,
+        pattern,
+        glob,
+        fixed_strings,
+        context,
+        max_results,
+        metrics,
+        run_rg=_run_rg,
+        collect=_collect,
+        matches_glob=_matches_glob,
+        rg_bin=RG_BIN,
+        timeout_s=SEARCH_TIMEOUT_S,
+        max_line_chars=SEARCH_MAX_LINE_CHARS,
+        clip_mark=LINE_CLIP_MARK,
+    )
 
 
 def _fit_budget_with_metrics(
@@ -157,22 +177,14 @@ def _fit_budget_with_metrics(
     metrics: ExactSearchMetrics,
     pre_bytes: int | None = None,
 ):
-    if pre_bytes is None:
-        pre_bytes = _structured_bytes(payload)
-    metrics.pre_budget_bytes = pre_bytes
-    started_ns = time.perf_counter_ns()
-    try:
-        outcome = _enforce_result_budget_rich(
-            payload, names_only=names_only, initial_bytes=pre_bytes
-        )
-    except CodedToolError:
-        metrics.budget_outcome = "metadata_error"
-        raise
-    finally:
-        metrics.budget_ms += ExactSearchMetrics.elapsed_ms(started_ns)
-    metrics.budget_outcome = outcome.kind
-    metrics.result_bytes = outcome.result_bytes
-    return outcome
+    return _fit_budget_metrics(
+        payload,
+        names_only=names_only,
+        metrics=metrics,
+        structured_bytes=_structured_bytes,
+        enforce=_enforce_result_budget_rich,
+        pre_bytes=pre_bytes,
+    )
 
 
 def _search_exact_impl(
@@ -188,9 +200,14 @@ def _search_exact_impl(
 ) -> ToolResult:
     explicit_context = context_lines if context_lines is not None else 0
     metrics.effective_context = explicit_context
-    events, _ = _run_rg(resolved, pattern, fixed_strings, explicit_context, metrics)
-    matches, line_map, total, truncated = _collect(
-        events, resolved, glob, max_results, metrics
+    scan = _scan_exact(
+        resolved, pattern, glob, fixed_strings, explicit_context, max_results, metrics
+    )
+    matches, line_map, total, truncated = (
+        scan.matches,
+        scan.line_map,
+        scan.total,
+        scan.truncated,
     )
 
     if (
@@ -202,14 +219,21 @@ def _search_exact_impl(
         metrics.auto_context = True
         span = AUTO_CONTEXT_SINGLE if len(matches) == 1 else AUTO_CONTEXT_FEW
         metrics.effective_context = span
-        events, _ = _run_rg(resolved, pattern, fixed_strings, span, metrics)
-        matches, line_map, total, truncated = _collect(
-            events, resolved, glob, max_results, metrics
+        scan = _scan_exact(
+            resolved, pattern, glob, fixed_strings, span, max_results, metrics
         )
-        _timed_attach_context(matches, line_map, span, line_numbers, metrics)
+        matches, line_map, total, truncated = (
+            scan.matches,
+            scan.line_map,
+            scan.total,
+            scan.truncated,
+        )
+        _timed_attach_context_impl(
+            _attach_context, matches, line_map, span, line_numbers, metrics
+        )
     elif explicit_context > 0:
-        _timed_attach_context(
-            matches, line_map, explicit_context, line_numbers, metrics
+        _timed_attach_context_impl(
+            _attach_context, matches, line_map, explicit_context, line_numbers, metrics
         )
 
     where = f"{resolved}" + (f" (glob {glob!r})" if glob else "")
@@ -287,10 +311,10 @@ def _search_exact_impl(
         started_ns = time.perf_counter_ns()
         try:
             adaptive = build_adaptive_result(
-                events,
+                scan.adaptive_events,
                 root=resolved,
                 pattern=pattern,
-                glob=glob,
+                glob=scan.adaptive_glob,
                 fixed_strings=fixed_strings,
                 max_match_entries=max_results,
                 settings=SEARCH_SETTINGS,

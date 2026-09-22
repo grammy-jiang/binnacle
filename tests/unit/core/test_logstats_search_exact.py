@@ -36,3 +36,35 @@ def test_exact_search_stats_report_coverage_phases_work_and_amplification():
     assert "auto_context_second_rg=1" in text
     assert "rg JSON parse" in text and "collect/filter" in text
     assert "rg events / accepted" in text and "rg chars / returned" in text
+
+
+STREAMING_SAMPLE = """
+2026-09-22T20:00:00.000 INFO: event=search_dispatch call=s mode=exact path_hash=x pattern_chars=3
+2026-09-22T20:00:00.010 INFO: event=search_exact call=s outcome=ok error_code=- strategy=normal budget_outcome=none scope=dir pipeline=streaming rg_calls=1 auto_context=false context_requested=1 effective_context=1 rg_subprocess_ms=0 rg_parse_ms=0 collect_ms=0 context_attach_ms=0.2 adaptive_ms=0 budget_ms=0.1 impl_ms=9 rg_stdout_chars=0 rg_stdout_bytes=2400 rg_wall_ms=7 stream_cpu_ms=3 glob_cache_hits=20 glob_cache_misses=4 glob_rejected_files=2 glob_rejected_events=10 adaptive_retained_match_events=6 rg_events=30 rg_match_events=8 rg_context_events=15 rg_begin_events=3 rg_bad_json=0 collect_event_candidates=23 collect_glob_checks=4 collect_glob_rejected=10 accepted_matches=6 accepted_files=2 retained_matches=6 match_cap_hit=false adaptive_attempted=false adaptive_selected=false adaptive_budget_trimmed=false adaptive_match_events=0 adaptive_glob_checks=0 adaptive_glob_rejected=0 pre_budget_bytes=900 returned_entries=6 result_bytes=900 final_truncated=false
+"""
+
+
+def test_exact_search_stats_keep_streaming_and_materialized_metrics_separate():
+    records, startups = logstats.parse(SAMPLE + STREAMING_SAMPLE)
+    st = logstats.analyze(records, startups)
+    exact = st.exact_search
+    assert exact.pipelines == {"materialized": 3, "streaming": 1}
+    assert exact.rg_subprocess_ms == [4.0, 10.0, 2.0]
+    assert exact.rg_parse_ms == [1.0, 3.0, 0.0]
+    assert exact.collect_ms == [2.0, 4.0, 0.0]
+    assert exact.rg_wall_ms == [7.0]
+    assert exact.stream_cpu_ms == [3.0]
+    assert exact.rg_stdout_chars == [1000, 4000, 0]
+    assert exact.rg_stdout_bytes == [2400]
+    assert exact.glob_cache_hits == [20]
+    assert exact.glob_cache_misses == [4]
+    assert exact.glob_rejected_files == [2]
+    assert exact.glob_rejected_events == [10]
+    assert exact.adaptive_retained_match_events == [6]
+    assert exact.bytes_per_returned_entry == [400.0]
+
+    text = logstats.render(st)
+    assert "pipeline: materialized=3, streaming=1" in text
+    assert "rg stream wall" in text and "stream CPU" in text
+    assert "rg stdout bytes" in text and "glob cache misses" in text
+    assert "rg bytes / returned" in text
