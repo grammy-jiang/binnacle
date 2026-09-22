@@ -121,7 +121,9 @@ def test_streaming_invalid_regex_keeps_error_code(tmp_path, monkeypatch):
     assert exc.value.telemetry_code == "rg_rejected"
 
 
-def test_streaming_invalid_glob_keeps_error_code_and_reaps_rg(tmp_path, monkeypatch):
+def test_streaming_invalid_glob_keeps_error_code_and_reaps_rg(
+    tmp_path, monkeypatch, caplog
+):
     (tmp_path / "a.py").write_text("hit\n")
     monkeypatch.setattr(st, "EXACT_EXECUTION", "streaming")
 
@@ -132,11 +134,33 @@ def test_streaming_invalid_glob_keeps_error_code_and_reaps_rg(tmp_path, monkeypa
     # search_text's compatibility matcher captures its own full_match reference;
     # patch that seam too so the streaming reducer exercises consumer cleanup.
     monkeypatch.setattr(st, "full_match", invalid)
-    with pytest.raises(st.CodedToolError, match="Invalid glob") as exc:
-        run_mode(
-            monkeypatch, "streaming", "hit", tmp_path, glob="*.py", context_lines=0
-        )
+    from binnacle.callctx import current_call
+
+    token = current_call.set("stream-invalid-glob")
+    try:
+        with (
+            caplog.at_level("INFO", logger="binnacle.search_text"),
+            pytest.raises(st.CodedToolError, match="Invalid glob") as exc,
+        ):
+            run_mode(
+                monkeypatch,
+                "streaming",
+                "hit",
+                tmp_path,
+                glob="*.py",
+                context_lines=0,
+            )
+    finally:
+        current_call.reset(token)
     assert exc.value.telemetry_code == "invalid_glob"
+    summary = next(
+        record.getMessage()
+        for record in caplog.records
+        if "event=search_exact call=stream-invalid-glob" in record.getMessage()
+    )
+    assert "outcome=error error_code=invalid_glob" in summary
+    assert "pipeline=streaming" in summary
+    assert "collect_event_candidates=1" in summary
 
 
 def test_streaming_timeout_keeps_error_code(tmp_path, monkeypatch):

@@ -92,14 +92,15 @@ def _scan_streaming(
         rg_bin=rg_bin,
         timeout_s=timeout_s,
     )
+    result = reducer.result()
     try:
         with managed_rg_stream(stream):
             for event in stream:
                 reducer.consume(event)
     finally:
         _update_stream_metrics(metrics, stream)
-    result = reducer.result()
-    _update_reducer_metrics(metrics, reducer, result)
+        result = reducer.result()
+        _update_reducer_metrics(metrics, reducer, result)
     return ExactScanResult(
         result.matches,
         result.line_map,
