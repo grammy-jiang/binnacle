@@ -1,9 +1,9 @@
 """Regex search with ripgrep plus indexed/adaptive discovery (see docs/tools/search_text.md)."""
 
 import hashlib
-import json
 import logging
 import subprocess
+import time
 from pathlib import Path, PurePath
 from typing import Annotated, Any
 
@@ -18,6 +18,16 @@ from binnacle.indexed_context import PREFIX as INDEXED_CONTEXT_PREFIX
 from binnacle.indexed_context import get_indexed_context_service
 from binnacle.paths import full_match, nearby_hint, resolve_path
 from binnacle.search_text_adaptive import build_adaptive_result, log_adaptive_result
+from binnacle.search_text_budget import (
+    enforce_result_budget as _fit_result_budget,
+)
+from binnacle.search_text_budget import (
+    entry_count as _budget_entry_count,
+)
+from binnacle.search_text_budget import (
+    structured_bytes as _budget_structured_bytes,
+)
+from binnacle.search_text_telemetry import ExactSearchMetrics
 
 SEARCH_SETTINGS = get_settings().search_text
 SEARCH_MAX_RESULTS_DEFAULT = SEARCH_SETTINGS.max_results_default
@@ -42,103 +52,45 @@ def _clip(text: str) -> str:
 
 
 def _structured_bytes(payload: dict[str, Any]) -> int:
-    """Exact compact-JSON UTF-8 size used by result-budget enforcement."""
-    return len(
-        json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-    )
+    return _budget_structured_bytes(payload)
 
 
 def _entry_count(payload: dict[str, Any]) -> int:
-    entries = payload.get("entries")
-    return len(entries) if isinstance(entries, list) else 0
+    return _budget_entry_count(payload)
 
 
-def _budget_note(
-    returned: int, total: int, *, names_only: bool, context_omitted: bool = False
-) -> str:
-    if context_omitted:
-        return (
-            "The first match is returned without context because its context block "
-            "exceeded the response budget. Use read_file around the reported line "
-            "to inspect it."
-        )
-    next_step = (
-        "Narrow the path or glob."
-        if names_only
-        else "Narrow the pattern/path/glob, reduce context_lines, or use names_only."
-    )
-    return (
-        f"Showing first {returned} of {total} matches; response budget reached. "
-        f"{next_step}"
+def _enforce_result_budget_rich(payload: dict[str, Any], *, names_only: bool):
+    return _fit_result_budget(
+        payload, names_only=names_only, max_bytes=SEARCH_RESULT_MAX_BYTES
     )
 
 
 def _enforce_result_budget(
     payload: dict[str, Any], *, names_only: bool
 ) -> tuple[dict[str, Any], bool]:
-    """Fit a search result under the configured structured-result byte budget.
-
-    Preserve match order and complete entries.  If even the first contextual
-    entry cannot fit, keep its file/line/text identity and omit only that
-    context so a broad or pathological context request never yields zero hits.
-    """
-    if _structured_bytes(payload) <= SEARCH_RESULT_MAX_BYTES:
-        return payload, False
-
-    entries = list(payload.get("entries", []))
-    base = {k: v for k, v in payload.items() if k not in {"entries", "note"}}
-    base["truncated"] = True
-    total = int(payload.get("count", len(entries)))
-
-    def candidate(n: int) -> dict[str, Any]:
-        out = dict(base)
-        out["entries"] = entries[:n]
-        out["note"] = _budget_note(n, total, names_only=names_only)
-        return out
-
-    lo, hi = 0, len(entries)
-    while lo < hi:
-        mid = (lo + hi + 1) // 2
-        if _structured_bytes(candidate(mid)) <= SEARCH_RESULT_MAX_BYTES:
-            lo = mid
-        else:
-            hi = mid - 1
-
-    if lo:
-        return candidate(lo), True
-
-    if entries and not names_only:
-        compact_first = {
-            k: v
-            for k, v in entries[0].items()
-            if k not in {"context", "context_first_line"}
-        }
-        out = dict(base)
-        out["entries"] = [compact_first]
-        out["note"] = _budget_note(1, total, names_only=False, context_omitted=True)
-        if _structured_bytes(out) <= SEARCH_RESULT_MAX_BYTES:
-            return out, True
-
-    empty = candidate(0)
-    if _structured_bytes(empty) <= SEARCH_RESULT_MAX_BYTES:
-        return empty, True
-    raise CodedToolError(
-        "response_budget_exceeded",
-        "Search result metadata exceeds the configured response budget. "
-        "Use a shorter pattern or a more specific path.",
-    )
+    outcome = _enforce_result_budget_rich(payload, names_only=names_only)
+    return outcome.payload, outcome.hit
 
 
 def _run_rg(
-    root: Path, pattern: str, fixed_strings: bool, context: int
+    root: Path,
+    pattern: str,
+    fixed_strings: bool,
+    context: int,
+    metrics: ExactSearchMetrics | None = None,
 ) -> tuple[list[dict], bool]:
     """Run rg --json; returns (events, hit_no_match). Raises ToolError."""
+    import orjson
+
     cmd = [RG_BIN, "--json", "--smart-case"]
     if fixed_strings:
         cmd.append("--fixed-strings")
     if context > 0:
         cmd += ["--context", str(context)]
     cmd += ["--regexp", pattern, str(root)]
+    if metrics is not None:
+        metrics.rg_calls += 1
+    started_ns = time.perf_counter_ns()
     try:
         proc = subprocess.run(
             cmd, capture_output=True, text=True, timeout=SEARCH_TIMEOUT_S, check=False
@@ -154,18 +106,39 @@ def _run_rg(
             f"Search timed out after {SEARCH_TIMEOUT_S} s. Narrow the scope "
             f"with a more specific path or a glob filter.",
         )
+    finally:
+        if metrics is not None:
+            metrics.rg_subprocess_ms += ExactSearchMetrics.elapsed_ms(started_ns)
     if proc.returncode == 2 or (proc.returncode not in (0, 1) and proc.stderr):
         raise CodedToolError(
             "rg_rejected",
             f"ripgrep rejected the search: {proc.stderr.strip()[-300:]}. "
             f"Fix the pattern, or use fixed_strings for literal text.",
         )
-    events = []
+
+    if metrics is not None:
+        metrics.rg_stdout_chars += len(proc.stdout)
+    parse_started_ns = time.perf_counter_ns()
+    events: list[dict] = []
     for line in proc.stdout.splitlines():
         try:
-            events.append(json.loads(line))
-        except json.JSONDecodeError:
+            event = orjson.loads(line)
+        except orjson.JSONDecodeError:
+            if metrics is not None:
+                metrics.rg_bad_json += 1
             continue
+        events.append(event)
+        if metrics is not None:
+            metrics.rg_events += 1
+            kind = event.get("type")
+            if kind == "match":
+                metrics.rg_match_events += 1
+            elif kind == "context":
+                metrics.rg_context_events += 1
+            elif kind == "begin":
+                metrics.rg_begin_events += 1
+    if metrics is not None:
+        metrics.rg_parse_ms += ExactSearchMetrics.elapsed_ms(parse_started_ns)
     return events, proc.returncode == 1
 
 
@@ -188,31 +161,51 @@ def _matches_glob(file_path: str, root: Path, glob: str | None) -> bool:
 
 
 def _collect(
-    events: list[dict], root: Path, glob: str | None, max_results: int
+    events: list[dict],
+    root: Path,
+    glob: str | None,
+    max_results: int,
+    metrics: ExactSearchMetrics | None = None,
 ) -> tuple[list[dict], dict[str, dict[int, str]], int, bool]:
     """Parse rg events into match entries plus a per-file line map."""
+    started_ns = time.perf_counter_ns()
     matches: list[dict] = []
     line_map: dict[str, dict[int, str]] = {}
     total = 0
     truncated = False
-    for ev in events:
-        kind = ev.get("type")
-        if kind not in ("match", "context"):
-            continue
-        data = ev["data"]
-        file = data["path"]["text"]
-        if not _matches_glob(file, root, glob):
-            continue
-        line_no = data["line_number"]
-        text = data["lines"].get("text", "").rstrip("\n")
-        line_map.setdefault(file, {})[line_no] = text
-        if kind == "match":
-            total += 1
-            if len(matches) < max_results:
-                matches.append({"file": file, "line": line_no, "text": _clip(text)})
-            else:
-                truncated = True
-    return matches, line_map, total, truncated
+    try:
+        for ev in events:
+            kind = ev.get("type")
+            if kind not in ("match", "context"):
+                continue
+            if metrics is not None:
+                metrics.collect_event_candidates += 1
+            data = ev["data"]
+            file = data["path"]["text"]
+            if glob is not None and metrics is not None:
+                metrics.collect_glob_checks += 1
+            if not _matches_glob(file, root, glob):
+                if glob is not None and metrics is not None:
+                    metrics.collect_glob_rejected += 1
+                continue
+            line_no = data["line_number"]
+            text = data["lines"].get("text", "").rstrip("\n")
+            line_map.setdefault(file, {})[line_no] = text
+            if kind == "match":
+                total += 1
+                if len(matches) < max_results:
+                    matches.append({"file": file, "line": line_no, "text": _clip(text)})
+                else:
+                    truncated = True
+        if metrics is not None:
+            metrics.accepted_matches = total
+            metrics.accepted_files = len(line_map)
+            metrics.retained_matches = len(matches)
+            metrics.match_cap_hit = truncated
+        return matches, line_map, total, truncated
+    finally:
+        if metrics is not None:
+            metrics.collect_ms += ExactSearchMetrics.elapsed_ms(started_ns)
 
 
 def _attach_context(

@@ -8,7 +8,6 @@ exceed the configured structured-result budget.
 from __future__ import annotations
 
 import hashlib
-import json
 import logging
 import re
 from collections import defaultdict
@@ -16,6 +15,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+import orjson
 
 from binnacle.config import SearchTextSettings
 
@@ -39,6 +40,16 @@ class AdaptiveResult:
     tail_entries: int
     result_bytes: int
     budget_trimmed: bool
+    match_events_scanned: int
+    glob_checks: int
+    glob_rejected: int
+
+
+@dataclass
+class AdaptiveWork:
+    match_events_scanned: int = 0
+    glob_checks: int = 0
+    glob_rejected: int = 0
 
 
 def _path_hashes(payload: dict[str, Any], *, detailed_only: bool) -> str:
@@ -89,9 +100,7 @@ def log_adaptive_result(
 
 
 def structured_bytes(payload: dict[str, Any]) -> int:
-    return len(
-        json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-    )
+    return len(orjson.dumps(payload))
 
 
 def _split_top_level_alternatives(pattern: str) -> list[str]:
@@ -151,14 +160,23 @@ def _collect_files(
     root: Path,
     glob: str | None,
     matches_glob: MatchGlob,
+    work: AdaptiveWork | None = None,
 ) -> dict[str, list[dict[str, Any]]]:
     files: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for event in events:
         if event.get("type") != "match":
             continue
+        if work is not None:
+            work.match_events_scanned += 1
         data = event.get("data", {})
         path = data.get("path", {}).get("text")
-        if not isinstance(path, str) or not matches_glob(path, root, glob):
+        if not isinstance(path, str):
+            continue
+        if glob is not None and work is not None:
+            work.glob_checks += 1
+        if not matches_glob(path, root, glob):
+            if glob is not None and work is not None:
+                work.glob_rejected += 1
             continue
         line = data.get("line_number")
         if not isinstance(line, int):
@@ -344,7 +362,8 @@ def build_adaptive_result(
     matches_glob: MatchGlob,
     result_max_bytes: int,
 ) -> AdaptiveResult | None:
-    files = _collect_files(events, root, glob, matches_glob)
+    work = AdaptiveWork()
+    files = _collect_files(events, root, glob, matches_glob, work)
     if not files:
         return None
 
@@ -432,4 +451,7 @@ def build_adaptive_result(
         tail_entries=tail_entries,
         result_bytes=structured_bytes(final_payload),
         budget_trimmed=budget_trimmed,
+        match_events_scanned=work.match_events_scanned,
+        glob_checks=work.glob_checks,
+        glob_rejected=work.glob_rejected,
     )
