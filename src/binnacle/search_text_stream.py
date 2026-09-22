@@ -11,10 +11,10 @@ import tempfile
 import threading
 import time
 from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from types import TracebackType
-from typing import BinaryIO, Self
+from typing import BinaryIO
 
 import orjson
 
@@ -81,8 +81,8 @@ class RgJsonStream:
         cmd += ["--regexp", self.pattern, str(self.root)]
         return cmd
 
-    def __enter__(self) -> Self:
-        self._stderr = tempfile.TemporaryFile(mode="w+b")
+    def start(self) -> None:
+        self._stderr = tempfile.TemporaryFile(mode="w+b")  # noqa: SIM115 -- owned until close()
         self._started_ns = time.perf_counter_ns()
         self._cpu_started_ns = time.thread_time_ns()
         try:
@@ -102,7 +102,6 @@ class RgJsonStream:
         self._timer = threading.Timer(self.timeout_s, self._on_timeout)
         self._timer.daemon = True
         self._timer.start()
-        return self
 
     def _on_timeout(self) -> None:
         proc = self._proc
@@ -160,12 +159,15 @@ class RgJsonStream:
         if self._finished:
             return
         self._finished = True
-        if self._timer is not None:
-            self._timer.cancel()
         proc = self._proc
         if proc is None:
             return
+        # Keep the absolute timeout armed through process exit. A child may close
+        # stdout and continue running; EOF alone must not disable the old timeout
+        # contract before wait() completes.
         returncode = proc.wait()
+        if self._timer is not None:
+            self._timer.cancel()
         self._record_timing()
         self.stats.timed_out = self._timeout_fired.is_set()
         if self.stats.timed_out:
@@ -200,17 +202,9 @@ class RgJsonStream:
         self._record_timing()
         self.stats.timed_out = self._timeout_fired.is_set()
 
-    def __exit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc: BaseException | None,
-        tb: TracebackType | None,
-    ) -> None:
+    def close(self) -> None:
         try:
-            if exc_type is None and not self._finished:
-                # The consumer stopped before EOF; never leave rg behind.
-                self._abort()
-            elif exc_type is not None:
+            if not self._finished:
                 self._abort()
         finally:
             if self._timer is not None:
@@ -219,3 +213,12 @@ class RgJsonStream:
                 self._proc.stdout.close()
             if self._stderr is not None:
                 self._stderr.close()
+
+
+@contextmanager
+def managed_rg_stream(stream: RgJsonStream) -> Iterator[RgJsonStream]:
+    stream.start()
+    try:
+        yield stream
+    finally:
+        stream.close()

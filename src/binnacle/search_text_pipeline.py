@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
-from binnacle.search_text_stream import RgJsonStream
+from binnacle.search_text_stream import RgJsonStream, managed_rg_stream
 from binnacle.search_text_stream_reduce import ExactScanResult, ExactStreamReducer
 from binnacle.search_text_telemetry import ExactSearchMetrics
 
@@ -93,7 +93,7 @@ def _scan_streaming(
         timeout_s=timeout_s,
     )
     try:
-        with stream:
+        with managed_rg_stream(stream):
             for event in stream:
                 reducer.consume(event)
     finally:
