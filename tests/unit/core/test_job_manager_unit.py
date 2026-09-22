@@ -27,6 +27,8 @@ def test_job_manager_unit_is_stable_sibling_service(tmp_path, monkeypatch):
     assert "KillMode=control-group" in spec.body
     assert "RuntimeDirectory=binnacle" in spec.body
     assert "ExecStartPost" not in spec.body
+    assert spec.body.startswith("[Unit]\n")
+    assert not spec.body.startswith("\\\n")
     text = job_manager_unit.render_job_manager_unit(params)
     marker = units.read_marker(text)
     assert marker is not None and marker.params == params

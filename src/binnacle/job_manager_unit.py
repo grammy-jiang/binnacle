@@ -8,7 +8,7 @@ from binnacle import units
 JOBS_UNIT = "binnacle-jobs.service"
 OWNER = "binnacle"
 
-JOBS_UNIT_TEMPLATE = """\\
+JOBS_UNIT_TEMPLATE = """\
 [Unit]
 Description=Binnacle command job manager
 

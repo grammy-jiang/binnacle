@@ -69,7 +69,12 @@ class _Handler(socketserver.StreamRequestHandler):
         except Exception:  # isolate one malformed/failed request
             log.exception("event=job_manager_request_error")
             response = {"ok": False, "error": "internal job-manager error"}
-        self.wfile.write(json.dumps(response, separators=(",", ":")).encode() + b"\n")
+        try:
+            self.wfile.write(
+                json.dumps(response, separators=(",", ":")).encode() + b"\n"
+            )
+        except (BrokenPipeError, ConnectionResetError):
+            log.info("event=job_manager_client_disconnected")
 
 
 class JobManager:

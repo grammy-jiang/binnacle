@@ -345,3 +345,34 @@ def test_explicit_owner_setting_overrides_managed_marker(monkeypatch):
     assert jobs._resolve_owner_mode() == "embedded"
     monkeypatch.setattr(jobs, "_OWNER_SETTING", "manager")
     assert jobs._resolve_owner_mode() == "manager"
+
+
+def test_disconnected_client_does_not_dump_handler_traceback(manager, caplog):
+    _, socket_path, _ = manager
+    request = {
+        "version": 1,
+        "op": "start",
+        "command": "sleep 0.1",
+        "workdir": "/tmp",
+        "stdin": None,
+        "wait_seconds": 1,
+        "call_id": "disconnect-test",
+    }
+    wire = json.dumps(request).encode() + b"\n"
+    with caplog.at_level("INFO", logger="binnacle.job_manager"):
+        client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        client.connect(str(socket_path))
+        client.sendall(wire)
+        client.shutdown(socket.SHUT_RDWR)
+        client.close()
+        for _ in range(100):
+            if any(
+                "event=job_manager_client_disconnected" in record.getMessage()
+                for record in caplog.records
+            ):
+                break
+            time.sleep(0.01)
+    assert any(
+        "event=job_manager_client_disconnected" in record.getMessage()
+        for record in caplog.records
+    )
