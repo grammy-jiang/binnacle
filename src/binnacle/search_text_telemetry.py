@@ -7,13 +7,14 @@ import time
 from dataclasses import dataclass
 from typing import Literal
 
-Strategy = Literal[
-    "normal",
-    "names_only",
-    "adaptive",
-    "budget_trimmed",
-    "budget_context_omitted",
-]
+Strategy = Literal["normal", "names_only", "adaptive"]
+
+
+@dataclass
+class AdaptiveWork:
+    match_events_scanned: int = 0
+    glob_checks: int = 0
+    glob_rejected: int = 0
 
 
 @dataclass
@@ -23,6 +24,7 @@ class ExactSearchMetrics:
     context_requested: str
     started_ns: int = 0
     strategy: Strategy = "normal"
+    budget_outcome: str = "none"
     outcome: str = "ok"
     error_code: str = "-"
     rg_calls: int = 0
@@ -84,7 +86,7 @@ class ExactSearchMetrics:
         impl_ms = self.elapsed_ms(self.started_ns) if self.started_ns else 0.0
         logger.info(
             "event=search_exact call=%s outcome=%s error_code=%s strategy=%s "
-            "scope=%s rg_calls=%d auto_context=%s context_requested=%s "
+            "budget_outcome=%s scope=%s rg_calls=%d auto_context=%s context_requested=%s "
             "effective_context=%d rg_subprocess_ms=%.2f rg_parse_ms=%.2f "
             "collect_ms=%.2f context_attach_ms=%.2f adaptive_ms=%.2f "
             "budget_ms=%.2f impl_ms=%.2f rg_stdout_chars=%d rg_events=%d "
@@ -100,6 +102,7 @@ class ExactSearchMetrics:
             self.outcome,
             self.error_code,
             self.strategy,
+            self.budget_outcome,
             self.scope,
             self.rg_calls,
             str(self.auto_context).lower(),

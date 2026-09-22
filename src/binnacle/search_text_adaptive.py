@@ -1,9 +1,4 @@
-"""Adaptive file-oriented representation for broad search_text results.
-
-This module never decides whether adaptive discovery should run. The public tool
-assembles its ordinary result first and calls here only when that result would
-exceed the configured structured-result budget.
-"""
+"""Adaptive file-oriented representation for broad search_text results."""
 
 from __future__ import annotations
 
@@ -19,6 +14,7 @@ from typing import Any
 import orjson
 
 from binnacle.config import SearchTextSettings
+from binnacle.search_text_telemetry import AdaptiveWork
 
 MatchGlob = Callable[[str, Path, str | None], bool]
 
@@ -43,13 +39,6 @@ class AdaptiveResult:
     match_events_scanned: int
     glob_checks: int
     glob_rejected: int
-
-
-@dataclass
-class AdaptiveWork:
-    match_events_scanned: int = 0
-    glob_checks: int = 0
-    glob_rejected: int = 0
 
 
 def _path_hashes(payload: dict[str, Any], *, detailed_only: bool) -> str:
@@ -361,8 +350,9 @@ def build_adaptive_result(
     settings: SearchTextSettings,
     matches_glob: MatchGlob,
     result_max_bytes: int,
+    work: AdaptiveWork | None = None,
 ) -> AdaptiveResult | None:
-    work = AdaptiveWork()
+    work = work or AdaptiveWork()
     files = _collect_files(events, root, glob, matches_glob, work)
     if not files:
         return None
