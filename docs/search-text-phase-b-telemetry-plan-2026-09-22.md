@@ -1,7 +1,7 @@
 # `search_text` Phase B — exact-search telemetry plan
 
-Status: investigation/design only. Production exact-search behavior is unchanged by this
-plan. Implementation starts only after this plan is reviewed.
+Status: implemented on `feature/search-text-phase-b`; final validation in progress.
+The four algorithm-optimization hypotheses remain recorded but intentionally unimplemented.
 
 ## 1. Objective
 
@@ -605,3 +605,36 @@ Phase B is complete only when:
 - full pytest has zero unexpected failures;
 - live journal/stats validation confirms the schema on the managed dev server;
 - production search semantics remain unchanged.
+
+## 18. Implementation evidence
+
+The implemented Phase B follows the plan with one approved change: rg JSON parsing now uses
+`orjson` rather than stdlib `json.loads`. Compact result-budget sizing also uses `orjson` and
+unit coverage verifies the compact UTF-8 byte count matches the previous representation.
+
+Structural seams keep `tools/search_text.py` below the 500-line hard gate: static schema,
+rg execution/parsing, collect/context logic, registration, budget fitting, and telemetry
+helpers live in focused modules while the historical module-level helper façades remain
+available for existing tests/monkeypatches.
+
+Controlled fast-search A/B (four alternating rounds, 60 measured calls/round after warmup):
+
+| Workload | Baseline median p50 | Phase B median p50 | Baseline median p95 | Phase B median p95 |
+| --- | ---: | ---: | ---: | ---: |
+| literal/no-context | 17.216 ms | 16.696 ms | 19.157 ms | 19.640 ms |
+| regex/context=2 | 42.762 ms | 39.536 ms | 46.149 ms | 43.056 ms |
+
+The fast-path gate therefore passes: no p50 regression, and the only p95 increase is ~2.5%.
+
+For the broad historical workload, two baseline runs were 22.42/22.61 s and two Phase-B
+runs were 19.91/19.78 s. All four produced the same final structured payload SHA-256
+`1c5c67ffc66efd8eeb43a3f3bb8cfed059f4a6197350f5d6db78518b4f2e4194`, count 2464,
+135 entries, and the same adaptive note/truncation state. A direct Phase-B rg measurement on
+the ~162M-character / 309,733-event output recorded ~3.47 s of `orjson` parse time, versus
+~9.66 s for the earlier stdlib-parser investigation run (absolute times are cache/load
+sensitive; final end-to-end A/B is the acceptance evidence).
+
+The following hypotheses remain future work exactly as agreed: reduce irrelevant rg
+context/event generation before Python filtering; cache per-file glob acceptance; stream or
+otherwise avoid one giant captured JSON string; reuse exact collection in adaptive
+discovery. Phase B records the evidence needed to evaluate them and does not implement them.

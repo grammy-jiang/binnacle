@@ -85,7 +85,7 @@ budget.` / `No matches for 'foo' under /x.`
 
 **Behavior**: resolve path (shared guard). Run
 `rg --json --smart-case [-F] [-C n]` on the path, 20 s timeout; parse the
-event stream (`match`/`context`); apply the Python-side glob filter; stop
+event stream (`match`/`context`) with `orjson`; apply the Python-side glob filter; stop
 at `max_results`. Auto-context: when the first pass yields 1–3 matches with
 no explicit `context_lines` and not `names_only`, re-run with `-C 50`
 (1 match) or `-C 15` (2–3). After the ordinary result is assembled, measure
@@ -213,3 +213,25 @@ trim occurred.
 Small results, `names_only`, explicit `@context`, and ordinary results already under
 the byte budget retain their previous behavior. See
 `docs/search-text-adaptive-discovery.md` for the pilot contract and rollback.
+
+## 8. Exact-search Phase B telemetry — 2026-09-22
+
+Ordinary exact search now emits one terminal `search_exact` journal summary in addition to
+`search_dispatch` and the existing budget/adaptive records. This is internal telemetry and
+does not change the MCP input/output schema. It records coarse phase timings plus raw-work
+counters so a slow call can be attributed to rg execution, JSON parsing, collect/glob
+filtering, context shaping, adaptive construction or budget fitting. It also records the
+final strategy and machine-readable budget outcome.
+
+Phase B changed the rg JSON parser from stdlib `json.loads` to `orjson.loads`. Controlled
+A/B on the same broad query preserved the final structured payload hash exactly while two
+baseline runs took 22.42/22.61 s and two Phase-B runs took 19.91/19.78 s (about 12% lower
+wall time). Fast-path instrumentation also passed the performance gate: median p50 changed
+from 17.216 to 16.696 ms for a literal no-context workload and 42.762 to 39.536 ms for a
+regex+context workload; the only median p95 increase was 19.157 to 19.640 ms (~2.5%).
+
+The event deliberately records `rg_stdout_chars`, not a byte count: rg currently returns a
+Python text string, and re-encoding a pathological ~162 MB output merely for telemetry
+would create another expensive full-buffer pass. Phase B does not implement streaming rg
+JSON, glob caching, context-generation changes or adaptive scan reuse; those remain future
+optimization hypotheses after an observation window.

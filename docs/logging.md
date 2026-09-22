@@ -35,6 +35,7 @@ second.
 | `tool_result` | `ToolLoggingMiddleware`; level WARNING when `is_error=True` | `call tool client session request_id [turn] [oai_session] duration_ms is_error` then either result sizes plus lifted scalar facts, or `error_class [error_code] error=<text, 200 chars>` | 09-02; tokenizer fields from 09-21; stable error codes from 09-22 |
 | `job_start` | `jobs.start_job` in the selected owner | `job_id pid command(60 chars, repr) workdir call owner owner_instance command_hash command_chars` | 09-02; owner/hash fields from 09-22 |
 | `search_budget_hit` | `tools.search_text`; INFO | `call result_bytes result_budget_bytes returned_entries total_matches names_only` | 09-19 |
+| `search_exact` | exact `search_text`; INFO, one terminal summary after exact dispatch | `call outcome error_code strategy budget_outcome scope rg_calls auto_context context_requested effective_context` + phase timings + rg/collect/adaptive work counters + final result size/truncation | 09-22 |
 | `job_listing` | `tools.job_status`; INFO | `call recorded_jobs returned_jobs running_jobs history_limit command_preview_chars` | 09-19 |
 | `job_status_timing` | `tools.job_status`; INFO | `call job_id wait_requested_s dispatch_ms state_ms read_log_ms process_scan_ms impl_ms state processes log_bytes` | 09-19 |
 | `run_command_dispatch` | `tools.run_command`; INFO, one per successful call | `call client job_id owner owner_instance requested_wait_s bounded_wait_s effective_wait_s background_arg auto_background handoff_reason owner_roundtrip_ms command_hash command_chars state` | 09-22 |
@@ -284,7 +285,37 @@ record with the same `(session, request_id)`, and a window without
 for 2026-09-12..13 before and after the change). Tests:
 `tests/integration/test_logging.py`, `tests/unit/core/test_logstats.py`, `tests/scripts/test_usage_breakdown.py`.
 
-## 12. Indexed-context pilot records (2026-09-19)
+## 12. Exact-search Phase B telemetry (2026-09-22)
+
+Every ordinary exact search that reaches `search_dispatch(mode=exact)` now emits exactly
+one terminal `search_exact` record on success or failure. It contains no raw path, pattern,
+match text, context, or file list. Correlation uses `call`; `search_dispatch` already carries
+the path hash and pattern length.
+
+The event separates result semantics from work:
+
+- `strategy=normal|names_only|adaptive`;
+- `budget_outcome=none|entries_trimmed|context_omitted|metadata_error`;
+- cumulative coarse timings: `rg_subprocess_ms`, `rg_parse_ms`, `collect_ms`,
+  `context_attach_ms`, `adaptive_ms`, `budget_ms`, `impl_ms`;
+- raw-work counters: rg stdout characters/event types, collect candidates/glob
+  checks/rejects, accepted/retained matches/files, adaptive second-scan counters;
+- final bounded-result facts: pre-budget bytes, returned entries/result bytes, truncation.
+
+Auto-context remains one exact execution: `rg_calls=2`, `auto_context=true`, and phase/work
+metrics are cumulative. Errors after exact dispatch retain partial work and record the
+Phase-A stable `error_code` when available. Indexed `@context` keeps its existing telemetry
+and does not emit `search_exact`.
+
+`binnacle stats` reports exact-dispatch/summary coverage for mixed old/new journal windows,
+strategy/budget/error counts, phase latency percentiles, work distributions, and
+amplification ratios (`rg events / accepted match`, `rg chars / returned entry`).
+
+The rg JSON parser is `orjson` from Phase B. This was explicitly approved as part of the
+instrumentation change; the other optimization hypotheses in the Phase B plan remain
+unimplemented so observation data stays comparable.
+
+## 13. Indexed-context pilot records (2026-09-19)
 
 The development `search_text('@context ...')` pilot adds dedicated single-line
 telemetry without changing `tool_call`/`tool_result`.
