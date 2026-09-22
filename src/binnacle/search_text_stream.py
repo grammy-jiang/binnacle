@@ -14,7 +14,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from types import TracebackType
-from typing import BinaryIO
+from typing import BinaryIO, Self
 
 import orjson
 
@@ -81,7 +81,7 @@ class RgJsonStream:
         cmd += ["--regexp", self.pattern, str(self.root)]
         return cmd
 
-    def __enter__(self) -> RgJsonStream:  # noqa: PYI034
+    def __enter__(self) -> Self:
         self._stderr = tempfile.TemporaryFile(mode="w+b")
         self._started_ns = time.perf_counter_ns()
         self._cpu_started_ns = time.thread_time_ns()
