@@ -8,13 +8,21 @@ field that goes missing from the live journal fails here first.
 import asyncio
 import json
 import re
+import time
 from pathlib import Path
 
 import mcp.types
 from fastmcp import Client
 
 from binnacle import jobs, logging_middleware, server
-from binnacle.callctx import current_call_started
+from binnacle.callctx import (
+    current_argument_names,
+    current_call_started,
+    current_client,
+)
+from binnacle.config import RunCommandSettings
+from binnacle.tools import run_command as rc
+from binnacle.tools import stop_job as sj
 
 
 def _messages(caplog, event: str) -> list[str]:
@@ -61,6 +69,57 @@ def test_tool_call_start_context_is_reset_after_call(caplog):
     with caplog.at_level("INFO"):
         _run(("list_files", {"path": "/tmp", "max_results": 1}))
     assert current_call_started.get() is None
+
+
+def test_auto_background_policy_uses_middleware_client(monkeypatch):
+    info = mcp.types.Implementation(name="openai-mcp-test", version="1")
+    monkeypatch.setattr(
+        rc,
+        "RUN_SETTINGS",
+        RunCommandSettings(auto_background_patterns={"openai-mcp": (r"\bsleep\b",)}),
+    )
+    monkeypatch.setattr(jobs, "WARMUP_S", 0.05)
+    assert current_client.get() is None
+
+    started_at = time.monotonic()
+    (result,) = _run(
+        ("run_command", {"command": "sleep 2", "workdir": "/tmp"}),
+        client_info=info,
+    )
+    elapsed = time.monotonic() - started_at
+    payload = result.structured_content
+    assert payload is not None
+    assert payload["state"] == "running" and payload["background_job"] is True
+    assert elapsed < 1
+    assert current_client.get() is None
+    assert current_argument_names.get() == frozenset()
+    sj.stop_job_impl(payload["job_id"])
+
+
+def test_explicit_background_false_overrides_auto_policy(monkeypatch):
+    info = mcp.types.Implementation(name="openai-mcp-test", version="1")
+    monkeypatch.setattr(
+        rc,
+        "RUN_SETTINGS",
+        RunCommandSettings(auto_background_patterns={"openai-mcp": (r"\bsleep\b",)}),
+    )
+    monkeypatch.setattr(jobs, "WARMUP_S", 0.05)
+
+    (result,) = _run(
+        (
+            "run_command",
+            {
+                "command": "sleep 0.15; echo done",
+                "workdir": "/tmp",
+                "background": False,
+            },
+        ),
+        client_info=info,
+    )
+    payload = result.structured_content
+    assert payload is not None
+    assert payload["state"] == "exited" and payload["background_job"] is False
+    assert payload["output"] == "done\n"
 
 
 def test_tool_call_and_result_share_a_call_id_and_carry_sizes(caplog):
@@ -283,7 +342,7 @@ def test_effective_config_line(caplog):
     assert fields["pid"].isdigit()
     assert fields["version"] not in ("", "?")
     assert "keep_newest=" in lines[0] and "client_tools=" in lines[0]
-    assert "indexed_context=" in lines[0]
+    assert "auto_background=" in lines[0] and "indexed_context=" in lines[0]
     assert "indexed_reconcile=" in lines[0]
     assert "indexed_max_open=" in lines[0]
     assert "tokenizer_enabled=" in lines[0]

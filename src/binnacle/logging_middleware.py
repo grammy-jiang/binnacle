@@ -32,7 +32,12 @@ from fastmcp.server.dependencies import get_http_headers
 from fastmcp.server.middleware import CallNext, Middleware, MiddlewareContext
 from fastmcp.server.middleware.logging import LoggingMiddleware
 
-from binnacle.callctx import current_call, current_call_started
+from binnacle.callctx import (
+    current_argument_names,
+    current_call,
+    current_call_started,
+    current_client,
+)
 from binnacle.config import get_settings
 from binnacle.identity import ClientIdentity
 from binnacle.token_telemetry import TokenCounter
@@ -282,7 +287,8 @@ class ToolLoggingMiddleware(Middleware):
         call_id = uuid.uuid4().hex[:12]
         who = self._who(context, call_id)
         who.update(_header_fields())
-        args_chars, args_text = _args_json(getattr(context.message, "arguments", None))
+        arguments = getattr(context.message, "arguments", None) or {}
+        args_chars, args_text = _args_json(arguments)
         self._log(
             "tool_call",
             logging.INFO,
@@ -290,6 +296,10 @@ class ToolLoggingMiddleware(Middleware):
             {"args_chars": str(args_chars), "args": args_text},
         )
         token = current_call.set(call_id)
+        client_token = current_client.set(
+            None if who["client"] == "-" else who["client"]
+        )
+        argument_names_token = current_argument_names.set(frozenset(arguments))
         start = time.perf_counter()
         started_token = current_call_started.set(start)
         try:
@@ -312,6 +322,8 @@ class ToolLoggingMiddleware(Middleware):
             raise
         finally:
             current_call_started.reset(started_token)
+            current_argument_names.reset(argument_names_token)
+            current_client.reset(client_token)
             current_call.reset(token)
         is_error = bool(getattr(result, "is_error", False))
         fields = {"duration_ms": _duration_ms(start), "is_error": str(is_error)}

@@ -16,6 +16,7 @@ server start -- the same restart model the systemd deployment already has.
 """
 
 import os
+import re
 from functools import lru_cache
 from pathlib import Path
 
@@ -163,12 +164,43 @@ class EditFileSettings(BaseModel):
 
 
 class RunCommandSettings(BaseModel):
-    """run_command wait-not-kill bounds (spec docs/tools/run_command.md §3)."""
+    """run_command wait policy (spec docs/tools/run_command.md §3)."""
 
     wait_default_s: int = 30
     wait_max_s: int = Field(
         50, description="Below ChatGPT's hard 60 s client cap (design §5)."
     )
+    auto_background_patterns: dict[str, tuple[str, ...]] = Field(
+        default_factory=dict,
+        description=(
+            "Client-name PREFIX -> regexes that make matching commands use the "
+            "background warm-up when the caller omits background."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def validate_auto_background_patterns(self) -> "RunCommandSettings":
+        for client, patterns in self.auto_background_patterns.items():
+            if not client:
+                raise ValueError(
+                    "run_command.auto_background_patterns keys must be non-empty"
+                )
+            for pattern in patterns:
+                try:
+                    re.compile(pattern)
+                except re.error as exc:
+                    raise ValueError(
+                        f"invalid run_command auto-background regex for {client!r}: {pattern!r}"
+                    ) from exc
+        return self
+
+    def should_auto_background(self, client: str | None, command: str) -> bool:
+        if not client:
+            return False
+        for prefix, patterns in self.auto_background_patterns.items():
+            if client.startswith(prefix):
+                return any(re.search(pattern, command) for pattern in patterns)
+        return False
 
 
 class JobsSettings(BaseModel):

@@ -41,6 +41,7 @@ stdin from the `stdin` param, no PTY.
 | Every command launches **detached** (`start_new_session=True`, own process group), stdout+stderr merged into one spool file `~/.local/state/binnacle/jobs/<job_id>/out.log`; `meta.json` at launch, `exit` written by the reaping path | Gemini/Codex/Copilot detach discipline; the parent doc's reload-survival contract | in-process `subprocess` held by uvicorn (dies on reload) |
 | `run_command` waits up to `wait_seconds` (default 30, clamp 1–50) polling the spool; finishes → full result, still running → `{job_id, state: running, partial_output}` | Codex yield / Copilot initial_wait; ChatGPT 60 s cap | kill-at-timeout (Gemini) |
 | `background: true` → return `job_id` after a 1 s warm-up (surfaces immediate errors) | Gemini `is_background` + `delay_ms` | fire-and-forget with no warm-up |
+| Deployment-local `run_command.auto_background_patterns` can apply that same warm-up to matching commands for a client-name prefix; repository default is empty | 2026-09-22 production latency review: 77 real long commands spent ~39.8 min in foreground wait before yielding | hard-coded command names or repository-owned ChatGPT preferences |
 | Merged stream; exit metadata as structured fields (`exit_code`, `signal`, `timed_out`) | universal | separate stdout/stderr |
 | Head+tail truncation at 24 000 chars per call, `[… N chars elided …]`; the **full** log always remains on disk and `job_status` tails it | Codex/Gemini/Claude; read_file's own shaping | head-only |
 | Env hygiene: inherit, then set `PAGER=cat`, `GIT_PAGER=cat`, `GIT_TERMINAL_PROMPT=0`, `PYTHONUNBUFFERED=1`, `CI=1`, `BINNACLE=1`; no secret redaction (full passthrough, like Codex/Gemini defaults) | Gemini's interactivity-neutering set | PTY; secret filtering (out of scope for a single-user Pi) |
@@ -72,7 +73,7 @@ single client in use. "Not killed" stays (timeout ≠ kill, §1); "created no
 job" stays (the 50 blind job_status listings, docs/usage-analysis-2026-09-06.md).
 
 **Input**: `command` (required), `workdir` (default `~/Projects`),
-`wait_seconds` (int 1–50, default 30), `background` (bool, default false),
+`wait_seconds` (int 1–50, default 30), `background` (bool, default false; deployment-local client policy may auto-background matching commands),
 `stdin` (string, optional), `tail_lines` (int ≥ 1, optional; added
 2026-09-03 — keep only the last N lines of output, prefixed with a
 `[… K earlier lines omitted (tail_lines=N) …]` marker and `truncated:
@@ -84,6 +85,22 @@ output, truncated, output_bytes, duration_s, log_path, workdir,
 background_job: false}`; still running / background: `{job_id, state:
 "running", output (partial), runtime_s, log_path, workdir,
 background_job: true}` + summary naming `job_status`.
+
+### 3.1 Deployment-local auto-background policy
+
+Repository defaults contain no command patterns. A deployment may configure regular
+expressions by client-name prefix in `~/.config/binnacle/config.toml`; matching an omitted `background` parameter only changes the initial wait to the normal
+background warm-up; explicit `background=false` opts out. The policy does not change process
+isolation, output capture, or stop semantics. This keeps local agent workflow preferences
+out of forks of the repository. Invalid regular expressions fail configuration loading.
+
+```toml
+[run_command.auto_background_patterns]
+"openai-mcp" = ["<deployment-specific regex>"]
+```
+
+The running-result summary deliberately tells the agent to continue independent work and
+call `job_status` once when the result is actually needed, rather than encouraging polling.
 
 `background_job` and the summary tail were added 2026-09-06: a synchronous
 finish appends "It finished synchronously; no background job was created,

@@ -82,6 +82,7 @@ scalar facts only), the values of `X-Openai-Session` (hashed) and
 | Error classification | `request_error` text, ERROR level, class unknown | `is_error=True error_class=ToolError` (or NotFoundError, ValidationError, ...) `error=message` at WARNING; cancellations are recorded too |
 | Truncation and clipping | Nothing | `truncated` (all four file/search tools and run_command's head/tail clip or `tail_lines` drop), `lines_clipped`, `start_line/end_line/total_lines` (read_file window), `count` vs `entries` (search cap), `output_bytes` vs the clip; `tail_lines`, `max_results` visible in `args` |
 | Background jobs and outcomes | `job_start`/`job_exit` by `job_id`, exit code only | `background_job=true` and `state` on the result; `job_exit` adds `runtime_s`, `log_bytes`; `job_start` names the call |
+| Automatic background policy | None | `run_command_auto_background` records `call`, resolved `client`, and a 12-hex command hash when deployment-local policy changes a call's initial wait; the configured regex is not logged |
 | Client identity | `client=` on rich lines | `client=` on every plain line too; `oai_session=` (12-hex SHA-256 prefix of `X-Openai-Session`) groups calls of one ChatGPT session |
 | Restarts | uvicorn's `Application startup complete` | plus `config pid=... version=...` |
 

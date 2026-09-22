@@ -3,6 +3,8 @@
 Spec: docs/tools/run_command.md. Shared job machinery: jobs.py.
 """
 
+import hashlib
+import logging
 import subprocess
 import time
 from typing import Annotated
@@ -13,11 +15,14 @@ from fastmcp.tools.base import ToolResult
 from pydantic import Field
 
 from binnacle import jobs
+from binnacle.callctx import current_argument_names, current_call, current_client
 from binnacle.config import get_settings
 from binnacle.paths import resolve_path
 
-RUN_WAIT_DEFAULT = get_settings().run_command.wait_default_s
-RUN_WAIT_MAX = get_settings().run_command.wait_max_s
+RUN_SETTINGS = get_settings().run_command
+RUN_WAIT_DEFAULT = RUN_SETTINGS.wait_default_s
+RUN_WAIT_MAX = RUN_SETTINGS.wait_max_s
+log = logging.getLogger("binnacle.run_command")
 
 OUTPUT_SCHEMA = {
     "type": "object",
@@ -62,7 +67,21 @@ def run_command_impl(
             f"Use a directory inside ~/Projects or /tmp."
         )
     wait_seconds = max(1, min(wait_seconds, RUN_WAIT_MAX))
-    deadline = time.time() + (jobs.WARMUP_S if background else wait_seconds)
+    client = current_client.get()
+    auto_background = (
+        not background
+        and "background" not in current_argument_names.get()
+        and RUN_SETTINGS.should_auto_background(client, command)
+    )
+    effective_background = background or auto_background
+    if auto_background:
+        log.info(
+            "event=run_command_auto_background call=%s client=%s command_hash=%s",
+            current_call.get(),
+            client or "-",
+            hashlib.sha256(command.encode()).hexdigest()[:12],
+        )
+    deadline = time.time() + (jobs.WARMUP_S if effective_background else wait_seconds)
 
     try:
         job_id, proc = jobs.start_job(command, resolved, stdin)
@@ -137,13 +156,15 @@ def run_command_impl(
         "background_job": True,
     }
     reason = (
-        "started in background"
+        "started in background by local policy"
+        if auto_background
+        else "started in background"
         if background
         else f"still running after {wait_seconds} s"
     )
     summary = (
-        f"Command {reason}; job_id={job_id}. "
-        f"Poll with job_status, cancel with stop_job."
+        f"Command {reason}; job_id={job_id}. Continue independent work; "
+        "call job_status once when the result is needed, or stop_job to cancel."
     )
     return ToolResult(content=summary, structured_content=payload)
 
@@ -175,7 +196,9 @@ def register(mcp: FastMCP) -> None:
         ] = RUN_WAIT_DEFAULT,
         background: Annotated[
             bool,
-            Field(description="Return at once with a job_id after a 1 s warm-up."),
+            Field(
+                description="Return at once with a job_id after a 1 s warm-up. Local policy may also auto-background matching commands."
+            ),
         ] = False,
         stdin: Annotated[
             str | None, Field(description="Text piped to the command's stdin.")

@@ -26,6 +26,7 @@ def test_defaults_load_without_config_file(tmp_path, monkeypatch):
     assert settings.serve.port == 8000
     assert settings.roots.extra_roots == (Path("/tmp"),)
     assert settings.jobs.keep_newest == 50
+    assert settings.run_command.auto_background_patterns == {}
     assert settings.telemetry.tokenizer.enabled is False
     assert settings.telemetry.tokenizer.encoding == "o200k_base"
     assert settings.telemetry.tokenizer.client_prefixes == ("openai-mcp",)
@@ -57,6 +58,9 @@ extra_roots = ["/tmp", "/var/tmp"]
 keep_newest = 7
 listing_history_limit = 3
 
+[run_command.auto_background_patterns]
+"openai-mcp" = ["pytest", "tox"]
+
 [telemetry.tokenizer]
 enabled = true
 encoding = "o200k_base"
@@ -86,6 +90,9 @@ adaptive_snippet_chars = 220
     assert settings.roots.extra_roots == (Path("/tmp"), Path("/var/tmp"))
     assert settings.jobs.keep_newest == 7
     assert settings.jobs.listing_history_limit == 3
+    assert settings.run_command.auto_background_patterns == {
+        "openai-mcp": ("pytest", "tox")
+    }
     assert settings.telemetry.tokenizer.enabled is True
     assert settings.telemetry.tokenizer.encoding == "o200k_base"
     assert settings.telemetry.tokenizer.client_prefixes == ("openai-mcp", "codex")
@@ -98,6 +105,23 @@ adaptive_snippet_chars = 220
     assert settings.search_text.adaptive_total_files == 180
     assert settings.search_text.adaptive_representative_matches == 3
     assert settings.search_text.adaptive_snippet_chars == 220
+
+
+def test_run_command_rejects_invalid_auto_background_regex(tmp_path, monkeypatch):
+    clear_binnacle_env(monkeypatch)
+    cfg = tmp_path / "config.toml"
+    cfg.write_text(
+        """
+[run_command.auto_background_patterns]
+"openai-mcp" = ["[unterminated"]
+"""
+    )
+    monkeypatch.setenv(config.CONFIG_FILE_ENV, str(cfg))
+
+    with pytest.raises(
+        ValidationError, match="invalid run_command auto-background regex"
+    ):
+        config.Settings()
 
 
 def test_environment_overrides_toml(tmp_path, monkeypatch):

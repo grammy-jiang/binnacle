@@ -47,7 +47,7 @@ def log_effective_config() -> None:
     s = get_settings()
     logger.info(
         "event=config pid=%d version=%s roots=%s jobs_dir=%s keep_newest=%d "
-        "client_tools=%s rg_bin=%s indexed_context=%s indexed_reconcile=%s "
+        "client_tools=%s auto_background=%s rg_bin=%s indexed_context=%s indexed_reconcile=%s "
         "indexed_max_open=%d tokenizer_enabled=%s tokenizer_encoding=%s "
         "tokenizer_clients=%s",
         os.getpid(),
@@ -56,6 +56,10 @@ def log_effective_config() -> None:
         s.jobs.dir,
         s.jobs.keep_newest,
         {prefix: len(tools) for prefix, tools in s.client_tools.items()},
+        {
+            prefix: len(patterns)
+            for prefix, patterns in s.run_command.auto_background_patterns.items()
+        },
         s.rg_bin,
         str(s.indexed_context.enabled).lower(),
         str(s.indexed_context.reconcile_on_query).lower(),
