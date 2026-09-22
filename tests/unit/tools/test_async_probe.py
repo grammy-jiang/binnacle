@@ -27,11 +27,15 @@ def test_capabilities_payload_distinguishes_initialize_and_request_support():
         "tasks_initialize_capability": False,
         "tasks_request_capability": False,
         "tasks_request_settings": None,
+        "protocol_version": None,
+        "client_name": None,
     }
     assert async_probe.capabilities_payload(FakeContext(True, {})) == {
         "tasks_initialize_capability": True,
         "tasks_request_capability": True,
         "tasks_request_settings": {},
+        "protocol_version": None,
+        "client_name": None,
     }
 
 
@@ -45,8 +49,16 @@ def test_wait_is_actually_async_and_bounded_by_requested_delay():
 
 
 def test_seed_is_unpredictable_and_echo_preserves_exact_value():
-    first = async_probe.seed_impl("unit").structured_content
-    second = async_probe.seed_impl("unit").structured_content
+    first = asyncio.run(async_probe.seed_impl("unit")).structured_content
+    second = asyncio.run(async_probe.seed_impl("unit")).structured_content
     assert first["token"] != second["token"]
     echoed = async_probe.echo_impl("unit", first["token"]).structured_content
-    assert echoed == first
+    assert echoed["probe_id"] == first["probe_id"]
+    assert echoed["token"] == first["token"]
+
+
+def test_seed_delay_creates_a_controlled_dependency_window():
+    started = time.monotonic()
+    result = asyncio.run(async_probe.seed_impl("unit", 0.1)).structured_content
+    assert time.monotonic() - started >= 0.09
+    assert result["delay_s"] == 0.1

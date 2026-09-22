@@ -52,10 +52,21 @@ def _event(
 
 def capabilities_payload(ctx: _ExtensionContext) -> dict:
     per_request = ctx.client_extension_settings(TASKS_EXTENSION)
+    protocol_version = None
+    client_name = None
+    try:
+        params = ctx.session.client_params  # type: ignore[attr-defined]
+        if params is not None:
+            protocol_version = str(params.protocol_version)
+            client_name = params.client_info.name
+    except (AttributeError, RuntimeError):
+        pass
     return {
         "tasks_initialize_capability": ctx.client_supports_extension(TASKS_EXTENSION),
         "tasks_request_capability": per_request is not None,
         "tasks_request_settings": per_request,
+        "protocol_version": protocol_version,
+        "client_name": client_name,
     }
 
 
@@ -77,10 +88,12 @@ async def wait_impl(probe_id: str, label: str, delay_s: float) -> ToolResult:
     )
 
 
-def seed_impl(probe_id: str) -> ToolResult:
+async def seed_impl(probe_id: str, delay_s: float = 0.0) -> ToolResult:
     token = uuid.uuid4().hex
     _event("start", "seed", probe_id, token=token)
-    payload = {"probe_id": probe_id, "token": token}
+    if delay_s:
+        await asyncio.sleep(delay_s)
+    payload = {"probe_id": probe_id, "token": token, "delay_s": delay_s}
     _event("end", "seed", probe_id, token=token)
     return ToolResult(content=token, structured_content=payload)
 
@@ -139,9 +152,19 @@ def register(mcp: FastMCP) -> None:
         return await wait_impl(probe_id, label, delay_s)
 
     @mcp.tool(annotations=annotations)
-    def async_probe_seed(probe_id: PROBE_ID) -> ToolResult:
+    async def async_probe_seed(
+        probe_id: PROBE_ID,
+        delay_s: Annotated[
+            float,
+            Field(
+                ge=0.0,
+                le=5.0,
+                description="Optional delay before returning the unpredictable token.",
+            ),
+        ] = 0.0,
+    ) -> ToolResult:
         """Return an unpredictable token for a causal async-scheduling probe."""
-        return seed_impl(probe_id)
+        return await seed_impl(probe_id, delay_s)
 
     @mcp.tool(annotations=annotations)
     def async_probe_echo(
