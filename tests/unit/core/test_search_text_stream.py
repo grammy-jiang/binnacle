@@ -146,12 +146,12 @@ def test_completed_child_is_not_timed_out_by_slow_consumer(tmp_path):
         "for i in range(50):\n"
         " print(json.dumps({'type':'match','data':{'i':i}}), flush=True)\n",
     )
-    stream = RgJsonStream(tmp_path, "x", False, 0, rg_bin=str(rg), timeout_s=0.1)
+    stream = RgJsonStream(tmp_path, "x", False, 0, rg_bin=str(rg), timeout_s=1.0)
     with managed_rg_stream(stream):
         events = []
         for item in stream:
             events.append(item)
-            time.sleep(0.01)
+            time.sleep(0.03)
     assert len(events) == 50
     assert stream.stats.timed_out is False
 
@@ -163,7 +163,10 @@ def test_stdout_eof_does_not_disable_absolute_timeout(tmp_path):
     )
     stream = RgJsonStream(tmp_path, "x", False, 0, rg_bin=str(rg), timeout_s=0.15)
     started = time.monotonic()
-    with pytest.raises(ToolError, match="timed out") as exc, stream:
+    with (
+        pytest.raises(ToolError, match="timed out") as exc,
+        managed_rg_stream(stream),
+    ):
         list(stream)
     assert time.monotonic() - started < 2
     assert exc.value.telemetry_code == "rg_timeout"

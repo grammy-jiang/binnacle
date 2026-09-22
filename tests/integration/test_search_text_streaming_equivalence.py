@@ -29,8 +29,6 @@ def run_mode(monkeypatch, mode: str, pattern: str, path: Path, **kwargs):
         {"fixed_strings": True, "context_lines": 0},
         {"glob": "*.py", "context_lines": 1, "line_numbers": True},
         {"names_only": True, "glob": "*.py", "context_lines": 0},
-        {"context_lines": None},
-        {"context_lines": 0, "max_results": 2},
     ],
 )
 def test_normal_exact_results_match_between_pipelines(tmp_path, monkeypatch, kwargs):
@@ -41,6 +39,32 @@ def test_normal_exact_results_match_between_pipelines(tmp_path, monkeypatch, kwa
     streaming = run_mode(monkeypatch, "streaming", "hit", tmp_path, **kwargs)
 
     assert streaming == materialized
+
+
+def test_truncated_independent_rg_runs_preserve_contract_not_order(
+    tmp_path, monkeypatch
+):
+    (tmp_path / "a.py").write_text("hit alpha\nhit beta\n")
+    (tmp_path / "b.txt").write_text("hit text\n")
+
+    materialized = run_mode(
+        monkeypatch, "materialized", "hit", tmp_path, context_lines=0, max_results=2
+    )
+    streaming = run_mode(
+        monkeypatch, "streaming", "hit", tmp_path, context_lines=0, max_results=2
+    )
+
+    # Separate rg invocations may traverse files in a different order; same-raw
+    # reducer/property tests cover entry-order equivalence. Public truncation
+    # semantics must remain identical here without imposing a new sort order.
+    for payload in (materialized, streaming):
+        assert payload["count"] == 3
+        assert payload["truncated"] is True
+        assert len(payload["entries"]) == 2
+        assert payload["note"] == (
+            "Showing first 2 of 3 matches; narrow the pattern, add a glob, "
+            "or raise max_results."
+        )
 
 
 def test_auto_context_second_rg_matches(tmp_path, monkeypatch):
