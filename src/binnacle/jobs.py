@@ -6,16 +6,15 @@ own process group with output spooled to disk, so a job survives
 from process memory (ChatGPT re-initializes per call — no session state).
 """
 
-import json
 import logging
 import os
 import signal
 import subprocess
 import threading
 import time
-import uuid
 from pathlib import Path
 
+from binnacle import job_store
 from binnacle.callctx import current_call
 from binnacle.config import get_settings
 from binnacle.job_process import (
@@ -56,56 +55,23 @@ _ENV_OVERRIDES = {
 
 
 def _job_dir(job_id: str) -> Path:
-    return JOBS_DIR / job_id
-
-
-_META_REQUIRED = ("command", "workdir", "pid", "started_at")
+    """Compatibility facade for the current job-store tests/callers."""
+    return job_store.job_dir(JOBS_DIR, job_id)
 
 
 def _read_meta(job_id: str) -> dict | None:
-    """meta.json as a dict, or None if missing, unparsable, or incomplete.
-
-    A record the server was killed while writing can parse yet lack keys;
-    treating it as absent keeps job_status and the listing from crashing on
-    one bad directory (prune deletes it in time).
-    """
-    try:
-        meta = json.loads((_job_dir(job_id) / "meta.json").read_text())
-    except (OSError, json.JSONDecodeError):
-        return None
-    if not isinstance(meta, dict) or any(k not in meta for k in _META_REQUIRED):
-        return None
-    return meta
+    """Compatibility facade over the storage-only module."""
+    return job_store.read_meta(JOBS_DIR, job_id)
 
 
 def _write_meta(job_id: str, meta: dict) -> None:
-    """Atomically replace a job's durable metadata.
-
-    Readers run concurrently with reapers and stop/status calls. Writing
-    `meta.json` in place exposes a truncate/write window where `_read_meta()`
-    can observe invalid JSON and misclassify a real job as absent. Build the
-    complete JSON in a same-directory temporary file, then atomically replace
-    the target so readers see either the old or the new complete record.
-    """
-    d = _job_dir(job_id)
-    target = d / "meta.json"
-    temp = d / f".meta.{uuid.uuid4().hex}.tmp"
-    try:
-        temp.write_text(json.dumps(meta))
-        os.replace(temp, target)
-    finally:
-        temp.unlink(missing_ok=True)
+    """Compatibility facade preserving the existing atomic-write contract."""
+    job_store.write_meta(JOBS_DIR, job_id, meta)
 
 
 def _remove_job_dir(stale: Path) -> bool:
-    """Best-effort removal; a dir a concurrent prune already deleted is fine."""
-    try:
-        for f in stale.iterdir():
-            f.unlink(missing_ok=True)
-        stale.rmdir()
-    except OSError:
-        return False
-    return True
+    """Compatibility facade for best-effort durable-store cleanup."""
+    return job_store.remove_job_dir(stale)
 
 
 def _prune(reserve: int = 0) -> None:
@@ -228,7 +194,7 @@ def start_job(
     with _STORE_LOCK:
         JOBS_DIR.mkdir(parents=True, exist_ok=True)
         _prune(reserve=1)
-        job_id = uuid.uuid4().hex[:12]
+        job_id = job_store.new_job_id()
         d = _job_dir(job_id)
         d.mkdir(parents=True)
         log = d / "out.log"
@@ -286,10 +252,7 @@ def start_job(
 
 
 def read_log(job_id: str) -> bytes:
-    try:
-        return (_job_dir(job_id) / "out.log").read_bytes()
-    except OSError:
-        return b""
+    return job_store.read_log(JOBS_DIR, job_id)
 
 
 def clip_head_tail(text: str, limit: int = RUN_MAX_OUTPUT_CHARS) -> tuple[str, bool]:
@@ -347,10 +310,7 @@ def job_state(job_id: str) -> dict | None:
 
 
 def list_jobs() -> list[dict]:
-    try:
-        ids = [d.name for d in JOBS_DIR.iterdir() if d.is_dir()]
-    except OSError:
-        return []
+    ids = job_store.list_job_ids(JOBS_DIR)
     states = [s for jid in ids if (s := job_state(jid)) is not None]
     states.sort(key=lambda s: s["started_at"], reverse=True)
     return states
