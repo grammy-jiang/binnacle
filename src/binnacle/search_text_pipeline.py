@@ -126,7 +126,10 @@ def _update_reducer_metrics(metrics, reducer, result) -> None:
     metrics.glob_cache_misses += reducer.glob_cache_misses
     metrics.glob_rejected_files += reducer.glob_rejected_files
     metrics.glob_rejected_events += reducer.glob_rejected_events
-    metrics.adaptive_retained_match_events += len(result.accepted_match_events)
+    # This describes the final scan's adaptive input, not cumulative work.
+    # Auto-context replaces the first scan, so its released events must not be
+    # counted as if they remained available to adaptive ranking.
+    metrics.adaptive_retained_match_events = len(result.accepted_match_events)
     metrics.collect_event_candidates += reducer.event_candidates
     metrics.collect_glob_checks += reducer.glob_cache_misses
     metrics.collect_glob_rejected += reducer.glob_rejected_events

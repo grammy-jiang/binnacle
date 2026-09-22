@@ -75,6 +75,8 @@ def test_auto_context_records_second_rg_and_cumulative_work(tmp_path, caplog):
     assert f["context_requested"] == "omitted"
     assert int(f["effective_context"]) == st.AUTO_CONTEXT_SINGLE
     assert int(f["rg_events"]) > int(f["rg_match_events"])
+    if f.get("pipeline") == "streaming":
+        assert int(f["adaptive_retained_match_events"]) == 1
 
 
 def test_names_only_and_budget_outcome_are_orthogonal(tmp_path, caplog, monkeypatch):
