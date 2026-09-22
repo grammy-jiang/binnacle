@@ -19,6 +19,7 @@ import os
 import re
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 from pydantic_settings import (
@@ -203,9 +204,26 @@ class RunCommandSettings(BaseModel):
         return False
 
 
-class JobsSettings(BaseModel):
-    """Disk-backed job store (spec docs/tools/run_command.md §6)."""
+def _default_jobs_socket() -> Path:
+    runtime = os.environ.get("XDG_RUNTIME_DIR")
+    base = Path(runtime) if runtime else Path(f"/run/user/{os.getuid()}")
+    return base / "binnacle" / "jobs.sock"
 
+
+class JobsSettings(BaseModel):
+    """Disk-backed job store and local ownership backend."""
+
+    owner: Literal["embedded", "manager"] = Field(
+        "embedded",
+        description=(
+            "Process owner for run_command jobs. Managed systemd deployments use "
+            "manager; embedded remains the rollback/test path."
+        ),
+    )
+    socket_path: Path = Field(
+        default_factory=_default_jobs_socket,
+        description="Private AF_UNIX socket for binnacle-jobs.service.",
+    )
     dir: Path = Field(
         default_factory=lambda: Path.home() / ".local" / "state" / "binnacle" / "jobs",
         description="Job spool; survives reloads.",

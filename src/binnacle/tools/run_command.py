@@ -5,8 +5,6 @@ Spec: docs/tools/run_command.md. Shared job machinery: jobs.py.
 
 import hashlib
 import logging
-import subprocess
-import time
 from typing import Annotated
 
 from fastmcp import FastMCP
@@ -81,26 +79,11 @@ def run_command_impl(
             client or "-",
             hashlib.sha256(command.encode()).hexdigest()[:12],
         )
-    deadline = time.time() + (jobs.WARMUP_S if effective_background else wait_seconds)
-
+    initial_wait = jobs.WARMUP_S if effective_background else float(wait_seconds)
     try:
-        job_id, proc = jobs.start_job(command, resolved, stdin)
-    except OSError as e:
-        raise ToolError(
-            f"Could not start the job: {e}. The job spool {jobs.JOBS_DIR} must be "
-            f"writable; run `binnacle doctor`."
-        ) from e
-    # Wait on the process itself, in this request thread, up to the deadline.
-    # If it finishes, record the exit inline (the exit code is already in
-    # memory as proc.returncode) — so there is no window where a just-finished
-    # command reads as "running", and the common synchronous case spawns no
-    # thread. If it outlives the deadline, it has become a real background
-    # job; hand it to a watcher thread that records its exit later.
-    try:
-        proc.wait(timeout=max(0.0, deadline - time.time()))
-        jobs.record_exit(job_id, proc)
-    except subprocess.TimeoutExpired:
-        jobs.reap_in_background(job_id, proc)
+        job_id = jobs.start_and_wait(command, resolved, stdin, initial_wait)
+    except (OSError, RuntimeError) as e:
+        raise ToolError(f"Could not start the job: {e}. Run `binnacle doctor`.") from e
 
     state = jobs.job_state(job_id)
     log_text = jobs.read_log(job_id).decode("utf-8", errors="replace")

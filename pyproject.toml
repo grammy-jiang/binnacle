@@ -18,6 +18,7 @@ dependencies = [
 
 [project.scripts]
 binnacle = "binnacle.cli:main"
+binnacle-jobs = "binnacle.job_manager:main"
 binnacle-watchdog = "binnacle.watchdog_cli:main"
 binnacle-tunnel = "binnacle.tunnel_cli:main"
 

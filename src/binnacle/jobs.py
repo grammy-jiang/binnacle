@@ -31,6 +31,8 @@ JOBS_DIR = get_settings().jobs.dir
 KEEP_NEWEST = get_settings().jobs.keep_newest
 RUN_MAX_OUTPUT_CHARS = get_settings().jobs.max_output_chars
 WARMUP_S = get_settings().jobs.warmup_s
+OWNER_MODE = get_settings().jobs.owner
+MANAGER_SOCKET = get_settings().jobs.socket_path
 
 # stop_job timings; module-level so tests can shrink the escalation wait.
 STOP_SIGTERM_GRACE_S = 5.0  # wait for a clean SIGTERM exit before SIGKILL
@@ -269,6 +271,32 @@ def start_job(
     return job_id, proc
 
 
+def start_and_wait(
+    command: str, workdir: Path, stdin: str | None, wait_seconds: float
+) -> str:
+    """Start a job through the configured owner and wait through its first window."""
+    if OWNER_MODE == "manager":
+        from binnacle import job_client
+
+        response = job_client.start(
+            MANAGER_SOCKET,
+            command=command,
+            workdir=workdir,
+            stdin=stdin,
+            wait_seconds=wait_seconds,
+            call_id=current_call.get(),
+        )
+        return str(response["job_id"])
+
+    job_id, proc = start_job(command, workdir, stdin)
+    try:
+        proc.wait(timeout=wait_seconds)
+        record_exit(job_id, proc)
+    except subprocess.TimeoutExpired:
+        reap_in_background(job_id, proc)
+    return job_id
+
+
 def read_log(job_id: str) -> bytes:
     return job_store.read_log(JOBS_DIR, job_id)
 
@@ -406,7 +434,8 @@ def await_exit(job_id: str, timeout: float) -> dict | None:
         interval = min(interval * 1.5, 0.5)
 
 
-def stop_job(job_id: str) -> dict | None:
+def stop_job_embedded(job_id: str) -> dict | None:
+    """Original signal/process-tree stop path, used by the stable owner process."""
     state = job_state(job_id)
     if state is None:
         return None
@@ -433,3 +462,16 @@ def stop_job(job_id: str) -> dict | None:
     except ProcessLookupError:
         pass
     return await_exit(job_id, STOP_SIGKILL_GRACE_S)
+
+
+def stop_job(job_id: str) -> dict | None:
+    """Stop through the manager for manager-owned jobs; retain legacy compatibility."""
+    meta = _read_meta(job_id)
+    if meta is None:
+        return None
+    if meta.get("schema_version") == 2 and meta.get("owner_instance_id"):
+        from binnacle import job_client
+
+        job_client.stop(MANAGER_SOCKET, job_id)
+        return job_state(job_id)
+    return stop_job_embedded(job_id)
