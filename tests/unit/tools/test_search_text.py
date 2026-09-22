@@ -186,12 +186,19 @@ def compact_bytes(payload: dict) -> int:
     )
 
 
+def _disable_adaptive(monkeypatch) -> None:
+    # These tests exercise the ordinary response-budget path. Keep them isolated
+    # from deployment-local adaptive-discovery configuration.
+    monkeypatch.setattr(st.SEARCH_SETTINGS, "adaptive_discovery_enabled", False)
+
+
 def test_result_budget_truncates_complete_entries_in_order(
     tmp_path, monkeypatch, caplog
 ):
     lines = [f"hit {i:03d} " + ("x" * 120) for i in range(80)]
     (tmp_path / "many.txt").write_text("\n".join(lines) + "\n")
     monkeypatch.setattr(st, "SEARCH_RESULT_MAX_BYTES", 4_096)
+    _disable_adaptive(monkeypatch)
 
     token = current_call.set("budget-test-call")
     try:
@@ -215,6 +222,7 @@ def test_result_budget_truncates_complete_entries_in_order(
 def test_result_budget_counts_utf8_bytes_not_characters(tmp_path, monkeypatch):
     (tmp_path / "unicode.txt").write_text(("hit 中文🙂" + "界" * 80 + "\n") * 40)
     monkeypatch.setattr(st, "SEARCH_RESULT_MAX_BYTES", 4_096)
+    _disable_adaptive(monkeypatch)
     p = search("hit", str(tmp_path), context_lines=0)
 
     assert p["count"] == 40
@@ -229,6 +237,7 @@ def test_result_budget_keeps_first_match_when_context_alone_is_too_large(
         ("before " + "a" * 1_500 + "\n") + "needle\n" + ("after " + "c" * 1_500 + "\n")
     )
     monkeypatch.setattr(st, "SEARCH_RESULT_MAX_BYTES", 1_024)
+    _disable_adaptive(monkeypatch)
     p = search("needle", str(tmp_path), context_lines=1, line_numbers=True)
 
     assert p["count"] == 1
@@ -256,6 +265,7 @@ def test_result_budget_does_not_change_small_result(tmp_path, monkeypatch):
 def test_result_budget_and_max_results_keep_true_total(tmp_path, monkeypatch):
     (tmp_path / "many.txt").write_text(("hit " + "z" * 200 + "\n") * 100)
     monkeypatch.setattr(st, "SEARCH_RESULT_MAX_BYTES", 2_048)
+    _disable_adaptive(monkeypatch)
     p = search("hit", str(tmp_path), max_results=25, context_lines=0)
 
     assert p["count"] == 100
