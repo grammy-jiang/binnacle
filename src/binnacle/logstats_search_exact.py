@@ -45,7 +45,7 @@ def analyze_exact_search(
         if calls is not None:
             out.rg_calls_total += calls
         out.auto_context += int(f.get("auto_context") == "true")
-        for key, target in (
+        float_targets: tuple[tuple[str, list[float]], ...] = (
             ("impl_ms", out.impl_ms),
             ("rg_subprocess_ms", out.rg_subprocess_ms),
             ("rg_parse_ms", out.rg_parse_ms),
@@ -53,10 +53,11 @@ def analyze_exact_search(
             ("context_attach_ms", out.context_attach_ms),
             ("adaptive_ms", out.adaptive_ms),
             ("budget_ms", out.budget_ms),
-        ):
+        )
+        for key, target in float_targets:
             if (value := _float(f, key)) is not None:
                 target.append(value)
-        for key, target in (
+        int_targets: tuple[tuple[str, list[int]], ...] = (
             ("rg_stdout_chars", out.rg_stdout_chars),
             ("rg_events", out.rg_events),
             ("rg_match_events", out.rg_match_events),
@@ -68,9 +69,10 @@ def analyze_exact_search(
             ("returned_entries", out.returned_entries),
             ("adaptive_match_events", out.adaptive_match_events),
             ("adaptive_glob_checks", out.adaptive_glob_checks),
-        ):
-            if (value := _int(f, key)) is not None:
-                target.append(value)
+        )
+        for key, int_target in int_targets:
+            if (int_value := _int(f, key)) is not None:
+                int_target.append(int_value)
         events = _int(f, "rg_events")
         accepted = _int(f, "accepted_matches")
         if events is not None and accepted:
@@ -82,7 +84,9 @@ def analyze_exact_search(
     return out
 
 
-def _metric_line(label: str, values: list[int | float], unit: str = "") -> str | None:
+def _metric_line(
+    label: str, values: Sequence[int | float], unit: str = ""
+) -> str | None:
     if not values:
         return None
     suffix = f" {unit}" if unit else ""
@@ -124,7 +128,7 @@ def render_exact_search(exact: ExactSearchStats) -> list[str]:
             + ", ".join(f"{k}={v}" for k, v in exact.error_codes.most_common())
         )
     out.append("  latency:")
-    for label, values in (
+    latency_metrics: tuple[tuple[str, list[float]], ...] = (
         ("exact impl", exact.impl_ms),
         ("rg subprocess", exact.rg_subprocess_ms),
         ("rg JSON parse", exact.rg_parse_ms),
@@ -132,11 +136,12 @@ def render_exact_search(exact: ExactSearchStats) -> list[str]:
         ("context attach", exact.context_attach_ms),
         ("adaptive build", exact.adaptive_ms),
         ("budget shaping", exact.budget_ms),
-    ):
+    )
+    for label, values in latency_metrics:
         if line := _metric_line(label, values, "ms"):
             out.append(line)
     out.append("  work:")
-    for label, values in (
+    work_metrics: tuple[tuple[str, list[int]], ...] = (
         ("rg stdout chars", exact.rg_stdout_chars),
         ("rg events", exact.rg_events),
         ("match events", exact.rg_match_events),
@@ -148,8 +153,9 @@ def render_exact_search(exact: ExactSearchStats) -> list[str]:
         ("returned entries", exact.returned_entries),
         ("adaptive match scan", exact.adaptive_match_events),
         ("adaptive glob checks", exact.adaptive_glob_checks),
-    ):
-        if line := _metric_line(label, values):
+    )
+    for label, work_values in work_metrics:
+        if line := _metric_line(label, work_values):
             out.append(line)
     out.append("  amplification:")
     if line := _metric_line("rg events / accepted", exact.events_per_accepted_match):
