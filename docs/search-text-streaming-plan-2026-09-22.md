@@ -525,7 +525,7 @@ search target:
 | Workload | Materialized p50 | Streaming p50 | Result |
 | --- | ---: | ---: | --- |
 | literal `event=`, `*.py`, context=0 | 16.48–16.99 ms | 12.39–12.59 ms | streaming faster |
-| regex `event=|logger`, `*.py`, context=2 | 40.78–41.35 ms | 15.30–15.97 ms | streaming much faster |
+| regex event/logger, `*.py`, context=2 | 40.78–41.35 ms | 15.30–15.97 ms | streaming much faster |
 
 No watchdog/timer regression is visible; the `<1 ms / <=5%` no-regression gate is passed
 with large margin.
