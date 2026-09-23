@@ -322,5 +322,24 @@
         "Phase 2 is closed without deployment and Phase 3 remains not started; the first post-write pre-commit pass changed only a missing EOF newline in phase2-progress.md, and the clean rerun passed every hook."
       ]
     }
+  },
+  "post_completion_review": {
+    "label": "2.12a",
+    "status": "complete",
+    "issue": "Independent review found that a positive job_status wait exception released its blocking lease and emitted blocking_window_closed but returned before emitting the frozen per-call job_status_timing policy record.",
+    "fix": "Positive-wait exceptions now emit job_status_timing after lease release, including requested/bounded/effective/actual wait, budget/policy/turn/client fields, state=error, and na for read/process stages not reached.",
+    "tests": [
+      "Focused telemetry/logging regression matrix -> 36 passed in 6.28s",
+      "uv run pytest -q -> 1115 passed, 3 skipped in 123.66s",
+      "uv run python scripts/check_module_size.py -> 227 Python modules checked; 12 warnings; 0 errors",
+      "uv run pre-commit run --all-files (before closeout evidence update) -> PASS; all hooks passed",
+      "uv run pre-commit run --all-files (after closeout evidence update) -> PASS; all hooks passed"
+    ],
+    "notes": [
+      "The existing exception-path lease/window accounting behavior is unchanged.",
+      "The exception regression test moved to test_job_status_blocking_guard_errors.py so the original integration module remains below the 500-line hard gate.",
+      "No production deployment or blocking budget enablement occurred.",
+      "Phase 2 remains complete and Phase 3 remains not started."
+    ]
   }
 }
