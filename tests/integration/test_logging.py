@@ -370,6 +370,8 @@ def test_effective_config_line(caplog):
     assert by_tool["search_text"]["exact_execution"] == "streaming"
     assert by_tool["run_command"]["wait_max_s"] == "50"
     assert by_tool["jobs"]["warmup_s"] == "1.0"
+    assert by_tool["jobs"]["blocking_wall_budget_clients"] == "0"
+    assert by_tool["jobs"]["blocking_wall_budgets"] == "-"
     assert by_tool["jobs"]["configured_owner"] in {"auto", "embedded", "manager"}
     assert by_tool["jobs"]["effective_owner"] in {"embedded", "manager"}
     assert by_tool["jobs"]["stop_sigterm_grace_s"] == "5.0"

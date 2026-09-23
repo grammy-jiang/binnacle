@@ -251,6 +251,37 @@ class JobsSettings(BaseModel):
     quiet_after_s: int = Field(
         30, description="A running job with no output this long is quiet=true."
     )
+    blocking_wall_budget_s_by_client: dict[str, int] = Field(
+        default_factory=dict,
+        description="Client-name PREFIX -> cumulative blocking-wall budget in seconds.",
+    )
+
+    @model_validator(mode="after")
+    def validate_blocking_wall_budgets(self) -> "JobsSettings":
+        for client, budget in self.blocking_wall_budget_s_by_client.items():
+            if not client.strip():
+                raise ValueError(
+                    "jobs.blocking_wall_budget_s_by_client keys must be non-empty "
+                    "and not whitespace-only"
+                )
+            if not 1 <= budget <= 3600:
+                raise ValueError(
+                    "jobs.blocking_wall_budget_s_by_client budgets must be in 1..3600"
+                )
+        return self
+
+    def blocking_wall_budget_for_client(self, client: str | None) -> int | None:
+        if client is None:
+            return None
+        matches = (
+            prefix
+            for prefix in self.blocking_wall_budget_s_by_client
+            if client.startswith(prefix)
+        )
+        prefix = max(matches, key=len, default=None)
+        if prefix is None:
+            return None
+        return self.blocking_wall_budget_s_by_client[prefix]
 
 
 class Settings(BaseSettings):

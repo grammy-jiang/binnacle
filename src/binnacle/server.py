@@ -120,6 +120,14 @@ def log_effective_config() -> None:
         max_output_chars=s.jobs.max_output_chars,
         warmup_s=s.jobs.warmup_s,
         quiet_after_s=s.jobs.quiet_after_s,
+        blocking_wall_budget_clients=len(s.jobs.blocking_wall_budget_s_by_client),
+        blocking_wall_budgets=",".join(
+            f"{prefix}:{budget}"
+            for prefix, budget in sorted(
+                s.jobs.blocking_wall_budget_s_by_client.items()
+            )
+        )
+        or "-",
         stop_sigterm_grace_s=jobs.STOP_SIGTERM_GRACE_S,
         stop_sigkill_grace_s=jobs.STOP_SIGKILL_GRACE_S,
     )
