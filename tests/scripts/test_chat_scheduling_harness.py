@@ -307,3 +307,51 @@ def test_capture_journal_freezes_requested_window(monkeypatch, tmp_path):
     assert target.read_text() == "journal-evidence\n"
     assert seen["args"][seen["args"].index("--since") + 1] == "@99.000"
     assert seen["args"][seen["args"].index("--until") + 1] == "@111.000"
+
+
+def test_chat_artifact_cleanup_retries_transient_delete_failures(monkeypatch, tmp_path):
+    backup_dir = tmp_path / "backups"
+    monkeypatch.setattr(chat, "CHAT_BACKUP_DIR", backup_dir)
+    monkeypatch.setattr(chat.time, "sleep", lambda _: None)
+    cid = "12345678-1234-1234-1234-123456789abc"
+    delete_attempts = 0
+
+    def fake_run(args, **kwargs):
+        nonlocal delete_attempts
+        if "--delete" in args:
+            delete_attempts += 1
+            if delete_attempts < 3:
+                raise subprocess.CalledProcessError(1, args)
+            backup_dir.mkdir(parents=True, exist_ok=True)
+            (backup_dir / f"20260923T000000Z_{cid}.json").write_text(
+                '{"conversation":"saved"}'
+            )
+        return subprocess.CompletedProcess(args, 0, "", "")
+
+    monkeypatch.setattr(chat, "_run", fake_run)
+    artifact = chat.ChatArtifact("project", tmp_path)
+    artifact.chat_id = cid
+    artifact.tracked = True
+
+    result = artifact.cleanup()
+
+    assert delete_attempts == 3
+    assert result["deleted"] is True
+    assert artifact.tracked is False
+
+
+def test_project_client_retries_transient_helper_failures(monkeypatch):
+    attempts = 0
+    monkeypatch.setattr(chat.time, "sleep", lambda _: None)
+
+    def fake_run(args, **kwargs):
+        nonlocal attempts
+        attempts += 1
+        if attempts < 3:
+            raise subprocess.CalledProcessError(1, args)
+        return subprocess.CompletedProcess(args, 0, "baseline\n", "")
+
+    monkeypatch.setattr(chat, "_run", fake_run)
+
+    assert chat.ProjectClient("project").instructions() == "baseline"
+    assert attempts == 3
