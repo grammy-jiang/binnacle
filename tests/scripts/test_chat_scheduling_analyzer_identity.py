@@ -1,6 +1,11 @@
+from pathlib import Path
+
 from scripts.chat_scheduling_analyzer import analyze_trace
+from scripts.chat_scheduling_evidence import _assign_nodes
+from scripts.chat_scheduling_journal import RawCall
 from scripts.chat_scheduling_manifest import ROOT as SCENARIO_ROOT
 from scripts.chat_scheduling_manifest import load_scenario
+from scripts.chat_scheduling_runtime import TrialIdentity
 from scripts.chat_scheduling_trace import ToolInterval, TrialTrace
 
 
@@ -207,3 +212,106 @@ def test_r9_combined_fix_and_retest_command_satisfies_recovery_oracle():
 
     assert metrics.correctness_passed is True
     assert metrics.same_prompt_completion is True
+
+
+def test_r7_repeated_wait_duration_does_not_change_dependency_identity():
+    scenario = load_scenario(SCENARIO_ROOT / "R7.json")
+    root = Path("/tmp/binnacle-chat-scheduling-v2/R7/run-r7")
+    identity = TrialIdentity(scenario_id="R7", run_id="run-r7", nonce="N0")
+    command_a = "python3 -c 'import time; time.sleep(60); print(\"R7-A-N0\")'"
+    command_b = "python3 -c 'import time; time.sleep(75); print(\"R7-B-N0\")'"
+
+    calls = [
+        RawCall(
+            call_id="start-a",
+            tool="run_command",
+            turn="t",
+            client="openai-mcp",
+            start_epoch_s=0,
+            args={
+                "background": True,
+                "wait_seconds": 1,
+                "workdir": str(root),
+                "command": command_a,
+            },
+            args_raw="",
+            end_epoch_s=1,
+            result_fields={"job_id": "JA", "state": "running"},
+        ),
+        RawCall(
+            call_id="wait-a-1",
+            tool="job_status",
+            turn="t",
+            client="openai-mcp",
+            start_epoch_s=2,
+            args={"job_id": "JA", "wait_seconds": 50, "tail_lines": 20},
+            args_raw="",
+            end_epoch_s=52,
+            result_fields={"job_id": "JA", "state": "running", "waited_s": "50"},
+        ),
+        RawCall(
+            call_id="wait-a-2",
+            tool="job_status",
+            turn="t",
+            client="openai-mcp",
+            start_epoch_s=53,
+            args={"job_id": "JA", "wait_seconds": 10, "tail_lines": 20},
+            args_raw="",
+            end_epoch_s=60,
+            result_fields={
+                "job_id": "JA",
+                "state": "exited",
+                "exit_code": "0",
+                "waited_s": "7",
+            },
+        ),
+        RawCall(
+            call_id="start-b",
+            tool="run_command",
+            turn="t",
+            client="openai-mcp",
+            start_epoch_s=61,
+            args={
+                "background": True,
+                "wait_seconds": 1,
+                "workdir": str(root),
+                "command": command_b,
+            },
+            args_raw="",
+            end_epoch_s=62,
+            result_fields={"job_id": "JB", "state": "running"},
+        ),
+        RawCall(
+            call_id="wait-b-1",
+            tool="job_status",
+            turn="t",
+            client="openai-mcp",
+            start_epoch_s=63,
+            args={"job_id": "JB", "wait_seconds": 50, "tail_lines": 20},
+            args_raw="",
+            end_epoch_s=113,
+            result_fields={"job_id": "JB", "state": "running", "waited_s": "50"},
+        ),
+        RawCall(
+            call_id="wait-b-2",
+            tool="job_status",
+            turn="t",
+            client="openai-mcp",
+            start_epoch_s=114,
+            args={"job_id": "JB", "wait_seconds": 30, "tail_lines": 20},
+            args_raw="",
+            end_epoch_s=135,
+            result_fields={
+                "job_id": "JB",
+                "state": "exited",
+                "exit_code": "0",
+                "waited_s": "21",
+            },
+        ),
+    ]
+
+    assigned, completed, _ = _assign_nodes(scenario, calls, identity, root, {})
+
+    assert assigned["wait-a-2"] == "wait_first"
+    assert assigned["wait-b-2"] == "wait_second"
+    assert completed == {"start_first", "wait_first", "start_second", "wait_second"}
