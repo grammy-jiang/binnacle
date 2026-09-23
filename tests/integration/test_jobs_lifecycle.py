@@ -93,6 +93,16 @@ def test_single_job_timing_logs_stage_breakdown(monkeypatch, caplog):
     assert "call=timing-test-call" in line
     assert "job_id=timing-job" in line
     assert "wait_requested_s=0" in line
+    assert "wait_bounded_s=0" in line
+    assert "wait_effective_s=0" in line
+    assert "waited_s=0.0" in line
+    assert "blocking_budget_s=na" in line
+    assert "blocking_spent_before_s=na" in line
+    assert "blocking_remaining_before_s=na" in line
+    assert "blocking_active_before=0" in line
+    assert "blocking_policy=no_policy" in line
+    assert "blocking_budget_exhausted=false" in line
+    assert "turn=-" in line and "client=-" in line
     assert "dispatch_ms=" in line and "dispatch_ms=na" not in line
     assert "state_ms=" in line
     assert "read_log_ms=" in line
@@ -111,6 +121,12 @@ def test_status_wait_returns_when_job_exits():
     assert "finished" in s["log_tail"]
     assert 0.3 < waited < 5  # returned soon after exit, not at the deadline
     assert 0 < s["waited_s"] <= waited + 0.1
+    assert s["wait_requested_s"] == 10
+    assert s["wait_effective_s"] == 10
+    assert s["blocking_budget_s"] is None
+    assert s["blocking_remaining_s"] is None
+    assert s["blocking_budget_exhausted"] is False
+    assert s["blocking_policy"] == "no_policy"
 
 
 def test_status_wait_expires_leaves_job_running():
@@ -187,7 +203,9 @@ def test_background_run_marks_background_job_true():
     assert p["state"] == "running" and p["background_job"] is True
     content = rc.run_command_impl("sleep 30", "/tmp", 10, True, None).content[0].text
     assert "no background job" not in content.lower()
-    assert "job_status" in content
+    assert "Use job_status when the result is needed, or stop_job to cancel." in content
+    assert "continue independent work" not in content.lower()
+    assert "call job_status once" not in content.lower()
     stop(p["job_id"])
     stop(p["job_id"])  # idempotent; also cleans the second job
 

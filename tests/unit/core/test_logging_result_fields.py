@@ -25,6 +25,12 @@ def test_result_fields_lift_low_cardinality_tool_facts_only():
             "previous_bytes": 10,
             "runtime_s": 1.25,
             "last_output_age_s": 0.5,
+            "wait_requested_s": 50,
+            "wait_effective_s": 3,
+            "blocking_budget_s": 5,
+            "blocking_remaining_s": 2.5,
+            "blocking_budget_exhausted": False,
+            "blocking_policy": "tracked",
         },
     )
     fields = logging_middleware._result_fields(result)
@@ -37,5 +43,11 @@ def test_result_fields_lift_low_cardinality_tool_facts_only():
     assert fields["previous_bytes"] == "10"
     assert fields["runtime_s"] == "1.25"
     assert fields["last_output_age_s"] == "0.5"
+    assert fields["wait_requested_s"] == "50"
+    assert fields["wait_effective_s"] == "3"
+    assert fields["blocking_budget_s"] == "5"
+    assert fields["blocking_remaining_s"] == "2.5"
+    assert fields["blocking_budget_exhausted"] == "false"
+    assert fields["blocking_policy"] == "tracked"
     serialized = json.dumps(fields)
     assert secret not in serialized and "/tmp/secret" not in serialized

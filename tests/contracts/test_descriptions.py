@@ -45,10 +45,13 @@ def test_search_text_keeps_grep_equivalence():
     assert "prefer this over grep" in d
 
 
-def test_job_status_keeps_the_only_needed_clause_and_wait_once():
+def test_job_status_keeps_the_only_needed_clause_and_wait_contract():
     d = descriptions()["job_status"].lower()
     assert "only needed when run_command returned a job_id" in d
-    assert "wait_seconds=50" in d and "instead of polling" in d
+    assert "positive wait blocks up to the requested duration (max 50 seconds)" in d
+    assert "smaller effective turn budget" in d
+    assert "waiting never kills a still-running job" in d
+    assert "wait_seconds=50" not in d and "instead of polling" not in d
 
 
 def test_run_command_keeps_not_killed_and_no_job_facts():
