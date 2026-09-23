@@ -11,7 +11,7 @@
 | 2.7 | COMPLETE |
 | 2.8 | COMPLETE |
 | 2.9 | COMPLETE |
-| 2.10 | NOT STARTED |
+| 2.10 | COMPLETE |
 | 2.11 | NOT STARTED |
 | 2.12 | NOT STARTED |
 
@@ -20,8 +20,8 @@ Branch: `feature/chat-mode-blocking-wall-guard`
 Worktree: `/home/grammy-jiang/Projects/binnacle-chat-blocking-wall-guard`
 Source branch: `design/chat-mode-scheduling-v2`
 Phase-1 evidence commit: `cc1b014`
-Last completed step: **2.9**
-Next step: **2.10**
+Last completed step: **2.10**
+Next step: **2.11**
 
 ## Step 2.1 baseline freeze
 
@@ -306,3 +306,16 @@ Next step: **2.9 - `binnacle stats` guard aggregation**
 
 Step 2.9: **COMPLETE**
 Next step: **2.10 - Real-job integration suite**
+
+## Step 2.10 real-job integration suite
+
+- Added real short-background-job coverage for early exit, sequential exhaustion, post-exhaustion durability, already-exited jobs, explicit zero wait, no-policy, no-turn, and invalid job IDs.
+- Real tracked waits verify actual wall charge, remaining budget, summary text, telemetry, durable job survival, and explicit cleanup with broad timing tolerances.
+- Added an authenticated HTTP positive-wait workflow using X-Request-Id=turn-http-210/call-status and client phase2-http; the tracked result and job_status_timing line prove the base-turn and client ContextVars reach synchronous job_status.
+- Guard exhaustion leaves the durable job running and listed until the test explicitly stops it.
+- Focused guard suite: PASS - 11 passed in 4.35 s.
+- Focused HTTP/context proof: PASS - 1 passed, 6 deselected in 4.46 s.
+- Exact Step-2.10 matrix: PASS - 55 passed in 46.60 s.
+
+Step 2.10: **COMPLETE**
+Next step: **2.11 - Concurrency, reload semantics, and guard overhead**
