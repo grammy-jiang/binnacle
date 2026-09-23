@@ -165,6 +165,23 @@ a budget-exhaustion probe, not a normal workload. H only runs on R5/R6/R7/R12.
 Microbenchmarks run before and after each benchmark session as a scheduler
 sanity check.
 
+### Submitted-trial inclusion rule
+
+A scheduled A/B slot is bound to the **first submitted trial**, not the first
+successful trial.
+
+- If the harness fails before submission and there is no chat-timing evidence
+  that Enter occurred, the same slot may be retried.
+- Once timing evidence says the message was submitted, that outcome belongs to
+  the slot even if the request later times out, produces no conversation, or
+  never reaches MCP.
+- A submitted failure must not be replaced by a later successful rerun.
+- Extra reruns after all planned slots are already filled are diagnostic only
+  and are excluded from the primary A/B sample.
+
+This prevents retry/survivor bias from making an unstable arm look faster or
+more reliable than the user would actually experience.
+
 ## 4. Metrics
 
 ### 4.1 Primary performance metrics
