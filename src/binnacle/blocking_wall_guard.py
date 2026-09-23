@@ -2,7 +2,7 @@
 
 This module owns the deterministic policy state used by the Phase-2 guard.
 Steps 2.4 through 2.6 implement sequential, overlapping, and bounded-state
-accounting. job_status integration is added by a later numbered step.
+accounting. Step 2.7 integrates the tracker with positive job_status waits.
 """
 
 from __future__ import annotations

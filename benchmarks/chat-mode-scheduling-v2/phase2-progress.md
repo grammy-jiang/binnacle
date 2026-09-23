@@ -8,7 +8,7 @@
 | 2.4 | COMPLETE |
 | 2.5 | COMPLETE |
 | 2.6 | COMPLETE |
-| 2.7 | NOT STARTED |
+| 2.7 | COMPLETE |
 | 2.8 | NOT STARTED |
 | 2.9 | NOT STARTED |
 | 2.10 | NOT STARTED |
@@ -20,8 +20,8 @@ Branch: `feature/chat-mode-blocking-wall-guard`
 Worktree: `/home/grammy-jiang/Projects/binnacle-chat-blocking-wall-guard`
 Source branch: `design/chat-mode-scheduling-v2`
 Phase-1 evidence commit: `cc1b014`
-Last completed step: **2.6**
-Next step: **2.7**
+Last completed step: **2.7**
+Next step: **2.8**
 
 ## Step 2.1 baseline freeze
 
@@ -250,3 +250,17 @@ Next step: **2.6 - LRU bound, eviction, and fallback policies**
 
 Step 2.6: **COMPLETE**
 Next step: **2.7 - Integrate the guard into `job_status`**
+
+## Step 2.7 integrate the guard into `job_status`
+
+- Added the process-local `BlockingWallTracker` singleton to `job_status`.
+- Positive specific-job calls now validate job existence before resolving policy or acquiring a lease.
+- Matching client+turn calls use the guard's effective wait; `no_policy`, `no_turn`, and `capacity_untracked` preserve the ordinary bounded wait.
+- Zero-wait and no-id listing paths do not acquire guard state.
+- Exhausted turn budgets make later positive waits non-blocking while leaving durable jobs running.
+- Leases release in `finally`, including when the underlying wait raises.
+- Exact Step-2.7 matrix: PASS - 69 passed in 38.28 s.
+- Structured policy output, exhausted-summary wording, and detailed guard telemetry remain deferred to Step 2.8.
+
+Step 2.7: **COMPLETE**
+Next step: **2.8 - Structured output, summaries, and detailed telemetry**
