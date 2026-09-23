@@ -1,0 +1,168 @@
+{
+  "schema_version": 1,
+  "phase": 2,
+  "step": "2.12",
+  "date": "2026-09-24",
+  "status": "complete",
+  "branch": "feature/chat-mode-blocking-wall-guard",
+  "validated_parent_head": "0722f1d8c812d1ad6fc0c00b7434c279189329f4",
+  "phase1_evidence_commit": "cc1b014",
+  "phase3_started": false,
+  "production_deployed": false,
+  "answers": {
+    "default_behavior_unchanged": {
+      "result": true,
+      "detail": "Repository JobsSettings defaults the budget map to empty. Default execution keeps ordinary per-call behavior; original positive job_status waits intentionally gain additive policy observability while zero-wait and listing payloads retain their prior shape."
+    },
+    "prefix_configuration_correct": {
+      "result": true,
+      "detail": "Client prefixes must be nonblank, budgets validate in 1..3600 seconds, and the longest matching prefix wins deterministically."
+    },
+    "base_turn_correlation_reliable_and_conservative": {
+      "result": true,
+      "detail": "Only request IDs with a nonempty base and call suffix publish current_turn; missing/malformed IDs publish None. Context resets are covered on success, error, sequential, concurrent, and authenticated HTTP paths."
+    },
+    "sequential_accounting_charges_actual_wall_time": {
+      "result": true,
+      "detail": "Early release charges measured monotonic wall time, sequential waits accumulate, productive gaps are free, and less than one second remaining becomes nonblocking."
+    },
+    "overlapping_waits_charge_union_wall_time": {
+      "result": true,
+      "detail": "Unit and real-job concurrency coverage verify two/five overlapping waits, overlapping waves, and different jobs in one turn share the original active-window deadline and charge the wall-time union once."
+    },
+    "exceptions_can_strand_active_lease": {
+      "result": false,
+      "detail": "Leases release in finally paths; exception/cancellation-equivalent tests and integration coverage leave active_count consistent."
+    },
+    "memory_bounded": {
+      "result": true,
+      "detail": "The process-local tracker is bounded to 4096 total turn records by default; inactive records are LRU-evictable."
+    },
+    "active_records_protected_from_eviction": {
+      "result": true,
+      "detail": "Active records are never evicted. If capacity is entirely active, a new turn uses explicit capacity_untracked fail-open behavior."
+    },
+    "capacity_fallback_preserves_ordinary_behavior": {
+      "result": true,
+      "detail": "capacity_untracked preserves the ordinary bounded wait and does not mutate tracked turns."
+    },
+    "exhaustion_model_visible": {
+      "result": true,
+      "detail": "Positive-wait output exposes policy/budget/remaining/exhaustion fields; a still-running exhausted job explicitly states that later positive waits in the turn will be nonblocking."
+    },
+    "logs_stats_reconstruct_policy_decisions": {
+      "result": true,
+      "detail": "job_status_timing logs requested/bounded/effective/actual waits plus policy and tracker state; blocking_window_closed records cumulative spent/remaining values; logstats aggregates policy counts, per-turn union wall, utilization buckets, and p50/p90/p95/max."
+    },
+    "durable_jobs_survive_exhaustion_and_reload": {
+      "result": true,
+      "detail": "Real-job tests keep exhausted jobs observable/running until explicit stop, and replacing the process-local tracker resets only ephemeral budget state while the durable job remains observable and stoppable."
+    },
+    "measured_overhead": {
+      "result": true,
+      "detail": "Three independent 100000-iteration Pi runs measured median run-level p95 0.006445 ms and p99 0.007259 ms, passing p95 <1 ms and p99 <2 ms."
+    },
+    "ready_for_phase3_offline_replay": {
+      "result": true,
+      "detail": "Phase-2 implementation, integration, concurrency, telemetry, and overhead evidence are green. Phase 3 has not started and no production deployment or budget enablement occurred."
+    }
+  },
+  "schema_review": {
+    "job_status_input_wait_seconds": "integer 0..50; unchanged",
+    "positive_wait_output_additions": [
+      "wait_requested_s",
+      "wait_effective_s",
+      "blocking_budget_s",
+      "blocking_remaining_s",
+      "blocking_budget_exhausted",
+      "blocking_policy"
+    ],
+    "zero_wait_payload_shape_unchanged": true,
+    "listing_payload_shape_unchanged": true
+  },
+  "validation": {
+    "focused_phase2": {
+      "command": "uv run pytest -q tests/unit/core/test_config_loading.py tests/unit/core/test_logging_result_fields.py tests/unit/core/test_logstats_jobs.py tests/unit/core/test_logstats.py tests/unit/core/test_blocking_wall_guard.py tests/integration/test_logging.py tests/integration/test_http_workflows.py tests/integration/test_jobs_lifecycle.py tests/integration/test_job_status_blocking_guard.py tests/integration/test_job_status_blocking_guard_concurrency.py tests/integration/test_job_manager_telemetry.py tests/contracts/test_descriptions.py",
+      "result": "158 passed in 64.12s"
+    },
+    "full_pytest_pre_evidence": {
+      "command": "uv run pytest -q",
+      "result": "1115 passed, 3 skipped in 122.07s"
+    },
+    "pre_commit_pre_evidence": {
+      "command": "uv run pre-commit run --all-files",
+      "result": "PASS; all hooks passed"
+    },
+    "architecture": {
+      "command": "uv run --no-sync python scripts/check_architecture.py",
+      "result": "97 modules checked; 0 forbidden reverse dependencies"
+    },
+    "module_size": {
+      "command": "uv run --no-sync python scripts/check_module_size.py",
+      "result": "226 Python modules checked; 11 warnings; 0 errors"
+    },
+    "ai_readability": {
+      "command": "uv run --no-sync python scripts/check_ai_readability.py",
+      "result": "23 long functions; warning-only; 0 blocking errors",
+      "phase2_touched_long_functions": [
+        {
+          "function": "src/binnacle/tools/job_status.py::job_status_impl",
+          "current_lines": 194,
+          "baseline_lines": 89,
+          "severity": "severe warning"
+        },
+        {
+          "function": "src/binnacle/logstats_jobs.py::analyze_job_telemetry",
+          "current_lines": 134,
+          "baseline_lines": 86,
+          "severity": "strong warning"
+        },
+        {
+          "function": "src/binnacle/blocking_wall_guard.py::BlockingWallTracker.acquire",
+          "current_lines": 104,
+          "baseline_lines": null,
+          "severity": "warning"
+        }
+      ],
+      "assessment": "AI-readability is advisory rather than blocking. Module-size and architecture checks have zero errors; final validation does not introduce a behavioral refactor solely to silence advisory warnings."
+    },
+    "tracker_test_isolation": "Guard integration/concurrency fixtures replace the process-local tracker with per-test instances via monkeypatch and clean durable job fixtures; focused and full suites pass without observed cross-test state leakage.",
+    "final_full_pytest": {
+      "command": "uv run pytest -q",
+      "result": "1115 passed, 3 skipped in 123.07s"
+    },
+    "final_pre_commit": "PASS; all hooks passed on the clean post-write rerun",
+    "git_diff_check": "PASS after the EOF newline fix",
+    "final_production_isolation": {
+      "checked_at": "2026-09-24T05:46:55+10:00",
+      "production_branch": "master",
+      "production_head": "83862b040f59afc97963041de557bf9037f13e50",
+      "service": "active",
+      "blocking_budget_key_present": false,
+      "unrelated_watchdog_work_preserved": true
+    },
+    "post_write_pre_commit_first_pass": "All substantive hooks passed; end-of-file-fixer changed only the final newline of phase2-progress.md, so a clean rerun is required."
+  },
+  "production_isolation_initial": {
+    "checked_at": "2026-09-24T05:36:49+10:00",
+    "branch": "master",
+    "head": "83862b040f59afc97963041de557bf9037f13e50",
+    "service": "active",
+    "blocking_budget_key_present": false,
+    "unrelated_watchdog_work_preserved": true
+  },
+  "overhead_evidence": {
+    "path_json": "benchmarks/chat-mode-scheduling-v2/phase2-step11-guard-overhead-2026-09-24.json",
+    "path_markdown": "benchmarks/chat-mode-scheduling-v2/phase2-step11-guard-overhead-2026-09-24.md",
+    "runs": 3,
+    "iterations_per_run": 100000,
+    "median_run_level_p95_ms": 0.006445,
+    "median_run_level_p99_ms": 0.007259,
+    "target_pass": true
+  },
+  "exit_state": {
+    "phase_2": "complete",
+    "phase_3": "not_started",
+    "production": "unchanged"
+  }
+}
