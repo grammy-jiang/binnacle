@@ -3,7 +3,7 @@
 | Step | Status |
 | --- | --- |
 | 2.1 | COMPLETE |
-| 2.2 | NOT STARTED |
+| 2.2 | COMPLETE |
 | 2.3 | NOT STARTED |
 | 2.4 | NOT STARTED |
 | 2.5 | NOT STARTED |
@@ -20,8 +20,8 @@ Branch: `feature/chat-mode-blocking-wall-guard`
 Worktree: `/home/grammy-jiang/Projects/binnacle-chat-blocking-wall-guard`
 Source branch: `design/chat-mode-scheduling-v2`
 Phase-1 evidence commit: `cc1b014`
-Last completed step: **2.1**
-Next step: **2.2**
+Last completed step: **2.2**
+Next step: **2.3**
 
 ## Step 2.1 baseline freeze
 
@@ -186,3 +186,13 @@ baseline.
 
 Step 2.1: **COMPLETE**
 Next step: **2.2 — Configuration contract**
+
+## Step 2.2 configuration contract
+
+- Added empty-default per-client blocking-wall budgets with 1..3600 validation and non-blank prefixes.
+- Longest-prefix lookup added.
+- jobs tool_config budget fields added.
+- Default remains disabled; job_status behavior unchanged.
+- Tests: 19 passed; logging: 1 passed.
+Step 2.2: **COMPLETE**
+Next step: **2.3**

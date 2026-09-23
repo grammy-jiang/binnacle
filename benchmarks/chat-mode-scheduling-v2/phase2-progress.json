@@ -6,8 +6,8 @@
   "worktree": "/home/grammy-jiang/Projects/binnacle-chat-blocking-wall-guard",
   "source_branch": "design/chat-mode-scheduling-v2",
   "phase1_evidence_commit": "cc1b014",
-  "last_completed_step": "2.1",
-  "next_step": "2.2",
+  "last_completed_step": "2.2",
+  "next_step": "2.3",
   "baseline": {
     "design_source_head": "e9c04728e5ac583a8e5d3b991cb01309de36ef82",
     "production": {
@@ -168,9 +168,11 @@
       ]
     },
     "2.2": {
-      "status": "not_started",
-      "tests": [],
-      "notes": []
+      "status": "complete",
+      "tests": [
+        "config 19 passed; logging 1 passed"
+      ],
+      "notes": ["Config contract implemented; defaults disabled; job_status unchanged."]
     },
     "2.3": {
       "status": "not_started",
