@@ -1,0 +1,62 @@
+{
+  "baseline_definition": {
+    "arm_A": "exact live rp-test-sandbox instructions captured above + current production server",
+    "note": "The repository legacy reference is historical context only; it is not the live A arm because it does not match the benchmark Project."
+  },
+  "benchmark_project": {
+    "live_instructions": "rp-test instructions v2: sandbox for the chatgpt-web-operations skill tests. Reply in one short sentence.\n\n\n",
+    "live_instructions_sha256": "65e535f82d81f6d6f403007313555154f6319527897cf6f6bdf3b41bae4104a0",
+    "name": "rp-test-sandbox",
+    "project_id": "g-p-6aaea9da2bc881918d6f9eb5177cf904"
+  },
+  "captured_at": "2026-09-23T10:45:56+10:00",
+  "chat_baseline_probe": {
+    "conversation_id": "6ab320c4-dd24-83ec-a12b-7cfdb6c0375b",
+    "conversation_template_id": "g-p-6aaea9da2bc881918d6f9eb5177cf904",
+    "default_model_slug": "gpt-5-6-thinking",
+    "model_slug": "gpt-5-6-thinking",
+    "resolved_model_slug": "gpt-5-6-thinking",
+    "thinking_effort": "max"
+  },
+  "host": {
+    "arch": "aarch64",
+    "hostname": "raspberrypi",
+    "kernel": "6.18.50+rpt-rpi-2712",
+    "python": "Python 3.13.5"
+  },
+  "phase": "0.1-baseline-freeze",
+  "production_server": {
+    "branch_status": "## master...origin/master",
+    "commit": "83862b040f59afc97963041de557bf9037f13e50",
+    "connector_name": "Raspberry Pi MCP",
+    "connector_tool_count": 6,
+    "effective_config": {
+      "auto_background_patterns": [
+        "openai-mcp"
+      ],
+      "blocking_wait_budget_s_by_client": {},
+      "client_tools_openai_mcp": [
+        "read_file",
+        "list_files",
+        "search_text",
+        "run_command",
+        "job_status",
+        "stop_job"
+      ],
+      "jobs_quiet_after_s": 30,
+      "jobs_warmup_s": 1.0,
+      "wait_max_s": 50
+    },
+    "repo": "/home/grammy-jiang/Projects/binnacle",
+    "service_active_state": "active",
+    "service_sub_state": "running",
+    "service_working_directory": "/home/grammy-jiang/Projects/binnacle"
+  },
+  "reference_instructions": {
+    "legacy_matches_live": false,
+    "legacy_repo_sha256": "0a5c27fac185f7ebbe609aecceee55863a7bdca13d04250810f3bf22595c7db9",
+    "proposed_matches_live": false,
+    "proposed_v2_sha256": "b7df6953a3c64bd245b3d5ff13b6f2667e940d5a154e650fec0b10e6a22cf094"
+  },
+  "schema_version": 1
+}
