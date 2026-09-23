@@ -17,7 +17,7 @@ CHATGPT_SEND_PYTHON.
     chatgpt-send --chat <id|url> "message"          # existing conversation
     chatgpt-send --new "message"                    # new chat; prints its URL
     chatgpt-send --project g-p-<id> "message"       # new chat inside a Project
-    [--timeout 180] [--browser chrome|chromium|auto] [--json]
+    [--timeout 180] [--browser chrome|chromium|auto] [--json] [--url-file PATH]
 
 Exit 0 with the reply on stdout; non-zero with a reason otherwise.
 """
@@ -31,6 +31,7 @@ import shutil
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 import chatgpt_cookies
 import chatgpt_session as cs
@@ -153,6 +154,19 @@ def _display(visible: bool):
             proc.kill()
 
 
+def _record_chat_url(path: str | None, url: str) -> None:
+    """Persist a newly-created conversation URL as soon as it is known.
+
+    A caller can then track/delete the exact test chat even when this process
+    later times out before it can return the normal JSON result.
+    """
+    if path is None or "/c/" not in url:
+        return
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(url + "\n", encoding="utf-8")
+
+
 def run(
     chat: str | None,
     message: str,
@@ -160,6 +174,7 @@ def run(
     timeout_s: float,
     visible: bool = False,
     project: str | None = None,
+    url_file: str | None = None,
 ) -> dict:
     from playwright.sync_api import TimeoutError as PWTimeout
     from playwright.sync_api import sync_playwright
@@ -196,6 +211,7 @@ def run(
         confirmations = 0
         buttons_seen: set[str] = set()  # debug: what the page offered while waiting
         while time.monotonic() < deadline:
+            _record_chat_url(url_file, page.url)
             try:
                 for t in page.get_by_role("button").all_inner_texts():
                     t = " ".join(t.split())
@@ -236,6 +252,7 @@ def run(
                 f"no complete reply within {timeout_s:g} s (last seen: {last_text[:200]!r})"
             )
 
+        _record_chat_url(url_file, page.url)
         result = {
             "url": page.url,
             "confirmations_clicked": confirmations,
@@ -267,6 +284,10 @@ def main() -> None:
         "--json", action="store_true", help="print {url, confirmations_clicked, reply}"
     )
     ap.add_argument(
+        "--url-file",
+        help="write the conversation URL as soon as it is known (for exact cleanup after a timeout)",
+    )
+    ap.add_argument(
         "--visible",
         action="store_true",
         help="show the browser on screen (default: invisible via Xvfb)",
@@ -281,6 +302,7 @@ def main() -> None:
         args.timeout,
         args.visible,
         args.project,
+        args.url_file,
     )
     if args.json:
         print(json.dumps(result, indent=2, ensure_ascii=False))

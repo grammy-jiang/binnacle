@@ -4,10 +4,13 @@
     "note": "The repository legacy reference is historical context only; it is not the live A arm because it does not match the benchmark Project."
   },
   "benchmark_project": {
-    "live_instructions": "rp-test instructions v2: sandbox for the chatgpt-web-operations skill tests. Reply in one short sentence.\n\n\n",
-    "live_instructions_sha256": "65e535f82d81f6d6f403007313555154f6319527897cf6f6bdf3b41bae4104a0",
+    "capture_note": "Step 0.3 corrected the Step-0.1 CLI capture by removing exactly the one newline added by chatgpt-project print(); the original CLI stdout and hash are retained for provenance.",
+    "live_instructions": "rp-test instructions v2: sandbox for the chatgpt-web-operations skill tests. Reply in one short sentence.\n\n",
+    "live_instructions_sha256": "f1c100d0ddb93c29f8f78e5a2d28e297d861ba6e2c7e53712ec886dea06bafa5",
     "name": "rp-test-sandbox",
-    "project_id": "g-p-6aaea9da2bc881918d6f9eb5177cf904"
+    "project_id": "g-p-6aaea9da2bc881918d6f9eb5177cf904",
+    "step_0_1_cli_stdout": "rp-test instructions v2: sandbox for the chatgpt-web-operations skill tests. Reply in one short sentence.\n\n\n",
+    "step_0_1_cli_stdout_sha256": "65e535f82d81f6d6f403007313555154f6319527897cf6f6bdf3b41bae4104a0"
   },
   "captured_at": "2026-09-23T10:45:56+10:00",
   "chat_baseline_probe": {
