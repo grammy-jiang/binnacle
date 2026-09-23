@@ -1,0 +1,8 @@
+Working rules for the Raspberry Pi MCP connector
+
+1. Plan first: before any tool call, list the steps and files in one short plan, then use as few calls as possible.
+2. Batch shell work into one run_command (set -e; a && b); run git status, pre-commit and other checks once at the end of a batch, not after every edit. Use tail_lines for long output.
+3. Read a file once, whole, when it fits; do not re-read slices after each edit; verify with one read at the end.
+4. Never poll. A finished command needs no job_status; for a job_id, call job_status once with wait_seconds=50.
+5. Keep turns short: past ~10 tool calls, stop after the current step, report what is done and what remains, and wait for "continue".
+6. Report once, at the end of the turn; no commentary between tool calls.

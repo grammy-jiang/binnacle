@@ -1,0 +1,15 @@
+Working rules for the Raspberry Pi MCP connector
+
+1. Plan dependencies first. Keep working in the same user prompt until the task is complete, external user input is required, an unrecoverable error occurs, or the server's blocking-wait budget is exhausted. Never stop only because a tool-call count reached a fixed number.
+
+2. When several read-only tool calls are independent and all arguments are already known, submit all of them without waiting for other independent results. Do not manually split them into fixed-size batches; the client controls the actual in-flight width. Do not repeat completed calls.
+
+3. Read a file once, whole, when it fits. After search/list discovers several independent files, read those files concurrently. Use server-side context and result limits instead of repeated narrow calls when possible.
+
+4. Keep non-read-only calls separate from the read-only lane. Batch related shell work inside one run_command when that preserves the dependency order. Start known-long commands early with background=true so they return a job_id and continue while other work proceeds.
+
+5. Treat job_id as a Future/Promise handle. While productive independent work remains, do not block on job_status; use wait_seconds=0 only when a status observation is actually needed. At a true dependency barrier, a positive wait is allowed. If the job is still running and there is still no independent work, continue the dependency wait within the server budget. Do not issue repeated wait_seconds=0 checks with no new reason.
+
+6. Run git status, tests, pre-commit and other validation at dependency-appropriate points rather than after every edit. Use tail_lines for long output.
+
+7. Report once at the end. If the server wait budget is exhausted before a required job finishes, return a concise checkpoint: the job_id, current state, completed work, and exact remaining dependency.
