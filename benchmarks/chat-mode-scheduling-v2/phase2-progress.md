@@ -7,7 +7,7 @@
 | 2.3 | COMPLETE |
 | 2.4 | COMPLETE |
 | 2.5 | COMPLETE |
-| 2.6 | NOT STARTED |
+| 2.6 | COMPLETE |
 | 2.7 | NOT STARTED |
 | 2.8 | NOT STARTED |
 | 2.9 | NOT STARTED |
@@ -20,8 +20,8 @@ Branch: `feature/chat-mode-blocking-wall-guard`
 Worktree: `/home/grammy-jiang/Projects/binnacle-chat-blocking-wall-guard`
 Source branch: `design/chat-mode-scheduling-v2`
 Phase-1 evidence commit: `cc1b014`
-Last completed step: **2.5**
-Next step: **2.6**
+Last completed step: **2.6**
+Next step: **2.7**
 
 ## Step 2.1 baseline freeze
 
@@ -237,3 +237,16 @@ Next step: **2.5 - Overlapping-wait union accounting**
 
 Step 2.5: **COMPLETE**
 Next step: **2.6 - LRU bound, eviction, and fallback policies**
+
+## Step 2.6 LRU bound, eviction, and fallback policies
+
+- Enforced the configured tracker capacity as a total tracked-turn-record bound (4096 by default).
+- New records evict the least-recently-used inactive record; active records are never evicted.
+- When all capacity is active, new turns return `capacity_untracked`, keep ordinary bounded-wait behavior, and do not mutate another turn's accounting.
+- `last_seen` is refreshed on tracked acquire/release activity, so recently used inactive records are retained deterministically.
+- A turn that initially falls back can be tracked after an active record becomes inactive and eligible for eviction.
+- Exact Step-2.6 unit command: PASS - 24 passed.
+- No `job_status` integration was added.
+
+Step 2.6: **COMPLETE**
+Next step: **2.7 - Integrate the guard into `job_status`**
