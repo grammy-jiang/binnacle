@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 import shutil
+import subprocess
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -30,16 +31,28 @@ class ProjectClient:
         self.browser = browser
         self.script = SKILL_SCRIPTS / "chatgpt-project"
 
+    def _invoke(self, args: list[str]) -> subprocess.CompletedProcess[str]:
+        last_error: subprocess.SubprocessError | None = None
+        for attempt in range(3):
+            try:
+                return _run(args, timeout=30)
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+                last_error = exc
+                if attempt < 2:
+                    time.sleep(3.0 * (attempt + 1))
+        if last_error is None:
+            raise HarnessError("Project helper failed without an error")
+        raise last_error
+
     def instructions(self) -> str:
-        proc = _run(
+        proc = self._invoke(
             [
                 str(self.script),
                 "--browser",
                 self.browser,
                 "get-instructions",
                 self.project_name,
-            ],
-            timeout=30,
+            ]
         )
         out = proc.stdout
         if not out.endswith("\n"):
@@ -50,7 +63,7 @@ class ProjectClient:
         return out[:-1]
 
     def set_instructions(self, text: str) -> None:
-        _run(
+        self._invoke(
             [
                 str(self.script),
                 "--browser",
@@ -59,8 +72,7 @@ class ProjectClient:
                 self.project_name,
                 "--text",
                 text,
-            ],
-            timeout=30,
+            ]
         )
         if self.instructions() != text:
             raise HarnessError("Project instruction read-back differs after update")
@@ -173,17 +185,26 @@ class ChatArtifact:
             }
         if not self.tracked:
             self.track("Chat scheduling v2 benchmark trial")
-        _run(
-            [
-                str(self.chats_script),
-                "--browser",
-                self.browser,
-                "--id",
-                self.chat_id,
-                "--delete",
-            ],
-            timeout=30,
-        )
+        delete_args = [
+            str(self.chats_script),
+            "--browser",
+            self.browser,
+            "--id",
+            self.chat_id,
+            "--delete",
+        ]
+        last_delete_error: subprocess.SubprocessError | None = None
+        for attempt in range(3):
+            try:
+                _run(delete_args, timeout=30)
+                last_delete_error = None
+                break
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+                last_delete_error = exc
+                if attempt < 2:
+                    time.sleep(3.0 * (attempt + 1))
+        if last_delete_error is not None:
+            raise last_delete_error
         backup = self._copy_delete_backup()
         if self.tracked:
             _run([str(self.chats_script), "--untrack", self.chat_id], timeout=10)

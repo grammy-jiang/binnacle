@@ -450,3 +450,30 @@ def test_real_evidence_loader_pairs_journal_calls_and_assigns_m2_nodes(tmp_path)
     assert metrics.eligible_read_only_overlap_ratio == 1.0
     assert metrics.tool_result_tokens == 56
     assert metrics.tool_result_bytes == 240
+
+
+def test_real_wait_interval_uses_same_rounding_as_tool_interval():
+    from scripts.chat_scheduling_evidence import _tool_intervals
+    from scripts.chat_scheduling_journal import RawCall
+
+    raw = RawCall(
+        call_id="wait-precision",
+        tool="job_status",
+        turn="turn-1",
+        client="openai-mcp",
+        start_epoch_s=19.797935932159422,
+        end_epoch_s=23.315185932159422,
+        args={"job_id": "J", "wait_seconds": 5},
+        args_raw='{"job_id":"J","wait_seconds":5}',
+        result_fields={"waited_s": "3.493", "is_error": "False"},
+    )
+
+    [interval] = _tool_intervals(
+        [raw],
+        {"wait-precision": "slow_status"},
+        origin_epoch_s=0.0,
+    )
+
+    assert interval.blocking_start_s == interval.start_s
+    assert interval.blocking_end_s is not None
+    assert interval.blocking_end_s <= interval.end_s
