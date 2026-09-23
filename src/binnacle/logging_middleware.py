@@ -38,6 +38,7 @@ from binnacle.callctx import (
     current_call,
     current_call_started,
     current_client,
+    current_turn,
 )
 from binnacle.config import get_settings
 from binnacle.identity import ClientIdentity
@@ -218,6 +219,16 @@ def _header_fields() -> dict[str, str]:
     return fields
 
 
+def _base_turn(request_id: str | None) -> str | None:
+    """Return the reliable base-turn prefix from the base/call request id."""
+    if not request_id:
+        return None
+    base, slash, suffix = request_id.partition("/")
+    if not slash or not base or not suffix:
+        return None
+    return base
+
+
 def _result_fields(
     result: Any, token_counter: TokenCounter | None = None
 ) -> dict[str, str]:
@@ -310,6 +321,7 @@ class ToolLoggingMiddleware(Middleware):
         client_token = current_client.set(
             None if who["client"] == "-" else who["client"]
         )
+        turn_token = current_turn.set(_base_turn(who.get("turn")))
         argument_names_token = current_argument_names.set(frozenset(arguments))
         start = time.perf_counter()
         started_token = current_call_started.set(start)
@@ -336,6 +348,7 @@ class ToolLoggingMiddleware(Middleware):
         finally:
             current_call_started.reset(started_token)
             current_argument_names.reset(argument_names_token)
+            current_turn.reset(turn_token)
             current_client.reset(client_token)
             current_call.reset(token)
         is_error = bool(getattr(result, "is_error", False))

@@ -4,7 +4,7 @@
 | --- | --- |
 | 2.1 | COMPLETE |
 | 2.2 | COMPLETE |
-| 2.3 | NOT STARTED |
+| 2.3 | COMPLETE |
 | 2.4 | NOT STARTED |
 | 2.5 | NOT STARTED |
 | 2.6 | NOT STARTED |
@@ -20,8 +20,8 @@ Branch: `feature/chat-mode-blocking-wall-guard`
 Worktree: `/home/grammy-jiang/Projects/binnacle-chat-blocking-wall-guard`
 Source branch: `design/chat-mode-scheduling-v2`
 Phase-1 evidence commit: `cc1b014`
-Last completed step: **2.2**
-Next step: **2.3**
+Last completed step: **2.3**
+Next step: **2.4**
 
 ## Step 2.1 baseline freeze
 
@@ -196,3 +196,17 @@ Next step: **2.2 — Configuration contract**
 - Tests: 19 passed; logging: 1 passed.
 Step 2.2: **COMPLETE**
 Next step: **2.3**
+
+## Step 2.3 turn correlation ContextVar
+
+- Added current_turn ContextVar with default None.
+- Added conservative base/call parsing; absent or malformed request IDs publish no base turn.
+- ToolLoggingMiddleware sets and resets base-turn context with the existing call context.
+- Full X-Request-Id remains unchanged in the turn= log field.
+- Covered sync-thread propagation, sequential isolation, concurrent distinct HTTP turns, and exception cleanup.
+- Focused coverage: PASS - 6 passed, 23 deselected in 2.71 s.
+- Exact Step-2.3 matrix: PASS - 30 passed in 5.58 s.
+- No guard policy or job_status behavior was added.
+
+Step 2.3: **COMPLETE**
+Next step: **2.4 - Blocking-wall tracker, sequential core**

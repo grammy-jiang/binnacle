@@ -17,6 +17,7 @@ current_call: ContextVar[str] = ContextVar("binnacle_current_call", default="-")
 current_client: ContextVar[str | None] = ContextVar(
     "binnacle_current_client", default=None
 )
+current_turn: ContextVar[str | None] = ContextVar("binnacle_current_turn", default=None)
 current_argument_names: ContextVar[frozenset[str]] = ContextVar(
     "binnacle_current_argument_names", default=frozenset()
 )

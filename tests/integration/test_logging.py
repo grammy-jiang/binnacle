@@ -19,8 +19,10 @@ from binnacle.callctx import (
     current_argument_names,
     current_call_started,
     current_client,
+    current_turn,
 )
 from binnacle.config import RunCommandSettings
+from binnacle.tools import list_files as lf
 from binnacle.tools import run_command as rc
 from binnacle.tools import stop_job as sj
 
@@ -322,6 +324,59 @@ def test_correlation_headers_are_lifted_when_present(monkeypatch):
 
 def test_no_correlation_fields_in_memory():
     assert logging_middleware._header_fields() == {}
+
+
+def test_base_turn_extracts_only_reliable_request_ids():
+    assert logging_middleware._base_turn("wfr_0123abcd/9zq1") == "wfr_0123abcd"
+    assert logging_middleware._base_turn("base/call/more") == "base"
+    for malformed in (None, "", "no-slash", "/call", "turn/"):
+        assert logging_middleware._base_turn(malformed) is None
+
+
+def test_missing_turn_is_none_inside_sync_tool(monkeypatch):
+    seen: list[str | None] = []
+    original = lf.list_files_impl
+
+    def capture(path, glob, max_results, include_hidden):
+        seen.append(current_turn.get())
+        return original(path, glob, max_results, include_hidden)
+
+    monkeypatch.setattr(lf, "list_files_impl", capture)
+    assert current_turn.get() is None
+    _run(("list_files", {"path": "/tmp", "max_results": 1}))
+    assert seen == [None]
+    assert current_turn.get() is None
+
+
+def test_base_turn_reaches_sync_tool_and_resets_sequentially(monkeypatch):
+    seen: list[str | None] = []
+    original = lf.list_files_impl
+    headers = {"x-request-id": "turn-a/call-1"}
+
+    def capture(path, glob, max_results, include_hidden):
+        seen.append(current_turn.get())
+        return original(path, glob, max_results, include_hidden)
+
+    monkeypatch.setattr(lf, "list_files_impl", capture)
+    monkeypatch.setattr(logging_middleware, "get_http_headers", lambda: dict(headers))
+
+    _run(("list_files", {"path": "/tmp", "max_results": 1}))
+    headers["x-request-id"] = "turn-b/call-2"
+    _run(("list_files", {"path": "/tmp", "max_results": 1}))
+
+    assert seen == ["turn-a", "turn-b"]
+    assert current_turn.get() is None
+
+
+def test_base_turn_context_resets_after_tool_exception(monkeypatch):
+    monkeypatch.setattr(
+        logging_middleware,
+        "get_http_headers",
+        lambda: {"x-request-id": "turn-error/call-1"},
+    )
+    assert current_turn.get() is None
+    _run(("read_file", {"path": "/etc/passwd"}))
+    assert current_turn.get() is None
 
 
 def test_prune_line(caplog, tmp_path, monkeypatch):
