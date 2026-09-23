@@ -293,7 +293,8 @@
         "Added scripts/benchmark_blocking_wall_guard.py and dated JSON/Markdown evidence with three independent 100000-iteration Pi runs; no CI wall-clock threshold was added.",
         "No production runtime source changes were required by Step 2.11; the existing tracker/job_status implementation satisfied the new concurrency and reload cases.",
         "Initial pushed ci.yml run 35903817678 failed Coverage policy / Python 3.13 because src/binnacle/jobs.py full coverage was 89.78%, below the required 90.00%.",
-        "Added an idempotent second stop assertion to the reload-semantics integration test so the already-exited embedded stop path is covered; local full coverage for src/binnacle/jobs.py is now 90.67% without lowering the policy or excluding the module."
+        "Added an idempotent second stop assertion to the reload-semantics integration test so the already-exited embedded stop path is covered; local full coverage for src/binnacle/jobs.py is now 90.67% without lowering the policy or excluding the module.",
+        "Follow-up ci.yml run 35909011954 for commit 8d20def3093fe9421bbb259f9bb9cca32088a052 completed successfully after the coverage fix."
       ]
     },
     "2.12": {
