@@ -1524,13 +1524,34 @@ grep -n "blocking_wall_budget_s_by_client" \
 
 Required result:
 
-- production checkout is on `master` and clean;
+- production checkout remains on `master`;
 - `binnacle-mcp.service` is `active`;
-- production config contains no Phase-2 blocking-budget setting.
+- production config contains no Phase-2 blocking-budget setting;
+- Phase 2 has not edited, reset, cleaned, staged, committed, or deleted anything
+  in the production checkout.
+
+**Do not require the production worktree to be globally clean.** Other agents or
+workflows may legitimately have unrelated tracked/untracked work there. Preserve
+that work exactly; never use `git reset`, `git clean`, checkout/revert, or delete
+files to satisfy a Phase-2 cleanliness check. Step 2.1 records the production
+HEAD and porcelain status as an observational baseline. Later unrelated drift is
+reported, not automatically reverted. A Phase-2-related production change
+(e.g. this feature's config key, source files copied from the feature branch, or
+a service deployment) is a blocker.
+
+At this cold-start review, production was on `master`, the service was `active`,
+and the worktree already contained this unrelated untracked file:
+
+```text
+?? docs/watchdog-connectivity-and-best-path-plan-2026-09-23.md
+```
+
+That file belongs to another workflow. A future Phase-2 agent must not remove or
+modify it. Its presence alone is **not** a Phase-2 blocker.
 
 The production HEAD at planning time was `83862b0`, but another legitimate
-workflow may advance `master` later. Do not reset production to that hash. Clean
-branch/config/service state is the invariant.
+workflow may advance `master` later. Do not reset production to that hash. The
+Phase-2 invariant is isolation, not global cleanliness.
 
 Phase 2 is not a deployment phase.
 
@@ -1548,7 +1569,7 @@ baseline before policy code is introduced.
 - Phase 1 Step 1.9 complete;
 - `design/chat-mode-scheduling-v2` contains `cc1b014` and this plan;
 - Phase-1 design worktree clean;
-- production `master` clean.
+- production checkout is on `master`; unrelated pre-existing dirt is allowed and must be preserved.
 
 ### Tasks
 
@@ -1556,7 +1577,10 @@ baseline before policy code is introduced.
 2. Create the two canonical progress files from Section 9.1.2 with all 12 JSON
    step states initialized to `not_started` (Markdown: `NOT STARTED`), then mark
    2.1 `complete` only at exit.
-3. Record design source HEAD and production `master` HEAD/service state.
+3. Record design source HEAD and the production observation baseline:
+   `git rev-parse HEAD`, `git status --porcelain=v1 --untracked-files=normal`,
+   service `ActiveState/SubState`, and whether the Phase-2 budget key is absent
+   from production config. Do not clean or normalize that baseline.
 4. Freeze the current tool contract by recording the relevant constants/fields
    from `src/binnacle/tools/job_status.py`: input `wait_seconds 0..50`, current
    `OUTPUT_SCHEMA`, and current `job_status_timing` fields.
@@ -1577,7 +1601,7 @@ Primarily evidence/documentation. No production runtime behavior should change.
 - Phase-2 branch/worktree exists and is clean;
 - focused baseline is green;
 - current public/tool contract is recorded;
-- production is unchanged;
+- Phase 2 has not modified production; unrelated production work is preserved;
 - next step is 2.2.
 
 ### Do not do in 2.1
@@ -2107,7 +2131,7 @@ Freeze Phase 2 as an implementation result without deploying it.
 3. Run all pre-commit hooks.
 4. Verify typing/lint/architecture/readability checks.
 5. Check `git diff --check`.
-6. Verify production checkout/config/service remain untouched.
+6. Verify Phase 2 has not touched production checkout/config/service and preserve unrelated production changes.
 7. Verify repository default budget remains disabled.
 8. Review MCP schema changes and ensure they are limited to intended
    `job_status` output additions; input `wait_seconds <=50` remains.
@@ -2207,7 +2231,7 @@ Phase 2 is complete only if all items below are true.
 - [ ] pre-commit green;
 - [ ] concurrency/reload evidence green;
 - [ ] overhead evidence recorded;
-- [ ] production master/config/service unchanged;
+- [ ] Phase 2 did not modify production checkout/config/service; unrelated production work was preserved;
 - [ ] no Phase-2 budget deployed;
 - [ ] Phase-2 report committed and pushed.
 
@@ -2322,7 +2346,7 @@ particular, a cold-start agent is not expected to investigate or redesign:
 - real-job/concurrency fixture shapes;
 - performance evidence artifact names;
 - per-step commit subjects, push, and CI completion rules;
-- production-isolation commands;
+- production-isolation commands and preservation of unrelated dirty worktrees;
 - interrupted-worktree recovery policy.
 
 Normal implementation work still requires reading the target source files,
