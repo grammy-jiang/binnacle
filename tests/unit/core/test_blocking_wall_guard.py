@@ -1,4 +1,4 @@
-"""Deterministic sequential and overlapping coverage for the blocking-wall tracker."""
+"""Deterministic sequential, overlapping, and bounded-state tracker coverage."""
 
 import asyncio
 import threading
@@ -429,3 +429,70 @@ def test_cancellation_equivalent_cleanup_releases_active_lease() -> None:
     next_lease = _tracked(tracker, budget_s=10)
     assert next_lease.decision.active_before == 0
     assert next_lease.decision.spent_before_s == pytest.approx(1.25)
+
+
+def test_inactive_lru_eviction_retains_recently_used_record() -> None:
+    clock = FakeClock()
+    tracker = BlockingWallTracker(clock=clock, capacity=2)
+    old = _tracked(tracker, turn="turn-a", budget_s=10)
+    clock.advance(1.0)
+    old.release()
+    recent = _tracked(tracker, turn="turn-b", budget_s=10)
+    clock.advance(1.0)
+    recent.release()
+    clock.advance(1.0)
+    refreshed = _tracked(tracker, turn="turn-a", budget_s=10)
+    state = tracker._states[("openai-mcp(ChatGPT)", "turn-a")]
+    assert state.last_seen == pytest.approx(clock.now)
+    clock.advance(0.5)
+    refreshed.release()
+    assert state.last_seen == pytest.approx(clock.now)
+    clock.advance(0.5)
+    _tracked(tracker, turn="turn-c", budget_s=10)
+    assert {key[1] for key in tracker._states} == {"turn-a", "turn-c"}
+
+
+def test_mixed_pressure_never_evicts_active_record() -> None:
+    clock = FakeClock()
+    tracker = BlockingWallTracker(clock=clock, capacity=2)
+    active = _tracked(tracker, turn="turn-active", budget_s=20)
+    clock.advance(1.0)
+    _tracked(tracker, turn="turn-old", budget_s=20).release()
+    clock.advance(1.0)
+    _tracked(tracker, turn="turn-replacement", budget_s=20)
+    assert {key[1] for key in tracker._states} == {"turn-active", "turn-replacement"}
+    assert tracker._states[("openai-mcp(ChatGPT)", "turn-active")].active_count == 1
+    assert active.decision.policy == "tracked"
+
+
+def test_all_active_capacity_fallback_preserves_tracked_accounting() -> None:
+    clock = FakeClock()
+    tracker = BlockingWallTracker(clock=clock, capacity=2)
+    first = _tracked(tracker, turn="turn-a", budget_s=10)
+    _tracked(tracker, turn="turn-b", budget_s=10)
+    state = tracker._states[("openai-mcp(ChatGPT)", "turn-a")]
+    snapshot = (state.active_count, state.spent_s, state.last_seen)
+    clock.advance(2.0)
+    fallback = _tracked(tracker, turn="turn-c", budget_s=10)
+    assert fallback.decision.policy == "capacity_untracked"
+    assert fallback.decision.effective_wait_s == 50
+    assert len(tracker._states) == 2
+    assert (state.active_count, state.spent_s, state.last_seen) == snapshot
+    assert fallback.release().spent_after_s is None
+    clock.advance(1.0)
+    assert first.release().spent_after_s == pytest.approx(3.0)
+
+
+def test_new_turn_tracks_after_active_capacity_becomes_inactive() -> None:
+    clock = FakeClock()
+    tracker = BlockingWallTracker(clock=clock, capacity=1)
+    first = _tracked(tracker, turn="turn-a", budget_s=10)
+    fallback = _tracked(tracker, turn="turn-b", budget_s=10)
+    assert fallback.decision.policy == "capacity_untracked"
+    clock.advance(2.0)
+    first.release()
+    clock.advance(1.0)
+    tracked = _tracked(tracker, turn="turn-b", budget_s=10)
+    assert tracked.decision.policy == "tracked"
+    assert tracked.decision.spent_before_s == pytest.approx(0.0)
+    assert {key[1] for key in tracker._states} == {"turn-b"}
