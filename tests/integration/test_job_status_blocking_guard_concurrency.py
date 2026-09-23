@@ -284,4 +284,8 @@ def test_fresh_tracker_loses_only_ephemeral_budget_state(
     stopped = stop(job_id)
     assert stopped["state"] == "exited"
     assert stopped["signal"] in (15, 9)
+
+    stopped_again = stop(job_id)
+    assert stopped_again["state"] == "exited"
+    assert stopped_again["signal"] == stopped["signal"]
     _assert_no_active_leases(fresh_tracker)
