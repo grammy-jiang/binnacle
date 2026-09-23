@@ -203,8 +203,8 @@ def run_command_impl(
         else f"still running after {plan.bounded_wait_s} s"
     )
     summary = (
-        f"Command {reason}; job_id={job_id}. Continue independent work; "
-        "call job_status once when the result is needed, or stop_job to cancel."
+        f"Command {reason}; job_id={job_id}. "
+        "Use job_status when the result is needed, or stop_job to cancel."
     )
     return ToolResult(content=summary, structured_content=payload)
 
