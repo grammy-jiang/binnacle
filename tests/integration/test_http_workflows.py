@@ -1,7 +1,11 @@
 """Authenticated HTTP MCP tool workflows over the real ASGI app."""
 
+import asyncio
 import json
+import threading
 
+from binnacle.callctx import current_turn
+from binnacle.tools import list_files as lf
 from tests.integration.http_test_support import (
     http_tool_call,
     sse_json,
@@ -251,3 +255,38 @@ def test_http_correlation_headers_reach_tool_log(caplog, tmp_path):
         assert f"turn={request_id}" in line
         assert f"oai_session={expected_hash}" in line
         assert openai_session not in line
+
+
+def test_http_concurrent_requests_keep_distinct_base_turns(monkeypatch, tmp_path):
+    barrier = threading.Barrier(2)
+    seen: list[str | None] = []
+    original = lf.list_files_impl
+
+    def capture(path, glob, max_results, include_hidden):
+        seen.append(current_turn.get())
+        barrier.wait(timeout=5)
+        return original(path, glob, max_results, include_hidden)
+
+    monkeypatch.setattr(lf, "list_files_impl", capture)
+
+    async def go(c, headers):
+        async def one(rpc_id, request_id):
+            return await http_tool_call(
+                c,
+                {**headers, "x-request-id": request_id},
+                rpc_id,
+                "list_files",
+                {"path": str(tmp_path), "max_results": 1},
+            )
+
+        first, second = await asyncio.gather(
+            one(70, "turn-alpha/call-1"),
+            one(71, "turn-beta/call-1"),
+        )
+        assert first["result"]["isError"] is False
+        assert second["result"]["isError"] is False
+
+    with_session(go, client_name="scenario-audit")
+
+    assert sorted(seen) == ["turn-alpha", "turn-beta"]
+    assert current_turn.get() is None

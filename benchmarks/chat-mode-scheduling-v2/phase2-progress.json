@@ -6,8 +6,8 @@
   "worktree": "/home/grammy-jiang/Projects/binnacle-chat-blocking-wall-guard",
   "source_branch": "design/chat-mode-scheduling-v2",
   "phase1_evidence_commit": "cc1b014",
-  "last_completed_step": "2.2",
-  "next_step": "2.3",
+  "last_completed_step": "2.3",
+  "next_step": "2.4",
   "baseline": {
     "design_source_head": "e9c04728e5ac583a8e5d3b991cb01309de36ef82",
     "production": {
@@ -172,12 +172,22 @@
       "tests": [
         "config 19 passed; logging 1 passed"
       ],
-      "notes": ["Config contract implemented; defaults disabled; job_status unchanged."]
+      "notes": [
+        "Config contract implemented; defaults disabled; job_status unchanged."
+      ]
     },
     "2.3": {
-      "status": "not_started",
-      "tests": [],
-      "notes": []
+      "status": "complete",
+      "tests": [
+        "focused base-turn/context coverage -> 6 passed, 23 deselected in 2.71s",
+        "uv run pytest -q tests/integration/test_logging.py tests/integration/test_http_workflows.py tests/unit/core/test_logging_result_fields.py -> 30 passed in 5.58s"
+      ],
+      "notes": [
+        "Added current_turn ContextVar with default None and conservative base-turn parsing.",
+        "ToolLoggingMiddleware publishes parsed base-turn context and resets it in finally while preserving full X-Request-Id turn logs.",
+        "Covered absent/malformed headers, sequential turns, concurrent distinct HTTP turns, exception cleanup, and sync-thread propagation.",
+        "No guard policy or job_status behavior was added in Step 2.3."
+      ]
     },
     "2.4": {
       "status": "not_started",
