@@ -19,8 +19,7 @@
       "allow_repeats": true,
       "arguments": {
         "job_id": "{result:start_first.job_id}",
-        "tail_lines": 20,
-        "wait_seconds": 50
+        "tail_lines": 20
       },
       "completion_condition": "job_state=exited",
       "depends_on": [
@@ -50,8 +49,7 @@
       "allow_repeats": true,
       "arguments": {
         "job_id": "{result:start_second.job_id}",
-        "tail_lines": 20,
-        "wait_seconds": 50
+        "tail_lines": 20
       },
       "completion_condition": "job_state=exited",
       "depends_on": [

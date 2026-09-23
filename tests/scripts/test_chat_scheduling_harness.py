@@ -315,10 +315,12 @@ def test_chat_artifact_cleanup_retries_transient_delete_failures(monkeypatch, tm
     monkeypatch.setattr(chat.time, "sleep", lambda _: None)
     cid = "12345678-1234-1234-1234-123456789abc"
     delete_attempts = 0
+    delete_args = []
 
     def fake_run(args, **kwargs):
         nonlocal delete_attempts
         if "--delete" in args:
+            delete_args.append(args)
             delete_attempts += 1
             if delete_attempts < 3:
                 raise subprocess.CalledProcessError(1, args)
@@ -336,6 +338,8 @@ def test_chat_artifact_cleanup_retries_transient_delete_failures(monkeypatch, tm
     result = artifact.cleanup()
 
     assert delete_attempts == 3
+    assert delete_args[-1][0] == "/usr/bin/python3"
+    assert delete_args[-1][1].endswith("/chatgpt-chats")
     assert result["deleted"] is True
     assert artifact.tracked is False
 
@@ -353,8 +357,23 @@ def test_project_client_retries_transient_helper_failures(monkeypatch):
 
     monkeypatch.setattr(chat, "_run", fake_run)
 
-    assert chat.ProjectClient("project").instructions() == "baseline"
+    client = chat.ProjectClient("project")
+    assert client.instructions() == "baseline"
     assert attempts == 3
+
+
+def test_project_client_uses_system_python_for_dbus_helper(monkeypatch):
+    calls = []
+
+    def fake_run(args, **kwargs):
+        calls.append(args)
+        return subprocess.CompletedProcess(args, 0, "baseline\n", "")
+
+    monkeypatch.setattr(chat, "_run", fake_run)
+    client = chat.ProjectClient("project")
+    assert client.instructions() == "baseline"
+    assert calls[0][0] == "/usr/bin/python3"
+    assert calls[0][1].endswith("/chatgpt-project")
 
 
 def test_send_project_chat_retries_only_before_submission(monkeypatch, tmp_path):
