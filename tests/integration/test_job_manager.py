@@ -30,10 +30,14 @@ def manager(tmp_path, monkeypatch):
     thread = threading.Thread(target=runtime.serve_forever, daemon=True)
     thread.start()
     for _ in range(200):
-        if socket_path.exists():
+        try:
+            job_client.ping(socket_path)
+        except job_client.JobManagerError:
+            time.sleep(0.005)
+        else:
             break
-        time.sleep(0.005)
-    assert socket_path.exists()
+    else:
+        pytest.fail("job manager did not become ready")
     yield runtime, socket_path, store
     for state in jobs.list_jobs():
         if state["state"] == "running":
