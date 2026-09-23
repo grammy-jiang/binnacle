@@ -1,0 +1,108 @@
+{
+  "benchmark_class": "micro",
+  "dag": [
+    {
+      "access": "non_read_only",
+      "arguments": {
+        "job_id": "{job:stop1}"
+      },
+      "depends_on": [],
+      "id": "stop_1",
+      "kind": "tool",
+      "tool": "stop_job"
+    },
+    {
+      "access": "non_read_only",
+      "arguments": {
+        "job_id": "{job:stop2}"
+      },
+      "depends_on": [],
+      "id": "stop_2",
+      "kind": "tool",
+      "tool": "stop_job"
+    },
+    {
+      "access": "non_read_only",
+      "arguments": {
+        "job_id": "{job:stop3}"
+      },
+      "depends_on": [],
+      "id": "stop_3",
+      "kind": "tool",
+      "tool": "stop_job"
+    }
+  ],
+  "expected_runtime_s": 30,
+  "fixture": {
+    "allowed_mutation_globs": [
+      "{root}/**"
+    ],
+    "files": [],
+    "jobs": [
+      {
+        "command": "python3 -c 'import signal,time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(300)'",
+        "name": "stop1",
+        "prelaunch": true
+      },
+      {
+        "command": "python3 -c 'import signal,time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(300)'",
+        "name": "stop2",
+        "prelaunch": true
+      },
+      {
+        "command": "python3 -c 'import signal,time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(300)'",
+        "name": "stop3",
+        "prelaunch": true
+      }
+    ],
+    "kind": "dummy_jobs",
+    "production_mutation_allowed": false,
+    "root_template": "/tmp/binnacle-chat-scheduling-v2/{id}/{run_id}"
+  },
+  "id": "M5",
+  "max_turn_runtime_s": 90,
+  "metric_tags": [
+    "non_read_only_serialization",
+    "annotations",
+    "wall_time"
+  ],
+  "oracle": {
+    "checks": [
+      {
+        "params": {},
+        "type": "all_nodes_complete"
+      },
+      {
+        "params": {
+          "jobs": [
+            "stop1",
+            "stop2",
+            "stop3"
+          ],
+          "signal": 9,
+          "state": "exited"
+        },
+        "type": "job_state"
+      },
+      {
+        "params": {
+          "hard_gate": false,
+          "relation": "non_read_only_serialization_observed"
+        },
+        "type": "event_relation"
+      },
+      {
+        "params": {
+          "value": "DONE"
+        },
+        "type": "exact_reply"
+      }
+    ],
+    "terminal_state": "all_required_nodes_complete"
+  },
+  "phase1_step": null,
+  "prompt_template": "Use only Raspberry Pi MCP stop_job. Stop the three prelaunched jobs {job:stop1}, {job:stop2}, {job:stop3}; request them together if allowed. Reply only DONE after all return.",
+  "purpose": "Confirm readOnlyHint=false tools remain serialized even when idempotent.",
+  "schema_version": 1,
+  "title": "Idempotent non-read-only serialization"
+}

@@ -1,0 +1,94 @@
+{
+  "benchmark_class": "micro",
+  "dag": [
+    {
+      "access": "read_only",
+      "arguments": {
+        "path": "{root}/f1.txt"
+      },
+      "depends_on": [],
+      "id": "read_1",
+      "kind": "tool",
+      "tool": "read_file"
+    },
+    {
+      "access": "read_only",
+      "arguments": {
+        "path": "{root}/f2.txt"
+      },
+      "depends_on": [],
+      "id": "read_2",
+      "kind": "tool",
+      "tool": "read_file"
+    },
+    {
+      "access": "read_only",
+      "arguments": {
+        "path": "{root}/f3.txt"
+      },
+      "depends_on": [],
+      "id": "read_3",
+      "kind": "tool",
+      "tool": "read_file"
+    }
+  ],
+  "expected_runtime_s": 12,
+  "fixture": {
+    "allowed_mutation_globs": [],
+    "files": [
+      {
+        "content": "M1-payload-1-{nonce}\n",
+        "path": "f1.txt"
+      },
+      {
+        "content": "M1-payload-2-{nonce}\n",
+        "path": "f2.txt"
+      },
+      {
+        "content": "M1-payload-3-{nonce}\n",
+        "path": "f3.txt"
+      }
+    ],
+    "jobs": [],
+    "kind": "ephemeral_dir",
+    "production_mutation_allowed": false,
+    "root_template": "/tmp/binnacle-chat-scheduling-v2/{id}/{run_id}"
+  },
+  "id": "M1",
+  "max_turn_runtime_s": 60,
+  "metric_tags": [
+    "read_parallelism",
+    "wall_time",
+    "tool_calls"
+  ],
+  "oracle": {
+    "checks": [
+      {
+        "params": {},
+        "type": "all_nodes_complete"
+      },
+      {
+        "params": {
+          "nodes": [
+            "read_1",
+            "read_2",
+            "read_3"
+          ]
+        },
+        "type": "tool_calls_exact_once"
+      },
+      {
+        "params": {
+          "value": "DONE"
+        },
+        "type": "exact_reply"
+      }
+    ],
+    "terminal_state": "all_required_nodes_complete"
+  },
+  "phase1_step": "1.2",
+  "prompt_template": "Use only Raspberry Pi MCP read_file. Read {root}/f1.txt, {root}/f2.txt, {root}/f3.txt exactly once each. They are independent. After all three return, reply only DONE.",
+  "purpose": "Basic model batching of already-known read-only calls.",
+  "schema_version": 1,
+  "title": "Three independent reads"
+}

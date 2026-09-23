@@ -1,0 +1,117 @@
+{
+  "benchmark_class": "micro",
+  "dag": [
+    {
+      "access": "read_only",
+      "arguments": {
+        "job_id": "{job:slow}",
+        "tail_lines": 5,
+        "wait_seconds": 8
+      },
+      "depends_on": [],
+      "id": "slow_status",
+      "kind": "tool",
+      "tool": "job_status"
+    },
+    {
+      "access": "read_only",
+      "arguments": {
+        "path": "{root}/token.txt"
+      },
+      "depends_on": [],
+      "id": "read_token",
+      "kind": "tool",
+      "tool": "read_file"
+    },
+    {
+      "access": "reasoning",
+      "arguments": {
+        "operation": "use_exact_token"
+      },
+      "depends_on": [
+        "read_token"
+      ],
+      "id": "derive_pattern",
+      "kind": "reasoning",
+      "tool": null
+    },
+    {
+      "access": "read_only",
+      "arguments": {
+        "fixed_strings": true,
+        "path": "{root}",
+        "pattern": "{result:read_token}"
+      },
+      "depends_on": [
+        "derive_pattern"
+      ],
+      "id": "dependent_search",
+      "kind": "tool",
+      "tool": "search_text"
+    }
+  ],
+  "expected_runtime_s": 25,
+  "fixture": {
+    "allowed_mutation_globs": [],
+    "files": [
+      {
+        "content": "{nonce}\n",
+        "path": "token.txt"
+      },
+      {
+        "content": "alpha\n{nonce}\nomega\n",
+        "path": "search.txt"
+      }
+    ],
+    "jobs": [
+      {
+        "command": "python3 -c 'import time; time.sleep(40)'",
+        "name": "slow",
+        "prelaunch": true
+      }
+    ],
+    "kind": "ephemeral_dir",
+    "production_mutation_allowed": false,
+    "root_template": "/tmp/binnacle-chat-scheduling-v2/{id}/{run_id}"
+  },
+  "id": "M4",
+  "max_turn_runtime_s": 90,
+  "metric_tags": [
+    "dependent_continuation",
+    "scheduler_regression"
+  ],
+  "oracle": {
+    "checks": [
+      {
+        "params": {},
+        "type": "all_nodes_complete"
+      },
+      {
+        "params": {
+          "hard_gate": true,
+          "relation": "token_returns_while_status_running"
+        },
+        "type": "event_relation"
+      },
+      {
+        "params": {
+          "hard_gate": false,
+          "relation": "dependent_search_vs_status_end"
+        },
+        "type": "event_relation"
+      },
+      {
+        "params": {
+          "value": "DONE"
+        },
+        "type": "exact_reply"
+      }
+    ],
+    "terminal_state": "all_required_nodes_complete"
+  },
+  "phase1_step": null,
+  "prompt_template": "Use only Raspberry Pi MCP read-only tools. Check {job:slow} with job_status wait_seconds=8 and read {root}/token.txt. The instant the token returns, use that exact unpredictable token as a fixed-string search_text pattern in {root}; do not wait for job_status if continuation is possible. Reply only DONE.",
+  "purpose": "Re-measure whether an early dynamic result can drive a dependent call across a still-running slow call.",
+  "schema_version": 1,
+  "title": "Dependent continuation barrier"
+}

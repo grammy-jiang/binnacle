@@ -1,0 +1,212 @@
+{
+  "benchmark_class": "macro",
+  "dag": [
+    {
+      "access": "read_only",
+      "arguments": {
+        "path": "{root}/known/f01.txt"
+      },
+      "depends_on": [],
+      "id": "read_01",
+      "kind": "tool",
+      "tool": "read_file"
+    },
+    {
+      "access": "read_only",
+      "arguments": {
+        "path": "{root}/known/f02.txt"
+      },
+      "depends_on": [],
+      "id": "read_02",
+      "kind": "tool",
+      "tool": "read_file"
+    },
+    {
+      "access": "read_only",
+      "arguments": {
+        "path": "{root}/known/f03.txt"
+      },
+      "depends_on": [],
+      "id": "read_03",
+      "kind": "tool",
+      "tool": "read_file"
+    },
+    {
+      "access": "read_only",
+      "arguments": {
+        "path": "{root}/known/f04.txt"
+      },
+      "depends_on": [],
+      "id": "read_04",
+      "kind": "tool",
+      "tool": "read_file"
+    },
+    {
+      "access": "read_only",
+      "arguments": {
+        "path": "{root}/known/f05.txt"
+      },
+      "depends_on": [],
+      "id": "read_05",
+      "kind": "tool",
+      "tool": "read_file"
+    },
+    {
+      "access": "read_only",
+      "arguments": {
+        "path": "{root}/known/f06.txt"
+      },
+      "depends_on": [],
+      "id": "read_06",
+      "kind": "tool",
+      "tool": "read_file"
+    },
+    {
+      "access": "read_only",
+      "arguments": {
+        "path": "{root}/known/f07.txt"
+      },
+      "depends_on": [],
+      "id": "read_07",
+      "kind": "tool",
+      "tool": "read_file"
+    },
+    {
+      "access": "read_only",
+      "arguments": {
+        "path": "{root}/known/f08.txt"
+      },
+      "depends_on": [],
+      "id": "read_08",
+      "kind": "tool",
+      "tool": "read_file"
+    },
+    {
+      "access": "read_only",
+      "arguments": {
+        "path": "{root}/known/f09.txt"
+      },
+      "depends_on": [],
+      "id": "read_09",
+      "kind": "tool",
+      "tool": "read_file"
+    },
+    {
+      "access": "read_only",
+      "arguments": {
+        "path": "{root}/known/f10.txt"
+      },
+      "depends_on": [],
+      "id": "read_10",
+      "kind": "tool",
+      "tool": "read_file"
+    }
+  ],
+  "expected_runtime_s": 25,
+  "fixture": {
+    "allowed_mutation_globs": [],
+    "files": [
+      {
+        "content": "payload-R2-01-{nonce}\n",
+        "path": "known/f01.txt"
+      },
+      {
+        "content": "payload-R2-02-{nonce}\n",
+        "path": "known/f02.txt"
+      },
+      {
+        "content": "payload-R2-03-{nonce}\n",
+        "path": "known/f03.txt"
+      },
+      {
+        "content": "payload-R2-04-{nonce}\n",
+        "path": "known/f04.txt"
+      },
+      {
+        "content": "payload-R2-05-{nonce}\n",
+        "path": "known/f05.txt"
+      },
+      {
+        "content": "payload-R2-06-{nonce}\n",
+        "path": "known/f06.txt"
+      },
+      {
+        "content": "payload-R2-07-{nonce}\n",
+        "path": "known/f07.txt"
+      },
+      {
+        "content": "payload-R2-08-{nonce}\n",
+        "path": "known/f08.txt"
+      },
+      {
+        "content": "payload-R2-09-{nonce}\n",
+        "path": "known/f09.txt"
+      },
+      {
+        "content": "payload-R2-10-{nonce}\n",
+        "path": "known/f10.txt"
+      }
+    ],
+    "jobs": [],
+    "kind": "ephemeral_dir",
+    "production_mutation_allowed": false,
+    "root_template": "/tmp/binnacle-chat-scheduling-v2/{id}/{run_id}"
+  },
+  "id": "R2",
+  "max_turn_runtime_s": 90,
+  "metric_tags": [
+    "wall_time",
+    "read_parallelism",
+    "same_prompt_completion",
+    "tool_calls",
+    "tokens"
+  ],
+  "oracle": {
+    "checks": [
+      {
+        "params": {},
+        "type": "all_nodes_complete"
+      },
+      {
+        "params": {
+          "values": [
+            "payload-R2-01-{nonce}",
+            "payload-R2-02-{nonce}",
+            "payload-R2-03-{nonce}",
+            "payload-R2-04-{nonce}",
+            "payload-R2-05-{nonce}",
+            "payload-R2-06-{nonce}",
+            "payload-R2-07-{nonce}",
+            "payload-R2-08-{nonce}",
+            "payload-R2-09-{nonce}",
+            "payload-R2-10-{nonce}"
+          ]
+        },
+        "type": "reply_contains_all"
+      },
+      {
+        "params": {
+          "nodes": [
+            "read_01",
+            "read_02",
+            "read_03",
+            "read_04",
+            "read_05",
+            "read_06",
+            "read_07",
+            "read_08",
+            "read_09",
+            "read_10"
+          ]
+        },
+        "type": "tool_calls_exact_once"
+      }
+    ],
+    "terminal_state": "all_required_nodes_complete"
+  },
+  "phase1_step": "1.3",
+  "prompt_template": "Read these ten independent files exactly once: {root}/known/f01.txt, {root}/known/f02.txt, {root}/known/f03.txt, {root}/known/f04.txt, {root}/known/f05.txt, {root}/known/f06.txt, {root}/known/f07.txt, {root}/known/f08.txt, {root}/known/f09.txt, {root}/known/f10.txt. Reply with their payload lines in path order.",
+  "purpose": "Wide read fan-out where every path is known at prompt time.",
+  "schema_version": 1,
+  "title": "Inspect ten known independent files"
+}

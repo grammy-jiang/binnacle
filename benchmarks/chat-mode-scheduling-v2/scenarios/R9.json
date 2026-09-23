@@ -1,0 +1,151 @@
+{
+  "benchmark_class": "macro",
+  "dag": [
+    {
+      "access": "non_read_only",
+      "arguments": {
+        "command": "python3 test_math_utils.py",
+        "workdir": "{root}"
+      },
+      "depends_on": [],
+      "id": "initial_test",
+      "kind": "tool",
+      "tool": "run_command"
+    },
+    {
+      "access": "read_only",
+      "arguments": {
+        "path": "{root}/math_utils.py"
+      },
+      "depends_on": [
+        "initial_test"
+      ],
+      "id": "read_source",
+      "kind": "tool",
+      "tool": "read_file"
+    },
+    {
+      "access": "read_only",
+      "arguments": {
+        "path": "{root}/test_math_utils.py"
+      },
+      "depends_on": [
+        "initial_test"
+      ],
+      "id": "read_test",
+      "kind": "tool",
+      "tool": "read_file"
+    },
+    {
+      "access": "reasoning",
+      "arguments": {
+        "operation": "identify_clamp_bug"
+      },
+      "depends_on": [
+        "read_source",
+        "read_test"
+      ],
+      "id": "diagnose",
+      "kind": "reasoning",
+      "tool": null
+    },
+    {
+      "access": "non_read_only",
+      "arguments": {
+        "operation": "edit math_utils.py to fix the diagnosed bug",
+        "workdir": "{root}"
+      },
+      "depends_on": [
+        "diagnose"
+      ],
+      "id": "fix_source",
+      "kind": "tool",
+      "tool": "run_command"
+    },
+    {
+      "access": "non_read_only",
+      "arguments": {
+        "command": "python3 test_math_utils.py",
+        "workdir": "{root}"
+      },
+      "depends_on": [
+        "fix_source"
+      ],
+      "id": "retest",
+      "kind": "tool",
+      "tool": "run_command"
+    },
+    {
+      "access": "read_only",
+      "arguments": {
+        "path": "{root}/math_utils.py"
+      },
+      "depends_on": [
+        "retest"
+      ],
+      "id": "verify_source",
+      "kind": "tool",
+      "tool": "read_file"
+    }
+  ],
+  "expected_runtime_s": 80,
+  "fixture": {
+    "allowed_mutation_globs": [
+      "{root}/**"
+    ],
+    "files": [
+      {
+        "content": "def clamp(value, low, high):\n    return min(low, max(high, value))\n",
+        "path": "math_utils.py"
+      },
+      {
+        "content": "from pathlib import Path\n\nns = {}\nexec(Path('math_utils.py').read_text(), ns)\nclamp = ns['clamp']\nassert clamp(15, 0, 10) == 10\nassert clamp(-2, 0, 10) == 0\nassert clamp(7, 0, 10) == 7\nprint('R9-test-pass')\n",
+        "path": "test_math_utils.py"
+      }
+    ],
+    "jobs": [],
+    "kind": "ephemeral_git_repo",
+    "production_mutation_allowed": false,
+    "root_template": "/tmp/binnacle-chat-scheduling-v2/{id}/{run_id}"
+  },
+  "id": "R9",
+  "max_turn_runtime_s": 150,
+  "metric_tags": [
+    "wall_time",
+    "recovery_journey",
+    "same_prompt_completion",
+    "tool_calls",
+    "tokens",
+    "correctness"
+  ],
+  "oracle": {
+    "checks": [
+      {
+        "params": {},
+        "type": "all_nodes_complete"
+      },
+      {
+        "params": {
+          "node": "retest"
+        },
+        "type": "command_exit_zero"
+      },
+      {
+        "params": {},
+        "type": "no_mutation_outside_scope"
+      },
+      {
+        "params": {
+          "value": "DONE"
+        },
+        "type": "exact_reply"
+      }
+    ],
+    "terminal_state": "all_required_nodes_complete"
+  },
+  "phase1_step": "1.6",
+  "prompt_template": "Work only inside disposable repo {root}. First run the focused test test_math_utils.py and observe the failure. Diagnose it by reading the relevant source and test, fix only the bug, rerun the same focused test, then inspect the final source. Reply only DONE when it passes. Do not modify outside {root}.",
+  "purpose": "Recovery journey where source inspection becomes useful only after the initial failure.",
+  "schema_version": 1,
+  "title": "Fail, diagnose, fix, retest"
+}

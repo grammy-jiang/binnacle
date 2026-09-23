@@ -1,0 +1,143 @@
+{
+  "benchmark_class": "micro",
+  "dag": [
+    {
+      "access": "control",
+      "arguments": {
+        "job": "slow",
+        "operation": "local_fastmcp_job_status",
+        "wait_seconds": 2
+      },
+      "depends_on": [],
+      "id": "local_wait_1",
+      "kind": "control",
+      "tool": null
+    },
+    {
+      "access": "control",
+      "arguments": {
+        "job": "slow",
+        "operation": "local_fastmcp_job_status",
+        "wait_seconds": 2
+      },
+      "depends_on": [],
+      "id": "local_wait_2",
+      "kind": "control",
+      "tool": null
+    },
+    {
+      "access": "control",
+      "arguments": {
+        "job": "slow",
+        "operation": "local_fastmcp_job_status",
+        "wait_seconds": 2
+      },
+      "depends_on": [],
+      "id": "local_wait_3",
+      "kind": "control",
+      "tool": null
+    },
+    {
+      "access": "control",
+      "arguments": {
+        "job": "slow",
+        "operation": "local_fastmcp_job_status",
+        "wait_seconds": 2
+      },
+      "depends_on": [],
+      "id": "local_wait_4",
+      "kind": "control",
+      "tool": null
+    },
+    {
+      "access": "control",
+      "arguments": {
+        "job": "slow",
+        "operation": "local_fastmcp_job_status",
+        "wait_seconds": 2
+      },
+      "depends_on": [],
+      "id": "local_wait_5",
+      "kind": "control",
+      "tool": null
+    },
+    {
+      "access": "control",
+      "arguments": {
+        "job": "slow",
+        "operation": "local_fastmcp_job_status",
+        "wait_seconds": 2
+      },
+      "depends_on": [],
+      "id": "local_wait_6",
+      "kind": "control",
+      "tool": null
+    },
+    {
+      "access": "control",
+      "arguments": {
+        "job": "slow",
+        "operation": "local_fastmcp_job_status",
+        "wait_seconds": 2
+      },
+      "depends_on": [],
+      "id": "local_wait_7",
+      "kind": "control",
+      "tool": null
+    },
+    {
+      "access": "control",
+      "arguments": {
+        "job": "slow",
+        "operation": "local_fastmcp_job_status",
+        "wait_seconds": 2
+      },
+      "depends_on": [],
+      "id": "local_wait_8",
+      "kind": "control",
+      "tool": null
+    }
+  ],
+  "expected_runtime_s": 3,
+  "fixture": {
+    "allowed_mutation_globs": [],
+    "files": [],
+    "jobs": [
+      {
+        "command": "python3 -c 'import time; time.sleep(30)'",
+        "name": "slow",
+        "prelaunch": true
+      }
+    ],
+    "kind": "dummy_jobs",
+    "production_mutation_allowed": false,
+    "root_template": "/tmp/binnacle-chat-scheduling-v2/{id}/{run_id}"
+  },
+  "id": "M7",
+  "max_turn_runtime_s": 20,
+  "metric_tags": [
+    "server_control",
+    "concurrency"
+  ],
+  "oracle": {
+    "checks": [
+      {
+        "params": {},
+        "type": "all_nodes_complete"
+      },
+      {
+        "params": {
+          "hard_gate": true,
+          "relation": "eight_local_waits_wall_under_4s"
+        },
+        "type": "event_relation"
+      }
+    ],
+    "terminal_state": "all_required_nodes_complete"
+  },
+  "phase1_step": null,
+  "prompt_template": "LOCAL_CONTROL_ONLY",
+  "purpose": "Prove local Binnacle/FastMCP can service eight waits concurrently.",
+  "schema_version": 1,
+  "title": "Local FastMCP concurrency control"
+}
