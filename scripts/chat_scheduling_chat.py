@@ -246,7 +246,7 @@ def send_project_chat(
     ]
 
     last_error: subprocess.SubprocessError | None = None
-    for attempt in range(2):
+    for attempt in range(3):
         try:
             proc = _run(args, timeout=timeout_s + 30)
             result = json.loads(proc.stdout)
@@ -260,7 +260,7 @@ def send_project_chat(
             submitted = url_file.exists() or (
                 timing_file is not None and timing_file.exists()
             )
-            if submitted or attempt == 1:
+            if submitted or attempt == 2:
                 raise
             time.sleep(3.0)
 
