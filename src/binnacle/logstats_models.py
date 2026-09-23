@@ -97,6 +97,17 @@ class JobTelemetryStats:
     job_status_running_after_wait: int = 0
     job_status_state_ms: list[float] = field(default_factory=list)
     job_status_wait_state_ms: list[float] = field(default_factory=list)
+    job_status_positive_calls: int = 0
+    job_status_nonblocking_calls: int = 0
+    job_status_requested_wait_s: list[float] = field(default_factory=list)
+    job_status_effective_wait_s: list[float] = field(default_factory=list)
+    blocking_policies: Counter = field(default_factory=Counter)
+    blocking_budget_exhausted_calls: int = 0
+    blocking_wall_per_turn_s: list[float] = field(default_factory=list)
+    blocking_utilization_25: int = 0
+    blocking_utilization_50: int = 0
+    blocking_utilization_75: int = 0
+    blocking_utilization_100: int = 0
 
 
 @dataclass

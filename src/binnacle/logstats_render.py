@@ -3,7 +3,10 @@
 from collections.abc import Sequence
 from typing import Any
 
-from binnacle.logstats_jobs import render_job_telemetry
+from binnacle.logstats_jobs import (
+    render_blocking_wall_guard,
+    render_job_telemetry,
+)
 from binnacle.logstats_models import AdaptiveDiscoveryStats, IndexedContextStats, Stats
 from binnacle.logstats_search_exact import render_exact_search
 
@@ -209,6 +212,7 @@ def render(st: Stats) -> str:
             f"run_command results that became background jobs: {st.background_jobs}"
         )
     out.extend(render_job_telemetry(st.jobs))
+    out.extend(render_blocking_wall_guard(st.jobs))
     out.extend(render_exact_search(st.exact_search))
     if st.turn_calls:
         per_turn = sorted(st.turn_calls.values())

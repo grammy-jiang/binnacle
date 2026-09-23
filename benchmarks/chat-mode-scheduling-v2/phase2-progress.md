@@ -10,7 +10,7 @@
 | 2.6 | COMPLETE |
 | 2.7 | COMPLETE |
 | 2.8 | COMPLETE |
-| 2.9 | NOT STARTED |
+| 2.9 | COMPLETE |
 | 2.10 | NOT STARTED |
 | 2.11 | NOT STARTED |
 | 2.12 | NOT STARTED |
@@ -20,8 +20,8 @@ Branch: `feature/chat-mode-blocking-wall-guard`
 Worktree: `/home/grammy-jiang/Projects/binnacle-chat-blocking-wall-guard`
 Source branch: `design/chat-mode-scheduling-v2`
 Phase-1 evidence commit: `cc1b014`
-Last completed step: **2.8**
-Next step: **2.9**
+Last completed step: **2.9**
+Next step: **2.10**
 
 ## Step 2.1 baseline freeze
 
@@ -287,3 +287,22 @@ Next step: **2.8 - Structured output, summaries, and detailed telemetry**
 
 Step 2.8: **COMPLETE**
 Next step: **2.9 - `binnacle stats` guard aggregation**
+
+## Step 2.9 `binnacle stats` guard aggregation
+
+- Extended the existing job telemetry model/analyzer with Phase-2 guard policy
+  counts, positive/non-blocking/exhausted call counts, and requested/effective
+  wait distributions.
+- `blocking_window_closed` records aggregate by `(client, turn)` using the
+  maximum cumulative `blocking_spent_after_s`, so multiple windows in one turn
+  contribute one final cumulative blocking-wall value.
+- Added tracked-turn p50/p90/p95/max blocking-wall statistics and >=25%,
+  >=50%, >=75%, and effectively-100% utilization crossings; effectively-100%
+  follows the frozen `remaining < 1 second OR exhausted call observed` rule.
+- Added the `job_status blocking-wall guard:` human-readable section with the
+  frozen labels and preserved historical journals without Phase-2 fields: they
+  parse/render without synthetic guard values.
+- Exact Step-2.9 matrix: PASS - 19 passed in 0.28 s.
+
+Step 2.9: **COMPLETE**
+Next step: **2.10 - Real-job integration suite**

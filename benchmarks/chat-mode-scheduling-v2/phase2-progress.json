@@ -6,8 +6,8 @@
   "worktree": "/home/grammy-jiang/Projects/binnacle-chat-blocking-wall-guard",
   "source_branch": "design/chat-mode-scheduling-v2",
   "phase1_evidence_commit": "cc1b014",
-  "last_completed_step": "2.8",
-  "next_step": "2.9",
+  "last_completed_step": "2.9",
+  "next_step": "2.10",
   "baseline": {
     "design_source_head": "e9c04728e5ac583a8e5d3b991cb01309de36ef82",
     "production": {
@@ -253,9 +253,16 @@
       ]
     },
     "2.9": {
-      "status": "not_started",
-      "tests": [],
-      "notes": []
+      "status": "complete",
+      "tests": [
+        "uv run pytest -q tests/unit/core/test_logstats_jobs.py tests/unit/core/test_logstats.py -> 19 passed in 0.28s"
+      ],
+      "notes": [
+        "Extended the existing job telemetry model/analyzer/renderer with Phase-2 blocking-wall policy counts, requested/effective wait distributions, exhausted/non-blocking call counts, per-turn blocking-wall distributions, and utilization crossings.",
+        "blocking_window_closed records aggregate by (client, turn) using the maximum cumulative blocking_spent_after_s, so multiple active windows in one turn are reported once rather than as separate turns.",
+        "Utilization reports >=25%, >=50%, >=75%, and effectively-100% using remaining <1 second or an exhausted call observed for the tracked turn.",
+        "Historical job_status_timing records without the additive blocking_policy field remain parseable and do not synthesize Phase-2 guard statistics or render the guard section."
+      ]
     },
     "2.10": {
       "status": "not_started",
