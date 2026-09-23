@@ -1,6 +1,6 @@
 # Chat mode scheduling v2 — benchmark and A/B plan
 
-Status: confirmatory measurement plan; no production change.
+Status: Phase 1 complete with conditional GO to Phase 2; no production change.
 
 Parent design: `docs/chat-mode-scheduling-v2-design.md`.
 Evidence: `docs/chat-mode-scheduling-final-2026-09-23.md`.
@@ -9,6 +9,12 @@ The benchmark DAG metadata described here is test-only. It is not a production
 workflow engine.
 
 Executable metric definitions: `benchmarks/chat-mode-scheduling-v2/METRICS.md`.
+
+Phase-1 aggregate decision (2026-09-23): continue to Phase 2 only as a
+non-production experiment; do not merge/deploy. The complete evidence and gate
+matrix are in
+`benchmarks/chat-mode-scheduling-v2/phase1-step9-aggregate-go-no-go-2026-09-23.md`.
+The acceptance thresholds below are unchanged.
 
 ## 1. Benchmark architecture
 
