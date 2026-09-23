@@ -6,8 +6,8 @@
   "worktree": "/home/grammy-jiang/Projects/binnacle-chat-blocking-wall-guard",
   "source_branch": "design/chat-mode-scheduling-v2",
   "phase1_evidence_commit": "cc1b014",
-  "last_completed_step": "2.9",
-  "next_step": "2.10",
+  "last_completed_step": "2.10",
+  "next_step": "2.11",
   "baseline": {
     "design_source_head": "e9c04728e5ac583a8e5d3b991cb01309de36ef82",
     "production": {
@@ -265,9 +265,18 @@
       ]
     },
     "2.10": {
-      "status": "not_started",
-      "tests": [],
-      "notes": []
+      "status": "complete",
+      "tests": [
+        "uv run pytest -q tests/integration/test_job_status_blocking_guard.py -> 11 passed in 4.35s",
+        "uv run pytest -q tests/integration/test_http_workflows.py -k tracked_job_status_receives_base_turn_and_client -> 1 passed, 6 deselected in 4.46s",
+        "uv run pytest -q tests/integration/test_job_status_blocking_guard.py tests/integration/test_jobs_lifecycle.py tests/integration/test_http_workflows.py -> 55 passed in 46.60s"
+      ],
+      "notes": [
+        "Added real short-background-job coverage for early exit, sequential exhaustion, post-exhaustion durability, already-exited jobs, explicit zero wait, no_policy, no_turn, and invalid job IDs.",
+        "Real tracked waits use broad timing tolerances and verify actual wall charge, remaining budget, summary text, telemetry, durable job survival, and explicit cleanup without multi-minute sleeps.",
+        "Added an authenticated HTTP positive-wait workflow with X-Request-Id=turn-http-210/call-status and a configured phase2-http client; the tracked result and job_status_timing line prove base-turn and client ContextVars reach synchronous job_status.",
+        "The guard never stops a job on exhaustion; the real exhaustion case verifies the same job remains listed/running until the test explicitly stops it."
+      ]
     },
     "2.11": {
       "status": "not_started",

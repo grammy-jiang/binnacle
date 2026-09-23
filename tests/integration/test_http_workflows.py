@@ -2,9 +2,14 @@
 
 import asyncio
 import json
+import logging
 import threading
+from types import SimpleNamespace
 
+from binnacle import jobs as jobstore
+from binnacle.blocking_wall_guard import BlockingWallTracker
 from binnacle.callctx import current_turn
+from binnacle.tools import job_status as js
 from binnacle.tools import list_files as lf
 from tests.integration.http_test_support import (
     http_tool_call,
@@ -290,3 +295,76 @@ def test_http_concurrent_requests_keep_distinct_base_turns(monkeypatch, tmp_path
 
     assert sorted(seen) == ["turn-alpha", "turn-beta"]
     assert current_turn.get() is None
+
+
+def test_http_tracked_job_status_receives_base_turn_and_client(
+    monkeypatch, tmp_path, caplog
+):
+    job_id = None
+    monkeypatch.setattr(jobstore, "JOBS_DIR", tmp_path / "jobs-http-guard")
+    monkeypatch.setattr(jobstore, "OWNER_MODE", "embedded")
+    tracker = BlockingWallTracker()
+    monkeypatch.setattr(js, "blocking_wall_tracker", tracker)
+    budget = SimpleNamespace(
+        blocking_wall_budget_for_client=lambda client: (
+            3 if client and client.startswith("phase2-http") else None
+        )
+    )
+    monkeypatch.setattr(js, "get_settings", lambda: SimpleNamespace(jobs=budget))
+
+    async def go(c, headers):
+        nonlocal job_id
+        started = await http_tool_call(
+            c,
+            headers,
+            80,
+            "run_command",
+            {"command": "sleep 5", "workdir": str(tmp_path), "background": True},
+        )
+        assert started["result"]["isError"] is False
+        job_id = started["result"]["structuredContent"]["job_id"]
+
+        request_id = "turn-http-210/call-status"
+        status = await http_tool_call(
+            c,
+            {**headers, "x-request-id": request_id},
+            81,
+            "job_status",
+            {"job_id": job_id, "wait_seconds": 1},
+        )
+        assert status["result"]["isError"] is False
+        payload = status["result"]["structuredContent"]
+        assert payload["state"] == "running"
+        assert payload["blocking_policy"] == "tracked"
+        assert payload["wait_requested_s"] == 1
+        assert payload["wait_effective_s"] == 1
+        assert payload["blocking_budget_s"] == 3
+        assert payload["blocking_budget_exhausted"] is False
+
+        stopped = await http_tool_call(c, headers, 82, "stop_job", {"job_id": job_id})
+        assert stopped["result"]["isError"] is False
+        assert stopped["result"]["structuredContent"]["state"] == "exited"
+
+    try:
+        with caplog.at_level(logging.INFO):
+            with_session(go, client_name="phase2-http")
+    finally:
+        if job_id is not None:
+            from binnacle import job_owner
+
+            state = jobstore.job_state(job_id)
+            if state is not None and state["state"] == "running":
+                job_owner.stop_job(job_id)
+
+    timing = [
+        record.getMessage()
+        for record in caplog.records
+        if "event=job_status_timing" in record.getMessage()
+    ]
+    assert any(
+        "blocking_policy=tracked" in line
+        and "turn=turn-http-210" in line
+        and "client=phase2-http" in line
+        for line in timing
+    )
+    assert ("phase2-http", "turn-http-210") in tracker._states
