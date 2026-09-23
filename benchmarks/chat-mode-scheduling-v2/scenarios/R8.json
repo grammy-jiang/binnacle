@@ -47,25 +47,12 @@
       "tool": "run_command"
     },
     {
-      "access": "non_read_only",
-      "arguments": {
-        "command": "python3 test_app.py",
-        "workdir": "{root}"
-      },
-      "depends_on": [
-        "edit_app"
-      ],
-      "id": "focused_test",
-      "kind": "tool",
-      "tool": "run_command"
-    },
-    {
       "access": "read_only",
       "arguments": {
         "path": "{root}/app.py"
       },
       "depends_on": [
-        "focused_test"
+        "edit_app"
       ],
       "id": "verify_app",
       "kind": "tool",
@@ -121,9 +108,9 @@
       },
       {
         "params": {
-          "node": "focused_test"
+          "contains": "test_app.py"
         },
-        "type": "command_exit_zero"
+        "type": "command_contains_exit_zero"
       },
       {
         "params": {},
