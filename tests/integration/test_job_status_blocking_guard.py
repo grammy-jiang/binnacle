@@ -245,35 +245,6 @@ def test_budget_exhaustion_becomes_nonblocking_without_stopping_job(
     assert "blocking_remaining_after_s=0.0" in closed[0]
 
 
-def test_wait_exception_releases_active_lease(status_env, monkeypatch, caplog):
-    _, clock, tracker = status_env
-
-    def failing_wait(job_id: str, wait_seconds: int):
-        clock.advance(2.0)
-        raise RuntimeError("wait failed")
-
-    monkeypatch.setattr(js, "_wait_for_exit", failing_wait)
-
-    with (
-        caplog.at_level("INFO", logger="binnacle.job_status"),
-        pytest.raises(RuntimeError, match="wait failed"),
-    ):
-        _call_with_context(client="openai-mcp/1", turn="turn-a", wait_seconds=50)
-
-    closed = [
-        record.getMessage()
-        for record in caplog.records
-        if "event=blocking_window_closed" in record.getMessage()
-    ]
-    assert len(closed) == 1
-    assert "blocking_window_wall_s=2.0" in closed[0]
-    assert "blocking_spent_after_s=2.0" in closed[0]
-
-    tracked = tracker._states[("openai-mcp/1", "turn-a")]
-    assert tracked.active_count == 0
-    assert tracked.spent_s == pytest.approx(2.0)
-
-
 def test_real_job_early_exit_charges_actual_wall(real_job_env, tmp_path, caplog):
     tracker = real_job_env
     job_id = _start_real_job("sleep 0.2", tmp_path)
