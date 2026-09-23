@@ -14,7 +14,7 @@ from fastmcp.tools.base import ToolResult
 from pydantic import Field
 
 from binnacle import jobs
-from binnacle.blocking_wall_guard import BlockingWallTracker
+from binnacle.blocking_wall_guard import BlockingDecision, BlockingWallTracker
 from binnacle.callctx import (
     current_call,
     current_call_started,
@@ -133,6 +133,55 @@ def _elapsed_ms(start: float) -> float:
     return (_PERF_COUNTER() - start) * 1_000
 
 
+def _log_wait_exception_timing(
+    *,
+    job_id: str,
+    requested_wait_s: int,
+    bounded_wait_s: int,
+    decision: BlockingDecision,
+    waited_s: float,
+    state_start: float,
+    impl_start: float,
+    dispatch_ms: float | None,
+    turn: str | None,
+    client: str | None,
+    log_bytes: int,
+) -> None:
+    """Preserve the full guard decision when a positive wait raises."""
+    dispatch_field = f"{dispatch_ms:.2f}" if dispatch_ms is not None else "na"
+    log.info(
+        "event=job_status_timing call=%s job_id=%s wait_requested_s=%s "
+        "wait_bounded_s=%s wait_effective_s=%s waited_s=%s "
+        "blocking_budget_s=%s blocking_spent_before_s=%s "
+        "blocking_remaining_before_s=%s blocking_active_before=%s "
+        "blocking_policy=%s blocking_budget_exhausted=%s turn=%s client=%s "
+        "dispatch_ms=%s state_ms=%.2f read_log_ms=na process_scan_ms=na "
+        "impl_ms=%.2f state=error processes=na log_bytes=%s",
+        current_call.get(),
+        job_id,
+        requested_wait_s,
+        bounded_wait_s,
+        decision.effective_wait_s,
+        waited_s,
+        decision.budget_s if decision.budget_s is not None else "na",
+        decision.spent_before_s if decision.spent_before_s is not None else "na",
+        (
+            decision.remaining_before_s
+            if decision.remaining_before_s is not None
+            else "na"
+        ),
+        decision.active_before,
+        decision.policy,
+        str(decision.blocking_budget_exhausted).lower(),
+        turn if turn is not None else "-",
+        client if client is not None else "-",
+        dispatch_field,
+        _elapsed_ms(state_start),
+        _elapsed_ms(impl_start),
+        log_bytes,
+    )
+
+
 def _listing_result() -> ToolResult:
     states = jobs.list_jobs()
     rows, running = _listing_rows(states)
@@ -191,32 +240,50 @@ def job_status_impl(
             budget_s=budget_s,
         )
         decision = lease.decision
+        wait_started = _PERF_COUNTER()
+        state_before_wait = state
         try:
-            if decision.effective_wait_s > 0:
-                state, waited = _wait_for_exit(job_id, decision.effective_wait_s)
-            else:
-                state, waited = jobs.job_state(job_id), 0.0
-        finally:
-            release = lease.release()
-            if release.window_closed:
-                log.info(
-                    "event=blocking_window_closed call=%s turn=%s client=%s "
-                    "blocking_budget_s=%s blocking_window_wall_s=%s "
-                    "blocking_spent_after_s=%s blocking_remaining_after_s=%s",
-                    current_call.get(),
-                    turn if turn is not None else "-",
-                    client if client is not None else "-",
-                    decision.budget_s if decision.budget_s is not None else "na",
-                    release.window_wall_s
-                    if release.window_wall_s is not None
-                    else "na",
-                    release.spent_after_s
-                    if release.spent_after_s is not None
-                    else "na",
-                    release.remaining_after_s
-                    if release.remaining_after_s is not None
-                    else "na",
-                )
+            try:
+                if decision.effective_wait_s > 0:
+                    state, waited = _wait_for_exit(job_id, decision.effective_wait_s)
+                else:
+                    state, waited = jobs.job_state(job_id), 0.0
+            finally:
+                release = lease.release()
+                if release.window_closed:
+                    log.info(
+                        "event=blocking_window_closed call=%s turn=%s client=%s "
+                        "blocking_budget_s=%s blocking_window_wall_s=%s "
+                        "blocking_spent_after_s=%s blocking_remaining_after_s=%s",
+                        current_call.get(),
+                        turn if turn is not None else "-",
+                        client if client is not None else "-",
+                        decision.budget_s if decision.budget_s is not None else "na",
+                        release.window_wall_s
+                        if release.window_wall_s is not None
+                        else "na",
+                        release.spent_after_s
+                        if release.spent_after_s is not None
+                        else "na",
+                        release.remaining_after_s
+                        if release.remaining_after_s is not None
+                        else "na",
+                    )
+        except BaseException:
+            _log_wait_exception_timing(
+                job_id=job_id,
+                requested_wait_s=requested_wait_s,
+                bounded_wait_s=bounded_wait_s,
+                decision=decision,
+                waited_s=round(_PERF_COUNTER() - wait_started, 3),
+                state_start=state_start,
+                impl_start=impl_start,
+                dispatch_ms=dispatch_ms,
+                turn=turn,
+                client=client,
+                log_bytes=state_before_wait["log_bytes"],
+            )
+            raise
     else:
         waited = 0.0
 
