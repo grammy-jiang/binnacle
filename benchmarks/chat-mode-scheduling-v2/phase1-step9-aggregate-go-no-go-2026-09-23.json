@@ -1,0 +1,721 @@
+{
+  "categories": {
+    "development_recovery_R8_R9": {
+      "A": {
+        "completed_median_tool_calls": 7.0,
+        "completed_median_tool_result_tokens": 1054.0,
+        "completed_median_wall_s": 58.87,
+        "completed_n": 6,
+        "correct": 6,
+        "interruptions": 0,
+        "manual_continuations_median": 0.0,
+        "manual_continuations_p90": 0,
+        "manual_continuations_total": 0,
+        "median_wall_s": 58.87,
+        "n": 6,
+        "premature_handoffs": 0,
+        "same_prompt": 6
+      },
+      "B": {
+        "completed_median_tool_calls": 6,
+        "completed_median_tool_result_tokens": 850,
+        "completed_median_wall_s": 39.77,
+        "completed_n": 5,
+        "correct": 5,
+        "interruptions": 1,
+        "manual_continuations_median": 0.0,
+        "manual_continuations_p90": 0,
+        "manual_continuations_total": 0,
+        "median_wall_s": 48.7865,
+        "n": 6,
+        "premature_handoffs": 0,
+        "same_prompt": 5
+      },
+      "median_wall_improvement_b_vs_a_pct": 17.13,
+      "paired_median_improvement_pct": 1.44,
+      "pairs": {
+        "b_faster": 3,
+        "median_b_over_a": 0.985555,
+        "n": 6
+      }
+    },
+    "executed_long_job_R3_R5_R7": {
+      "A": {
+        "completed_median_tool_calls": 8.0,
+        "completed_median_tool_result_tokens": 1500.0,
+        "completed_median_wall_s": 52.58,
+        "completed_n": 6,
+        "correct": 7,
+        "interruptions": 2,
+        "manual_continuations_median": 0,
+        "manual_continuations_p90": 1,
+        "manual_continuations_total": 1,
+        "median_wall_s": 67.93,
+        "n": 9,
+        "premature_handoffs": 1,
+        "same_prompt": 6
+      },
+      "B": {
+        "completed_median_tool_calls": 6.0,
+        "completed_median_tool_result_tokens": 1208.5,
+        "completed_median_wall_s": 53.9105,
+        "completed_n": 6,
+        "correct": 6,
+        "interruptions": 3,
+        "manual_continuations_median": 0,
+        "manual_continuations_p90": 0,
+        "manual_continuations_total": 0,
+        "median_wall_s": 110.7,
+        "n": 9,
+        "premature_handoffs": 0,
+        "same_prompt": 6
+      },
+      "median_wall_improvement_b_vs_a_pct": -62.96,
+      "paired_median_improvement_pct": 11.0,
+      "pairs": {
+        "b_faster": 5,
+        "median_b_over_a": 0.89001,
+        "n": 9
+      }
+    },
+    "read_heavy_R1_R2_R11": {
+      "A": {
+        "completed_median_tool_calls": 10,
+        "completed_median_tool_result_tokens": 1320,
+        "completed_median_wall_s": 39.871,
+        "completed_n": 9,
+        "correct": 9,
+        "interruptions": 0,
+        "manual_continuations_median": 0,
+        "manual_continuations_p90": 0,
+        "manual_continuations_total": 0,
+        "median_wall_s": 39.871,
+        "n": 9,
+        "premature_handoffs": 0,
+        "same_prompt": 9
+      },
+      "B": {
+        "completed_median_tool_calls": 10,
+        "completed_median_tool_result_tokens": 1320,
+        "completed_median_wall_s": 31.244,
+        "completed_n": 7,
+        "correct": 7,
+        "interruptions": 2,
+        "manual_continuations_median": 0,
+        "manual_continuations_p90": 0,
+        "manual_continuations_total": 0,
+        "median_wall_s": 33.02,
+        "n": 9,
+        "premature_handoffs": 0,
+        "same_prompt": 7
+      },
+      "median_wall_improvement_b_vs_a_pct": 17.18,
+      "paired_median_improvement_pct": 9.48,
+      "pairs": {
+        "b_faster": 6,
+        "median_b_over_a": 0.905178,
+        "n": 9
+      }
+    }
+  },
+  "completed_trial_efficiency": {
+    "A": {
+      "median_tool_calls": 8,
+      "median_tool_result_tokens": 1275,
+      "n": 21,
+      "total_tool_calls": 166,
+      "total_tool_result_tokens": 27738
+    },
+    "B": {
+      "median_tool_calls": 7.0,
+      "median_tool_result_tokens": 1249.0,
+      "n": 18,
+      "total_tool_calls": 134,
+      "total_tool_result_tokens": 22279
+    }
+  },
+  "date": "2026-09-23",
+  "decision": {
+    "merge_or_deploy_v2": "NO-GO",
+    "phase2_nonproduction_experiment": "GO",
+    "reason": "Instruction-only B passes the Phase-1 mechanism/progression gate by showing a positive macro point estimate, fewer continuation handoffs, more read concurrency, and fewer long-barrier status calls; however it fails the full reliability, performance, overlap, and statistical gates."
+  },
+  "full_acceptance_gates_applied_as_diagnostic_to_B": {
+    "deterministic_correctness_100pct": {
+      "A_pct": 91.67,
+      "B_pass": false,
+      "B_pct": 75.0,
+      "target": 100.0
+    },
+    "eligible_overlap_ge_80pct": {
+      "B_pass": false,
+      "observed_B_median": 0.555556,
+      "observed_B_weighted": 0.589286,
+      "target": 0.8
+    },
+    "interruption_regression_le_2pp": {
+      "A_pct": 8.33,
+      "B_pass": false,
+      "B_pct": 25.0,
+      "regression_pp": 16.67,
+      "target_max_regression_pp": 2.0
+    },
+    "manual_continuation_median_p90_zero": {
+      "A": [
+        0.0,
+        0
+      ],
+      "B": [
+        0.0,
+        0
+      ],
+      "B_pass": true,
+      "target": "median=0,p90=0"
+    },
+    "no_premature_handoff": {
+      "B_pass": true,
+      "observed_B": 0,
+      "target": 0
+    },
+    "overall_median_wall_ge_20pct_faster": {
+      "B_pass": false,
+      "observed_pct": 8.08,
+      "target": 20.0
+    },
+    "paired_bootstrap_upper_lt_1": {
+      "B_pass": false,
+      "observed_95pct_ci": [
+        0.75647,
+        1.13321
+      ],
+      "target_upper_bound": 1.0
+    },
+    "read_heavy_median_ge_30pct_faster": {
+      "B_pass": false,
+      "observed_pct": 17.18,
+      "target": 30.0
+    },
+    "same_prompt_completion_ge_95pct": {
+      "A_pct": 87.5,
+      "B_pass": false,
+      "B_pct": 75.0,
+      "target": 95.0
+    }
+  },
+  "macro_overall": {
+    "A": {
+      "completed_median_tool_calls": 8,
+      "completed_median_tool_result_tokens": 1275,
+      "completed_median_wall_s": 47.992,
+      "completed_n": 21,
+      "correct": 22,
+      "interruptions": 2,
+      "manual_continuations_median": 0.0,
+      "manual_continuations_p90": 0,
+      "manual_continuations_total": 1,
+      "median_wall_s": 49.8165,
+      "n": 24,
+      "premature_handoffs": 1,
+      "same_prompt": 21
+    },
+    "B": {
+      "completed_median_tool_calls": 7.0,
+      "completed_median_tool_result_tokens": 1249.0,
+      "completed_median_wall_s": 41.8295,
+      "completed_n": 18,
+      "correct": 18,
+      "interruptions": 6,
+      "manual_continuations_median": 0.0,
+      "manual_continuations_p90": 0,
+      "manual_continuations_total": 0,
+      "median_wall_s": 45.7895,
+      "n": 24,
+      "premature_handoffs": 0,
+      "same_prompt": 18
+    },
+    "median_wall_improvement_b_vs_a_pct": 8.08,
+    "paired_median_improvement_pct": 8.27,
+    "pairs": {
+      "b_faster": 14,
+      "median_b_over_a": 0.917258,
+      "n": 24
+    }
+  },
+  "micro": {
+    "acceptance": {
+      "all_valid_trials_correct": true,
+      "all_valid_trials_no_duplicates": true,
+      "all_valid_trials_same_prompt": true,
+      "all_valid_trials_uninterrupted": true,
+      "m3_a_sliding_refill_hard_gate": true,
+      "m3_b_sliding_refill_hard_gate": true
+    },
+    "pairs": {
+      "M1": {
+        "idle_delta_s_b_minus_a": 0.0,
+        "overlap_ratio_delta_b_minus_a": 0.0,
+        "peak_delta_b_minus_a": 0,
+        "wall_ratio_b_over_a": 1.239432
+      },
+      "M2": {
+        "idle_delta_s_b_minus_a": 0.0,
+        "overlap_ratio_delta_b_minus_a": 0.25,
+        "peak_delta_b_minus_a": 2,
+        "wall_ratio_b_over_a": 1.055183
+      },
+      "M3": {
+        "idle_delta_s_b_minus_a": 0.106,
+        "overlap_ratio_delta_b_minus_a": -0.166666,
+        "peak_delta_b_minus_a": 0,
+        "wall_ratio_b_over_a": 1.138673
+      }
+    },
+    "status": "mechanism_pass_performance_inconclusive"
+  },
+  "next_phase_constraints": [
+    "Phase 2 remains design-branch only; do not deploy the server guard or B instructions.",
+    "Preserve A/B evidence selection rules and production isolation.",
+    "Add timeout provenance telemetry/classification before the Phase-4 live confirmatory run.",
+    "Phase 3 must replay 120/300/600-second guard candidates before live C trials.",
+    "Phase 4 C must satisfy the original hard gates; Phase-1 B results do not waive them."
+  ],
+  "paired_bootstrap": {
+    "ci95": [
+      0.75647,
+      1.13321
+    ],
+    "overall_median_b_over_a": 0.917258,
+    "resamples": 100000,
+    "seed": 20260923
+  },
+  "per_scenario": {
+    "R1": {
+      "A": {
+        "completed_median_tool_calls": 7,
+        "completed_median_tool_result_tokens": 1275,
+        "completed_median_wall_s": 40.693,
+        "completed_n": 3,
+        "correct": 3,
+        "interruptions": 0,
+        "manual_continuations_median": 0,
+        "manual_continuations_p90": 0,
+        "manual_continuations_total": 0,
+        "median_wall_s": 40.693,
+        "n": 3,
+        "premature_handoffs": 0,
+        "same_prompt": 3
+      },
+      "B": {
+        "completed_median_tool_calls": 7,
+        "completed_median_tool_result_tokens": 1261,
+        "completed_median_wall_s": 31.244,
+        "completed_n": 3,
+        "correct": 3,
+        "interruptions": 0,
+        "manual_continuations_median": 0,
+        "manual_continuations_p90": 0,
+        "manual_continuations_total": 0,
+        "median_wall_s": 31.244,
+        "n": 3,
+        "premature_handoffs": 0,
+        "same_prompt": 3
+      },
+      "median_wall_improvement_b_vs_a_pct": 23.22,
+      "paired_median_improvement_pct": 21.45,
+      "pairs": {
+        "b_faster": 3,
+        "median_b_over_a": 0.785484,
+        "n": 3
+      }
+    },
+    "R11": {
+      "A": {
+        "completed_median_tool_calls": 11,
+        "completed_median_tool_result_tokens": 1982,
+        "completed_median_wall_s": 39.871,
+        "completed_n": 3,
+        "correct": 3,
+        "interruptions": 0,
+        "manual_continuations_median": 0,
+        "manual_continuations_p90": 0,
+        "manual_continuations_total": 0,
+        "median_wall_s": 39.871,
+        "n": 3,
+        "premature_handoffs": 0,
+        "same_prompt": 3
+      },
+      "B": {
+        "completed_median_tool_calls": 11.0,
+        "completed_median_tool_result_tokens": 2006.5,
+        "completed_median_wall_s": 38.4545,
+        "completed_n": 2,
+        "correct": 2,
+        "interruptions": 1,
+        "manual_continuations_median": 0,
+        "manual_continuations_p90": 0,
+        "manual_continuations_total": 0,
+        "median_wall_s": 43.889,
+        "n": 3,
+        "premature_handoffs": 0,
+        "same_prompt": 2
+      },
+      "median_wall_improvement_b_vs_a_pct": -10.08,
+      "paired_median_improvement_pct": -10.08,
+      "pairs": {
+        "b_faster": 1,
+        "median_b_over_a": 1.100775,
+        "n": 3
+      }
+    },
+    "R2": {
+      "A": {
+        "completed_median_tool_calls": 10,
+        "completed_median_tool_result_tokens": 1320,
+        "completed_median_wall_s": 36.197,
+        "completed_n": 3,
+        "correct": 3,
+        "interruptions": 0,
+        "manual_continuations_median": 0,
+        "manual_continuations_p90": 0,
+        "manual_continuations_total": 0,
+        "median_wall_s": 36.197,
+        "n": 3,
+        "premature_handoffs": 0,
+        "same_prompt": 3
+      },
+      "B": {
+        "completed_median_tool_calls": 10.0,
+        "completed_median_tool_result_tokens": 1300.0,
+        "completed_median_wall_s": 25.4845,
+        "completed_n": 2,
+        "correct": 2,
+        "interruptions": 1,
+        "manual_continuations_median": 0,
+        "manual_continuations_p90": 0,
+        "manual_continuations_total": 0,
+        "median_wall_s": 27.364,
+        "n": 3,
+        "premature_handoffs": 0,
+        "same_prompt": 2
+      },
+      "median_wall_improvement_b_vs_a_pct": 24.4,
+      "paired_median_improvement_pct": 9.71,
+      "pairs": {
+        "b_faster": 2,
+        "median_b_over_a": 0.902919,
+        "n": 3
+      }
+    },
+    "R3": {
+      "A": {
+        "completed_median_tool_calls": 11.0,
+        "completed_median_tool_result_tokens": 1884.5,
+        "completed_median_wall_s": 51.3735,
+        "completed_n": 2,
+        "correct": 2,
+        "interruptions": 0,
+        "manual_continuations_median": 0,
+        "manual_continuations_p90": 1,
+        "manual_continuations_total": 1,
+        "median_wall_s": 54.137,
+        "n": 3,
+        "premature_handoffs": 1,
+        "same_prompt": 2
+      },
+      "B": {
+        "completed_median_tool_calls": 11.0,
+        "completed_median_tool_result_tokens": 1839.0,
+        "completed_median_wall_s": 53.9105,
+        "completed_n": 2,
+        "correct": 2,
+        "interruptions": 1,
+        "manual_continuations_median": 0,
+        "manual_continuations_p90": 0,
+        "manual_continuations_total": 0,
+        "median_wall_s": 61.653,
+        "n": 3,
+        "premature_handoffs": 0,
+        "same_prompt": 2
+      },
+      "median_wall_improvement_b_vs_a_pct": -13.88,
+      "paired_median_improvement_pct": -26.83,
+      "pairs": {
+        "b_faster": 1,
+        "median_b_over_a": 1.268319,
+        "n": 3
+      }
+    },
+    "R5": {
+      "A": {
+        "completed_median_tool_calls": 2.0,
+        "completed_median_tool_result_tokens": 333.0,
+        "completed_median_wall_s": 49.004,
+        "completed_n": 2,
+        "correct": 2,
+        "interruptions": 1,
+        "manual_continuations_median": 0,
+        "manual_continuations_p90": 0,
+        "manual_continuations_total": 0,
+        "median_wall_s": 51.023,
+        "n": 3,
+        "premature_handoffs": 0,
+        "same_prompt": 2
+      },
+      "B": {
+        "completed_median_tool_calls": 2.0,
+        "completed_median_tool_result_tokens": 336.0,
+        "completed_median_wall_s": 45.106,
+        "completed_n": 2,
+        "correct": 2,
+        "interruptions": 1,
+        "manual_continuations_median": 0,
+        "manual_continuations_p90": 0,
+        "manual_continuations_total": 0,
+        "median_wall_s": 45.411,
+        "n": 3,
+        "premature_handoffs": 0,
+        "same_prompt": 2
+      },
+      "median_wall_improvement_b_vs_a_pct": 11.0,
+      "paired_median_improvement_pct": 11.0,
+      "pairs": {
+        "b_faster": 2,
+        "median_b_over_a": 0.89001,
+        "n": 3
+      }
+    },
+    "R7": {
+      "A": {
+        "completed_median_tool_calls": 8.0,
+        "completed_median_tool_result_tokens": 1669.0,
+        "completed_median_wall_s": 191.269,
+        "completed_n": 2,
+        "correct": 3,
+        "interruptions": 1,
+        "manual_continuations_median": 0,
+        "manual_continuations_p90": 0,
+        "manual_continuations_total": 0,
+        "median_wall_s": 210.746,
+        "n": 3,
+        "premature_handoffs": 0,
+        "same_prompt": 2
+      },
+      "B": {
+        "completed_median_tool_calls": 6.0,
+        "completed_median_tool_result_tokens": 1208.5,
+        "completed_median_wall_s": 158.6315,
+        "completed_n": 2,
+        "correct": 2,
+        "interruptions": 1,
+        "manual_continuations_median": 0,
+        "manual_continuations_p90": 0,
+        "manual_continuations_total": 0,
+        "median_wall_s": 159.423,
+        "n": 3,
+        "premature_handoffs": 0,
+        "same_prompt": 2
+      },
+      "median_wall_improvement_b_vs_a_pct": 24.35,
+      "paired_median_improvement_pct": 24.35,
+      "pairs": {
+        "b_faster": 2,
+        "median_b_over_a": 0.75647,
+        "n": 3
+      }
+    },
+    "R8": {
+      "A": {
+        "completed_median_tool_calls": 5,
+        "completed_median_tool_result_tokens": 736,
+        "completed_median_wall_s": 42.896,
+        "completed_n": 3,
+        "correct": 3,
+        "interruptions": 0,
+        "manual_continuations_median": 0,
+        "manual_continuations_p90": 0,
+        "manual_continuations_total": 0,
+        "median_wall_s": 42.896,
+        "n": 3,
+        "premature_handoffs": 0,
+        "same_prompt": 3
+      },
+      "B": {
+        "completed_median_tool_calls": 5,
+        "completed_median_tool_result_tokens": 727,
+        "completed_median_wall_s": 36.934,
+        "completed_n": 3,
+        "correct": 3,
+        "interruptions": 0,
+        "manual_continuations_median": 0,
+        "manual_continuations_p90": 0,
+        "manual_continuations_total": 0,
+        "median_wall_s": 36.934,
+        "n": 3,
+        "premature_handoffs": 0,
+        "same_prompt": 3
+      },
+      "median_wall_improvement_b_vs_a_pct": 13.9,
+      "paired_median_improvement_pct": 30.41,
+      "pairs": {
+        "b_faster": 2,
+        "median_b_over_a": 0.695916,
+        "n": 3
+      }
+    },
+    "R9": {
+      "A": {
+        "completed_median_tool_calls": 8,
+        "completed_median_tool_result_tokens": 1257,
+        "completed_median_wall_s": 62.198,
+        "completed_n": 3,
+        "correct": 3,
+        "interruptions": 0,
+        "manual_continuations_median": 0,
+        "manual_continuations_p90": 0,
+        "manual_continuations_total": 0,
+        "median_wall_s": 62.198,
+        "n": 3,
+        "premature_handoffs": 0,
+        "same_prompt": 3
+      },
+      "B": {
+        "completed_median_tool_calls": 8.5,
+        "completed_median_tool_result_tokens": 1322.5,
+        "completed_median_wall_s": 57.8325,
+        "completed_n": 2,
+        "correct": 2,
+        "interruptions": 1,
+        "manual_continuations_median": 0,
+        "manual_continuations_p90": 0,
+        "manual_continuations_total": 0,
+        "median_wall_s": 57.862,
+        "n": 3,
+        "premature_handoffs": 0,
+        "same_prompt": 2
+      },
+      "median_wall_improvement_b_vs_a_pct": 6.97,
+      "paired_median_improvement_pct": -4.18,
+      "pairs": {
+        "b_faster": 1,
+        "median_b_over_a": 1.04177,
+        "n": 3
+      }
+    }
+  },
+  "phase1_progression_gate": {
+    "confidence_warning": "overall paired bootstrap CI includes 1.00 and observed UX reliability regressed",
+    "design_rule": "continue only if B improves the macro suite; server guard cannot fix poor model scheduling",
+    "macro_direct_median_improvement_pct": 8.08,
+    "macro_paired_median_improvement_pct": 8.27,
+    "manual_continuations_A_total": 1,
+    "manual_continuations_B_total": 0,
+    "mechanism_evidence": {
+      "M3_A_sliding_refill_hard_gate": true,
+      "M3_B_sliding_refill_hard_gate": true,
+      "R7_completed_median_tool_calls_A": 8.0,
+      "R7_completed_median_tool_calls_B": 6.0,
+      "micro_step_1_2": "mechanism_pass_performance_inconclusive",
+      "read_overlap_median_A": 0.4,
+      "read_overlap_median_B": 0.555556,
+      "read_peak_median_A": 2,
+      "read_peak_median_B": 3
+    },
+    "pairs_b_faster": 14,
+    "pairs_total": 24,
+    "pass_for_nonproduction_phase2_experiment": true,
+    "premature_handoffs_A": 1,
+    "premature_handoffs_B": 0
+  },
+  "reliability": {
+    "A_interruption_pct": 8.33,
+    "A_same_prompt_pct": 87.5,
+    "B_interruption_pct": 25.0,
+    "B_same_prompt_pct": 75.0,
+    "interpretation": "The dominant unresolved failure mode is submitted ChatGPT/browser/turn timeout, including trials where no useful MCP work began. A server-side blocking guard cannot directly repair pre-MCP submission/turn failures.",
+    "interruption_delta_B_minus_A_pp": 16.67,
+    "same_prompt_delta_B_minus_A_pp": -12.5
+  },
+  "scheduling": {
+    "A": {
+      "avoidable_idle_wall_p90_s": 0.0,
+      "completed_trials": 9,
+      "median_eligible_overlap_ratio": 0.4,
+      "median_read_only_peak_inflight": 2,
+      "weighted_eligible_overlap_ratio": 0.28
+    },
+    "B": {
+      "avoidable_idle_wall_p90_s": 0.0,
+      "completed_trials": 7,
+      "median_eligible_overlap_ratio": 0.555556,
+      "median_read_only_peak_inflight": 3,
+      "weighted_eligible_overlap_ratio": 0.589286
+    }
+  },
+  "schema_version": 1,
+  "scope": {
+    "deferred_not_scored_in_phase1": [
+      "R4",
+      "R6",
+      "R10",
+      "R12"
+    ],
+    "macro_pairs": 24,
+    "macro_scenarios": [
+      "R1",
+      "R11",
+      "R2",
+      "R3",
+      "R5",
+      "R7",
+      "R8",
+      "R9"
+    ],
+    "macro_trials_per_arm": 24,
+    "micro_scenarios": [
+      "M1",
+      "M2",
+      "M3"
+    ]
+  },
+  "source_head": "21fa80b7960340ea1aec36d037980bb9ade8fb55",
+  "sources": [
+    {
+      "file": "phase1-step3-read-heavy-ab-2026-09-23.json",
+      "sha256": "bfb2a31f79a20ac6a292d1ec095a05d7dd462bdf26d22b1922bc2389cb253190",
+      "status": "positive_signal_targets_not_met",
+      "step": "1.3"
+    },
+    {
+      "file": "phase1-step4-background-barrier-ab-2026-09-23.json",
+      "sha256": "835ad53b639ed53a67bb7731e05cf4075b641449da56d7a5ac267f73b7988d11",
+      "status": "mixed_result_ux_targets_not_met",
+      "step": "1.4"
+    },
+    {
+      "file": "phase1-step5-development-journey-ab-2026-09-23.json",
+      "sha256": "1e2257a98e3c13d809f32134483a6ccaf1c1bf8fd81048099230e2b8a28f021d",
+      "status": "complete_positive_signal",
+      "step": "1.5"
+    },
+    {
+      "file": "phase1-step6-recovery-journey-ab-2026-09-23.json",
+      "sha256": "c6438ce993dd73e495379beeda3a3dea7cb1331a7c5ad678c00481bfed6b576e",
+      "status": "complete_positive_signal_with_reliability_warning",
+      "step": "1.6"
+    },
+    {
+      "file": "phase1-step7-multiround-planning-ab-2026-09-23.json",
+      "sha256": "8703003bf2bd1c57f098d869e41dd9ed8eaa9bc574cc691af582bd0b6e50909f",
+      "status": "mechanism_positive_reliability_target_not_met",
+      "step": "1.7"
+    },
+    {
+      "file": "phase1-step8-repeated-dependency-barrier-ab-2026-09-23.json",
+      "sha256": "98a3744b0deb5b441e892d34d025bb17d45d9e043ca54805a50afe9524e71a6f",
+      "status": "performance_target_met_reliability_target_not_met",
+      "step": "1.8"
+    }
+  ],
+  "status": "conditional_go_phase2_no_go_merge_or_deploy",
+  "step": "1.9"
+}

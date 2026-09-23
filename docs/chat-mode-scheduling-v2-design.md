@@ -1,6 +1,6 @@
 # Chat mode scheduling v2 — design
 
-Status: design ready for implementation and controlled A/B; no production change.
+Status: Phase 1 complete; conditional GO to Phase 2; no production change.
 
 Evidence source: `docs/chat-mode-scheduling-final-2026-09-23.md`, copied from
 the completed `analysis/chat-async-probe` investigation at commit `352d906`.
@@ -312,6 +312,17 @@ read/mixed workloads and reduce continuation prompts.
 
 If B does not improve the macro suite, stop. A server guard cannot fix poor
 model scheduling.
+
+Phase-1 outcome (2026-09-23): **conditional GO to Phase 2, no-go for
+merge/deploy**. Across 24 canonical macro pairs B showed an 8.1% lower direct
+median wall time, an 8.3% paired-median improvement, zero premature handoffs
+and stronger read/long-barrier scheduling mechanics. However B same-prompt
+completion was only 75%, the interruption rate was 25%, the >=20% overall and
+>=30% read-heavy performance targets were not met, and the paired bootstrap
+95% interval included regression. Phase 2 may therefore proceed only as a
+non-production experiment; all original Phase-4 production gates remain in
+force. See
+`benchmarks/chat-mode-scheduling-v2/phase1-step9-aggregate-go-no-go-2026-09-23.md`.
 
 ### Phase 2 — blocking-wall guard
 
