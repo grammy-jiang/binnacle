@@ -1,8 +1,10 @@
 # Chat mode asynchronous MCP orchestration experiment
 
-**Status:** experiment design; isolated branch only
+**Status:** complete; isolated branch only
 **Scope:** ChatGPT **Chat mode** using the real Raspberry Pi MCP connector
 **Non-goals:** Work mode, API-only behavior, generic workflow engines, production feature design
+
+Final synthesis: `docs/chat-mode-scheduling-final-2026-09-23.md`.
 
 ## 1. Question
 

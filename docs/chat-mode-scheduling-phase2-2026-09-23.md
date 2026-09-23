@@ -1,5 +1,7 @@
 # ChatGPT Chat mode MCP scheduling - phase 2 results
 
+**Final synthesis:** see `chat-mode-scheduling-final-2026-09-23.md`. It supersedes provisional scheduler wording in this intermediate report.
+
 > **Refinement after this report:** a later unequal-duration production test
 > showed a roughly five-wide **sliding in-flight window**, not a rigid
 > five-call batch. Independent calls with already-known arguments may refill

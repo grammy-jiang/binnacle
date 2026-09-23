@@ -1,5 +1,7 @@
 # ChatGPT Chat mode asynchronous MCP orchestration — results
 
+**Final synthesis:** see `chat-mode-scheduling-final-2026-09-23.md`. It supersedes provisional scheduler wording in this intermediate report.
+
 > **Later refinement:** phase-2 production controls showed that the read-only
 > scheduler is not a rigid whole-batch barrier. It maintains roughly five
 > independent calls in flight and may refill a freed slot while another slow
