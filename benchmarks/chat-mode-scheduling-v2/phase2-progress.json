@@ -6,8 +6,8 @@
   "worktree": "/home/grammy-jiang/Projects/binnacle-chat-blocking-wall-guard",
   "source_branch": "design/chat-mode-scheduling-v2",
   "phase1_evidence_commit": "cc1b014",
-  "last_completed_step": "2.10",
-  "next_step": "2.11",
+  "last_completed_step": "2.11",
+  "next_step": "2.12",
   "baseline": {
     "design_source_head": "e9c04728e5ac583a8e5d3b991cb01309de36ef82",
     "production": {
@@ -279,9 +279,18 @@
       ]
     },
     "2.11": {
-      "status": "not_started",
-      "tests": [],
-      "notes": []
+      "status": "complete",
+      "tests": [
+        "uv run pytest -q tests/integration/test_job_status_blocking_guard_concurrency.py -> 7 passed in 17.41s",
+        "Exact Step-2.11 matrix -> 42 passed in 20.34s",
+        "Step-2.11 overhead benchmark -> 3 x 100000 iterations; median p95 0.006445 ms, median p99 0.007259 ms; design targets passed"
+      ],
+      "notes": [
+        "Added synchronized real-job concurrency coverage for two/five simultaneous waits, a second overlapping wave sharing the original deadline, different jobs sharing one turn budget, independent concurrent turns, and one turn exhausting while another retains budget.",
+        "Added reload-semantics coverage by replacing job_status.blocking_wall_tracker with a fresh process-local tracker while a durable sleep fixture remained running; the job stayed observable and stoppable and only ephemeral budget state was reset.",
+        "Added scripts/benchmark_blocking_wall_guard.py and dated JSON/Markdown evidence with three independent 100000-iteration Pi runs; no CI wall-clock threshold was added.",
+        "No production runtime source changes were required by Step 2.11; the existing tracker/job_status implementation satisfied the new concurrency and reload cases."
+      ]
     },
     "2.12": {
       "status": "not_started",
