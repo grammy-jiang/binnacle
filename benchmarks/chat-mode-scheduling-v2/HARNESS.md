@@ -77,6 +77,11 @@ For this reason:
 - Project get/set operations have a bounded outer retry around the helper's own
   session-level retry;
 - exact UUID chat deletion has the same bounded outer retry;
+- browser submission may retry once only when neither a conversation URL nor
+  chat-timing evidence exists, proving the previous attempt failed before a
+  ChatGPT turn was submitted;
+- once Enter timing or a conversation URL exists, browser submission is never
+  automatically retried because that could duplicate a real ChatGPT turn;
 - retries never broaden selectors or fall back to title matching;
 - if retries are exhausted, the trial fails and the exact tracked chat remains
   in the ledger for explicit recovery.

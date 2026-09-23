@@ -1,0 +1,328 @@
+{
+  "R1": {
+    "A": {
+      "overlap_ratio_median": 0.5,
+      "peak_median": 3,
+      "tokens_median": 1275,
+      "tool_calls_median": 7,
+      "wall_mean_s": 38.708,
+      "wall_median_s": 40.693
+    },
+    "B": {
+      "overlap_ratio_median": 0.5,
+      "peak_median": 3,
+      "tokens_median": 1261,
+      "tool_calls_median": 7,
+      "wall_mean_s": 30.829,
+      "wall_median_s": 31.244
+    },
+    "all_correct": true,
+    "all_same_prompt": true,
+    "duplicates": 0,
+    "interruptions": 0,
+    "manual_continuations": 0,
+    "n_pairs": 3,
+    "paired_median_speedup_pct": 21.45,
+    "paired_wall_ratio_median": 0.785484,
+    "paired_wall_ratios_b_over_a": [
+      0.785484,
+      0.948541,
+      0.684835
+    ]
+  },
+  "R2": {
+    "A": {
+      "overlap_ratio_median": 0.5,
+      "peak_median": 3,
+      "tokens_median": 1310,
+      "tool_calls_median": 10,
+      "wall_mean_s": 39.798,
+      "wall_median_s": 36.197
+    },
+    "B": {
+      "overlap_ratio_median": 0.6,
+      "peak_median": 4,
+      "tokens_median": 1320,
+      "tool_calls_median": 10,
+      "wall_mean_s": 28.569,
+      "wall_median_s": 27.364
+    },
+    "all_correct": true,
+    "all_same_prompt": true,
+    "duplicates": 0,
+    "interruptions": 0,
+    "manual_continuations": 0,
+    "n_pairs": 3,
+    "paired_median_speedup_pct": 24.4,
+    "paired_wall_ratio_median": 0.755974,
+    "paired_wall_ratios_b_over_a": [
+      0.540215,
+      0.755974,
+      0.920778
+    ]
+  },
+  "combined_read_heavy": {
+    "A": {
+      "overlap_ratio_median": 0.5,
+      "peak_median": 3.0,
+      "tokens_median": 1296.5,
+      "tool_calls_median": 8.5,
+      "wall_mean_s": 39.253,
+      "wall_median_s": 38.445
+    },
+    "B": {
+      "overlap_ratio_median": 0.55,
+      "peak_median": 3.5,
+      "tokens_median": 1305.0,
+      "tool_calls_median": 8.5,
+      "wall_mean_s": 29.699,
+      "wall_median_s": 29.556
+    },
+    "all_correct": true,
+    "all_same_prompt": true,
+    "duplicates": 0,
+    "exploratory_bootstrap_95pct_ci_paired_median_ratio": [
+      0.612525,
+      0.93466
+    ],
+    "interruptions": 0,
+    "manual_continuations": 0,
+    "n_pairs": 6,
+    "paired_median_speedup_pct": 22.93,
+    "paired_wall_ratio_median": 0.770729,
+    "paired_wall_ratios_b_over_a": [
+      0.785484,
+      0.948541,
+      0.684835,
+      0.540215,
+      0.755974,
+      0.920778
+    ]
+  },
+  "decision": {
+    "correctness_gate": true,
+    "note": "Pilot shows clear wall-time improvement but does not meet the later confirmatory >=30% read-heavy target in both scenarios; Step 1.3 is exploratory and not the final acceptance gate.",
+    "read_heavy_pilot_target_30pct_met": false,
+    "same_prompt_gate": true,
+    "zero_interruptions": true,
+    "zero_manual_continuations": true
+  },
+  "excluded_infrastructure_attempts": [
+    {
+      "arm": "B",
+      "classification": "pre-conversation infrastructure failure",
+      "evidence": "Enter timing existed but no conversation URL, no R2 MCP calls, no backend conversation found",
+      "run_id": "r2-20260923T154139-d85ce7fb3f"
+    },
+    {
+      "arm": "B",
+      "classification": "pre-conversation infrastructure failure",
+      "evidence": "no chat timing, no URL, no conversation, no R2 MCP workload",
+      "run_id": "r2-20260923T155245-4c0910b09f"
+    },
+    {
+      "arm": "A",
+      "classification": "pre-conversation infrastructure failure",
+      "evidence": "no chat timing, no URL, no conversation, no R2 MCP workload",
+      "run_id": "r2-20260923T155720-eacac57cc2"
+    }
+  ],
+  "host_telemetry_note": "9/12 valid trials were launched through batches with pre/post load/temp/throttle snapshots; every recorded vcgencmd value was throttled=0x0.",
+  "schema_version": 1,
+  "status": "pilot_pass",
+  "step": "1.3",
+  "valid_trials": [
+    {
+      "arm": "A",
+      "correct": true,
+      "duplicates": 0,
+      "interrupted": false,
+      "manual_continuations": 0,
+      "overlap_ratio": 0.0,
+      "pair": 1,
+      "peak": 1,
+      "run_id": "r1-20260923T153114-e4eb49b0eb",
+      "same_prompt": true,
+      "scenario": "R1",
+      "tokens": 1303,
+      "tool_calls": 7,
+      "wall_s": 42.491
+    },
+    {
+      "arm": "B",
+      "correct": true,
+      "duplicates": 0,
+      "interrupted": false,
+      "manual_continuations": 0,
+      "overlap_ratio": 0.5,
+      "pair": 1,
+      "peak": 3,
+      "run_id": "r1-20260923T153237-67ac207754",
+      "same_prompt": true,
+      "scenario": "R1",
+      "tokens": 1221,
+      "tool_calls": 7,
+      "wall_s": 33.376
+    },
+    {
+      "arm": "A",
+      "correct": true,
+      "duplicates": 0,
+      "interrupted": false,
+      "manual_continuations": 0,
+      "overlap_ratio": 0.5,
+      "pair": 2,
+      "peak": 3,
+      "run_id": "r1-20260923T153537-509df2fe2f",
+      "same_prompt": true,
+      "scenario": "R1",
+      "tokens": 1275,
+      "tool_calls": 7,
+      "wall_s": 32.939
+    },
+    {
+      "arm": "B",
+      "correct": true,
+      "duplicates": 0,
+      "interrupted": false,
+      "manual_continuations": 0,
+      "overlap_ratio": 0.666667,
+      "pair": 2,
+      "peak": 4,
+      "run_id": "r1-20260923T153409-5cf19620a0",
+      "same_prompt": true,
+      "scenario": "R1",
+      "tokens": 1261,
+      "tool_calls": 7,
+      "wall_s": 31.244
+    },
+    {
+      "arm": "A",
+      "correct": true,
+      "duplicates": 0,
+      "interrupted": false,
+      "manual_continuations": 0,
+      "overlap_ratio": 0.5,
+      "pair": 3,
+      "peak": 3,
+      "run_id": "r1-20260923T153652-844d73ddfe",
+      "same_prompt": true,
+      "scenario": "R1",
+      "tokens": 1255,
+      "tool_calls": 7,
+      "wall_s": 40.693
+    },
+    {
+      "arm": "B",
+      "correct": true,
+      "duplicates": 0,
+      "interrupted": false,
+      "manual_continuations": 0,
+      "overlap_ratio": 0.5,
+      "pair": 3,
+      "peak": 3,
+      "run_id": "r1-20260923T153816-36c09bb6d7",
+      "same_prompt": true,
+      "scenario": "R1",
+      "tokens": 1469,
+      "tool_calls": 7,
+      "wall_s": 27.868
+    },
+    {
+      "arm": "A",
+      "correct": true,
+      "duplicates": 0,
+      "interrupted": false,
+      "manual_continuations": 0,
+      "overlap_ratio": 0.5,
+      "pair": 1,
+      "peak": 3,
+      "run_id": "r2-20260923T154756-58d6369649",
+      "same_prompt": true,
+      "scenario": "R2",
+      "tokens": 1320,
+      "tool_calls": 10,
+      "wall_s": 47.992
+    },
+    {
+      "arm": "B",
+      "correct": true,
+      "duplicates": 0,
+      "interrupted": false,
+      "manual_continuations": 0,
+      "overlap_ratio": 0.8,
+      "pair": 1,
+      "peak": 4,
+      "run_id": "r2-20260923T154558-c6729a5365",
+      "same_prompt": true,
+      "scenario": "R2",
+      "tokens": 1290,
+      "tool_calls": 10,
+      "wall_s": 25.926
+    },
+    {
+      "arm": "A",
+      "correct": true,
+      "duplicates": 0,
+      "interrupted": false,
+      "manual_continuations": 0,
+      "overlap_ratio": 0.6,
+      "pair": 2,
+      "peak": 3,
+      "run_id": "r2-20260923T154921-f527640167",
+      "same_prompt": true,
+      "scenario": "R2",
+      "tokens": 1290,
+      "tool_calls": 10,
+      "wall_s": 36.197
+    },
+    {
+      "arm": "B",
+      "correct": true,
+      "duplicates": 0,
+      "interrupted": false,
+      "manual_continuations": 0,
+      "overlap_ratio": 0.6,
+      "pair": 2,
+      "peak": 4,
+      "run_id": "r2-20260923T155047-71bebf98f7",
+      "same_prompt": true,
+      "scenario": "R2",
+      "tokens": 1320,
+      "tool_calls": 10,
+      "wall_s": 27.364
+    },
+    {
+      "arm": "A",
+      "correct": true,
+      "duplicates": 0,
+      "interrupted": false,
+      "manual_continuations": 0,
+      "overlap_ratio": 0.0,
+      "pair": 3,
+      "peak": 1,
+      "run_id": "r2-20260923T160016-3893bc4235",
+      "same_prompt": true,
+      "scenario": "R2",
+      "tokens": 1310,
+      "tool_calls": 10,
+      "wall_s": 35.205
+    },
+    {
+      "arm": "B",
+      "correct": true,
+      "duplicates": 0,
+      "interrupted": false,
+      "manual_continuations": 0,
+      "overlap_ratio": 0.5,
+      "pair": 3,
+      "peak": 3,
+      "run_id": "r2-20260923T155459-55cd6ee28a",
+      "same_prompt": true,
+      "scenario": "R2",
+      "tokens": 1350,
+      "tool_calls": 10,
+      "wall_s": 32.416
+    }
+  ]
+}

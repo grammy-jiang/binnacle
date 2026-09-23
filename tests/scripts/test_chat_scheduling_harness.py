@@ -355,3 +355,56 @@ def test_project_client_retries_transient_helper_failures(monkeypatch):
 
     assert chat.ProjectClient("project").instructions() == "baseline"
     assert attempts == 3
+
+
+def test_send_project_chat_retries_only_before_submission(monkeypatch, tmp_path):
+    attempts = 0
+    monkeypatch.setattr(chat.time, "sleep", lambda _: None)
+
+    def fake_run(args, **kwargs):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise subprocess.CalledProcessError(1, args)
+        return subprocess.CompletedProcess(
+            args,
+            0,
+            json.dumps({"url": "https://chatgpt.com/c/123", "reply": "DONE"}),
+            "",
+        )
+
+    monkeypatch.setattr(chat, "_run", fake_run)
+    result = chat.send_project_chat(
+        "g-p-project",
+        "prompt",
+        10,
+        tmp_path / "url.txt",
+        timing_file=tmp_path / "timing.json",
+    )
+
+    assert attempts == 2
+    assert result["submit_attempts"] == 2
+
+
+def test_send_project_chat_does_not_retry_after_enter_evidence(monkeypatch, tmp_path):
+    attempts = 0
+    timing = tmp_path / "timing.json"
+
+    def fake_run(args, **kwargs):
+        nonlocal attempts
+        attempts += 1
+        timing.write_text('{"status":"running"}')
+        raise subprocess.CalledProcessError(1, args)
+
+    monkeypatch.setattr(chat, "_run", fake_run)
+
+    with pytest.raises(subprocess.CalledProcessError):
+        chat.send_project_chat(
+            "g-p-project",
+            "prompt",
+            10,
+            tmp_path / "url.txt",
+            timing_file=timing,
+        )
+
+    assert attempts == 1
