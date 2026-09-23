@@ -405,7 +405,7 @@ def load_trial_trace(state_dir: Path, scenario: Scenario) -> TrialTrace:
         user_messages=user_messages,
         tools=tools,
         jobs=_job_intervals(raw_jobs, trial_job_ids, origin),
-        explicit_completed_nodes=completed,
+        explicit_completed_nodes=sorted(completed),
         final_files={
             str(key): str(value)
             for key, value in (fixture_snapshot.get("final_files") or {}).items()

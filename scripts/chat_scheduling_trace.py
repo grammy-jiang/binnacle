@@ -76,7 +76,7 @@ class TrialTrace(StrictModel):
     user_messages: int = Field(default=1, ge=0)
     tools: list[ToolInterval] = Field(default_factory=list)
     jobs: list[JobInterval] = Field(default_factory=list)
-    explicit_completed_nodes: set[str] = Field(default_factory=set)
+    explicit_completed_nodes: list[str] = Field(default_factory=list)
     relations: dict[str, bool] = Field(default_factory=dict)
     final_files: dict[str, str] = Field(default_factory=dict)
     mutation_scope_ok: bool | None = None
