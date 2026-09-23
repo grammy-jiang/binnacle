@@ -121,3 +121,31 @@ A final isolation check is required again immediately before commit.
     PHASE 2 COMPLETE
     PHASE 3 NOT STARTED
     production unchanged
+
+## Post-completion review closeout — 2.12a
+
+The independent Phase-2 review found one observability-only gap: a positive
+`job_status` wait exception released the active lease and emitted the
+`blocking_window_closed` union-accounting event, but it skipped the frozen
+`job_status_timing` decision record because the exception propagated before the
+normal end-of-function logger.
+
+This is now fixed. The exception path emits the same guard decision telemetry
+before re-raising, with `state=error` and `na` for read-log/process-scan stages
+that were not reached. Guard semantics, durable-job behavior, policy selection,
+and normal successful output are unchanged.
+
+Closeout validation:
+
+- focused telemetry/logging matrix: **36 passed in 6.28 s**;
+- full repository pytest: **1115 passed, 3 skipped in 123.66 s**;
+- module-size: **227 modules checked; 12 warnings; 0 errors**;
+- pre-commit before evidence update: **PASS**;
+- pre-commit after evidence update: **PASS**.
+
+The regression test was moved into a dedicated small error-path test module so
+no file exceeds the repository's 500-line hard gate.
+
+With this closeout patch, the previously reported exception-path telemetry gap
+is resolved. Phase 2 remains complete and ready for Phase 3 offline replay, but
+Phase 3 has not started and production remains undeployed.

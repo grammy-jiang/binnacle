@@ -164,5 +164,21 @@
     "phase_2": "complete",
     "phase_3": "not_started",
     "production": "unchanged"
+  },
+  "post_completion_review": {
+    "label": "2.12a",
+    "status": "complete",
+    "finding": "wait-exception policy timing telemetry gap",
+    "resolved": true,
+    "detail": "A positive job_status wait that raised already released the lease and logged blocking_window_closed, but skipped job_status_timing. The closeout patch now emits the frozen decision telemetry on that error path with state=error and na for stages not reached.",
+    "validation": {
+      "focused": "36 passed in 6.28s",
+      "full_pytest": "1115 passed, 3 skipped in 123.66s",
+      "module_size": "227 Python modules checked; 12 warnings; 0 errors",
+      "pre_commit_before_evidence_update": "PASS; all hooks passed",
+      "pre_commit_after_evidence_update": "PASS; all hooks passed"
+    },
+    "phase3_started": false,
+    "production_deployed": false
   }
 }

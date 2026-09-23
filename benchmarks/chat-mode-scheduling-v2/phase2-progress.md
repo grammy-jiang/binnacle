@@ -380,3 +380,31 @@ Step 2.12: **COMPLETE**
 Phase 2: **COMPLETE**
 Phase 3: **NOT STARTED**
 Next: **Phase 3 offline replay; not started by this step**
+
+## Post-completion review closeout — 2.12a
+
+An independent review after Step 2.12 found one narrow telemetry contract gap:
+when a positive `job_status` wait raised, the lease was released correctly and
+`blocking_window_closed` was emitted, but the exception propagated before the
+per-call `job_status_timing` record was written.
+
+The closeout patch preserves the existing guard/accounting behavior and adds the
+missing error-path timing record. It carries requested/bounded/effective/actual
+wait, budget/spent/remaining/active state, policy, exhaustion, turn, and client.
+Stages that were not reached are explicit `na`, and the terminal timing state is
+`state=error`.
+
+Validation:
+
+- focused telemetry/logging matrix: **PASS — 36 passed in 6.28 s**;
+- full repository pytest: **PASS — 1115 passed, 3 skipped in 123.66 s**;
+- module-size check: **227 modules, 12 warnings, 0 errors**;
+- pre-commit before closeout evidence update: **PASS — all hooks passed**;
+- pre-commit after closeout evidence update: **PASS — all hooks passed**.
+
+The exception regression test is isolated in
+`tests/integration/test_job_status_blocking_guard_errors.py`, keeping the main
+blocking-guard integration module below the 500-line hard gate.
+
+Phase 2 remains **COMPLETE**. Phase 3 remains **NOT STARTED**. No production
+deployment or blocking budget enablement occurred.
