@@ -9,7 +9,7 @@
 | 2.5 | COMPLETE |
 | 2.6 | COMPLETE |
 | 2.7 | COMPLETE |
-| 2.8 | NOT STARTED |
+| 2.8 | COMPLETE |
 | 2.9 | NOT STARTED |
 | 2.10 | NOT STARTED |
 | 2.11 | NOT STARTED |
@@ -20,8 +20,8 @@ Branch: `feature/chat-mode-blocking-wall-guard`
 Worktree: `/home/grammy-jiang/Projects/binnacle-chat-blocking-wall-guard`
 Source branch: `design/chat-mode-scheduling-v2`
 Phase-1 evidence commit: `cc1b014`
-Last completed step: **2.7**
-Next step: **2.8**
+Last completed step: **2.8**
+Next step: **2.9**
 
 ## Step 2.1 baseline freeze
 
@@ -264,3 +264,26 @@ Next step: **2.7 - Integrate the guard into `job_status`**
 
 Step 2.7: **COMPLETE**
 Next step: **2.8 - Structured output, summaries, and detailed telemetry**
+
+## Step 2.8 structured output, summaries, and detailed telemetry
+
+- Positive specific-job `job_status` results expose `wait_requested_s`,
+  `wait_effective_s`, `blocking_budget_s`, `blocking_remaining_s`,
+  `blocking_budget_exhausted`, and `blocking_policy`; zero-wait and
+  listing payloads keep their prior shape.
+- `job_status_timing` records requested/bounded/effective/actual waits and
+  budget/spent/remaining/active/policy/exhaustion/turn/client fields.
+- Final tracked releases emit `blocking_window_closed` from the same
+  `finally` path that releases the lease, including exception cleanup.
+- Still-running jobs with exhausted turn budget state explicitly that
+  further positive waits in the turn will be non-blocking; durable jobs are
+  not stopped.
+- `ToolLoggingMiddleware.RESULT_KEYS` lifts the six model-visible policy
+  fields; logging and run-command docs reflect the additive contract.
+- Removed the obsolete wait-once wording from `run_command` output,
+  `job_status` description, and Section 4 of `docs/tools/run_command.md`.
+- Exact Step-2.8 matrix: PASS - 77 passed in 40.33 s.
+- Repository defaults remain policy-disabled and production was not modified.
+
+Step 2.8: **COMPLETE**
+Next step: **2.9 - `binnacle stats` guard aggregation**

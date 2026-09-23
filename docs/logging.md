@@ -37,7 +37,8 @@ second.
 | `search_budget_hit` | `tools.search_text`; INFO | `call result_bytes result_budget_bytes returned_entries total_matches names_only` | 09-19 |
 | `search_exact` | exact `search_text`; INFO, one terminal summary after exact dispatch | `call outcome error_code strategy budget_outcome scope rg_calls auto_context context_requested effective_context` + phase timings + rg/collect/adaptive work counters + final result size/truncation | 09-22 |
 | `job_listing` | `tools.job_status`; INFO | `call recorded_jobs returned_jobs running_jobs history_limit command_preview_chars` | 09-19 |
-| `job_status_timing` | `tools.job_status`; INFO | `call job_id wait_requested_s dispatch_ms state_ms read_log_ms process_scan_ms impl_ms state processes log_bytes` | 09-19 |
+| `job_status_timing` | `tools.job_status`; INFO | `call job_id wait_requested_s wait_bounded_s wait_effective_s waited_s blocking_budget_s blocking_spent_before_s blocking_remaining_before_s blocking_active_before blocking_policy blocking_budget_exhausted turn client dispatch_ms state_ms read_log_ms process_scan_ms impl_ms state processes log_bytes` | 09-19; blocking-wall policy fields from 09-24 |
+| `blocking_window_closed` | `tools.job_status`; INFO when a tracked active window commits | `call turn client blocking_budget_s blocking_window_wall_s blocking_spent_after_s blocking_remaining_after_s` | 09-24 |
 | `run_command_dispatch` | `tools.run_command`; INFO, one per successful call | `call client job_id owner owner_instance requested_wait_s bounded_wait_s effective_wait_s background_arg auto_background handoff_reason owner_roundtrip_ms command_hash command_chars state` | 09-22 |
 | `run_command_dispatch_error` | `tools.run_command`; WARNING when owner dispatch fails | same policy/owner/timing fields plus `error_class` | 09-22 |
 | `job_owner_timing` | stable job manager; INFO | `op call job_id owner_instance`, start: `wait_s launch_ms impl_ms state`; stop: `impl_ms state` | 09-22 |
@@ -58,8 +59,10 @@ Lifted result keys (`RESULT_KEYS`, only when the tool's `structured_content`
 has them; list-valued `entries`, `jobs`, `processes` are logged as their
 length): `job_id state exit_code signal background_job truncated count
 total_lines start_line end_line lines_clipped kind output_bytes log_bytes quiet
-waited_s runtime_s last_output_age_s fits_in_one_call lossy next_start_line
-mime_guess mode replacements match first_change_line action previous_bytes bytes`.
+waited_s wait_requested_s wait_effective_s blocking_budget_s
+blocking_remaining_s blocking_budget_exhausted blocking_policy runtime_s
+last_output_age_s fits_in_one_call lossy next_start_line mime_guess mode
+replacements match first_change_line action previous_bytes bytes`.
 Booleans are `true`/`false`, absent values `null`; `is_error` keeps its 09-02
 spelling `True`/`False`. Full content, snippets, notes and paths are not lifted.
 
