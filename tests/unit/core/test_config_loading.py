@@ -27,6 +27,8 @@ def test_defaults_load_without_config_file(tmp_path, monkeypatch):
     assert settings.roots.extra_roots == (Path("/tmp"),)
     assert settings.jobs.keep_newest == 50
     assert settings.jobs.owner == "auto"
+    assert settings.jobs.blocking_wall_budget_s_by_client == {}
+    assert settings.jobs.blocking_wall_budget_for_client("openai-mcp") is None
     assert settings.run_command.auto_background_patterns == {}
     assert settings.telemetry.tokenizer.enabled is False
     assert settings.telemetry.tokenizer.encoding == "o200k_base"
@@ -60,6 +62,10 @@ extra_roots = ["/tmp", "/var/tmp"]
 keep_newest = 7
 listing_history_limit = 3
 
+[jobs.blocking_wall_budget_s_by_client]
+"openai-mcp" = 120
+"openai-mcp(ChatGPT)" = 90
+
 [run_command.auto_background_patterns]
 "openai-mcp" = ["pytest", "tox"]
 
@@ -92,6 +98,12 @@ adaptive_snippet_chars = 220
     assert settings.roots.extra_roots == (Path("/tmp"), Path("/var/tmp"))
     assert settings.jobs.keep_newest == 7
     assert settings.jobs.listing_history_limit == 3
+    assert settings.jobs.blocking_wall_budget_s_by_client == {
+        "openai-mcp": 120,
+        "openai-mcp(ChatGPT)": 90,
+    }
+    assert settings.jobs.blocking_wall_budget_for_client("openai-mcp") == 120
+    assert settings.jobs.blocking_wall_budget_for_client("openai-mcp(ChatGPT)") == 90
     assert settings.run_command.auto_background_patterns == {
         "openai-mcp": ("pytest", "tox")
     }
@@ -147,6 +159,10 @@ enabled = false
     monkeypatch.setenv(config.CONFIG_FILE_ENV, str(cfg))
     monkeypatch.setenv("BINNACLE_SERVE__PORT", "9456")
     monkeypatch.setenv("BINNACLE_JOBS__KEEP_NEWEST", "11")
+    monkeypatch.setenv(
+        "BINNACLE_JOBS__BLOCKING_WALL_BUDGET_S_BY_CLIENT",
+        '{"openai-mcp":120}',
+    )
     monkeypatch.setenv("BINNACLE_TELEMETRY__TOKENIZER__ENABLED", "true")
     monkeypatch.setenv("BINNACLE_INDEXED_CONTEXT__ENABLED", "true")
 
@@ -154,6 +170,7 @@ enabled = false
 
     assert settings.serve.port == 9456
     assert settings.jobs.keep_newest == 11
+    assert settings.jobs.blocking_wall_budget_s_by_client == {"openai-mcp": 120}
     assert settings.telemetry.tokenizer.enabled is True
     assert settings.indexed_context.enabled is True
 
@@ -282,6 +299,42 @@ def test_should_auto_background_covers_client_prefix_matching():
         settings.should_auto_background("openai-mcp(ChatGPT)", "python app.py") is False
     )
     assert settings.should_auto_background("unmatched-client", "pytest -q") is False
+
+
+@pytest.mark.parametrize("budget", [1, 3600])
+def test_jobs_blocking_wall_budget_accepts_boundaries(budget):
+    settings = config.JobsSettings(
+        blocking_wall_budget_s_by_client={"openai-mcp": budget}
+    )
+    assert settings.blocking_wall_budget_for_client("openai-mcp") == budget
+
+
+@pytest.mark.parametrize("budget", [0, 3601])
+def test_jobs_blocking_wall_budget_rejects_out_of_range_values(budget):
+    with pytest.raises(ValidationError, match="budgets must be in 1..3600"):
+        config.JobsSettings(blocking_wall_budget_s_by_client={"openai-mcp": budget})
+
+
+@pytest.mark.parametrize("client_prefix", ["", "   "])
+def test_jobs_blocking_wall_budget_rejects_blank_client_prefix(client_prefix):
+    with pytest.raises(ValidationError, match="keys must be non-empty"):
+        config.JobsSettings(blocking_wall_budget_s_by_client={client_prefix: 120})
+
+
+def test_jobs_blocking_wall_budget_uses_longest_matching_client_prefix():
+    settings = config.JobsSettings(
+        blocking_wall_budget_s_by_client={
+            "openai-mcp": 120,
+            "openai-mcp(ChatGPT)": 60,
+            "other": 30,
+        }
+    )
+    assert settings.blocking_wall_budget_for_client("openai-mcp") == 120
+    assert settings.blocking_wall_budget_for_client("openai-mcp-legacy") == 120
+    assert settings.blocking_wall_budget_for_client("openai-mcp(ChatGPT)") == 60
+    assert settings.blocking_wall_budget_for_client("openai-mcp(ChatGPT)/desktop") == 60
+    assert settings.blocking_wall_budget_for_client("unrelated-client") is None
+    assert settings.blocking_wall_budget_for_client(None) is None
 
 
 def test_match_auto_background_reports_rule_and_preserves_prefix_order():
