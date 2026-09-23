@@ -14,7 +14,13 @@ from fastmcp.tools.base import ToolResult
 from pydantic import Field
 
 from binnacle import jobs
-from binnacle.callctx import current_call, current_call_started
+from binnacle.blocking_wall_guard import BlockingWallTracker
+from binnacle.callctx import (
+    current_call,
+    current_call_started,
+    current_client,
+    current_turn,
+)
 from binnacle.config import get_settings
 
 QUIET_AFTER_S = get_settings().jobs.quiet_after_s
@@ -23,6 +29,7 @@ LISTING_COMMAND_PREVIEW_CHARS = get_settings().jobs.listing_command_preview_char
 WAIT_MAX = get_settings().run_command.wait_max_s
 log = logging.getLogger("binnacle.job_status")
 _PERF_COUNTER = time.perf_counter
+blocking_wall_tracker = BlockingWallTracker()
 
 OUTPUT_SCHEMA = {
     "type": "object",
@@ -155,12 +162,36 @@ def job_status_impl(
     if job_id is None:
         return _listing_result()
 
-    wait_seconds = max(0, min(wait_seconds, WAIT_MAX))
+    requested_wait_s = wait_seconds
+    bounded_wait_s = max(0, min(requested_wait_s, WAIT_MAX))
     state_start = _PERF_COUNTER()
-    if wait_seconds:
-        state, waited = _wait_for_exit(job_id, wait_seconds)
+    state = jobs.job_state(job_id)
+    if state is None:
+        raise ToolError(
+            f"No job with id {job_id!r}. Call job_status without a job_id to list recent jobs."
+        )
+
+    if requested_wait_s > 0:
+        client = current_client.get()
+        turn = current_turn.get()
+        budget_s = get_settings().jobs.blocking_wall_budget_for_client(client)
+        lease = blocking_wall_tracker.acquire(
+            client=client,
+            turn=turn,
+            requested_wait_s=requested_wait_s,
+            bounded_wait_s=bounded_wait_s,
+            budget_s=budget_s,
+        )
+        try:
+            if lease.decision.effective_wait_s > 0:
+                state, waited = _wait_for_exit(job_id, lease.decision.effective_wait_s)
+            else:
+                state, waited = jobs.job_state(job_id), 0.0
+        finally:
+            lease.release()
     else:
-        state, waited = jobs.job_state(job_id), 0.0
+        waited = 0.0
+
     state_ms = _elapsed_ms(state_start)
     if state is None:
         raise ToolError(
@@ -194,7 +225,7 @@ def job_status_impl(
         "workdir": state["workdir"],
         "processes": processes,
     }
-    if wait_seconds:
+    if requested_wait_s > 0:
         payload["waited_s"] = waited
     if state["state"] == "exited":
         rc = state["exit_code"]
@@ -214,7 +245,7 @@ def job_status_impl(
         )
     else:
         summary = f"Job {job_id} running ({state['runtime_s']} s)."
-    if wait_seconds and state["state"] == "running":
+    if requested_wait_s > 0 and state["state"] == "running":
         summary += f" Still running after waiting {waited} s."
     impl_ms = _elapsed_ms(impl_start)
     dispatch_field = f"{dispatch_ms:.2f}" if dispatch_ms is not None else "na"
@@ -224,7 +255,7 @@ def job_status_impl(
         "impl_ms=%.2f state=%s processes=%s log_bytes=%s",
         current_call.get(),
         job_id,
-        wait_seconds,
+        bounded_wait_s,
         dispatch_field,
         state_ms,
         read_log_ms,
