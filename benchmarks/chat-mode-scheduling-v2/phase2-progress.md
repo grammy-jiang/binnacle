@@ -335,5 +335,7 @@ Next step: **2.11 - Concurrency, reload semantics, and guard overhead**
 - Exact CI-equivalent coverage policy after the fix: PASS - 1114 passed, 3 skipped; src/binnacle/jobs.py full coverage 90.67% (target 90.00%); 0 policy errors.
 - Follow-up exact Step-2.11 matrix after the coverage fix: PASS - 42 passed in 20.30 s.
 
+- Follow-up ci.yml run 35909011954 for commit 8d20def3093fe9421bbb259f9bb9cca32088a052: PASS.
+
 Step 2.11: **COMPLETE**
 Next step: **2.12 - Final Phase-2 validation and handoff**
