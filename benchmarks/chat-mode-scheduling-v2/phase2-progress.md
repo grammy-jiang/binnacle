@@ -6,7 +6,7 @@
 | 2.2 | COMPLETE |
 | 2.3 | COMPLETE |
 | 2.4 | COMPLETE |
-| 2.5 | NOT STARTED |
+| 2.5 | COMPLETE |
 | 2.6 | NOT STARTED |
 | 2.7 | NOT STARTED |
 | 2.8 | NOT STARTED |
@@ -20,8 +20,8 @@ Branch: `feature/chat-mode-blocking-wall-guard`
 Worktree: `/home/grammy-jiang/Projects/binnacle-chat-blocking-wall-guard`
 Source branch: `design/chat-mode-scheduling-v2`
 Phase-1 evidence commit: `cc1b014`
-Last completed step: **2.4**
-Next step: **2.5**
+Last completed step: **2.5**
+Next step: **2.6**
 
 ## Step 2.1 baseline freeze
 
@@ -224,3 +224,16 @@ Next step: **2.4 - Blocking-wall tracker, sequential core**
 
 Step 2.4: **COMPLETE**
 Next step: **2.5 - Overlapping-wait union accounting**
+
+## Step 2.5 overlapping-wait union accounting
+
+- Overlapping positive effective waits share one active window and the original deadline; later waits use live remaining time without extending the window.
+- Live spent-before and remaining values include elapsed union wall time while a window is active.
+- Non-final releases decrement active_count without committing the window; the final active release commits the capped union duration once.
+- Zero-effective waits never increment active_count.
+- Deterministic coverage includes two/five fully overlapping waits, partial overlap, early release, deadline exhaustion, reordered release, exception cleanup, cancellation-equivalent cleanup, and a real threaded acquire/release case.
+- Exact Step-2.5 unit command: PASS - 20 passed in 0.29s.
+- No job-status integration, LRU eviction, or capacity fallback behavior was added.
+
+Step 2.5: **COMPLETE**
+Next step: **2.6 - LRU bound, eviction, and fallback policies**
