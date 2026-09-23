@@ -22,6 +22,7 @@ from binnacle.callctx import (
     current_turn,
 )
 from binnacle.config import RunCommandSettings
+from binnacle.tools import job_status as js
 from binnacle.tools import list_files as lf
 from binnacle.tools import run_command as rc
 from binnacle.tools import stop_job as sj
@@ -255,9 +256,15 @@ def test_job_status_timing_receives_call_start_across_thread_hop(caplog, monkeyp
     monkeypatch.setattr(jobs, "job_state", lambda job_id: state)
     monkeypatch.setattr(jobs, "read_log", lambda job_id: b"")
     monkeypatch.setattr(jobs, "job_processes", lambda pgid: [])
+    monkeypatch.setattr(js, "_wait_for_exit", lambda job_id, wait_seconds: (state, 0.1))
 
     with caplog.at_level("INFO"):
-        _run(("job_status", {"job_id": "timing-job", "tail_lines": 10}))
+        _run(
+            (
+                "job_status",
+                {"job_id": "timing-job", "tail_lines": 10, "wait_seconds": 1},
+            )
+        )
 
     timing = _messages(caplog, "job_status_timing")
     calls = _messages(caplog, "tool_call")
@@ -270,6 +277,23 @@ def test_job_status_timing_receives_call_start_across_thread_hop(caplog, monkeyp
     assert timing_fields["dispatch_ms"] != "na"
     assert float(timing_fields["dispatch_ms"]) >= 0
     assert float(timing_fields["impl_ms"]) >= 0
+    assert timing_fields["wait_requested_s"] == "1"
+    assert timing_fields["wait_bounded_s"] == "1"
+    assert timing_fields["wait_effective_s"] == "1"
+    assert timing_fields["waited_s"] == "0.1"
+    assert timing_fields["blocking_budget_s"] == "na"
+    assert timing_fields["blocking_spent_before_s"] == "na"
+    assert timing_fields["blocking_remaining_before_s"] == "na"
+    assert timing_fields["blocking_active_before"] == "0"
+    assert timing_fields["blocking_policy"] == "no_policy"
+    assert timing_fields["blocking_budget_exhausted"] == "false"
+    assert result_fields["waited_s"] == "0.1"
+    assert result_fields["wait_requested_s"] == "1"
+    assert result_fields["wait_effective_s"] == "1"
+    assert result_fields["blocking_budget_s"] == "null"
+    assert result_fields["blocking_remaining_s"] == "null"
+    assert result_fields["blocking_budget_exhausted"] == "false"
+    assert result_fields["blocking_policy"] == "no_policy"
 
 
 def test_job_lines_carry_the_call_id_and_the_outcome(caplog, tmp_path):
