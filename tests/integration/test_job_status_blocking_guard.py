@@ -5,9 +5,11 @@ from types import SimpleNamespace
 import pytest
 from fastmcp.exceptions import ToolError
 
+from binnacle import jobs as jobstore
 from binnacle.blocking_wall_guard import BlockingWallTracker
 from binnacle.callctx import current_client, current_turn
 from binnacle.tools import job_status as js
+from tests.integration.job_test_support import stop
 
 
 class FakeClock:
@@ -69,14 +71,45 @@ def status_env(monkeypatch):
     return state, clock, tracker
 
 
-def _call_with_context(*, client: str | None, turn: str | None, wait_seconds: int):
+def _call_with_context(
+    *,
+    client: str | None,
+    turn: str | None,
+    wait_seconds: int,
+    job_id: str = "job-1",
+):
     client_token = current_client.set(client)
     turn_token = current_turn.set(turn)
     try:
-        return js.job_status_impl("job-1", 10, wait_seconds)
+        return js.job_status_impl(job_id, 10, wait_seconds)
     finally:
         current_turn.reset(turn_token)
         current_client.reset(client_token)
+
+
+@pytest.fixture
+def real_job_env(tmp_path, monkeypatch):
+    monkeypatch.setattr(jobstore, "JOBS_DIR", tmp_path / "jobs")
+    monkeypatch.setattr(jobstore, "OWNER_MODE", "embedded")
+    monkeypatch.setattr(
+        js,
+        "get_settings",
+        lambda: SimpleNamespace(jobs=BudgetSettings({"phase2-real": 3})),
+    )
+    tracker = BlockingWallTracker()
+    monkeypatch.setattr(js, "blocking_wall_tracker", tracker)
+    yield tracker
+
+    if jobstore.JOBS_DIR.exists():
+        for state in jobstore.list_jobs():
+            if state["state"] == "running":
+                stop(state["job_id"])
+
+
+def _start_real_job(command: str, workdir) -> str:
+    job_id, proc = jobstore.start_job(command, workdir, None)
+    jobstore.reap_in_background(job_id, proc)
+    return job_id
 
 
 def test_output_schema_declares_positive_wait_policy_fields():
@@ -87,85 +120,6 @@ def test_output_schema_declares_positive_wait_policy_fields():
     assert properties["blocking_remaining_s"] == {"type": ["number", "null"]}
     assert properties["blocking_budget_exhausted"] == {"type": "boolean"}
     assert properties["blocking_policy"] == {"type": "string"}
-
-
-def test_matching_client_and_turn_reduce_later_positive_wait(status_env, monkeypatch):
-    state, clock, tracker = status_env
-    waits: list[int] = []
-
-    def fake_wait(job_id: str, wait_seconds: int):
-        waits.append(wait_seconds)
-        if len(waits) == 1:
-            clock.advance(2.0)
-        return state, float(wait_seconds)
-
-    monkeypatch.setattr(js, "_wait_for_exit", fake_wait)
-
-    first = _call_with_context(client="openai-mcp/1", turn="turn-a", wait_seconds=50)
-    second = _call_with_context(client="openai-mcp/1", turn="turn-a", wait_seconds=50)
-
-    assert waits == [5, 3]
-    assert first.structured_content["waited_s"] == 5.0
-    assert first.structured_content["wait_requested_s"] == 50
-    assert first.structured_content["wait_effective_s"] == 5
-    assert first.structured_content["blocking_budget_s"] == 5
-    assert first.structured_content["blocking_remaining_s"] == pytest.approx(3.0)
-    assert first.structured_content["blocking_budget_exhausted"] is False
-    assert first.structured_content["blocking_policy"] == "tracked"
-    assert second.structured_content["waited_s"] == 3.0
-    assert second.structured_content["wait_effective_s"] == 3
-    assert second.structured_content["blocking_remaining_s"] == pytest.approx(3.0)
-    tracked = tracker._states[("openai-mcp/1", "turn-a")]
-    assert tracked.spent_s == pytest.approx(2.0)
-
-
-def test_no_policy_preserves_ordinary_bounded_wait(monkeypatch, status_env):
-    state, _, tracker = status_env
-    monkeypatch.setattr(
-        js,
-        "get_settings",
-        lambda: SimpleNamespace(jobs=BudgetSettings({})),
-    )
-    waits: list[int] = []
-
-    def fake_wait(job_id: str, wait_seconds: int):
-        waits.append(wait_seconds)
-        return state, 0.25
-
-    monkeypatch.setattr(js, "_wait_for_exit", fake_wait)
-
-    result = _call_with_context(client="openai-mcp/1", turn="turn-a", wait_seconds=50)
-
-    assert waits == [50]
-    assert result.structured_content["waited_s"] == 0.25
-    assert result.structured_content["wait_requested_s"] == 50
-    assert result.structured_content["wait_effective_s"] == 50
-    assert result.structured_content["blocking_budget_s"] is None
-    assert result.structured_content["blocking_remaining_s"] is None
-    assert result.structured_content["blocking_budget_exhausted"] is False
-    assert result.structured_content["blocking_policy"] == "no_policy"
-    assert tracker._states == {}
-
-
-def test_no_turn_preserves_ordinary_bounded_wait(status_env, monkeypatch):
-    state, _, tracker = status_env
-    waits: list[int] = []
-
-    def fake_wait(job_id: str, wait_seconds: int):
-        waits.append(wait_seconds)
-        return state, 0.25
-
-    monkeypatch.setattr(js, "_wait_for_exit", fake_wait)
-
-    result = _call_with_context(client="openai-mcp/1", turn=None, wait_seconds=50)
-
-    assert waits == [50]
-    assert result.structured_content["wait_effective_s"] == 50
-    assert result.structured_content["blocking_budget_s"] is None
-    assert result.structured_content["blocking_remaining_s"] is None
-    assert result.structured_content["blocking_budget_exhausted"] is False
-    assert result.structured_content["blocking_policy"] == "no_turn"
-    assert tracker._states == {}
 
 
 def test_capacity_fallback_preserves_ordinary_bounded_wait(status_env, monkeypatch):
@@ -291,40 +245,6 @@ def test_budget_exhaustion_becomes_nonblocking_without_stopping_job(
     assert "blocking_remaining_after_s=0.0" in closed[0]
 
 
-def test_unknown_job_is_rejected_before_policy_resolution(monkeypatch):
-    tracker = BlockingWallTracker()
-    monkeypatch.setattr(js, "blocking_wall_tracker", tracker)
-    monkeypatch.setattr(js.jobs, "job_state", lambda job_id: None)
-
-    def unexpected_settings():
-        raise AssertionError("settings must not be resolved for an unknown job")
-
-    monkeypatch.setattr(js, "get_settings", unexpected_settings)
-
-    with pytest.raises(ToolError, match="No job with id"):
-        _call_with_context(client="openai-mcp/1", turn="turn-a", wait_seconds=50)
-
-    assert tracker._states == {}
-
-
-def test_zero_wait_does_not_acquire_policy(status_env):
-    _, _, tracker = status_env
-
-    result = _call_with_context(client="openai-mcp/1", turn="turn-a", wait_seconds=0)
-
-    assert "waited_s" not in result.structured_content
-    for key in (
-        "wait_requested_s",
-        "wait_effective_s",
-        "blocking_budget_s",
-        "blocking_remaining_s",
-        "blocking_budget_exhausted",
-        "blocking_policy",
-    ):
-        assert key not in result.structured_content
-    assert tracker._states == {}
-
-
 def test_wait_exception_releases_active_lease(status_env, monkeypatch, caplog):
     _, clock, tracker = status_env
 
@@ -352,3 +272,224 @@ def test_wait_exception_releases_active_lease(status_env, monkeypatch, caplog):
     tracked = tracker._states[("openai-mcp/1", "turn-a")]
     assert tracked.active_count == 0
     assert tracked.spent_s == pytest.approx(2.0)
+
+
+def test_real_job_early_exit_charges_actual_wall(real_job_env, tmp_path, caplog):
+    tracker = real_job_env
+    job_id = _start_real_job("sleep 0.2", tmp_path)
+
+    with caplog.at_level("INFO", logger="binnacle.job_status"):
+        result = _call_with_context(
+            client="phase2-real/1",
+            turn="turn-early",
+            wait_seconds=2,
+            job_id=job_id,
+        )
+
+    payload = result.structured_content
+    assert payload["state"] == "exited"
+    assert payload["exit_code"] == 0
+    assert payload["blocking_policy"] == "tracked"
+    assert payload["wait_effective_s"] == 2
+    assert 0.0 <= payload["waited_s"] < 1.5
+    assert 2.0 < payload["blocking_remaining_s"] <= 3.0
+    assert payload["blocking_budget_exhausted"] is False
+    assert "exited 0" in result.content[0].text
+
+    tracked = tracker._states[("phase2-real/1", "turn-early")]
+    assert tracked.active_count == 0
+    assert tracked.spent_s == pytest.approx(
+        3.0 - payload["blocking_remaining_s"], abs=0.05
+    )
+    assert abs(tracked.spent_s - payload["waited_s"]) < 0.2
+
+    timing = [
+        record.getMessage()
+        for record in caplog.records
+        if "event=job_status_timing" in record.getMessage()
+    ]
+    closed = [
+        record.getMessage()
+        for record in caplog.records
+        if "event=blocking_window_closed" in record.getMessage()
+    ]
+    assert any(
+        "blocking_policy=tracked" in line
+        and "turn=turn-early" in line
+        and "client=phase2-real/1" in line
+        for line in timing
+    )
+    assert len(closed) == 1
+
+
+def test_real_job_sequential_exhaustion_keeps_job_durable(
+    real_job_env, tmp_path, caplog
+):
+    tracker = real_job_env
+    job_id = _start_real_job("sleep 5", tmp_path)
+    results = []
+
+    with caplog.at_level("INFO", logger="binnacle.job_status"):
+        for _ in range(4):
+            result = _call_with_context(
+                client="phase2-real/1",
+                turn="turn-exhaust",
+                wait_seconds=2,
+                job_id=job_id,
+            )
+            results.append(result)
+            if result.structured_content["blocking_policy"] == "exhausted":
+                break
+
+    exhausted = results[-1]
+    payload = exhausted.structured_content
+    assert payload["blocking_policy"] == "exhausted"
+    assert payload["state"] == "running"
+    assert payload["wait_effective_s"] == 0
+    assert payload["waited_s"] == 0.0
+    assert payload["blocking_budget_s"] == 3
+    assert payload["blocking_remaining_s"] < 1.0
+    assert payload["blocking_budget_exhausted"] is True
+    assert (
+        "Turn blocking budget exhausted; further positive waits in this turn "
+        "will be non-blocking." in exhausted.content[0].text
+    )
+
+    tracked_payloads = [
+        item.structured_content
+        for item in results
+        if item.structured_content["blocking_policy"] == "tracked"
+    ]
+    assert tracked_payloads
+    total_waited = sum(item["waited_s"] for item in tracked_payloads)
+    assert 1.5 <= total_waited <= 3.5
+
+    state = jobstore.job_state(job_id)
+    assert state is not None and state["state"] == "running"
+    listing = js.job_status_impl(None, 100, 0).structured_content["jobs"]
+    assert any(
+        item["job_id"] == job_id and item["state"] == "running" for item in listing
+    )
+
+    tracked = tracker._states[("phase2-real/1", "turn-exhaust")]
+    assert tracked.active_count == 0
+    assert 1.5 <= tracked.spent_s <= 3.0
+
+    stopped = stop(job_id)
+    assert stopped["state"] == "exited"
+    assert stopped["signal"] in (15, 9)
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert any(
+        "event=job_status_timing" in line
+        and "blocking_policy=exhausted" in line
+        and "turn=turn-exhaust" in line
+        for line in messages
+    )
+
+
+def test_real_job_already_exited_positive_wait_is_prompt(real_job_env, tmp_path):
+    tracker = real_job_env
+    job_id = _start_real_job("true", tmp_path)
+    exited = jobstore.await_exit(job_id, 2.0)
+    assert exited is not None and exited["state"] == "exited"
+
+    result = _call_with_context(
+        client="phase2-real/1",
+        turn="turn-exited",
+        wait_seconds=2,
+        job_id=job_id,
+    )
+    payload = result.structured_content
+
+    assert payload["state"] == "exited"
+    assert payload["blocking_policy"] == "tracked"
+    assert payload["wait_effective_s"] == 2
+    assert payload["waited_s"] < 0.2
+    assert payload["blocking_remaining_s"] > 2.5
+    tracked = tracker._states[("phase2-real/1", "turn-exited")]
+    assert tracked.spent_s < 0.2
+
+
+def test_real_job_zero_wait_adds_no_policy_state(real_job_env, tmp_path):
+    tracker = real_job_env
+    job_id = _start_real_job("sleep 5", tmp_path)
+
+    result = _call_with_context(
+        client="phase2-real/1",
+        turn="turn-zero",
+        wait_seconds=0,
+        job_id=job_id,
+    )
+    payload = result.structured_content
+
+    assert payload["state"] == "running"
+    for key in (
+        "waited_s",
+        "wait_requested_s",
+        "wait_effective_s",
+        "blocking_budget_s",
+        "blocking_remaining_s",
+        "blocking_budget_exhausted",
+        "blocking_policy",
+    ):
+        assert key not in payload
+    assert tracker._states == {}
+
+
+def test_real_job_invalid_id_does_not_acquire_tracker(real_job_env, monkeypatch):
+    tracker = real_job_env
+
+    def unexpected_settings():
+        raise AssertionError("settings must not be resolved for an unknown job")
+
+    monkeypatch.setattr(js, "get_settings", unexpected_settings)
+    with pytest.raises(ToolError, match="No job with id"):
+        _call_with_context(
+            client="phase2-real/1",
+            turn="turn-invalid",
+            wait_seconds=2,
+            job_id="missing-real-job",
+        )
+    assert tracker._states == {}
+
+
+def test_real_job_no_policy_preserves_ordinary_wait(
+    real_job_env, tmp_path, monkeypatch
+):
+    tracker = real_job_env
+    monkeypatch.setattr(
+        js,
+        "get_settings",
+        lambda: SimpleNamespace(jobs=BudgetSettings({})),
+    )
+    job_id = _start_real_job("sleep 0.2", tmp_path)
+    result = _call_with_context(
+        client="phase2-real/1", turn="turn-no-policy", wait_seconds=2, job_id=job_id
+    )
+    payload = result.structured_content
+    assert payload["state"] == "exited"
+    assert payload["blocking_policy"] == "no_policy"
+    assert payload["wait_effective_s"] == 2
+    assert payload["blocking_budget_s"] is None
+    assert payload["blocking_remaining_s"] is None
+    assert payload["blocking_budget_exhausted"] is False
+    assert payload["waited_s"] < 1.5
+    assert tracker._states == {}
+
+
+def test_real_job_no_turn_preserves_ordinary_wait(real_job_env, tmp_path):
+    tracker = real_job_env
+    job_id = _start_real_job("sleep 0.2", tmp_path)
+    result = _call_with_context(
+        client="phase2-real/1", turn=None, wait_seconds=2, job_id=job_id
+    )
+    payload = result.structured_content
+    assert payload["state"] == "exited"
+    assert payload["blocking_policy"] == "no_turn"
+    assert payload["wait_effective_s"] == 2
+    assert payload["blocking_budget_s"] is None
+    assert payload["blocking_remaining_s"] is None
+    assert payload["blocking_budget_exhausted"] is False
+    assert payload["waited_s"] < 1.5
+    assert tracker._states == {}
