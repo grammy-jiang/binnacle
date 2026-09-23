@@ -149,14 +149,13 @@ def _node_matches(
     if node.tool != call.tool:
         return False
     for key, value in expected.items():
-        if key == "operation":
+        # These fields affect presentation/test metadata, not scheduler
+        # semantics, so they must not participate in logical DAG identity.
+        if key in {"operation", "tail_lines"}:
             continue
         if isinstance(value, str) and "{result:" in value:
             continue
         if key not in call.args:
-            # tail_lines affects presentation, not scheduler semantics.
-            if key == "tail_lines":
-                continue
             return False
         if call.args[key] != value:
             return False
