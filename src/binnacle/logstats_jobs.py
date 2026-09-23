@@ -19,6 +19,8 @@ def analyze_job_telemetry(
     out = JobTelemetryStats()
     owner_roundtrip_by_job: dict[str, float] = {}
     manager_impl_by_job: dict[str, float] = {}
+    blocking_turns: dict[tuple[str, str], tuple[float, float, float | None]] = {}
+    exhausted_turns: set[tuple[str, str]] = set()
     for record in records:
         f = fields(record.body)
         if record.event == "run_command_dispatch_error":
@@ -60,7 +62,8 @@ def analyze_job_telemetry(
                     out.manager_stop_impl_ms.append(value)
         elif record.event == "job_status_timing":
             out.job_status_calls += 1
-            wait_requested = _number(f, "wait_requested_s") or 0.0
+            wait_requested_value = _number(f, "wait_requested_s")
+            wait_requested = wait_requested_value or 0.0
             state_ms = _number(f, "state_ms")
             if wait_requested > 0:
                 out.job_status_wait_calls += 1
@@ -70,6 +73,41 @@ def analyze_job_telemetry(
                     out.job_status_wait_state_ms.append(state_ms)
             if state_ms is not None:
                 out.job_status_state_ms.append(state_ms)
+
+            # blocking_policy marks the additive Phase-2 record shape. Older
+            # job_status_timing lines are intentionally excluded from guard
+            # statistics so historical journals do not gain synthetic values.
+            if "blocking_policy" in f:
+                if wait_requested_value is not None:
+                    out.job_status_requested_wait_s.append(wait_requested_value)
+                    if wait_requested_value > 0:
+                        out.job_status_positive_calls += 1
+                if (wait_effective := _number(f, "wait_effective_s")) is not None:
+                    out.job_status_effective_wait_s.append(wait_effective)
+                    if wait_effective <= 0:
+                        out.job_status_nonblocking_calls += 1
+                out.blocking_policies[f.get("blocking_policy", "?")] += 1
+                if f.get("blocking_budget_exhausted", "").lower() == "true":
+                    out.blocking_budget_exhausted_calls += 1
+                    client, turn = f.get("client"), f.get("turn")
+                    if client not in (None, "-") and turn not in (None, "-"):
+                        exhausted_turns.add((client, turn))
+        elif record.event == "blocking_window_closed":
+            client, turn = f.get("client"), f.get("turn")
+            budget = _number(f, "blocking_budget_s")
+            spent = _number(f, "blocking_spent_after_s")
+            remaining = _number(f, "blocking_remaining_after_s")
+            if (
+                client not in (None, "-")
+                and turn not in (None, "-")
+                and budget is not None
+                and budget > 0
+                and spent is not None
+            ):
+                key = (client, turn)
+                current = blocking_turns.get(key)
+                if current is None or spent >= current[0]:
+                    blocking_turns[key] = (spent, budget, remaining)
         elif record.event == "job_exit":
             if reason := f.get("reason"):
                 out.exit_reasons[reason] += 1
@@ -94,6 +132,16 @@ def analyze_job_telemetry(
             out.manager_invalid_requests += 1
         elif record.event == "job_manager_request_error":
             out.manager_request_errors += 1
+    for key, (spent, budget, remaining) in blocking_turns.items():
+        out.blocking_wall_per_turn_s.append(spent)
+        utilization = spent / budget
+        out.blocking_utilization_25 += int(utilization >= 0.25)
+        out.blocking_utilization_50 += int(utilization >= 0.50)
+        out.blocking_utilization_75 += int(utilization >= 0.75)
+        out.blocking_utilization_100 += int(
+            (remaining is not None and remaining < 1.0) or key in exhausted_turns
+        )
+
     for job_id, roundtrip in owner_roundtrip_by_job.items():
         if (impl := manager_impl_by_job.get(job_id)) is not None:
             out.owner_transport_overhead_ms.append(max(0.0, roundtrip - impl))
@@ -103,6 +151,62 @@ def analyze_job_telemetry(
 def _pct(values: Sequence[int | float], q: float) -> float:
     ordered = sorted(values)
     return ordered[min(len(ordered) - 1, int(q * len(ordered)))]
+
+
+def _guard_distribution(label: str, values: list[float]) -> str:
+    if not values:
+        return f"  {label}: n / p50 / p90 / p95 / max = 0 / - / - / - / -"
+    return (
+        f"  {label}: n / p50 / p90 / p95 / max = {len(values)} / "
+        f"{_pct(values, 0.5):.2f} / {_pct(values, 0.9):.2f} / "
+        f"{_pct(values, 0.95):.2f} / {max(values):.2f}"
+    )
+
+
+def render_blocking_wall_guard(jobs: JobTelemetryStats) -> list[str]:
+    """Human-readable Phase-2 blocking-wall guard statistics."""
+    if not (jobs.blocking_policies or jobs.blocking_wall_per_turn_s):
+        return []
+
+    policy_order = (
+        "tracked",
+        "no_policy",
+        "no_turn",
+        "capacity_untracked",
+        "exhausted",
+    )
+    policies = " ".join(
+        f"{name}={jobs.blocking_policies.get(name, 0)}" for name in policy_order
+    )
+    extras = sorted(set(jobs.blocking_policies) - set(policy_order))
+    if extras:
+        policies += " " + " ".join(
+            f"{name}={jobs.blocking_policies[name]}" for name in extras
+        )
+
+    out = ["\njob_status blocking-wall guard:", f"  policies: {policies}"]
+    out.append(
+        "  waits: positive / nonblocking / exhausted = "
+        f"{jobs.job_status_positive_calls} / {jobs.job_status_nonblocking_calls} / "
+        f"{jobs.blocking_budget_exhausted_calls}"
+    )
+    out.append(
+        _guard_distribution("requested wait s", jobs.job_status_requested_wait_s)
+    )
+    out.append(
+        _guard_distribution("effective wait s", jobs.job_status_effective_wait_s)
+    )
+    out.append(
+        _guard_distribution(
+            "blocking wall / tracked turn s", jobs.blocking_wall_per_turn_s
+        )
+    )
+    out.append(
+        "  utilization: >=25% / >=50% / >=75% / effectively-100% = "
+        f"{jobs.blocking_utilization_25} / {jobs.blocking_utilization_50} / "
+        f"{jobs.blocking_utilization_75} / {jobs.blocking_utilization_100}"
+    )
+    return out
 
 
 def render_job_telemetry(jobs: JobTelemetryStats) -> list[str]:
