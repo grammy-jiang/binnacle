@@ -230,21 +230,40 @@ def send_project_chat(
     browser: str = "chrome",
     timing_file: Path | None = None,
 ) -> dict[str, Any]:
-    proc = _run(
-        [
-            str(branch_chatgpt_send()),
-            "--browser",
-            browser,
-            "--project",
-            project_id,
-            "--json",
-            "--url-file",
-            str(url_file),
-            *(["--timing-file", str(timing_file)] if timing_file is not None else []),
-            "--timeout",
-            str(timeout_s),
-            prompt,
-        ],
-        timeout=timeout_s + 30,
-    )
-    return json.loads(proc.stdout)
+    args = [
+        str(branch_chatgpt_send()),
+        "--browser",
+        browser,
+        "--project",
+        project_id,
+        "--json",
+        "--url-file",
+        str(url_file),
+        *(["--timing-file", str(timing_file)] if timing_file is not None else []),
+        "--timeout",
+        str(timeout_s),
+        prompt,
+    ]
+
+    last_error: subprocess.SubprocessError | None = None
+    for attempt in range(2):
+        try:
+            proc = _run(args, timeout=timeout_s + 30)
+            result = json.loads(proc.stdout)
+            result["submit_attempts"] = attempt + 1
+            return result
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+            last_error = exc
+            # Safe automatic retry is only allowed before any evidence that
+            # Enter created/submitted a conversation. Once either artifact
+            # exists, retrying could duplicate a real ChatGPT turn.
+            submitted = url_file.exists() or (
+                timing_file is not None and timing_file.exists()
+            )
+            if submitted or attempt == 1:
+                raise
+            time.sleep(3.0)
+
+    if last_error is None:
+        raise HarnessError("chat submit failed without an error")
+    raise last_error

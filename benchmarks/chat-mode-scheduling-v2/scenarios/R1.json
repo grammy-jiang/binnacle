@@ -4,7 +4,6 @@
     {
       "access": "read_only",
       "arguments": {
-        "fixed_strings": true,
         "path": "{root}",
         "pattern": "discover-{nonce}"
       },
