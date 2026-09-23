@@ -4,7 +4,6 @@
     {
       "access": "read_only",
       "arguments": {
-        "fixed_strings": true,
         "path": "{root}/wave1",
         "pattern": "wave1-{nonce}"
       },
@@ -92,7 +91,6 @@
     {
       "access": "read_only",
       "arguments": {
-        "fixed_strings": true,
         "path": "{root}/wave2",
         "pattern": "{result:derive_wave2_marker}"
       },
