@@ -6,8 +6,8 @@
   "worktree": "/home/grammy-jiang/Projects/binnacle-chat-blocking-wall-guard",
   "source_branch": "design/chat-mode-scheduling-v2",
   "phase1_evidence_commit": "cc1b014",
-  "last_completed_step": "2.5",
-  "next_step": "2.6",
+  "last_completed_step": "2.6",
+  "next_step": "2.7",
   "baseline": {
     "design_source_head": "e9c04728e5ac583a8e5d3b991cb01309de36ef82",
     "production": {
@@ -215,9 +215,16 @@
       ]
     },
     "2.6": {
-      "status": "not_started",
-      "tests": [],
-      "notes": []
+      "status": "complete",
+      "tests": [
+        "uv run pytest -q tests/unit/core/test_blocking_wall_guard.py -> 24 passed"
+      ],
+      "notes": [
+        "Bounded BlockingWallTracker state to its configured total-record capacity (4096 by default) with deterministic least-recently-used eviction among inactive records only.",
+        "Active records are never evicted; when every slot is active, new turns use capacity_untracked and preserve the ordinary bounded wait without mutating tracked accounting.",
+        "Tracked acquire/release paths refresh last_seen, recently used inactive records are retained, and a previously untracked turn can become tracked after inactive capacity becomes available.",
+        "No job_status integration was added in Step 2.6."
+      ]
     },
     "2.7": {
       "status": "not_started",
