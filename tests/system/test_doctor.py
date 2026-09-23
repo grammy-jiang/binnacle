@@ -211,6 +211,7 @@ def test_service_env_unreadable_proc_warns(tmp_path):
     assert c.status == "warn"
 
 
+@pytest.mark.no_xdist
 def test_process_environ_reads_own_process():
     env = doctor.process_environ(os.getpid())
     assert env is not None and "PATH" in env

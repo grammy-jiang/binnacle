@@ -186,6 +186,7 @@ def test_exec_start_argv_parses_systemctl_show_output():
     assert units.exec_start_argv("{ path=/x ; ignore_errors=no }") == []
 
 
+@pytest.mark.no_xdist
 def test_proc_cmdline_reads_this_process():
     argv = units.proc_cmdline(os.getpid())
     assert argv and "python" in Path(argv[0]).name
