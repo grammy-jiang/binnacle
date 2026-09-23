@@ -75,6 +75,19 @@ def _check(
         )
         return passed, f"{node_id} did not exit zero"
 
+    if kind == "command_contains_exit_zero":
+        substring = str(params.get("contains", ""))
+        matches = [
+            call
+            for call in trace.tools
+            if call.tool == "run_command"
+            and substring in str(call.args.get("command", ""))
+        ]
+        passed = any(
+            call.result.get("exit_code") == 0 and _successful(call) for call in matches
+        )
+        return passed, f"no successful run_command containing {substring!r}"
+
     if kind == "job_state":
         if "node" in params:
             node_id = str(params["node"])
