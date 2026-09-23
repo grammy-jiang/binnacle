@@ -59,6 +59,17 @@ def test_catalog_is_exact_and_all_manifests_validate():
     )
 
 
+def test_r1_discovery_identity_uses_semantic_arguments_only():
+    scenario = load_all()["R1"]
+    discover = next(node for node in scenario.dag if node.id == "discover")
+
+    assert discover.tool == "search_text"
+    assert discover.arguments == {
+        "path": "{root}",
+        "pattern": "discover-{nonce}",
+    }
+
+
 def test_m3_slow_fixture_outlives_the_entire_micro_turn():
     scenario = load_all()["M3"]
 
