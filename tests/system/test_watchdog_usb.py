@@ -51,18 +51,21 @@ def test_usb_reset_schedule_escalates_across_attempts():
     run, _ = recording_nmcli()
     fired: list[float] = []
     now = 0.0
-    for _ in range(12):
-        while True:
-            now += 10.0
-            actions = wd.evaluate(routes_demoted(), bad, state, policy, now=now)
-            if actions:
-                break
-        assert kinds(actions) == ["usb_reset"]
-        with mock.patch.object(wd, "usb_reset_device", return_value=(True, "ok")):
+    with mock.patch.object(
+        wd_actions, "usb_reset_device", return_value=(True, "ok")
+    ) as reset:
+        for _ in range(12):
+            while True:
+                now += 10.0
+                actions = wd.evaluate(routes_demoted(), bad, state, policy, now=now)
+                if actions:
+                    break
+            assert kinds(actions) == ["usb_reset"]
             wd.apply_action(
                 actions[0], routes_demoted(), state, run=run, now=now, policy=policy
             )
-        fired.append(now)
+            fired.append(now)
+    assert reset.call_count == 12
     gaps = [b - a for a, b in pairwise(fired)]
     assert gaps == [60, 60, 180, 180, 180, 300, 300, 300, 600, 600, 600]
     assert state.usb_attempts["wlan1"] == 12
