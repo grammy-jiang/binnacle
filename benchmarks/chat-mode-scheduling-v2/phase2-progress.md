@@ -13,15 +13,15 @@
 | 2.9 | COMPLETE |
 | 2.10 | COMPLETE |
 | 2.11 | COMPLETE |
-| 2.12 | NOT STARTED |
+| 2.12 | COMPLETE |
 
-Phase status: **IN PROGRESS**
+Phase status: **COMPLETE**
 Branch: `feature/chat-mode-blocking-wall-guard`
 Worktree: `/home/grammy-jiang/Projects/binnacle-chat-blocking-wall-guard`
 Source branch: `design/chat-mode-scheduling-v2`
 Phase-1 evidence commit: `cc1b014`
-Last completed step: **2.11**
-Next step: **2.12**
+Last completed step: **2.12**
+Next step: **Phase 3 offline replay (not started)**
 
 ## Step 2.1 baseline freeze
 
@@ -339,3 +339,44 @@ Next step: **2.11 - Concurrency, reload semantics, and guard overhead**
 
 Step 2.11: **COMPLETE**
 Next step: **2.12 - Final Phase-2 validation and handoff**
+
+## Step 2.12 final Phase-2 validation and handoff
+
+- Wrote the exact dated final evidence artifacts
+  phase2-blocking-wall-guard-2026-09-24.json and
+  phase2-blocking-wall-guard-2026-09-24.md.
+- Focused Phase-2 validation matrix: **PASS — 158 passed in 64.12 s**.
+- Full repository pytest before evidence write:
+  **PASS — 1115 passed, 3 skipped in 122.07 s**.
+- Pre-commit before evidence write: **PASS — all hooks passed**.
+- Architecture: **97 modules checked; 0 forbidden reverse dependencies**.
+- Module-size ratchet: **226 Python modules; 11 warnings; 0 errors**.
+- AI-readability: 23 advisory long-function warnings. Phase-2-touched warnings
+  are documented in the final report; the repository hook is warning-only and
+  the blocking module-size/architecture policies have zero errors.
+- Contract review confirms an empty default budget map, deterministic
+  longest-prefix configuration, conservative base-turn extraction/reset,
+  unchanged job_status.wait_seconds input range 0..50, and only the intended
+  six additive fields on original positive-wait results.
+- Concurrency, reload, durable-job, telemetry/logstats, capacity fallback,
+  exhaustion, exception cleanup, and per-test tracker isolation evidence are
+  green.
+- Step-2.11 overhead evidence remains green: median run-level p95
+  **0.006445 ms** and p99 **0.007259 ms** across three independent
+  100000-iteration Pi runs.
+- Initial Step-2.12 production isolation remained intact: production is
+  master at 83862b040f59afc97963041de557bf9037f13e50, service is active,
+  the Phase-2 budget key is absent, and unrelated watchdog work is preserved.
+- Post-write full pytest: **PASS — 1115 passed, 3 skipped in 123.07 s**.
+- Post-write git diff --check: **PASS**.
+- Production isolation at 2026-09-24T05:46:55+10:00: **PASS**; production
+  remains master at 83862b040f59afc97963041de557bf9037f13e50, the service is
+  active, the budget key is absent, and unrelated watchdog work is preserved.
+- The first post-write pre-commit pass fixed only the final newline of this
+  progress file; every substantive hook passed. The clean rerun then
+  **PASSED every hook**.
+
+Step 2.12: **COMPLETE**
+Phase 2: **COMPLETE**
+Phase 3: **NOT STARTED**
+Next: **Phase 3 offline replay; not started by this step**
