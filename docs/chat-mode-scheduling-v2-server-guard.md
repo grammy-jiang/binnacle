@@ -145,7 +145,7 @@ If turn correlation is unavailable:
 
 - keep the ordinary per-call 50-second schema bound;
 - do not pretend a per-turn wall budget was enforced;
-- log `policy=no_turn`;
+- log `blocking_policy=no_turn`;
 - never create hidden cross-session state based on guesses.
 
 ### 1.5 Process lifetime
@@ -161,11 +161,12 @@ version because:
 - persisting ephemeral ChatGPT turn accounting would add complexity without
   evidence that it is needed.
 
-The tracker is LRU-bounded (initially 4096 inactive turn records). An active
-wait window is never evicted. If capacity is exhausted entirely by active
-records, a new turn falls back to the ordinary per-call 50-second bound and
-logs `policy=capacity_untracked`; silently evicting an active lease would make
-wall accounting incorrect.
+The tracker is LRU-bounded to **4096 total turn records** in the first
+implementation. Inactive records are eligible for LRU eviction; an active wait
+window is never evicted. If all 4096 records are active, a new turn falls back
+to the ordinary per-call 50-second bound and logs
+`blocking_policy=capacity_untracked`; silently evicting an active lease would make wall
+accounting incorrect.
 
 If production evidence shows reloads frequently occur inside long active turns,
 persistence can be reconsidered separately.
@@ -211,10 +212,13 @@ further positive waits will be non-blocking. This is a policy fact, not an
 error, and gives the model the signal required for the checkpoint fallback in
 the Project instruction.
 
-At the end of an active window, emit an event carrying:
+At the end of an active window, emit `event=blocking_window_closed` carrying:
 
 ```text
+call
 turn
+client
+blocking_budget_s
 blocking_window_wall_s
 blocking_spent_after_s
 blocking_remaining_after_s
@@ -248,7 +252,7 @@ Unit tests:
 - budget exhaustion is visible in structured output and the one-line summary;
 - new turn receives a new budget;
 - nonmatching client is unchanged;
-- missing turn uses `policy=no_turn`;
+- missing turn uses `blocking_policy=no_turn`;
 - LRU eviction is bounded, never evicts active leases, and has an explicit
   capacity-untracked fallback;
 - monotonic clock is used;
