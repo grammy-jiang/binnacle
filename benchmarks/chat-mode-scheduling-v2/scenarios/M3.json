@@ -91,7 +91,7 @@
     ],
     "jobs": [
       {
-        "command": "python3 -c 'import time; time.sleep(30)'",
+        "command": "python3 -c 'import time; time.sleep(300)'",
         "name": "slow",
         "prelaunch": true
       }
