@@ -141,6 +141,7 @@ class OracleCheck(StrictModel):
         "file_content",
         "pytest_pass",
         "command_exit_zero",
+        "command_contains_exit_zero",
         "no_mutation_outside_scope",
         "all_nodes_complete",
     ]

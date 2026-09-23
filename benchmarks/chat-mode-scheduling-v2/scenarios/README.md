@@ -90,6 +90,13 @@ improvement into a correctness failure.
 Performance and user-experience metrics are evaluated by the A/B analyzer, not
 by scenario correctness oracles.
 
+Physical shell batching is allowed when it preserves logical dependencies.
+For example, R8 accepts either a dedicated test command or a combined
+edit-and-test command. Its `command_contains_exit_zero` oracle requires that at
+least one `run_command` containing `test_app.py` exits successfully, so the
+benchmark checks the required test outcome without forcing one physical call
+per logical step.
+
 ## Validation
 
 Run:
