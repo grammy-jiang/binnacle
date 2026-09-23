@@ -12,7 +12,7 @@
 | 2.8 | COMPLETE |
 | 2.9 | COMPLETE |
 | 2.10 | COMPLETE |
-| 2.11 | NOT STARTED |
+| 2.11 | COMPLETE |
 | 2.12 | NOT STARTED |
 
 Phase status: **IN PROGRESS**
@@ -20,8 +20,8 @@ Branch: `feature/chat-mode-blocking-wall-guard`
 Worktree: `/home/grammy-jiang/Projects/binnacle-chat-blocking-wall-guard`
 Source branch: `design/chat-mode-scheduling-v2`
 Phase-1 evidence commit: `cc1b014`
-Last completed step: **2.10**
-Next step: **2.11**
+Last completed step: **2.11**
+Next step: **2.12**
 
 ## Step 2.1 baseline freeze
 
@@ -319,3 +319,16 @@ Next step: **2.10 - Real-job integration suite**
 
 Step 2.10: **COMPLETE**
 Next step: **2.11 - Concurrency, reload semantics, and guard overhead**
+
+## Step 2.11 concurrency, reload semantics, and guard overhead
+
+- Added synchronized real-job concurrency coverage for two simultaneous 2-second waits, five simultaneous 1-second waits, an overlapping second wave, different jobs under one turn, independent concurrent turns, and independent exhaustion state.
+- Replaced job_status.blocking_wall_tracker with a fresh BlockingWallTracker while a durable sleep fixture remained running; the job stayed observable and stoppable, confirming that reload loses only ephemeral guard state.
+- Focused concurrency/reload suite: PASS - 7 passed in 17.41 s.
+- Added scripts/benchmark_blocking_wall_guard.py and the required dated JSON and Markdown performance evidence.
+- Three independent 100,000-iteration Pi runs measured median run-level p95 = 0.006445 ms and p99 = 0.007259 ms, passing the <1 ms / <2 ms design targets without adding a normal CI wall-clock gate.
+- No production runtime source changes were needed; no race or active-lease leak was observed.
+- Exact Step-2.11 matrix: PASS - 42 passed in 20.34 s.
+
+Step 2.11: **COMPLETE**
+Next step: **2.12 - Final Phase-2 validation and handoff**
