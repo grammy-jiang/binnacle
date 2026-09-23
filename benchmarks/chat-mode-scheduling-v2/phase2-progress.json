@@ -6,8 +6,8 @@
   "worktree": "/home/grammy-jiang/Projects/binnacle-chat-blocking-wall-guard",
   "source_branch": "design/chat-mode-scheduling-v2",
   "phase1_evidence_commit": "cc1b014",
-  "last_completed_step": "2.6",
-  "next_step": "2.7",
+  "last_completed_step": "2.7",
+  "next_step": "2.8",
   "baseline": {
     "design_source_head": "e9c04728e5ac583a8e5d3b991cb01309de36ef82",
     "production": {
@@ -227,9 +227,17 @@
       ]
     },
     "2.7": {
-      "status": "not_started",
-      "tests": [],
-      "notes": []
+      "status": "complete",
+      "tests": [
+        "uv run pytest -q tests/unit/core/test_blocking_wall_guard.py tests/integration/test_job_status_blocking_guard.py tests/integration/test_jobs_lifecycle.py -> 69 passed in 38.28s"
+      ],
+      "notes": [
+        "Integrated the process-local BlockingWallTracker into positive specific-job job_status calls using the frozen validation/acquire/wait/release order.",
+        "Unknown job IDs are rejected before budget resolution or lease acquisition; zero-wait and listing paths do not acquire guard state.",
+        "Matching client+turn calls use the guard's effective wait; no_policy, no_turn, and capacity_untracked preserve the ordinary bounded wait.",
+        "Budget exhaustion makes later positive waits non-blocking without stopping durable jobs, and every acquired lease is released in a finally block including wait exceptions.",
+        "Structured policy fields, exhausted-summary wording, and detailed blocking telemetry remain deferred to Step 2.8."
+      ]
     },
     "2.8": {
       "status": "not_started",
