@@ -330,5 +330,10 @@ Next step: **2.11 - Concurrency, reload semantics, and guard overhead**
 - No production runtime source changes were needed; no race or active-lease leak was observed.
 - Exact Step-2.11 matrix: PASS - 42 passed in 20.34 s.
 
+- Initial pushed ci.yml run 35903817678 failed the Python 3.13 coverage-policy job because src/binnacle/jobs.py full coverage was 89.78%, below the required 90.00%.
+- Added an idempotent second-stop assertion to the reload-semantics integration test, exercising the already-exited embedded stop path without changing production code, coverage policy, or exclusions.
+- Exact CI-equivalent coverage policy after the fix: PASS - 1114 passed, 3 skipped; src/binnacle/jobs.py full coverage 90.67% (target 90.00%); 0 policy errors.
+- Follow-up exact Step-2.11 matrix after the coverage fix: PASS - 42 passed in 20.30 s.
+
 Step 2.11: **COMPLETE**
 Next step: **2.12 - Final Phase-2 validation and handoff**

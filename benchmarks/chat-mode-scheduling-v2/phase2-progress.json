@@ -283,13 +283,17 @@
       "tests": [
         "uv run pytest -q tests/integration/test_job_status_blocking_guard_concurrency.py -> 7 passed in 17.41s",
         "Exact Step-2.11 matrix -> 42 passed in 20.34s",
-        "Step-2.11 overhead benchmark -> 3 x 100000 iterations; median p95 0.006445 ms, median p99 0.007259 ms; design targets passed"
+        "Step-2.11 overhead benchmark -> 3 x 100000 iterations; median p95 0.006445 ms, median p99 0.007259 ms; design targets passed",
+        "uv run tox -e coverage-policy -- --ignore=tests/integration/test_wheel_artifact.py -> 1114 passed, 3 skipped; coverage-policy OK; src/binnacle/jobs.py full coverage 90.67% (target 90.00%)",
+        "Follow-up exact Step-2.11 matrix after coverage fix -> 42 passed in 20.30s"
       ],
       "notes": [
         "Added synchronized real-job concurrency coverage for two/five simultaneous waits, a second overlapping wave sharing the original deadline, different jobs sharing one turn budget, independent concurrent turns, and one turn exhausting while another retains budget.",
         "Added reload-semantics coverage by replacing job_status.blocking_wall_tracker with a fresh process-local tracker while a durable sleep fixture remained running; the job stayed observable and stoppable and only ephemeral budget state was reset.",
         "Added scripts/benchmark_blocking_wall_guard.py and dated JSON/Markdown evidence with three independent 100000-iteration Pi runs; no CI wall-clock threshold was added.",
-        "No production runtime source changes were required by Step 2.11; the existing tracker/job_status implementation satisfied the new concurrency and reload cases."
+        "No production runtime source changes were required by Step 2.11; the existing tracker/job_status implementation satisfied the new concurrency and reload cases.",
+        "Initial pushed ci.yml run 35903817678 failed Coverage policy / Python 3.13 because src/binnacle/jobs.py full coverage was 89.78%, below the required 90.00%.",
+        "Added an idempotent second stop assertion to the reload-semantics integration test so the already-exited embedded stop path is covered; local full coverage for src/binnacle/jobs.py is now 90.67% without lowering the policy or excluding the module."
       ]
     },
     "2.12": {
