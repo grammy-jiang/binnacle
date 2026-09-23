@@ -8,6 +8,8 @@ Evidence: `docs/chat-mode-scheduling-final-2026-09-23.md`.
 This document specifies only the server-side catastrophe ceiling. It is not a
 workflow scheduler and does not know whether independent work remains.
 
+Execution SOP: `docs/chat-mode-scheduling-v2-phase2-execution-plan.md`.
+
 ## 1. Layer B — cumulative blocking-wall guard
 
 The server guard is not a scheduler. It exists only to prevent the historical

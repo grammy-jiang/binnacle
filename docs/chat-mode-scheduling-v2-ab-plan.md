@@ -16,6 +16,8 @@ matrix are in
 `benchmarks/chat-mode-scheduling-v2/phase1-step9-aggregate-go-no-go-2026-09-23.md`.
 The acceptance thresholds below are unchanged.
 
+Execution SOP: `docs/chat-mode-scheduling-v2-phase2-execution-plan.md`.
+
 ## 1. Benchmark architecture
 
 The benchmark has two layers.
