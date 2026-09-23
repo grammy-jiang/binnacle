@@ -8,6 +8,8 @@ Evidence: `docs/chat-mode-scheduling-final-2026-09-23.md`.
 The benchmark DAG metadata described here is test-only. It is not a production
 workflow engine.
 
+Executable metric definitions: `benchmarks/chat-mode-scheduling-v2/METRICS.md`.
+
 ## 1. Benchmark architecture
 
 The benchmark has two layers.

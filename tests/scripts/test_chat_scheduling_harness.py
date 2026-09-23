@@ -242,6 +242,11 @@ def test_trial_failure_after_instruction_apply_restores_and_cleans(
     monkeypatch.setattr(harness, "LocalMCP", FakeMCP)
     monkeypatch.setattr(harness, "ProductionSnapshot", FakeProduction)
     monkeypatch.setattr(harness, "arm_instructions", lambda arm: "variant-B")
+    monkeypatch.setattr(
+        harness,
+        "capture_journal",
+        lambda start, end, target: target.write_text(""),
+    )
 
     code, state = harness.run_trial("M1", "B", fail_after_instructions=True)
 
@@ -260,3 +265,45 @@ def test_arm_a_instructions_preserve_exact_backend_trailing_newlines():
 
     assert text.endswith("\n\n")
     assert not text.endswith("\n\n\n")
+
+
+def test_fixture_snapshot_preserves_final_files_and_git_diff(monkeypatch, tmp_path):
+    scenario = load_scenario(SCENARIO_ROOT / "R8.json").model_copy(deep=True)
+    fixture_base = tmp_path / "fixtures"
+    monkeypatch.setattr(runtime, "FIXTURE_BASE", fixture_base)
+    scenario.fixture.root_template = str(fixture_base / "{id}" / "{run_id}")
+    fixture = runtime.FixtureLease(
+        scenario,
+        runtime.TrialIdentity("R8", "snapshot-test", "N-SNAP"),
+        FakeMCP(),
+    )
+    fixture.__enter__()
+    try:
+        app = fixture.root / "app.py"
+        app.write_text(app.read_text().replace("BEFORE-N-SNAP", "AFTER-N-SNAP"))
+        target = tmp_path / "fixture-final.json"
+        payload = fixture.snapshot(target)
+
+        assert "AFTER-N-SNAP" in payload["final_files"]["app.py"]
+        assert "app.py" in payload["git_status_porcelain"]
+        assert "AFTER-N-SNAP" in payload["git_diff"]
+        assert json.loads(target.read_text())["file_sha256"]["app.py"]
+    finally:
+        fixture.cleanup()
+
+
+def test_capture_journal_freezes_requested_window(monkeypatch, tmp_path):
+    seen = {}
+
+    def fake_run(args, **kwargs):
+        seen["args"] = args
+        return subprocess.CompletedProcess(args, 0, "journal-evidence\n", "")
+
+    monkeypatch.setattr(runtime, "_run", fake_run)
+    target = tmp_path / "journal.log"
+
+    runtime.capture_journal(100.0, 110.0, target)
+
+    assert target.read_text() == "journal-evidence\n"
+    assert seen["args"][seen["args"].index("--since") + 1] == "@99.000"
+    assert seen["args"][seen["args"].index("--until") + 1] == "@111.000"
