@@ -224,6 +224,8 @@ def _tool_intervals(
         fields = coerce_fields(call.result_fields or {})
         start = max(0.0, call.start_epoch_s - origin_epoch_s)
         end = max(start, call.end_epoch_s - origin_epoch_s)
+        start_s = round(start, 6)
+        end_s = round(end, 6)
         waited = fields.get("waited_s")
         blocking_start = blocking_end = None
         if (
@@ -232,8 +234,11 @@ def _tool_intervals(
             and isinstance(waited, (int, float))
             and waited > 0
         ):
-            blocking_start = start
-            blocking_end = min(end, start + float(waited))
+            blocking_start = start_s
+            blocking_end = max(
+                start_s,
+                min(end_s, round(start + float(waited), 6)),
+            )
         tokens = fields.get("tokenizer_tokens")
         if not isinstance(tokens, int):
             tokens = fields.get("est_tokens")
@@ -245,8 +250,8 @@ def _tool_intervals(
                 node_id=assigned.get(call.call_id),
                 tool=call.tool,
                 turn=call.turn,
-                start_s=round(start, 6),
-                end_s=round(end, 6),
+                start_s=start_s,
+                end_s=end_s,
                 args=call.args,
                 result=fields,
                 is_error=bool(fields.get("is_error")),

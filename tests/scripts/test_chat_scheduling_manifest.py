@@ -59,6 +59,13 @@ def test_catalog_is_exact_and_all_manifests_validate():
     )
 
 
+def test_m3_slow_fixture_outlives_the_entire_micro_turn():
+    scenario = load_all()["M3"]
+
+    assert scenario.max_turn_runtime_s == 75
+    assert "time.sleep(300)" in scenario.fixture.jobs[0].command
+
+
 def test_phase1_single_turn_bounds_are_explicit_and_reasonable():
     scenarios = load_all()
 

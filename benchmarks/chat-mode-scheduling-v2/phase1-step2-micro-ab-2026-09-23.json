@@ -1,0 +1,157 @@
+{
+  "acceptance": {
+    "all_valid_trials_correct": true,
+    "all_valid_trials_no_duplicates": true,
+    "all_valid_trials_same_prompt": true,
+    "all_valid_trials_uninterrupted": true,
+    "m3_a_sliding_refill_hard_gate": true,
+    "m3_b_sliding_refill_hard_gate": true
+  },
+  "invalid_or_excluded_trials": [
+    {
+      "reason": "workload completed, but exact chat cleanup hit transient auth failure; excluded from A/B",
+      "run_id": "m1-20260923T145220-2d166c0ea2"
+    },
+    {
+      "reason": "old 30s slow fixture; excluded after fixture duration was hardened for paired comparability",
+      "run_id": "m3-20260923T150618-dbf6089189"
+    },
+    {
+      "reason": "invalid M3: 30s slow fixture exited before ChatGPT job_status began; no blocking interval",
+      "run_id": "m3-20260923T150919-46d496e895"
+    }
+  ],
+  "pairs": {
+    "M1": {
+      "idle_delta_s_b_minus_a": 0.0,
+      "overlap_ratio_delta_b_minus_a": 0.0,
+      "peak_delta_b_minus_a": 0,
+      "wall_ratio_b_over_a": 1.239432
+    },
+    "M2": {
+      "idle_delta_s_b_minus_a": 0.0,
+      "overlap_ratio_delta_b_minus_a": 0.25,
+      "peak_delta_b_minus_a": 2,
+      "wall_ratio_b_over_a": 1.055183
+    },
+    "M3": {
+      "idle_delta_s_b_minus_a": 0.106,
+      "overlap_ratio_delta_b_minus_a": -0.166666,
+      "peak_delta_b_minus_a": 0,
+      "wall_ratio_b_over_a": 1.138673
+    }
+  },
+  "rows": [
+    {
+      "arm": "A",
+      "avoidable_idle_wall_s": 0.0,
+      "blocking_wall_s": 0.0,
+      "correctness_passed": true,
+      "duplicate_calls": 0,
+      "eligible_read_only_calls": 3,
+      "eligible_read_only_overlap_ratio": 0.0,
+      "interrupted": false,
+      "overlapped_eligible_read_only_calls": 0,
+      "read_only_peak_inflight": 1,
+      "run_id": "m1-20260923T145841-729813112f",
+      "same_prompt_completion": true,
+      "scenario": "M1",
+      "tool_calls": 3,
+      "tool_result_tokens": 390,
+      "wall_s": 15.637
+    },
+    {
+      "arm": "B",
+      "avoidable_idle_wall_s": 0.0,
+      "blocking_wall_s": 0.0,
+      "correctness_passed": true,
+      "duplicate_calls": 0,
+      "eligible_read_only_calls": 3,
+      "eligible_read_only_overlap_ratio": 0.0,
+      "interrupted": false,
+      "overlapped_eligible_read_only_calls": 0,
+      "read_only_peak_inflight": 1,
+      "run_id": "m1-20260923T150006-ea1f998359",
+      "same_prompt_completion": true,
+      "scenario": "M1",
+      "tool_calls": 3,
+      "tool_result_tokens": 378,
+      "wall_s": 19.381
+    },
+    {
+      "arm": "A",
+      "avoidable_idle_wall_s": 0.0,
+      "blocking_wall_s": 0.0,
+      "correctness_passed": true,
+      "duplicate_calls": 0,
+      "eligible_read_only_calls": 8,
+      "eligible_read_only_overlap_ratio": 0.25,
+      "interrupted": false,
+      "overlapped_eligible_read_only_calls": 2,
+      "read_only_peak_inflight": 2,
+      "run_id": "m2-20260923T150429-62fc843337",
+      "same_prompt_completion": true,
+      "scenario": "M2",
+      "tool_calls": 8,
+      "tool_result_tokens": 1016,
+      "wall_s": 23.232
+    },
+    {
+      "arm": "B",
+      "avoidable_idle_wall_s": 0.0,
+      "blocking_wall_s": 0.0,
+      "correctness_passed": true,
+      "duplicate_calls": 0,
+      "eligible_read_only_calls": 8,
+      "eligible_read_only_overlap_ratio": 0.5,
+      "interrupted": false,
+      "overlapped_eligible_read_only_calls": 4,
+      "read_only_peak_inflight": 4,
+      "run_id": "m2-20260923T150228-62c10a4d57",
+      "same_prompt_completion": true,
+      "scenario": "M2",
+      "tool_calls": 8,
+      "tool_result_tokens": 1056,
+      "wall_s": 24.514
+    },
+    {
+      "arm": "A",
+      "avoidable_idle_wall_s": 0.23,
+      "blocking_wall_s": 5.001,
+      "correctness_passed": true,
+      "duplicate_calls": 0,
+      "eligible_read_only_calls": 6,
+      "eligible_read_only_overlap_ratio": 0.833333,
+      "interrupted": false,
+      "overlapped_eligible_read_only_calls": 5,
+      "read_only_peak_inflight": 3,
+      "run_id": "m3-20260923T151237-1605a360f7",
+      "same_prompt_completion": true,
+      "scenario": "M3",
+      "tool_calls": 6,
+      "tool_result_tokens": 853,
+      "wall_s": 24.446
+    },
+    {
+      "arm": "B",
+      "avoidable_idle_wall_s": 0.336,
+      "blocking_wall_s": 5.0,
+      "correctness_passed": true,
+      "duplicate_calls": 0,
+      "eligible_read_only_calls": 6,
+      "eligible_read_only_overlap_ratio": 0.666667,
+      "interrupted": false,
+      "overlapped_eligible_read_only_calls": 4,
+      "read_only_peak_inflight": 3,
+      "run_id": "m3-20260923T151401-085319717c",
+      "same_prompt_completion": true,
+      "scenario": "M3",
+      "tool_calls": 6,
+      "tool_result_tokens": 844,
+      "wall_s": 27.836
+    }
+  ],
+  "schema_version": 1,
+  "status": "mechanism_pass_performance_inconclusive",
+  "step": "1.2"
+}

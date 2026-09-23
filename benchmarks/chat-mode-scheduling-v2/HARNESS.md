@@ -70,6 +70,20 @@ The instruction restore happens **before** chat deletion and fixture teardown.
 A chat cleanup failure therefore cannot strand the benchmark Project on the
 wrong instruction variant.
 
+The ChatGPT terminal helpers may occasionally see transient 403/session
+authentication failures even while the browser-backed chat itself is healthy.
+For this reason:
+
+- Project get/set operations have a bounded outer retry around the helper's own
+  session-level retry;
+- exact UUID chat deletion has the same bounded outer retry;
+- retries never broaden selectors or fall back to title matching;
+- if retries are exhausted, the trial fails and the exact tracked chat remains
+  in the ledger for explicit recovery.
+
+These retries are lifecycle hardening only. Chat wall-time metrics are measured
+inside the submitted conversation and exclude setup/restore/cleanup time.
+
 ## A/B instruction sources
 
 Arm A is read from the exact backend string stored in:
