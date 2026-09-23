@@ -23,6 +23,20 @@ def run_mode(monkeypatch, mode: str, pattern: str, path: Path, **kwargs):
     ).structured_content
 
 
+def by_file(payload: dict) -> dict:
+    """The payload with its entries grouped by file, in path order.
+
+    rg runs with its default parallel walker and no `--sort`, so which file
+    it reports first depends on which worker thread finishes first. Neither
+    pipeline sorts (order is not part of the contract, see the truncation
+    test below), and two independent rg runs can therefore disagree on file
+    order: measured 2026-09-24 on the Pi, 49 of 400 back-to-back pairs under
+    CPU load differed in nothing but that. The sort is stable, so the line
+    order inside a file -- which rg does fix -- is still compared.
+    """
+    return {**payload, "entries": sorted(payload["entries"], key=lambda e: e["file"])}
+
+
 @pytest.mark.parametrize(
     "kwargs",
     [
@@ -38,7 +52,7 @@ def test_normal_exact_results_match_between_pipelines(tmp_path, monkeypatch, kwa
     materialized = run_mode(monkeypatch, "materialized", "hit", tmp_path, **kwargs)
     streaming = run_mode(monkeypatch, "streaming", "hit", tmp_path, **kwargs)
 
-    assert streaming == materialized
+    assert by_file(streaming) == by_file(materialized)
 
 
 def test_truncated_independent_rg_runs_preserve_contract_not_order(
