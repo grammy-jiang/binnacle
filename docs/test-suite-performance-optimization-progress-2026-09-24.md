@@ -5,7 +5,7 @@
 | Step | Description | Status |
 | --- | --- | --- |
 | 1.1 | Clean reproducible baseline | PASS |
-| 1.2 | Fix watchdog USB mock target | NOT STARTED |
+| 1.2 | Fix watchdog USB mock target | PASS |
 | 1.3 | Define/mark true no_xdist tests | NOT STARTED |
 | 1.4 | Resolve search-text ordering contract | NOT STARTED |
 | 1.5 | Build two-lane fast full-suite command | NOT STARTED |
@@ -196,3 +196,70 @@ Risks / follow-up:
 Next:
 
 - 1.2 Fix watchdog USB mock target
+
+Step: 1.2 Fix the watchdog USB mock target
+Status: PASS
+
+Changed:
+
+- `tests/system/test_watchdog_usb.py` — patches `wd_actions.usb_reset_device`, the lookup point used by `actions.py`, and retains the mock so the test asserts exactly 12 reset-helper calls.
+- `docs/test-suite-performance-optimization-progress-2026-09-24.md` — marks Step 1.2 PASS and records this report.
+- No production source files changed.
+
+Source snapshot:
+
+- Branch: `design/chat-mode-scheduling-v2`
+- Exact source commit at step start: `460dc7303a2175f64f8a99dc2ddf6319f11cb868`
+- The worktree was clean at step start.
+- Step 1.1 was PASS and Step 1.2 was the next NOT STARTED step.
+
+Validation:
+
+- Implementation-boundary confirmation:
+  - `apply_action()` maps `"usb_reset"` to `_apply_usb_reset()`.
+  - `_apply_usb_reset()` calls the `usb_reset_device` symbol imported into `binnacle.ops.watchdog.actions`.
+- Exact pre-fix timed command:
+  `/usr/bin/time -f "wall=%e" uv run pytest -q tests/system/test_watchdog_usb.py::test_usb_reset_schedule_escalates_across_attempts --randomly-seed=12345`
+  - Result: 1 passed, 0 failed, 0 skipped.
+  - Pytest elapsed: 12.24 s.
+  - `wall=12.84`.
+- Exact post-fix timed command:
+  `/usr/bin/time -f "wall=%e" uv run pytest -q tests/system/test_watchdog_usb.py::test_usb_reset_schedule_escalates_across_attempts --randomly-seed=12345`
+  - Result: 1 passed, 0 failed, 0 skipped.
+  - Pytest elapsed: 0.26 s.
+  - `wall=0.79`.
+- Exact focused module command:
+  `uv run pytest tests/system/test_watchdog_usb.py -q`
+  - Result: 23 passed, 0 failed, 0 skipped in 0.36 s.
+- Exact full-lane command: none; Step 1.2 requires only the target test and the watchdog USB module.
+
+Performance:
+
+- Before: `wall=12.84 s` for the target test at seed 12345.
+- After: `wall=0.79 s` for the same target test at seed 12345.
+- Apples-to-apples: yes — same source tree except the isolated test fix, same host, test selection, dependency lock, Python environment, and random seed.
+- Benchmark host/load evidence:
+  - Before pre-fix timed run: `nproc=4`; `/proc/loadavg = 1.24 1.07 1.01 2/798 673083`.
+  - Before post-fix timed run: `nproc=4`; `/proc/loadavg = 0.52 0.90 0.95 1/798 673418`.
+  - Neither 1-minute load exceeded 1.5, so no foreign-load wait was required.
+
+Findings:
+
+- The compatibility-facade patch target did not intercept the action implementation's imported helper, so the test entered the real authorized-reset settle path.
+- Patching `binnacle.ops.watchdog.actions.usb_reset_device` removes the accidental settle waits while preserving all 12 attempts, the exact backoff gap sequence, the final attempt counter, and the separate method-rotation coverage.
+- The retained mock assertion `reset.call_count == 12` proves that every applied reset action used the mocked hardware boundary.
+- Production source behaviour changed: no.
+- Host-safety, coverage policy, production timing defaults, and test selection were not weakened.
+
+Deviation from Section 5.8:
+
+- None.
+
+Risks / follow-up:
+
+- No known Step 1.2 follow-up beyond continuing the frozen plan.
+- The timed A/B command includes `--randomly-seed=12345` as required by the benchmark protocol.
+
+Next:
+
+- 1.3 Define and mark the true no-xdist tests
