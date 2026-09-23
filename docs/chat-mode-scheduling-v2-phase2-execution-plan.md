@@ -208,10 +208,18 @@ Budget selection is a later experiment. Phase 3 will replay at least
 
 These are hard constraints throughout all Phase-2 steps.
 
-### 5.1 Default behavior is unchanged
+### 5.1 Default execution semantics are unchanged
 
 Repository defaults must contain no active client budget. With an empty budget
-map, existing clients must retain the current `job_status` behavior.
+map, existing clients retain the current blocking/job-lifecycle semantics: the
+server does not impose a per-turn ceiling and the ordinary per-call 0..50-second
+contract remains.
+
+Phase 2 intentionally adds **backward-compatible observability** in Step 2.8:
+a specific-job call with an original positive wait gains optional/additive
+structured policy fields, even under `no_policy`. Zero-wait and listing payloads
+retain their previous shape. Therefore "unchanged" in this document means
+execution semantics, not byte-for-byte result JSON after Step 2.8.
 
 ### 5.2 Existing per-call contract remains
 
@@ -347,12 +355,13 @@ active_window_deadline
 last_seen
 ```
 
-An implementation may encapsulate additional private fields if tests require
-them, but the semantics above must remain recognizable.
+Private helper fields are allowed, but the public Phase-2 state/API contract is
+frozen in Section 9.1.6 and the accounting formulas are frozen in Section
+9.1.8. Do not redesign them during implementation.
 
 ### 7.3 First positive wait in a new window
 
-Conceptually:
+The exact first-window rule is:
 
 ```text
 remaining = budget - spent
@@ -399,8 +408,8 @@ non-blocking.
 
 ## 8. Policy outcomes
 
-The implementation should expose explicit policy outcomes rather than relying on
-implicit null fields. At minimum:
+The implementation exposes the following exact policy outcomes; their names are
+frozen by Section 9.1.7:
 
 ```text
 no_policy
@@ -409,9 +418,6 @@ tracked
 exhausted
 capacity_untracked
 ```
-
-Names may be refined during implementation if the final set remains unambiguous
-and is documented/tested.
 
 Expected behavior:
 
@@ -427,7 +433,8 @@ Expected behavior:
 
 Every `job_status` decision must be reconstructible from logs.
 
-Log fields should include at least:
+The per-call log contract is exactly the field set below, with null/absent-value
+encoding defined in Section 9.1.11:
 
 ```text
 wait_requested_s
@@ -444,7 +451,7 @@ turn
 client
 ```
 
-Positive-wait structured output should expose at least:
+Positive-wait structured output uses exactly these additional policy keys:
 
 ```text
 wait_requested_s
@@ -475,25 +482,873 @@ Later `binnacle stats` must aggregate enough information to answer:
 - how many turns crossed 25%, 50%, 75%, and 100% budget utilization;
 - p50/p90/p95/max blocking wall per turn.
 
+## 9.1 Frozen implementation decisions for a cold-start agent
+
+This section removes choices that a new agent would otherwise have to
+re-investigate. These decisions are **already made for Phase 2**. Do not reopen
+them unless implementation evidence proves one impossible or internally
+inconsistent. If that happens, record the contradiction in the Phase-2 progress
+files before changing the contract.
+
+### 9.1.1 Canonical repositories, branch, and worktree
+
+Use these exact locations and names:
+
+```text
+production checkout:
+  /home/grammy-jiang/Projects/binnacle
+  expected branch: master
+
+Phase-1/design checkout:
+  /home/grammy-jiang/Projects/binnacle-chat-scheduling-design
+  branch: design/chat-mode-scheduling-v2
+
+Phase-2 implementation branch:
+  feature/chat-mode-blocking-wall-guard
+
+Phase-2 implementation worktree:
+  /home/grammy-jiang/Projects/binnacle-chat-blocking-wall-guard
+```
+
+The Phase-1 evidence decision is commit `cc1b014`. The implementation branch
+must **not** be created directly from `cc1b014`, because the design branch has
+newer planning documentation. Create Phase 2 from the current synchronized tip
+of `origin/design/chat-mode-scheduling-v2` that contains this document.
+
+Do not branch Phase 2 from `master` or `proof-of-concept`.
+
+### 9.1.2 Canonical Phase-2 progress files
+
+Step 2.1 must create both files below, and every later numbered step must update
+them before that step is committed:
+
+```text
+benchmarks/chat-mode-scheduling-v2/phase2-progress.json
+benchmarks/chat-mode-scheduling-v2/phase2-progress.md
+```
+
+`phase2-progress.json` is the machine-readable source of truth for step status.
+Use exact JSON step states `not_started`, `complete`, or `blocked`; use phase
+status `in_progress`, `blocked`, or `complete`. The Markdown mirror renders those
+as `NOT STARTED`, `COMPLETE`, or `BLOCKED`. Use schema version 1 with at least:
+
+```json
+{
+  "schema_version": 1,
+  "phase": 2,
+  "status": "in_progress",
+  "branch": "feature/chat-mode-blocking-wall-guard",
+  "worktree": "/home/grammy-jiang/Projects/binnacle-chat-blocking-wall-guard",
+  "source_branch": "design/chat-mode-scheduling-v2",
+  "phase1_evidence_commit": "cc1b014",
+  "last_completed_step": "2.1",
+  "next_step": "2.2",
+  "steps": {
+    "2.1": {
+      "status": "complete",
+      "tests": [],
+      "notes": []
+    }
+  }
+}
+```
+
+Do **not** attempt to store the hash of the commit that contains the progress
+file inside that same commit; that would be self-referential. Git history is the
+authoritative step-commit mapping. The progress files record step number,
+status, tests, findings, and next step.
+
+`phase2-progress.md` is the concise human-readable mirror. It must begin with a
+small status table containing all twelve steps and `NOT STARTED / COMPLETE /
+BLOCKED` state.
+
+### 9.1.3 Exact new source and test files
+
+Use these exact new files rather than choosing alternate locations:
+
+```text
+src/binnacle/blocking_wall_guard.py
+
+tests/unit/core/test_blocking_wall_guard.py
+tests/integration/test_job_status_blocking_guard.py
+tests/integration/test_job_status_blocking_guard_concurrency.py
+
+scripts/benchmark_blocking_wall_guard.py
+```
+
+Existing files to extend are fixed as:
+
+```text
+src/binnacle/callctx.py
+src/binnacle/config.py
+src/binnacle/logging_middleware.py
+src/binnacle/tools/job_status.py
+src/binnacle/server.py
+src/binnacle/logstats_models.py
+src/binnacle/logstats_jobs.py
+src/binnacle/logstats_render.py
+
+tests/unit/core/test_config_loading.py
+tests/unit/core/test_logging_result_fields.py
+tests/unit/core/test_logstats_jobs.py
+tests/unit/core/test_logstats.py
+tests/integration/test_logging.py
+tests/integration/test_http_workflows.py
+tests/integration/test_jobs_lifecycle.py
+tests/integration/test_job_manager_telemetry.py
+tests/contracts/test_descriptions.py
+
+docs/tools/run_command.md
+docs/logging.md
+```
+
+Do not move durable-job code into the new guard module. Do not create another
+stats subsystem. `docs/tools/run_command.md` owns the public run/job-status
+contract text; `docs/logging.md` owns the production event inventory.
+
+### 9.1.4 Exact configuration API
+
+Add this setting to `JobsSettings`:
+
+```python
+blocking_wall_budget_s_by_client: dict[str, int]
+```
+
+The default is an empty mapping via `default_factory=dict`.
+
+Validation rules are fixed:
+
+- client-prefix keys must be non-empty and not whitespace-only;
+- each budget must be an integer in `1..3600` inclusive;
+- configuration outside that range fails settings validation.
+
+Add this method to `JobsSettings`:
+
+```python
+def blocking_wall_budget_for_client(self, client: str | None) -> int | None: ...
+```
+
+Resolution is exact prefix matching against the configured keys. If several
+prefixes match, the longest matching prefix wins. `None` or an unmatched client
+returns `None`.
+
+Step 2.2 must also add effective-config observability to the existing `jobs`
+`tool_config` line:
+
+```text
+blocking_wall_budget_clients=<count>
+blocking_wall_budgets=<prefix:seconds,... or ->
+```
+
+Sort prefixes for deterministic output. These values are configuration, not
+secrets.
+
+For environment-loading coverage, use the existing Pydantic-settings convention
+and test the JSON mapping form:
+
+```text
+BINNACLE_JOBS__BLOCKING_WALL_BUDGET_S_BY_CLIENT={"openai-mcp":120}
+```
+
+### 9.1.5 Exact turn-correlation rule
+
+Add to `src/binnacle/callctx.py`:
+
+```python
+current_turn: ContextVar[str | None]
+```
+
+Add a pure helper in `logging_middleware.py`:
+
+```python
+def _base_turn(request_id: str | None) -> str | None: ...
+```
+
+The parsing rule is fixed:
+
+1. input is the full `X-Request-Id` value already logged as `turn=`;
+2. split once on the first `/`;
+3. return the prefix only when prefix, slash, and suffix are all non-empty;
+4. otherwise return `None`;
+5. do not synthesize a base turn from session ID, MCP request ID, or any other
+   field.
+
+`ToolLoggingMiddleware.on_call_tool()` must continue logging the full request-id
+value as `turn=` while publishing only the base portion in `current_turn`.
+Set/reset `current_turn` in the same `try/finally` scope as `current_client` and
+`current_call`.
+
+### 9.1.6 Exact tracker public API and data model
+
+`src/binnacle/blocking_wall_guard.py` owns the policy state. Use these public
+names:
+
+```text
+BlockingWallTracker
+BlockingDecision
+BlockingRelease
+BlockingLease
+TurnState
+```
+
+Use a `threading.Lock`, because synchronous MCP tools may execute concurrently
+in worker threads. Do not use an asyncio-only lock.
+
+`BlockingWallTracker` constructor:
+
+```python
+def __init__(
+    self,
+    *,
+    clock: Callable[[], float] = time.monotonic,
+    capacity: int = 4096,
+) -> None: ...
+```
+
+The capacity is **4096 total tracked turn records**, not 4096 inactive records
+plus active records. On insertion while full, evict the least-recently-used
+inactive record. If all records are active, return the untracked capacity
+fallback; never evict an active record.
+
+The tracker key is exactly:
+
+```text
+(client, base_turn)
+```
+
+`TurnState` contains at least:
+
+```text
+budget_s
+spent_s
+active_count
+active_window_started
+active_window_deadline
+last_seen
+```
+
+The configured budget is fixed for a tracked record's process lifetime. A
+process reload creates a new tracker and therefore a new record from current
+configuration.
+
+Expose one acquisition method with this semantic signature:
+
+```python
+def acquire(
+    self,
+    *,
+    client: str | None,
+    turn: str | None,
+    requested_wait_s: int,
+    bounded_wait_s: int,
+    budget_s: int | None,
+) -> BlockingLease: ...
+```
+
+`BlockingLease` always exists, including untracked/no-op outcomes. It exposes a
+`decision: BlockingDecision` and an idempotent:
+
+```python
+def release(self) -> BlockingRelease: ...
+```
+
+Calling `release()` twice must not double-charge time.
+
+`BlockingDecision` contains at least:
+
+```text
+policy
+requested_wait_s
+bounded_wait_s
+effective_wait_s
+budget_s
+spent_before_s
+remaining_before_s
+active_before
+blocking_budget_exhausted
+```
+
+Untracked policies use `None` for budget/spent/remaining values. `active_before`
+is zero for untracked policies.
+
+`BlockingRelease` contains at least:
+
+```text
+spent_after_s
+remaining_after_s
+active_after
+window_closed
+window_wall_s
+```
+
+Untracked releases use `None` for budget-derived values and
+`window_closed=false`.
+
+The production `job_status` module imports one process-local singleton:
+
+```python
+from binnacle.blocking_wall_guard import BlockingWallTracker
+
+blocking_wall_tracker = BlockingWallTracker()
+```
+
+Tests replace `job_status.blocking_wall_tracker` with a fresh tracker. Do not
+add persistence for this object.
+
+### 9.1.7 Exact policy names
+
+These strings are frozen for Phase 2 and must be used in output/logs/tests:
+
+```text
+no_policy
+no_turn
+tracked
+exhausted
+capacity_untracked
+```
+
+Do not rename them during implementation without first updating this execution
+contract and the server-guard specification in the same step.
+
+Policy selection order for a positive request is:
+
+```text
+no matching configured budget -> no_policy
+matching budget but no reliable base turn -> no_turn
+matching budget + turn but tracker has no capacity -> capacity_untracked
+matching budget + turn + remaining < 1 second -> exhausted
+otherwise -> tracked
+```
+
+For `no_policy`, `no_turn`, and `capacity_untracked`, effective wait equals the
+ordinary bounded wait. For `exhausted`, effective wait is zero.
+`blocking_budget_exhausted` is true only for `exhausted`; it is false for the
+other four policies.
+
+For each positive specific-job call, resolve the budget exactly with:
+
+```python
+get_settings().jobs.blocking_wall_budget_for_client(current_client.get())
+```
+
+Do not cache a second independent copy of the client-budget map in
+`job_status.py`; `get_settings()` is already process-cached and a server reload
+picks up changed configuration together with a fresh tracker.
+
+### 9.1.8 Exact accounting semantics
+
+All tracker time is monotonic.
+
+For an inactive tracked turn at acquisition time:
+
+```text
+spent_before = state.spent_s
+remaining_before = max(0, budget - spent_before)
+```
+
+For an already-active window:
+
+```text
+active_elapsed = min(now, active_window_deadline) - active_window_started
+spent_before = state.spent_s + max(0, active_elapsed)
+remaining_before = max(0, active_window_deadline - now)
+```
+
+If `remaining_before < 1`, a positive request returns `exhausted` with effective
+wait zero and does not increment `active_count`.
+
+Otherwise:
+
+```text
+effective_wait = min(bounded_wait, floor(remaining_before))
+```
+
+A new active window uses:
+
+```text
+active_window_started = now
+active_window_deadline = now + remaining_before
+```
+
+An overlapping lease shares that same deadline. It does not extend it.
+
+On the final active release:
+
+```text
+window_wall = max(0, min(now, deadline) - window_started)
+spent_s = min(budget_s, previous_committed_spent_s + window_wall)
+```
+
+Productive gaps after a window closes are not charged.
+
+### 9.1.9 Exact `job_status` integration order
+
+For `job_id is None`, preserve listing behavior exactly. Do not invoke the guard
+and do not add policy fields to the listing payload.
+
+For a specific job:
+
+```text
+1. save the original requested wait before any clamp;
+2. compute bounded_wait = max(0, min(requested_wait, WAIT_MAX));
+3. call jobs.job_state(job_id) once to validate existence;
+4. if it is None, raise the existing ToolError BEFORE acquiring a guard lease;
+5. if original requested wait <= 0, preserve the ordinary non-blocking path and
+   do not acquire a lease;
+6. for a positive request, resolve current client, current base turn, and client
+   budget, then acquire one BlockingLease;
+7. if effective_wait > 0, call _wait_for_exit(job_id, effective_wait);
+8. if effective_wait == 0, call jobs.job_state(job_id) for a fresh non-blocking
+   state and set waited_s = 0.0;
+9. release the lease in a finally block;
+10. after release, continue the existing log-read/process-scan/payload/summary
+    path;
+11. if the post-wait state unexpectedly becomes None, preserve the existing
+    unknown-job ToolError behavior after the lease has safely released.
+```
+
+This order is decided. Do not spend Step 2.7 re-evaluating whether invalid jobs
+should consume budget: they must not.
+
+### 9.1.10 Exact structured-output rule
+
+The existing listing payload remains unchanged.
+
+For a specific job with **original requested `wait_seconds > 0`**, include these
+keys even when there is no configured policy:
+
+```text
+wait_requested_s
+wait_effective_s
+blocking_budget_s
+blocking_remaining_s
+blocking_budget_exhausted
+blocking_policy
+```
+
+Types:
+
+```text
+wait_requested_s: integer
+wait_effective_s: integer
+blocking_budget_s: integer | null
+blocking_remaining_s: number | null
+blocking_budget_exhausted: boolean
+blocking_policy: string
+```
+
+`blocking_remaining_s` is the best after-call value from `BlockingRelease`.
+For untracked policies it is `null`.
+
+For an original zero-wait request, preserve the existing payload shape and do
+not add these policy fields. This minimizes noise and backward-compatibility
+surface.
+
+For any original positive request, include `waited_s`, including
+`waited_s=0.0` when exhaustion reduced the effective wait to zero.
+
+### 9.1.11 Exact logging contract
+
+Extend `event=job_status_timing`; do not create a second per-call policy event.
+For every specific-job status call, retain existing timing fields and add:
+
+```text
+wait_requested_s
+wait_bounded_s
+wait_effective_s
+waited_s
+blocking_budget_s
+blocking_spent_before_s
+blocking_remaining_before_s
+blocking_active_before
+blocking_policy
+blocking_budget_exhausted
+turn
+client
+```
+
+Use `na` for nullable numeric values in single-line logs. Use `-` for absent
+turn/client. `wait_requested_s` means the original caller value;
+`wait_bounded_s` is the existing 0..50 bound; `wait_effective_s` is the policy
+result.
+
+When a tracked release closes an active window, emit exactly:
+
+```text
+event=blocking_window_closed
+```
+
+with:
+
+```text
+call
+turn
+client
+blocking_budget_s
+blocking_window_wall_s
+blocking_spent_after_s
+blocking_remaining_after_s
+```
+
+The guard module returns data; `job_status.py` owns these log writes. Keep the
+guard module free of logging dependencies. The window-close event must be
+emitted from the same `finally` path that calls `lease.release()`, so an
+exception/cancellation cannot silently commit accounting without telemetry.
+
+Add these structured-result keys to
+`ToolLoggingMiddleware.RESULT_KEYS` in Step 2.8:
+
+```text
+wait_requested_s
+wait_effective_s
+blocking_budget_s
+blocking_remaining_s
+blocking_budget_exhausted
+blocking_policy
+```
+
+When a job is still running and the decision/release state says the turn budget
+is exhausted, append this exact sentence to the existing human/model summary:
+
+```text
+Turn blocking budget exhausted; further positive waits in this turn will be non-blocking.
+```
+
+Do not present exhaustion as an error and do not tell the model that the job was
+stopped.
+
+### 9.1.11a Remove the obsolete "wait once" contract text
+
+Phase 1 proved that the old "call `job_status` once" wording conflicts with the
+new scheduling model. Step 2.8 must remove that obsolete wording in all three
+places below; this is not optional.
+
+1. In `src/binnacle/tools/run_command.py`, replace the current background
+   summary template with exactly:
+
+```python
+summary = (
+    f"Command {reason}; job_id={job_id}. "
+    "Use job_status when the result is needed, or stop_job to cancel."
+)
+```
+
+This removes both `Continue independent work` and `call job_status once`;
+workflow belongs to Project instructions, while this result states only the
+available job controls.
+
+1. In the `job_status` MCP tool description/docstring in
+   `src/binnacle/tools/job_status.py`, replace the old "Call once with
+   wait_seconds=50" sentence with exactly:
+
+```text
+A positive wait blocks up to the requested duration (max 50 seconds) or any smaller effective turn budget; waiting never kills a still-running job.
+```
+
+Keep the measured clause "Only needed when run_command returned a job_id."
+Workflow such as whether to continue waiting belongs to the ChatGPT Project
+instructions, not the tool description.
+
+1. Update `docs/tools/run_command.md` Section 4 to match that tool contract and
+   the additive Phase-2 output fields.
+
+Update `tests/contracts/test_descriptions.py` in the same step: rename
+`test_job_status_keeps_the_only_needed_clause_and_wait_once` to
+`test_job_status_keeps_the_only_needed_clause_and_wait_contract`, remove the old
+wait-once expectation, and assert the new max-50/not-killed contract while
+preserving the existing rule that tool descriptions do not own workflow.
+
+The v2 Project rule file already owns the desired workflow:
+`.claude/skills/chatgpt-mcp-dev/references/project-instructions-chat-scheduling-v2.txt`.
+Phase 2 does not need to redesign that file.
+
+### 9.1.12 Exact `binnacle stats` semantics
+
+Extend the existing job telemetry model, analyzer, and renderer. Do not create a
+new top-level stats command.
+
+For `job_status_timing` records:
+
+- positive call = `wait_requested_s > 0`;
+- non-blocking call = `wait_effective_s <= 0`;
+- collect requested and effective wait distributions;
+- count `blocking_policy` values;
+- count `blocking_budget_exhausted=true`.
+
+For `blocking_window_closed` records, aggregate by `(client, turn)` and retain
+the maximum cumulative `blocking_spent_after_s` observed for that turn. A turn
+may close multiple windows; report it once using the final cumulative value.
+
+For utilization counts, compare each turn's final cumulative spent with its
+budget:
+
+```text
+25%: spent / budget >= 0.25
+50%: spent / budget >= 0.50
+75%: spent / budget >= 0.75
+100%: remaining < 1 second OR an exhausted call was observed for that turn
+```
+
+Report per-turn blocking wall p50/p90/p95/max from those final cumulative
+values. Reuse the existing `_pct()` convention in `logstats_jobs.py`; do not
+introduce a second percentile definition for Phase 2. Historical logs without
+the new fields/events must continue to parse and render without synthetic
+Phase-2 values.
+
+The human renderer adds one section headed exactly:
+
+```text
+job_status blocking-wall guard:
+```
+
+with lines for:
+
+```text
+policies
+waits: positive / nonblocking / exhausted
+requested wait s: n / p50 / p90 / p95 / max
+effective wait s: n / p50 / p90 / p95 / max
+blocking wall / tracked turn s: n / p50 / p90 / p95 / max
+utilization: >=25% / >=50% / >=75% / effectively-100%
+```
+
+Exact spacing may follow the existing `logstats_render.py` style, but these labels
+and quantities are not optional.
+
+### 9.1.13 Exact test-file and command matrix
+
+Use these commands at minimum. Additional focused tests are allowed, but an
+agent must not spend time rediscovering the baseline suite.
+
+Step 2.1 baseline:
+
+```bash
+uv run pytest -q \
+  tests/unit/core/test_config_loading.py \
+  tests/unit/core/test_logging_result_fields.py \
+  tests/unit/core/test_logstats_jobs.py \
+  tests/integration/test_logging.py \
+  tests/integration/test_http_workflows.py \
+  tests/integration/test_jobs_lifecycle.py \
+  tests/integration/test_job_manager_telemetry.py
+```
+
+Step 2.2:
+
+```bash
+uv run pytest -q tests/unit/core/test_config_loading.py
+```
+
+Step 2.3:
+
+```bash
+uv run pytest -q \
+  tests/integration/test_logging.py \
+  tests/integration/test_http_workflows.py \
+  tests/unit/core/test_logging_result_fields.py
+```
+
+Steps 2.4–2.6:
+
+```bash
+uv run pytest -q tests/unit/core/test_blocking_wall_guard.py
+```
+
+Step 2.7:
+
+```bash
+uv run pytest -q \
+  tests/unit/core/test_blocking_wall_guard.py \
+  tests/integration/test_job_status_blocking_guard.py \
+  tests/integration/test_jobs_lifecycle.py
+```
+
+Step 2.8:
+
+```bash
+uv run pytest -q \
+  tests/integration/test_job_status_blocking_guard.py \
+  tests/integration/test_logging.py \
+  tests/integration/test_jobs_lifecycle.py \
+  tests/unit/core/test_logging_result_fields.py \
+  tests/contracts/test_descriptions.py
+```
+
+Step 2.9:
+
+```bash
+uv run pytest -q \
+  tests/unit/core/test_logstats_jobs.py \
+  tests/unit/core/test_logstats.py
+```
+
+Step 2.10:
+
+```bash
+uv run pytest -q \
+  tests/integration/test_job_status_blocking_guard.py \
+  tests/integration/test_jobs_lifecycle.py \
+  tests/integration/test_http_workflows.py
+```
+
+Step 2.11:
+
+```bash
+uv run pytest -q \
+  tests/unit/core/test_blocking_wall_guard.py \
+  tests/integration/test_job_status_blocking_guard.py \
+  tests/integration/test_job_status_blocking_guard_concurrency.py
+```
+
+Step 2.12:
+
+```bash
+uv run pytest -q
+uv run pre-commit run --all-files
+git diff --check
+```
+
+Before every numbered-step commit, run `uv run pre-commit run --all-files`.
+Full pytest is mandatory only at Step 2.12 unless a preceding step uncovers a
+cross-cutting regression that warrants it earlier.
+
+### 9.1.14 Exact Step-2.11 benchmark artifact contract
+
+Implement:
+
+```text
+scripts/benchmark_blocking_wall_guard.py
+```
+
+It measures tracker acquire/release overhead without sleeping and emits JSON.
+Use at least 100,000 iterations per run and record p50/p90/p95/p99/max in
+milliseconds. Run it three times on the Pi and retain all three runs plus the
+median of the three run-level p95/p99 values.
+
+Evidence files use the execution date:
+
+```text
+benchmarks/chat-mode-scheduling-v2/phase2-step11-guard-overhead-YYYY-MM-DD.json
+benchmarks/chat-mode-scheduling-v2/phase2-step11-guard-overhead-YYYY-MM-DD.md
+```
+
+The design target remains p95 <1 ms and p99 <2 ms. Do not encode those tight
+thresholds as a normal CI wall-clock assertion. If the three-run evidence misses
+the target, investigate/optimize within Step 2.11 and mark Step 2.11 incomplete
+until the result is either fixed or explicitly escalated as a blocker.
+
+### 9.1.15 Exact final artifact names
+
+Step 2.12 uses the execution date and writes exactly:
+
+```text
+benchmarks/chat-mode-scheduling-v2/phase2-blocking-wall-guard-YYYY-MM-DD.json
+benchmarks/chat-mode-scheduling-v2/phase2-blocking-wall-guard-YYYY-MM-DD.md
+```
+
+Do not invent a different naming scheme.
+
+### 9.1.16 Mandatory per-step persistence
+
+Every numbered step, including the baseline-only Step 2.1, must end by:
+
+1. updating both canonical progress files;
+2. running the step's required tests;
+3. running `uv run pre-commit run --all-files`;
+4. running the production-isolation check from Section 11.9;
+5. committing all files for that step with a `Phase 2.N:` subject;
+6. pushing `feature/chat-mode-blocking-wall-guard` to `origin`;
+7. waiting for the pushed branch's GitHub `ci.yml` run to finish successfully;
+8. only then reporting the step complete to the user.
+
+This makes a new transaction recoverable from GitHub even if the previous
+ChatGPT turn ended immediately after a step.
+
+The repository CI runs on every push. After pushing a numbered-step commit, use:
+
+```bash
+RUN_ID=$(gh run list \
+  --workflow ci.yml \
+  --branch feature/chat-mode-blocking-wall-guard \
+  --limit 1 \
+  --json databaseId \
+  --jq '.[0].databaseId')
+gh run watch "$RUN_ID" --exit-status
+```
+
+If that CI run fails, the numbered step is not complete; diagnose/fix it in the
+same step, recommit/push, and wait for green CI. If GitHub itself is unavailable,
+use the blocker SOP rather than calling the step complete.
+
+Use these exact commit subjects:
+
+| Step | Commit subject |
+| --- | --- |
+| 2.1 | `Phase 2.1: freeze blocking guard baseline` |
+| 2.2 | `Phase 2.2: add blocking wall budget configuration` |
+| 2.3 | `Phase 2.3: publish MCP base-turn context` |
+| 2.4 | `Phase 2.4: add sequential blocking wall tracker` |
+| 2.5 | `Phase 2.5: account overlapping blocking waits` |
+| 2.6 | `Phase 2.6: bound blocking wall tracker state` |
+| 2.7 | `Phase 2.7: integrate blocking wall guard with job status` |
+| 2.8 | `Phase 2.8: expose blocking wall policy telemetry` |
+| 2.9 | `Phase 2.9: aggregate blocking wall guard telemetry` |
+| 2.10 | `Phase 2.10: validate blocking guard with real jobs` |
+| 2.11 | `Phase 2.11: validate guard concurrency and overhead` |
+| 2.12 | `Phase 2.12: complete blocking wall guard phase` |
+
 ## 10. Worktree and branch strategy
 
 Phase 2 implementation should not be developed directly in the Phase-1 design
 worktree.
 
-At the beginning of Step 2.1:
+At the beginning of Step 2.1, use the exact branch/worktree contract from
+Section 9.1.1.
 
-1. verify `design/chat-mode-scheduling-v2` contains Phase-1 checkpoint
-   `cc1b014` and this execution-plan document;
-2. verify that design worktree is clean and synchronized with origin;
-3. create a new branch from the current design branch tip, for example:
-   `feature/chat-mode-blocking-wall-guard`;
-4. create a dedicated worktree, for example:
-   `~/Projects/binnacle-chat-blocking-wall-guard`;
-5. leave production `~/Projects/binnacle` on `master` untouched.
+If the Phase-2 branch does not yet exist, execute the equivalent of:
 
-If the branch/worktree already exists in a later transaction, reuse it rather
-than create another one. First inspect its HEAD, status, and relationship to the
-Phase-1/design branch.
+```bash
+git -C /home/grammy-jiang/Projects/binnacle-chat-scheduling-design fetch origin
+git -C /home/grammy-jiang/Projects/binnacle-chat-scheduling-design status --short --branch
+git -C /home/grammy-jiang/Projects/binnacle-chat-scheduling-design worktree add \
+  -b feature/chat-mode-blocking-wall-guard \
+  /home/grammy-jiang/Projects/binnacle-chat-blocking-wall-guard \
+  origin/design/chat-mode-scheduling-v2
+```
+
+The design worktree must be clean and its local design branch must be
+synchronized with `origin/design/chat-mode-scheduling-v2` before creation.
+
+If the branch already exists and the canonical worktree exists, reuse it. If the
+branch exists but the canonical worktree does not, attach it with:
+
+```bash
+git -C /home/grammy-jiang/Projects/binnacle-chat-scheduling-design worktree add \
+  /home/grammy-jiang/Projects/binnacle-chat-blocking-wall-guard \
+  feature/chat-mode-blocking-wall-guard
+```
+
+Do not create alternate Phase-2 branch or worktree names.
+
+### 10.1 Interrupted-worktree recovery rules
+
+Never run `git reset --hard`, `git clean`, delete/recreate the Phase-2 branch, or
+discard a dirty canonical worktree merely to make it match this plan.
+
+After `git fetch origin`, recover according to this exact table:
+
+| Observed Phase-2 state | Required action |
+| --- | --- |
+| branch/worktree absent, progress files absent | normal Step 2.1 creation path |
+| canonical worktree dirty | treat as an interrupted current step; read progress files and diff, preserve changes, continue that same step |
+| clean local branch only ahead of origin | keep local commits; verify progress/tests and push, never reset them |
+| clean local branch only behind origin | `git pull --ff-only` in the canonical Phase-2 worktree, then resume from progress |
+| local/origin diverged | mark current step `blocked`; do not reset/rebase/force-push automatically |
+| progress says a step complete but worktree has uncommitted changes for that step | treat the step as inconsistent/incomplete; reconcile those changes before moving to the next step |
+| progress and Git history disagree on next step | Git history plus committed progress files must be reconciled before implementation; do not guess |
+
+A divergence usually means another agent/session wrote the same branch. It is a
+real coordination blocker, not permission to destroy one side.
 
 ## 11. Global execution SOP
 
@@ -502,16 +1357,23 @@ This SOP applies to every Phase-2 implementation step.
 ### 11.1 Start-of-transaction recovery
 
 A new ChatGPT transaction must not assume it knows the current Phase-2 state.
-It should:
+Before Step 2.1, the Phase-2 branch/worktree and progress files intentionally do
+not exist. In that one case, absence of all three is the explicit checkpoint
+`next_step=2.1`; use the design worktree to execute Step 2.1. If the Phase-2
+branch exists but progress files are missing, treat Step 2.1 as incomplete and
+finish/recover it rather than guessing a later step.
 
-1. locate the Phase-2 worktree and branch;
+Otherwise it should:
+
+1. use the canonical branch/worktree paths in Section 9.1.1;
 2. read this document;
 3. read `docs/chat-mode-scheduling-v2-server-guard.md`;
-4. read the latest Phase-2 checkpoint/report if one exists;
-5. inspect `git status --short --branch` and recent commits;
-6. determine the last completed numbered step from committed evidence;
-7. verify production `master` has not been modified;
-8. continue from the next incomplete step.
+4. read `benchmarks/chat-mode-scheduling-v2/phase2-progress.json` and `.md`;
+5. inspect `git status --short --branch` and `git log -12 --oneline --decorate`;
+6. use `last_completed_step` / `next_step` from the progress JSON and verify it
+   against committed Git history;
+7. run the production-isolation checks from Section 11.9;
+8. continue from the exact `next_step`; do not re-run completed steps.
 
 Do not restart a completed step merely because the chat is new.
 
@@ -531,9 +1393,10 @@ If the user requests multiple steps in one instruction, for example "do 2.4 and
 
 ### 11.3 Long-running commands
 
-For known-long commands:
+For commands expected to run longer than about 10 seconds (including full
+pytest and all-files pre-commit in this repository):
 
-- prefer `background=true` where appropriate;
+- use `background=true`;
 - retain the returned `job_id`;
 - use blocking `job_status(wait_seconds=50)` rather than rapid polling;
 - if the job is still running and no independent work remains, continue the
@@ -544,17 +1407,19 @@ For known-long commands:
 
 ### 11.4 Testing order
 
-Within each step, prefer:
+Within each step, use this order:
 
 ```text
 new/changed focused unit tests
 -> relevant integration tests
 -> affected existing tests
--> pre-commit for touched files or all files as appropriate
+-> the exact step command matrix in Section 9.1.13
+-> uv run pre-commit run --all-files
 ```
 
-Do not run the complete repository suite after every tiny edit. Run full pytest
-at major integration checkpoints and mandatorily at Step 2.12.
+Do not run the complete repository suite after every tiny edit. Full pytest is
+mandatory at Step 2.12 and optional earlier only when a discovered cross-cutting
+regression makes it necessary.
 
 ### 11.5 Test design principles
 
@@ -571,21 +1436,12 @@ at major integration checkpoints and mandatorily at Step 2.12.
 
 ### 11.6 Commit discipline
 
-Each numbered step should normally end with one coherent commit when it changes
-tracked files. A step may intentionally produce no commit if it is purely an
-investigation/baseline step, but its result must then be recorded in the Phase-2
-checkpoint document before moving on.
+Every numbered step ends with one coherent commit and push, including baseline
+Step 2.1. Update the canonical Phase-2 progress files in that commit. This is
+mandatory so a later transaction can recover without conversation memory.
 
-Recommended commit pattern:
-
-```text
-Phase 2.2: add blocking wall budget configuration
-Phase 2.3: publish MCP base-turn context
-Phase 2.4: add sequential blocking wall tracker
-...
-```
-
-Do not mix unrelated cleanup/refactoring into these commits.
+Use the exact commit-subject table in Section 9.1.16. Do not mix unrelated
+cleanup/refactoring into these commits.
 
 ### 11.7 Status report after each step
 
@@ -639,17 +1495,42 @@ whether any background jobs remain
 safe resume instruction
 ```
 
-### 11.9 Production isolation
-
-Before and after major steps, verify as appropriate:
+If Git and GitHub remain available, update both Phase-2 progress files with
+phase/step state `blocked`, keep `last_completed_step` unchanged, keep
+`next_step` pointing at the blocked step, and push a checkpoint commit with
+subject:
 
 ```text
-~/Projects/binnacle remains on master
-production worktree is clean
-binnacle-mcp.service remains in its expected state
-production config is unchanged
-no experimental Phase-2 budget has been enabled
+Phase 2.N: checkpoint blocked
 ```
+
+Do not count that checkpoint as the step's completion commit. When work resumes,
+continue the same step and later create its normal completion commit from the
+fixed table in Section 9.1.16. If the blocker itself prevents Git persistence,
+leave the working tree intact and include its exact status in the user-facing
+blocker report.
+
+### 11.9 Production isolation
+
+Before declaring **every numbered step complete**, run these exact safety
+checks (read-only against production):
+
+```bash
+git -C /home/grammy-jiang/Projects/binnacle status --short --branch
+systemctl --user is-active binnacle-mcp.service
+grep -n "blocking_wall_budget_s_by_client" \
+  /home/grammy-jiang/.config/binnacle/config.toml || true
+```
+
+Required result:
+
+- production checkout is on `master` and clean;
+- `binnacle-mcp.service` is `active`;
+- production config contains no Phase-2 blocking-budget setting.
+
+The production HEAD at planning time was `83862b0`, but another legitimate
+workflow may advance `master` later. Do not reset production to that hash. Clean
+branch/config/service state is the invariant.
 
 Phase 2 is not a deployment phase.
 
@@ -671,20 +1552,21 @@ baseline before policy code is introduced.
 
 ### Tasks
 
-1. Create or recover `feature/chat-mode-blocking-wall-guard` and its worktree.
-2. Record source branch and HEAD.
-3. Record production `master` HEAD and service state.
-4. Inspect and record the current `job_status` input/output schema.
-5. Inspect current `job_status_timing` fields.
-6. Inspect current request/client/turn correlation behavior.
-7. Run focused baseline suites covering:
-   - `job_status` lifecycle;
-   - job-manager telemetry;
-   - request/tool logging;
-   - HTTP correlation workflows;
-   - config loading;
-   - logstats job telemetry.
-8. Create/update a Phase-2 checkpoint/evidence file with the baseline result.
+1. Create/recover the exact branch/worktree from Section 9.1.1.
+2. Create the two canonical progress files from Section 9.1.2 with all 12 JSON
+   step states initialized to `not_started` (Markdown: `NOT STARTED`), then mark
+   2.1 `complete` only at exit.
+3. Record design source HEAD and production `master` HEAD/service state.
+4. Freeze the current tool contract by recording the relevant constants/fields
+   from `src/binnacle/tools/job_status.py`: input `wait_seconds 0..50`, current
+   `OUTPUT_SCHEMA`, and current `job_status_timing` fields.
+5. Record current correlation behavior from `logging_middleware.py`: full
+   `X-Request-Id` is logged as `turn=`, but no base-turn ContextVar exists yet.
+6. Run the exact Step-2.1 baseline command from Section 9.1.13.
+7. Run `uv run pre-commit run --all-files`.
+8. Run the production-isolation commands from Section 11.9.
+9. Update progress JSON/Markdown with test results and baseline facts.
+10. Commit with subject `Phase 2.1: freeze blocking guard baseline` and push.
 
 ### Expected files
 
@@ -713,9 +1595,9 @@ Target duration: **10–15 minutes**.
 Add an opt-in per-client blocking-wall budget configuration without changing
 runtime behavior yet.
 
-### Proposed contract
+### Contract
 
-Add to `JobsSettings` a mapping conceptually equivalent to:
+Implement the exact configuration API in Section 9.1.4. The field is:
 
 ```python
 blocking_wall_budget_s_by_client: dict[str, int] = {}
@@ -749,7 +1631,7 @@ Cover at least:
 - modern ChatGPT name;
 - unrelated client;
 - multiple matching prefixes / longest-prefix wins;
-- TOML loading and environment override compatibility where applicable.
+- TOML loading and the exact environment JSON mapping form from Section 9.1.4.
 
 ### Exit criteria
 
@@ -806,26 +1688,12 @@ Target duration: **15–20 minutes**.
 Implement the guard as a standalone deterministic state machine for one turn and
 sequential waits.
 
-### Recommended module
+### Module and API
 
-```text
-src/binnacle/blocking_wall_guard.py
-```
-
-Do not embed the tracker state machine directly in `job_status.py`.
-
-### Suggested abstractions
-
-Keep them small and purpose-specific, for example:
-
-```text
-BlockingWallTracker
-TurnState
-BlockingDecision
-BlockingLease
-```
-
-Exact class names may change if readability improves.
+Use exactly `src/binnacle/blocking_wall_guard.py` and the public names/API in
+Section 9.1.6. Do not embed the tracker state machine directly in
+`job_status.py`, and do not rename the frozen public Phase-2 classes during this
+step.
 
 ### Clock
 
@@ -903,9 +1771,9 @@ Bound process-local turn state and make all untracked cases explicit.
 
 ### Capacity
 
-Initial inactive-record capacity: **4096**.
-
-Inactive records use LRU eviction. Active records are never evicted.
+Tracker capacity is **4096 total turn records**. The precise eviction rule is
+defined in Section 9.1.6. Inactive records use LRU eviction and active records
+are never evicted.
 
 If the tracker cannot allocate a record because capacity is entirely active,
 return `capacity_untracked` and preserve ordinary per-call behavior.
@@ -959,21 +1827,9 @@ actual waited = 4.2 because job exited
 
 ### Integration sequence
 
-Conceptually:
-
-```text
-read current client/turn
--> resolve configured budget
--> bound request by existing WAIT_MAX
--> tracker acquire/decision
--> wait using effective wait
--> release lease in finally
--> read/build normal job result
-```
-
-Carefully determine whether unknown-job validation should occur before or after
-lease acquisition so invalid IDs cannot consume budget or strand leases. Preserve
-existing externally visible error semantics.
+Follow the exact ordered algorithm in Section 9.1.9. Unknown-job existence is
+validated **before** lease acquisition; invalid job IDs must not consume budget.
+Do not revisit that design choice during Step 2.7.
 
 ### Backward-compatibility gate
 
@@ -1020,10 +1876,15 @@ Extend `job_status_timing` or add a clearly related policy event so the requeste
 bounded, effective, actual, budget, remaining, active-count, policy, client, and
 turn values can be reconstructed.
 
-Emit a window-close event when union accounting is committed.
+Emit a window-close event when union accounting is committed. Update
+`docs/logging.md` in the same step with the exact new/extended event fields.
+Update `docs/tools/run_command.md` and the tool/result wording exactly as required
+by Section 9.1.11a.
 
 ### Tests
 
+- remove/replace every obsolete `call job_status once` / `Call once with
+  wait_seconds=50` wording identified in Section 9.1.11a;
 - structured schema fields;
 - normal tracked wait;
 - early job exit;
@@ -1071,7 +1932,7 @@ across those windows. Do not report each window as if it were a separate turn.
 
 ### Implementation location
 
-Prefer extending:
+Extend exactly:
 
 ```text
 logstats_models.py
@@ -1112,18 +1973,38 @@ fake clock/state machine.
 
 ### Test scenarios
 
-Use small budgets and short jobs to keep runtime bounded:
+Use the following concrete fixtures as the default integration cases; do not
+spend time designing a second set unless one proves flaky on the Pi:
 
-- job exits inside a positive wait;
-- sequential waits consume cumulative budget;
-- budget reaches exhaustion while job remains running;
-- subsequent positive request becomes effectively non-blocking;
-- job later completes and remains observable;
-- already-exited job returns promptly;
-- explicit zero wait remains non-blocking;
-- nonmatching client is unchanged;
-- missing-turn context is unchanged;
-- invalid job ID does not corrupt tracker state.
+1. **Early exit:** configured budget 3 s; job `sleep 0.2`; request 2 s; expect
+   exited state, actual wait well below 2 s, and remaining budget near 3 s minus
+   actual wait. Use broad timing tolerance rather than exact milliseconds.
+2. **Sequential/exhaustion:** configured budget 3 s; job `sleep 5`; issue
+   positive waits against the same turn until cumulative actual union reaches
+   the integer-floor exhaustion boundary; the next positive request must have
+   effective wait 0 while the job remains alive. Clean up the job explicitly.
+3. **Post-exhaustion durability:** after case 2 exhaustion, verify the same job
+   is still listed/running, then stop it through normal job cleanup.
+4. **Already exited:** use `true` (or an already-recorded completed fixture job)
+   and verify a positive request returns promptly and charges effectively zero
+   wall time.
+5. **Explicit zero wait:** request 0; no policy fields are added and no lease is
+   acquired.
+6. **No policy:** matching turn but client has no configured budget; behavior is
+   ordinary per-call waiting with `no_policy` for a positive request.
+7. **No turn:** configured client but `current_turn=None`; behavior is ordinary
+   per-call waiting with `no_turn`.
+8. **Invalid ID:** call a nonexistent job ID and verify the existing ToolError is
+   raised before tracker acquisition and tracker state remains unchanged.
+9. **HTTP/context end-to-end:** extend `tests/integration/test_http_workflows.py`
+   with one positive-wait status call whose request carries a known
+   `X-Request-Id=<base>/<call>` and a test client prefix with a configured budget.
+   Assert the tool result is policy-tracked and the journal/caplog shows the
+   expected base turn and client. This is the cross-layer proof that middleware
+   ContextVars reach the synchronous `job_status` implementation.
+
+Integration tests may shorten `sleep 5` only if total semantics remain the same;
+never lengthen these into multi-minute tests.
 
 ### Assertions
 
@@ -1155,19 +2036,30 @@ Validate the hard concurrency cases and collect performance evidence.
 
 ### Concurrent integration cases
 
-- two simultaneous positive status waits in one turn;
-- five simultaneous waits in one turn;
-- partial overlap/refill;
-- waits for different jobs under the same turn;
-- different turns concurrently;
-- one turn exhausting while another retains budget.
+Use short `sleep 5` fixture jobs and these patterns:
 
-Confirm that overlapping waits share the same active-window deadline and charge
-union time once.
+- two simultaneous positive waits in one turn with budget 3 s and 2 s requested
+  by each call; union charge should be roughly one 2 s interval, not 4 s;
+- five simultaneous positive waits in one turn with budget 3 s and 1 s requested
+  by each call; union charge should be roughly one 1 s interval, not 5 s;
+- a second wave starts while the first window is still active and must share the
+  original deadline rather than extend it;
+- waits for different jobs under the same turn still share one turn budget;
+- different turns concurrently maintain independent state/deadlines;
+- one turn can exhaust while another retains budget.
+
+Use barriers/events in the test harness to synchronize call start rather than
+assuming thread scheduling order. Timing assertions should use broad bounds; the
+primary assertions are tracker state, shared deadline, and non-summed union wall.
+Clean up all fixture jobs in `finally`.
 
 ### Reload semantics
 
-Simulate/recreate tracker state while a durable job exists.
+Do not restart production services for this test. Start a normal durable fixture
+job, then replace `job_status.blocking_wall_tracker` with a fresh
+`BlockingWallTracker()` instance while that job is still running. Verify that the
+job remains observable and stoppable. This simulates process-local guard-state
+loss without altering durable job storage.
 
 Required outcome:
 
@@ -1190,8 +2082,8 @@ p99 < 2 ms
 
 Do not create an unnecessarily tight CI wall-clock gate that becomes flaky on a
 shared Pi. Functional CI should prove algorithmic behavior; a dedicated evidence
-run should report measured p50/p90/p95/p99/max. A broad regression sanity limit
-may be used if stable.
+run should report measured p50/p90/p95/p99/max. Do not add a normal CI wall-clock threshold for the 1 ms / 2 ms targets. Use
+the exact three-run evidence contract in Section 9.1.14.
 
 ### Exit criteria
 
@@ -1222,7 +2114,8 @@ Freeze Phase 2 as an implementation result without deploying it.
 9. Review module/function size against repository readability guidance.
 10. Confirm no tracker state leaks between tests.
 11. Write final Phase-2 evidence/report.
-12. Commit and push the Phase-2 branch.
+12. Commit and push the Phase-2 branch, then wait for the pushed `ci.yml` run
+    to finish green using Section 9.1.16.
 
 ### Final evidence should answer
 
@@ -1243,12 +2136,7 @@ Freeze Phase 2 as an implementation result without deploying it.
 
 ### Expected final artifacts
 
-Use clear dated names, for example:
-
-```text
-benchmarks/chat-mode-scheduling-v2/phase2-blocking-wall-guard-2026-09-xx.md
-benchmarks/chat-mode-scheduling-v2/phase2-blocking-wall-guard-2026-09-xx.json
-```
+Use the exact dated artifact names from Section 9.1.15.
 
 ### Exit criteria
 
@@ -1365,27 +2253,34 @@ must not expand Phase 2 into a browser reliability redesign.
 ## 27. New-transaction bootstrap procedure
 
 When a future ChatGPT transaction is asked to continue this work, use this
-procedure before implementation:
+procedure before implementation. If the canonical Phase-2 branch/worktree and
+progress files are all absent, that means Phase 2 has not started and the next
+step is exactly 2.1. If the branch exists but progress files do not, recover and
+finish Step 2.1 first. Otherwise:
 
 ```text
-1. Find the Binnacle worktrees and identify the Phase-2 branch/worktree.
-2. Read docs/chat-mode-scheduling-v2-phase2-execution-plan.md.
-3. Read docs/chat-mode-scheduling-v2-server-guard.md.
+1. Use `/home/grammy-jiang/Projects/binnacle-chat-blocking-wall-guard` on
+   `feature/chat-mode-blocking-wall-guard`; create it only if Step 2.1 has not
+   yet done so, using Section 10.
+2. Read `docs/chat-mode-scheduling-v2-phase2-execution-plan.md`.
+3. Read `docs/chat-mode-scheduling-v2-server-guard.md`.
 4. Read the Phase-1 Step 1.9 aggregate report.
-5. Read any committed Phase-2 checkpoint/report.
-6. Inspect git status and recent commits.
-7. Determine exactly which numbered Phase-2 step is the next incomplete step.
-8. Verify production master is clean and no experimental budget is enabled.
-9. Execute only the requested step range, continuously until its defined stop point.
-10. Report progress using the standard Phase-2 status format.
+5. Read the canonical `phase2-progress.json` and `.md`.
+6. Run `git status --short --branch` and `git log -12 --oneline --decorate`.
+7. Verify progress JSON against Git history and take its exact `next_step`.
+8. Run the production-isolation commands from Section 11.9.
+9. Execute only the requested step range, continuously until its defined stop
+   point, using the fixed API/test decisions in Section 9.1.
+10. Update progress files, test, pre-commit, safety-check, commit, and push before
+    reporting a step complete.
 ```
 
 Do not ask the user to restate decisions already captured here unless repository
 state contradicts the document or a genuinely new decision is required.
 
-## 28. Current checkpoint at document creation
+## 28. Current checkpoint after cold-start review
 
-At the time this plan was written:
+After the cold-start-agent review of this plan:
 
 ```text
 Phase 1: 9 / 9 complete
@@ -1393,9 +2288,49 @@ Phase 2: 0 / 12 complete
 Phase 2 implementation: NOT STARTED
 Phase 2 branch/worktree: NOT YET CREATED
 production deployment: NONE
-Phase-1 checkpoint: cc1b014
+Phase-1 evidence checkpoint: cc1b014
+planning branch: design/chat-mode-scheduling-v2
 next implementation step: 2.1
 ```
 
 Writing and committing this planning document does **not** count as starting
 Step 2.1.
+
+## 29. Cold-start audit verdict
+
+This execution plan was re-reviewed from the perspective of an agent with **no
+conversation memory and no prior task knowledge**. The review deliberately
+looked for places where such an agent would have to rediscover architecture,
+choose filenames/branches, invent state-machine semantics, decide test scope, or
+resolve conflicting documents before it could work.
+
+Those decisions are now frozen in Section 9.1 and the numbered steps. In
+particular, a cold-start agent is not expected to investigate or redesign:
+
+- branch/worktree names or creation source;
+- Phase-2 progress/checkpoint filenames or status schema;
+- source/test/document ownership;
+- config field/matching semantics;
+- base-turn parsing;
+- tracker public API, capacity, lock type, or policy strings;
+- union-wall accounting formulas;
+- unknown-job/lease ordering;
+- structured output/log event fields;
+- removal of obsolete `job_status once` wording;
+- logstats aggregation semantics;
+- focused test commands;
+- real-job/concurrency fixture shapes;
+- performance evidence artifact names;
+- per-step commit subjects, push, and CI completion rules;
+- production-isolation commands;
+- interrupted-worktree recovery policy.
+
+Normal implementation work still requires reading the target source files,
+writing code/tests, and debugging failures. That is execution, not a request to
+re-open the design. The only intentionally discretionary choices left are
+private helper/local-variable names and similarly local implementation details
+that do not alter the frozen contracts.
+
+If an implementation fact genuinely contradicts a frozen contract, the agent
+must record that contradiction in `phase2-progress.json` / `.md` and treat it as
+a design blocker rather than silently inventing a new rule.
