@@ -88,6 +88,32 @@ def _check(
         )
         return passed, f"no successful run_command containing {substring!r}"
 
+    if kind == "command_failure_precedes_success":
+        substring = str(params.get("contains", ""))
+        calls = [
+            call
+            for call in trace.tools
+            if call.tool == "run_command"
+            and substring in str(call.args.get("command", ""))
+        ]
+        failures = [
+            call
+            for call in calls
+            if isinstance(call.result.get("exit_code"), int)
+            and call.result.get("exit_code") != 0
+        ]
+        successes = [
+            call
+            for call in calls
+            if call.result.get("exit_code") == 0 and _successful(call)
+        ]
+        passed = any(
+            failure.end_s <= success.start_s
+            for failure in failures
+            for success in successes
+        )
+        return passed, f"no failed {substring!r} command preceding a successful one"
+
     if kind == "job_state":
         if "node" in params:
             node_id = str(params["node"])
