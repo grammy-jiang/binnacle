@@ -30,6 +30,7 @@ class ProjectClient:
         self.project_name = project_name
         self.browser = browser
         self.script = SKILL_SCRIPTS / "chatgpt-project"
+        self.system_python = Path("/usr/bin/python3")
 
     def _invoke(self, args: list[str]) -> subprocess.CompletedProcess[str]:
         last_error: subprocess.SubprocessError | None = None
@@ -47,6 +48,7 @@ class ProjectClient:
     def instructions(self) -> str:
         proc = self._invoke(
             [
+                str(self.system_python),
                 str(self.script),
                 "--browser",
                 self.browser,
@@ -65,6 +67,7 @@ class ProjectClient:
     def set_instructions(self, text: str) -> None:
         self._invoke(
             [
+                str(self.system_python),
                 str(self.script),
                 "--browser",
                 self.browser,
@@ -186,6 +189,7 @@ class ChatArtifact:
         if not self.tracked:
             self.track("Chat scheduling v2 benchmark trial")
         delete_args = [
+            "/usr/bin/python3",
             str(self.chats_script),
             "--browser",
             self.browser,
