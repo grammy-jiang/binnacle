@@ -5,7 +5,7 @@
 | 2.1 | COMPLETE |
 | 2.2 | COMPLETE |
 | 2.3 | COMPLETE |
-| 2.4 | NOT STARTED |
+| 2.4 | COMPLETE |
 | 2.5 | NOT STARTED |
 | 2.6 | NOT STARTED |
 | 2.7 | NOT STARTED |
@@ -20,8 +20,8 @@ Branch: `feature/chat-mode-blocking-wall-guard`
 Worktree: `/home/grammy-jiang/Projects/binnacle-chat-blocking-wall-guard`
 Source branch: `design/chat-mode-scheduling-v2`
 Phase-1 evidence commit: `cc1b014`
-Last completed step: **2.3**
-Next step: **2.4**
+Last completed step: **2.4**
+Next step: **2.5**
 
 ## Step 2.1 baseline freeze
 
@@ -210,3 +210,17 @@ Next step: **2.3**
 
 Step 2.3: **COMPLETE**
 Next step: **2.4 - Blocking-wall tracker, sequential core**
+
+## Step 2.4 blocking-wall tracker, sequential core
+
+- Added the standalone BlockingWallTracker with the frozen public classes/API.
+- Uses an injected clock with production default time.monotonic and short threading.Lock bookkeeping.
+- Sequential waits charge actual elapsed wall time; productive gaps are not charged.
+- Remaining budget below one second yields exhausted with effective wait zero.
+- No-policy and no-turn preserve the ordinary bounded wait; release is idempotent.
+- New base turns get fresh budgets; tracked records keep the budget fixed for their process lifetime.
+- Exact Step-2.4 unit command: PASS - 12 passed in 0.23 s.
+- No job_status integration, overlapping-wait accounting, or LRU/capacity fallback behavior was added.
+
+Step 2.4: **COMPLETE**
+Next step: **2.5 - Overlapping-wait union accounting**
