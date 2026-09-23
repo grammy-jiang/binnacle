@@ -5,6 +5,8 @@ Status: Phase 1 complete; conditional GO to Phase 2; no production change.
 Evidence source: `docs/chat-mode-scheduling-final-2026-09-23.md`, copied from
 the completed `analysis/chat-async-probe` investigation at commit `352d906`.
 
+Execution SOP: `docs/chat-mode-scheduling-v2-phase2-execution-plan.md`.
+
 ## Executive decision
 
 The v2 proposal has two production changes and one evidence programme:
