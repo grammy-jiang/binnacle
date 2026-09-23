@@ -1,0 +1,177 @@
+{
+  "benchmark_class": "micro",
+  "dag": [
+    {
+      "access": "read_only",
+      "arguments": {
+        "path": "{root}/f01.txt"
+      },
+      "depends_on": [],
+      "id": "read_01",
+      "kind": "tool",
+      "tool": "read_file"
+    },
+    {
+      "access": "read_only",
+      "arguments": {
+        "path": "{root}/f02.txt"
+      },
+      "depends_on": [],
+      "id": "read_02",
+      "kind": "tool",
+      "tool": "read_file"
+    },
+    {
+      "access": "read_only",
+      "arguments": {
+        "path": "{root}/f03.txt"
+      },
+      "depends_on": [],
+      "id": "read_03",
+      "kind": "tool",
+      "tool": "read_file"
+    },
+    {
+      "access": "read_only",
+      "arguments": {
+        "path": "{root}/f04.txt"
+      },
+      "depends_on": [],
+      "id": "read_04",
+      "kind": "tool",
+      "tool": "read_file"
+    },
+    {
+      "access": "read_only",
+      "arguments": {
+        "path": "{root}/f05.txt"
+      },
+      "depends_on": [],
+      "id": "read_05",
+      "kind": "tool",
+      "tool": "read_file"
+    },
+    {
+      "access": "read_only",
+      "arguments": {
+        "path": "{root}/f06.txt"
+      },
+      "depends_on": [],
+      "id": "read_06",
+      "kind": "tool",
+      "tool": "read_file"
+    },
+    {
+      "access": "read_only",
+      "arguments": {
+        "path": "{root}/f07.txt"
+      },
+      "depends_on": [],
+      "id": "read_07",
+      "kind": "tool",
+      "tool": "read_file"
+    },
+    {
+      "access": "read_only",
+      "arguments": {
+        "path": "{root}/f08.txt"
+      },
+      "depends_on": [],
+      "id": "read_08",
+      "kind": "tool",
+      "tool": "read_file"
+    }
+  ],
+  "expected_runtime_s": 18,
+  "fixture": {
+    "allowed_mutation_globs": [],
+    "files": [
+      {
+        "content": "M2-payload-01-{nonce}\n",
+        "path": "f01.txt"
+      },
+      {
+        "content": "M2-payload-02-{nonce}\n",
+        "path": "f02.txt"
+      },
+      {
+        "content": "M2-payload-03-{nonce}\n",
+        "path": "f03.txt"
+      },
+      {
+        "content": "M2-payload-04-{nonce}\n",
+        "path": "f04.txt"
+      },
+      {
+        "content": "M2-payload-05-{nonce}\n",
+        "path": "f05.txt"
+      },
+      {
+        "content": "M2-payload-06-{nonce}\n",
+        "path": "f06.txt"
+      },
+      {
+        "content": "M2-payload-07-{nonce}\n",
+        "path": "f07.txt"
+      },
+      {
+        "content": "M2-payload-08-{nonce}\n",
+        "path": "f08.txt"
+      }
+    ],
+    "jobs": [],
+    "kind": "ephemeral_dir",
+    "production_mutation_allowed": false,
+    "root_template": "/tmp/binnacle-chat-scheduling-v2/{id}/{run_id}"
+  },
+  "id": "M2",
+  "max_turn_runtime_s": 75,
+  "metric_tags": [
+    "read_parallelism",
+    "sliding_window",
+    "wall_time",
+    "tool_calls"
+  ],
+  "oracle": {
+    "checks": [
+      {
+        "params": {},
+        "type": "all_nodes_complete"
+      },
+      {
+        "params": {
+          "nodes": [
+            "read_01",
+            "read_02",
+            "read_03",
+            "read_04",
+            "read_05",
+            "read_06",
+            "read_07",
+            "read_08"
+          ]
+        },
+        "type": "tool_calls_exact_once"
+      },
+      {
+        "params": {
+          "value": "DONE"
+        },
+        "type": "exact_reply"
+      },
+      {
+        "params": {
+          "hard_gate": false,
+          "relation": "peak_read_only_inflight_observed"
+        },
+        "type": "event_relation"
+      }
+    ],
+    "terminal_state": "all_required_nodes_complete"
+  },
+  "phase1_step": "1.2",
+  "prompt_template": "Use only Raspberry Pi MCP read_file. Read these eight independent paths exactly once: {root}/f01.txt, {root}/f02.txt, {root}/f03.txt, {root}/f04.txt, {root}/f05.txt, {root}/f06.txt, {root}/f07.txt, {root}/f08.txt. Submit all currently-known independent reads without manually grouping them. Reply only DONE.",
+  "purpose": "Observe the connector sliding window without manually batching at five.",
+  "schema_version": 1,
+  "title": "Eight independent reads"
+}

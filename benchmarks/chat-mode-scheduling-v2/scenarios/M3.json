@@ -1,0 +1,151 @@
+{
+  "benchmark_class": "micro",
+  "dag": [
+    {
+      "access": "read_only",
+      "arguments": {
+        "job_id": "{job:slow}",
+        "tail_lines": 5,
+        "wait_seconds": 5
+      },
+      "depends_on": [],
+      "id": "slow_status",
+      "kind": "tool",
+      "tool": "job_status"
+    },
+    {
+      "access": "read_only",
+      "arguments": {
+        "path": "{root}/f1.txt"
+      },
+      "depends_on": [],
+      "id": "read_1",
+      "kind": "tool",
+      "tool": "read_file"
+    },
+    {
+      "access": "read_only",
+      "arguments": {
+        "path": "{root}/f2.txt"
+      },
+      "depends_on": [],
+      "id": "read_2",
+      "kind": "tool",
+      "tool": "read_file"
+    },
+    {
+      "access": "read_only",
+      "arguments": {
+        "path": "{root}/f3.txt"
+      },
+      "depends_on": [],
+      "id": "read_3",
+      "kind": "tool",
+      "tool": "read_file"
+    },
+    {
+      "access": "read_only",
+      "arguments": {
+        "path": "{root}/f4.txt"
+      },
+      "depends_on": [],
+      "id": "read_4",
+      "kind": "tool",
+      "tool": "read_file"
+    },
+    {
+      "access": "read_only",
+      "arguments": {
+        "path": "{root}/f5.txt"
+      },
+      "depends_on": [],
+      "id": "read_5",
+      "kind": "tool",
+      "tool": "read_file"
+    }
+  ],
+  "expected_runtime_s": 20,
+  "fixture": {
+    "allowed_mutation_globs": [],
+    "files": [
+      {
+        "content": "M3-payload-1-{nonce}\n",
+        "path": "f1.txt"
+      },
+      {
+        "content": "M3-payload-2-{nonce}\n",
+        "path": "f2.txt"
+      },
+      {
+        "content": "M3-payload-3-{nonce}\n",
+        "path": "f3.txt"
+      },
+      {
+        "content": "M3-payload-4-{nonce}\n",
+        "path": "f4.txt"
+      },
+      {
+        "content": "M3-payload-5-{nonce}\n",
+        "path": "f5.txt"
+      }
+    ],
+    "jobs": [
+      {
+        "command": "python3 -c 'import time; time.sleep(30)'",
+        "name": "slow",
+        "prelaunch": true
+      }
+    ],
+    "kind": "ephemeral_dir",
+    "production_mutation_allowed": false,
+    "root_template": "/tmp/binnacle-chat-scheduling-v2/{id}/{run_id}"
+  },
+  "id": "M3",
+  "max_turn_runtime_s": 75,
+  "metric_tags": [
+    "read_parallelism",
+    "sliding_window",
+    "refill",
+    "wall_time"
+  ],
+  "oracle": {
+    "checks": [
+      {
+        "params": {},
+        "type": "all_nodes_complete"
+      },
+      {
+        "params": {
+          "nodes": [
+            "slow_status",
+            "read_1",
+            "read_2",
+            "read_3",
+            "read_4",
+            "read_5"
+          ]
+        },
+        "type": "tool_calls_exact_once"
+      },
+      {
+        "params": {
+          "hard_gate": true,
+          "relation": "later_read_starts_before_slow_status_ends"
+        },
+        "type": "event_relation"
+      },
+      {
+        "params": {
+          "value": "DONE"
+        },
+        "type": "exact_reply"
+      }
+    ],
+    "terminal_state": "all_required_nodes_complete"
+  },
+  "phase1_step": "1.2",
+  "prompt_template": "Use only Raspberry Pi MCP read-only tools. In the same scheduling workload, check prelaunched {job:slow} with job_status wait_seconds=5 and read {root}/f1.txt through {root}/f5.txt exactly once. All six calls have known arguments and are independent. Reply only DONE.",
+  "purpose": "Verify independent reads can refill slots while a slow read-only wait remains unresolved.",
+  "schema_version": 1,
+  "title": "Sliding refill beside slow status"
+}

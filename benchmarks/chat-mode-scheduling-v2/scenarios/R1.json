@@ -1,0 +1,173 @@
+{
+  "benchmark_class": "macro",
+  "dag": [
+    {
+      "access": "read_only",
+      "arguments": {
+        "fixed_strings": true,
+        "path": "{root}",
+        "pattern": "discover-{nonce}"
+      },
+      "depends_on": [],
+      "id": "discover",
+      "kind": "tool",
+      "tool": "search_text"
+    },
+    {
+      "access": "read_only",
+      "arguments": {
+        "path": "{root}/group/item1.txt"
+      },
+      "depends_on": [
+        "discover"
+      ],
+      "id": "read_1",
+      "kind": "tool",
+      "tool": "read_file"
+    },
+    {
+      "access": "read_only",
+      "arguments": {
+        "path": "{root}/group/item2.txt"
+      },
+      "depends_on": [
+        "discover"
+      ],
+      "id": "read_2",
+      "kind": "tool",
+      "tool": "read_file"
+    },
+    {
+      "access": "read_only",
+      "arguments": {
+        "path": "{root}/group/item3.txt"
+      },
+      "depends_on": [
+        "discover"
+      ],
+      "id": "read_3",
+      "kind": "tool",
+      "tool": "read_file"
+    },
+    {
+      "access": "read_only",
+      "arguments": {
+        "path": "{root}/group/item4.txt"
+      },
+      "depends_on": [
+        "discover"
+      ],
+      "id": "read_4",
+      "kind": "tool",
+      "tool": "read_file"
+    },
+    {
+      "access": "read_only",
+      "arguments": {
+        "path": "{root}/group/item5.txt"
+      },
+      "depends_on": [
+        "discover"
+      ],
+      "id": "read_5",
+      "kind": "tool",
+      "tool": "read_file"
+    },
+    {
+      "access": "read_only",
+      "arguments": {
+        "path": "{root}/group/item6.txt"
+      },
+      "depends_on": [
+        "discover"
+      ],
+      "id": "read_6",
+      "kind": "tool",
+      "tool": "read_file"
+    }
+  ],
+  "expected_runtime_s": 25,
+  "fixture": {
+    "allowed_mutation_globs": [],
+    "files": [
+      {
+        "content": "discover-{nonce}\npayload-R1-1-{nonce}\n",
+        "path": "group/item1.txt"
+      },
+      {
+        "content": "discover-{nonce}\npayload-R1-2-{nonce}\n",
+        "path": "group/item2.txt"
+      },
+      {
+        "content": "discover-{nonce}\npayload-R1-3-{nonce}\n",
+        "path": "group/item3.txt"
+      },
+      {
+        "content": "discover-{nonce}\npayload-R1-4-{nonce}\n",
+        "path": "group/item4.txt"
+      },
+      {
+        "content": "discover-{nonce}\npayload-R1-5-{nonce}\n",
+        "path": "group/item5.txt"
+      },
+      {
+        "content": "discover-{nonce}\npayload-R1-6-{nonce}\n",
+        "path": "group/item6.txt"
+      }
+    ],
+    "jobs": [],
+    "kind": "ephemeral_dir",
+    "production_mutation_allowed": false,
+    "root_template": "/tmp/binnacle-chat-scheduling-v2/{id}/{run_id}"
+  },
+  "id": "R1",
+  "max_turn_runtime_s": 90,
+  "metric_tags": [
+    "wall_time",
+    "read_parallelism",
+    "same_prompt_completion",
+    "tool_calls",
+    "tokens"
+  ],
+  "oracle": {
+    "checks": [
+      {
+        "params": {},
+        "type": "all_nodes_complete"
+      },
+      {
+        "params": {
+          "values": [
+            "payload-R1-1-{nonce}",
+            "payload-R1-2-{nonce}",
+            "payload-R1-3-{nonce}",
+            "payload-R1-4-{nonce}",
+            "payload-R1-5-{nonce}",
+            "payload-R1-6-{nonce}"
+          ]
+        },
+        "type": "reply_contains_all"
+      },
+      {
+        "params": {
+          "nodes": [
+            "discover",
+            "read_1",
+            "read_2",
+            "read_3",
+            "read_4",
+            "read_5",
+            "read_6"
+          ]
+        },
+        "type": "tool_calls_exact_once"
+      }
+    ],
+    "terminal_state": "all_required_nodes_complete"
+  },
+  "phase1_step": "1.3",
+  "prompt_template": "Search {root} for exact marker discover-{nonce}. Read every matching file exactly once. Reply with the six payload-R1-* lines in filename order and nothing else.",
+  "purpose": "Realistic discovery fan-out into six independent file reads.",
+  "schema_version": 1,
+  "title": "Search then inspect six matches"
+}

@@ -1,0 +1,81 @@
+{
+  "benchmark_class": "macro",
+  "dag": [
+    {
+      "access": "non_read_only",
+      "arguments": {
+        "background": true,
+        "command": "python3 -c 'import time; time.sleep(25); print(\"R5-{nonce}\")'",
+        "wait_seconds": 1,
+        "workdir": "{root}"
+      },
+      "depends_on": [],
+      "id": "start_job",
+      "kind": "tool",
+      "tool": "run_command"
+    },
+    {
+      "access": "read_only",
+      "allow_repeats": true,
+      "arguments": {
+        "job_id": "{result:start_job.job_id}",
+        "tail_lines": 20,
+        "wait_seconds": 50
+      },
+      "completion_condition": "job_state=exited",
+      "depends_on": [
+        "start_job"
+      ],
+      "id": "wait_result",
+      "kind": "tool",
+      "tool": "job_status"
+    }
+  ],
+  "expected_runtime_s": 40,
+  "fixture": {
+    "allowed_mutation_globs": [
+      "{root}/**"
+    ],
+    "files": [],
+    "jobs": [],
+    "kind": "ephemeral_dir",
+    "production_mutation_allowed": false,
+    "root_template": "/tmp/binnacle-chat-scheduling-v2/{id}/{run_id}"
+  },
+  "id": "R5",
+  "max_turn_runtime_s": 90,
+  "metric_tags": [
+    "wall_time",
+    "dependency_wait",
+    "same_prompt_completion",
+    "continuation_prompts"
+  ],
+  "oracle": {
+    "checks": [
+      {
+        "params": {},
+        "type": "all_nodes_complete"
+      },
+      {
+        "params": {
+          "exit_code": 0,
+          "node": "wait_result",
+          "state": "exited"
+        },
+        "type": "job_state"
+      },
+      {
+        "params": {
+          "value": "R5-{nonce}"
+        },
+        "type": "exact_reply"
+      }
+    ],
+    "terminal_state": "all_required_nodes_complete"
+  },
+  "phase1_step": "1.4",
+  "prompt_template": "Start the supplied 25-second job in the background. There is no other work to do; wait for its required result in this same prompt. Reply only R5-{nonce} after it exits successfully.",
+  "purpose": "Measure same-prompt waiting when no independent work exists.",
+  "schema_version": 1,
+  "title": "Short true dependency barrier"
+}
