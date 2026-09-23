@@ -167,6 +167,17 @@ def _record_chat_url(path: str | None, url: str) -> None:
     target.write_text(url + "\n", encoding="utf-8")
 
 
+def _record_timing(path: str | None, payload: dict) -> None:
+    """Atomically persist timing evidence, including timeout paths."""
+    if path is None:
+        return
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    tmp = target.with_suffix(target.suffix + ".tmp")
+    tmp.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    os.replace(tmp, target)
+
+
 def run(
     chat: str | None,
     message: str,
@@ -175,6 +186,7 @@ def run(
     visible: bool = False,
     project: str | None = None,
     url_file: str | None = None,
+    timing_file: str | None = None,
 ) -> dict:
     from playwright.sync_api import TimeoutError as PWTimeout
     from playwright.sync_api import sync_playwright
@@ -204,7 +216,16 @@ def run(
         before = page.locator('[data-message-author-role="assistant"]').count()
         composer.click()
         composer.fill(message)
+        sent_at_epoch_s = time.time()
+        sent_at_mono = time.monotonic()
         page.keyboard.press("Enter")
+        _record_timing(
+            timing_file,
+            {
+                "status": "running",
+                "sent_at_epoch_s": sent_at_epoch_s,
+            },
+        )
 
         deadline = time.monotonic() + timeout_s
         last_text, stable_since = "", None
@@ -247,17 +268,43 @@ def run(
             last_text = text
             time.sleep(0.5)
         else:
+            timed_out_at_epoch_s = time.time()
+            wall_s = round(time.monotonic() - sent_at_mono, 3)
+            _record_timing(
+                timing_file,
+                {
+                    "status": "timeout",
+                    "sent_at_epoch_s": sent_at_epoch_s,
+                    "observed_at_epoch_s": timed_out_at_epoch_s,
+                    "wall_s": wall_s,
+                    "last_text": last_text,
+                },
+            )
             b.close()
             cs.fail(
                 f"no complete reply within {timeout_s:g} s (last seen: {last_text[:200]!r})"
             )
 
+        settled_at_mono = time.monotonic()
+        settled_at_epoch_s = time.time()
         _record_chat_url(url_file, page.url)
+        _record_timing(
+            timing_file,
+            {
+                "status": "complete",
+                "sent_at_epoch_s": sent_at_epoch_s,
+                "settled_at_epoch_s": settled_at_epoch_s,
+                "wall_s": round(settled_at_mono - sent_at_mono, 3),
+            },
+        )
         result = {
             "url": page.url,
             "confirmations_clicked": confirmations,
             "buttons_seen": sorted(buttons_seen),
             "reply": last_text,
+            "sent_at_epoch_s": sent_at_epoch_s,
+            "settled_at_epoch_s": settled_at_epoch_s,
+            "wall_s": round(settled_at_mono - sent_at_mono, 3),
         }
         b.close()
         return result
@@ -288,6 +335,10 @@ def main() -> None:
         help="write the conversation URL as soon as it is known (for exact cleanup after a timeout)",
     )
     ap.add_argument(
+        "--timing-file",
+        help="atomically write send/settle timing evidence, including timeout paths",
+    )
+    ap.add_argument(
         "--visible",
         action="store_true",
         help="show the browser on screen (default: invisible via Xvfb)",
@@ -303,6 +354,7 @@ def main() -> None:
         args.visible,
         args.project,
         args.url_file,
+        args.timing_file,
     )
     if args.json:
         print(json.dumps(result, indent=2, ensure_ascii=False))

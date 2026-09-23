@@ -218,7 +218,7 @@
     "terminal_state": "all_required_nodes_complete"
   },
   "phase1_step": "1.4",
-  "prompt_template": "Start the supplied 30-second validation in the background first. While it runs, read all eight files under {root}/inspect exactly once. Then obtain the validation result. Reply only DONE when the validation succeeded and all reads completed.",
+  "prompt_template": "Use Raspberry Pi MCP. In {root}, start this exact validation command first with run_command background=true and wait_seconds=1: python3 -c 'import time; time.sleep(30); print(\"validation-R3-{nonce}\")'. While it runs, read all eight files under {root}/inspect exactly once. Then obtain the validation result. Reply only DONE when validation succeeded and all reads completed.",
   "purpose": "Measure overlap between a background validation and eight independent inspections.",
   "schema_version": 1,
   "title": "Thirty-second validation with useful reads"

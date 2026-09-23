@@ -148,16 +148,21 @@ State is outside the repository:
 ```text
 ~/.local/state/binnacle/chat-scheduling-v2/runs/<run_id>/
     trial.json
-    chat-url.txt        # when a chat was created
-    conversation.json   # after successful exact backup/delete
+    chat-url.txt         # conversation id recovery
+    chat-timing.json     # Enter -> settled/timeout wall time
+    conversation.json    # exact backup after test-chat deletion
+    journal.log          # frozen MCP/jobs trial window
+    fixture-final.json   # final fixture contents/hash/diff before cleanup
+    trace.json           # Step 0.4 normalized evidence, after analysis
+    metrics.json         # Step 0.4 trial metrics, after analysis
 ```
 
 `trial.json` is written atomically and records the current stage, error,
 instruction restore result, fixture cleanup, chat cleanup, and production
 invariant.
 
-Step 0.4 will add scoring/analyzer logic; Step 0.3 deliberately records raw
-evidence only.
+The raw evidence files remain immutable inputs to the Step 0.4 analyzer.
+Metric definitions are in `benchmarks/chat-mode-scheduling-v2/METRICS.md`.
 
 ## Step 0.3 validation
 

@@ -162,7 +162,7 @@
     "terminal_state": "all_required_nodes_complete"
   },
   "phase1_step": null,
-  "prompt_template": "Start the supplied 30-second validation command with run_command background=true, then read {root}/f1.txt through {root}/f4.txt while it runs. Observe the job non-blocking after the reads, then wait for its required result and reply only DONE.",
+  "prompt_template": "Use Raspberry Pi MCP. In {root}, start this exact command with run_command background=true and wait_seconds=1: python3 -c 'import time; time.sleep(30); print(\"M6-job-{nonce}\")'. While it runs, read {root}/f1.txt through {root}/f4.txt. Observe the returned job non-blocking after the reads, then wait for its required result and reply only DONE.",
   "purpose": "Verify a background job handle permits later useful work inside one user prompt.",
   "schema_version": 1,
   "title": "Future handle same-prompt flow"
