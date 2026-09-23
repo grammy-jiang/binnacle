@@ -1,0 +1,71 @@
+{
+  "benchmark": "blocking_wall_guard_acquire_release",
+  "date": "2026-09-24",
+  "iterations_per_run": 100000,
+  "median_run_level_ms": {
+    "p95": 0.006445,
+    "p99": 0.007259
+  },
+  "phase": 2,
+  "run_count": 3,
+  "runs": [
+    {
+      "benchmark": "blocking_wall_guard_acquire_release",
+      "clock": "time.perf_counter_ns",
+      "machine": "aarch64",
+      "python": "3.13.5",
+      "result": {
+        "iterations": 100000,
+        "max_ms": 0.05463,
+        "p50_ms": 0.006203,
+        "p90_ms": 0.006296,
+        "p95_ms": 0.006445,
+        "p99_ms": 0.007259
+      },
+      "run": 1,
+      "schema_version": 1,
+      "tracker_clock": "time.monotonic"
+    },
+    {
+      "benchmark": "blocking_wall_guard_acquire_release",
+      "clock": "time.perf_counter_ns",
+      "machine": "aarch64",
+      "python": "3.13.5",
+      "result": {
+        "iterations": 100000,
+        "max_ms": 0.052593,
+        "p50_ms": 0.006167,
+        "p90_ms": 0.00626,
+        "p95_ms": 0.006407,
+        "p99_ms": 0.007148
+      },
+      "run": 2,
+      "schema_version": 1,
+      "tracker_clock": "time.monotonic"
+    },
+    {
+      "benchmark": "blocking_wall_guard_acquire_release",
+      "clock": "time.perf_counter_ns",
+      "machine": "aarch64",
+      "python": "3.13.5",
+      "result": {
+        "iterations": 100000,
+        "max_ms": 0.261536,
+        "p50_ms": 0.006093,
+        "p90_ms": 0.00624,
+        "p95_ms": 0.006778,
+        "p99_ms": 0.036204179999999905
+      },
+      "run": 3,
+      "schema_version": 1,
+      "tracker_clock": "time.monotonic"
+    }
+  ],
+  "schema_version": 1,
+  "step": "2.11",
+  "target_pass": true,
+  "targets_ms": {
+    "p95_lt": 1.0,
+    "p99_lt": 2.0
+  }
+}
