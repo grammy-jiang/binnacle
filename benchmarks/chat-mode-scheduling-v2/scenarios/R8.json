@@ -1,0 +1,146 @@
+{
+  "benchmark_class": "macro",
+  "dag": [
+    {
+      "access": "read_only",
+      "arguments": {
+        "path": "{root}/README.md"
+      },
+      "depends_on": [],
+      "id": "read_readme",
+      "kind": "tool",
+      "tool": "read_file"
+    },
+    {
+      "access": "read_only",
+      "arguments": {
+        "path": "{root}/app.py"
+      },
+      "depends_on": [],
+      "id": "read_app",
+      "kind": "tool",
+      "tool": "read_file"
+    },
+    {
+      "access": "read_only",
+      "arguments": {
+        "path": "{root}/test_app.py"
+      },
+      "depends_on": [],
+      "id": "read_test",
+      "kind": "tool",
+      "tool": "read_file"
+    },
+    {
+      "access": "non_read_only",
+      "arguments": {
+        "operation": "edit app.py to satisfy the stated requirement",
+        "workdir": "{root}"
+      },
+      "depends_on": [
+        "read_readme",
+        "read_app",
+        "read_test"
+      ],
+      "id": "edit_app",
+      "kind": "tool",
+      "tool": "run_command"
+    },
+    {
+      "access": "non_read_only",
+      "arguments": {
+        "command": "python3 test_app.py",
+        "workdir": "{root}"
+      },
+      "depends_on": [
+        "edit_app"
+      ],
+      "id": "focused_test",
+      "kind": "tool",
+      "tool": "run_command"
+    },
+    {
+      "access": "read_only",
+      "arguments": {
+        "path": "{root}/app.py"
+      },
+      "depends_on": [
+        "focused_test"
+      ],
+      "id": "verify_app",
+      "kind": "tool",
+      "tool": "read_file"
+    }
+  ],
+  "expected_runtime_s": 65,
+  "fixture": {
+    "allowed_mutation_globs": [
+      "{root}/**"
+    ],
+    "files": [
+      {
+        "content": "Requirement: app.message() must return exactly AFTER-{nonce}.\n",
+        "path": "README.md"
+      },
+      {
+        "content": "def message():\n    return 'BEFORE-{nonce}'\n",
+        "path": "app.py"
+      },
+      {
+        "content": "from pathlib import Path\n\nns = {}\nexec(Path('app.py').read_text(), ns)\nassert ns['message']() == 'AFTER-{nonce}'\nprint('R8-test-pass')\n",
+        "path": "test_app.py"
+      }
+    ],
+    "jobs": [],
+    "kind": "ephemeral_git_repo",
+    "production_mutation_allowed": false,
+    "root_template": "/tmp/binnacle-chat-scheduling-v2/{id}/{run_id}"
+  },
+  "id": "R8",
+  "max_turn_runtime_s": 130,
+  "metric_tags": [
+    "wall_time",
+    "development_journey",
+    "same_prompt_completion",
+    "tool_calls",
+    "tokens",
+    "correctness"
+  ],
+  "oracle": {
+    "checks": [
+      {
+        "params": {},
+        "type": "all_nodes_complete"
+      },
+      {
+        "params": {
+          "contains": "AFTER-{nonce}",
+          "path": "{root}/app.py"
+        },
+        "type": "file_content"
+      },
+      {
+        "params": {
+          "node": "focused_test"
+        },
+        "type": "command_exit_zero"
+      },
+      {
+        "params": {},
+        "type": "no_mutation_outside_scope"
+      },
+      {
+        "params": {
+          "value": "DONE"
+        },
+        "type": "exact_reply"
+      }
+    ],
+    "terminal_state": "all_required_nodes_complete"
+  },
+  "phase1_step": "1.5",
+  "prompt_template": "Work only inside disposable repo {root}. Inspect README.md, app.py and test_app.py. Implement the stated requirement, run only test_app.py, then read the final app.py. Reply only DONE when the focused test passes. Do not modify anything outside {root}.",
+  "purpose": "A deterministic end-to-end development journey in a disposable git fixture.",
+  "schema_version": 1,
+  "title": "Inspect, edit, test, verify"
+}
