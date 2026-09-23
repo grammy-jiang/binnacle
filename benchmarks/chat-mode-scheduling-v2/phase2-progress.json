@@ -1,0 +1,226 @@
+{
+  "schema_version": 1,
+  "phase": 2,
+  "status": "in_progress",
+  "branch": "feature/chat-mode-blocking-wall-guard",
+  "worktree": "/home/grammy-jiang/Projects/binnacle-chat-blocking-wall-guard",
+  "source_branch": "design/chat-mode-scheduling-v2",
+  "phase1_evidence_commit": "cc1b014",
+  "last_completed_step": "2.1",
+  "next_step": "2.2",
+  "baseline": {
+    "design_source_head": "e9c04728e5ac583a8e5d3b991cb01309de36ef82",
+    "production": {
+      "head": "83862b040f59afc97963041de557bf9037f13e50",
+      "branch": "master",
+      "status_porcelain_v1": [
+        " M CLAUDE.md",
+        " M docs/watchdog-poc.md",
+        " M src/binnacle/ops/watchdog/config.py",
+        " M src/binnacle/ops/watchdog/cycle.py",
+        " M src/binnacle/ops/watchdog/diagnostics.py",
+        " M src/binnacle/ops/watchdog/inventory.py",
+        " M src/binnacle/ops/watchdog/model.py",
+        " M src/binnacle/ops/watchdog/network.py",
+        " M src/binnacle/ops/watchdog/policy.py",
+        " M src/binnacle/ops/watchdog/policy_recovery.py",
+        " M src/binnacle/ops/watchdog/reporting.py",
+        " M src/binnacle/watchdog.py",
+        " M src/binnacle/watchdog_cli.py",
+        " M src/binnacle/watchdog_config.py",
+        " M tests/system/test_watchdog_devices.py",
+        " M tests/watchdog_support.py",
+        "?? docs/watchdog-connectivity-and-best-path-plan-2026-09-23.md",
+        "?? src/binnacle/ops/watchdog/device_identity.py",
+        "?? src/binnacle/ops/watchdog/policy_usb.py",
+        "?? tests/system/test_watchdog_identity.py",
+        "?? tests/system/test_watchdog_usb_policy.py"
+      ],
+      "service_active_state": "active",
+      "service_sub_state": "running",
+      "blocking_wall_budget_key_present": false,
+      "isolation_check_command": "bash /tmp/phase2-manager/isolation-check.sh",
+      "isolation_check_note": "Section 11.9 is run through the task-manager helper because the Raspberry Pi MCP file tools are restricted to /home/grammy-jiang/Projects and /tmp and cannot read ~/.config/binnacle/config.toml directly."
+    },
+    "job_status_contract": {
+      "input_wait_seconds": {
+        "minimum": 0,
+        "maximum": 50
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "job_id": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "exit_code": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "signal": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "runtime_s": {
+            "type": "number"
+          },
+          "last_output_age_s": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "quiet": {
+            "type": "boolean"
+          },
+          "log_tail": {
+            "type": "string"
+          },
+          "log_bytes": {
+            "type": "integer"
+          },
+          "log_path": {
+            "type": "string"
+          },
+          "command": {
+            "type": "string"
+          },
+          "workdir": {
+            "type": "string"
+          },
+          "waited_s": {
+            "type": "number"
+          },
+          "processes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "pid": {
+                  "type": "integer"
+                },
+                "state": {
+                  "type": "string"
+                },
+                "etime_s": {
+                  "type": "number"
+                },
+                "cpu_s": {
+                  "type": "number"
+                },
+                "cmd": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "jobs": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        }
+      },
+      "job_status_timing_fields": [
+        "call",
+        "job_id",
+        "wait_requested_s",
+        "dispatch_ms",
+        "state_ms",
+        "read_log_ms",
+        "process_scan_ms",
+        "impl_ms",
+        "state",
+        "processes",
+        "log_bytes"
+      ],
+      "job_status_timing_note": "At this baseline, job_status_impl clamps wait_seconds before logging, so wait_requested_s reflects the bounded value."
+    },
+    "correlation": {
+      "header": "X-Request-Id",
+      "logged_field": "turn",
+      "full_request_id_logged": true,
+      "base_turn_contextvar_exists": false,
+      "note": "ToolLoggingMiddleware copies the full x-request-id into turn=; callctx.py has no current_turn ContextVar at the Step 2.1 baseline."
+    }
+  },
+  "steps": {
+    "2.1": {
+      "status": "complete",
+      "tests": [
+        "uv run pytest -q tests/unit/core/test_config_loading.py tests/unit/core/test_logging_result_fields.py tests/unit/core/test_logstats_jobs.py tests/integration/test_logging.py tests/integration/test_http_workflows.py tests/integration/test_jobs_lifecycle.py tests/integration/test_job_manager_telemetry.py -> 78 passed in 45.88s",
+        "uv run pre-commit run --all-files -> passed"
+      ],
+      "notes": [
+        "Created feature/chat-mode-blocking-wall-guard at synchronized design source HEAD e9c04728e5ac583a8e5d3b991cb01309de36ef82.",
+        "Frozen the existing job_status 0..50 input bound, OUTPUT_SCHEMA, job_status_timing field set, and full X-Request-Id turn logging behavior; no runtime policy code changed.",
+        "Section 11.9 checks use bash /tmp/phase2-manager/isolation-check.sh because Raspberry Pi MCP file reads cannot access ~/.config directly.",
+        "Final Section 11.9 check at 2026-09-23T23:47:53+1000: production remained on master at 83862b040f59afc97963041de557bf9037f13e50, binnacle-mcp.service was active, and the Phase-2 budget key was absent.",
+        "Pre-existing watchdog-related production changes were preserved untouched."
+      ]
+    },
+    "2.2": {
+      "status": "not_started",
+      "tests": [],
+      "notes": []
+    },
+    "2.3": {
+      "status": "not_started",
+      "tests": [],
+      "notes": []
+    },
+    "2.4": {
+      "status": "not_started",
+      "tests": [],
+      "notes": []
+    },
+    "2.5": {
+      "status": "not_started",
+      "tests": [],
+      "notes": []
+    },
+    "2.6": {
+      "status": "not_started",
+      "tests": [],
+      "notes": []
+    },
+    "2.7": {
+      "status": "not_started",
+      "tests": [],
+      "notes": []
+    },
+    "2.8": {
+      "status": "not_started",
+      "tests": [],
+      "notes": []
+    },
+    "2.9": {
+      "status": "not_started",
+      "tests": [],
+      "notes": []
+    },
+    "2.10": {
+      "status": "not_started",
+      "tests": [],
+      "notes": []
+    },
+    "2.11": {
+      "status": "not_started",
+      "tests": [],
+      "notes": []
+    },
+    "2.12": {
+      "status": "not_started",
+      "tests": [],
+      "notes": []
+    }
+  }
+}
