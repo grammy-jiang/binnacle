@@ -364,7 +364,7 @@ def test_send_project_chat_retries_only_before_submission(monkeypatch, tmp_path)
     def fake_run(args, **kwargs):
         nonlocal attempts
         attempts += 1
-        if attempts == 1:
+        if attempts < 3:
             raise subprocess.CalledProcessError(1, args)
         return subprocess.CompletedProcess(
             args,
@@ -382,8 +382,8 @@ def test_send_project_chat_retries_only_before_submission(monkeypatch, tmp_path)
         timing_file=tmp_path / "timing.json",
     )
 
-    assert attempts == 2
-    assert result["submit_attempts"] == 2
+    assert attempts == 3
+    assert result["submit_attempts"] == 3
 
 
 def test_send_project_chat_does_not_retry_after_enter_evidence(monkeypatch, tmp_path):
