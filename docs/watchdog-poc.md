@@ -71,11 +71,18 @@ The repair ladder, worst first, each rung rate-limited and backed off:
   unavailable): re-activate the best profile in range; a USB adapter that
   is unavailable, or that a re-activation did not bring back, gets the
   USB reset schedule -- it carries nothing, so this costs nothing;
-- a USB adapter whose link is below the best speed it has shown (a USB 3
-  part enumerated at 480 Mbit/s): re-enumerate it -- through a demotion
-  when it is the active route -- on `usb_speed_schedule`, and accept the
-  lower level after `usb_speed_give_up` attempts until it shows the
-  higher one again;
+- a USB adapter whose link is below the level its policy promises
+  (`usb_link_policies`, 2026-09-23: `param` -- the RTL8812AU's
+  rtw_switch_usb_mode=1 forces SuperSpeed, so 5000, any other value
+  promises nothing; `fixed`; `observe`; or `learned`, the old "best
+  speed it has shown", keyed by physical identity and relearned when
+  the module parameters change): re-enumerate it -- through a demotion
+  when it is the active route -- on `usb_speed_schedule`; a learned
+  level is accepted as lower after `usb_speed_give_up` attempts, a fixed
+  or param target never lowers itself and waits for the link to change.
+  The old rule made 18 resets between 09-12 and 09-23 and raised no
+  link: 12 on the USB 2-only RTL8188EUS through the wlan1/wlan2 name
+  swaps, 6 on the RTL8812AU in deliberate mode 0;
 - a device on a lower-priority profile than one in range: the preference
   move (above).
 
@@ -89,6 +96,22 @@ demotion is in flight; the last healthy route is never demoted.
 
 The adapter is never removed and never left out of service permanently --
 demotion is reversed as soon as it carries traffic again.
+
+Identity (2026-09-23): every durable per-device entry (demotions, reset
+and USB counters, levels, preference counters, wedge times, grades)
+follows the adapter, not the interface name. Each cycle reads the
+permanent MAC (`ip -o link`, `permaddr` first) and keys the device as
+`usb:<vid:pid>@<mac>` or `builtin@<mac>`; when a name's identity changes,
+the state under it is parked by identity and the adapter's own state is
+installed under its new name (`identity_parked`, `identity_renamed`,
+`identity_returned`, `identity_mismatch`, `identity_seen` in the
+journal). A name-keyed file from before is adopted when its recorded USB
+id matches the adapter now under the name, and discarded otherwise. On
+2026-09-15 the two USB adapters swapped names for three boots and the
+RTL8188EUS inherited the RTL8812AU's learned 5000 Mbit/s: 12 USB resets
+for a speed it cannot have. Code in `ops/watchdog/device_identity.py`
+and `policy_usb.py`; the plan and its review in
+`docs/watchdog-connectivity-and-best-path-plan-2026-09-23.md`.
 
 Route changes go through NetworkManager (`connection modify` +
 `device reapply`), not `ip route`: NM re-applies its own routes on every

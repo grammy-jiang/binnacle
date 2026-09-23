@@ -55,7 +55,7 @@ def test_observe_devices_collects_link_and_usb_facts(tmp_path, monkeypatch):
     )
     assert devices["wlan0"] == wd.DeviceInfo("wlan0", "disconnected")
     assert devices["wlan1"].describe(5000) == (
-        "connected Occom-USB 5 GHz 80 MHz 867 Mbit/s -49 dBm usb 480 (best 5000)"
+        "connected Occom-USB 5 GHz 80 MHz 867 Mbit/s -49 dBm usb 480 (target 5000)"
     )
     assert devices["wlan0"].describe() == "disconnected"
 

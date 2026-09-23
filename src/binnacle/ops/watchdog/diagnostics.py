@@ -28,9 +28,16 @@ def describe_issues(
                     "does: a DNS server problem, not the link"
                 )
         if info is not None and info.usb_speed is not None:
-            best = state.usb_best_speed.get(dev, 0)
-            if info.usb_speed < best:
-                parts.append(f"USB link {info.usb_speed} Mbit/s, best seen {best}")
+            target = state.usb_target.get(dev, state.usb_best_speed.get(dev))
+            if target is not None and info.usb_speed < target:
+                mode = state.usb_mode.get(dev, "learned")
+                parts.append(
+                    f"USB link {info.usb_speed} Mbit/s, best seen {target}"
+                    if mode == "learned"
+                    else f"USB link {info.usb_speed} Mbit/s, target {target} ({mode})"
+                )
+                if dev in state.usb_speed_exhausted:
+                    parts.append("repair exhausted")
         pref = prefs.get(dev)
         if pref is not None and pref.target:
             where = "in range" if pref.visible else "not in range"

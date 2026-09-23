@@ -48,8 +48,9 @@ def inventory_line(
                 f"{p.name}:prio{p.priority}:metric{metric}:{'auto' if p.autoconnect else 'manual'}"
             )
     kind = f"usb:{usb_id}@{node}:{info.usb_speed or '?'}Mbit" if usb_id else "builtin"
+    ident = f" id={info.key}" if info.key else ""
     return (
-        f"kind={kind} driver={driver} module={module or '?'}"
+        f"kind={kind}{ident} driver={driver} module={module or '?'}"
         + (
             " params=" + ",".join(f"{k}={v}" for k, v in params.items())
             if params

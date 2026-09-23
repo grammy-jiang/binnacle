@@ -3,6 +3,7 @@
 import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
+from typing import Any
 
 from binnacle.ops.watchdog.config import ActionKind
 from binnacle.uplink import ProbeResult
@@ -58,10 +59,12 @@ class State:
     last_summary: dict[str, str] = field(default_factory=dict)
     #: dev -> "profile (band)" as of the last cycle; shown by `doctor`.
     last_profiles: dict[str, str] = field(default_factory=dict)
-    #: USB link level: the best speed each adapter has shown, the reset
-    #: attempts made to get back to it, when the last one was, and since
-    #: when it has been at the best (not persisted; clears the count after
-    #: `usb_speed_hold_s`).
+    #: USB link level in `learned` mode: the best speed the adapter has
+    #: shown (lowered when repair gives up; `usb_max_seen` never is), the
+    #: reset attempts made to get back to the target, when the last one
+    #: was, and since when it has been at the target (not persisted;
+    #: clears the count after `usb_speed_hold_s`). The target itself comes
+    #: from the policy (policy_usb.py) since 2026-09-23.
     usb_best_speed: dict[str, int] = field(default_factory=dict)
     usb_speed_attempts: dict[str, int] = field(default_factory=dict)
     last_usb_speed_reset: dict[str, float] = field(default_factory=dict)
@@ -77,6 +80,27 @@ class State:
     #: Devices ever observed (dev -> usb id or "builtin"): a device that
     #: disappears from NetworkManager is reported as absent.
     known_devices: dict[str, str] = field(default_factory=dict)
+    #: Physical identity (2026-09-23): dev -> "usb:<vid:pid>@<mac>" or
+    #: "builtin@<mac>" as last observed under that name, and the durable
+    #: per-device state of adapters not seen right now, keyed by identity,
+    #: so it follows the adapter to whatever name it gets next (see
+    #: device_identity.py: on 2026-09-15 wlan1/wlan2 swapped for three
+    #: boots and the USB 2-only RTL8188EUS inherited the RTL8812AU's
+    #: learned 5000 Mbit/s level).
+    identities: dict[str, str] = field(default_factory=dict)
+    parked: dict[str, dict[str, Any]] = field(default_factory=dict)
+    #: USB link policy per device: the fingerprint the repair counters
+    #: belong to, the resolved target (None = observe) and mode, the
+    #: highest speed ever seen (diagnostic, never a target by itself) and
+    #: the speed at which a fixed target's repair was exhausted.
+    usb_policy_fp: dict[str, str] = field(default_factory=dict)
+    usb_target: dict[str, int | None] = field(default_factory=dict)
+    usb_mode: dict[str, str] = field(default_factory=dict)
+    usb_max_seen: dict[str, int] = field(default_factory=dict)
+    usb_speed_exhausted: dict[str, int] = field(default_factory=dict)
+    #: Transient: USB policy changes seen this cycle (dev, old, new,
+    #: cleared), logged by the loop as `usb_speed_policy_changed`.
+    policy_events: list[tuple[str, str, str, str]] = field(default_factory=list)
     #: Driver reloads (non-USB radios), paced like the USB schedule.
     reload_attempts: dict[str, int] = field(default_factory=dict)
     last_reload: dict[str, float] = field(default_factory=dict)
@@ -181,6 +205,7 @@ class State:
             "issue_flips",
             "last_flap_log",
             "last_logged_issue",
+            "policy_events",
         ):
             data.pop(transient, None)
         return json.dumps(data, indent=2)
@@ -257,6 +282,7 @@ class State:
             for k, v in (raw.get("wedge_times") or {}).items()
             if isinstance(v, list)
         }
+        _load_identity(state, raw)
         return state
 
     def save(self, path: Path) -> None:
@@ -264,6 +290,32 @@ class State:
         tmp = path.with_suffix(".tmp")
         tmp.write_text(self.to_json(), encoding="utf-8")
         tmp.replace(path)
+
+
+def _load_identity(state: "State", raw: dict[str, Any]) -> None:
+    """The identity and USB-policy tables (2026-09-23)."""
+    state.identities = {
+        str(k): str(v) for k, v in (raw.get("identities") or {}).items()
+    }
+    state.parked = {
+        str(k): dict(v)
+        for k, v in (raw.get("parked") or {}).items()
+        if isinstance(v, dict)
+    }
+    state.usb_policy_fp = {
+        str(k): str(v) for k, v in (raw.get("usb_policy_fp") or {}).items()
+    }
+    state.usb_target = {
+        str(k): (int(v) if v is not None else None)
+        for k, v in (raw.get("usb_target") or {}).items()
+    }
+    state.usb_mode = {str(k): str(v) for k, v in (raw.get("usb_mode") or {}).items()}
+    state.usb_max_seen = {
+        str(k): int(v) for k, v in (raw.get("usb_max_seen") or {}).items()
+    }
+    state.usb_speed_exhausted = {
+        str(k): int(v) for k, v in (raw.get("usb_speed_exhausted") or {}).items()
+    }
 
 
 @dataclass(frozen=True, slots=True)
@@ -315,8 +367,24 @@ class DeviceInfo:
     width: int | None = None
     rate: float | None = None
     signal: int | None = None
+    #: Permanent MAC address, lower case; "" when it could not be read.
+    mac: str = ""
+    #: Kernel module parameters named in `inventory_params` (and by the USB
+    #: link policies), as read this cycle: (name, value), sorted by name.
+    params: tuple[tuple[str, str], ...] = ()
 
-    def describe(self, best_usb: int | None = None) -> str:
+    @property
+    def key(self) -> str | None:
+        """Physical identity: `usb:<vid:pid>@<mac>` for a USB adapter,
+        `builtin@<mac>` otherwise; None without a MAC, which means no stable
+        identity and no history applied to the device."""
+        if not self.mac:
+            return None
+        if self.usb_id:
+            return f"usb:{self.usb_id}@{self.mac}"
+        return f"builtin@{self.mac}"
+
+    def describe(self, target_usb: int | None = None) -> str:
         parts = [self.nm_state]
         if self.profile:
             parts.append(self.profile)
@@ -330,8 +398,8 @@ class DeviceInfo:
                 parts.append(f"{self.signal} dBm")
         if self.usb_speed is not None:
             usb = f"usb {self.usb_speed}"
-            if best_usb and best_usb != self.usb_speed:
-                usb += f" (best {best_usb})"
+            if target_usb and target_usb != self.usb_speed:
+                usb += f" (target {target_usb})"
             parts.append(usb)
         return " ".join(parts)
 

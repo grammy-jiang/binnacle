@@ -8,6 +8,27 @@ ActionKind = Literal["demote", "restore", "reset", "usb_reset", "reload"]
 
 
 @dataclass(frozen=True, slots=True)
+class UsbLinkPolicy:
+    """Desired USB link speed for one adapter model (`usb_id`), or one
+    adapter (`permanent_mac`). `fixed`: `target_mbps` is the level to
+    repair to. `observe`: record the speed, never reset for it. `param`:
+    the target follows the kernel module parameter `param`; `targets`
+    maps its value to a speed and an unlisted value means observe (the
+    RTL8812AU: rtw_switch_usb_mode=1 forces SuperSpeed, so 5000; 0
+    leaves the chip at whatever it enumerated). `learned`, the default
+    without a rule: the best speed the adapter has shown, keyed by
+    identity, relearned when its parameters change. A target is a floor
+    for repair, never a reason to force a healthy link down."""
+
+    usb_id: str
+    mode: str = "learned"
+    target_mbps: int | None = None
+    permanent_mac: str | None = None
+    param: str | None = None
+    targets: tuple[tuple[str, int], ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class Policy:
     failures_before_action: int = 3
     successes_before_restore: int = 3
@@ -70,6 +91,9 @@ class Policy:
     usb_speed_give_up: int = 6
     #: Time at the best speed after which the attempt counter clears.
     usb_speed_hold_s: float = 3600.0
+    #: What level each USB adapter is held to (2026-09-23, see
+    #: policy_usb.py); an adapter without a rule is in `learned` mode.
+    usb_link_policies: tuple[UsbLinkPolicy, ...] = ()
     #: Public resolver asked when the system one fails, to classify the
     #: failure (resolver vs link). Diagnostic; None disables it.
     dns_fallback: str | None = "1.1.1.1"
@@ -198,6 +222,14 @@ def usb_backoff(schedule: tuple[tuple[int, float], ...], attempt: int) -> float:
             return interval
         done += count
     return schedule[-1][1] if schedule else 600.0
+
+
+def usb_param_names(policy: "Policy") -> tuple[str, ...]:
+    """Module parameters to read per device: the inventory's and every
+    parameter a `param` link policy follows."""
+    names = set(policy.inventory_params)
+    names.update(r.param for r in policy.usb_link_policies if r.param)
+    return tuple(sorted(names))
 
 
 DEFAULT_POLICY = Policy()
