@@ -178,6 +178,60 @@ def _record_timing(path: str | None, payload: dict) -> None:
     os.replace(tmp, target)
 
 
+def _conversation_id(url: str) -> str | None:
+    match = re.search(
+        r"/c/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})",
+        url,
+        re.IGNORECASE,
+    )
+    return match.group(1).lower() if match else None
+
+
+def _final_from_conversation(data: object) -> tuple[bool, str]:
+    """Return backend final-completion state and final assistant text."""
+    if not isinstance(data, dict):
+        return False, ""
+    mapping = data.get("mapping")
+    if not isinstance(mapping, dict):
+        return False, ""
+    current = mapping.get(data.get("current_node"))
+    if not isinstance(current, dict):
+        return False, ""
+    message = current.get("message")
+    if not isinstance(message, dict):
+        return False, ""
+    author = message.get("author")
+    if not isinstance(author, dict) or author.get("role") != "assistant":
+        return False, ""
+    metadata = message.get("metadata")
+    metadata = metadata if isinstance(metadata, dict) else {}
+    complete = bool(metadata.get("is_complete")) or (
+        message.get("status") == "finished_successfully"
+        and message.get("end_turn") is True
+    )
+    content = message.get("content")
+    content = content if isinstance(content, dict) else {}
+    parts = content.get("parts")
+    text = "\n".join(part for part in (parts or []) if isinstance(part, str))
+    return complete, text
+
+
+def _backend_final(page) -> tuple[bool, str]:
+    """Read completion through the authenticated page when UI state lags."""
+    cid = _conversation_id(page.url)
+    if cid is None:
+        return False, ""
+    data = page.evaluate(
+        """async (cid) => {
+            const response = await fetch("/backend-api/conversation/" + cid);
+            if (!response.ok) return null;
+            return await response.json();
+        }""",
+        cid,
+    )
+    return _final_from_conversation(data)
+
+
 def run(
     chat: str | None,
     message: str,
@@ -188,6 +242,7 @@ def run(
     url_file: str | None = None,
     timing_file: str | None = None,
 ) -> dict:
+    from playwright.sync_api import Error as PWError
     from playwright.sync_api import TimeoutError as PWTimeout
     from playwright.sync_api import sync_playwright
 
@@ -258,11 +313,21 @@ def run(
                 text = msgs.nth(n - 1).inner_text(timeout=2_000) if n > before else ""
             except PWTimeout:
                 text = last_text
-            if not generating and text and text == last_text:
+            stable = bool(text and text == last_text)
+            if stable:
                 if stable_since is None:
                     stable_since = time.monotonic()
                 elif time.monotonic() - stable_since > 2.0:
-                    break
+                    if not generating:
+                        break
+                    try:
+                        backend_complete, backend_text = _backend_final(page)
+                    except PWError:
+                        backend_complete, backend_text = False, ""
+                    if backend_complete:
+                        if backend_text:
+                            last_text = backend_text
+                        break
             else:
                 stable_since = None
             last_text = text
