@@ -1,9 +1,8 @@
 """Process-local cumulative blocking-wall accounting.
 
 This module owns the deterministic policy state used by the Phase-2 guard.
-Steps 2.4 and 2.5 implement sequential and overlapping wait accounting;
-job_status integration and bounded-state eviction are added by later numbered
-steps.
+Steps 2.4 through 2.6 implement sequential, overlapping, and bounded-state
+accounting. job_status integration is added by a later numbered step.
 """
 
 from __future__ import annotations
@@ -128,6 +127,14 @@ class BlockingWallTracker:
             now = self._clock()
             state = self._states.get(key)
             if state is None:
+                if len(self._states) >= self._capacity:
+                    evicted = self._evict_lru_inactive()
+                    if not evicted:
+                        return self._untracked_lease(
+                            policy="capacity_untracked",
+                            requested_wait_s=requested_wait_s,
+                            bounded_wait_s=bounded_wait_s,
+                        )
                 state = TurnState(
                     budget_s=budget_s,
                     spent_s=0.0,
@@ -195,6 +202,22 @@ class BlockingWallTracker:
             state.active_count += 1
 
         return BlockingLease(decision, lambda: self._release_active(key))
+
+    def _evict_lru_inactive(self) -> bool:
+        candidate_key: tuple[str | None, str] | None = None
+        candidate_last_seen = 0.0
+        for key, state in self._states.items():
+            if state.active_count:
+                continue
+            if candidate_key is None or state.last_seen < candidate_last_seen:
+                candidate_key = key
+                candidate_last_seen = state.last_seen
+
+        if candidate_key is None:
+            return False
+
+        del self._states[candidate_key]
+        return True
 
     def _release_active(self, key: tuple[str | None, str]) -> BlockingRelease:
         with self._lock:
