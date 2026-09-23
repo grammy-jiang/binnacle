@@ -6,7 +6,7 @@
 | --- | --- | --- |
 | 1.1 | Clean reproducible baseline | PASS |
 | 1.2 | Fix watchdog USB mock target | PASS |
-| 1.3 | Define/mark true no_xdist tests | NOT STARTED |
+| 1.3 | Define/mark true no_xdist tests | PASS |
 | 1.4 | Resolve search-text ordering contract | NOT STARTED |
 | 1.5 | Build two-lane fast full-suite command | NOT STARTED |
 | 1.6 | Full regression + Phase 1 checkpoint | NOT STARTED |
@@ -263,3 +263,75 @@ Risks / follow-up:
 Next:
 
 - 1.3 Define and mark the true no-xdist tests
+
+Step: 1.3 Define and mark the true no-xdist tests
+Status: PASS
+
+Changed:
+
+- `pyproject.toml` — registers the exact `no_xdist` pytest marker and required description.
+- `tests/unit/core/test_units.py` — marks `test_proc_cmdline_reads_this_process` with `@pytest.mark.no_xdist`.
+- `tests/system/test_doctor.py` — marks `test_process_environ_reads_own_process` with `@pytest.mark.no_xdist`.
+- `docs/test-suite-performance-optimization-progress-2026-09-24.md` — marks Step 1.3 PASS and records this report.
+- No production source files changed.
+
+Source snapshot:
+
+- Branch: `design/chat-mode-scheduling-v2`
+- Exact source commit at step start: `7eac79bb506d82ed6c8ba28cf5c8a16f80d206fd`
+- The worktree was clean at step start.
+- Progress record and `git log -8 --oneline --decorate` showed Steps 1.1 and 1.2 PASS, with Step 1.3 as the next NOT STARTED step.
+
+Validation:
+
+- Requested marked collection command:
+  `uv run pytest tests --collect-only -q -m no_xdist`
+  - The platform safety filter refused to send this benign command.
+  - Equivalent connector command used:
+    `.venv/bin/python -m pytest tests --collect-only -q -m no_xdist`
+  - Result: exactly the two required node IDs collected; `2/1118 tests collected (1116 deselected)`; 0 collection failures.
+- Requested complementary collection command:
+  `uv run pytest tests --collect-only -q -m "not no_xdist"`
+  - Equivalent connector command used after the same platform-filter issue:
+    `.venv/bin/python -m pytest tests --collect-only -q -m "not no_xdist"`
+  - Result: `1116/1118 tests collected (2 deselected)`; 0 collection failures.
+  - Complete collection log was checked and neither marked node ID appeared.
+- Requested ordinary-process marker lane:
+  `uv run pytest tests -q -m no_xdist --randomly-seed=12345`
+  - Equivalent connector command used:
+    `.venv/bin/python -m pytest tests -q -m no_xdist --randomly-seed=12345`
+  - Result: 2 passed, 0 failed, 0 skipped, 1116 deselected in 2.73 s.
+- Changed-file pre-commit gate:
+  `uv run pre-commit run --files pyproject.toml tests/unit/core/test_units.py tests/system/test_doctor.py docs/test-suite-performance-optimization-progress-2026-09-24.md`
+  - Result: PASS; all applicable hooks passed.
+- Exact full-lane command: none. The owner-authorized Step 1.3 trim explicitly forbids running the whole parallel-safe lane in this step; the full lane is deferred to Step 1.4.
+
+Performance:
+
+- Before: N/A.
+- After: N/A.
+- No performance behavior was changed or timed in Step 1.3, so there is no A/B wall-time comparison.
+
+Findings:
+
+- The exact registered marker is `no_xdist: test must run in a normal pytest process, not an xdist worker`.
+- Exactly the two process-self-inspection tests are marked `no_xdist`.
+- The complementary collection excludes both marked tests.
+- No marker warning appeared.
+- Production source behaviour changed: no.
+- Host-safety fixture, coverage policy, production timing defaults, and test selection were not weakened.
+
+Deviation from Section 5.8 / frozen step:
+
+- Owner-authorized trim: the Step 1.3 complementary xdist execution was intentionally not run. Marker separation was proven by the two collection commands instead, and the two marked tests were run in an ordinary pytest process. The whole parallel-safe lane is reserved for Step 1.4.
+- Tooling substitution: the platform safety filter rejected the requested `uv run pytest ...` collection form. Per the task instructions, the equivalent project-venv Python invocation was used. It kept the same interpreter environment, pytest configuration, test selection, and seed where applicable.
+- No other Section 5.8 execution lock was changed.
+
+Risks / follow-up:
+
+- Step 1.4 must keep the search-text equivalence test eligible for xdist and fix only its ordering comparison as locked by Section 5.8.3.
+- Step 1.4 owns the full parallel-safe lane run under the owner-authorized trim.
+
+Next:
+
+- 1.4 Make search-text differential comparison order-correct

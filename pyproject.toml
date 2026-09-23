@@ -64,6 +64,9 @@ testpaths = ["tests"]
 # A hung test (the job tools spawn real subprocesses) fails instead of
 # freezing a tox run; 60 s is far above any test's honest runtime.
 timeout = 60
+markers = [
+    "no_xdist: test must run in a normal pytest process, not an xdist worker",
+]
 
 [tool.coverage.run]
 # Branch coverage, measured at 87% on 2026-09-13 (350 tests). The gate runs
