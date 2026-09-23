@@ -124,3 +124,86 @@ def test_r8_combined_edit_and_test_command_satisfies_test_oracle():
 
     assert metrics.correctness_passed is True
     assert metrics.same_prompt_completion is True
+
+
+def test_r9_combined_fix_and_retest_command_satisfies_recovery_oracle():
+    scenario = load_scenario(SCENARIO_ROOT / "R9.json")
+    root = "/tmp/binnacle-chat-scheduling-v2/R9/run-r9"
+    tools = [
+        ToolInterval(
+            call_id="initial",
+            node_id=None,
+            tool="run_command",
+            turn="turn-1",
+            start_s=0,
+            end_s=1,
+            args={"workdir": root, "command": "python3 test_math_utils.py"},
+            result={"exit_code": 1},
+        ),
+        ToolInterval(
+            call_id="source",
+            node_id="read_source",
+            tool="read_file",
+            turn="turn-1",
+            start_s=2,
+            end_s=3,
+            args={"path": f"{root}/math_utils.py"},
+            result={},
+        ),
+        ToolInterval(
+            call_id="test",
+            node_id="read_test",
+            tool="read_file",
+            turn="turn-1",
+            start_s=2,
+            end_s=3,
+            args={"path": f"{root}/test_math_utils.py"},
+            result={},
+        ),
+        ToolInterval(
+            call_id="fix-test",
+            node_id="fix_source",
+            tool="run_command",
+            turn="turn-1",
+            start_s=4,
+            end_s=5,
+            args={
+                "workdir": root,
+                "command": "sed -i s/bad/good/ math_utils.py && python3 test_math_utils.py",
+            },
+            result={"exit_code": 0},
+        ),
+        ToolInterval(
+            call_id="verify",
+            node_id="verify_source",
+            tool="read_file",
+            turn="turn-1",
+            start_s=6,
+            end_s=7,
+            args={"path": f"{root}/math_utils.py"},
+            result={},
+        ),
+    ]
+    trace = TrialTrace(
+        scenario_id="R9",
+        run_id="run-r9",
+        nonce="N0",
+        fixture_root=root,
+        arm="B",
+        wall_s=8,
+        timing_status="complete",
+        final_reply="DONE",
+        assistant_complete=True,
+        user_messages=1,
+        tools=tools,
+        final_files={
+            "math_utils.py": "def clamp(value, low, high):\n    return max(low, min(high, value))\n"
+        },
+        mutation_scope_ok=True,
+        production_unchanged=True,
+    )
+
+    metrics = analyze_trace(scenario, trace)
+
+    assert metrics.correctness_passed is True
+    assert metrics.same_prompt_completion is True
