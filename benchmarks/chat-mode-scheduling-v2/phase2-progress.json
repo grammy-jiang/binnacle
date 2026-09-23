@@ -6,8 +6,8 @@
   "worktree": "/home/grammy-jiang/Projects/binnacle-chat-blocking-wall-guard",
   "source_branch": "design/chat-mode-scheduling-v2",
   "phase1_evidence_commit": "cc1b014",
-  "last_completed_step": "2.3",
-  "next_step": "2.4",
+  "last_completed_step": "2.4",
+  "next_step": "2.5",
   "baseline": {
     "design_source_head": "e9c04728e5ac583a8e5d3b991cb01309de36ef82",
     "production": {
@@ -190,9 +190,16 @@
       ]
     },
     "2.4": {
-      "status": "not_started",
-      "tests": [],
-      "notes": []
+      "status": "complete",
+      "tests": [
+        "uv run pytest -q tests/unit/core/test_blocking_wall_guard.py -> 12 passed in 0.23s"
+      ],
+      "notes": [
+        "Added the standalone BlockingWallTracker sequential state machine with the frozen public classes/API and an injected time.monotonic clock.",
+        "Sequential tracked waits charge actual elapsed wall time on release; productive gaps are free; less than one second remaining returns exhausted with effective wait zero.",
+        "No-policy and no-turn paths preserve the ordinary bounded wait, release is idempotent, new base turns receive fresh budgets, and a tracked record keeps its original configured budget.",
+        "No job_status integration, overlapping-wait accounting, or LRU/capacity fallback behavior was added in Step 2.4."
+      ]
     },
     "2.5": {
       "status": "not_started",
