@@ -1,0 +1,169 @@
+{
+  "benchmark_class": "micro",
+  "dag": [
+    {
+      "access": "non_read_only",
+      "arguments": {
+        "background": true,
+        "command": "python3 -c 'import time; time.sleep(30); print(\"M6-job-{nonce}\")'",
+        "wait_seconds": 1,
+        "workdir": "{root}"
+      },
+      "depends_on": [],
+      "id": "start_job",
+      "kind": "tool",
+      "tool": "run_command"
+    },
+    {
+      "access": "read_only",
+      "arguments": {
+        "path": "{root}/f1.txt"
+      },
+      "depends_on": [
+        "start_job"
+      ],
+      "id": "read_1",
+      "kind": "tool",
+      "tool": "read_file"
+    },
+    {
+      "access": "read_only",
+      "arguments": {
+        "path": "{root}/f2.txt"
+      },
+      "depends_on": [
+        "start_job"
+      ],
+      "id": "read_2",
+      "kind": "tool",
+      "tool": "read_file"
+    },
+    {
+      "access": "read_only",
+      "arguments": {
+        "path": "{root}/f3.txt"
+      },
+      "depends_on": [
+        "start_job"
+      ],
+      "id": "read_3",
+      "kind": "tool",
+      "tool": "read_file"
+    },
+    {
+      "access": "read_only",
+      "arguments": {
+        "path": "{root}/f4.txt"
+      },
+      "depends_on": [
+        "start_job"
+      ],
+      "id": "read_4",
+      "kind": "tool",
+      "tool": "read_file"
+    },
+    {
+      "access": "read_only",
+      "arguments": {
+        "job_id": "{result:start_job.job_id}",
+        "tail_lines": 20,
+        "wait_seconds": 0
+      },
+      "depends_on": [
+        "read_1",
+        "read_2",
+        "read_3",
+        "read_4"
+      ],
+      "id": "observe",
+      "kind": "tool",
+      "tool": "job_status"
+    },
+    {
+      "access": "read_only",
+      "allow_repeats": true,
+      "arguments": {
+        "job_id": "{result:start_job.job_id}",
+        "tail_lines": 20,
+        "wait_seconds": 50
+      },
+      "completion_condition": "job_state=exited",
+      "depends_on": [
+        "observe"
+      ],
+      "id": "barrier_wait",
+      "kind": "tool",
+      "tool": "job_status"
+    }
+  ],
+  "expected_runtime_s": 45,
+  "fixture": {
+    "allowed_mutation_globs": [
+      "{root}/**"
+    ],
+    "files": [
+      {
+        "content": "M6-read-1-{nonce}\n",
+        "path": "f1.txt"
+      },
+      {
+        "content": "M6-read-2-{nonce}\n",
+        "path": "f2.txt"
+      },
+      {
+        "content": "M6-read-3-{nonce}\n",
+        "path": "f3.txt"
+      },
+      {
+        "content": "M6-read-4-{nonce}\n",
+        "path": "f4.txt"
+      }
+    ],
+    "jobs": [],
+    "kind": "ephemeral_dir",
+    "production_mutation_allowed": false,
+    "root_template": "/tmp/binnacle-chat-scheduling-v2/{id}/{run_id}"
+  },
+  "id": "M6",
+  "max_turn_runtime_s": 100,
+  "metric_tags": [
+    "future_handle",
+    "same_prompt_completion",
+    "background_overlap"
+  ],
+  "oracle": {
+    "checks": [
+      {
+        "params": {},
+        "type": "all_nodes_complete"
+      },
+      {
+        "params": {
+          "hard_gate": true,
+          "relation": "read_occurs_while_background_job_running"
+        },
+        "type": "event_relation"
+      },
+      {
+        "params": {
+          "exit_code": 0,
+          "node": "barrier_wait",
+          "state": "exited"
+        },
+        "type": "job_state"
+      },
+      {
+        "params": {
+          "value": "DONE"
+        },
+        "type": "exact_reply"
+      }
+    ],
+    "terminal_state": "all_required_nodes_complete"
+  },
+  "phase1_step": null,
+  "prompt_template": "Start the supplied 30-second validation command with run_command background=true, then read {root}/f1.txt through {root}/f4.txt while it runs. Observe the job non-blocking after the reads, then wait for its required result and reply only DONE.",
+  "purpose": "Verify a background job handle permits later useful work inside one user prompt.",
+  "schema_version": 1,
+  "title": "Future handle same-prompt flow"
+}

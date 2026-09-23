@@ -1,0 +1,225 @@
+{
+  "benchmark_class": "macro",
+  "dag": [
+    {
+      "access": "non_read_only",
+      "arguments": {
+        "background": true,
+        "command": "python3 -c 'import time; time.sleep(30); print(\"validation-R3-{nonce}\")'",
+        "wait_seconds": 1,
+        "workdir": "{root}"
+      },
+      "depends_on": [],
+      "id": "start_validation",
+      "kind": "tool",
+      "tool": "run_command"
+    },
+    {
+      "access": "read_only",
+      "arguments": {
+        "path": "{root}/inspect/f01.txt"
+      },
+      "depends_on": [
+        "start_validation"
+      ],
+      "id": "read_01",
+      "kind": "tool",
+      "tool": "read_file"
+    },
+    {
+      "access": "read_only",
+      "arguments": {
+        "path": "{root}/inspect/f02.txt"
+      },
+      "depends_on": [
+        "start_validation"
+      ],
+      "id": "read_02",
+      "kind": "tool",
+      "tool": "read_file"
+    },
+    {
+      "access": "read_only",
+      "arguments": {
+        "path": "{root}/inspect/f03.txt"
+      },
+      "depends_on": [
+        "start_validation"
+      ],
+      "id": "read_03",
+      "kind": "tool",
+      "tool": "read_file"
+    },
+    {
+      "access": "read_only",
+      "arguments": {
+        "path": "{root}/inspect/f04.txt"
+      },
+      "depends_on": [
+        "start_validation"
+      ],
+      "id": "read_04",
+      "kind": "tool",
+      "tool": "read_file"
+    },
+    {
+      "access": "read_only",
+      "arguments": {
+        "path": "{root}/inspect/f05.txt"
+      },
+      "depends_on": [
+        "start_validation"
+      ],
+      "id": "read_05",
+      "kind": "tool",
+      "tool": "read_file"
+    },
+    {
+      "access": "read_only",
+      "arguments": {
+        "path": "{root}/inspect/f06.txt"
+      },
+      "depends_on": [
+        "start_validation"
+      ],
+      "id": "read_06",
+      "kind": "tool",
+      "tool": "read_file"
+    },
+    {
+      "access": "read_only",
+      "arguments": {
+        "path": "{root}/inspect/f07.txt"
+      },
+      "depends_on": [
+        "start_validation"
+      ],
+      "id": "read_07",
+      "kind": "tool",
+      "tool": "read_file"
+    },
+    {
+      "access": "read_only",
+      "arguments": {
+        "path": "{root}/inspect/f08.txt"
+      },
+      "depends_on": [
+        "start_validation"
+      ],
+      "id": "read_08",
+      "kind": "tool",
+      "tool": "read_file"
+    },
+    {
+      "access": "read_only",
+      "allow_repeats": true,
+      "arguments": {
+        "job_id": "{result:start_validation.job_id}",
+        "tail_lines": 20,
+        "wait_seconds": 50
+      },
+      "completion_condition": "job_state=exited",
+      "depends_on": [
+        "read_01",
+        "read_02",
+        "read_03",
+        "read_04",
+        "read_05",
+        "read_06",
+        "read_07",
+        "read_08"
+      ],
+      "id": "validation_result",
+      "kind": "tool",
+      "tool": "job_status"
+    }
+  ],
+  "expected_runtime_s": 50,
+  "fixture": {
+    "allowed_mutation_globs": [
+      "{root}/**"
+    ],
+    "files": [
+      {
+        "content": "payload-R3-01-{nonce}\n",
+        "path": "inspect/f01.txt"
+      },
+      {
+        "content": "payload-R3-02-{nonce}\n",
+        "path": "inspect/f02.txt"
+      },
+      {
+        "content": "payload-R3-03-{nonce}\n",
+        "path": "inspect/f03.txt"
+      },
+      {
+        "content": "payload-R3-04-{nonce}\n",
+        "path": "inspect/f04.txt"
+      },
+      {
+        "content": "payload-R3-05-{nonce}\n",
+        "path": "inspect/f05.txt"
+      },
+      {
+        "content": "payload-R3-06-{nonce}\n",
+        "path": "inspect/f06.txt"
+      },
+      {
+        "content": "payload-R3-07-{nonce}\n",
+        "path": "inspect/f07.txt"
+      },
+      {
+        "content": "payload-R3-08-{nonce}\n",
+        "path": "inspect/f08.txt"
+      }
+    ],
+    "jobs": [],
+    "kind": "ephemeral_dir",
+    "production_mutation_allowed": false,
+    "root_template": "/tmp/binnacle-chat-scheduling-v2/{id}/{run_id}"
+  },
+  "id": "R3",
+  "max_turn_runtime_s": 110,
+  "metric_tags": [
+    "wall_time",
+    "background_overlap",
+    "avoidable_idle",
+    "same_prompt_completion",
+    "tokens"
+  ],
+  "oracle": {
+    "checks": [
+      {
+        "params": {},
+        "type": "all_nodes_complete"
+      },
+      {
+        "params": {
+          "hard_gate": true,
+          "relation": "reads_overlap_background_job"
+        },
+        "type": "event_relation"
+      },
+      {
+        "params": {
+          "exit_code": 0,
+          "node": "validation_result",
+          "state": "exited"
+        },
+        "type": "job_state"
+      },
+      {
+        "params": {
+          "value": "DONE"
+        },
+        "type": "exact_reply"
+      }
+    ],
+    "terminal_state": "all_required_nodes_complete"
+  },
+  "phase1_step": "1.4",
+  "prompt_template": "Start the supplied 30-second validation in the background first. While it runs, read all eight files under {root}/inspect exactly once. Then obtain the validation result. Reply only DONE when the validation succeeded and all reads completed.",
+  "purpose": "Measure overlap between a background validation and eight independent inspections.",
+  "schema_version": 1,
+  "title": "Thirty-second validation with useful reads"
+}

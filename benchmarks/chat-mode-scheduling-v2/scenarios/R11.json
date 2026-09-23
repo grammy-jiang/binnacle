@@ -1,0 +1,254 @@
+{
+  "benchmark_class": "macro",
+  "dag": [
+    {
+      "access": "read_only",
+      "arguments": {
+        "fixed_strings": true,
+        "path": "{root}/wave1",
+        "pattern": "wave1-{nonce}"
+      },
+      "depends_on": [],
+      "id": "search_wave1",
+      "kind": "tool",
+      "tool": "search_text"
+    },
+    {
+      "access": "read_only",
+      "arguments": {
+        "path": "{root}/wave1/p1.txt"
+      },
+      "depends_on": [
+        "search_wave1"
+      ],
+      "id": "read_wave1_1",
+      "kind": "tool",
+      "tool": "read_file"
+    },
+    {
+      "access": "read_only",
+      "arguments": {
+        "path": "{root}/wave1/p2.txt"
+      },
+      "depends_on": [
+        "search_wave1"
+      ],
+      "id": "read_wave1_2",
+      "kind": "tool",
+      "tool": "read_file"
+    },
+    {
+      "access": "read_only",
+      "arguments": {
+        "path": "{root}/wave1/p3.txt"
+      },
+      "depends_on": [
+        "search_wave1"
+      ],
+      "id": "read_wave1_3",
+      "kind": "tool",
+      "tool": "read_file"
+    },
+    {
+      "access": "read_only",
+      "arguments": {
+        "path": "{root}/wave1/p4.txt"
+      },
+      "depends_on": [
+        "search_wave1"
+      ],
+      "id": "read_wave1_4",
+      "kind": "tool",
+      "tool": "read_file"
+    },
+    {
+      "access": "read_only",
+      "arguments": {
+        "path": "{root}/wave1/p5.txt"
+      },
+      "depends_on": [
+        "search_wave1"
+      ],
+      "id": "read_wave1_5",
+      "kind": "tool",
+      "tool": "read_file"
+    },
+    {
+      "access": "reasoning",
+      "arguments": {
+        "operation": "concatenate_fragment_values_in_filename_order"
+      },
+      "depends_on": [
+        "read_wave1_1",
+        "read_wave1_2",
+        "read_wave1_3",
+        "read_wave1_4",
+        "read_wave1_5"
+      ],
+      "id": "derive_wave2_marker",
+      "kind": "reasoning",
+      "tool": null
+    },
+    {
+      "access": "read_only",
+      "arguments": {
+        "fixed_strings": true,
+        "path": "{root}/wave2",
+        "pattern": "{result:derive_wave2_marker}"
+      },
+      "depends_on": [
+        "derive_wave2_marker"
+      ],
+      "id": "search_wave2",
+      "kind": "tool",
+      "tool": "search_text"
+    },
+    {
+      "access": "read_only",
+      "arguments": {
+        "path": "{root}/wave2/out1.txt"
+      },
+      "depends_on": [
+        "search_wave2"
+      ],
+      "id": "read_wave2_1",
+      "kind": "tool",
+      "tool": "read_file"
+    },
+    {
+      "access": "read_only",
+      "arguments": {
+        "path": "{root}/wave2/out2.txt"
+      },
+      "depends_on": [
+        "search_wave2"
+      ],
+      "id": "read_wave2_2",
+      "kind": "tool",
+      "tool": "read_file"
+    },
+    {
+      "access": "read_only",
+      "arguments": {
+        "path": "{root}/wave2/out3.txt"
+      },
+      "depends_on": [
+        "search_wave2"
+      ],
+      "id": "read_wave2_3",
+      "kind": "tool",
+      "tool": "read_file"
+    },
+    {
+      "access": "read_only",
+      "arguments": {
+        "path": "{root}/wave2/out4.txt"
+      },
+      "depends_on": [
+        "search_wave2"
+      ],
+      "id": "read_wave2_4",
+      "kind": "tool",
+      "tool": "read_file"
+    }
+  ],
+  "expected_runtime_s": 50,
+  "fixture": {
+    "allowed_mutation_globs": [],
+    "files": [
+      {
+        "content": "wave1-{nonce}\nfragment=wave2-\n",
+        "path": "wave1/p1.txt"
+      },
+      {
+        "content": "wave1-{nonce}\nfragment={nonce}\n",
+        "path": "wave1/p2.txt"
+      },
+      {
+        "content": "wave1-{nonce}\nfragment=-\n",
+        "path": "wave1/p3.txt"
+      },
+      {
+        "content": "wave1-{nonce}\nfragment=final\n",
+        "path": "wave1/p4.txt"
+      },
+      {
+        "content": "wave1-{nonce}\nfragment=-key\n",
+        "path": "wave1/p5.txt"
+      },
+      {
+        "content": "wave2-{nonce}-final-key\npayload-R11-1-{nonce}\n",
+        "path": "wave2/out1.txt"
+      },
+      {
+        "content": "wave2-{nonce}-final-key\npayload-R11-2-{nonce}\n",
+        "path": "wave2/out2.txt"
+      },
+      {
+        "content": "wave2-{nonce}-final-key\npayload-R11-3-{nonce}\n",
+        "path": "wave2/out3.txt"
+      },
+      {
+        "content": "wave2-{nonce}-final-key\npayload-R11-4-{nonce}\n",
+        "path": "wave2/out4.txt"
+      }
+    ],
+    "jobs": [],
+    "kind": "ephemeral_dir",
+    "production_mutation_allowed": false,
+    "root_template": "/tmp/binnacle-chat-scheduling-v2/{id}/{run_id}"
+  },
+  "id": "R11",
+  "max_turn_runtime_s": 130,
+  "metric_tags": [
+    "wall_time",
+    "multi_round",
+    "read_parallelism",
+    "same_prompt_completion",
+    "tool_calls",
+    "tokens"
+  ],
+  "oracle": {
+    "checks": [
+      {
+        "params": {},
+        "type": "all_nodes_complete"
+      },
+      {
+        "params": {
+          "values": [
+            "payload-R11-1-{nonce}",
+            "payload-R11-2-{nonce}",
+            "payload-R11-3-{nonce}",
+            "payload-R11-4-{nonce}"
+          ]
+        },
+        "type": "reply_contains_all"
+      },
+      {
+        "params": {
+          "nodes": [
+            "search_wave1",
+            "read_wave1_1",
+            "read_wave1_2",
+            "read_wave1_3",
+            "read_wave1_4",
+            "read_wave1_5",
+            "search_wave2",
+            "read_wave2_1",
+            "read_wave2_2",
+            "read_wave2_3",
+            "read_wave2_4"
+          ]
+        },
+        "type": "tool_calls_exact_once"
+      }
+    ],
+    "terminal_state": "all_required_nodes_complete"
+  },
+  "phase1_step": "1.7",
+  "prompt_template": "Search {root}/wave1 for wave1-{nonce}, then read every match. Each has a fragment= value; concatenate those fragment values in filename order to form the exact marker for wave two. Search {root}/wave2 for that derived marker, read every match, and reply with the four payload-R11-* lines in filename order.",
+  "purpose": "Exercise multi-round planning: parallel work within each wave, reasoning barrier between waves.",
+  "schema_version": 1,
+  "title": "Two read/search waves with derived dependency"
+}
