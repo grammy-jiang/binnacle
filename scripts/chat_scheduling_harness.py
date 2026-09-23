@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import time
 import traceback
 from datetime import datetime
 from pathlib import Path
@@ -27,6 +28,7 @@ from scripts.chat_scheduling_runtime import (
     LocalMCP,
     ProductionSnapshot,
     TrialIdentity,
+    capture_journal,
     new_state_dir,
     write_json,
 )
@@ -122,6 +124,8 @@ def run_trial(
     record = _record_base(
         identity, state_dir, kind="scenario", scenario_id=scenario_id, arm=arm
     )
+    trial_start_epoch_s = time.time()
+    record["trial_start_epoch_s"] = trial_start_epoch_s
     write_json(record_path, record)
 
     production_before = ProductionSnapshot.capture()
@@ -138,6 +142,7 @@ def run_trial(
     fixture = FixtureLease(scenario, identity, LocalMCP())
     artifact = ChatArtifact(PROJECT_ID, state_dir, browser)
     url_file = state_dir / "chat-url.txt"
+    timing_file = state_dir / "chat-timing.json"
     trial_error: Exception | None = None
     chat_cleanup_error: str | None = None
     fixture_cleanup: dict[str, Any] = {}
@@ -170,6 +175,7 @@ def run_trial(
                     timeout_s,
                     url_file,
                     browser=browser,
+                    timing_file=timing_file,
                 )
                 record["chat"]["send_result"] = result
                 artifact.url = result["url"]
@@ -215,6 +221,23 @@ def run_trial(
                     "type": type(exc).__name__,
                     "message": str(exc),
                     "traceback": traceback.format_exc(),
+                }
+
+        fixture_snapshot_path = state_dir / "fixture-final.json"
+        try:
+            fixture_snapshot = fixture.snapshot(fixture_snapshot_path)
+            record["fixture_final_path"] = str(fixture_snapshot_path)
+            record["fixture_final_files"] = sorted(
+                fixture_snapshot.get("final_files", {})
+            )
+        except Exception as exc:  # noqa: BLE001 - preserve other cleanup paths
+            record["fixture_snapshot_error"] = f"{type(exc).__name__}: {exc}"
+            if trial_error is None:
+                trial_error = HarnessError("could not snapshot final fixture")
+                record["error"] = {
+                    "type": type(trial_error).__name__,
+                    "message": str(trial_error),
+                    "traceback": "",
                 }
 
         artifact.discover(url_file)
@@ -272,6 +295,22 @@ def run_trial(
                 "message": str(trial_error),
                 "traceback": "",
             }
+
+        trial_end_epoch_s = time.time()
+        record["trial_end_epoch_s"] = trial_end_epoch_s
+        journal_path = state_dir / "journal.log"
+        try:
+            capture_journal(trial_start_epoch_s, trial_end_epoch_s, journal_path)
+            record["journal_path"] = str(journal_path)
+        except Exception as exc:  # noqa: BLE001 - missing raw telemetry invalidates scoring
+            record["journal_error"] = f"{type(exc).__name__}: {exc}"
+            if trial_error is None:
+                trial_error = HarnessError("could not freeze trial journal")
+                record["error"] = {
+                    "type": type(trial_error).__name__,
+                    "message": str(trial_error),
+                    "traceback": "",
+                }
 
         record["finished_at"] = _now()
         record["status"] = "failed" if trial_error else "completed"
@@ -335,6 +374,7 @@ def run_chat_smoke(browser: str = "chrome") -> tuple[int, Path]:
     original = project.instructions()
     artifact = ChatArtifact(PROJECT_ID, state_dir, browser)
     url_file = state_dir / "chat-url.txt"
+    timing_file = state_dir / "chat-timing.json"
     error: Exception | None = None
     try:
         result = send_project_chat(
@@ -343,6 +383,7 @@ def run_chat_smoke(browser: str = "chrome") -> tuple[int, Path]:
             60,
             url_file,
             browser=browser,
+            timing_file=timing_file,
         )
         artifact.url = result["url"]
         artifact.discover(url_file)

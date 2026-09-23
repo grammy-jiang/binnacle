@@ -207,6 +207,7 @@ def send_project_chat(
     url_file: Path,
     *,
     browser: str = "chrome",
+    timing_file: Path | None = None,
 ) -> dict[str, Any]:
     proc = _run(
         [
@@ -218,6 +219,7 @@ def send_project_chat(
             "--json",
             "--url-file",
             str(url_file),
+            *(["--timing-file", str(timing_file)] if timing_file is not None else []),
             "--timeout",
             str(timeout_s),
             prompt,

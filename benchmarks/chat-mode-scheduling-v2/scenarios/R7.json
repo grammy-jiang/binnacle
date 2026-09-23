@@ -113,7 +113,7 @@
     "terminal_state": "all_required_nodes_complete"
   },
   "phase1_step": "1.8",
-  "prompt_template": "Complete two required jobs sequentially in this prompt. Start the 60-second first job in the background and wait until it succeeds. Only then start the 75-second second job and wait until it succeeds. Reply only DONE after both complete.",
+  "prompt_template": "Use Raspberry Pi MCP and complete two required jobs sequentially in this prompt. First, in {root}, start this exact command with background=true and wait_seconds=1: python3 -c 'import time; time.sleep(60); print(\"R7-A-{nonce}\")'. Wait until it succeeds. Only then start this exact second command in {root} with background=true and wait_seconds=1: python3 -c 'import time; time.sleep(75); print(\"R7-B-{nonce}\")'. Wait until it succeeds. Reply only DONE after both complete.",
   "purpose": "Stress legitimate repeated waits and same-prompt completion without useful side work.",
   "schema_version": 1,
   "title": "Two sequential long dependency barriers"

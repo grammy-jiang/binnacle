@@ -301,6 +301,37 @@ class FixtureLease:
             self.scenario.prompt_template, self.identity, self.root, self.jobs
         )
 
+    def snapshot(self, target: Path) -> dict[str, Any]:
+        """Persist final fixture evidence before destructive cleanup."""
+        final_files: dict[str, str] = {}
+        file_hashes: dict[str, str] = {}
+        for item in self.scenario.fixture.files:
+            path = self.root / item.path
+            if not path.exists() or not path.is_file():
+                continue
+            data = path.read_bytes()
+            file_hashes[item.path] = hashlib.sha256(data).hexdigest()
+            try:
+                final_files[item.path] = data.decode("utf-8")
+            except UnicodeDecodeError:
+                pass
+        payload: dict[str, Any] = {
+            "root": str(self.root),
+            "final_files": final_files,
+            "file_sha256": file_hashes,
+        }
+        if (self.root / ".git").is_dir():
+            payload["git_status_porcelain"] = _run(
+                ["git", "status", "--porcelain=v1", "--untracked-files=all"],
+                cwd=self.root,
+            ).stdout
+            payload["git_diff"] = _run(
+                ["git", "diff", "--no-ext-diff", "--binary"],
+                cwd=self.root,
+            ).stdout
+        write_json(target, payload)
+        return payload
+
     def cleanup(self) -> dict[str, Any]:
         stopped: list[str] = []
         errors: list[str] = []
@@ -324,6 +355,29 @@ class FixtureLease:
         if cleanup["errors"] and exc is None:
             raise HarnessError("; ".join(cleanup["errors"]))
         return False
+
+
+def capture_journal(start_epoch_s: float, end_epoch_s: float, target: Path) -> None:
+    """Freeze the MCP/jobs journal window needed for reproducible analysis."""
+    proc = _run(
+        [
+            "journalctl",
+            "--user",
+            "-u",
+            "binnacle-mcp.service",
+            "-u",
+            "binnacle-jobs.service",
+            "--since",
+            f"@{max(0.0, start_epoch_s - 1.0):.3f}",
+            "--until",
+            f"@{end_epoch_s + 1.0:.3f}",
+            "--no-pager",
+            "-o",
+            "cat",
+        ],
+        timeout=30,
+    )
+    target.write_text(proc.stdout, encoding="utf-8")
 
 
 def new_state_dir(identity: TrialIdentity, base: Path = STATE_BASE) -> Path:
