@@ -1,0 +1,403 @@
+{
+  "canonical_slots": [
+    {
+      "arm": "A",
+      "attempt": 1,
+      "avoidable_idle_wall_s": 0.0,
+      "blocking_wall_s": 0.0,
+      "budget_exhaustion_handoff": false,
+      "correctness_passed": true,
+      "duplicate_calls": 0,
+      "eligible_read_only_calls": 2,
+      "eligible_read_only_overlap_ratio": 0.0,
+      "host_after": {
+        "cpu_temp_c": 49.0,
+        "loadavg": [
+          0.9111328125,
+          0.52783203125,
+          0.2890625
+        ],
+        "throttled": "throttled=0x0"
+      },
+      "host_before": {
+        "cpu_temp_c": 46.3,
+        "loadavg": [
+          0.27587890625,
+          0.205078125,
+          0.162109375
+        ],
+        "throttled": "throttled=0x0"
+      },
+      "interrupted": false,
+      "interruption_kind": null,
+      "job_status_calls": 0,
+      "manual_continuations_required": 0,
+      "oracle_failures": [],
+      "overlapped_eligible_read_only_calls": 0,
+      "positive_job_status_calls": 0,
+      "premature_handoff": false,
+      "read_only_peak_inflight": 1,
+      "redundant_exact_calls": 1,
+      "run_id": "r9-20260923T185522-00caf17c83",
+      "same_prompt_completion": true,
+      "scenario_id": "R9",
+      "schema_version": 1,
+      "slot": 1,
+      "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r9-20260923T185522-00caf17c83",
+      "submitted": true,
+      "tool_calls": 8,
+      "tool_errors": 0,
+      "tool_result_bytes": 3737,
+      "tool_result_tokens": 1252,
+      "wall_s": 62.198
+    },
+    {
+      "arm": "B",
+      "attempt": 1,
+      "avoidable_idle_wall_s": 0.0,
+      "blocking_wall_s": 0.0,
+      "budget_exhaustion_handoff": false,
+      "correctness_passed": true,
+      "duplicate_calls": 0,
+      "eligible_read_only_calls": 2,
+      "eligible_read_only_overlap_ratio": 0.0,
+      "host_after": {
+        "cpu_temp_c": 49.6,
+        "loadavg": [
+          1.0634765625,
+          0.86474609375,
+          0.45458984375
+        ],
+        "throttled": "throttled=0x0"
+      },
+      "host_before": {
+        "cpu_temp_c": 49.0,
+        "loadavg": [
+          0.9111328125,
+          0.52783203125,
+          0.2890625
+        ],
+        "throttled": "throttled=0x0"
+      },
+      "interrupted": false,
+      "interruption_kind": null,
+      "job_status_calls": 0,
+      "manual_continuations_required": 0,
+      "oracle_failures": [],
+      "overlapped_eligible_read_only_calls": 0,
+      "positive_job_status_calls": 0,
+      "premature_handoff": false,
+      "read_only_peak_inflight": 1,
+      "redundant_exact_calls": 2,
+      "run_id": "r9-20260923T185713-9afb825863",
+      "same_prompt_completion": true,
+      "scenario_id": "R9",
+      "schema_version": 1,
+      "slot": 2,
+      "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r9-20260923T185713-9afb825863",
+      "submitted": true,
+      "tool_calls": 8,
+      "tool_errors": 0,
+      "tool_result_bytes": 3714,
+      "tool_result_tokens": 1237,
+      "wall_s": 57.803
+    },
+    {
+      "arm": "B",
+      "attempt": 1,
+      "avoidable_idle_wall_s": 0.0,
+      "blocking_wall_s": 0.0,
+      "budget_exhaustion_handoff": false,
+      "correctness_passed": true,
+      "duplicate_calls": 0,
+      "eligible_read_only_calls": 2,
+      "eligible_read_only_overlap_ratio": 0.0,
+      "host_after": {
+        "cpu_temp_c": 48.5,
+        "loadavg": [
+          0.40380859375,
+          0.68359375,
+          0.43896484375
+        ],
+        "throttled": "throttled=0x0"
+      },
+      "host_before": {
+        "cpu_temp_c": 49.6,
+        "loadavg": [
+          1.0634765625,
+          0.86474609375,
+          0.45458984375
+        ],
+        "throttled": "throttled=0x0"
+      },
+      "interrupted": false,
+      "interruption_kind": null,
+      "job_status_calls": 0,
+      "manual_continuations_required": 0,
+      "oracle_failures": [],
+      "overlapped_eligible_read_only_calls": 0,
+      "positive_job_status_calls": 0,
+      "premature_handoff": false,
+      "read_only_peak_inflight": 1,
+      "redundant_exact_calls": 2,
+      "run_id": "r9-20260923T185918-36fc982452",
+      "same_prompt_completion": true,
+      "scenario_id": "R9",
+      "schema_version": 1,
+      "slot": 3,
+      "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r9-20260923T185918-36fc982452",
+      "submitted": true,
+      "tool_calls": 9,
+      "tool_errors": 0,
+      "tool_result_bytes": 4202,
+      "tool_result_tokens": 1408,
+      "wall_s": 57.862
+    },
+    {
+      "arm": "A",
+      "attempt": 1,
+      "avoidable_idle_wall_s": 0.0,
+      "blocking_wall_s": 0.0,
+      "budget_exhaustion_handoff": false,
+      "correctness_passed": true,
+      "duplicate_calls": 0,
+      "eligible_read_only_calls": 2,
+      "eligible_read_only_overlap_ratio": 0.0,
+      "host_after": {
+        "cpu_temp_c": 50.1,
+        "loadavg": [
+          0.6298828125,
+          0.74365234375,
+          0.490234375
+        ],
+        "throttled": "throttled=0x0"
+      },
+      "host_before": {
+        "cpu_temp_c": 50.1,
+        "loadavg": [
+          0.53173828125,
+          0.70556640625,
+          0.44775390625
+        ],
+        "throttled": "throttled=0x0"
+      },
+      "interrupted": false,
+      "interruption_kind": null,
+      "job_status_calls": 0,
+      "manual_continuations_required": 0,
+      "oracle_failures": [],
+      "overlapped_eligible_read_only_calls": 0,
+      "positive_job_status_calls": 0,
+      "premature_handoff": false,
+      "read_only_peak_inflight": 1,
+      "redundant_exact_calls": 2,
+      "run_id": "r9-20260923T190117-3ca00c3502",
+      "same_prompt_completion": true,
+      "scenario_id": "R9",
+      "schema_version": 1,
+      "slot": 4,
+      "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r9-20260923T190117-3ca00c3502",
+      "submitted": true,
+      "tool_calls": 8,
+      "tool_errors": 0,
+      "tool_result_bytes": 3714,
+      "tool_result_tokens": 1266,
+      "wall_s": 55.542
+    },
+    {
+      "arm": "A",
+      "attempt": 1,
+      "avoidable_idle_wall_s": 0.0,
+      "blocking_wall_s": 0.0,
+      "budget_exhaustion_handoff": false,
+      "correctness_passed": true,
+      "duplicate_calls": 0,
+      "eligible_read_only_calls": 2,
+      "eligible_read_only_overlap_ratio": 0.0,
+      "host_after": {
+        "cpu_temp_c": 50.7,
+        "loadavg": [
+          0.45654296875,
+          0.66845703125,
+          0.49658203125
+        ],
+        "throttled": "throttled=0x0"
+      },
+      "host_before": {
+        "cpu_temp_c": 50.1,
+        "loadavg": [
+          0.6298828125,
+          0.74365234375,
+          0.490234375
+        ],
+        "throttled": "throttled=0x0"
+      },
+      "interrupted": false,
+      "interruption_kind": null,
+      "job_status_calls": 0,
+      "manual_continuations_required": 0,
+      "oracle_failures": [],
+      "overlapped_eligible_read_only_calls": 0,
+      "positive_job_status_calls": 0,
+      "premature_handoff": false,
+      "read_only_peak_inflight": 1,
+      "redundant_exact_calls": 2,
+      "run_id": "r9-20260923T190254-2eadaa06bc",
+      "same_prompt_completion": true,
+      "scenario_id": "R9",
+      "schema_version": 1,
+      "slot": 5,
+      "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r9-20260923T190254-2eadaa06bc",
+      "submitted": true,
+      "tool_calls": 8,
+      "tool_errors": 0,
+      "tool_result_bytes": 3710,
+      "tool_result_tokens": 1257,
+      "wall_s": 83.511
+    },
+    {
+      "arm": "B",
+      "attempt": 1,
+      "avoidable_idle_wall_s": 0.0,
+      "blocking_wall_s": 0.0,
+      "budget_exhaustion_handoff": false,
+      "correctness_passed": false,
+      "duplicate_calls": 0,
+      "eligible_read_only_calls": 0,
+      "eligible_read_only_overlap_ratio": null,
+      "host_after": {
+        "cpu_temp_c": 47.4,
+        "loadavg": [
+          0.3779296875,
+          0.5517578125,
+          0.4833984375
+        ],
+        "throttled": "throttled=0x0"
+      },
+      "host_before": {
+        "cpu_temp_c": 50.7,
+        "loadavg": [
+          0.45654296875,
+          0.66845703125,
+          0.49658203125
+        ],
+        "throttled": "throttled=0x0"
+      },
+      "interrupted": true,
+      "interruption_kind": "timeout",
+      "job_status_calls": 0,
+      "manual_continuations_required": 0,
+      "oracle_failures": [
+        "all_nodes_complete: missing nodes: ['read_source', 'read_test', 'diagnose', 'fix_source', 'verify_source']",
+        "command_failure_precedes_success: no failed 'test_math_utils.py' command preceding a successful one",
+        "command_contains_exit_zero: no successful run_command containing 'test_math_utils.py'",
+        "exact_reply: final reply mismatch"
+      ],
+      "overlapped_eligible_read_only_calls": 0,
+      "positive_job_status_calls": 0,
+      "premature_handoff": false,
+      "read_only_peak_inflight": 0,
+      "redundant_exact_calls": 0,
+      "run_id": "r9-20260923T190501-97863702d8",
+      "same_prompt_completion": false,
+      "scenario_id": "R9",
+      "schema_version": 1,
+      "slot": 6,
+      "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r9-20260923T190501-97863702d8",
+      "submitted": true,
+      "tool_calls": 0,
+      "tool_errors": 0,
+      "tool_result_bytes": 0,
+      "tool_result_tokens": 0,
+      "wall_s": 170.513
+    }
+  ],
+  "excluded_pre_submit_attempts": [],
+  "host": {
+    "all_throttled_zero": true,
+    "cpu_temp_max_c": 50.7,
+    "cpu_temp_min_c": 46.3,
+    "evidence_rows": 12,
+    "load1_max": 1.063,
+    "load1_min": 0.276
+  },
+  "pairs": [
+    {
+      "a_same_prompt": true,
+      "a_slot": 1,
+      "a_wall_s": 62.198,
+      "b_faster": true,
+      "b_over_a": 0.929339,
+      "b_same_prompt": true,
+      "b_slot": 2,
+      "b_wall_s": 57.803,
+      "pair": 1
+    },
+    {
+      "a_same_prompt": true,
+      "a_slot": 4,
+      "a_wall_s": 55.542,
+      "b_faster": false,
+      "b_over_a": 1.04177,
+      "b_same_prompt": true,
+      "b_slot": 3,
+      "b_wall_s": 57.862,
+      "pair": 2
+    },
+    {
+      "a_same_prompt": true,
+      "a_slot": 5,
+      "a_wall_s": 83.511,
+      "b_faster": false,
+      "b_over_a": 2.041803,
+      "b_same_prompt": false,
+      "b_slot": 6,
+      "b_wall_s": 170.513,
+      "pair": 3
+    }
+  ],
+  "schema_version": 1,
+  "selection_rule": "first submitted trial per planned slot; only pre-submit failures may retry",
+  "specification_correction": {
+    "chats_rerun": false,
+    "reason": "recovery correctness should match outcome semantics rather than one exact physical command order",
+    "replayed_from_frozen_evidence": true,
+    "requirements": [
+      "focused test has a failed execution before a successful execution",
+      "source and test are inspected",
+      "final source is inspected",
+      "successful focused test exists",
+      "reply is DONE"
+    ]
+  },
+  "status": "complete_positive_signal_with_reliability_warning",
+  "step": "1.6",
+  "summary": {
+    "A": {
+      "completed_median_wall_s": 62.198,
+      "correct": 3,
+      "interruptions": 0,
+      "median_tool_calls_completed": 8,
+      "median_tool_result_tokens_completed": 1257,
+      "median_wall_s": 62.198,
+      "n": 3,
+      "premature_handoffs": 0,
+      "same_prompt": 3
+    },
+    "B": {
+      "completed_median_wall_s": 57.832,
+      "correct": 2,
+      "interruptions": 1,
+      "median_tool_calls_completed": 8.5,
+      "median_tool_result_tokens_completed": 1322.5,
+      "median_wall_s": 57.862,
+      "n": 3,
+      "premature_handoffs": 0,
+      "same_prompt": 2
+    },
+    "median_paired_b_over_a": 1.04177,
+    "median_wall_improvement_b_vs_a_pct": 6.97,
+    "paired_median_improvement_pct": -4.18,
+    "pairs_b_faster": 1
+  }
+}

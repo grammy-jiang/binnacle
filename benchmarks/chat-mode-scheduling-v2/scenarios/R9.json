@@ -2,24 +2,11 @@
   "benchmark_class": "macro",
   "dag": [
     {
-      "access": "non_read_only",
-      "arguments": {
-        "command": "python3 test_math_utils.py",
-        "workdir": "{root}"
-      },
-      "depends_on": [],
-      "id": "initial_test",
-      "kind": "tool",
-      "tool": "run_command"
-    },
-    {
       "access": "read_only",
       "arguments": {
         "path": "{root}/math_utils.py"
       },
-      "depends_on": [
-        "initial_test"
-      ],
+      "depends_on": [],
       "id": "read_source",
       "kind": "tool",
       "tool": "read_file"
@@ -29,9 +16,7 @@
       "arguments": {
         "path": "{root}/test_math_utils.py"
       },
-      "depends_on": [
-        "initial_test"
-      ],
+      "depends_on": [],
       "id": "read_test",
       "kind": "tool",
       "tool": "read_file"
@@ -63,25 +48,12 @@
       "tool": "run_command"
     },
     {
-      "access": "non_read_only",
-      "arguments": {
-        "command": "python3 test_math_utils.py",
-        "workdir": "{root}"
-      },
-      "depends_on": [
-        "fix_source"
-      ],
-      "id": "retest",
-      "kind": "tool",
-      "tool": "run_command"
-    },
-    {
       "access": "read_only",
       "arguments": {
         "path": "{root}/math_utils.py"
       },
       "depends_on": [
-        "retest"
+        "fix_source"
       ],
       "id": "verify_source",
       "kind": "tool",
@@ -126,9 +98,15 @@
       },
       {
         "params": {
-          "node": "retest"
+          "contains": "test_math_utils.py"
         },
-        "type": "command_exit_zero"
+        "type": "command_failure_precedes_success"
+      },
+      {
+        "params": {
+          "contains": "test_math_utils.py"
+        },
+        "type": "command_contains_exit_zero"
       },
       {
         "params": {},
