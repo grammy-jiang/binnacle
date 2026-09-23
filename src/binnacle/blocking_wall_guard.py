@@ -1,9 +1,9 @@
 """Process-local cumulative blocking-wall accounting.
 
 This module owns the deterministic policy state used by the Phase-2 guard.
-Step 2.4 implements the sequential core only; job_status integration,
-overlapping-wait accounting, and bounded-state eviction are added by later
-numbered steps.
+Steps 2.4 and 2.5 implement sequential and overlapping wait accounting;
+job_status integration and bounded-state eviction are added by later numbered
+steps.
 """
 
 from __future__ import annotations
@@ -84,7 +84,7 @@ class BlockingLease:
 
 
 class BlockingWallTracker:
-    """Track cumulative blocking wall time for sequential per-turn waits."""
+    """Track cumulative blocking wall time for per-turn waits."""
 
     def __init__(
         self,
@@ -138,15 +138,24 @@ class BlockingWallTracker:
                 )
                 self._states[key] = state
 
-            # Step 2.4 is intentionally the sequential state-machine core.
-            # Step 2.5 extends this branch to shared overlapping windows.
-            if state.active_count:
-                raise RuntimeError("overlapping waits are not implemented in Step 2.4")
-
             state.last_seen = now
-            spent_before = state.spent_s
-            remaining_before = max(0.0, state.budget_s - spent_before)
             active_before = state.active_count
+            if active_before:
+                if (
+                    state.active_window_started is None
+                    or state.active_window_deadline is None
+                ):
+                    raise RuntimeError("active blocking window is incomplete")
+                active_elapsed = max(
+                    0.0,
+                    min(now, state.active_window_deadline)
+                    - state.active_window_started,
+                )
+                spent_before = state.spent_s + active_elapsed
+                remaining_before = max(0.0, state.active_window_deadline - now)
+            else:
+                spent_before = state.spent_s
+                remaining_before = max(0.0, state.budget_s - spent_before)
 
             if remaining_before < 1.0:
                 decision = BlockingDecision(
@@ -180,9 +189,10 @@ class BlockingWallTracker:
             if effective_wait <= 0:
                 return BlockingLease(decision, self._noop_release(decision))
 
-            state.active_count = 1
-            state.active_window_started = now
-            state.active_window_deadline = now + remaining_before
+            if not active_before:
+                state.active_window_started = now
+                state.active_window_deadline = now + remaining_before
+            state.active_count += 1
 
         return BlockingLease(decision, lambda: self._release_active(key))
 
@@ -190,13 +200,34 @@ class BlockingWallTracker:
         with self._lock:
             now = self._clock()
             state = self._states[key]
-            if state.active_count != 1:
-                raise RuntimeError("sequential lease state is inconsistent")
+            if state.active_count < 1:
+                raise RuntimeError("active lease state is inconsistent")
             if (
                 state.active_window_started is None
                 or state.active_window_deadline is None
             ):
                 raise RuntimeError("active blocking window is incomplete")
+
+            state.active_count -= 1
+            state.last_seen = now
+            if state.active_count:
+                active_elapsed = max(
+                    0.0,
+                    min(now, state.active_window_deadline)
+                    - state.active_window_started,
+                )
+                spent_after = min(
+                    float(state.budget_s),
+                    state.spent_s + active_elapsed,
+                )
+                remaining_after = max(0.0, state.active_window_deadline - now)
+                return BlockingRelease(
+                    spent_after_s=spent_after,
+                    remaining_after_s=remaining_after,
+                    active_after=state.active_count,
+                    window_closed=False,
+                    window_wall_s=None,
+                )
 
             window_wall = max(
                 0.0,
@@ -206,10 +237,8 @@ class BlockingWallTracker:
                 float(state.budget_s),
                 state.spent_s + window_wall,
             )
-            state.active_count = 0
             state.active_window_started = None
             state.active_window_deadline = None
-            state.last_seen = now
             remaining_after = max(0.0, state.budget_s - state.spent_s)
 
             return BlockingRelease(

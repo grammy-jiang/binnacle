@@ -6,8 +6,8 @@
   "worktree": "/home/grammy-jiang/Projects/binnacle-chat-blocking-wall-guard",
   "source_branch": "design/chat-mode-scheduling-v2",
   "phase1_evidence_commit": "cc1b014",
-  "last_completed_step": "2.4",
-  "next_step": "2.5",
+  "last_completed_step": "2.5",
+  "next_step": "2.6",
   "baseline": {
     "design_source_head": "e9c04728e5ac583a8e5d3b991cb01309de36ef82",
     "production": {
@@ -202,9 +202,17 @@
       ]
     },
     "2.5": {
-      "status": "not_started",
-      "tests": [],
-      "notes": []
+      "status": "complete",
+      "tests": [
+        "uv run pytest -q tests/unit/core/test_blocking_wall_guard.py -> 20 passed in 0.29s"
+      ],
+      "notes": [
+        "Extended BlockingWallTracker so overlapping positive effective waits share one active window and the original deadline instead of summing requested wait time.",
+        "Overlapping acquisitions report live union spend and remaining budget; only positive effective waits increment active_count, and non-final releases leave the shared window open.",
+        "The final active release commits the union wall duration capped at the shared deadline; release ordering does not affect the committed charge.",
+        "Added deterministic coverage for two/five fully overlapping waits, partial overlap, early release, deadline exhaustion, reordered release, exception/cancellation cleanup, and zero-effective waits, including a real threaded acquire/release case.",
+        "No job_status integration, LRU eviction, or capacity fallback behavior was added in Step 2.5."
+      ]
     },
     "2.6": {
       "status": "not_started",
