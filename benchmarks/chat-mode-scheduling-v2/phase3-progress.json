@@ -6,8 +6,8 @@
   "worktree": "/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase3",
   "source_branch": "feature/chat-mode-blocking-wall-guard",
   "audited_source_head": "5f2be143352aaa63fb680c1c79e289d46be201fe",
-  "last_completed_step": "3.5A",
-  "next_step": "3.6A/B/C + 3H replay completion on audited corpus revision 2; Step 3.7 after all required C reports",
+  "last_completed_step": "3.7",
+  "next_step": "3.8 Phase-4 input-contract readiness dry run; Phase-4 live calibration remains blocked by NO_LIVE_CANDIDATE",
   "dependency_audit": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase3-dependency-audit-2026-09-25-r01.json",
     "revision": "r01",
@@ -75,7 +75,9 @@
     "phase3_scenario_path_head": "7107f142ae6746e17180ae92b4d4be0e6e3957d2",
     "phase3_corpus_path_head": "3e498a33294708c7fe1996b49e78752d8720523d",
     "phase3_corpus_path_head_r2": "19d5951b9617936c655664a992dc0c419051c4f7",
-    "phase3_corpus_audit_head": "207000caa3727f37f494675f34934fd61fc6cdd5"
+    "phase3_corpus_audit_head": "207000caa3727f37f494675f34934fd61fc6cdd5",
+    "phase3_replay_promotion_head": "2382ae0dca4fee931d9af33c049e9dad97514e64",
+    "phase3_candidate_shortlist_head": "3915fbb05fe4409418aa9c4293d5a2846cd925ae"
   },
   "frozen_hashes": {
     "phase2_progress_json": "bcfc0413457b00dd935ab5ba5cc11b35d4e3dd3e9c81edd54e429c599f8cc809",
@@ -112,7 +114,17 @@
     "phase3_corpus_audit_phase1_step8": "ed94a7f5b456f1821e4cf29c3f55fa896a6cf8d118083bf4a048705d9ba1e3d7",
     "phase3_corpus_audit_operational_journal_r2": "80832bc63ac61d223319b48e22de6f6ccdb128e4287bcef981752348dc8df184",
     "phase3_corpus_audit_aggregate": "1abf3b53e0bea8d6b4b607ede318898cdd5e2145bc820ab66de30380a087b789",
-    "phase3_corpus_shard_operational_journal_md_r2": "8758424862f43081a8722e9948ac4a197e60638db133d3a43f226df009b4e574"
+    "phase3_corpus_shard_operational_journal_md_r2": "8758424862f43081a8722e9948ac4a197e60638db133d3a43f226df009b4e574",
+    "phase3_replay_c120_promoted_json": "3d0de49551d27bd1a0729af16941ba80c2ecef9c409d73140cf5e24515cb500b",
+    "phase3_replay_c120_promoted_md": "fa30e6171392cd024d91dbc36bab235d08e8e7abf9a9ae4d40c4755413a4b86f",
+    "phase3_replay_c300_promoted_json": "db8081d25139192a6b1eb7dfeb0b948ddbabbacbca87b2cf0e34acb3a9896cf6",
+    "phase3_replay_c300_promoted_md": "9b8f0ff583c3f4a1e31eb773ec51f80b28e7a0c530c72af413743d140cbea20a",
+    "phase3_replay_c600_promoted_json": "41f0f4b59a00e43b638f9048cc2e7288838a68ae25e966d12f09050245b1e08e",
+    "phase3_replay_c600_promoted_md": "05191f6ef6cab7c5626e797aeb201644cd34e105564567aff5f976be637637d1",
+    "phase3_replay_h10_promoted_json": "b769fb75cd4159bf2c12fd92e33c0df62b7dfee775dfb8fb2c5ea6cb5110621c",
+    "phase3_replay_h10_promoted_md": "580e05f39f30427a911f9ff7f955561c5e8bc03bf8a63b2e3b06afacdabfb031",
+    "phase3_candidate_shortlist_json": "23edc0fbba3210aae5da205122be51a806b7be54ab5ca5c590d98de6c931b975",
+    "phase3_candidate_shortlist_md": "cfaf76ecaa4d8ac462e916b2ccf4de9c8f3666f68532a0594a3e0e2878fb941e"
   },
   "preflight_findings": {
     "p3-preflight-git-lineage": "5269556409bd3dce896c842ca2528f04416d6b839f4d54c6e55b76c607b062cc",
@@ -618,38 +630,76 @@
       "worker_branch": null
     },
     "3.6A": {
-      "status": "not_started",
-      "tests": [],
-      "notes": [],
-      "commit": null,
-      "worker_branch": null
+      "status": "complete",
+      "tests": [
+        "deterministic replay + focused replay pytest (10 passed) + file-scoped pre-commit -> PASS"
+      ],
+      "notes": [
+        "Worker 859da76a0b2741c7483430383dbf3436381af641 integrated as canonical 9b06d99 from feature/chat-mode-scheduling-v2-phase3-c120.",
+        "C120 corpus_sha256 matches audited revision-2 corpus 4dd1e387c42d6fccd37d60795b00192144f3b4d93c57d9eb54ab527a72e8e94d.",
+        "Promoted without rerun: audit_status=pass, provisional=false; promoted JSON SHA-256 3d0de49551d27bd1a0729af16941ba80c2ecef9c409d73140cf5e24515cb500b."
+      ],
+      "commit": "859da76a0b2741c7483430383dbf3436381af641",
+      "worker_branch": "feature/chat-mode-scheduling-v2-phase3-c120"
     },
     "3.6B": {
-      "status": "not_started",
-      "tests": [],
-      "notes": [],
-      "commit": null,
-      "worker_branch": null
+      "status": "complete",
+      "tests": [
+        "two deterministic frozen replay runs + promotion metadata validation + file-scoped pre-commit -> PASS"
+      ],
+      "notes": [
+        "Worker 6e6018399cf36b23d06b20decd5a2c9ab0b1e19c integrated as canonical b7f59e3 from feature/chat-mode-scheduling-v2-phase3-c300.",
+        "C300 corpus_sha256 matches audited revision-2 corpus 4dd1e387c42d6fccd37d60795b00192144f3b4d93c57d9eb54ab527a72e8e94d.",
+        "Promoted without rerun: audit_status=pass, provisional=false; promoted JSON SHA-256 db8081d25139192a6b1eb7dfeb0b948ddbabbacbca87b2cf0e34acb3a9896cf6."
+      ],
+      "commit": "6e6018399cf36b23d06b20decd5a2c9ab0b1e19c",
+      "worker_branch": "feature/chat-mode-scheduling-v2-phase3-c300"
     },
     "3.6C": {
-      "status": "not_started",
-      "tests": [],
-      "notes": [],
-      "commit": null,
-      "worker_branch": null
+      "status": "complete",
+      "tests": [
+        "deterministic replay + focused replay pytest (10 passed) + file-scoped pre-commit -> PASS"
+      ],
+      "notes": [
+        "Worker c13669d3bc46199feed05815d7bad707bb893d7c integrated as canonical 1ca62ea from feature/chat-mode-scheduling-v2-phase3-c600.",
+        "C600 corpus_sha256 matches audited revision-2 corpus 4dd1e387c42d6fccd37d60795b00192144f3b4d93c57d9eb54ab527a72e8e94d.",
+        "Promoted without rerun: audit_status=pass, provisional=false; promoted JSON SHA-256 41f0f4b59a00e43b638f9048cc2e7288838a68ae25e966d12f09050245b1e08e."
+      ],
+      "commit": "c13669d3bc46199feed05815d7bad707bb893d7c",
+      "worker_branch": "feature/chat-mode-scheduling-v2-phase3-c600"
     },
     "3H": {
-      "status": "not_started",
-      "tests": [],
-      "notes": [],
-      "commit": null,
-      "worker_branch": null
+      "status": "complete",
+      "tests": [
+        "two deterministic H10 replay runs + promotion metadata validation + file-scoped pre-commit -> PASS"
+      ],
+      "notes": [
+        "Worker 09a9096256a0db1be29776be375ca2f9f630bdd4 integrated as canonical 1d2c26d from feature/chat-mode-scheduling-v2-phase3-h10.",
+        "H10 corpus_sha256 matches audited revision-2 corpus 4dd1e387c42d6fccd37d60795b00192144f3b4d93c57d9eb54ab527a72e8e94d.",
+        "Promoted without rerun: audit_status=pass, provisional=false; promoted JSON SHA-256 b769fb75cd4159bf2c12fd92e33c0df62b7dfee775dfb8fb2c5ea6cb5110621c.",
+        "H10 is historical-comparator evidence only and was excluded from live-candidate selection."
+      ],
+      "commit": "09a9096256a0db1be29776be375ca2f9f630bdd4",
+      "worker_branch": "feature/chat-mode-scheduling-v2-phase3-h10"
     },
     "3.7": {
-      "status": "running",
-      "tests": [],
-      "notes": [],
-      "commit": null,
+      "status": "complete",
+      "tests": [
+        "Promotion validator -> PASS 4/4 reports on audited revision-2 corpus; replay rows unchanged.",
+        "uv run pytest -q tests/scripts/test_chat_scheduling_phase3_report.py -> PASS: 5 passed.",
+        "Frozen shortlist command rerun -> PASS: JSON/Markdown byte-identical; 3 rejected, 0 live.",
+        "uv run pre-commit run --files report CLI, renderer helper, focused tests, and shortlist artifacts -> PASS."
+      ],
+      "notes": [
+        "C120/C300/C600 and H10 were promoted under the speculative replay contract after exact corpus-SHA verification; no replay was rerun.",
+        "C120 rejected by completion-preservation and exhaustion gates; C300 and C600 rejected by exhaustion and repeated-wait-burden-reduction gates.",
+        "All three C candidates pass the deterministic no-early-exhaustion gate and evidence-completeness gate.",
+        "Frozen shortlist verdict is NO_LIVE_CANDIDATE with live_candidates=[] and preferred_live_candidate=null.",
+        "open_evidence_limitations is empty because every offline gate was computable from the frozen evidence.",
+        "No production budget is declared. Phase-4 targeted live calibration must not start unless a future Phase-3 revision yields at least one passing C candidate.",
+        "H10 was promoted in this step for Step 3.10 consumption but remains ineligible for the shortlist."
+      ],
+      "commit": "3915fbb05fe4409418aa9c4293d5a2846cd925ae",
       "worker_branch": null
     },
     "3.8": {
@@ -739,7 +789,7 @@
   ],
   "handoff": null,
   "created_at": "2026-09-25T00:51:02+10:00",
-  "updated_at": "2026-09-25T05:08:01+10:00",
+  "updated_at": "2026-09-25T05:23:44+10:00",
   "orchestrator_state_checkpoint_path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase3/checkpoints/orchestrator-state-initial.json",
   "ready_count": 1,
   "claimed_count": 0,
@@ -836,5 +886,12 @@
       ],
       "aggregate_audit_worker_commit": "af218f65892a74f5c05ab48aefb406a7b59718a1"
     }
-  ]
+  ],
+  "candidate_shortlist_path": "benchmarks/chat-mode-scheduling-v2/phase3-candidate-shortlist.json",
+  "candidate_shortlist_sha256": "23edc0fbba3210aae5da205122be51a806b7be54ab5ca5c590d98de6c931b975",
+  "candidate_shortlist_md_path": "benchmarks/chat-mode-scheduling-v2/phase3-candidate-shortlist.md",
+  "candidate_shortlist_md_sha256": "cfaf76ecaa4d8ac462e916b2ccf4de9c8f3666f68532a0594a3e0e2878fb941e",
+  "live_candidates": [],
+  "preferred_live_candidate": null,
+  "phase3_offline_verdict": "NO_LIVE_CANDIDATE"
 }
