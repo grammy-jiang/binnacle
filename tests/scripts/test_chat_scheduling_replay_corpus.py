@@ -329,6 +329,30 @@ def test_operational_extraction_normalizes_turns_hashes_ids_and_uses_actual_wait
     assert "JOB-SECRET" not in serialized
 
 
+def test_operational_window_check_uses_token_filter_before_event_parsing(tmp_path):
+    inventory = _operational_inventory(tmp_path)
+    document = json.loads(inventory.read_text())
+    document["sources"][0]["line_count"] = 2
+    _write(inventory, document)
+    incidental = (
+        "1005.000000 host app: event=tool_call call=c2 tool=search_text "
+        'turn=TURN-SECRET/b args={"pattern":"job_status_timing"}\n'
+    )
+
+    shard = extract_source(
+        inventory,
+        "operational-journal",
+        journal_text=_journal() + incidental,
+    )
+
+    assert shard["status"] == "available"
+    assert shard["source_window"]["line_count"] == 2
+    assert shard["source_window"]["window_line_count"] == 2
+    assert shard["source_window"]["parsed_rows"] == 1
+    assert shard["source_window"]["replayable_wait_count"] == 1
+    assert shard["row_count"] == 1
+
+
 def test_operational_reader_uses_user_journal_and_frozen_bounds(monkeypatch):
     seen = {}
 
