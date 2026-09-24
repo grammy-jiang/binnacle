@@ -15,7 +15,7 @@
 | 2.3 | Shorten lifecycle waited-out processes safely | PASS |
 | 2.4 | Preserve/classify tunnel readiness real-time contract | PASS |
 | 2.5 | Review remaining top-20 long-tail tests | PASS |
-| 2.6 | Real-timing coverage + anti-flake evidence | NOT STARTED |
+| 2.6 | Real-timing coverage + anti-flake evidence | PASS |
 | 2.7 | Full regression + Phase 2 checkpoint | NOT STARTED |
 | 3.1 | Remove coverage from ordinary compatibility tox environments | NOT STARTED |
 | 3.2 | Make coverage-policy run each test only once | NOT STARTED |
@@ -1110,3 +1110,94 @@ Risks / follow-up:
 Next:
 
 - 2.6 Establish real-timing coverage and anti-flake evidence
+
+Step: 2.6 Establish real-timing coverage and anti-flake evidence
+Status: PASS
+
+Changed:
+
+- `docs/test-suite-performance-optimization-progress-2026-09-24.md` — marks Step 2.6 PASS and records the retained real-timing inventory and anti-flake evidence.
+- No test files, production source files, configuration files, or frozen-plan text changed.
+
+Source snapshot:
+
+- Branch: `design/chat-mode-scheduling-v2`.
+- Exact source commit at step start: `0497959686daedb6174feb1e98a852ac9322100a`.
+- The worktree was clean at step start.
+- The progress table and `git log -8 --oneline --decorate` confirmed Steps 1.1 through 2.5 PASS and Step 2.6 as the next NOT STARTED step.
+- Production timing defaults were re-verified unchanged: `JobsSettings.warmup_s=1.0`; `jobs.WARMUP_S` derives from that setting; `STOP_SIGTERM_GRACE_S=5.0`; run-command/job-status wait maxima still derive from production run-command settings; tunnel readiness still renders `SECONDS+10` with `sleep 0.2`.
+
+Validation:
+
+- Timing-sensitive module pass 1:
+  `.venv/bin/python -m pytest -q tests/integration/test_job_status_blocking_guard.py tests/integration/test_job_status_blocking_guard_concurrency.py tests/integration/test_jobs_lifecycle.py tests/integration/test_jobs.py tests/system/test_tunnel_readiness.py tests/unit/core/test_search_text_stream.py --randomly-seed=12345`
+  - Result: 94 passed, 0 failed, 0 skipped in 38.99 s.
+- Timing-sensitive module pass 2, same exact command and seed:
+  - Result: 94 passed, 0 failed, 0 skipped in 38.90 s.
+- Five-iteration most-timing-sensitive loop:
+  `/usr/bin/time -f "wall=%e user=%U sys=%S cpu=%P maxrss_kb=%M" bash -c 'set -e; for i in 1 2 3 4 5; do echo "=== timing loop $i ==="; .venv/bin/python -m pytest -q --randomly-seed=12345 tests/integration/test_job_status_blocking_guard_concurrency.py::test_second_wave_shares_original_deadline tests/integration/test_job_status_blocking_guard_concurrency.py::test_one_turn_can_exhaust_while_another_retains_budget tests/system/test_tunnel_readiness.py::test_waits_out_the_bound_but_never_fails_when_the_probe_is_not_ok tests/system/test_tunnel_readiness.py::test_waits_out_the_bound_when_the_url_file_is_stale tests/integration/test_jobs_lifecycle.py::test_status_wait_expires_leaves_job_running; done'`
+  - Iterations 1–5: each 5 passed, 0 failed, 0 skipped; elapsed 12.64 s, 11.89 s, 11.96 s, 11.88 s, and 12.09 s.
+  - Aggregate: 25 passed executions, 0 failed, 0 skipped; `wall=65.52 user=11.56 sys=1.16 cpu=19% maxrss_kb=96912`.
+- Production-default assertion:
+  `.venv/bin/python -m pytest -q tests/unit/core/test_config_loading.py::test_defaults_load_without_config_file --randomly-seed=12345`
+  - Result: 1 passed, 0 failed, 0 skipped in 0.32 s.
+- Exact full-lane command, owner-authorized alternate seed:
+  `/usr/bin/time -f "wall=%e user=%U sys=%S cpu=%P maxrss_kb=%M" uv run python scripts/run_test_suite.py --workers 4 --seed 54321`
+  - Parallel-safe lane: 1126 passed, 0 failed, 3 skipped in 27.65 s; lane elapsed 28.35 s.
+  - Ordinary-process lane: 2 passed, 0 failed, 0 skipped, 1129 deselected in 3.27 s; lane elapsed 4.81 s.
+  - Aggregate managed suite: 1128 passed, 0 failed, 3 skipped; runner total 33.16 s.
+  - Wrapper: `wall=33.25 user=54.83 sys=4.83 cpu=179% maxrss_kb=433344`.
+- Changed-file pre-commit gate:
+  `uv run pre-commit run --files docs/test-suite-performance-optimization-progress-2026-09-24.md`
+  - Result: PASS.
+
+Benchmark host/load evidence:
+
+- Before timing-sensitive module pass 1: CPU count 4; `/proc/loadavg = 0.33 0.57 0.55 1/814 802104`.
+- Before timing-sensitive module pass 2: CPU count 4; `/proc/loadavg = 0.35 0.53 0.54 1/807 802757`.
+- Before the five-iteration loop: CPU count 4; `/proc/loadavg = 0.37 0.51 0.53 1/806 803475`.
+- Before the full fast suite: CPU count 4; `/proc/loadavg = 0.27 0.43 0.50 1/810 804616`.
+- Every one-minute load was below 1.5, so no foreign-load wait was required and none of these timings is labelled foreign-load contaminated.
+
+Performance:
+
+- Before/context: Step 2.5's final-source fixed-seed fast run was `wall=33.02 s` at seed 12345, and its duration run was `wall=32.72 s` at seed 12345.
+- Current Step 2.6 full fast suite: `wall=33.25 s` at seed 54321.
+- Apples-to-apples: no performance A/B is claimed because this confidence gate changes no performance behaviour and the owner-authorized Step 2.6 full run intentionally uses a different seed. The new 33.25 s figure is the requested current full-suite wall-time evidence, not an optimisation delta.
+
+Retained real-timing coverage:
+
+- Blocking-wall budget concurrency — all seven tests in `tests/integration/test_job_status_blocking_guard_concurrency.py`, including two/five simultaneous waits, a delayed second wave, shared budgets across jobs, independent turn deadlines, one-turn exhaustion, and fresh-tracker reset. These prove actual overlapping wall-clock windows, scheduler/thread interaction, and deadline sharing; a fake clock alone cannot prove that concurrent OS waits are charged as one real wall interval.
+- Real job-status waiting — `test_real_job_early_exit_charges_actual_wall`, `test_real_job_sequential_exhaustion_keeps_job_durable`, `test_real_job_already_exited_positive_wait_is_prompt`, `test_real_job_no_policy_preserves_ordinary_wait`, and `test_real_job_no_turn_preserves_ordinary_wait`, plus lifecycle `test_status_wait_returns_when_job_exits`, `test_status_wait_expires_leaves_job_running`, and `test_status_wait_is_capped`. These prove real child exit/wakeup, positive-wait expiry, cap enforcement, and measured waited-time accounting against OS process state.
+- Run-command/process-pressure timing — `test_slow_command_yields_job_then_completes`, `test_large_unread_stdin_does_not_stall_past_wait_seconds`, and `test_run_command_wait_seconds_is_clamped_to_max`. These retain the real handoff deadline and pipe/back-pressure path; a fake clock cannot validate subprocess handoff or a blocked stdin writer.
+- Signal escalation — lifecycle `test_stop_escalates_to_sigkill_when_sigterm_ignored` and telemetry `test_stop_escalation_is_visible_in_telemetry`. They use a shortened test-only grace while retaining real SIGTERM-ignore to SIGKILL behaviour and reaper/telemetry observation.
+- Tunnel readiness — all four tests in `tests/system/test_tunnel_readiness.py`, especially `test_waits_out_the_bound_but_never_fails_when_the_probe_is_not_ok` and `test_waits_out_the_bound_when_the_url_file_is_stale`. They execute the rendered Bash `ExecStartPost` against a local HTTP server and real file freshness; only real wall time exercises Bash `SECONDS` quantisation and the shell/HTTP/file boundary.
+- Search-stream timeout/consumer timing — `test_timeout_kills_and_reaps_child`, `test_completed_child_is_not_timed_out_by_slow_consumer`, and `test_stdout_eof_does_not_disable_absolute_timeout`. They prove real child timeout/reaping and that slow consumer wall time is distinguished from child execution time.
+- HTTP integration waits — `test_authenticated_http_background_job_status_and_stop` and `test_http_tracked_job_status_receives_base_turn_and_client` retain real HTTP, process, and positive status-wait behaviour while using the test-only short background warm-up.
+- Reaper/process lifecycle races such as `test_reaper_tolerates_pruned_dir` still use a real child, but the unrelated production warm-up is controlled. The shared `_short_job_warmup` fixture remains non-autouse at 0.05 s and is explicitly opted into only by five measured integration modules.
+
+Findings:
+
+- No new timing flakes appeared: 188 timing-module executions across two module passes plus 25 focused boundary-test executions were green, followed by a green full fast suite at seed 54321.
+- Meaningful end-to-end real waits remain for blocking-budget concurrency, job-status early-return/expiry/cap semantics, run-command handoff/back-pressure, signal escalation, rendered tunnel readiness, search-stream timeout/reaping, HTTP wait propagation, and selected process/reaper races.
+- Most ordinary job state/lifecycle coverage now uses controlled test timing: the integration warm-up override is explicit and non-autouse, lifecycle child/grace/wait values are reduced locally where the production duration is not the contract, and fake/injected clocks remain used for pure policy/state tests.
+- Production source behaviour changed: no.
+- Host-safety fixture, coverage policy, production timing defaults, and managed test selection were not weakened.
+
+Deviation from Section 5.8 / frozen step:
+
+- Owner-authorized deviation for Step 2.6: the full fast suite was run exactly once with seed 54321, not once at 12345 plus another seed. The seed-12345 full run is explicitly reserved for Step 2.7.
+- Owner-authorized trim: the most timing-sensitive subset was looped exactly five times, not 5–10 times.
+- Tooling substitution: the platform rejected the direct `uv run pytest ...` timing-module command before it reached the Pi, so the equivalent project-venv `.venv/bin/python -m pytest ...` invocation was used with identical test selection and seed.
+- Tooling substitution: after one successful exact `nproc && cat /proc/loadavg` check, a later identical preflight was rejected before reaching the Pi. Equivalent `getconf _NPROCESSORS_ONLN; sed -n '1p' /proc/loadavg` checks supplied the authoritative pre-run CPU/load evidence above.
+- Connector execution note: both timing-module commands were auto-backgrounded despite direct `wait_seconds=50`; every returned job ID was waited to an exited state. The explicit long loop and full-suite commands were backgrounded as required and likewise waited to completion.
+- No other Section 5.8 execution lock changed.
+
+Risks / follow-up:
+
+- The retained real-time tests intentionally spend wall time and should not be converted wholesale to fake clocks merely to reduce duration; future changes should preserve at least one end-to-end real-time test per contract.
+- Step 2.7 owns the seed-12345 Phase 2 regression checkpoint and its required full-file validation; no Step 2.7 work was performed here.
+
+Next:
+
+- 2.7 Phase 2 regression checkpoint
