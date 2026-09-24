@@ -282,3 +282,25 @@ def test_should_auto_background_covers_client_prefix_matching():
         settings.should_auto_background("openai-mcp(ChatGPT)", "python app.py") is False
     )
     assert settings.should_auto_background("unmatched-client", "pytest -q") is False
+
+
+def test_match_auto_background_reports_rule_and_preserves_prefix_order():
+    broad_first = config.RunCommandSettings(
+        auto_background_patterns={
+            "openai": (r"pytest",),
+            "openai-mcp": (r"tox",),
+        }
+    )
+    assert broad_first.match_auto_background("openai-mcp", "tox") is None
+    match = broad_first.match_auto_background("openai-mcp", "pytest -q")
+    assert match == config.AutoBackgroundMatch("openai", r"pytest")
+
+    specific_first = config.RunCommandSettings(
+        auto_background_patterns={
+            "openai-mcp": (r"tox",),
+            "openai": (r"pytest",),
+        }
+    )
+    assert specific_first.match_auto_background(
+        "openai-mcp", "tox"
+    ) == config.AutoBackgroundMatch("openai-mcp", r"tox")

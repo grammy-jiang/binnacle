@@ -183,6 +183,18 @@ def analyze_run_command_workflow(
     out.dispatch_without_call = len(set(index.dispatches) - set(index.tool_calls))
     out.call_without_result = len(set(index.tool_calls) - set(index.tool_results))
 
+    for call, (_, marker) in index.auto_markers.items():
+        rule_hash = marker.get("rule_hash")
+        if not rule_hash or rule_hash == "-":
+            continue
+        out.auto_rule_matches[rule_hash] += 1
+        dispatch_row = index.dispatches.get(call)
+        if (
+            dispatch_row is not None
+            and dispatch_outcome(dispatch_row[1]) == "handed_off"
+        ):
+            out.auto_rule_handoffs[rule_hash] += 1
+
     for call, (_, dispatch) in index.dispatches.items():
         mode = policy_mode(dispatch)
         outcome = dispatch_outcome(dispatch)
@@ -425,5 +437,12 @@ def render_run_command_workflow(stats: RunCommandWorkflowStats) -> list[str]:
                 f"    status waited total s={sum(stats.auto_status_waited_s):.2f} "
                 f"(coverage={len(stats.auto_status_waited_s)}/{stats.auto_status_calls})"
             )
+        if stats.auto_rule_matches:
+            out.append("    auto rules:")
+            for rule_hash, matches in stats.auto_rule_matches.most_common():
+                out.append(
+                    f"      {rule_hash}: matches={matches} "
+                    f"handed_off={stats.auto_rule_handoffs.get(rule_hash, 0)}"
+                )
 
     return out
