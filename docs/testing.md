@@ -56,9 +56,22 @@ Use the supported two-lane runner for fast full-suite feedback:
 uv run python scripts/run_test_suite.py
 ```
 
-The runner executes xdist-safe tests in the parallel lane and the `no_xdist`
-process-identity tests in a separate ordinary pytest process. On the Pi 5, use
-the fixed benchmark form when a reproducible performance measurement is needed:
+The runner executes two complementary lanes. Tests matching
+`-m "not no_xdist"` may run in xdist workers; tests marked `no_xdist` run in
+a separate ordinary pytest process. The marker means exactly "this test must
+run in a normal pytest process, not an xdist worker". It does **not** mean that
+the test is skipped or removed from the full suite. The current marked tests
+inspect their own process command line or environment, so xdist worker identity
+would invalidate the contract they are testing. The current marked nodes are:
+
+- `tests/unit/core/test_units.py::test_proc_cmdline_reads_this_process`;
+- `tests/system/test_doctor.py::test_process_environ_reads_own_process`.
+
+Worker count resolves in this order: explicit `--workers`,
+`BINNACLE_TEST_WORKERS`, then `min(4, os.cpu_count() or 1)`. A resolved
+worker count of one disables xdist entirely for the parallel-safe lane. On the
+Pi 5, use the fixed benchmark form when a reproducible performance measurement
+is needed:
 
 ```bash
 uv run python scripts/run_test_suite.py --workers 4 --seed 12345
@@ -106,6 +119,13 @@ tie rule selects this simpler sequential-tox policy. Keep this as a local
 matrix policy; do not copy the local tox scheduling decision into GitHub
 Actions without separate CI-specific evidence.
 
+Compatibility tox environments run `scripts/run_test_suite.py` and do not
+collect coverage. The dedicated `coverage-policy` tox environment owns
+coverage instrumentation and the semantic 95/90 per-module gate. In GitHub
+Actions, Python 3.10, 3.11, 3.12, and 3.14 remain compatibility jobs while
+Python 3.13 runs `coverage-policy`. CI does not hard-code a Pi worker count:
+the repository runner resolves its bounded worker count from the CI host.
+
 Before a baseline or merge commit, run:
 
 ```bash
@@ -124,6 +144,15 @@ is per module: core logic must reach at least 95% branch coverage from the unit
 suite alone; every other production module must reach at least 90% branch
 coverage from the full appropriate suite. Repository-average coverage remains
 a trend metric only and cannot make a weak module pass.
+
+`uv run tox -e coverage-policy` uses
+`scripts/run_coverage_policy.py` to execute every managed test exactly once
+across four lanes: unit parallel-safe, unit `no_xdist`, non-unit
+parallel-safe, and non-unit `no_xdist`. The unit-only JSON report is written
+after the two unit lanes and before any non-unit test. The full JSON is written
+after the two non-unit lanes, then the existing semantic checker applies the
+95/90 policy. Only the two parallel-safe lanes use xdist; the `no_xdist`
+lanes always run in ordinary pytest processes.
 
 The executable policy and module classification live in `quality-policy.json`;
 `docs/quality-gates.md` documents the full workflow. There are currently no
@@ -152,6 +181,65 @@ uv run mutmut results
 ```
 
 Do not run the entire mutation tree as a routine hook.
+
+## Test timing policy
+
+Production timing defaults are not test-performance knobs. In particular,
+production job background warm-up remains 1.0 second. Selected job-heavy
+integration modules explicitly opt in to the non-autouse
+`_short_job_warmup` fixture in `tests/integration/conftest.py`, which uses a
+0.05-second warm-up only inside those tests.
+
+Real elapsed time is retained where wall time is itself part of the contract.
+The retained coverage includes:
+
+- all blocking-window concurrency checks in
+  `tests/integration/test_job_status_blocking_guard_concurrency.py`;
+- real job-status expiry, cap, and early-return checks in
+  `tests/integration/test_job_status_blocking_guard.py` and
+  `tests/integration/test_jobs_lifecycle.py`;
+- subprocess handoff/back-pressure and signal-escalation paths in the jobs
+  integration tests and `tests/integration/test_job_telemetry.py`;
+- all rendered Bash readiness checks in
+  `tests/system/test_tunnel_readiness.py`, especially the two timeout cases;
+- real child timeout/reaping and slow-consumer checks in
+  `tests/unit/core/test_search_text_stream.py`.
+
+These tests may use shortened, test-specific timing where the production
+duration is not the contract, but they still exercise real elapsed time and OS
+boundaries. Do not convert them wholesale to fake clocks merely to reduce suite
+duration.
+
+## Benchmark reproduction
+
+For comparable timing data, use the same source snapshot, dependency lock,
+Python version, test selection, host, and random seed. This performance plan
+uses seed `12345`. Before every timed run record `nproc` and
+`cat /proc/loadavg`; if unrelated work has pushed the one-minute load above
+1.5, wait for that foreign load to clear before treating the timing as clean.
+
+Fast full-suite benchmark:
+
+```bash
+nproc
+cat /proc/loadavg
+/usr/bin/time -f "wall=%e user=%U sys=%S cpu=%P maxrss_kb=%M" \
+  uv run python scripts/run_test_suite.py --workers 4 --seed 12345
+```
+
+Selected local five-interpreter matrix benchmark:
+
+```bash
+uv run tox run --notest
+nproc
+cat /proc/loadavg
+/usr/bin/time -f "wall=%e user=%U sys=%S cpu=%P maxrss_kb=%M" \
+  env BINNACLE_TEST_WORKERS=4 uv run tox run -- --seed 12345
+```
+
+The complete 2026-09-24 A/B/C tox scheduling measurements and historical
+2026-09-22 results are retained in
+`docs/long-command-performance-and-distribution.md`.
 
 ## Host-safety rule
 
