@@ -25,6 +25,11 @@ def _isolate_job_store(tmp_path_factory):
     jobstore.JOBS_DIR = original
 
 
+@pytest.fixture(autouse=True)
+def _short_job_warmup(monkeypatch):
+    monkeypatch.setattr(jobstore, "WARMUP_S", 0.05)
+
+
 @pytest.fixture()
 def fresh_store(tmp_path, monkeypatch):
     monkeypatch.setattr(jobstore, "JOBS_DIR", tmp_path / "store")
@@ -182,8 +187,7 @@ def test_run_tail_lines_larger_than_output_is_noop():
 
 
 # -- background_job flag (2026-09-06; docs/usage-analysis-2026-09-06.md §6) --
-# A synchronous finish must say plainly that no job was created, so the model
-# stops polling job_status to check (50 blind no-arg calls in one week).
+# Synchronous completion must report that no background job was created.
 
 
 def test_synchronous_run_reports_no_background_job():
@@ -238,8 +242,7 @@ def test_status_wait_bridges_to_exited_for_background_job():
 
 
 def _wait_until(cond, timeout: float = 5.0, step: float = 0.05) -> bool:
-    """Poll a condition instead of sleeping a fixed time: under load (Chrome,
-    Xvfb, a parallel suite) child processes can take >0.5 s to appear."""
+    """Poll because loaded hosts can delay child-process readiness."""
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if cond():
