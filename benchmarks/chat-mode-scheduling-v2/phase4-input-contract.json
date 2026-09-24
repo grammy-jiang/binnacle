@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "source_phase": 3,
+  "audited_corpus_sha256": "4dd1e387c42d6fccd37d60795b00192144f3b4d93c57d9eb54ab527a72e8e94d",
+  "replay_corpus_path": "benchmarks/chat-mode-scheduling-v2/phase3-replay-corpus.json",
+  "replay_corpus_sha256": "4dd1e387c42d6fccd37d60795b00192144f3b4d93c57d9eb54ab527a72e8e94d",
+  "candidate_shortlist_path": "benchmarks/chat-mode-scheduling-v2/phase3-candidate-shortlist.json",
+  "candidate_shortlist_sha256": "23edc0fbba3210aae5da205122be51a806b7be54ab5ca5c590d98de6c931b975",
+  "live_candidates": [],
+  "preferred_live_candidate": null,
+  "candidate_budgets_s": {
+    "C120": 120,
+    "C300": 300,
+    "C600": 600
+  },
+  "c_candidate_reports": {
+    "C120": {
+      "budget_s": 120,
+      "path": "benchmarks/chat-mode-scheduling-v2/phase3-replay-c120.json",
+      "sha256": "3d0de49551d27bd1a0729af16941ba80c2ecef9c409d73140cf5e24515cb500b"
+    },
+    "C300": {
+      "budget_s": 300,
+      "path": "benchmarks/chat-mode-scheduling-v2/phase3-replay-c300.json",
+      "sha256": "db8081d25139192a6b1eb7dfeb0b948ddbabbacbca87b2cf0e34acb3a9896cf6"
+    },
+    "C600": {
+      "budget_s": 600,
+      "path": "benchmarks/chat-mode-scheduling-v2/phase3-replay-c600.json",
+      "sha256": "41f0f4b59a00e43b638f9048cc2e7288838a68ae25e966d12f09050245b1e08e"
+    }
+  },
+  "scenario_catalog_sha256": "45002efd15fe7aa07fa5933180752c6537bea6584520f41a4e1d6b6de61ab5fd",
+  "provenance_classifier_commit": "2b5e83c4f8015f3077794dabb9e864a3c4d806b6",
+  "canonical_v2_instruction_path": ".claude/skills/chatgpt-mcp-dev/references/project-instructions-chat-scheduling-v2.txt",
+  "canonical_v2_instruction_sha256": "b7df6953a3c64bd245b3d5ff13b6f2667e940d5a154e650fec0b10e6a22cf094",
+  "historical_a_baseline_source_project": {
+    "project_id": "g-p-6aaea9da2bc881918d6f9eb5177cf904",
+    "project_name": "rp-test-sandbox",
+    "instructions_sha256": "dd81ecafb56bf235fa1933a0727fb5fd196c7e5ae86519e39866234a6f4b2b78"
+  },
+  "historical_h10": {
+    "budget_s": 10,
+    "eligible_as_live_candidate": false,
+    "policy": "historical_one_shot",
+    "exhausted_policy": "historical_one_shot_exhausted",
+    "first_original_positive_request": "effective=min(bounded_wait, 10)",
+    "later_original_positive_requests": "effective=0",
+    "later_zero_wait_blocking_budget_exhausted": true,
+    "phase4_adapter_required": true,
+    "adapter_scope": "benchmark_only_scripts",
+    "production_runtime_mode_allowed": false
+  },
+  "logical_arm_vocabulary": [
+    "A",
+    "B",
+    "C",
+    "H"
+  ],
+  "phase4_source_support": {
+    "endpoint_routing_implemented_in_phase3": false,
+    "c_h_harness_support_implemented_in_phase3": false
+  },
+  "phase3_offline_verdict": "NO_LIVE_CANDIDATE"
+}
