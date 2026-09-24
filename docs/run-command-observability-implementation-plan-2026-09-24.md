@@ -995,6 +995,10 @@ retention window.
 Validation: focused readiness tests **72 passed**; full suite **1200 passed, 3 skipped** plus
 **2** ordinary-process tests; repository-wide pre-commit **PASS**.
 
+Deployment: `c082cea` merged to `master` and `proof-of-concept`; MCP restarted at
+**2026-09-25 01:42:10 AEST** with `behavior_hash=2c8ed8a675b3` and local evidence retention
+set to 14 days. The clean Phase-5 decision window starts at that restart.
+
 Detailed Phase-5 design remains:
 `docs/run-command-observability-phase5-design-2026-09-24.md`.
 

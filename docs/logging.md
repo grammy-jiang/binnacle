@@ -232,8 +232,9 @@ guessing from the presence of a `tail_lines` argument.
 For Phase-5 qualitative review, deployments may opt into private full-command evidence with
 `run_command.auto_background_evidence_retention_days`. The repository default is `0`
 (disabled). Enabled evidence is written only for automatic-policy matches to
-`~/.local/state/binnacle/run-command-evidence/YYYY-MM-DD.jsonl` by default. The directory is
-mode `0700`, files are mode `0600`, and each row contains the full command plus call/hash,
+`~/.local/state/binnacle/run-command-evidence/YYYY-MM-DD.jsonl` by default, using the UTC
+calendar date for filenames. The directory is mode `0700`, files are mode `0600`, and each
+row contains the full command plus call/hash,
 behavior/rule identity, and match span. Evidence write failures are best-effort and cannot
 fail `run_command`; they emit only `run_command_evidence_error` without command text.
 Retention pruning scans these low-count daily evidence files only when an auto match occurs;
