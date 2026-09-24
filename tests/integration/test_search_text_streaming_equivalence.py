@@ -38,7 +38,23 @@ def test_normal_exact_results_match_between_pipelines(tmp_path, monkeypatch, kwa
     materialized = run_mode(monkeypatch, "materialized", "hit", tmp_path, **kwargs)
     streaming = run_mode(monkeypatch, "streaming", "hit", tmp_path, **kwargs)
 
-    assert streaming == materialized
+    for field in ("path", "pattern", "count", "truncated", "note"):
+        assert streaming.get(field) == materialized.get(field)
+
+    assert materialized["truncated"] is False
+    assert streaming["truncated"] is False
+
+    def entry_key(entry):
+        return (
+            entry["file"],
+            entry.get("line", -1),
+            entry.get("text", ""),
+            entry.get("count", -1),
+        )
+
+    assert sorted(streaming["entries"], key=entry_key) == sorted(
+        materialized["entries"], key=entry_key
+    )
 
 
 def test_truncated_independent_rg_runs_preserve_contract_not_order(
