@@ -2,7 +2,7 @@
 
 Status: IN PROGRESS
 
-Updated: 2026-09-25T02:23:56+10:00
+Updated: 2026-09-25T02:29:18+10:00
 
 ## Canonical state
 
@@ -34,7 +34,7 @@ Updated: 2026-09-25T02:23:56+10:00
 | 3.3B | complete |
 | 3.3C | complete |
 | 3.3D | not_started |
-| 3.4A | not_started |
+| 3.4A | running |
 | 3.4B | complete |
 | 3.4C | complete |
 | 3.5M | not_started |
