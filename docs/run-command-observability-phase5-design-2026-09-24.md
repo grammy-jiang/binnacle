@@ -1,6 +1,6 @@
 # run_command Phase 5 evidence-driven policy design and implementation plan — 2026-09-24
 
-Status: design complete; implementation intentionally gated on post-deployment production evidence.
+Status: design complete; Phase-5 readiness hardening deployed; policy implementation remains gated on post-deployment production evidence.
 
 Canonical path:
 
@@ -11,10 +11,13 @@ Canonical path:
 Deployment baseline:
 
 - observability Phases 1–4 merged to `master` and `proof-of-concept` at `55e96c3`;
-- `binnacle-mcp.service` restarted with the new telemetry at **2026-09-24 23:32 AEST**;
-- startup telemetry recorded `auto_background_rules=5` and
-  `auto_background_policy_hash=637d1b4f98dc`;
-- a one-shot review is scheduled for **2026-10-01 23:32 AEST**, seven days after deployment;
+- Phase-5 readiness hardening merged to both branches at `c082cea`;
+- `binnacle-mcp.service` cleanly restarted at **2026-09-25 01:42:10 AEST**;
+- effective startup identity is `policy_hash=637d1b4f98dc`,
+  `behavior_hash=2c8ed8a675b3`, semantics version `1`, automatic warm-up `1.0 s`;
+- this development host enables private auto-match evidence retention for **14 days**;
+- the one-shot review is scheduled for **2026-10-02 01:42:10 AEST**, seven days after the
+  readiness-hardened restart;
 - Phase 5 must not change policy before that review unless a correctness defect appears.
 
 ## 0. Phase-5 readiness hardening — 2026-09-25
@@ -61,8 +64,17 @@ Validation before deployment:
 - frozen large-window `binnacle stats` median after detailed grouping: **10.508 s**, about
   0.08 s above the prior 10.432 s Phase-1/2 measurement.
 
-After this hardening is deployed, the clean Phase-5 observation window should start at the
-hardening service restart, not at the older 2026-09-24 23:32 deployment.
+The hardening is deployed. The clean Phase-5 observation window starts at
+**2026-09-25 01:42:10 AEST**. A live probe immediately after restart confirmed:
+
+- `run_command_auto_background` emitted policy/behavior/rule identity, semantics, warm-up,
+  and match span;
+- private evidence preserved the full matched command with mode 0700/0600;
+- `binnacle stats` rendered the new behavior and behavior-scoped rule group;
+- marker/dispatch linkage was complete for the probe.
+
+The earlier 2026-09-24 23:32 window remains useful historical context but is not the clean
+Phase-5 decision window.
 
 Related documents:
 
@@ -195,9 +207,9 @@ Phase 5 must not:
 
 ### 4.1 Primary observation window
 
-Primary start: **2026-09-24 23:32 AEST**.
+Primary start: **2026-09-25 01:42:10 AEST**.
 
-Primary first review: **2026-10-01 23:32 AEST**.
+Primary first review: **2026-10-02 01:42:10 AEST**.
 
 The scheduled analysis must query from the deployment start, not “last seven days” relative
 to an arbitrary later execution time.
@@ -253,9 +265,10 @@ uses the private evidence store when enabled:
 ```
 
 Each row contains the full auto-matched command, call/command hash, policy/behavior/rule
-identity, semantics version, automatic warm-up, and exact match span. It does not enter the
-normal journal or MCP response. Evidence retention is configured by
-`run_command.auto_background_evidence_retention_days` and is disabled by repository default.
+identity, semantics version, automatic warm-up, and exact match span. Daily filenames use
+the UTC calendar date. Evidence does not enter the normal journal or MCP response. Evidence
+retention is configured by `run_command.auto_background_evidence_retention_days` and is
+disabled by repository default.
 
 If private evidence coverage is incomplete, do not infer command-shape classifications from
 a clipped `tool_call.args` preview. Mark those samples unavailable.
@@ -944,7 +957,7 @@ forced policy change.
 
 ## 24. First scheduled review checklist
 
-The review scheduled for 2026-10-01 23:32 AEST should answer, in order:
+The review scheduled for 2026-10-02 01:42:10 AEST should answer, in order:
 
 1. Did the expected behavior hash remain active, and which policy hash did it map to?
 2. How many matches did each rule hash receive?
