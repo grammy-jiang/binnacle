@@ -368,6 +368,8 @@ def probe_with(
     ):
         return dns_answers[server]
 
+    uplink._last_address.clear()
+    uplink._last_address["example.com"] = "93.184.216.34"
     with (
         um.patch.object(uplink, "probe_dns", side_effect=fake_dns) as pd,
         um.patch.object(

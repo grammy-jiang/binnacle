@@ -45,6 +45,35 @@ def resolve_workers(
     return min(MAX_DEFAULT_WORKERS, os.cpu_count() or 1)
 
 
+def build_pytest_lane_command(
+    *,
+    test_args: Sequence[str],
+    workers: int,
+    seed: int | None,
+    shared_args: Sequence[str],
+    no_xdist: bool,
+) -> list[str]:
+    """Build one pytest lane while keeping xdist out of no_xdist tests."""
+    command = [
+        sys.executable,
+        "-m",
+        "pytest",
+        *test_args,
+        "-q",
+        "-m",
+        "no_xdist" if no_xdist else "not no_xdist",
+    ]
+
+    if not no_xdist and workers > 1:
+        command.extend(["-n", str(workers), "--dist=worksteal"])
+
+    if seed is not None:
+        command.append(f"--randomly-seed={seed}")
+
+    command.extend(shared_args)
+    return command
+
+
 def build_lane_commands(
     *,
     workers: int,
@@ -52,20 +81,20 @@ def build_lane_commands(
     shared_args: Sequence[str],
 ) -> tuple[list[str], list[str]]:
     """Build the parallel-safe and ordinary-process pytest commands."""
-    common = [sys.executable, "-m", "pytest", "tests", "-q"]
-    main = [*common, "-m", "not no_xdist"]
-    ordinary = [*common, "-m", "no_xdist"]
-
-    if workers > 1:
-        main.extend(["-n", str(workers), "--dist=worksteal"])
-
-    if seed is not None:
-        seed_arg = f"--randomly-seed={seed}"
-        main.append(seed_arg)
-        ordinary.append(seed_arg)
-
-    main.extend(shared_args)
-    ordinary.extend(shared_args)
+    main = build_pytest_lane_command(
+        test_args=["tests"],
+        workers=workers,
+        seed=seed,
+        shared_args=shared_args,
+        no_xdist=False,
+    )
+    ordinary = build_pytest_lane_command(
+        test_args=["tests"],
+        workers=workers,
+        seed=seed,
+        shared_args=shared_args,
+        no_xdist=True,
+    )
     return main, ordinary
 
 

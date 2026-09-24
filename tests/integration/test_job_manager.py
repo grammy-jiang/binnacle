@@ -22,6 +22,7 @@ def manager(tmp_path, monkeypatch):
     store = tmp_path / "jobs"
     socket_path = tmp_path / "run" / "jobs.sock"
     monkeypatch.setattr(jobs, "JOBS_DIR", store)
+    monkeypatch.delenv("NOTIFY_SOCKET", raising=False)
     runtime = JobManager(
         socket_path,
         owner_instance_id="owner-new",
