@@ -27,6 +27,7 @@ def test_defaults_load_without_config_file(tmp_path, monkeypatch):
     assert settings.roots.extra_roots == (Path("/tmp"),)
     assert settings.jobs.keep_newest == 50
     assert settings.jobs.owner == "auto"
+    assert settings.jobs.warmup_s == 1.0
     assert settings.jobs.blocking_wall_budget_s_by_client == {}
     assert settings.jobs.blocking_wall_budget_for_client("openai-mcp") is None
     assert settings.run_command.auto_background_patterns == {}
