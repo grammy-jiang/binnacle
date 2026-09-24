@@ -7,7 +7,7 @@
   "source_branch": "feature/chat-mode-blocking-wall-guard",
   "audited_source_head": "5f2be143352aaa63fb680c1c79e289d46be201fe",
   "last_completed_step": "3.8",
-  "next_step": "3.9 full Phase-3 validation; Phase-4 live calibration remains blocked by NO_LIVE_CANDIDATE",
+  "next_step": "3.7 gate-population correction; revalidate dependent Step 3.8 binding afterward",
   "dependency_audit": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase3-dependency-audit-2026-09-25-r01.json",
     "revision": "r01",
@@ -685,7 +685,7 @@
       "worker_branch": "feature/chat-mode-scheduling-v2-phase3-h10"
     },
     "3.7": {
-      "status": "complete",
+      "status": "running",
       "tests": [
         "Promotion validator -> PASS 4/4 reports on audited revision-2 corpus; replay rows unchanged.",
         "uv run pytest -q tests/scripts/test_chat_scheduling_phase3_report.py -> PASS: 5 passed.",
@@ -699,7 +699,8 @@
         "Frozen shortlist verdict is NO_LIVE_CANDIDATE with live_candidates=[] and preferred_live_candidate=null.",
         "open_evidence_limitations is empty because every offline gate was computable from the frozen evidence.",
         "No production budget is declared. Phase-4 targeted live calibration must not start unless a future Phase-3 revision yields at least one passing C candidate.",
-        "H10 was promoted in this step for Step 3.10 consumption but remains ineligible for the shortlist."
+        "H10 was promoted in this step for Step 3.10 consumption but remains ineligible for the shortlist.",
+        "Attempt a2 reopens Step 3.7 to correct gate populations: gates 1-3 canonical Phase-1 only; gate 4 operational-journal when available."
       ],
       "commit": "3915fbb05fe4409418aa9c4293d5a2846cd925ae",
       "worker_branch": null
@@ -808,7 +809,7 @@
   ],
   "handoff": null,
   "created_at": "2026-09-25T00:51:02+10:00",
-  "updated_at": "2026-09-25T05:40:32+10:00",
+  "updated_at": "2026-09-25T05:51:35+10:00",
   "orchestrator_state_checkpoint_path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase3/checkpoints/orchestrator-state-initial.json",
   "ready_count": 1,
   "claimed_count": 0,
