@@ -6,8 +6,8 @@
   "worktree": "/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase3",
   "source_branch": "feature/chat-mode-blocking-wall-guard",
   "audited_source_head": "5f2be143352aaa63fb680c1c79e289d46be201fe",
-  "last_completed_step": "3.7",
-  "next_step": "3.8 Phase-4 input-contract readiness dry run; Phase-4 live calibration remains blocked by NO_LIVE_CANDIDATE",
+  "last_completed_step": "3.8",
+  "next_step": "3.9 full Phase-3 validation; Phase-4 live calibration remains blocked by NO_LIVE_CANDIDATE",
   "dependency_audit": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase3-dependency-audit-2026-09-25-r01.json",
     "revision": "r01",
@@ -77,7 +77,8 @@
     "phase3_corpus_path_head_r2": "19d5951b9617936c655664a992dc0c419051c4f7",
     "phase3_corpus_audit_head": "207000caa3727f37f494675f34934fd61fc6cdd5",
     "phase3_replay_promotion_head": "2382ae0dca4fee931d9af33c049e9dad97514e64",
-    "phase3_candidate_shortlist_head": "3915fbb05fe4409418aa9c4293d5a2846cd925ae"
+    "phase3_candidate_shortlist_head": "3915fbb05fe4409418aa9c4293d5a2846cd925ae",
+    "phase4_input_contract_head": "30be293c8e212f8f1e1c9c80fe000b3e40ccf303"
   },
   "frozen_hashes": {
     "phase2_progress_json": "bcfc0413457b00dd935ab5ba5cc11b35d4e3dd3e9c81edd54e429c599f8cc809",
@@ -124,7 +125,8 @@
     "phase3_replay_h10_promoted_json": "b769fb75cd4159bf2c12fd92e33c0df62b7dfee775dfb8fb2c5ea6cb5110621c",
     "phase3_replay_h10_promoted_md": "580e05f39f30427a911f9ff7f955561c5e8bc03bf8a63b2e3b06afacdabfb031",
     "phase3_candidate_shortlist_json": "23edc0fbba3210aae5da205122be51a806b7be54ab5ca5c590d98de6c931b975",
-    "phase3_candidate_shortlist_md": "cfaf76ecaa4d8ac462e916b2ccf4de9c8f3666f68532a0594a3e0e2878fb941e"
+    "phase3_candidate_shortlist_md": "cfaf76ecaa4d8ac462e916b2ccf4de9c8f3666f68532a0594a3e0e2878fb941e",
+    "phase4_input_contract_json": "da56f269c247dde80b5327b8e317a8b6fbf2985b45dd98c0264c3ec9a01ddc29"
   },
   "preflight_findings": {
     "p3-preflight-git-lineage": "5269556409bd3dce896c842ca2528f04416d6b839f4d54c6e55b76c607b062cc",
@@ -703,10 +705,27 @@
       "worker_branch": null
     },
     "3.8": {
-      "status": "running",
-      "tests": [],
-      "notes": [],
-      "commit": null,
+      "status": "complete",
+      "tests": [
+        "Step-3.8 dry-run validator -> PASS: R1-R12 all load; R12 renders H10/C120/C300/C600 job runtimes 40/150/330/630 s with the frozen budget-exhaustion safety oracle; two frozen Phase-1 R7 timeout examples classify as active-turn vs MCP-completed browser timeout; corpus has 326 rows; all 3 C reports and shortlist parse and share audited corpus SHA.",
+        "uv run pytest -q tests/scripts/test_chat_scheduling_manifest.py tests/scripts/test_chat_scheduling_oracle.py tests/scripts/test_chat_scheduling_provenance.py tests/scripts/test_chat_scheduling_phase3_report.py -> PASS: 40 passed in 1.91s; real 2.84s; nproc=4; pre-run loadavg=0.39 0.54 0.81 (timing under foreign parallel-programme load).",
+        "Phase-4 input-contract validator -> PASS: contract SHA-256 da56f269c247dde80b5327b8e317a8b6fbf2985b45dd98c0264c3ec9a01ddc29; scenario catalog SHA-256 45002efd15fe7aa07fa5933180752c6537bea6584520f41a4e1d6b6de61ab5fd; 3 C reports bound; 0 live candidates.",
+        "uv run pre-commit run --files benchmarks/chat-mode-scheduling-v2/phase4-input-contract.json -> PASS."
+      ],
+      "notes": [
+        "Wrote benchmarks/chat-mode-scheduling-v2/phase4-input-contract.json and froze SHA-256 da56f269c247dde80b5327b8e317a8b6fbf2985b45dd98c0264c3ec9a01ddc29 at commit 30be293c8e212f8f1e1c9c80fe000b3e40ccf303.",
+        "Frozen live_candidates=[] and preferred_live_candidate=null from the Step-3.7 shortlist. Candidate budgets are C120=120 s, C300=300 s, C600=600 s; H10 is not eligible as a live candidate.",
+        "Scenario catalog SHA-256 is 45002efd15fe7aa07fa5933180752c6537bea6584520f41a4e1d6b6de61ab5fd using the canonical handoff object of sorted R*.json relative paths to per-file SHA-256 values.",
+        "Provenance classifier commit is 2b5e83c4f8015f3077794dabb9e864a3c4d806b6. Frozen Phase-1 examples r7-20260923T211346-942d651555 and r7-20260923T203622-d51ce307ef classify as active_turn_browser_timeout and mcp_completed_browser_timeout respectively.",
+        "Canonical v2 instruction SHA-256 is b7df6953a3c64bd245b3d5ff13b6f2667e940d5a154e650fec0b10e6a22cf094 for .claude/skills/chatgpt-mcp-dev/references/project-instructions-chat-scheduling-v2.txt.",
+        "Current historical A baseline source Project identity is g-p-6aaea9da2bc881918d6f9eb5177cf904 / rp-test-sandbox with instructions SHA-256 dd81ecafb56bf235fa1933a0727fb5fd196c7e5ae86519e39866234a6f4b2b78; the instruction text itself is not stored in Phase-3 artifacts.",
+        "Frozen H10 semantics: historical_one_shot, first original-positive wait effective=min(bounded_wait, 10), later original-positive waits effective=0, exhausted policy historical_one_shot_exhausted; Phase 4 must provide the benchmark-only adapter and must not add a production runtime mode.",
+        "Required logical arm vocabulary is exactly A/B/C/H.",
+        "Endpoint routing and C/H harness support are not implemented or required in Phase 3. The existing Phase-3 harness remains A/B-only and scripts/chat_scheduling_endpoints.py is absent; those capabilities belong to Phase 4.",
+        "No live ChatGPT trials were run. The focused test matrix has no separate 3.8 target, so the dry run used the relevant manifest/oracle/provenance/report constituent tests plus explicit contract validation.",
+        "Phase-3 offline verdict remains NO_LIVE_CANDIDATE. Step 3.8 input readiness is complete, but Phase-4 live calibration remains blocked unless a future Phase-3 revision yields at least one passing C candidate."
+      ],
+      "commit": "30be293c8e212f8f1e1c9c80fe000b3e40ccf303",
       "worker_branch": null
     },
     "3.9": {
@@ -789,7 +808,7 @@
   ],
   "handoff": null,
   "created_at": "2026-09-25T00:51:02+10:00",
-  "updated_at": "2026-09-25T05:23:44+10:00",
+  "updated_at": "2026-09-25T05:40:32+10:00",
   "orchestrator_state_checkpoint_path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase3/checkpoints/orchestrator-state-initial.json",
   "ready_count": 1,
   "claimed_count": 0,
@@ -893,5 +912,21 @@
   "candidate_shortlist_md_sha256": "cfaf76ecaa4d8ac462e916b2ccf4de9c8f3666f68532a0594a3e0e2878fb941e",
   "live_candidates": [],
   "preferred_live_candidate": null,
-  "phase3_offline_verdict": "NO_LIVE_CANDIDATE"
+  "phase3_offline_verdict": "NO_LIVE_CANDIDATE",
+  "phase4_input_contract_path": "benchmarks/chat-mode-scheduling-v2/phase4-input-contract.json",
+  "phase4_input_contract_sha256": "da56f269c247dde80b5327b8e317a8b6fbf2985b45dd98c0264c3ec9a01ddc29",
+  "scenario_catalog_sha256": "45002efd15fe7aa07fa5933180752c6537bea6584520f41a4e1d6b6de61ab5fd",
+  "provenance_classifier_commit": "2b5e83c4f8015f3077794dabb9e864a3c4d806b6",
+  "canonical_v2_instruction_sha256": "b7df6953a3c64bd245b3d5ff13b6f2667e940d5a154e650fec0b10e6a22cf094",
+  "historical_a_baseline_source_project": {
+    "project_id": "g-p-6aaea9da2bc881918d6f9eb5177cf904",
+    "project_name": "rp-test-sandbox",
+    "instructions_sha256": "dd81ecafb56bf235fa1933a0727fb5fd196c7e5ae86519e39866234a6f4b2b78"
+  },
+  "logical_arm_vocabulary": [
+    "A",
+    "B",
+    "C",
+    "H"
+  ]
 }
