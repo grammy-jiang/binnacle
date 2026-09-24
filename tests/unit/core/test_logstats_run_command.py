@@ -244,3 +244,22 @@ INFO: event=tool_result call=a tool=run_command client=x session=s request_id=0 
 
     assert stats.auto_terminal_observed == 1
     assert stats.auto_terminal_collection_lag_s == []
+
+
+def test_output_shaping_events_classify_new_and_legacy_results():
+    sample = """
+2026-09-24T17:00:00.000 INFO: event=tool_call call=new tool=run_command client=x session=s request_id=0 args_chars=1 args={}
+2026-09-24T17:00:00.001 INFO: event=run_command_output_shaping call=new job_id=j state=exited reason=tail_lines+char_limit tail_lines=5 dropped_lines=10 char_clipped=true selected_chars=30000 returned_chars=24050 omitted_chars=6000 log_bytes=50000
+2026-09-24T17:00:00.002 INFO: event=tool_result call=new tool=run_command client=x session=s request_id=0 duration_ms=1 is_error=False content_chars=1 structured_bytes=1 est_tokens=1 truncated=true
+2026-09-24T17:00:01.000 INFO: event=tool_call call=old tool=run_command client=x session=s request_id=0 args_chars=1 args={}
+2026-09-24T17:00:01.001 INFO: event=tool_result call=old tool=run_command client=x session=s request_id=0 duration_ms=1 is_error=False content_chars=1 structured_bytes=1 est_tokens=1 truncated=true
+"""
+    records, startups = logstats.parse(sample)
+    stats = logstats.analyze(records, startups)
+    workflow = stats.run_command
+    assert workflow.output_shaping_reasons == {"tail_lines+char_limit": 1}
+    assert workflow.output_shaping_legacy_unclassified == 1
+    assert workflow.output_shaping_dropped_lines == [10]
+    assert workflow.output_shaping_omitted_chars == [6000]
+    text = logstats.render(stats)
+    assert "output shaping: tail_lines+char_limit=1, legacy_unclassified=1" in text

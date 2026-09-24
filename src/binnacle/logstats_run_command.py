@@ -22,6 +22,7 @@ class RunCommandEventIndex:
     dispatches: dict[str, tuple[int, Fields]] = field(default_factory=dict)
     dispatch_errors: dict[str, tuple[int, Fields]] = field(default_factory=dict)
     auto_markers: dict[str, tuple[int, Fields]] = field(default_factory=dict)
+    output_shaping: dict[str, tuple[int, Fields]] = field(default_factory=dict)
     job_starts: dict[str, tuple[int, Fields]] = field(default_factory=dict)
     owner_starts: dict[str, tuple[int, Fields]] = field(default_factory=dict)
     job_exits: dict[str, tuple[int, Fields]] = field(default_factory=dict)
@@ -45,6 +46,7 @@ def build_run_command_index(
         "run_command_dispatch",
         "run_command_dispatch_error",
         "run_command_auto_background",
+        "run_command_output_shaping",
         "job_start",
         "job_owner_timing",
         "job_exit",
@@ -80,6 +82,9 @@ def build_run_command_index(
         elif record.event == "run_command_auto_background":
             if call := f.get("call"):
                 out.auto_markers[call] = (seq, f)
+        elif record.event == "run_command_output_shaping":
+            if call := f.get("call"):
+                out.output_shaping[call] = (seq, f)
         elif record.event == "job_start":
             if job_id := f.get("job_id"):
                 out.job_starts[job_id] = (seq, f)
@@ -182,6 +187,17 @@ def analyze_run_command_workflow(
     out.result_without_call = len(set(index.tool_results) - set(index.tool_calls))
     out.dispatch_without_call = len(set(index.dispatches) - set(index.tool_calls))
     out.call_without_result = len(set(index.tool_calls) - set(index.tool_results))
+
+    for _, shaping in index.output_shaping.values():
+        out.output_shaping_reasons[shaping.get("reason", "?")] += 1
+        if (dropped := _number(shaping, "dropped_lines")) is not None:
+            out.output_shaping_dropped_lines.append(int(dropped))
+        if (omitted := _number(shaping, "omitted_chars")) is not None:
+            out.output_shaping_omitted_chars.append(int(omitted))
+
+    for call, (_, result) in index.tool_results.items():
+        if result.get("truncated") == "true" and call not in index.output_shaping:
+            out.output_shaping_legacy_unclassified += 1
 
     for call, (_, dispatch) in index.dispatches.items():
         mode = policy_mode(dispatch)
@@ -365,6 +381,27 @@ def render_run_command_workflow(stats: RunCommandWorkflowStats) -> list[str]:
             f"sync_exit={stats.synchronous_exit_linked}/{stats.synchronous_exit_expected}"
             f" ({_coverage(stats.synchronous_exit_linked, stats.synchronous_exit_expected)})"
         )
+
+    if stats.output_shaping_reasons or stats.output_shaping_legacy_unclassified:
+        reasons = ", ".join(
+            f"{key}={value}"
+            for key, value in stats.output_shaping_reasons.most_common()
+        )
+        out.append(
+            "  output shaping: "
+            + (reasons if reasons else "classified=0")
+            + f", legacy_unclassified={stats.output_shaping_legacy_unclassified}"
+        )
+        if stats.output_shaping_dropped_lines:
+            out.append(
+                f"    dropped_lines_total={sum(stats.output_shaping_dropped_lines)} "
+                f"(n={len(stats.output_shaping_dropped_lines)})"
+            )
+        if stats.output_shaping_omitted_chars:
+            out.append(
+                f"    omitted_chars_total={sum(stats.output_shaping_omitted_chars)} "
+                f"(n={len(stats.output_shaping_omitted_chars)})"
+            )
 
     if stats.auto_matches:
         out.append("  auto-background:")
