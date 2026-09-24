@@ -5,7 +5,7 @@
   "replay_corpus_path": "benchmarks/chat-mode-scheduling-v2/phase3-replay-corpus.json",
   "replay_corpus_sha256": "4dd1e387c42d6fccd37d60795b00192144f3b4d93c57d9eb54ab527a72e8e94d",
   "candidate_shortlist_path": "benchmarks/chat-mode-scheduling-v2/phase3-candidate-shortlist.json",
-  "candidate_shortlist_sha256": "23edc0fbba3210aae5da205122be51a806b7be54ab5ca5c590d98de6c931b975",
+  "candidate_shortlist_sha256": "51db08d70ad8ebfcc46de9e53c661b517b9f3ed41b10579d49057aa395f8d11d",
   "live_candidates": [],
   "preferred_live_candidate": null,
   "candidate_budgets_s": {
