@@ -7,7 +7,7 @@
   "source_branch": "feature/chat-mode-blocking-wall-guard",
   "audited_source_head": "5f2be143352aaa63fb680c1c79e289d46be201fe",
   "last_completed_step": "3.4A",
-  "next_step": "3.5 source-shard extraction fan-out",
+  "next_step": "3.5M integrate source shards and freeze replay corpus",
   "dependency_audit": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase3-dependency-audit-2026-09-25-r01.json",
     "revision": "r01",
@@ -356,7 +356,7 @@
       "worker_branch": null
     },
     "3.5M": {
-      "status": "not_started",
+      "status": "running",
       "tests": [],
       "notes": [],
       "commit": null,

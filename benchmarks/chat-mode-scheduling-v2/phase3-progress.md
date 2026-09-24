@@ -2,7 +2,7 @@
 
 Status: IN PROGRESS
 
-Updated: 2026-09-25T02:32:23+10:00
+Updated: 2026-09-25T03:28:42+10:00
 
 ## Canonical state
 
@@ -10,7 +10,7 @@ Updated: 2026-09-25T02:32:23+10:00
 - Worktree: /home/grammy-jiang/Projects/binnacle-chat-scheduling-phase3
 - Audited source HEAD: 5f2be143352aaa63fb680c1c79e289d46be201fe
 - Last completed step: 3.4A
-- Next step: 3.5 source-shard extraction fan-out
+- Next step: 3.5M integrate source shards and freeze replay corpus
 - Dependency audit: phase3-dependency-audit-2026-09-25-r01.json, r01, SHA-256 d3bec25ba8d49ed4db78e07930542b9e963608ad264c198f8fbf04c4ccfa473a
 - Task graph: phase3-task-graph.json, r01, SHA-256 44cbedb0524fe87a9d111579a96d0d33f4171dfee6ece34eb53baa4c506696b2
 - Initial orchestrator-state checkpoint SHA-256: cec108b23fcf319a48d699f123b8fbf713919f3873d1cae4968a16844b80ed12
@@ -38,7 +38,7 @@ Updated: 2026-09-25T02:32:23+10:00
 | 3.4A | complete |
 | 3.4B | complete |
 | 3.4C | complete |
-| 3.5M | not_started |
+| 3.5M | running |
 | 3.5A | not_started |
 | 3.6A | not_started |
 | 3.6B | not_started |
