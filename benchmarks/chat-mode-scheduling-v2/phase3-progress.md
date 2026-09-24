@@ -2,7 +2,7 @@
 
 Status: IN PROGRESS
 
-Updated: 2026-09-25T02:31:25+10:00
+Updated: 2026-09-25T02:32:23+10:00
 
 ## Canonical state
 
@@ -17,6 +17,7 @@ Updated: 2026-09-25T02:31:25+10:00
 - Validated synchronized baseline HEAD: 806a23053043be46f6ba35ad046833168caa904d
 - Frozen replay path HEAD: 9c768800f1e97f9e06d18bd32b173e24d93e82f0
 - Frozen scenario path HEAD: 7107f142ae6746e17180ae92b4d4be0e6e3957d2
+- Frozen corpus path HEAD: 3e498a33294708c7fe1996b49e78752d8720523d
 - Production baseline re-observed: 2026-09-25T01:10:16+10:00
 
 ## Deviation
@@ -201,6 +202,8 @@ Updated: 2026-09-25T02:31:25+10:00
 - Frozen phase3-source-inventory.json SHA-256 reverified as
   1a147dd0d1632c567d91a4e35e83085ecca062a9f0bcab251b8ccd7a2a62bc9f;
   the inventory includes operational-journal with status available.
+- Frozen phase3_corpus_path_head at 3e498a33294708c7fe1996b49e78752d8720523d, the HEAD produced by the
+  Step-3.4A completion progress commit.
 - No semantic deviation from the Step-3.4A runbook or focused test matrix.
 
 ## Step 3.4A validation
