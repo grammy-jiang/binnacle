@@ -115,4 +115,15 @@ One earlier bundled exploratory Python inspection command was rejected by the
 platform safety filter. The provided `statecat.sh` helper was used instead for
 that inspection; this did not alter evidence or audit logic.
 
+## Canonical corpus binding (Step 3.5A)
+
+- Canonical revision-2 replay corpus SHA-256:
+  `4dd1e387c42d6fccd37d60795b00192144f3b4d93c57d9eb54ab527a72e8e94d`.
+- Canonical integrated shard SHA-256:
+  `332a8a6c449d48b617a752f9a1a8244497eddd1853ea59c9fe7586fa984ec9e1`.
+- The Step 3.5A fan-in binds this independent source/shard PASS to the
+  aggregate revision-2 PASS. The shard hash above matches the integrated
+  shard bytes and the aggregate audit confirms exact membership in the
+  frozen corpus.
+
 AUDIT phase1-step4: PASS
