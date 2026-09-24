@@ -10,16 +10,19 @@ Updated: 2026-09-25T03:38:02+10:00
 - Worktree: /home/grammy-jiang/Projects/binnacle-chat-scheduling-phase3
 - Audited source HEAD: 5f2be143352aaa63fb680c1c79e289d46be201fe
 - Last completed step: 3.5M
-- Next step: 3.5M revision 2 integration and corpus re-freeze
+- Next step: 3.5A revision-2 aggregate audit + 3.6A/B/C + 3H replay reruns from corpus revision 2
 - Dependency audit: phase3-dependency-audit-2026-09-25-r01.json, r01, SHA-256 d3bec25ba8d49ed4db78e07930542b9e963608ad264c198f8fbf04c4ccfa473a
 - Task graph: phase3-task-graph.json, r01, SHA-256 44cbedb0524fe87a9d111579a96d0d33f4171dfee6ece34eb53baa4c506696b2
 - Initial orchestrator-state checkpoint SHA-256: cec108b23fcf319a48d699f123b8fbf713919f3873d1cae4968a16844b80ed12
 - Validated synchronized baseline HEAD: 806a23053043be46f6ba35ad046833168caa904d
 - Frozen replay path HEAD: 9c768800f1e97f9e06d18bd32b173e24d93e82f0
 - Frozen scenario path HEAD: 7107f142ae6746e17180ae92b4d4be0e6e3957d2
-- Frozen corpus path HEAD: 3e498a33294708c7fe1996b49e78752d8720523d
-- Frozen replay corpus SHA-256: c2c2809abde13c7b697e3a8c3e91a547fe68bbd83fdbd816c611b3f0e94808de
-- Replay corpus report SHA-256: b45934afec305a6575fa67e70fbc19407b7e0cfaf0fbab756b53d9571cd13888
+- Frozen corpus path HEAD (revision 1 lineage): 3e498a33294708c7fe1996b49e78752d8720523d
+- Frozen corpus path HEAD revision 2: 19d5951b9617936c655664a992dc0c419051c4f7
+- Replay corpus revision: 2
+- Frozen replay corpus SHA-256: 4dd1e387c42d6fccd37d60795b00192144f3b4d93c57d9eb54ab527a72e8e94d
+- Superseded replay corpus revision 1 SHA-256: c2c2809abde13c7b697e3a8c3e91a547fe68bbd83fdbd816c611b3f0e94808de
+- Replay corpus report SHA-256: f6e46b89b60bb89c918ab4c5d9ab11d0dea5da2b27bf3794c96f1e34ebc440bd
 - Production baseline re-observed: 2026-09-25T01:10:16+10:00
 
 ## Deviation
@@ -40,7 +43,7 @@ Updated: 2026-09-25T03:38:02+10:00
 | 3.4A | complete |
 | 3.4B | complete |
 | 3.4C | complete |
-| 3.5M | running |
+| 3.5M | complete |
 | p3-source-phase1-step3 | complete |
 | p3-source-phase1-step4 | complete |
 | p3-source-phase1-step5 | complete |
@@ -48,6 +51,8 @@ Updated: 2026-09-25T03:38:02+10:00
 | p3-source-phase1-step7 | complete |
 | p3-source-phase1-step8 | complete |
 | p3-source-operational-journal | complete |
+| p3-fix-opjournal-extractor | complete |
+| p3-source-operational-journal-r2 | complete |
 | 3.5A | not_started |
 | 3.6A | not_started |
 | 3.6B | not_started |
@@ -265,11 +270,49 @@ Updated: 2026-09-25T03:38:02+10:00
 - Pre-run host snapshot: 4 cores; load average 1.37 0.82 0.74.
 - Timing was measured under foreign parallel-programme load.
 
-## Step 3.5M revision 2 status
+## Step 3.5M revision 2 notes
 
-- Reopened after the operational-journal audit exposed the revision-1 extractor/window-count defect; integrating the verified extractor fix and revision-2 operational-journal shard before re-freezing the corpus.
+- Revision 1 corpus `c2c2809abde13c7b697e3a8c3e91a547fe68bbd83fdbd816c611b3f0e94808de` is retained as superseded history after its
+  operational-journal audit exposed the extractor/window-count defect.
+- Integrated the verified extractor fix `c7b0b8bf1c308812d3b391c556b8a302d5b8c125` as canonical
+  `13879b7`, then revision-2 operational-journal shard `5d240da6dd35baa438f2775551e65a4eee329a42`
+  as canonical `e86a0e3`.
+- Frozen revision-2 corpus path HEAD: `19d5951b9617936c655664a992dc0c419051c4f7`.
+- Operational journal is now available across the frozen
+  1789777318.789691..1790263827.324505 window: 4,073 token-filtered lines,
+  4,045 parsed timing records, 2,968 replayable waits, and 278 rows. The 28
+  token-bearing non-timing/wrapped records are not an expiration gap.
+- Revision-2 operational source SHA-256:
+  `c1a18c4095de00cd68833fb66dabc9db6fbfc2a1122ab6019095f15acd8a1948`;
+  shard SHA-256: `40186dbf2adde0936a47d0a270c802f71fad5adf8dca9c8a3d9c039590b97cff`.
+- Deterministic merge produced 326 rows: the canonical submitted population
+  remains 48 = 24 A + 24 B, plus 278 operational-history rows. All 10 submitted
+  Phase-1 failures remain present.
+- All 32 Phase-1 positive waits match raw `result.waited_s`. All 2,968
+  operational waits carry actual `waited_s`; 2,135 differ from requested wait.
+- Independent union checks match all 48 Phase-1 metrics. Fourteen operational
+  rows contain overlapping wait intervals, and all 14 reproduce the stored union
+  metric with zero mismatches.
+- Revision-2 replay corpus SHA-256: `4dd1e387c42d6fccd37d60795b00192144f3b4d93c57d9eb54ab527a72e8e94d`.
+- Revision-2 replay corpus report SHA-256: `f6e46b89b60bb89c918ab4c5d9ab11d0dea5da2b27bf3794c96f1e34ebc440bd`.
+- Provisional replay outputs against revision 1 remain historical diagnostics
+  and must be rerun against revision 2 under the promotion/invalidation contract.
+- No production checkout, service, or configuration was modified.
 
-## Step 3.5M notes
+## Step 3.5M revision 2 validation
+
+- Frozen merge CLI executed twice into the canonical JSON/Markdown paths: PASS;
+  both outputs were byte-identical across runs.
+- Corpus invariant validator: PASS; 326 total rows, 48 canonical Phase-1 rows,
+  278 operational rows, 24 A + 24 B, 10 failures retained, 32 Phase-1 actual-wait
+  comparisons, 48 Phase-1 union checks, 2,968 operational actual waits, and 14
+  overlapping operational-union checks all matched.
+- `uv run pytest -q tests/scripts/test_chat_scheduling_replay_corpus.py`: PASS,
+  12 passed in 0.27s; run-command runtime 0.815s.
+- Pre-run host snapshot for pytest: 4 cores; load average 0.70 0.68 0.57.
+- Timing was measured under foreign parallel-programme load.
+
+## Step 3.5M revision 1 notes (superseded)
 
 - Every source worker completion packet was re-read through `statecat.sh`; all
   seven workers were based at frozen `phase3_corpus_path_head`
@@ -304,7 +347,7 @@ Updated: 2026-09-25T03:38:02+10:00
   `frozen_window_line_count_mismatch_4073_4045`; no rows were synthesized.
 - No production configuration, service, or production checkout was modified.
 
-## Step 3.5M validation
+## Step 3.5M revision 1 validation
 
 - Frozen merge CLI executed twice: PASS; JSON and Markdown were byte-identical.
 - Independent corpus invariant validator: PASS; 48 trials, 24 A + 24 B,
@@ -331,3 +374,14 @@ Updated: 2026-09-25T03:38:02+10:00
   `feature/chat-mode-scheduling-v2-phase3-source-phase1-step8` integrated as canonical cherry-pick `53f2855`; shard SHA-256 `be0b57741415bccd2676e1dc7914beaf50b1a887983819cda22c5698f933ff40`.
 - `p3-source-operational-journal`: worker `809b7156de2112477deeb873507a89afd35585a2` on
   `feature/chat-mode-scheduling-v2-phase3-source-operational-journal` integrated as canonical cherry-pick `5a6a5a2`; shard SHA-256 `f1124faced67d51e9ea30311f9dea25e17bd2f82d2c2e0a3cdbb4842de080bbe`.
+
+## Revision 2 worker notes
+
+- `p3-fix-opjournal-extractor`: worker `c7b0b8bf1c308812d3b391c556b8a302d5b8c125` on
+  `feature/chat-mode-scheduling-v2-phase3-fix-opjournal`, integrated as
+  canonical `13879b7`; extractor SHA-256
+  `b46ea65a8c24e20ede17e6bf4d9f2598e94fc23b7cb1cc0db7b5b6493fe827af`.
+- `p3-source-operational-journal-r2`: worker `5d240da6dd35baa438f2775551e65a4eee329a42` on
+  `feature/chat-mode-scheduling-v2-phase3-source-operational-journal-r2`,
+  integrated as canonical `e86a0e3`; shard SHA-256
+  `40186dbf2adde0936a47d0a270c802f71fad5adf8dca9c8a3d9c039590b97cff`.
