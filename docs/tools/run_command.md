@@ -110,6 +110,17 @@ telemetry only; the MCP result schema is unchanged. Start/exit lifecycle records
 same `call`, `job_id`, owner instance and command hash so the history remains directly
 joinable across MCP restarts.
 
+When automatic policy selects the background warm-up, its existing sparse marker also
+records a stable `policy_hash` and `rule_hash`; it never copies the deployment-local regex
+text. Startup `tool_config` records the total automatic-rule count and effective policy
+hash. This makes historical per-rule behavior measurable without putting local preferences
+into the repository or the MCP response.
+
+If returned output actually loses content, `run_command` emits one sparse
+`run_command_output_shaping` record that distinguishes `tail_lines`, the configured
+character limit, or both and records only scalar counts. The result payload and full
+on-disk job log keep their existing contract.
+
 `background_job` and the summary tail were added 2026-09-06: a synchronous
 finish appends "It finished synchronously; no background job was created,
 so no job_status or stop_job is needed." Evidence: models polled
