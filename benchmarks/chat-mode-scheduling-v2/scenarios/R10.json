@@ -1,0 +1,92 @@
+{
+  "benchmark_class": "macro",
+  "dag": [
+    {
+      "access": "non_read_only",
+      "arguments": {
+        "background": true,
+        "command": "python3 -c 'import time; time.sleep(90)'",
+        "wait_seconds": 1,
+        "workdir": "{root}"
+      },
+      "depends_on": [],
+      "id": "start_job",
+      "kind": "tool",
+      "tool": "run_command"
+    },
+    {
+      "access": "read_only",
+      "allow_repeats": true,
+      "arguments": {
+        "job_id": "{result:start_job.job_id}",
+        "tail_lines": 20,
+        "wait_seconds": 50
+      },
+      "completion_condition": "job_state=exited",
+      "depends_on": [
+        "start_job"
+      ],
+      "id": "wait_result",
+      "kind": "tool",
+      "tool": "job_status"
+    }
+  ],
+  "expected_runtime_s": 110,
+  "fixture": {
+    "allowed_mutation_globs": [
+      "{root}/**"
+    ],
+    "files": [],
+    "jobs": [],
+    "kind": "ephemeral_dir",
+    "production_mutation_allowed": false,
+    "root_template": "/tmp/binnacle-chat-scheduling-v2/{id}/{run_id}"
+  },
+  "id": "R10",
+  "max_turn_runtime_s": 180,
+  "metric_tags": [
+    "wall_time",
+    "dependency_wait",
+    "quiet_job",
+    "same_prompt_completion",
+    "continuation_prompts"
+  ],
+  "oracle": {
+    "checks": [
+      {
+        "params": {},
+        "type": "all_nodes_complete"
+      },
+      {
+        "params": {
+          "fields": {
+            "quiet": true,
+            "state": "running"
+          },
+          "node": "wait_result"
+        },
+        "type": "job_status_any_call"
+      },
+      {
+        "params": {
+          "exit_code": 0,
+          "node": "wait_result",
+          "state": "exited"
+        },
+        "type": "job_state"
+      },
+      {
+        "params": {
+          "value": "DONE"
+        },
+        "type": "exact_reply"
+      }
+    ],
+    "terminal_state": "all_required_nodes_complete"
+  },
+  "phase1_step": null,
+  "prompt_template": "Use Raspberry Pi MCP. In {root}, start this exact quiet command with run_command background=true and wait_seconds=1: python3 -c 'import time; time.sleep(90)'. It intentionally produces no stdout or stderr. There is no independent work. Keep checking the returned job in this same prompt until it exits; do not treat quiet=true while state=running as completion. Reply only DONE after the job exits successfully.",
+  "purpose": "Verify quiet running jobs remain live dependencies until their repeated status node exits.",
+  "schema_version": 1,
+  "title": "Ninety-second quiet dependency job"
+}

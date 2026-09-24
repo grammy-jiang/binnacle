@@ -27,11 +27,15 @@ CATALOG_SCENARIOS = {
     "R1",
     "R2",
     "R3",
+    "R4",
     "R5",
+    "R6",
     "R7",
     "R8",
     "R9",
+    "R10",
     "R11",
+    "R12",
 }
 EXPECTED_PHASE1_STEPS = {
     "M1": "1.2",
@@ -44,10 +48,14 @@ EXPECTED_PHASE1_STEPS = {
     "R1": "1.3",
     "R2": "1.3",
     "R3": "1.4",
+    "R4": None,
     "R5": "1.4",
+    "R6": None,
     "R8": "1.5",
     "R9": "1.6",
+    "R10": None,
     "R11": "1.7",
+    "R12": None,
     "R7": "1.8",
 }
 PRODUCTION_TOOLS = {
@@ -145,6 +153,7 @@ class OracleCheck(StrictModel):
         "command_failure_precedes_success",
         "no_mutation_outside_scope",
         "all_nodes_complete",
+        "job_status_any_call",
     ]
     params: dict[str, Any] = Field(default_factory=dict)
 
@@ -162,7 +171,8 @@ class Scenario(StrictModel):
     title: str
     purpose: str
     expected_runtime_s: int = Field(ge=0)
-    max_turn_runtime_s: int = Field(gt=0, le=240)
+    max_turn_runtime_s: int = Field(gt=0)
+    runtime_budget_margin_s: int | None = Field(default=None, ge=0)
     fixture: Fixture
     prompt_template: str
     dag: list[Node]
@@ -177,6 +187,16 @@ class Scenario(StrictModel):
             raise ValueError("M* ids must be micro and R* ids must be macro")
         if self.expected_runtime_s > self.max_turn_runtime_s:
             raise ValueError("expected runtime exceeds max turn runtime")
+        if self.id == "R12":
+            if self.max_turn_runtime_s > 690:
+                raise ValueError("R12 max turn runtime exceeds 690-second ceiling")
+            if self.runtime_budget_margin_s != 30:
+                raise ValueError("R12 runtime_budget_margin_s must be 30")
+        else:
+            if self.max_turn_runtime_s > 240:
+                raise ValueError("max turn runtime exceeds 240-second ceiling")
+            if self.runtime_budget_margin_s is not None:
+                raise ValueError("runtime_budget_margin_s is only valid for R12")
         if self.phase1_step != EXPECTED_PHASE1_STEPS.get(self.id):
             raise ValueError(
                 f"{self.id} phase1_step must be {EXPECTED_PHASE1_STEPS.get(self.id)!r}"
@@ -248,6 +268,8 @@ class Scenario(StrictModel):
         job_names = {job.name for job in self.fixture.jobs}
         node_ids = {node.id for node in self.dag}
         allowed_simple = {"id", "run_id", "nonce", "root"}
+        if self.id == "R12":
+            allowed_simple.add("budget_plus_margin_s")
 
         def strings(value: Any):
             if isinstance(value, str):
