@@ -45,7 +45,9 @@ def record_cycle(
     prefs = preferences
 
     for dev, info in devices.items():
-        state.last_devices[dev] = info.describe(state.usb_best_speed.get(dev))
+        state.last_devices[dev] = info.describe(
+            state.usb_target.get(dev, state.usb_best_speed.get(dev))
+        )
     for dev in state.known_devices:
         if dev not in devices:
             state.last_devices[dev] = "absent"

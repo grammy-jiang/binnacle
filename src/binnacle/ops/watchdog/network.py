@@ -5,7 +5,12 @@ from dataclasses import dataclass
 
 from binnacle.ops.watchdog.command import Run, _run
 from binnacle.ops.watchdog.config import Policy
-from binnacle.ops.watchdog.hardware import usb_node_of, usb_speed_of
+from binnacle.ops.watchdog.hardware import (
+    driver_module_of,
+    module_params,
+    usb_node_of,
+    usb_speed_of,
+)
 from binnacle.ops.watchdog.model import DeviceInfo, Preference, State
 
 
@@ -123,6 +128,24 @@ def device_mac(dev: str, run: Run = _run) -> str:
         parts = raw.split()
         if len(parts) >= 2 and parts[0] == "addr":
             return parts[1].lower()
+    return ""
+
+
+def permanent_mac(dev: str, run: Run = _run) -> str:
+    """The adapter's burnt-in MAC, lower case, from `ip -o link`: the
+    `permaddr` field when the current address differs from it (NetworkManager
+    randomizes the address of a disconnected radio for scanning), else the
+    address itself. "" when unknown -- and then the device has no identity,
+    so nothing is re-keyed on its account."""
+    proc = run("ip", "-o", "link", "show", "dev", dev)
+    if proc.returncode != 0:
+        return ""
+    fields = proc.stdout.split()
+    for marker in ("permaddr", "link/ether"):
+        if marker in fields:
+            i = fields.index(marker)
+            if i + 1 < len(fields):
+                return fields[i + 1].lower()
     return ""
 
 
@@ -253,9 +276,11 @@ def wifi_link_info(
 
 
 def observe_devices(
-    run: Run = _run, usb_ids: Collection[str] = ()
+    run: Run = _run,
+    usb_ids: Collection[str] = (),
+    param_names: Collection[str] = (),
 ) -> dict[str, DeviceInfo]:
-    """Every managed Wi-Fi device with its state and level facts."""
+    """Every managed Wi-Fi device with its state, identity and level facts."""
     out: dict[str, DeviceInfo] = {}
     for dev, (nm_state, profile) in nm_devices(run).items():
         node, usb_id = usb_node_of(dev)
@@ -264,8 +289,22 @@ def observe_devices(
         rate = None
         if nm_state in ("connected", "connecting"):
             freq, width, rate, signal = wifi_link_info(dev, run)
+        params: tuple[tuple[str, str], ...] = ()
+        if param_names:
+            module, _ = driver_module_of(dev)
+            params = tuple(sorted(module_params(module, param_names).items()))
         out[dev] = DeviceInfo(
-            dev, nm_state, profile, usb_id, speed, freq, width, rate, signal
+            dev,
+            nm_state,
+            profile,
+            usb_id,
+            speed,
+            freq,
+            width,
+            rate,
+            signal,
+            mac=permanent_mac(dev, run),
+            params=params,
         )
     return out
 

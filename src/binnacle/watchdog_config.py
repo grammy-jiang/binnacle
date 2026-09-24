@@ -3,6 +3,7 @@
 import os
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, Field
 from pydantic_settings import (
@@ -13,6 +14,38 @@ from pydantic_settings import (
 )
 
 from binnacle.config import CONFIG_FILE_ENV, DEFAULT_CONFIG_FILE
+
+
+class UsbLinkPolicySettings(BaseModel):
+    """Desired USB link speed for one adapter model, or one adapter by
+    permanent MAC (`[[watchdog.usb_link_policies]]`; see
+    binnacle/ops/watchdog/policy_usb.py)."""
+
+    usb_id: str = Field(..., description="USB vendor:product id the rule applies to.")
+    mode: Literal["learned", "fixed", "observe", "param"] = Field(
+        "learned",
+        description=(
+            "learned: the best speed the adapter has shown, relearned when its "
+            "module parameters change; fixed: target_mbps; observe: never reset "
+            "for speed; param: the target follows a module parameter (`targets` "
+            "maps its value to a speed; an unlisted value means observe)."
+        ),
+    )
+    target_mbps: int | None = Field(None, description="Level to repair to (fixed).")
+    permanent_mac: str | None = Field(
+        None, description="Limit the rule to one adapter by its permanent MAC."
+    )
+    param: str | None = Field(
+        None,
+        description=(
+            "Module parameter the target follows (param mode); read from "
+            "/sys/module/<module>/parameters/ alongside inventory_params."
+        ),
+    )
+    targets: dict[str, int] = Field(
+        default_factory=dict,
+        description="param mode: parameter value -> target speed in Mbit/s.",
+    )
 
 
 class WatchdogSettings(BaseModel):
@@ -129,6 +162,16 @@ class WatchdogSettings(BaseModel):
     )
     usb_speed_hold_s: float = Field(
         3600.0, description="Time at the best speed that clears the attempt count."
+    )
+    usb_link_policies: tuple[UsbLinkPolicySettings, ...] = Field(
+        (),
+        description=(
+            "What USB link level each adapter model is held to; without a rule "
+            "an adapter is in learned mode, keyed by physical identity. "
+            "2026-09-23: 0 of 18 learned-level resets ever raised a link; this "
+            "host holds the RTL8812AU to what rtw_switch_usb_mode promises "
+            "(1 -> 5000) and the RTL8188EUS to a fixed 480."
+        ),
     )
     upstream_host: str = Field(
         "api.openai.com", description="Host the DNS and TCP layers probe."

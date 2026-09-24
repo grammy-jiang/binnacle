@@ -15,14 +15,93 @@ import cyclopts
 from binnacle import units
 from binnacle.cli import BACKUP_DIR, SERVER_UNIT, UNIT_DIR, _systemctl
 from binnacle.config import get_settings
+from binnacle.ops.watchdog.config import Policy, UsbLinkPolicy
 from binnacle.tunnel_unit import TUNNEL_UNIT
-from binnacle.watchdog_config import get_watchdog_settings
+from binnacle.watchdog_config import WatchdogSettings, get_watchdog_settings
 from binnacle.watchdog_unit import OWNER, WATCHDOG_UNIT, watchdog_unit_spec
 
 app = cyclopts.App(
     name="binnacle-watchdog",
     help="Host-specific uplink watchdog companion for Binnacle.",
 )
+
+
+def _policy_from(cfg: WatchdogSettings, dry_run: bool) -> Policy:
+    """The loop's policy from the TOML settings; `run` and the dry-run
+    rehearsal share it."""
+    return Policy(
+        failures_before_action=cfg.failures_before_action,
+        successes_before_restore=cfg.successes_before_restore,
+        demoted_metric=cfg.demoted_metric,
+        reset_after_failover=cfg.reset_after_failover,
+        min_reset_interval_s=cfg.min_reset_interval_s,
+        usb_reset_enabled=cfg.usb_reset_enabled,
+        usb_reset_schedule=cfg.usb_reset_schedule,
+        usb_reset_ids=cfg.usb_reset_ids,
+        usb_reset_methods=cfg.usb_reset_methods,
+        standby_repair=cfg.standby_repair,
+        prefer_enabled=cfg.prefer_enabled,
+        prefer_check_interval_s=cfg.prefer_check_interval_s,
+        prefer_schedule=cfg.prefer_schedule,
+        prefer_hold_s=cfg.prefer_hold_s,
+        prefer_timeout_s=cfg.prefer_timeout_s,
+        down_repair=cfg.down_repair,
+        connecting_cycles_before_action=cfg.connecting_cycles_before_action,
+        usb_speed_repair=cfg.usb_speed_repair,
+        usb_speed_schedule=cfg.usb_speed_schedule,
+        usb_speed_give_up=cfg.usb_speed_give_up,
+        usb_speed_hold_s=cfg.usb_speed_hold_s,
+        usb_link_policies=_link_policies(cfg),
+        dns_fallback=cfg.dns_fallback,
+        cycle_timeout_s=cfg.cycle_timeout_s,
+        driver_reload_enabled=cfg.driver_reload_enabled,
+        service_repair=cfg.service_repair,
+        service_failures_before_action=cfg.service_failures_before_action,
+        service_restart_interval_s=cfg.service_restart_interval_s,
+        tunnel_restart_after_s=cfg.tunnel_restart_after_s,
+        tunnel_log=cfg.tunnel_log,
+        mcp_units=(SERVER_UNIT,),
+        tunnel_unit=TUNNEL_UNIT,
+        mcp_url=f"http://{get_settings().serve.host}:{get_settings().serve.port}/mcp",
+        reconcile_interval_s=cfg.reconcile_interval_s,
+        snapshot_interval_s=cfg.snapshot_interval_s,
+        pause_file=cfg.state_file.with_suffix(".pause"),
+        system_service_repair=cfg.system_service_repair,
+        inventory_params=cfg.inventory_params,
+        tunnel_stale_after_s=cfg.tunnel_stale_after_s,
+        tunnel_health_url_file=cfg.tunnel_health_url_file,
+        fast_interval_s=cfg.fast_interval_s,
+        fast_failures_before_action=cfg.fast_failures_before_action,
+        fast_timeout_s=cfg.fast_timeout_s,
+        restart_tunnel_on_failover=cfg.restart_tunnel_on_failover,
+        reset_floor_s=cfg.reset_floor_s,
+        flap_window_s=cfg.flap_window_s,
+        restore_hold_max_cycles=cfg.restore_hold_max_cycles,
+        restore_fast_quiet_s=cfg.restore_fast_quiet_s,
+        tunnel_affinity=cfg.tunnel_affinity,
+        tunnel_affinity_cycles=cfg.tunnel_affinity_cycles,
+        tunnel_quiet_s=cfg.tunnel_quiet_s,
+        failover_restart_floor_s=cfg.failover_restart_floor_s,
+        tunnel_ready_timeout_s=cfg.tunnel_ready_timeout_s,
+        flap_log_limit=cfg.flap_log_limit,
+        dry_run=dry_run,
+    )
+
+
+def _link_policies(cfg: WatchdogSettings) -> tuple[UsbLinkPolicy, ...]:
+    """The TOML `[[watchdog.usb_link_policies]]` rules as the policy's
+    frozen records (`targets` becomes a sorted tuple of pairs)."""
+    return tuple(
+        UsbLinkPolicy(
+            usb_id=rule.usb_id,
+            mode=rule.mode,
+            target_mbps=rule.target_mbps,
+            permanent_mac=rule.permanent_mac,
+            param=rule.param,
+            targets=tuple(sorted(rule.targets.items())),
+        )
+        for rule in cfg.usb_link_policies
+    )
 
 
 @app.command
@@ -159,62 +238,7 @@ def run(
         level=logging.INFO, format="%(levelname)s: %(message)s", stream=sys.stdout
     )
     cfg = get_watchdog_settings()
-    policy = wd.Policy(
-        failures_before_action=cfg.failures_before_action,
-        successes_before_restore=cfg.successes_before_restore,
-        demoted_metric=cfg.demoted_metric,
-        reset_after_failover=cfg.reset_after_failover,
-        min_reset_interval_s=cfg.min_reset_interval_s,
-        usb_reset_enabled=cfg.usb_reset_enabled,
-        usb_reset_schedule=cfg.usb_reset_schedule,
-        usb_reset_ids=cfg.usb_reset_ids,
-        usb_reset_methods=cfg.usb_reset_methods,
-        standby_repair=cfg.standby_repair,
-        prefer_enabled=cfg.prefer_enabled,
-        prefer_check_interval_s=cfg.prefer_check_interval_s,
-        prefer_schedule=cfg.prefer_schedule,
-        prefer_hold_s=cfg.prefer_hold_s,
-        prefer_timeout_s=cfg.prefer_timeout_s,
-        down_repair=cfg.down_repair,
-        connecting_cycles_before_action=cfg.connecting_cycles_before_action,
-        usb_speed_repair=cfg.usb_speed_repair,
-        usb_speed_schedule=cfg.usb_speed_schedule,
-        usb_speed_give_up=cfg.usb_speed_give_up,
-        usb_speed_hold_s=cfg.usb_speed_hold_s,
-        dns_fallback=cfg.dns_fallback,
-        cycle_timeout_s=cfg.cycle_timeout_s,
-        driver_reload_enabled=cfg.driver_reload_enabled,
-        service_repair=cfg.service_repair,
-        service_failures_before_action=cfg.service_failures_before_action,
-        service_restart_interval_s=cfg.service_restart_interval_s,
-        tunnel_restart_after_s=cfg.tunnel_restart_after_s,
-        tunnel_log=cfg.tunnel_log,
-        mcp_units=(SERVER_UNIT,),
-        tunnel_unit=TUNNEL_UNIT,
-        mcp_url=f"http://{get_settings().serve.host}:{get_settings().serve.port}/mcp",
-        reconcile_interval_s=cfg.reconcile_interval_s,
-        snapshot_interval_s=cfg.snapshot_interval_s,
-        pause_file=cfg.state_file.with_suffix(".pause"),
-        system_service_repair=cfg.system_service_repair,
-        inventory_params=cfg.inventory_params,
-        tunnel_stale_after_s=cfg.tunnel_stale_after_s,
-        tunnel_health_url_file=cfg.tunnel_health_url_file,
-        fast_interval_s=cfg.fast_interval_s,
-        fast_failures_before_action=cfg.fast_failures_before_action,
-        fast_timeout_s=cfg.fast_timeout_s,
-        restart_tunnel_on_failover=cfg.restart_tunnel_on_failover,
-        reset_floor_s=cfg.reset_floor_s,
-        flap_window_s=cfg.flap_window_s,
-        restore_hold_max_cycles=cfg.restore_hold_max_cycles,
-        restore_fast_quiet_s=cfg.restore_fast_quiet_s,
-        tunnel_affinity=cfg.tunnel_affinity,
-        tunnel_affinity_cycles=cfg.tunnel_affinity_cycles,
-        tunnel_quiet_s=cfg.tunnel_quiet_s,
-        failover_restart_floor_s=cfg.failover_restart_floor_s,
-        tunnel_ready_timeout_s=cfg.tunnel_ready_timeout_s,
-        flap_log_limit=cfg.flap_log_limit,
-        dry_run=dry_run,
-    )
+    policy = _policy_from(cfg, dry_run)
     wd.run_forever(
         state_file or cfg.state_file,
         interval_s=interval if interval is not None else cfg.interval_s,
@@ -419,8 +443,9 @@ def status(rescan: bool = False) -> None:
     print("devices (state, profile, band, width, rate, signal, USB link):")
     for dev in devs:
         info = devices.get(dev)
-        line = f"  {dev}: " + (
-            info.describe(state.usb_best_speed.get(dev))
+        ident = f" [{info.key}]" if info is not None and info.key else ""
+        line = f"  {dev}{ident}: " + (
+            info.describe(state.usb_target.get(dev, state.usb_best_speed.get(dev)))
             if info is not None
             else "not a NetworkManager Wi-Fi device"
         )
@@ -437,6 +462,13 @@ def status(rescan: bool = False) -> None:
             line += "; highest-priority profile"
         if state.usb_speed_attempts.get(dev):
             line += f"; USB link resets so far {state.usb_speed_attempts[dev]}"
+        if dev in state.usb_speed_exhausted:
+            line += "; USB link repair exhausted"
+        if state.usb_mode.get(dev):
+            line += (
+                f"; USB policy {state.usb_mode[dev]}, "
+                f"max seen {state.usb_max_seen.get(dev, '?')}"
+            )
         print(line)
     if state.issues:
         print("below the highest level:")

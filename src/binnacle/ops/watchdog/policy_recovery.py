@@ -1,4 +1,5 @@
-"""Recovery, link-level, and preference watchdog policy rungs."""
+"""Recovery and preference watchdog policy rungs (the USB link level
+lives in policy_usb.py)."""
 
 from binnacle.ops.watchdog.context import EvaluationContext
 from binnacle.ops.watchdog.model import Action
@@ -8,7 +9,6 @@ from binnacle.ops.watchdog.schedule import (
     _reload_due,
     _repairs_in_episode,
     _usb_reset_due,
-    _usb_speed_due,
     recent_wedges,
     restore_needed,
 )
@@ -166,112 +166,6 @@ def evaluate_demoted(ctx: EvaluationContext) -> None:
                         f"driver reload attempt {attempt}",
                     )
                 )
-
-
-def evaluate_usb_level(ctx: EvaluationContext) -> bool:
-    probes = ctx.probes
-    state = ctx.state
-    policy = ctx.policy
-    now = ctx.now
-    devs = ctx.devs
-    routed = ctx.routed
-    healthy_devs = ctx.healthy_devs
-    active = ctx.active
-    actions = ctx.actions
-    note = ctx.note
-    # -- voluntary repairs: one per cycle, never over a demotion in flight,
-    #    never on a device that is not healthy right now. Level first (a USB
-    #    reset also re-picks the profile), then the profile preference.
-    acted = False
-
-    # -- USB link level: back to the best speed this adapter has shown
-    for dev in sorted(devs):
-        info = devs[dev]
-        if info.usb_speed is None:
-            continue
-        best = state.usb_best_speed.get(dev, 0)
-        if info.usb_speed >= best:
-            if info.usb_speed > best:
-                state.usb_best_speed[dev] = info.usb_speed
-            since = state.usb_best_since.setdefault(dev, now)
-            if (
-                dev in state.usb_speed_attempts
-                and now - since >= policy.usb_speed_hold_s
-            ):
-                state.usb_speed_attempts.pop(dev, None)
-                state.last_usb_speed_reset.pop(dev, None)
-            continue
-        state.usb_best_since.pop(dev, None)
-        attempts = state.usb_speed_attempts.get(dev, 0)
-        if attempts >= policy.usb_speed_give_up:
-            # The port, cable or driver will not give more right now: accept
-            # this as the level until the device shows the higher one again.
-            state.usb_best_speed[dev] = info.usb_speed
-            state.usb_speed_attempts.pop(dev, None)
-            state.last_usb_speed_reset.pop(dev, None)
-            continue
-        if (
-            not policy.usb_speed_repair
-            or acted
-            or state.demoted
-            or state.repair_in_flight
-            or dev not in routed
-            or not _usb_speed_due(state, dev, policy, now)
-        ):
-            why = (
-                "repair disabled"
-                if not policy.usb_speed_repair
-                else "another action this cycle"
-                if acted
-                else "a demotion is in flight"
-                if state.demoted
-                else "a repair is in flight"
-                if state.repair_in_flight
-                else "no route"
-                if dev not in routed
-                else "waiting for the schedule"
-            )
-            note(dev, "usb_level", f"link {info.usb_speed} Mbit/s, best {best}; {why}")
-            continue
-        probe = probes.get(dev)
-        if probe is None or not probe.healthy:
-            note(
-                dev,
-                "usb_level",
-                f"link {info.usb_speed} Mbit/s, best {best}; device not healthy",
-            )
-            continue
-        if active is not None and dev == active.dev:
-            alternatives = healthy_devs - {dev}
-            if not alternatives:
-                note(
-                    dev,
-                    "usb_level",
-                    f"link {info.usb_speed} Mbit/s, best {best}; no healthy alternative",
-                )
-                continue  # never take the only working uplink down for this
-            actions.append(
-                Action(
-                    "demote",
-                    dev,
-                    f"USB link at {info.usb_speed} Mbit/s, best seen {best} "
-                    f"(reset attempt {attempts + 1}); {min(alternatives)} is healthy",
-                    metric=policy.demoted_metric,
-                    tag="usb_speed",
-                )
-            )
-        actions.append(
-            Action(
-                "usb_reset",
-                dev,
-                f"USB link at {info.usb_speed} Mbit/s, best seen {best}; "
-                f"reset attempt {attempts + 1}",
-                tag="usb_speed",
-            )
-        )
-        acted = True
-
-    return acted
 
 
 def evaluate_preference(ctx: EvaluationContext, acted: bool) -> None:

@@ -24,10 +24,17 @@ from binnacle.ops.watchdog.command import Run, _run
 from binnacle.ops.watchdog.config import (
     DEFAULT_POLICY,
     Policy,
+    UsbLinkPolicy,
     usb_backoff,
+    usb_param_names,
     usb_reset_method,
 )
 from binnacle.ops.watchdog.cycle import cycle
+from binnacle.ops.watchdog.device_identity import (
+    DURABLE_FIELDS,
+    absent_issues,
+    track_identities,
+)
 from binnacle.ops.watchdog.diagnostics import describe_issues
 from binnacle.ops.watchdog.fast import (
     _still_safe,
@@ -73,6 +80,7 @@ from binnacle.ops.watchdog.network import (
     device_profiles,
     nm_devices,
     observe_devices,
+    permanent_mac,
     preferences,
     profile_binding,
     profile_details,
@@ -86,6 +94,7 @@ from binnacle.ops.watchdog.network import (
     wifi_radio_enabled,
 )
 from binnacle.ops.watchdog.policy import evaluate
+from binnacle.ops.watchdog.policy_usb import UsbTarget, resolve_usb_target
 from binnacle.ops.watchdog.schedule import (
     recent_wedges,
     restore_needed,
@@ -119,6 +128,7 @@ from binnacle.ops.watchdog.tunnel import (
 __all__ = [
     "ACT_LOCK",
     "DEFAULT_POLICY",
+    "DURABLE_FIELDS",
     "NET_CLASS",
     "SYS_MODULE",
     "USBDEVFS_RESET",
@@ -133,6 +143,8 @@ __all__ = [
     "State",
     "SystemObservation",
     "TunnelSocket",
+    "UsbLinkPolicy",
+    "UsbTarget",
     "WifiProfile",
     "_log_decision",
     "_log_issues",
@@ -141,6 +153,7 @@ __all__ = [
     "_rfc3339_epoch",
     "_split_terse",
     "_still_safe",
+    "absent_issues",
     "after_failover",
     "apply_action",
     "band_label",
@@ -168,6 +181,7 @@ __all__ = [
     "observe_services",
     "observe_system",
     "pause_until",
+    "permanent_mac",
     "preferences",
     "profile_binding",
     "profile_details",
@@ -175,12 +189,14 @@ __all__ = [
     "profile_never_default",
     "recent_wedges",
     "reset_device",
+    "resolve_usb_target",
     "restart_tunnel",
     "restore_needed",
     "set_route_metric",
     "stranded_metrics",
     "supervise_fast_path",
     "system_unit_active",
+    "track_identities",
     "tunnel_affinity_check",
     "tunnel_main_pid",
     "tunnel_sockets",
@@ -190,6 +206,7 @@ __all__ = [
     "usb_backoff",
     "usb_devfs_path",
     "usb_node_of",
+    "usb_param_names",
     "usb_reset_device",
     "usb_reset_method",
     "usb_speed_of",

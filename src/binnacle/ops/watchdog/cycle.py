@@ -9,7 +9,8 @@ from pathlib import Path
 from binnacle import uplink
 from binnacle.ops.watchdog.actions import apply_action
 from binnacle.ops.watchdog.command import Run, _run
-from binnacle.ops.watchdog.config import Policy
+from binnacle.ops.watchdog.config import Policy, usb_param_names
+from binnacle.ops.watchdog.device_identity import absent_issues, track_identities
 from binnacle.ops.watchdog.fast import _still_safe
 from binnacle.ops.watchdog.hardware import (
     host_health,
@@ -116,7 +117,7 @@ def _observe(
         run=run,
         fallback_nameserver=policy.dns_fallback,
     )
-    devices = observe_devices(run, policy.usb_reset_ids)
+    devices = observe_devices(run, policy.usb_reset_ids, usb_param_names(policy))
     radio = wifi_radio_enabled(run)
     state.extra_issues = {}
 
@@ -137,18 +138,8 @@ def _observe(
         else 0
     )
 
-    for dev, info in devices.items():
-        state.known_devices[dev] = info.usb_id or "builtin"
-    for dev, kind in state.known_devices.items():
-        if dev not in devices:
-            state.extra_issues[dev] = (
-                f"absent: not seen by NetworkManager ({kind}); "
-                + (
-                    "unplugged, or the driver is not bound"
-                    if kind != "builtin"
-                    else "the driver is gone"
-                )
-            )
+    track_identities(state, devices, cycle_n)
+    state.extra_issues.update(absent_issues(state, devices))
     state.extra_issues.update(usb_adapters_without_netdev(policy.usb_reset_ids))
     if now_cycle - state.last_reconcile >= policy.reconcile_interval_s:
         state.last_reconcile = now_cycle
@@ -409,6 +400,18 @@ def cycle(
 
     for dev, rung, text in state.decisions:
         _log_decision(state, policy, cycle_n, now_cycle, dev, rung, text)
+    for dev, old, new, cleared in state.policy_events:
+        log.warning(
+            "event=usb_speed_policy_changed cycle=%s dev=%s id=%s old=%s new=%s "
+            "cleared=%s",
+            cycle_n,
+            dev,
+            state.identities.get(dev, "-"),
+            old,
+            new,
+            cleared,
+        )
+    state.policy_events = []
     services_note, tunnel_note = maintain_services(
         state,
         policy,

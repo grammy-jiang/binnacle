@@ -8,13 +8,13 @@ from binnacle.ops.watchdog.model import Action, DeviceInfo, Preference, State
 from binnacle.ops.watchdog.policy_recovery import (
     evaluate_demoted,
     evaluate_preference,
-    evaluate_usb_level,
 )
 from binnacle.ops.watchdog.policy_routes import (
     evaluate_active,
     evaluate_standby,
     evaluate_unrouted,
 )
+from binnacle.ops.watchdog.policy_usb import evaluate_usb_level
 from binnacle.uplink import ProbeResult, Route
 
 
@@ -33,6 +33,7 @@ def evaluate(
     prefs = preferences or {}
     devs = devices or {}
     state.decisions = []
+    state.policy_events = []
     if not routes and not devs:
         return []
 

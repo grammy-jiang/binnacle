@@ -44,6 +44,7 @@ __all__ = [
     "healthy",
     "json",
     "kinds",
+    "link_fake",
     "lossy",
     "mock",
     "nm_fake",
@@ -335,6 +336,31 @@ def socket_fake(inner, pid: str = "1234", ss: str = "", addr: str = ""):
             return subprocess.CompletedProcess(list(args), 0, stdout=ss, stderr="")
         if args[:4] == ("ip", "-o", "-4", "addr"):
             return subprocess.CompletedProcess(list(args), 0, stdout=addr, stderr="")
+        return inner(*args, **kw)
+
+    return run
+
+
+def link_fake(inner, macs: dict[str, str], permaddr: dict[str, str] | None = None):
+    """Wrap a run fake with `ip -o link show dev X` answers: the device's
+    address and, for devices in `permaddr`, a differing permanent one (what
+    NetworkManager's scan randomization produces on a disconnected radio)."""
+    permaddr = permaddr or {}
+
+    def run(*args: str, **kw) -> subprocess.CompletedProcess:
+        if args[:5] == ("ip", "-o", "link", "show", "dev"):
+            dev = args[5]
+            if dev not in macs:
+                return subprocess.CompletedProcess(
+                    list(args), 1, stdout="", stderr=f'Device "{dev}" does not exist.'
+                )
+            extra = f" permaddr {permaddr[dev]}" if dev in permaddr else ""
+            out = (
+                f"3: {dev}: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq state UP "
+                f"mode DORMANT group default qlen 1000\\    link/ether {macs[dev]} "
+                f"brd ff:ff:ff:ff:ff:ff{extra}\n"
+            )
+            return subprocess.CompletedProcess(list(args), 0, stdout=out, stderr="")
         return inner(*args, **kw)
 
     return run

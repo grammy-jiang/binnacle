@@ -171,12 +171,17 @@ schedule, and its counters persist across a watchdog restart:
    re-activation did not bring it back (2026-09-12 21:51: the 5 GHz profile
    did not come up after the reset). Nothing in range: wait. It carries
    nothing, so this costs nothing.
-4. **USB link below the best speed this adapter has shown** (a USB 3 part
-   enumerated at 480 Mbit/s): re-enumerate it — through a demotion when it
-   is the active route — 10 min ×3, 1 h ×3, then every 6 h; after six
-   failed attempts the lower speed is accepted as the level until the
-   adapter shows the higher one again. Level facts are learned, not
-   configured: nothing in the repo says "5000".
+4. **USB link below the level its policy promises** (`usb_link_policies`
+   in the host config since 2026-09-23: the RTL8812AU follows
+   `rtw_switch_usb_mode`, 1 → 5000, anything else → observe; the
+   RTL8188EUS is fixed 480; an adapter without a rule keeps the old
+   learned rule, by physical identity): re-enumerate it — through a
+   demotion when it is the active route — 10 min ×3, 1 h ×3, then every
+   6 h; a learned level is accepted as lower after six attempts, a fixed
+   or param target never lowers itself. Nothing in the repo says "5000":
+   the numbers are in the host config, the mechanism in the repo. The
+   old learned-by-name rule made 18 resets between 09-12 and 09-23 and
+   raised no link (seventh look).
 5. **Lower-priority profile than one in range**: the preference move. NM
    activates the first profile whose network is in its first scan and
    never revisits, so after the 09-12 21:51 reset and again after the
@@ -664,6 +669,40 @@ the radios, restated 2026-09-20: always the fast adapter first, the next
 one when it is down, the fast one again once it is back, and connectivity
 above everything.
 
+### Seventh look (2026-09-23): identity and the USB target
+
+The user's plan `docs/watchdog-connectivity-and-best-path-plan-2026-09-23.md`
+was checked against the journal before anything was built (its §0 holds
+the evidence and the corrections). Two bugs were real: the state file was
+keyed by interface name, and the USB level was "the best speed ever
+seen". On 2026-09-15 12:24 the two USB adapters swapped wlan1/wlan2 for
+three boots (and once mid-boot on 09-16), so the USB 2-only RTL8188EUS
+inherited the RTL8812AU's learned 5000 Mbit/s: 12 USB resets for a speed
+it cannot have. On 09-23 10:15 the RTL8812AU rebooted in mode 0 at 480
+against a learned 5000: 6 demotions of a healthy primary (~100 s each),
+6 resets, 4 tunnel restarts. Since 09-12: 18 USB-speed resets, 0 raised a
+link. Dropped from the plan: ranking paths by a capacity estimate and
+making route metrics an output of it — the metrics are already on
+MAC-bound profiles, `iw` idles wlan0 at 24 Mbit/s on VHT80, and the
+watchdog measures no throughput.
+
+Built and deployed the same night: `ops/watchdog/device_identity.py`
+(each cycle reads the permanent MAC with `ip -o link`, keys the device
+`usb:<vid:pid>@<mac>` / `builtin@<mac>`, and re-keys the durable state
+when a name's identity changes — parked by identity while the adapter is
+absent, adopted from a legacy file when `known_devices` matches,
+discarded on a mismatch; journal events `identity_seen` / `_parked` /
+`_renamed` / `_returned` / `_mismatch`) and `ops/watchdog/policy_usb.py`
+(the USB target from `[[watchdog.usb_link_policies]]`: `param`, `fixed`,
+`observe`, `learned`; a fingerprint over the rule and the module
+parameters clears the repair counters on a change, logged as
+`usb_speed_policy_changed`; a fixed or param target exhausts instead of
+lowering itself). Tests: `tests/system/test_watchdog_identity.py`,
+`test_watchdog_usb_policy.py`. Not yet done from the corrected plan:
+the bounded normalize-while-demoted (one 5 GHz attempt before the
+restore; the 20:12 wedge cost four preference demotions), episode ids,
+serialized repairs with re-observation, and the netdev-less USB reset.
+
 ### The journal as the record
 
 The watchdog's journal is written so a window of it, however short, can
@@ -676,7 +715,11 @@ correlates them, and `n` persists across restarts):
 - `inventory` per device (at start and every 10 min, logged when it
   changes): bus and USB id, node, link speed, driver, module and the
   parameters named in `inventory_params` (here `rtw_switch_usb_mode`),
-  every profile bound to it with priority, metric and autoconnect.
+  every profile bound to it with priority, metric and autoconnect, and
+  since 2026-09-23 `id=usb:<vid:pid>@<permanent mac>`; the identity
+  events (`identity_seen` / `identity_parked` / `identity_renamed` /
+  `identity_returned` / `identity_mismatch`) and
+  `usb_speed_policy_changed` when a device's USB target changes.
   `inventory_host`: throttle flags, temperature, resolver, radio switch.
 - `uplink_probe` per route per cycle with the layer timings
   (`gateway=ok(3ms) dns=ok(2ms) tcp=ok(20ms)`) and `uplink_probe_error`
@@ -798,11 +841,17 @@ threshold (three 30 s cycles) plus the cycle's own duration.
 
 ### USB 3 mode, measured throughput, and the stability job
 
-The adapter runs in USB 3 mode on purpose: `/etc/modprobe.d/8812au.conf` sets
-`rtw_switch_usb_mode=1`, which makes the driver switch the chip to SuperSpeed
-at probe (one forced re-enumeration; mode 0 leaves it in its power-on USB 2
-link). The built-in radio is inside a metal case and links at ~24 Mbit/s, so
-wlan1 is the only real uplink and wlan0 is a lifeline, not a substitute.
+The adapter ran in USB 3 mode on purpose from 09-12 to 09-18:
+`/etc/modprobe.d/8812au.conf` set `rtw_switch_usb_mode=1`, which makes the
+driver switch the chip to SuperSpeed at probe (one forced re-enumeration;
+mode 0 leaves it in its power-on USB 2 link). **Since 2026-09-18 the user
+runs mode 0 as an experiment** (18 disconnects in 11 h at mode 1 while
+wlan0 on the same BSSID had none; the hypothesis: SuperSpeed is unreliable
+on this machine; the chip stayed at 5000 until the 2026-09-23 reboot, then
+480; the file's own comments carry the revert and the judging rule). The
+watchdog reads the mode and expects 5000 only in mode 1 (seventh look). The
+built-in radio is inside a metal case and links at ~24 Mbit/s, so wlan1 is
+the only real uplink and wlan0 is a lifeline, not a substitute.
 
 Measured 2026-09-12 (Cloudflare WAN download over wlan1): single stream 152 /
 198 / 243 Mbit/s in USB 2 mode and 190 / 232 / 201 Mbit/s in USB 3 mode — no
