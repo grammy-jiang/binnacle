@@ -17,6 +17,53 @@ Deployment baseline:
 - a one-shot review is scheduled for **2026-10-01 23:32 AEST**, seven days after deployment;
 - Phase 5 must not change policy before that review unless a correctness defect appears.
 
+## 0. Phase-5 readiness hardening — 2026-09-25
+
+A live-readiness review after Phases 1–4 exposed four evidence/reporting gaps that are fixed
+before Phase 5 policy work begins:
+
+1. detailed per-rule metrics were available only through ad-hoc raw-journal joins;
+2. workflow stats did not segment different policy/behavior versions inside one window;
+3. full command evidence disappeared rapidly because `tool_call.args` is clipped and the
+   per-job spool retains only the newest jobs;
+4. `policy_hash` fingerprinted regex configuration but not matching-semantics version or
+   automatic warm-up.
+
+The readiness hardening adds no policy change. Matching regexes, prefix semantics, warm-up,
+explicit-background behavior, wait limits, durable ownership, and MCP schemas remain
+unchanged.
+
+New evidence identity:
+
+```text
+policy_hash    = ordered client-prefix/regex configuration
+behavior_hash  = policy configuration + semantics_version + actual auto_warmup_s
+rule_hash      = one (client_prefix, regex) rule
+```
+
+`run_command_auto_background` also records `match_start` / `match_end` scalar offsets.
+For qualitative false-positive review, deployments may opt into a private full-command
+evidence store. Repository default is disabled; the Phase-5 development host enables a
+bounded retention window locally. The evidence store is outside the journal and MCP
+response, mode 0700/0600, and records only automatic-policy matches.
+
+`binnacle stats` now renders behavior-level and behavior-scoped rule-level runtime,
+counterfactual, follow-up, overlap, and collection-lag metrics, plus marker/dispatch linkage
+coverage. Startup `tool_config` records behavior identity even when a behavior receives zero
+matches.
+
+Validation before deployment:
+
+- focused readiness suite: **72 passed**;
+- supported two-lane full suite: **1200 passed, 3 skipped** plus **2** ordinary-process
+  tests, wrapper wall **34.00 s** at seed 12345;
+- repository-wide `pre-commit run --all-files`: **PASS**;
+- frozen large-window `binnacle stats` median after detailed grouping: **10.508 s**, about
+  0.08 s above the prior 10.432 s Phase-1/2 measurement.
+
+After this hardening is deployed, the clean Phase-5 observation window should start at the
+hardening service restart, not at the older 2026-09-24 23:32 deployment.
+
 Related documents:
 
 - `docs/run-command-observability-investigation-2026-09-24.md`;
@@ -74,23 +121,25 @@ user configuration; their raw text is intentionally not copied into this documen
 
 ### 2.2 New Phase-3 evidence
 
-Every automatic match now records:
+Every automatic match records:
 
 ```text
 policy_hash=<12hex>
+behavior_hash=<12hex>
+semantics_version=<n>
+auto_warmup_s=<seconds>
 rule_hash=<12hex>
+match_start=<character offset>
+match_end=<character offset>
 ```
 
-The startup `tool_config tool=run_command` record additionally records:
+The startup `tool_config tool=run_command` additionally records the automatic client/rule
+counts, policy hash, behavior hash, semantics version, effective automatic warm-up, and
+private evidence-retention configuration.
 
-```text
-auto_background_clients=<n>
-auto_background_rules=<n>
-auto_background_policy_hash=<12hex>
-```
-
-This lets Phase 5 segment results by exact effective policy and by rule without logging the
-private pattern text.
+`policy_hash` identifies the ordered regex configuration. `behavior_hash` is the primary
+before/after segmentation key because it also covers semantics version and automatic
+warm-up. `rule_hash` remains the per-rule identity. Raw regex text is not logged.
 
 ### 2.3 Historical pre-telemetry evidence
 
@@ -160,21 +209,24 @@ Never aggregate across different effective policies without identifying the boun
 Primary segmentation key:
 
 ```text
+auto_background_behavior_hash
+```
+
+Secondary configuration fingerprint:
+
+```text
 auto_background_policy_hash
 ```
 
-Per-rule key:
+Per-rule key is `rule_hash`, scoped by behavior hash. The same rule hash observed under two
+behavior hashes is reported as two distinct rule groups.
 
-```text
-rule_hash
-```
-
-If the policy hash changes inside the observation window:
+If the behavior hash changes inside the observation window:
 
 1. split the report by policy hash;
-2. record the startup timestamp for each hash;
-3. do not pool rule behavior across the change unless the exact rule hash is identical and
-   the surrounding policy change cannot affect its client-prefix selection;
+2. record the startup timestamp and policy hash for each behavior hash;
+3. never pool outcome metrics across different behavior hashes, even when the rule hash is
+   identical;
 4. prefer separate before/after rows.
 
 ### 4.3 Required raw-event coverage
@@ -190,6 +242,23 @@ For a post-deployment Phase-5 dataset to be actionable, it should contain:
 
 If a field is absent because of a mixed-version window, report coverage and exclude that
 metric from decision-making rather than synthesizing it.
+
+### 4.4 Private command evidence
+
+Quantitative metrics come from journal telemetry. Qualitative false-positive classification
+uses the private evidence store when enabled:
+
+```text
+~/.local/state/binnacle/run-command-evidence/YYYY-MM-DD.jsonl
+```
+
+Each row contains the full auto-matched command, call/command hash, policy/behavior/rule
+identity, semantics version, automatic warm-up, and exact match span. It does not enter the
+normal journal or MCP response. Evidence retention is configured by
+`run_command.auto_background_evidence_retention_days` and is disabled by repository default.
+
+If private evidence coverage is incomplete, do not infer command-shape classifications from
+a clipped `tool_call.args` preview. Mark those samples unavailable.
 
 ## 5. Evidence sufficiency model
 
@@ -240,7 +309,7 @@ decision.
 
 ### 6.1 Policy-level metrics
 
-For each `policy_hash`:
+For each `behavior_hash` (including its `policy_hash`, semantics version and warm-up metadata):
 
 - observation start/end;
 - startup count;
@@ -607,14 +676,16 @@ Do not change policy yet.
 
 ### Step 5.3 — Inspect representative local command shapes
 
-For actionable/high-interest rule hashes:
+For actionable/high-interest behavior-scoped rule groups:
 
-1. locate a bounded representative local sample;
-2. classify using Section 7;
-3. record aggregate category counts only;
-4. identify candidate false-positive rules.
+1. load bounded private evidence rows for that behavior/rule;
+2. use `match_start` / `match_end` to locate the trigger inside the full command;
+3. classify using Section 7;
+4. record aggregate category counts only;
+5. identify candidate false-positive rules.
 
-Do not commit raw commands.
+Do not commit raw commands or local regex text. If private evidence is unavailable for a
+sample, mark it unavailable rather than reconstructing it from clipped journal arguments.
 
 ### Step 5.4 — Review foreground wait-expired families
 
@@ -645,6 +716,9 @@ tests/unit/core/test_run_command_telemetry.py
 docs/tools/run_command.md
 docs/logging.md
 ```
+
+Implementation must increment `AUTO_BACKGROUND_SEMANTICS_VERSION` because longest-prefix
+selection changes generic matching semantics even when the regex mapping is unchanged.
 
 Tests must cover:
 
@@ -872,7 +946,7 @@ forced policy change.
 
 The review scheduled for 2026-10-01 23:32 AEST should answer, in order:
 
-1. Did the expected policy hash remain active?
+1. Did the expected behavior hash remain active, and which policy hash did it map to?
 2. How many matches did each rule hash receive?
 3. Which rules have at least 20 matches?
 4. Which rules show high warm-up-finish / first-status-already-exited behavior?

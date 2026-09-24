@@ -5,7 +5,7 @@ from typing import Any
 
 from binnacle.logstats_jobs import render_job_telemetry
 from binnacle.logstats_models import AdaptiveDiscoveryStats, IndexedContextStats, Stats
-from binnacle.logstats_run_command import render_run_command_workflow
+from binnacle.logstats_run_command_render import render_run_command_workflow
 from binnacle.logstats_search_exact import render_exact_search
 
 

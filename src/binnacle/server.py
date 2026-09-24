@@ -19,7 +19,11 @@ from binnacle.logging_middleware import (
     RequestLoggingMiddleware,
     ToolLoggingMiddleware,
 )
-from binnacle.run_command_telemetry import auto_background_policy_hash
+from binnacle.run_command_telemetry import (
+    AUTO_BACKGROUND_SEMANTICS_VERSION,
+    auto_background_behavior_hash,
+    auto_background_policy_hash,
+)
 from binnacle.tools import register_all
 from binnacle.visibility import ClientToolVisibility
 
@@ -117,6 +121,16 @@ def log_effective_config() -> None:
         auto_background_policy_hash=auto_background_policy_hash(
             s.run_command.auto_background_patterns
         ),
+        auto_background_behavior_hash=auto_background_behavior_hash(
+            s.run_command.auto_background_patterns,
+            s.jobs.warmup_s,
+        ),
+        auto_background_semantics_version=AUTO_BACKGROUND_SEMANTICS_VERSION,
+        auto_background_warmup_s=s.jobs.warmup_s,
+        auto_background_evidence_retention_days=(
+            s.run_command.auto_background_evidence_retention_days
+        ),
+        auto_background_evidence_dir=s.run_command.auto_background_evidence_dir,
     )
     _log_tool_config(
         "jobs",

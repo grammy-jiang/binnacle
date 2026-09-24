@@ -110,11 +110,20 @@ telemetry only; the MCP result schema is unchanged. Start/exit lifecycle records
 same `call`, `job_id`, owner instance and command hash so the history remains directly
 joinable across MCP restarts.
 
-When automatic policy selects the background warm-up, its existing sparse marker also
-records a stable `policy_hash` and `rule_hash`; it never copies the deployment-local regex
-text. Startup `tool_config` records the total automatic-rule count and effective policy
-hash. This makes historical per-rule behavior measurable without putting local preferences
-into the repository or the MCP response.
+When automatic policy selects the background warm-up, its sparse marker records
+`policy_hash`, `behavior_hash`, `semantics_version`, the actual automatic warm-up,
+`rule_hash`, and the matching character span. It never copies deployment-local regex text.
+`policy_hash` identifies the ordered regex configuration; `behavior_hash` additionally
+covers matching-semantics version and warm-up so behavior changes form a new analysis
+segment. Startup `tool_config` records the same effective identity. This makes historical
+per-rule behavior measurable without putting local preferences into the repository or MCP
+response.
+
+A deployment that needs later false-positive review may opt into private full-command
+evidence with `run_command.auto_background_evidence_retention_days`; repository default is
+`0` (disabled). Evidence is recorded only for automatic matches in a private local JSONL
+store, never in the MCP response or normal journal. Write failure is best-effort and cannot
+fail the command.
 
 If returned output actually loses content, `run_command` emits one sparse
 `run_command_output_shaping` record that distinguishes `tail_lines`, the configured

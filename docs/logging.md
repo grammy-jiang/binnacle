@@ -38,10 +38,11 @@ second.
 | `search_exact` | exact `search_text`; INFO, one terminal summary after exact dispatch | `call outcome error_code strategy budget_outcome scope rg_calls auto_context context_requested effective_context` + phase timings + rg/collect/adaptive work counters + final result size/truncation | 09-22 |
 | `job_listing` | `tools.job_status`; INFO | `call recorded_jobs returned_jobs running_jobs history_limit command_preview_chars` | 09-19 |
 | `job_status_timing` | `tools.job_status`; INFO | `call job_id wait_requested_s dispatch_ms state_ms read_log_ms process_scan_ms impl_ms state processes log_bytes` | 09-19 |
-| `run_command_auto_background` | `tools.run_command`; INFO, one per automatic-policy match | `call client command_hash policy_hash rule_hash`; hashes identify the effective ordered policy and matched rule without logging regex text | 09-22; policy/rule hashes from 09-24 |
+| `run_command_auto_background` | `tools.run_command`; INFO, one per automatic-policy match | `call client command_hash policy_hash behavior_hash semantics_version auto_warmup_s rule_hash match_start match_end`; identifies config, behavior semantics, matched rule and match span without logging regex text | 09-22; policy/rule hashes from 09-24; behavior/span fields from 09-25 |
 | `run_command_dispatch` | `tools.run_command`; INFO, one per successful call | `call client job_id owner owner_instance requested_wait_s bounded_wait_s effective_wait_s background_arg auto_background handoff_reason owner_roundtrip_ms command_hash command_chars state` | 09-22 |
 | `run_command_dispatch_error` | `tools.run_command`; WARNING when owner dispatch fails | same policy/owner/timing fields plus `error_class` | 09-22 |
 | `run_command_output_shaping` | `tools.run_command`; INFO, only when returned output loses content | `call job_id state reason tail_lines dropped_lines char_clipped selected_chars returned_chars omitted_chars log_bytes`; `reason` is `tail_lines`, `char_limit`, or both | 09-24 |
+| `run_command_evidence_error` | private auto-match evidence writer; WARNING, only when local evidence persistence fails | `call behavior_hash rule_hash error_class`; never logs command text | 09-25 |
 | `job_owner_timing` | stable job manager; INFO | `op call job_id owner_instance`, start: `wait_s launch_ms impl_ms state`; stop: `impl_ms state` | 09-22 |
 | `job_stop_requested` | ownership layer; INFO | `job_id call origin_call owner_instance command_hash` | 09-22 |
 | `job_stop_escalate` | process owner; WARNING | `job_id call signal=SIGKILL grace_s` | 09-22 |
@@ -98,7 +99,7 @@ scalar facts only), the values of `X-Openai-Session` (hashed) and
 | Error classification | `request_error` text, ERROR level, class unknown | `is_error=True error_class=ToolError [error_code=<stable reason>] error=message` at WARNING. `CodedToolError` remains a `ToolError` subclass and logs `error_class=ToolError`, preserving historical class counts while adding stable low-cardinality reasons; cancellations/validation/unknown-tool errors retain their native class |
 | Truncation and clipping | Nothing | `truncated` (all four file/search tools and run_command's head/tail clip or `tail_lines` drop), `lines_clipped`, `start_line/end_line/total_lines` (read_file window), `count` vs `entries` (search cap), `output_bytes` vs the clip; `tail_lines`, `max_results` visible in `args` |
 | Background jobs and outcomes | `job_start`/`job_exit` by `job_id`, exit code only | `run_command_dispatch` records owner/wait/handoff decision; `job_start` and `job_exit` retain call/hash/owner correlation; `job_exit` records runtime, bytes and reason |
-| Automatic background policy | None | `run_command_auto_background` records the trigger; `run_command_dispatch` records requested/bounded/effective wait and the final `handoff_reason`, so later analysis does not need to reconstruct old policy configuration |
+| Automatic background policy | None | `run_command_auto_background` records config/behavior/rule identity plus match span; `run_command_dispatch` records requested/bounded/effective wait and final `handoff_reason`; optional private evidence preserves the full matched command outside the journal |
 | Client identity | `client=` on rich lines | `client=` on every plain line too; `oai_session=` (12-hex SHA-256 prefix of `X-Openai-Session`) groups calls of one ChatGPT session |
 | Restarts / effective limits | uvicorn's `Application startup complete` | `config pid=... version=...` plus startup-only `tool_config` records for read/list/search/run/jobs/edit behavior-changing limits; reviews can detect config variants in a window instead of assuming today's defaults |
 
@@ -211,10 +212,15 @@ Automatic-background matches now extend the existing sparse marker with `policy_
 - `rule_hash` fingerprints the matched `(client prefix, pattern)` pair.
 
 Raw deployment-local regex text is not emitted. The `tool_config tool=run_command` startup
-record also carries `auto_background_rules` and `auto_background_policy_hash`, so a later
-review can segment measurements by the actual effective policy rather than by client count
-alone. The policy hash intentionally includes order because prefix order is part of the
-current matching semantics.
+record carries `auto_background_rules`, `auto_background_policy_hash`,
+`auto_background_behavior_hash`, `auto_background_semantics_version`,
+`auto_background_warmup_s`, and the private evidence-retention setting.
+
+`policy_hash` fingerprints the ordered client-prefix/regex mapping. `behavior_hash`
+additionally fingerprints the behavior-semantics version and actual automatic warm-up,
+so a semantics or threshold change cannot be accidentally pooled with an unchanged regex
+configuration. The policy hash intentionally includes order because prefix order is part
+of the current matching semantics.
 
 `run_command_output_shaping` is a sparse event: it is absent when the returned command
 output is unchanged and emitted once when line selection, the configured character limit,
@@ -222,6 +228,16 @@ or both remove content. The event records scalar counts only; command output is 
 duplicated into telemetry. `binnacle stats` classifies the new reasons and reports older
 `truncated=true` results without a shaping event as `legacy_unclassified` rather than
 guessing from the presence of a `tail_lines` argument.
+
+For Phase-5 qualitative review, deployments may opt into private full-command evidence with
+`run_command.auto_background_evidence_retention_days`. The repository default is `0`
+(disabled). Enabled evidence is written only for automatic-policy matches to
+`~/.local/state/binnacle/run-command-evidence/YYYY-MM-DD.jsonl` by default. The directory is
+mode `0700`, files are mode `0600`, and each row contains the full command plus call/hash,
+behavior/rule identity, and match span. Evidence write failures are best-effort and cannot
+fail `run_command`; they emit only `run_command_evidence_error` without command text.
+Retention pruning scans these low-count daily evidence files only when an auto match occurs;
+it does not enlarge or scan the per-job spool.
 
 The local pre-dispatch check for a resolved workdir that exists but is not a directory now
 uses the stable `workdir_not_directory` telemetry code. It remains a `ToolError` to clients

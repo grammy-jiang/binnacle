@@ -173,6 +173,8 @@ class EditFileSettings(BaseModel):
 class AutoBackgroundMatch:
     client_prefix: str
     pattern: str
+    match_start: int
+    match_end: int
 
 
 class RunCommandSettings(BaseModel):
@@ -188,6 +190,21 @@ class RunCommandSettings(BaseModel):
             "Client-name PREFIX -> regexes that make matching commands use the "
             "background warm-up when the caller omits background."
         ),
+    )
+    auto_background_evidence_retention_days: int = Field(
+        0,
+        ge=0,
+        le=365,
+        description=(
+            "Days to retain private full-command evidence for automatic-background "
+            "matches; 0 disables evidence capture."
+        ),
+    )
+    auto_background_evidence_dir: Path = Field(
+        default_factory=lambda: (
+            Path.home() / ".local" / "state" / "binnacle" / "run-command-evidence"
+        ),
+        description="Private local evidence directory for automatic-background matches.",
     )
 
     @model_validator(mode="after")
@@ -214,8 +231,10 @@ class RunCommandSettings(BaseModel):
         for prefix, patterns in self.auto_background_patterns.items():
             if client.startswith(prefix):
                 for pattern in patterns:
-                    if re.search(pattern, command):
-                        return AutoBackgroundMatch(prefix, pattern)
+                    matched = re.search(pattern, command)
+                    if matched is not None:
+                        start, end = matched.span()
+                        return AutoBackgroundMatch(prefix, pattern, start, end)
                 return None
         return None
 

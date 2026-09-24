@@ -11,6 +11,8 @@ from typing import Any
 
 log = logging.getLogger("binnacle.run_command")
 
+AUTO_BACKGROUND_SEMANTICS_VERSION = 1
+
 
 def _short_hash(value: object) -> str:
     payload = json.dumps(value, separators=(",", ":"), ensure_ascii=False)
@@ -29,6 +31,23 @@ def auto_background_policy_hash(
     return _short_hash([[prefix, list(rules)] for prefix, rules in patterns.items()])
 
 
+def auto_background_behavior_hash(
+    patterns: Mapping[str, Sequence[str]],
+    auto_warmup_s: float,
+    semantics_version: int = AUTO_BACKGROUND_SEMANTICS_VERSION,
+) -> str:
+    """Fingerprint config plus behavior semantics that affect auto handoff."""
+
+    return _short_hash(
+        [
+            "run_command_auto_background",
+            semantics_version,
+            auto_warmup_s,
+            [[prefix, list(rules)] for prefix, rules in patterns.items()],
+        ]
+    )
+
+
 @dataclass(frozen=True)
 class DispatchPlan:
     requested_wait_s: int
@@ -42,7 +61,12 @@ class DispatchPlan:
     command_hash: str
     command_chars: int
     auto_policy_hash: str
+    auto_behavior_hash: str
+    auto_semantics_version: int
+    auto_warmup_s: float
     auto_rule_hash: str | None
+    auto_match_start: int | None
+    auto_match_end: int | None
 
     @classmethod
     def build(
@@ -81,23 +105,36 @@ class DispatchPlan:
             auto_policy_hash=auto_background_policy_hash(
                 settings.auto_background_patterns
             ),
+            auto_behavior_hash=auto_background_behavior_hash(
+                settings.auto_background_patterns, warmup_s
+            ),
+            auto_semantics_version=AUTO_BACKGROUND_SEMANTICS_VERSION,
+            auto_warmup_s=warmup_s,
             auto_rule_hash=(
                 auto_background_rule_hash(match.client_prefix, match.pattern)
                 if match is not None
                 else None
             ),
+            auto_match_start=match.match_start if match is not None else None,
+            auto_match_end=match.match_end if match is not None else None,
         )
 
     def log_auto_background(self, call_id: str) -> None:
         if self.auto_background:
             log.info(
                 "event=run_command_auto_background call=%s client=%s command_hash=%s "
-                "policy_hash=%s rule_hash=%s",
+                "policy_hash=%s behavior_hash=%s semantics_version=%s "
+                "auto_warmup_s=%s rule_hash=%s match_start=%s match_end=%s",
                 call_id,
                 self.client or "-",
                 self.command_hash,
                 self.auto_policy_hash,
+                self.auto_behavior_hash,
+                self.auto_semantics_version,
+                self.auto_warmup_s,
                 self.auto_rule_hash or "-",
+                self.auto_match_start if self.auto_match_start is not None else "-",
+                self.auto_match_end if self.auto_match_end is not None else "-",
             )
 
     def handoff_reason(self, state: str) -> str:

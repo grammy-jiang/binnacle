@@ -101,6 +101,39 @@ class JobTelemetryStats:
 
 
 @dataclass
+class AutoBackgroundGroupStats:
+    """One behavior/rule slice for Phase-5 policy analysis."""
+
+    policy_hash: str | None = None
+    behavior_hash: str | None = None
+    rule_hash: str | None = None
+    semantics_version: str | None = None
+    auto_warmup_s: float | None = None
+    startups: int = 0
+    matches: int = 0
+    dispatch_errors: int = 0
+    dispatch_missing: int = 0
+    warmup_finished: int = 0
+    handed_off: int = 0
+    terminal_observed: int = 0
+    runtime_s: list[float] = field(default_factory=list)
+    handoff_terminal_observed: int = 0
+    handoff_analysis_eligible: int = 0
+    handoff_would_finish_within_original_wait: int = 0
+    handoff_would_timeout_anyway: int = 0
+    initial_wait_released_s: float = 0.0
+    jobs_with_status: int = 0
+    status_calls: int = 0
+    first_status_states: Counter = field(default_factory=Counter)
+    first_status_same_turn: int = 0
+    first_status_different_turn: int = 0
+    first_status_unknown_turn: int = 0
+    jobs_with_intervening_non_status_calls: int = 0
+    intervening_tools: Counter = field(default_factory=Counter)
+    terminal_collection_lag_s: list[float] = field(default_factory=list)
+
+
+@dataclass
 class RunCommandWorkflowStats:
     """Cross-event run_command policy/lifecycle analysis."""
 
@@ -123,6 +156,10 @@ class RunCommandWorkflowStats:
     dispatch_without_call: int = 0
     call_without_result: int = 0
 
+    auto_dispatches: int = 0
+    auto_marker_dispatch_linked: int = 0
+    auto_dispatches_without_marker: int = 0
+    auto_markers_without_dispatch_or_error: int = 0
     auto_matches: int = 0
     auto_warmup_finished: int = 0
     auto_handed_off: int = 0
@@ -149,6 +186,10 @@ class RunCommandWorkflowStats:
     output_shaping_omitted_chars: list[int] = field(default_factory=list)
     auto_rule_matches: Counter = field(default_factory=Counter)
     auto_rule_handoffs: Counter = field(default_factory=Counter)
+    auto_behavior_groups: dict[str, AutoBackgroundGroupStats] = field(
+        default_factory=dict
+    )
+    auto_rule_groups: dict[str, AutoBackgroundGroupStats] = field(default_factory=dict)
 
 
 @dataclass

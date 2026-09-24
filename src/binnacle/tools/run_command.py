@@ -17,6 +17,7 @@ from binnacle.callctx import current_argument_names, current_call, current_clien
 from binnacle.config import get_settings
 from binnacle.errors import CodedToolError
 from binnacle.paths import resolve_path
+from binnacle.run_command_evidence import record_auto_match
 from binnacle.run_command_telemetry import DispatchPlan
 
 RUN_SETTINGS = get_settings().run_command
@@ -109,6 +110,22 @@ def run_command_impl(
     )
     call_id = current_call.get()
     plan.log_auto_background(call_id)
+    if plan.auto_background and plan.auto_rule_hash is not None:
+        record_auto_match(
+            retention_days=RUN_SETTINGS.auto_background_evidence_retention_days,
+            call_id=call_id,
+            client=plan.client,
+            command=command,
+            command_hash=plan.command_hash,
+            policy_hash=plan.auto_policy_hash,
+            behavior_hash=plan.auto_behavior_hash,
+            semantics_version=plan.auto_semantics_version,
+            auto_warmup_s=plan.auto_warmup_s,
+            rule_hash=plan.auto_rule_hash,
+            match_start=plan.auto_match_start,
+            match_end=plan.auto_match_end,
+            root=RUN_SETTINGS.auto_background_evidence_dir,
+        )
     owner_started = time.perf_counter()
     try:
         job_id = job_owner.start_and_wait(
