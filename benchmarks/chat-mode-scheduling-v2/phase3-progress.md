@@ -2,19 +2,20 @@
 
 Status: IN PROGRESS
 
-Updated: 2026-09-25T01:38:45+10:00
+Updated: 2026-09-25T02:10:31+10:00
 
 ## Canonical state
 
 - Branch: feature/chat-mode-scheduling-v2-phase3
 - Worktree: /home/grammy-jiang/Projects/binnacle-chat-scheduling-phase3
 - Audited source HEAD: 5f2be143352aaa63fb680c1c79e289d46be201fe
-- Last completed step: 3.2
-- Next step: 3.3A/B/C/D implementation frontier
+- Last completed step: 3.4B
+- Next step: 3.4A/3.4C integration frontier
 - Dependency audit: phase3-dependency-audit-2026-09-25-r01.json, r01, SHA-256 d3bec25ba8d49ed4db78e07930542b9e963608ad264c198f8fbf04c4ccfa473a
 - Task graph: phase3-task-graph.json, r01, SHA-256 44cbedb0524fe87a9d111579a96d0d33f4171dfee6ece34eb53baa4c506696b2
 - Initial orchestrator-state checkpoint SHA-256: cec108b23fcf319a48d699f123b8fbf713919f3873d1cae4968a16844b80ed12
 - Validated synchronized baseline HEAD: 806a23053043be46f6ba35ad046833168caa904d
+- Frozen replay path HEAD: 9c768800f1e97f9e06d18bd32b173e24d93e82f0
 - Production baseline re-observed: 2026-09-25T01:10:16+10:00
 
 ## Deviation
@@ -29,11 +30,11 @@ Updated: 2026-09-25T01:38:45+10:00
 | 3.1 | complete |
 | 3.2 | complete |
 | 3.3A | not_started |
-| 3.3B | not_started |
+| 3.3B | complete |
 | 3.3C | not_started |
 | 3.3D | not_started |
 | 3.4A | not_started |
-| 3.4B | not_started |
+| 3.4B | complete |
 | 3.4C | not_started |
 | 3.5M | not_started |
 | 3.5A | not_started |
@@ -122,3 +123,36 @@ Updated: 2026-09-25T01:38:45+10:00
 - JSON syntax checks for source inventory and replay-corpus fixture: PASS.
 - Focused test matrix: no dedicated Step-3.2 pytest target.
 - File-scoped pre-commit on all Step-3.2 Git outputs: PASS.
+
+## Step 3.3B notes
+
+- Replay-engine worker completion packet 3.3B--a1 matches the assignment
+  evidence for commit 9c768800f1e97f9e06d18bd32b173e24d93e82f0 on
+  feature/chat-mode-scheduling-v2-phase3-replay.
+- Integrated worker output hashes match the completion packet:
+  scripts/chat_scheduling_replay.py
+  c741cc6dbba5812e15acfce4e6a33033bbc1157b126ec386d9918dd8dcdf5443
+  and tests/scripts/test_chat_scheduling_replay.py
+  9227c7590383c18f71473dd15f50dd95359cecee7b8c7a7c7e602e027781dc39.
+
+## Step 3.3B validation
+
+- uv run pytest -q tests/scripts/test_chat_scheduling_replay.py: PASS in
+  the worker worktree, 10 passed in 0.34s.
+
+## Step 3.4B notes
+
+- Integrated the replay-engine worker by strict fast-forward from f01dc93c3aa015d8932f58c9c5233cdb1cb3f361
+  to 9c768800f1e97f9e06d18bd32b173e24d93e82f0; the worker commit parent exactly matched the
+  pre-integration canonical HEAD.
+- Frozen phase3_replay_path_head at 9c768800f1e97f9e06d18bd32b173e24d93e82f0.
+- Source-shard worktrees were not touched or restarted; their immutable inputs
+  remain valid as required by Step 3.4B.
+- No semantic deviation from the Step-3.4B runbook or focused test matrix.
+
+## Step 3.4B validation
+
+- uv run pytest -q tests/scripts/test_chat_scheduling_replay.py: PASS,
+  10 passed in 0.44s; real 1.16s.
+- Pre-run host snapshot: 4 cores; load average 0.92 1.01 0.86.
+- Timing was measured under foreign parallel-programme load.
