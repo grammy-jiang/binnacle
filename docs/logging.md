@@ -39,8 +39,10 @@ second.
 | `job_listing` | `tools.job_status`; INFO | `call recorded_jobs returned_jobs running_jobs history_limit command_preview_chars` | 09-19 |
 | `job_status_timing` | `tools.job_status`; INFO | `call job_id wait_requested_s wait_bounded_s wait_effective_s waited_s blocking_budget_s blocking_spent_before_s blocking_remaining_before_s blocking_active_before blocking_policy blocking_budget_exhausted turn client dispatch_ms state_ms read_log_ms process_scan_ms impl_ms state processes log_bytes`; a positive-wait exception still emits this record with `state=error` and `na` for stages not reached | 09-19; blocking-wall policy fields and exception-path completion from 09-24 |
 | `blocking_window_closed` | `tools.job_status`; INFO when a tracked active window commits | `call turn client blocking_budget_s blocking_window_wall_s blocking_spent_after_s blocking_remaining_after_s` | 09-24 |
+| `run_command_auto_background` | `tools.run_command`; INFO, one per automatic-policy match | `call client command_hash policy_hash rule_hash`; hashes identify the effective ordered policy and matched rule without logging regex text | 09-22; policy/rule hashes from 09-24 |
 | `run_command_dispatch` | `tools.run_command`; INFO, one per successful call | `call client job_id owner owner_instance requested_wait_s bounded_wait_s effective_wait_s background_arg auto_background handoff_reason owner_roundtrip_ms command_hash command_chars state` | 09-22 |
 | `run_command_dispatch_error` | `tools.run_command`; WARNING when owner dispatch fails | same policy/owner/timing fields plus `error_class` | 09-22 |
+| `run_command_output_shaping` | `tools.run_command`; INFO, only when returned output loses content | `call job_id state reason tail_lines dropped_lines char_clipped selected_chars returned_chars omitted_chars log_bytes`; `reason` is `tail_lines`, `char_limit`, or both | 09-24 |
 | `job_owner_timing` | stable job manager; INFO | `op call job_id owner_instance`, start: `wait_s launch_ms impl_ms state`; stop: `impl_ms state` | 09-22 |
 | `job_stop_requested` | ownership layer; INFO | `job_id call origin_call owner_instance command_hash` | 09-22 |
 | `job_stop_escalate` | process owner; WARNING | `job_id call signal=SIGKILL grace_s` | 09-22 |
@@ -124,8 +126,8 @@ capabilities instead:
   including configured vs effective job owner;
 - user-facing coded failures remain `ToolError` but optionally carry `error_code`, allowing
   stable aggregation such as `path_outside_root`, `file_not_found`, `range_past_end`,
-  `rg_timeout`, `invalid_glob`, `rg_rejected`, and `response_budget_exceeded` without
-  parsing human error text.
+  `rg_timeout`, `invalid_glob`, `rg_rejected`, `workdir_not_directory`, and
+  `response_budget_exceeded` without parsing human error text.
 
 `binnacle stats` reports stable error-code counts, `read_file` whole/range and outcome
 counts, `list_files` list/glob usage, and the latest effective tool config plus how many
@@ -199,9 +201,36 @@ inside the parser's in-memory `Record`. This does not change the journal format.
 collection lag between job completion and result collection. Older untimestamped records
 remain valid and simply do not contribute to that latency distribution.
 
-This Phase-1 analysis deliberately does not infer output-shaping causes or the specific
-automatic-background rule that matched; those facts are not reliably reconstructable from
-historical clipped arguments and require later additive telemetry.
+Historical records created before the Phase-3 telemetry cannot identify output-shaping
+causes or the specific automatic-background rule from clipped arguments alone. New records
+add those facts without changing the MCP result.
+
+### 6.2 Policy identity and output-shaping telemetry (2026-09-24)
+
+Automatic-background matches now extend the existing sparse marker with `policy_hash` and
+`rule_hash`. Both are 12-hex SHA-256 prefixes over canonical internal policy material:
+
+- `policy_hash` fingerprints the ordered effective client-prefix/rule mapping;
+- `rule_hash` fingerprints the matched `(client prefix, pattern)` pair.
+
+Raw deployment-local regex text is not emitted. The `tool_config tool=run_command` startup
+record also carries `auto_background_rules` and `auto_background_policy_hash`, so a later
+review can segment measurements by the actual effective policy rather than by client count
+alone. The policy hash intentionally includes order because prefix order is part of the
+current matching semantics.
+
+`run_command_output_shaping` is a sparse event: it is absent when the returned command
+output is unchanged and emitted once when line selection, the configured character limit,
+or both remove content. The event records scalar counts only; command output is never
+duplicated into telemetry. `binnacle stats` classifies the new reasons and reports older
+`truncated=true` results without a shaping event as `legacy_unclassified` rather than
+guessing from the presence of a `tail_lines` argument.
+
+The local pre-dispatch check for a resolved workdir that exists but is not a directory now
+uses the stable `workdir_not_directory` telemetry code. It remains a `ToolError` to clients
+and occurs before `run_command_dispatch`; stats therefore classifies it with other
+not-dispatched errors, separately from job-owner dispatch failures and from a command that
+successfully starts and later exits non-zero.
 
 ## 7. Record format, from the live journal (2026-09-13 22:36, `scripts/mcp_client.py`)
 

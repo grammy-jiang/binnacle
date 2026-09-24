@@ -1,6 +1,6 @@
 # `run_command` observability implementation plan — 2026-09-24
 
-Status: Phases 1–2 implemented and validated; Phases 3–5 pending.
+Status: Phases 1–4 implemented and validated; Phase 5 pending production evidence.
 
 Parent investigation:
 `docs/run-command-observability-investigation-2026-09-24.md`.
@@ -13,31 +13,59 @@ Working branch/worktree:
 
 ## 0. Implementation progress — 2026-09-24
 
-Phases 1 and 2 are complete on this branch. Runtime telemetry and execution behavior remain
-unchanged.
+Phases 1–4 are implemented on this analysis branch. Phase 5 remains intentionally pending
+because it is a policy-quality decision that requires representative production evidence
+from the new rule/policy hashes.
 
 Completed:
 
-- added a dedicated cross-event `run_command` workflow analyzer and stats model;
-- preserved millisecond timestamps for plain records so collection lag can be measured;
-- separated policy selection from dispatch outcome;
-- joined pre-dispatch errors, lifecycle linkage, automatic handoff counterfactuals,
-  `job_status` follow-up, same-turn correlation, and observable intervening tool work;
-- documented in-window/mixed-version coverage semantics;
-- reproduced the frozen production-window aggregates from the investigation;
-- validated the 2026-09-22 deployment-transition window without false failure reports.
+- Phase 1: added a dedicated cross-event `run_command` workflow analyzer and stats model;
+  preserved millisecond timestamps; separated policy selection from dispatch outcome;
+  joined pre-dispatch errors, lifecycle linkage, automatic-handoff counterfactuals,
+  `job_status` follow-up, same-turn correlation, observable intervening tool work, and
+  result-collection lag;
+- Phase 2: reproduced the frozen production-window aggregates, validated the mixed-version
+  deployment-transition window, and passed the stats performance gate;
+- Phase 3A: added stable automatic-policy/rule fingerprints without exposing raw regexes;
+  implemented independently as `96edff2` and merged via `14ed1cc`;
+- Phase 3B: added a pure output-shaping model plus sparse classified shaping telemetry;
+  implemented independently as `e35566a` and merged via `d68a52d`; the two Phase-3 lanes
+  were merged only after their independent tests and hooks passed;
+- Phase 4: added the stable `workdir_not_directory` pre-dispatch error code and verified
+  the middleware records it without a dispatch (`ba63114`).
 
-Validation:
+Validation recorded so far:
 
-- focused baseline plus new tests: **119 passed**;
-- modified-file pre-commit: all hooks passed, including mypy, deptry, module-size,
+- Phase-1/2 focused baseline plus new tests: **119 passed**;
+- merged Phase-3 combined targeted suite: **151 passed**;
+- Phase-4 focused suite: **45 passed**;
+- all changed-file pre-commit gates run so far passed, including mypy, deptry, module-size,
   AI-readability, and architecture checks;
-- frozen-window `binnacle stats` performance: 10.360 / 10.577 / 10.432 s,
+- frozen-window `binnacle stats` performance after Phase 1/2: 10.360 / 10.577 / 10.432 s,
   median **10.432 s** versus 9.749 s baseline (+0.683 s, about +7.0%);
-- performance gate (<15% and <1.0 s absolute regression) passed.
+- the performance gate (<15% and <1.0 s absolute regression) passed.
 
-Next: Phase 3, with policy/rule identity and output-shaping telemetry developed in
-independent lanes and merged only after both lanes pass their own gates.
+Final integrated validation:
+
+- frozen historical production journal remained compatible: core workflow numbers reproduced
+  exactly, and **43** old truncated results were reported as `legacy_unclassified` because
+  the historical window predates `run_command_output_shaping`;
+- supported two-lane full suite, seed 12345:
+  - parallel-safe lane: **1186 passed, 3 skipped** in 31.68 s;
+  - ordinary-process lane: **2 passed**, 1189 deselected in 2.92 s;
+  - total runner elapsed 36.70 s; wrapper wall **36.78 s**;
+  - starting one-minute load average was 0.57;
+- repository-wide `pre-commit run --all-files`: **PASS** across every configured hook,
+  including markdown/yaml/json, secret detection, ruff, bandit, uv-lock, codespell, mypy,
+  pip-audit, deptry, module-size, AI-readability, and architecture boundaries;
+- Phases 1–4 are therefore closed on this analysis branch with no MCP schema change.
+
+Phase 5 entry condition:
+
+- deploy the Phases 1–4 telemetry first;
+- accumulate a representative real-use sample with `policy_hash`/`rule_hash` present;
+- then compare per-rule match, warm-up-finish, handoff, follow-up, overlap, and collection
+  behavior before changing prefix semantics, warm-up thresholds, or local regexes.
 
 ## 1. Goal
 
