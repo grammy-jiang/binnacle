@@ -22,7 +22,7 @@
 | 3.3 | Enable xdist for coverage-policy while preserving no_xdist lanes | PASS |
 | 3.4 | Benchmark bounded tox-level scheduling | PASS |
 | 3.5 | Update GitHub Actions | PASS |
-| 3.6 | Update testing/quality/performance documentation | NOT STARTED |
+| 3.6 | Update testing/quality/performance documentation | PASS |
 | 3.7 | Final end-to-end release validation | NOT STARTED |
 
 ## Step reports
@@ -1800,3 +1800,76 @@ Risks / follow-up:
 Next:
 
 - 3.6 Update testing and quality-gate documentation
+
+Step: 3.6 Update testing and quality-gate documentation
+Status: PASS
+
+Changed:
+
+- `docs/testing.md` — documents the supported fast two-lane full-suite command, exact `no_xdist` semantics and nodes, production-versus-test timing policy, retained real-timing coverage, compatibility-versus-coverage tox responsibilities, host-aware local/CI worker policy, and benchmark reproduction commands.
+- `docs/quality-gates.md` — replaces the obsolete duplicate direct pytest coverage recipe with the authoritative de-duplicated `coverage-policy` flow and its direct report-generation form.
+- `docs/long-command-performance-and-distribution.md` — preserves the dated 2026-09-22 and Phase 1 measurements, updates historical lane wording, records the Phase 2/3 checkpoint plus Step 3.4 A/B/C scheduler evidence, and gives exact reproduction commands.
+- `docs/test-suite-performance-optimization-progress-2026-09-24.md` — marks Step 3.6 PASS and records this report.
+- The frozen plan was reviewed but not changed.
+- No production source, test, tox, CI workflow, coverage threshold, host-safety fixture, or production timing default changed.
+
+Source snapshot:
+
+- Branch: `design/chat-mode-scheduling-v2`.
+- Exact source commit at step start: `b44073e28ae62aabeb0a83a01adfbf2d12b73510`.
+- The worktree was clean at step start and matched `origin/design/chat-mode-scheduling-v2`.
+- The progress table showed Steps 1.1 through 3.5 PASS and Step 3.6 as the next NOT STARTED step.
+- `git log -8 --oneline --decorate` showed HEAD `b44073e` (`docs: record Step 3.5 CI validation`) above the completed Step 3.4/3.5 checkpoint history.
+- Correlation nonce command: `echo p2-3.6-1790234072-12405` — exit 0.
+
+Validation:
+
+- Exact focused test commands: none. Step 3.6 is documentation-only and changes no executable source or tests.
+- Exact full-lane command: none. The frozen Step 3.6 stop point requires documentation/pre-commit validation, not a full pytest/tox lane.
+- Documentation search audit used Raspberry Pi MCP `search_text` for:
+  - `--cov=binnacle|--cov-report=json`;
+  - `serial-only|@pytest\\.mark\\.serial|serial marker`;
+  - `compatibility tox|compatibility.*coverage|coverage.*compatibility`.
+  The three current documentation files changed in this step contain no old direct pytest-plus-coverage recipe and no old serial-marker wording. Repository-wide matches for direct `--cov` commands are confined to the frozen plan and the progress record's explicitly historical/equivalence evidence. Current compatibility documentation states that ordinary tox environments do not collect coverage.
+- `git diff --check` — PASS before hook execution.
+- Changed-document hook gate:
+  `uv run pre-commit run --files docs/testing.md docs/quality-gates.md docs/long-command-performance-and-distribution.md`
+  - PASS; all applicable hooks passed, including markdownlint and codespell.
+- Mandatory documentation-step repository hook gate:
+  `uv run pre-commit run --all-files`
+  - PASS; every repository hook passed.
+- Final changed-file hook gate including this progress record:
+  `uv run pre-commit run --files docs/testing.md docs/quality-gates.md docs/long-command-performance-and-distribution.md docs/test-suite-performance-optimization-progress-2026-09-24.md`
+  - PASS; all applicable hooks passed.
+- Pytest pass/fail/skip counts: N/A; no pytest command was required or run in this documentation-only step.
+
+Performance:
+
+- Before: N/A.
+- After: N/A.
+- Step 3.6 changes documentation only; no performance-sensitive code or orchestration changed and no new timed benchmark was run.
+- Existing historical and current measurements were preserved with their dates/source context rather than overwritten.
+
+Findings:
+
+- `docs/quality-gates.md` was the material stale document: it still instructed developers to run `tests/unit` with coverage and then the entire `tests` tree with coverage, which would re-run unit tests. It now points to `uv run tox -e coverage-policy` and explains the four-lane, no-duplicate report boundary.
+- `docs/testing.md` now makes explicit that `no_xdist` excludes tests only from xdist workers, not from the suite, and names the two process-self-inspection nodes.
+- Production job warm-up remains 1.0 s; selected integration modules use the explicit non-autouse 0.05 s test fixture only where opted in.
+- Retained real-time contracts are explicitly documented for blocking-budget concurrency, job-status waits, subprocess handoff/back-pressure, signal escalation, tunnel readiness, and search-stream timeout/reaping.
+- Local Pi matrix policy remains sequential tox with `BINNACLE_TEST_WORKERS=4`; CI remains host-aware and does not hard-code the Pi worker count.
+- Production source behaviour changed: no.
+- Host-safety fixture, semantic coverage policy, production timing defaults, live-test opt-in behavior, supported interpreter coverage, and managed test inventory were not changed or weakened.
+
+Deviation from Section 5.8 / frozen step:
+
+- None.
+- Tooling note: the first guarded documentation-edit helper preserved transport escape characters around Markdown backticks and exited before any replacement or write. The corrected helper then applied the intended patch. No repository state was changed by the failed attempt.
+
+Risks / follow-up:
+
+- Historical `--cov` commands remain intentionally present in the frozen plan and progress record where they document the old method or equivalence measurements; they are not presented as the current developer workflow.
+- Step 3.7 owns final end-to-end release validation; no Step 3.7 command or release gate was executed here.
+
+Next:
+
+- 3.7 Final end-to-end release validation

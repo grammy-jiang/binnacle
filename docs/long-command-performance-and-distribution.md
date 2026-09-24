@@ -165,7 +165,7 @@ exist in the sequential baseline and are not counted as parallelism regressions.
 | sequential | 117.85 s | 35% | 42.42 s | 417,920 KiB | 3 baseline failures |
 | xdist 2, worksteal | 74.05 s | 80% | 59.76 s | 403,168 KiB | baseline + 2 xdist-specific failures |
 | xdist 4, worksteal | 65.65 s | 133% | 87.61 s | 400,464 KiB | same 2 xdist-specific failures |
-| hybrid: xdist 4 + 2 serial-only tests | **64.27 s** | 135% | 86.97 s | 399,616 KiB | only the 3 baseline failures; serial lane 2/2 pass |
+| historical hybrid: xdist 4 + 2 ordinary-process tests | **64.27 s** | 135% | 86.97 s | 399,616 KiB | only the 3 baseline failures; ordinary-process lane 2/2 pass |
 
 The hybrid reduces wall time by about **45.5%** (1.83x speedup) versus sequential.
 Moving from two to four workers provides only about another 11% wall-time reduction while
@@ -198,6 +198,62 @@ was 113.04 s sequential versus 47.10 s with the two-lane runner. The older Step 
 Phase 1 steps changed test code and added runner tests.
 
 The supported command is documented in `docs/testing.md`.
+
+### Phase 2/3 local checkpoint and scheduler result (2026-09-24)
+
+These measurements are newer than the 2026-09-22 historical table above; they
+do not rewrite it. After the Phase 2 timing work, the fixed-seed fast full suite
+completed in **32.01 s** wall time at seed `12345`, with 1,128 passed and 3
+skipped across the two required lanes.
+
+The de-duplicated coverage runner then reduced the workers=1 direct coverage
+pipeline from 102.03 s to two repeatable workers=4 runs at **54.09 s** and
+**53.68 s**, with 1,132 passed and 3 skipped and module-by-module coverage
+identical to the sequential single-pass reports. The authoritative
+`tox -e coverage-policy` path also remained green.
+
+Step 3.4 compared the bounded local Python-matrix strategies on one unchanged
+source snapshot, after warming tox environments:
+
+| Strategy | Command shape | Wall time | Result |
+| --- | --- | ---: | --- |
+| A | sequential tox, 4 pytest workers/environment | 165.70 s | all five environments green |
+| B | 2 tox environments, 2 pytest workers/environment | 152.04 s | all five environments green |
+| C | 4 tox environments, 1 pytest process/environment | 178.98 s | all five environments green |
+| A repeat | sequential tox, 4 pytest workers/environment | 164.99 s | all five environments green |
+
+Strategy B was the raw fastest, but its advantage over A was below the frozen
+10 percent decision threshold. The selected local policy is therefore Strategy
+A, which is simpler and repeated within 0.4 percent. This local choice is not a
+GitHub Actions policy: CI already parallelizes by Python-version job and lets
+the repository runner resolve `min(4, os.cpu_count() or 1)` on each host.
+
+Reproduce the bounded matrix comparison with seed `12345`:
+
+```bash
+uv run tox run --notest
+
+nproc
+cat /proc/loadavg
+/usr/bin/time -f "wall=%e user=%U sys=%S cpu=%P maxrss_kb=%M" \
+  env BINNACLE_TEST_WORKERS=4 uv run tox run -- --seed 12345
+
+nproc
+cat /proc/loadavg
+/usr/bin/time -f "wall=%e user=%U sys=%S cpu=%P maxrss_kb=%M" \
+  env BINNACLE_TEST_WORKERS=2 uv run tox run-parallel -p 2 -- --seed 12345
+
+nproc
+cat /proc/loadavg
+/usr/bin/time -f "wall=%e user=%U sys=%S cpu=%P maxrss_kb=%M" \
+  env BINNACLE_TEST_WORKERS=1 uv run tox run-parallel -p 4 -- --seed 12345
+```
+
+Record `nproc` and `/proc/loadavg` immediately before each timed run. If the
+one-minute load exceeds 1.5 because of unrelated work, wait up to five minutes
+for that foreign load to clear or label the timing as contaminated. Do not
+compare runs that use different source snapshots, test selections, dependency
+locks, Python versions, or seeds.
 
 ## 8. Measurements
 
