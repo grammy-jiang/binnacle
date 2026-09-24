@@ -145,6 +145,8 @@ class RunCommandWorkflowStats:
 
     output_shaping_reasons: Counter = field(default_factory=Counter)
     output_shaping_legacy_unclassified: int = 0
+    output_shaping_dropped_lines: list[int] = field(default_factory=list)
+    output_shaping_omitted_chars: list[int] = field(default_factory=list)
     auto_rule_matches: Counter = field(default_factory=Counter)
     auto_rule_handoffs: Counter = field(default_factory=Counter)
 

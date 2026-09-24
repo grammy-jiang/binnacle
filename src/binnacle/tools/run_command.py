@@ -3,6 +3,7 @@
 Spec: docs/tools/run_command.md. Shared job machinery: jobs.py.
 """
 
+import logging
 import time
 from typing import Annotated
 
@@ -11,7 +12,7 @@ from fastmcp.exceptions import ToolError
 from fastmcp.tools.base import ToolResult
 from pydantic import Field
 
-from binnacle import job_owner, jobs
+from binnacle import job_output, job_owner, jobs
 from binnacle.callctx import current_argument_names, current_call, current_client
 from binnacle.config import get_settings
 from binnacle.paths import resolve_path
@@ -20,6 +21,7 @@ from binnacle.run_command_telemetry import DispatchPlan
 RUN_SETTINGS = get_settings().run_command
 RUN_WAIT_DEFAULT = RUN_SETTINGS.wait_default_s
 RUN_WAIT_MAX = RUN_SETTINGS.wait_max_s
+log = logging.getLogger("binnacle.run_command")
 
 OUTPUT_SCHEMA = {
     "type": "object",
@@ -41,25 +43,40 @@ OUTPUT_SCHEMA = {
 }
 
 
-def _tail(text: str, n: int) -> tuple[str, int]:
-    """Last n lines of text and how many lines were dropped."""
-    lines = text.splitlines(keepends=True)
-    if len(lines) <= n:
-        return text, 0
-    return "".join(lines[-n:]), len(lines) - n
-
-
-def _shaped_output(job_id: str, tail_lines: int | None) -> tuple[str, bool]:
+def _shaped_output(
+    job_id: str, tail_lines: int | None
+) -> job_output.RunCommandOutputShape:
     log_text = jobs.read_log(job_id).decode("utf-8", errors="replace")
-    dropped = 0
-    if tail_lines is not None:
-        log_text, dropped = _tail(log_text, tail_lines)
-    output, truncated = jobs.clip_head_tail(log_text)
-    if not dropped:
-        return output, truncated
-    return (
-        f"[… {dropped} earlier lines omitted (tail_lines={tail_lines}) …]\n" + output,
-        True,
+    return job_output.shape_run_command_output(
+        log_text, jobs.RUN_MAX_OUTPUT_CHARS, tail_lines
+    )
+
+
+def _log_output_shaping(
+    call_id: str,
+    job_id: str,
+    state: str,
+    shape: job_output.RunCommandOutputShape,
+    tail_lines: int | None,
+    log_bytes: int,
+) -> None:
+    if not shape.truncated:
+        return
+    log.info(
+        "event=run_command_output_shaping call=%s job_id=%s state=%s reason=%s "
+        "tail_lines=%s dropped_lines=%d char_clipped=%s selected_chars=%d "
+        "returned_chars=%d omitted_chars=%d log_bytes=%d",
+        call_id,
+        job_id,
+        state,
+        shape.reason,
+        tail_lines if tail_lines is not None else "-",
+        shape.dropped_lines,
+        str(shape.char_clipped).lower(),
+        shape.selected_chars,
+        shape.returned_chars,
+        shape.omitted_chars,
+        log_bytes,
     )
 
 
@@ -108,7 +125,16 @@ def run_command_impl(
     plan.log_success(
         call_id, job_id, returned_state, owner_roundtrip_ms, owner_instance
     )
-    output, truncated = _shaped_output(job_id, tail_lines)
+    shape = _shaped_output(job_id, tail_lines)
+    output, truncated = shape.output, shape.truncated
+    _log_output_shaping(
+        call_id,
+        job_id,
+        returned_state,
+        shape,
+        tail_lines,
+        int((state or {}).get("log_bytes") or 0),
+    )
 
     if state and state["state"] == "exited":
         payload = {
