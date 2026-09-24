@@ -2,7 +2,7 @@
 
 Status: IN PROGRESS
 
-Updated: 2026-09-25T03:38:02+10:00
+Updated: 2026-09-25T05:00:08+10:00
 
 ## Canonical state
 
@@ -53,7 +53,7 @@ Updated: 2026-09-25T03:38:02+10:00
 | p3-source-operational-journal | complete |
 | p3-fix-opjournal-extractor | complete |
 | p3-source-operational-journal-r2 | complete |
-| 3.5A | not_started |
+| 3.5A | running |
 | 3.6A | not_started |
 | 3.6B | not_started |
 | 3.6C | not_started |
