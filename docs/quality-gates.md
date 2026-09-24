@@ -67,25 +67,43 @@ production module. The checker still supports temporary floors as a migration
 mechanism, but introducing one requires an explicit quality-policy change and
 does not change the final acceptance target.
 
-Generate and check the reports with:
+Run the authoritative gate with:
 
 ```bash
-uv run pytest tests/unit -q \
-  --cov=binnacle --cov-branch --cov-fail-under=0 \
-  --cov-report=json:/tmp/binnacle-unit-coverage.json
+uv run tox -e coverage-policy
+```
 
-uv run pytest tests -q \
-  --cov=binnacle --cov-branch --cov-fail-under=0 \
-  --cov-report=json:/tmp/binnacle-full-coverage.json
+The tox environment first runs `scripts/run_coverage_policy.py`, then runs the
+existing semantic checker. The coverage runner does not execute the unit suite
+twice. It erases stale data, runs unit parallel-safe and unit `no_xdist`
+tests, writes the unit-only JSON, then appends non-unit parallel-safe and
+non-unit `no_xdist` coverage before writing the full JSON. Only the two
+parallel-safe lanes may use xdist; the `no_xdist` tests stay in ordinary
+pytest processes and remain part of the coverage population.
 
-python scripts/check_coverage_policy.py \
+To reproduce the report generation directly, for example when comparing JSON
+reports module by module, run:
+
+```bash
+uv run python scripts/run_coverage_policy.py \
+  --seed 12345 \
+  --unit-json /tmp/binnacle-unit-coverage.json \
+  --full-json /tmp/binnacle-full-coverage.json
+
+uv run python scripts/check_coverage_policy.py \
   --unit-json /tmp/binnacle-unit-coverage.json \
   --full-json /tmp/binnacle-full-coverage.json
 ```
 
+Ordinary Python tox environments are compatibility gates only:
+`python scripts/run_test_suite.py {posargs}`. They intentionally do not carry
+`--cov` instrumentation. The supported local matrix remains Python 3.10
+through 3.14; GitHub Actions uses 3.10, 3.11, 3.12, and 3.14 for compatibility
+and the dedicated Python 3.13 `coverage-policy` job for coverage. Worker count
+is resolved by the repository runner rather than hard-coded in CI.
+
 `--strict` ignores any migration floor that may be introduced in the future.
-With the current policy it is equivalent to the normal check. The
-`coverage-policy` tox environment runs the same per-module gate.
+With the current policy it is equivalent to the normal check.
 
 ## Test kinds
 
