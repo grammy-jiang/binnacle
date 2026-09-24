@@ -2,15 +2,15 @@
 
 Status: IN PROGRESS
 
-Updated: 2026-09-25T05:08:01+10:00
+Updated: 2026-09-25T05:23:44+10:00
 
 ## Canonical state
 
 - Branch: feature/chat-mode-scheduling-v2-phase3
 - Worktree: /home/grammy-jiang/Projects/binnacle-chat-scheduling-phase3
 - Audited source HEAD: 5f2be143352aaa63fb680c1c79e289d46be201fe
-- Last completed step: 3.5A
-- Next step: 3.6A/B/C + 3H replay completion on audited corpus revision 2; Step 3.7 after all required C reports
+- Last completed step: 3.7
+- Next step: 3.8 Phase-4 input-contract readiness dry run; Phase-4 live calibration remains blocked by NO_LIVE_CANDIDATE
 - Dependency audit: phase3-dependency-audit-2026-09-25-r01.json, r01, SHA-256 d3bec25ba8d49ed4db78e07930542b9e963608ad264c198f8fbf04c4ccfa473a
 - Task graph: phase3-task-graph.json, r01, SHA-256 44cbedb0524fe87a9d111579a96d0d33f4171dfee6ece34eb53baa4c506696b2
 - Initial orchestrator-state checkpoint SHA-256: cec108b23fcf319a48d699f123b8fbf713919f3873d1cae4968a16844b80ed12
@@ -26,6 +26,13 @@ Updated: 2026-09-25T05:08:01+10:00
 - Corpus audit status: PASS
 - Audited corpus SHA-256: 4dd1e387c42d6fccd37d60795b00192144f3b4d93c57d9eb54ab527a72e8e94d
 - Frozen corpus audit HEAD: 207000caa3727f37f494675f34934fd61fc6cdd5
+- Frozen replay promotion HEAD: 2382ae0dca4fee931d9af33c049e9dad97514e64
+- Frozen candidate shortlist HEAD: 3915fbb05fe4409418aa9c4293d5a2846cd925ae
+- Candidate shortlist JSON SHA-256: 23edc0fbba3210aae5da205122be51a806b7be54ab5ca5c590d98de6c931b975
+- Candidate shortlist Markdown SHA-256: cfaf76ecaa4d8ac462e916b2ccf4de9c8f3666f68532a0594a3e0e2878fb941e
+- Phase-3 offline verdict: NO_LIVE_CANDIDATE
+- Live candidates: none
+- Preferred live candidate: none
 - Production baseline re-observed: 2026-09-25T01:10:16+10:00
 
 ## Deviation
@@ -65,11 +72,11 @@ Updated: 2026-09-25T05:08:01+10:00
 | p3-audit-operational-journal-r2 | complete |
 | p3-audit-aggregate | complete |
 | 3.5A | complete |
-| 3.6A | not_started |
-| 3.6B | not_started |
-| 3.6C | not_started |
-| 3H | not_started |
-| 3.7 | running |
+| 3.6A | complete |
+| 3.6B | complete |
+| 3.6C | complete |
+| 3H | complete |
+| 3.7 | complete |
 | 3.8 | not_started |
 | 3.9 | not_started |
 | 3.10 | not_started |
@@ -436,3 +443,49 @@ Updated: 2026-09-25T05:08:01+10:00
 - Focused test matrix defines no dedicated Step-3.5A pytest target.
 - File-scoped pre-commit on normalized audit evidence and the revision-2
   operational-journal note: PASS.
+
+## Step 3.6A/B/C and 3H integration notes
+
+- C120 worker 859da76a0b2741c7483430383dbf3436381af641 integrated as
+  canonical 9b06d99; C300 worker
+  6e6018399cf36b23d06b20decd5a2c9ab0b1e19c integrated as
+  canonical b7f59e3; C600 worker
+  c13669d3bc46199feed05815d7bad707bb893d7c integrated as
+  canonical 1ca62ea.
+- H10 worker 09a9096256a0db1be29776be375ca2f9f630bdd4 was independently
+  verified from its completion packet, integrated as canonical 1d2c26d, and
+  promoted for Step 3.10 consumption.
+- All four reports reference audited revision-2 corpus 4dd1e387c42d6fccd37d60795b00192144f3b4d93c57d9eb54ab527a72e8e94d.
+- Promotion changed only audit metadata to audit_status=pass and
+  provisional=false; the deterministic replay rows were not rerun or changed.
+- H10 remains historical-comparator evidence only and is excluded from the
+  C-candidate shortlist.
+
+## Step 3.7 notes
+
+- Frozen shortlist HEAD: 3915fbb05fe4409418aa9c4293d5a2846cd925ae.
+- Frozen shortlist JSON SHA-256: 23edc0fbba3210aae5da205122be51a806b7be54ab5ca5c590d98de6c931b975.
+- Frozen shortlist Markdown SHA-256: cfaf76ecaa4d8ac462e916b2ccf4de9c8f3666f68532a0594a3e0e2878fb941e.
+- C120 is rejected by the completion-preservation and exhaustion gates.
+- C300 and C600 are rejected by the exhaustion and repeated-wait-burden
+  reduction gates.
+- All three C candidates pass the no-early-exhaustion and evidence-completeness
+  gates.
+- The frozen verdict is NO_LIVE_CANDIDATE; live_candidates is empty and
+  preferred_live_candidate is null.
+- open_evidence_limitations is empty because every offline gate was computable
+  from the frozen corpus and promoted reports.
+- No production budget is declared. Phase-4 targeted live calibration must not
+  start unless a future Phase-3 revision yields at least one passing C
+  candidate.
+
+## Step 3.7 validation
+
+- Promotion validator: PASS, 4/4 reports match the audited revision-2 corpus.
+- Focused report pytest: PASS, 5 tests.
+- Frozen shortlist command rerun: PASS; JSON and Markdown were byte-identical
+  at SHA-256 23edc0fbba3210aae5da205122be51a806b7be54ab5ca5c590d98de6c931b975 and cfaf76ecaa4d8ac462e916b2ccf4de9c8f3666f68532a0594a3e0e2878fb941e.
+- Canonical shortlist validator: PASS, three rejected candidates and zero live
+  candidates.
+- File-scoped pre-commit for the report CLI, renderer helper, focused tests,
+  and shortlist artifacts: PASS.
