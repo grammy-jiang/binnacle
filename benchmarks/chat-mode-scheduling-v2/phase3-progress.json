@@ -7,7 +7,7 @@
   "source_branch": "feature/chat-mode-blocking-wall-guard",
   "audited_source_head": "5f2be143352aaa63fb680c1c79e289d46be201fe",
   "last_completed_step": "3.5M",
-  "next_step": "3.5A aggregate audit + 3.6A/B/C + 3H speculative replay frontier",
+  "next_step": "3.5M revision 2 integration and corpus re-freeze",
   "dependency_audit": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase3-dependency-audit-2026-09-25-r01.json",
     "revision": "r01",
@@ -365,7 +365,7 @@
       "worker_branch": null
     },
     "3.5M": {
-      "status": "complete",
+      "status": "running",
       "tests": [
         "Frozen merge CLI run twice -> PASS; phase3-replay-corpus.json and .md byte-identical on both runs; corpus SHA-256 c2c2809abde13c7b697e3a8c3e91a547fe68bbd83fdbd816c611b3f0e94808de; report SHA-256 b45934afec305a6575fa67e70fbc19407b7e0cfaf0fbab756b53d9571cd13888.",
         "Independent 3.5M invariant validator -> PASS: Phase-1 reports, frozen inventory and corpus all 48 trials = 24 A + 24 B; 10/10 submitted failures retained; 32 positive-request waits checked against raw result.waited_s with 0 mismatches; 48 report union metrics + 13 positive-wait turn unions reproduced with 0 mismatches.",
@@ -380,7 +380,8 @@
         "Actual-wait check PASS: all 32 positive-request wait records match raw result.waited_s; 2 observed waits are zero-duration and 22 records differ from the requested duration, confirming requested wait was not substituted for observed wall time.",
         "Union check PASS: every one of the 48 Phase-1 report blocking_wall_s metrics and all 13 positive-wait per-turn unions were independently reproduced from raw traces with zero mismatches. The canonical 48-trial population contains no overlapping positive-wait intervals, so there is no real overlapping canonical trace sample to exercise beyond the same union calculation.",
         "Operational-journal limitation is explicit: frozen window 2026-09-19T10:21:58.789691+10:00 through 2026-09-25T01:30:27.324505+10:00 expected 4,073 job_status_timing lines but only 4,045 remained at extraction; the shard is explicitly unavailable with frozen_window_line_count_mismatch_4073_4045 and no rows were synthesized.",
-        "No production configuration, service, or production checkout was modified."
+        "No production configuration, service, or production checkout was modified.",
+        "Revision 2 reopened Step 3.5M after the operational-journal audit exposed the revision-1 extractor/window-count defect; integrating the verified extractor fix and re-extracted operational-journal shard before re-freezing the corpus."
       ],
       "commit": null,
       "worker_branch": null

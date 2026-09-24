@@ -10,7 +10,7 @@ Updated: 2026-09-25T03:38:02+10:00
 - Worktree: /home/grammy-jiang/Projects/binnacle-chat-scheduling-phase3
 - Audited source HEAD: 5f2be143352aaa63fb680c1c79e289d46be201fe
 - Last completed step: 3.5M
-- Next step: 3.5A aggregate audit + 3.6A/B/C + 3H speculative replay frontier
+- Next step: 3.5M revision 2 integration and corpus re-freeze
 - Dependency audit: phase3-dependency-audit-2026-09-25-r01.json, r01, SHA-256 d3bec25ba8d49ed4db78e07930542b9e963608ad264c198f8fbf04c4ccfa473a
 - Task graph: phase3-task-graph.json, r01, SHA-256 44cbedb0524fe87a9d111579a96d0d33f4171dfee6ece34eb53baa4c506696b2
 - Initial orchestrator-state checkpoint SHA-256: cec108b23fcf319a48d699f123b8fbf713919f3873d1cae4968a16844b80ed12
@@ -40,7 +40,7 @@ Updated: 2026-09-25T03:38:02+10:00
 | 3.4A | complete |
 | 3.4B | complete |
 | 3.4C | complete |
-| 3.5M | complete |
+| 3.5M | running |
 | p3-source-phase1-step3 | complete |
 | p3-source-phase1-step4 | complete |
 | p3-source-phase1-step5 | complete |
@@ -264,6 +264,10 @@ Updated: 2026-09-25T03:38:02+10:00
   real 2.99s.
 - Pre-run host snapshot: 4 cores; load average 1.37 0.82 0.74.
 - Timing was measured under foreign parallel-programme load.
+
+## Step 3.5M revision 2 status
+
+- Reopened after the operational-journal audit exposed the revision-1 extractor/window-count defect; integrating the verified extractor fix and revision-2 operational-journal shard before re-freezing the corpus.
 
 ## Step 3.5M notes
 
