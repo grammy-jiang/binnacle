@@ -4,8 +4,9 @@
 - Policy: cumulative
 - Budget: 300.0 s
 - Corpus SHA-256: 4dd1e387c42d6fccd37d60795b00192144f3b4d93c57d9eb54ab527a72e8e94d
-- `audit_status_at_start`: `pending`
-- `provisional`: `true`
+- Audit status at start: pending
+- Audit status: pass
+- Provisional: false
 
 ## Summary
 
