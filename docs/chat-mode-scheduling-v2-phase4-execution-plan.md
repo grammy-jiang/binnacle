@@ -19,7 +19,7 @@ staged deployment.
 | Replay evidence | Corpus/candidate hashes agree with final Phase-3 report |
 | Scenarios | R1–R12 catalog valid, including parameterized R12 |
 | Provenance | Submitted-failure classifier implemented and tested |
-| Source base | Latest proof-of-concept HEAD/CI identified for common live source |
+| Source base | Completed Phase-3 branch is the direct predecessor; lower Phase0->1->2->3 stack freshness verified |
 | Benchmark environment | Isolated A/B/surviving-C/H topology is feasible; no fallback to primary connector |
 
 Phase 4 produces the selected live budget, full A/B/C/H evidence, hard-gate
@@ -205,13 +205,13 @@ a new PASS artifact is committed. Never silently inherit an old dependency PASS.
 Use:
 
 ```text
-completed Phase-3 canonical checkout:
+completed Phase-3 direct-predecessor checkout:
   /home/grammy-jiang/Projects/binnacle-chat-scheduling-phase3
   expected branch: feature/chat-mode-scheduling-v2-phase3
 
-integration/design checkout after the owner-approved Phase-3 merge:
-  /home/grammy-jiang/Projects/binnacle-chat-scheduling-design
-  expected branch: design/chat-mode-scheduling-v2
+public integration refs used only for lower-stack freshness checks:
+  origin/proof-of-concept
+  origin/master
 
 production observation checkout:
   /home/grammy-jiang/Projects/binnacle
@@ -219,10 +219,12 @@ production observation checkout:
 ```
 
 Phase 4.0 requires Phase-3 progress/handoff evidence from the Phase-3 checkout
-and also verifies the Phase-3 closeout has been integrated into the design line.
-If those two histories disagree, investigate before creating the Phase-4 branch.
-Missing Phase-3 worktree may be reattached to its exact branch; do not reconstruct
-Phase-3 evidence by copying files into another branch.
+and verifies the Phase-3 branch itself is the direct source for Phase 4;
+public POC/master are freshness references, not Phase-4 parents.
+If the Phase-3 checkout/handoff and lower-stack ancestry disagree, investigate
+before creating the Phase-4 branch. Missing Phase-3 worktree may be reattached to
+its exact branch; do not reconstruct Phase-3 evidence by copying files into
+another branch.
 
 ## Step 4.0 — Dependency Audit / Entry Gate
 
@@ -258,8 +260,9 @@ available.
 **No live endpoint, Project mutation, connector setup, calibration, or trial may
 start before this audit passes.**
 
-Phase 4 depends on a fully closed Phase 3 and on the latest proof-of-concept line
-being suitable as the common live server source base.
+Phase 4 depends on a fully closed **Phase-3 branch as its direct predecessor**.
+`master`/`proof-of-concept` are checked only to detect lower-stack staleness; they
+are never Phase-4 parents.
 
 ### Required Phase-3 state
 
@@ -286,8 +289,8 @@ Verify:
 5. R4/R6/R10/R12 manifests exist and manifest validation is green.
 6. The timeout-provenance classifier is implemented/tested and the Phase-1 frozen
    timeout examples classify without changing canonical inclusion.
-7. Phase-3 tests/pre-commit/CI are green and its final checkpoint is integrated
-   into the scheduling design line. Specifically verify the handoff
+7. Phase-3 tests/pre-commit/CI are green and its final checkpoint is the current
+   `feature/chat-mode-scheduling-v2-phase3` tip. Specifically verify the handoff
    `validated_evidence_commit` equals `validated_ci_head_sha`, the recorded CI run
    concluded `success`, and a fresh query for the **current Phase-3 closeout
    HEAD** also shows green CI. Both commits must lie on the expected Phase-3
@@ -297,11 +300,21 @@ Verify:
 
 ### Required source-line state
 
-Verify the latest `origin/proof-of-concept` and `origin/master` relationship and
-CI. Record the proof-of-concept HEAD that Step 4.0 workspace bootstrap will use as the common server base. The read-only preflight does not mutate it; integration begins only after that preflight passes.
+Verify the direct stacked ancestry:
+
+```text
+Phase0 -> Phase1 -> Phase2 -> Phase3
+```
+
+and verify the Phase-3 tip/handoff is green. Compare `origin/master` and
+`origin/proof-of-concept` against the public-base fingerprint recorded by Phase 3.
+If new public-base work appeared after Phase 3's last stack audit, do not rebase
+Phase 4 directly to public. Restack from the earliest affected lower phase, then
+rebase Phase 3 on refreshed Phase 2, and rerun Phase-3 validation/handoff as
+required before Phase 4 starts.
 
 Also re-check that the completed test-efficiency runner/coverage policy inherited
-by Phase 3 is still the authoritative test workflow.
+through Phase 2/3 is still authoritative.
 
 ### External/environment prerequisites
 
@@ -327,15 +340,13 @@ but it must not cause the agent to fall back to the primary production connector
 ### Phase-4 workspace bootstrap inside Step 4.0
 
 After read-only preflight proves Phase 3 complete, identifies a live candidate
-shortlist, and identifies the latest green proof-of-concept source base, create
-the exact Phase-4 integration workspace defined below **inside 4.0**. Merge the
-Phase-3-complete scheduling design line into that proof-of-concept-based branch
-non-destructively. Create progress files there, run the inherited optimized
-source-level smoke needed to prove the merge is viable, and then commit the
-formal dependency audit.
+shortlist, and verifies the stacked Phase0->1->2->3 lineage is fresh, create the
+exact Phase-4 integration workspace **inside 4.0**, directly from the current
+Phase-3 HEAD. Create progress files there, run the inherited optimized source-level
+smoke, and commit the formal dependency audit.
 
-If the merge conflicts or the inherited smoke fails, 4.0 is BLOCKED; no live
-endpoint/Project setup starts.
+If Phase-3 handoff/lineage is inconsistent or the inherited smoke fails, 4.0 is
+BLOCKED; no live endpoint/Project setup starts.
 
 ### Audit result
 
@@ -349,7 +360,8 @@ live_candidate_shortlist
 scenario_catalog
 provenance_classifier
 phase3_ci
-proof_of_concept_head_and_ci
+stacked_lineage_phase0_phase1_phase2_phase3
+public_base_freshness_master_and_poc
 test_runner_inheritance
 benchmark_project_snapshot
 isolated_endpoint_prerequisites
@@ -361,7 +373,7 @@ production_isolation
 ```text
 dependency audit PASS committed
 Phase-3 shortlist/hash frozen
-proof-of-concept source base frozen for Step 4.1
+Phase-3 direct-predecessor source HEAD frozen for Step 4.1
 external setup blockers = none
 next allowed step: 4.1
 ```
@@ -382,7 +394,7 @@ branch/worktree or reset it.
 | Work | Direct predecessor(s) | Required predecessor evidence before start |
 | --- | --- | --- |
 | **4.0** dependency audit | Phase 3 | Phase-3 handoff/report/hashes/CI + external preflight all PASS |
-| **4.1** validate/freeze source checkpoint | 4.0 | audited shortlist + proof-of-concept base + test runner frozen |
+| **4.1** validate/freeze source checkpoint | 4.0 | audited shortlist + Phase-3 predecessor HEAD + test runner frozen |
 | **4.2A/B/C/D** Wave 4A | 4.1 | one frozen `phase4_source_head`; worker branches from that exact HEAD |
 | **4.3** integrate/smoke endpoints | all code-producing 4.2 lanes | worker commits/tests integrated; endpoint code locally runnable |
 | **4.4** live Project/connector setup + smoke | 4.3 + 4.2D readiness | local endpoints green; Project/connector prerequisites resolved |
@@ -902,12 +914,12 @@ would confound scheduling policy with code drift.
 
 Step 4.0/4.1 split is fixed:
 
-1. **4.0 read-only preflight** records the latest green
-   `origin/proof-of-concept` HEAD and Phase-3 scheduling lineage.
-2. **4.0 workspace bootstrap** creates the Phase-4 branch from that exact proof
-   HEAD, merges the completed Phase-3 scheduling design line, and runs a bounded
-   inherited smoke sufficient to decide whether the merge is viable. The formal
-   dependency audit records this candidate source commit.
+1. **4.0 read-only preflight** records the current green Phase-3 HEAD and verifies
+   the complete Phase0->Phase1->Phase2->Phase3 lineage/handoff.
+2. **4.0 workspace bootstrap** creates the Phase-4 branch directly from that
+   Phase-3 HEAD and runs a bounded inherited smoke sufficient to establish
+   viability. The
+   formal dependency audit records this candidate source commit.
 3. **4.1 validation** runs the focused default-policy equivalence plus inherited
    optimized test/coverage gate. Only after they pass is the current commit frozen
    as `phase4_source_head`.
@@ -916,8 +928,8 @@ Step 4.0/4.1 split is fixed:
 
 A/B have the cumulative guard code present but disabled by an empty budget map.
 That is the baseline server behavior for the confirmatory run. Step 4.1 records
-a focused default-policy equivalence check against the latest proof-of-concept
-behavior before live measurement.
+a focused default-policy equivalence check against the Phase-3 inherited
+server behavior before live measurement.
 
 A Project instructions are recaptured from the actual baseline Project state at
 Phase-4 start, before any benchmark mutation. B/C/H use the canonical v2 rule
@@ -1270,11 +1282,11 @@ already exist; do not recreate them.
 
 Tasks:
 
-1. Re-read 4.0's proof-of-concept base, merged Phase-3 lineage and test-runner
+1. Re-read 4.0's Phase-3 predecessor HEAD, stacked lineage and test-runner
    evidence. If either upstream branch moved in a way relevant to this experiment,
    investigate and rerun 4.0 rather than silently updating the source.
 2. Run the focused default-policy equivalence check against the recorded
-   proof-of-concept behavior: empty budget map, existing tool input contract, and
+   Phase-3 inherited behavior: empty budget map, existing tool input contract, and
    relevant baseline lifecycle tests.
 3. Run the inherited optimized test/coverage gate required by 4.0.
 4. Freeze the current commit as `phase4_source_head`; every A/B/C/H logical arm
