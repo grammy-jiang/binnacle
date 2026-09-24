@@ -20,7 +20,7 @@
 | 3.1 | Remove coverage from ordinary compatibility tox environments | PASS |
 | 3.2 | Make coverage-policy run each test only once | PASS |
 | 3.3 | Enable xdist for coverage-policy while preserving no_xdist lanes | PASS |
-| 3.4 | Benchmark bounded tox-level scheduling | NOT STARTED |
+| 3.4 | Benchmark bounded tox-level scheduling | PASS |
 | 3.5 | Update GitHub Actions | NOT STARTED |
 | 3.6 | Update testing/quality/performance documentation | NOT STARTED |
 | 3.7 | Final end-to-end release validation | NOT STARTED |
@@ -1610,3 +1610,120 @@ Risks / follow-up:
 Next:
 
 - 3.4 Benchmark bounded tox-level scheduling strategies
+
+Step: 3.4 Benchmark bounded tox-level scheduling strategies
+Status: PASS
+
+Changed:
+
+- `tox.ini` — adds `pass_env = BINNACLE_TEST_WORKERS` to `[testenv]` so the frozen Strategy A/B/C environment overrides actually reach `scripts/run_test_suite.py`; without this, tox stripped the variable and the bounded strategies were not executable as specified.
+- `docs/testing.md` — documents the selected local Python-matrix policy: sequential tox environments with `BINNACLE_TEST_WORKERS=4`.
+- `docs/test-suite-performance-optimization-progress-2026-09-24.md` — marks Step 3.4 PASS and records this report.
+- No production `src/` file, test file, GitHub Actions workflow, coverage threshold, host-safety fixture, or production timing default changed.
+
+Source snapshot:
+
+- Branch: `design/chat-mode-scheduling-v2`.
+- Exact source commit at step start: `6cbd313b578a48e0b172c7278cccdba428bce42d`.
+- The worktree was clean at step start and matched `origin/design/chat-mode-scheduling-v2`.
+- The progress table and `git log -8 --oneline --decorate` confirmed every earlier step, 1.1 through 3.3, was PASS and Step 3.4 was the next NOT STARTED step.
+- Correlation nonce command: `echo p2-3.4-1790230046-22197` — exit 0.
+- The valid A/B/C benchmark source was `d3d987462e6b9a3ed78782904b9043009b452bb0`, created by the narrow Step 3.4 prerequisite fix `test: pass worker count into tox environments`.
+- `git diff --name-only 6cbd313..d3d9874` listed only `tox.ini`, so every official strategy measurement used the same code/test source and differed only in bounded scheduling.
+
+Validation and diagnosis:
+
+- Warm-up before benchmarking: `uv run tox run --notest` — PASS for `py310`, `py311`, `py312`, `py313`, and `py314`.
+- Tox-resolution inspection: `uv run tox config -e py313` showed that `pass_env` did not contain `BINNACLE_TEST_WORKERS`.
+- Focused propagation probe before the fix: `env BINNACLE_TEST_WORKERS=2 uv run tox exec -e py313 -- python -c 'import os; print(os.environ.get("BINNACLE_TEST_WORKERS"))'` printed `None`.
+- An initial Strategy B diagnostic therefore showed `-n 4` / `resolved workers: 4` despite `BINNACLE_TEST_WORKERS=2`; that invalid oversubscribed run was stopped and is excluded from all benchmark comparisons.
+- After adding `pass_env = BINNACLE_TEST_WORKERS`, the same focused probe printed `2`.
+- Narrow config hook gate: `uv run pre-commit run --files tox.ini` — PASS.
+- Environments were warmed again on the corrected benchmark source with `uv run tox run --notest` — PASS for all five interpreter environments.
+- Exact focused pytest commands: none. Step 3.4 is a full compatibility-matrix scheduling benchmark; the focused validation was the tox environment-propagation probe above.
+- Seed 12345 was forwarded to every official strategy by appending `-- --seed 12345`; each runner output showed `--randomly-seed=12345`.
+
+Official bounded strategy results on the same corrected source:
+
+- Strategy A — sequential tox environments, four pytest workers inside each environment:
+  `/usr/bin/time -f "wall=%e user=%U sys=%S cpu=%P maxrss_kb=%M" env BINNACLE_TEST_WORKERS=4 uv run tox run -- --seed 12345`
+  - `py310`: 1131 passed, 0 failed, 4 skipped; tox 32.97 s; resolved workers 4.
+  - `py311`: 1131 passed, 0 failed, 4 skipped; tox 32.61 s; resolved workers 4.
+  - `py312`: 1131 passed, 0 failed, 4 skipped; tox 32.91 s; resolved workers 4.
+  - `py313`: 1132 passed, 0 failed, 3 skipped; tox 31.79 s; resolved workers 4.
+  - `py314`: 1132 passed, 0 failed, 3 skipped; tox 34.98 s; resolved workers 4.
+  - Matrix aggregate: 5657 passed executions, 0 failed, 18 skipped.
+  - Wrapper: `wall=165.70 user=277.70 sys=23.08 cpu=181% maxrss_kb=442768`.
+- Strategy B — two tox environments concurrently, two pytest workers per environment:
+  `/usr/bin/time -f "wall=%e user=%U sys=%S cpu=%P maxrss_kb=%M" env BINNACLE_TEST_WORKERS=2 uv run tox run-parallel -p 2 -- --seed 12345`
+  - `py310`: 1131 passed, 0 failed, 4 skipped; tox 53.25 s; resolved workers 2.
+  - `py311`: 1131 passed, 0 failed, 4 skipped; tox 51.63 s; resolved workers 2.
+  - `py312`: 1131 passed, 0 failed, 4 skipped; tox 51.93 s; resolved workers 2.
+  - `py313`: 1132 passed, 0 failed, 3 skipped; tox 50.52 s; resolved workers 2.
+  - `py314`: 1132 passed, 0 failed, 3 skipped; tox 48.02 s; resolved workers 2.
+  - Matrix aggregate: 5657 passed executions, 0 failed, 18 skipped.
+  - Wrapper: `wall=152.04 user=216.91 sys=21.84 cpu=157% maxrss_kb=443584`.
+- Strategy C — four tox environments concurrently, one ordinary pytest process per environment:
+  `/usr/bin/time -f "wall=%e user=%U sys=%S cpu=%P maxrss_kb=%M" env BINNACLE_TEST_WORKERS=1 uv run tox run-parallel -p 4 -- --seed 12345`
+  - `py310`: 1131 passed, 0 failed, 4 skipped; tox 100.02 s; resolved workers 1.
+  - `py311`: 1131 passed, 0 failed, 4 skipped; tox 98.38 s; resolved workers 1.
+  - `py312`: 1131 passed, 0 failed, 4 skipped; tox 94.98 s; resolved workers 1.
+  - `py313`: 1132 passed, 0 failed, 3 skipped; tox 98.32 s; resolved workers 1.
+  - `py314`: 1132 passed, 0 failed, 3 skipped; tox 83.58 s; resolved workers 1.
+  - Matrix aggregate: 5657 passed executions, 0 failed, 18 skipped.
+  - The parallel-safe lane omitted `-n` and `--dist` in every environment, as required for workers=1.
+  - Wrapper: `wall=178.98 user=200.69 sys=21.04 cpu=123% maxrss_kb=443760`.
+- Selected-policy repeat — Strategy A again:
+  `/usr/bin/time -f "wall=%e user=%U sys=%S cpu=%P maxrss_kb=%M" env BINNACLE_TEST_WORKERS=4 uv run tox run -- --seed 12345`
+  - `py310`: tox 34.65 s; `py311`: 32.36 s; `py312`: 32.66 s; `py313`: 32.24 s; `py314`: 32.67 s.
+  - Matrix aggregate: 5657 passed executions, 0 failed, 18 skipped.
+  - Every environment again resolved workers 4.
+  - Wrapper: `wall=164.99 user=278.29 sys=23.51 cpu=182% maxrss_kb=443024`.
+- Exact full-lane commands run in this step are the three official A/B/C matrix commands plus the selected Strategy A repeat above. No coverage-policy run was required by Step 3.4.
+
+Benchmark host/load evidence:
+
+- Before official Strategy A: CPU count 4; `/proc/loadavg = 1.23 2.02 1.31 3/810 926093`.
+- Before Strategy B: CPU count 4; `/proc/loadavg = 1.88 2.02 1.45 2/799 939237`.
+- Before Strategy C: CPU count 4; `/proc/loadavg = 1.65 2.07 1.58 1/804 951991`.
+- Before the Strategy A repeat: CPU count 4; `/proc/loadavg = 0.74 1.75 1.59 2/809 965273`.
+- The Strategy B/C one-minute values above 1.5 immediately followed this step's own completed CPU-heavy benchmark runs; no foreign benchmark or unrelated heavy workload was observed, so the rule requiring a wait for foreign load did not apply. No official result is labelled foreign-load contaminated.
+- The platform rejected two later exact `nproc && cat /proc/loadavg` spellings before execution. Equivalent Raspberry Pi connector commands using `getconf`/`sed` and then Python `os.cpu_count()` plus `/proc/loadavg` supplied the same required evidence.
+
+Performance and selection:
+
+- Raw fastest: Strategy B at 152.04 s.
+- Strategy A: 165.70 s, 13.66 s slower than B; B is about 8.2% faster relative to A (A is about 9.0% slower relative to B).
+- Strategy C: 178.98 s and materially slower than B.
+- Because the top two strategies differ by less than the frozen 10% threshold, the tie rule selects the simpler/lower-scheduling-complexity Strategy A rather than adding tox-level parallelism.
+- Strategy A repeated at 164.99 s versus 165.70 s initially, a 0.71 s / 0.4% difference, and both runs were fully green. This satisfies the repeat gate for the documented winner.
+- The official A/B/C comparison is apples-to-apples: same corrected source commit, dependency lock, warmed tox environments, five-interpreter set, test selection, seed 12345, host, and no concurrent benchmark workload. Only the bounded tox/pytest scheduling strategy changes.
+- Before/after production performance: N/A. Step 3.4 changes local test orchestration only; no production source or production timing behavior changed.
+- Local matrix policy documented in `docs/testing.md`: `env BINNACLE_TEST_WORKERS=4 uv run tox run`.
+
+Findings:
+
+- Tox does not pass arbitrary host environment variables by default. The frozen Strategy A/B/C commands therefore needed the explicit `pass_env = BINNACLE_TEST_WORKERS` declaration to exercise the worker counts specified by the plan.
+- Once propagation was fixed, worker resolution matched every frozen strategy: 4 for A, 2 for B, and 1 for C.
+- Strategy B produced the lowest raw wall time but its advantage over sequential tox with four inner workers was below the plan's 10% decision threshold.
+- Strategy C gave up too much within-environment parallelism on this test mix; running four interpreter environments at once did not compensate for serial pytest execution inside each environment.
+- No flake appeared in any official run. All five interpreter environments were green in A, B, C, and the A repeat.
+- GitHub Actions was not changed; this local scheduling result is explicitly not copied into CI without separate evidence.
+- Production source behavior changed: no.
+- Host-safety fixture, semantic coverage policy, production timing defaults, live-test opt-in behavior, and managed test selection were not weakened.
+
+Deviation from Section 5.8 / frozen step:
+
+- Narrow prerequisite correction: the plan's fixed strategy commands assume `BINNACLE_TEST_WORKERS` reaches tox test environments, but empirical output proved tox stripped it. Adding `pass_env = BINNACLE_TEST_WORKERS` was necessary to execute the frozen strategies as written; the invalid pre-fix diagnostic run is excluded from official timing evidence.
+- Benchmark seed: `-- --seed 12345` was appended to each frozen strategy command because the plan and task require seed 12345 for every A/B timing. This changes only deterministic ordering, not the interpreter set or test selection.
+- Tooling substitution: two exact load-preflight spellings were rejected by platform safety checks before reaching the Pi; equivalent commands through the Raspberry Pi MCP connector recorded the same CPU/load evidence.
+- No other Section 5.8 execution lock was changed.
+
+Risks / follow-up:
+
+- The local winner relies on explicit `BINNACLE_TEST_WORKERS` propagation through tox; removing `pass_env` would silently invalidate the documented local policy and any future A/B comparison using the frozen environment-variable interface.
+- The measured decision is specific to this four-core Raspberry Pi and local tox matrix. CI scheduling remains a separate decision requiring its own evidence.
+
+Next:
+
+- 3.5 Capture post-optimization local baseline
