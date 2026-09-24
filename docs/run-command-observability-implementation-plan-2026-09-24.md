@@ -978,6 +978,26 @@ A command exit code != 0 is a normal command outcome, not a `run_command` tool e
 - stats error section does not mislabel non-zero command exits as tool errors;
 - stable codes appear without parsing human error text.
 
+### Phase 4.5 — Phase-5 evidence readiness hardening (2026-09-25)
+
+A live review before Phase 5 found four non-policy gaps. The hardening keeps execution
+semantics unchanged while adding:
+
+- behavior identity (`policy_hash + semantics_version + auto_warmup_s`);
+- detailed behavior/per-rule workflow stats and marker/dispatch coverage;
+- optional private full-command evidence for auto matches, repository-default disabled;
+- match-span offsets and best-effort evidence persistence.
+
+This phase exists so the scheduled Phase-5 review can perform both quantitative analysis
+and representative false-positive classification without relying on the short per-job
+retention window.
+
+Validation: focused readiness tests **72 passed**; full suite **1200 passed, 3 skipped** plus
+**2** ordinary-process tests; repository-wide pre-commit **PASS**.
+
+Detailed Phase-5 design remains:
+`docs/run-command-observability-phase5-design-2026-09-24.md`.
+
 ---
 
 ## Phase 5 — Evidence-driven policy evaluation and tuning

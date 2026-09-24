@@ -347,7 +347,7 @@ def test_match_auto_background_reports_rule_and_preserves_prefix_order():
     )
     assert broad_first.match_auto_background("openai-mcp", "tox") is None
     match = broad_first.match_auto_background("openai-mcp", "pytest -q")
-    assert match == config.AutoBackgroundMatch("openai", r"pytest")
+    assert match == config.AutoBackgroundMatch("openai", r"pytest", 0, 6)
 
     specific_first = config.RunCommandSettings(
         auto_background_patterns={
@@ -357,4 +357,16 @@ def test_match_auto_background_reports_rule_and_preserves_prefix_order():
     )
     assert specific_first.match_auto_background(
         "openai-mcp", "tox"
-    ) == config.AutoBackgroundMatch("openai-mcp", r"tox")
+    ) == config.AutoBackgroundMatch("openai-mcp", r"tox", 0, 3)
+
+
+@pytest.mark.parametrize("days", [0, 1, 14, 365])
+def test_run_command_evidence_retention_accepts_bounds(days):
+    settings = config.RunCommandSettings(auto_background_evidence_retention_days=days)
+    assert settings.auto_background_evidence_retention_days == days
+
+
+@pytest.mark.parametrize("days", [-1, 366])
+def test_run_command_evidence_retention_rejects_out_of_range(days):
+    with pytest.raises(ValidationError):
+        config.RunCommandSettings(auto_background_evidence_retention_days=days)

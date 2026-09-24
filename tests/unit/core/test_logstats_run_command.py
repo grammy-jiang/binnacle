@@ -278,3 +278,78 @@ def test_output_shaping_events_classify_new_and_legacy_results():
     assert workflow.output_shaping_omitted_chars == [6000]
     text = logstats.render(stats)
     assert "output shaping: tail_lines+char_limit=1, legacy_unclassified=1" in text
+
+
+def test_phase5_groups_segment_behaviors_and_scope_rules():
+    sample = """
+2026-09-25T01:59:59.000 INFO: event=tool_config tool=run_command wait_default_s=30 wait_max_s=50 auto_background_policy_hash=pA auto_background_behavior_hash=bA auto_background_semantics_version=1 auto_background_warmup_s=1.0
+2026-09-25T02:00:00.000 INFO: event=tool_call call=a1 tool=run_command client=x session=s request_id=0 turn=t1/run args_chars=1 args={}
+2026-09-25T02:00:00.001 INFO: event=run_command_auto_background call=a1 client=x command_hash=c1 policy_hash=pA behavior_hash=bA semantics_version=1 auto_warmup_s=1.0 rule_hash=r1
+2026-09-25T02:00:00.100 INFO: event=run_command_dispatch call=a1 client=x job_id=j1 owner=manager owner_instance=o requested_wait_s=30 bounded_wait_s=30 effective_wait_s=1 background_arg=omitted auto_background=true handoff_reason=synchronous owner_roundtrip_ms=100 command_hash=c1 command_chars=1 state=exited
+2026-09-25T02:00:00.110 INFO: event=job_exit job_id=j1 exit_code=0 signal=None reason=normal_exit runtime_s=0.2 log_bytes=0 call=a1 owner=manager owner_instance=o command_hash=c1
+2026-09-25T02:00:00.120 INFO: event=tool_result call=a1 tool=run_command client=x session=s request_id=0 duration_ms=120 is_error=False content_chars=1 structured_bytes=1 est_tokens=1
+2026-09-25T02:00:01.000 INFO: event=tool_call call=a2 tool=run_command client=x session=s request_id=0 turn=t2/run args_chars=1 args={}
+2026-09-25T02:00:01.001 INFO: event=run_command_auto_background call=a2 client=x command_hash=c2 policy_hash=pA behavior_hash=bA semantics_version=1 auto_warmup_s=1.0 rule_hash=r1
+2026-09-25T02:00:02.000 INFO: event=run_command_dispatch call=a2 client=x job_id=j2 owner=manager owner_instance=o requested_wait_s=30 bounded_wait_s=30 effective_wait_s=1 background_arg=omitted auto_background=true handoff_reason=auto_background owner_roundtrip_ms=1000 command_hash=c2 command_chars=1 state=running
+2026-09-25T02:00:03.000 INFO: event=tool_call call=read tool=read_file client=x session=s request_id=0 turn=t2/read args_chars=1 args={}
+2026-09-25T02:00:05.000 INFO: event=job_exit job_id=j2 exit_code=0 signal=None reason=normal_exit runtime_s=4 log_bytes=0 call=a2 owner=manager owner_instance=o command_hash=c2
+2026-09-25T02:00:06.000 INFO: event=tool_call call=s2 tool=job_status client=x session=s request_id=0 turn=t2/status args_chars=1 args={}
+2026-09-25T02:00:06.100 INFO: event=job_status_timing call=s2 job_id=j2 wait_requested_s=0 waited_s=0 state_ms=1 state=exited
+2026-09-25T02:00:06.110 INFO: event=tool_result call=a2 tool=run_command client=x session=s request_id=0 duration_ms=1000 is_error=False content_chars=1 structured_bytes=1 est_tokens=1
+2026-09-25T02:00:59.000 INFO: event=tool_config tool=run_command wait_default_s=30 wait_max_s=50 auto_background_policy_hash=pB auto_background_behavior_hash=bB auto_background_semantics_version=2 auto_background_warmup_s=2.0
+2026-09-25T02:01:00.000 INFO: event=tool_call call=b1 tool=run_command client=x session=s request_id=0 turn=t3/run args_chars=1 args={}
+2026-09-25T02:01:00.001 INFO: event=run_command_auto_background call=b1 client=x command_hash=c3 policy_hash=pB behavior_hash=bB semantics_version=2 auto_warmup_s=2.0 rule_hash=r1
+2026-09-25T02:01:02.000 INFO: event=run_command_dispatch call=b1 client=x job_id=j3 owner=manager owner_instance=o requested_wait_s=20 bounded_wait_s=20 effective_wait_s=2 background_arg=omitted auto_background=true handoff_reason=auto_background owner_roundtrip_ms=2000 command_hash=c3 command_chars=1 state=running
+2026-09-25T02:01:50.000 INFO: event=job_exit job_id=j3 exit_code=0 signal=None reason=normal_exit runtime_s=50 log_bytes=0 call=b1 owner=manager owner_instance=o command_hash=c3
+2026-09-25T02:01:50.010 INFO: event=tool_result call=b1 tool=run_command client=x session=s request_id=0 duration_ms=2000 is_error=False content_chars=1 structured_bytes=1 est_tokens=1
+2026-09-25T02:02:00.000 INFO: event=tool_config tool=run_command wait_default_s=30 wait_max_s=50 auto_background_policy_hash=pC auto_background_behavior_hash=bC auto_background_semantics_version=1 auto_background_warmup_s=1.0
+"""
+    records, startups = logstats.parse(sample)
+    stats = logstats.analyze(records, startups).run_command
+
+    assert set(stats.auto_behavior_groups) == {"bA", "bB", "bC"}
+    a = stats.auto_behavior_groups["bA"]
+    assert (a.policy_hash, a.semantics_version, a.auto_warmup_s) == ("pA", "1", 1.0)
+    assert a.startups == 1
+    assert (a.matches, a.warmup_finished, a.handed_off) == (2, 1, 1)
+    assert a.runtime_s == [0.2, 4.0]
+    assert a.handoff_would_finish_within_original_wait == 1
+    assert a.handoff_would_timeout_anyway == 0
+    assert a.jobs_with_status == 1
+    assert a.first_status_states == {"exited": 1}
+    assert a.jobs_with_intervening_non_status_calls == 1
+    assert a.terminal_collection_lag_s == [1.1]
+
+    b = stats.auto_behavior_groups["bB"]
+    assert (b.policy_hash, b.semantics_version, b.auto_warmup_s) == ("pB", "2", 2.0)
+    assert b.startups == 1
+    assert (b.matches, b.warmup_finished, b.handed_off) == (1, 0, 1)
+    assert b.runtime_s == [50.0]
+    assert b.handoff_would_finish_within_original_wait == 0
+    assert b.handoff_would_timeout_anyway == 1
+
+    assert set(stats.auto_rule_groups) == {"bA/r1", "bB/r1"}
+    assert stats.auto_rule_groups["bA/r1"].matches == 2
+    assert stats.auto_rule_groups["bB/r1"].matches == 1
+
+    rendered = logstats.render(logstats.analyze(records, startups))
+    assert "auto-background (aggregate across behavior groups):" in rendered
+    assert "    auto rules:" not in rendered
+    assert "auto behavior groups:" in rendered
+    assert "behavior=bA policy=pA semantics=1 warmup_s=1" in rendered
+    assert "behavior=bB policy=pB semantics=2 warmup_s=2" in rendered
+    assert rendered.count("rule=r1") == 2
+
+
+def test_behavior_with_startup_and_zero_matches_still_renders():
+    sample = """
+2026-09-25T03:00:00.000 INFO: event=tool_config tool=run_command wait_default_s=30 wait_max_s=50 auto_background_policy_hash=p0 auto_background_behavior_hash=b0 auto_background_semantics_version=1 auto_background_warmup_s=1.0
+"""
+    records, startups = logstats.parse(sample)
+    rendered = logstats.render(logstats.analyze(records, startups))
+
+    assert "run_command workflow:" in rendered
+    assert "auto behavior groups:" in rendered
+    assert (
+        "behavior=b0 policy=p0 semantics=1 warmup_s=1 startups=1 matches=0" in rendered
+    )
