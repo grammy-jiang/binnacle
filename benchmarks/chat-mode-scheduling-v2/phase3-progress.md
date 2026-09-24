@@ -2,15 +2,15 @@
 
 Status: IN PROGRESS
 
-Updated: 2026-09-25T05:00:08+10:00
+Updated: 2026-09-25T05:08:01+10:00
 
 ## Canonical state
 
 - Branch: feature/chat-mode-scheduling-v2-phase3
 - Worktree: /home/grammy-jiang/Projects/binnacle-chat-scheduling-phase3
 - Audited source HEAD: 5f2be143352aaa63fb680c1c79e289d46be201fe
-- Last completed step: 3.5M
-- Next step: 3.5A revision-2 aggregate audit + 3.6A/B/C + 3H replay reruns from corpus revision 2
+- Last completed step: 3.5A
+- Next step: 3.6A/B/C + 3H replay completion on audited corpus revision 2; Step 3.7 after all required C reports
 - Dependency audit: phase3-dependency-audit-2026-09-25-r01.json, r01, SHA-256 d3bec25ba8d49ed4db78e07930542b9e963608ad264c198f8fbf04c4ccfa473a
 - Task graph: phase3-task-graph.json, r01, SHA-256 44cbedb0524fe87a9d111579a96d0d33f4171dfee6ece34eb53baa4c506696b2
 - Initial orchestrator-state checkpoint SHA-256: cec108b23fcf319a48d699f123b8fbf713919f3873d1cae4968a16844b80ed12
@@ -23,6 +23,9 @@ Updated: 2026-09-25T05:00:08+10:00
 - Frozen replay corpus SHA-256: 4dd1e387c42d6fccd37d60795b00192144f3b4d93c57d9eb54ab527a72e8e94d
 - Superseded replay corpus revision 1 SHA-256: c2c2809abde13c7b697e3a8c3e91a547fe68bbd83fdbd816c611b3f0e94808de
 - Replay corpus report SHA-256: f6e46b89b60bb89c918ab4c5d9ab11d0dea5da2b27bf3794c96f1e34ebc440bd
+- Corpus audit status: PASS
+- Audited corpus SHA-256: 4dd1e387c42d6fccd37d60795b00192144f3b4d93c57d9eb54ab527a72e8e94d
+- Frozen corpus audit HEAD: 207000caa3727f37f494675f34934fd61fc6cdd5
 - Production baseline re-observed: 2026-09-25T01:10:16+10:00
 
 ## Deviation
@@ -53,7 +56,15 @@ Updated: 2026-09-25T05:00:08+10:00
 | p3-source-operational-journal | complete |
 | p3-fix-opjournal-extractor | complete |
 | p3-source-operational-journal-r2 | complete |
-| 3.5A | running |
+| p3-audit-phase1-step3 | complete |
+| p3-audit-phase1-step4 | complete |
+| p3-audit-phase1-step5 | complete |
+| p3-audit-phase1-step6 | complete |
+| p3-audit-phase1-step7 | complete |
+| p3-audit-phase1-step8 | complete |
+| p3-audit-operational-journal-r2 | complete |
+| p3-audit-aggregate | complete |
+| 3.5A | complete |
 | 3.6A | not_started |
 | 3.6B | not_started |
 | 3.6C | not_started |
@@ -385,3 +396,43 @@ Updated: 2026-09-25T05:00:08+10:00
   `feature/chat-mode-scheduling-v2-phase3-source-operational-journal-r2`,
   integrated as canonical `e86a0e3`; shard SHA-256
   `40186dbf2adde0936a47d0a270c802f71fad5adf8dca9c8a3d9c039590b97cff`.
+
+## Step 3.5A notes
+
+- Step 3.5A is PASS against revision-2 corpus
+  `4dd1e387c42d6fccd37d60795b00192144f3b4d93c57d9eb54ab527a72e8e94d`.
+- Required per-source audits PASS for `phase1-step3`, `phase1-step4`,
+  `phase1-step5`, `phase1-step6`, `phase1-step7`,
+  `phase1-step8`, and available `operational-journal`; the aggregate
+  audit also PASSes against the same corpus SHA.
+- The four audits already integrated before revision 2 were reverified
+  byte-for-byte. Newly integrated worker-to-canonical mappings are:
+  `a3467546d` to `5e1a97f`, `45345c838` to
+  `94304fa`, `9b8de4aa7` to `d6615fd`, and
+  `af218f658` to `0ad10fb`.
+- Per-source audits began before the merged corpus existed. The canonical fan-in
+  therefore adds Step-3.5A binding annotations with the revision-2 corpus SHA
+  while preserving the independent source/shard audit conclusions.
+- Frozen corpus-audit evidence HEAD:
+  `207000caa3727f37f494675f34934fd61fc6cdd5`.
+- The operational-journal note now records revision 2: 4,073 token-filtered
+  lines, 4,045 extractor parser records, 4,043 independently correlated true
+  timing events, 2,968 positive waits, and 278 rows.
+- Revision-1 operational-journal audit
+  `5518a09b30fd21356f7659f63f1318b39d769431` is retained as historical
+  FAIL evidence in `corpus_revisions[]`; it is not cherry-picked or counted
+  as the required audit. Its extractor defect was fixed in
+  `c7b0b8bf1c308812d3b391c556b8a302d5b8c125`.
+- No revision-2 corpus defect remains. Step 3.7 remains gated on all required C
+  candidate reports referencing this audited corpus SHA.
+
+## Step 3.5A validation
+
+- Audit binding validator: PASS, 7/7 per-source audits plus aggregate.
+- Aggregate consistency audit: PASS, 96/96 checks; 326 unique rows and 3,000
+  waits; canonical Phase-1 population remains 48 = 24 A + 24 B.
+- Deterministic aggregate merge evidence: PASS, 2/2 fresh JSON and Markdown
+  outputs byte-identical to the frozen corpus/report.
+- Focused test matrix defines no dedicated Step-3.5A pytest target.
+- File-scoped pre-commit on normalized audit evidence and the revision-2
+  operational-journal note: PASS.
