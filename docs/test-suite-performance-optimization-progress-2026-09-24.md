@@ -9,7 +9,7 @@
 | 1.3 | Define/mark true no_xdist tests | PASS |
 | 1.4 | Resolve search-text ordering contract | PASS |
 | 1.5 | Build two-lane fast full-suite command | PASS |
-| 1.6 | Full regression + Phase 1 checkpoint | NOT STARTED |
+| 1.6 | Full regression + Phase 1 checkpoint | PASS |
 | 2.1 | Real-wait inventory | NOT STARTED |
 | 2.2 | Explicit test timing policy for job warm-up | NOT STARTED |
 | 2.3 | Shorten lifecycle waited-out processes safely | NOT STARTED |
@@ -495,3 +495,143 @@ Risks / follow-up:
 Next:
 
 - 1.6 Phase 1 full regression and documentation checkpoint
+
+Step: 1.6 Phase 1 full regression and documentation checkpoint
+Status: PASS
+
+Changed:
+
+- `docs/testing.md` — documents the supported two-lane fast full-suite command and the fixed Pi 5 benchmark form.
+- `docs/long-command-performance-and-distribution.md` — preserves the historical 2026-09-22 measurements and adds a concise Phase 1 clean-checkpoint measurement.
+- `docs/test-suite-performance-optimization-progress-2026-09-24.md` — marks Step 1.6 PASS, records checkpoint evidence, and stores the seed-12345 top-50 durations.
+- No production source files changed.
+- The frozen plan itself was not changed; this separate progress record is the live execution-status record.
+
+Source snapshot:
+
+- Branch: `design/chat-mode-scheduling-v2`
+- Exact source commit at step start: `94441a58aca911ba9069d3228adf33557b2deec1`.
+- The worktree was clean at step start.
+- The progress record and `git log -8 --oneline --decorate` confirmed Steps 1.1 through 1.5 were PASS and Step 1.6 was the next NOT STARTED step.
+
+Validation:
+
+- Fast full-suite run 1, fixed seed:
+  `/usr/bin/time -f "wall=%e user=%U sys=%S cpu=%P maxrss_kb=%M" uv run python scripts/run_test_suite.py --workers 4 --seed 12345`
+  - Parallel-safe lane: 1126 passed, 0 failed, 3 skipped in 44.00 s.
+  - Ordinary-process lane: 2 passed, 0 failed, 0 skipped, 1129 deselected in 2.81 s.
+  - Runner total: 48.78 s; resolved workers: 4; final exit code 0.
+  - Wrapper: `wall=48.85 user=53.23 sys=5.40 cpu=120% maxrss_kb=427936`.
+- Fast full-suite run 2, fixed seed plus duration inventory:
+  `/usr/bin/time -f "wall=%e user=%U sys=%S cpu=%P maxrss_kb=%M" uv run python scripts/run_test_suite.py --workers 4 --seed 12345 --durations=50`
+  - Parallel-safe lane: 1126 passed, 0 failed, 3 skipped in 41.67 s.
+  - Ordinary-process lane: 2 passed, 0 failed, 0 skipped, 1129 deselected in 2.79 s.
+  - Runner total: 46.44 s; resolved workers: 4; final exit code 0.
+  - Wrapper: `wall=46.55 user=51.79 sys=4.75 cpu=121% maxrss_kb=426496`.
+- Fast full-suite run 3, different seed:
+  `/usr/bin/time -f "wall=%e user=%U sys=%S cpu=%P maxrss_kb=%M" uv run python scripts/run_test_suite.py --workers 4 --seed 54321`
+  - Parallel-safe lane: 1126 passed, 0 failed, 3 skipped in 39.41 s.
+  - Ordinary-process lane: 2 passed, 0 failed, 0 skipped, 1129 deselected in 2.73 s.
+  - Runner total: 44.08 s; resolved workers: 4; final exit code 0.
+  - Wrapper: `wall=44.16 user=51.62 sys=4.55 cpu=127% maxrss_kb=436032`.
+- Exact focused test commands: none. The owner-authorized Step 1.6 trim explicitly skips the separate watchdog and search-text focused suites because the three full runs cover them.
+- Changed-file hooks: `uv run pre-commit run --files docs/testing.md docs/long-command-performance-and-distribution.md docs/test-suite-performance-optimization-progress-2026-09-24.md` — PASS.
+- Mandatory full hook gate: `uv run pre-commit run --all-files` — PASS.
+
+Benchmark host/load evidence:
+
+- Before fixed-seed run 1: `nproc=4`; `/proc/loadavg = 0.28 0.93 1.03 1/801 720677`.
+- Before fixed-seed run 2: `nproc=4`; `/proc/loadavg = 1.01 1.02 1.05 1/799 722456`.
+- Before different-seed run: `nproc=4`; `/proc/loadavg = 1.11 1.07 1.07 1/799 724228`.
+- No one-minute load exceeded 1.5, so no foreign-load wait was required and none of the checkpoint timings is labelled as foreign-load contaminated.
+
+Performance:
+
+- Step 1.1 branch-specific sequential baseline: `wall=124.73 s`, 1115 passed and 3 skipped. This is contextual because later Phase 1 steps changed test code and added runner tests.
+- Formal same-source Phase 1 A/B from Step 1.5: `wall=113.04 s` sequential versus `wall=47.10 s` with the two-lane runner, a 58.3% wall-time reduction.
+- Step 1.6 stable fixed-seed checkpoint: `wall=48.85 s` and `wall=46.55 s`; the different-seed run was `wall=44.16 s`.
+- Apples-to-apples: the Step 1.5 113.04 s versus 47.10 s comparison is the formal same-source A/B. Step 1.6 confirms repeatability on the unchanged runner source snapshot; the Step 1.1 baseline is older-snapshot context only.
+- Step 1.6 itself changes documentation only and does not alter runtime behaviour.
+
+### Step 1.6 durations (seed 12345, fast runner)
+
+| Duration | Phase | Test |
+| ---: | --- | --- |
+| 10.47s | call | `tests/integration/test_jobs_lifecycle.py::test_stop_reports_recorded_signal_not_unknown` |
+| 4.04s | call | `tests/integration/test_job_status_blocking_guard_concurrency.py::test_one_turn_can_exhaust_while_another_retains_budget` |
+| 3.07s | call | `tests/integration/test_jobs_lifecycle.py::test_status_wait_expires_leaves_job_running` |
+| 2.50s | call | `tests/integration/test_jobs_lifecycle.py::test_stop_a_job_that_just_finished_on_its_own` |
+| 2.49s | call | `tests/integration/test_jobs_lifecycle.py::test_status_wait_returns_when_job_exits` |
+| 2.27s | call | `tests/integration/test_job_status_blocking_guard_concurrency.py::test_second_wave_shares_original_deadline` |
+| 2.13s | call | `tests/integration/test_http_workflows.py::test_authenticated_http_background_job_status_and_stop` |
+| 2.10s | call | `tests/integration/test_http_workflows.py::test_http_tracked_job_status_receives_base_turn_and_client` |
+| 2.08s | call | `tests/integration/test_job_status_blocking_guard_concurrency.py::test_fresh_tracker_loses_only_ephemeral_budget_state` |
+| 2.07s | call | `tests/integration/test_job_status_blocking_guard.py::test_real_job_sequential_exhaustion_keeps_job_durable` |
+| 2.06s | call | `tests/integration/test_packaging_smoke.py::test_core_server_imports_when_watchdog_companion_is_blocked` |
+| 2.06s | call | `tests/integration/test_jobs_lifecycle.py::test_status_wait_is_capped` |
+| 2.05s | call | `tests/integration/test_jobs.py::test_slow_command_yields_job_then_completes` |
+| 2.05s | call | `tests/integration/test_jobs_lifecycle.py::test_background_run_marks_background_job_true` |
+| 2.05s | call | `tests/integration/test_jobs_lifecycle.py::test_large_unread_stdin_does_not_stall_past_wait_seconds` |
+| 2.03s | call | `tests/integration/test_job_status_blocking_guard_concurrency.py::test_two_simultaneous_waits_charge_one_two_second_window` |
+| 2.03s | call | `tests/integration/test_job_status_blocking_guard_concurrency.py::test_different_jobs_same_turn_share_one_budget` |
+| 2.03s | call | `tests/integration/test_job_status_blocking_guard_concurrency.py::test_different_turns_keep_independent_deadlines` |
+| 2.01s | call | `tests/integration/test_jobs_store.py::test_reaper_tolerates_pruned_dir` |
+| 1.87s | call | `tests/system/test_tunnel_readiness.py::test_waits_out_the_bound_when_the_url_file_is_stale` |
+| 1.63s | call | `tests/integration/test_packaging_smoke.py::test_server_import_fails_cleanly_when_configured_token_is_missing` |
+| 1.54s | call | `tests/integration/test_jobs_lifecycle.py::test_stop_escalates_to_sigkill_when_sigterm_ignored` |
+| 1.53s | call | `tests/unit/core/test_search_text_stream.py::test_completed_child_is_not_timed_out_by_slow_consumer` |
+| 1.52s | call | `tests/system/test_watchdog_failures_services.py::test_http_alive_treats_any_http_status_as_alive` |
+| 1.40s | call | `tests/unit/core/test_properties.py::test_full_match_agrees_with_the_stdlib` |
+| 1.35s | call | `tests/integration/test_jobs.py::test_quiet_flag_on_sleeping_job` |
+| 1.34s | call | `tests/integration/test_jobs.py::test_stop_terminates_running_job_and_children` |
+| 1.32s | call | `tests/system/test_tunnel_readiness.py::test_waits_out_the_bound_but_never_fails_when_the_probe_is_not_ok` |
+| 1.30s | call | `tests/integration/test_job_telemetry.py::test_stop_escalation_is_visible_in_telemetry` |
+| 1.17s | call | `tests/contracts/test_job_schemas.py::test_running_job_status_validates` |
+| 1.15s | call | `tests/contracts/test_job_schemas.py::test_signal_killed_job_validates_in_all_three_tools` |
+| 1.13s | call | `tests/contracts/test_job_schemas.py::test_listing_validates_with_mixed_states` |
+| 1.09s | call | `tests/integration/test_jobs_lifecycle.py::test_setsid_child_is_stopped_with_the_job` |
+| 1.09s | call | `tests/integration/test_jobs_lifecycle.py::test_concurrent_stops_agree` |
+| 1.08s | call | `tests/integration/test_jobs_lifecycle.py::test_stop_kills_the_whole_process_group` |
+| 1.08s | call | `tests/integration/test_job_status_blocking_guard_concurrency.py::test_five_simultaneous_waits_charge_one_one_second_window` |
+| 1.06s | call | `tests/integration/test_jobs_store.py::test_start_job_spares_old_running_job_outside_base_window` |
+| 1.06s | call | `tests/integration/test_jobs_store.py::test_prune_spares_running_job` |
+| 1.05s | call | `tests/integration/test_jobs_lifecycle.py::test_run_command_wait_seconds_is_clamped_to_max` |
+| 1.05s | call | `tests/integration/test_jobs_lifecycle.py::test_missing_log_file_does_not_break_status` |
+| 1.05s | call | `tests/integration/test_jobs_lifecycle.py::test_status_lists_processes_of_running_job` |
+| 1.04s | call | `tests/integration/test_jobs_lifecycle.py::test_double_stop_reports_the_same_final_state` |
+| 1.02s | call | `tests/integration/test_jobs_lifecycle.py::test_status_wait_bridges_to_exited_for_background_job` |
+| 1.01s | call | `tests/integration/test_jobs_lifecycle.py::test_external_kill_via_run_command_is_recorded_and_visible` |
+| 1.00s | call | `tests/integration/test_jobs.py::test_background_returns_fast` |
+| 1.00s | call | `tests/integration/test_jobs_lifecycle.py::test_reload_orphan_running_then_unknown_and_stop_is_honest` |
+| 0.96s | call | `tests/integration/test_wheel_artifact.py::test_wheel_contains_runtime_package_typing_marker_and_entry_points` |
+| 0.90s | call | `tests/scripts/test_usage_breakdown.py::test_test_traffic_is_dropped_by_its_call_id` |
+| 0.69s | call | `tests/integration/test_jobs_state_machine.py::TestJobLifecycleStateMachine::runTest` |
+| 0.63s | call | `tests/unit/core/test_properties.py::test_clip_head_tail_bounds_and_preserves_both_ends` |
+
+Findings:
+
+- Every checkpoint run had zero unexpected failures.
+- The ordinary-process lane consistently ran exactly the two known process-self-inspection tests; the complementary parallel-safe lane remained stable.
+- The watchdog USB schedule test no longer appears in the top-50 duration table, confirming that the accidental 12-second settle path remains removed in the full suite.
+- The search-text ordering comparison remained green under repeated xdist full-suite runs.
+- The remaining Phase 1 long tail is dominated by job lifecycle and blocking-guard timing; the slowest call is `tests/integration/test_jobs_lifecycle.py::test_stop_reports_recorded_signal_not_unknown` at 10.47 s.
+- Production source behaviour changed: no.
+- Host-safety fixture, coverage policy, production timing defaults, and managed test selection were not weakened.
+- Phase 2 is safe to start from this checkpoint after the checkpoint commit and CI gate are green.
+
+Deviation from Section 5.8 / frozen step:
+
+- Owner-authorized trim: the separate watchdog and search-text focused suites were skipped; the three full-suite runs cover both areas.
+- Owner-authorized addition: the fast full suite was run exactly three times — twice with seed 12345 and once with seed 54321. The second fixed-seed run included `--durations=50`, and its top-50 table is stored above for Step 2.1 reuse.
+- Tooling substitution: the platform blocked a large inline progress-write payload before execution, so the same report was written through smaller stdin-driven Python helpers via the Raspberry Pi MCP connector.
+- No other Section 5.8 execution lock was changed.
+
+Risks / follow-up:
+
+- The 10.47-second lifecycle test and several 2–4 second blocking/lifecycle tests remain the clearest Phase 2 opportunities.
+- The two tunnel-readiness timeout tests remain visible at 1.87 s and 1.32 s and are intentionally real-time contracts under Section 5.8.7; they must not be converted to fake clocks merely for speed.
+- The checkpoint documentation changes are non-production-only; no production timing or runtime behaviour changed.
+
+Next:
+
+- 2.1 Build the real-wait inventory
