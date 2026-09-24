@@ -46,33 +46,132 @@ upstream evidence. Metric arithmetic remains authoritative in
 remain authoritative in `docs/chat-mode-scheduling-v2-ab-plan.md`; server-guard
 semantics remain authoritative in `docs/chat-mode-scheduling-v2-server-guard.md`.
 
-### Coordinator and parallel workers
+### Orchestrator and dynamically parallel workers
 
-The hard concurrency ceiling for this plan is **four ChatGPT sessions total**,
-not four workers plus a coordinator. One of those four sessions is always the
-**coordinator (Slot A)**. In a four-lane wave the coordinator may also execute
-one explicitly assigned low-conflict lane in a separate worker worktree; the
-other three sessions occupy Slots B/C/D. If the coordinator must remain purely
-coordinating for a particular wave, only three worker lanes run concurrently and
-the fourth lane waits. Never create a fifth session to preserve a four-worker
-wave.
+There is **no plan-imposed numeric limit** on concurrent ChatGPT worker sessions.
+The user's environment is known to support multiple simultaneous chats; four is a
+proven minimum capability, **not a ceiling**. The orchestrator/task manager is a
+coordination role and does not consume or reserve a worker slot in this design.
 
-Only the coordinator may edit:
+The orchestrator maintains a dependency-driven **ready queue**. A task is ready
+when all of its declared predecessors are complete and every required immutable
+input hash is frozen. At every scheduling event it must:
+
+1. enumerate **all** ready tasks, not only a fixed-size batch;
+2. launch every ready task whose write/resource locks do not conflict with an
+   already-running task and whose live-resource class is inside the currently
+   qualified capacity envelope;
+3. when **any** worker completes, validate its declared outputs/commit, release
+   its locks, recompute the DAG immediately, and launch newly ready tasks without
+   waiting for unrelated workers in the earlier batch;
+4. keep independent blocked tasks from preventing unrelated ready work;
+5. continue this refill process until the next genuine fan-in/dependency barrier.
+
+Therefore terms such as "wave" or "parallel stage" in this document identify a
+**dependency frontier**, not a fixed number of sessions and not a rule that all
+workers in that frontier must start/finish together. If eight independent tasks
+are ready and the actual environment can support eight safely, launch eight. If
+additional tasks become ready while those eight run, launch them immediately when
+their resource constraints allow.
+
+The orchestrator exclusively mutates **canonical coordination state**:
 
 - this phase's canonical progress JSON/Markdown;
 - dependency-audit artifacts;
 - integration-branch history;
 - final phase verdict/report;
-- shared ChatGPT Project instructions, connector routing, endpoint configuration,
-  staging deployment state, or production state.
+- any global deployment/cutover decision record.
 
-Parallel workers use separate worktrees/branches and only the file ownership
-assigned by this document. A worker ends with a clean committed branch and
-reports its commit hash. The coordinator integrates worker commits serially.
+External resources are not automatically global locks. The orchestrator may
+delegate mutation of **disjoint** Projects, connector profiles, endpoints, or
+review artifacts to parallel workers by assigning an exclusive resource id to
+each worker. For example, `project-mutate:rp-sched-A` and
+`project-mutate:rp-sched-C300` may run concurrently, while two workers may never
+hold the same Project/connector/endpoint mutation lock. Primary/staging deployment
+cutovers remain orchestrator-controlled because they affect shared runtime state.
+
+Workers use separate worktrees/branches or explicitly read-only scratch state and
+only the ownership assigned by this document. A code/evidence worker ends with a
+clean committed branch and reports its commit hash plus input/output hashes. The
+orchestrator integrates commits serially when they target the same integration
+branch, but worker execution before that fan-in is maximally parallel.
+
+#### Resource-lock model
+
+The scheduler uses **resource identities**, not session-count limits. A worker
+declares the smallest relevant set, for example:
+
+```text
+git-write:<worker-branch>
+artifact-write:<path>
+project-mutate:<project-id>
+connector-mutate:<connector-or-profile>
+endpoint-config:<endpoint-id>
+staging-deployment
+primary-deployment
+canonical-progress
+canonical-integration
+```
+
+Read-only use of immutable evidence does not conflict. Two workers may run in
+parallel when their write/resource identities are disjoint. A shared resource is
+serialized only for the period actually required; do not serialize an entire
+phase merely because one later action is exclusive.
+
+#### Live-resource admission control
+
+CPU/network/tunnel/browser limits are **measured runtime constraints**, not fixed
+chat-count rules. Live benchmark/deployment tasks declare a live-resource class.
+The orchestrator admits as many as the current qualification/health evidence
+supports and stops increasing concurrency when correctness, routing, dispatch,
+load, throttling, or interruption criteria fail. A later section may define a
+special stricter admission rule for performance timing; that rule limits only the
+contended live resource, not unrelated analysis/code/review workers.
+
+#### Progress fields for parallel scheduling
+
+Canonical progress records enough state for a new orchestrator to reconstruct the
+scheduler without conversation memory:
+
+```text
+ready_tasks[]
+running_tasks[]        # task id, worker branch/session label, input hashes
+resource_locks{}       # resource id -> owning task
+completed_worker_commits{}
+blocked_tasks{}        # blocker and unaffected-ready-work note
+```
+
+These are orchestration state, not a license for workers to edit canonical
+progress concurrently.
+
+### Dependency-audit preflight fan-out
+
+Step N.0 is a fan-in gate, but its **read-only investigations are independent
+worker tasks** and should be launched concurrently whenever their inputs are
+available. The orchestrator should normally fan out at least these categories,
+adapted to the phase-specific N.0 requirements:
+
+```text
+preflight-git-lineage          # branch ancestry, dirty/diverged worktrees, public-base freshness
+preflight-previous-artifacts   # progress/report/handoff paths + SHA verification
+preflight-previous-ci          # recorded evidence CI + current closeout HEAD CI
+preflight-test-tooling         # authoritative runner/coverage/benchmark tooling identity
+preflight-production-state     # read-only master/service/config/unit observation
+preflight-external-control     # auth, Projects/connectors/tunnel control plane when relevant
+preflight-runtime-state        # relevant staging/endpoint/process identity when relevant
+```
+
+There is no fixed worker count: split a category further when that produces
+disjoint useful work (for example one artifact-hash worker per report family or
+one Project-readback worker per Project). Workers write only scratch findings;
+the orchestrator owns the formal dependency-audit JSON/Markdown and performs the
+final consistency fan-in. A blocker in one category does not stop unrelated
+preflight workers from finishing, so the final blocker report is as complete as
+possible in one pass.
 
 ### Predecessor uncertainty rule
 
-Before **every numbered step or parallel wave**, verify its direct predecessors
+Before **every numbered step or parallel frontier**, verify its direct predecessors
 from this phase's canonical progress JSON and the artifacts named by the step
 dependency table below. A cold-start agent must not infer completion from Git
 commit names, file existence alone, or a previous chat summary.
@@ -369,12 +468,12 @@ with an alternate name.
 | **6.0** dependency audit | Phase 5 | Phase-5 handoff/T0/identities/rollback/staging health all PASS |
 | **6.1** initialize windows | 6.0 | committed PASS audit + exact T0 |
 | **6.2** T+24h freeze | 6.1 + wall clock >=T+24h | exact timestamp-bounded data available |
-| **6A** T+24h analysis | 6.2 | one immutable T+24h evidence snapshot/hash |
-| **6.3** T+24h gate | all 6A lanes | four reports reconcile to same evidence hash |
+| **6A** T+24h review frontier | 6.2 | one immutable T+24h evidence snapshot/hash; all independent subreviews ready together |
+| **6.3** T+24h gate | all canonical focus artifacts + integrity/activity audits | same evidence hash; all focus fan-ins complete |
 | **6.4** wait to T+7d | 6.3=`CONTINUE_TO_7D` or `CONTINUE_TO_7D_LOW_VOLUME` | no rollback/hard failure |
 | **6.5** T+7d freeze | wall clock >=T+7d | full and incremental immutable windows frozen |
-| **6B** T+7d analysis | 6.5 | both window hashes frozen |
-| **6.6** final operational verdict | all 6B lanes | four reports reconcile + no evidence blocker |
+| **6B** T+7d review frontier | 6.5 | both window hashes frozen; all independent subreviews ready together |
+| **6.6** final operational verdict | all canonical T+7d focus artifacts + integrity/activity audits | all focus fan-ins reconcile + no evidence blocker |
 | **6.7** primary release-candidate deployment | 6.6=`GO_PRIMARY_INTEGRATION` + explicit owner approval | pre-cutover dependency refresh PASS |
 | **6.8** primary smoke + 24h confirmation | 6.7 | cutover commit/config/instructions/consumer inventory frozen |
 | **6.9** final evidence/repository closeout + cleanup | 6.8=`PRIMARY_CONFIRMATION_PASS` | no rollback condition, primary state healthy |
@@ -395,13 +494,13 @@ a fresh pre-cutover dependency investigation** before touching primary:
 This pre-cutover refresh is required even when 6.0 was PASS; the elapsed time is
 long enough that upstream drift is expected rather than exceptional.
 
-### Phase-6 review worker branch/worktree topology
+### Phase-6 dynamic review topology
 
-For each frozen review window, create fresh worker branches from the current
-Phase-6 integration HEAD. The suffix identifies the window and lane; never reuse
-a branch from an earlier window because its evidence hash differs.
+Every frozen Phase-6 evidence window uses the same pattern: **many read-only
+subreview workers -> four canonical focus leads -> orchestrator verdict**. The
+four focus outputs are a reporting contract, not a session limit.
 
-T+24h:
+Canonical focus-lead branches for T+24h:
 
 ```text
 feature/chat-mode-scheduling-v2-phase6-t24-reliability
@@ -414,58 +513,75 @@ feature/chat-mode-scheduling-v2-phase6-t24-workflow
   /home/grammy-jiang/Projects/binnacle-chat-scheduling-phase6-t24-workflow
 ```
 
-T+7d worker names are exactly:
+T+7d uses the same exact branch/worktree pattern with `t7d-*`. Primary-cutover
+confirmation uses `primary24-*`; a 48-hour extension uses fresh `primary48-*`
+branches. Never reuse an earlier-window focus branch.
+
+For each window the orchestrator immediately fans out all independent subreview
+partitions against the same evidence SHA. Default partition set:
 
 ```text
-feature/chat-mode-scheduling-v2-phase6-t7d-reliability
-  /home/grammy-jiang/Projects/binnacle-chat-scheduling-phase6-t7d-reliability
-feature/chat-mode-scheduling-v2-phase6-t7d-blocking
-  /home/grammy-jiang/Projects/binnacle-chat-scheduling-phase6-t7d-blocking
-feature/chat-mode-scheduling-v2-phase6-t7d-efficiency
-  /home/grammy-jiang/Projects/binnacle-chat-scheduling-phase6-t7d-efficiency
-feature/chat-mode-scheduling-v2-phase6-t7d-workflow
-  /home/grammy-jiang/Projects/binnacle-chat-scheduling-phase6-t7d-workflow
+reliability/*:
+  mcp-server-errors
+  job-manager-errors
+  tunnel-connector-health
+  interruptions-outages
+
+blocking/*:
+  union-wall-budget
+  exhaustion-classification
+  wait-distribution
+  overlap-accounting
+
+efficiency/*:
+  tool-result-tokens
+  job-status-call-burden
+  concurrency-overlap
+  duplicate-completed-reads
+
+workflow/*:
+  same-turn-proxy
+  continuation-incidents
+  tagged-validation-correctness
+  activity-sufficiency
 ```
 
-Primary-cutover 24-hour review names are exactly:
+The orchestrator may add more read-only partitions when evidence naturally splits
+(for example per scenario class or per day) as long as ownership/output names are
+disjoint and the canonical focus lead knows the complete expected partition list.
+There is no plan-imposed worker count.
+
+Subreviews write scratch fragments only:
 
 ```text
-feature/chat-mode-scheduling-v2-phase6-primary24-reliability
-  /home/grammy-jiang/Projects/binnacle-chat-scheduling-phase6-primary24-reliability
-feature/chat-mode-scheduling-v2-phase6-primary24-blocking
-  /home/grammy-jiang/Projects/binnacle-chat-scheduling-phase6-primary24-blocking
-feature/chat-mode-scheduling-v2-phase6-primary24-efficiency
-  /home/grammy-jiang/Projects/binnacle-chat-scheduling-phase6-primary24-efficiency
-feature/chat-mode-scheduling-v2-phase6-primary24-workflow
-  /home/grammy-jiang/Projects/binnacle-chat-scheduling-phase6-primary24-workflow
+/tmp/binnacle-chat-scheduling-v2/phase6/review/<window>/<focus>/<partition>.json
 ```
 
-If primary confirmation extends to 48 hours, use fresh branches/worktrees with
-`primary48-*` in place of `primary24-*`. Each worker checks the frozen evidence
-SHA before analysis and commits only its assigned review artifacts. The
-coordinator cherry-picks all four commits before writing the corresponding
-canonical gate. Never reuse an earlier-window worker branch.
+A focus lead becomes ready as soon as all partitions for **that focus** finish; it
+does not wait for the other three focus families. It verifies evidence/fragment
+hashes and writes one canonical `{json,md}` artifact. The orchestrator writes the
+6.3/6.6/6.8 verdict only after the required canonical focus artifacts exist.
 
-Wave-6A outputs:
+Canonical T+24h outputs:
 
 ```text
-Slot A coordinator: benchmarks/chat-mode-scheduling-v2/phase6-t24h-reliability.{json,md}
-Slot B:             benchmarks/chat-mode-scheduling-v2/phase6-t24h-blocking-wall.{json,md}
-Slot C:             benchmarks/chat-mode-scheduling-v2/phase6-t24h-efficiency.{json,md}
-Slot D:             benchmarks/chat-mode-scheduling-v2/phase6-t24h-workflow-ux.{json,md}
+reliability: benchmarks/chat-mode-scheduling-v2/phase6-t24h-reliability.{json,md}
+blocking:    benchmarks/chat-mode-scheduling-v2/phase6-t24h-blocking-wall.{json,md}
+efficiency:  benchmarks/chat-mode-scheduling-v2/phase6-t24h-efficiency.{json,md}
+workflow:    benchmarks/chat-mode-scheduling-v2/phase6-t24h-workflow-ux.{json,md}
 ```
 
-Wave-6B outputs:
+Canonical T+7d outputs:
 
 ```text
-Slot A coordinator: benchmarks/chat-mode-scheduling-v2/phase6-t7d-reliability.{json,md}
-Slot B:             benchmarks/chat-mode-scheduling-v2/phase6-t7d-blocking-wall.{json,md}
-Slot C:             benchmarks/chat-mode-scheduling-v2/phase6-t7d-efficiency.{json,md}
-Slot D:             benchmarks/chat-mode-scheduling-v2/phase6-t7d-workflow-ux.{json,md}
+reliability: benchmarks/chat-mode-scheduling-v2/phase6-t7d-reliability.{json,md}
+blocking:    benchmarks/chat-mode-scheduling-v2/phase6-t7d-blocking-wall.{json,md}
+efficiency:  benchmarks/chat-mode-scheduling-v2/phase6-t7d-efficiency.{json,md}
+workflow:    benchmarks/chat-mode-scheduling-v2/phase6-t7d-workflow-ux.{json,md}
 ```
 
-Every lane records the exact evidence-window hashes it analyzed. Only the
-coordinator writes 6.3/6.6 canonical verdicts.
+Every canonical focus artifact records the exact evidence-window SHA(s) it
+analyzed.
 
 ### Final CI attestation without self-reference
 
@@ -698,21 +814,18 @@ benchmarks/chat-mode-scheduling-v2/phase6-t24h-evidence.md
 ```
 
 Record the JSON SHA-256 in progress. Do not extend the window opportunistically
-because the review was started late; use timestamps. Every Wave-6A lane reads this
-exact artifact.
+because the review was started late; use timestamps. Every T+24h subreview and focus lead reads this exact artifact/hash.
 
-### Wave 6A — T+24h parallel analysis
+### T+24h review frontier 6A — dynamic read-only fan-out
 
-```text
-Slot A  reliability/reachability/interruptions
-Slot B  blocking wall/budget/exhaustion
-Slot C  calls/tokens/concurrency/efficiency
-Slot D  same-turn proxy/continuations/correctness incidents
-```
+Immediately enqueue the full Phase-6 subreview partition set defined in
+**Phase-6 dynamic review topology**. All partitions share the frozen T+24h
+evidence SHA; focus leads launch independently as soon as their own partitions
+complete.
 
 ### Step 6.3 — T+24h gate
 
-Serial aggregate. First evaluate hard rollback conditions. If none fired, classify
+Orchestrator fan-in. First evaluate hard rollback conditions after the required canonical focus artifacts/integrity checks are complete. If none fired, classify
 first-day evidence volume. `CONTINUE_TO_7D` requires at least:
 
 ```text
@@ -760,11 +873,12 @@ Freeze both half-open windows into fixed artifacts:
 ```
 
 Record both JSON SHA-256 values in progress so late degradation is not hidden by
-averaging with the first day. Every Wave-6B lane reads these same hashes.
+averaging with the first day. Every T+7d subreview/focus lead reads these same hashes.
 
-### Wave 6B — T+7d parallel analysis
+### T+7d review frontier 6B — dynamic read-only fan-out
 
-Use the same four lanes as Wave 6A, each comparing:
+Launch the full dynamic subreview partition set again against both frozen T+7d
+window hashes. Each subreview/focus lead compares the relevant metrics across:
 
 ```text
 Phase-4 confirmatory C
@@ -774,6 +888,9 @@ Phase-6 first 24 h
 Phase-6 days 2–7
 full 7 d
 ```
+
+Per-day or per-scenario-class subworkers may be added freely when they reduce wall
+time; the canonical focus leads remain the deterministic fan-in boundary.
 
 ### Step 6.6 — final operational go/no-go
 
@@ -834,6 +951,26 @@ worktree: /home/grammy-jiang/Projects/binnacle-chat-scheduling-primary-integrati
 If either already exists, inspect/recover it rather than creating an alternate
 name. Divergence or unexplained dirty state is a blocker; do not reset it.
 
+Before any primary mutation, fan out the 6.7 **read-only pre-cutover
+investigation** into independent workers:
+
+```text
+precutover-git-drift          # latest POC/master + scheduling stack ancestry/conflicts
+precutover-consumers          # primary connector consumer inventory/scope
+precutover-project-state      # current instructions/connector mappings per Project
+precutover-units-config       # primary config/server/jobs/tunnel unit snapshots/hashes
+precutover-runtime            # currently deployed commit/process/service identity
+precutover-rollback           # completeness/readability of all rollback snapshots
+precutover-staging-fallback   # staging endpoint remains healthy/restartable
+```
+
+Launch all immediately with read-only resource access. Each writes a private or
+non-sensitive hashed fragment under the pre-primary-cutover snapshot root. The
+orchestrator performs no primary mutation until **all required pre-cutover
+workers pass**. Additional Projects discovered by the consumer-inventory worker
+create new Project-state snapshot tasks dynamically and those tasks start
+immediately rather than waiting for the first set to finish.
+
 Release-candidate branch/deployment procedure:
 
 1. fetch latest `origin/proof-of-concept` and `origin/master`;
@@ -880,7 +1017,7 @@ Treat 6.8 as four explicit substeps:
 6.8.1  immediate primary read + short background-job smoke
 6.8.2  record primary_cutover_started_at and wait real 24 h
 6.8.3  freeze the exact primary-cutover 24 h evidence window
-6.8.4  run four-lane review and coordinator PASS/ROLLBACK gate
+6.8.4  run dynamic review fan-out -> focus leads -> orchestrator PASS/ROLLBACK gate
 ```
 
 6.8.1 verifies effective config, instruction hash, guard telemetry, durable-job
@@ -918,7 +1055,7 @@ and extend the confirmation once to **48 hours total**. Freeze:
 [0,+48h):    benchmarks/chat-mode-scheduling-v2/phase6-primary48h-evidence.{json,md}
 ```
 
-Rerun all four reviews against the cumulative 48-hour evidence with exact outputs:
+Rerun the full dynamic subreview fan-out against the cumulative 48-hour evidence, producing these four canonical focus outputs:
 
 ```text
 benchmarks/chat-mode-scheduling-v2/phase6-primary48h-reliability.{json,md}
@@ -932,17 +1069,18 @@ If the cumulative 48-hour window meets the minimum and every gate passes, record
 minimum at 48 hours, explicit owner decision is required to amend the plan for a
 further extension or rollback/stop; it is not an automatic PASS.
 
-6.8.4 uses exactly:
+6.8.4 launches the same dynamic partition set used for staging windows. Its
+canonical 24-hour focus outputs are exactly:
 
 ```text
-Slot A coordinator: benchmarks/chat-mode-scheduling-v2/phase6-primary24h-reliability.{json,md}
-Slot B:             benchmarks/chat-mode-scheduling-v2/phase6-primary24h-blocking-wall.{json,md}
-Slot C:             benchmarks/chat-mode-scheduling-v2/phase6-primary24h-efficiency.{json,md}
-Slot D:             benchmarks/chat-mode-scheduling-v2/phase6-primary24h-workflow-ux.{json,md}
+reliability: benchmarks/chat-mode-scheduling-v2/phase6-primary24h-reliability.{json,md}
+blocking:    benchmarks/chat-mode-scheduling-v2/phase6-primary24h-blocking-wall.{json,md}
+efficiency:  benchmarks/chat-mode-scheduling-v2/phase6-primary24h-efficiency.{json,md}
+workflow:    benchmarks/chat-mode-scheduling-v2/phase6-primary24h-workflow-ux.{json,md}
 ```
 
-All four artifacts reference the same window hash. At the 24-hour decision the
-coordinator records exactly one of:
+All canonical focus artifacts reference the same window hash. At the 24-hour
+decision the orchestrator records exactly one of:
 
 ```text
 PRIMARY_CONFIRMATION_PASS               # also record primary_confirmation_hours=24

@@ -45,33 +45,132 @@ upstream evidence. Metric arithmetic remains authoritative in
 remain authoritative in `docs/chat-mode-scheduling-v2-ab-plan.md`; server-guard
 semantics remain authoritative in `docs/chat-mode-scheduling-v2-server-guard.md`.
 
-### Coordinator and parallel workers
+### Orchestrator and dynamically parallel workers
 
-The hard concurrency ceiling for this plan is **four ChatGPT sessions total**,
-not four workers plus a coordinator. One of those four sessions is always the
-**coordinator (Slot A)**. In a four-lane wave the coordinator may also execute
-one explicitly assigned low-conflict lane in a separate worker worktree; the
-other three sessions occupy Slots B/C/D. If the coordinator must remain purely
-coordinating for a particular wave, only three worker lanes run concurrently and
-the fourth lane waits. Never create a fifth session to preserve a four-worker
-wave.
+There is **no plan-imposed numeric limit** on concurrent ChatGPT worker sessions.
+The user's environment is known to support multiple simultaneous chats; four is a
+proven minimum capability, **not a ceiling**. The orchestrator/task manager is a
+coordination role and does not consume or reserve a worker slot in this design.
 
-Only the coordinator may edit:
+The orchestrator maintains a dependency-driven **ready queue**. A task is ready
+when all of its declared predecessors are complete and every required immutable
+input hash is frozen. At every scheduling event it must:
+
+1. enumerate **all** ready tasks, not only a fixed-size batch;
+2. launch every ready task whose write/resource locks do not conflict with an
+   already-running task and whose live-resource class is inside the currently
+   qualified capacity envelope;
+3. when **any** worker completes, validate its declared outputs/commit, release
+   its locks, recompute the DAG immediately, and launch newly ready tasks without
+   waiting for unrelated workers in the earlier batch;
+4. keep independent blocked tasks from preventing unrelated ready work;
+5. continue this refill process until the next genuine fan-in/dependency barrier.
+
+Therefore terms such as "wave" or "parallel stage" in this document identify a
+**dependency frontier**, not a fixed number of sessions and not a rule that all
+workers in that frontier must start/finish together. If eight independent tasks
+are ready and the actual environment can support eight safely, launch eight. If
+additional tasks become ready while those eight run, launch them immediately when
+their resource constraints allow.
+
+The orchestrator exclusively mutates **canonical coordination state**:
 
 - this phase's canonical progress JSON/Markdown;
 - dependency-audit artifacts;
 - integration-branch history;
 - final phase verdict/report;
-- shared ChatGPT Project instructions, connector routing, endpoint configuration,
-  staging deployment state, or production state.
+- any global deployment/cutover decision record.
 
-Parallel workers use separate worktrees/branches and only the file ownership
-assigned by this document. A worker ends with a clean committed branch and
-reports its commit hash. The coordinator integrates worker commits serially.
+External resources are not automatically global locks. The orchestrator may
+delegate mutation of **disjoint** Projects, connector profiles, endpoints, or
+review artifacts to parallel workers by assigning an exclusive resource id to
+each worker. For example, `project-mutate:rp-sched-A` and
+`project-mutate:rp-sched-C300` may run concurrently, while two workers may never
+hold the same Project/connector/endpoint mutation lock. Primary/staging deployment
+cutovers remain orchestrator-controlled because they affect shared runtime state.
+
+Workers use separate worktrees/branches or explicitly read-only scratch state and
+only the ownership assigned by this document. A code/evidence worker ends with a
+clean committed branch and reports its commit hash plus input/output hashes. The
+orchestrator integrates commits serially when they target the same integration
+branch, but worker execution before that fan-in is maximally parallel.
+
+#### Resource-lock model
+
+The scheduler uses **resource identities**, not session-count limits. A worker
+declares the smallest relevant set, for example:
+
+```text
+git-write:<worker-branch>
+artifact-write:<path>
+project-mutate:<project-id>
+connector-mutate:<connector-or-profile>
+endpoint-config:<endpoint-id>
+staging-deployment
+primary-deployment
+canonical-progress
+canonical-integration
+```
+
+Read-only use of immutable evidence does not conflict. Two workers may run in
+parallel when their write/resource identities are disjoint. A shared resource is
+serialized only for the period actually required; do not serialize an entire
+phase merely because one later action is exclusive.
+
+#### Live-resource admission control
+
+CPU/network/tunnel/browser limits are **measured runtime constraints**, not fixed
+chat-count rules. Live benchmark/deployment tasks declare a live-resource class.
+The orchestrator admits as many as the current qualification/health evidence
+supports and stops increasing concurrency when correctness, routing, dispatch,
+load, throttling, or interruption criteria fail. A later section may define a
+special stricter admission rule for performance timing; that rule limits only the
+contended live resource, not unrelated analysis/code/review workers.
+
+#### Progress fields for parallel scheduling
+
+Canonical progress records enough state for a new orchestrator to reconstruct the
+scheduler without conversation memory:
+
+```text
+ready_tasks[]
+running_tasks[]        # task id, worker branch/session label, input hashes
+resource_locks{}       # resource id -> owning task
+completed_worker_commits{}
+blocked_tasks{}        # blocker and unaffected-ready-work note
+```
+
+These are orchestration state, not a license for workers to edit canonical
+progress concurrently.
+
+### Dependency-audit preflight fan-out
+
+Step N.0 is a fan-in gate, but its **read-only investigations are independent
+worker tasks** and should be launched concurrently whenever their inputs are
+available. The orchestrator should normally fan out at least these categories,
+adapted to the phase-specific N.0 requirements:
+
+```text
+preflight-git-lineage          # branch ancestry, dirty/diverged worktrees, public-base freshness
+preflight-previous-artifacts   # progress/report/handoff paths + SHA verification
+preflight-previous-ci          # recorded evidence CI + current closeout HEAD CI
+preflight-test-tooling         # authoritative runner/coverage/benchmark tooling identity
+preflight-production-state     # read-only master/service/config/unit observation
+preflight-external-control     # auth, Projects/connectors/tunnel control plane when relevant
+preflight-runtime-state        # relevant staging/endpoint/process identity when relevant
+```
+
+There is no fixed worker count: split a category further when that produces
+disjoint useful work (for example one artifact-hash worker per report family or
+one Project-readback worker per Project). Workers write only scratch findings;
+the orchestrator owns the formal dependency-audit JSON/Markdown and performs the
+final consistency fan-in. A blocker in one category does not stop unrelated
+preflight workers from finishing, so the final blocker report is as complete as
+possible in one pass.
 
 ### Predecessor uncertainty rule
 
-Before **every numbered step or parallel wave**, verify its direct predecessors
+Before **every numbered step or parallel frontier**, verify its direct predecessors
 from this phase's canonical progress JSON and the artifacts named by the step
 dependency table below. A cold-start agent must not infer completion from Git
 commit names, file existence alone, or a previous chat summary.
@@ -466,10 +565,10 @@ execution lineage; the planning branch remains documentation history only.
 | **3.0** dependency audit | Phase 2 + test-efficiency final checkpoint | upstream progress/reports/hashes/CI investigated and PASS |
 | **3.1** validate synchronized baseline | 3.0 | committed PASS dependency-audit artifact |
 | **3.2** freeze replay schema | 3.1 | Phase-3 integration branch/worktree + inherited test runner recorded |
-| **3.3A/B/C/D** Wave 3A | 3.2 | exact shared schema/source HEAD + four worker branches created |
-| **3.4** integrate Wave 3A | all 3.3 lanes | four worker commit hashes + worker tests + clean worker worktrees |
-| **3.5** build corpus | 3.4 | integrated extractor/replay/scenario/provenance tests green |
-| **3.6A/B/C/D** Wave 3B | 3.5 | one frozen corpus path + SHA256; no corpus mutation during replay |
+| **3.3A/B/C/D** implementation frontier | 3.2 | exact shared schema/source HEAD + all four task-specific worker branches created |
+| **3.4** integrate implementation frontier | all 3.3 tasks | all required worker commit hashes + worker tests + clean worker worktrees |
+| **3.5** parallel source extraction + corpus freeze/audit | 3.4 | integrated extractor/replay/scenario/provenance tests green; source inventory frozen |
+| **3.6A/B/C/D** candidate replay frontier | 3.5 | one frozen audited corpus path + SHA256; no corpus mutation during replay |
 | **3.7** aggregate/shortlist | all 3.6 lanes | four candidate JSON/Markdown artifacts + corpus hash match |
 | **3.8** Phase-4 readiness | 3.7 | shortlist/verdict frozen; missing-scenario/provenance work integrated |
 | **3.9** final validation | 3.8 | readiness PASS; no unresolved blocker |
@@ -491,7 +590,7 @@ HEAD. Reuse/recover them if they already exist; never create alternate suffixes:
      worktree: /home/grammy-jiang/Projects/binnacle-chat-scheduling-phase3-provenance
 ```
 
-After Step 3.4 integrates Wave 3A, create/rebase **fresh candidate-report worker
+After Step 3.4 integrates the implementation frontier, create/rebase **fresh candidate-report worker
 branches from the post-3.5 frozen-corpus integration HEAD**:
 
 ```text
@@ -505,55 +604,115 @@ feature/chat-mode-scheduling-v2-phase3-h10
   /home/grammy-jiang/Projects/binnacle-chat-scheduling-phase3-h10
 ```
 
-Each Wave-3B worker commits only its candidate JSON/Markdown. Step 3.7 coordinator
+Each candidate-replay worker commits only its candidate JSON/Markdown. Step 3.7 orchestrator
 cherry-picks the four evidence commits in C120, C300, C600, H10 order. If a
 candidate was mechanically rejected during replay, it still writes/commits its
 rejection report; no lane is omitted.
 
-The Wave-3A four-session assignment is exactly:
+The implementation frontier has four independent tasks because the work itself
+contains four disjoint ownership areas. The orchestrator launches **all four at
+once** when 3.2 freezes their common input HEAD; it does not occupy one of those
+workers:
 
 ```text
-Slot A (coordinator + worker worktree): 3.3A corpus extractor
-Slot B:                              3.3B replay engine
-Slot C:                              3.3C missing scenarios
-Slot D:                              3.3D timeout provenance
+implementation-corpus      -> 3.3A corpus extractor
+implementation-replay      -> 3.3B replay engine
+implementation-scenarios   -> 3.3C missing scenarios/oracles
+implementation-provenance  -> 3.3D timeout provenance/evidence
 ```
 
-The Wave-3B assignment is exactly:
+If one implementation worker is blocked, the other three continue. Step 3.4 is a
+true fan-in barrier because its integration tests require all four ownership
+areas, but the orchestrator must not delay independent work merely to preserve a
+fixed batch shape.
+
+The candidate replay frontier likewise launches one worker for **each candidate
+policy** as soon as the audited corpus is frozen:
 
 ```text
-Slot A (coordinator): C120
-Slot B:               C300
-Slot C:               C600
-Slot D:               H10
+candidate-c120
+candidate-c300
+candidate-c600
+candidate-h10
 ```
 
-If one lane is blocked, independent lanes may finish, but Step 3.4/3.7 cannot
-start until every required lane is resolved. Do not substitute a missing lane's
-result with inference from another candidate.
+The candidate frontier has one worker per frozen policy (`C120/C300/C600/H10`). Step 3.7 is the fan-in requiring all four policy reports; the count comes from the policy set, not from worker scheduling.
 
-### Parallel audit artifact ownership
+### Dynamic source-shard extraction and audit fan-out
 
-After Step 3.5 freezes the corpus, Slots C/D perform independent read-only
-corpus audits in these exact worker branches/worktrees:
+Step 3.5 is intentionally more parallel than the original plan. The source
+inventory assigns a stable `source_id` to every canonical source:
 
 ```text
-Slot C:
-  feature/chat-mode-scheduling-v2-phase3-corpus-audit-c
-  /home/grammy-jiang/Projects/binnacle-chat-scheduling-phase3-corpus-audit-c
-  -> benchmarks/chat-mode-scheduling-v2/phase3-corpus-audit-c.md
-
-Slot D:
-  feature/chat-mode-scheduling-v2-phase3-corpus-audit-d
-  /home/grammy-jiang/Projects/binnacle-chat-scheduling-phase3-corpus-audit-d
-  -> benchmarks/chat-mode-scheduling-v2/phase3-corpus-audit-d.md
+phase1-step3
+phase1-step4
+phase1-step5
+phase1-step6
+phase1-step7
+phase1-step8
+operational-journal   # only when a retained window exists
 ```
 
-Both branches start from the exact post-3.5 integration HEAD and verify the frozen
-corpus SHA before analysis. They do not edit the corpus or canonical progress.
-Each commits only its audit Markdown. Slot A cherry-picks C then D, reconciles
-findings, and records `corpus_audit=PASS` before Wave 3B. A disagreement with the
-corpus is a Step-3.5 blocker; do not continue candidate replay.
+After Step 3.4 integrates the extractor, the orchestrator creates **one worker per
+source_id** from the same integration HEAD. Branch/worktree names are derived
+deterministically:
+
+```text
+branch:   feature/chat-mode-scheduling-v2-phase3-source-<source_id>
+worktree: /home/grammy-jiang/Projects/binnacle-chat-scheduling-phase3-source-<source_id>
+output:   benchmarks/chat-mode-scheduling-v2/phase3-corpus-shards/<source_id>.json
+```
+
+All source workers run concurrently when ready. Each reads only its frozen source
+paths and writes only its shard file plus an optional shard Markdown note. A
+missing optional operational-journal window produces an explicit `unavailable`
+shard; a missing canonical Phase-1 source is a blocker.
+
+The extractor CLI therefore supports deterministic shard/merge operations:
+
+```bash
+uv run python scripts/chat_scheduling_replay_corpus.py extract \
+  --inventory benchmarks/chat-mode-scheduling-v2/phase3-source-inventory.json \
+  --source-id <source_id> \
+  --output benchmarks/chat-mode-scheduling-v2/phase3-corpus-shards/<source_id>.json
+
+uv run python scripts/chat_scheduling_replay_corpus.py merge \
+  --inventory benchmarks/chat-mode-scheduling-v2/phase3-source-inventory.json \
+  --shards-dir benchmarks/chat-mode-scheduling-v2/phase3-corpus-shards \
+  --output benchmarks/chat-mode-scheduling-v2/phase3-replay-corpus.json \
+  --report benchmarks/chat-mode-scheduling-v2/phase3-replay-corpus.md
+```
+
+As each extraction worker finishes, the orchestrator validates its source hash and
+can immediately launch its corresponding **independent audit worker**; it does not
+wait for every extraction worker first. Audit branch/worktree names are:
+
+```text
+feature/chat-mode-scheduling-v2-phase3-audit-<source_id>
+/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase3-audit-<source_id>
+```
+
+Each audit worker re-derives counts/timing invariants from that immutable source
+and writes only:
+
+```text
+benchmarks/chat-mode-scheduling-v2/phase3-corpus-audits/<source_id>.md
+```
+
+After all required shards exist, the orchestrator merges them deterministically
+into the corpus while any already-started shard audits continue running. Then it
+launches one additional aggregate consistency audit worker:
+
+```text
+branch:   feature/chat-mode-scheduling-v2-phase3-audit-aggregate
+worktree: /home/grammy-jiang/Projects/binnacle-chat-scheduling-phase3-audit-aggregate
+output:   benchmarks/chat-mode-scheduling-v2/phase3-corpus-audits/aggregate.md
+```
+
+Step 3.5 completes only when every canonical source audit and the aggregate audit
+pass against the same final corpus/source hashes. The number of simultaneous
+workers is therefore the number of ready source/audit tasks, not an arbitrary
+chat-session limit.
 
 ### Final CI attestation without self-reference
 
@@ -650,14 +809,11 @@ The inventory contains exact canonical Phase-1 trial source paths/hashes and the
 available operational journal window. The corpus extractor consumes this file;
 it does not independently rediscover sources on every run.
 
-Corpus build CLI:
-
-```bash
-uv run python scripts/chat_scheduling_replay_corpus.py build \
-  --inventory benchmarks/chat-mode-scheduling-v2/phase3-source-inventory.json \
-  --output benchmarks/chat-mode-scheduling-v2/phase3-replay-corpus.json \
-  --report benchmarks/chat-mode-scheduling-v2/phase3-replay-corpus.md
-```
+Corpus construction uses the parallel `extract` + deterministic `merge` CLI
+contract defined in **Dynamic source-shard extraction and audit fan-out** above.
+A single-process `build` convenience command may exist for local debugging, but
+Phase-3 canonical execution uses shard fan-out so independent source extraction is
+not serialized unnecessarily.
 
 Phase-3 aggregate CLI used by Step 3.7:
 
@@ -672,7 +828,7 @@ uv run python scripts/chat_scheduling_phase3_report.py \
   --output-md benchmarks/chat-mode-scheduling-v2/phase3-policy-replay-YYYY-MM-DD-rNN.md
 ```
 
-The actual date/revision is resolved by the coordinator before invocation; never
+The actual date/revision is resolved by the orchestrator before invocation; never
 literally create a file containing `YYYY-MM-DD-rNN`.
 
 ### Focused test matrix
@@ -906,8 +1062,7 @@ A candidate is rejected before Phase 4 if any of these apply:
    retained as reliability context but are not assigned fabricated replay fields.
 
 Passing Phase 3 means **eligible for live testing**, not approved for deployment.
-The live calibration shortlist is exactly **all candidates that pass every
-the **Phase-3 offline candidate gates**. The preferred live candidate is the smallest passing
+The live calibration shortlist is exactly **all candidates that pass every Phase-3 offline candidate gate**. The preferred live candidate is the smallest passing
 budget. Do not drop another passing candidate because it looks less attractive;
 Phase 4 targeted calibration exists to resolve that uncertainty. If no candidate
 passes, Phase 3 ends `NO_LIVE_CANDIDATE` and Phase 4 must not start.
@@ -918,7 +1073,7 @@ passes, Phase 3 ends `NO_LIVE_CANDIDATE` and Phase 4 must not start.
 
 Target: 10–20 minutes.
 
-Serial; Slot A only.
+Orchestrator-owned canonical step. Independent already-running workers may continue; this step itself has no worker-session ceiling.
 
 Predecessor: Step 3.0 PASS. The canonical Phase-3 workspace already exists; do
 not create another branch/worktree here.
@@ -953,7 +1108,7 @@ Do not implement replay yet.
 
 Target: 15–20 minutes.
 
-Serial; Slot A.
+Orchestrator-owned canonical step. Launch all newly ready worker tasks immediately after its freeze point.
 
 Tasks:
 
@@ -967,11 +1122,11 @@ Tasks:
 
 Exit: worker lanes have a stable shared schema and do not need to redesign it.
 
-### Wave 3A — four parallel implementation lanes
+### Parallel implementation frontier 3A — all independent implementation tasks
 
-All four start from Step-3.2 HEAD.
+All four implementation tasks start immediately from the same Step-3.2 HEAD. Four is the task count, not a concurrency limit.
 
-#### Step 3.3A — corpus extractor — Slot A coordinator/worker
+#### Step 3.3A — corpus extractor worker
 
 Target: 15–20 minutes.
 
@@ -983,7 +1138,7 @@ tests/scripts/test_chat_scheduling_replay_corpus.py
 ```
 
 This worker implements extraction code/tests only. It does **not** write the
-canonical `phase3-replay-corpus.{json,md}`; Step 3.5 coordinator generation owns
+canonical `phase3-replay-corpus.{json,md}`; Step 3.5 orchestrator generation owns
 those artifacts.
 
 Tasks:
@@ -996,7 +1151,7 @@ Tasks:
 - fail loudly when a referenced canonical submitted trial is missing rather than
   silently shrinking the sample.
 
-#### Step 3.3B — replay engine — Slot B
+#### Step 3.3B — replay engine worker
 
 Target: 15–20 minutes.
 
@@ -1011,7 +1166,7 @@ Implement the frozen baseline/C120/C300/C600/H10 replay semantics defined in **P
 deterministic API. Synthetic tests cover serial waits, overlap, partial overlap,
 early exhausted budget, observed exit inside/outside candidate interval, and H10.
 
-#### Step 3.3C — missing Phase-4 scenarios — Slot C
+#### Step 3.3C — missing Phase-4 scenarios worker
 
 Target: 15–20 minutes.
 
@@ -1096,7 +1251,7 @@ Phase-1 bound globally.
 
 R12 is excluded from aggregate performance medians.
 
-#### Step 3.3D — timeout provenance classifier — Slot D
+#### Step 3.3D — timeout provenance classifier worker
 
 Target: 15–20 minutes.
 
@@ -1126,11 +1281,11 @@ other_submitted_error            # submitted but none of the above
 
 Classification is diagnostic only. It never changes canonical inclusion.
 
-### Step 3.4 — integrate Wave 3A
+### Step 3.4 — integrate implementation frontier 3A
 
 Target: 15–20 minutes.
 
-Serial; Slot A.
+Orchestrator-owned canonical fan-in step.
 
 Cherry-pick worker commits in this order:
 
@@ -1148,8 +1303,11 @@ cross-worker conflict silently.
 
 Target: 10–20 minutes.
 
-Serial corpus generation, but Slots C/D may independently audit counts and hashes
-in parallel after generation.
+Execute the dynamic source-shard extraction/audit fan-out defined earlier. Source
+workers and their corresponding audit workers refill continuously as inputs become
+ready. The orchestrator alone performs the deterministic shard merge/final corpus
+freeze once all required canonical shards exist; audit workers may still be
+running while unrelated source extraction/merge-ready work proceeds.
 
 Required checks:
 
@@ -1161,10 +1319,10 @@ Required checks:
 - corpus generation is deterministic byte-for-byte when source evidence is
   unchanged.
 
-### Wave 3B — candidate replay, four sessions in parallel
+### Candidate replay frontier 3B — one concurrent worker per candidate policy
 
 Each lane reads the same frozen corpus and writes only its own candidate files.
-No source code edits during this wave.
+No source code edits during this candidate-replay frontier.
 
 #### Step 3.6A — C120 replay
 
@@ -1194,7 +1352,8 @@ exhaustion, union-wall burden, calls clipped/nonblocking, and per-scenario table
 
 Target: 15–20 minutes.
 
-Serial; Slot A.
+Orchestrator-owned fan-in after all four candidate policy artifacts are frozen.
+Independent workers from other non-conflicting checks may still run.
 
 Implement/validate `scripts/chat_scheduling_phase3_report.py` using the frozen CLI
 contract above, then write:
