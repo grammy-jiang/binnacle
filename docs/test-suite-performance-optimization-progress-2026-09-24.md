@@ -10,7 +10,7 @@
 | 1.4 | Resolve search-text ordering contract | PASS |
 | 1.5 | Build two-lane fast full-suite command | PASS |
 | 1.6 | Full regression + Phase 1 checkpoint | PASS |
-| 2.1 | Real-wait inventory | NOT STARTED |
+| 2.1 | Real-wait inventory | PASS |
 | 2.2 | Explicit test timing policy for job warm-up | NOT STARTED |
 | 2.3 | Shorten lifecycle waited-out processes safely | NOT STARTED |
 | 2.4 | Inject time into tunnel/readiness polling tests | NOT STARTED |
@@ -635,3 +635,170 @@ Risks / follow-up:
 Next:
 
 - 2.1 Build the real-wait inventory
+
+Step: 2.1 Build the real-wait inventory
+Status: PASS
+
+Changed:
+
+- `docs/test-suite-performance-optimization-progress-2026-09-24.md` — marks Step 2.1 PASS and records the complete real-wait inventory, source-search completeness check, and the owner-authorized duration-evidence reuse.
+- No test files or production source files changed.
+
+Source snapshot:
+
+- Branch: `design/chat-mode-scheduling-v2`
+- Exact source commit at step start: `8f5d3171833ae99a97366fa01a649b31a9fb0dd4`.
+- The worktree was clean at step start.
+- The progress record and `git log -8 --oneline --decorate` confirmed Steps 1.1 through 1.6 were PASS and Step 2.1 was the next NOT STARTED step.
+- `git diff --name-only 94441a58aca911ba9069d3228adf33557b2deec1 8f5d3171833ae99a97366fa01a649b31a9fb0dd4` showed only `docs/long-command-performance-and-distribution.md`, `docs/test-suite-performance-optimization-progress-2026-09-24.md`, and `docs/testing.md`. Therefore the Step 1.6 duration run and the Step 2.1 start commit have identical test and production source.
+
+Validation:
+
+- Owner-authorized duration evidence instead of a new sequential `--durations=50` run:
+  `/usr/bin/time -f "wall=%e user=%U sys=%S cpu=%P maxrss_kb=%M" uv run python scripts/run_test_suite.py --workers 4 --seed 12345 --durations=50`
+  - Step 1.6 parallel-safe lane: 1126 passed, 0 failed, 3 skipped in 41.67 s.
+  - Step 1.6 ordinary-process lane: 2 passed, 0 failed, 0 skipped, 1129 deselected in 2.79 s.
+  - Runner total: 46.44 s; wrapper `wall=46.55`.
+- Historical sequential top-30 evidence used for completeness reconciliation:
+  `/usr/bin/time -f "wall=%e user=%U sys=%S cpu=%P maxrss_kb=%M" uv run pytest tests -q --randomly-seed=12345 --durations=30`
+  - Step 1.1 result: 1115 passed, 0 failed, 3 skipped; wrapper `wall=124.73`.
+- Exact Raspberry Pi MCP source searches:
+  - `search_text(path=tests, pattern="sleep", names_only=true)` — 102 matches across 24 files.
+  - `search_text(path=tests, pattern="time\\.sleep\\(", line_numbers=true)` — 24 matches.
+  - `search_text(path=tests, pattern="asyncio\\.sleep\\(", line_numbers=true)` — 0 matches.
+  - `search_text(path=tests, pattern="sleep\\s+[0-9]", line_numbers=true)` — 56 shell/fixture sleep matches.
+  - `search_text(path=tests, pattern="wait_seconds", line_numbers=true)` — 87 matches.
+  - `search_text(path=tests, pattern="wait_seconds\\s*=", names_only=true)` — 37 assignment/call-site matches.
+  - `search_text(path=tests, pattern="STOP_SIGTERM_GRACE_S|WARMUP_S", line_numbers=true)` — 8 matches.
+  - `search_text(path=tests, pattern="poll", line_numbers=true)` — 108 matches.
+  - `search_text(path=tests, pattern="deadline", line_numbers=true)` — 18 matches.
+  - `search_text(path=tests, pattern="timeout", names_only=true)` — 138 matches.
+  - `search_text(path=tests, pattern="^\\s*while\\b", line_numbers=true)` — 10 loop matches.
+- Exact focused test commands run in Step 2.1: none. This measurement/inventory step changed no test or production behaviour.
+- Exact full-lane command run in Step 2.1: none. The owner-authorized trim explicitly forbids a new sequential duration run and directs reuse of Step 1.6 plus Step 1.1 evidence.
+- New Step 2.1 pytest pass/fail/skip counts: N/A because no pytest command was run. The reused fixed-seed Step 1.6 evidence is 1128 passed total, 0 failed, 3 skipped across the two lanes.
+- Changed-file pre-commit gate:
+  `uv run pre-commit run --files docs/test-suite-performance-optimization-progress-2026-09-24.md`
+  - Result: PASS.
+
+Performance:
+
+- Before: current Phase 1 fixed-seed duration evidence is the Step 1.6 fast runner at `wall=46.55 s`.
+- After: N/A. Step 2.1 is inventory-only and makes no performance change.
+- Apples-to-apples A/B comparison: none attempted.
+- No new timed benchmark was run, so the benchmark-only `nproc` and `/proc/loadavg` preflight was not applicable in this step.
+- The Step 1.6 duration evidence is valid for this inventory under the owner-authorized trim because only documentation changed between its measured source and the exact Step 2.1 start commit.
+
+### Step 2.1 real-wait inventory
+
+Categories are the frozen-plan categories: **1** real-time contract; **2** process lifecycle with configurable timing; **3** pure state/policy; **4** external subprocess startup cost; **5** unexplained/non-wait long tail to profile before changing.
+
+The materiality threshold for the current Step 1.6 table is **1.00 s call duration**. Every current entry at or above that threshold is inventoried below. The four recorded entries below 1.00 s are explicitly reconciled after the table.
+
+| Baseline call | Test node id | Why wall time is spent | Category | Proposed treatment | Real-time coverage that must remain |
+| ---: | --- | --- | ---: | --- | --- |
+| 10.47s | `tests/integration/test_jobs_lifecycle.py::test_stop_reports_recorded_signal_not_unknown` | Ten background starts each pay the production 1.0 s warm-up; each `sleep 30` is only a live sentinel and is stopped immediately. | 2 | Step 2.2 module-local `WARMUP_S=0.05`; keep the ten-stop race/state coverage unless later evidence supports reducing repetitions. | Keep real process/stop behaviour; the production 1.0 s warm-up need not remain. |
+| 4.04s | `tests/integration/test_job_status_blocking_guard_concurrency.py::test_one_turn_can_exhaust_while_another_retains_budget` | Deliberate concurrent real waits consume one 3 s budget while another turn retains and spends a further 1 s. | 1 | Retain as real-time guard evidence; change only with separate anti-flake proof. | Yes. |
+| 3.07s | `tests/integration/test_jobs_lifecycle.py::test_status_wait_expires_leaves_job_running` | One 1.0 s background warm-up plus two positive one-second status waits. | 2 | Step 2.2 removes warm-up cost; later preserve the bounded-wait contract with the smallest safe real timing. | Keep a real positive-wait expiry check; production warm-up need not remain. |
+| 2.50s | `tests/integration/test_jobs_lifecycle.py::test_stop_a_job_that_just_finished_on_its_own` | 1.0 s background warm-up plus fixed `time.sleep(1.5)` after a one-second child. | 2 | Step 2.2, then replace the fixed finish sleep with state-based readiness and shorten the child in Step 2.3. | Keep the real finish-vs-stop race; fixed 1.5 s delay need not remain. |
+| 2.49s | `tests/integration/test_jobs_lifecycle.py::test_status_wait_returns_when_job_exits` | Background warm-up consumes about 1 s, then status blocks for the remainder of a two-second child. | 2 | Step 2.2 plus Step 2.3 shorter child duration while retaining early-return semantics. | Keep a real early-return wait; exact production seconds need not remain. |
+| 2.27s | `tests/integration/test_job_status_blocking_guard_concurrency.py::test_second_wave_shares_original_deadline` | Intentional two-second shared deadline with a real 0.25 s stagger before the second waiter. | 1 | Retain; it directly checks overlapping wall-clock deadline semantics. | Yes. |
+| 2.13s | `tests/integration/test_http_workflows.py::test_authenticated_http_background_job_status_and_stop` | Real HTTP run-command background warm-up plus a one-second `job_status` wait. | 2 | Re-measure after lifecycle-only Step 2.2; broaden warm-up override only if later evidence satisfies Section 5.8.6. | Keep real HTTP and process lifecycle; production warm-up duration need not remain. |
+| 2.10s | `tests/integration/test_http_workflows.py::test_http_tracked_job_status_receives_base_turn_and_client` | Real HTTP background warm-up plus a tracked one-second status wait. | 2 | Re-measure later; retain real HTTP/context propagation while shortening only test timing if still material. | Keep real HTTP/tracker integration; exact production timing need not remain. |
+| 2.08s | `tests/integration/test_job_status_blocking_guard_concurrency.py::test_fresh_tracker_loses_only_ephemeral_budget_state` | Two intentional real one-second waits, one before and one after replacing the tracker. | 1 | Retain as real-time budget-reset evidence. | Yes. |
+| 2.07s | `tests/integration/test_job_status_blocking_guard.py::test_real_job_sequential_exhaustion_keeps_job_durable` | Real sequential waits consume the configured three-second blocking budget until the policy becomes non-blocking. | 1 | Retain as end-to-end blocking-budget evidence. | Yes. |
+| 2.06s | `tests/integration/test_packaging_smoke.py::test_core_server_imports_when_watchdog_companion_is_blocked` | Fresh Python interpreter startup and isolated import graph, not a deliberate sleep. | 4 | Preserve import isolation; profile interpreter/import startup before considering reuse. | No wall-time contract; subprocess isolation is the contract. |
+| 2.06s | `tests/integration/test_jobs_lifecycle.py::test_status_wait_is_capped` | 1.0 s background warm-up plus a real one-second wait after `WAIT_MAX` is reduced to 1. | 2 | Step 2.2 removes warm-up; retain a bounded positive wait at the minimum stable test duration. | Keep real cap behaviour; production warm-up need not remain. |
+| 2.05s | `tests/integration/test_jobs.py::test_slow_command_yields_job_then_completes` | A one-second run-command handoff followed by 0.2 s polling until a two-second child exits. | 2 | Shorten the child/poll window while preserving real handoff and completion in a later long-tail step. | Keep a real handoff/completion path. |
+| 2.05s | `tests/integration/test_jobs_lifecycle.py::test_background_run_marks_background_job_true` | Two separate `sleep 30` background starts each pay the production 1.0 s warm-up; neither sentinel is waited to completion. | 2 | Step 2.2 module-local warm-up override. | Keep real background process creation; no 1.0 s timing contract. |
+| 2.05s | `tests/integration/test_jobs_lifecycle.py::test_large_unread_stdin_does_not_stall_past_wait_seconds` | Deliberate two-second run-command wait while a `sleep 20` child never consumes its large stdin. | 2 | Preserve spool/deadlock coverage; shorten the bounded test wait only if the same pipe-pressure contract remains reliable. | Keep a real process and bounded wait, not the two-second value itself. |
+| 2.03s | `tests/integration/test_job_status_blocking_guard_concurrency.py::test_two_simultaneous_waits_charge_one_two_second_window` | Two concurrent real two-second waits must charge one overlapping wall-clock window. | 1 | Retain. | Yes. |
+| 2.03s | `tests/integration/test_job_status_blocking_guard_concurrency.py::test_different_jobs_same_turn_share_one_budget` | Concurrent real two-second waits on different jobs prove one turn budget is shared. | 1 | Retain. | Yes. |
+| 2.03s | `tests/integration/test_job_status_blocking_guard_concurrency.py::test_different_turns_keep_independent_deadlines` | Concurrent real two-second waits prove independent turn deadlines. | 1 | Retain. | Yes. |
+| 2.01s | `tests/integration/test_jobs_store.py::test_reaper_tolerates_pruned_dir` | One-second background warm-up, then 0.1 s polling waits for a two-second child/reaper after its job directory is removed. | 2 | If still material in Step 2.5, shorten test timing while retaining the real reaper race. | Keep real process/reaper behaviour; production warm-up duration need not remain. |
+| 1.87s | `tests/system/test_tunnel_readiness.py::test_waits_out_the_bound_when_the_url_file_is_stale` | The rendered Bash `SECONDS` script intentionally waits out a two-second bound. | 1 | Retain unchanged under Sections 5.8.7 and Step 2.4 unless contradictory measurement appears. | Yes; this is an intentional real-time contract. |
+| 1.63s | `tests/integration/test_packaging_smoke.py::test_server_import_fails_cleanly_when_configured_token_is_missing` | Fresh Python interpreter startup plus server import/failure path, not a deliberate sleep. | 4 | Preserve isolated import-failure semantics; profile before any fixture/process reuse. | No wall-time contract; subprocess isolation is the contract. |
+| 1.54s | `tests/integration/test_jobs_lifecycle.py::test_stop_escalates_to_sigkill_when_sigterm_ignored` | 1.0 s background warm-up plus a deliberately reduced 0.5 s SIGTERM grace; 30 s child sleep is only a sentinel. | 2 | Step 2.2 removes warm-up cost; retain real SIGTERM-to-SIGKILL escalation with test-specific grace. | Keep real signal escalation; production 5 s grace and 1 s warm-up need not be paid. |
+| 1.53s | `tests/unit/core/test_search_text_stream.py::test_completed_child_is_not_timed_out_by_slow_consumer` | Consumer deliberately sleeps 0.03 s for 50 already-produced events so consumption lasts longer than the one-second stream timeout. | 1 | Retain one real slow-consumer contract; only scale values down together after stability proof. | Yes. |
+| 1.52s | `tests/system/test_watchdog_failures_services.py::test_http_alive_treats_any_http_status_as_alive` | The positive local HTTP request is quick; the post-shutdown negative probe can consume its one-second socket timeout. | 3 | In Step 2.5, close the listener fully or use the smallest safe test timeout; retain a real local-socket functional check. | Retain real socket behaviour, not a one-second wall wait. |
+| 1.40s | `tests/unit/core/test_properties.py::test_full_match_agrees_with_the_stdlib` | Hypothesis/property-case CPU and filesystem/path work; source search shows no deliberate sleep. | 5 | Not a Phase 2 wait target; profile only if it remains a long-tail bottleneck and do not reduce meaningful case volume merely for speed. | No. |
+| 1.35s | `tests/integration/test_jobs.py::test_quiet_flag_on_sleeping_job` | 1.0 s background warm-up plus fixed `time.sleep(0.3)`; the test already sets `QUIET_AFTER_S=0`. | 2 | Later remove/replace the fixed delay after proving state visibility; consider scoped short warm-up only with Section 5.8.6 evidence. | Keep real running-job status; 0.3 s and production warm-up are not contracts. |
+| 1.34s | `tests/integration/test_jobs.py::test_stop_terminates_running_job_and_children` | 1.0 s background warm-up plus fixed 0.3 s after stop; `sleep 30` children are sentinels. | 2 | Replace post-stop fixed sleep with observable state/process readiness if later targeted. | Keep real process-group stop behaviour. |
+| 1.32s | `tests/system/test_tunnel_readiness.py::test_waits_out_the_bound_but_never_fails_when_the_probe_is_not_ok` | The rendered Bash `SECONDS` script intentionally waits out a two-second bound while the health probe remains bad. | 1 | Retain unchanged under Section 5.8.7. | Yes; this is an intentional real-time contract. |
+| 1.30s | `tests/integration/test_job_telemetry.py::test_stop_escalation_is_visible_in_telemetry` | Production 1.0 s background warm-up plus test-specific 0.25 s SIGTERM grace; 30 s child sleep is only a sentinel. | 2 | If still material, use a scoped test warm-up without touching production default; retain real escalation telemetry. | Keep real signal/telemetry path; exact warm-up is not a contract. |
+| 1.17s | `tests/contracts/test_job_schemas.py::test_running_job_status_validates` | FastMCP background `sleep 30` pays production 1.0 s warm-up and is then stopped. | 2 | If later material, opt this module into a short test warm-up only with new Section 5.8.6 evidence. | Keep real FastMCP/job schema path; 1.0 s is not a contract. |
+| 1.15s | `tests/contracts/test_job_schemas.py::test_signal_killed_job_validates_in_all_three_tools` | Background sentinel pays production 1.0 s warm-up before real stop/signal schema checks. | 2 | Same scoped-warm-up treatment only if later measurement justifies it. | Keep real signal-killed schema path. |
+| 1.13s | `tests/contracts/test_job_schemas.py::test_listing_validates_with_mixed_states` | Background sentinel pays production 1.0 s warm-up before listing validation. | 2 | Same scoped-warm-up treatment only if later measurement justifies it. | Keep real running/exited mixed-state schema path. |
+| 1.09s | `tests/integration/test_jobs_lifecycle.py::test_setsid_child_is_stopped_with_the_job` | Background start pays 1.0 s warm-up; long `sleep 40.*` sentinels are killed, with readiness polled in 0.05 s steps. | 2 | Step 2.2 module-local warm-up override; retain readiness polling. | Keep real escaped-session descendant handling. |
+| 1.09s | `tests/integration/test_jobs_lifecycle.py::test_concurrent_stops_agree` | Background `sleep 30` pays 1.0 s warm-up, then two stops race concurrently. | 2 | Step 2.2 module-local warm-up override. | Keep real concurrent stop race. |
+| 1.08s | `tests/integration/test_jobs_lifecycle.py::test_stop_kills_the_whole_process_group` | Background process group pays 1.0 s warm-up; `sleep 60` children are sentinels and readiness/death is condition-polled. | 2 | Step 2.2 module-local warm-up override; keep condition-based synchronization. | Keep real process-group kill behaviour. |
+| 1.08s | `tests/integration/test_job_status_blocking_guard_concurrency.py::test_five_simultaneous_waits_charge_one_one_second_window` | Five concurrent real one-second waits must charge one overlapping wall-clock window. | 1 | Retain. | Yes. |
+| 1.06s | `tests/integration/test_jobs_store.py::test_start_job_spares_old_running_job_outside_base_window` | Old `sleep 30` background sentinel pays production 1.0 s warm-up before prune/start assertions. | 2 | Re-measure in Step 2.5; shorten only through an explicit scoped test timing policy if justified. | Keep a real running job during pruning; 1.0 s is not the contract. |
+| 1.06s | `tests/integration/test_jobs_store.py::test_prune_spares_running_job` | `sleep 5` background sentinel pays production 1.0 s warm-up; it is stopped after prune assertions. | 2 | Same as the preceding jobs-store test. | Keep a real running job during pruning. |
+| 1.05s | `tests/integration/test_jobs_lifecycle.py::test_run_command_wait_seconds_is_clamped_to_max` | `RUN_WAIT_MAX` is set to 1, so the test deliberately consumes a one-second real run-command wait against `sleep 10`. | 2 | Preserve real clamp behavior at the minimum stable positive duration. | Keep one real bounded wait; the production duration is not the contract. |
+| 1.05s | `tests/integration/test_jobs_lifecycle.py::test_missing_log_file_does_not_break_status` | Background `sleep 5` pays production 1.0 s warm-up before its log is removed. | 2 | Step 2.2 module-local warm-up override. | Keep real running-job/log-loss behavior. |
+| 1.05s | `tests/integration/test_jobs_lifecycle.py::test_status_lists_processes_of_running_job` | Background shell plus two `sleep 30` children pays 1.0 s warm-up; children are sentinels, not waited out. | 2 | Step 2.2 module-local warm-up override. | Keep real process enumeration. |
+| 1.04s | `tests/integration/test_jobs_lifecycle.py::test_double_stop_reports_the_same_final_state` | Background `sleep 30` pays production 1.0 s warm-up before two idempotent stops. | 2 | Step 2.2 module-local warm-up override. | Keep real idempotent stop behavior. |
+| 1.02s | `tests/integration/test_jobs_lifecycle.py::test_status_wait_bridges_to_exited_for_background_job` | A one-second child largely overlaps the production 1.0 s background warm-up before the positive status wait observes exit. | 2 | Step 2.2 then shorten the child relative to the test warm-up in Step 2.3. | Keep a real running-to-exited bridge. |
+| 1.01s | `tests/integration/test_jobs_lifecycle.py::test_external_kill_via_run_command_is_recorded_and_visible` | Victim `sleep 30` pays 1.0 s background warm-up; the later kill/status path is prompt. | 2 | Step 2.2 module-local warm-up override. | Keep real external signal recording. |
+| 1.00s | `tests/integration/test_jobs.py::test_background_returns_fast` | Background `sleep 5` returns after the production 1.0 s warm-up; the test only requires return under 3 s. | 2 | Re-measure later; use scoped short test warm-up only if justified by Section 5.8.6. | Keep real background handoff; 1.0 s is not a contract. |
+| 1.00s | `tests/integration/test_jobs_lifecycle.py::test_reload_orphan_running_then_unknown_and_stop_is_honest` | Direct `start_job("sleep 1")` followed by `proc.wait()` intentionally waits for the one-second child to finish without a reaper. | 2 | Step 2.3 shorten the real child while preserving running-to-unknown orphan semantics. | Keep a real unreaped child lifecycle; one second is not required. |
+
+Current Step 1.6 top-50 entries below the 1.00 s materiality threshold:
+
+- 0.96 s `tests/integration/test_wheel_artifact.py::test_wheel_contains_runtime_package_typing_marker_and_entry_points` — external packaging/build cost, not a deliberate wait.
+- 0.90 s `tests/scripts/test_usage_breakdown.py::test_test_traffic_is_dropped_by_its_call_id` — static log-analysis work; embedded `sleep 5` text is fixture data, not executed.
+- 0.69 s `tests/integration/test_jobs_state_machine.py::TestJobLifecycleStateMachine::runTest` — explicitly sets `jobstore.WARMUP_S=0.01`; its `sleep 10` child is a sentinel that is normally stopped, not waited to completion.
+- 0.63 s `tests/unit/core/test_properties.py::test_clip_head_tail_bounds_and_preserves_both_ends` — property/CPU work, no deliberate wait.
+
+Historical Step 1.1 top-30 reconciliation:
+
+- Every still-relevant Step 1.1 top-30 entry is represented in the inventory above.
+- The former 12.02 s `tests/system/test_watchdog_usb.py::test_usb_reset_schedule_escalates_across_attempts` was already fixed in Step 1.2 by patching the real USB-reset lookup point. It no longer appears in the Step 1.6 top-50, so it is a resolved Phase 1 accidental wait rather than a Phase 2 target.
+
+### Source-search completeness
+
+The direct wait-pattern search found no hidden second class of material waits:
+
+| Match family | Disposition |
+| --- | --- |
+| `time.sleep(...)` | Material executions are represented above: tunnel readiness delay/timeout tests, lifecycle/jobs polling or fixed waits, blocking-guard staggering, and the slow search-text consumer. Manager readiness polls use 0.005–0.01 s sleeps and are not duration-ranked. Chat-scheduling occurrences are command/trace strings, not executed by those tests. |
+| `asyncio.sleep(...)` | No matches. |
+| Shell `sleep N` | Material wall cost is represented above. Most long `sleep 20/30/40/60/99` commands are deliberately long sentinels that are stopped/killed before completion; their wall cost comes from warm-up, positive wait, or signal grace, not from waiting N seconds. |
+| `wait_seconds=` | Material real waits are represented above. Additional matches are schema/validation text, analyzer trace fixtures, helper definitions, fake waits, or manager tests using 0.05 s waits. |
+| `WARMUP_S` | The lifecycle module still uses production 1.0 s and is the locked Step 2.2 target. Logging and manager tests already use 0.05 s locally; the state machine uses 0.01 s; no global override exists. |
+| `STOP_SIGTERM_GRACE_S` | Lifecycle and telemetry escalation tests already reduce grace locally to 0.5 s and 0.25 s respectively; production grace is untouched. |
+| Poll/deadline/while loops | The only sleep-based deadline poll found is lifecycle `_wait_until(...)`, used for process readiness/death and represented by affected rows above. Jobs-store's concurrent reader loop has no sleep; watchdog loops advance synthetic `now`; uplink fixture loops block on local sockets; `tests/conftest.py` has an argument-parsing loop. None creates an unclassified material deliberate wait. |
+| `timeout` matches | The broad 138-match search is dominated by upper bounds, local-network/subprocess safety timeouts, fake-clock tests, and telemetry strings. Material consumed timeouts are already represented by tunnel readiness, blocking guard, watchdog HTTP liveness, packaging startup, and search-stream rows above. |
+| Watchdog/chat harness sleep injection | Watchdog policy/audit/tunnel-affinity tests and chat-scheduling harness tests inject callbacks such as `sleep=lambda _: None` or record requested sleeps; they do not consume those durations. |
+| Search-text fake child sleeps | `time.sleep(30)` fake-rg children are timeout/cleanup sentinels and are killed/reaped at about 0.15 s or on consumer exit; they do not consume 30 s. The one deliberate 1.53 s slow-consumer test is inventoried above. |
+| Static fixture/log sleep text | Chat-scheduling analyzer/manifest tests, usage-breakdown fixtures, logstats fixtures, and unfinished-job metadata contain sleep/wait text as data only. |
+
+Findings:
+
+- The dominant configurable cost is the production 1.0 s job background warm-up leaking into tests, especially `test_stop_reports_recorded_signal_not_unknown` where ten starts account for essentially the entire 10.47 s call. This is exactly the narrow seam locked for Step 2.2.
+- Several blocking-wall guard concurrency tests intentionally spend one to four seconds of real wall time and assert elapsed/spent budget semantics. They are retained real-time contracts, not candidates for a global fake clock.
+- The two tunnel-readiness timeout tests are intentional real-time Bash `SECONDS` contracts and remain protected by Section 5.8.7.
+- Long shell sleeps are usually sentinels, not the consumed delay. Shortening every `sleep 30` or `sleep 60` string mechanically would not necessarily improve wall time and could narrow race windows.
+- Packaging smoke tests are a separate external interpreter/import startup cost, not a real-wait problem.
+- The 1.40 s property test is CPU/property-volume work, not a wait. It should not be "optimized" by reducing meaningful property coverage without separate evidence.
+- No `asyncio.sleep` waits exist in the test tree.
+- Production source behaviour changed: no.
+- Host-safety fixture, coverage policy, production timing defaults, and managed test selection were not changed or weakened.
+
+Deviation from Section 5.8 / frozen step:
+
+- Owner-authorized trim: no new full sequential `uv run pytest tests -q --durations=50 --randomly-seed=12345` was run. The Step 1.6 seed-12345 top-50 table plus the Step 1.1 sequential top-30 were used exactly as authorized, while this step concentrated on source search, classification, and completeness.
+- Supervisor nonce tooling substitution: the requested first command `echo p2-2.1-1790212605-22573` was the first tool invocation but was blocked by the platform before reaching the Pi. The equivalent Raspberry Pi connector command `printf '%s\\n' 'p2-2.1-1790212605-22573'` then succeeded and emitted the exact nonce. Per the task instructions, this platform refusal was not treated as a step blocker.
+- No other Section 5.8 execution lock was changed.
+
+Risks / follow-up:
+
+- Step 2.2 must remain narrow: add the locked module-local `jobstore.WARMUP_S=0.05` fixture only in `tests/integration/test_jobs_lifecycle.py` and add the production-default assertion in `tests/unit/core/test_config_loading.py`. Do not broaden the override from this inventory alone.
+- Blocking-wall and tunnel-readiness real-time tests should be treated as retained contracts unless a later step has specific stable A/B evidence.
+- Jobs-store, HTTP, schema, telemetry, and `tests/integration/test_jobs.py` also show 1.0 s warm-up cost, but Section 5.8.6 requires later profiling before moving to an opt-in integration fixture.
+- The watchdog HTTP liveness negative probe and the slow search-text consumer are the clearest non-warm-up waits to revisit only after the locked lifecycle work is measured.
+
+Next:
+
+- 2.2 Scope a short job warm-up to lifecycle tests
