@@ -7,7 +7,7 @@
   "source_branch": "feature/chat-mode-blocking-wall-guard",
   "audited_source_head": "5f2be143352aaa63fb680c1c79e289d46be201fe",
   "last_completed_step": "3.5M",
-  "next_step": "3.5M revision 2 integration and corpus re-freeze",
+  "next_step": "3.5A revision-2 aggregate audit + 3.6A/B/C + 3H replay reruns from corpus revision 2",
   "dependency_audit": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase3-dependency-audit-2026-09-25-r01.json",
     "revision": "r01",
@@ -73,7 +73,8 @@
     "phase3_synchronized_baseline": "806a23053043be46f6ba35ad046833168caa904d",
     "phase3_replay_path_head": "9c768800f1e97f9e06d18bd32b173e24d93e82f0",
     "phase3_scenario_path_head": "7107f142ae6746e17180ae92b4d4be0e6e3957d2",
-    "phase3_corpus_path_head": "3e498a33294708c7fe1996b49e78752d8720523d"
+    "phase3_corpus_path_head": "3e498a33294708c7fe1996b49e78752d8720523d",
+    "phase3_corpus_path_head_r2": "19d5951b9617936c655664a992dc0c419051c4f7"
   },
   "frozen_hashes": {
     "phase2_progress_json": "bcfc0413457b00dd935ab5ba5cc11b35d4e3dd3e9c81edd54e429c599f8cc809",
@@ -90,15 +91,18 @@
     "phase3_source_inventory_json": "1a147dd0d1632c567d91a4e35e83085ecca062a9f0bcab251b8ccd7a2a62bc9f",
     "phase3_source_inventory_md": "4a8046cdd0227c81ba5a50412377027e239a291f80f95b0b40783bf32bbd6191",
     "phase3_replay_corpus_contract": "54841770dc38fb50160562278beb52770a25c88ab46df7f0a9466201933fe1c7",
-    "phase3_replay_corpus_json": "c2c2809abde13c7b697e3a8c3e91a547fe68bbd83fdbd816c611b3f0e94808de",
-    "phase3_replay_corpus_md": "b45934afec305a6575fa67e70fbc19407b7e0cfaf0fbab756b53d9571cd13888",
+    "phase3_replay_corpus_json": "4dd1e387c42d6fccd37d60795b00192144f3b4d93c57d9eb54ab527a72e8e94d",
+    "phase3_replay_corpus_md": "f6e46b89b60bb89c918ab4c5d9ab11d0dea5da2b27bf3794c96f1e34ebc440bd",
     "phase3_corpus_shard_phase1_step3": "6c1a6bf8df81bd3a68e697d3cfae9927fba4fec3c569ce27b71eefe134aed118",
     "phase3_corpus_shard_phase1_step4": "332a8a6c449d48b617a752f9a1a8244497eddd1853ea59c9fe7586fa984ec9e1",
     "phase3_corpus_shard_phase1_step5": "f2f3b655d809efef8b0d059c6cb07c809b18bfd4b16034cf226a67403ee12685",
     "phase3_corpus_shard_phase1_step6": "4c8f7a23d025730f90a87a9f746f517c7801b8f6a73f3caed83d103e355ad19a",
     "phase3_corpus_shard_phase1_step7": "98fbab4cc39735db0e2fa9b1079c5a7a74841e53748edcaff7da4501e338fed3",
     "phase3_corpus_shard_phase1_step8": "be0b57741415bccd2676e1dc7914beaf50b1a887983819cda22c5698f933ff40",
-    "phase3_corpus_shard_operational_journal": "f1124faced67d51e9ea30311f9dea25e17bd2f82d2c2e0a3cdbb4842de080bbe"
+    "phase3_corpus_shard_operational_journal": "40186dbf2adde0936a47d0a270c802f71fad5adf8dca9c8a3d9c039590b97cff",
+    "phase3_replay_corpus_json_r1_superseded": "c2c2809abde13c7b697e3a8c3e91a547fe68bbd83fdbd816c611b3f0e94808de",
+    "phase3_replay_corpus_md_r1_superseded": "b45934afec305a6575fa67e70fbc19407b7e0cfaf0fbab756b53d9571cd13888",
+    "phase3_corpus_shard_operational_journal_r1_superseded": "f1124faced67d51e9ea30311f9dea25e17bd2f82d2c2e0a3cdbb4842de080bbe"
   },
   "preflight_findings": {
     "p3-preflight-git-lineage": "5269556409bd3dce896c842ca2528f04416d6b839f4d54c6e55b76c607b062cc",
@@ -365,11 +369,14 @@
       "worker_branch": null
     },
     "3.5M": {
-      "status": "running",
+      "status": "complete",
       "tests": [
         "Frozen merge CLI run twice -> PASS; phase3-replay-corpus.json and .md byte-identical on both runs; corpus SHA-256 c2c2809abde13c7b697e3a8c3e91a547fe68bbd83fdbd816c611b3f0e94808de; report SHA-256 b45934afec305a6575fa67e70fbc19407b7e0cfaf0fbab756b53d9571cd13888.",
         "Independent 3.5M invariant validator -> PASS: Phase-1 reports, frozen inventory and corpus all 48 trials = 24 A + 24 B; 10/10 submitted failures retained; 32 positive-request waits checked against raw result.waited_s with 0 mismatches; 48 report union metrics + 13 positive-wait turn unions reproduced with 0 mismatches.",
-        "uv run pytest -q tests/scripts/test_chat_scheduling_replay_corpus.py -> PASS: 11 passed in 0.23s; run-command runtime 0.816s; nproc=4; pre-run loadavg=2.88 2.10 1.41 under foreign parallel-programme load."
+        "uv run pytest -q tests/scripts/test_chat_scheduling_replay_corpus.py -> PASS: 11 passed in 0.23s; run-command runtime 0.816s; nproc=4; pre-run loadavg=2.88 2.10 1.41 under foreign parallel-programme load.",
+        "Revision 2 frozen merge CLI run twice -> PASS; phase3-replay-corpus.json and .md byte-identical on both runs; corpus SHA-256 4dd1e387c42d6fccd37d60795b00192144f3b4d93c57d9eb54ab527a72e8e94d; report SHA-256 f6e46b89b60bb89c918ab4c5d9ab11d0dea5da2b27bf3794c96f1e34ebc440bd; merged rows=326.",
+        "Revision 2 invariant validator -> PASS: canonical Phase-1 population remains 48 = 24 A + 24 B; all 10 submitted failures retained; 32/32 Phase-1 positive waits match raw result.waited_s; 48/48 raw union metrics match; operational shard contributes 278 rows / 2968 waits with 0 missing actual waited_s and 2135 requested!=actual waits; 14 overlapping operational traces reproduce union metrics with 0 mismatches.",
+        "Revision 2 uv run pytest -q tests/scripts/test_chat_scheduling_replay_corpus.py -> PASS: 12 passed in 0.27s; run-command runtime 0.815s; nproc=4; pre-run loadavg=0.70 0.68 0.57 under foreign parallel-programme load."
       ],
       "notes": [
         "Every source worker completion packet was re-read through statecat.sh; all seven workers have base_commit equal to frozen phase3_corpus_path_head 3e498a33294708c7fe1996b49e78752d8720523d and their canonical shard SHA-256 values match the packet output hashes.",
@@ -381,9 +388,16 @@
         "Union check PASS: every one of the 48 Phase-1 report blocking_wall_s metrics and all 13 positive-wait per-turn unions were independently reproduced from raw traces with zero mismatches. The canonical 48-trial population contains no overlapping positive-wait intervals, so there is no real overlapping canonical trace sample to exercise beyond the same union calculation.",
         "Operational-journal limitation is explicit: frozen window 2026-09-19T10:21:58.789691+10:00 through 2026-09-25T01:30:27.324505+10:00 expected 4,073 job_status_timing lines but only 4,045 remained at extraction; the shard is explicitly unavailable with frozen_window_line_count_mismatch_4073_4045 and no rows were synthesized.",
         "No production configuration, service, or production checkout was modified.",
-        "Revision 2 reopened Step 3.5M after the operational-journal audit exposed the revision-1 extractor/window-count defect; integrating the verified extractor fix and re-extracted operational-journal shard before re-freezing the corpus."
+        "Revision 2 reopened Step 3.5M after the operational-journal audit exposed the revision-1 extractor/window-count defect; integrating the verified extractor fix and re-extracted operational-journal shard before re-freezing the corpus.",
+        "Revision 1 replay corpus c2c2809abde13c7b697e3a8c3e91a547fe68bbd83fdbd816c611b3f0e94808de is superseded history after the operational-journal audit exposed the extractor/window-count defect; historical revision-1 audit evidence is retained and was not cherry-picked or deleted by this revision.",
+        "Verified predecessor completion packets and integrated in required order: extractor fix worker c7b0b8bf1c308812d3b391c556b8a302d5b8c125 -> canonical 13879b7, then revision-2 operational-journal shard worker 5d240da6dd35baa438f2775551e65a4eee329a42 -> canonical e86a0e3.",
+        "Frozen phase3_corpus_path_head_r2 at 19d5951b9617936c655664a992dc0c419051c4f7; original phase3_corpus_path_head 3e498a33294708c7fe1996b49e78752d8720523d remains the revision-1 source-shard lineage checkpoint.",
+        "Operational-journal revision 2 is available: frozen 1789777318.789691..1790263827.324505 window has all 4073 token-filtered lines, 4045 parsed timing records, 2968 replayable waits and 278 rows; source SHA-256 c1a18c4095de00cd68833fb66dabc9db6fbfc2a1122ab6019095f15acd8a1948; shard SHA-256 40186dbf2adde0936a47d0a270c802f71fad5adf8dca9c8a3d9c039590b97cff. The 28 non-parsed token-bearing lines are incidental/wrapped records, not an expiration gap.",
+        "Revision 2 deterministic merge produced 326 rows = 48 canonical Phase-1 rows + 278 operational-history rows and 3000 waits = 32 Phase-1 waits + 2968 operational waits; replay_corpus_sha256=4dd1e387c42d6fccd37d60795b00192144f3b4d93c57d9eb54ab527a72e8e94d.",
+        "Overlapping-union check now has real samples in the operational shard: 14 rows contain overlapping positive-wait intervals, and all 14 independently reproduce observed_blocking_wall_s with zero mismatches.",
+        "Speculative replay invalidation applies: any provisional replay report on revision-1 corpus c2c2809abde13c7b697e3a8c3e91a547fe68bbd83fdbd816c611b3f0e94808de remains historical diagnostic evidence and must be rerun against revision-2 corpus 4dd1e387c42d6fccd37d60795b00192144f3b4d93c57d9eb54ab527a72e8e94d."
       ],
-      "commit": null,
+      "commit": "19d5951b9617936c655664a992dc0c419051c4f7",
       "worker_branch": null
     },
     "p3-source-phase1-step3": {
@@ -532,6 +546,30 @@
       "notes": [],
       "commit": null,
       "worker_branch": null
+    },
+    "p3-fix-opjournal-extractor": {
+      "status": "complete",
+      "tests": [
+        "uv run pytest -q tests/scripts/test_chat_scheduling_replay_corpus.py -> PASS: 12 passed; worker file-scoped pre-commit PASS."
+      ],
+      "notes": [
+        "Worker c7b0b8bf1c308812d3b391c556b8a302d5b8c125 fixed the operational-journal frozen-window availability check to count literal token-filtered lines before event parsing; integrated as canonical cherry-pick 13879b7.",
+        "Fixed extractor output hashes: scripts/chat_scheduling_replay_corpus.py b46ea65a8c24e20ede17e6bf4d9f2598e94fc23b7cb1cc0db7b5b6493fe827af; tests/scripts/test_chat_scheduling_replay_corpus.py 777b9f7b5da12f8fc0ad2cb4890e3c61e9c504ef7d8662a47d0050ff64913eff."
+      ],
+      "commit": "c7b0b8bf1c308812d3b391c556b8a302d5b8c125",
+      "worker_branch": "feature/chat-mode-scheduling-v2-phase3-fix-opjournal"
+    },
+    "p3-source-operational-journal-r2": {
+      "status": "complete",
+      "tests": [
+        "Operational-journal revision-2 extraction twice -> PASS: status=available, rows=278, byte-identical shard SHA-256 40186dbf2adde0936a47d0a270c802f71fad5adf8dca9c8a3d9c039590b97cff; uv run pytest -q tests/scripts/test_chat_scheduling_replay_corpus.py -> PASS: 12 passed; worker file-scoped pre-commit PASS."
+      ],
+      "notes": [
+        "Worker 5d240da6dd35baa438f2775551e65a4eee329a42 based on extractor-fix commit c7b0b8bf1c308812d3b391c556b8a302d5b8c125 replaced the revision-1 unavailable operational-journal shard; integrated as canonical cherry-pick e86a0e3.",
+        "Frozen source window: 4073 token-filtered lines, 4045 parsed timing records, 2968 replayable waits; normalized source SHA-256 c1a18c4095de00cd68833fb66dabc9db6fbfc2a1122ab6019095f15acd8a1948."
+      ],
+      "commit": "5d240da6dd35baa438f2775551e65a4eee329a42",
+      "worker_branch": "feature/chat-mode-scheduling-v2-phase3-source-operational-journal-r2"
     }
   },
   "checkpoints": [
@@ -575,7 +613,7 @@
   ],
   "handoff": null,
   "created_at": "2026-09-25T00:51:02+10:00",
-  "updated_at": "2026-09-25T03:38:02+10:00",
+  "updated_at": "2026-09-25T04:31:47+10:00",
   "orchestrator_state_checkpoint_path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase3/checkpoints/orchestrator-state-initial.json",
   "ready_count": 1,
   "claimed_count": 0,
@@ -608,8 +646,8 @@
   },
   "phase3_source_inventory_sha256": "1a147dd0d1632c567d91a4e35e83085ecca062a9f0bcab251b8ccd7a2a62bc9f",
   "phase3_replay_corpus_contract_sha256": "54841770dc38fb50160562278beb52770a25c88ab46df7f0a9466201933fe1c7",
-  "replay_corpus_sha256": "c2c2809abde13c7b697e3a8c3e91a547fe68bbd83fdbd816c611b3f0e94808de",
-  "replay_corpus_report_sha256": "b45934afec305a6575fa67e70fbc19407b7e0cfaf0fbab756b53d9571cd13888",
+  "replay_corpus_sha256": "4dd1e387c42d6fccd37d60795b00192144f3b4d93c57d9eb54ab527a72e8e94d",
+  "replay_corpus_report_sha256": "f6e46b89b60bb89c918ab4c5d9ab11d0dea5da2b27bf3794c96f1e34ebc440bd",
   "source_shard_sha256": {
     "phase1-step3": "6c1a6bf8df81bd3a68e697d3cfae9927fba4fec3c569ce27b71eefe134aed118",
     "phase1-step4": "332a8a6c449d48b617a752f9a1a8244497eddd1853ea59c9fe7586fa984ec9e1",
@@ -617,6 +655,25 @@
     "phase1-step6": "4c8f7a23d025730f90a87a9f746f517c7801b8f6a73f3caed83d103e355ad19a",
     "phase1-step7": "98fbab4cc39735db0e2fa9b1079c5a7a74841e53748edcaff7da4501e338fed3",
     "phase1-step8": "be0b57741415bccd2676e1dc7914beaf50b1a887983819cda22c5698f933ff40",
-    "operational-journal": "f1124faced67d51e9ea30311f9dea25e17bd2f82d2c2e0a3cdbb4842de080bbe"
-  }
+    "operational-journal": "40186dbf2adde0936a47d0a270c802f71fad5adf8dca9c8a3d9c039590b97cff"
+  },
+  "replay_corpus_revision": 2,
+  "superseded_replay_corpus_sha256": "c2c2809abde13c7b697e3a8c3e91a547fe68bbd83fdbd816c611b3f0e94808de",
+  "extractor_fix_commit": "c7b0b8bf1c308812d3b391c556b8a302d5b8c125",
+  "replay_corpus_history": [
+    {
+      "revision": 1,
+      "sha256": "c2c2809abde13c7b697e3a8c3e91a547fe68bbd83fdbd816c611b3f0e94808de",
+      "report_sha256": "b45934afec305a6575fa67e70fbc19407b7e0cfaf0fbab756b53d9571cd13888",
+      "status": "superseded",
+      "reason": "operational-journal extractor/window-count defect exposed by revision-1 audit"
+    },
+    {
+      "revision": 2,
+      "sha256": "4dd1e387c42d6fccd37d60795b00192144f3b4d93c57d9eb54ab527a72e8e94d",
+      "report_sha256": "f6e46b89b60bb89c918ab4c5d9ab11d0dea5da2b27bf3794c96f1e34ebc440bd",
+      "status": "current"
+    }
+  ],
+  "phase3_corpus_path_head_r2": "19d5951b9617936c655664a992dc0c419051c4f7"
 }
