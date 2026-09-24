@@ -6,8 +6,8 @@
   "worktree": "/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase3",
   "source_branch": "feature/chat-mode-blocking-wall-guard",
   "audited_source_head": "5f2be143352aaa63fb680c1c79e289d46be201fe",
-  "last_completed_step": "3.2",
-  "next_step": "3.3A/B/C/D",
+  "last_completed_step": "3.4B",
+  "next_step": "3.4A/3.4C integration frontier",
   "dependency_audit": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase3-dependency-audit-2026-09-25-r01.json",
     "revision": "r01",
@@ -70,7 +70,8 @@
     "phase3_after_planning_replay": "e41ac987b52506aecc948f584b0a5cbc1087d497",
     "origin_master_at_audit": "821cd3addc787a3ec6c6764ebc2327a67de72dd0",
     "origin_proof_of_concept_at_audit": "821cd3addc787a3ec6c6764ebc2327a67de72dd0",
-    "phase3_synchronized_baseline": "806a23053043be46f6ba35ad046833168caa904d"
+    "phase3_synchronized_baseline": "806a23053043be46f6ba35ad046833168caa904d",
+    "phase3_replay_path_head": "9c768800f1e97f9e06d18bd32b173e24d93e82f0"
   },
   "frozen_hashes": {
     "phase2_progress_json": "bcfc0413457b00dd935ab5ba5cc11b35d4e3dd3e9c81edd54e429c599f8cc809",
@@ -267,11 +268,16 @@
       "worker_branch": null
     },
     "3.3B": {
-      "status": "not_started",
-      "tests": [],
-      "notes": [],
-      "commit": null,
-      "worker_branch": null
+      "status": "complete",
+      "tests": [
+        "uv run pytest -q tests/scripts/test_chat_scheduling_replay.py -> PASS: 10 passed in 0.34s (worker validation)"
+      ],
+      "notes": [
+        "Replay-engine worker completion packet 3.3B--a1 verified against assignment evidence.",
+        "Worker output hashes match the integrated files: scripts/chat_scheduling_replay.py c741cc6dbba5812e15acfce4e6a33033bbc1157b126ec386d9918dd8dcdf5443; tests/scripts/test_chat_scheduling_replay.py 9227c7590383c18f71473dd15f50dd95359cecee7b8c7a7c7e602e027781dc39."
+      ],
+      "commit": "9c768800f1e97f9e06d18bd32b173e24d93e82f0",
+      "worker_branch": "feature/chat-mode-scheduling-v2-phase3-replay"
     },
     "3.3C": {
       "status": "not_started",
@@ -295,9 +301,16 @@
       "worker_branch": null
     },
     "3.4B": {
-      "status": "not_started",
-      "tests": [],
-      "notes": [],
+      "status": "complete",
+      "tests": [
+        "uv run pytest -q tests/scripts/test_chat_scheduling_replay.py -> PASS: 10 passed in 0.44s; real 1.16s; nproc=4; pre-run loadavg=0.92 1.01 0.86 (timing under foreign parallel-programme load)"
+      ],
+      "notes": [
+        "Integrated replay-engine worker by strict fast-forward from f01dc93c3aa015d8932f58c9c5233cdb1cb3f361 to 9c768800f1e97f9e06d18bd32b173e24d93e82f0; the worker commit parent exactly matched the pre-integration canonical HEAD.",
+        "Frozen phase3_replay_path_head at 9c768800f1e97f9e06d18bd32b173e24d93e82f0.",
+        "Source-shard worktrees were not touched or restarted; their immutable inputs remain valid as required by Step 3.4B.",
+        "No semantic deviation from the Step-3.4B runbook or focused test matrix."
+      ],
       "commit": null,
       "worker_branch": null
     },
@@ -420,7 +433,7 @@
   ],
   "handoff": null,
   "created_at": "2026-09-25T00:51:02+10:00",
-  "updated_at": "2026-09-25T01:38:45+10:00",
+  "updated_at": "2026-09-25T02:10:31+10:00",
   "orchestrator_state_checkpoint_path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase3/checkpoints/orchestrator-state-initial.json",
   "ready_count": 1,
   "claimed_count": 0,
