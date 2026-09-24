@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from binnacle.run_command_evidence import load_evidence, record_auto_match
 
 
-def _record(root, *, retention_days=14, day=25):
+def _record(root, *, retention_days=14, day=25, now=None):
     return record_auto_match(
         retention_days=retention_days,
         call_id=f"call-{day}",
@@ -20,7 +20,7 @@ def _record(root, *, retention_days=14, day=25):
         match_start=5,
         match_end=11,
         root=root,
-        now=datetime(2026, 9, day, 12, 0, tzinfo=timezone.utc),
+        now=now or datetime(2026, 9, day, 12, 0, tzinfo=timezone.utc),
     )
 
 
@@ -28,6 +28,15 @@ def test_evidence_disabled_writes_nothing(tmp_path):
     root = tmp_path / "evidence"
     assert _record(root, retention_days=0) is None
     assert not root.exists()
+
+
+def test_evidence_normalizes_naive_timestamp_to_utc(tmp_path):
+    root = tmp_path / "evidence"
+    naive = datetime(2026, 9, 25, 12, 0, tzinfo=timezone.utc).replace(tzinfo=None)
+    path = _record(root, now=naive)
+
+    assert path is not None
+    assert load_evidence(root)[0]["timestamp"] == "2026-09-25T12:00:00+00:00"
 
 
 def test_evidence_is_private_and_preserves_full_command(tmp_path):
