@@ -50,7 +50,21 @@ but dates are not a directory structure.
 
 ## Normal commands
 
-Fast feedback for the managed suite:
+Use the supported two-lane runner for fast full-suite feedback:
+
+```bash
+uv run python scripts/run_test_suite.py
+```
+
+The runner executes xdist-safe tests in the parallel lane and the `no_xdist`
+process-identity tests in a separate ordinary pytest process. On the Pi 5, use
+the fixed benchmark form when a reproducible performance measurement is needed:
+
+```bash
+uv run python scripts/run_test_suite.py --workers 4 --seed 12345
+```
+
+For direct single-process pytest feedback:
 
 ```bash
 uv run pytest -q
