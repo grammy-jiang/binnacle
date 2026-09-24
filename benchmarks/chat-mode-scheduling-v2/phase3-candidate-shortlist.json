@@ -1,0 +1,182 @@
+{
+  "candidate_evaluations": [
+    {
+      "budget_s": 120.0,
+      "candidate": "C120",
+      "failed_gates": [
+        "gate_1_completion_preservation",
+        "gate_2_exhaustion"
+      ],
+      "gates": {
+        "gate_1_completion_preservation": {
+          "minimum_percent": 95.0,
+          "passed": false,
+          "value_percent": 88.888889
+        },
+        "gate_2_exhaustion": {
+          "denominator_turns_with_positive_waits": 291,
+          "maximum_percent": 10.0,
+          "passed": false,
+          "value_percent": 47.766323
+        },
+        "gate_3_no_early_exhaustion": {
+          "early_exhaustion_turns": 0,
+          "margin_s": 1.0,
+          "passed": true
+        },
+        "gate_4_repeated_wait_burden_reduction": {
+          "minimum_percent": 70.0,
+          "passed": true,
+          "value_percent": 75.123692
+        },
+        "gate_5_evidence_completeness": {
+          "examples": [],
+          "missing_evidence_count": 0,
+          "passed": true
+        }
+      },
+      "passed": false,
+      "report_path": "benchmarks/chat-mode-scheduling-v2/phase3-replay-c120.json",
+      "report_sha256": "3d0de49551d27bd1a0729af16941ba80c2ecef9c409d73140cf5e24515cb500b"
+    },
+    {
+      "budget_s": 300.0,
+      "candidate": "C300",
+      "failed_gates": [
+        "gate_2_exhaustion",
+        "gate_4_repeated_wait_burden_reduction"
+      ],
+      "gates": {
+        "gate_1_completion_preservation": {
+          "minimum_percent": 95.0,
+          "passed": true,
+          "value_percent": 100.0
+        },
+        "gate_2_exhaustion": {
+          "denominator_turns_with_positive_waits": 291,
+          "maximum_percent": 10.0,
+          "passed": false,
+          "value_percent": 29.209622
+        },
+        "gate_3_no_early_exhaustion": {
+          "early_exhaustion_turns": 0,
+          "margin_s": 1.0,
+          "passed": true
+        },
+        "gate_4_repeated_wait_burden_reduction": {
+          "minimum_percent": 70.0,
+          "passed": false,
+          "value_percent": 52.467818
+        },
+        "gate_5_evidence_completeness": {
+          "examples": [],
+          "missing_evidence_count": 0,
+          "passed": true
+        }
+      },
+      "passed": false,
+      "report_path": "benchmarks/chat-mode-scheduling-v2/phase3-replay-c300.json",
+      "report_sha256": "db8081d25139192a6b1eb7dfeb0b948ddbabbacbca87b2cf0e34acb3a9896cf6"
+    },
+    {
+      "budget_s": 600.0,
+      "candidate": "C600",
+      "failed_gates": [
+        "gate_2_exhaustion",
+        "gate_4_repeated_wait_burden_reduction"
+      ],
+      "gates": {
+        "gate_1_completion_preservation": {
+          "minimum_percent": 95.0,
+          "passed": true,
+          "value_percent": 100.0
+        },
+        "gate_2_exhaustion": {
+          "denominator_turns_with_positive_waits": 291,
+          "maximum_percent": 10.0,
+          "passed": false,
+          "value_percent": 17.869416
+        },
+        "gate_3_no_early_exhaustion": {
+          "early_exhaustion_turns": 0,
+          "margin_s": 1.0,
+          "passed": true
+        },
+        "gate_4_repeated_wait_burden_reduction": {
+          "minimum_percent": 70.0,
+          "passed": false,
+          "value_percent": 29.565116
+        },
+        "gate_5_evidence_completeness": {
+          "examples": [],
+          "missing_evidence_count": 0,
+          "passed": true
+        }
+      },
+      "passed": false,
+      "report_path": "benchmarks/chat-mode-scheduling-v2/phase3-replay-c600.json",
+      "report_sha256": "41f0f4b59a00e43b638f9048cc2e7288838a68ae25e966d12f09050245b1e08e"
+    }
+  ],
+  "candidate_gate_thresholds": {
+    "completion_preservation_min_percent": 95.0,
+    "early_exhaustion_margin_s": 1.0,
+    "exhaustion_max_percent": 10.0,
+    "repeated_wait_burden_reduction_min_percent": 70.0
+  },
+  "corpus_path": "benchmarks/chat-mode-scheduling-v2/phase3-replay-corpus.json",
+  "corpus_sha256": "4dd1e387c42d6fccd37d60795b00192144f3b4d93c57d9eb54ab527a72e8e94d",
+  "live_candidates": [],
+  "open_evidence_limitations": [],
+  "phase4_targeted_calibration_requirements": [
+    "Do not start Phase-4 targeted calibration: no C120/C300/C600 candidate passed every Phase-3 offline gate."
+  ],
+  "preferred_live_candidate": null,
+  "production_budget_declared": false,
+  "rejected_candidates": [
+    {
+      "budget_s": 120.0,
+      "candidate": "C120",
+      "failed_gates": [
+        "gate_1_completion_preservation",
+        "gate_2_exhaustion"
+      ]
+    },
+    {
+      "budget_s": 300.0,
+      "candidate": "C300",
+      "failed_gates": [
+        "gate_2_exhaustion",
+        "gate_4_repeated_wait_burden_reduction"
+      ]
+    },
+    {
+      "budget_s": 600.0,
+      "candidate": "C600",
+      "failed_gates": [
+        "gate_2_exhaustion",
+        "gate_4_repeated_wait_burden_reduction"
+      ]
+    }
+  ],
+  "report_kind": "phase3-candidate-shortlist",
+  "schema_version": 1,
+  "source_reports": {
+    "C120": {
+      "budget_s": 120.0,
+      "path": "benchmarks/chat-mode-scheduling-v2/phase3-replay-c120.json",
+      "sha256": "3d0de49551d27bd1a0729af16941ba80c2ecef9c409d73140cf5e24515cb500b"
+    },
+    "C300": {
+      "budget_s": 300.0,
+      "path": "benchmarks/chat-mode-scheduling-v2/phase3-replay-c300.json",
+      "sha256": "db8081d25139192a6b1eb7dfeb0b948ddbabbacbca87b2cf0e34acb3a9896cf6"
+    },
+    "C600": {
+      "budget_s": 600.0,
+      "path": "benchmarks/chat-mode-scheduling-v2/phase3-replay-c600.json",
+      "sha256": "41f0f4b59a00e43b638f9048cc2e7288838a68ae25e966d12f09050245b1e08e"
+    }
+  },
+  "verdict": "NO_LIVE_CANDIDATE"
+}
