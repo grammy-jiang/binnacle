@@ -1,0 +1,83 @@
+{
+  "candidate_shortlist_path": "benchmarks/chat-mode-scheduling-v2/phase3-candidate-shortlist.json",
+  "candidate_shortlist_sha256": "51db08d70ad8ebfcc46de9e53c661b517b9f3ed41b10579d49057aa395f8d11d",
+  "corpus_sha256": "4dd1e387c42d6fccd37d60795b00192144f3b4d93c57d9eb54ab527a72e8e94d",
+  "evidence_history": [
+    {
+      "artifact": "replay_corpus",
+      "disposition": "historical diagnostic only; not used for Phase-3 acceptance",
+      "reason": "operational-journal extractor/window-count defect exposed by revision-1 audit",
+      "report_sha256": "b45934afec305a6575fa67e70fbc19407b7e0cfaf0fbab756b53d9571cd13888",
+      "revision": 1,
+      "sha256": "c2c2809abde13c7b697e3a8c3e91a547fe68bbd83fdbd816c611b3f0e94808de",
+      "status": "superseded"
+    },
+    {
+      "artifact": "operational_journal_audit",
+      "audit_commit": "5518a09b30fd21356f7659f63f1318b39d769431",
+      "audit_status": "fail",
+      "audit_task_id": "p3-audit-operational-journal",
+      "disposition": "historical FAIL diagnostic only; revision 2 was re-extracted and audited PASS",
+      "extractor_fix_commit": "c7b0b8bf1c308812d3b391c556b8a302d5b8c125",
+      "finding": "Frozen source contained 4073 token-filtered job_status_timing lines while the revision-1 extractor compared 4045 parsed records, so the shard was incorrectly marked unavailable with zero rows.",
+      "revision": 1,
+      "source_shard_sha256": "f1124faced67d51e9ea30311f9dea25e17bd2f82d2c2e0a3cdbb4842de080bbe"
+    }
+  ],
+  "historical_comparator": {
+    "budget_s": 10.0,
+    "path": "benchmarks/chat-mode-scheduling-v2/phase3-replay-h10.json",
+    "policy": "historical-one-shot",
+    "sha256": "b769fb75cd4159bf2c12fd92e33c0df62b7dfee775dfb8fb2c5ea6cb5110621c",
+    "summary": {
+      "burden_reduction_percent": 97.828806,
+      "candidate_blocking_wall_s": 1821.949,
+      "completion_at_risk": 15,
+      "completion_preservation_percent": 16.666667,
+      "exhaustion_percent": 100.0,
+      "observed_blocking_wall_s": 83914.599908,
+      "observed_required_completions": 18,
+      "positive_waits_observed": 3000,
+      "required_completions_preserved": 3,
+      "turns": 326,
+      "turns_exhausted": 291,
+      "turns_with_positive_waits": 291,
+      "waits_clipped": 2458,
+      "waits_converted_to_nonblocking": 2709
+    }
+  },
+  "live_candidates": [],
+  "open_evidence_limitations": [],
+  "phase4_targeted_calibration_requirements": [
+    "Do not start Phase-4 targeted calibration: no C120/C300/C600 candidate passed every Phase-3 offline gate."
+  ],
+  "preferred_live_candidate": null,
+  "production_budget_declared": false,
+  "rejected_candidates": [
+    {
+      "budget_s": 120.0,
+      "candidate": "C120",
+      "failed_gates": [
+        "gate_1_completion_preservation",
+        "gate_2_exhaustion"
+      ]
+    },
+    {
+      "budget_s": 300.0,
+      "candidate": "C300",
+      "failed_gates": [
+        "gate_4_repeated_wait_burden_reduction"
+      ]
+    },
+    {
+      "budget_s": 600.0,
+      "candidate": "C600",
+      "failed_gates": [
+        "gate_4_repeated_wait_burden_reduction"
+      ]
+    }
+  ],
+  "report_kind": "phase3-policy-replay",
+  "schema_version": 1,
+  "verdict": "NO_LIVE_CANDIDATE"
+}
