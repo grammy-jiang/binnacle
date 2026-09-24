@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "fields": [
+    "source_id",
+    "source_sha256",
+    "trial_id",
+    "scenario",
+    "arm",
+    "base_turn",
+    "observed_blocking_wall_s",
+    "waits",
+    "observed_required_completions",
+    "terminal_state",
+    "correct",
+    "same_prompt"
+  ],
+  "wait_fields": [
+    "wait_index",
+    "node_id",
+    "job_id_hash",
+    "requested_wait_s",
+    "call_start_offset_s",
+    "call_end_offset_s",
+    "blocking_start_offset_s",
+    "blocking_end_offset_s",
+    "waited_s",
+    "state",
+    "job_exit_offset_s",
+    "required_completion",
+    "observed_completion"
+  ],
+  "rows": []
+}
