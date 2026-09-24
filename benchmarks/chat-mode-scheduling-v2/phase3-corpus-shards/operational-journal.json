@@ -1,0 +1,12 @@
+{
+  "inventory_sha256": "1a147dd0d1632c567d91a4e35e83085ecca062a9f0bcab251b8ccd7a2a62bc9f",
+  "kind": "operational-journal",
+  "reason": "frozen_window_line_count_mismatch_4073_4045",
+  "row_count": 0,
+  "rows": [],
+  "schema_version": 1,
+  "source_id": "operational-journal",
+  "source_sha256": null,
+  "status": "unavailable",
+  "trial_count": 0
+}
