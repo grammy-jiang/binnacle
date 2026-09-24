@@ -118,13 +118,13 @@ def test_single_job_timing_logs_stage_breakdown(monkeypatch, caplog):
 
 
 def test_status_wait_returns_when_job_exits():
-    p = run("sleep 2; echo finished", background=True)  # 1 s warm-up already elapsed
+    p = run("sleep 0.5; echo finished", background=True)
     t0 = time.time()
     s = status(p["job_id"], wait_seconds=10)
     waited = time.time() - t0
     assert s["state"] == "exited" and s["exit_code"] == 0
     assert "finished" in s["log_tail"]
-    assert 0.3 < waited < 5  # returned soon after exit, not at the deadline
+    assert 0.2 < waited < 5  # returned soon after exit, not at the deadline
     assert 0 < s["waited_s"] <= waited + 0.1
     assert s["wait_requested_s"] == 10
     assert s["wait_effective_s"] == 10
@@ -137,22 +137,23 @@ def test_status_wait_returns_when_job_exits():
 def test_status_wait_expires_leaves_job_running():
     p = run("sleep 30", background=True)
     t0 = time.time()
-    s = status(p["job_id"], wait_seconds=1)
-    assert 0.9 < time.time() - t0 < 3
+    result = js.job_status_impl(p["job_id"], 100, 1)
+    elapsed = time.time() - t0
+    s = result.structured_content
+    assert s is not None and 0.9 < elapsed < 3
     assert s["state"] == "running" and s["waited_s"] >= 0.9
-    assert (
-        "Still running after waiting"
-        in js.job_status_impl(p["job_id"], 100, 1).content[0].text
-    )
+    assert "Still running after waiting" in result.content[0].text
     stop(p["job_id"])
 
 
 def test_status_wait_is_capped(monkeypatch):
-    monkeypatch.setattr(js, "WAIT_MAX", 1)
+    monkeypatch.setattr(js, "WAIT_MAX", 0.25)
     p = run("sleep 30", background=True)
     t0 = time.time()
-    status(p["job_id"], wait_seconds=40)
-    assert time.time() - t0 < 3
+    s = status(p["job_id"], wait_seconds=40)
+    elapsed = time.time() - t0
+    assert 0.15 < elapsed < 2 and s["state"] == "running"
+    assert (s["wait_requested_s"], s["wait_effective_s"]) == (40, 0.25)
     stop(p["job_id"])
 
 
@@ -236,7 +237,7 @@ def test_stop_reports_recorded_signal_not_unknown():
 
 
 def test_status_wait_bridges_to_exited_for_background_job():
-    p = run("sleep 1", background=True)  # dies ~1 s after the 1 s warm-up
+    p = run("sleep 0.4", background=True)
     s = status(p["job_id"], wait_seconds=10)
     assert s["state"] == "exited" and s["exit_code"] == 0  # never "unknown"
 
@@ -278,7 +279,7 @@ def test_background_flag_with_fast_command_still_reports_exited():
 def test_stop_escalates_to_sigkill_when_sigterm_ignored(monkeypatch):
     # A process that ignores SIGTERM must still be stopped, by SIGKILL, and
     # the recorded signal must be 9. Shrink the grace so the test is quick.
-    monkeypatch.setattr(jobstore, "STOP_SIGTERM_GRACE_S", 0.5)
+    monkeypatch.setattr(jobstore, "STOP_SIGTERM_GRACE_S", 0.25)
     p = run(
         "exec python3 -c 'import signal, time; "
         "signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(30)'",
@@ -326,10 +327,9 @@ def test_double_stop_reports_the_same_final_state():
 
 
 def test_stop_a_job_that_just_finished_on_its_own():
-    # Race the finish against the stop: the job exits 0 right as stop is called;
-    # stop must report the true final state, never a signal it never sent.
-    p = run("sleep 1", background=True)
-    time.sleep(1.5)  # let it finish (1 s warm-up already elapsed)
+    # Observe the real child exit instead of sleeping a fixed cushion.
+    p = run("sleep 0.3", background=True)
+    assert _wait_until(lambda: status(p["job_id"])["state"] == "exited", timeout=3)
     r = stop(p["job_id"])
     assert r["state"] == "exited" and r["exit_code"] == 0 and r["signal"] is None
 
@@ -373,13 +373,11 @@ def test_missing_log_file_does_not_break_status(fresh_store):
 
 
 def test_large_unread_stdin_does_not_stall_past_wait_seconds():
-    # 200 KiB > the 64 KiB pipe buffer; the command never reads stdin. With a
-    # pipe, start_job would block until the command ended (defeating the
-    # wait); with the spool file it returns at wait_seconds.
+    # Keep >64 KiB of real pipe pressure while using the minimum public wait.
     t0 = time.time()
-    p = run("sleep 20", wait_seconds=2, stdin="x" * 200_000)
-    assert time.time() - t0 < 6
-    assert p["state"] == "running"
+    p = run("sleep 20", wait_seconds=1, stdin="x" * 200_000)
+    elapsed = time.time() - t0
+    assert 0.9 < elapsed < 3 and p["state"] == "running"
     stop(p["job_id"])
 
 
@@ -454,7 +452,7 @@ def test_reload_orphan_running_then_unknown_and_stop_is_honest(fresh_store):
     # watcher (start_job spawns none). While alive it is running; after it
     # ends nobody records the exit, so it is unknown, and stop_job says so
     # rather than inventing a signal.
-    job_id, proc = jobstore.start_job("sleep 1", Path("/tmp"), None)
+    job_id, proc = jobstore.start_job("sleep 0.4", Path("/tmp"), None)
     assert status(job_id)["state"] == "running"
     proc.wait()  # reap it ourselves, but record nothing (as a dead server would)
     assert status(job_id)["state"] == "unknown"
