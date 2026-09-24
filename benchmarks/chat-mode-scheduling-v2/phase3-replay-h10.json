@@ -1,5 +1,6 @@
 {
   "algorithm_id": "phase3-replay-v1",
+  "audit_status": "pass",
   "audit_status_at_start": "pending",
   "budget_s": 10.0,
   "corpus_sha256": "4dd1e387c42d6fccd37d60795b00192144f3b4d93c57d9eb54ab527a72e8e94d",
@@ -159,7 +160,7 @@
     }
   ],
   "policy": "historical-one-shot",
-  "provisional": true,
+  "provisional": false,
   "rows": [
     {
       "base_turn": "turn-00accef01bfe1d5d",
