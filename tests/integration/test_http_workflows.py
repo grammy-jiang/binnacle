@@ -6,6 +6,8 @@ import logging
 import threading
 from types import SimpleNamespace
 
+import pytest
+
 from binnacle import jobs as jobstore
 from binnacle.blocking_wall_guard import BlockingWallTracker
 from binnacle.callctx import current_turn
@@ -16,6 +18,8 @@ from tests.integration.http_test_support import (
     sse_json,
     with_session,
 )
+
+pytestmark = pytest.mark.usefixtures("_short_job_warmup")
 
 
 def test_authenticated_http_file_workflow_round_trip(tmp_path):
