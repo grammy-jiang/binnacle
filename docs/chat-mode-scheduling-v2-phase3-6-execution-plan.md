@@ -137,26 +137,52 @@ The progress/handoff object names the one current canonical revision.
 
 ## Parallelism model
 
-Maximum planned concurrency is four ChatGPT sessions. Parallelism occurs only
-inside phase-defined waves with separate worker worktrees and disjoint ownership.
-Canonical progress, integration, live shared Project/connector mutation,
-deployment, and final verdict steps remain serial.
+The plan imposes **no fixed worker-session limit**. One orchestrator manages the
+DAG and may launch any number of concurrent ChatGPT worker sessions that are
+currently dependency-ready and resource-compatible. Four simultaneous chats are a
+known supported minimum, not a scheduling target or ceiling.
 
-High-level waves:
+The orchestrator uses continuous ready-queue refill rather than fixed batches:
 
-| Phase | Parallel wave | Up to 4 sessions |
-| --- | --- | ---: |
-| 3 | corpus / replay engine / scenarios / provenance | 4 |
-| 3 | C120 / C300 / C600 / H10 replay | 4 |
-| 4 | endpoint / harness / analyzer / setup audit | 4 |
-| 4 | targeted candidate calibration | 4 |
-| 4 | evidence review | 4 |
-| 5 | Stage-1 observation review (24h; repeated at 48/72h only if activity is insufficient) | 4 |
-| 6 | T+24h review | 4 |
-| 6 | T+7d review | 4 |
+```text
+freeze predecessor/input hashes
+        ↓
+compute all ready tasks
+        ↓
+launch every non-conflicting task allowed by current resource health
+        ↓
+first worker completion
+        ↓
+validate output + release locks + recompute DAG immediately
+        ↓
+launch newly ready tasks while older unrelated workers may still run
+        ↓
+repeat until a true fan-in barrier
+```
 
-Phase-4 full A/B/C timing is parallel only if its quantitative contention
-qualification passes; otherwise it is serial/randomized.
+High-level parallel frontiers include, but are not limited to:
+
+| Phase | Parallel frontier | Parallelism rule |
+| --- | --- | --- |
+| 3 | implementation lanes: corpus / replay engine / scenarios / provenance | launch all four immediately; additional source-shard/audit workers start as soon as their inputs freeze |
+| 3 | corpus extraction/audit | fan out by canonical source shard/report; no artificial worker cap |
+| 3 | C120 / C300 / C600 / H10 replay | all candidates simultaneously; downstream aggregation starts only after required candidate artifacts arrive |
+| 4 | endpoint / harness / analyzer / readiness implementation | launch all independent implementation workers immediately |
+| 4 | endpoint/project/tunnel local smoke & provisioning | fan out per isolated endpoint/project/profile where mutations are disjoint |
+| 4 | targeted calibration | dispatch canonical trial tasks through a dynamically measured live-resource admission envelope |
+| 4 | full A/B/C confirmatory timing | qualify matched-block concurrency progressively and use the highest passing concurrency level; unrelated analysis workers remain unconstrained |
+| 4 | evidence review | fan out by scenario group/metric family, then aggregate into the four canonical review artifacts |
+| 5 | staging smoke/observation review | parallelize independent service/config/evidence checks and fan out review subanalyses; only shared Project/deployment mutations serialize |
+| 6 | T+24h / T+7d / primary-confirmation review | fan out all independent metric/evidence partitions, then perform deterministic fan-in |
+
+Canonical progress writes, integration-branch mutation, final verdicts, and a
+single shared external mutation remain orchestrator-serialized. That protects
+shared state without throttling unrelated workers.
+
+Phase-4 timing concurrency is special because excessive concurrent live trials
+can bias the measurement. Its plan therefore discovers a runtime-safe concurrency
+envelope experimentally. This is a **measurement-validity constraint**, not a
+ChatGPT-session-count restriction.
 
 ## Current checkpoint
 
