@@ -2,20 +2,21 @@
 
 Status: IN PROGRESS
 
-Updated: 2026-09-25T02:22:11+10:00
+Updated: 2026-09-25T02:23:56+10:00
 
 ## Canonical state
 
 - Branch: feature/chat-mode-scheduling-v2-phase3
 - Worktree: /home/grammy-jiang/Projects/binnacle-chat-scheduling-phase3
 - Audited source HEAD: 5f2be143352aaa63fb680c1c79e289d46be201fe
-- Last completed step: 3.4B
-- Next step: 3.4A/3.4C integration frontier
+- Last completed step: 3.4C
+- Next step: 3.4A integration frontier
 - Dependency audit: phase3-dependency-audit-2026-09-25-r01.json, r01, SHA-256 d3bec25ba8d49ed4db78e07930542b9e963608ad264c198f8fbf04c4ccfa473a
 - Task graph: phase3-task-graph.json, r01, SHA-256 44cbedb0524fe87a9d111579a96d0d33f4171dfee6ece34eb53baa4c506696b2
 - Initial orchestrator-state checkpoint SHA-256: cec108b23fcf319a48d699f123b8fbf713919f3873d1cae4968a16844b80ed12
 - Validated synchronized baseline HEAD: 806a23053043be46f6ba35ad046833168caa904d
 - Frozen replay path HEAD: 9c768800f1e97f9e06d18bd32b173e24d93e82f0
+- Frozen scenario path HEAD: 7107f142ae6746e17180ae92b4d4be0e6e3957d2
 - Production baseline re-observed: 2026-09-25T01:10:16+10:00
 
 ## Deviation
@@ -31,11 +32,11 @@ Updated: 2026-09-25T02:22:11+10:00
 | 3.2 | complete |
 | 3.3A | not_started |
 | 3.3B | complete |
-| 3.3C | not_started |
+| 3.3C | complete |
 | 3.3D | not_started |
 | 3.4A | not_started |
 | 3.4B | complete |
-| 3.4C | running |
+| 3.4C | complete |
 | 3.5M | not_started |
 | 3.5A | not_started |
 | 3.6A | not_started |
@@ -140,6 +141,20 @@ Updated: 2026-09-25T02:22:11+10:00
 - uv run pytest -q tests/scripts/test_chat_scheduling_replay.py: PASS in
   the worker worktree, 10 passed in 0.34s.
 
+## Step 3.3C notes
+
+- Scenario/oracle worker completion packet 3.3C--a1 matches the assignment
+  evidence for commit 80dc8362a8b27d00dd64ff73e0acc3a725505b35 on
+  feature/chat-mode-scheduling-v2-phase3-scenarios.
+- All eight worker output SHA-256 values match the canonical integrated files
+  after cherry-pick.
+
+## Step 3.3C validation
+
+- uv run pytest -q tests/scripts/test_chat_scheduling_manifest.py
+  tests/scripts/test_chat_scheduling_oracle.py: PASS in the worker worktree,
+  26 passed in 1.65s.
+
 ## Step 3.4B notes
 
 - Integrated the replay-engine worker by strict fast-forward from f01dc93c3aa015d8932f58c9c5233cdb1cb3f361
@@ -155,4 +170,27 @@ Updated: 2026-09-25T02:22:11+10:00
 - uv run pytest -q tests/scripts/test_chat_scheduling_replay.py: PASS,
   10 passed in 0.44s; real 1.16s.
 - Pre-run host snapshot: 4 cores; load average 0.92 1.01 0.86.
+- Timing was measured under foreign parallel-programme load.
+
+## Step 3.4C notes
+
+- Integrated 3.3C by deterministic cherry-pick because the worker branch was
+  based at f01dc93c3aa015d8932f58c9c5233cdb1cb3f361 while canonical HEAD had
+  already advanced through Step 3.4B.
+- Cherry-pick mapping:
+  51cdf6d36dec2eb737d356cb802f2311428b7b8a to
+  e0f34f7790e6b588b9303f965e3eb6e242f8e6eb, then
+  80dc8362a8b27d00dd64ff73e0acc3a725505b35 to
+  7107f142ae6746e17180ae92b4d4be0e6e3957d2.
+- Frozen phase3_scenario_path_head at
+  7107f142ae6746e17180ae92b4d4be0e6e3957d2.
+- All eight integrated output SHA-256 values match the 3.3C completion packet.
+- No semantic deviation from the Step-3.4C runbook or focused test matrix.
+
+## Step 3.4C validation
+
+- uv run pytest -q tests/scripts/test_chat_scheduling_manifest.py
+  tests/scripts/test_chat_scheduling_oracle.py: PASS, 26 passed in 1.96s;
+  real 2.99s.
+- Pre-run host snapshot: 4 cores; load average 1.37 0.82 0.74.
 - Timing was measured under foreign parallel-programme load.

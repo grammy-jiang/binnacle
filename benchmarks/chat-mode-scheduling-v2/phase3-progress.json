@@ -6,8 +6,8 @@
   "worktree": "/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase3",
   "source_branch": "feature/chat-mode-blocking-wall-guard",
   "audited_source_head": "5f2be143352aaa63fb680c1c79e289d46be201fe",
-  "last_completed_step": "3.4B",
-  "next_step": "3.4A/3.4C integration frontier",
+  "last_completed_step": "3.4C",
+  "next_step": "3.4A integration frontier",
   "dependency_audit": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase3-dependency-audit-2026-09-25-r01.json",
     "revision": "r01",
@@ -71,7 +71,8 @@
     "origin_master_at_audit": "821cd3addc787a3ec6c6764ebc2327a67de72dd0",
     "origin_proof_of_concept_at_audit": "821cd3addc787a3ec6c6764ebc2327a67de72dd0",
     "phase3_synchronized_baseline": "806a23053043be46f6ba35ad046833168caa904d",
-    "phase3_replay_path_head": "9c768800f1e97f9e06d18bd32b173e24d93e82f0"
+    "phase3_replay_path_head": "9c768800f1e97f9e06d18bd32b173e24d93e82f0",
+    "phase3_scenario_path_head": "7107f142ae6746e17180ae92b4d4be0e6e3957d2"
   },
   "frozen_hashes": {
     "phase2_progress_json": "bcfc0413457b00dd935ab5ba5cc11b35d4e3dd3e9c81edd54e429c599f8cc809",
@@ -280,11 +281,16 @@
       "worker_branch": "feature/chat-mode-scheduling-v2-phase3-replay"
     },
     "3.3C": {
-      "status": "not_started",
-      "tests": [],
-      "notes": [],
-      "commit": null,
-      "worker_branch": null
+      "status": "complete",
+      "tests": [
+        "uv run pytest -q tests/scripts/test_chat_scheduling_manifest.py tests/scripts/test_chat_scheduling_oracle.py -> PASS: 26 passed in 1.65s (worker validation)"
+      ],
+      "notes": [
+        "Scenario/oracle worker completion packet 3.3C--a1 verified against assignment evidence.",
+        "All eight worker output SHA-256 values match the canonical integrated files after cherry-pick."
+      ],
+      "commit": "80dc8362a8b27d00dd64ff73e0acc3a725505b35",
+      "worker_branch": "feature/chat-mode-scheduling-v2-phase3-scenarios"
     },
     "3.3D": {
       "status": "not_started",
@@ -315,9 +321,17 @@
       "worker_branch": null
     },
     "3.4C": {
-      "status": "running",
-      "tests": [],
-      "notes": [],
+      "status": "complete",
+      "tests": [
+        "uv run pytest -q tests/scripts/test_chat_scheduling_manifest.py tests/scripts/test_chat_scheduling_oracle.py -> PASS: 26 passed in 1.96s; real 2.99s; nproc=4; pre-run loadavg=1.37 0.82 0.74 (timing under foreign parallel-programme load)"
+      ],
+      "notes": [
+        "Integrated 3.3C by deterministic cherry-pick because the worker branch was based at f01dc93c3aa015d8932f58c9c5233cdb1cb3f361 while canonical HEAD had already advanced through Step 3.4B.",
+        "Cherry-pick mapping: 51cdf6d36dec2eb737d356cb802f2311428b7b8a -> e0f34f7790e6b588b9303f965e3eb6e242f8e6eb; 80dc8362a8b27d00dd64ff73e0acc3a725505b35 -> 7107f142ae6746e17180ae92b4d4be0e6e3957d2.",
+        "Frozen phase3_scenario_path_head at 7107f142ae6746e17180ae92b4d4be0e6e3957d2.",
+        "All eight integrated output SHA-256 values match the 3.3C completion packet.",
+        "No semantic deviation from the Step-3.4C runbook or focused test matrix."
+      ],
       "commit": null,
       "worker_branch": null
     },
@@ -433,7 +447,7 @@
   ],
   "handoff": null,
   "created_at": "2026-09-25T00:51:02+10:00",
-  "updated_at": "2026-09-25T02:22:11+10:00",
+  "updated_at": "2026-09-25T02:23:56+10:00",
   "orchestrator_state_checkpoint_path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase3/checkpoints/orchestrator-state-initial.json",
   "ready_count": 1,
   "claimed_count": 0,
