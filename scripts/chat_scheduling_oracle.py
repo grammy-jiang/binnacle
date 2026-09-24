@@ -114,6 +114,17 @@ def _check(
         )
         return passed, f"no failed {substring!r} command preceding a successful one"
 
+    if kind == "job_status_any_call":
+        node_id = str(params.get("node"))
+        fields = params.get("fields", {})
+        calls = grouped.get(node_id, [])
+        passed = any(
+            _successful(call)
+            and all(call.result.get(key) == value for key, value in fields.items())
+            for call in calls
+        )
+        return passed, f"no successful {node_id} call matched fields {fields!r}"
+
     if kind == "job_state":
         if "node" in params:
             node_id = str(params["node"])
