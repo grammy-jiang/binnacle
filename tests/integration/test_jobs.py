@@ -11,6 +11,8 @@ from binnacle.tools import job_status as js
 from binnacle.tools import run_command as rc
 from tests.integration.job_test_support import run, status, stop
 
+pytestmark = pytest.mark.usefixtures("_short_job_warmup")
+
 
 @pytest.fixture(autouse=True, scope="module")
 def _isolate_job_store(tmp_path_factory):

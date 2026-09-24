@@ -11,6 +11,8 @@ from fastmcp.exceptions import ToolError
 from binnacle import jobs as jobstore
 from tests.integration.job_test_support import run, status, stop
 
+pytestmark = pytest.mark.usefixtures("_short_job_warmup")
+
 
 @pytest.fixture(autouse=True, scope="module")
 def _isolate_job_store(tmp_path_factory):
@@ -248,9 +250,9 @@ def test_remove_job_dir_tolerates_vanished_dir(fresh_store):
 
 def test_reaper_tolerates_pruned_dir(caplog, fresh_store):
     with caplog.at_level("WARNING", logger="binnacle.jobs"):
-        # Long enough that the job is still running after the 1 s
-        # background warm-up, so the dir vanishes before the reaper fires.
-        p = run("sleep 2", background=True)
+        # Long enough that the job is still running after the test-only
+        # 0.05 s warm-up, so the dir vanishes before the reaper fires.
+        p = run("sleep 1", background=True)
         job_id = p["job_id"]
         assert status(job_id)["state"] == "running"
         assert jobstore._remove_job_dir(jobstore.JOBS_DIR / job_id)
