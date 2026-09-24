@@ -8,6 +8,7 @@ from fastmcp.exceptions import ToolError
 from binnacle.errors import CodedToolError
 from binnacle.tools import list_files as lf
 from binnacle.tools import read_file as rf
+from binnacle.tools import run_command as rc
 from binnacle.tools import search_text as st
 
 
@@ -161,3 +162,11 @@ def test_search_text_indexed_args_and_budget_codes(tmp_path, monkeypatch):
     with pytest.raises(ToolError, match="metadata exceeds") as exc:
         st._enforce_result_budget(payload, names_only=False)
     assert _code(exc) == "response_budget_exceeded"
+
+
+def test_run_command_workdir_error_code(tmp_path):
+    file_path = tmp_path / "not-a-directory.txt"
+    file_path.write_text("x")
+    with pytest.raises(ToolError, match="workdir is not a directory") as exc:
+        rc.run_command_impl("true", str(file_path), 5, False, None)
+    assert _code(exc) == "workdir_not_directory"

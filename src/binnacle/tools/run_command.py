@@ -15,6 +15,7 @@ from pydantic import Field
 from binnacle import job_output, job_owner, jobs
 from binnacle.callctx import current_argument_names, current_call, current_client
 from binnacle.config import get_settings
+from binnacle.errors import CodedToolError
 from binnacle.paths import resolve_path
 from binnacle.run_command_telemetry import DispatchPlan
 
@@ -90,9 +91,10 @@ def run_command_impl(
 ) -> ToolResult:
     resolved = resolve_path(workdir)
     if not resolved.is_dir():
-        raise ToolError(
+        raise CodedToolError(
+            "workdir_not_directory",
             f"workdir is not a directory: {resolved}. "
-            f"Use a directory inside ~/Projects or /tmp."
+            f"Use a directory inside ~/Projects or /tmp.",
         )
     plan = DispatchPlan.build(
         command=command,
