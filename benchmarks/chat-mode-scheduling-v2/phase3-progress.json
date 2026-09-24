@@ -6,8 +6,8 @@
   "worktree": "/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase3",
   "source_branch": "feature/chat-mode-blocking-wall-guard",
   "audited_source_head": "5f2be143352aaa63fb680c1c79e289d46be201fe",
-  "last_completed_step": "3.0",
-  "next_step": "3.1",
+  "last_completed_step": "3.1",
+  "next_step": "3.2",
   "dependency_audit": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase3-dependency-audit-2026-09-25-r01.json",
     "revision": "r01",
@@ -25,7 +25,7 @@
     "compatibility_matrix": "env BINNACLE_TEST_WORKERS=4 uv run tox run -- --seed 12345"
   },
   "production_baseline": {
-    "observed_at": "2026-09-25T00:45:47+10:00",
+    "observed_at": "2026-09-25T01:10:16+10:00",
     "path": "/home/grammy-jiang/Projects/binnacle",
     "branch": "master",
     "head": "821cd3addc787a3ec6c6764ebc2327a67de72dd0",
@@ -69,7 +69,8 @@
     "planning": "9555405b660b1807927d6e07667641b0647584e7",
     "phase3_after_planning_replay": "e41ac987b52506aecc948f584b0a5cbc1087d497",
     "origin_master_at_audit": "821cd3addc787a3ec6c6764ebc2327a67de72dd0",
-    "origin_proof_of_concept_at_audit": "821cd3addc787a3ec6c6764ebc2327a67de72dd0"
+    "origin_proof_of_concept_at_audit": "821cd3addc787a3ec6c6764ebc2327a67de72dd0",
+    "phase3_synchronized_baseline": "806a23053043be46f6ba35ad046833168caa904d"
   },
   "frozen_hashes": {
     "phase2_progress_json": "bcfc0413457b00dd935ab5ba5cc11b35d4e3dd3e9c81edd54e429c599f8cc809",
@@ -215,9 +216,21 @@
       "worker_branch": null
     },
     "3.1": {
-      "status": "not_started",
-      "tests": [],
-      "notes": [],
+      "status": "complete",
+      "tests": [
+        "git log --oneline -12 + git merge-base --is-ancestor feature/chat-mode-blocking-wall-guard HEAD + replayed-commit ancestry + canonical/planning runbook SHA-256 comparison -> PASS",
+        "bash /tmp/p36-manager/isolation-check.sh -> PASS before/after smoke; production HEAD/config/unit/profile hashes, services, budget-key absence, and listening port unchanged",
+        "uv run python scripts/run_test_suite.py --workers 4 --seed 12345 -> PASS: parallel-safe 1160 passed/3 skipped; no_xdist 2 passed/1163 deselected; aggregate 1162 passed, 0 failed, 3 skipped; runner elapsed 42.87 s; wall 42.94 s; workers 4; pre-run nproc=4 loadavg=0.40 0.63 0.52"
+      ],
+      "notes": [
+        "Validated canonical branch feature/chat-mode-scheduling-v2-phase3 in /home/grammy-jiang/Projects/binnacle-chat-scheduling-phase3 at pre-step HEAD 806a23053043be46f6ba35ad046833168caa904d.",
+        "Audited Phase-2/test-efficiency source 5f2be143352aaa63fb680c1c79e289d46be201fe and all six replayed planning commits are ancestors of the validated baseline.",
+        "Phase-3 execution-plan SHA-256 remains 84e6567197d364323b87f64874e81c92efcc611764f10225be1bed64db73a453 and is byte-identical to the planning-worktree copy.",
+        "Final test-efficiency checkpoint remains Step 3.7 PASS; frozen test-efficiency progress, testing documentation, repository default budget definition, and host-safety guard hashes match Step-3.0 audit evidence.",
+        "The current aggregate 1162 passed/3 skipped differs from the historical pre-rebase Step-3.7 snapshot's 1132/3 because f706136 has a different tests tree. Audited source 5f2be143 and the validated Phase-3 baseline have identical tests-tree and runner blobs, so this is not post-audit source or selection drift.",
+        "The focused test matrix defines no separate Step-3.1 pytest target; the authoritative optimized full-suite smoke is the Step-3.1 gate.",
+        "Production was re-observed after the smoke at 2026-09-25T01:10:16+10:00 and remained untouched."
+      ],
       "commit": null,
       "worker_branch": null
     },
@@ -389,7 +402,7 @@
   ],
   "handoff": null,
   "created_at": "2026-09-25T00:51:02+10:00",
-  "updated_at": "2026-09-25T00:55:50+10:00",
+  "updated_at": "2026-09-25T01:11:59+10:00",
   "orchestrator_state_checkpoint_path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase3/checkpoints/orchestrator-state-initial.json",
   "ready_count": 1,
   "claimed_count": 0,
