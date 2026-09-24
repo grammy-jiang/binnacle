@@ -646,7 +646,7 @@
       "worker_branch": null
     },
     "3.7": {
-      "status": "not_started",
+      "status": "running",
       "tests": [],
       "notes": [],
       "commit": null,
