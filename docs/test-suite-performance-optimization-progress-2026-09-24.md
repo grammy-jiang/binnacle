@@ -23,7 +23,7 @@
 | 3.4 | Benchmark bounded tox-level scheduling | PASS |
 | 3.5 | Update GitHub Actions | PASS |
 | 3.6 | Update testing/quality/performance documentation | PASS |
-| 3.7 | Final end-to-end release validation | PARTIAL |
+| 3.7 | Final end-to-end release validation | PASS |
 
 ## Step reports
 
@@ -1875,7 +1875,7 @@ Next:
 - 3.7 Final end-to-end release validation
 
 Step: 3.7 Final end-to-end release validation
-Status: PARTIAL
+Status: PASS
 
 Changed:
 
@@ -1930,7 +1930,7 @@ Validation:
   - `coverage-policy` invokes the ordered four-lane runner and writes unit JSON before non-unit execution, so unit tests are not re-run for the full report;
   - current documentation describes the same fast-suite, coverage-policy, local matrix, production/test timing, and retained real-time contracts used by this gate.
 - Repository-wide `uv run pre-commit run --all-files`: PASS after fixing one MD012 extra-blank-line issue in this new progress entry; every hook passed on rerun.
-- GitHub Actions verification for the pushed checkpoint commit: pending.
+- GitHub Actions verification for pushed checkpoint `d4670924dbc0e829312c4d9bb508da0e193465ca`: PASS. `bash /tmp/tsp-manager/push-and-watch.sh` pushed the commit and waited for `ci.yml`; run `35971468048` completed with conclusion `success`.
 
 Benchmark host/load evidence:
 
@@ -1952,7 +1952,7 @@ Performance:
 
 Findings:
 
-- All local Step 3.7 release gates run so far are green.
+- All local Step 3.7 release gates and the pushed GitHub Actions checkpoint are green.
 - The ordinary-process lane visibly executes both required `no_xdist` tests.
 - The semantic 95/90 per-module coverage policy is green with 0 modules below target.
 - No expected test was deleted; the current Python 3.13 skip count remains 3, matching the Step 1.1 baseline, so no unexplained skip increase is present on the primary interpreter.
@@ -1967,8 +1967,8 @@ Deviation from Section 5.8 / frozen step:
 
 Risks / follow-up:
 
-- The checkpoint remains PARTIAL only until the pushed GitHub Actions run is green.
+- No known release blocker remains. Merge is explicitly outside this step and still requires owner approval.
 
 Next:
 
-- Complete Step 3.7 by committing the checkpoint record, pushing, and verifying GitHub Actions.
+- Owner decision: explicit merge approval; do not merge or rebase automatically.
