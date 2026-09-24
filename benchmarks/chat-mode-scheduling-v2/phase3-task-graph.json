@@ -1,0 +1,581 @@
+{
+  "schema_version": 1,
+  "phase": 3,
+  "source_head": "e41ac987b52506aecc948f584b0a5cbc1087d497",
+  "audited_source_head": "5f2be143352aaa63fb680c1c79e289d46be201fe",
+  "revision": "r01",
+  "static_tasks": [
+    {
+      "task_id": "3.0",
+      "task_kind": "orchestrator_gate",
+      "predecessor_ids": [],
+      "required_input_artifacts": [
+        {
+          "path": "benchmarks/chat-mode-scheduling-v2/phase2-progress.json",
+          "sha256": "bcfc0413457b00dd935ab5ba5cc11b35d4e3dd3e9c81edd54e429c599f8cc809"
+        },
+        {
+          "path": "benchmarks/chat-mode-scheduling-v2/phase2-blocking-wall-guard-2026-09-24.json",
+          "sha256": "2548bb6bdcff0e2767eba4aea54f9168d27d10abc878bc34e29a8105e303a5d7"
+        },
+        {
+          "path": "docs/test-suite-performance-optimization-progress-2026-09-24.md",
+          "sha256": "52c753c319c64f6b09a6bec8cdef1a65df9566570553008829e81b94419bd064"
+        },
+        {
+          "path": "docs/chat-mode-scheduling-v2-phase3-execution-plan.md",
+          "sha256": "84e6567197d364323b87f64874e81c92efcc611764f10225be1bed64db73a453"
+        }
+      ],
+      "resource_locks": [
+        "canonical-integration",
+        "canonical-progress"
+      ],
+      "expected_output_paths": [
+        "benchmarks/chat-mode-scheduling-v2/phase3-dependency-audit-2026-09-25-r01.json",
+        "benchmarks/chat-mode-scheduling-v2/phase3-dependency-audit-2026-09-25-r01.md",
+        "benchmarks/chat-mode-scheduling-v2/phase3-task-graph.json"
+      ],
+      "side_effect_class": "disposable",
+      "external_gates": [],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "critical"
+    },
+    {
+      "task_id": "3.1",
+      "task_kind": "orchestrator_validation",
+      "predecessor_ids": [
+        "3.0"
+      ],
+      "required_input_artifacts": [],
+      "resource_locks": [
+        "canonical-progress"
+      ],
+      "expected_output_paths": [],
+      "side_effect_class": "disposable",
+      "external_gates": [],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "critical",
+      "fan_in": {
+        "type": "all_of",
+        "requires": [
+          "3.0 PASS dependency audit"
+        ]
+      }
+    },
+    {
+      "task_id": "3.2",
+      "task_kind": "orchestrator_freeze",
+      "predecessor_ids": [
+        "3.1"
+      ],
+      "required_input_artifacts": [],
+      "resource_locks": [
+        "canonical-integration",
+        "canonical-progress"
+      ],
+      "expected_output_paths": [
+        "benchmarks/chat-mode-scheduling-v2/phase3-source-inventory.json",
+        "benchmarks/chat-mode-scheduling-v2/phase3-source-inventory.md"
+      ],
+      "side_effect_class": "disposable",
+      "external_gates": [],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "critical",
+      "fan_in": {
+        "type": "all_of",
+        "requires": [
+          "3.1 authoritative test runner smoke PASS"
+        ]
+      }
+    },
+    {
+      "task_id": "3.3A",
+      "task_kind": "worker_implementation",
+      "predecessor_ids": [
+        "3.2"
+      ],
+      "required_input_artifacts": [],
+      "resource_locks": [
+        "git-write:feature/chat-mode-scheduling-v2-phase3-corpus"
+      ],
+      "expected_output_paths": [
+        "scripts/chat_scheduling_replay_corpus.py",
+        "tests/scripts/test_chat_scheduling_replay_corpus.py"
+      ],
+      "side_effect_class": "disposable",
+      "external_gates": [],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "critical"
+    },
+    {
+      "task_id": "3.3B",
+      "task_kind": "worker_implementation",
+      "predecessor_ids": [
+        "3.2"
+      ],
+      "required_input_artifacts": [],
+      "resource_locks": [
+        "git-write:feature/chat-mode-scheduling-v2-phase3-replay"
+      ],
+      "expected_output_paths": [
+        "scripts/chat_scheduling_replay.py",
+        "tests/scripts/test_chat_scheduling_replay.py"
+      ],
+      "side_effect_class": "disposable",
+      "external_gates": [],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "critical"
+    },
+    {
+      "task_id": "3.3C",
+      "task_kind": "worker_implementation",
+      "predecessor_ids": [
+        "3.2"
+      ],
+      "required_input_artifacts": [],
+      "resource_locks": [
+        "git-write:feature/chat-mode-scheduling-v2-phase3-scenarios"
+      ],
+      "expected_output_paths": [
+        "benchmarks/chat-mode-scheduling-v2/scenarios/R4.json",
+        "benchmarks/chat-mode-scheduling-v2/scenarios/R6.json",
+        "benchmarks/chat-mode-scheduling-v2/scenarios/R10.json",
+        "benchmarks/chat-mode-scheduling-v2/scenarios/R12.json",
+        "scripts/chat_scheduling_manifest.py",
+        "scripts/chat_scheduling_oracle.py",
+        "tests/scripts/test_chat_scheduling_manifest.py",
+        "tests/scripts/test_chat_scheduling_oracle.py"
+      ],
+      "side_effect_class": "disposable",
+      "external_gates": [],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "critical"
+    },
+    {
+      "task_id": "3.3D",
+      "task_kind": "worker_implementation",
+      "predecessor_ids": [
+        "3.2"
+      ],
+      "required_input_artifacts": [],
+      "resource_locks": [
+        "git-write:feature/chat-mode-scheduling-v2-phase3-provenance"
+      ],
+      "expected_output_paths": [
+        "scripts/chat_scheduling_provenance.py",
+        "tests/scripts/test_chat_scheduling_provenance.py",
+        "scripts/chat_scheduling_evidence.py",
+        "tests/scripts/test_chat_scheduling_evidence.py"
+      ],
+      "side_effect_class": "disposable",
+      "external_gates": [],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "critical"
+    },
+    {
+      "task_id": "3.4A",
+      "task_kind": "orchestrator_integration",
+      "predecessor_ids": [
+        "3.3A",
+        "3.3D"
+      ],
+      "required_input_artifacts": [],
+      "resource_locks": [
+        "canonical-integration",
+        "canonical-progress"
+      ],
+      "expected_output_paths": [],
+      "side_effect_class": "disposable",
+      "external_gates": [],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "critical",
+      "fan_in": {
+        "type": "all_of",
+        "requires": [
+          "3.3A extractor commit/tests PASS",
+          "3.3D provenance/evidence commit/tests PASS"
+        ]
+      }
+    },
+    {
+      "task_id": "3.4B",
+      "task_kind": "orchestrator_integration",
+      "predecessor_ids": [
+        "3.3B"
+      ],
+      "required_input_artifacts": [],
+      "resource_locks": [
+        "canonical-integration",
+        "canonical-progress"
+      ],
+      "expected_output_paths": [],
+      "side_effect_class": "disposable",
+      "external_gates": [],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "critical",
+      "fan_in": {
+        "type": "all_of",
+        "requires": [
+          "3.3B replay-engine commit/tests PASS"
+        ]
+      }
+    },
+    {
+      "task_id": "3.4C",
+      "task_kind": "orchestrator_integration",
+      "predecessor_ids": [
+        "3.3C"
+      ],
+      "required_input_artifacts": [],
+      "resource_locks": [
+        "canonical-integration",
+        "canonical-progress"
+      ],
+      "expected_output_paths": [],
+      "side_effect_class": "disposable",
+      "external_gates": [],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "critical",
+      "fan_in": {
+        "type": "all_of",
+        "requires": [
+          "3.3C scenario/oracle commit/tests PASS"
+        ]
+      }
+    },
+    {
+      "task_id": "3.5M",
+      "task_kind": "orchestrator_merge",
+      "predecessor_ids": [
+        "3.4A"
+      ],
+      "required_input_artifacts": [],
+      "resource_locks": [
+        "canonical-integration",
+        "canonical-progress"
+      ],
+      "expected_output_paths": [
+        "benchmarks/chat-mode-scheduling-v2/phase3-replay-corpus.json",
+        "benchmarks/chat-mode-scheduling-v2/phase3-replay-corpus.md"
+      ],
+      "side_effect_class": "disposable",
+      "external_gates": [],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "critical",
+      "fan_in": {
+        "type": "all_of",
+        "requires": [
+          "3.4A integration checkpoint",
+          "every source_shard instance output"
+        ]
+      },
+      "dynamic_predecessor_rules": [
+        {
+          "template_id": "source_shard",
+          "rule": "all_instances"
+        }
+      ]
+    },
+    {
+      "task_id": "3.5A",
+      "task_kind": "orchestrator_audit_fanin",
+      "predecessor_ids": [
+        "3.5M"
+      ],
+      "required_input_artifacts": [],
+      "resource_locks": [
+        "canonical-integration",
+        "canonical-progress"
+      ],
+      "expected_output_paths": [],
+      "side_effect_class": "disposable",
+      "external_gates": [],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "critical",
+      "fan_in": {
+        "type": "all_of",
+        "requires": [
+          "3.5M frozen corpus SHA",
+          "every source_audit instance PASS",
+          "aggregate_audit PASS"
+        ]
+      },
+      "dynamic_predecessor_rules": [
+        {
+          "template_id": "source_audit",
+          "rule": "all_instances"
+        },
+        {
+          "template_id": "aggregate_audit",
+          "rule": "all_instances"
+        }
+      ]
+    },
+    {
+      "task_id": "3.6A",
+      "task_kind": "worker_replay",
+      "predecessor_ids": [
+        "3.5M",
+        "3.4B"
+      ],
+      "required_input_artifacts": [],
+      "resource_locks": [
+        "git-write:feature/chat-mode-scheduling-v2-phase3-c120"
+      ],
+      "expected_output_paths": [
+        "benchmarks/chat-mode-scheduling-v2/phase3-replay-c120.json",
+        "benchmarks/chat-mode-scheduling-v2/phase3-replay-c120.md"
+      ],
+      "side_effect_class": "disposable",
+      "external_gates": [],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "normal"
+    },
+    {
+      "task_id": "3.6B",
+      "task_kind": "worker_replay",
+      "predecessor_ids": [
+        "3.5M",
+        "3.4B"
+      ],
+      "required_input_artifacts": [],
+      "resource_locks": [
+        "git-write:feature/chat-mode-scheduling-v2-phase3-c300"
+      ],
+      "expected_output_paths": [
+        "benchmarks/chat-mode-scheduling-v2/phase3-replay-c300.json",
+        "benchmarks/chat-mode-scheduling-v2/phase3-replay-c300.md"
+      ],
+      "side_effect_class": "disposable",
+      "external_gates": [],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "normal"
+    },
+    {
+      "task_id": "3.6C",
+      "task_kind": "worker_replay",
+      "predecessor_ids": [
+        "3.5M",
+        "3.4B"
+      ],
+      "required_input_artifacts": [],
+      "resource_locks": [
+        "git-write:feature/chat-mode-scheduling-v2-phase3-c600"
+      ],
+      "expected_output_paths": [
+        "benchmarks/chat-mode-scheduling-v2/phase3-replay-c600.json",
+        "benchmarks/chat-mode-scheduling-v2/phase3-replay-c600.md"
+      ],
+      "side_effect_class": "disposable",
+      "external_gates": [],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "normal"
+    },
+    {
+      "task_id": "3H",
+      "task_kind": "worker_replay",
+      "predecessor_ids": [
+        "3.5M",
+        "3.4B"
+      ],
+      "required_input_artifacts": [],
+      "resource_locks": [
+        "git-write:feature/chat-mode-scheduling-v2-phase3-h10"
+      ],
+      "expected_output_paths": [
+        "benchmarks/chat-mode-scheduling-v2/phase3-replay-h10.json",
+        "benchmarks/chat-mode-scheduling-v2/phase3-replay-h10.md"
+      ],
+      "side_effect_class": "disposable",
+      "external_gates": [],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "normal"
+    },
+    {
+      "task_id": "3.7",
+      "task_kind": "orchestrator_fanin",
+      "predecessor_ids": [
+        "3.6A",
+        "3.6B",
+        "3.6C",
+        "3.5A"
+      ],
+      "required_input_artifacts": [],
+      "resource_locks": [
+        "canonical-integration",
+        "canonical-progress"
+      ],
+      "expected_output_paths": [
+        "benchmarks/chat-mode-scheduling-v2/phase3-candidate-shortlist.json",
+        "benchmarks/chat-mode-scheduling-v2/phase3-candidate-shortlist.md"
+      ],
+      "side_effect_class": "disposable",
+      "external_gates": [],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "critical",
+      "fan_in": {
+        "type": "all_of",
+        "requires": [
+          "C120 report on audited corpus",
+          "C300 report on audited corpus",
+          "C600 report on audited corpus",
+          "3.5A PASS against same corpus SHA"
+        ]
+      }
+    },
+    {
+      "task_id": "3.8",
+      "task_kind": "orchestrator_readiness",
+      "predecessor_ids": [
+        "3.7",
+        "3.4C"
+      ],
+      "required_input_artifacts": [],
+      "resource_locks": [
+        "canonical-integration",
+        "canonical-progress"
+      ],
+      "expected_output_paths": [
+        "benchmarks/chat-mode-scheduling-v2/phase4-input-contract.json"
+      ],
+      "side_effect_class": "disposable",
+      "external_gates": [],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "critical",
+      "fan_in": {
+        "type": "all_of",
+        "requires": [
+          "3.7 frozen C shortlist",
+          "3.4C R4/R6/R10/R12 + manifest/oracle integration"
+        ]
+      }
+    },
+    {
+      "task_id": "3.9",
+      "task_kind": "orchestrator_validation",
+      "predecessor_ids": [
+        "3.8"
+      ],
+      "required_input_artifacts": [],
+      "resource_locks": [
+        "canonical-progress"
+      ],
+      "expected_output_paths": [],
+      "side_effect_class": "disposable",
+      "external_gates": [],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "critical",
+      "fan_in": {
+        "type": "all_of",
+        "requires": [
+          "3.8 Phase-4 readiness PASS",
+          "authoritative optimized suite PASS",
+          "full pre-commit PASS",
+          "production isolation PASS"
+        ]
+      }
+    },
+    {
+      "task_id": "3.10",
+      "task_kind": "orchestrator_closeout",
+      "predecessor_ids": [
+        "3.9",
+        "3H"
+      ],
+      "required_input_artifacts": [],
+      "resource_locks": [
+        "canonical-integration",
+        "canonical-progress"
+      ],
+      "expected_output_paths": [
+        "benchmarks/chat-mode-scheduling-v2/phase3-policy-replay-YYYY-MM-DD-rNN.json",
+        "benchmarks/chat-mode-scheduling-v2/phase3-policy-replay-YYYY-MM-DD-rNN.md"
+      ],
+      "side_effect_class": "disposable",
+      "external_gates": [],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "critical",
+      "fan_in": {
+        "type": "all_of",
+        "requires": [
+          "3.9 final validation PASS",
+          "3H historical H10 report promoted against audited corpus SHA"
+        ]
+      }
+    }
+  ],
+  "dynamic_templates": [
+    {
+      "template_id": "source_shard",
+      "expansion_source": "benchmarks/chat-mode-scheduling-v2/phase3-source-inventory.json",
+      "task_id_pattern": "p3-source-<source_id>",
+      "predecessor_rule": {
+        "type": "all_of",
+        "task_ids": [
+          "3.4A"
+        ]
+      },
+      "resource_lock_pattern": "git-write:feature/chat-mode-scheduling-v2-phase3-source-<source_id>",
+      "output_path_pattern": "benchmarks/chat-mode-scheduling-v2/phase3-corpus-shards/<source_id>.json",
+      "side_effect_class": "disposable",
+      "external_gates": [],
+      "required_for_phase": true,
+      "scheduling_class": "critical"
+    },
+    {
+      "template_id": "source_audit",
+      "expansion_source": "benchmarks/chat-mode-scheduling-v2/phase3-source-inventory.json",
+      "task_id_pattern": "p3-audit-<source_id>",
+      "predecessor_rule": {
+        "type": "all_of",
+        "task_id_pattern": [
+          "p3-source-<source_id>"
+        ]
+      },
+      "resource_lock_pattern": "git-write:feature/chat-mode-scheduling-v2-phase3-audit-<source_id>",
+      "output_path_pattern": "benchmarks/chat-mode-scheduling-v2/phase3-corpus-audits/<source_id>.md",
+      "side_effect_class": "disposable",
+      "external_gates": [],
+      "required_for_phase": true,
+      "scheduling_class": "normal"
+    },
+    {
+      "template_id": "aggregate_audit",
+      "expansion_source": "benchmarks/chat-mode-scheduling-v2/phase3-replay-corpus.json",
+      "task_id_pattern": "p3-audit-aggregate",
+      "predecessor_rule": {
+        "type": "all_of",
+        "task_ids": [
+          "3.5M"
+        ]
+      },
+      "resource_lock_pattern": "git-write:feature/chat-mode-scheduling-v2-phase3-audit-aggregate",
+      "output_path_pattern": "benchmarks/chat-mode-scheduling-v2/phase3-corpus-audits/aggregate.md",
+      "side_effect_class": "disposable",
+      "external_gates": [],
+      "required_for_phase": true,
+      "scheduling_class": "normal"
+    }
+  ]
+}

@@ -1,0 +1,301 @@
+{
+  "schema_version": 1,
+  "phase": 3,
+  "revision": "r01",
+  "audited_at": "2026-09-25T00:54:04+10:00",
+  "audited_source_head": "5f2be143352aaa63fb680c1c79e289d46be201fe",
+  "previous_phase_progress_path": "benchmarks/chat-mode-scheduling-v2/phase2-progress.json",
+  "previous_phase_progress_sha256": "bcfc0413457b00dd935ab5ba5cc11b35d4e3dd3e9c81edd54e429c599f8cc809",
+  "previous_phase_report_path": "benchmarks/chat-mode-scheduling-v2/phase2-blocking-wall-guard-2026-09-24.json",
+  "previous_phase_report_sha256": "2548bb6bdcff0e2767eba4aea54f9168d27d10abc878bc34e29a8105e303a5d7",
+  "required_supporting_artifacts": [
+    {
+      "path": "benchmarks/chat-mode-scheduling-v2/phase2-progress.md",
+      "sha256": "e0e76712d33995ee6763ba60fd5a438d4ea25c9d2f034c45d269c4eaa38c014c"
+    },
+    {
+      "path": "benchmarks/chat-mode-scheduling-v2/phase2-blocking-wall-guard-2026-09-24.md",
+      "sha256": "3df301f90655782db9f430bff7a8af41bb74c5f7e25ad09e46c705a6efd2115b"
+    },
+    {
+      "path": "docs/test-suite-performance-optimization-progress-2026-09-24.md",
+      "sha256": "52c753c319c64f6b09a6bec8cdef1a65df9566570553008829e81b94419bd064"
+    },
+    {
+      "path": "docs/testing.md",
+      "sha256": "e419989b039b266585f62fa356826c5b3b0948cf63f11e0b2b247f4515ff8f1c"
+    },
+    {
+      "path": "docs/chat-mode-scheduling-v2-phase3-execution-plan.md",
+      "sha256": "84e6567197d364323b87f64874e81c92efcc611764f10225be1bed64db73a453"
+    }
+  ],
+  "required_ci_run_id": 35984222055,
+  "required_ci_head_sha": "5f2be143352aaa63fb680c1c79e289d46be201fe",
+  "required_ci_conclusion": "success",
+  "external_prerequisites": {
+    "production_isolation": "PASS",
+    "public_base_freshness": "DEVIATION_ACCEPTED_BY_ORCHESTRATOR_EPOCH_1"
+  },
+  "production_observation_baseline": {
+    "observed_at": "2026-09-25T00:45:47+10:00",
+    "branch": "master",
+    "head": "821cd3addc787a3ec6c6764ebc2327a67de72dd0",
+    "origin_master": "821cd3addc787a3ec6c6764ebc2327a67de72dd0",
+    "clean": true,
+    "services": {
+      "binnacle-mcp.service": "active/running",
+      "binnacle-jobs.service": "active/running",
+      "binnacle-tunnel.service": "active/running",
+      "binnacle-watchdog.service": "active/running"
+    },
+    "config_sha256": "3efb1381b7d83c0c78c741443ff4e53523de4909ba1a31719fc366ca9e9e494c",
+    "budget_key_present": false,
+    "unit_file_hashes": {
+      "binnacle-mcp.service": "d7b8475f8e3fec783552c3676210622181e8563a85f3918938c912f321fe0759",
+      "binnacle-jobs.service": "afcaff05eb85821812081167f84cf1b8c7712e2f66a8e85e94e72a1ce09f01ae",
+      "binnacle-tunnel.service": "1b9572d46cc52ce056958eb23a2fba69dec6fd47eb7a70bc2668c3cd88609475"
+    },
+    "primary_tunnel_profile_sha256": "c8e2a608779109854e6d3aae921a2cb1fbbe1b6511f1630990899052a6b74ecb",
+    "preflight_window_change": "Production/public HEAD advanced from 77a3f03aec66befd499513e05f33ed5b53a6b2f7 to 821cd3addc787a3ec6c6764ebc2327a67de72dd0 during the preflight window."
+  },
+  "bootstrap_summary_path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase3/preflight/bootstrap-summary.json",
+  "bootstrap_summary_sha256": "6bc13077758824ea72f5ba723f7ed095842debfc7a50eb67abdd5908f4ca7cfd",
+  "task_graph_path": "benchmarks/chat-mode-scheduling-v2/phase3-task-graph.json",
+  "task_graph_revision": "r01",
+  "task_graph_sha256": "44cbedb0524fe87a9d111579a96d0d33f4171dfee6ece34eb53baa4c506696b2",
+  "rows": {
+    "phase2_progress": {
+      "status": "PASS",
+      "evidence": {
+        "path": "benchmarks/chat-mode-scheduling-v2/phase2-progress.json",
+        "sha256": "bcfc0413457b00dd935ab5ba5cc11b35d4e3dd3e9c81edd54e429c599f8cc809",
+        "status": "complete",
+        "last_completed_step": "2.12",
+        "next_step": null,
+        "post_completion_review": {
+          "label": "2.12a",
+          "status": "complete"
+        }
+      }
+    },
+    "phase2_report_and_2_12a": {
+      "status": "PASS",
+      "evidence": {
+        "json_path": "benchmarks/chat-mode-scheduling-v2/phase2-blocking-wall-guard-2026-09-24.json",
+        "json_sha256": "2548bb6bdcff0e2767eba4aea54f9168d27d10abc878bc34e29a8105e303a5d7",
+        "md_path": "benchmarks/chat-mode-scheduling-v2/phase2-blocking-wall-guard-2026-09-24.md",
+        "md_sha256": "3df301f90655782db9f430bff7a8af41bb74c5f7e25ad09e46c705a6efd2115b",
+        "phase2_complete": true,
+        "phase3_started": false,
+        "production_deployed": false,
+        "phase2_2_12_commit": "7778444c2c101a5c24ef6b873c1175ffca05101e",
+        "phase2_2_12a_commit": "a244d958af98ba05d8d9cff5eabed5fd07b51e58",
+        "test_efficiency_history_follows_2_12a": true,
+        "closeout_full_pytest": "1115 passed, 3 skipped in 123.66s"
+      }
+    },
+    "phase2_ci": {
+      "status": "PASS",
+      "evidence": {
+        "current_phase2_head": "5f2be143352aaa63fb680c1c79e289d46be201fe",
+        "current_phase2_ci": {
+          "run_id": 35984222055,
+          "head_sha": "5f2be143352aaa63fb680c1c79e289d46be201fe",
+          "conclusion": "success"
+        },
+        "phase2_2_12a_original_equivalent": "52ed0bdd61fbae2a61f4028c0a9e04439bf6c1d6",
+        "phase2_2_12a_original_green_runs": [
+          35918266664,
+          35917246939
+        ]
+      }
+    },
+    "test_efficiency_progress": {
+      "status": "PASS",
+      "evidence": {
+        "path": "docs/test-suite-performance-optimization-progress-2026-09-24.md",
+        "sha256": "52c753c319c64f6b09a6bec8cdef1a65df9566570553008829e81b94419bd064",
+        "step_3_7_status": "PASS",
+        "rebased_final_release_validation": "9b639ffc133237fae10d5b71572072ad4ab14be6",
+        "rebased_final_ci_validation": "39b7fbfa451171f7d400a71b69e76bbde5164dc6",
+        "rebased_closeout": "5f2be143352aaa63fb680c1c79e289d46be201fe"
+      }
+    },
+    "test_efficiency_ci": {
+      "status": "PASS",
+      "evidence": {
+        "step_3_7_release_validation": {
+          "run_id": 35971468048,
+          "head_sha": "d4670924dbc0e829312c4d9bb508da0e193465ca",
+          "conclusion": "success"
+        },
+        "final_ci_validation": {
+          "run_id": 35971734700,
+          "head_sha": "7ca429456e290843271152b16f266fb9413b21a0",
+          "conclusion": "success"
+        },
+        "rebased_closeout_current_ci": {
+          "run_id": 35984222055,
+          "head_sha": "5f2be143352aaa63fb680c1c79e289d46be201fe",
+          "conclusion": "success"
+        }
+      }
+    },
+    "authoritative_test_runner": {
+      "status": "PASS",
+      "evidence": {
+        "fast_full_suite": "uv run python scripts/run_test_suite.py --workers 4 --seed 12345",
+        "coverage_policy": "uv run tox -e coverage-policy -- --seed 12345",
+        "compatibility_matrix": "env BINNACLE_TEST_WORKERS=4 uv run tox run -- --seed 12345",
+        "docs_testing_sha256": "e419989b039b266585f62fa356826c5b3b0948cf63f11e0b2b247f4515ff8f1c",
+        "repository_default_blocking_wall_budget": {},
+        "config_sha256": "15452a46d54101666e099d9da11678de4244c53de7352e206593ade6787a2e3b",
+        "host_safety_guard_sha256": "2ced4609e58cd3c5ff3a6db9be66c1255fd44b1e4ea73ced02f94dd7f1e81624",
+        "focused_matrix_has_step_3_0_pytest": false
+      }
+    },
+    "planning_handoff": {
+      "status": "PASS",
+      "evidence": {
+        "planning_head": "9555405b660b1807927d6e07667641b0647584e7",
+        "runbook_sha256": "84e6567197d364323b87f64874e81c92efcc611764f10225be1bed64db73a453",
+        "phase3_runbook_sha256_after_replay": "84e6567197d364323b87f64874e81c92efcc611764f10225be1bed64db73a453",
+        "all_replayed_commits_docs_or_claude_only": true,
+        "replayed_commits": [
+          {
+            "source": "70332b90f98c548049a3833b7caf40867506a1fc",
+            "replayed": "9e581e95cca4b113773eab4595f69bf39b919f3b"
+          },
+          {
+            "source": "4317884280e82e6c2946bec687c916227e9cf759",
+            "replayed": "a954957b1b5ee9e9bc7028ace1aa3bbb9b983fcd"
+          },
+          {
+            "source": "ced33e9023fc413236cfec888ae7bcdc601ccf61",
+            "replayed": "c14d830b74327faf47794bd666e541edba3f485e"
+          },
+          {
+            "source": "b40235fcd293207d5500cc90721fd9e012cf941d",
+            "replayed": "3a0f302e77f8efe2241a0c41b91ecd3483435c6b"
+          },
+          {
+            "source": "fd4d171215307bcdb02dd00c18272f1cd22c1902",
+            "replayed": "733cb5349a28447512786c2fedbbf5e87cac24a5"
+          },
+          {
+            "source": "9555405b660b1807927d6e07667641b0647584e7",
+            "replayed": "e41ac987b52506aecc948f584b0a5cbc1087d497"
+          }
+        ]
+      }
+    },
+    "git_lineage": {
+      "status": "PASS",
+      "evidence": {
+        "phase0": "2650c083bc125f492844284682f7fc25424f8c07",
+        "phase1": "30746503f02f53fb598906c2b6dd2bfed8756afd",
+        "phase2": "5f2be143352aaa63fb680c1c79e289d46be201fe",
+        "phase0_is_ancestor_of_phase1": true,
+        "phase1_is_ancestor_of_phase2": true,
+        "phase3_bootstrap_base": "5f2be143352aaa63fb680c1c79e289d46be201fe",
+        "phase3_after_planning_replay": "e41ac987b52506aecc948f584b0a5cbc1087d497"
+      }
+    },
+    "production_isolation": {
+      "status": "PASS",
+      "evidence": {
+        "observed_at": "2026-09-25T00:45:47+10:00",
+        "branch": "master",
+        "head": "821cd3addc787a3ec6c6764ebc2327a67de72dd0",
+        "origin_master": "821cd3addc787a3ec6c6764ebc2327a67de72dd0",
+        "clean": true,
+        "services": {
+          "binnacle-mcp.service": "active/running",
+          "binnacle-jobs.service": "active/running",
+          "binnacle-tunnel.service": "active/running",
+          "binnacle-watchdog.service": "active/running"
+        },
+        "config_sha256": "3efb1381b7d83c0c78c741443ff4e53523de4909ba1a31719fc366ca9e9e494c",
+        "budget_key_present": false,
+        "unit_file_hashes": {
+          "binnacle-mcp.service": "d7b8475f8e3fec783552c3676210622181e8563a85f3918938c912f321fe0759",
+          "binnacle-jobs.service": "afcaff05eb85821812081167f84cf1b8c7712e2f66a8e85e94e72a1ce09f01ae",
+          "binnacle-tunnel.service": "1b9572d46cc52ce056958eb23a2fba69dec6fd47eb7a70bc2668c3cd88609475"
+        },
+        "primary_tunnel_profile_sha256": "c8e2a608779109854e6d3aae921a2cb1fbbe1b6511f1630990899052a6b74ecb",
+        "preflight_window_change": "Production/public HEAD advanced from 77a3f03aec66befd499513e05f33ed5b53a6b2f7 to 821cd3addc787a3ec6c6764ebc2327a67de72dd0 during the preflight window."
+      }
+    },
+    "public_base_freshness": {
+      "status": "DEVIATION",
+      "evidence": {
+        "origin_master": "821cd3addc787a3ec6c6764ebc2327a67de72dd0",
+        "origin_proof_of_concept": "821cd3addc787a3ec6c6764ebc2327a67de72dd0",
+        "previous_public_tip": "77a3f03aec66befd499513e05f33ed5b53a6b2f7",
+        "public_commit_count": 9,
+        "public_commits": [
+          {
+            "sha": "62c5946d1d6a05570ad733d0d088c215398fd2eb",
+            "subject": "docs: plan run-command observability improvements"
+          },
+          {
+            "sha": "f093fd26438877bf588c0676fa849a5f2c7909ee",
+            "subject": "stats: add run-command workflow analysis"
+          },
+          {
+            "sha": "96edff2d0f81cb1550d1c26c640cfc235eb15c37",
+            "subject": "telemetry: fingerprint run-command auto policy"
+          },
+          {
+            "sha": "e35566a9c6324d6438055a55ecf8bd0263bb0467",
+            "subject": "telemetry: classify run-command output shaping"
+          },
+          {
+            "sha": "14ed1cc00410d0a165514219b366c84b348f2703",
+            "subject": "merge: add run-command policy telemetry"
+          },
+          {
+            "sha": "d68a52d1f372fa935f361a5dca59abe4066ef2e2",
+            "subject": "merge: add run-command output-shaping telemetry"
+          },
+          {
+            "sha": "ba631147c65e289fd10fa2865fc664db8a36ceed",
+            "subject": "telemetry: code run-command workdir failures"
+          },
+          {
+            "sha": "55e96c39e75c9ed06e41d86069379ac08ed3e3be",
+            "subject": "docs: close run-command observability phases 1-4"
+          },
+          {
+            "sha": "821cd3addc787a3ec6c6764ebc2327a67de72dd0",
+            "subject": "docs: add run-command phase 5 design"
+          }
+        ],
+        "phase2_tree": "b8f7f75ddca64c721c72bddb1ec8a7d9f7f135bc",
+        "public_tree": "5eadca6a9a4e5a0ef06d10de493522abab910266",
+        "trees_equal": false,
+        "phase2_cherry_vs_origin_master": {
+          "plus": 1,
+          "minus": 59,
+          "total": 60
+        },
+        "overlapping_files": [
+          "src/binnacle/config.py",
+          "src/binnacle/server.py",
+          "src/binnacle/tools/run_command.py",
+          "src/binnacle/logstats_models.py",
+          "src/binnacle/logstats_render.py",
+          "tests/unit/core/test_config_loading.py",
+          "docs/logging.md",
+          "docs/tools/run_command.md"
+        ],
+        "orchestrator_decision": "Do not rewrite the owner's three stack branches unattended tonight: rebasing 60 commits across eight overlapping files and force-pushing them is not reversible without the owner; master is still moving; Phase 3 changes no runtime source (only scripts/, tests/scripts/, benchmarks/, docs/), so the deferred restack cannot change Phase-3 evidence; the Step 4.0 rule provides the catch-up: restack from the earliest affected lower phase, then rebase Phase 3 on refreshed Phase 2, and rerun Phase-3 validation/handoff.",
+        "disposition": "owner ratification pending; catch-up restack scheduled at Step 4.0 or earlier at the owner's request",
+        "blocks_phase3": false
+      }
+    }
+  },
+  "overall_status": "PASS",
+  "blockers": []
+}
