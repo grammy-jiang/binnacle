@@ -226,17 +226,17 @@ def _extract_phase1(inventory_path: Path, inventory_sha: str, source: dict[str, 
         )
     rows.sort(key=_row_key)
     return {"schema_version": 1, "source_id": source_id, "kind": source.get("kind"), "status": "available", "inventory_sha256": inventory_sha, "source_sha256": expected_sha, "trial_count": len(trials), "row_count": len(rows), "rows": rows}  # fmt: skip
+def _journal_timestamp(line: str) -> float | None:
+    try: return float(line.lstrip().split(maxsplit=1)[0])
+    except (IndexError, ValueError): return None
+def _maybe_num(value: Any, label: str) -> float | None:
+    try: return _num(value, label)
+    except CorpusError: return None
 def _journal_entry(line: str) -> tuple[float, str, dict[str, str]] | None:
-    parts = line.lstrip().split(maxsplit=1)
-    if len(parts) != 2:
-        return None
-    try:
-        ts = float(parts[0])
-    except ValueError:
-        return None
+    ts, parts = _journal_timestamp(line), line.lstrip().split(maxsplit=1)
+    if ts is None or len(parts) != 2: return None
     at = parts[1].find("event=")
-    if at < 0:
-        return None
+    if at < 0: return None
     payload = parts[1][at:]
     return ts, payload, plain_fields(payload)
 def _read_journal(source: dict[str, Any]) -> str:
@@ -257,21 +257,14 @@ def _extract_operational(inventory_sha: str, source: dict[str, Any], journal_tex
     expected = source.get("line_count")
     if not isinstance(expected, int):
         raise JournalWindowUnavailable("journal_line_count_missing")
-    parsed = [x for line in journal_text.splitlines() if (x := _journal_entry(line))]
-    timings = [
-        x
-        for x in parsed
-        if oldest <= x[0] <= newest
-        and x[2].get("event") == source.get("event_filter", "job_status_timing")
-    ]
-    if len(timings) != expected:
-        raise JournalWindowUnavailable(
-            f"frozen_window_line_count_mismatch_{expected}_{len(timings)}"
-        )
-    normalized = (
-        "\n".join(f"{ts:.6f} {payload}" for ts, payload, _ in sorted(timings)) + "\n"
-    )
-    source_sha = _hash(normalized)
+    event_filter = source.get("event_filter", "job_status_timing")
+    if not isinstance(event_filter, str): raise JournalWindowUnavailable("journal_event_filter_missing")
+    lines = journal_text.splitlines()
+    window_lines = [line for line in lines if (ts := _journal_timestamp(line)) is not None and oldest <= ts <= newest and event_filter in line]
+    if len(window_lines) != expected: raise JournalWindowUnavailable(f"frozen_window_line_count_mismatch_{expected}_{len(window_lines)}")
+    parsed = [x for line in lines if (x := _journal_entry(line))]
+    timings = [x for x in parsed if oldest <= x[0] <= newest and x[2].get("event") == event_filter]
+    source_sha = _hash("\n".join(window_lines) + "\n")
     starts: dict[str, tuple[float, dict[str, str]]] = {}
     ends: dict[str, tuple[float, dict[str, str]]] = {}
     exits: dict[str, float] = {}
@@ -289,15 +282,12 @@ def _extract_operational(inventory_sha: str, source: dict[str, Any], journal_tex
             exits[fields["job_id"]] = ts
     groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
     terminal: dict[str, str] = {}
+    replayable_waits = 0
     for timing_ts, _, fields in timings:
-        requested = _num(
-            fields.get("wait_requested_s", 0), "operational requested wait"
-        )
-        if requested <= 0:
-            continue
+        requested = _maybe_num(fields.get("wait_requested_s", 0), "operational requested wait")
+        if requested is None or requested <= 0: continue
         call = fields.get("call")
-        if not call or call not in starts or call not in ends:
-            raise JournalWindowUnavailable("positive_wait_missing_tool_call_pair")
+        if not call or call not in starts or call not in ends: continue
         start, call_fields = starts[call]
         end, result_fields = ends[call]
         turn = (
@@ -306,13 +296,12 @@ def _extract_operational(inventory_sha: str, source: dict[str, Any], journal_tex
             or f"call:{call}"
         )
         origin = origins.get(turn, start)
-        waited = _num(fields.get("waited_s"), "operational waited_s")
-        if waited < 0:
-            raise JournalWindowUnavailable("negative_operational_wait")
+        waited = _maybe_num(result_fields.get("waited_s", fields.get("waited_s")), "operational waited_s")
+        if waited is None or waited < 0: continue
         block_end = min(end, start + waited)
         job_id = fields.get("job_id")
-        if not job_id:
-            raise JournalWindowUnavailable("positive_wait_missing_job_id")
+        if not job_id: continue
+        replayable_waits += 1
         state = fields.get("state") or result_fields.get("state") or "unknown"
         exit_s = exits.get(job_id, end if state == "exited" else None)
         groups[turn].append({"wait_index": 0, "node_id": None, "job_id_hash": _hash(job_id), "requested_wait_s": requested, "call_start_offset_s": _off(start, origin), "call_end_offset_s": _off(end, origin), "blocking_start_offset_s": _off(start, origin), "blocking_end_offset_s": _off(block_end, origin), "waited_s": waited, "state": state, "job_exit_offset_s": _off(exit_s, origin), "required_completion": False, "observed_completion": state == "exited", "_timing_ts": timing_ts})  # fmt: skip
@@ -333,7 +322,7 @@ def _extract_operational(inventory_sha: str, source: dict[str, Any], journal_tex
         turn_hash = _hash(turn)
         rows.append({"source_id": source["source_id"], "source_sha256": source_sha, "trial_id": f"operational-{turn_hash[:16]}", "scenario": "operational", "arm": "historical", "base_turn": f"turn-{turn_hash[:16]}", "observed_blocking_wall_s": _union(intervals), "waits": waits, "observed_required_completions": 0, "terminal_state": terminal[turn], "correct": None, "same_prompt": None})  # fmt: skip
     rows.sort(key=_row_key)
-    return {"schema_version": 1, "source_id": source["source_id"], "kind": source.get("kind"), "status": "available", "inventory_sha256": inventory_sha, "source_sha256": source_sha, "source_window": {"oldest_unix_s": source.get("oldest_unix_s"), "newest_unix_s": source.get("newest_unix_s"), "line_count": expected}, "trial_count": len(rows), "row_count": len(rows), "rows": rows}  # fmt: skip
+    return {"schema_version": 1, "source_id": source["source_id"], "kind": source.get("kind"), "status": "available", "inventory_sha256": inventory_sha, "source_sha256": source_sha, "source_window": {"oldest_unix_s": source.get("oldest_unix_s"), "newest_unix_s": source.get("newest_unix_s"), "line_count": expected, "window_line_count": len(window_lines), "parsed_rows": len(timings), "replayable_wait_count": replayable_waits}, "trial_count": len(rows), "row_count": len(rows), "rows": rows}  # fmt: skip
 def extract_source(inventory_path: Path, source_id: str, *, journal_text: str | None = None) -> dict[str, Any]:
     inventory = _load(inventory_path)
     _contract(inventory)
@@ -441,11 +430,7 @@ def merge_shards(inventory_path: Path, shards_dir: Path, output_path: Path, repo
             if isinstance(raw_waits, list):
                 count += len(raw_waits)
         window = shard.get("source_window")
-        window_text = (
-            f"{window.get('oldest_unix_s')}..{window.get('newest_unix_s')} ({window.get('line_count')} timing lines)"
-            if isinstance(window, dict)
-            else "-"
-        )
+        window_text = (f"{window.get('oldest_unix_s')}..{window.get('newest_unix_s')} ({window.get('window_line_count', window.get('line_count'))} token-filtered lines, {window.get('parsed_rows', '-')} parsed timing records)" if isinstance(window, dict) else "-")  # fmt: skip
         lines.append(
             f"| {shard.get('source_id')} | {shard.get('status')} | {len(report_rows)} | {count} | "
             f"`{shard.get('source_sha256') or '-'}` | {window_text} |"
