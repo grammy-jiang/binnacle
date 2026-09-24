@@ -14,7 +14,7 @@
 | 2.2 | Scope a short job warm-up to lifecycle tests | PASS |
 | 2.3 | Shorten lifecycle waited-out processes safely | PASS |
 | 2.4 | Preserve/classify tunnel readiness real-time contract | PASS |
-| 2.5 | Review remaining top-20 long-tail tests | NOT STARTED |
+| 2.5 | Review remaining top-20 long-tail tests | PASS |
 | 2.6 | Real-timing coverage + anti-flake evidence | NOT STARTED |
 | 2.7 | Full regression + Phase 2 checkpoint | NOT STARTED |
 | 3.1 | Remove coverage from ordinary compatibility tox environments | NOT STARTED |
@@ -1046,3 +1046,67 @@ Risks / follow-up:
 Next:
 
 - 2.5 Review remaining top-20 long-tail tests
+
+Step: 2.5 Review remaining top-20 long-tail tests
+Status: PASS
+
+Changed:
+
+- `tests/integration/conftest.py` — adds shared non-autouse `_short_job_warmup` with test-only `jobstore.WARMUP_S=0.05`.
+- `tests/integration/test_jobs_lifecycle.py` — replaces the module-local autouse fixture with an explicit module opt-in.
+- `tests/integration/test_http_workflows.py` — explicitly opts this measured job-heavy module into the short warm-up fixture.
+- `tests/integration/test_jobs.py` — explicitly opts the core job integration module into the short warm-up fixture.
+- `tests/integration/test_jobs_store.py` — opts in and shortens the reaper sentinel child from 2 s to 1 s so it still outlasts the 0.05 s test warm-up without paying an artificial extra second.
+- `tests/integration/test_job_telemetry.py` — explicitly opts the escalation telemetry module into the short warm-up fixture.
+- `docs/test-suite-performance-optimization-progress-2026-09-24.md` — marks Step 2.5 PASS and records this report.
+- No production source or configuration files changed.
+
+Source snapshot:
+
+- Branch: `design/chat-mode-scheduling-v2`.
+- Exact source commit at step start: `7471e20399be7c50c93a74267491758aa6ed9c84`.
+- Worktree was clean at step start; progress and `git log -8 --oneline --decorate` confirmed Steps 1.1 through 2.4 PASS and Step 2.5 next.
+
+Validation:
+
+- Pre-change fast duration benchmark: `/usr/bin/time -f "wall=%e user=%U sys=%S cpu=%P maxrss_kb=%M" uv run python scripts/run_test_suite.py --workers 4 --seed 12345 --durations=30` — parallel-safe 1126 passed, 3 skipped in 31.47 s; ordinary 2 passed, 1129 deselected in 2.80 s; runner 36.16 s; `wall=36.25 user=54.56 sys=4.59 cpu=163% maxrss_kb=427360`.
+- Final-source focused command: `/usr/bin/time -f "wall=%e user=%U sys=%S cpu=%P maxrss_kb=%M" uv run pytest -q tests/integration/test_jobs_lifecycle.py tests/integration/test_http_workflows.py tests/integration/test_jobs.py tests/integration/test_jobs_store.py tests/integration/test_job_telemetry.py --randomly-seed=12345 --durations=20` — 80 passed, 0 failed, 0 skipped in 17.45 s; `wall=18.80 user=4.76 sys=0.66 cpu=28% maxrss_kb=186704`.
+- Exact final-source full-lane command: `/usr/bin/time -f "wall=%e user=%U sys=%S cpu=%P maxrss_kb=%M" uv run python scripts/run_test_suite.py --workers 4 --seed 12345` — parallel-safe 1126 passed, 3 skipped in 28.27 s; ordinary 2 passed, 1129 deselected in 2.77 s; runner 32.94 s; `wall=33.02 user=53.40 sys=4.89 cpu=176% maxrss_kb=429408`.
+- Final-source duration benchmark: `/usr/bin/time -f "wall=%e user=%U sys=%S cpu=%P maxrss_kb=%M" uv run python scripts/run_test_suite.py --workers 4 --seed 12345 --durations=30` — parallel-safe 1126 passed, 3 skipped in 27.89 s; ordinary 2 passed, 1129 deselected in 2.82 s; runner 32.63 s; `wall=32.72 user=53.97 sys=5.02 cpu=180% maxrss_kb=426688`.
+- Code-file pre-commit gate: `uv run pre-commit run --files tests/integration/conftest.py tests/integration/test_jobs_lifecycle.py tests/integration/test_http_workflows.py tests/integration/test_jobs.py tests/integration/test_jobs_store.py tests/integration/test_job_telemetry.py` — initial ruff-check auto-fixed four formatting/import-layout issues; rerun PASS.
+- Final changed-file pre-commit gate including this progress record: `uv run pre-commit run --files tests/integration/conftest.py tests/integration/test_jobs_lifecycle.py tests/integration/test_http_workflows.py tests/integration/test_jobs.py tests/integration/test_jobs_store.py tests/integration/test_job_telemetry.py docs/test-suite-performance-optimization-progress-2026-09-24.md` — `PASS`.
+
+Performance:
+
+- Before: fixed-seed fast-runner `--durations=30` wall 36.25 s.
+- After: final-source fixed-seed fast-runner `--durations=30` wall 32.72 s.
+- Improvement: 3.53 s lower wall time, a 9.7% reduction.
+- Apples-to-apples: yes — same host, dependency lock, Python environment, managed test selection, four workers, seed 12345, and `--durations=30`; only the Step 2.5 test timing changes differ.
+- Targeted movement: HTTP background/status/stop 2.11 s -> 1.15-1.18 s; HTTP tracked status 2.10 s -> 1.14-1.15 s; jobs quiet 1.35 s -> 0.42 s; jobs process-group stop 1.34 s -> 0.40 s; telemetry escalation 1.29 s -> 0.34 s; jobs-store reaper 2.01 s -> 1.06-1.07 s; jobs-store running prune/start entries at 1.07/1.06 s dropped out of the final top 30.
+- Load evidence: pre-change `nproc=4`, `/proc/loadavg = 0.31 0.57 0.74`; final focused `0.48 0.60 0.68`; final plain full `0.33 0.55 0.66`; final duration `0.74 0.64 0.69`. All one-minute loads were below 1.5; no timing is foreign-load contaminated.
+
+Findings:
+
+- Step 2.5 supplied the evidence anticipated by Section 5.8.6: several additional integration modules materially paid the same production 1.0 s background warm-up.
+- The shared fixture remains non-autouse and is activated only by explicit `pytestmark = pytest.mark.usefixtures("_short_job_warmup")` declarations in the five measured integration modules.
+- The reaper test retains a real child/reaper race; the child is still much longer than the 0.05 s test warm-up.
+- The two HTTP tests still spend about one second because each deliberately requests a real one-second `job_status` wait; this step removes only the unrelated background warm-up.
+- Remaining top durations are retained blocking-wall/tunnel real-time contracts, isolated import startup, the real slow-consumer test, meaningful property volume, contract-schema warm-up outside the integration-only fixture, and the separate one-second run-command handoff test.
+- Production source behaviour changed: no. Production `jobs.warmup_s` remains 1.0 s. Host safety, coverage policy, managed test selection, and production timing defaults were not weakened.
+
+Deviation from Section 5.8 / frozen step:
+
+- Owner-authorized deviation: before and after `--durations=30` measurements used the fast runner `uv run python scripts/run_test_suite.py --workers 4 --seed 12345 --durations=30`, not sequential pytest runs; both A/B measurements use the same fast-runner selection and seed.
+- Tooling substitution: one exact benign `nproc && cat /proc/loadavg` preflight was blocked by the platform; equivalent `getconf _NPROCESSORS_ONLN; sed -n '1p' /proc/loadavg` supplied the required evidence.
+- Connector note: focused pytest and pre-commit commands were auto-backgrounded despite `wait_seconds=50`; every job ID was waited to an exited state. No other Section 5.8 lock changed.
+
+Risks / follow-up:
+
+- Do not make `_short_job_warmup` autouse in `tests/integration/conftest.py`; explicit opt-in is part of this safety decision.
+- Contract-schema tests still pay production warm-up outside `tests/integration`; broadening to root `tests/conftest.py` would exceed this coherent Step 2.5 group and the Section 5.8.6 integration-only path.
+- `test_slow_command_yields_job_then_completes` remains about 2.04 s because it verifies a distinct one-second public handoff followed by real completion; it was reviewed but not shortened in this group.
+- Step 2.6 should establish retained real-time coverage and anti-flake evidence.
+
+Next:
+
+- 2.6 Establish real-timing coverage and anti-flake evidence

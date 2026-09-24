@@ -25,9 +25,7 @@ def _isolate_job_store(tmp_path_factory):
     jobstore.JOBS_DIR = original
 
 
-@pytest.fixture(autouse=True)
-def _short_job_warmup(monkeypatch):
-    monkeypatch.setattr(jobstore, "WARMUP_S", 0.05)
+pytestmark = pytest.mark.usefixtures("_short_job_warmup")
 
 
 @pytest.fixture()

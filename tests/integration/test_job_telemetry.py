@@ -1,7 +1,11 @@
 """Lifecycle telemetry that is orthogonal to the core job contract tests."""
 
+import pytest
+
 from binnacle import jobs as jobstore
 from tests.integration.job_test_support import run, stop
+
+pytestmark = pytest.mark.usefixtures("_short_job_warmup")
 
 
 def test_stop_escalation_is_visible_in_telemetry(monkeypatch, caplog):
