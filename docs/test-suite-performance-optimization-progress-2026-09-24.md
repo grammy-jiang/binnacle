@@ -17,7 +17,7 @@
 | 2.5 | Review remaining top-20 long-tail tests | PASS |
 | 2.6 | Real-timing coverage + anti-flake evidence | PASS |
 | 2.7 | Full regression + Phase 2 checkpoint | PASS |
-| 3.1 | Remove coverage from ordinary compatibility tox environments | NOT STARTED |
+| 3.1 | Remove coverage from ordinary compatibility tox environments | PASS |
 | 3.2 | Make coverage-policy run each test only once | NOT STARTED |
 | 3.3 | Enable xdist for coverage-policy while preserving no_xdist lanes | NOT STARTED |
 | 3.4 | Benchmark bounded tox-level scheduling | NOT STARTED |
@@ -1281,3 +1281,87 @@ Risks / follow-up:
 Next:
 
 - 3.1 Separate compatibility testing from coverage instrumentation
+
+Step: 3.1 Separate compatibility testing from coverage instrumentation
+Status: PASS
+
+Changed:
+
+- `tox.ini` — ordinary Python compatibility environments now run `python scripts/run_test_suite.py {posargs}` with no `--cov` / `--cov-fail-under`; `env_list`, `runner`, `dependency_groups`, dependency locking, and `[testenv:coverage-policy]` remain unchanged.
+- `docs/test-suite-performance-optimization-progress-2026-09-24.md` — marks Step 3.1 PASS and records this report.
+
+Source snapshot:
+
+- Branch: `design/chat-mode-scheduling-v2`.
+- Exact source commit at step start: `634607df214757b745dfaf9ec3df4a0561608ff7`.
+- The worktree was clean at step start and matched `origin/design/chat-mode-scheduling-v2`.
+- The progress status table showed Steps 1.1 through 2.7 PASS and Step 3.1 as the next NOT STARTED step; `git log -8 --oneline --decorate` ended at the Phase 2 checkpoint commit `634607d`.
+
+Validation:
+
+- Exact focused test commands: none; Step 3.1 is a tox-configuration step whose frozen validation is the compatibility environments themselves.
+- Resolved-command inspection: `uv run tox config -e py313` — PASS; resolved `commands = python scripts/run_test_suite.py`, with `uv-venv-lock-runner` and `dependency_groups = test` preserved.
+- Representative before-change A/B command on Python 3.13: `/usr/bin/time -f 'wall=%e user=%U sys=%S cpu=%P maxrss_kb=%M' uv run tox -e py313 -- --randomly-seed=12345`.
+  - Legacy tox command: `python -m pytest tests/ -q --cov --cov-fail-under=86.9 --randomly-seed=12345`.
+  - Result: 1128 passed, 0 failed, 3 skipped in 91.25 s; tox `py313: OK`.
+  - Wrapper: `wall=94.25 user=43.90 sys=3.37 cpu=50% maxrss_kb=442352`.
+- Required Python 3.10 validation, timed with the fixed seed: `/usr/bin/time -f 'wall=%e user=%U sys=%S cpu=%P maxrss_kb=%M' uv run tox -e py310 -- --seed 12345`.
+  - Tox invoked `python scripts/run_test_suite.py --seed 12345`.
+  - Parallel-safe lane: `.tox/py310/bin/python -m pytest tests -q -m 'not no_xdist' -n 4 --dist=worksteal --randomly-seed=12345` — 1125 passed, 0 failed, 4 skipped in 38.57 s.
+  - Ordinary-process lane: `.tox/py310/bin/python -m pytest tests -q -m no_xdist --randomly-seed=12345` — 2 passed, 0 failed, 0 skipped, 1129 deselected in 3.28 s.
+  - Aggregate managed suite: 1127 passed, 0 failed, 4 skipped; tox `py310: OK`.
+  - Wrapper: `wall=45.70 user=94.40 sys=6.10 cpu=219% maxrss_kb=424080`.
+- Required Python 3.13 validation, timed with the fixed seed: `/usr/bin/time -f 'wall=%e user=%U sys=%S cpu=%P maxrss_kb=%M' uv run tox -e py313 -- --seed 12345`.
+  - Tox invoked `python scripts/run_test_suite.py --seed 12345`.
+  - Parallel-safe lane: `.tox/py313/bin/python -m pytest tests -q -m 'not no_xdist' -n 4 --dist=worksteal --randomly-seed=12345` — 1126 passed, 0 failed, 3 skipped in 28.25 s.
+  - Ordinary-process lane: `.tox/py313/bin/python -m pytest tests -q -m no_xdist --randomly-seed=12345` — 2 passed, 0 failed, 0 skipped, 1129 deselected in 2.82 s.
+  - Aggregate managed suite: 1128 passed, 0 failed, 3 skipped; tox `py313: OK`.
+  - Wrapper: `wall=33.60 user=55.77 sys=4.96 cpu=180% maxrss_kb=428000`.
+- Required Python 3.14 validation, timed with the fixed seed: `/usr/bin/time -f 'wall=%e user=%U sys=%S cpu=%P maxrss_kb=%M' uv run tox -e py314 -- --seed 12345`.
+  - Tox invoked `python scripts/run_test_suite.py --seed 12345`.
+  - Parallel-safe lane: `.tox/py314/bin/python -m pytest tests -q -m 'not no_xdist' -n 4 --dist=worksteal --randomly-seed=12345` — 1126 passed, 0 failed, 3 skipped in 29.64 s.
+  - Ordinary-process lane: `.tox/py314/bin/python -m pytest tests -q -m no_xdist --randomly-seed=12345` — 2 passed, 0 failed, 0 skipped, 1129 deselected in 2.91 s.
+  - Aggregate managed suite: 1128 passed, 0 failed, 3 skipped; tox `py314: OK`.
+  - Wrapper: `wall=35.29 user=64.16 sys=4.86 cpu=195% maxrss_kb=444928`.
+- Post-change tox output for all three required environments showed both runner lanes, no coverage summary, and no `--cov` argument in any pytest command.
+- Exact full-lane commands run in this step are the three seeded tox commands above; no `coverage-policy` run was required or performed because its internals are explicitly frozen until Steps 3.2 and 3.3.
+- Changed-file hook gate: `uv run pre-commit run --files tox.ini docs/test-suite-performance-optimization-progress-2026-09-24.md` — PASS; all applicable hooks passed.
+
+Benchmark host/load evidence:
+
+- Before the legacy Python 3.13 timed baseline: `nproc=4`; `/proc/loadavg = 0.36 0.46 0.46 1/798 837075`.
+- Before the post-change Python 3.10 timed run: `nproc=4`; `/proc/loadavg = 0.83 0.66 0.54 1/797 840587`.
+- Before the post-change Python 3.13 timed run, the one-minute load initially reflected the just-finished Python 3.10 run (`2.32`, then `1.66`); after a 20-second helper wait it was `1.44 1.09 0.72 2/793 843713`, with `nproc=4`, before starting the timed run.
+- Before the post-change Python 3.14 timed run: `nproc=4`; `/proc/loadavg = 1.32 1.14 0.76 1/797 846471`.
+- No foreign heavy workload was observed; the elevated intermediate one-minute load was decay from this step's own immediately preceding tox run. No reported timed result is labelled foreign-load contaminated.
+
+Performance:
+
+- Before, representative Python 3.13 compatibility tox with coverage instrumentation: `wall=94.25 s` at seed 12345.
+- After, Python 3.13 compatibility tox using the no-coverage two-lane runner: `wall=33.60 s` at seed 12345.
+- Reduction: 60.65 s, approximately 64.4% wall time.
+- The A/B uses the same base commit, host, Python 3.13 environment, dependency lock, test population, and random seed; the intentional variable is Step 3.1's tox command/orchestration. The pre-change tox setup cost was 0.21 s versus 0.04 s after, negligible relative to the measured difference.
+- Post-change per-environment wall times at seed 12345: py310 45.70 s, py313 33.60 s, py314 35.29 s.
+
+Findings:
+
+- Ordinary compatibility tox now proves interpreter compatibility without coverage instrumentation and reuses the already-established bounded two-lane full-suite runner.
+- The five-interpreter local matrix remains exactly `py310, py311, py312, py313, py314`; no duplicate Python 3.13 CI compatibility work was introduced.
+- `[testenv:coverage-policy]` is unchanged and still owns the authoritative coverage path until Steps 3.2 and 3.3.
+- Production source behaviour changed in Step 3.1: no. Only tox orchestration and the progress record changed.
+- The host-safety fixture, coverage thresholds/policy, production timing defaults, and test inventory were not changed.
+
+Deviation from Section 5.8 / frozen step:
+
+- None.
+- The required tox validations were supplied seed 12345 so the timed evidence is reproducible under the benchmark rule; this only forwards the deterministic random seed and does not change test selection.
+- Two shell-form load/wait helper commands were refused by platform safety checks. Equivalent Python helper commands through the Raspberry Pi MCP `run_command` connector were used instead; the validation/benchmark procedure and repository state were unchanged.
+
+Risks / follow-up:
+
+- Python 3.10 is slower than 3.13/3.14 on this host under the same bounded four-worker runner, but it is green and remains part of the required supported matrix.
+- Do not modify `coverage-policy` internals before Step 3.2, and do not introduce tox-level parallelism before Step 3.4.
+
+Next:
+
+- 3.2 Make coverage-policy run each test only once
