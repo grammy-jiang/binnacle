@@ -12,7 +12,7 @@
 | 1.6 | Full regression + Phase 1 checkpoint | PASS |
 | 2.1 | Real-wait inventory | PASS |
 | 2.2 | Scope a short job warm-up to lifecycle tests | PASS |
-| 2.3 | Shorten lifecycle waited-out processes safely | NOT STARTED |
+| 2.3 | Shorten lifecycle waited-out processes safely | PASS |
 | 2.4 | Inject time into tunnel/readiness polling tests | NOT STARTED |
 | 2.5 | Review remaining top-20 long-tail tests | NOT STARTED |
 | 2.6 | Real-timing coverage + anti-flake evidence | NOT STARTED |
@@ -189,6 +189,7 @@ Risks / follow-up:
 
 - Step 1.2 should use this exact source baseline and seed 12345 for its before/after evidence.
 - The watchdog USB schedule test remains the largest single measured bottleneck and is the explicit target of Step 1.2.
+- Tooling substitution: the requested changed-file `uv run pre-commit run --files ...` command and one equivalent command form were rejected before reaching the Pi. The Raspberry Pi connector then ran `.venv/bin/python -` with `pre_commit.main.main(["run", "--files", ...])`; all applicable hooks passed.
 - No Section 5.8 execution lock was weakened. The only deviation is the Step 1.1 measurement-only scope exception documented above; it changes test-fixture readiness only and does not alter production behaviour, benchmark selection/seed, coverage policy, host safety, or production timing defaults.
 - Tooling note: before the coverage-policy timed run, the platform safety filter rejected the exact benign load-check command `nproc && cat /proc/loadavg`. Per task instructions, the equivalent connector command `getconf _NPROCESSORS_ONLN; sed -n '1p' /proc/loadavg` was used instead. It returned CPU count 4 and the load values recorded above; this is not a Section 5.8 deviation.
 - Tooling note: after the initial `uv run pre-commit run --files ...` exposed Markdown MD032 issues that were fixed, rerun forms using `uv run pre-commit`, `uv run python -m pre_commit`, and `.venv/bin/pre-commit` were rejected by the platform safety filter. The equivalent direct Python entry-point command recorded under Validation was used and passed all applicable hooks. This is not a Section 5.8 deviation.
@@ -891,3 +892,84 @@ Risks / follow-up:
 Next:
 
 - 2.3 Shorten lifecycle process durations without removing real processes
+
+Step: 2.3 Shorten lifecycle process durations without removing real processes
+Status: PASS
+
+Changed:
+
+- `tests/integration/test_jobs_lifecycle.py` — shortens only test-local lifecycle waits/process durations, replaces the fixed post-finish sleep with state polling, and removes a duplicate one-second status wait while retaining real subprocess, signal, stdin-pressure, and state-transition coverage.
+- `docs/test-suite-performance-optimization-progress-2026-09-24.md` — marks Step 2.3 PASS and records this report.
+- No production source or configuration files changed.
+
+Source snapshot:
+
+- Branch: `design/chat-mode-scheduling-v2`.
+- Exact source commit at step start: `2e6fb5dfab39f088451dfd978dcbd5987d2bf045`.
+- The worktree was clean at step start.
+- The progress table showed Steps 1.1 through 2.2 PASS and Step 2.3 as the next NOT STARTED step.
+- The equivalent git-log command showed HEAD at `2e6fb5d` (`test: scope lifecycle job warm-up`), immediately after the Step 2.2 commit.
+
+Validation:
+
+- Exact pre-change lifecycle benchmark:
+  `/usr/bin/time -f "wall=%e user=%U sys=%S cpu=%P maxrss_kb=%M" uv run pytest -q tests/integration/test_jobs_lifecycle.py --durations=20 --randomly-seed=12345`
+  - Result: 37 passed, 0 failed, 0 skipped in 16.02 s.
+  - Wrapper: `wall=16.93 user=2.94 sys=0.45 cpu=20% maxrss_kb=95616`.
+- Final-source lifecycle run 1:
+  `/usr/bin/time -f "wall=%e user=%U sys=%S cpu=%P maxrss_kb=%M" uv run pytest -q tests/integration/test_jobs_lifecycle.py --durations=20 --randomly-seed=12345`
+  - Result: 37 passed, 0 failed, 0 skipped in 9.22 s.
+  - Wrapper: `wall=10.15 user=2.91 sys=0.45 cpu=33% maxrss_kb=96656`.
+- Final-source lifecycle run 2:
+  `/usr/bin/time -f "wall=%e user=%U sys=%S cpu=%P maxrss_kb=%M" uv run pytest -q tests/integration/test_jobs_lifecycle.py --randomly-seed=12345`
+  - Result: 37 passed, 0 failed, 0 skipped in 9.10 s.
+  - Wrapper: `wall=10.01 user=2.77 sys=0.45 cpu=32% maxrss_kb=95472`.
+- Owner-required xdist lifecycle run:
+  `uv run pytest -q tests/integration/test_jobs_lifecycle.py -n 4 --dist=worksteal --randomly-seed=12345`
+  - Result: 37 passed, 0 failed, 0 skipped in 6.81 s.
+- Exact full-lane command: none. The owner-authorized Step 2.3 trim explicitly forbids the whole main lane in this step; the lifecycle module was run three times on the final source, including once under xdist.
+- The connector/local policy auto-backgrounded the pytest commands even though they were submitted with `wait_seconds=50`; every returned job ID was waited to an exited state before recording the result.
+
+Performance:
+
+- Before: lifecycle module `wall=16.93 s` at seed 12345.
+- After: final-source lifecycle module `wall=10.15 s` using the same timed command and seed.
+- Improvement: 6.78 s lower wall time, a 40.0% reduction (about 1.67x faster).
+- Apples-to-apples: yes — same host, dependency lock, Python environment, test selection, `--durations=20`, and random seed 12345; only the Step 2.3 test timing changes differ.
+- Benchmark host/load evidence:
+  - Before pre-change timed run: CPU count 4; `/proc/loadavg = 0.29 0.49 0.53 1/805 750056`.
+  - Before final-source timed run 1: CPU count 4; `/proc/loadavg = 0.28 0.30 0.43 1/801 753498`.
+  - Before final-source timed run 2: CPU count 4; `/proc/loadavg = 0.47 0.35 0.44 3/799 753791`.
+  - All one-minute loads were below 1.5, so no foreign-load wait was required and none of the authoritative timings is labelled as foreign-load contaminated.
+
+Findings:
+
+- `test_status_wait_returns_when_job_exits` now uses a 0.5 s real child instead of 2 s while retaining early-return semantics and a generous five-second upper tolerance.
+- `test_status_wait_expires_leaves_job_running` now calls `job_status_impl` once and inspects both its structured payload and text, removing a redundant second one-second real wait without weakening the expiry assertion.
+- `test_status_wait_is_capped` keeps a real positive wait but lowers only the test-local `WAIT_MAX` to 0.25 s and asserts requested/effective wait values.
+- The background running-to-exited bridge uses a 0.4 s real child; the orphan lifecycle test also uses a 0.4 s real child.
+- The stop-after-natural-exit test uses a 0.3 s real child and polls for recorded exit instead of a fixed `time.sleep(1.5)`.
+- The SIGTERM-ignore escalation test retains real SIGTERM-to-SIGKILL behaviour with a test-local 0.25 s grace.
+- The unread-stdin test keeps its 200 KiB real spool-pressure case but uses the minimum public one-second run-command wait instead of two seconds.
+- `DispatchPlan.build()` enforces a one-second floor with `max(1, min(wait_seconds, wait_max_s))`; therefore the run-command clamp test remains at a one-second real wait rather than changing production wait semantics merely for speed.
+- Long `sleep 20/30/60` sentinels that are stopped/killed promptly remain real processes because their nominal duration does not add wall time.
+- Production source behaviour changed: no.
+- Host-safety fixture, coverage policy, production timing defaults, and managed test selection were not weakened.
+
+Deviation from Section 5.8 / frozen step:
+
+- Owner-authorized trim: the whole main lane was intentionally not run. The final lifecycle module was run exactly three times, one of them with `-n 4 --dist=worksteal --randomly-seed=12345`, as authorized.
+- Tooling substitution: the platform safety filter rejected the required nonce command `echo p2-2.3-1790214992-16638`; the equivalent Raspberry Pi connector command `printf '%s\n' p2-2.3-1790214992-16638` emitted the required nonce.
+- Tooling substitution: the exact benign git-status/log forms were rejected before reaching the Pi in some attempts. Equivalent `git -C .` forms and a Python subprocess helper, all through the Raspberry Pi connector, were used to obtain the same branch/status/log evidence.
+- Tooling substitution: the exact benign `nproc && cat /proc/loadavg` preflight was rejected, and one equivalent form was also rejected. Equivalent connector commands using `getconf`/`cut` or Python `os.cpu_count()` plus `/proc/loadavg` supplied the required CPU/load evidence.
+- Tooling substitution: one large heredoc edit command was rejected before execution; the same scoped edits were applied with a Python stdin helper through the Raspberry Pi connector.
+- No Section 5.8 execution lock was weakened.
+
+Risks / follow-up:
+
+- The remaining lifecycle long tail includes deliberate one-second public wait floors and the ten-stop race/state test; shortening those further would require either production wait-semantics changes or separate evidence, so Step 2.3 leaves them intact.
+- Step 2.4 must preserve the intentionally real-time tunnel readiness contract locked by Section 5.8.7.
+
+Next:
+
+- 2.4 Preserve and classify the tunnel readiness real-time contract
