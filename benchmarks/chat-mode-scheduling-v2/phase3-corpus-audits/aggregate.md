@@ -69,11 +69,12 @@ parsed timing records. Canonical revision-2 progress further records 2968
 replayable waits and 278 rows and states that the 28 token-bearing non-timing or
 wrapped records are not an expiration gap.
 
-The optional
-`phase3-corpus-shards/operational-journal.md` file is a revision-1 historical
-note and is not a merge input; Git history shows the revision-2 replacement was
-made to `operational-journal.json`. This aggregate audit therefore uses the
-revision-2 JSON shard plus revision-2 canonical progress for merge consistency.
+At aggregate-audit execution time, the optional
+`phase3-corpus-shards/operational-journal.md` file was still a stale
+revision-1 historical note and was not a merge input. Step 3.5A canonical
+housekeeping rewrites that note to describe revision 2; the aggregate audit
+itself uses the revision-2 JSON shard plus revision-2 canonical progress for
+merge consistency.
 
 ## Privacy checks
 
