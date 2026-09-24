@@ -14,6 +14,17 @@ from typing import Any
 if not __package__:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from scripts.chat_scheduling_phase3_report_populations import (
+    burden_reduction_metrics,
+    completion_metrics,
+    corpus_row_ids,
+    early_exhaustion_count,
+    exhaustion_metrics,
+    optional_exhaustion_metrics,
+    positive_wait_evidence_issues,
+    row_identity,
+    split_rows,
+)
 from scripts.chat_scheduling_phase3_report_render import (
     _write_outputs,
     render_final_markdown,
@@ -50,101 +61,6 @@ def _number(value: Any, field: str) -> float:
     return result
 
 
-def _integer(value: Any, field: str) -> int:
-    if isinstance(value, bool) or not isinstance(value, int):
-        raise TypeError(f"{field} must be an integer")
-    return value
-
-
-def _percent(numerator: int, denominator: int, field: str) -> float:
-    if denominator <= 0:
-        raise ValueError(f"{field} denominator must be positive")
-    return round(100.0 * numerator / denominator, 6)
-
-
-def _row_identity(row: Mapping[str, Any]) -> tuple[str, str, str]:
-    return (
-        str(row.get("source_id")),
-        str(row.get("trial_id")),
-        str(row.get("base_turn")),
-    )
-
-
-def _corpus_row_ids(corpus: Mapping[str, Any]) -> list[tuple[str, str, str]]:
-    rows = corpus.get("rows")
-    if not isinstance(rows, list):
-        raise TypeError("replay corpus rows must be a list")
-    identities: list[tuple[str, str, str]] = []
-    for index, row in enumerate(rows):
-        if not isinstance(row, Mapping):
-            raise TypeError(f"corpus row {index} must be an object")
-        identities.append(_row_identity(row))
-    if len(set(identities)) != len(identities):
-        raise ValueError("replay corpus row identities are not unique")
-    return sorted(identities)
-
-
-def _positive_wait_evidence_issues(corpus: Mapping[str, Any]) -> list[str]:
-    rows = corpus.get("rows")
-    if not isinstance(rows, list):
-        raise TypeError("replay corpus rows must be a list")
-    issues: list[str] = []
-    for row_index, row in enumerate(rows):
-        if not isinstance(row, Mapping):
-            raise TypeError(f"corpus row {row_index} must be an object")
-        waits = row.get("waits")
-        if not isinstance(waits, list):
-            raise TypeError(f"corpus row {row_index} waits must be a list")
-        for wait_index, wait in enumerate(waits):
-            if not isinstance(wait, Mapping):
-                raise TypeError(
-                    f"corpus row {row_index} wait {wait_index} must be an object"
-                )
-            requested = _number(
-                wait.get("requested_wait_s"),
-                f"corpus row {row_index} wait {wait_index} requested_wait_s",
-            )
-            if requested <= EPSILON:
-                continue
-            missing: list[str] = []
-            for field in (
-                "call_start_offset_s",
-                "call_end_offset_s",
-                "waited_s",
-                "state",
-            ):
-                if wait.get(field) is None:
-                    missing.append(field)
-            waited = wait.get("waited_s")
-            if waited is not None:
-                waited_s = _number(
-                    waited, f"corpus row {row_index} wait {wait_index} waited_s"
-                )
-                if waited_s > EPSILON:
-                    for field in (
-                        "blocking_start_offset_s",
-                        "blocking_end_offset_s",
-                    ):
-                        if wait.get(field) is None:
-                            missing.append(field)
-            if (
-                bool(wait.get("required_completion"))
-                and bool(wait.get("observed_completion"))
-                and wait.get("job_exit_offset_s") is None
-            ):
-                missing.append("job_exit_offset_s")
-            state = wait.get("state")
-            if state is not None and (not isinstance(state, str) or not state.strip()):
-                missing.append("state")
-            if missing:
-                source_id, trial_id, base_turn = _row_identity(row)
-                issues.append(
-                    f"{source_id}/{trial_id}/{base_turn} wait {wait_index}: "
-                    + ", ".join(sorted(set(missing)))
-                )
-    return issues
-
-
 def _validate_promoted_candidate(
     report: Mapping[str, Any],
     *,
@@ -167,7 +83,7 @@ def _validate_promoted_candidate(
     rows = report.get("rows")
     if not isinstance(rows, list):
         raise TypeError(f"{path} rows must be a list")
-    report_ids = sorted(_row_identity(row) for row in rows if isinstance(row, Mapping))
+    report_ids = sorted(row_identity(row) for row in rows if isinstance(row, Mapping))
     if len(report_ids) != len(rows):
         raise TypeError(f"{path} contains a non-object replay row")
     if report_ids != list(corpus_row_ids):
@@ -184,91 +100,168 @@ def _evaluate_candidate(
     budget_s: float,
     report_path: Path,
     report_sha256: str,
-    evidence_issues: Sequence[str],
+    canonical_evidence_issues: Sequence[str],
+    all_evidence_issues: Sequence[str],
 ) -> dict[str, Any]:
-    summary = report.get("summary")
     rows = report.get("rows")
-    if not isinstance(summary, Mapping):
-        raise TypeError(f"{report_path} summary must be an object")
     if not isinstance(rows, list):
         raise TypeError(f"{report_path} rows must be a list")
+    canonical_rows, operational_rows = split_rows(rows, field=str(report_path))
+    all_rows = [*canonical_rows, *operational_rows]
 
-    observed_required = _integer(
-        summary.get("observed_required_completions"),
-        f"{report_path} observed_required_completions",
+    canonical_completion = completion_metrics(
+        canonical_rows, field=f"{report_path} canonical completion"
     )
-    preserved = _integer(
-        summary.get("required_completions_preserved"),
-        f"{report_path} required_completions_preserved",
+    canonical_exhaustion = exhaustion_metrics(
+        canonical_rows, field=f"{report_path} canonical exhaustion"
     )
-    completion_percent = _percent(
-        preserved, observed_required, "completion preservation"
+    canonical_early = early_exhaustion_count(
+        canonical_rows,
+        budget_s=budget_s,
+        margin_s=EARLY_EXHAUSTION_MARGIN_S,
+        field=f"{report_path} canonical early exhaustion",
     )
-
-    positive_turns = _integer(
-        summary.get("turns_with_positive_waits"),
-        f"{report_path} turns_with_positive_waits",
+    gate4_rows = operational_rows if operational_rows else canonical_rows
+    gate4_population = (
+        "operational_journal" if operational_rows else "canonical_phase1_fallback"
     )
-    exhausted_turns = _integer(
-        summary.get("turns_exhausted"), f"{report_path} turns_exhausted"
-    )
-    exhaustion_percent = _percent(
-        exhausted_turns, positive_turns, "candidate exhaustion"
-    )
-
-    observed_wall = _number(
-        summary.get("observed_blocking_wall_s"),
-        f"{report_path} observed_blocking_wall_s",
-    )
-    candidate_wall = _number(
-        summary.get("candidate_blocking_wall_s"),
-        f"{report_path} candidate_blocking_wall_s",
-    )
-    if observed_wall <= EPSILON:
-        raise ValueError("historical burden-reduction denominator must be positive")
-    burden_reduction_percent = round(
-        100.0 * (observed_wall - candidate_wall) / observed_wall, 6
+    gate4_burden = burden_reduction_metrics(
+        gate4_rows, field=f"{report_path} gate 4 burden"
     )
 
-    early_exhaustion_count = 0
-    for index, row in enumerate(rows):
-        if not isinstance(row, Mapping):
-            raise TypeError(f"{report_path} row {index} must be an object")
-        exhausted = row.get("candidate_exhaustion_offset_s") is not None
-        observed = _number(
-            row.get("observed_blocking_wall_s"),
-            f"{report_path} row {index} observed_blocking_wall_s",
-        )
-        if exhausted and observed <= budget_s - EARLY_EXHAUSTION_MARGIN_S + EPSILON:
-            early_exhaustion_count += 1
+    prior_completion = completion_metrics(
+        all_rows, field=f"{report_path} prior combined completion"
+    )
+    prior_exhaustion = exhaustion_metrics(
+        all_rows, field=f"{report_path} prior combined exhaustion"
+    )
+    prior_early = early_exhaustion_count(
+        all_rows,
+        budget_s=budget_s,
+        margin_s=EARLY_EXHAUSTION_MARGIN_S,
+        field=f"{report_path} prior combined early exhaustion",
+    )
+    prior_burden = burden_reduction_metrics(
+        all_rows, field=f"{report_path} prior combined burden"
+    )
+    operational_exhaustion = optional_exhaustion_metrics(
+        operational_rows, field=f"{report_path} operational exhaustion"
+    )
 
     gates: dict[str, dict[str, Any]] = {
         "gate_1_completion_preservation": {
-            "passed": completion_percent + EPSILON >= COMPLETION_MIN_PERCENT,
-            "value_percent": completion_percent,
+            "passed": canonical_completion["value_percent"] + EPSILON
+            >= COMPLETION_MIN_PERCENT,
+            "value_percent": canonical_completion["value_percent"],
             "minimum_percent": COMPLETION_MIN_PERCENT,
+            "observed_required_completions": canonical_completion[
+                "observed_required_completions"
+            ],
+            "required_completions_preserved": canonical_completion[
+                "required_completions_preserved"
+            ],
         },
         "gate_2_exhaustion": {
-            "passed": exhaustion_percent <= EXHAUSTION_MAX_PERCENT + EPSILON,
-            "value_percent": exhaustion_percent,
+            "passed": canonical_exhaustion["value_percent"]
+            <= EXHAUSTION_MAX_PERCENT + EPSILON,
+            "value_percent": canonical_exhaustion["value_percent"],
             "maximum_percent": EXHAUSTION_MAX_PERCENT,
-            "denominator_turns_with_positive_waits": positive_turns,
+            "denominator_turns_with_positive_waits": canonical_exhaustion[
+                "turns_with_positive_waits"
+            ],
+            "turns_exhausted": canonical_exhaustion["turns_exhausted"],
         },
         "gate_3_no_early_exhaustion": {
-            "passed": early_exhaustion_count == 0,
-            "early_exhaustion_turns": early_exhaustion_count,
+            "passed": canonical_early == 0,
+            "early_exhaustion_turns": canonical_early,
             "margin_s": EARLY_EXHAUSTION_MARGIN_S,
         },
         "gate_4_repeated_wait_burden_reduction": {
-            "passed": burden_reduction_percent + EPSILON
+            "passed": gate4_burden["value_percent"] + EPSILON
             >= BURDEN_REDUCTION_MIN_PERCENT,
-            "value_percent": burden_reduction_percent,
+            "value_percent": gate4_burden["value_percent"],
             "minimum_percent": BURDEN_REDUCTION_MIN_PERCENT,
+            "observed_blocking_wall_s": gate4_burden["observed_blocking_wall_s"],
+            "candidate_blocking_wall_s": gate4_burden["candidate_blocking_wall_s"],
         },
         "gate_5_evidence_completeness": {
-            "passed": not evidence_issues,
-            "missing_evidence_count": len(evidence_issues),
-            "examples": list(evidence_issues[:5]),
+            "passed": not canonical_evidence_issues,
+            "missing_evidence_count": len(canonical_evidence_issues),
+            "examples": list(canonical_evidence_issues[:5]),
+        },
+    }
+    gate_populations = {
+        "gate_1_completion_preservation": {
+            "population": "canonical_phase1_observed_valid_completion",
+            "canonical_turns": len(canonical_rows),
+            "turns_with_observed_required_completions": sum(
+                int(row.get("observed_required_completions", 0)) > 0
+                for row in canonical_rows
+            ),
+        },
+        "gate_2_exhaustion": {
+            "population": "canonical_phase1_positive_wait_turns",
+            "turns": canonical_exhaustion["turns_with_positive_waits"],
+        },
+        "gate_3_no_early_exhaustion": {
+            "population": "canonical_phase1_turns",
+            "turns": len(canonical_rows),
+        },
+        "gate_4_repeated_wait_burden_reduction": {
+            "population": gate4_population,
+            "turns": len(gate4_rows),
+            "fallback_used": not bool(operational_rows),
+        },
+        "gate_5_evidence_completeness": {
+            "population": "canonical_phase1_positive_wait_turns",
+            "turns": canonical_exhaustion["turns_with_positive_waits"],
+        },
+    }
+    correction_before_after = {
+        "gate_1_completion_preservation": {
+            "metric": "value_percent",
+            "before": prior_completion["value_percent"],
+            "after": canonical_completion["value_percent"],
+            "before_population": "canonical_plus_operational_required_completions",
+            "after_population": "canonical_phase1_observed_valid_completion",
+        },
+        "gate_2_exhaustion": {
+            "metric": "value_percent",
+            "before": prior_exhaustion["value_percent"],
+            "after": canonical_exhaustion["value_percent"],
+            "before_population": "canonical_plus_operational_positive_wait_turns",
+            "after_population": "canonical_phase1_positive_wait_turns",
+        },
+        "gate_3_no_early_exhaustion": {
+            "metric": "early_exhaustion_turns",
+            "before": prior_early,
+            "after": canonical_early,
+            "before_population": "canonical_plus_operational_turns",
+            "after_population": "canonical_phase1_turns",
+        },
+        "gate_4_repeated_wait_burden_reduction": {
+            "metric": "value_percent",
+            "before": prior_burden["value_percent"],
+            "after": gate4_burden["value_percent"],
+            "before_population": "canonical_plus_operational_turns",
+            "after_population": gate4_population,
+        },
+        "gate_5_evidence_completeness": {
+            "metric": "missing_evidence_count",
+            "before": len(all_evidence_issues),
+            "after": len(canonical_evidence_issues),
+            "before_population": "canonical_plus_operational_positive_wait_turns",
+            "after_population": "canonical_phase1_positive_wait_turns",
+        },
+    }
+    diagnostics = {
+        "operational_exhaustion": {
+            "population": "operational_journal_positive_wait_turns",
+            **operational_exhaustion,
+        },
+        "combined_exhaustion": {
+            "population": "canonical_plus_operational_positive_wait_turns",
+            **prior_exhaustion,
         },
     }
     failed_gates = [name for name, result in gates.items() if not result["passed"]]
@@ -280,6 +273,9 @@ def _evaluate_candidate(
         "passed": not failed_gates,
         "failed_gates": failed_gates,
         "gates": gates,
+        "gate_populations": gate_populations,
+        "diagnostics": diagnostics,
+        "correction_before_after": correction_before_after,
     }
 
 
@@ -290,8 +286,17 @@ def build_shortlist(
     if corpus.get("schema_version") != SCHEMA_VERSION:
         raise ValueError("unsupported replay corpus schema_version")
     corpus_sha256 = _sha256(corpus_raw)
-    corpus_row_ids = _corpus_row_ids(corpus)
-    evidence_issues = _positive_wait_evidence_issues(corpus)
+    frozen_row_ids = corpus_row_ids(corpus)
+    corpus_rows = corpus.get("rows")
+    if not isinstance(corpus_rows, list):
+        raise TypeError("replay corpus rows must be a list")
+    canonical_corpus_rows, _ = split_rows(corpus_rows, field="replay corpus")
+    canonical_evidence_issues = positive_wait_evidence_issues(
+        canonical_corpus_rows, field="canonical replay corpus"
+    )
+    all_evidence_issues = positive_wait_evidence_issues(
+        corpus_rows, field="combined replay corpus"
+    )
 
     evaluations: list[dict[str, Any]] = []
     seen_candidates: set[str] = set()
@@ -302,7 +307,7 @@ def build_shortlist(
             report,
             path=path,
             corpus_sha256=corpus_sha256,
-            corpus_row_ids=corpus_row_ids,
+            corpus_row_ids=frozen_row_ids,
         )
         if candidate in seen_candidates:
             raise ValueError(f"duplicate candidate report for {candidate}")
@@ -320,7 +325,8 @@ def build_shortlist(
                 budget_s=budget_s,
                 report_path=path,
                 report_sha256=report_sha256,
-                evidence_issues=evidence_issues,
+                canonical_evidence_issues=canonical_evidence_issues,
+                all_evidence_issues=all_evidence_issues,
             )
         )
     expected = set(CANDIDATE_NAMES.values())

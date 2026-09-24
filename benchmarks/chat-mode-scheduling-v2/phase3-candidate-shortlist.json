@@ -3,21 +3,100 @@
     {
       "budget_s": 120.0,
       "candidate": "C120",
+      "correction_before_after": {
+        "gate_1_completion_preservation": {
+          "after": 88.888889,
+          "after_population": "canonical_phase1_observed_valid_completion",
+          "before": 88.888889,
+          "before_population": "canonical_plus_operational_required_completions",
+          "metric": "value_percent"
+        },
+        "gate_2_exhaustion": {
+          "after": 15.384615,
+          "after_population": "canonical_phase1_positive_wait_turns",
+          "before": 47.766323,
+          "before_population": "canonical_plus_operational_positive_wait_turns",
+          "metric": "value_percent"
+        },
+        "gate_3_no_early_exhaustion": {
+          "after": 0,
+          "after_population": "canonical_phase1_turns",
+          "before": 0,
+          "before_population": "canonical_plus_operational_turns",
+          "metric": "early_exhaustion_turns"
+        },
+        "gate_4_repeated_wait_burden_reduction": {
+          "after": 75.772057,
+          "after_population": "operational_journal",
+          "before": 75.123692,
+          "before_population": "canonical_plus_operational_turns",
+          "metric": "value_percent"
+        },
+        "gate_5_evidence_completeness": {
+          "after": 0,
+          "after_population": "canonical_phase1_positive_wait_turns",
+          "before": 0,
+          "before_population": "canonical_plus_operational_positive_wait_turns",
+          "metric": "missing_evidence_count"
+        }
+      },
+      "diagnostics": {
+        "combined_exhaustion": {
+          "population": "canonical_plus_operational_positive_wait_turns",
+          "turns_exhausted": 139,
+          "turns_with_positive_waits": 291,
+          "value_percent": 47.766323
+        },
+        "operational_exhaustion": {
+          "available": true,
+          "population": "operational_journal_positive_wait_turns",
+          "turns_exhausted": 137,
+          "turns_with_positive_waits": 278,
+          "value_percent": 49.280576
+        }
+      },
       "failed_gates": [
         "gate_1_completion_preservation",
         "gate_2_exhaustion"
       ],
+      "gate_populations": {
+        "gate_1_completion_preservation": {
+          "canonical_turns": 48,
+          "population": "canonical_phase1_observed_valid_completion",
+          "turns_with_observed_required_completions": 13
+        },
+        "gate_2_exhaustion": {
+          "population": "canonical_phase1_positive_wait_turns",
+          "turns": 13
+        },
+        "gate_3_no_early_exhaustion": {
+          "population": "canonical_phase1_turns",
+          "turns": 48
+        },
+        "gate_4_repeated_wait_burden_reduction": {
+          "fallback_used": false,
+          "population": "operational_journal",
+          "turns": 278
+        },
+        "gate_5_evidence_completeness": {
+          "population": "canonical_phase1_positive_wait_turns",
+          "turns": 13
+        }
+      },
       "gates": {
         "gate_1_completion_preservation": {
           "minimum_percent": 95.0,
+          "observed_required_completions": 18,
           "passed": false,
+          "required_completions_preserved": 16,
           "value_percent": 88.888889
         },
         "gate_2_exhaustion": {
-          "denominator_turns_with_positive_waits": 291,
+          "denominator_turns_with_positive_waits": 13,
           "maximum_percent": 10.0,
           "passed": false,
-          "value_percent": 47.766323
+          "turns_exhausted": 2,
+          "value_percent": 15.384615
         },
         "gate_3_no_early_exhaustion": {
           "early_exhaustion_turns": 0,
@@ -25,9 +104,11 @@
           "passed": true
         },
         "gate_4_repeated_wait_burden_reduction": {
+          "candidate_blocking_wall_s": 20154.25617,
           "minimum_percent": 70.0,
+          "observed_blocking_wall_s": 83185.996908,
           "passed": true,
-          "value_percent": 75.123692
+          "value_percent": 75.772057
         },
         "gate_5_evidence_completeness": {
           "examples": [],
@@ -42,21 +123,99 @@
     {
       "budget_s": 300.0,
       "candidate": "C300",
+      "correction_before_after": {
+        "gate_1_completion_preservation": {
+          "after": 100.0,
+          "after_population": "canonical_phase1_observed_valid_completion",
+          "before": 100.0,
+          "before_population": "canonical_plus_operational_required_completions",
+          "metric": "value_percent"
+        },
+        "gate_2_exhaustion": {
+          "after": 0.0,
+          "after_population": "canonical_phase1_positive_wait_turns",
+          "before": 29.209622,
+          "before_population": "canonical_plus_operational_positive_wait_turns",
+          "metric": "value_percent"
+        },
+        "gate_3_no_early_exhaustion": {
+          "after": 0,
+          "after_population": "canonical_phase1_turns",
+          "before": 0,
+          "before_population": "canonical_plus_operational_turns",
+          "metric": "early_exhaustion_turns"
+        },
+        "gate_4_repeated_wait_burden_reduction": {
+          "after": 52.927366,
+          "after_population": "operational_journal",
+          "before": 52.467818,
+          "before_population": "canonical_plus_operational_turns",
+          "metric": "value_percent"
+        },
+        "gate_5_evidence_completeness": {
+          "after": 0,
+          "after_population": "canonical_phase1_positive_wait_turns",
+          "before": 0,
+          "before_population": "canonical_plus_operational_positive_wait_turns",
+          "metric": "missing_evidence_count"
+        }
+      },
+      "diagnostics": {
+        "combined_exhaustion": {
+          "population": "canonical_plus_operational_positive_wait_turns",
+          "turns_exhausted": 85,
+          "turns_with_positive_waits": 291,
+          "value_percent": 29.209622
+        },
+        "operational_exhaustion": {
+          "available": true,
+          "population": "operational_journal_positive_wait_turns",
+          "turns_exhausted": 85,
+          "turns_with_positive_waits": 278,
+          "value_percent": 30.57554
+        }
+      },
       "failed_gates": [
-        "gate_2_exhaustion",
         "gate_4_repeated_wait_burden_reduction"
       ],
+      "gate_populations": {
+        "gate_1_completion_preservation": {
+          "canonical_turns": 48,
+          "population": "canonical_phase1_observed_valid_completion",
+          "turns_with_observed_required_completions": 13
+        },
+        "gate_2_exhaustion": {
+          "population": "canonical_phase1_positive_wait_turns",
+          "turns": 13
+        },
+        "gate_3_no_early_exhaustion": {
+          "population": "canonical_phase1_turns",
+          "turns": 48
+        },
+        "gate_4_repeated_wait_burden_reduction": {
+          "fallback_used": false,
+          "population": "operational_journal",
+          "turns": 278
+        },
+        "gate_5_evidence_completeness": {
+          "population": "canonical_phase1_positive_wait_turns",
+          "turns": 13
+        }
+      },
       "gates": {
         "gate_1_completion_preservation": {
           "minimum_percent": 95.0,
+          "observed_required_completions": 18,
           "passed": true,
+          "required_completions_preserved": 18,
           "value_percent": 100.0
         },
         "gate_2_exhaustion": {
-          "denominator_turns_with_positive_waits": 291,
+          "denominator_turns_with_positive_waits": 13,
           "maximum_percent": 10.0,
-          "passed": false,
-          "value_percent": 29.209622
+          "passed": true,
+          "turns_exhausted": 0,
+          "value_percent": 0.0
         },
         "gate_3_no_early_exhaustion": {
           "early_exhaustion_turns": 0,
@@ -64,9 +223,11 @@
           "passed": true
         },
         "gate_4_repeated_wait_burden_reduction": {
+          "candidate_blocking_wall_s": 39157.840128,
           "minimum_percent": 70.0,
+          "observed_blocking_wall_s": 83185.996908,
           "passed": false,
-          "value_percent": 52.467818
+          "value_percent": 52.927366
         },
         "gate_5_evidence_completeness": {
           "examples": [],
@@ -81,21 +242,99 @@
     {
       "budget_s": 600.0,
       "candidate": "C600",
+      "correction_before_after": {
+        "gate_1_completion_preservation": {
+          "after": 100.0,
+          "after_population": "canonical_phase1_observed_valid_completion",
+          "before": 100.0,
+          "before_population": "canonical_plus_operational_required_completions",
+          "metric": "value_percent"
+        },
+        "gate_2_exhaustion": {
+          "after": 0.0,
+          "after_population": "canonical_phase1_positive_wait_turns",
+          "before": 17.869416,
+          "before_population": "canonical_plus_operational_positive_wait_turns",
+          "metric": "value_percent"
+        },
+        "gate_3_no_early_exhaustion": {
+          "after": 0,
+          "after_population": "canonical_phase1_turns",
+          "before": 0,
+          "before_population": "canonical_plus_operational_turns",
+          "metric": "early_exhaustion_turns"
+        },
+        "gate_4_repeated_wait_burden_reduction": {
+          "after": 29.824066,
+          "after_population": "operational_journal",
+          "before": 29.565116,
+          "before_population": "canonical_plus_operational_turns",
+          "metric": "value_percent"
+        },
+        "gate_5_evidence_completeness": {
+          "after": 0,
+          "after_population": "canonical_phase1_positive_wait_turns",
+          "before": 0,
+          "before_population": "canonical_plus_operational_positive_wait_turns",
+          "metric": "missing_evidence_count"
+        }
+      },
+      "diagnostics": {
+        "combined_exhaustion": {
+          "population": "canonical_plus_operational_positive_wait_turns",
+          "turns_exhausted": 52,
+          "turns_with_positive_waits": 291,
+          "value_percent": 17.869416
+        },
+        "operational_exhaustion": {
+          "available": true,
+          "population": "operational_journal_positive_wait_turns",
+          "turns_exhausted": 52,
+          "turns_with_positive_waits": 278,
+          "value_percent": 18.705036
+        }
+      },
       "failed_gates": [
-        "gate_2_exhaustion",
         "gate_4_repeated_wait_burden_reduction"
       ],
+      "gate_populations": {
+        "gate_1_completion_preservation": {
+          "canonical_turns": 48,
+          "population": "canonical_phase1_observed_valid_completion",
+          "turns_with_observed_required_completions": 13
+        },
+        "gate_2_exhaustion": {
+          "population": "canonical_phase1_positive_wait_turns",
+          "turns": 13
+        },
+        "gate_3_no_early_exhaustion": {
+          "population": "canonical_phase1_turns",
+          "turns": 48
+        },
+        "gate_4_repeated_wait_burden_reduction": {
+          "fallback_used": false,
+          "population": "operational_journal",
+          "turns": 278
+        },
+        "gate_5_evidence_completeness": {
+          "population": "canonical_phase1_positive_wait_turns",
+          "turns": 13
+        }
+      },
       "gates": {
         "gate_1_completion_preservation": {
           "minimum_percent": 95.0,
+          "observed_required_completions": 18,
           "passed": true,
+          "required_completions_preserved": 18,
           "value_percent": 100.0
         },
         "gate_2_exhaustion": {
-          "denominator_turns_with_positive_waits": 291,
+          "denominator_turns_with_positive_waits": 13,
           "maximum_percent": 10.0,
-          "passed": false,
-          "value_percent": 17.869416
+          "passed": true,
+          "turns_exhausted": 0,
+          "value_percent": 0.0
         },
         "gate_3_no_early_exhaustion": {
           "early_exhaustion_turns": 0,
@@ -103,9 +342,11 @@
           "passed": true
         },
         "gate_4_repeated_wait_burden_reduction": {
+          "candidate_blocking_wall_s": 58376.550685,
           "minimum_percent": 70.0,
+          "observed_blocking_wall_s": 83185.996908,
           "passed": false,
-          "value_percent": 29.565116
+          "value_percent": 29.824066
         },
         "gate_5_evidence_completeness": {
           "examples": [],
@@ -146,7 +387,6 @@
       "budget_s": 300.0,
       "candidate": "C300",
       "failed_gates": [
-        "gate_2_exhaustion",
         "gate_4_repeated_wait_burden_reduction"
       ]
     },
@@ -154,7 +394,6 @@
       "budget_s": 600.0,
       "candidate": "C600",
       "failed_gates": [
-        "gate_2_exhaustion",
         "gate_4_repeated_wait_burden_reduction"
       ]
     }

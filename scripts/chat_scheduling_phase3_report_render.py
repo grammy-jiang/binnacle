@@ -39,6 +39,64 @@ def render_shortlist_markdown(report: Mapping[str, Any]) -> str:
             f"{gates['gate_5_evidence_completeness']['passed']} | "
             f"{'PASS' if item['passed'] else 'REJECT'} |"
         )
+
+    lines.extend(["", "## Gate populations", ""])
+    for item in report["candidate_evaluations"]:
+        lines.extend([f"### {item['candidate']}", ""])
+        for gate, population in item["gate_populations"].items():
+            details = ", ".join(
+                f"{key}={value}"
+                for key, value in population.items()
+                if key != "population"
+            )
+            lines.append(
+                f"- {gate}: {population['population']}"
+                + (f"; {details}" if details else "")
+            )
+        lines.append("")
+
+    lines.extend(
+        [
+            "## Population correction before/after",
+            "",
+            "| Candidate | Gate | Metric | Before | After | Before population | After population |",
+            "| --- | --- | --- | ---: | ---: | --- | --- |",
+        ]
+    )
+    for item in report["candidate_evaluations"]:
+        for gate, comparison in item["correction_before_after"].items():
+            lines.append(
+                f"| {item['candidate']} | {gate} | {comparison['metric']} | "
+                f"{comparison['before']} | {comparison['after']} | "
+                f"{comparison['before_population']} | "
+                f"{comparison['after_population']} |"
+            )
+
+    lines.extend(
+        [
+            "",
+            "## Exhaustion diagnostics",
+            "",
+            (
+                "| Candidate | Operational exhausted / positive | Operational % | "
+                "Combined exhausted / positive | Combined % |"
+            ),
+            "| --- | ---: | ---: | ---: | ---: |",
+        ]
+    )
+    for item in report["candidate_evaluations"]:
+        operational = item["diagnostics"]["operational_exhaustion"]
+        combined = item["diagnostics"]["combined_exhaustion"]
+        lines.append(
+            f"| {item['candidate']} | "
+            f"{operational['turns_exhausted']} / "
+            f"{operational['turns_with_positive_waits']} | "
+            f"{operational['value_percent']} | "
+            f"{combined['turns_exhausted']} / "
+            f"{combined['turns_with_positive_waits']} | "
+            f"{combined['value_percent']} |"
+        )
+
     lines.extend(["", "## Rejected candidates", ""])
     if report["rejected_candidates"]:
         for item in report["rejected_candidates"]:

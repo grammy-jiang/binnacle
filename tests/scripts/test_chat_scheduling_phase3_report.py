@@ -2,6 +2,7 @@ import hashlib
 import json
 import subprocess
 import sys
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
@@ -81,38 +82,57 @@ def _candidate_report(
     provisional: bool = False,
     audit_status: str = "pass",
 ) -> Path:
-    rows = [
-        {
-            "source_id": row["source_id"],
-            "source_sha256": row["source_sha256"],
-            "trial_id": row["trial_id"],
-            "scenario": row["scenario"],
-            "historical_arm": row["arm"],
-            "base_turn": row["base_turn"],
-            "observed_blocking_wall_s": row["observed_blocking_wall_s"],
-            "candidate_blocking_wall_s": min(
-                row["observed_blocking_wall_s"], candidate_wall_s / 10.0
-            ),
-            "burden_reduction_percent": None,
-            "candidate_exhaustion_offset_s": None,
-            "positive_waits_observed": 1,
-            "waits_clipped": 0,
-            "waits_converted_to_nonblocking": 0,
-            "observed_required_completions": 1,
-            "required_completions_preserved": 1,
-            "completion_at_risk": 0,
-            "terminal_state": row["terminal_state"],
-            "correct": row["correct"],
-            "same_prompt": row["same_prompt"],
-        }
-        for row in corpus_rows
-    ]
+    replay_rows = []
+    preserve_remaining = preserved
+    candidate_per_row = candidate_wall_s / len(corpus_rows)
+    for row in corpus_rows:
+        observed_required = int(row["observed_required_completions"])
+        preserved_here = min(observed_required, preserve_remaining)
+        preserve_remaining -= preserved_here
+        replay_rows.append(
+            {
+                "source_id": row["source_id"],
+                "source_sha256": row["source_sha256"],
+                "trial_id": row["trial_id"],
+                "scenario": row["scenario"],
+                "historical_arm": row["arm"],
+                "base_turn": row["base_turn"],
+                "observed_blocking_wall_s": row["observed_blocking_wall_s"],
+                "candidate_blocking_wall_s": min(
+                    row["observed_blocking_wall_s"], candidate_per_row
+                ),
+                "burden_reduction_percent": None,
+                "candidate_exhaustion_offset_s": None,
+                "positive_waits_observed": 1,
+                "waits_clipped": 0,
+                "waits_converted_to_nonblocking": 0,
+                "observed_required_completions": observed_required,
+                "required_completions_preserved": preserved_here,
+                "completion_at_risk": observed_required - preserved_here,
+                "terminal_state": row["terminal_state"],
+                "correct": row["correct"],
+                "same_prompt": row["same_prompt"],
+            }
+        )
     if exhausted:
-        for row in rows[:exhausted]:
+        for row in replay_rows[:exhausted]:
             row["candidate_exhaustion_offset_s"] = budget_s
-    observed_wall_s = 200.0
+    observed_wall_s = sum(float(row["observed_blocking_wall_s"]) for row in replay_rows)
+    actual_candidate_wall_s = sum(
+        float(row["candidate_blocking_wall_s"]) for row in replay_rows
+    )
+    observed_required = sum(
+        int(row["observed_required_completions"]) for row in replay_rows
+    )
+    actual_preserved = sum(
+        int(row["required_completions_preserved"]) for row in replay_rows
+    )
+    positive_turns = sum(int(row["positive_waits_observed"]) > 0 for row in replay_rows)
+    exhausted_turns = sum(
+        row["candidate_exhaustion_offset_s"] is not None for row in replay_rows
+    )
     burden_reduction = round(
-        100.0 * (observed_wall_s - candidate_wall_s) / observed_wall_s, 6
+        100.0 * (observed_wall_s - actual_candidate_wall_s) / observed_wall_s, 6
     )
     report = {
         "schema_version": 1,
@@ -124,23 +144,27 @@ def _candidate_report(
         "policy": "cumulative",
         "budget_s": budget_s,
         "summary": {
-            "turns": 10,
-            "turns_with_positive_waits": 10,
+            "turns": len(replay_rows),
+            "turns_with_positive_waits": positive_turns,
             "observed_blocking_wall_s": observed_wall_s,
-            "candidate_blocking_wall_s": candidate_wall_s,
+            "candidate_blocking_wall_s": actual_candidate_wall_s,
             "burden_reduction_percent": burden_reduction,
-            "positive_waits_observed": 10,
+            "positive_waits_observed": positive_turns,
             "waits_clipped": 0,
             "waits_converted_to_nonblocking": 0,
-            "observed_required_completions": 10,
-            "required_completions_preserved": preserved,
-            "completion_at_risk": 10 - preserved,
-            "completion_preservation_percent": preserved * 10.0,
-            "turns_exhausted": exhausted,
-            "exhaustion_percent": exhausted * 10.0,
+            "observed_required_completions": observed_required,
+            "required_completions_preserved": actual_preserved,
+            "completion_at_risk": observed_required - actual_preserved,
+            "completion_preservation_percent": (
+                None
+                if observed_required == 0
+                else round(100.0 * actual_preserved / observed_required, 6)
+            ),
+            "turns_exhausted": exhausted_turns,
+            "exhaustion_percent": round(100.0 * exhausted_turns / positive_turns, 6),
         },
         "per_scenario": [],
-        "rows": rows,
+        "rows": replay_rows,
     }
     _write_json(path, report)
     return path
@@ -245,6 +269,69 @@ def test_shortlist_cli_selects_all_passing_candidates_deterministically(
     ]
     assert payload["open_evidence_limitations"] == []
     assert payload["production_budget_declared"] is False
+
+
+def test_shortlist_gate2_uses_canonical_population_and_keeps_operational_diagnostic(
+    tmp_path: Path,
+):
+    corpus_path, _, canonical_rows = _corpus(tmp_path)
+    operational_rows = []
+    for index in range(20):
+        row = deepcopy(canonical_rows[index % len(canonical_rows)])
+        row["source_id"] = "operational-journal"
+        row["trial_id"] = f"operational-{index:02d}"
+        row["observed_required_completions"] = 0
+        for wait in row["waits"]:
+            wait["required_completion"] = False
+            wait["observed_completion"] = False
+            wait["job_exit_offset_s"] = None
+        operational_rows.append(row)
+    all_rows = [*canonical_rows, *operational_rows]
+    _write_json(
+        corpus_path,
+        {
+            "schema_version": 1,
+            "fields": [],
+            "wait_fields": [],
+            "rows": all_rows,
+        },
+    )
+    corpus_sha256 = hashlib.sha256(corpus_path.read_bytes()).hexdigest()
+    candidates = _candidate_set(tmp_path, corpus_sha256, all_rows)
+
+    payload = json.loads(candidates[0].read_text(encoding="utf-8"))
+    operational = [
+        row for row in payload["rows"] if row["source_id"] == "operational-journal"
+    ]
+    for row in operational[:10]:
+        row["candidate_exhaustion_offset_s"] = 120.0
+    payload["summary"]["turns_exhausted"] = 10
+    payload["summary"]["exhaustion_percent"] = round(100.0 * 10 / 30, 6)
+    _write_json(candidates[0], payload)
+
+    result = build_shortlist(corpus_path, candidates)
+    c120 = next(
+        item for item in result["candidate_evaluations"] if item["candidate"] == "C120"
+    )
+
+    gate2 = c120["gates"]["gate_2_exhaustion"]
+    assert gate2["denominator_turns_with_positive_waits"] == 10
+    assert gate2["turns_exhausted"] == 0
+    assert gate2["value_percent"] == 0.0
+    assert c120["gate_populations"]["gate_2_exhaustion"] == {
+        "population": "canonical_phase1_positive_wait_turns",
+        "turns": 10,
+    }
+    assert c120["diagnostics"]["operational_exhaustion"]["value_percent"] == 50.0
+    assert c120["diagnostics"]["combined_exhaustion"]["value_percent"] == 33.333333
+    correction = c120["correction_before_after"]["gate_2_exhaustion"]
+    assert correction["before"] == 33.333333
+    assert correction["after"] == 0.0
+    assert c120["gate_populations"]["gate_4_repeated_wait_burden_reduction"] == {
+        "population": "operational_journal",
+        "turns": 20,
+        "fallback_used": False,
+    }
 
 
 def test_shortlist_rejects_unpromoted_candidate(tmp_path: Path):
