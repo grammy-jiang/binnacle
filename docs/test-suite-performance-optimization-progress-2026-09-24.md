@@ -13,7 +13,7 @@
 | 2.1 | Real-wait inventory | PASS |
 | 2.2 | Scope a short job warm-up to lifecycle tests | PASS |
 | 2.3 | Shorten lifecycle waited-out processes safely | PASS |
-| 2.4 | Inject time into tunnel/readiness polling tests | NOT STARTED |
+| 2.4 | Preserve/classify tunnel readiness real-time contract | PASS |
 | 2.5 | Review remaining top-20 long-tail tests | NOT STARTED |
 | 2.6 | Real-timing coverage + anti-flake evidence | NOT STARTED |
 | 2.7 | Full regression + Phase 2 checkpoint | NOT STARTED |
@@ -973,3 +973,76 @@ Risks / follow-up:
 Next:
 
 - 2.4 Preserve and classify the tunnel readiness real-time contract
+
+Step: 2.4 Preserve and classify the tunnel readiness real-time contract
+Status: PASS
+
+Changed:
+
+- `docs/test-suite-performance-optimization-progress-2026-09-24.md` — marks Step 2.4 PASS, corrects its status-table description to the frozen-plan title, and records this confidence-gate report.
+- No test files, production source files, or configuration files changed.
+
+Source snapshot:
+
+- Branch: `design/chat-mode-scheduling-v2`.
+- Exact source commit at step start: `9fc9263536009b39c32a75cfa10d42fbd32a1d0a`.
+- The worktree was clean at step start.
+- The progress record and `git log -8 --oneline --decorate` confirmed Steps 1.1 through 2.3 were PASS and Step 2.4 was the next NOT STARTED step.
+
+Validation:
+
+- Contract inspection:
+  - `tests/system/test_tunnel_readiness.py` renders the current tunnel unit, extracts the real `ExecStartPost` Bash script, unescapes systemd's `$$`, substitutes only the test bound, runs the script with Bash, and checks elapsed real time against a local HTTP health server.
+  - `src/binnacle/tunnel_unit.py` still renders `end=$$((SECONDS+10))` with `sleep 0.2`, exits successfully on timeout, and leaves the production ten-second bound unchanged.
+  - The two timeout tests still use `bound_s=2` and assert `1 <= elapsed < 4`; healthy readiness uses a larger test bound and must finish before it.
+- Exact focused module command:
+  `uv run pytest -q tests/system/test_tunnel_readiness.py --durations=10`
+  - Result: 4 passed, 0 failed, 0 skipped in 5.87 s.
+  - Slowest timeout calls: bad probe 1.82 s; stale URL file 1.67 s.
+  - Healthy readiness calls: 0.47 s each and therefore completed before their bound.
+- Exact repeated timeout command:
+  `for i in 1 2 3 4 5; do uv run pytest -q tests/system/test_tunnel_readiness.py::test_waits_out_the_bound_but_never_fails_when_the_probe_is_not_ok tests/system/test_tunnel_readiness.py::test_waits_out_the_bound_when_the_url_file_is_stale || exit 1; done`
+  - Run 1: 2 passed, 0 failed, 0 skipped in 4.57 s.
+  - Run 2: 2 passed, 0 failed, 0 skipped in 3.95 s.
+  - Run 3: 2 passed, 0 failed, 0 skipped in 4.27 s.
+  - Run 4: 2 passed, 0 failed, 0 skipped in 4.66 s.
+  - Run 5: 2 passed, 0 failed, 0 skipped in 3.96 s.
+  - Aggregate repeated executions: 10 passed, 0 failed, 0 skipped.
+- Exact full-lane command: none. Step 2.4 is a focused system timing confidence gate and does not require a full-suite lane; Step 2.7 owns the Phase 2 full regression.
+- Changed-file pre-commit gate:
+  `uv run pre-commit run --files docs/test-suite-performance-optimization-progress-2026-09-24.md`
+  - Result: PASS; all applicable hooks passed.
+
+Performance:
+
+- Before/after A/B wall time: N/A. Step 2.4 changes no runtime code or test timing and therefore performs no optimisation A/B.
+- Current measured cost: the focused module completed in 5.87 s; its two intentional timeout calls were 1.82 s and 1.67 s.
+- Historical Step 1.6 tunnel-readiness durations are contextual only, not an A/B comparison, because Step 2.4 makes no timing change.
+- Benchmark/load evidence:
+  - Before the full module: `nproc=4`; `/proc/loadavg = 1.21 1.18 0.92 1/804 772043`.
+  - Before the five-run timeout loop: `nproc=4`; `/proc/loadavg = 1.06 1.15 0.91 2/802 772288`.
+  - Both one-minute loads were below 1.5, so no foreign-load wait was required and the measurements are not labelled as foreign-load contaminated.
+
+Findings:
+
+- The frozen real-time contract still exists exactly at the intended seam: rendered systemd/Bash readiness logic, not `binnacle.ops.watchdog.tunnel.restart_tunnel`.
+- The production readiness script remains bounded at ten seconds and sleeps 0.2 s between probes; no production timing default changed.
+- The two timeout tests are explicitly classified as **intentional real-time contract** coverage. Their elapsed wall time is part of what they validate, so they must remain real-time and be carried into the retained-real-time inventory in Step 2.6.
+- The two-second integer bound is retained. Reducing it to one second would weaken the test because Bash `SECONDS` advances in whole wall-clock seconds and can expire almost immediately near a second boundary.
+- No Python fake clock was introduced and no test was replaced with watchdog tunnel-restart coverage.
+- Production source behaviour changed: no.
+- Host-safety fixture, coverage policy, production timing defaults, and managed test selection were not weakened.
+
+Deviation from Section 5.8 / frozen step:
+
+- None.
+- Connector execution note: both pytest commands were auto-backgrounded by connector/local policy despite being submitted with direct `wait_seconds=50`; each returned job ID was waited to an exited state before its result was recorded. This did not change command semantics.
+
+Risks / follow-up:
+
+- Step 2.5 may optimise other long-tail tests, but these two timeout cases are not candidates unless new evidence contradicts this preserved contract.
+- Step 2.6 must include both timeout tests in its retained-real-time inventory and anti-flake evidence.
+
+Next:
+
+- 2.5 Review remaining top-20 long-tail tests
