@@ -353,3 +353,19 @@ def test_behavior_with_startup_and_zero_matches_still_renders():
     assert (
         "behavior=b0 policy=p0 semantics=1 warmup_s=1 startups=1 matches=0" in rendered
     )
+
+
+def test_phase5_groups_account_for_dispatch_errors_and_missing_dispatches():
+    sample = """
+2026-09-25T04:00:00.000 INFO: event=tool_config tool=run_command wait_default_s=30 wait_max_s=50
+2026-09-25T04:00:01.000 INFO: event=run_command_auto_background call=error client=x command_hash=c1 policy_hash=pE behavior_hash=bE semantics_version=1 auto_warmup_s=1.0 rule_hash=-
+2026-09-25T04:00:01.001 WARNING: event=run_command_dispatch_error call=error client=x error_class=RuntimeError error_code=launch_failed
+2026-09-25T04:00:02.000 INFO: event=run_command_auto_background call=missing client=x command_hash=c2 policy_hash=pM behavior_hash=bM semantics_version=1 auto_warmup_s=1.0 rule_hash=-
+"""
+    records, startups = logstats.parse(sample)
+    stats = logstats.analyze(records, startups).run_command
+
+    assert set(stats.auto_behavior_groups) == {"bE", "bM"}
+    assert stats.auto_behavior_groups["bE"].dispatch_errors == 1
+    assert stats.auto_behavior_groups["bM"].dispatch_missing == 1
+    assert stats.auto_rule_groups == {}
