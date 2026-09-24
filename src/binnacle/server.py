@@ -19,6 +19,7 @@ from binnacle.logging_middleware import (
     RequestLoggingMiddleware,
     ToolLoggingMiddleware,
 )
+from binnacle.run_command_telemetry import auto_background_policy_hash
 from binnacle.tools import register_all
 from binnacle.visibility import ClientToolVisibility
 
@@ -109,6 +110,13 @@ def log_effective_config() -> None:
         wait_default_s=s.run_command.wait_default_s,
         wait_max_s=s.run_command.wait_max_s,
         auto_background_clients=len(s.run_command.auto_background_patterns),
+        auto_background_rules=sum(
+            len(patterns)
+            for patterns in s.run_command.auto_background_patterns.values()
+        ),
+        auto_background_policy_hash=auto_background_policy_hash(
+            s.run_command.auto_background_patterns
+        ),
     )
     _log_tool_config(
         "jobs",

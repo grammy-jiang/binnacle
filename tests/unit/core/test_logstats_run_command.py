@@ -244,3 +244,18 @@ INFO: event=tool_result call=a tool=run_command client=x session=s request_id=0 
 
     assert stats.auto_terminal_observed == 1
     assert stats.auto_terminal_collection_lag_s == []
+
+
+def test_auto_rule_hashes_are_aggregated_when_present():
+    sample = """
+2026-09-24T16:00:00.000 INFO: event=tool_call call=a tool=run_command client=x session=s request_id=0 args_chars=1 args={}
+2026-09-24T16:00:00.001 INFO: event=run_command_auto_background call=a client=x command_hash=c policy_hash=p rule_hash=r1
+2026-09-24T16:00:01.000 INFO: event=run_command_dispatch call=a client=x job_id=j owner=manager owner_instance=o requested_wait_s=30 bounded_wait_s=30 effective_wait_s=1 background_arg=omitted auto_background=true handoff_reason=auto_background owner_roundtrip_ms=1000 command_hash=c command_chars=1 state=running
+2026-09-24T16:00:01.001 INFO: event=tool_result call=a tool=run_command client=x session=s request_id=0 duration_ms=1 is_error=False content_chars=1 structured_bytes=1 est_tokens=1
+"""
+    records, startups = logstats.parse(sample)
+    stats = logstats.analyze(records, startups)
+    assert stats.run_command.auto_rule_matches == {"r1": 1}
+    assert stats.run_command.auto_rule_handoffs == {"r1": 1}
+    text = logstats.render(stats)
+    assert "r1: matches=1 handed_off=1" in text
