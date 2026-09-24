@@ -485,7 +485,7 @@
       "worker_branch": "feature/chat-mode-scheduling-v2-phase3-source-operational-journal"
     },
     "3.5A": {
-      "status": "not_started",
+      "status": "running",
       "tests": [],
       "notes": [],
       "commit": null,
