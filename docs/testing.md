@@ -93,11 +93,18 @@ Run the authoritative per-module branch-coverage gate:
 uv run tox -e coverage-policy
 ```
 
-Run the supported Python matrix:
+Run the supported Python matrix on the four-core development Pi with
+sequential tox environments and four pytest workers inside each environment:
 
 ```bash
-uv run tox
+env BINNACLE_TEST_WORKERS=4 uv run tox run
 ```
+
+Step 3.4 benchmarked bounded tox-level alternatives on this host. The
+two-environment/two-worker strategy was less than 10% faster, so the frozen
+tie rule selects this simpler sequential-tox policy. Keep this as a local
+matrix policy; do not copy the local tox scheduling decision into GitHub
+Actions without separate CI-specific evidence.
 
 Before a baseline or merge commit, run:
 
