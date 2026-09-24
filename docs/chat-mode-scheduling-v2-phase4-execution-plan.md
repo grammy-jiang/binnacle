@@ -47,33 +47,132 @@ upstream evidence. Metric arithmetic remains authoritative in
 remain authoritative in `docs/chat-mode-scheduling-v2-ab-plan.md`; server-guard
 semantics remain authoritative in `docs/chat-mode-scheduling-v2-server-guard.md`.
 
-### Coordinator and parallel workers
+### Orchestrator and dynamically parallel workers
 
-The hard concurrency ceiling for this plan is **four ChatGPT sessions total**,
-not four workers plus a coordinator. One of those four sessions is always the
-**coordinator (Slot A)**. In a four-lane wave the coordinator may also execute
-one explicitly assigned low-conflict lane in a separate worker worktree; the
-other three sessions occupy Slots B/C/D. If the coordinator must remain purely
-coordinating for a particular wave, only three worker lanes run concurrently and
-the fourth lane waits. Never create a fifth session to preserve a four-worker
-wave.
+There is **no plan-imposed numeric limit** on concurrent ChatGPT worker sessions.
+The user's environment is known to support multiple simultaneous chats; four is a
+proven minimum capability, **not a ceiling**. The orchestrator/task manager is a
+coordination role and does not consume or reserve a worker slot in this design.
 
-Only the coordinator may edit:
+The orchestrator maintains a dependency-driven **ready queue**. A task is ready
+when all of its declared predecessors are complete and every required immutable
+input hash is frozen. At every scheduling event it must:
+
+1. enumerate **all** ready tasks, not only a fixed-size batch;
+2. launch every ready task whose write/resource locks do not conflict with an
+   already-running task and whose live-resource class is inside the currently
+   qualified capacity envelope;
+3. when **any** worker completes, validate its declared outputs/commit, release
+   its locks, recompute the DAG immediately, and launch newly ready tasks without
+   waiting for unrelated workers in the earlier batch;
+4. keep independent blocked tasks from preventing unrelated ready work;
+5. continue this refill process until the next genuine fan-in/dependency barrier.
+
+Therefore terms such as "wave" or "parallel stage" in this document identify a
+**dependency frontier**, not a fixed number of sessions and not a rule that all
+workers in that frontier must start/finish together. If eight independent tasks
+are ready and the actual environment can support eight safely, launch eight. If
+additional tasks become ready while those eight run, launch them immediately when
+their resource constraints allow.
+
+The orchestrator exclusively mutates **canonical coordination state**:
 
 - this phase's canonical progress JSON/Markdown;
 - dependency-audit artifacts;
 - integration-branch history;
 - final phase verdict/report;
-- shared ChatGPT Project instructions, connector routing, endpoint configuration,
-  staging deployment state, or production state.
+- any global deployment/cutover decision record.
 
-Parallel workers use separate worktrees/branches and only the file ownership
-assigned by this document. A worker ends with a clean committed branch and
-reports its commit hash. The coordinator integrates worker commits serially.
+External resources are not automatically global locks. The orchestrator may
+delegate mutation of **disjoint** Projects, connector profiles, endpoints, or
+review artifacts to parallel workers by assigning an exclusive resource id to
+each worker. For example, `project-mutate:rp-sched-A` and
+`project-mutate:rp-sched-C300` may run concurrently, while two workers may never
+hold the same Project/connector/endpoint mutation lock. Primary/staging deployment
+cutovers remain orchestrator-controlled because they affect shared runtime state.
+
+Workers use separate worktrees/branches or explicitly read-only scratch state and
+only the ownership assigned by this document. A code/evidence worker ends with a
+clean committed branch and reports its commit hash plus input/output hashes. The
+orchestrator integrates commits serially when they target the same integration
+branch, but worker execution before that fan-in is maximally parallel.
+
+#### Resource-lock model
+
+The scheduler uses **resource identities**, not session-count limits. A worker
+declares the smallest relevant set, for example:
+
+```text
+git-write:<worker-branch>
+artifact-write:<path>
+project-mutate:<project-id>
+connector-mutate:<connector-or-profile>
+endpoint-config:<endpoint-id>
+staging-deployment
+primary-deployment
+canonical-progress
+canonical-integration
+```
+
+Read-only use of immutable evidence does not conflict. Two workers may run in
+parallel when their write/resource identities are disjoint. A shared resource is
+serialized only for the period actually required; do not serialize an entire
+phase merely because one later action is exclusive.
+
+#### Live-resource admission control
+
+CPU/network/tunnel/browser limits are **measured runtime constraints**, not fixed
+chat-count rules. Live benchmark/deployment tasks declare a live-resource class.
+The orchestrator admits as many as the current qualification/health evidence
+supports and stops increasing concurrency when correctness, routing, dispatch,
+load, throttling, or interruption criteria fail. A later section may define a
+special stricter admission rule for performance timing; that rule limits only the
+contended live resource, not unrelated analysis/code/review workers.
+
+#### Progress fields for parallel scheduling
+
+Canonical progress records enough state for a new orchestrator to reconstruct the
+scheduler without conversation memory:
+
+```text
+ready_tasks[]
+running_tasks[]        # task id, worker branch/session label, input hashes
+resource_locks{}       # resource id -> owning task
+completed_worker_commits{}
+blocked_tasks{}        # blocker and unaffected-ready-work note
+```
+
+These are orchestration state, not a license for workers to edit canonical
+progress concurrently.
+
+### Dependency-audit preflight fan-out
+
+Step N.0 is a fan-in gate, but its **read-only investigations are independent
+worker tasks** and should be launched concurrently whenever their inputs are
+available. The orchestrator should normally fan out at least these categories,
+adapted to the phase-specific N.0 requirements:
+
+```text
+preflight-git-lineage          # branch ancestry, dirty/diverged worktrees, public-base freshness
+preflight-previous-artifacts   # progress/report/handoff paths + SHA verification
+preflight-previous-ci          # recorded evidence CI + current closeout HEAD CI
+preflight-test-tooling         # authoritative runner/coverage/benchmark tooling identity
+preflight-production-state     # read-only master/service/config/unit observation
+preflight-external-control     # auth, Projects/connectors/tunnel control plane when relevant
+preflight-runtime-state        # relevant staging/endpoint/process identity when relevant
+```
+
+There is no fixed worker count: split a category further when that produces
+disjoint useful work (for example one artifact-hash worker per report family or
+one Project-readback worker per Project). Workers write only scratch findings;
+the orchestrator owns the formal dependency-audit JSON/Markdown and performs the
+final consistency fan-in. A blocker in one category does not stop unrelated
+preflight workers from finishing, so the final blocker report is as complete as
+possible in one pass.
 
 ### Predecessor uncertainty rule
 
-Before **every numbered step or parallel wave**, verify its direct predecessors
+Before **every numbered step or parallel frontier**, verify its direct predecessors
 from this phase's canonical progress JSON and the artifacts named by the step
 dependency table below. A cold-start agent must not infer completion from Git
 commit names, file existence alone, or a previous chat summary.
@@ -279,7 +378,7 @@ exact paths identify the canonical revision. Do not choose the newest-looking
 
 Verify:
 
-1. `phase3-progress.json` is `complete` with no unresolved worker/wave/slot.
+1. `phase3-progress.json` is `complete` with no unresolved worker/task/canonical-trial slot.
 2. The Phase-3 final policy-replay report exists and its hashes match the replay
    corpus plus each candidate report.
 3. The final Phase-3 verdict contains at least one live cumulative candidate;
@@ -395,24 +494,24 @@ branch/worktree or reset it.
 | --- | --- | --- |
 | **4.0** dependency audit | Phase 3 | Phase-3 handoff/report/hashes/CI + external preflight all PASS |
 | **4.1** validate/freeze source checkpoint | 4.0 | audited shortlist + Phase-3 predecessor HEAD + test runner frozen |
-| **4.2A/B/C/D** Wave 4A | 4.1 | one frozen `phase4_source_head`; worker branches from that exact HEAD |
+| **4.2A/B/C/D** implementation frontier | 4.1 | one frozen `phase4_source_head`; all task-specific workers start from that exact HEAD |
 | **4.3** integrate/smoke endpoints | all code-producing 4.2 lanes | worker commits/tests integrated; endpoint code locally runnable |
 | **4.4** live Project/connector setup + smoke | 4.3 + 4.2D readiness | local endpoints green; Project/connector prerequisites resolved |
 | **4.5** pre-run M1/M2/M3 | 4.4 | all live routing/instruction hashes verified |
 | **4.6** parallel qualification | 4.5 | micro sanity PASS + qualification schedule frozen |
-| **4B** targeted calibration | 4.6 | isolation healthy; surviving Phase-3 candidate set unchanged |
+| **4B** targeted calibration ready queue | 4.6 | isolation healthy; surviving Phase-3 candidate set unchanged; live admission envelope frozen |
 | **4.7** select C budget | every required 4B lane | canonical calibration slots complete, including expected R12 safety slot |
 | **4.8** freeze confirmatory schedule | 4.7 | selected budget fixed + execution mode (serial/parallel) fixed |
-| **4.9.1–4.9.6** macro groups | 4.8, then prior group checkpoint | frozen schedule; previous group slot integrity verified |
+| **4.9.1–4.9.6** macro partitions | 4.8 only | frozen schedule; all six partitions are independently ready and may execute concurrently within the qualified live envelope |
 | **4.10** post-run micros | 4.9.6 | all main canonical slots frozen exactly once |
-| **4C** evidence review | 4.10 | post-run micro evidence frozen + canonical trials immutable |
-| **4.11** hard-gate matrix | all 4C lanes | four review artifacts + canonical metrics reconcile |
+| **4C** evidence-review frontier | 4.10 | post-run micro evidence frozen + canonical trials immutable; fan-out partitions may start together |
+| **4.11** hard-gate matrix | all canonical 4C focus artifacts | all focus aggregations + canonical metrics reconcile |
 | **4.12** GO/NO-GO | 4.11 | hard-gate matrix internally consistent |
 | **4.13** final checkpoint | 4.12 | verdict fixed; no open evidence-integrity blocker |
 
 ### Phase-4 worker branch/worktree topology
 
-Step 4.1 creates these exact Wave-4A workers from `phase4_source_head`:
+Step 4.1 creates these exact implementation workers from `phase4_source_head`; all four launch immediately because their file ownership is disjoint:
 
 ```text
 4.2A branch: feature/chat-mode-scheduling-v2-phase4-endpoints
@@ -425,10 +524,12 @@ Step 4.1 creates these exact Wave-4A workers from `phase4_source_head`:
      worktree: /home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4-readiness
 ```
 
-Wave-4B live calibration does **not** create code branches; its four sessions use
-the frozen integration worktree only for read-only orchestration and write raw
-trial state outside Git. Canonical trial evidence is frozen/imported by the
-coordinator between blocks. No calibration session edits source/config files.
+Targeted live calibration does **not** create code branches. Each canonical
+calibration trial is an independent ephemeral worker task using frozen source and
+read-only orchestration state. The orchestrator may have many such trial workers
+running simultaneously, subject only to the live-resource admission envelope
+qualified in Step 4.6. Canonical trial evidence is frozen/imported by the
+orchestrator; calibration workers never edit source/config/progress files.
 
 After 4.10, create review workers from the same immutable post-run integration
 HEAD:
@@ -444,36 +545,58 @@ feature/chat-mode-scheduling-v2-phase4-review-efficiency
   /home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4-review-efficiency
 ```
 
-Each review worker commits only its two review artifacts. Step 4.11 coordinator
-cherry-picks those four commits in Slot A/B/C/D order before generating the
-canonical gate matrix.
+Each canonical focus-lead worker commits only its two review artifacts. Step 4.11 orchestrator cherry-picks the four focus commits in the documented focus order before generating the canonical gate matrix. Read-only subreview workers described below may be more numerous and do not write canonical artifacts.
 
-Wave-4A assignment is exactly:
+Implementation task mapping is by task id, not session slot:
 
 ```text
-Slot A coordinator: 4.2D external/Project readiness only
-Slot B:             4.2C analyzer
-Slot C:             4.2B harness
-Slot D:             4.2A endpoint launcher
+4.2A -> endpoint launcher + historical H adapter
+4.2B -> multi-arm harness/evidence plumbing
+4.2C -> schedule/gate analyzer
+4.2D -> Project/connector readiness lead
 ```
+
+All four implementation workers launch as soon as 4.1 freezes
+`phase4_source_head`. The orchestrator is separate and does not consume one of
+these workers. If one finishes early, any downstream work that depends only on
+that worker **and other already-complete predecessors** becomes eligible
+immediately; do not wait for an arbitrary four-worker batch boundary. Step 4.3 is
+still the code-integration fan-in requiring all four implementation commits.
+
+Within 4.2D, after one common authenticated-control-plane preflight succeeds,
+fan out one readiness worker per required benchmark lane (`A`, `B`, `H`, and each
+surviving `C120/C300/C600`). Each worker holds disjoint
+`project-mutate:<project>` and `connector-mutate:<profile>` locks and writes a
+non-canonical readiness fragment under:
+
+```text
+/tmp/binnacle-chat-scheduling-v2/phase4/readiness/<endpoint-id>.json
+```
+
+The 4.2D lead aggregates all fragments into the canonical
+`phase4-readiness.{json,md}` on its worker branch. If the authenticated control
+plane cannot safely support concurrent mutations, its observed rate/serialization
+requirement becomes a resource lock for this subfrontier only; it does not limit
+other workers.
 
 **4.2D must not claim that Projects already route to final A/B/surviving-C/H connectors.**
 At this point endpoints are still being implemented. Its job is to create/verify
 the required benchmark Projects where supported, snapshot `rp-test-sandbox`, inspect
 connector-registration capability, and record any owner UI action still needed.
-Actual connector attachment/routing/schema verification occurs serially in 4.4
-after 4.3 endpoints are green.
+Actual connector attachment/routing/schema verification occurs in 4.4 after 4.3
+endpoints are green. Disjoint lane resources are mutated in parallel; only an
+observed shared control-plane lock serializes the affected sub-operations.
 
-Wave-4C review outputs are disjoint and fixed:
+Canonical 4C focus-review outputs are disjoint and fixed:
 
 ```text
-Slot A: benchmarks/chat-mode-scheduling-v2/phase4-review-correctness-safety.{json,md}
-Slot B: benchmarks/chat-mode-scheduling-v2/phase4-review-performance-bootstrap.{json,md}
-Slot C: benchmarks/chat-mode-scheduling-v2/phase4-review-reliability-provenance.{json,md}
-Slot D: benchmarks/chat-mode-scheduling-v2/phase4-review-scheduling-efficiency.{json,md}
+correctness lead: benchmarks/chat-mode-scheduling-v2/phase4-review-correctness-safety.{json,md}
+performance lead: benchmarks/chat-mode-scheduling-v2/phase4-review-performance-bootstrap.{json,md}
+reliability lead: benchmarks/chat-mode-scheduling-v2/phase4-review-reliability-provenance.{json,md}
+scheduling/efficiency lead: benchmarks/chat-mode-scheduling-v2/phase4-review-scheduling-efficiency.{json,md}
 ```
 
-Only the coordinator writes 4.11's canonical hard-gate matrix.
+Only the orchestrator writes 4.11's canonical hard-gate matrix.
 
 ### Final CI attestation without self-reference
 
@@ -536,7 +659,7 @@ Phase 5.0 recomputes the report/hash/gate identities before staging.
 
 ## Phase-4 implementation and focused-test command contract
 
-### Wave-4A file ownership
+### Implementation-frontier 4A file ownership
 
 ```text
 4.2A endpoint launcher owns:
@@ -565,7 +688,7 @@ base owned by 4.2A. It writes only:
 
 4.2B must not alter the scenario/oracle definitions frozen by Phase 3 except for
 a proven compatibility bug; such a bug blocks the worker and is investigated by
-the coordinator rather than silently changing benchmark semantics.
+the orchestrator rather than silently changing benchmark semantics.
 
 ### Phase-4 baseline snapshot artifact
 
@@ -643,7 +766,7 @@ It contains deterministic, non-secret identities for all six reserved lanes and
 no Project ids or mutable attachment status. Step 4.2D writes Project/control-
 plane findings only to `phase4-readiness.json`.
 
-After 4.3 integrates all Wave-4A commits, the **coordinator** joins the base
+After 4.3 integrates all implementation-frontier commits, the **orchestrator** joins the base
 mapping with readiness evidence and writes:
 
 ```text
@@ -651,7 +774,7 @@ benchmarks/chat-mode-scheduling-v2/phase4-endpoint-topology.json
 ```
 
 Before 4.4 it may contain `project_id=null` / `attachment_status=pending` for an
-external action not yet completed. Step 4.4 coordinator updates only those
+external action not yet completed. Step 4.4 orchestrator updates only those
 external identity/status fields after readback verification, then freezes the
 file before 4.5. No parallel worker edits the final topology.
 
@@ -677,7 +800,7 @@ No PID, token value, cookie, API key, auth header, or secret environment content
 belongs in either topology file. Step 4.3 records base/readiness hashes. Step 4.4
 freezes `phase4-endpoint-topology.json` and records its SHA-256 in progress. After
 the first canonical live submission, changing it invalidates the live experiment
-unless the coordinator aborts/restarts the frozen schedule.
+unless the orchestrator aborts/restarts the frozen schedule.
 
 #### Runtime endpoint registry — private, not committed
 
@@ -1253,23 +1376,31 @@ No later phase may waive these gates silently.
 
 ### Targeted budget calibration
 
-Surviving C budgets from Phase 3 may run in parallel across separate guarded
-endpoints/Projects because this stage primarily classifies completion and budget
-exhaustion. Up to three C candidates plus H can occupy four sessions.
+Every canonical calibration slot (`candidate × scenario × repeat`, including H)
+is an independent task after Step 4.6. The orchestrator continuously dispatches
+as many slots as the qualified `max_safe_live_sessions` envelope allows. It may
+run multiple chats against the same candidate Project/endpoint concurrently when
+Step 4.6 has qualified that load; each trial has unique nonce/turn evidence and
+per-trial endpoint log slices. Admission is governed only by the measured live-resource envelope.
 
 ### Full confirmatory A/B/C
 
-Before allowing simultaneous matched A/B/C blocks, Step 4.6 must qualify local
-contention. If qualification fails, use serial randomized arm order.
+Performance timing uses **matched blocks**: one A, one B and one selected-C trial
+for the same scenario/repeat class. Step 4.6 discovers how many matched blocks can
+run concurrently without materially contaminating timing. Let that number be
+`max_safe_parallel_blocks = K`. One running block uses three live chat sessions,
+so K blocks use `3*K` sessions; K is measured, not hard-coded.
 
-If qualification passes, a matched block may submit the same
-`scenario/repeat/nonce-class` A/B/C trials within a narrow time window on three
-isolated endpoints. Record host load and per-server dispatch timing for the whole
-block. A block is `host_load_flagged=true` when a checkpoint 1-minute load
-average exceeds `0.75 * nproc` or an available `vcgencmd get_throttled` is not
-`0x0`. The submitted outcomes remain canonical and are **not replaced**. After
-the frozen schedule is complete, an extra matched block may be run as diagnostic
-evidence, but it cannot replace the flagged canonical slots.
+The orchestrator continuously refills up to K concurrent matched blocks. When a
+block finishes, the next ready block starts immediately even while other blocks
+remain active. If no concurrent matched block level passes qualification, set
+`K=0` and use serial randomized arm order.
+
+Every concurrent block records host load and per-server dispatch timing. A block
+is `host_load_flagged=true` when a checkpoint 1-minute load average exceeds
+`0.75 * nproc` or an available `vcgencmd get_throttled` is not `0x0`. Submitted
+outcomes remain canonical and are **not replaced**. Diagnostic reruns never
+replace flagged canonical slots.
 
 ## 24. Phase-4 steps
 
@@ -1298,9 +1429,9 @@ Tasks:
 Exit: `phase4_source_head` is immutable for the live experiment and Step 4.2 may
 begin.
 
-### Wave 4A — preparation, up to four sessions
+### Parallel implementation frontier 4A — launch every independent preparation task
 
-#### Step 4.2A — isolated endpoint launcher — Slot D
+#### Step 4.2A — isolated endpoint launcher worker
 
 Target: 15–20 minutes.
 
@@ -1308,7 +1439,7 @@ Implement benchmark-only scripts/config templates that launch A/B/H plus every s
 with separate ports, job dirs, sockets, tokens and logs. No primary systemd/config
 files are changed.
 
-#### Step 4.2B — harness multi-arm support — Slot C
+#### Step 4.2B — harness multi-arm support worker
 
 Target: 15–20 minutes.
 
@@ -1337,7 +1468,7 @@ submission status
 provenance classification
 ```
 
-#### Step 4.2C — confirmatory analyzer/report generator — Slot B
+#### Step 4.2C — confirmatory analyzer/report generator worker
 
 Target: 15–20 minutes.
 
@@ -1345,7 +1476,7 @@ Implement aggregate A/B/C/H tables, category medians, paired C/A bootstrap,
 reliability deltas, hard-gate matrix and submitted-slot integrity checks. Do not
 consume live data yet.
 
-#### Step 4.2D — Project/connector external-readiness audit — Slot A coordinator
+#### Step 4.2D — Project/connector external-readiness lead
 
 Target: 15–20 minutes plus any external registration action.
 
@@ -1365,16 +1496,20 @@ still being implemented in parallel. It must:
 Actual connector attachment, endpoint routing, tool-schema verification, and
 instruction-hash verification are **Step 4.4**, after 4.3 local endpoints pass.
 
-### Step 4.3 — integrate Wave 4A and smoke endpoints
+### Step 4.3 — integrate implementation frontier and fan out endpoint smoke
 
 Target: 15–20 minutes.
 
-Serial coordinator integration. Cherry-pick Wave-4A commits in worker-step
-order **4.2A -> 4.2B -> 4.2C -> 4.2D** (physical Slots D -> C -> B -> A) only
-after every worker reports its commit/tests/clean worktree. Verify `phase4-endpoint-topology-base.json` and
+Orchestrator integration. Cherry-pick implementation commits in worker-step order **4.2A -> 4.2B -> 4.2C -> 4.2D** only after every required worker reports its commit/tests/clean worktree. Verify `phase4-endpoint-topology-base.json` and
 `phase4-readiness.json` are each owned by the intended worker, then generate the
-initial coordinator-owned `phase4-endpoint-topology.json`. Do not ask either
+initial orchestrator-owned `phase4-endpoint-topology.json`. Do not ask either
 worker to resolve cross-file Project identity joins.
+
+After integration, launch **one read-only smoke worker per started endpoint**
+immediately. Each worker owns only its endpoint runtime/log scratch output and
+holds `endpoint-config:<id>` read/health ownership, not canonical topology writes.
+The orchestrator aggregates their smoke results into the final topology. Endpoint
+smokes are independent and must not be serialized by endpoint id.
 
 Use local MCP smoke calls on every started endpoint and verify distinct job
 spools, log paths, sockets, and budget behavior:
@@ -1389,11 +1524,16 @@ H: first wait <=10, later wait 0
 
 Target: 15–20 minutes plus any owner UI action already identified by 4.2D.
 
-First execute **exactly the connector/profile attachment mechanism audited by
-4.2D** for every started benchmark lane. If 4.2D recorded an unresolved owner UI
-action, stop here until that action is completed; do not invent another API or use
-the primary connector. Read back Project id/name, attached connector identity,
-profile health and tool schema before the smoke chat.
+Execute **exactly the connector/profile attachment mechanism audited by 4.2D**.
+For every started benchmark lane whose Project/profile resources are disjoint,
+launch a separate provisioning worker concurrently with locks
+`project-mutate:<project-id>` + `connector-mutate:<profile>`. If the control plane
+itself requires serialization, model that one control-plane resource as a lock;
+do not serialize unrelated local endpoint/smoke/analysis work. If 4.2D recorded an
+unresolved owner UI action, only affected lanes remain blocked while independent
+ready work continues. Never fall back to the primary connector. Each provisioning
+worker reads back Project id/name, attached connector identity, profile health and
+tool schema before its smoke chat.
 
 Then one tiny disposable chat per started benchmark Project verifies:
 
@@ -1427,48 +1567,78 @@ sanities. If any required condition fails, stop before 4.6 and investigate the
 endpoint/Project/model/product state. Do not continue macro trials while calling
 the micro failure "noise".
 
-### Step 4.6 — qualify simultaneous A/B/C live blocks
+### Step 4.6 — discover the safe live concurrency envelope
 
-Target: 15–20 minutes plus trial time.
+Target: qualification trial time; no fixed session-count target.
 
-Use one read-heavy/control block and one wait-heavy/control block. Compare serial
-versus simultaneous server-side evidence.
-
-Parallel matched blocks are allowed only if **all** of these pass:
-
-- no endpoint/tunnel error in the qualification block;
-- no cross-spool/cross-project evidence;
-- Pi 1-minute load average stays <= `0.75 * nproc` at block checkpoints
-  (3.0 on the current 4-core Pi);
-- when `vcgencmd get_throttled` is available it reports `0x0`; absence of the
-  command is recorded but is not itself a failure;
-- per-arm `dispatch_ms` p95 in parallel is <= `max(serial_p95 + 20 ms,
-  serial_p95 * 2)`;
-- non-blocking local implementation overhead p95 (implementation minus intended
-  blocking wait) is <= `max(serial_p95 + 20 ms, serial_p95 * 1.25)`;
-- maximum qualification `dispatch_ms` is <=100 ms in both serial and parallel
-  qualification runs; any larger dispatch delay fails parallel qualification
-  rather than requiring a subjective explanation;
-- no arm loses correctness or connector reachability only in parallel mode.
-
-Any failed or unmeasurable criterion selects **serial randomized live trials**.
-Record the decision once; do not switch modes mid-confirmatory run without
-invalidating/restarting the schedule.
-
-### Wave 4B — targeted live budget calibration
-
-Use only candidates that survived Phase 3.
-
-Up to four sessions may run simultaneously:
+This step produces two measured capacities:
 
 ```text
-Slot A  C120 targeted R5/R6/R7/R12 (if C120 survived)
-Slot B  C300 targeted R5/R6/R7/R12 (if C300 survived)
-Slot C  C600 targeted R5/R6/R7/R12 (if C600 survived)
-Slot D  H10  targeted R5/R6/R7/R12
+max_safe_live_sessions
+max_safe_parallel_blocks   # K matched A/B/C blocks; each block = 3 sessions
 ```
 
-Each slot has an independent endpoint/Project. Canonical inclusion rule applies.
+First capture serial reference evidence for one read-heavy and one wait-heavy
+qualification case. Then run **geometric concurrency escalation** with disposable
+non-canonical qualification chats:
+
+```text
+live-session levels: 1, 2, 4, 8, ...
+matched-block levels: K = 1, 2, 4, 8, ...
+```
+
+At each level distribute work across the required isolated endpoints/projects as
+evenly as possible and run both read-heavy and wait-heavy probes. Continue to the
+next level only while all criteria below pass and while the level is useful for
+the finite remaining trial schedule. Stop escalation when:
+
+- a criterion fails;
+- the platform refuses/queues additional chats in a way that violates the
+  qualification thresholds;
+- all remaining canonical tasks could already run at once; or
+- an external resource limit prevents creating that level without changing the
+  frozen experiment topology.
+
+A failing level does not invalidate the previous passing level. The highest
+passing level becomes the envelope. If K=1 fails, set
+`max_safe_parallel_blocks=0` and use serial randomized confirmatory arms.
+
+A level passes only if **all** of these hold:
+
+- no endpoint/tunnel error in the qualification run;
+- no cross-spool/cross-project evidence;
+- Pi 1-minute load average stays <= `0.75 * nproc` at checkpoints;
+- when `vcgencmd get_throttled` is available it reports `0x0`; absence of the
+  command is recorded but is not itself a failure;
+- per-arm `dispatch_ms` p95 is <= `max(serial_p95 + 20 ms, serial_p95 * 2)`;
+- non-blocking local implementation overhead p95 is <=
+  `max(serial_p95 + 20 ms, serial_p95 * 1.25)`;
+- maximum qualification `dispatch_ms` is <=100 ms;
+- no arm loses correctness or connector reachability only at that concurrency.
+
+Record every tested level, pass/fail reason, host/tunnel metrics and the two chosen
+envelope values in progress. These values are admission controls for live trials,
+not ChatGPT product limits and not limits on code/evidence workers.
+
+### Targeted live calibration ready queue 4B
+
+Use only candidates that survived Phase 3 plus H10. Expand the entire canonical
+calibration matrix into ready tasks:
+
+```text
+for each surviving candidate/H:
+  R5 repeats 1..3
+  R6 repeats 1..3
+  R7 repeats 1..3
+  R12 safety repeat 1
+```
+
+This is up to 10 tasks per candidate, and all tasks are individually schedulable.
+The orchestrator continuously keeps up to `max_safe_live_sessions` canonical
+calibration chats active, subject to per-resource health/locks, and refills as any
+trial finishes. It does **not** reserve one session per candidate or wait for all
+repeats of one candidate before starting another. Canonical inclusion rule applies
+to every submitted task.
 For one candidate, the bounded calibration denominator is the nine R5/R6/R7
 trials. Therefore `same-prompt >=95%` means **9/9 must pass** and the <=10%
 outside-R12 exhaustion rule means **0/9 unexpected exhaustion**. R12 is the
@@ -1476,7 +1646,7 @@ separate expected-exhaustion safety case.
 
 ### Step 4.7 — select the full-confirmatory C budget
 
-Serial.
+Orchestrator-owned fan-in after every required calibration task is frozen.
 
 Choose the **smallest live candidate** that simultaneously satisfies the targeted
 budget-selection rules:
@@ -1528,18 +1698,16 @@ Rules:
 - keep host/tunnel health evidence around each block;
 - save/analyze each trial immediately so evidence loss is detected early;
 - do not rerun a submitted timeout;
-- selected-budget calibration trials may count only under the **Reuse rule for candidate calibration** defined in this Phase-4 document
-  are satisfied.
+- selected-budget calibration trials may count only when the **Reuse rule for candidate calibration** defined in this Phase-4 document is satisfied.
 
 Other sessions may **read/analyze** completed block state in parallel but they
 must not edit canonical progress, import/freeze trial files into Git, change live
 endpoint config, or change Project instructions. They write diagnostic scratch
-output only under `/tmp/binnacle-chat-scheduling-v2/phase4/diagnostics/<slot>/`.
-After each 4.9 group, the coordinator alone validates slot integrity, imports any
+output only under `/tmp/binnacle-chat-scheduling-v2/phase4/diagnostics/<worker-id>/`.
+After each 4.9 group, the orchestrator alone validates slot integrity, imports any
 canonical evidence artifacts, updates progress, and commits/pushes the checkpoint.
 
-Treat Step 4.9 as six resumable checkpoints so one chat transaction does not own
-the entire confirmatory run:
+Treat Step 4.9 as six **independent tracking partitions**, not a serial chain:
 
 ```text
 4.9.1  R1/R2        read-heavy
@@ -1550,31 +1718,43 @@ the entire confirmatory run:
 4.9.6  R10/R11      quiet job + multi-round planning
 ```
 
-After each substep, freeze all completed trial directories, update canonical
-progress, **always commit and push that group checkpoint** (progress itself
-changes), and verify no scheduled slot is missing or duplicated. The next
-transaction resumes at the next substep; it never restarts a complete group. A
-checkpoint commit does not rerun submitted slots merely because its CI later
-fails; fix source/analysis infrastructure without replacing canonical trial
-outcomes.
+All six partitions become ready immediately after 4.8. The orchestrator draws
+matched blocks from across the partitions and keeps up to
+`max_safe_parallel_blocks` blocks active. There is no `4.9.1 -> 4.9.2` dependency.
+When every slot belonging to one partition finishes, freeze that partition's
+trial directories and write/commit its checkpoint even if other partitions are
+still running. A later transaction resumes only unfinished slots from the frozen
+schedule; it never restarts a submitted slot. CI failure on a checkpoint does not
+replace canonical outcomes; fix source/analysis infrastructure separately.
 
 ### Step 4.10 — post-run M1/M2/M3 sanity
 
 Repeat M1/M2/M3 on A, B, and `selected_c_endpoint` to detect a session-wide client/product change
 between beginning and end.
 
-### Wave 4C — parallel evidence review
+### Evidence-review frontier 4C — unlimited read-only fan-out with four canonical focus leads
 
-After all canonical slots are frozen:
+After all canonical slots are frozen, launch four canonical **focus leads**:
 
 ```text
-Slot A  correctness/safety/mutation audit
-Slot B  performance/bootstrap/category analysis
-Slot C  reliability/timeout-provenance/same-prompt audit
-Slot D  scheduling/guard/token/call-efficiency audit
+correctness/safety lead
+performance/bootstrap lead
+reliability/provenance lead
+scheduling/guard/efficiency lead
 ```
 
-Each writes a separate review artifact. No lane writes the final verdict.
+Each lead may immediately fan out read-only subreview workers over independent
+partitions (for example scenario groups R1/R2, R3/R4, R5/R6, R7, R8/R9, R10/R11;
+or independent metric families inside its focus). Subworkers write only hashed
+scratch fragments under:
+
+```text
+/tmp/binnacle-chat-scheduling-v2/phase4/review/<focus>/<partition>.json
+```
+
+There is no plan-imposed number of subreview workers. The focus lead validates
+all expected partitions and deterministically aggregates them into its one
+canonical `{json,md}` review artifact. No lead/subworker writes the final verdict.
 
 ### 24.1 Confirmatory sample arithmetic
 
@@ -1586,7 +1766,7 @@ not only completed trials.
 
 ### Step 4.11 — aggregate hard-gate matrix
 
-Serial coordinator consumes the four reviews and produces the formal C-vs-A/B
+Orchestrator consumes the four canonical focus reviews and produces the formal C-vs-A/B
 result. A disagreement between review artifacts and canonical trial metrics is a
 blocker until reconciled.
 
