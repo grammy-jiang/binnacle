@@ -10,7 +10,7 @@ Updated: 2026-09-25T06:37:09+10:00
 - Worktree: /home/grammy-jiang/Projects/binnacle-chat-scheduling-phase3
 - Audited source HEAD: 5f2be143352aaa63fb680c1c79e289d46be201fe
 - Last completed step: 3.9
-- Next step: 3.10 final replay report and Phase-3 checkpoint; Phase-4 live calibration remains blocked by NO_LIVE_CANDIDATE
+- Next step: 3.10 closeout after evidence-commit CI attestation; do not start Phase 4 (NO_LIVE_CANDIDATE)
 - Dependency audit: phase3-dependency-audit-2026-09-25-r01.json, r01, SHA-256 d3bec25ba8d49ed4db78e07930542b9e963608ad264c198f8fbf04c4ccfa473a
 - Task graph: phase3-task-graph.json, r01, SHA-256 44cbedb0524fe87a9d111579a96d0d33f4171dfee6ece34eb53baa4c506696b2
 - Initial orchestrator-state checkpoint SHA-256: cec108b23fcf319a48d699f123b8fbf713919f3873d1cae4968a16844b80ed12
@@ -87,7 +87,7 @@ Updated: 2026-09-25T06:37:09+10:00
 | 3.7 | complete |
 | 3.8 | complete |
 | 3.9 | complete |
-| 3.10 | not_started |
+| 3.10 | running |
 
 ## Step 3.0 notes
 
@@ -630,3 +630,64 @@ Updated: 2026-09-25T06:37:09+10:00
   journal evidence attributes the delta from the original baseline to the
   owner's separate workflow, not scheduling-v2. MCP job runtime 0.114 s.
   Pre-run: 4 cores, load average 1.13 0.58 0.48.
+
+## Step 3.10 evidence-commit notes
+
+- Evidence commit pushed; closeout pending CI. Phase status remains
+  `in_progress`; Step 3.10 remains `running`.
+- H10 worker `09a9096256a0db1be29776be375ca2f9f630bdd4` was already
+  integrated as canonical `1d2c26d1563b5c6a5eafafb5947c92cd705aa37d` and
+  promoted at `2382ae0`. The worker and canonical commits have identical
+  patch IDs, so no duplicate cherry-pick or replay was performed.
+- Promoted H10 SHA-256 is
+  `b769fb75cd4159bf2c12fd92e33c0df62b7dfee775dfb8fb2c5ea6cb5110621c`;
+  it uses audited revision-2 corpus
+  `4dd1e387c42d6fccd37d60795b00192144f3b4d93c57d9eb54ab527a72e8e94d`,
+  with `audit_status=pass` and `provisional=false`.
+- The dated r01 final report copied the frozen shortlist selection unchanged:
+  `live_candidates=[]`, `preferred_live_candidate=null`, verdict
+  `NO_LIVE_CANDIDATE`; therefore `phase4_ready=false`.
+- The task-specific corpus revision note is preserved in the final report:
+  revision-1 corpus evidence and the revision-1 operational-journal audit FAIL
+  remain historical diagnostics only; Phase-3 acceptance uses revision 2.
+- Final report JSON SHA-256:
+  `1689cca8c152d7ec6474e99ba7bf005c8f3b3425f181d90cc44a5fe73b544277`.
+- Final report Markdown SHA-256:
+  `ab0be93752fa94f79700ec9c2c6f59e83a4331e1db5f4dad236afa88505c4bc8`.
+
+## Step 3.10 focused validation
+
+- Frozen `final` report command: PASS; shortlist selection copied unchanged and
+  H10 corpus SHA matched the audited revision-2 corpus. Pre-run: 4 cores, load
+  average 0.18 0.41 0.43.
+- Task-specific final-report history validator: PASS; revision-1 corpus and the
+  revision-1 operational-journal audit FAIL are retained without changing the
+  frozen selection.
+- `uv run pytest -q tests/scripts/test_chat_scheduling_phase3_report.py`: PASS,
+  6 passed in 0.56 s. Pre-run: 4 cores, load average 0.17 0.38 0.42; timing
+  measured under foreign parallel-programme load.
+- Fresh production isolation check: PASS at 2026-09-25T06:46:34+10:00; clean
+  production master/origin-master `0f8136aadf9f074d025864b0b130fad6230324e4`,
+  reconciled config/unit/profile hashes unchanged, all four services active/running,
+  blocking-wall budget key absent, and only `127.0.0.1:8000` listening.
+
+## Phase-3 handoff (evidence commit; CI closeout pending)
+
+- Final report JSON: `benchmarks/chat-mode-scheduling-v2/phase3-policy-replay-2026-09-25-r01.json`.
+- Final report Markdown: `benchmarks/chat-mode-scheduling-v2/phase3-policy-replay-2026-09-25-r01.md`.
+- Phase-3 source head: `d5a322375b37dffe8d02421df79a222e9cadaaf2`.
+- Replay corpus SHA-256:
+  `4dd1e387c42d6fccd37d60795b00192144f3b4d93c57d9eb54ab527a72e8e94d`.
+- Candidate shortlist SHA-256:
+  `51db08d70ad8ebfcc46de9e53c661b517b9f3ed41b10579d49057aa395f8d11d`.
+- Historical H10 SHA-256:
+  `b769fb75cd4159bf2c12fd92e33c0df62b7dfee775dfb8fb2c5ea6cb5110621c`.
+- Live candidates: none; preferred live candidate: none.
+- Scenario catalog SHA-256:
+  `45002efd15fe7aa07fa5933180752c6537bea6584520f41a4e1d6b6de61ab5fd`.
+- Provenance classifier commit:
+  `2b5e83c4f8015f3077794dabb9e864a3c4d806b6`.
+- Phase-4 input-contract SHA-256:
+  `bc2fc07ab945504b3acc726c1779d2b46533f43472535f803f2f17b986321024`.
+- Phase-4 ready: false.
+- CI attestation fields are intentionally absent until the fixed closeout commit.
