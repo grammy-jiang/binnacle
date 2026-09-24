@@ -1,16 +1,16 @@
 # Chat mode scheduling v2 — Phase 3 progress
 
-Status: IN PROGRESS
+Status: COMPLETE
 
-Updated: 2026-09-25T06:37:09+10:00
+Updated: 2026-09-25T06:52:45+10:00
 
 ## Canonical state
 
 - Branch: feature/chat-mode-scheduling-v2-phase3
 - Worktree: /home/grammy-jiang/Projects/binnacle-chat-scheduling-phase3
 - Audited source HEAD: 5f2be143352aaa63fb680c1c79e289d46be201fe
-- Last completed step: 3.9
-- Next step: 3.10 closeout after evidence-commit CI attestation; do not start Phase 4 (NO_LIVE_CANDIDATE)
+- Last completed step: 3.10
+- Next step: none; Phase 3 is complete. Phase 4 must not start without a new owner-approved experiment (NO_LIVE_CANDIDATE).
 - Dependency audit: phase3-dependency-audit-2026-09-25-r01.json, r01, SHA-256 d3bec25ba8d49ed4db78e07930542b9e963608ad264c198f8fbf04c4ccfa473a
 - Task graph: phase3-task-graph.json, r01, SHA-256 44cbedb0524fe87a9d111579a96d0d33f4171dfee6ece34eb53baa4c506696b2
 - Initial orchestrator-state checkpoint SHA-256: cec108b23fcf319a48d699f123b8fbf713919f3873d1cae4968a16844b80ed12
@@ -87,7 +87,7 @@ Updated: 2026-09-25T06:37:09+10:00
 | 3.7 | complete |
 | 3.8 | complete |
 | 3.9 | complete |
-| 3.10 | running |
+| 3.10 | complete |
 
 ## Step 3.0 notes
 
@@ -633,8 +633,9 @@ Updated: 2026-09-25T06:37:09+10:00
 
 ## Step 3.10 evidence-commit notes
 
-- Evidence commit pushed; closeout pending CI. Phase status remains
-  `in_progress`; Step 3.10 remains `running`.
+- Evidence commit `80e10c6c8728a9113c79181795b0f5da805f02e0` is validated by
+  CI run `36057278878`; its head SHA matches and the conclusion is `success`.
+  Phase status is `complete`; Step 3.10 is `complete`.
 - H10 worker `09a9096256a0db1be29776be375ca2f9f630bdd4` was already
   integrated as canonical `1d2c26d1563b5c6a5eafafb5947c92cd705aa37d` and
   promoted at `2382ae0`. The worker and canonical commits have identical
@@ -671,11 +672,11 @@ Updated: 2026-09-25T06:37:09+10:00
   reconciled config/unit/profile hashes unchanged, all four services active/running,
   blocking-wall budget key absent, and only `127.0.0.1:8000` listening.
 
-## Phase-3 handoff (evidence commit; CI closeout pending)
+## Phase-3 handoff (complete)
 
 - Final report JSON: `benchmarks/chat-mode-scheduling-v2/phase3-policy-replay-2026-09-25-r01.json`.
 - Final report Markdown: `benchmarks/chat-mode-scheduling-v2/phase3-policy-replay-2026-09-25-r01.md`.
-- Phase-3 source head: `d5a322375b37dffe8d02421df79a222e9cadaaf2`.
+- Phase-3 source head: `80e10c6c8728a9113c79181795b0f5da805f02e0`.
 - Replay corpus SHA-256:
   `4dd1e387c42d6fccd37d60795b00192144f3b4d93c57d9eb54ab527a72e8e94d`.
 - Candidate shortlist SHA-256:
@@ -689,5 +690,9 @@ Updated: 2026-09-25T06:37:09+10:00
   `2b5e83c4f8015f3077794dabb9e864a3c4d806b6`.
 - Phase-4 input-contract SHA-256:
   `bc2fc07ab945504b3acc726c1779d2b46533f43472535f803f2f17b986321024`.
-- Phase-4 ready: false.
-- CI attestation fields are intentionally absent until the fixed closeout commit.
+- Phase-4 ready: false. Final verdict: `NO_LIVE_CANDIDATE`. Phase 4 must not
+  start without a new owner-approved experiment.
+- Validated evidence commit: `80e10c6c8728a9113c79181795b0f5da805f02e0`.
+- Validated CI run id: `36057278878`.
+- Validated CI head SHA: `80e10c6c8728a9113c79181795b0f5da805f02e0`.
+- Validated CI conclusion: `success`.
