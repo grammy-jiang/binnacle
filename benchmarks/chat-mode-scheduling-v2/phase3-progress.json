@@ -1,0 +1,423 @@
+{
+  "schema_version": 1,
+  "phase": 3,
+  "status": "in_progress",
+  "branch": "feature/chat-mode-scheduling-v2-phase3",
+  "worktree": "/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase3",
+  "source_branch": "feature/chat-mode-blocking-wall-guard",
+  "audited_source_head": "5f2be143352aaa63fb680c1c79e289d46be201fe",
+  "last_completed_step": "3.0",
+  "next_step": "3.1",
+  "dependency_audit": {
+    "path": "benchmarks/chat-mode-scheduling-v2/phase3-dependency-audit-2026-09-25-r01.json",
+    "revision": "r01",
+    "sha256": "d3bec25ba8d49ed4db78e07930542b9e963608ad264c198f8fbf04c4ccfa473a"
+  },
+  "task_graph_path": "benchmarks/chat-mode-scheduling-v2/phase3-task-graph.json",
+  "task_graph_revision": "r01",
+  "task_graph_sha256": "44cbedb0524fe87a9d111579a96d0d33f4171dfee6ece34eb53baa4c506696b2",
+  "orchestrator_state_path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase3/orchestrator-state.json",
+  "orchestrator_state_checkpoint_sha256": "cec108b23fcf319a48d699f123b8fbf713919f3873d1cae4968a16844b80ed12",
+  "orchestrator_state_checkpoint_at": "2026-09-25T00:55:01+10:00",
+  "test_commands": {
+    "fast_full_suite": "uv run python scripts/run_test_suite.py --workers 4 --seed 12345",
+    "coverage_policy": "uv run tox -e coverage-policy -- --seed 12345",
+    "compatibility_matrix": "env BINNACLE_TEST_WORKERS=4 uv run tox run -- --seed 12345"
+  },
+  "production_baseline": {
+    "observed_at": "2026-09-25T00:45:47+10:00",
+    "path": "/home/grammy-jiang/Projects/binnacle",
+    "branch": "master",
+    "head": "821cd3addc787a3ec6c6764ebc2327a67de72dd0",
+    "origin_master": "821cd3addc787a3ec6c6764ebc2327a67de72dd0",
+    "clean": true,
+    "services": {
+      "binnacle-mcp.service": {
+        "active_state": "active",
+        "sub_state": "running"
+      },
+      "binnacle-jobs.service": {
+        "active_state": "active",
+        "sub_state": "running"
+      },
+      "binnacle-tunnel.service": {
+        "active_state": "active",
+        "sub_state": "running"
+      },
+      "binnacle-watchdog.service": {
+        "active_state": "active",
+        "sub_state": "running"
+      }
+    },
+    "unit_file_hashes": {
+      "/home/grammy-jiang/.config/systemd/user/binnacle-mcp.service": "d7b8475f8e3fec783552c3676210622181e8563a85f3918938c912f321fe0759",
+      "/home/grammy-jiang/.config/systemd/user/binnacle-jobs.service": "afcaff05eb85821812081167f84cf1b8c7712e2f66a8e85e94e72a1ce09f01ae",
+      "/home/grammy-jiang/.config/systemd/user/binnacle-tunnel.service": "1b9572d46cc52ce056958eb23a2fba69dec6fd47eb7a70bc2668c3cd88609475"
+    },
+    "config_sha256": "3efb1381b7d83c0c78c741443ff4e53523de4909ba1a31719fc366ca9e9e494c",
+    "primary_tunnel_profile_sha256": "c8e2a608779109854e6d3aae921a2cb1fbbe1b6511f1630990899052a6b74ecb",
+    "blocking_wall_budget_key_present": false,
+    "listening_ports": [
+      "127.0.0.1:8000"
+    ],
+    "preflight_window_change": "Production/public HEAD advanced from 77a3f03aec66befd499513e05f33ed5b53a6b2f7 during the preflight window to 821cd3addc787a3ec6c6764ebc2327a67de72dd0; the refreshed state was re-observed before workspace bootstrap."
+  },
+  "frozen_heads": {
+    "phase0": "2650c083bc125f492844284682f7fc25424f8c07",
+    "phase1": "30746503f02f53fb598906c2b6dd2bfed8756afd",
+    "phase2": "5f2be143352aaa63fb680c1c79e289d46be201fe",
+    "planning": "9555405b660b1807927d6e07667641b0647584e7",
+    "phase3_after_planning_replay": "e41ac987b52506aecc948f584b0a5cbc1087d497",
+    "origin_master_at_audit": "821cd3addc787a3ec6c6764ebc2327a67de72dd0",
+    "origin_proof_of_concept_at_audit": "821cd3addc787a3ec6c6764ebc2327a67de72dd0"
+  },
+  "frozen_hashes": {
+    "phase2_progress_json": "bcfc0413457b00dd935ab5ba5cc11b35d4e3dd3e9c81edd54e429c599f8cc809",
+    "phase2_progress_md": "e0e76712d33995ee6763ba60fd5a438d4ea25c9d2f034c45d269c4eaa38c014c",
+    "phase2_report_json": "2548bb6bdcff0e2767eba4aea54f9168d27d10abc878bc34e29a8105e303a5d7",
+    "phase2_report_md": "3df301f90655782db9f430bff7a8af41bb74c5f7e25ad09e46c705a6efd2115b",
+    "test_efficiency_progress": "52c753c319c64f6b09a6bec8cdef1a65df9566570553008829e81b94419bd064",
+    "phase3_runbook": "84e6567197d364323b87f64874e81c92efcc611764f10225be1bed64db73a453",
+    "bootstrap_summary": "6bc13077758824ea72f5ba723f7ed095842debfc7a50eb67abdd5908f4ca7cfd",
+    "dependency_audit_json": "d3bec25ba8d49ed4db78e07930542b9e963608ad264c198f8fbf04c4ccfa473a",
+    "dependency_audit_md": "ed427aaf27b14057990793bddee93a5deae245146e4e8ea44fd0e8f40b598fad",
+    "task_graph": "44cbedb0524fe87a9d111579a96d0d33f4171dfee6ece34eb53baa4c506696b2",
+    "orchestrator_state_initial_checkpoint": "cec108b23fcf319a48d699f123b8fbf713919f3873d1cae4968a16844b80ed12"
+  },
+  "preflight_findings": {
+    "p3-preflight-git-lineage": "5269556409bd3dce896c842ca2528f04416d6b839f4d54c6e55b76c607b062cc",
+    "p3-preflight-previous-artifacts": "de131926992ea1a9772500d3536ddd72ab39e7a56ac4d54a058da1ebfa95f13b",
+    "p3-preflight-previous-ci": "8b8793e8ab9dd793aaf5ba56146dd0d99264f578b9a7fa4c07f47bf005d5658e",
+    "p3-preflight-test-tooling": "fd7d8f9f35c9f5aac2934c6eb9fad9751b7d1a3402b17d726bc066be56a9de29",
+    "p3-preflight-production-state": "44440eadddc66ac9151fa9a3dc005f4305b6a175a8861d2173daf1831df68dfd"
+  },
+  "planning_replayed_commits": [
+    {
+      "source": "70332b90f98c548049a3833b7caf40867506a1fc",
+      "replayed": "9e581e95cca4b113773eab4595f69bf39b919f3b",
+      "subject": "Document Phase 3-6 scheduling execution plan"
+    },
+    {
+      "source": "4317884280e82e6c2946bec687c916227e9cf759",
+      "replayed": "a954957b1b5ee9e9bc7028ace1aa3bbb9b983fcd",
+      "subject": "Split Phase 3-6 plans and harden dependency gates"
+    },
+    {
+      "source": "ced33e9023fc413236cfec888ae7bcdc601ccf61",
+      "replayed": "c14d830b74327faf47794bd666e541edba3f485e",
+      "subject": "Harden Phase 3-6 plans for cold-start execution"
+    },
+    {
+      "source": "b40235fcd293207d5500cc90721fd9e012cf941d",
+      "replayed": "3a0f302e77f8efe2241a0c41b91ecd3483435c6b",
+      "subject": "Align Phase 3-6 plans with stacked phase branches"
+    },
+    {
+      "source": "fd4d171215307bcdb02dd00c18272f1cd22c1902",
+      "replayed": "733cb5349a28447512786c2fedbbf5e87cac24a5",
+      "subject": "Maximize parallel orchestration in Phase 3-6 plans"
+    },
+    {
+      "source": "9555405b660b1807927d6e07667641b0647584e7",
+      "replayed": "e41ac987b52506aecc948f584b0a5cbc1087d497",
+      "subject": "Add orchestrator ownership, task graphs and partial fan-ins to Phase 3-6 plans"
+    }
+  ],
+  "deviations": [
+    {
+      "id": "public_base_freshness",
+      "status": "DEVIATION",
+      "origin_master": "821cd3addc787a3ec6c6764ebc2327a67de72dd0",
+      "origin_proof_of_concept": "821cd3addc787a3ec6c6764ebc2327a67de72dd0",
+      "public_refs_synchronized": true,
+      "previous_public_tip": "77a3f03aec66befd499513e05f33ed5b53a6b2f7",
+      "public_commits_since_previous_tip": [
+        {
+          "sha": "62c5946d1d6a05570ad733d0d088c215398fd2eb",
+          "subject": "docs: plan run-command observability improvements"
+        },
+        {
+          "sha": "f093fd26438877bf588c0676fa849a5f2c7909ee",
+          "subject": "stats: add run-command workflow analysis"
+        },
+        {
+          "sha": "96edff2d0f81cb1550d1c26c640cfc235eb15c37",
+          "subject": "telemetry: fingerprint run-command auto policy"
+        },
+        {
+          "sha": "e35566a9c6324d6438055a55ecf8bd0263bb0467",
+          "subject": "telemetry: classify run-command output shaping"
+        },
+        {
+          "sha": "14ed1cc00410d0a165514219b366c84b348f2703",
+          "subject": "merge: add run-command policy telemetry"
+        },
+        {
+          "sha": "d68a52d1f372fa935f361a5dca59abe4066ef2e2",
+          "subject": "merge: add run-command output-shaping telemetry"
+        },
+        {
+          "sha": "ba631147c65e289fd10fa2865fc664db8a36ceed",
+          "subject": "telemetry: code run-command workdir failures"
+        },
+        {
+          "sha": "55e96c39e75c9ed06e41d86069379ac08ed3e3be",
+          "subject": "docs: close run-command observability phases 1-4"
+        },
+        {
+          "sha": "821cd3addc787a3ec6c6764ebc2327a67de72dd0",
+          "subject": "docs: add run-command phase 5 design"
+        }
+      ],
+      "public_commit_count": 9,
+      "phase2_tree": "b8f7f75ddca64c721c72bddb1ec8a7d9f7f135bc",
+      "public_tree": "5eadca6a9a4e5a0ef06d10de493522abab910266",
+      "trees_equal": false,
+      "phase2_cherry_vs_origin_master": {
+        "plus": 1,
+        "minus": 59,
+        "total": 60
+      },
+      "overlapping_files": [
+        "src/binnacle/config.py",
+        "src/binnacle/server.py",
+        "src/binnacle/tools/run_command.py",
+        "src/binnacle/logstats_models.py",
+        "src/binnacle/logstats_render.py",
+        "tests/unit/core/test_config_loading.py",
+        "docs/logging.md",
+        "docs/tools/run_command.md"
+      ],
+      "orchestrator_decision": "Do not rewrite the owner's three stack branches unattended tonight: rebasing 60 commits across eight overlapping files and force-pushing them is not reversible without the owner; master is still moving; Phase 3 changes no runtime source (only scripts/, tests/scripts/, benchmarks/, docs/), so the deferred restack cannot change Phase-3 evidence; the Step 4.0 rule provides the catch-up: restack from the earliest affected lower phase, then rebase Phase 3 on refreshed Phase 2, and rerun Phase-3 validation/handoff.",
+      "disposition": "owner ratification pending; catch-up restack scheduled at Step 4.0 or earlier at the owner's request",
+      "blocks_phase3": false
+    }
+  ],
+  "steps": {
+    "3.0": {
+      "status": "complete",
+      "tests": [
+        "Ad-hoc phase3-task-graph.json validator -> GRAPH VALIDATION PASS 9/9",
+        "python3 -m json.tool phase3-task-graph.json -> PASS",
+        "python3 -m json.tool phase3-dependency-audit-2026-09-25-r01.json -> PASS",
+        "uv run pre-commit run --files benchmarks/chat-mode-scheduling-v2/phase3-progress.json benchmarks/chat-mode-scheduling-v2/phase3-progress.md benchmarks/chat-mode-scheduling-v2/phase3-dependency-audit-2026-09-25-r01.json benchmarks/chat-mode-scheduling-v2/phase3-dependency-audit-2026-09-25-r01.md benchmarks/chat-mode-scheduling-v2/phase3-task-graph.json -> PASS"
+      ],
+      "notes": [
+        "All nine mandatory dependency-audit rows PASS.",
+        "Public-base freshness is recorded separately as DEVIATION under the binding epoch-1 orchestrator decision; no lower-stack restack/rebase was performed.",
+        "Bootstrap summary SHA-256: 6bc13077758824ea72f5ba723f7ed095842debfc7a50eb67abdd5908f4ca7cfd.",
+        "Audited Phase-2 source HEAD: 5f2be143352aaa63fb680c1c79e289d46be201fe.",
+        "Six planning-only commits replayed in order through e41ac987b52506aecc948f584b0a5cbc1087d497; Phase-3 execution-plan SHA-256 matches planning.",
+        "Task graph r01 validated 9/9 and frozen at SHA-256 44cbedb0524fe87a9d111579a96d0d33f4171dfee6ece34eb53baa4c506696b2.",
+        "Initial orchestrator state has 3.0 complete, 3.1 ready, every other static task blocked on predecessors; checkpoint SHA-256: cec108b23fcf319a48d699f123b8fbf713919f3873d1cae4968a16844b80ed12."
+      ],
+      "commit": null,
+      "worker_branch": null
+    },
+    "3.1": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "3.2": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "3.3A": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "3.3B": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "3.3C": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "3.3D": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "3.4A": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "3.4B": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "3.4C": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "3.5M": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "3.5A": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "3.6A": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "3.6B": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "3.6C": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "3H": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "3.7": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "3.8": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "3.9": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "3.10": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    }
+  },
+  "checkpoints": [
+    {
+      "kind": "initial_orchestrator_state",
+      "at": "2026-09-25T00:55:01+10:00",
+      "task_graph_revision": "r01",
+      "task_graph_sha256": "44cbedb0524fe87a9d111579a96d0d33f4171dfee6ece34eb53baa4c506696b2",
+      "orchestrator_state_checkpoint_path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase3/checkpoints/orchestrator-state-initial.json",
+      "orchestrator_state_checkpoint_sha256": "cec108b23fcf319a48d699f123b8fbf713919f3873d1cae4968a16844b80ed12",
+      "ready_count": 1,
+      "claimed_count": 0,
+      "running_count": 0,
+      "blocked_count": 18,
+      "running_task_ids_at_checkpoint": [],
+      "completed_task_count": 1,
+      "completed_worker_commits_since_checkpoint": {},
+      "blocked_task_summary": {
+        "waiting_on_predecessors": [
+          "3.2",
+          "3.3A",
+          "3.3B",
+          "3.3C",
+          "3.3D",
+          "3.4A",
+          "3.4B",
+          "3.4C",
+          "3.5M",
+          "3.5A",
+          "3.6A",
+          "3.6B",
+          "3.6C",
+          "3H",
+          "3.7",
+          "3.8",
+          "3.9",
+          "3.10"
+        ]
+      }
+    }
+  ],
+  "handoff": null,
+  "created_at": "2026-09-25T00:51:02+10:00",
+  "updated_at": "2026-09-25T00:55:50+10:00",
+  "orchestrator_state_checkpoint_path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase3/checkpoints/orchestrator-state-initial.json",
+  "ready_count": 1,
+  "claimed_count": 0,
+  "running_count": 0,
+  "blocked_count": 18,
+  "running_task_ids_at_checkpoint": [],
+  "completed_task_count": 1,
+  "completed_worker_commits_since_checkpoint": {},
+  "blocked_task_summary": {
+    "waiting_on_predecessors": [
+      "3.2",
+      "3.3A",
+      "3.3B",
+      "3.3C",
+      "3.3D",
+      "3.4A",
+      "3.4B",
+      "3.4C",
+      "3.5M",
+      "3.5A",
+      "3.6A",
+      "3.6B",
+      "3.6C",
+      "3H",
+      "3.7",
+      "3.8",
+      "3.9",
+      "3.10"
+    ]
+  }
+}
