@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "phase": 3,
-  "status": "in_progress",
+  "status": "complete",
   "branch": "feature/chat-mode-scheduling-v2-phase3",
   "worktree": "/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase3",
   "source_branch": "feature/chat-mode-blocking-wall-guard",
   "audited_source_head": "5f2be143352aaa63fb680c1c79e289d46be201fe",
-  "last_completed_step": "3.9",
-  "next_step": "3.10 closeout after evidence-commit CI attestation; do not start Phase 4 (NO_LIVE_CANDIDATE)",
+  "last_completed_step": "3.10",
+  "next_step": null,
   "dependency_audit": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase3-dependency-audit-2026-09-25-r01.json",
     "revision": "r01",
@@ -833,22 +833,24 @@
       "worker_branch": null
     },
     "3.10": {
-      "status": "running",
+      "status": "complete",
       "tests": [
         "uv run python scripts/chat_scheduling_phase3_report.py final ... -> PASS: H10 corpus SHA matched audited revision-2 corpus and frozen shortlist live_candidates/preferred_live_candidate were copied unchanged.",
         "Task-specific final-report evidence-history validator -> PASS: superseded revision-1 corpus and revision-1 operational-journal audit FAIL retained as historical diagnostics; Phase-3 acceptance remains bound only to revision 2.",
         "uv run pytest -q tests/scripts/test_chat_scheduling_phase3_report.py -> PASS: 6 passed in 0.56s; pre-run nproc=4 loadavg=0.17 0.38 0.42 (timing under foreign parallel-programme load).",
-        "bash /tmp/p36-manager/isolation-check.sh -> PASS: production master/origin-master 0f8136aadf9f074d025864b0b130fad6230324e4 remained clean; reconciled config/unit/profile hashes unchanged, all four services active/running, blocking-wall budget key absent, port 127.0.0.1:8000 only."
+        "bash /tmp/p36-manager/isolation-check.sh -> PASS: production master/origin-master 0f8136aadf9f074d025864b0b130fad6230324e4 remained clean; reconciled config/unit/profile hashes unchanged, all four services active/running, blocking-wall budget key absent, port 127.0.0.1:8000 only.",
+        "gh run view 36057278878 --repo grammy-jiang/binnacle --json databaseId,headSha,conclusion,status,event,workflowName -> PASS: completed CI run, head SHA 80e10c6c8728a9113c79181795b0f5da805f02e0, conclusion success."
       ],
       "notes": [
-        "evidence commit pushed; closeout pending CI",
+        "Evidence commit 80e10c6c8728a9113c79181795b0f5da805f02e0 validated by CI run 36057278878 with matching head SHA and conclusion success; Phase-3 closeout/handoff is complete.",
         "H10 worker 09a9096256a0db1be29776be375ca2f9f630bdd4 was already integrated earlier as canonical 1d2c26d1563b5c6a5eafafb5947c92cd705aa37d and promoted at 2382ae0; worker/canonical patch-id is identical, so no duplicate cherry-pick or replay was performed.",
         "Promoted H10 JSON SHA-256 b769fb75cd4159bf2c12fd92e33c0df62b7dfee775dfb8fb2c5ea6cb5110621c uses audited revision-2 corpus 4dd1e387c42d6fccd37d60795b00192144f3b4d93c57d9eb54ab527a72e8e94d with audit_status=pass and provisional=false.",
         "Final report revision r01 is dated 2026-09-25. live_candidates=[] and preferred_live_candidate=null exactly match the frozen shortlist; verdict remains NO_LIVE_CANDIDATE and phase4_ready=false.",
         "Task-specific corpus revision history was added to the generated final artifacts without changing candidate selection: revision-1 corpus and revision-1 operational-journal audit FAIL remain historical diagnostics only.",
-        "Final report SHA-256: JSON 1689cca8c152d7ec6474e99ba7bf005c8f3b3425f181d90cc44a5fe73b544277; Markdown ab0be93752fa94f79700ec9c2c6f59e83a4331e1db5f4dad236afa88505c4bc8."
+        "Final report SHA-256: JSON 1689cca8c152d7ec6474e99ba7bf005c8f3b3425f181d90cc44a5fe73b544277; Markdown ab0be93752fa94f79700ec9c2c6f59e83a4331e1db5f4dad236afa88505c4bc8.",
+        "Final verdict remains NO_LIVE_CANDIDATE: phase4_ready=false, live_candidates=[], preferred_live_candidate=null. Phase 4 must not start without a new owner-approved experiment."
       ],
-      "commit": null,
+      "commit": "80e10c6c8728a9113c79181795b0f5da805f02e0",
       "worker_branch": null
     },
     "p3-fix-opjournal-extractor": {
@@ -920,7 +922,7 @@
     "final_report_md": "benchmarks/chat-mode-scheduling-v2/phase3-policy-replay-2026-09-25-r01.md",
     "final_report_json_sha256": "1689cca8c152d7ec6474e99ba7bf005c8f3b3425f181d90cc44a5fe73b544277",
     "final_report_md_sha256": "ab0be93752fa94f79700ec9c2c6f59e83a4331e1db5f4dad236afa88505c4bc8",
-    "phase3_source_head": "d5a322375b37dffe8d02421df79a222e9cadaaf2",
+    "phase3_source_head": "80e10c6c8728a9113c79181795b0f5da805f02e0",
     "replay_corpus_path": "benchmarks/chat-mode-scheduling-v2/phase3-replay-corpus.json",
     "replay_corpus_sha256": "4dd1e387c42d6fccd37d60795b00192144f3b4d93c57d9eb54ab527a72e8e94d",
     "candidate_shortlist_path": "benchmarks/chat-mode-scheduling-v2/phase3-candidate-shortlist.json",
@@ -933,10 +935,14 @@
     "provenance_classifier_commit": "2b5e83c4f8015f3077794dabb9e864a3c4d806b6",
     "phase4_input_contract_path": "benchmarks/chat-mode-scheduling-v2/phase4-input-contract.json",
     "phase4_input_contract_sha256": "bc2fc07ab945504b3acc726c1779d2b46533f43472535f803f2f17b986321024",
-    "phase4_ready": false
+    "phase4_ready": false,
+    "validated_evidence_commit": "80e10c6c8728a9113c79181795b0f5da805f02e0",
+    "validated_ci_run_id": 36057278878,
+    "validated_ci_head_sha": "80e10c6c8728a9113c79181795b0f5da805f02e0",
+    "validated_ci_conclusion": "success"
   },
   "created_at": "2026-09-25T00:51:02+10:00",
-  "updated_at": "2026-09-25T06:46:59+10:00",
+  "updated_at": "2026-09-25T06:52:45+10:00",
   "orchestrator_state_checkpoint_path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase3/checkpoints/orchestrator-state-initial.json",
   "ready_count": 1,
   "claimed_count": 0,
