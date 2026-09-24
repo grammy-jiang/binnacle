@@ -142,6 +142,26 @@ DAG and may launch any number of concurrent ChatGPT worker sessions that are
 currently dependency-ready and resource-compatible. Four simultaneous chats are a
 known supported minimum, not a scheduling target or ceiling.
 
+The orchestrator has three persistence layers; do not collapse them into one file:
+
+```text
+Git: phaseN-task-graph.json
+  stable DAG + dynamic templates; changes only when dependency design changes
+
+local: ~/.local/state/binnacle/chat-scheduling-v2/phaseN/orchestrator-state.json
+  high-frequency ready/claimed/running/attempt/resource-lock state; atomic updates,
+  no Git commit per scheduling event
+
+Git: phaseN-progress.json + checkpoint ledger/artifacts
+  low-frequency durable summaries at fan-ins, evidence freezes, side-effect
+  boundaries, recovery checkpoints and handoffs
+```
+
+N.0 materializes/validates task-graph revision r01 and initializes local
+orchestrator state before releasing the first Phase-N.1+ worker. This prevents a
+cold-start agent from treating prose alone as an executable scheduler or turning
+Git into a high-frequency queue database.
+
 The orchestrator uses continuous ready-queue refill rather than fixed batches:
 
 ```text
@@ -164,10 +184,10 @@ High-level parallel frontiers include, but are not limited to:
 
 | Phase | Parallel frontier | Parallelism rule |
 | --- | --- | --- |
-| 3 | implementation lanes: corpus / replay engine / scenarios / provenance | launch all four immediately; additional source-shard/audit workers start as soon as their inputs freeze |
+| 3 | corpus / replay / scenario / provenance implementation | launch all four immediately, then partial-fan-in A+D→corpus path, B→replay path, C→Phase-4 scenario path; source-shard/audit workers start without waiting for unrelated paths |
 | 3 | corpus extraction/audit | fan out by canonical source shard/report; no artificial worker cap |
 | 3 | C120 / C300 / C600 / H10 replay | all candidates simultaneously; downstream aggregation starts only after required candidate artifacts arrive |
-| 4 | endpoint / harness / analyzer / readiness implementation | launch all independent implementation workers immediately |
+| 4 | endpoint / harness / analyzer / readiness implementation | launch all immediately; partial fan-ins allow runtime/local smoke, analyzer integration, and external readiness/provisioning to progress independently |
 | 4 | endpoint/project/tunnel local smoke & provisioning | fan out per isolated endpoint/project/profile where mutations are disjoint |
 | 4 | targeted calibration | dispatch canonical trial tasks through a dynamically measured live-resource admission envelope |
 | 4 | full A/B/C confirmatory timing | qualify matched-block concurrency progressively and use the highest passing concurrency level; unrelated analysis workers remain unconstrained |

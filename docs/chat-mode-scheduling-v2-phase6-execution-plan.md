@@ -96,6 +96,93 @@ clean committed branch and reports its commit hash plus input/output hashes. The
 orchestrator integrates commits serially when they target the same integration
 branch, but worker execution before that fan-in is maximally parallel.
 
+#### Persistent worker scratch/state root
+
+Any worker artifact needed for cold-start recovery, fan-in, or evidence integrity
+must live under the phase-local persistent state root, not `/tmp`:
+
+```text
+/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phaseN/
+```
+
+Resolve `N` to the phase number and use directory mode `0700`; files that may
+contain Project/runtime details use `0600`. Disposable scenario fixtures may still
+use `/tmp` when their loss is explicitly acceptable and their canonical evidence
+is already frozen elsewhere. Long-running endpoint logs, readiness/provisioning
+fragments, diagnostics, review fragments, orchestrator state, and recovery
+metadata are persistent.
+
+A reboot or chat restart must not force recomputation merely because `/tmp` was
+cleared. If a persistent fragment is missing, use the task recovery contract to
+determine whether it can be safely recomputed; never assume the external action
+did not happen.
+
+#### Single-writer orchestrator ownership and handoff
+
+Exactly **one orchestrator owner** may mutate Phase-6 scheduler/progress/
+integration state at a time. Unlimited worker sessions do not imply multiple task
+managers.
+
+Persist ownership outside Git at:
+
+```text
+/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase6/orchestrator-owner.json
+```
+
+Schema:
+
+```text
+orchestrator_id        # generated UUID/opaque label for one orchestration tenure
+orchestrator_epoch     # monotonically increasing integer
+claimed_at
+last_checkpoint_at
+last_state_sha256
+status = active | handing_off | superseded
+```
+
+Ownership never expires merely because time passes; a stale clock must not create
+two writers. A replacement orchestrator first performs the recovery investigation,
+reads the current task/progress/external state, marks the old owner `superseded`,
+increments `orchestrator_epoch`, writes a new owner record atomically, and only
+then mutates scheduler/progress state. Record the new epoch at the next canonical
+checkpoint.
+
+Every assignment/completion packet and task attempt records the epoch under which
+it was issued. A worker may finish an old-epoch attempt after orchestrator handoff;
+the new orchestrator validates its task/attempt/input/output hashes before
+accepting it. The superseded orchestrator, if it resumes, must detect the epoch
+mismatch and become read-only; it may not launch tasks, acquire locks, integrate
+commits, or update progress.
+
+#### Worker assignment and completion packets
+
+The orchestrator communicates work through persistent local packets so a worker
+chat needs no prior conversation memory:
+
+```text
+/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase6/assignments/
+  <task_id>--<attempt_id>.json
+/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase6/completions/
+  <task_id>--<attempt_id>.json
+```
+
+Assignment packet contains the full task descriptor, orchestrator epoch, exact
+worker branch/worktree or scratch root, input hashes, predecessor evidence,
+resource locks already reserved by the orchestrator, expected outputs, validation
+commands, stop point, and prohibited shared mutations. The worker treats this
+packet plus the referenced runbook section as authoritative.
+
+The worker never edits `orchestrator-state.json`, `orchestrator-owner.json`, or
+canonical progress. On completion it atomically writes the completion packet with
+output/commit/test hashes and reports the same information to the orchestrator.
+The orchestrator validates the packet before transitioning the task to complete
+and releasing locks.
+
+How a ChatGPT worker session is opened/assigned is outside the repository task
+graph; the plan does not assume the orchestrator can programmatically create chat
+sessions. The shared assignment/completion protocol makes any available worker
+session interchangeable and cold-start safe.
+
 #### Resource-lock model
 
 The scheduler uses **resource identities**, not session-count limits. A worker
@@ -118,6 +205,30 @@ parallel when their write/resource identities are disjoint. A shared resource is
 serialized only for the period actually required; do not serialize an entire
 phase merely because one later action is exclusive.
 
+#### Task-granularity / work-conservation rule
+
+Maximize **useful** parallelism, not worker count for its own sake. Create a
+separate worker task when the work has all of these properties:
+
+- its predecessors/input hashes can be frozen independently;
+- it owns a disjoint output path or is read-only;
+- it has a meaningful validation/check that can succeed/fail independently;
+- completing it can unblock downstream work, reduce critical-path latency, or
+  materially shorten a large scan/analysis by sharding;
+- worker startup/integration overhead is small relative to the work saved.
+
+Good split dimensions are source document/report, endpoint/Project, scenario or
+trial block, metric family, time window, independent service/config check, or
+independent artifact verification. Do **not** split a short sequential operation
+into artificial microtasks that all write the same file, require constant
+cross-worker conversation, or must immediately fan back into one tiny edit.
+
+The orchestrator may coalesce trivially small ready tasks that share the same
+read-only inputs/output owner when doing so lowers overhead without delaying any
+other downstream task. This is an efficiency decision, never a fixed worker cap.
+Conversely, a large worker should be split further when an independent shard can
+produce a separately verifiable output and reduce the critical path.
+
 #### Live-resource admission control
 
 CPU/network/tunnel/browser limits are **measured runtime constraints**, not fixed
@@ -128,25 +239,277 @@ load, throttling, or interruption criteria fail. A later section may define a
 special stricter admission rule for performance timing; that rule limits only the
 contended live resource, not unrelated analysis/code/review workers.
 
-#### Progress fields for parallel scheduling
+#### Machine-readable task graph contract
 
-Canonical progress records enough state for a new orchestrator to reconstruct the
-scheduler without conversation memory:
+Each phase materializes one canonical **stable task graph** before launching its
+first implementation/live worker:
 
 ```text
-ready_tasks[]
-running_tasks[]        # task id, worker branch/session label, input hashes
-resource_locks{}       # resource id -> owning task
-completed_worker_commits{}
-blocked_tasks{}        # blocker and unaffected-ready-work note
+benchmarks/chat-mode-scheduling-v2/phaseN-task-graph.json
 ```
 
-These are orchestration state, not a license for workers to edit canonical
-progress concurrently.
+`N` is the phase number. The Git-tracked graph contains static DAG nodes plus
+**dynamic task templates**, not every transient worker instance. It changes only
+when the dependency design/template itself changes. Schema:
+
+```text
+schema_version
+phase
+source_head
+revision
+static_tasks[]:
+  task_id
+  task_kind
+  predecessor_ids[]
+  required_input_artifacts[] + sha256
+  resource_locks[]
+  expected_output_paths[]
+  side_effect_class
+  external_gates[]
+  enabled_condition | null
+  required_for_phase = true | false
+  scheduling_class = critical | normal | opportunistic
+
+dynamic_templates[]:
+  template_id
+  expansion_source
+  task_id_pattern
+  predecessor_rule
+  resource_lock_pattern
+  output_path_pattern
+  side_effect_class
+  external_gates[]
+  required_for_phase = true | false
+  scheduling_class = critical | normal | opportunistic
+```
+
+Static task ids come directly from the phase dependency table. Dynamic fan-out
+instances (source shards, endpoint readiness tasks, calibration trials, review
+partitions, discovered Projects, extension-window reviews) are instantiated from
+these templates at runtime with deterministic ids; they are **not appended to the
+Git task-graph file for every launch**.
+
+High-frequency scheduler state lives outside Git at:
+
+```text
+~/.local/state/binnacle/chat-scheduling-v2/phaseN/orchestrator-state.json
+```
+
+Use directory mode `0700` and atomic file replacement. It records instantiated
+ready/claimed/running/completed/blocked tasks, attempts, worker branch/scratch
+paths and current resource locks. This file may change on every scheduling event
+without creating a Git commit or serializing unrelated workers.
+
+Canonical progress stores only the stable graph path/revision/SHA plus compact
+checkpoint summaries. At dependency barriers, side-effect boundaries, recovery
+checkpoints and phase handoff, persist a compact task-ledger snapshot under
+`benchmarks/chat-mode-scheduling-v2/` containing completed task ids and their
+input/output hashes. Do not commit every ready/running transition.
+
+Before accepting a new graph revision, the orchestrator validates mechanically:
+
+1. graph is acyclic;
+2. every predecessor id exists or is a documented completed prior-phase handoff;
+3. every enabled task's required immutable input hash exists;
+4. no two concurrently enabled tasks claim the same exclusive output path;
+5. every shared/external mutation has an explicit resource lock;
+6. every non-artifact prerequisite such as explicit owner approval is declared as
+   an `external_gate`, not disguised as a missing task id;
+7. no task depends on a later-phase artifact;
+8. every fan-in names the exact canonical artifacts/verdicts required for release;
+9. dynamic instances have unique deterministic ids and output paths.
+
+Progress stores `task_graph_path`, `task_graph_revision`, and `task_graph_sha256`.
+Any **stable graph/template** change after work has started creates a new revision
+and records the reason. Runtime instantiation/claim/refill updates only local
+orchestrator state and does not revise the Git graph. Existing completed/running
+task identities are never silently rewritten. If a stable graph revision changes
+predecessors/locks/outputs of an already submitted or side-effectful task, the
+phase is blocked for investigation rather than adapting in place.
+
+The Markdown runbook remains authoritative for semantics; the JSON makes the
+orchestrator's dependency/parallel execution mechanically auditable and
+recoverable by a new AI agent.
+
+Task-graph materialization is part of **Step 6.0**, not a later implementation
+step. After the formal dependency preflight has enough information to establish
+the Phase-6 workspace and enabled conditions, but **before Step 6.0 is marked
+complete or any Phase-6.1+ worker is launched**, the orchestrator must:
+
+1. render `phase6-task-graph.json` revision `r01` from this runbook and the
+   audited predecessor/handoff identities;
+2. run all graph validations listed above;
+3. record graph path/revision/SHA in canonical progress;
+4. initialize `~/.local/state/binnacle/chat-scheduling-v2/phase6/orchestrator-state.json`
+   with the static ready/blocked state implied by the graph;
+5. freeze a checkpoint of that initial local state and record its SHA/time;
+6. only then mark 6.0 `complete` and allow the ready-queue scheduler to launch
+   Phase-6.1+ work.
+
+If the dependency audit is BLOCKED before a valid source/workspace can be chosen,
+do not invent a task graph from uncertain inputs. If the graph validator fails,
+Step 6.0 is BLOCKED even when every upstream dependency itself passed.
+
+#### Task identity, claim, and recovery contract
+
+Every parallel task has a deterministic `task_id` derived from phase + logical
+work unit, never from a chat/session number. Examples:
+
+```text
+p3-source-phase1-step3
+p3-audit-phase1-step3
+p3-candidate-c300
+p4-readiness-c300
+p4-calibration-c300-r7-repeat2
+p4-confirmatory-r3-repeat4
+p5-review24-blocking-exhaustion
+p6-t7d-efficiency-job-status-call-burden
+```
+
+Before launch, the orchestrator writes a task descriptor into progress/scratch
+state containing:
+
+```text
+task_id
+predecessor_ids[]
+input_artifacts[] + sha256
+source_head / worker_base_head
+required_resource_locks[]
+external_gates[]
+expected_output_paths[]
+worker_branch/worktree or scratch_root
+focused_test/validation command when applicable
+side_effect_class = none | disposable | shared_external
+attempt_id
+claim_id
+forbidden_actions[]
+state = ready | claimed | running | complete | blocked | abandoned | disabled
+```
+
+`attempt_id` is unique per launch attempt; `claim_id` uniquely identifies the current ownership claim for that attempt; `task_id` stays stable across retries.
+
+Conditional nodes use `enabled_condition` from the stable task graph. When a
+condition becomes definitively false, set that task instance to `disabled`; a
+disabled task is terminal for DAG accounting and does **not** block downstream
+`one_of`/conditional fan-ins. Never mark a skipped conditional branch `complete`
+merely to satisfy the graph.
+
+`required_for_phase=false` is reserved for **opportunistic optimization work** whose
+absence cannot change correctness, required evidence, or a deployment verdict. Such
+a task may be set `disabled` with a recorded scheduler reason such as
+`critical_path_priority`, `no_idle_live_host_window`, or `no_remaining_work_to_accelerate`.
+It must never appear in a required `all_of`/`latest_enabled` fan-in. If an
+opportunistic result is reused later, the consumer validates its input/criteria
+hashes exactly like any other cached result.
+
+`scheduling_class=critical` means the task directly unlocks/advances the current
+critical path; `normal` is required but not immediately critical; `opportunistic`
+is optional latency-hiding/capacity-refinement work. The ready-queue scheduler
+uses this class only for priority when tasks contend for the **same** scarce
+resource; it does not reduce concurrency among disjoint tasks.
+
+Conditional fan-ins must name their rule explicitly rather than listing mutually
+exclusive predecessors as an unconditional AND. Supported runbook semantics are:
+
+```text
+all_of: every enabled predecessor must complete
+one_of: exactly one eligible predecessor path must complete with the required verdict
+latest_enabled: the latest enabled decision node in an extension chain supplies the verdict
+```
+
+The orchestrator evaluates conditions only from frozen canonical verdicts/hashes,
+never from worker guesses. Once a side-effectful downstream task is launched, the
+condition/verdict that enabled it is immutable unless the phase is rolled back and
+re-audited.
+The orchestrator allocates the task attempt's unique `claim_id` and atomically claims **all** required resource locks before changing `ready -> claimed`. Workers never partially acquire locks or wait while holding a
+subset; this avoids lock-order deadlocks. If the complete lock set is unavailable,
+the task remains ready and other tasks continue.
+
+A worker completion packet must return:
+
+```text
+task_id + attempt_id
+input hashes actually consumed
+claim_id
+output paths + hashes
+commit hash / clean worktree status when Git-backed
+tests/validation result
+external side effects performed (normally none unless explicitly assigned)
+known blocker/limitation
+```
+
+On orchestrator/chat recovery, any task left `claimed`/`running` is **investigated
+before re-launch**. Check worker branch/worktree, expected outputs, background
+processes, submitted-trial evidence, Project/connector/service state and external
+side effects as applicable. A new attempt is allowed only after the old attempt is
+proved complete, proved not to have executed the side effect, or is explicitly
+marked `abandoned` with evidence. For canonical live trials, existing submission
+evidence always wins: never create a replacement attempt for a submitted slot.
+
+Read-only deterministic analysis may be recomputed after an abandoned attempt, but
+its new attempt must use the same frozen input hashes. Shared-external mutations
+are never blindly retried. If an abandoned/superseded worker later returns, its
+completion packet is quarantined because its `claim_id` no longer owns the task;
+it cannot overwrite or release locks belonging to the newer attempt.
+
+#### Progress/checkpoint fields for parallel scheduling
+
+High-frequency `ready/claimed/running/resource-lock` state lives only in the
+persistent local `orchestrator-state.json` described above. Canonical Git progress
+must **not** be rewritten for every worker launch/completion; that would turn Git
+into the scheduler bottleneck.
+
+At canonical checkpoints (dependency fan-in, side-effect boundary, recovery
+checkpoint, evidence freeze, or phase handoff), progress records a compact
+scheduler snapshot:
+
+```text
+task_graph_path
+task_graph_revision
+task_graph_sha256
+orchestrator_state_path
+orchestrator_state_checkpoint_sha256
+orchestrator_state_checkpoint_at
+ready_count
+claimed_count
+running_count
+blocked_count
+running_task_ids_at_checkpoint[]
+completed_task_count
+completed_worker_commits_since_checkpoint{}
+blocked_task_summary{}
+```
+
+The checkpoint SHA refers to an immutable copy of the local scheduler state made
+at that checkpoint, not to a continuously changing file. A cold-start
+orchestrator loads canonical progress/task-graph first, then the current local
+state if present, and reconciles it against worker branches/processes/external
+side effects using the task-recovery contract. Missing local state does not erase
+committed task evidence; reconstruct from the most recent checkpoint plus worker
+outputs/branches.
+
+Workers never edit canonical progress concurrently. The orchestrator batches
+normal read-only worker completions into the next meaningful checkpoint, while
+side-effectful/submitted live tasks still use the explicit pre-action checkpoints
+defined in this runbook.
 
 ### Dependency-audit preflight fan-out
 
-Step N.0 is a fan-in gate, but its **read-only investigations are independent
+Step 6.0 is the only orchestration stage that runs **before** the formal
+Phase-6 task graph exists. It therefore uses a tiny bootstrap scheduler state,
+not the normal phase graph/runtime state:
+
+```text
+/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase6/bootstrap-state.json
+```
+
+Use directory mode `0700` and atomic replacement. Bootstrap task ids are the
+fixed `preflight-*` ids below plus any deterministic read-only child shards
+created from them. The bootstrap state records ready/claimed/running/complete/
+blocked preflight tasks, attempts and read-only resource identities. It never
+contains implementation/live/deployment tasks.
+
+Step 6.0 is a fan-in gate, but its **read-only investigations are independent
 worker tasks** and should be launched concurrently whenever their inputs are
 available. The orchestrator should normally fan out at least these categories,
 adapted to the phase-specific N.0 requirements:
@@ -168,6 +531,16 @@ the orchestrator owns the formal dependency-audit JSON/Markdown and performs the
 final consistency fan-in. A blocker in one category does not stop unrelated
 preflight workers from finishing, so the final blocker report is as complete as
 possible in one pass.
+
+After all required preflight tasks finish, the orchestrator freezes a bootstrap
+summary/hash into the dependency-audit evidence. Only then may Step 6.0 choose/
+create the canonical Phase-6 workspace, write formal progress/audit, materialize
+`phase6-task-graph.json` r01, and initialize the normal
+`orchestrator-state.json`. Archive (do not overwrite) the bootstrap state; later
+Phase-6.1+ scheduling never uses it.
+
+If preflight is BLOCKED, keep `bootstrap-state.json` for recovery and do not create
+a speculative formal task graph from uncertain source identities.
 
 ### Predecessor uncertainty rule
 
@@ -347,8 +720,11 @@ Step 6.0 has **two ordered stages**:
    overwrite a prior blocked/running checkpoint merely because the chat is new.
 
 The formal dependency-audit artifact and its revision/hash are recorded under
-the progress JSON `dependency_audit` object. On PASS, mark 6.0 `complete` and
-set `next_step=6.1`. On a blocker discovered **after** workspace bootstrap,
+the progress JSON `dependency_audit` object. On audit PASS, **do not yet mark
+6.0 complete**: first materialize/validate task-graph revision r01 and initialize
+the persistent orchestrator state as required by the task-graph contract above.
+Only after those checks pass, mark 6.0 `complete` and set `next_step=6.1`.
+On a blocker discovered **after** workspace bootstrap,
 leave `last_completed_step` unchanged, set phase status `blocked`, keep
 `next_step=6.0`, and commit/push the blocker evidence when Git remains
 available.
@@ -457,8 +833,9 @@ worktree: /home/grammy-jiang/Projects/binnacle-chat-scheduling-phase6-review
 
 Step 6.0 creates/reuses this workspace from the exact Phase-5 staging branch HEAD
 recorded by the Phase-5 handoff after read-only preflight. This branch stores only
-Phase-6 progress/evidence/review changes until Step 6.7; it is not the primary
-integration branch. Dirty/diverged state is investigated, never reset or replaced
+Phase-6 progress/evidence/review changes remain on this branch while 6.7A builds
+the separate primary-integration candidate; this review branch is never itself
+the primary integration branch. Dirty/diverged state is investigated, never reset or replaced
 with an alternate name.
 
 ## Phase-6 step dependency DAG
@@ -470,16 +847,55 @@ with an alternate name.
 | **6.2** T+24h freeze | 6.1 + wall clock >=T+24h | exact timestamp-bounded data available |
 | **6A** T+24h review frontier | 6.2 | one immutable T+24h evidence snapshot/hash; all independent subreviews ready together |
 | **6.3** T+24h gate | all canonical focus artifacts + integrity/activity audits | same evidence hash; all focus fan-ins complete |
-| **6.4** wait to T+7d | 6.3=`CONTINUE_TO_7D` or `CONTINUE_TO_7D_LOW_VOLUME` | no rollback/hard failure |
-| **6.5** T+7d freeze | wall clock >=T+7d | full and incremental immutable windows frozen |
+| **6.4** continue existing T0-based observation to T+7d | 6.3=`CONTINUE_TO_7D` or `CONTINUE_TO_7D_LOW_VOLUME` | seven-day clock was already running since T0; no rollback/hard failure |
+| **6.5** T+7d freeze | 6.3 CONTINUE outcome + wall clock >=`T0+7d` | full/incremental immutable windows frozen from original T0; 6.4 never shifts the deadline |
 | **6B** T+7d review frontier | 6.5 | both window hashes frozen; all independent subreviews ready together |
 | **6.6** final operational verdict | all canonical T+7d focus artifacts + integrity/activity audits | all focus fan-ins reconcile + no evidence blocker |
-| **6.7** primary release-candidate deployment | 6.6=`GO_PRIMARY_INTEGRATION` + explicit owner approval | pre-cutover dependency refresh PASS |
-| **6.8** primary smoke + 24h confirmation | 6.7 | cutover commit/config/instructions/consumer inventory frozen |
-| **6.9** final evidence/repository closeout + cleanup | 6.8=`PRIMARY_CONFIRMATION_PASS` | no rollback condition, primary state healthy |
+| **precutover-git-drift** | 6.6=`GO_PRIMARY_INTEGRATION` | latest POC/master + scheduling-stack ancestry/drift analysis PASS; no primary mutation |
+| **6.7A** build/test primary release candidate | `precutover-git-drift` PASS | integration candidate built; optimized tests/CI green; no primary mutation |
+| **6.7B** primary-state snapshot/control-plane fan-out | 6.6=`GO_PRIMARY_INTEGRATION` | consumers/Projects/units/config/runtime/rollback/staging-fallback snapshots all PASS |
+| **6.7C** primary cutover + confirmation T0 | 6.7A + 6.7B; external gate=`explicit_owner_approval` | parallel Project B-like fan-in PASS, then shared guard enablement -> verified C state; `primary_cutover_started_at` recorded |
+| **6.8A** primary immediate smoke branch | 6.7C | runs inside already-started confirmation window; emits `critical_smoke_pass` then final PASS/ROLLBACK |
+| **6.8B@24** primary 24h freeze/review decision | 6.8A + wall clock >=cutover+24h | 24h evidence frozen; dynamic review fan-out/focus fan-ins complete; verdict recorded |
+| **6E48** optional primary 48h extension freeze/review | 6.8B@24=`PRIMARY_CONFIRMATION_INSUFFICIENT_ACTIVITY` + wall clock >=cutover+48h | incremental + cumulative 48h evidence frozen; dynamic review fan-out/focus fan-ins complete |
+| **6.8B@48** primary 48h confirmation decision | 6E48 | `PRIMARY_CONFIRMATION_PASS`, `ROLLBACK`, `BLOCKED_EVIDENCE`, or owner decision for further extension |
+| **6.9** final evidence/repository closeout + cleanup | latest 6.8B@24/48 verdict=`PRIMARY_CONFIRMATION_PASS` | no rollback condition, primary state healthy |
 
-Because Phase 6 deliberately spans at least seven days, **Step 6.7 must perform
-a fresh pre-cutover dependency investigation** before touching primary:
+### Phase-6 conditional task-graph rules
+
+Encode conditional rollout/confirmation paths exactly:
+
+```text
+6.4:
+  enabled_condition = 6.3.verdict in {CONTINUE_TO_7D, CONTINUE_TO_7D_LOW_VOLUME}
+
+6.7A / 6.7B:
+  enabled_condition = (6.6.verdict == GO_PRIMARY_INTEGRATION)
+
+6.7C:
+  fan_in = all_of(6.7A, 6.7B)
+  external_gate = explicit_owner_approval
+
+6E48:
+  enabled_condition = (6.8B@24.verdict == PRIMARY_CONFIRMATION_INSUFFICIENT_ACTIVITY)
+
+6.8B@48:
+  enabled_condition = (6E48.state == complete)
+
+6.9:
+  fan_in = latest_enabled(6.8B@24, 6.8B@48)
+  required_verdict = PRIMARY_CONFIRMATION_PASS
+```
+
+If 6.8B@24 passes, 6E48/6.8B@48 become `disabled` and 6.9 becomes ready. If 6.6
+returns any NO-GO/ROLLBACK outcome, 6.7A/B/C and all primary-confirmation nodes are
+disabled. `BLOCKED_EVIDENCE` blocks the current gate; it is not treated as a
+false/skip condition. Wall clock alone never enables an extension without its
+required verdict.
+
+Because Phase 6 deliberately spans at least seven days, **6.7A/6.7B must perform
+the fresh pre-cutover Git/state investigations in parallel** before 6.7C may touch
+primary:
 
 - fetch latest `origin/proof-of-concept` and `origin/master`;
 - compare them with the heads recorded at 6.0 and with the approved scheduling
@@ -554,13 +970,13 @@ There is no plan-imposed worker count.
 Subreviews write scratch fragments only:
 
 ```text
-/tmp/binnacle-chat-scheduling-v2/phase6/review/<window>/<focus>/<partition>.json
+/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase6/review/<window>/<focus>/<partition>.json
 ```
 
 A focus lead becomes ready as soon as all partitions for **that focus** finish; it
 does not wait for the other three focus families. It verifies evidence/fragment
 hashes and writes one canonical `{json,md}` artifact. The orchestrator writes the
-6.3/6.6/6.8 verdict only after the required canonical focus artifacts exist.
+6.3/6.6/6.8B verdicts only after the required canonical focus artifacts exist.
 
 Canonical T+24h outputs:
 
@@ -634,7 +1050,7 @@ verifies its file hash/commit is on the Phase-5 handoff lineage and reruns:
 uv run pytest -q tests/scripts/test_chat_scheduling_operational.py
 ```
 
-Every 6.2/6.5/6.8 evidence freeze invokes the `freeze` subcommand with explicit
+Every 6.2/6.5/6.8B evidence freeze invokes the `freeze` subcommand with explicit
 `--start` and `--end`; every parallel review invokes `review --focus ...` against
 the already frozen JSON. If the tool requires a behavioral fix during Phase 6,
 stop, test the fix, record the new tool commit/hash in progress, and ensure all
@@ -650,7 +1066,7 @@ Step 6.0 verifies its commit/hash is on the Phase-5 handoff lineage and reruns:
 uv run pytest -q tests/scripts/test_chat_scheduling_project_instructions.py
 ```
 
-Every 6.7 primary Project mutation uses the helper's `merge`/`verify` contract
+Every 6.7C primary Project mutation uses the helper's `merge`/`verify` contract
 and exact private pre-cutover snapshots; no Project instruction string is edited
 manually.
 
@@ -713,12 +1129,11 @@ Before primary cutover, a Phase-6 rollback uses the exact Phase-5 Project
 snapshots and staged rollback order. Freeze the triggering evidence window first,
 restore `Raspberry Pi 5`; restore `Binnacle` too when the fault is shared staging
 behavior. Preserve the staging runtime/spool until durable jobs are terminal or
-explicitly stopped. Mark Phase 6/5 rollout state `rolled_back`; do not continue to
-6.7.
+explicitly stopped. Mark Phase 6/5 rollout state `rolled_back`; do not continue to the 6.7A/6.7B/6.7C primary-integration sub-DAG.
 
 ### Private primary-cutover rollback snapshot
 
-Before Step 6.7 mutates primary code/config/Project routing, the fresh pre-cutover
+Before Step 6.7C mutates primary code/config/Project routing, the fresh pre-cutover
 investigation must write exact rollback material outside Git at:
 
 ```text
@@ -740,33 +1155,40 @@ not commit or print credentials/tokens. `connector-consumers.json` records every
 known Project attached to the primary connector and whether it is owner-approved
 for this rollout. Any unapproved consumer blocks budget enablement.
 
-The snapshot is complete only when every Project that 6.7 will mutate has both an
+The snapshot is complete only when every Project that 6.7C will mutate has both an
 instruction snapshot and connector mapping, primary config/unit files are hashed,
 and the exact pre-cutover deployed Git HEAD is recorded. Missing snapshot material
-means 6.7 is `BLOCKED_EXTERNAL`/`BLOCKED_EVIDENCE`; do not mutate primary first
+means 6.7C is `BLOCKED_EXTERNAL`/`BLOCKED_EVIDENCE`; do not mutate primary first
 and try to reconstruct rollback state afterward.
 
 ### Primary-cutover rollback SOP
 
-After Step 6.7 has changed the primary deployed candidate/config/instructions, a
-hard rollback uses the pre-6.7 snapshots captured by the fresh pre-cutover
+After Step 6.7C has changed the primary deployed candidate/config/instructions, a
+hard rollback uses the pre-6.7C snapshots captured by the fresh pre-cutover
 investigation. Execute in this order:
 
 1. freeze failure evidence and current primary unit/config/instruction/connector
    hashes;
-2. restore Project instructions and connector mappings for every primary consumer
-   changed by 6.7;
-3. restore the pre-6.7 deployment-local config (removing the selected budget);
-4. restore/redeploy the exact pre-6.7 primary runtime commit using the repository's
-   audited deployment mechanism;
+2. **disable/remove the selected blocking-wall budget first**, using the audited
+   deployment/reload mechanism, and verify the effective primary config is back
+   to guard-disabled. This returns the rollout to the already-tested B-like state
+   (v2 instructions + guard disabled) before any Project instruction rollback;
+3. restore Project instructions and connector mappings for every primary consumer
+   changed by 6.7C. Launch one rollback worker per Project in parallel, each with
+   `project-mutate:<project-id>`, and fan in only after every Project readback
+   matches its pre-6.7C snapshot;
+4. after the Project fan-in, the behavior is back to the pre-v2/A-like Project
+   policy state on the still-new code path. Restore/redeploy the exact pre-6.7C
+   primary runtime commit only when the failure/rollback scope requires code
+   rollback; use the repository's audited deployment mechanism;
 5. restart/verify primary jobs/server/tunnel only as required by that deployment
    mechanism; never stop durable jobs merely to simplify rollback;
 6. run the primary read-only smoke plus one status check for any surviving job;
-7. verify primary unit/config/runtime/Project hashes against the pre-6.7 snapshot;
+7. verify primary unit/config/runtime/Project hashes against the pre-6.7C snapshot;
 8. keep the qualified staging endpoint restartable as the investigation fallback;
 9. record `ROLLBACK` and stop final repository synchronization.
 
-If repository history had already reached `proof-of-concept` during 6.7 because
+If repository history had already reached `proof-of-concept` during 6.7A because
 the current release workflow required it, do not rewrite published Git history.
 Revert/fix forward according to the repository workflow; `master` is still not
 finalized until 6.9.
@@ -798,10 +1220,12 @@ T0, T+24h and T+7d. Freeze Phase-4/5 reference reports and production baseline
 hashes.
 
 Schedule five disposable, explicitly tagged Stage-2 validation turns across the
-seven-day window using the same V1–V5 Phase-5 classes. Run **at least V1 and V2
-inside the first 24 hours** and the remaining three by T+7d. They test rollout
-semantics but are reported separately from ordinary `Raspberry Pi 5` development
-turns and do not satisfy the ordinary-usage minimum by themselves.
+seven-day window using the same V1–V5 Phase-5 classes. **Immediately after 6.1**,
+launch V1 and V2 as independent ready tasks; they may run concurrently when
+staging health permits. Schedule V3/V4/V5 as independent tasks later in the same
+T0-based window and complete them by T+7d. They test rollout semantics but are
+reported separately from ordinary `Raspberry Pi 5` development turns and do not
+satisfy the ordinary-usage minimum by themselves.
 
 ### Step 6.2 — T+24h data freeze
 
@@ -853,10 +1277,19 @@ Both CONTINUE outcomes allow Step 6.4. `ROLLBACK` stops the rollout.
 `BLOCKED_EVIDENCE` must be resolved before continuing because safety state is
 unknown. Progress records which first-day minimums were missing.
 
-### Step 6.4 — wait to T+7d
+### Step 6.4 — continue the existing T0-based observation to T+7d
 
-Intentional wall-clock gate. Progress becomes `waiting_wall_clock` with exact
-`resume_not_before`.
+This step does **not** start a new clock. The seven-day observation began at the
+Phase-5 `stage2_started_at = T0` and has already been running during 6.1–6.3.
+After a CONTINUE verdict, progress remains/returns `waiting_wall_clock` with:
+
+```text
+resume_not_before = T0 + 7 days
+```
+
+If the 24-hour review finishes late, do not add seven more days or shift T0. If
+wall clock is already >=T0+7d by the time 6.3 resolves, Step 6.5 becomes ready
+immediately.
 
 ### Step 6.5 — T+7d data freeze
 
@@ -921,12 +1354,12 @@ BLOCKED_EVIDENCE
 `EXTEND_OBSERVATION_WITH_OWNER_APPROVAL` is not an automatic escape from a failed
 gate; it is only for insufficient volume/evidence when no hard gate failed.
 
-### Step 6.7 — build and deploy the primary release candidate, only after GO
+### Primary-integration sub-DAG — 6.7A / 6.7B / 6.7C
 
-This step is serial and destructive enough to require explicit owner approval.
-It prepares/deploys the primary **release candidate** but does not declare the
-repository/project rollout finally complete; Step 6.9 owns that closeout after
-the real primary 24-hour confirmation.
+Only **6.7C cutover** is destructive and requires explicit owner approval. 6.7A
+release-candidate build/CI and 6.7B read-only snapshot/control-plane work should
+run in parallel after 6.6 GO. Step 6.9 still owns final repository/project
+closeout after the real primary confirmation.
 
 Before enabling the budget on the primary connector, freeze a **connector
 consumer inventory**: list every known ChatGPT Project that uses the primary
@@ -936,8 +1369,7 @@ affects all such Projects. If any consumer has not been included in the owner's
 rollout scope, do not enable the primary budget; remain on staging and report the
 blocker.
 
-Also re-investigate the authenticated connector/Project control mechanism at
-6.7. If the agent cannot verify current consumer attachment or cannot restore the
+Also re-investigate the authenticated connector/Project control mechanism during the 6.7A/6.7B pre-cutover sub-DAG. If the agent cannot verify current consumer attachment or cannot restore the
 primary mapping after rollback, primary integration is `BLOCKED_EXTERNAL`; do not
 proceed based on the week-old Phase-5 mechanism.
 
@@ -951,11 +1383,24 @@ worktree: /home/grammy-jiang/Projects/binnacle-chat-scheduling-primary-integrati
 If either already exists, inspect/recover it rather than creating an alternate
 name. Divergence or unexplained dirty state is a blocker; do not reset it.
 
-Before any primary mutation, fan out the 6.7 **read-only pre-cutover
-investigation** into independent workers:
+### Task `precutover-git-drift` — release-line freshness gate
+
+Start immediately after 6.6 `GO_PRIMARY_INTEGRATION`. This read-only task fetches
+latest `origin/proof-of-concept`/`origin/master`, verifies stacked scheduling
+lineage, classifies intervening runtime/config/test changes, and writes a hashed
+freshness fragment under the private pre-cutover snapshot root. It performs no
+Project/service/config mutation.
+
+A PASS releases 6.7A immediately; 6.7B snapshot workers may already be running in
+parallel. A BLOCKED result prevents 6.7A/6.7C but does not cancel unrelated 6.7B
+evidence collection.
+
+### Step 6.7B — primary-state snapshot/control-plane fan-out
+
+Start immediately after 6.6 GO. Before any primary mutation, fan out the read-only
+pre-cutover investigation into independent workers:
 
 ```text
-precutover-git-drift          # latest POC/master + scheduling stack ancestry/conflicts
 precutover-consumers          # primary connector consumer inventory/scope
 precutover-project-state      # current instructions/connector mappings per Project
 precutover-units-config       # primary config/server/jobs/tunnel unit snapshots/hashes
@@ -965,17 +1410,22 @@ precutover-staging-fallback   # staging endpoint remains healthy/restartable
 ```
 
 Launch all immediately with read-only resource access. Each writes a private or
-non-sensitive hashed fragment under the pre-primary-cutover snapshot root. The
-orchestrator performs no primary mutation until **all required pre-cutover
-workers pass**. Additional Projects discovered by the consumer-inventory worker
-create new Project-state snapshot tasks dynamically and those tasks start
-immediately rather than waiting for the first set to finish.
+non-sensitive hashed fragment under the pre-primary-cutover snapshot root.
+Additional Projects discovered by the consumer-inventory worker create new
+Project-state snapshot tasks dynamically and those tasks start immediately rather
+than waiting for the first set to finish. 6.7B is complete only when every
+required snapshot/control-plane task passes and the rollout scope is frozen.
 
-Release-candidate branch/deployment procedure:
+### Step 6.7A — build/test primary release candidate
+
+This task may start as soon as `precutover-git-drift` reports the current public
+base/stack relationship is safe to integrate. It does **not** wait for Project,
+unit, runtime, or rollback snapshot workers and performs no primary mutation.
+
+Release-candidate build procedure:
 
 1. fetch latest `origin/proof-of-concept` and `origin/master`;
-2. verify their relationship/current CI and complete the required 6.7 pre-cutover
-   investigation;
+2. verify their relationship/current CI and complete the required `precutover-git-drift` investigation;
 3. create/recover the fixed `release/chat-mode-scheduling-v2-primary-integration`
    branch/worktree above from the **latest proof-of-concept**;
 4. merge the current approved `release/chat-mode-scheduling-v2-phase6-review`
@@ -988,54 +1438,122 @@ Release-candidate branch/deployment procedure:
    primary-integration candidate, and wait for its CI green;
 7. record this exact candidate commit/hash in Phase-6 progress. Do **not** merge
    `master` yet. Whether the repository release workflow requires merging this
-   candidate to `proof-of-concept` before deployment is re-checked in the 6.7
-   fresh investigation; if required, merge only to `proof-of-concept`, wait CI,
+   candidate to `proof-of-concept` before deployment is re-checked in the 6.7A/6.7B fresh investigation; if required, merge only to `proof-of-concept`, wait CI,
    and record the resulting proof HEAD. Final `master` synchronization waits for
    6.9;
-8. deploy the approved candidate to the primary server using the repository's
+
+### Step 6.7C — primary cutover
+
+Predecessors: 6.7A CI green + 6.7B all PASS + explicit owner approval. Re-read all
+relevant release/snapshot hashes immediately before the first mutation; any drift
+invalidates the affected predecessor and returns to 6.7A/6.7B as appropriate.
+
+Then perform the cutover in this exact order:
+
+1. deploy the approved candidate to the primary server using the repository's
    currently documented deployment mechanism, initially with the repository
    default guard disabled; record the exact deployed commit and unit/config hashes;
-9. smoke the primary server/connector with the guard disabled;
-10. enable the selected client budget in deployment-local config;
-11. for every owner-approved primary-connector consumer in rollout scope, use
-    the Phase-5 tested instruction-merge helper to inject/update exactly one
-    canonical scheduling-v2 block while preserving that Project's existing
-    instructions; read back/verify the merged text and record pre/post hashes;
-12. re-smoke long-job flow and verify effective config/log telemetry; only then
-    begin Step 6.8's 24-hour clock.
+2. smoke the primary server/connector with the guard disabled;
+3. prepare one private merged-instruction file per owner-approved primary
+    connector consumer, then launch **one Project mutation worker per Project** in
+    parallel. Each worker holds `project-mutate:<project-id>`, uses the Phase-5
+    tested merge helper, applies exactly one scheduling-v2 block, reads the full
+    instructions back, verifies non-block text is unchanged, and writes its
+    pre/post hashes. The guard remains disabled throughout this fan-out;
+4. fan in every Project mutation. If any Project fails, do **not** enable the
+    guard: restore every Project already changed from its pre-cutover snapshot,
+    verify rollback, and return 6.7C to BLOCKED/ROLLBACK investigation. If all
+    pass, the rollout is temporarily in the already-tested **B-like state**
+    (v2 instructions + guard disabled);
+5. only after the complete B-like Project fan-in passes, enable the selected
+    client budget in deployment-local config using the audited deployment/reload
+    mechanism. Verify the effective budget, server/job/tunnel health and all
+    consumer mappings/instruction hashes without changing them again;
+6. when the resulting state exactly matches the intended C identity, **immediately
+    record `primary_cutover_started_at`** plus deployed commit/config/unit/Project
+    hashes;
+7. release Step 6.8A smoke tasks. The confirmation clock is already running while
+    those tasks execute.
+
+This ordering deliberately uses a Phase-4-validated intermediate state rather
+than an untested mixed state. Project instruction mutations are parallel across
+disjoint Projects; the one shared guard enablement is the final orchestrator-owned
+cutover point.
 
 Do not combine code deployment, config enablement, and Project-instruction change
-into one opaque action. Each has an independent rollback checkpoint. If 6.8
-fails, restore the pre-6.7 deployed code/config/instructions/connector mapping;
+into one opaque action. Each has an independent rollback checkpoint. If the 6.8A/6.8B confirmation sub-DAG fails, restore the pre-6.7C deployed code/config/instructions/connector mapping;
 `master` has not been finalized, so repository rollback remains uncomplicated.
 
-### Step 6.8 — primary cutover immediate smoke and 24-hour confirmation
+### Primary-confirmation sub-DAG — 6.8A / 6.8B@24 / optional 6E48 / 6.8B@48
 
-Treat 6.8 as four explicit substeps:
+The confirmation clock is separate from the earlier seven-day staging T0. Its reference is `primary_cutover_started_at`, recorded by **6.7C at the moment the desired primary cutover state is read-back verified**. Immediate smoke occurs inside this window and never shifts the timestamp.
 
-```text
-6.8.1  immediate primary read + short background-job smoke
-6.8.2  record primary_cutover_started_at and wait real 24 h
-6.8.3  freeze the exact primary-cutover 24 h evidence window
-6.8.4  run dynamic review fan-out -> focus leads -> orchestrator PASS/ROLLBACK gate
-```
+### Step 6.8A — primary immediate smoke branch inside the confirmation window
 
-6.8.1 verifies effective config, instruction hash, guard telemetry, durable-job
-behavior, connector consumer inventory, and rollback switches. If it fails,
-rollback immediately and do not start the 24-hour timer.
+Predecessor: 6.7C cutover complete with recorded code/config/instruction/consumer
+identities.
 
-6.8.2 sets progress to `waiting_wall_clock`; synthetic time cannot satisfy it.
-
-6.8.3 freezes `[primary_cutover_started_at, +24h)` into:
+Immediately fan out read-only/disposable smoke tasks for:
 
 ```text
-benchmarks/chat-mode-scheduling-v2/phase6-primary24h-evidence.json
-benchmarks/chat-mode-scheduling-v2/phase6-primary24h-evidence.md
+primary-read-path
+primary-short-background-job
+primary-effective-config
+primary-guard-telemetry
+primary-consumer-routing
+primary-rollback-readiness
 ```
 
-Record its JSON SHA-256 in progress.
+They may run concurrently because they do not mutate the same primary resource.
+Any hard failure triggers the primary-cutover rollback SOP. Preserve the already-started cutover window as failure evidence; do not reset/reuse its timestamp.
 
-Before 6.8.4 can return `PRIMARY_CONFIRMATION_PASS`, the primary window must contain at
+Define an early critical smoke fan-in over:
+
+```text
+primary-read-path
+primary-effective-config
+primary-consumer-routing
+primary-rollback-readiness
+```
+
+As soon as those pass, record `critical_smoke_pass=true` and enqueue V1/V2 as
+independent cutover-validation tasks; they may run concurrently while the
+background-job/telemetry smoke tasks continue. A later hard smoke failure still
+invalidates the early pass and triggers rollback.
+
+When every required immediate smoke task passes, freeze the immediate-smoke
+evidence hashes and mark 6.8A PASS. The already-running deadline remains:
+
+```text
+resume_not_before = primary_cutover_started_at + 24h
+```
+
+V1/V2 do not count as ordinary development usage.
+
+### Step 6.8B@24 — primary 24-hour freeze/review decision
+
+Predecessors: 6.8A PASS and wall clock >=`primary_cutover_started_at+24h`.
+
+Freeze exactly:
+
+```text
+[primary_cutover_started_at, +24h):
+  benchmarks/chat-mode-scheduling-v2/phase6-primary24h-evidence.json
+  benchmarks/chat-mode-scheduling-v2/phase6-primary24h-evidence.md
+```
+
+Record the JSON SHA-256 and immediately launch the full Phase-6 dynamic subreview
+partition set. Fresh `primary24-*` focus leads aggregate the partitions into:
+
+```text
+reliability: benchmarks/chat-mode-scheduling-v2/phase6-primary24h-reliability.{json,md}
+blocking:    benchmarks/chat-mode-scheduling-v2/phase6-primary24h-blocking-wall.{json,md}
+efficiency:  benchmarks/chat-mode-scheduling-v2/phase6-primary24h-efficiency.{json,md}
+workflow:    benchmarks/chat-mode-scheduling-v2/phase6-primary24h-workflow-ux.{json,md}
+```
+
+All focus artifacts must reference the same evidence SHA. A
+`PRIMARY_CONFIRMATION_PASS` decision requires no hard rollback condition and at
 least:
 
 ```text
@@ -1045,17 +1563,43 @@ least:
 2 explicitly tagged cutover-validation long-job turns
 ```
 
-Run those two tagged cutover-validation turns during the first 24 hours using
-known-fit disposable V1/V2 semantics. If the 24-hour window is below a minimum
-and no hard rollback condition fired, return `PRIMARY_CONFIRMATION_INSUFFICIENT_ACTIVITY`
-and extend the confirmation once to **48 hours total**. Freeze:
+The orchestrator records exactly one:
 
 ```text
-[+24h,+48h): benchmarks/chat-mode-scheduling-v2/phase6-primary24h-extension-24-48h-evidence.{json,md}
-[0,+48h):    benchmarks/chat-mode-scheduling-v2/phase6-primary48h-evidence.{json,md}
+PRIMARY_CONFIRMATION_PASS               # primary_confirmation_hours=24
+PRIMARY_CONFIRMATION_INSUFFICIENT_ACTIVITY
+BLOCKED_EVIDENCE
+ROLLBACK
 ```
 
-Rerun the full dynamic subreview fan-out against the cumulative 48-hour evidence, producing these four canonical focus outputs:
+Only `PRIMARY_CONFIRMATION_INSUFFICIENT_ACTIVITY` releases Step 6E48. A hard
+failure/ROLLBACK stops the rollout; `BLOCKED_EVIDENCE` must be resolved before any
+advance.
+
+### Step 6E48 — optional primary 48-hour extension freeze/review
+
+Predecessors:
+
+```text
+6.8B@24 = PRIMARY_CONFIRMATION_INSUFFICIENT_ACTIVITY
+wall clock >= primary_cutover_started_at + 48h
+```
+
+Do not restart the clock. Freeze both:
+
+```text
+incremental [+24h,+48h):
+  benchmarks/chat-mode-scheduling-v2/phase6-primary24h-extension-24-48h-evidence.json
+  benchmarks/chat-mode-scheduling-v2/phase6-primary24h-extension-24-48h-evidence.md
+
+cumulative [0,+48h):
+  benchmarks/chat-mode-scheduling-v2/phase6-primary48h-evidence.json
+  benchmarks/chat-mode-scheduling-v2/phase6-primary48h-evidence.md
+```
+
+Immediately launch the full dynamic subreview partition set against the cumulative
+48-hour evidence plus independent incremental-window integrity/degradation
+workers. Fresh `primary48-*` focus leads produce:
 
 ```text
 benchmarks/chat-mode-scheduling-v2/phase6-primary48h-reliability.{json,md}
@@ -1064,37 +1608,24 @@ benchmarks/chat-mode-scheduling-v2/phase6-primary48h-efficiency.{json,md}
 benchmarks/chat-mode-scheduling-v2/phase6-primary48h-workflow-ux.{json,md}
 ```
 
-If the cumulative 48-hour window meets the minimum and every gate passes, record
-`PRIMARY_CONFIRMATION_PASS` with `primary_confirmation_hours=48`. If still below
-minimum at 48 hours, explicit owner decision is required to amend the plan for a
-further extension or rollback/stop; it is not an automatic PASS.
+6E48 completes only when all canonical focus artifacts and the incremental
+integrity result are frozen to the recorded hashes.
 
-6.8.4 launches the same dynamic partition set used for staging windows. Its
-canonical 24-hour focus outputs are exactly:
+### Step 6.8B@48 — primary 48-hour confirmation decision
 
-```text
-reliability: benchmarks/chat-mode-scheduling-v2/phase6-primary24h-reliability.{json,md}
-blocking:    benchmarks/chat-mode-scheduling-v2/phase6-primary24h-blocking-wall.{json,md}
-efficiency:  benchmarks/chat-mode-scheduling-v2/phase6-primary24h-efficiency.{json,md}
-workflow:    benchmarks/chat-mode-scheduling-v2/phase6-primary24h-workflow-ux.{json,md}
-```
+Predecessor: 6E48 complete.
 
-All canonical focus artifacts reference the same window hash. At the 24-hour
-decision the orchestrator records exactly one of:
+Apply the same primary confirmation/hard-rollback criteria to the cumulative
+48-hour evidence and inspect the incremental 24–48h result for late degradation.
 
-```text
-PRIMARY_CONFIRMATION_PASS               # also record primary_confirmation_hours=24
-PRIMARY_CONFIRMATION_INSUFFICIENT_ACTIVITY
-BLOCKED_EVIDENCE
-ROLLBACK
-```
+- If all gates and minimum activity pass, record
+  `PRIMARY_CONFIRMATION_PASS` with `primary_confirmation_hours=48`.
+- `ROLLBACK` and `BLOCKED_EVIDENCE` retain their normal meanings.
+- If activity is still insufficient at 48 hours, do **not** auto-extend. Explicit
+  owner approval plus a plan amendment defining the next exact window/artifact
+  names is required before another extension node may exist.
 
-The insufficient verdict follows the one-time 48-hour extension rule above. Any
-condition in **Phase-6 hard rollback conditions** applies. This window checks
-regressions introduced specifically by moving from staging to the primary
-connector; it does not replace the completed seven-day staging evidence.
-
-### Step 6.9 — cleanup and final project report
+### Step 6.9 — final evidence/repository closeout and cleanup
 
 After `PRIMARY_CONFIRMATION_PASS`:
 
