@@ -69,7 +69,7 @@ Updated: 2026-09-25T05:08:01+10:00
 | 3.6B | not_started |
 | 3.6C | not_started |
 | 3H | not_started |
-| 3.7 | not_started |
+| 3.7 | running |
 | 3.8 | not_started |
 | 3.9 | not_started |
 | 3.10 | not_started |
