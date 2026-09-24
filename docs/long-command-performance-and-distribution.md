@@ -182,6 +182,23 @@ The single-host comparison target for the multi-host POC is therefore approximat
 with correct lane placement**, not the 118 s sequential baseline. A multi-host design must
 beat the best correct single-host mode after including source/environment setup overhead.
 
+### Phase 1 clean checkpoint (2026-09-24)
+
+The 2026-09-22 measurements above remain historical. Phase 1 of the test-suite performance
+plan established a supported two-lane runner and remeasured the Pi 5 on source snapshot
+`94441a58aca911ba9069d3228adf33557b2deec1`, before documentation-only checkpoint
+changes.
+
+The fixed-seed `12345` checkpoint runs completed in **48.85 s** and **46.55 s** wall time;
+a different seed (`54321`) completed in **44.16 s**. Each run selected the same 1,131
+managed tests: 1,126 parallel-safe tests passed, 3 live tests skipped, and both `no_xdist`
+tests passed in the ordinary-process lane. The formal same-source Phase 1 A/B from Step 1.5
+was 113.04 s sequential versus 47.10 s with the two-lane runner. The older Step 1.1
+124.73 s sequential baseline remains contextual rather than apples-to-apples because later
+Phase 1 steps changed test code and added runner tests.
+
+The supported command is documented in `docs/testing.md`.
+
 ## 8. Measurements
 
 For every run capture:
