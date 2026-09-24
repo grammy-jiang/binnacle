@@ -163,6 +163,46 @@ percentiles, manager launch/stop timings, job runtime percentiles, job-status bl
 wait totals, exit reasons, stop escalation, recoveries and client disconnects.
 CPU/RSS/IO sampling is deliberately not part of this telemetry pass.
 
+### 6.1 Cross-event run-command workflow analysis (2026-09-24)
+
+`binnacle stats` also joins the existing run-command records into a workflow view. This
+analysis adds **no runtime journal event** and does not change either MCP tool schema. It
+separates two dimensions that `handoff_reason` alone cannot express:
+
+- policy selection: default foreground, explicit foreground override, explicit background,
+  automatic background, or an older/unknown record shape;
+- execution outcome: synchronous finish, warm-up finish, handoff, or foreground wait
+  expiry.
+
+The analyzer correlates `tool_call` / `tool_result`, `run_command_dispatch`,
+`job_start`, `job_owner_timing`, `job_exit`, and `job_status_timing` using `call` and
+`job_id`. It reports **in-window linkage** rather than treating every unmatched record as
+logging loss: an arbitrary `--since` / `--until` boundary may legitimately split a call
+or job, and mixed-version deployment windows may contain records from before a telemetry
+field existed.
+
+For automatic-background handoffs with terminal evidence, stats reports a labelled
+counterfactual:
+
+```text
+max(0, min(runtime_s, bounded_wait_s) - effective_wait_s)
+```
+
+This estimates how much of the original foreground wait window was released by the early
+handoff. It is not end-to-end time saved. The same section therefore also reports later
+`job_status` activity, first-status state/turn, observable intervening non-status tool
+calls, and status-phase time.
+
+Plain single-line Binnacle records retain their full ISO timestamp, including milliseconds,
+inside the parser's in-memory `Record`. This does not change the journal format. Where both
+`job_exit` and a terminal `job_status_timing` have precise timestamps, stats can report the
+collection lag between job completion and result collection. Older untimestamped records
+remain valid and simply do not contribute to that latency distribution.
+
+This Phase-1 analysis deliberately does not infer output-shaping causes or the specific
+automatic-background rule that matched; those facts are not reliably reconstructable from
+historical clipped arguments and require later additive telemetry.
+
 ## 7. Record format, from the live journal (2026-09-13 22:36, `scripts/mcp_client.py`)
 
 ```text

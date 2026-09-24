@@ -28,6 +28,7 @@ from binnacle.logstats_io import fetch_journal
 from binnacle.logstats_jobs import analyze_job_telemetry
 from binnacle.logstats_models import IndexedContextStats, Record, Stats
 from binnacle.logstats_render import indexed_context_report, render
+from binnacle.logstats_run_command import analyze_run_command_workflow
 from binnacle.logstats_search_exact import analyze_exact_search
 from binnacle.logstats_tools import (
     analyze_tool_call,
@@ -45,6 +46,7 @@ _PLAIN_START = re.compile(
     r"^(?:(\d{4})-(\d{2})-(\d{2})T(\d{2}:\d{2}:\d{2})(?:\.\d+)? )?"
     r"(?:INFO|WARNING|ERROR): event=(\w+)(.*)$"
 )
+_PLAIN_TIMESTAMP = re.compile(r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?) ")
 _PLAIN_KV = re.compile(r"(\w+)=(\S+)")
 # Keys whose value is free text (spaces allowed); each is the last key on
 # its line, so the value runs to the end of the record.
@@ -146,6 +148,7 @@ def parse(text: str) -> tuple[list[Record], int]:
             day, time = ts.group(1), ts.group(2)
         plain = _PLAIN_START.match(line)
         if plain:
+            timestamp_match = _PLAIN_TIMESTAMP.match(line)
             # A binnacle single-line record closes any open rich record.
             if cur:
                 records.append(cur)
@@ -157,6 +160,7 @@ def parse(text: str) -> tuple[list[Record], int]:
                     body="event=" + event + rest,
                     day=f"{month}/{dom}/{year[2:]}" if year else day,
                     time=clock or time,
+                    timestamp=timestamp_match.group(1) if timestamp_match else None,
                 )
             )
             continue
@@ -437,5 +441,6 @@ def analyze(records: list[Record], startups: int = 0) -> Stats:
     st.indexed = analyze_indexed_context(records)
     st.adaptive = analyze_adaptive_discovery(records)
     st.jobs = analyze_job_telemetry(records, plain_fields)
+    st.run_command = analyze_run_command_workflow(records, plain_fields)
     st.exact_search = analyze_exact_search(records, plain_fields)
     return st

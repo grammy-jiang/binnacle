@@ -1,6 +1,6 @@
 # `run_command` observability implementation plan — 2026-09-24
 
-Status: planning complete; implementation not started.
+Status: Phases 1–2 implemented and validated; Phases 3–5 pending.
 
 Parent investigation:
 `docs/run-command-observability-investigation-2026-09-24.md`.
@@ -10,6 +10,34 @@ Working branch/worktree:
 - branch: `analysis/run-command-observability-audit`
 - worktree: `~/Projects/binnacle-run-command-observability-audit`
 - base commit: `77a3f03`
+
+## 0. Implementation progress — 2026-09-24
+
+Phases 1 and 2 are complete on this branch. Runtime telemetry and execution behavior remain
+unchanged.
+
+Completed:
+
+- added a dedicated cross-event `run_command` workflow analyzer and stats model;
+- preserved millisecond timestamps for plain records so collection lag can be measured;
+- separated policy selection from dispatch outcome;
+- joined pre-dispatch errors, lifecycle linkage, automatic handoff counterfactuals,
+  `job_status` follow-up, same-turn correlation, and observable intervening tool work;
+- documented in-window/mixed-version coverage semantics;
+- reproduced the frozen production-window aggregates from the investigation;
+- validated the 2026-09-22 deployment-transition window without false failure reports.
+
+Validation:
+
+- focused baseline plus new tests: **119 passed**;
+- modified-file pre-commit: all hooks passed, including mypy, deptry, module-size,
+  AI-readability, and architecture checks;
+- frozen-window `binnacle stats` performance: 10.360 / 10.577 / 10.432 s,
+  median **10.432 s** versus 9.749 s baseline (+0.683 s, about +7.0%);
+- performance gate (<15% and <1.0 s absolute regression) passed.
+
+Next: Phase 3, with policy/rule identity and output-shaping telemetry developed in
+independent lanes and merged only after both lanes pass their own gates.
 
 ## 1. Goal
 

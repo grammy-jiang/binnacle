@@ -188,6 +188,7 @@ def test_plain_records_parse_with_their_own_timestamps():
     assert (old.day, old.time) == ("09/13/26", "22:00:00")
     new = next(r for r in records if r.event == "tool_call")
     assert (new.day, new.time) == ("09/13/26", "23:10:00")
+    assert new.timestamp == "2026-09-13T23:10:00.100"
     # the rich record before them still closed cleanly
     assert records[0].event == "request_start" and "tool=run_command" in records[0].body
 

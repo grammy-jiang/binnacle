@@ -11,6 +11,7 @@ class Record:
     body: str
     day: str | None = None
     time: str | None = None
+    timestamp: str | None = None
 
 
 @dataclass
@@ -111,6 +112,55 @@ class JobTelemetryStats:
 
 
 @dataclass
+class RunCommandWorkflowStats:
+    """Cross-event run_command policy/lifecycle analysis."""
+
+    tool_calls: int = 0
+    tool_results: int = 0
+    result_errors: int = 0
+    successful_dispatches: int = 0
+    dispatch_errors: int = 0
+    not_dispatched_errors: int = 0
+    policy_modes: Counter = field(default_factory=Counter)
+    outcomes: Counter = field(default_factory=Counter)
+    not_dispatched_error_reasons: Counter = field(default_factory=Counter)
+
+    dispatch_result_linked: int = 0
+    dispatch_job_start_linked: int = 0
+    dispatch_owner_timing_linked: int = 0
+    synchronous_exit_linked: int = 0
+    synchronous_exit_expected: int = 0
+    result_without_call: int = 0
+    dispatch_without_call: int = 0
+    call_without_result: int = 0
+
+    auto_matches: int = 0
+    auto_warmup_finished: int = 0
+    auto_handed_off: int = 0
+    auto_terminal_observed: int = 0
+    auto_terminal_analysis_eligible: int = 0
+    auto_would_finish_within_original_wait: int = 0
+    auto_would_timeout_anyway: int = 0
+    auto_initial_wait_released_s: float = 0.0
+    auto_jobs_with_status: int = 0
+    auto_status_calls: int = 0
+    auto_first_status_states: Counter = field(default_factory=Counter)
+    auto_first_status_same_turn: int = 0
+    auto_first_status_different_turn: int = 0
+    auto_first_status_unknown_turn: int = 0
+    auto_jobs_with_intervening_non_status_calls: int = 0
+    auto_intervening_tools: Counter = field(default_factory=Counter)
+    auto_terminal_collection_lag_s: list[float] = field(default_factory=list)
+    auto_status_state_ms: list[float] = field(default_factory=list)
+    auto_status_waited_s: list[float] = field(default_factory=list)
+
+    output_shaping_reasons: Counter = field(default_factory=Counter)
+    output_shaping_legacy_unclassified: int = 0
+    auto_rule_matches: Counter = field(default_factory=Counter)
+    auto_rule_handoffs: Counter = field(default_factory=Counter)
+
+
+@dataclass
 class ExactSearchStats:
     dispatches: int = 0
     summaries: int = 0
@@ -186,4 +236,7 @@ class Stats:
     indexed: IndexedContextStats = field(default_factory=IndexedContextStats)
     adaptive: AdaptiveDiscoveryStats = field(default_factory=AdaptiveDiscoveryStats)
     jobs: JobTelemetryStats = field(default_factory=JobTelemetryStats)
+    run_command: RunCommandWorkflowStats = field(
+        default_factory=RunCommandWorkflowStats
+    )
     exact_search: ExactSearchStats = field(default_factory=ExactSearchStats)
