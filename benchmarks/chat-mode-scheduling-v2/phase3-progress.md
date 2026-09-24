@@ -77,7 +77,7 @@ Updated: 2026-09-25T05:23:44+10:00
 | 3.6C | complete |
 | 3H | complete |
 | 3.7 | complete |
-| 3.8 | not_started |
+| 3.8 | running |
 | 3.9 | not_started |
 | 3.10 | not_started |
 
