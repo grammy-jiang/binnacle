@@ -1,7 +1,7 @@
 # Binnacle full test-suite performance optimisation plan
 
 **Date:** 2026-09-24
-**Status:** execution plan; implementation not started by this document
+**Status:** COMPLETED — implementation and final validation finished 2026-09-24; see `docs/test-suite-performance-optimization-progress-2026-09-24.md` for execution evidence.
 **Scope:** local and CI execution time of the managed automated Python test suite
 **Working repository:** `~/Projects/binnacle-chat-scheduling-design`
 **Working branch:** `design/chat-mode-scheduling-v2`
@@ -2656,32 +2656,32 @@ A new agent can use this as the compact progress ledger.
 
 ### Phase 1
 
-- [ ] 1.1 Clean reproducible baseline
-- [ ] 1.2 Fix watchdog USB mock target
-- [ ] 1.3 Define/mark true no_xdist tests
-- [ ] 1.4 Resolve search-text ordering contract
-- [ ] 1.5 Build two-lane fast full-suite command
-- [ ] 1.6 Full regression + Phase 1 checkpoint
+- [x] 1.1 Clean reproducible baseline
+- [x] 1.2 Fix watchdog USB mock target
+- [x] 1.3 Define/mark true no_xdist tests
+- [x] 1.4 Resolve search-text ordering contract
+- [x] 1.5 Build two-lane fast full-suite command
+- [x] 1.6 Full regression + Phase 1 checkpoint
 
 ### Phase 2
 
-- [ ] 2.1 Real-wait inventory
-- [ ] 2.2 Explicit test timing policy for job warm-up
-- [ ] 2.3 Shorten lifecycle waited-out processes safely
-- [ ] 2.4 Inject time into tunnel/readiness polling tests
-- [ ] 2.5 Review remaining top-20 long-tail tests
-- [ ] 2.6 Real-timing coverage + anti-flake evidence
-- [ ] 2.7 Full regression + Phase 2 checkpoint
+- [x] 2.1 Real-wait inventory
+- [x] 2.2 Scope a short job warm-up to lifecycle tests
+- [x] 2.3 Shorten lifecycle waited-out processes safely
+- [x] 2.4 Preserve/classify tunnel readiness real-time contract
+- [x] 2.5 Review remaining top-20 long-tail tests
+- [x] 2.6 Real-timing coverage + anti-flake evidence
+- [x] 2.7 Full regression + Phase 2 checkpoint
 
 ### Phase 3
 
-- [ ] 3.1 Remove coverage from ordinary compatibility tox environments
-- [ ] 3.2 Make coverage-policy run each test only once
-- [ ] 3.3 Enable xdist for coverage-policy while preserving no_xdist lanes
-- [ ] 3.4 Benchmark bounded tox-level scheduling
-- [ ] 3.5 Update GitHub Actions
-- [ ] 3.6 Update testing/quality/performance documentation
-- [ ] 3.7 Final end-to-end release validation
+- [x] 3.1 Remove coverage from ordinary compatibility tox environments
+- [x] 3.2 Make coverage-policy run each test only once
+- [x] 3.3 Enable xdist for coverage-policy while preserving no_xdist lanes
+- [x] 3.4 Benchmark bounded tox-level scheduling
+- [x] 3.5 Update GitHub Actions
+- [x] 3.6 Update testing/quality/performance documentation
+- [x] 3.7 Final end-to-end release validation
 
 ---
 

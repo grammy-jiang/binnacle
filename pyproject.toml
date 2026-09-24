@@ -69,9 +69,10 @@ markers = [
 ]
 
 [tool.coverage.run]
-# Branch coverage, measured at 87% on 2026-09-13 (350 tests). The gate runs
-# in tox (every interpreter) so a plain `pytest` stays fast; ratchet
-# fail_under up as the number rises, never down.
+# Branch coverage, measured at 87% on 2026-09-13 (350 tests). The authoritative
+# gate runs only in the dedicated tox coverage-policy environment; ordinary
+# compatibility tox environments stay uncovered and fast. Ratchet fail_under
+# up as the number rises, never down.
 branch = true
 source = ["binnacle"]
 
