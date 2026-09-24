@@ -80,10 +80,13 @@ def test_m3_slow_fixture_outlives_the_entire_micro_turn():
 def test_phase1_single_turn_bounds_are_explicit_and_reasonable():
     scenarios = load_all()
 
-    for scenario in scenarios.values():
-        assert 0 <= scenario.expected_runtime_s <= scenario.max_turn_runtime_s <= 240
+    for scenario_id, scenario in scenarios.items():
+        assert 0 <= scenario.expected_runtime_s <= scenario.max_turn_runtime_s
+        if scenario_id != "R12":
+            assert scenario.max_turn_runtime_s <= 240
 
     assert scenarios["R7"].max_turn_runtime_s == 230
+    assert scenarios["R12"].max_turn_runtime_s == 690
 
 
 def test_mutating_scenarios_are_disposable_and_scoped():
@@ -113,9 +116,13 @@ def test_repeating_nodes_are_only_logical_job_status_barriers():
     assert {(scenario_id, node.id) for scenario_id, node in repeating} == {
         ("M6", "barrier_wait"),
         ("R3", "validation_result"),
+        ("R4", "validation_result"),
         ("R5", "wait_result"),
+        ("R6", "wait_result"),
         ("R7", "wait_first"),
         ("R7", "wait_second"),
+        ("R10", "wait_result"),
+        ("R12", "wait_result"),
     }
     assert all(node.tool == "job_status" for _, node in repeating)
     assert all(node.completion_condition == "job_state=exited" for _, node in repeating)
@@ -310,3 +317,99 @@ def test_r11_fragments_derive_exact_wave2_marker(tmp_path):
     wave2 = sorted((tmp_path / "wave2").glob("*.txt"))
     assert len(wave2) == 4
     assert all(marker in path.read_text() for path in wave2)
+
+
+def test_phase4_scenario_runtime_contracts_are_frozen():
+    scenarios = load_all()
+
+    for scenario_id in ("R4", "R6", "R10"):
+        scenario = scenarios[scenario_id]
+        assert scenario.phase1_step is None
+        assert scenario.expected_runtime_s == 110
+        assert scenario.max_turn_runtime_s == 180
+
+    r4 = scenarios["R4"]
+    assert [item.path for item in r4.fixture.files] == [
+        f"inspect/f{i:02d}.txt" for i in range(1, 9)
+    ]
+    assert [item.content for item in r4.fixture.files] == [
+        f"payload-R4-{i:02d}-{{nonce}}\n" for i in range(1, 9)
+    ]
+    assert "time.sleep(90)" in r4.dag[0].arguments["command"]
+
+    assert "time.sleep(90)" in scenarios["R6"].dag[0].arguments["command"]
+    assert "R6-{nonce}" in scenarios["R6"].dag[0].arguments["command"]
+
+    r10 = scenarios["R10"]
+    assert "time.sleep(90)" in r10.dag[0].arguments["command"]
+    assert "print(" not in r10.dag[0].arguments["command"]
+    assert any(
+        check.type == "job_status_any_call"
+        and check.params
+        == {
+            "node": "wait_result",
+            "fields": {"state": "running", "quiet": True},
+        }
+        for check in r10.oracle.checks
+    )
+
+
+def test_r12_budget_contract_is_parameterized_and_nonterminal():
+    r12 = load_all()["R12"]
+
+    assert r12.phase1_step is None
+    assert r12.runtime_budget_margin_s == 30
+    assert r12.max_turn_runtime_s == 690
+    assert "{budget_plus_margin_s}" in r12.dag[0].arguments["command"]
+    assert "{budget_plus_margin_s}" in r12.prompt_template
+    assert "300" not in r12.dag[0].arguments["command"]
+    assert "exclude_aggregate_performance" in r12.metric_tags
+    assert "all_nodes_complete" not in {check.type for check in r12.oracle.checks}
+    assert any(
+        check.type == "reply_contains_all"
+        and check.params["values"]
+        == [
+            "BUDGET_EXHAUSTED",
+            "job_id=",
+            "state=running",
+            "pending=dependency",
+            "resume=job_status",
+        ]
+        for check in r12.oracle.checks
+    )
+    assert any(
+        check.type == "job_status_any_call"
+        and check.params
+        == {
+            "node": "wait_result",
+            "fields": {
+                "state": "running",
+                "blocking_budget_exhausted": True,
+            },
+        }
+        for check in r12.oracle.checks
+    )
+
+
+def test_only_r12_may_exceed_phase1_runtime_bound():
+    data = _minimal()
+    data["max_turn_runtime_s"] = 241
+    with pytest.raises(ValidationError, match="240-second"):
+        Scenario.model_validate(data)
+
+    r12 = load_all()["R12"].model_dump()
+    r12["max_turn_runtime_s"] = 691
+    with pytest.raises(ValidationError, match="690-second"):
+        Scenario.model_validate(r12)
+
+
+def test_budget_margin_and_placeholder_are_r12_only():
+    data = _minimal()
+    data["runtime_budget_margin_s"] = 30
+    with pytest.raises(ValidationError, match="only valid for R12"):
+        Scenario.model_validate(data)
+
+    data = _minimal()
+    data["prompt_template"] = "wait {budget_plus_margin_s}"
+    with pytest.raises(ValidationError, match="unknown placeholder"):
+        Scenario.model_validate(data)
