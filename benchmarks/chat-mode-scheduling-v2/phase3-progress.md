@@ -2,15 +2,15 @@
 
 Status: IN PROGRESS
 
-Updated: 2026-09-25T05:51:35+10:00
+Updated: 2026-09-25T05:59:29+10:00
 
 ## Canonical state
 
 - Branch: feature/chat-mode-scheduling-v2-phase3
 - Worktree: /home/grammy-jiang/Projects/binnacle-chat-scheduling-phase3
 - Audited source HEAD: 5f2be143352aaa63fb680c1c79e289d46be201fe
-- Last completed step: 3.8
-- Next step: 3.7 gate-population correction; revalidate dependent Step 3.8 binding afterward
+- Last completed step: 3.7
+- Next step: 3.8 revalidate Phase-4 input-contract binding against corrected Step-3.7 shortlist before 3.9
 - Dependency audit: phase3-dependency-audit-2026-09-25-r01.json, r01, SHA-256 d3bec25ba8d49ed4db78e07930542b9e963608ad264c198f8fbf04c4ccfa473a
 - Task graph: phase3-task-graph.json, r01, SHA-256 44cbedb0524fe87a9d111579a96d0d33f4171dfee6ece34eb53baa4c506696b2
 - Initial orchestrator-state checkpoint SHA-256: cec108b23fcf319a48d699f123b8fbf713919f3873d1cae4968a16844b80ed12
@@ -27,9 +27,9 @@ Updated: 2026-09-25T05:51:35+10:00
 - Audited corpus SHA-256: 4dd1e387c42d6fccd37d60795b00192144f3b4d93c57d9eb54ab527a72e8e94d
 - Frozen corpus audit HEAD: 207000caa3727f37f494675f34934fd61fc6cdd5
 - Frozen replay promotion HEAD: 2382ae0dca4fee931d9af33c049e9dad97514e64
-- Frozen candidate shortlist HEAD: 3915fbb05fe4409418aa9c4293d5a2846cd925ae
-- Candidate shortlist JSON SHA-256: 23edc0fbba3210aae5da205122be51a806b7be54ab5ca5c590d98de6c931b975
-- Candidate shortlist Markdown SHA-256: cfaf76ecaa4d8ac462e916b2ccf4de9c8f3666f68532a0594a3e0e2878fb941e
+- Frozen candidate shortlist HEAD: 06c86f8db508be2d311ccd27f5aaffe2740597a3
+- Candidate shortlist JSON SHA-256: 51db08d70ad8ebfcc46de9e53c661b517b9f3ed41b10579d49057aa395f8d11d
+- Candidate shortlist Markdown SHA-256: bd4a258152e66277e663af2a5d7e6fbac0daa2592cfe51d2d3caf1bb644a9c85
 - Phase-3 offline verdict: NO_LIVE_CANDIDATE
 - Live candidates: none
 - Preferred live candidate: none
@@ -82,8 +82,8 @@ Updated: 2026-09-25T05:51:35+10:00
 | 3.6B | complete |
 | 3.6C | complete |
 | 3H | complete |
-| 3.7 | running |
-| 3.8 | complete |
+| 3.7 | complete |
+| 3.8 | blocked |
 | 3.9 | not_started |
 | 3.10 | not_started |
 
@@ -469,35 +469,53 @@ Updated: 2026-09-25T05:51:35+10:00
 
 ## Step 3.7 notes
 
-- Frozen shortlist HEAD: 3915fbb05fe4409418aa9c4293d5a2846cd925ae.
-- Frozen shortlist JSON SHA-256: 23edc0fbba3210aae5da205122be51a806b7be54ab5ca5c590d98de6c931b975.
-- Frozen shortlist Markdown SHA-256: cfaf76ecaa4d8ac462e916b2ccf4de9c8f3666f68532a0594a3e0e2878fb941e.
-- C120 is rejected by the completion-preservation and exhaustion gates.
-- C300 and C600 are rejected by the exhaustion and repeated-wait-burden
-  reduction gates.
-- All three C candidates pass the no-early-exhaustion and evidence-completeness
-  gates.
-- The frozen verdict is NO_LIVE_CANDIDATE; live_candidates is empty and
-  preferred_live_candidate is null.
-- open_evidence_limitations is empty because every offline gate was computable
-  from the frozen corpus and promoted reports.
-- No production budget is declared. Phase-4 targeted live calibration must not
-  start unless a future Phase-3 revision yields at least one passing C
-  candidate.
+- Attempt a2 corrects the gate-population error found after repository
+  verification; thresholds and gate definitions are unchanged.
+- Superseded shortlist JSON SHA-256: 23edc0fbba3210aae5da205122be51a806b7be54ab5ca5c590d98de6c931b975.
+- Corrected shortlist JSON SHA-256: 51db08d70ad8ebfcc46de9e53c661b517b9f3ed41b10579d49057aa395f8d11d.
+- Superseded shortlist Markdown SHA-256: cfaf76ecaa4d8ac462e916b2ccf4de9c8f3666f68532a0594a3e0e2878fb941e.
+- Corrected shortlist Markdown SHA-256: bd4a258152e66277e663af2a5d7e6fbac0daa2592cfe51d2d3caf1bb644a9c85.
+- Gates 1, 2, 3 and 5 now use canonical Phase-1 evidence. Gate 4 uses the
+  available 278-row operational-journal population, with canonical fallback
+  only when operational history is unavailable.
+- C120 before/after: gate 1 88.888889% -> 88.888889%; gate 2 47.766323% ->
+  15.384615%; gate 3 0 -> 0 early exhaustions; gate 4 75.123692% ->
+  75.772057%; gate 5 0 -> 0 missing-evidence records.
+- C300 before/after: gate 1 100.0% -> 100.0%; gate 2 29.209622% -> 0.0%;
+  gate 3 0 -> 0 early exhaustions; gate 4 52.467818% -> 52.927366%;
+  gate 5 0 -> 0 missing-evidence records.
+- C600 before/after: gate 1 100.0% -> 100.0%; gate 2 17.869416% -> 0.0%;
+  gate 3 0 -> 0 early exhaustions; gate 4 29.565116% -> 29.824066%;
+  gate 5 0 -> 0 missing-evidence records.
+- Corrected gate-2 canonical denominators are 13 positive-wait turns for each
+  candidate: C120 exhausts 2/13, C300 0/13 and C600 0/13.
+- Operational exhaustion is diagnostic only: C120 137/278 = 49.280576%,
+  C300 85/278 = 30.57554%, C600 52/278 = 18.705036%. Combined diagnostics
+  preserve the previously reported 47.766323%, 29.209622% and 17.869416%.
+- The corrected verdict remains NO_LIVE_CANDIDATE. C120 fails gates 1 and 2;
+  C300 and C600 fail gate 4 only. live_candidates remains empty and
+  preferred_live_candidate remains null.
+- open_evidence_limitations remains empty and no production budget is declared.
+- Step 3.8 is invalidated only because its Phase-4 input contract embeds the
+  superseded shortlist hash; its live-candidate semantics remain unchanged.
 
 ## Step 3.7 validation
 
-- Promotion validator: PASS, 4/4 reports match the audited revision-2 corpus.
-- Focused report pytest: PASS, 5 tests.
-- Frozen shortlist command rerun: PASS; JSON and Markdown were byte-identical
-  at SHA-256 23edc0fbba3210aae5da205122be51a806b7be54ab5ca5c590d98de6c931b975 and cfaf76ecaa4d8ac462e916b2ccf4de9c8f3666f68532a0594a3e0e2878fb941e.
-- Canonical shortlist validator: PASS, three rejected candidates and zero live
-  candidates.
-- File-scoped pre-commit for the report CLI, renderer helper, focused tests,
-  and shortlist artifacts: PASS.
+- Focused report pytest: PASS, 6 tests including a mixed canonical/operational
+  regression proving gate 2 counts canonical positive-wait turns only.
+- Frozen shortlist command ran twice exactly and produced byte-identical JSON
+  and Markdown at SHA-256 51db08d70ad8ebfcc46de9e53c661b517b9f3ed41b10579d49057aa395f8d11d and bd4a258152e66277e663af2a5d7e6fbac0daa2592cfe51d2d3caf1bb644a9c85.
+- Corrected population validator: PASS. Gates 1/2/3 canonical; gate 4
+  operational-journal; gate 5 canonical; operational and combined exhaustion
+  are diagnostic fields rather than gates.
+- File-scoped pre-commit for the corrected report CLI, population helper,
+  renderer, tests and shortlist artifacts: PASS.
 
 ## Step 3.8 notes
 
+- Step 3.7 attempt a2 changed the shortlist hash from 23edc0fbba3210aae5da205122be51a806b7be54ab5ca5c590d98de6c931b975 to
+  51db08d70ad8ebfcc46de9e53c661b517b9f3ed41b10579d49057aa395f8d11d. The existing Phase-4 input contract still binds the old hash,
+  so Step 3.8 is blocked pending revalidation before Step 3.9.
 - Phase-4 input contract frozen at commit `30be293c8e212f8f1e1c9c80fe000b3e40ccf303` with SHA-256
   `da56f269c247dde80b5327b8e317a8b6fbf2985b45dd98c0264c3ec9a01ddc29`.
 - `live_candidates=[]` and `preferred_live_candidate=null` are copied from the
