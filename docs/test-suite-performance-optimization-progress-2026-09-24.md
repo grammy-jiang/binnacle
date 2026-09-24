@@ -16,7 +16,7 @@
 | 2.4 | Preserve/classify tunnel readiness real-time contract | PASS |
 | 2.5 | Review remaining top-20 long-tail tests | PASS |
 | 2.6 | Real-timing coverage + anti-flake evidence | PASS |
-| 2.7 | Full regression + Phase 2 checkpoint | NOT STARTED |
+| 2.7 | Full regression + Phase 2 checkpoint | PASS |
 | 3.1 | Remove coverage from ordinary compatibility tox environments | NOT STARTED |
 | 3.2 | Make coverage-policy run each test only once | NOT STARTED |
 | 3.3 | Enable xdist for coverage-policy while preserving no_xdist lanes | NOT STARTED |
@@ -1201,3 +1201,83 @@ Risks / follow-up:
 Next:
 
 - 2.7 Phase 2 regression checkpoint
+
+Step: 2.7 Phase 2 regression checkpoint
+Status: PASS
+
+Changed:
+
+- `docs/test-suite-performance-optimization-progress-2026-09-24.md` — marks Step 2.7 PASS and records the Phase 2 regression checkpoint.
+- No test files, production source files, configuration files, or frozen-plan text changed in Step 2.7.
+
+Source snapshot:
+
+- Branch: `design/chat-mode-scheduling-v2`.
+- Exact source commit at step start: `8b745bcc6ce2c0b6c68731f496782a6ad55d3209`.
+- The worktree was clean at step start.
+- The progress table and `git log -8 --oneline --decorate` confirmed Steps 1.1 through 2.6 PASS and Step 2.7 as the next NOT STARTED step.
+- Accumulated Phase 2 diff from the Phase 1 checkpoint contains only `docs/test-suite-performance-optimization-progress-2026-09-24.md`, `tests/integration/conftest.py`, `tests/integration/test_http_workflows.py`, `tests/integration/test_job_telemetry.py`, `tests/integration/test_jobs.py`, `tests/integration/test_jobs_lifecycle.py`, `tests/integration/test_jobs_store.py`, and `tests/unit/core/test_config_loading.py`; `git diff ... -- src` was empty.
+
+Validation:
+
+- Exact focused test commands: none. Step 2.7 is the Phase 2 full regression gate; its frozen actions require the full fast suite, authoritative current coverage-policy, and repository-wide hooks. Timing-sensitive focused/repeated evidence was established in Step 2.6.
+- Exact fast full-lane command:
+  `/usr/bin/time -f "wall=%e user=%U sys=%S cpu=%P maxrss_kb=%M" uv run python scripts/run_test_suite.py --workers 4 --seed 12345`
+  - Parallel-safe lane: 1126 passed, 0 failed, 3 skipped in 27.20 s; lane elapsed 27.75 s.
+  - Ordinary-process lane: 2 passed, 0 failed, 0 skipped, 1129 deselected in 2.82 s; lane elapsed 4.19 s.
+  - Aggregate managed suite: 1128 passed, 0 failed, 3 skipped.
+  - Runner total elapsed: 31.94 s; resolved workers: 4.
+  - Wrapper: `wall=32.01 user=53.54 sys=5.04 cpu=183% maxrss_kb=427216`.
+- Exact authoritative coverage-policy command:
+  `/usr/bin/time -f "wall=%e user=%U sys=%S cpu=%P maxrss_kb=%M" uv run tox -e coverage-policy`
+  - Unit coverage pass: 337 passed, 0 failed, 0 skipped in 17.90 s.
+  - Full coverage pass: 1128 passed, 0 failed, 3 skipped in 89.24 s.
+  - Per-module checker: 93 production modules; 0 below final target; 0 errors.
+  - Tox: `coverage-policy: OK`; tox-reported total 109.92 s.
+  - Wrapper: `wall=110.32 user=56.70 sys=3.99 cpu=55% maxrss_kb=432416`.
+- Mandatory repository hook gate:
+  `uv run pre-commit run --all-files`
+  - Result: PASS; all hooks passed.
+- Production timing defaults were re-verified in source: `JobsSettings.warmup_s=1.0`; `STOP_SIGTERM_GRACE_S=5.0`; tunnel readiness still renders `SECONDS+10` with `sleep 0.2`.
+- Phase 2 timing-sensitive stability evidence from Step 2.6 remains applicable to this unchanged pre-checkpoint source: two 94-test timing-module passes plus five iterations of the five most timing-sensitive boundary tests were all green before this checkpoint, followed here by a green seed-12345 full suite.
+
+Benchmark host/load evidence:
+
+- Before the fast full-suite run: `nproc=4`; `/proc/loadavg = 0.34 0.59 0.58 1/805 811284`.
+- Before the coverage-policy run: `nproc=4`; `/proc/loadavg = 0.85 0.71 0.62 1/806 812807`.
+- Both one-minute loads were below 1.5, so no foreign-load wait was required and neither checkpoint timing is labelled as foreign-load contaminated.
+
+Performance:
+
+- Phase 1 fixed-seed checkpoint context: Step 1.6 recorded `wall=48.85 s` and `wall=46.55 s` for seed-12345 fast-suite runs.
+- Post-Phase-2 checkpoint: `wall=32.01 s` at seed 12345.
+- Relative to the lower Step 1.6 fixed-seed checkpoint value, the Phase 2 checkpoint is 14.54 s lower, about 31.2% faster.
+- This cross-phase comparison intentionally spans source snapshots because Phase 2's purpose was to change test timing; it is checkpoint trend evidence, not a same-source A/B under Section 8.
+- The formal same-source Phase 2 A/B evidence remains the individual optimisation steps, including Step 2.5's fixed-seed fast-runner duration comparison `wall=36.25 s` before versus `wall=32.72 s` after, a 9.7% reduction.
+- Coverage-policy also improved materially versus the older Step 1.1 contextual baseline (`wall=169.81 s` to `wall=110.32 s`), but that is likewise cross-snapshot context rather than a formal same-source A/B.
+
+Findings:
+
+- All Phase 2 exit gates are green: full managed suite, semantic coverage policy, and repository-wide hooks.
+- Production timing defaults are unchanged and the accumulated Phase 2 diff contains no production `src/` changes.
+- The host-safety fixture remained enabled; the full suite completed without host mutation failures.
+- Repeated timing-sensitive tests were already stable in Step 2.6 and the seed-12345 full suite is green at the checkpoint source.
+- Phase 2 retained required real-time contracts for blocking-wall concurrency, subprocess handoff/back-pressure, signal escalation, tunnel readiness, search-stream timeout/reaping, HTTP waits, and selected process/reaper races.
+- No arbitrary sleep was removed in Step 2.7. Earlier Phase 2 removals/reductions were paired with state polling, preserved real waits, or scoped test-only timing overrides as recorded in Steps 2.2–2.6.
+- Production source behaviour changed in Step 2.7: no.
+
+Deviation from Section 5.8 / frozen step:
+
+- None.
+- The two long validation commands were wrapped with `/usr/bin/time` solely to capture the checkpoint wall/CPU/RSS evidence; the required underlying commands, selections, worker count, and seed were unchanged.
+- The initial all-files hook pass was run before updating this progress record; hooks are rerun against the changed record and repository before the checkpoint commit.
+
+Risks / follow-up:
+
+- The remaining long-tail wall time is predominantly intentional real-time contract coverage or compatibility/coverage orchestration overhead. Phase 3 must preserve the Phase 2 test semantics while removing redundant orchestration.
+- Do not broaden the shared short job warm-up beyond explicit integration-module opt-in without new evidence.
+- Do not redesign coverage-policy until Step 3.2; Step 2.7 used the current implementation exactly as required.
+
+Next:
+
+- 3.1 Separate compatibility testing from coverage instrumentation
