@@ -72,7 +72,8 @@
     "origin_proof_of_concept_at_audit": "821cd3addc787a3ec6c6764ebc2327a67de72dd0",
     "phase3_synchronized_baseline": "806a23053043be46f6ba35ad046833168caa904d",
     "phase3_replay_path_head": "9c768800f1e97f9e06d18bd32b173e24d93e82f0",
-    "phase3_scenario_path_head": "7107f142ae6746e17180ae92b4d4be0e6e3957d2"
+    "phase3_scenario_path_head": "7107f142ae6746e17180ae92b4d4be0e6e3957d2",
+    "phase3_corpus_path_head": "3e498a33294708c7fe1996b49e78752d8720523d"
   },
   "frozen_hashes": {
     "phase2_progress_json": "bcfc0413457b00dd935ab5ba5cc11b35d4e3dd3e9c81edd54e429c599f8cc809",
@@ -319,6 +320,7 @@
         "Cherry-pick mapping: 5bf38be3c6570bf9a89bc6f8dc0130c18b1ac6b9 -> f7cdff80326d80a33e925094b64783bd0be4a669; dc7249e91883e55ce862fbfdbd4fb40945cd4fe3 -> 2b5e83c4f8015f3077794dabb9e864a3c4d806b6.",
         "All five integrated worker output SHA-256 values match the verified completion packets.",
         "Frozen phase3-source-inventory.json SHA-256 reverified as 1a147dd0d1632c567d91a4e35e83085ecca062a9f0bcab251b8ccd7a2a62bc9f; inventory includes operational-journal with status available.",
+        "Frozen phase3_corpus_path_head at 3e498a33294708c7fe1996b49e78752d8720523d, the HEAD produced by the Step-3.4A completion progress commit.",
         "No semantic deviation from the Step-3.4A runbook or focused test matrix."
       ],
       "commit": null,
@@ -465,7 +467,7 @@
   ],
   "handoff": null,
   "created_at": "2026-09-25T00:51:02+10:00",
-  "updated_at": "2026-09-25T02:31:25+10:00",
+  "updated_at": "2026-09-25T02:32:23+10:00",
   "orchestrator_state_checkpoint_path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase3/checkpoints/orchestrator-state-initial.json",
   "ready_count": 1,
   "claimed_count": 0,
