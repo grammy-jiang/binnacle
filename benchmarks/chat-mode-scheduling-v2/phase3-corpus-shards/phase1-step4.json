@@ -1,0 +1,308 @@
+{
+  "inventory_sha256": "1a147dd0d1632c567d91a4e35e83085ecca062a9f0bcab251b8ccd7a2a62bc9f",
+  "kind": "phase1-macro-report",
+  "row_count": 12,
+  "rows": [
+    {
+      "arm": "A",
+      "base_turn": "df9f5822-4f92-4df2-a239-294d0dc3bafe",
+      "correct": true,
+      "observed_blocking_wall_s": 14.505,
+      "observed_required_completions": 1,
+      "same_prompt": true,
+      "scenario": "R3",
+      "source_id": "phase1-step4",
+      "source_sha256": "835ad53b639ed53a67bb7731e05cf4075b641449da56d7a5ac267f73b7988d11",
+      "terminal_state": "completed",
+      "trial_id": "r3-20260923T165558-5f6c0ac6cc",
+      "waits": [
+        {
+          "blocking_end_offset_s": 30.294,
+          "blocking_start_offset_s": 15.789,
+          "call_end_offset_s": 30.295,
+          "call_start_offset_s": 15.789,
+          "job_exit_offset_s": 30.037,
+          "job_id_hash": "d8716f35b559e7ed6e13ea680c2f9e6a4883ac62b20e6343d4da5db530c0ee3f",
+          "node_id": "validation_result",
+          "observed_completion": true,
+          "requested_wait_s": 50.0,
+          "required_completion": true,
+          "state": "exited",
+          "wait_index": 1,
+          "waited_s": 14.505
+        }
+      ]
+    },
+    {
+      "arm": "B",
+      "base_turn": "b66a2341-ff33-46e9-8846-5f166e3e262c",
+      "correct": true,
+      "observed_blocking_wall_s": 16.51,
+      "observed_required_completions": 1,
+      "same_prompt": true,
+      "scenario": "R3",
+      "source_id": "phase1-step4",
+      "source_sha256": "835ad53b639ed53a67bb7731e05cf4075b641449da56d7a5ac267f73b7988d11",
+      "terminal_state": "completed",
+      "trial_id": "r3-20260923T170014-f2ea2e57b0",
+      "waits": [
+        {
+          "blocking_end_offset_s": 30.388,
+          "blocking_start_offset_s": 13.878,
+          "call_end_offset_s": 30.39,
+          "call_start_offset_s": 13.878,
+          "job_exit_offset_s": 30.024,
+          "job_id_hash": "022baa1bc30c498c81b170ec7950bd665db4dd2ffb8df40dbd1b43f0c90e268a",
+          "node_id": "validation_result",
+          "observed_completion": true,
+          "requested_wait_s": 50.0,
+          "required_completion": true,
+          "state": "exited",
+          "wait_index": 1,
+          "waited_s": 16.51
+        }
+      ]
+    },
+    {
+      "arm": "B",
+      "base_turn": "trial",
+      "correct": false,
+      "observed_blocking_wall_s": 0,
+      "observed_required_completions": 0,
+      "same_prompt": false,
+      "scenario": "R3",
+      "source_id": "phase1-step4",
+      "source_sha256": "835ad53b639ed53a67bb7731e05cf4075b641449da56d7a5ac267f73b7988d11",
+      "terminal_state": "failed",
+      "trial_id": "r3-20260923T170222-993f7b7f2c",
+      "waits": []
+    },
+    {
+      "arm": "A",
+      "base_turn": "05efc11b-115c-4fe4-992b-5d5d14c0a6b5",
+      "correct": true,
+      "observed_blocking_wall_s": 14.511,
+      "observed_required_completions": 1,
+      "same_prompt": true,
+      "scenario": "R3",
+      "source_id": "phase1-step4",
+      "source_sha256": "835ad53b639ed53a67bb7731e05cf4075b641449da56d7a5ac267f73b7988d11",
+      "terminal_state": "completed",
+      "trial_id": "r3-20260923T170514-349ca3f042",
+      "waits": [
+        {
+          "blocking_end_offset_s": 30.322,
+          "blocking_start_offset_s": 15.811,
+          "call_end_offset_s": 30.324,
+          "call_start_offset_s": 15.811,
+          "job_exit_offset_s": 30.037,
+          "job_id_hash": "5d83d96abf809788e2b15a8247ec8a3c1fbcaf317972b30e33ac4ae5ccad26f7",
+          "node_id": "validation_result",
+          "observed_completion": true,
+          "requested_wait_s": 50.0,
+          "required_completion": true,
+          "state": "exited",
+          "wait_index": 1,
+          "waited_s": 14.511
+        }
+      ]
+    },
+    {
+      "arm": "A",
+      "base_turn": "trial",
+      "correct": false,
+      "observed_blocking_wall_s": 0,
+      "observed_required_completions": 0,
+      "same_prompt": false,
+      "scenario": "R3",
+      "source_id": "phase1-step4",
+      "source_sha256": "835ad53b639ed53a67bb7731e05cf4075b641449da56d7a5ac267f73b7988d11",
+      "terminal_state": "completed",
+      "trial_id": "r3-20260923T170718-83a5983ce3",
+      "waits": []
+    },
+    {
+      "arm": "B",
+      "base_turn": "2c49e265-4348-4b4b-90a9-a6dbf8170273",
+      "correct": true,
+      "observed_blocking_wall_s": 12.005,
+      "observed_required_completions": 1,
+      "same_prompt": true,
+      "scenario": "R3",
+      "source_id": "phase1-step4",
+      "source_sha256": "835ad53b639ed53a67bb7731e05cf4075b641449da56d7a5ac267f73b7988d11",
+      "terminal_state": "completed",
+      "trial_id": "r3-20260923T171043-867bec433f",
+      "waits": [
+        {
+          "blocking_end_offset_s": 30.095,
+          "blocking_start_offset_s": 18.09,
+          "call_end_offset_s": 30.097,
+          "call_start_offset_s": 18.09,
+          "job_exit_offset_s": 30.037,
+          "job_id_hash": "0403197542cc9ee879f89fa41a5047d4abb927b39d7769193867da1b4195972e",
+          "node_id": "validation_result",
+          "observed_completion": true,
+          "requested_wait_s": 50.0,
+          "required_completion": true,
+          "state": "exited",
+          "wait_index": 1,
+          "waited_s": 12.005
+        }
+      ]
+    },
+    {
+      "arm": "B",
+      "base_turn": "trial",
+      "correct": false,
+      "observed_blocking_wall_s": 0,
+      "observed_required_completions": 0,
+      "same_prompt": false,
+      "scenario": "R5",
+      "source_id": "phase1-step4",
+      "source_sha256": "835ad53b639ed53a67bb7731e05cf4075b641449da56d7a5ac267f73b7988d11",
+      "terminal_state": "failed",
+      "trial_id": "r5-20260923T171218-8b86263319",
+      "waits": []
+    },
+    {
+      "arm": "A",
+      "base_turn": "dab7e173-ff2f-4ac7-b3fa-6be47058f9aa",
+      "correct": true,
+      "observed_blocking_wall_s": 23.524,
+      "observed_required_completions": 1,
+      "same_prompt": true,
+      "scenario": "R5",
+      "source_id": "phase1-step4",
+      "source_sha256": "835ad53b639ed53a67bb7731e05cf4075b641449da56d7a5ac267f73b7988d11",
+      "terminal_state": "completed",
+      "trial_id": "r5-20260923T171626-8943400707",
+      "waits": [
+        {
+          "blocking_end_offset_s": 25.458,
+          "blocking_start_offset_s": 1.934,
+          "call_end_offset_s": 25.459,
+          "call_start_offset_s": 1.934,
+          "job_exit_offset_s": 25.033,
+          "job_id_hash": "81e84f3641e61391412e00d938b495392fefecbf8a35646e3d7b7058343603f4",
+          "node_id": "wait_result",
+          "observed_completion": true,
+          "requested_wait_s": 50.0,
+          "required_completion": true,
+          "state": "exited",
+          "wait_index": 1,
+          "waited_s": 23.524
+        }
+      ]
+    },
+    {
+      "arm": "A",
+      "base_turn": "a12681bd-d493-4977-a6dc-6821ae59bd9a",
+      "correct": true,
+      "observed_blocking_wall_s": 23.52,
+      "observed_required_completions": 1,
+      "same_prompt": true,
+      "scenario": "R5",
+      "source_id": "phase1-step4",
+      "source_sha256": "835ad53b639ed53a67bb7731e05cf4075b641449da56d7a5ac267f73b7988d11",
+      "terminal_state": "completed",
+      "trial_id": "r5-20260923T171751-150174d991",
+      "waits": [
+        {
+          "blocking_end_offset_s": 25.351,
+          "blocking_start_offset_s": 1.831,
+          "call_end_offset_s": 25.354,
+          "call_start_offset_s": 1.831,
+          "job_exit_offset_s": 25.033,
+          "job_id_hash": "4e9b3011d601fbe728e648597473c4c4112804aec387e6ca6d97f18d3befef57",
+          "node_id": "wait_result",
+          "observed_completion": true,
+          "requested_wait_s": 50.0,
+          "required_completion": true,
+          "state": "exited",
+          "wait_index": 1,
+          "waited_s": 23.52
+        }
+      ]
+    },
+    {
+      "arm": "B",
+      "base_turn": "8de6e16b-ba44-4a24-ac21-f04eada179e0",
+      "correct": true,
+      "observed_blocking_wall_s": 21.516,
+      "observed_required_completions": 1,
+      "same_prompt": true,
+      "scenario": "R5",
+      "source_id": "phase1-step4",
+      "source_sha256": "835ad53b639ed53a67bb7731e05cf4075b641449da56d7a5ac267f73b7988d11",
+      "terminal_state": "completed",
+      "trial_id": "r5-20260923T172045-62e44edbe4",
+      "waits": [
+        {
+          "blocking_end_offset_s": 25.442,
+          "blocking_start_offset_s": 3.926,
+          "call_end_offset_s": 25.445,
+          "call_start_offset_s": 3.926,
+          "job_exit_offset_s": 25.043,
+          "job_id_hash": "d7530ef8b8a84c9faae27b8e95a315db88f1e474d53499defe6125d248b2f864",
+          "node_id": "wait_result",
+          "observed_completion": true,
+          "requested_wait_s": 50.0,
+          "required_completion": true,
+          "state": "exited",
+          "wait_index": 1,
+          "waited_s": 21.516
+        }
+      ]
+    },
+    {
+      "arm": "B",
+      "base_turn": "c3072e6e-a23e-4fa9-bd49-f897fe518402",
+      "correct": true,
+      "observed_blocking_wall_s": 23.52,
+      "observed_required_completions": 1,
+      "same_prompt": true,
+      "scenario": "R5",
+      "source_id": "phase1-step4",
+      "source_sha256": "835ad53b639ed53a67bb7731e05cf4075b641449da56d7a5ac267f73b7988d11",
+      "terminal_state": "completed",
+      "trial_id": "r5-20260923T172519-0cee94f978",
+      "waits": [
+        {
+          "blocking_end_offset_s": 25.429,
+          "blocking_start_offset_s": 1.909,
+          "call_end_offset_s": 25.43,
+          "call_start_offset_s": 1.909,
+          "job_exit_offset_s": 25.028,
+          "job_id_hash": "da651058919602e4ac639d1b5722ed07cc3245be78a30186ae5322515e55b20c",
+          "node_id": "wait_result",
+          "observed_completion": true,
+          "requested_wait_s": 50.0,
+          "required_completion": true,
+          "state": "exited",
+          "wait_index": 1,
+          "waited_s": 23.52
+        }
+      ]
+    },
+    {
+      "arm": "A",
+      "base_turn": "trial",
+      "correct": false,
+      "observed_blocking_wall_s": 0,
+      "observed_required_completions": 0,
+      "same_prompt": false,
+      "scenario": "R5",
+      "source_id": "phase1-step4",
+      "source_sha256": "835ad53b639ed53a67bb7731e05cf4075b641449da56d7a5ac267f73b7988d11",
+      "terminal_state": "failed",
+      "trial_id": "r5-20260923T172700-fab3c30167",
+      "waits": []
+    }
+  ],
+  "schema_version": 1,
+  "source_id": "phase1-step4",
+  "source_sha256": "835ad53b639ed53a67bb7731e05cf4075b641449da56d7a5ac267f73b7988d11",
+  "status": "available",
+  "trial_count": 12
+}
