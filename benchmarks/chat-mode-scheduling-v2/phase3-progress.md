@@ -2,15 +2,15 @@
 
 Status: IN PROGRESS
 
-Updated: 2026-09-25T01:12:11+10:00
+Updated: 2026-09-25T01:38:45+10:00
 
 ## Canonical state
 
 - Branch: feature/chat-mode-scheduling-v2-phase3
 - Worktree: /home/grammy-jiang/Projects/binnacle-chat-scheduling-phase3
 - Audited source HEAD: 5f2be143352aaa63fb680c1c79e289d46be201fe
-- Last completed step: 3.1
-- Next step: 3.2
+- Last completed step: 3.2
+- Next step: 3.3A/B/C/D implementation frontier
 - Dependency audit: phase3-dependency-audit-2026-09-25-r01.json, r01, SHA-256 d3bec25ba8d49ed4db78e07930542b9e963608ad264c198f8fbf04c4ccfa473a
 - Task graph: phase3-task-graph.json, r01, SHA-256 44cbedb0524fe87a9d111579a96d0d33f4171dfee6ece34eb53baa4c506696b2
 - Initial orchestrator-state checkpoint SHA-256: cec108b23fcf319a48d699f123b8fbf713919f3873d1cae4968a16844b80ed12
@@ -27,7 +27,7 @@ Updated: 2026-09-25T01:12:11+10:00
 | --- | --- |
 | 3.0 | complete |
 | 3.1 | complete |
-| 3.2 | not_started |
+| 3.2 | complete |
 | 3.3A | not_started |
 | 3.3B | not_started |
 | 3.3C | not_started |
@@ -93,3 +93,32 @@ Updated: 2026-09-25T01:12:11+10:00
 - Pre-run host snapshot: 4 cores; load average 0.40 0.63 0.52.
 - Production isolation check after the smoke: PASS at
   2026-09-25T01:10:16+10:00.
+
+## Step 3.2 notes
+
+- All six mandatory Phase-1 macro report SHA-256 values match the Step-1.9
+  aggregate authority.
+- Canonical submitted population is frozen at 48 slots = 24 A + 24 B; no
+  submitted failure was dropped.
+- All 48 canonical state/evidence directories exist and all 48 normalized
+  traces retain the raw timing/state fields required for replay. The corpus
+  contains 32 positive `job_status` calls across 13 trials.
+- Observed valid-completion subset: 39 trials = 21 A + 18 B.
+- Operational source `operational-journal` is available with 4073 retained
+  `job_status_timing` lines from short-unix 1789777318.789691 through
+  1790263827.324505.
+- `phase3-source-inventory.json` SHA-256: `1a147dd0d1632c567d91a4e35e83085ecca062a9f0bcab251b8ccd7a2a62bc9f`.
+- `phase3-source-inventory.md` SHA-256: `4a8046cdd0227c81ba5a50412377027e239a291f80f95b0b40783bf32bbd6191`.
+- Empty/header `phase3-replay-corpus.json` contract SHA-256: `54841770dc38fb50160562278beb52770a25c88ab46df7f0a9466201933fe1c7`.
+- Replay schema version 1 freezes 12 turn fields, 13 wait fields, exact
+  Section-14.5 output names, C120/C300/C600 cumulative-union semantics, H10,
+  completion preservation, hashed job ids, and the no-conversation-prose rule.
+
+## Step 3.2 validation
+
+- Integrity validator: PASS — 6 canonical source reports; 48 trials = 24 A +
+  24 B; 48/48 raw replay evidence present; 32 positive waits; 39 valid
+  completions; operational journal available; fixture has zero rows.
+- JSON syntax checks for source inventory and replay-corpus fixture: PASS.
+- Focused test matrix: no dedicated Step-3.2 pytest target.
+- File-scoped pre-commit on all Step-3.2 Git outputs: PASS.
