@@ -982,6 +982,9 @@ A command exit code != 0 is a normal command outcome, not a `run_command` tool e
 
 ## Phase 5 — Evidence-driven policy evaluation and tuning
 
+Detailed Phase-5 design and cold-start execution plan:
+`docs/run-command-observability-phase5-design-2026-09-24.md`.
+
 **Objective:** use the now-correct telemetry to decide whether policy behavior should
 change. This phase must not be bundled blindly into the observability implementation.
 
