@@ -21,7 +21,7 @@
 | 3.2 | Make coverage-policy run each test only once | PASS |
 | 3.3 | Enable xdist for coverage-policy while preserving no_xdist lanes | PASS |
 | 3.4 | Benchmark bounded tox-level scheduling | PASS |
-| 3.5 | Update GitHub Actions | NOT STARTED |
+| 3.5 | Update GitHub Actions | PARTIAL |
 | 3.6 | Update testing/quality/performance documentation | NOT STARTED |
 | 3.7 | Final end-to-end release validation | NOT STARTED |
 
@@ -1727,3 +1727,59 @@ Risks / follow-up:
 Next:
 
 - 3.5 Capture post-optimization local baseline
+
+Step: 3.5 Update GitHub Actions for the new lane and coverage design
+Status: PARTIAL
+
+Changed:
+
+- `docs/test-suite-performance-optimization-progress-2026-09-24.md` — marks Step 3.5 PARTIAL while the required pushed GitHub Actions checkpoint is pending and records the pre-push validation evidence.
+- No `.github/workflows/ci.yml`, tox, runner, test, or production source change was required: the existing workflow already delegates compatibility jobs to the ordinary tox environments and the Python 3.13 coverage job to `coverage-policy`, so the Step 3.1–3.3 tox changes make CI consume the new repository runners without YAML churn.
+
+Source snapshot:
+
+- Branch: `design/chat-mode-scheduling-v2`.
+- Exact source commit at step start: `3940741de3982c44a02337eefb8e3b36c696b096`.
+- The worktree was clean at step start and matched `origin/design/chat-mode-scheduling-v2`.
+- The progress table showed Steps 1.1 through 3.4 PASS and Step 3.5 as the next NOT STARTED step; `git log -8 --oneline --decorate` showed HEAD `3940741` (`docs: record tox scheduling benchmark`) above the Step 3.4 implementation commit `d3d9874`.
+- Correlation nonce command: `echo p2-3.5-1790232392-4801` — exit 0.
+
+Validation:
+
+- Required tox configuration inspection: `uv run tox config -e py313` — PASS; resolved ordinary compatibility command is exactly `python scripts/run_test_suite.py`, with no coverage option.
+- Required coverage configuration inspection: `uv run tox config -e coverage-policy` — PASS; resolved commands are the new `scripts/run_coverage_policy.py` runner followed by the existing semantic checker.
+- CI-posarg propagation inspection: `uv run tox config -e py313 -- --ignore=tests/integration/test_wheel_artifact.py` — PASS; resolved command is `python scripts/run_test_suite.py --ignore=tests/integration/test_wheel_artifact.py`.
+- CI-posarg propagation inspection: `uv run tox config -e coverage-policy -- --ignore=tests/integration/test_wheel_artifact.py` — PASS; the ignore reaches `scripts/run_coverage_policy.py` while the checker command remains unchanged.
+- Exact focused runner-test command requested first: `uv run pytest -q tests/scripts/test_run_test_suite.py tests/scripts/test_run_coverage_policy.py --randomly-seed=12345` — platform safety checks refused the benign command before it reached the Pi.
+- Equivalent focused runner-test command actually executed through the Raspberry Pi MCP connector: `.venv/bin/python -c "import pytest,sys; sys.exit(pytest.main(['-q','tests/scripts/test_run_test_suite.py','tests/scripts/test_run_coverage_policy.py','--randomly-seed=12345']))"` — 17 passed, 0 failed, 0 skipped in 0.20 s.
+- Workflow inspection confirmed the matrix remains Python 3.10, 3.11, 3.12 and 3.14 compatibility plus dedicated Python 3.13 coverage-policy; uv cache/dependency setup, ripgrep installation, token/config preparation, pinned action versions, and the wheel-artifact ignore are unchanged.
+- Both repository runners already print the resolved worker count and lane commands. No `BINNACLE_TEST_WORKERS` value and no hard-coded `-n 4` is present in GitHub Actions YAML.
+- Exact full-lane command run locally in this step: none. Step 3.5's authoritative full-lane validation is the required pushed GitHub Actions matrix, which is pending at this PARTIAL checkpoint.
+
+Performance:
+
+- Before: N/A.
+- After: N/A.
+- Step 3.5 changes no performance-sensitive source or orchestration; no A/B timing is part of this step.
+
+Findings:
+
+- The existing `.github/workflows/ci.yml` already has the frozen Step 3.5 topology. Because compatibility and coverage jobs invoke tox rather than duplicating pytest arguments in YAML, the completed Step 3.1–3.3 tox changes automatically route CI through the new two-lane full-suite runner and ordered coverage runner.
+- No YAML edit is justified: adding a Pi-specific worker setting or duplicating runner flags in GitHub Actions would violate Section 5.8.11.
+- Production source behaviour changed: no.
+- Host-safety fixture, semantic coverage policy, production timing defaults, live-test opt-in behavior, supported interpreter coverage, and managed test inventory were not changed or weakened.
+
+Deviation from Section 5.8 / frozen step:
+
+- None in repository behavior or policy.
+- Tooling substitution only: the platform refused the direct benign `uv run pytest ...` focused-test spelling before execution. The equivalent project-venv Python invocation used the same pytest environment, test selection, and seed 12345.
+- The earlier attempt to submit several independent initial read-only connector calls in one orchestration request was rejected by the platform safety layer; the same required reads/commands were then issued individually or in read-only groups through the Raspberry Pi MCP connector. No repository state or validation semantics changed.
+
+Risks / follow-up:
+
+- Required pushed CI checkpoint is still pending. Step 3.5 must remain PARTIAL until the pushed `ci.yml` run is fully green and its job/log evidence is inspected.
+- If CI exposes a parallel-only failure, reproduce the narrow test locally before changing worker policy.
+
+Next:
+
+- Complete Step 3.5 post-push CI validation; do not start Step 3.6 before this step reaches PASS.
