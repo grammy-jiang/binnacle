@@ -2,15 +2,15 @@
 
 Status: IN PROGRESS
 
-Updated: 2026-09-25T03:28:42+10:00
+Updated: 2026-09-25T03:38:02+10:00
 
 ## Canonical state
 
 - Branch: feature/chat-mode-scheduling-v2-phase3
 - Worktree: /home/grammy-jiang/Projects/binnacle-chat-scheduling-phase3
 - Audited source HEAD: 5f2be143352aaa63fb680c1c79e289d46be201fe
-- Last completed step: 3.4A
-- Next step: 3.5M integrate source shards and freeze replay corpus
+- Last completed step: 3.5M
+- Next step: 3.5A aggregate audit + 3.6A/B/C + 3H speculative replay frontier
 - Dependency audit: phase3-dependency-audit-2026-09-25-r01.json, r01, SHA-256 d3bec25ba8d49ed4db78e07930542b9e963608ad264c198f8fbf04c4ccfa473a
 - Task graph: phase3-task-graph.json, r01, SHA-256 44cbedb0524fe87a9d111579a96d0d33f4171dfee6ece34eb53baa4c506696b2
 - Initial orchestrator-state checkpoint SHA-256: cec108b23fcf319a48d699f123b8fbf713919f3873d1cae4968a16844b80ed12
@@ -18,6 +18,8 @@ Updated: 2026-09-25T03:28:42+10:00
 - Frozen replay path HEAD: 9c768800f1e97f9e06d18bd32b173e24d93e82f0
 - Frozen scenario path HEAD: 7107f142ae6746e17180ae92b4d4be0e6e3957d2
 - Frozen corpus path HEAD: 3e498a33294708c7fe1996b49e78752d8720523d
+- Frozen replay corpus SHA-256: c2c2809abde13c7b697e3a8c3e91a547fe68bbd83fdbd816c611b3f0e94808de
+- Replay corpus report SHA-256: b45934afec305a6575fa67e70fbc19407b7e0cfaf0fbab756b53d9571cd13888
 - Production baseline re-observed: 2026-09-25T01:10:16+10:00
 
 ## Deviation
@@ -38,7 +40,14 @@ Updated: 2026-09-25T03:28:42+10:00
 | 3.4A | complete |
 | 3.4B | complete |
 | 3.4C | complete |
-| 3.5M | running |
+| 3.5M | complete |
+| p3-source-phase1-step3 | complete |
+| p3-source-phase1-step4 | complete |
+| p3-source-phase1-step5 | complete |
+| p3-source-phase1-step6 | complete |
+| p3-source-phase1-step7 | complete |
+| p3-source-phase1-step8 | complete |
+| p3-source-operational-journal | complete |
 | 3.5A | not_started |
 | 3.6A | not_started |
 | 3.6B | not_started |
@@ -255,3 +264,66 @@ Updated: 2026-09-25T03:28:42+10:00
   real 2.99s.
 - Pre-run host snapshot: 4 cores; load average 1.37 0.82 0.74.
 - Timing was measured under foreign parallel-programme load.
+
+## Step 3.5M notes
+
+- Every source worker completion packet was re-read through `statecat.sh`; all
+  seven workers were based at frozen `phase3_corpus_path_head`
+  `3e498a33294708c7fe1996b49e78752d8720523d`, and all shard hashes match the
+  worker packets.
+- Source shards were cherry-picked in deterministic source-id order:
+  `phase1-step3`, `phase1-step4`, `phase1-step5`, `phase1-step6`,
+  `phase1-step7`, `phase1-step8`, then `operational-journal`.
+- Already-verified per-source audits for `phase1-step3`, `phase1-step4`,
+  `phase1-step5`, and `phase1-step7` were also integrated. The remaining
+  per-source audits continue independently under Step 3.5A.
+- Frozen replay corpus SHA-256:
+  `c2c2809abde13c7b697e3a8c3e91a547fe68bbd83fdbd816c611b3f0e94808de`.
+- Frozen replay corpus report SHA-256:
+  `b45934afec305a6575fa67e70fbc19407b7e0cfaf0fbab756b53d9571cd13888`.
+- Canonical submitted population is 48 = 24 A + 24 B in the Phase-1 reports,
+  frozen inventory, and merged corpus. Raw terminal states are 38 completed and
+  10 failed; all 10 submitted failures are preserved.
+- All 32 positive-request wait records match raw `result.waited_s`, with zero
+  mismatches. Two have zero observed duration and 22 differ from the requested
+  duration.
+- The raw-trace union calculation reproduces all 48 Phase-1
+  `blocking_wall_s` metrics and all 13 positive-wait turn unions with zero
+  mismatches. The canonical population contains no overlapping positive-wait
+  intervals, so no real overlapping canonical trace sample exists beyond the
+  same union calculation.
+- The operational journal retention limitation is explicit: frozen window
+  2026-09-19T10:21:58.789691+10:00 through
+  2026-09-25T01:30:27.324505+10:00 expected 4,073
+  `job_status_timing` lines, but 4,045 remained at extraction. The explicit
+  unavailable shard records
+  `frozen_window_line_count_mismatch_4073_4045`; no rows were synthesized.
+- No production configuration, service, or production checkout was modified.
+
+## Step 3.5M validation
+
+- Frozen merge CLI executed twice: PASS; JSON and Markdown were byte-identical.
+- Independent corpus invariant validator: PASS; 48 trials, 24 A + 24 B,
+  10 submitted failures retained, 32 actual-wait comparisons, 48 report-union
+  comparisons, and 13 positive-wait turn-union comparisons all matched.
+- `uv run pytest -q tests/scripts/test_chat_scheduling_replay_corpus.py`: PASS,
+  11 passed in 0.23s; run-command runtime 0.816s.
+- Pre-run host snapshot for pytest: 4 cores; load average 2.88 2.10 1.41.
+- Timing was measured under foreign parallel-programme load.
+
+## Source-shard worker notes
+
+- `p3-source-phase1-step3`: worker `228dfba924eba6d9b73729a02dd21cb2e452b9e8` on
+  `feature/chat-mode-scheduling-v2-phase3-source-phase1-step3` integrated as canonical cherry-pick `f285261`; shard SHA-256 `6c1a6bf8df81bd3a68e697d3cfae9927fba4fec3c569ce27b71eefe134aed118`.
+- `p3-source-phase1-step4`: worker `31b554833d40c5704627a5e0c6afcdeb2d20d20c` on
+  `feature/chat-mode-scheduling-v2-phase3-source-phase1-step4` integrated as canonical cherry-pick `4e1f1ff`; shard SHA-256 `332a8a6c449d48b617a752f9a1a8244497eddd1853ea59c9fe7586fa984ec9e1`.
+- `p3-source-phase1-step5`: worker `7f6b7a82d6562bc395e4cf5e443d572f8ae582bd` on
+  `feature/chat-mode-scheduling-v2-phase3-source-phase1-step5` integrated as canonical cherry-pick `f080a2e`; shard SHA-256 `f2f3b655d809efef8b0d059c6cb07c809b18bfd4b16034cf226a67403ee12685`.
+- `p3-source-phase1-step6`: worker `981db98beb299d05de5d83e41b7365dc43bb8f27` on
+  `feature/chat-mode-scheduling-v2-phase3-source-phase1-step6` integrated as canonical cherry-pick `d528fbd`; shard SHA-256 `4c8f7a23d025730f90a87a9f746f517c7801b8f6a73f3caed83d103e355ad19a`.
+- `p3-source-phase1-step7`: worker `2167fb1c18c99c85dec08633d75bacabafba6177` on
+  `feature/chat-mode-scheduling-v2-phase3-source-phase1-step7` integrated as canonical cherry-pick `4c80548`; shard SHA-256 `98fbab4cc39735db0e2fa9b1079c5a7a74841e53748edcaff7da4501e338fed3`.
+- `p3-source-phase1-step8`: worker `d2c89b8f858565731ca77696ff3fce490c320d37` on
+  `feature/chat-mode-scheduling-v2-phase3-source-phase1-step8` integrated as canonical cherry-pick `53f2855`; shard SHA-256 `be0b57741415bccd2676e1dc7914beaf50b1a887983819cda22c5698f933ff40`.
+- `p3-source-operational-journal`: worker `809b7156de2112477deeb873507a89afd35585a2` on
+  `feature/chat-mode-scheduling-v2-phase3-source-operational-journal` integrated as canonical cherry-pick `5a6a5a2`; shard SHA-256 `f1124faced67d51e9ea30311f9dea25e17bd2f82d2c2e0a3cdbb4842de080bbe`.
