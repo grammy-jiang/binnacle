@@ -2,15 +2,15 @@
 
 Status: IN PROGRESS
 
-Updated: 2026-09-25T02:29:18+10:00
+Updated: 2026-09-25T02:31:25+10:00
 
 ## Canonical state
 
 - Branch: feature/chat-mode-scheduling-v2-phase3
 - Worktree: /home/grammy-jiang/Projects/binnacle-chat-scheduling-phase3
 - Audited source HEAD: 5f2be143352aaa63fb680c1c79e289d46be201fe
-- Last completed step: 3.4C
-- Next step: 3.4A integration frontier
+- Last completed step: 3.4A
+- Next step: 3.5 source-shard extraction fan-out
 - Dependency audit: phase3-dependency-audit-2026-09-25-r01.json, r01, SHA-256 d3bec25ba8d49ed4db78e07930542b9e963608ad264c198f8fbf04c4ccfa473a
 - Task graph: phase3-task-graph.json, r01, SHA-256 44cbedb0524fe87a9d111579a96d0d33f4171dfee6ece34eb53baa4c506696b2
 - Initial orchestrator-state checkpoint SHA-256: cec108b23fcf319a48d699f123b8fbf713919f3873d1cae4968a16844b80ed12
@@ -30,11 +30,11 @@ Updated: 2026-09-25T02:29:18+10:00
 | 3.0 | complete |
 | 3.1 | complete |
 | 3.2 | complete |
-| 3.3A | not_started |
+| 3.3A | complete |
 | 3.3B | complete |
 | 3.3C | complete |
-| 3.3D | not_started |
-| 3.4A | running |
+| 3.3D | complete |
+| 3.4A | complete |
 | 3.4B | complete |
 | 3.4C | complete |
 | 3.5M | not_started |
@@ -125,6 +125,22 @@ Updated: 2026-09-25T02:29:18+10:00
 - Focused test matrix: no dedicated Step-3.2 pytest target.
 - File-scoped pre-commit on all Step-3.2 Git outputs: PASS.
 
+## Step 3.3A notes
+
+- Corpus-extractor worker completion packet 3.3A--a1 matches the assignment
+  evidence for commit 5bf38be3c6570bf9a89bc6f8dc0130c18b1ac6b9 on
+  feature/chat-mode-scheduling-v2-phase3-corpus.
+- Integrated worker output hashes match the completion packet:
+  scripts/chat_scheduling_replay_corpus.py
+  98fe885409bc2a23aa0e7f5ff731e53fe5696795c920d3dce605d0901db5d6a4
+  and tests/scripts/test_chat_scheduling_replay_corpus.py
+  0d888d5204c74023d913afedcf563c2721a429a15a2eecd8beb247477acf7129.
+
+## Step 3.3A validation
+
+- uv run pytest -q tests/scripts/test_chat_scheduling_replay_corpus.py: PASS
+  in the worker worktree, 11 passed in 0.31s.
+
 ## Step 3.3B notes
 
 - Replay-engine worker completion packet 3.3B--a1 matches the assignment
@@ -154,6 +170,48 @@ Updated: 2026-09-25T02:29:18+10:00
 - uv run pytest -q tests/scripts/test_chat_scheduling_manifest.py
   tests/scripts/test_chat_scheduling_oracle.py: PASS in the worker worktree,
   26 passed in 1.65s.
+
+## Step 3.3D notes
+
+- Provenance/evidence worker completion packet 3.3D--a1 matches the assignment
+  evidence for commit dc7249e91883e55ce862fbfdbd4fb40945cd4fe3 on
+  feature/chat-mode-scheduling-v2-phase3-provenance.
+- All three worker output SHA-256 values match the canonical integrated files
+  after cherry-pick.
+
+## Step 3.3D validation
+
+- uv run pytest -q tests/scripts/test_chat_scheduling_provenance.py
+  tests/scripts/test_chat_scheduling_analyzer.py
+  tests/scripts/test_chat_scheduling_evidence.py: PASS in the worker worktree,
+  25 passed in 1.42s.
+
+## Step 3.4A notes
+
+- Integrated 3.3A then 3.3D by deterministic cherry-pick because both worker
+  commits were based at f01dc93c3aa015d8932f58c9c5233cdb1cb3f361 while
+  canonical HEAD had already advanced through Steps 3.4B and 3.4C.
+- Cherry-pick mapping:
+  5bf38be3c6570bf9a89bc6f8dc0130c18b1ac6b9 to
+  f7cdff80326d80a33e925094b64783bd0be4a669, then
+  dc7249e91883e55ce862fbfdbd4fb40945cd4fe3 to
+  2b5e83c4f8015f3077794dabb9e864a3c4d806b6.
+- All five integrated worker output SHA-256 values match the verified
+  completion packets.
+- Frozen phase3-source-inventory.json SHA-256 reverified as
+  1a147dd0d1632c567d91a4e35e83085ecca062a9f0bcab251b8ccd7a2a62bc9f;
+  the inventory includes operational-journal with status available.
+- No semantic deviation from the Step-3.4A runbook or focused test matrix.
+
+## Step 3.4A validation
+
+- uv run pytest -q tests/scripts/test_chat_scheduling_replay_corpus.py
+  tests/scripts/test_chat_scheduling_provenance.py
+  tests/scripts/test_chat_scheduling_analyzer.py
+  tests/scripts/test_chat_scheduling_harness.py: PASS, 54 passed in 1.73s;
+  run-command runtime 2.713s.
+- Pre-run host snapshot: 4 cores; load average 0.32 0.50 0.61.
+- Timing was measured under foreign parallel-programme load.
 
 ## Step 3.4B notes
 

@@ -6,8 +6,8 @@
   "worktree": "/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase3",
   "source_branch": "feature/chat-mode-blocking-wall-guard",
   "audited_source_head": "5f2be143352aaa63fb680c1c79e289d46be201fe",
-  "last_completed_step": "3.4C",
-  "next_step": "3.4A integration frontier",
+  "last_completed_step": "3.4A",
+  "next_step": "3.5 source-shard extraction fan-out",
   "dependency_audit": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase3-dependency-audit-2026-09-25-r01.json",
     "revision": "r01",
@@ -262,11 +262,16 @@
       "worker_branch": null
     },
     "3.3A": {
-      "status": "not_started",
-      "tests": [],
-      "notes": [],
-      "commit": null,
-      "worker_branch": null
+      "status": "complete",
+      "tests": [
+        "uv run pytest -q tests/scripts/test_chat_scheduling_replay_corpus.py -> PASS: 11 passed in 0.31s (worker validation)"
+      ],
+      "notes": [
+        "Corpus-extractor worker completion packet 3.3A--a1 verified against assignment evidence.",
+        "Worker output hashes match the integrated files: scripts/chat_scheduling_replay_corpus.py 98fe885409bc2a23aa0e7f5ff731e53fe5696795c920d3dce605d0901db5d6a4; tests/scripts/test_chat_scheduling_replay_corpus.py 0d888d5204c74023d913afedcf563c2721a429a15a2eecd8beb247477acf7129."
+      ],
+      "commit": "5bf38be3c6570bf9a89bc6f8dc0130c18b1ac6b9",
+      "worker_branch": "feature/chat-mode-scheduling-v2-phase3-corpus"
     },
     "3.3B": {
       "status": "complete",
@@ -293,16 +298,29 @@
       "worker_branch": "feature/chat-mode-scheduling-v2-phase3-scenarios"
     },
     "3.3D": {
-      "status": "not_started",
-      "tests": [],
-      "notes": [],
-      "commit": null,
-      "worker_branch": null
+      "status": "complete",
+      "tests": [
+        "uv run pytest -q tests/scripts/test_chat_scheduling_provenance.py tests/scripts/test_chat_scheduling_analyzer.py tests/scripts/test_chat_scheduling_evidence.py -> PASS: 25 passed in 1.42s (worker validation)"
+      ],
+      "notes": [
+        "Provenance/evidence worker completion packet 3.3D--a1 verified against assignment evidence.",
+        "Worker output hashes match the integrated files: scripts/chat_scheduling_provenance.py b9510db92f14ed6dc00ee87192678dc1f0d08ee243a1ba1ad555fc1be955cc0a; tests/scripts/test_chat_scheduling_provenance.py 8ed38fd5e5c380b946ee33dbf8fac03487abe468258d0d846038d5ad4ca71949; tests/scripts/test_chat_scheduling_evidence.py 9802b88b42f83ce91a14558a47d1170af063a440bdac14c12149da66ddf83fc8."
+      ],
+      "commit": "dc7249e91883e55ce862fbfdbd4fb40945cd4fe3",
+      "worker_branch": "feature/chat-mode-scheduling-v2-phase3-provenance"
     },
     "3.4A": {
-      "status": "running",
-      "tests": [],
-      "notes": [],
+      "status": "complete",
+      "tests": [
+        "uv run pytest -q tests/scripts/test_chat_scheduling_replay_corpus.py tests/scripts/test_chat_scheduling_provenance.py tests/scripts/test_chat_scheduling_analyzer.py tests/scripts/test_chat_scheduling_harness.py -> PASS: 54 passed in 1.73s; run-command runtime 2.713s; nproc=4; pre-run loadavg=0.32 0.50 0.61 (timing under foreign parallel-programme load)"
+      ],
+      "notes": [
+        "Integrated 3.3A then 3.3D by deterministic cherry-pick because both worker commits were based at f01dc93c3aa015d8932f58c9c5233cdb1cb3f361 while canonical HEAD had already advanced through Steps 3.4B and 3.4C.",
+        "Cherry-pick mapping: 5bf38be3c6570bf9a89bc6f8dc0130c18b1ac6b9 -> f7cdff80326d80a33e925094b64783bd0be4a669; dc7249e91883e55ce862fbfdbd4fb40945cd4fe3 -> 2b5e83c4f8015f3077794dabb9e864a3c4d806b6.",
+        "All five integrated worker output SHA-256 values match the verified completion packets.",
+        "Frozen phase3-source-inventory.json SHA-256 reverified as 1a147dd0d1632c567d91a4e35e83085ecca062a9f0bcab251b8ccd7a2a62bc9f; inventory includes operational-journal with status available.",
+        "No semantic deviation from the Step-3.4A runbook or focused test matrix."
+      ],
       "commit": null,
       "worker_branch": null
     },
@@ -447,7 +465,7 @@
   ],
   "handoff": null,
   "created_at": "2026-09-25T00:51:02+10:00",
-  "updated_at": "2026-09-25T02:29:18+10:00",
+  "updated_at": "2026-09-25T02:31:25+10:00",
   "orchestrator_state_checkpoint_path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase3/checkpoints/orchestrator-state-initial.json",
   "ready_count": 1,
   "claimed_count": 0,
