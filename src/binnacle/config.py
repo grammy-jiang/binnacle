@@ -17,6 +17,7 @@ server start -- the same restart model the systemd deployment already has.
 
 import os
 import re
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
@@ -168,6 +169,12 @@ class EditFileSettings(BaseModel):
     snippet_context_lines: int = 4
 
 
+@dataclass(frozen=True)
+class AutoBackgroundMatch:
+    client_prefix: str
+    pattern: str
+
+
 class RunCommandSettings(BaseModel):
     """run_command wait policy (spec docs/tools/run_command.md §3)."""
 
@@ -199,13 +206,21 @@ class RunCommandSettings(BaseModel):
                     ) from exc
         return self
 
-    def should_auto_background(self, client: str | None, command: str) -> bool:
+    def match_auto_background(
+        self, client: str | None, command: str
+    ) -> AutoBackgroundMatch | None:
         if not client:
-            return False
+            return None
         for prefix, patterns in self.auto_background_patterns.items():
             if client.startswith(prefix):
-                return any(re.search(pattern, command) for pattern in patterns)
-        return False
+                for pattern in patterns:
+                    if re.search(pattern, command):
+                        return AutoBackgroundMatch(prefix, pattern)
+                return None
+        return None
+
+    def should_auto_background(self, client: str | None, command: str) -> bool:
+        return self.match_auto_background(client, command) is not None
 
 
 def _default_jobs_socket() -> Path:

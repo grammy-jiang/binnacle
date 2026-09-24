@@ -336,3 +336,25 @@ def test_jobs_blocking_wall_budget_uses_longest_matching_client_prefix():
     assert settings.blocking_wall_budget_for_client("openai-mcp(ChatGPT)/desktop") == 60
     assert settings.blocking_wall_budget_for_client("unrelated-client") is None
     assert settings.blocking_wall_budget_for_client(None) is None
+
+
+def test_match_auto_background_reports_rule_and_preserves_prefix_order():
+    broad_first = config.RunCommandSettings(
+        auto_background_patterns={
+            "openai": (r"pytest",),
+            "openai-mcp": (r"tox",),
+        }
+    )
+    assert broad_first.match_auto_background("openai-mcp", "tox") is None
+    match = broad_first.match_auto_background("openai-mcp", "pytest -q")
+    assert match == config.AutoBackgroundMatch("openai", r"pytest")
+
+    specific_first = config.RunCommandSettings(
+        auto_background_patterns={
+            "openai-mcp": (r"tox",),
+            "openai": (r"pytest",),
+        }
+    )
+    assert specific_first.match_auto_background(
+        "openai-mcp", "tox"
+    ) == config.AutoBackgroundMatch("openai-mcp", r"tox")
