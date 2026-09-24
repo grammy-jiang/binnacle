@@ -7,6 +7,8 @@ the completed `analysis/chat-async-probe` investigation at commit `352d906`.
 
 Execution SOP: `docs/chat-mode-scheduling-v2-phase2-execution-plan.md`.
 
+Phase 3–6 execution SOP: `docs/chat-mode-scheduling-v2-phase3-6-execution-plan.md`.
+
 ## Executive decision
 
 The v2 proposal has two production changes and one evidence programme:

@@ -18,6 +18,8 @@ The acceptance thresholds below are unchanged.
 
 Execution SOP: `docs/chat-mode-scheduling-v2-phase2-execution-plan.md`.
 
+Phase 3–6 execution SOP: `docs/chat-mode-scheduling-v2-phase3-6-execution-plan.md`.
+
 ## 1. Benchmark architecture
 
 The benchmark has two layers.
