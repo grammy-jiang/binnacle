@@ -2,15 +2,15 @@
 
 Status: IN PROGRESS
 
-Updated: 2026-09-25T05:59:29+10:00
+Updated: 2026-09-25T06:07:39+10:00
 
 ## Canonical state
 
 - Branch: feature/chat-mode-scheduling-v2-phase3
 - Worktree: /home/grammy-jiang/Projects/binnacle-chat-scheduling-phase3
 - Audited source HEAD: 5f2be143352aaa63fb680c1c79e289d46be201fe
-- Last completed step: 3.7
-- Next step: 3.8 revalidate Phase-4 input-contract binding against corrected Step-3.7 shortlist before 3.9
+- Last completed step: 3.8
+- Next step: 3.9 full Phase-3 validation; Phase-4 live calibration remains blocked by NO_LIVE_CANDIDATE
 - Dependency audit: phase3-dependency-audit-2026-09-25-r01.json, r01, SHA-256 d3bec25ba8d49ed4db78e07930542b9e963608ad264c198f8fbf04c4ccfa473a
 - Task graph: phase3-task-graph.json, r01, SHA-256 44cbedb0524fe87a9d111579a96d0d33f4171dfee6ece34eb53baa4c506696b2
 - Initial orchestrator-state checkpoint SHA-256: cec108b23fcf319a48d699f123b8fbf713919f3873d1cae4968a16844b80ed12
@@ -34,7 +34,7 @@ Updated: 2026-09-25T05:59:29+10:00
 - Live candidates: none
 - Preferred live candidate: none
 - Phase-4 input contract: benchmarks/chat-mode-scheduling-v2/phase4-input-contract.json
-- Phase-4 input contract SHA-256: da56f269c247dde80b5327b8e317a8b6fbf2985b45dd98c0264c3ec9a01ddc29
+- Phase-4 input contract SHA-256: bc2fc07ab945504b3acc726c1779d2b46533f43472535f803f2f17b986321024
 - Scenario catalog SHA-256: 45002efd15fe7aa07fa5933180752c6537bea6584520f41a4e1d6b6de61ab5fd
 - Provenance classifier commit: 2b5e83c4f8015f3077794dabb9e864a3c4d806b6
 - Canonical v2 instruction SHA-256: b7df6953a3c64bd245b3d5ff13b6f2667e940d5a154e650fec0b10e6a22cf094
@@ -83,7 +83,7 @@ Updated: 2026-09-25T05:59:29+10:00
 | 3.6C | complete |
 | 3H | complete |
 | 3.7 | complete |
-| 3.8 | blocked |
+| 3.8 | complete |
 | 3.9 | not_started |
 | 3.10 | not_started |
 
@@ -513,51 +513,56 @@ Updated: 2026-09-25T05:59:29+10:00
 
 ## Step 3.8 notes
 
-- Step 3.7 attempt a2 changed the shortlist hash from 23edc0fbba3210aae5da205122be51a806b7be54ab5ca5c590d98de6c931b975 to
-  51db08d70ad8ebfcc46de9e53c661b517b9f3ed41b10579d49057aa395f8d11d. The existing Phase-4 input contract still binds the old hash,
-  so Step 3.8 is blocked pending revalidation before Step 3.9.
-- Phase-4 input contract frozen at commit `30be293c8e212f8f1e1c9c80fe000b3e40ccf303` with SHA-256
-  `da56f269c247dde80b5327b8e317a8b6fbf2985b45dd98c0264c3ec9a01ddc29`.
-- `live_candidates=[]` and `preferred_live_candidate=null` are copied from the
-  frozen Step-3.7 shortlist. C budgets are C120=120 s, C300=300 s and C600=600 s;
-  H10 is historical-only and is not a live candidate.
-- Scenario catalog SHA-256 is `45002efd15fe7aa07fa5933180752c6537bea6584520f41a4e1d6b6de61ab5fd`, computed from the canonical
+- Step-3.7 attempt a2 corrected gate populations and changed the shortlist
+  SHA-256 from `23edc0fbba3210aae5da205122be51a806b7be54ab5ca5c590d98de6c931b975` to `51db08d70ad8ebfcc46de9e53c661b517b9f3ed41b10579d49057aa395f8d11d`.
+  `live_candidates=[]`, `preferred_live_candidate=null`, and
+  `NO_LIVE_CANDIDATE` are unchanged.
+- Refreshed `benchmarks/chat-mode-scheduling-v2/phase4-input-contract.json`
+  at commit `be92c23118a714fabef2c09fb9dc7b8c51c67bd8`. Its SHA-256 is now
+  `bc2fc07ab945504b3acc726c1779d2b46533f43472535f803f2f17b986321024`; the only contract byte change was
+  `candidate_shortlist_sha256`.
+- C budgets remain C120=120 s, C300=300 s and C600=600 s. H10 remains
+  historical-only and is not a live candidate.
+- Scenario catalog SHA-256 remains `45002efd15fe7aa07fa5933180752c6537bea6584520f41a4e1d6b6de61ab5fd`, using the canonical
   sorted R1-R12 relative-path-to-file-SHA object required by the handoff contract.
-- Provenance classifier commit is `2b5e83c4f8015f3077794dabb9e864a3c4d806b6`. Frozen Phase-1 R7
-  timeout examples split correctly between `active_turn_browser_timeout` and
-  `mcp_completed_browser_timeout`.
-- Canonical v2 instructions SHA-256 is `b7df6953a3c64bd245b3d5ff13b6f2667e940d5a154e650fec0b10e6a22cf094` for
-  `.claude/skills/chatgpt-mcp-dev/references/project-instructions-chat-scheduling-v2.txt`.
-- Current historical A baseline source Project is
+- Provenance classifier commit remains `2b5e83c4f8015f3077794dabb9e864a3c4d806b6`. Frozen
+  Phase-1 R7 timeout examples still split correctly between
+  `active_turn_browser_timeout` and `mcp_completed_browser_timeout`.
+- Canonical v2 instruction SHA-256 remains `b7df6953a3c64bd245b3d5ff13b6f2667e940d5a154e650fec0b10e6a22cf094`.
+- Current historical A baseline source Project remains
   `g-p-6aaea9da2bc881918d6f9eb5177cf904` / `rp-test-sandbox`; its current
-  instructions SHA-256 is `dd81ecafb56bf235fa1933a0727fb5fd196c7e5ae86519e39866234a6f4b2b78`. The instructions text
-  is deliberately not stored in the contract or progress.
-- H10 remains `historical_one_shot`: the first original-positive request uses
-  `min(bounded_wait, 10)`, later original-positive requests use zero, and later
-  zero-wait decisions use `historical_one_shot_exhausted`. Phase 4 must provide
-  the benchmark-only adapter; no production runtime mode is allowed.
-- Required logical analysis arms are exactly `A/B/C/H`.
+  instructions SHA-256 is `dd81ecafb56bf235fa1933a0727fb5fd196c7e5ae86519e39866234a6f4b2b78`. The instruction text is not
+  stored in Phase-3 artifacts.
+- H10 remains `historical_one_shot`: first original-positive wait uses
+  `min(bounded_wait, 10)`, later original-positive waits use zero, and
+  later zero-wait decisions use `historical_one_shot_exhausted`. Phase 4
+  must provide the benchmark-only adapter; no production runtime mode is allowed.
+- Required logical analysis arms remain exactly `A/B/C/H`.
 - Endpoint routing and C/H harness support are not implemented or required in
   Phase 3. The Phase-3 harness remains A/B-only and
-  `scripts/chat_scheduling_endpoints.py` is absent; Phase 4 owns those changes.
-- No live ChatGPT trial was run. The Phase-3 offline verdict remains
+  `scripts/chat_scheduling_endpoints.py` is absent.
+- No live ChatGPT trial was run. The corrected offline verdict remains
   `NO_LIVE_CANDIDATE`, so Phase-4 live calibration remains blocked unless a
   future Phase-3 revision produces at least one passing C candidate.
+- The Step-3.7 correction invalidation is resolved: the Phase-4 input contract
+  now binds the corrected shortlist and Step 3.8 is complete again.
 
 ## Step 3.8 validation
 
-- Dry-run validator: PASS; 12/12 R manifests loaded, R12 rendered
-  H10/C120/C300/C600 job runtimes as 40/150/330/630 s with the expected safety
-  oracle, two frozen Phase-1 timeout examples classified correctly, and the
-  326-row corpus plus all three C reports plus shortlist share audited corpus
+- Refresh validator: PASS; 12/12 R manifests loaded, R12 rendered
+  H10/C120/C300/C600 runtimes 40/150/330/630 s with the expected safety oracle,
+  two frozen Phase-1 timeout examples classified correctly, and the 326-row
+  corpus plus all three C reports plus corrected shortlist share audited corpus
   SHA-256 `4dd1e387c42d6fccd37d60795b00192144f3b4d93c57d9eb54ab527a72e8e94d`.
-- Relevant constituent pytest: PASS, 40 tests in 1.91 s (real 2.84 s);
-  nproc=4, pre-run loadavg=0.39 0.54 0.81, timing under foreign
+- Contract binding: PASS; corrected shortlist SHA-256 is
+  `51db08d70ad8ebfcc46de9e53c661b517b9f3ed41b10579d49057aa395f8d11d`; refreshed contract SHA-256 is
+  `bc2fc07ab945504b3acc726c1779d2b46533f43472535f803f2f17b986321024`; live candidates remain zero.
+- Relevant constituent pytest: PASS, 41 tests in 1.91 s (real 2.86 s);
+  nproc=4, pre-run loadavg=0.37 0.42 0.52, timing under foreign
   parallel-programme load.
-- Input-contract binding validator: PASS; contract SHA-256 `da56f269c247dde80b5327b8e317a8b6fbf2985b45dd98c0264c3ec9a01ddc29`,
-  scenario-catalog SHA-256 `45002efd15fe7aa07fa5933180752c6537bea6584520f41a4e1d6b6de61ab5fd`, three C reports bound, zero live
-  candidates.
-- File-scoped pre-commit for `phase4-input-contract.json`: PASS.
+- Historical A Project identity refresh: PASS; only the current id/name and
+  instructions SHA-256 were retained.
+- File-scoped pre-commit for the refreshed input contract: PASS.
 - The focused test matrix defines no dedicated Step-3.8 pytest target; the
   relevant manifest/oracle/provenance/report tests and explicit contract
-  validators were used.
+  validator were rerun.
