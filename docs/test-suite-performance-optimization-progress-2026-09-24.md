@@ -23,7 +23,7 @@
 | 3.4 | Benchmark bounded tox-level scheduling | PASS |
 | 3.5 | Update GitHub Actions | PASS |
 | 3.6 | Update testing/quality/performance documentation | PASS |
-| 3.7 | Final end-to-end release validation | NOT STARTED |
+| 3.7 | Final end-to-end release validation | PARTIAL |
 
 ## Step reports
 
@@ -1873,3 +1873,102 @@ Risks / follow-up:
 Next:
 
 - 3.7 Final end-to-end release validation
+
+Step: 3.7 Final end-to-end release validation
+Status: PARTIAL
+
+Changed:
+
+- `docs/test-suite-performance-optimization-progress-2026-09-24.md` — records the final release-gate evidence. No production source, test, tox, CI workflow, coverage threshold, host-safety fixture, or production timing default changed in Step 3.7.
+
+Source snapshot:
+
+- Branch: `design/chat-mode-scheduling-v2`.
+- Exact source commit at step start: `f70613620793c697d8bb0f6cf8706e631e5791bb`.
+- The worktree was clean at step start and matched `origin/design/chat-mode-scheduling-v2`.
+- The progress table and `git log -8 --oneline --decorate` confirmed Steps 1.1 through 3.6 PASS and Step 3.7 as the next NOT STARTED step.
+- Correlation nonce command: `echo p2-3.7-1790235213-1058` — exit 0.
+
+Validation:
+
+- Exact focused test commands: none. Step 3.7 is the final end-to-end gate; validation is through the full release commands and static acceptance checks below.
+- Clean-baseline command replay on the final source snapshot:
+  `/usr/bin/time -f "wall=%e user=%U sys=%S cpu=%P maxrss_kb=%M" uv run pytest tests -q --randomly-seed=12345 --durations=30`
+  - Result: 1132 passed, 0 failed, 3 skipped in 72.38 s.
+  - Wrapper: `wall=73.84 user=23.89 sys=2.67 cpu=35% maxrss_kb=429968`.
+- Exact fast current-Python full-suite command:
+  `/usr/bin/time -f "wall=%e user=%U sys=%S cpu=%P maxrss_kb=%M" uv run python scripts/run_test_suite.py --workers 4 --seed 12345`
+  - Parallel-safe lane: 1130 passed, 0 failed, 3 skipped in 27.88 s; lane elapsed 28.43 s.
+  - Ordinary-process `no_xdist` lane: 2 passed, 0 failed, 0 skipped, 1133 deselected in 2.73 s; lane elapsed 4.03 s.
+  - Aggregate managed suite: 1132 passed, 0 failed, 3 skipped.
+  - Runner total elapsed 32.46 s; resolved workers 4.
+  - Wrapper: `wall=32.52 user=52.74 sys=4.66 cpu=176% maxrss_kb=430224`.
+- Exact authoritative coverage-policy command:
+  `/usr/bin/time -f "wall=%e user=%U sys=%S cpu=%P maxrss_kb=%M" uv run tox -e coverage-policy -- --seed 12345`
+  - Unit lanes: 336 + 1 passed, 0 failed.
+  - Non-unit lanes: 794 + 1 passed, 0 failed, 3 skipped.
+  - Unique managed-suite execution: 1132 passed, 0 failed, 3 skipped.
+  - Semantic checker: 93 production modules; 0 below final target; 0 errors.
+  - Full-report totals: 96.55% combined statement/branch coverage; 93.49% branch coverage (2601/2782 branches covered).
+  - Tox: `coverage-policy: OK`; wrapper `wall=53.88 user=102.75 sys=7.02 cpu=203% maxrss_kb=436656`.
+- Exact supported Python-matrix command, using the Step 3.4 selected local policy and fixed seed:
+  `/usr/bin/time -f "wall=%e user=%U sys=%S cpu=%P maxrss_kb=%M" env BINNACLE_TEST_WORKERS=4 uv run tox run -- --seed 12345`
+  - Python 3.10: 1131 passed, 0 failed, 4 skipped; tox 33.30 s.
+  - Python 3.11: 1131 passed, 0 failed, 4 skipped; tox 32.57 s.
+  - Python 3.12: 1131 passed, 0 failed, 4 skipped; tox 31.60 s.
+  - Python 3.13: 1132 passed, 0 failed, 3 skipped; tox 33.14 s.
+  - Python 3.14: 1132 passed, 0 failed, 3 skipped; tox 35.15 s.
+  - Matrix aggregate: 5657 passed executions, 0 failed, 18 skipped.
+  - Every environment resolved 4 pytest workers and used the two-lane runner.
+  - Wrapper: `wall=166.18 user=278.37 sys=23.63 cpu=181% maxrss_kb=448048`.
+- Static acceptance audit:
+  - no deleted test file since programme baseline `52ed0bdd61fbae2a61f4028c0a9e04439bf6c1d6`;
+  - `tests/conftest.py` is unchanged from that baseline, so the autouse host-safety guard is unchanged;
+  - no `src/` file changed during the programme;
+  - `JobsSettings.warmup_s` remains 1.0 s;
+  - ordinary compatibility tox environments invoke `scripts/run_test_suite.py` without coverage instrumentation;
+  - `coverage-policy` invokes the ordered four-lane runner and writes unit JSON before non-unit execution, so unit tests are not re-run for the full report;
+  - current documentation describes the same fast-suite, coverage-policy, local matrix, production/test timing, and retained real-time contracts used by this gate.
+- Repository-wide `uv run pre-commit run --all-files`: PASS after fixing one MD012 extra-blank-line issue in this new progress entry; every hook passed on rerun.
+- GitHub Actions verification for the pushed checkpoint commit: pending.
+
+Benchmark host/load evidence:
+
+- Before final-source sequential replay: `nproc=4`; `/proc/loadavg = 0.85 0.77 0.53 1/807 1015545`.
+- Before final fast full-suite run: `nproc=4`; `/proc/loadavg = 0.57 0.68 0.52 4/811 1017395`.
+- Before final coverage-policy run: `nproc=4`; `/proc/loadavg = 0.85 0.76 0.56 1/812 1018944`.
+- Before final Python-matrix run: `nproc=4`; `/proc/loadavg = 1.60 1.03 0.67 1/819 1021919`.
+- The only value above 1.5 immediately followed this step's own coverage-policy run; no foreign heavy workload was observed, so the required foreign-load wait did not apply and no reported timing is labelled foreign-load contaminated.
+
+Performance:
+
+- Original Step 1.1 sequential historical baseline: `wall=124.73 s`, 1115 passed / 3 skipped, seed 12345.
+- Final-source sequential replay: `wall=73.84 s`, 1132 passed / 3 skipped, seed 12345.
+- Final-source fast two-lane runner: `wall=32.52 s`, 1132 passed / 3 skipped, seed 12345.
+- Formal apples-to-apples final-source comparison: 73.84 s sequential versus 32.52 s fast runner on the same commit, dependency lock, host, test selection, Python version and seed; reduction 41.32 s, about 56.0%.
+- The final fast runner is also 92.21 s / about 73.9% below the original clean-baseline wall time. That cross-programme number is contextual rather than the formal Section 8 A/B because the source snapshot and managed test population changed; the current-source A/B above is the pass-driving reproducible comparison.
+- Coverage-policy improved from the Step 1.1 historical `wall=169.81 s` to final `wall=53.88 s`; this is likewise cross-snapshot programme context, not the formal same-source A/B.
+- Final selected local Python-matrix wall time: `166.18 s`.
+
+Findings:
+
+- All local Step 3.7 release gates run so far are green.
+- The ordinary-process lane visibly executes both required `no_xdist` tests.
+- The semantic 95/90 per-module coverage policy is green with 0 modules below target.
+- No expected test was deleted; the current Python 3.13 skip count remains 3, matching the Step 1.1 baseline, so no unexplained skip increase is present on the primary interpreter.
+- Host safety, production timing defaults, live-test opt-in semantics, managed test inventory, and retained real-time timing contracts were not weakened.
+- Production source behaviour changed in Step 3.7: no.
+
+Deviation from Section 5.8 / frozen step:
+
+- None.
+- The Python-matrix gate uses `env BINNACLE_TEST_WORKERS=4 uv run tox run -- --seed 12345`, the Step 3.4 selected supported local equivalent of `uv run tox`; this preserves the full five-interpreter matrix while making the fixed worker policy and seed explicit.
+- The coverage-policy command forwards `--seed 12345` so the final timed evidence follows the fixed-seed benchmark rule without changing test selection.
+
+Risks / follow-up:
+
+- The checkpoint remains PARTIAL only until the pushed GitHub Actions run is green.
+
+Next:
+
+- Complete Step 3.7 by committing the checkpoint record, pushing, and verifying GitHub Actions.
