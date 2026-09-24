@@ -16,7 +16,7 @@ infrastructure required by Phase 4.
 | --- | --- |
 | Phase 2 | Complete including 2.12a; guard/report/CI green |
 | Test efficiency | Final accepted checkpoint complete and CI green |
-| Design history | Phase-2 + final test-efficiency history preserved on latest design line |
+| Stack history | Phase 0 -> Phase 1 -> Phase 2 ancestry intact; Phase 2 includes final test-efficiency maintenance and is fresh vs public base |
 | Test runner | Final optimized test/coverage commands identified |
 | Production | Observed and preserved; scheduling-v2 still undeployed |
 
@@ -203,11 +203,21 @@ a new PASS artifact is committed. Never silently inherit an old dependency PASS.
 Use these exact existing worktrees for the read-only preflight:
 
 ```text
-latest moving design/test-efficiency checkout:
-  /home/grammy-jiang/Projects/binnacle-chat-scheduling-design
-  expected branch: design/chat-mode-scheduling-v2
+direct predecessor checkout:
+  /home/grammy-jiang/Projects/binnacle-chat-blocking-wall-guard
+  expected branch: feature/chat-mode-blocking-wall-guard
 
-planning document checkout until it is carried forward:
+lower-stack worktrees:
+  /home/grammy-jiang/Projects/binnacle-chat-scheduling-phase0
+    expected branch: feature/chat-mode-scheduling-v2-phase0
+  /home/grammy-jiang/Projects/binnacle-chat-scheduling-phase1
+    expected branch: feature/chat-mode-scheduling-v2-phase1
+
+public integration refs for freshness comparison:
+  origin/proof-of-concept
+  origin/master
+
+planning document checkout until Phase 3 starts:
   /home/grammy-jiang/Projects/binnacle-chat-scheduling-phase3-6-plan
   expected branch: planning/chat-mode-scheduling-v2-phase3-6
 
@@ -216,12 +226,12 @@ production observation checkout:
   expected branch: master
 ```
 
-Start with `git worktree list --porcelain` from any accessible Binnacle checkout
-and verify these branch/path mappings. If the design worktree is absent but the
-branch exists, attach the **same branch** at the canonical path; do not create a
-replacement branch. If the planning worktree is absent, read the plan from
-`origin/planning/chat-mode-scheduling-v2-phase3-6` via a recovered worktree at the
-same canonical path. Dirty/diverged state is investigated and preserved.
+Start with `git fetch origin`, `git worktree list --porcelain`, and verify the
+Phase0/Phase1/Phase2/planning/production mappings above. If a lower-phase worktree
+is absent but its exact branch exists, reattach that branch at the canonical path;
+do not invent a replacement branch. If the planning worktree is absent, recover
+`origin/planning/chat-mode-scheduling-v2-phase3-6` at the canonical planning path.
+Dirty/diverged state is investigated and preserved.
 
 Do not run Step 3.0 from production `master` merely because it is convenient; the
 production checkout is read-only observation evidence.
@@ -285,8 +295,12 @@ Audit all of the following from repository evidence, not conversation memory:
    - its `post_completion_review` / 2.12a entry is `complete`;
    - the dated Phase-2 final report says Phase 2 complete, Phase 3 not started,
      production undeployed;
-   - the Phase-2 guard implementation commit is an ancestor of the final design
-     line used for Phase 3.
+   - `feature/chat-mode-scheduling-v2-phase0` is an ancestor of
+     `feature/chat-mode-scheduling-v2-phase1`;
+   - `feature/chat-mode-scheduling-v2-phase1` is an ancestor of
+     `feature/chat-mode-blocking-wall-guard`;
+   - the Phase-2 guard implementation/2.12a evidence is present on the Phase-2
+     branch before its post-Phase-2 test-efficiency maintenance commits.
 2. **Phase 2 quality evidence**
    - final Phase-2/2.12a CI is green;
    - full tests/pre-commit evidence in the final report is internally consistent;
@@ -295,32 +309,93 @@ Audit all of the following from repository evidence, not conversation memory:
    - `docs/test-suite-performance-optimization-progress-2026-09-24.md` (or its
      documented successor) shows final Step 3.7 PASS, unless the owner explicitly
      accepted an earlier final checkpoint;
-   - its final commit is present on `origin/design/chat-mode-scheduling-v2`;
+   - its completed history is present on the **Phase-2 branch after 2.12a**;
+     planning-time evidence includes Step 3.7 PASS and original closeout commit
+     `0a80986`, but 3.0 verifies the rebased Phase-2 equivalents/history rather
+     than depending on the old commit id;
    - its final CI is green;
    - record the final authoritative fast/full/coverage commands that Phases 3–6
      must inherit rather than reimplement.
+   - planning-time known commands after the completed optimisation are:
+
+     ```text
+     fast full-suite:
+       uv run python scripts/run_test_suite.py --workers 4 --seed 12345
+     coverage policy:
+       uv run tox -e coverage-policy -- --seed 12345
+     local compatibility matrix when required:
+       env BINNACLE_TEST_WORKERS=4 uv run tox run -- --seed 12345
+     ```
+
+     Step 3.0 re-reads `docs/testing.md` and the optimisation progress file and
+     records any later authoritative change instead of blindly hard-coding these
+     planning-time commands.
 4. **Planning handoff**
    - this Phase-3 plan commit is available;
-   - Phase 3 starts from the **latest final green design HEAD**, then brings this
-     planning document forward as specified in the plan;
+   - Phase 3 starts from the **current Phase-2 branch HEAD**, never directly from
+     `master` or `proof-of-concept`;
+   - planning-only commits are replayed on top of Phase 2 after stack freshness is
+     proven.
    - no test-efficiency commit is dropped/reset.
 5. **Production observation baseline**
    - capture production branch/HEAD/status, service ActiveState/SubState, config
      and unit hashes, and budget-key presence;
    - preserve unrelated work exactly.
 
+### Mandatory lower-stack freshness investigation
+
+Before Phase-3 workspace bootstrap, verify the stacked branches in order:
+
+```text
+Phase0 = feature/chat-mode-scheduling-v2-phase0
+Phase1 = feature/chat-mode-scheduling-v2-phase1
+Phase2 = feature/chat-mode-blocking-wall-guard
+```
+
+Required ancestry:
+
+```text
+Phase0 is ancestor of Phase1
+Phase1 is ancestor of Phase2
+```
+
+Then compare the **Phase-2 tree** with the current public integration tree when
+`origin/master` and `origin/proof-of-concept` are synchronized. If their trees
+differ because new public-base work arrived after the last stack update, Phase 3
+must not absorb that work directly. Restack from the earliest affected layer:
+
+1. identify the latest non-scheduling/public-base commits that must move below the
+   scheduling stack;
+2. rebase Phase 0 onto that refreshed lower base;
+3. rebase Phase 1 onto refreshed Phase 0;
+4. rebase Phase 2 (including post-2.12a test-efficiency maintenance) onto refreshed
+   Phase 1;
+5. verify the refreshed Phase-2 tree/content against the intended current public
+   integration state;
+6. only then rebase planning/Phase 3 onto refreshed Phase 2.
+
+If master and POC themselves diverge, first investigate/reconcile the repository's
+normal public integration workflow; do not guess which public branch should be
+ignored.
+
+Planning-time verified stack after the 2026-09-24 restack:
+
+```text
+Phase0 tip: 2650c08
+Phase1 tip: 3074650
+Phase2 tip: 5f2be14
+Phase2 tree == master/proof-of-concept tree at 77a3f03
+```
+
+These ids are historical evidence only; future 3.0 audits use current branch refs.
+
 ### Phase-3 workspace bootstrap inside Step 3.0
 
-After the read-only preflight proves the test-efficiency program has reached its
-accepted final checkpoint and identifies the final green
-`origin/design/chat-mode-scheduling-v2` HEAD, bootstrap the exact Phase-3
-integration workspace defined below **inside 3.0**. Bring the planning commit
-range onto it using the deterministic `PLAN_BASE` procedure described later in
-this document. Then create progress files and perform/commit the formal audit.
-
-If the planning HEAD is already an ancestor of the final design HEAD, record that
-fact and do not cherry-pick duplicate commits; the required Phase-3 documents
-must still match this planning branch content by hash.
+After the read-only preflight proves Phase0->Phase1->Phase2 ancestry, Phase-2
+completion/test-efficiency state, and public-base freshness, bootstrap the exact
+Phase-3 integration workspace **from the current Phase-2 HEAD** inside 3.0. Bring
+forward only planning-document patches not already patch-equivalent on Phase 2.
+Then create progress files and perform/commit the formal audit.
 
 ### Audit result
 
@@ -345,7 +420,7 @@ no Step 3.1 work begins.
 
 ```text
 dependency audit PASS committed
-final upstream design HEAD identified
+final direct-predecessor Phase-2 HEAD identified
 authoritative optimized test commands recorded
 production baseline recorded
 next allowed step: 3.1
@@ -368,24 +443,21 @@ Planning-document transfer procedure used by 3.0:
 
 ```bash
 git fetch origin
-PLAN_BASE=$(git merge-base \
-  origin/design/chat-mode-scheduling-v2 \
-  origin/planning/chat-mode-scheduling-v2-phase3-6)
-git merge-base --is-ancestor "$PLAN_BASE" origin/design/chat-mode-scheduling-v2
-git merge-base --is-ancestor "$PLAN_BASE" origin/planning/chat-mode-scheduling-v2-phase3-6
+git rev-parse feature/chat-mode-blocking-wall-guard
+git rev-parse origin/planning/chat-mode-scheduling-v2-phase3-6
+git cherry -v \
+  feature/chat-mode-blocking-wall-guard \
+  origin/planning/chat-mode-scheduling-v2-phase3-6
 ```
 
-Create the Phase-3 branch/worktree from the final design HEAD. If the planning
-HEAD is not already an ancestor, inspect:
+Create/recover the Phase-3 branch/worktree from the **current Phase-2 HEAD**.
+Replay only `+` planning/document patches that are not already patch-equivalent on
+Phase 2, preserving their order. Before each replay, inspect the commit's file
+scope; runtime/test/production changes on the planning branch are a blocker.
 
-```bash
-git rev-list --reverse "$PLAN_BASE"..origin/planning/chat-mode-scheduling-v2-phase3-6
-```
-
-and cherry-pick only the verified planning-document commits in order. If the
-range unexpectedly contains production/test-efficiency code, stop and investigate
-branch history. Preserve the final design version of concurrent test-efficiency
-work when resolving documentation conflicts.
+The planning branch itself is kept rebased on Phase 2 while Phase 3 is not yet
+started. Once the actual Phase-3 feature branch exists, that branch becomes the
+execution lineage; the planning branch remains documentation history only.
 
 ## Phase-3 step dependency DAG
 
@@ -855,7 +927,7 @@ Tasks:
 
 1. Re-read the `audited_source_head`, final test-efficiency checkpoint, and
    authoritative fast/full/coverage commands recorded by 3.0.
-2. Confirm the Phase-3 HEAD contains both the final design/test-efficiency history
+2. Confirm the Phase-3 HEAD contains the complete current Phase-2/test-efficiency history
    and this current Phase-3 execution plan; verify no planning/test-efficiency
    commit was dropped during 3.0 bootstrap.
 3. Record the exact branch/worktree/HEAD and production observation baseline in
@@ -1201,8 +1273,9 @@ all tests + CI green
 production unchanged
 ```
 
-Do not start Phase 4 automatically. Integration into
-`design/chat-mode-scheduling-v2` requires the owner's explicit merge instruction,
-consistent with the Phase-2 workflow.
+Do not start Phase 4 automatically. Phase 4's direct predecessor is the completed
+Phase-3 branch; it must be created/rebased from Phase 3 rather than from
+`proof-of-concept`/`master`. Public integration of the whole scheduling stack is a
+later release action, not a Phase-3 completion requirement.
 
 ---

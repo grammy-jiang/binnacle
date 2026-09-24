@@ -14,6 +14,59 @@ Use **one phase document at a time**:
 - Phase 5: `docs/chat-mode-scheduling-v2-phase5-execution-plan.md`
 - Phase 6: `docs/chat-mode-scheduling-v2-phase6-execution-plan.md`
 
+## Canonical stacked branch topology
+
+Later phases use a **stacked-branch workflow**. A later phase never skips its
+immediate predecessor merely because the predecessor's tree is already present in
+`master`/`proof-of-concept`.
+
+```text
+public integration refs:
+  master / proof-of-concept
+        |
+        v
+Phase 0: feature/chat-mode-scheduling-v2-phase0
+        |
+        v
+Phase 1: feature/chat-mode-scheduling-v2-phase1
+        |
+        v
+Phase 2: feature/chat-mode-blocking-wall-guard
+         (Phase 2 implementation + completed test-efficiency maintenance)
+        |
+        v
+Phase 3: feature/chat-mode-scheduling-v2-phase3
+        |
+        v
+Phase 4: feature/chat-mode-scheduling-v2-phase4
+        |
+        v
+Phase 5: release/chat-mode-scheduling-v2-staging
+        |
+        v
+Phase 6: release/chat-mode-scheduling-v2-phase6-review
+```
+
+The separate `planning/chat-mode-scheduling-v2-phase3-6` branch carries planning
+documents and is itself rebased on Phase 2 while Phase 3 has not started.
+
+When the public base changes, do **not** rebase an upper phase directly onto the
+new public tip. Restack from the earliest affected lower layer in order:
+
+```text
+public/master-side changes
+-> Phase 0
+-> Phase 1
+-> Phase 2
+-> Phase 3/planning
+-> later active phase branches
+```
+
+At planning-time restack on 2026-09-24, current Phase-2 content was verified
+tree-identical to `master`/`proof-of-concept` while retaining the explicit
+Phase0->Phase1->Phase2 history. This historical equality does not permit future
+phases to bypass predecessor branches.
+
 ## Dependency DAG
 
 ```text
@@ -119,11 +172,17 @@ Phase 5 NOT STARTED
 Phase 6 NOT STARTED
 
 test-suite efficiency optimization:
-  still in progress on design/chat-mode-scheduling-v2
+  COMPLETE — Step 3.7 PASS; final workflow integrated into proof-of-concept/master
+  planning-time integrated base: 77a3f03
+  authoritative planning-time fast runner:
+    uv run python scripts/run_test_suite.py --workers 4 --seed 12345
+  authoritative planning-time coverage gate:
+    uv run tox -e coverage-policy -- --seed 12345
 
 next scheduling-v2 execution action:
-  wait for test-efficiency final checkpoint
-  then execute Phase 3 Step 3.0 dependency audit
+  execute Phase 3 Step 3.0 dependency audit against the current Phase-2 branch;
+  Step 3.0 first verifies the full Phase0->Phase1->Phase2 stack is fresh relative
+  to current master/proof-of-concept and restacks lower phases first if required
 ```
 
 Planning branch:
