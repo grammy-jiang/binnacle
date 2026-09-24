@@ -95,6 +95,72 @@ clean committed branch and reports its commit hash plus input/output hashes. The
 orchestrator integrates commits serially when they target the same integration
 branch, but worker execution before that fan-in is maximally parallel.
 
+#### Single-writer orchestrator ownership and handoff
+
+Exactly **one orchestrator owner** may mutate Phase-3 scheduler/progress/
+integration state at a time. Unlimited worker sessions do not imply multiple task
+managers.
+
+Persist ownership outside Git at:
+
+```text
+/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase3/orchestrator-owner.json
+```
+
+Schema:
+
+```text
+orchestrator_id        # generated UUID/opaque label for one orchestration tenure
+orchestrator_epoch     # monotonically increasing integer
+claimed_at
+last_checkpoint_at
+last_state_sha256
+status = active | handing_off | superseded
+```
+
+Ownership never expires merely because time passes; a stale clock must not create
+two writers. A replacement orchestrator first performs the recovery investigation,
+reads the current task/progress/external state, marks the old owner `superseded`,
+increments `orchestrator_epoch`, writes a new owner record atomically, and only
+then mutates scheduler/progress state. Record the new epoch at the next canonical
+checkpoint.
+
+Every assignment/completion packet and task attempt records the epoch under which
+it was issued. A worker may finish an old-epoch attempt after orchestrator handoff;
+the new orchestrator validates its task/attempt/input/output hashes before
+accepting it. The superseded orchestrator, if it resumes, must detect the epoch
+mismatch and become read-only; it may not launch tasks, acquire locks, integrate
+commits, or update progress.
+
+#### Worker assignment and completion packets
+
+The orchestrator communicates work through persistent local packets so a worker
+chat needs no prior conversation memory:
+
+```text
+/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase3/assignments/
+  <task_id>--<attempt_id>.json
+/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase3/completions/
+  <task_id>--<attempt_id>.json
+```
+
+Assignment packet contains the full task descriptor, orchestrator epoch, exact
+worker branch/worktree or scratch root, input hashes, predecessor evidence,
+resource locks already reserved by the orchestrator, expected outputs, validation
+commands, stop point, and prohibited shared mutations. The worker treats this
+packet plus the referenced runbook section as authoritative.
+
+The worker never edits `orchestrator-state.json`, `orchestrator-owner.json`, or
+canonical progress. On completion it atomically writes the completion packet with
+output/commit/test hashes and reports the same information to the orchestrator.
+The orchestrator validates the packet before transitioning the task to complete
+and releasing locks.
+
+How a ChatGPT worker session is opened/assigned is outside the repository task
+graph; the plan does not assume the orchestrator can programmatically create chat
+sessions. The shared assignment/completion protocol makes any available worker
+session interchangeable and cold-start safe.
+
 #### Resource-lock model
 
 The scheduler uses **resource identities**, not session-count limits. A worker
@@ -117,6 +183,30 @@ parallel when their write/resource identities are disjoint. A shared resource is
 serialized only for the period actually required; do not serialize an entire
 phase merely because one later action is exclusive.
 
+#### Task-granularity / work-conservation rule
+
+Maximize **useful** parallelism, not worker count for its own sake. Create a
+separate worker task when the work has all of these properties:
+
+- its predecessors/input hashes can be frozen independently;
+- it owns a disjoint output path or is read-only;
+- it has a meaningful validation/check that can succeed/fail independently;
+- completing it can unblock downstream work, reduce critical-path latency, or
+  materially shorten a large scan/analysis by sharding;
+- worker startup/integration overhead is small relative to the work saved.
+
+Good split dimensions are source document/report, endpoint/Project, scenario or
+trial block, metric family, time window, independent service/config check, or
+independent artifact verification. Do **not** split a short sequential operation
+into artificial microtasks that all write the same file, require constant
+cross-worker conversation, or must immediately fan back into one tiny edit.
+
+The orchestrator may coalesce trivially small ready tasks that share the same
+read-only inputs/output owner when doing so lowers overhead without delaying any
+other downstream task. This is an efficiency decision, never a fixed worker cap.
+Conversely, a large worker should be split further when an independent shard can
+produce a separately verifiable output and reduce the critical path.
+
 #### Live-resource admission control
 
 CPU/network/tunnel/browser limits are **measured runtime constraints**, not fixed
@@ -127,25 +217,277 @@ load, throttling, or interruption criteria fail. A later section may define a
 special stricter admission rule for performance timing; that rule limits only the
 contended live resource, not unrelated analysis/code/review workers.
 
-#### Progress fields for parallel scheduling
+#### Machine-readable task graph contract
 
-Canonical progress records enough state for a new orchestrator to reconstruct the
-scheduler without conversation memory:
+Each phase materializes one canonical **stable task graph** before launching its
+first implementation/live worker:
 
 ```text
-ready_tasks[]
-running_tasks[]        # task id, worker branch/session label, input hashes
-resource_locks{}       # resource id -> owning task
-completed_worker_commits{}
-blocked_tasks{}        # blocker and unaffected-ready-work note
+benchmarks/chat-mode-scheduling-v2/phaseN-task-graph.json
 ```
 
-These are orchestration state, not a license for workers to edit canonical
-progress concurrently.
+`N` is the phase number. The Git-tracked graph contains static DAG nodes plus
+**dynamic task templates**, not every transient worker instance. It changes only
+when the dependency design/template itself changes. Schema:
+
+```text
+schema_version
+phase
+source_head
+revision
+static_tasks[]:
+  task_id
+  task_kind
+  predecessor_ids[]
+  required_input_artifacts[] + sha256
+  resource_locks[]
+  expected_output_paths[]
+  side_effect_class
+  external_gates[]
+  enabled_condition | null
+  required_for_phase = true | false
+  scheduling_class = critical | normal | opportunistic
+
+dynamic_templates[]:
+  template_id
+  expansion_source
+  task_id_pattern
+  predecessor_rule
+  resource_lock_pattern
+  output_path_pattern
+  side_effect_class
+  external_gates[]
+  required_for_phase = true | false
+  scheduling_class = critical | normal | opportunistic
+```
+
+Static task ids come directly from the phase dependency table. Dynamic fan-out
+instances (source shards, endpoint readiness tasks, calibration trials, review
+partitions, discovered Projects, extension-window reviews) are instantiated from
+these templates at runtime with deterministic ids; they are **not appended to the
+Git task-graph file for every launch**.
+
+High-frequency scheduler state lives outside Git at:
+
+```text
+~/.local/state/binnacle/chat-scheduling-v2/phaseN/orchestrator-state.json
+```
+
+Use directory mode `0700` and atomic file replacement. It records instantiated
+ready/claimed/running/completed/blocked tasks, attempts, worker branch/scratch
+paths and current resource locks. This file may change on every scheduling event
+without creating a Git commit or serializing unrelated workers.
+
+Canonical progress stores only the stable graph path/revision/SHA plus compact
+checkpoint summaries. At dependency barriers, side-effect boundaries, recovery
+checkpoints and phase handoff, persist a compact task-ledger snapshot under
+`benchmarks/chat-mode-scheduling-v2/` containing completed task ids and their
+input/output hashes. Do not commit every ready/running transition.
+
+Before accepting a new graph revision, the orchestrator validates mechanically:
+
+1. graph is acyclic;
+2. every predecessor id exists or is a documented completed prior-phase handoff;
+3. every enabled task's required immutable input hash exists;
+4. no two concurrently enabled tasks claim the same exclusive output path;
+5. every shared/external mutation has an explicit resource lock;
+6. every non-artifact prerequisite such as explicit owner approval is declared as
+   an `external_gate`, not disguised as a missing task id;
+7. no task depends on a later-phase artifact;
+8. every fan-in names the exact canonical artifacts/verdicts required for release;
+9. dynamic instances have unique deterministic ids and output paths.
+
+Progress stores `task_graph_path`, `task_graph_revision`, and `task_graph_sha256`.
+Any **stable graph/template** change after work has started creates a new revision
+and records the reason. Runtime instantiation/claim/refill updates only local
+orchestrator state and does not revise the Git graph. Existing completed/running
+task identities are never silently rewritten. If a stable graph revision changes
+predecessors/locks/outputs of an already submitted or side-effectful task, the
+phase is blocked for investigation rather than adapting in place.
+
+The Markdown runbook remains authoritative for semantics; the JSON makes the
+orchestrator's dependency/parallel execution mechanically auditable and
+recoverable by a new AI agent.
+
+Task-graph materialization is part of **Step 3.0**, not a later implementation
+step. After the formal dependency preflight has enough information to establish
+the Phase-3 workspace and enabled conditions, but **before Step 3.0 is marked
+complete or any Phase-3.1+ worker is launched**, the orchestrator must:
+
+1. render `phase3-task-graph.json` revision `r01` from this runbook and the
+   audited predecessor/handoff identities;
+2. run all graph validations listed above;
+3. record graph path/revision/SHA in canonical progress;
+4. initialize `~/.local/state/binnacle/chat-scheduling-v2/phase3/orchestrator-state.json`
+   with the static ready/blocked state implied by the graph;
+5. freeze a checkpoint of that initial local state and record its SHA/time;
+6. only then mark 3.0 `complete` and allow the ready-queue scheduler to launch
+   Phase-3.1+ work.
+
+If the dependency audit is BLOCKED before a valid source/workspace can be chosen,
+do not invent a task graph from uncertain inputs. If the graph validator fails,
+Step 3.0 is BLOCKED even when every upstream dependency itself passed.
+
+#### Task identity, claim, and recovery contract
+
+Every parallel task has a deterministic `task_id` derived from phase + logical
+work unit, never from a chat/session number. Examples:
+
+```text
+p3-source-phase1-step3
+p3-audit-phase1-step3
+p3-candidate-c300
+p4-readiness-c300
+p4-calibration-c300-r7-repeat2
+p4-confirmatory-r3-repeat4
+p5-review24-blocking-exhaustion
+p6-t7d-efficiency-job-status-call-burden
+```
+
+Before launch, the orchestrator writes a task descriptor into progress/scratch
+state containing:
+
+```text
+task_id
+predecessor_ids[]
+input_artifacts[] + sha256
+source_head / worker_base_head
+required_resource_locks[]
+external_gates[]
+expected_output_paths[]
+worker_branch/worktree or scratch_root
+focused_test/validation command when applicable
+side_effect_class = none | disposable | shared_external
+attempt_id
+claim_id
+forbidden_actions[]
+state = ready | claimed | running | complete | blocked | abandoned | disabled
+```
+
+`attempt_id` is unique per launch attempt; `claim_id` uniquely identifies the current ownership claim for that attempt; `task_id` stays stable across retries.
+
+Conditional nodes use `enabled_condition` from the stable task graph. When a
+condition becomes definitively false, set that task instance to `disabled`; a
+disabled task is terminal for DAG accounting and does **not** block downstream
+`one_of`/conditional fan-ins. Never mark a skipped conditional branch `complete`
+merely to satisfy the graph.
+
+`required_for_phase=false` is reserved for **opportunistic optimization work** whose
+absence cannot change correctness, required evidence, or a deployment verdict. Such
+a task may be set `disabled` with a recorded scheduler reason such as
+`critical_path_priority`, `no_idle_live_host_window`, or `no_remaining_work_to_accelerate`.
+It must never appear in a required `all_of`/`latest_enabled` fan-in. If an
+opportunistic result is reused later, the consumer validates its input/criteria
+hashes exactly like any other cached result.
+
+`scheduling_class=critical` means the task directly unlocks/advances the current
+critical path; `normal` is required but not immediately critical; `opportunistic`
+is optional latency-hiding/capacity-refinement work. The ready-queue scheduler
+uses this class only for priority when tasks contend for the **same** scarce
+resource; it does not reduce concurrency among disjoint tasks.
+
+Conditional fan-ins must name their rule explicitly rather than listing mutually
+exclusive predecessors as an unconditional AND. Supported runbook semantics are:
+
+```text
+all_of: every enabled predecessor must complete
+one_of: exactly one eligible predecessor path must complete with the required verdict
+latest_enabled: the latest enabled decision node in an extension chain supplies the verdict
+```
+
+The orchestrator evaluates conditions only from frozen canonical verdicts/hashes,
+never from worker guesses. Once a side-effectful downstream task is launched, the
+condition/verdict that enabled it is immutable unless the phase is rolled back and
+re-audited.
+The orchestrator allocates the task attempt's unique `claim_id` and atomically claims **all** required resource locks before changing `ready -> claimed`. Workers never partially acquire locks or wait while holding a
+subset; this avoids lock-order deadlocks. If the complete lock set is unavailable,
+the task remains ready and other tasks continue.
+
+A worker completion packet must return:
+
+```text
+task_id + attempt_id
+input hashes actually consumed
+claim_id
+output paths + hashes
+commit hash / clean worktree status when Git-backed
+tests/validation result
+external side effects performed (normally none unless explicitly assigned)
+known blocker/limitation
+```
+
+On orchestrator/chat recovery, any task left `claimed`/`running` is **investigated
+before re-launch**. Check worker branch/worktree, expected outputs, background
+processes, submitted-trial evidence, Project/connector/service state and external
+side effects as applicable. A new attempt is allowed only after the old attempt is
+proved complete, proved not to have executed the side effect, or is explicitly
+marked `abandoned` with evidence. For canonical live trials, existing submission
+evidence always wins: never create a replacement attempt for a submitted slot.
+
+Read-only deterministic analysis may be recomputed after an abandoned attempt, but
+its new attempt must use the same frozen input hashes. Shared-external mutations
+are never blindly retried. If an abandoned/superseded worker later returns, its
+completion packet is quarantined because its `claim_id` no longer owns the task;
+it cannot overwrite or release locks belonging to the newer attempt.
+
+#### Progress/checkpoint fields for parallel scheduling
+
+High-frequency `ready/claimed/running/resource-lock` state lives only in the
+persistent local `orchestrator-state.json` described above. Canonical Git progress
+must **not** be rewritten for every worker launch/completion; that would turn Git
+into the scheduler bottleneck.
+
+At canonical checkpoints (dependency fan-in, side-effect boundary, recovery
+checkpoint, evidence freeze, or phase handoff), progress records a compact
+scheduler snapshot:
+
+```text
+task_graph_path
+task_graph_revision
+task_graph_sha256
+orchestrator_state_path
+orchestrator_state_checkpoint_sha256
+orchestrator_state_checkpoint_at
+ready_count
+claimed_count
+running_count
+blocked_count
+running_task_ids_at_checkpoint[]
+completed_task_count
+completed_worker_commits_since_checkpoint{}
+blocked_task_summary{}
+```
+
+The checkpoint SHA refers to an immutable copy of the local scheduler state made
+at that checkpoint, not to a continuously changing file. A cold-start
+orchestrator loads canonical progress/task-graph first, then the current local
+state if present, and reconciles it against worker branches/processes/external
+side effects using the task-recovery contract. Missing local state does not erase
+committed task evidence; reconstruct from the most recent checkpoint plus worker
+outputs/branches.
+
+Workers never edit canonical progress concurrently. The orchestrator batches
+normal read-only worker completions into the next meaningful checkpoint, while
+side-effectful/submitted live tasks still use the explicit pre-action checkpoints
+defined in this runbook.
 
 ### Dependency-audit preflight fan-out
 
-Step N.0 is a fan-in gate, but its **read-only investigations are independent
+Step 3.0 is the only orchestration stage that runs **before** the formal
+Phase-3 task graph exists. It therefore uses a tiny bootstrap scheduler state,
+not the normal phase graph/runtime state:
+
+```text
+/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase3/bootstrap-state.json
+```
+
+Use directory mode `0700` and atomic replacement. Bootstrap task ids are the
+fixed `preflight-*` ids below plus any deterministic read-only child shards
+created from them. The bootstrap state records ready/claimed/running/complete/
+blocked preflight tasks, attempts and read-only resource identities. It never
+contains implementation/live/deployment tasks.
+
+Step 3.0 is a fan-in gate, but its **read-only investigations are independent
 worker tasks** and should be launched concurrently whenever their inputs are
 available. The orchestrator should normally fan out at least these categories,
 adapted to the phase-specific N.0 requirements:
@@ -167,6 +509,16 @@ the orchestrator owns the formal dependency-audit JSON/Markdown and performs the
 final consistency fan-in. A blocker in one category does not stop unrelated
 preflight workers from finishing, so the final blocker report is as complete as
 possible in one pass.
+
+After all required preflight tasks finish, the orchestrator freezes a bootstrap
+summary/hash into the dependency-audit evidence. Only then may Step 3.0 choose/
+create the canonical Phase-3 workspace, write formal progress/audit, materialize
+`phase3-task-graph.json` r01, and initialize the normal
+`orchestrator-state.json`. Archive (do not overwrite) the bootstrap state; later
+Phase-3.1+ scheduling never uses it.
+
+If preflight is BLOCKED, keep `bootstrap-state.json` for recovery and do not create
+a speculative formal task graph from uncertain source identities.
 
 ### Predecessor uncertainty rule
 
@@ -360,8 +712,11 @@ Step 3.0 has **two ordered stages**:
    overwrite a prior blocked/running checkpoint merely because the chat is new.
 
 The formal dependency-audit artifact and its revision/hash are recorded under
-the progress JSON `dependency_audit` object. On PASS, mark 3.0 `complete` and
-set `next_step=3.1`. On a blocker discovered **after** workspace bootstrap,
+the progress JSON `dependency_audit` object. On audit PASS, **do not yet mark
+3.0 complete**: first materialize/validate task-graph revision r01 and initialize
+the persistent orchestrator state as required by the task-graph contract above.
+Only after those checks pass, mark 3.0 `complete` and set `next_step=3.1`.
+On a blocker discovered **after** workspace bootstrap,
 leave `last_completed_step` unchanged, set phase status `blocked`, keep
 `next_step=3.0`, and commit/push the blocker evidence when Git remains
 available.
@@ -566,13 +921,17 @@ execution lineage; the planning branch remains documentation history only.
 | **3.1** validate synchronized baseline | 3.0 | committed PASS dependency-audit artifact |
 | **3.2** freeze replay schema | 3.1 | Phase-3 integration branch/worktree + inherited test runner recorded |
 | **3.3A/B/C/D** implementation frontier | 3.2 | exact shared schema/source HEAD + all four task-specific worker branches created |
-| **3.4** integrate implementation frontier | all 3.3 tasks | all required worker commit hashes + worker tests + clean worker worktrees |
-| **3.5** parallel source extraction + corpus freeze/audit | 3.4 | integrated extractor/replay/scenario/provenance tests green; source inventory frozen |
-| **3.6A/B/C/D** candidate replay frontier | 3.5 | one frozen audited corpus path + SHA256; no corpus mutation during replay |
-| **3.7** aggregate/shortlist | all 3.6 lanes | four candidate JSON/Markdown artifacts + corpus hash match |
-| **3.8** Phase-4 readiness | 3.7 | shortlist/verdict frozen; missing-scenario/provenance work integrated |
+| **3.4A** integrate corpus/provenance path | 3.3A + 3.3D | extractor + evidence/provenance commits/tests green; frozen Step-3.2 source inventory remains unchanged |
+| **3.4B** integrate replay-engine path | 3.3B | replay-engine commit/tests green; may integrate while 3.5 source workers run |
+| **3.4C** integrate Phase-4 scenario path | 3.3C | scenario/oracle commit/tests green; may integrate while 3.5/3.6 work runs |
+| **3.5M** source-shard extraction + deterministic corpus merge | 3.4A | every required canonical shard committed; merged corpus hash frozen as provisional-canonical candidate |
+| **3.5A** corpus audit fan-out + aggregate audit | each shard may audit as soon as it exists; aggregate audit needs 3.5M | every canonical source audit + aggregate audit PASS against the 3.5M corpus hash |
+| **3.6A/B/C** cumulative candidate replay frontier | 3.5M + 3.4B | C120/C300/C600 replay against frozen 3.5M corpus hash; outputs provisional while 3.5A is pending |
+| **3H** historical H10 replay | 3.5M + 3.4B | diagnostic historical comparator; never a live-candidate/shortlist predecessor |
+| **3.7** promote/aggregate C shortlist | 3.6A/B/C + 3.5A PASS | C120/C300/C600 corpus hashes equal audited corpus; shortlist excludes H10 |
+| **3.8** Phase-4 readiness | 3.7 + 3.4C | shortlist/verdict frozen; R4/R6/R10/R12 + provenance contracts integrated |
 | **3.9** final validation | 3.8 | readiness PASS; no unresolved blocker |
-| **3.10** checkpoint | 3.9 | inherited optimized tests + pre-commit + CI + production isolation green |
+| **3.10** final replay report/checkpoint | 3.9 + 3H complete | C shortlist/readiness validated + H10 historical replay complete + final tests/CI/isolation green |
 
 ### Phase-3 worker branch/worktree topology
 
@@ -590,8 +949,7 @@ HEAD. Reuse/recover them if they already exist; never create alternate suffixes:
      worktree: /home/grammy-jiang/Projects/binnacle-chat-scheduling-phase3-provenance
 ```
 
-After Step 3.4 integrates the implementation frontier, create/rebase **fresh candidate-report worker
-branches from the post-3.5 frozen-corpus integration HEAD**:
+After Step 3.5M freezes the merged corpus hash **and** Step 3.4B has integrated the replay engine, create/rebase fresh replay-result worker branches from the current Phase-3 integration HEAD. Do not wait for Step 3.5A audits to finish:
 
 ```text
 feature/chat-mode-scheduling-v2-phase3-c120
@@ -604,10 +962,7 @@ feature/chat-mode-scheduling-v2-phase3-h10
   /home/grammy-jiang/Projects/binnacle-chat-scheduling-phase3-h10
 ```
 
-Each candidate-replay worker commits only its candidate JSON/Markdown. Step 3.7 orchestrator
-cherry-picks the four evidence commits in C120, C300, C600, H10 order. If a
-candidate was mechanically rejected during replay, it still writes/commits its
-rejection report; no lane is omitted.
+Each C replay worker commits only its C-candidate JSON/Markdown. The H10 worker commits its historical-comparator JSON/Markdown. Step 3.7 needs only C120/C300/C600; H10 is integrated whenever ready and is required only by 3.10 final closeout.
 
 The implementation frontier has four independent tasks because the work itself
 contains four disjoint ownership areas. The orchestrator launches **all four at
@@ -621,27 +976,36 @@ implementation-scenarios   -> 3.3C missing scenarios/oracles
 implementation-provenance  -> 3.3D timeout provenance/evidence
 ```
 
-If one implementation worker is blocked, the other three continue. Step 3.4 is a
-true fan-in barrier because its integration tests require all four ownership
-areas, but the orchestrator must not delay independent work merely to preserve a
-fixed batch shape.
+If one implementation worker is blocked, the other three continue. There is **no single all-worker integration barrier**. The orchestrator integrates each dependency path
+as soon as that path's inputs are ready: A+D feed 3.4A, B feeds 3.4B, C feeds
+3.4C. These integration commits share the canonical integration branch and are
+therefore serialized only for the short cherry-pick/test/commit critical section;
+workers spawned from an earlier frozen integration point continue concurrently.
 
-The candidate replay frontier likewise launches one worker for **each candidate
-policy** as soon as the audited corpus is frozen:
+The replay frontier launches one worker for each cumulative **C candidate** plus one independent H10 historical-comparator worker as soon as the Step-3.5M merged corpus hash is frozen and 3.4B is ready:
 
 ```text
 candidate-c120
 candidate-c300
 candidate-c600
-candidate-h10
+historical-h10
 ```
 
-The candidate frontier has one worker per frozen policy (`C120/C300/C600/H10`). Step 3.7 is the fan-in requiring all four policy reports; the count comes from the policy set, not from worker scheduling.
+Step 3.7 is the fan-in for the **three C candidate reports only**. The H10 worker
+runs on the same audited/provisional corpus pipeline but is diagnostic and may
+finish before or after shortlist/readiness work. This mirrors the authoritative
+A/B plan where H is not a production candidate.
 
 ### Dynamic source-shard extraction and audit fan-out
 
-Step 3.5 is intentionally more parallel than the original plan. The source
-inventory assigns a stable `source_id` to every canonical source:
+Step 3.5 is intentionally more parallel than the original plan. Before launching
+any shard worker, the orchestrator verifies the Step-3.2
+`phase3-source-inventory.json` SHA equals the value recorded in canonical progress.
+A mismatch invalidates 3.2 and blocks all shard work; workers never regenerate or
+mutate the inventory independently.
+
+The frozen source inventory assigns a stable `source_id` to every canonical
+source:
 
 ```text
 phase1-step3
@@ -653,7 +1017,7 @@ phase1-step8
 operational-journal   # only when a retained window exists
 ```
 
-After Step 3.4 integrates the extractor, the orchestrator creates **one worker per
+After Step 3.4A integrates the extractor/provenance path, the orchestrator creates **one worker per
 source_id** from the same integration HEAD. Branch/worktree names are derived
 deterministically:
 
@@ -664,9 +1028,16 @@ output:   benchmarks/chat-mode-scheduling-v2/phase3-corpus-shards/<source_id>.js
 ```
 
 All source workers run concurrently when ready. Each reads only its frozen source
-paths and writes only its shard file plus an optional shard Markdown note. A
-missing optional operational-journal window produces an explicit `unavailable`
-shard; a missing canonical Phase-1 source is a blocker.
+paths and writes only its shard file plus an optional shard Markdown note, then
+commits that artifact on its worker branch. A missing optional operational-journal
+window produces an explicit `unavailable` shard; a missing canonical Phase-1
+source is a blocker.
+
+As each source worker completes, the orchestrator validates its input/output
+hashes and briefly acquires `canonical-integration` to cherry-pick **that shard
+commit immediately**. This is continuous fan-in: do not wait for all shard workers
+before integrating completed shard artifacts. The short Git critical sections are
+serialized, while all remaining extraction/audit workers continue running.
 
 The extractor CLI therefore supports deterministic shard/merge operations:
 
@@ -684,8 +1055,9 @@ uv run python scripts/chat_scheduling_replay_corpus.py merge \
 ```
 
 As each extraction worker finishes, the orchestrator validates its source hash and
-can immediately launch its corresponding **independent audit worker**; it does not
-wait for every extraction worker first. Audit branch/worktree names are:
+immediately launches its corresponding **independent audit worker from that exact
+source-worker commit**; it does not wait for every extraction worker first. Audit
+branch/worktree names are:
 
 ```text
 feature/chat-mode-scheduling-v2-phase3-audit-<source_id>
@@ -693,15 +1065,17 @@ feature/chat-mode-scheduling-v2-phase3-audit-<source_id>
 ```
 
 Each audit worker re-derives counts/timing invariants from that immutable source
-and writes only:
+and shard artifact and writes only:
 
 ```text
 benchmarks/chat-mode-scheduling-v2/phase3-corpus-audits/<source_id>.md
 ```
 
-After all required shards exist, the orchestrator merges them deterministically
-into the corpus while any already-started shard audits continue running. Then it
-launches one additional aggregate consistency audit worker:
+After all required shard commits are integrated, the orchestrator merges them
+deterministically into the corpus while any already-started shard audits continue
+running. Per-source audit commits are cherry-picked as they complete under the
+same short canonical-integration lock. Then, once the merged corpus exists, launch
+one additional aggregate consistency audit worker:
 
 ```text
 branch:   feature/chat-mode-scheduling-v2-phase3-audit-aggregate
@@ -709,10 +1083,42 @@ worktree: /home/grammy-jiang/Projects/binnacle-chat-scheduling-phase3-audit-aggr
 output:   benchmarks/chat-mode-scheduling-v2/phase3-corpus-audits/aggregate.md
 ```
 
-Step 3.5 completes only when every canonical source audit and the aggregate audit
-pass against the same final corpus/source hashes. The number of simultaneous
-workers is therefore the number of ready source/audit tasks, not an arbitrary
-chat-session limit.
+Step 3.5M completes as soon as every required canonical shard is integrated and
+the deterministic merge produces a corpus JSON/Markdown with a frozen SHA. That
+SHA is immutable for all speculative replay workers.
+
+Step 3.5A continues independently: every per-source audit runs as soon as its
+shard exists, and the aggregate audit starts after 3.5M. 3.5A completes only when
+every canonical source audit and the aggregate audit pass against the **same
+3.5M corpus SHA** and all audit artifacts are present on the canonical branch.
+
+This deliberately overlaps audit latency with candidate replay. The number of
+simultaneous workers is the number of ready extraction/audit/replay tasks, not an
+arbitrary chat-session limit.
+
+### Speculative replay promotion/invalidation contract
+
+Every replay policy report (C120/C300/C600 **or H10**) started before 3.5A completion must record:
+
+```text
+corpus_sha256
+audit_status_at_start = pending
+provisional = true
+```
+
+They are deterministic computations over immutable corpus bytes, so no safety or
+external side effect depends on the pending audit. When 3.5A passes:
+
+- if the audited corpus SHA exactly equals the report's `corpus_sha256`, the
+  orchestrator promotes that report to canonical by recording
+  `audit_status=pass`, `provisional=false`; **do not rerun**;
+- if any audit exposes a source/corpus defect that requires a new corpus revision,
+  the old provisional reports remain historical diagnostics and only reports whose
+  corpus SHA differs from the new audited SHA are rerun;
+- if 3.5A is BLOCKED without a corrected corpus, Step 3.7 cannot promote/select a C candidate and Step 3.10 cannot finalize H10, but already-running deterministic replay workers may finish so their diagnostics are preserved.
+
+The provisional optimization saves wall time while preserving the rule that **no
+Phase-3 acceptance decision is made from an unaudited corpus**.
 
 ### Final CI attestation without self-reference
 
@@ -752,8 +1158,10 @@ final_report_json_sha256
 final_report_md_sha256
 phase3_source_head
 replay_corpus_path + sha256
-live_candidates[]
-preferred_live_candidate
+candidate_shortlist_path + sha256
+historical_h10_path + sha256
+live_candidates[]                 # C budgets only
+preferred_live_candidate          # C budget only
 scenario_catalog_sha256
 provenance_classifier_commit
 phase4_input_contract_path + sha256
@@ -815,21 +1223,32 @@ A single-process `build` convenience command may exist for local debugging, but
 Phase-3 canonical execution uses shard fan-out so independent source extraction is
 not serialized unnecessarily.
 
-Phase-3 aggregate CLI used by Step 3.7:
+Phase-3 report CLI has two fan-in modes.
+
+Step 3.7 C-candidate shortlist:
 
 ```bash
-uv run python scripts/chat_scheduling_phase3_report.py \
+uv run python scripts/chat_scheduling_phase3_report.py shortlist \
   --corpus benchmarks/chat-mode-scheduling-v2/phase3-replay-corpus.json \
   --candidate benchmarks/chat-mode-scheduling-v2/phase3-replay-c120.json \
   --candidate benchmarks/chat-mode-scheduling-v2/phase3-replay-c300.json \
   --candidate benchmarks/chat-mode-scheduling-v2/phase3-replay-c600.json \
-  --candidate benchmarks/chat-mode-scheduling-v2/phase3-replay-h10.json \
+  --output-json benchmarks/chat-mode-scheduling-v2/phase3-candidate-shortlist.json \
+  --output-md benchmarks/chat-mode-scheduling-v2/phase3-candidate-shortlist.md
+```
+
+Step 3.10 final replay report, after H10 is complete:
+
+```bash
+uv run python scripts/chat_scheduling_phase3_report.py final \
+  --shortlist benchmarks/chat-mode-scheduling-v2/phase3-candidate-shortlist.json \
+  --historical benchmarks/chat-mode-scheduling-v2/phase3-replay-h10.json \
   --output-json benchmarks/chat-mode-scheduling-v2/phase3-policy-replay-YYYY-MM-DD-rNN.json \
   --output-md benchmarks/chat-mode-scheduling-v2/phase3-policy-replay-YYYY-MM-DD-rNN.md
 ```
 
-The actual date/revision is resolved by the orchestrator before invocation; never
-literally create a file containing `YYYY-MM-DD-rNN`.
+The actual date/revision is resolved by the orchestrator before the final command;
+never literally create a file containing `YYYY-MM-DD-rNN`.
 
 ### Focused test matrix
 
@@ -848,17 +1267,22 @@ literally create a file containing `YYYY-MM-DD-rNN`.
   uv run pytest -q tests/scripts/test_chat_scheduling_provenance.py \
     tests/scripts/test_chat_scheduling_analyzer.py
 
-3.4 integration:
+3.4A corpus/provenance integration:
   uv run pytest -q tests/scripts/test_chat_scheduling_replay_corpus.py \
-    tests/scripts/test_chat_scheduling_replay.py \
-    tests/scripts/test_chat_scheduling_manifest.py \
-    tests/scripts/test_chat_scheduling_oracle.py \
     tests/scripts/test_chat_scheduling_provenance.py \
     tests/scripts/test_chat_scheduling_analyzer.py \
     tests/scripts/test_chat_scheduling_harness.py
 
-3.7 report:
+3.4B replay-engine integration:
+  uv run pytest -q tests/scripts/test_chat_scheduling_replay.py
+
+3.4C scenario/oracle integration:
+  uv run pytest -q tests/scripts/test_chat_scheduling_manifest.py \
+    tests/scripts/test_chat_scheduling_oracle.py
+
+3.7 shortlist + 3.10 final report modes:
   uv run pytest -q tests/scripts/test_chat_scheduling_phase3_report.py
+  # tests must cover both `shortlist` and `final` CLI modes
 ```
 
 If the completed test-efficiency program changes the wrapper used for full-suite
@@ -1021,7 +1445,9 @@ reconstructed.
 
 ## 16. Phase-3 replay corpus artifact
 
-Step 3.2 freezes schema version 1:
+Step 3.2 freezes **schema version 1 and an empty/header contract fixture** for the
+future corpus. It does not generate canonical replay rows yet. Step 3.5 consumes
+the frozen source inventory and produces the canonical artifact:
 
 ```text
 benchmarks/chat-mode-scheduling-v2/phase3-replay-corpus.json
@@ -1281,25 +1707,44 @@ other_submitted_error            # submitted but none of the above
 
 Classification is diagnostic only. It never changes canonical inclusion.
 
-### Step 3.4 — integrate implementation frontier 3A
+### Step 3.4A — integrate corpus/provenance path
 
-Target: 15–20 minutes.
+Target: short orchestrator critical section once 3.3A + 3.3D are complete.
 
-Orchestrator-owned canonical fan-in step.
-
-Cherry-pick worker commits in this order:
+Cherry-pick/integrate only:
 
 ```text
-corpus extractor
-replay engine
-scenario manifests
-timeout provenance
+3.3A corpus extractor
+3.3D provenance/evidence support
 ```
 
-Run focused integration tests plus manifest validation. Resolve no unexpected
-cross-worker conflict silently.
+Run their focused integration tests. Freeze the resulting integration HEAD as
+`phase3_corpus_path_head`. Immediately release the canonical-integration lock and
+launch Step 3.5 source-shard workers. Do **not** wait for 3.3B/3.3C.
 
-### Step 3.5 — build and validate the frozen replay corpus
+### Step 3.4B — integrate replay-engine path
+
+Predecessor: 3.3B only. When the replay-engine worker finishes, acquire the
+canonical-integration lock, bring its commit onto the current Phase-3 integration
+branch, run replay-engine focused tests, record `phase3_replay_path_head`, then
+release the lock. Step 3.6 waits for this checkpoint plus the frozen Step-3.5M corpus; Step 3.5M extraction does not wait for 3.4B.
+
+This integration may occur while source-shard extraction/audit workers created
+from `phase3_corpus_path_head` are still running. Their immutable input HEAD/hash
+remains valid; do not restart them merely because the canonical branch advanced.
+
+### Step 3.4C — integrate Phase-4 scenario path
+
+Predecessor: 3.3C only. Integrate R4/R6/R10/R12 + manifest/oracle changes when
+ready, run focused scenario/oracle tests, and record `phase3_scenario_path_head`.
+This checkpoint gates Step 3.8 but **does not gate** source extraction, candidate
+replay, or candidate aggregation.
+
+If 3.4B and 3.4C become ready simultaneously, queue their short integration
+critical sections in deterministic task-id order; this serialization is only for
+the shared Git integration branch, not for their workers/tests before fan-in.
+
+### Step 3.5M — extract shards and freeze the merged replay corpus
 
 Target: 10–20 minutes.
 
@@ -1311,6 +1756,7 @@ running while unrelated source extraction/merge-ready work proceeds.
 
 Required checks:
 
+- `phase3_corpus_path_head` matches the extractor/provenance input lineage used by every shard;
 - canonical submitted trial count agrees with Phase-1 reports;
 - no submitted failure was dropped because it lacks a successful conversation;
 - all positive waits use actual observed wait duration;
@@ -1319,9 +1765,23 @@ Required checks:
 - corpus generation is deterministic byte-for-byte when source evidence is
   unchanged.
 
-### Candidate replay frontier 3B — one concurrent worker per candidate policy
+### Step 3.5A — complete per-source and aggregate corpus audits
 
-Each lane reads the same frozen corpus and writes only its own candidate files.
+This audit branch begins **before** 3.5M finishes: each per-source audit starts as
+soon as its corresponding shard is frozen. After 3.5M produces the merged corpus,
+start the aggregate consistency audit immediately.
+
+Record every audit's source/shard/corpus hashes. Step 3.5A PASS requires all
+mandatory Phase-1 source audits plus aggregate audit PASS against exactly the
+3.5M corpus SHA. The optional operational-journal audit is required only when its
+source inventory entry is available rather than `unavailable`.
+
+A PASS releases Step 3.7 promotion/fan-in; it is **not** a predecessor for
+starting Step 3.6 candidate replay.
+
+### Replay frontier 3B — three C candidates + independent H historical comparator
+
+Each replay task reads the same frozen corpus and writes only its own policy result files.
 No source code edits during this candidate-replay frontier.
 
 #### Step 3.6A — C120 replay
@@ -1341,29 +1801,31 @@ Writes `phase3-replay-c300.*`.
 
 Writes `phase3-replay-c600.*`.
 
-#### Step 3.6D — H10 replay
+#### Step 3H — historical H10 replay
 
 Writes `phase3-replay-h10.*`.
 
-Each candidate report includes corpus hash, candidate algorithm id, preservation,
+Each policy report includes corpus hash, algorithm id, preservation,
 exhaustion, union-wall burden, calls clipped/nonblocking, and per-scenario table.
 
-### Step 3.7 — aggregate candidate replay and shortlist
+### Step 3.7 — promote C candidate reports and freeze live shortlist
 
 Target: 15–20 minutes.
 
-Orchestrator-owned fan-in after all four candidate policy artifacts are frozen.
-Independent workers from other non-conflicting checks may still run.
+Orchestrator-owned fan-in after C120/C300/C600 reports are frozen **and Step 3.5A is PASS**. First apply the speculative replay promotion/invalidation contract to the three C reports; H10 may still be running. No shortlist calculation begins while any required C candidate references a non-audited corpus SHA.
 
-Implement/validate `scripts/chat_scheduling_phase3_report.py` using the frozen CLI
-contract above, then write:
+Implement/validate the `shortlist` mode of
+`scripts/chat_scheduling_phase3_report.py` using the frozen CLI contract above,
+then write:
 
 ```text
-benchmarks/chat-mode-scheduling-v2/phase3-policy-replay-YYYY-MM-DD-rNN.json
-benchmarks/chat-mode-scheduling-v2/phase3-policy-replay-YYYY-MM-DD-rNN.md
+benchmarks/chat-mode-scheduling-v2/phase3-candidate-shortlist.json
+benchmarks/chat-mode-scheduling-v2/phase3-candidate-shortlist.md
 ```
 
-Apply the **Phase-3 offline candidate gates** mechanically. Output:
+Apply the **Phase-3 offline candidate gates only to C120/C300/C600**. H10 is not
+eligible for `live_candidates` and cannot become `preferred_live_candidate`.
+Output:
 
 ```text
 rejected_candidates
@@ -1390,17 +1852,18 @@ Phase-4 endpoint/harness support early. Validate without live ChatGPT trials:
 - R12 parameter rendering produces 40/150/330/630-second job runtimes for
   H10/C120/C300/C600 and expected safety-oracle semantics;
 - provenance classifier works on frozen Phase-1 timeout examples;
-- replay corpus and all four candidate artifacts are independently parseable and
-  share the frozen corpus SHA;
+- replay corpus + C120/C300/C600 reports + `phase3-candidate-shortlist.json` are independently parseable and share the audited corpus SHA; H10 result may still be pending because it is not a live-candidate dependency;
 - write a machine-readable Phase-4 input contract at:
 
   ```text
   benchmarks/chat-mode-scheduling-v2/phase4-input-contract.json
   ```
 
-  containing `live_candidates`, `preferred_live_candidate`, per-candidate budget,
-  scenario catalog SHA, provenance-classifier commit, canonical v2 instruction
-  SHA, and required logical arm vocabulary `A/B/C/H`;
+  containing `live_candidates` (**C budgets only**), `preferred_live_candidate`,
+  per-C-candidate budget, scenario catalog SHA, provenance-classifier commit,
+  canonical v2 instruction SHA, frozen H10 policy semantics/adapter requirement,
+  and required logical arm vocabulary `A/B/C/H`; it does not require the H10 replay
+  result itself;
 - capture only the **current hash/identity** of the historical A baseline source
   Project needed by Phase 4. The actual fresh baseline instruction snapshot is
   deliberately Phase-4 Step 4.1 work;
@@ -1414,18 +1877,33 @@ source mutation has started.
 
 Target: 10–20 minutes plus test runtime.
 
-Run the authoritative optimized suite recorded by Step 3.0, full
-pre-commit, CI, replay determinism check, and production isolation check.
+Run the authoritative optimized suite recorded by Step 3.0, full pre-commit, CI, C-candidate replay/shortlist determinism checks, and production isolation check. This validation may run while H10 historical replay is still finishing.
 
-### Step 3.10 — Phase-3 checkpoint
+### Step 3.10 — final replay report and Phase-3 checkpoint
 
-Write/update final progress and report. Phase 3 is COMPLETE only when:
+Predecessors: Step 3.9 PASS + Step 3H historical replay complete/promoted against
+the audited corpus SHA.
+
+Run the `chat_scheduling_phase3_report.py final` command to combine the frozen C
+shortlist with H10 historical-comparator evidence into the dated canonical
+`phase3-policy-replay-YYYY-MM-DD-rNN.{json,md}` report. Verify H10 uses the same
+audited corpus SHA; if its provisional corpus differs, rerun only H10 before final
+closeout.
+
+The final command is **not allowed to recompute C selection**. It embeds
+`candidate_shortlist_path + sha256` and copies `live_candidates` /
+`preferred_live_candidate` byte-for-byte/logically identically from the frozen
+shortlist artifact. A mismatch blocks closeout. H10 contributes only the
+historical-comparator section/fields.
+
+Then write/update final progress/handoff. Phase 3 is COMPLETE only when:
 
 ```text
 replay corpus frozen
-120/300/600/H10 all evaluated
-bad candidates explicitly rejected
-live shortlist recorded
+C120/C300/C600 evaluated and live shortlist frozen
+H10 historical comparator evaluated
+rejected C candidates explicitly recorded
+live shortlist contains only eligible C budgets
 R4/R6/R10/R12 manifests ready
 timeout provenance ready
 all tests + CI green
