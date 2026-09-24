@@ -39,7 +39,7 @@ Phase 5.0 dependency audit PASS
         |
         v
 Phase 5 staged deployment COMPLETE
-        |  Stage-1 24h PASS + Stage-2 smoke + T0
+        |  Stage-1 PASS after 24/48/72h observation + Stage-2 smoke + T0
         v
 Phase 6.0 dependency audit PASS
         |
@@ -71,13 +71,16 @@ invalidated and N.0 must be rerun before work continues.
 
 | Phase | Final report | Next-phase handoff |
 | --- | --- | --- |
-| 3 | `phase3-policy-replay-YYYY-MM-DD.{json,md}` | live candidate shortlist + corpus/scenario/provenance hashes |
-| 4 | `phase4-live-confirmatory-YYYY-MM-DD.{json,md}` | verdict + selected budget + source/instruction identities |
-| 5 | `phase5-staged-deployment-YYYY-MM-DD.{json,md}` | Stage-1 verdict + Stage-2 T0 + staging/rollback identities |
-| 6 | `phase6-post-deployment-review-YYYY-MM-DD.{json,md}` | terminal Phase 0–6 result; no implicit next phase |
+| 3 | `phase3-policy-replay-YYYY-MM-DD-rNN.{json,md}` | live candidate shortlist + corpus/scenario/provenance hashes |
+| 4 | `phase4-live-confirmatory-YYYY-MM-DD-rNN.{json,md}` | verdict + selected budget + source/instruction identities |
+| 5 | `phase5-staged-deployment-YYYY-MM-DD-rNN.{json,md}` | Stage-1 verdict + Stage-2 T0 + staging/rollback identities |
+| 6 | `phase6-post-deployment-review-YYYY-MM-DD-rNN.{json,md}` | terminal Phase 0–6 result; no implicit next phase |
 
 Each phase's progress JSON contains a `handoff` object. The next phase's N.0
 dependency audit recomputes report/artifact hashes and must reject disagreement.
+
+`rNN` starts at `r01`; reopening/re-auditing never overwrites committed evidence.
+The progress/handoff object names the one current canonical revision.
 
 ## Parallelism model
 
@@ -95,7 +98,7 @@ High-level waves:
 | 4 | endpoint / harness / analyzer / setup audit | 4 |
 | 4 | targeted candidate calibration | 4 |
 | 4 | evidence review | 4 |
-| 5 | Stage-1 24h evidence review | 4 |
+| 5 | Stage-1 observation review (24h; repeated at 48/72h only if activity is insufficient) | 4 |
 | 6 | T+24h review | 4 |
 | 6 | T+7d review | 4 |
 
