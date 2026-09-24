@@ -2,7 +2,7 @@
 
 Status: IN PROGRESS
 
-Updated: 2026-09-25T05:40:32+10:00
+Updated: 2026-09-25T05:51:35+10:00
 
 ## Canonical state
 
@@ -10,7 +10,7 @@ Updated: 2026-09-25T05:40:32+10:00
 - Worktree: /home/grammy-jiang/Projects/binnacle-chat-scheduling-phase3
 - Audited source HEAD: 5f2be143352aaa63fb680c1c79e289d46be201fe
 - Last completed step: 3.8
-- Next step: 3.9 full Phase-3 validation; Phase-4 live calibration remains blocked by NO_LIVE_CANDIDATE
+- Next step: 3.7 gate-population correction; revalidate dependent Step 3.8 binding afterward
 - Dependency audit: phase3-dependency-audit-2026-09-25-r01.json, r01, SHA-256 d3bec25ba8d49ed4db78e07930542b9e963608ad264c198f8fbf04c4ccfa473a
 - Task graph: phase3-task-graph.json, r01, SHA-256 44cbedb0524fe87a9d111579a96d0d33f4171dfee6ece34eb53baa4c506696b2
 - Initial orchestrator-state checkpoint SHA-256: cec108b23fcf319a48d699f123b8fbf713919f3873d1cae4968a16844b80ed12
@@ -82,7 +82,7 @@ Updated: 2026-09-25T05:40:32+10:00
 | 3.6B | complete |
 | 3.6C | complete |
 | 3H | complete |
-| 3.7 | complete |
+| 3.7 | running |
 | 3.8 | complete |
 | 3.9 | not_started |
 | 3.10 | not_started |
