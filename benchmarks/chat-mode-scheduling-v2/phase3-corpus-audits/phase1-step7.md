@@ -265,4 +265,15 @@ PY
 All 24 row-level invariant comparisons and all three submitted-population
 comparisons pass.
 
+## Canonical corpus binding (Step 3.5A)
+
+- Canonical revision-2 replay corpus SHA-256:
+  `4dd1e387c42d6fccd37d60795b00192144f3b4d93c57d9eb54ab527a72e8e94d`.
+- Canonical integrated shard SHA-256:
+  `98fbab4cc39735db0e2fa9b1079c5a7a74841e53748edcaff7da4501e338fed3`.
+- The Step 3.5A fan-in binds this independent source/shard PASS to the
+  aggregate revision-2 PASS. The shard hash above matches the integrated
+  shard bytes and the aggregate audit confirms exact membership in the
+  frozen corpus.
+
 AUDIT phase1-step7: PASS

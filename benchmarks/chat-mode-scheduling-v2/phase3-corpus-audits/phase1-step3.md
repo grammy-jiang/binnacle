@@ -239,4 +239,15 @@ Validation output:
 PASS canonical_slots=12 shard_rows=12 scenario_arm_counts=R1/A:3,R1/B:3,R2/A:3,R2/B:3 terminal_matches=12 positive_waits=0 nonzero_union_rows=0 required_completions=0
 ```
 
+## Canonical corpus binding (Step 3.5A)
+
+- Canonical revision-2 replay corpus SHA-256:
+  `4dd1e387c42d6fccd37d60795b00192144f3b4d93c57d9eb54ab527a72e8e94d`.
+- Canonical integrated shard SHA-256:
+  `6c1a6bf8df81bd3a68e697d3cfae9927fba4fec3c569ce27b71eefe134aed118`.
+- The Step 3.5A fan-in binds this independent source/shard PASS to the
+  aggregate revision-2 PASS. The shard hash above matches the integrated
+  shard bytes and the aggregate audit confirms exact membership in the
+  frozen corpus.
+
 AUDIT phase1-step3: PASS

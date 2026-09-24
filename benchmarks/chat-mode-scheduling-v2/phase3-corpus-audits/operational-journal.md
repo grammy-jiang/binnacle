@@ -188,4 +188,15 @@ source, shard, or invariant was skipped because of those command-text rejections
 
 All requested revision-2 operational-journal source/shard invariants match.
 
+## Canonical corpus binding (Step 3.5A)
+
+- Canonical revision-2 replay corpus SHA-256:
+  `4dd1e387c42d6fccd37d60795b00192144f3b4d93c57d9eb54ab527a72e8e94d`.
+- Canonical integrated shard SHA-256:
+  `40186dbf2adde0936a47d0a270c802f71fad5adf8dca9c8a3d9c039590b97cff`.
+- The Step 3.5A fan-in binds this independent source/shard PASS to the
+  aggregate revision-2 PASS. The shard hash above matches the integrated
+  shard bytes and the aggregate audit confirms exact membership in the
+  frozen corpus.
+
 AUDIT operational-journal: PASS
