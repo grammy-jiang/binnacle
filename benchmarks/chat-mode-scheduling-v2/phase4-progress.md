@@ -1,6 +1,6 @@
 # Chat mode scheduling v2 — Phase 4 progress
 
-Status: **in_progress**
+Status: **blocked**
 
 Branch: `feature/chat-mode-scheduling-v2-phase4`
 
@@ -10,7 +10,7 @@ Audited source HEAD: `3a4dfb1b248e4530fb09013976abb863c8e35eaf`
 
 Last completed step: **4.5**
 
-Next step: **4.6B0 qualification via manager runner request 4.6B0-qual**
+Next step: **repeat 4.6B0 aggregate level 3 (K=1) under host load1 <= 3.00, then reevaluate admission r01**
 
 ## Frozen Step 4.0 entry gate
 
@@ -42,7 +42,7 @@ Next step: **4.6B0 qualification via manager runner request 4.6B0-qual**
 | 4.4A | complete | — |
 | 4.5 | complete | 389e6a5 |
 | 4.6A | not_started | — |
-| 4.6B0 | not_started | — |
+| 4.6B0 | blocked | — |
 | 4.7 | not_started | — |
 | 4.6A:selected | not_started | — |
 | 4.8 | not_started | — |
@@ -205,6 +205,54 @@ Next step: **4.6B0 qualification via manager runner request 4.6B0-qual**
   SHA-256 deb26d1d621be0a53933be1b0cb983d8ab6eaae19da47203f22ac645b6f769b4.
 - C300/M1 chat 6ab6608c-98a0-83ec-8a5a-d73296f7b4a1 may remain from the
   cleanup-429 attempt and is explicitly listed for manager cleanup.
+
+## Step 4.6B0 core admission baseline — BLOCKED
+
+- Predecessor 4.5 is complete. The original 4.6B0-qual result is frozen at
+  SHA-256
+  c5231c5e11f5de372d6e73dee0c90393a53387260676f5843f5404f95a335c4d.
+- P4-A2 excludes q-read-1-a as a routing miss: all 10 fixture reads reached
+  production despite lane A's system hint. They were read-only disposable-fixture
+  calls, so this is an isolation incident, not a primary connector/config/schema
+  mutation. The A routing-miss rate is 1/10 (10.00%) in the original submitted
+  set and 1/11 (9.09%) after A's correctly routed wait repair submission; the
+  rule fails only above 10%. B and C300 have no observed routing misses.
+- The original Q-wait(1) block had no submitted outcomes: all three rows failed
+  before submission. Manager request 4.6B0-qual-2 therefore repaired that
+  block without counting pre-submit failures as qualification data.
+- The first submitted A repair outcome
+  r5-20260926T001004-5382623ee3 is correctly routed and otherwise healthy:
+  exact R5 reply, two matched lane calls, zero foreign calls,
+  production_unchanged=true, dispatch_ms=0.60 ms, local non-blocking
+  overhead about 0.08 ms, and no throttling.
+- Admission nevertheless **fails the mandatory host-load criterion** for this
+  measurement: A started at load1 4.63 on 4 CPUs, above
+  0.75 * nproc = 3.00. P4-A2 does not permit replacement of a correctly
+  routed submitted outcome, so this aggregate level cannot be declared passing.
+- Host-clean submitted serial R5 references give conservative p95
+  dispatch/overhead baselines of A 1.00/0.08 ms, B 0.76/0.10 ms, and C300
+  1.46/0.12 ms, corresponding to dispatch limits 21.00, 20.76 and 21.46 ms
+  and non-blocking-overhead limits 20.08, 20.10 and 20.12 ms. The A repair
+  timing is comfortably inside those limits and the 100 ms absolute ceiling.
+- No immutable phase4-live-admission-r01.json and no 4B-C300 or 4H
+  calibration run requests were written. The next measurement should repeat the
+  same smallest useful aggregate level of 3 sessions (K=1) after host load
+  returns to <=3.00; increasing K would not diagnose an environmental-load
+  failure.
+- Frozen blocking evidence: A trial JSON SHA-256
+  f40f5e67faa3994a457f1cb551d110874d62bbe3647fff7cbe7f08d9f3de2d12;
+  A endpoint evidence SHA-256
+  6787c5118b016acde71d75b2642ca5b7d191ddfc50de21e26cbd112ecc7d97e3.
+- Request validation: 4.6B0-qual is valid with 36 trials; 4.6B0-qual-2 is
+  valid with 3 repair trials. Production isolation remains at the accepted D2
+  baseline e8ece81d57dd2a478dd636d2b4f409519b845605 /
+  d24dadcc87e04096fdd960fc7d1543fca02ea53814b15ccd51fd9b1eb1153195,
+  with the blocking-wall budget key absent.
+- The repair runner finished with 3/3 owning submissions exit 0 and no routing
+  misses. B was host-clean at 0.75 -> 2.50 with dispatch 0.93 ms; C300 was
+  host-clean at 0.77 -> 0.84 with dispatch 0.80 ms. A remains the sole owning
+  host-load flag. Repair-result SHA-256:
+  11ee72571dcdb91d48d1e4be4813332d404def1b6bd39938b7d3ea013445b0a8.
 
 ## Step 4.3B analyzer integration
 
