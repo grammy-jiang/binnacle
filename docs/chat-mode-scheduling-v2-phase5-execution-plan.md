@@ -888,6 +888,19 @@ but you don't need to wait for me".
   hours). A `NO_GO_*` verdict still blocks Phase 5 and triggers the P5-A1
   discard rule after the owner is told.
 
+### Amendment P5-A3: owner confirmation of `project_connector_routing` (2026-09-25)
+
+Owner decision 2026-09-25 23:00 ("agree - it is okay") on the containment
+mechanism the 5.0S audit proposed: a distinct staging app/link; explicit
+staging-app system hints on every orchestrated rollout chat; the `Binnacle`
+Project instructions name the staging connector while keeping the canonical
+scheduling block; `disable_auto_invocation` on the staging link only after a
+test in the throwaway rehearsal Project shows `Binnacle` chats still reach
+staging with it on. Name-based routing of untagged chats is best effort: a
+`Binnacle` turn served by the production server is not staged evidence and is
+reported as a routing miss, never counted. 5.0F records this row as confirmed,
+citing this section and its planning commit.
+
 ## Phase-5 canonical staging workspace
 
 ```text
