@@ -472,8 +472,14 @@ def resolve_phase4_endpoint(
     for role in ("server", "manager", "tunnel"):
         pid = int(live[f"{role}_pid"])
         raw = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
-        actual = f"{pid}:{raw[raw.rfind(') ') + 2 :].split()[19]}"
-        if process_ids.get(role) != actual:
+        ticks = raw[raw.rfind(") ") + 2 :].split()[19]
+        expected = process_ids.get(role)
+        matches = (
+            expected.get("pid") == pid and expected.get("start_time_ticks") == ticks
+            if isinstance(expected, dict)
+            else expected == f"{pid}:{ticks}"
+        )
+        if not matches:
             raise HarnessError(f"stale {role} process identity")
     for key in ("token_path", "server_log_path", "manager_log_path", "tunnel_log_path"):
         if not Path(live[key]).expanduser().is_file():

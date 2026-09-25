@@ -448,7 +448,8 @@ def _resolver_env(monkeypatch, arm="B", endpoint="B", budget=None):
         "tunnel_profile": profile,
     }
     manifest = {**base, "phase4_source_head": source, "base_topology_sha256": "TOP", "project_name": f"project-{endpoint}", "project_id": f"pid-{endpoint}", "connector_logical_name": f"connector-{endpoint}", "attachment_status": "verified", "instruction_sha256": "INST"}  # fmt: skip
-    live = {**base, "phase4_source_head": source, "token_path": "/token", "server_log_path": "/server", "manager_log_path": "/manager", "tunnel_log_path": "/tunnel", "server_pid": pid, "manager_pid": pid, "tunnel_pid": pid, "process_start_identity": {name: f"{pid}:123" for name in ("server", "manager", "tunnel")}}  # fmt: skip
+    identities = {name: {"pid": pid, "start_time_ticks": "123"} for name in ("server", "manager", "tunnel")}  # fmt: skip
+    live = {**base, "phase4_source_head": source, "token_path": "/token", "server_log_path": "/server", "manager_log_path": "/manager", "tunnel_log_path": "/tunnel", "server_pid": pid, "manager_pid": pid, "tunnel_pid": pid, "process_start_identity": identities}  # fmt: skip
     docs = {"/baseline": {"phase4_source_head": source, "benchmark_source_project": {"instructions_snapshot_path": "/A", "instructions_sha256": "INST"}, "canonical_v2_instruction": {"path": "/V", "sha256": "INST"}, "model_thinking": {"thinking_effort": "max"}}, "/topology": {"phase4_source_head": source, "endpoints": {endpoint: base}}, f"/lanes/{endpoint}.json": manifest, "/registry": {"phase4_source_head": source, "endpoints": {endpoint: live}}}  # fmt: skip
 
     def fake_read(path, *args, **kwargs):
@@ -469,16 +470,12 @@ def _resolver_env(monkeypatch, arm="B", endpoint="B", budget=None):
     return sources, docs
 
 
-def test_phase4_resolver_rejects_private_identity_mismatch_and_stale_pid(monkeypatch):
+def test_phase4_resolver_rejects_private_identity_mismatch(monkeypatch):
     sources, docs = _resolver_env(monkeypatch)
     selected = runtime.resolve_phase4_endpoint("B", None, "B", sources=sources)
     assert selected["runtime_registry_sha256"] == "REG"
     docs["/registry"]["endpoints"]["B"]["port"] = 8111
     with pytest.raises(runtime.HarnessError, match="identity mismatch"):
-        runtime.resolve_phase4_endpoint("B", None, "B", sources=sources)
-    docs["/registry"]["endpoints"]["B"]["port"] = 8110
-    docs["/registry"]["endpoints"]["B"]["process_start_identity"]["server"] = "7:stale"
-    with pytest.raises(runtime.HarnessError, match="stale server"):
         runtime.resolve_phase4_endpoint("B", None, "B", sources=sources)
     sources, _ = _resolver_env(monkeypatch, arm="A", endpoint="A")
     assert (
@@ -487,3 +484,17 @@ def test_phase4_resolver_rejects_private_identity_mismatch_and_stale_pid(monkeyp
         ]
         == "INST"
     )
+
+
+@pytest.mark.parametrize("role", ["server", "manager", "tunnel"])
+def test_phase4_resolver_accepts_launcher_identity_shape_and_rejects_stale_role(monkeypatch, role):  # fmt: skip
+    sources, docs = _resolver_env(monkeypatch)
+    docs["/registry"]["endpoints"]["B"]["process_start_identity"][role]["start_time_ticks"] = "stale"  # fmt: skip
+    with pytest.raises(runtime.HarnessError, match=f"stale {role}"):
+        runtime.resolve_phase4_endpoint("B", None, "B", sources=sources)
+
+
+def test_phase4_resolver_keeps_string_process_identity_compatibility(monkeypatch):
+    sources, docs = _resolver_env(monkeypatch)
+    docs["/registry"]["endpoints"]["B"]["process_start_identity"] = {role: "7:123" for role in ("server", "manager", "tunnel")}  # fmt: skip
+    assert runtime.resolve_phase4_endpoint("B", None, "B", sources=sources)["runtime_registry_sha256"] == "REG"  # fmt: skip
