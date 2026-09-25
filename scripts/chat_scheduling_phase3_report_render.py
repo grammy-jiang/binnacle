@@ -54,7 +54,7 @@ def render_shortlist_markdown(report: Mapping[str, Any]) -> str:
         ]
     )
 
-    lines.extend(["", "## Gate populations", ""])
+    lines.extend(["## Gate populations", ""])
     for item in report["candidate_evaluations"]:
         lines.extend([f"### {item['candidate']}", ""])
         for gate, population in item["gate_populations"].items():

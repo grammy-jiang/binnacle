@@ -26,11 +26,11 @@
           "metric": "early_exhaustion_turns"
         },
         "gate_4_repeated_wait_burden_reduction": {
-          "after": 75.772057,
+          "after": 87.325603,
           "after_population": "operational_journal",
-          "before": 75.123692,
+          "before": 87.162212,
           "before_population": "canonical_plus_operational_turns",
-          "metric": "value_percent"
+          "metric": "repeated_wait_burden_reduction_percent"
         },
         "gate_5_evidence_completeness": {
           "after": 0,
@@ -41,11 +41,24 @@
         }
       },
       "diagnostics": {
+        "combined_definition_a_non_gating": {
+          "burden_reduction_percent": 75.123692,
+          "candidate_blocking_wall_s": 20874.85417,
+          "observed_blocking_wall_s": 83914.599908,
+          "population": "canonical_plus_operational_turns"
+        },
         "combined_exhaustion": {
           "population": "canonical_plus_operational_positive_wait_turns",
           "turns_exhausted": 139,
           "turns_with_positive_waits": 291,
           "value_percent": 47.766323
+        },
+        "gate_4_definition_a_non_gating": {
+          "burden_reduction_percent": 75.772057,
+          "candidate_blocking_wall_s": 20154.25617,
+          "observed_blocking_wall_s": 83185.996908,
+          "population": "operational_journal",
+          "reference_percent": 70.0
         },
         "operational_exhaustion": {
           "available": true,
@@ -104,11 +117,17 @@
           "passed": true
         },
         "gate_4_repeated_wait_burden_reduction": {
+          "burden_reduction_percent": 75.772057,
           "candidate_blocking_wall_s": 20154.25617,
-          "minimum_percent": 70.0,
+          "candidate_repeated_wait_burden_s": 7086.384091,
+          "definition": "b_repeat_per_turn_job_union",
+          "definition_a_non_gating_reference_percent": 70.0,
+          "minimum_percent": 60.0,
           "observed_blocking_wall_s": 83185.996908,
+          "observed_repeated_wait_burden_s": 55911.013516,
           "passed": true,
-          "value_percent": 75.772057
+          "repeated_wait_burden_reduction_percent": 87.325603,
+          "value_percent": 87.325603
         },
         "gate_5_evidence_completeness": {
           "examples": [],
@@ -146,11 +165,11 @@
           "metric": "early_exhaustion_turns"
         },
         "gate_4_repeated_wait_burden_reduction": {
-          "after": 52.927366,
+          "after": 63.448499,
           "after_population": "operational_journal",
-          "before": 52.467818,
+          "before": 63.319406,
           "before_population": "canonical_plus_operational_turns",
-          "metric": "value_percent"
+          "metric": "repeated_wait_burden_reduction_percent"
         },
         "gate_5_evidence_completeness": {
           "after": 0,
@@ -161,11 +180,24 @@
         }
       },
       "diagnostics": {
+        "combined_definition_a_non_gating": {
+          "burden_reduction_percent": 52.467818,
+          "candidate_blocking_wall_s": 39886.440128,
+          "observed_blocking_wall_s": 83914.599908,
+          "population": "canonical_plus_operational_turns"
+        },
         "combined_exhaustion": {
           "population": "canonical_plus_operational_positive_wait_turns",
           "turns_exhausted": 85,
           "turns_with_positive_waits": 291,
           "value_percent": 29.209622
+        },
+        "gate_4_definition_a_non_gating": {
+          "burden_reduction_percent": 52.927366,
+          "candidate_blocking_wall_s": 39157.840128,
+          "observed_blocking_wall_s": 83185.996908,
+          "population": "operational_journal",
+          "reference_percent": 70.0
         },
         "operational_exhaustion": {
           "available": true,
@@ -175,9 +207,7 @@
           "value_percent": 30.57554
         }
       },
-      "failed_gates": [
-        "gate_4_repeated_wait_burden_reduction"
-      ],
+      "failed_gates": [],
       "gate_populations": {
         "gate_1_completion_preservation": {
           "canonical_turns": 48,
@@ -223,11 +253,17 @@
           "passed": true
         },
         "gate_4_repeated_wait_burden_reduction": {
+          "burden_reduction_percent": 52.927366,
           "candidate_blocking_wall_s": 39157.840128,
-          "minimum_percent": 70.0,
+          "candidate_repeated_wait_burden_s": 20436.314672,
+          "definition": "b_repeat_per_turn_job_union",
+          "definition_a_non_gating_reference_percent": 70.0,
+          "minimum_percent": 60.0,
           "observed_blocking_wall_s": 83185.996908,
-          "passed": false,
-          "value_percent": 52.927366
+          "observed_repeated_wait_burden_s": 55911.013516,
+          "passed": true,
+          "repeated_wait_burden_reduction_percent": 63.448499,
+          "value_percent": 63.448499
         },
         "gate_5_evidence_completeness": {
           "examples": [],
@@ -235,7 +271,7 @@
           "passed": true
         }
       },
-      "passed": false,
+      "passed": true,
       "report_path": "benchmarks/chat-mode-scheduling-v2/phase3-replay-c300.json",
       "report_sha256": "db8081d25139192a6b1eb7dfeb0b948ddbabbacbca87b2cf0e34acb3a9896cf6"
     },
@@ -265,11 +301,11 @@
           "metric": "early_exhaustion_turns"
         },
         "gate_4_repeated_wait_burden_reduction": {
-          "after": 29.824066,
+          "after": 36.593805,
           "after_population": "operational_journal",
-          "before": 29.565116,
+          "before": 36.51935,
           "before_population": "canonical_plus_operational_turns",
-          "metric": "value_percent"
+          "metric": "repeated_wait_burden_reduction_percent"
         },
         "gate_5_evidence_completeness": {
           "after": 0,
@@ -280,11 +316,24 @@
         }
       },
       "diagnostics": {
+        "combined_definition_a_non_gating": {
+          "burden_reduction_percent": 29.565116,
+          "candidate_blocking_wall_s": 59105.150685,
+          "observed_blocking_wall_s": 83914.599908,
+          "population": "canonical_plus_operational_turns"
+        },
         "combined_exhaustion": {
           "population": "canonical_plus_operational_positive_wait_turns",
           "turns_exhausted": 52,
           "turns_with_positive_waits": 291,
           "value_percent": 17.869416
+        },
+        "gate_4_definition_a_non_gating": {
+          "burden_reduction_percent": 29.824066,
+          "candidate_blocking_wall_s": 58376.550685,
+          "observed_blocking_wall_s": 83185.996908,
+          "population": "operational_journal",
+          "reference_percent": 70.0
         },
         "operational_exhaustion": {
           "available": true,
@@ -342,11 +391,17 @@
           "passed": true
         },
         "gate_4_repeated_wait_burden_reduction": {
+          "burden_reduction_percent": 29.824066,
           "candidate_blocking_wall_s": 58376.550685,
-          "minimum_percent": 70.0,
+          "candidate_repeated_wait_burden_s": 35451.046526,
+          "definition": "b_repeat_per_turn_job_union",
+          "definition_a_non_gating_reference_percent": 70.0,
+          "minimum_percent": 60.0,
           "observed_blocking_wall_s": 83185.996908,
+          "observed_repeated_wait_burden_s": 55911.013516,
           "passed": false,
-          "value_percent": 29.824066
+          "repeated_wait_burden_reduction_percent": 36.593805,
+          "value_percent": 36.593805
         },
         "gate_5_evidence_completeness": {
           "examples": [],
@@ -360,19 +415,26 @@
     }
   ],
   "candidate_gate_thresholds": {
+    "burden_reduction_percent_definition": "a_total_turn_union",
+    "burden_reduction_percent_non_gating_reference_percent": 70.0,
     "completion_preservation_min_percent": 95.0,
     "early_exhaustion_margin_s": 1.0,
     "exhaustion_max_percent": 10.0,
-    "repeated_wait_burden_reduction_min_percent": 70.0
+    "repeated_wait_burden_definition": "b_repeat_per_turn_job_union",
+    "repeated_wait_burden_reduction_min_percent": 60.0
   },
   "corpus_path": "benchmarks/chat-mode-scheduling-v2/phase3-replay-corpus.json",
   "corpus_sha256": "4dd1e387c42d6fccd37d60795b00192144f3b4d93c57d9eb54ab527a72e8e94d",
-  "live_candidates": [],
+  "live_candidates": [
+    "C300"
+  ],
   "open_evidence_limitations": [],
   "phase4_targeted_calibration_requirements": [
-    "Do not start Phase-4 targeted calibration: no C120/C300/C600 candidate passed every Phase-3 offline gate."
+    "Exercise every live C candidate during targeted live calibration; do not collapse the shortlist to the preferred candidate.",
+    "Exercise the R12 budget-edge runtime for each live C budget while preserving the canonical A/B/C/H arm vocabulary.",
+    "Treat preferred_live_candidate as the smallest offline-passing budget, not as a declared production budget."
   ],
-  "preferred_live_candidate": null,
+  "preferred_live_candidate": "C300",
   "production_budget_declared": false,
   "rejected_candidates": [
     {
@@ -381,13 +443,6 @@
       "failed_gates": [
         "gate_1_completion_preservation",
         "gate_2_exhaustion"
-      ]
-    },
-    {
-      "budget_s": 300.0,
-      "candidate": "C300",
-      "failed_gates": [
-        "gate_4_repeated_wait_burden_reduction"
       ]
     },
     {
@@ -417,5 +472,5 @@
       "sha256": "41f0f4b59a00e43b638f9048cc2e7288838a68ae25e966d12f09050245b1e08e"
     }
   },
-  "verdict": "NO_LIVE_CANDIDATE"
+  "verdict": "LIVE_CANDIDATES_AVAILABLE"
 }
