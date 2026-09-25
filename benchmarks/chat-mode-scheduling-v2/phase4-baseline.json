@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "artifact_kind": "phase4-baseline",
+  "captured_at": "2026-09-25T15:59:43+10:00",
+  "phase4_source_head": "06bc1649c4bad9449470366da971649bb7620020",
+  "source_checkpoint": {
+    "branch": "feature/chat-mode-scheduling-v2-phase4",
+    "worktree": "/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4",
+    "phase3_predecessor_head": "3a4dfb1b248e4530fb09013976abb863c8e35eaf",
+    "phase4_source_head": "06bc1649c4bad9449470366da971649bb7620020",
+    "source_freeze_rule": "A/B/C/H logical arms and every physical C endpoint use this exact release-candidate source commit."
+  },
+  "benchmark_source_project": {
+    "name": "rp-test-sandbox",
+    "project_id": "g-p-6aaea9da2bc881918d6f9eb5177cf904",
+    "project_model": null,
+    "memory_enabled": false,
+    "project_updated_at": "2026-09-25T02:53:06.637292+00:00",
+    "instructions_snapshot_path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase4/baseline-instructions.txt",
+    "instructions_snapshot_mode": "0600",
+    "instructions_sha256": "f1c100d0ddb93c29f8f78e5a2d28e297d861ba6e2c7e53712ec886dea06bafa5",
+    "instructions_bytes": 107,
+    "capture_method": "chatgpt-project --browser chrome get-instructions; remove exactly the one trailing newline added by CLI print()",
+    "cli_stdout_sha256": "65e535f82d81f6d6f403007313555154f6319527897cf6f6bdf3b41bae4104a0"
+  },
+  "model_thinking": {
+    "browser": "chrome",
+    "model_version": "latest",
+    "server_last_used_model_config": {
+      "model": "gpt-5-6-thinking",
+      "thinking_effort": "max"
+    },
+    "resolved_preset": "Extra High",
+    "power_slider_position": 4,
+    "power_slider_positions": 5
+  },
+  "browser_profile": {
+    "browser": "chrome",
+    "source_profile": "Default",
+    "cookie_db": "/home/grammy-jiang/.config/google-chrome/Default/Cookies",
+    "harness_browser_default": "chrome",
+    "playwright_profile": "throwaway profile populated by injecting cookies from the logged-in Chrome Default profile",
+    "cookie_probe_readable_count": 27,
+    "cookie_probe_unreadable_count": 0,
+    "session_token_expiry": "2026-12-24"
+  },
+  "canonical_v2_instruction": {
+    "path": ".claude/skills/chatgpt-mcp-dev/references/project-instructions-chat-scheduling-v2.txt",
+    "sha256": "b7df6953a3c64bd245b3d5ff13b6f2667e940d5a154e650fec0b10e6a22cf094"
+  },
+  "phase3_candidate_shortlist": {
+    "path": "benchmarks/chat-mode-scheduling-v2/phase3-candidate-shortlist.json",
+    "sha256": "072556e60fb55f686d872bce4da004bc272e9162e32459f2dc276657faa0e094",
+    "live_candidates": [
+      "C300"
+    ],
+    "preferred_live_candidate": "C300"
+  }
+}

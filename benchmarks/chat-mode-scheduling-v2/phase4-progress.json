@@ -6,8 +6,8 @@
   "worktree": "/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4",
   "source_branch": "feature/chat-mode-scheduling-v2-phase3",
   "audited_source_head": "3a4dfb1b248e4530fb09013976abb863c8e35eaf",
-  "last_completed_step": "4.0",
-  "next_step": "4.1",
+  "last_completed_step": "4.1",
+  "next_step": "4.2A/4.2B/4.2C/4.2D",
   "dependency_audit": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase4-dependency-audit-2026-09-25-r01.json",
     "revision": "r01",
@@ -70,7 +70,8 @@
     "origin_master_at_audit": "260bc009a55e7a78716ac42faf64ae88cf2c6724",
     "origin_proof_of_concept_at_audit": "260bc009a55e7a78716ac42faf64ae88cf2c6724",
     "phase4_bootstrap_base": "3a4dfb1b248e4530fb09013976abb863c8e35eaf",
-    "phase4_dependency_audit_head": "89a206d24185284de278df18fe77ac0e4eccbb01"
+    "phase4_dependency_audit_head": "89a206d24185284de278df18fe77ac0e4eccbb01",
+    "phase4_source_head": "06bc1649c4bad9449470366da971649bb7620020"
   },
   "frozen_hashes": {
     "phase3_progress_json": "984ba7891843a6eb3a15b750e95177d3a325f14280990f47be62527d44482bde",
@@ -93,7 +94,10 @@
     "tox_ini": "244323e4443a5f645de6e1700530d5ec737a4e971496e9c561e1ed561679dd0e",
     "host_safety_guard": "2ced4609e58cd3c5ff3a6db9be66c1255fd44b1e4ea73ced02f94dd7f1e81624",
     "task_graph": "371dac292442c10d5c845f30bc71759e7f8422ceaa0ba998ad56b730c20fde17",
-    "orchestrator_state_initial_checkpoint": "8b592e2e58fdcda6d861c498b617b5b28d22ea94a4663ab5d8e5bfbe6a2e7111"
+    "orchestrator_state_initial_checkpoint": "8b592e2e58fdcda6d861c498b617b5b28d22ea94a4663ab5d8e5bfbe6a2e7111",
+    "baseline_instruction": "f1c100d0ddb93c29f8f78e5a2d28e297d861ba6e2c7e53712ec886dea06bafa5",
+    "phase4_baseline_json": "e8a6c5149185dfb32e9810be1610cd63011b08837f2562cf8780a3df3d6a61d3",
+    "phase4_baseline_md": "c41c44ec771495c26b43ffefc2831b0a877587fe329ec5475fd340be30ab3be0"
   },
   "preflight_findings": {
     "p4-preflight-git-lineage": "804da7b66ddc1f0e71ddf3106790989f50a0f320de4cd3b3f0aedaf962d68461",
@@ -134,9 +138,23 @@
       "worker_branch": null
     },
     "4.1": {
-      "status": "not_started",
-      "tests": [],
-      "notes": [],
+      "status": "complete",
+      "tests": [
+        "Default-policy equivalence -> PASS: empty JobsSettings blocking-wall budget map; focused config/guard/job-status/lifecycle/tool-contract suite 129 passed in 23.04s; pre-run nproc=4 loadavg=2.46 2.72 2.59.",
+        "uv run python scripts/run_test_suite.py --workers 4 --seed 12345 -> PASS: parallel-safe 1253 passed/3 skipped; no_xdist 2 passed/1256 deselected; aggregate 1255 passed, 0 failed, 3 skipped; total elapsed 108.71s; pre-run nproc=4 loadavg=3.82 3.05 2.71 (timing under foreign parallel-programme load).",
+        "uv run tox -e coverage-policy -- --seed 12345 -> PASS: unit 372+1 passed; non-unit 881+1 passed/3 skipped; aggregate 1255 passed/3 skipped; 99 production modules, 0 below final target, 0 errors; tox 107.30s; pre-run nproc=4 loadavg=9.83 5.71 3.74 (timing under foreign parallel-programme load).",
+        "uv run pre-commit run --files phase4-baseline.{json,md} phase4-progress.{json,md} -> PASS: all applicable hooks passed; pre-run nproc=4 loadavg=10.83 9.18 6.23 (timing under foreign parallel-programme load).",
+        "bash /tmp/p36-manager/isolation-check.sh -> PASS: production master remains clean at 260bc009a55e7a78716ac42faf64ae88cf2c6724; all four services active/running; config/unit/profile hashes unchanged; blocking-wall budget key absent; listening port remains 127.0.0.1:8000."
+      ],
+      "notes": [
+        "Step 4.0 predecessor evidence is consistent: canonical pre-evidence HEAD 06bc1649c4bad9449470366da971649bb7620020; remote Phase-3 remains 3a4dfb1b248e4530fb09013976abb863c8e35eaf; remote master/proof-of-concept remain 260bc009a55e7a78716ac42faf64ae88cf2c6724.",
+        "Inherited runner/coverage-policy hashes remain identical to Step-4.0 audit evidence; no upstream source/test-tooling drift was detected.",
+        "Frozen phase4_source_head is 06bc1649c4bad9449470366da971649bb7620020 for every A/B/C/H logical arm and physical C endpoint.",
+        "Exact rp-test-sandbox instructions were recaptured with explicit Chrome at 2026-09-25T15:59:43+10:00, stored privately mode 0600, and hash to f1c100d0ddb93c29f8f78e5a2d28e297d861ba6e2c7e53712ec886dea06bafa5.",
+        "Model/thinking is frozen to gpt-5-6-thinking/max (Extra High, 4 of 5); Chrome Default is the frozen source profile.",
+        "Canonical v2 instruction hash remains b7df6953a3c64bd245b3d5ff13b6f2667e940d5a154e650fec0b10e6a22cf094; live shortlist remains C300 only at 072556e60fb55f686d872bce4da004bc272e9162e32459f2dc276657faa0e094.",
+        "The 4.2A/B/C/D implementation worktrees were created/recovered with worktree-add.sh and each resolves to the exact frozen phase4_source_head 06bc1649c4bad9449470366da971649bb7620020."
+      ],
       "commit": null,
       "worker_branch": null
     },
@@ -145,28 +163,28 @@
       "tests": [],
       "notes": [],
       "commit": null,
-      "worker_branch": null
+      "worker_branch": "feature/chat-mode-scheduling-v2-phase4-endpoints"
     },
     "4.2B": {
       "status": "not_started",
       "tests": [],
       "notes": [],
       "commit": null,
-      "worker_branch": null
+      "worker_branch": "feature/chat-mode-scheduling-v2-phase4-harness"
     },
     "4.2C": {
       "status": "not_started",
       "tests": [],
       "notes": [],
       "commit": null,
-      "worker_branch": null
+      "worker_branch": "feature/chat-mode-scheduling-v2-phase4-analysis"
     },
     "4.2D": {
       "status": "not_started",
       "tests": [],
       "notes": [],
       "commit": null,
-      "worker_branch": null
+      "worker_branch": "feature/chat-mode-scheduling-v2-phase4-readiness"
     },
     "4.3A": {
       "status": "not_started",
@@ -360,9 +378,75 @@
           "4.13"
         ]
       }
+    },
+    {
+      "kind": "phase4_source_freeze",
+      "at": "2026-09-25T15:59:43+10:00",
+      "phase4_source_head": "06bc1649c4bad9449470366da971649bb7620020",
+      "phase4_baseline_path": "benchmarks/chat-mode-scheduling-v2/phase4-baseline.json",
+      "phase4_baseline_sha256": "e8a6c5149185dfb32e9810be1610cd63011b08837f2562cf8780a3df3d6a61d3",
+      "phase4_baseline_md_sha256": "c41c44ec771495c26b43ffefc2831b0a877587fe329ec5475fd340be30ab3be0",
+      "baseline_instruction_sha256": "f1c100d0ddb93c29f8f78e5a2d28e297d861ba6e2c7e53712ec886dea06bafa5",
+      "canonical_v2_instruction_sha256": "b7df6953a3c64bd245b3d5ff13b6f2667e940d5a154e650fec0b10e6a22cf094",
+      "phase3_candidate_shortlist_sha256": "072556e60fb55f686d872bce4da004bc272e9162e32459f2dc276657faa0e094",
+      "live_candidates": [
+        "C300"
+      ],
+      "preferred_live_candidate": "C300"
     }
   ],
   "handoff": null,
   "created_at": "2026-09-25T15:31:10+10:00",
-  "updated_at": "2026-09-25T15:41:48+10:00"
+  "updated_at": "2026-09-25T16:06:56+10:00",
+  "phase4_source_head": "06bc1649c4bad9449470366da971649bb7620020",
+  "baseline_snapshot": {
+    "path": "benchmarks/chat-mode-scheduling-v2/phase4-baseline.json",
+    "md_path": "benchmarks/chat-mode-scheduling-v2/phase4-baseline.md",
+    "captured_at": "2026-09-25T15:59:43+10:00",
+    "phase4_source_head": "06bc1649c4bad9449470366da971649bb7620020",
+    "source_project": {
+      "name": "rp-test-sandbox",
+      "project_id": "g-p-6aaea9da2bc881918d6f9eb5177cf904"
+    },
+    "baseline_instruction_path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase4/baseline-instructions.txt",
+    "baseline_instruction_mode": "0600",
+    "baseline_instruction_sha256": "f1c100d0ddb93c29f8f78e5a2d28e297d861ba6e2c7e53712ec886dea06bafa5",
+    "canonical_v2_instruction_path": ".claude/skills/chatgpt-mcp-dev/references/project-instructions-chat-scheduling-v2.txt",
+    "canonical_v2_instruction_sha256": "b7df6953a3c64bd245b3d5ff13b6f2667e940d5a154e650fec0b10e6a22cf094",
+    "model": "gpt-5-6-thinking",
+    "thinking_effort": "max",
+    "ui_preset": "Extra High",
+    "ui_power_slider_position": 4,
+    "browser": "chrome",
+    "chrome_profile": "Default",
+    "chrome_cookie_db": "/home/grammy-jiang/.config/google-chrome/Default/Cookies",
+    "phase3_candidate_shortlist_path": "benchmarks/chat-mode-scheduling-v2/phase3-candidate-shortlist.json",
+    "phase3_candidate_shortlist_sha256": "072556e60fb55f686d872bce4da004bc272e9162e32459f2dc276657faa0e094",
+    "live_candidates": [
+      "C300"
+    ],
+    "preferred_live_candidate": "C300"
+  },
+  "implementation_workers": {
+    "4.2A": {
+      "branch": "feature/chat-mode-scheduling-v2-phase4-endpoints",
+      "worktree": "/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4-endpoints",
+      "base": "06bc1649c4bad9449470366da971649bb7620020"
+    },
+    "4.2B": {
+      "branch": "feature/chat-mode-scheduling-v2-phase4-harness",
+      "worktree": "/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4-harness",
+      "base": "06bc1649c4bad9449470366da971649bb7620020"
+    },
+    "4.2C": {
+      "branch": "feature/chat-mode-scheduling-v2-phase4-analysis",
+      "worktree": "/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4-analysis",
+      "base": "06bc1649c4bad9449470366da971649bb7620020"
+    },
+    "4.2D": {
+      "branch": "feature/chat-mode-scheduling-v2-phase4-readiness",
+      "worktree": "/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4-readiness",
+      "base": "06bc1649c4bad9449470366da971649bb7620020"
+    }
+  }
 }

@@ -8,9 +8,9 @@ Worktree: `/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4`
 
 Audited source HEAD: `3a4dfb1b248e4530fb09013976abb863c8e35eaf`
 
-Last completed step: **4.0**
+Last completed step: **4.1**
 
-Next step: **4.1**
+Next step: **4.2A / 4.2B / 4.2C / 4.2D**
 
 ## Frozen Step 4.0 entry gate
 
@@ -30,7 +30,7 @@ Next step: **4.1**
 | Task | Status | Commit |
 | --- | --- | --- |
 | 4.0 | complete | — |
-| 4.1 | not_started | — |
+| 4.1 | complete | — |
 | 4.2A | not_started | — |
 | 4.2B | not_started | — |
 | 4.2C | not_started | — |
@@ -56,6 +56,22 @@ Next step: **4.1**
 | 4.12 | not_started | — |
 | 4H-R | not_started | — |
 | 4.13 | not_started | — |
+
+## Step 4.1 source checkpoint
+
+- Frozen Phase-4 source HEAD: `06bc1649c4bad9449470366da971649bb7620020`.
+- Baseline snapshot JSON SHA-256: `e8a6c5149185dfb32e9810be1610cd63011b08837f2562cf8780a3df3d6a61d3`.
+- Baseline snapshot Markdown SHA-256: `c41c44ec771495c26b43ffefc2831b0a877587fe329ec5475fd340be30ab3be0`.
+- `rp-test-sandbox` (`g-p-6aaea9da2bc881918d6f9eb5177cf904`) exact instructions are stored outside Git at `/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase4/baseline-instructions.txt` with mode `0600`; SHA-256 `f1c100d0ddb93c29f8f78e5a2d28e297d861ba6e2c7e53712ec886dea06bafa5`.
+- Current web model/thinking state: `gpt-5-6-thinking` / `max` (`Extra High`, position 4 of 5).
+- Frozen browser source profile: Google Chrome `Default`; current probe found 27 readable cookies, 0 unreadable, with session-token expiry `2026-12-24`.
+- Canonical v2 instruction SHA-256: `b7df6953a3c64bd245b3d5ff13b6f2667e940d5a154e650fec0b10e6a22cf094`.
+- Phase-3 live shortlist: `C300` only; shortlist SHA-256 `072556e60fb55f686d872bce4da004bc272e9162e32459f2dc276657faa0e094`.
+- Focused default-policy equivalence: **PASS**, 129 tests.
+- Optimized full suite: **PASS**, 1,255 passed / 3 skipped.
+- Coverage policy: **PASS**, 1,255 passed / 3 skipped; 99 production modules, 0 below target, 0 errors.
+- Implementation workers 4.2A/B/C/D are created/recovered at the exact frozen source HEAD on the documented endpoint, harness, analysis, and readiness branches/worktrees.
+- File-scoped pre-commit: **PASS**; production isolation recheck: **PASS** with the production baseline unchanged.
 
 ## Step 4.0 validation
 
