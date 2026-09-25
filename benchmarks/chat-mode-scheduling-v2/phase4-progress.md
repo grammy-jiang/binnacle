@@ -36,7 +36,7 @@ Next step: **4.2A / 4.2B / 4.2C / 4.2D**
 | 4.2C | not_started | — |
 | 4.2D | not_started | — |
 | 4.3A | not_started | — |
-| 4.3B | not_started | — |
+| 4.3B | running | — |
 | 4.4A | not_started | — |
 | 4.5 | not_started | — |
 | 4.6A | not_started | — |

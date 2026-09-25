@@ -194,7 +194,7 @@
       "worker_branch": null
     },
     "4.3B": {
-      "status": "not_started",
+      "status": "running",
       "tests": [],
       "notes": [],
       "commit": null,
@@ -397,7 +397,7 @@
   ],
   "handoff": null,
   "created_at": "2026-09-25T15:31:10+10:00",
-  "updated_at": "2026-09-25T16:06:56+10:00",
+  "updated_at": "2026-09-25T17:11:42+10:00",
   "phase4_source_head": "06bc1649c4bad9449470366da971649bb7620020",
   "baseline_snapshot": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase4-baseline.json",
