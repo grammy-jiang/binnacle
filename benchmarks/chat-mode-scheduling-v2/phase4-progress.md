@@ -57,7 +57,7 @@ Next step: **manager-dispatched Step 4.7 re-judgment under P4-A3 using the corre
 | 4C | not_started | — |
 | 4.11 | not_started | — |
 | 4.12 | not_started | — |
-| 4H-R | running | P4-A3 reanalysis in progress; prior comparator superseded |
+| 4H-R | complete | P4-A3 comparator frozen; H outcomes unchanged; selected C300 9/9 |
 | 4.13 | not_started | — |
 
 ### Dynamic lane manifest freezes
@@ -406,32 +406,44 @@ Next step: **manager-dispatched Step 4.7 re-judgment under P4-A3 using the corre
 Next step: **manager executes 4.6A-sel-qual and dispatches evaluation of
 Step 4.6A:selected from the frozen result**.
 
-## Step 4H-R historical H comparator — RUNNING (P4-A3 REANALYSIS)
+## Step 4H-R historical H comparator — COMPLETE (P4-A3 REANALYSIS)
 
-The prior comparator at commit `f600a1dc` used analyzer head `6073902b` and is historical evidence only; task 4H-R2 is re-analyzing the frozen H and selected-C300 trials at corrected analyzer head `76ec24ee`.
-
-- Frozen comparator JSON SHA-256
-  `12e477d0c6e16dfa41a3bbfd61dab1ba783486c83b2668ab8ee30812b9753f4f` and Markdown SHA-256
-  `50e7393adbb9d61016afb996cdf96f82ba60dae497ea9c156eb26424e5f85762`.
-- The 10 owning H trials cover R5/R6/R7 x3 plus R12 x1. One earlier R5
-  attempt failed before MCP submission and does not own a canonical slot.
-- P4-A2 retained-log recovery resolves the manager's `routing=null` serialization
-  gap: H routing misses are **0/10 (0%)**. Current observed rates are A 1/13
-  (7.69%), B 0/13, C 0/24, H 0/10; no arm exceeds the >10% integrity threshold.
-- On bounded R5/R6/R7, H is **0/9 correct**, **0/9 same-prompt**, and **9/9
-  budget-exhaustion handoffs**, with zero interruptions and nine required
-  continuations. C300 calibration is 7/9 same-prompt with two continuations.
-- H's raw bounded median wall time is 62.556 s versus 108.399 s for C300, but
-  this is early handoff rather than successful-completion acceleration.
-- R12 emitted the requested textual budget handoff, but its only `job_status`
-  result returned `blocking_budget_exhausted=false`; the canonical analyzer
-  therefore classifies it as premature and incorrect.
-- Focused 4.3B analyzer/confirmatory regression: **21 passed in 2.05s**; 4 CPUs;
-  pre-run load average 1.74 / 1.99 / 2.01 under foreign parallel-programme load.
-- Direct analyzer execution initially lacked the repository module path; rerunning
-  the same analyzer with `PYTHONPATH=.` resolved imports with no semantic change.
-- H remains diagnostic and does not alter Step 4.7 or any Step 4.12 verdict.
-  Phase 4 remains blocked at Step 4.7, so no Step 4.13 handoff exists to append.
+- Corrected analyzer head:
+  `76ec24eed464e1162f4b51d9549143bf6175d8bb`; the prior comparator at
+  `f600a1dc` used analyzer head `6073902b` and remains superseded history.
+- Re-analyzed **10/10 owning H trials** and **10/10 frozen selected-C300
+  calibration trials**. The raw run/result hashes and lane identities did not
+  change.
+- H bounded R5/R6/R7 remains **0/9 correct**, **0/9 same-prompt**, **9/9
+  budget-exhaustion handoffs**, zero premature handoffs, zero interruptions and
+  nine continuations.
+- P4-A3 changes three H internal oracle diagnostics only: R5 repeats 1 and 3
+  and R6 repeat 1 now match a positive wait and report
+  `wait_result state='running'` rather than an unmatched `None`. H
+  correctness, handoff, provenance and continuation outcomes do not change.
+- H R12 remains incorrect/premature: its one-shot 10 s wait never returns the
+  required `blocking_budget_exhausted=true` tool-result signature.
+- Step 4.7 revision r02 selected **C300 at 300 s**. Corrected C300 bounded
+  behavior is **9/9 same-prompt and correct**, zero premature handoffs and zero
+  continuations; C300 R12 is now correct with the expected exhaustion handoff.
+- Raw bounded median wall time remains H 62.556 s versus C300 108.399 s. This
+  is not a completion-speed advantage for H: H hands off all nine bounded
+  trials, while C300 completes all nine in the same prompt.
+- P4-A2 routing integrity remains **PASS**: A 1/13 (7.69%), B 0/13, C 0/24,
+  H 0/10; no arm exceeds the >10% threshold.
+- Updated comparator JSON SHA-256:
+  `13f1fae101ccf9de63b7c45ed593b4827ba8df4cd7a7943079ec214d812eecb7`.
+  Updated Markdown SHA-256:
+  `25345d3d5567878ef226d13d11d820357bf55eec8d9930402dd0bbd10de06b51`.
+- Focused P4-A3 analyzer/evidence/confirmatory regression:
+  **27 passed in 2.98s**; `nproc=4`; pre-run load average
+  2.03 / 2.69 / 2.65 under foreign parallel-programme load.
+- H remains diagnostic and does not alter the C gate matrix or Step 4.12
+  verdict. Step 4.13 has not started and `handoff` remains null, so no handoff
+  append is required.
+- One long helper command was intercepted by platform safety before reaching
+  the connector; a short analyzer loop plus state-file reads provided the same
+  evidence with no semantic deviation.
 
 ## Step 4.7-fix P4-A3 analyzer wait matching — COMPLETE
 

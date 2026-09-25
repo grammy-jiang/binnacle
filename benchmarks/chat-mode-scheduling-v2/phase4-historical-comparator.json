@@ -2,16 +2,16 @@
   "alters_4_12_verdict": false,
   "alters_c_gate_matrix": false,
   "comparison": {
-    "basis": "C300 calibration because Step 4.7 returned NO_GO and selected no C endpoint",
+    "basis": "selected C300 at 300 s from Step 4.7 revision r02; comparison uses the frozen C300 calibration trials",
     "bounded_r5_r6_r7": {
       "C300": {
         "budget_exhaustion_handoffs": 0,
-        "correctness_passes": 7,
+        "correctness_passes": 9,
         "interruptions": 0,
-        "manual_continuations_total": 2,
+        "manual_continuations_total": 0,
         "median_wall_s": 108.399,
-        "premature_handoffs": 2,
-        "same_prompt_completions": 7
+        "premature_handoffs": 0,
+        "same_prompt_completions": 9
       },
       "H": {
         "budget_exhaustion_handoffs": 9,
@@ -22,14 +22,14 @@
         "premature_handoffs": 0,
         "same_prompt_completions": 0
       },
-      "interpretation": "Not a successful-completion latency comparison: every bounded H trial handed off after budget exhaustion, whereas C300 completed seven of nine in the same prompt.",
+      "interpretation": "Not a successful-completion latency comparison: every bounded H trial handed off after historical-budget exhaustion, while selected C300 completed all nine in the same prompt under the corrected analyzer.",
       "raw_median_wall_delta_percent_h_minus_c300": -42.291,
       "raw_median_wall_ratio_h_over_c300": 0.57709
     },
     "by_scenario": {
       "R12": {
         "C300_budget_exhaustion_handoff": true,
-        "C300_correctness_passed": false,
+        "C300_correctness_passed": true,
         "C300_premature_handoff": false,
         "C300_wall_s": 347.819,
         "H_budget_exhaustion_handoff": false,
@@ -39,7 +39,7 @@
       },
       "R5": {
         "C300_median_wall_s": 40.268,
-        "C300_same_prompt": "1/3",
+        "C300_same_prompt": "3/3",
         "H_median_wall_s": 46.965,
         "H_over_C300_ratio": 1.166311,
         "H_same_prompt": "0/3"
@@ -61,14 +61,10 @@
     },
     "c300_run_result_json_sha256": "4ecbbd622113c843e7542b2eb67678fd7bf3daf0c51229dfb10c7acf06adbee5",
     "c300_run_result_jsonl_sha256": "51c4a3dadf977f9fab8601ae0e145e283020222929b0584cc4be1cc978dbdfce",
-    "selected_c_endpoint": null
+    "selected_c_endpoint": "C300",
+    "selected_c_budget_s": 300
   },
-  "conclusion": {
-    "evidence_integrity_blocker": false,
-    "handoff_action": "No Phase-4 handoff exists yet because the phase is blocked at Step 4.7; retain these hashes for Step 4.13 if the phase is later resumed.",
-    "phase4_verdict_effect": "none; H is diagnostic and does not alter the C gate matrix or any Step 4.12 verdict",
-    "summary": "The historical H 10 s one-shot policy systematically converts the bounded R5/R6/R7 waits into budget-exhaustion handoffs: 0/9 same-prompt completion and 9/9 required continuations. R12 also fails the required exhaustion-evidence signature because the assistant hands off after the first consumed wait without a second call that returns blocking_budget_exhausted=true."
-  },
+  "conclusion": "P4-A3 leaves H outcome-level behavior unchanged: the historical 10 s one-shot guard converts all nine bounded wait-heavy trials into continuation handoffs, while selected C300 completes 9/9 bounded trials in the same prompt under the corrected analyzer. H remains diagnostic only and does not alter the C gate matrix or Step 4.12 verdict.",
   "diagnostic_only": true,
   "evidence_integrity": {
     "arm_rates": {
@@ -110,7 +106,7 @@
       "slot": "4H:R5:1"
     }
   ],
-  "generated_at": "2026-09-26T02:48:21+10:00",
+  "generated_at": "2026-09-26T08:07:12+10:00",
   "h_aggregate": {
     "all_targeted": {
       "budget_exhaustion_handoffs": 9,
@@ -202,7 +198,7 @@
       "manual_continuations_required": 1,
       "oracle_failures": [
         "all_nodes_complete: missing nodes: ['wait_result']",
-        "job_state: wait_result state=None"
+        "job_state: wait_result state='running'"
       ],
       "positive_job_status_calls": 4,
       "premature_handoff": false,
@@ -256,7 +252,7 @@
       "manual_continuations_required": 1,
       "oracle_failures": [
         "all_nodes_complete: missing nodes: ['wait_result']",
-        "job_state: wait_result state=None"
+        "job_state: wait_result state='running'"
       ],
       "positive_job_status_calls": 2,
       "premature_handoff": false,
@@ -283,7 +279,7 @@
       "manual_continuations_required": 1,
       "oracle_failures": [
         "all_nodes_complete: missing nodes: ['wait_result']",
-        "job_state: wait_result state=None",
+        "job_state: wait_result state='running'",
         "exact_reply: final reply mismatch"
       ],
       "positive_job_status_calls": 2,
@@ -490,5 +486,30 @@
   "schema_version": 1,
   "status": "complete",
   "step": "4H-R",
-  "v2_instruction_sha256": "b7df6953a3c64bd245b3d5ff13b6f2667e940d5a154e650fec0b10e6a22cf094"
+  "v2_instruction_sha256": "b7df6953a3c64bd245b3d5ff13b6f2667e940d5a154e650fec0b10e6a22cf094",
+  "phase4_analyzer_path_head": "76ec24eed464e1162f4b51d9549143bf6175d8bb",
+  "p4_a3_reanalysis": {
+    "amendment": "P4-A3",
+    "prior_comparator_commit": "f600a1dc14d267c9c400e60795e9df536d1d4ff3",
+    "prior_comparator_json_sha256": "12e477d0c6e16dfa41a3bbfd61dab1ba783486c83b2668ab8ee30812b9753f4f",
+    "prior_analyzer_path_head": "6073902ba1e72a946da0ea7d7e901e36f47f96a3",
+    "corrected_analyzer_path_head": "76ec24eed464e1162f4b51d9549143bf6175d8bb",
+    "reanalyzed_trials": {
+      "H": 10,
+      "selected_C300": 10
+    },
+    "h_outcome_classifications_changed": false,
+    "h_internal_oracle_updates": [
+      "4H:R5:1 wait_result job-state diagnostic changed from None to running",
+      "4H:R5:3 wait_result job-state diagnostic changed from None to running",
+      "4H:R6:1 wait_result job-state diagnostic changed from None to running"
+    ],
+    "comparison_changes": [
+      "C300 bounded same-prompt completion 7/9 -> 9/9",
+      "C300 bounded premature handoff 2/9 -> 0/9",
+      "C300 bounded manual continuations 2 -> 0",
+      "C300 R12 correctness false -> true",
+      "comparison basis is now selected C300 at 300 s under Step 4.7 revision r02"
+    ]
+  }
 }
