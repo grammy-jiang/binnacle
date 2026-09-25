@@ -1,6 +1,6 @@
 # Chat mode scheduling v2 — Phase 4 progress
 
-Status: **in_progress**
+Status: **blocked**
 
 Branch: `feature/chat-mode-scheduling-v2-phase4`
 
@@ -10,7 +10,7 @@ Audited source HEAD: `3a4dfb1b248e4530fb09013976abb863c8e35eaf`
 
 Last completed step: **4.6B0**
 
-Next step: **manager executes 4B-C300 and 4H calibration requests under admission r01; 4.7 waits for the required C300 calibration fan-in**
+Next step: **STOP at Step 4.7 — C300 failed the targeted live budget-selection gates; no selected C endpoint and no 4.6A:selected request. A new owner-approved experiment is required to continue Phase 4.**
 
 ## Frozen Step 4.0 entry gate
 
@@ -43,7 +43,7 @@ Next step: **manager executes 4B-C300 and 4H calibration requests under admissio
 | 4.5 | complete | 389e6a5 |
 | 4.6A | not_started | — |
 | 4.6B0 | complete | — |
-| 4.7 | not_started | — |
+| 4.7 | blocked | — |
 | 4.6A:selected | not_started | — |
 | 4.8 | not_started | — |
 | 4.9.1 | not_started | — |
@@ -354,3 +354,34 @@ Next step: **manager executes 4B-C300 and 4H calibration requests under admissio
 - Production remains observation-only and unchanged.
 - The first local graph-validator draft used an over-broad Phase-5 text check;
   its corrected dependency-only check passes the authoritative 9-point contract.
+
+## Step 4.7 C budget selection — BLOCKED / NO-GO
+
+- C300 is the only Phase-3 live candidate. Final C-lane admission remains
+  immutable admission r01, SHA-256
+  16671e4aa1dbeaf07acc09c481aae59f645ee2185b6c7cbdbe822bdefec37eaf:
+  aggregate cap 3 sessions, C300 cap 1, H cap 1.
+- Every 4B-C300 state directory was analyzed: R5 x3, R6 x3, R7 x3 and R12 x1.
+  On the nine bounded R5/R6/R7 trials, same-prompt completion is **7/9**
+  (required 9/9), premature handoff is **2/9** (required 0), unexpected
+  budget-exhaustion handoff is **0/9**, and submitted interruption is **0/9**.
+- The frozen replay definition-(b) repeated-wait burden reduction remains
+  **63.448499%**, passing the >=60% gate.
+- R12 produced the expected budget-exhaustion handoff and no premature handoff or
+  interruption, but its analyzer correctness is false because the required
+  successful wait_result carrying blocking_budget_exhausted=true and
+  state=running is absent.
+- Amendment P4-A2 routing recovery: the manager rows contain routing=null, but a
+  read-only retained-log audit found every one of the ten calibration run ids only
+  in C300's server log, with zero matches in A, B, H, or the production journal.
+  Calibration C routing misses are **0/10 (0%)**. Frozen qualification rates were
+  A 1/13 (7.69%), B 0/13, C 0/14, H 0/0; including this calibration, C is
+  0/24. No observed arm exceeds the >10% evidence-integrity threshold.
+- Result hashes: 4B-C300.json
+  4ecbbd622113c843e7542b2eb67678fd7bf3daf0c51229dfb10c7acf06adbee5;
+  4B-C300.jsonl
+  51c4a3dadf977f9fab8601ae0e145e283020222929b0584cc4be1cc978dbdfce.
+- Focused analyzer/confirmatory regression revalidation: **21 passed in 2.15s**;
+  nproc=4; pre-run load average 1.32 / 1.56 / 1.97 under foreign load.
+- Because all Step-4.7 rules must pass simultaneously, the verdict is **NO_GO**.
+  selected_c_endpoint is null. No 4.6A:selected run request is written.
