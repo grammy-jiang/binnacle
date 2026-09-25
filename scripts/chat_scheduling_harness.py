@@ -16,6 +16,8 @@ from scripts.chat_scheduling_chat import (
     ChatArtifact,
     InstructionLease,
     ProjectClient,
+    lane_send_options,
+    render_lane_prompt,
     send_project_chat,
 )
 from scripts.chat_scheduling_manifest import ROOT as SCENARIO_ROOT
@@ -222,7 +224,12 @@ def run_trial(
             "jobs": fixture.jobs,
             "created": True,
         }
-        record["prompt"] = fixture.rendered_prompt()
+        record["prompt"] = render_lane_prompt(
+            fixture.rendered_prompt(), selected["connector_logical_name"]
+        )
+        record["prompt_sha256"] = hashlib.sha256(record["prompt"].encode()).hexdigest()
+        route = lane_send_options(selected)
+        record["chat_routing"] = route
         record["stage"] = "chat_running"
         write_json(record_path, record)
         with shared_send_gate(trial=True, url_file=url_file, timing_file=timing_file):
@@ -233,6 +240,9 @@ def run_trial(
                 url_file,
                 browser=browser,
                 timing_file=timing_file,
+                system_hint=route["system_hint"],
+                model=route["model"],
+                effort=route["effort"],
             )
         record["submission_status"] = "completed"
         record["chat"]["send_result"] = result

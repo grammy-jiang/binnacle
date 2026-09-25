@@ -9,6 +9,7 @@ import subprocess
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
 
@@ -21,6 +22,45 @@ CHAT_ID_RE = re.compile(
     r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
     re.IGNORECASE,
 )
+
+WEB_OPS_SCRIPTS = (
+    Path.home() / ".claude" / "skills" / "chatgpt-web-operations" / "scripts"
+)
+API_SEND_PROMPT = WEB_OPS_SCRIPTS / "send_prompt.py"
+API_READ_CHAT = WEB_OPS_SCRIPTS / "read_chat.py"
+
+BARE_PRODUCTION_CONNECTOR = re.compile(r"\bRaspberry Pi MCP\b(?! Scheduling\b)")
+
+
+def render_lane_prompt(prompt: str, connector_logical_name: str) -> str:
+    rendered = BARE_PRODUCTION_CONNECTOR.sub(connector_logical_name, prompt)
+    if BARE_PRODUCTION_CONNECTOR.search(rendered):
+        raise HarnessError("rendered prompt still names the production connector")
+    return rendered
+
+
+def lane_send_options(selected: dict[str, Any]) -> dict[str, str]:
+    manifest = json.loads(
+        Path(selected["lane_manifest_path"]).read_text(encoding="utf-8")
+    )
+    app_id = str(manifest.get("app_id") or "")
+    system_hint = str(manifest.get("system_hint") or "")
+    expected_hint = f"plugin:plugin_{app_id}" if app_id else ""
+    if not app_id or system_hint != expected_hint:
+        raise HarnessError("lane manifest has invalid connector system hint identity")
+    config = selected["model_thinking"].get(
+        "server_last_used_model_config", selected["model_thinking"]
+    )
+    model = str(config.get("model") or "")
+    effort = str(config.get("thinking_effort") or "")
+    if not model or not effort:
+        raise HarnessError("frozen model/thinking state is incomplete")
+    return {
+        "system_hint": system_hint,
+        "model": model,
+        "effort": effort,
+        "app_id": app_id,
+    }
 
 
 class ProjectClient:
@@ -225,6 +265,144 @@ def branch_chatgpt_send() -> Path:
     return SKILL_SCRIPTS / "chatgpt-send"
 
 
+def _write_timing(path: Path | None, payload: dict[str, Any]) -> None:
+    if path is None:
+        return
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    tmp.replace(path)
+
+
+def _routed_project_chat(
+    project_id: str,
+    prompt: str,
+    timeout_s: float,
+    url_file: Path,
+    *,
+    browser: str,
+    timing_file: Path | None,
+    system_hint: str,
+    model: str,
+    effort: str,
+) -> dict[str, Any]:
+    prompt_file = url_file.with_name("chat-prompt.txt")
+    result_file = url_file.with_name("chat-send.json")
+    send_body_file = url_file.with_name("chat-send-body.json")
+    prompt_file.write_text(prompt, encoding="utf-8")
+    args = [
+        "python3",
+        str(API_SEND_PROMPT),
+        str(prompt_file),
+        "--project",
+        project_id,
+        "--system-hint",
+        system_hint,
+        "--model",
+        model,
+        "--effort",
+        effort,
+        "--json",
+        str(result_file),
+        "--record-send-body",
+        str(send_body_file),
+        "--timeout",
+        str(timeout_s),
+        "--browser",
+        browser,
+        "--no-wait",
+    ]
+
+    # send_prompt.py's single-send failure path deliberately writes no JSON.
+    # Once it starts, a non-zero exit can mean the message posted but resolve
+    # failed, so trial sends are never automatically retried.
+    _run(args, timeout=max(timeout_s + 30, 120))
+    result = json.loads(result_file.read_text(encoding="utf-8"))
+    conversation_id = str(result.get("conversation_id") or "")
+    url = str(result.get("url") or "")
+    if (
+        not conversation_id
+        or not result.get("resolved")
+        or not CHAT_ID_RE.fullmatch(conversation_id)
+    ):
+        raise HarnessError("API-path sender did not resolve an exact conversation id")
+    if not url:
+        url = f"https://chatgpt.com/c/{conversation_id}"
+    url_file.write_text(url + "\n", encoding="utf-8")
+
+    sent_at = result.get("sent_at")
+    if send_body_file.exists():
+        # The request recorder is written on the f/conversation POST, so its
+        # mtime preserves the old harness's Enter/send timing origin much more
+        # closely than send_prompt.py's pre-browser "sent_at" bookkeeping.
+        sent_epoch = send_body_file.stat().st_mtime
+    else:
+        try:
+            sent_epoch = datetime.fromisoformat(str(sent_at)).timestamp()
+        except (TypeError, ValueError):
+            sent_epoch = time.time()
+    _write_timing(
+        timing_file,
+        {
+            "status": "running",
+            "sent_at_epoch_s": sent_epoch,
+        },
+    )
+
+    deadline = time.monotonic() + timeout_s
+    last_text = ""
+    while time.monotonic() < deadline:
+        poll_args = ["python3", str(API_READ_CHAT), conversation_id, "--text"]
+        poll = _run(poll_args, timeout=30, check=False)
+        if poll.returncode == 0:
+            _header, separator, reply = poll.stdout.partition("\n\n")
+            if not separator:
+                raise HarnessError("read_chat.py returned an unexpected reply shape")
+            settled_epoch = time.time()
+            wall_s = round(max(0.0, settled_epoch - sent_epoch), 3)
+            _write_timing(
+                timing_file,
+                {
+                    "status": "complete",
+                    "sent_at_epoch_s": sent_epoch,
+                    "settled_at_epoch_s": settled_epoch,
+                    "wall_s": wall_s,
+                },
+            )
+            result.update(
+                {
+                    "url": url,
+                    "reply": reply.strip(),
+                    "sent_at_epoch_s": sent_epoch,
+                    "settled_at_epoch_s": settled_epoch,
+                    "wall_s": wall_s,
+                    "submit_attempts": 1,
+                }
+            )
+            return result
+        if poll.returncode != 1:
+            raise HarnessError(
+                f"read_chat.py failed with exit code {poll.returncode}: "
+                f"{poll.stderr.strip()}"
+            )
+        _header, separator, tail = poll.stdout.partition("\n\n")
+        if separator:
+            last_text = tail.strip()
+        time.sleep(1.0)
+
+    observed_epoch = time.time()
+    _write_timing(
+        timing_file,
+        {
+            "status": "timeout",
+            "sent_at_epoch_s": sent_epoch,
+            "observed_at_epoch_s": observed_epoch,
+            "wall_s": round(max(0.0, observed_epoch - sent_epoch), 3),
+            "last_text": last_text,
+        },
+    )
+    raise subprocess.TimeoutExpired(args, timeout_s, output=last_text)
+
+
 def send_project_chat(
     project_id: str,
     prompt: str,
@@ -233,7 +411,28 @@ def send_project_chat(
     *,
     browser: str = "chrome",
     timing_file: Path | None = None,
+    system_hint: str | None = None,
+    model: str | None = None,
+    effort: str | None = None,
 ) -> dict[str, Any]:
+    routed = (system_hint, model, effort)
+    if any(value is not None for value in routed):
+        if not system_hint or not model or not effort:
+            raise HarnessError(
+                "routed trial send requires system_hint, model and effort"
+            )
+        return _routed_project_chat(
+            project_id,
+            prompt,
+            timeout_s,
+            url_file,
+            browser=browser,
+            timing_file=timing_file,
+            system_hint=system_hint,
+            model=model,
+            effort=effort,
+        )
+
     args = [
         str(branch_chatgpt_send()),
         "--browser",
