@@ -8,9 +8,9 @@ Worktree: `/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4`
 
 Audited source HEAD: `3a4dfb1b248e4530fb09013976abb863c8e35eaf`
 
-Last completed step: **4.5**
+Last completed step: **4.6B0**
 
-Next step: **evaluate 4.6B0 aggregate level 3 (K=1) from 4.6B0-qual-3 against frozen serial references, then write admission r01 on PASS**
+Next step: **manager executes 4B-C300 and 4H calibration requests under admission r01; 4.7 waits for the required C300 calibration fan-in**
 
 ## Frozen Step 4.0 entry gate
 
@@ -42,7 +42,7 @@ Next step: **evaluate 4.6B0 aggregate level 3 (K=1) from 4.6B0-qual-3 against fr
 | 4.4A | complete | — |
 | 4.5 | complete | 389e6a5 |
 | 4.6A | not_started | — |
-| 4.6B0 | running | — |
+| 4.6B0 | complete | — |
 | 4.7 | not_started | — |
 | 4.6A:selected | not_started | — |
 | 4.8 | not_started | — |
@@ -206,53 +206,56 @@ Next step: **evaluate 4.6B0 aggregate level 3 (K=1) from 4.6B0-qual-3 against fr
 - C300/M1 chat 6ab6608c-98a0-83ec-8a5a-d73296f7b4a1 may remain from the
   cleanup-429 attempt and is explicitly listed for manager cleanup.
 
-## Step 4.6B0 core admission baseline — RUNNING
+## Step 4.6B0 core admission baseline — COMPLETE
 
-- Predecessor 4.5 is complete. The original 4.6B0-qual result is frozen at
+- Predecessor 4.5 is complete. Attempt a1 remains historical evidence: its
+  correctly routed A wait repair started at load1 4.63 > 3.00, so that
+  measurement could not qualify K=1.
+- Attempt a2 consumes 4.6B0-qual-3 with the frozen serial references from
+  4.6B0-qual. The runner produced six owning rows, retried four pre-submit
+  failures without granting them slots, recorded no routing miss, and flagged no
+  owning row for host load.
+- K=1 is **PASS** at aggregate level 3 sessions. Across owning a2 rows the
+  maximum load1 is 2.96 on four CPUs (limit 3.00), throttling is 0x0, every
+  trial exits 0, production is unchanged, instructions are verified, endpoint
+  evidence has no integrity error, and normalized foreign calls are zero.
+- Frozen host-clean serial R5 nearest-rank p95 dispatch/overhead baselines are
+  A 1.00/0.08 ms, B 0.76/0.10 ms and C300 1.46/0.12 ms. The a2 wait block is
+  A 1.80/0.13 ms, B 1.11/0.10 ms and C300 1.49/0.16 ms, below dispatch limits
+  21.00/20.76/21.46 ms and overhead limits 20.08/20.10/20.12 ms. Maximum
+  dispatch is 1.80 ms, below the 100 ms absolute ceiling.
+- All three a2 R2 analyzers pass. A/B a2 R5 analyzers pass; C300 repeats the
+  missing-wait_result/premature-handoff signature already present in 3/5
+  serial C300 R5 references (serial pass count 2/5). This is not a
+  correctness/reachability loss that exists only at K=1 concurrency, so the
+  plan's concurrency-only criterion passes.
+- P4-A2 campaign routing-miss rates are A 1/13 = 7.69%, B 0/13 = 0%, C
+  0/14 = 0%, and H 0/0 (not yet observed). No arm exceeds the >10%
+  NO_GO_EVIDENCE_INTEGRITY threshold. Historical q-read-1-a remains the
+  sole routing miss and is excluded from every arm metric/gate.
+- Immutable admission phase4-live-admission-r01.json is frozen at SHA-256
+  16671e4aa1dbeaf07acc09c481aae59f645ee2185b6c7cbdbe822bdefec37eaf.
+  It sets aggregate cap 3 sessions and conservative per-endpoint cap 1 for
+  C300 and H; no 4.6B:lane refinement is requested.
+- Calibration request 4B-C300 is valid with 10 sequential C300 trials
+  (R5/R6/R7 x3, R12 x1), budget 300, admission r01, aggregate cap 3 and
+  priority 2; SHA-256
+  7340637573297ff6e859fedb9620559b41a1939c33364f9d101df8c69be4a28c.
+- Calibration request 4H is valid with 10 sequential H trials
+  (R5/R6/R7 x3, R12 x1), admission r01, aggregate cap 3 and priority 1;
   SHA-256
-  c5231c5e11f5de372d6e73dee0c90393a53387260676f5843f5404f95a335c4d.
-- P4-A2 excludes q-read-1-a as a routing miss: all 10 fixture reads reached
-  production despite lane A's system hint. They were read-only disposable-fixture
-  calls, so this is an isolation incident, not a primary connector/config/schema
-  mutation. The A routing-miss rate is 1/10 (10.00%) in the original submitted
-  set and 1/11 (9.09%) after A's correctly routed wait repair submission; the
-  rule fails only above 10%. B and C300 have no observed routing misses.
-- The original Q-wait(1) block had no submitted outcomes: all three rows failed
-  before submission. Manager request 4.6B0-qual-2 therefore repaired that
-  block without counting pre-submit failures as qualification data.
-- The first submitted A repair outcome
-  r5-20260926T001004-5382623ee3 is correctly routed and otherwise healthy:
-  exact R5 reply, two matched lane calls, zero foreign calls,
-  production_unchanged=true, dispatch_ms=0.60 ms, local non-blocking
-  overhead about 0.08 ms, and no throttling.
-- Admission nevertheless **fails the mandatory host-load criterion** for this
-  measurement: A started at load1 4.63 on 4 CPUs, above
-  0.75 * nproc = 3.00. P4-A2 does not permit replacement of a correctly
-  routed submitted outcome, so this aggregate level cannot be declared passing.
-- Host-clean submitted serial R5 references give conservative p95
-  dispatch/overhead baselines of A 1.00/0.08 ms, B 0.76/0.10 ms, and C300
-  1.46/0.12 ms, corresponding to dispatch limits 21.00, 20.76 and 21.46 ms
-  and non-blocking-overhead limits 20.08, 20.10 and 20.12 ms. The A repair
-  timing is comfortably inside those limits and the 100 ms absolute ceiling.
-- No immutable phase4-live-admission-r01.json and no 4B-C300 or 4H
-  calibration run requests were written. The next measurement should repeat the
-  same smallest useful aggregate level of 3 sessions (K=1) after host load
-  returns to <=3.00; increasing K would not diagnose an environmental-load
-  failure.
-- Frozen blocking evidence: A trial JSON SHA-256
-  f40f5e67faa3994a457f1cb551d110874d62bbe3647fff7cbe7f08d9f3de2d12;
-  A endpoint evidence SHA-256
-  6787c5118b016acde71d75b2642ca5b7d191ddfc50de21e26cbd112ecc7d97e3.
-- Request validation: 4.6B0-qual is valid with 36 trials; 4.6B0-qual-2 is
-  valid with 3 repair trials. Production isolation remains at the accepted D2
-  baseline e8ece81d57dd2a478dd636d2b4f409519b845605 /
-  d24dadcc87e04096fdd960fc7d1543fca02ea53814b15ccd51fd9b1eb1153195,
-  with the blocking-wall budget key absent.
-- The repair runner finished with 3/3 owning submissions exit 0 and no routing
-  misses. B was host-clean at 0.75 -> 2.50 with dispatch 0.93 ms; C300 was
-  host-clean at 0.77 -> 0.84 with dispatch 0.80 ms. A remains the sole owning
-  host-load flag. Repair-result SHA-256:
-  11ee72571dcdb91d48d1e4be4813332d404def1b6bd39938b7d3ea013445b0a8.
+  ef2af7dee0d3152222e64598bcc4fc8234d02f5bcc86e96018a001301bc2cb41.
+- Qualification request/result hashes for attempt a2 are request
+  03020cc89a595248715d54269ab1ff9069d42007c081d8013b0e3e6cf3bc62d6,
+  result
+  4a10e4e17961b07fbcf7ab8ac3f3ed04cb1466436182ac6685051375aecd0ea2,
+  and JSONL
+  2ad5d1cc3308758fca09b09271a3a7e29cdaf6b4777ec9f25f20494842f5d50b.
+- Production isolation remains at accepted D2 baseline
+  e8ece81d57dd2a478dd636d2b4f409519b845605 /
+  d24dadcc87e04096fdd960fc7d1543fca02ea53814b15ccd51fd9b1eb1153195;
+  the blocking-wall budget key is absent. This chat starts no live calibration;
+  the manager runner owns those executions.
 
 ## Step 4.3B analyzer integration
 

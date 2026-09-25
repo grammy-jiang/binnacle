@@ -6,8 +6,8 @@
   "worktree": "/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4",
   "source_branch": "feature/chat-mode-scheduling-v2-phase3",
   "audited_source_head": "3a4dfb1b248e4530fb09013976abb863c8e35eaf",
-  "last_completed_step": "4.5",
-  "next_step": "evaluate 4.6B0 aggregate level 3 (K=1) from 4.6B0-qual-3 against frozen serial references, then write admission r01 on PASS",
+  "last_completed_step": "4.6B0",
+  "next_step": "manager executes 4B-C300 and 4H calibration requests under admission r01; 4.7 waits for the required C300 calibration fan-in",
   "dependency_audit": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase4-dependency-audit-2026-09-25-r01.json",
     "revision": "r01",
@@ -127,7 +127,13 @@
     "phase4_4_6B0_blocking_A_trial_json": "f40f5e67faa3994a457f1cb551d110874d62bbe3647fff7cbe7f08d9f3de2d12",
     "phase4_4_6B0_blocking_A_endpoint_evidence": "6787c5118b016acde71d75b2642ca5b7d191ddfc50de21e26cbd112ecc7d97e3",
     "phase4_4_6B0_qual_repair_result_json": "11ee72571dcdb91d48d1e4be4813332d404def1b6bd39938b7d3ea013445b0a8",
-    "phase4_4_6B0_qual_repair_result_jsonl": "2ff3eb4b871263e2107a2cdb80994b6ac4adb8dc4d206559dd3abc1d497e1138"
+    "phase4_4_6B0_qual_repair_result_jsonl": "2ff3eb4b871263e2107a2cdb80994b6ac4adb8dc4d206559dd3abc1d497e1138",
+    "phase4_4_6B0_qual3_run_request": "03020cc89a595248715d54269ab1ff9069d42007c081d8013b0e3e6cf3bc62d6",
+    "phase4_4_6B0_qual3_result_json": "4a10e4e17961b07fbcf7ab8ac3f3ed04cb1466436182ac6685051375aecd0ea2",
+    "phase4_4_6B0_qual3_result_jsonl": "2ad5d1cc3308758fca09b09271a3a7e29cdaf6b4777ec9f25f20494842f5d50b",
+    "phase4_live_admission_r01": "16671e4aa1dbeaf07acc09c481aae59f645ee2185b6c7cbdbe822bdefec37eaf",
+    "phase4_4B_C300_run_request": "7340637573297ff6e859fedb9620559b41a1939c33364f9d101df8c69be4a28c",
+    "phase4_4H_run_request": "ef2af7dee0d3152222e64598bcc4fc8234d02f5bcc86e96018a001301bc2cb41"
   },
   "preflight_findings": {
     "p4-preflight-git-lineage": "804da7b66ddc1f0e71ddf3106790989f50a0f320de4cd3b3f0aedaf962d68461",
@@ -342,7 +348,7 @@
       "worker_branch": null
     },
     "4.6B0": {
-      "status": "running",
+      "status": "complete",
       "tests": [
         "bash /tmp/p36-manager/rr-validate.sh 4.6B0-qual -> PASS: valid=true, 36 trials, no errors.",
         "Step-4.6B0 serial wait reference gate (host-clean submitted samples only) -> A dispatch p95=1.00 ms / overhead p95=0.08 ms, B=0.76/0.10 ms, C300=1.46/0.12 ms; derived limits A=21.00/20.08 ms, B=20.76/20.10 ms, C300=21.46/20.12 ms; absolute dispatch ceiling=100 ms.",
@@ -350,7 +356,15 @@
         "4.6B0-qual-2 A wait repair -> BLOCKED admission host-load criterion: submitted/finished state r5-20260926T001004-5382623ee3 had host_start load1=4.63 with nproc=4, exceeding 0.75*nproc=3.00; throttled=0x0. Its lane routing, reply, production isolation and scheduler timing otherwise pass: 2 matched calls, 0 foreign calls, dispatch_ms=0.60, non-blocking overhead~=0.08 ms.",
         "bash /tmp/p36-manager/rr-validate.sh 4.6B0-qual-2 -> PASS: valid=true, 3 repair trials, one concurrent Q-wait(1) block, no errors.",
         "bash /tmp/p36-manager/isolation-check.sh -> PASS: production master clean at e8ece81d57dd2a478dd636d2b4f409519b845605; config SHA-256 d24dadcc87e04096fdd960fc7d1543fca02ea53814b15ccd51fd9b1eb1153195; unit/profile hashes stable; blocking-wall budget key absent.",
-        "4.6B0-qual-2 final repair result -> 3/3 owning submissions exit 0; routing_misses={}; B host 0.75->2.50 with dispatch_ms=0.93 and local overhead~=0.07 ms; C300 host 0.77->0.84 with dispatch_ms=0.80 and local overhead~=0.08 ms; A is the only owning host-load flag at start 4.63 > 3.00."
+        "4.6B0-qual-2 final repair result -> 3/3 owning submissions exit 0; routing_misses={}; B host 0.75->2.50 with dispatch_ms=0.93 and local overhead~=0.07 ms; C300 host 0.77->0.84 with dispatch_ms=0.80 and local overhead~=0.08 ms; A is the only owning host-load flag at start 4.63 > 3.00.",
+        "4.6B0-qual-3 runner result -> PASS host envelope: 6/6 owning rows exit 0; 4 pre-submit failures retried before owning submissions; routing_misses={}; flagged=0; nproc=4; maximum observed owning load1=2.96 <=3.00; throttled=0x0.",
+        "Step-4.6B0 matched-call timing gate -> PASS: frozen serial R5 nearest-rank p95 dispatch/overhead A=1.00/0.08 ms, B=0.76/0.10 ms, C300=1.46/0.12 ms; a2 wait owning A=1.80/0.13, B=1.11/0.10, C300=1.49/0.16 ms; all under derived limits and max dispatch 1.80 ms <=100 ms.",
+        "Step-4.6B0 analyzer gate -> PASS concurrency-only criterion: all three a2 R2 analyzers pass; a2 R5 A/B pass; C300 repeats the missing-wait_result/premature-handoff signature already present in 3/5 serial C300 R5 references, so no correctness/reachability loss exists only at K=1 concurrency.",
+        "P4-A2 routing integrity -> PASS: campaign submitted-trial rates A=1/13 (7.69%), B=0/13 (0%), C=0/14 (0%); H has no qualification submissions; no arm exceeds the >10% NO_GO_EVIDENCE_INTEGRITY threshold.",
+        "bash /tmp/p36-manager/rr-validate.sh 4B-C300 -> PASS: valid=true, 10 trials, one sequential lane, priority 2, aggregate_cap=3.",
+        "bash /tmp/p36-manager/rr-validate.sh 4H -> PASS: valid=true, 10 trials, one sequential lane, priority 1, aggregate_cap=3.",
+        "python3 -m json.tool phase4-live-admission-r01.json + git diff --check -> PASS.",
+        "bash /tmp/p36-manager/isolation-check.sh -> PASS: production master clean at e8ece81d57dd2a478dd636d2b4f409519b845605; config SHA-256 d24dadcc87e04096fdd960fc7d1543fca02ea53814b15ccd51fd9b1eb1153195; unit/profile hashes stable; blocking-wall budget key absent."
       ],
       "notes": [
         "Predecessor 4.5 is complete at canonical base 4ea296063a77a081a2bf937472526d205d57c373; no predecessor uncertainty remains.",
@@ -359,7 +373,16 @@
         "The first submitted A outcome in the repaired Q-wait level is owned and cannot be replaced under P4-A2 because it is correctly routed, not a ROUTING_MISS. Its host_start load1=4.63 exceeds the mandatory 3.00 ceiling, so aggregate level 3 sessions (K=1 matched A/B/C300 block) does not pass this measurement.",
         "The A wait outcome otherwise passes reachability/timing/isolation: exact R5 reply, production_unchanged=true, evidence_integrity_error=false, 2 matched lane calls, normalized_foreign_calls=0, dispatch_ms=0.60 <= 21.00 ms, local non-blocking overhead~=0.08 <= 20.08 ms, and max dispatch <=100 ms.",
         "No phase4-live-admission-r01.json and no 4B-C300/4H calibration requests were written, per the explicit fail branch of Step 4.6B0. The next measurement should repeat the same smallest useful aggregate level 3 (K=1) under host load1 <=3.00; increasing K would not address an environmental load failure.",
-        "Manager-owned 4.6B0-qual-2 finished after pre-submit retries: all three owning A/B/C300 wait trials exited 0 and no routing miss was recorded; B and C300 are host-clean, while A remains the sole owning host-load failure. Final repair result SHA-256 11ee72571dcdb91d48d1e4be4813332d404def1b6bd39938b7d3ea013445b0a8."
+        "Manager-owned 4.6B0-qual-2 finished after pre-submit retries: all three owning A/B/C300 wait trials exited 0 and no routing miss was recorded; B and C300 are host-clean, while A remains the sole owning host-load failure. Final repair result SHA-256 11ee72571dcdb91d48d1e4be4813332d404def1b6bd39938b7d3ea013445b0a8.",
+        "Attempt a2 consumed 4.6B0-qual-3 together with the frozen serial references from 4.6B0-qual; predecessor 4.5 remains complete and no predecessor uncertainty remains.",
+        "Aggregate level 3 sessions (K=1 matched A/B/C300 block) is the smallest useful passing level. Admission r01 therefore releases canonical calibration at aggregate_cap=3 with conservative per-endpoint cap=1 for C300 and H; no 4.6B:<lane> refinement is requested.",
+        "The a2 read-heavy block is clean: A/B/C300 each have exact R2 completion, 10 matched lane calls, zero tool errors, zero normalized foreign calls, evidence_integrity_error=false and no routing miss.",
+        "The a2 wait-heavy block is host-clean and scheduler-clean. C300 analyzer correctness is false for the same R5 wait-result signature already observed serially (serial C300 passes 2/5), so the plan's concurrency-only correctness criterion remains PASS rather than treating a pre-existing serial behavior as a K=1 loss.",
+        "P4-A2 campaign routing-miss accounting is A 1/13=7.69%, B 0/13=0%, C 0/14=0%, H 0/0 not yet observed. The sole miss is historical q-read-1-a; it remains excluded from all arm metrics/gates and its production calls were read-only disposable-fixture isolation incidents.",
+        "Immutable phase4-live-admission-r01.json SHA-256 16671e4aa1dbeaf07acc09c481aae59f645ee2185b6c7cbdbe822bdefec37eaf records topology/lane hashes, tested level history, criteria, serial limits, a2 measurements and routing-miss rates.",
+        "Calibration request 4B-C300 SHA-256 7340637573297ff6e859fedb9620559b41a1939c33364f9d101df8c69be4a28c schedules C300 R5/R6/R7 x3 plus R12 x1 sequentially at budget 300, admission r01, aggregate_cap=3, priority 2.",
+        "Calibration request 4H SHA-256 ef2af7dee0d3152222e64598bcc4fc8234d02f5bcc86e96018a001301bc2cb41 schedules H R5/R6/R7 x3 plus R12 x1 sequentially, admission r01, aggregate_cap=3, priority 1.",
+        "No live calibration trial was started by this chat; execution remains manager-runner owned under the live-host mode contract."
       ],
       "commit": null,
       "worker_branch": null
@@ -659,11 +682,29 @@
         "benchmarks/chat-mode-scheduling-v2/phase4-lanes/B.json": "a6c27c3611675e7d261d572d1edceae6a5a92ce2456c28d50335f68f051e41b4",
         "benchmarks/chat-mode-scheduling-v2/phase4-lanes/C300.json": "d413edb9f0eaca1471d99a6c1592a4ca19fd9a0af73611bf236def8bfd4ee8da"
       }
+    },
+    {
+      "kind": "live_admission_baseline",
+      "at": "2026-09-26T01:04:50+10:00",
+      "task_id": "4.6B0",
+      "admission_revision": "r01",
+      "aggregate_cap_sessions": 3,
+      "per_endpoint_limits": {
+        "C300": 1,
+        "H": 1
+      },
+      "output_paths": {
+        "benchmarks/chat-mode-scheduling-v2/phase4-live-admission-r01.json": "16671e4aa1dbeaf07acc09c481aae59f645ee2185b6c7cbdbe822bdefec37eaf"
+      },
+      "run_requests": {
+        "4B-C300": "7340637573297ff6e859fedb9620559b41a1939c33364f9d101df8c69be4a28c",
+        "4H": "ef2af7dee0d3152222e64598bcc4fc8234d02f5bcc86e96018a001301bc2cb41"
+      }
     }
   ],
   "handoff": null,
   "created_at": "2026-09-25T15:31:10+10:00",
-  "updated_at": "2026-09-26T00:23:24+10:00",
+  "updated_at": "2026-09-26T01:04:50+10:00",
   "phase4_source_head": "06bc1649c4bad9449470366da971649bb7620020",
   "baseline_snapshot": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase4-baseline.json",
@@ -713,6 +754,16 @@
       "branch": "feature/chat-mode-scheduling-v2-phase4-readiness",
       "worktree": "/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4-readiness",
       "base": "06bc1649c4bad9449470366da971649bb7620020"
+    }
+  },
+  "live_admission": {
+    "revision": "r01",
+    "path": "benchmarks/chat-mode-scheduling-v2/phase4-live-admission-r01.json",
+    "sha256": "16671e4aa1dbeaf07acc09c481aae59f645ee2185b6c7cbdbe822bdefec37eaf",
+    "aggregate_cap_sessions": 3,
+    "per_endpoint_limits": {
+      "C300": 1,
+      "H": 1
     }
   }
 }

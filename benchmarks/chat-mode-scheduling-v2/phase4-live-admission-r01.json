@@ -1,0 +1,227 @@
+{
+  "schema_version": 1,
+  "phase": 4,
+  "artifact": "phase4-live-admission",
+  "revision": "r01",
+  "qualified_at": "2026-09-26T01:02:57+10:00",
+  "decision": "PASS",
+  "phase4_source_head": "06bc1649c4bad9449470366da971649bb7620020",
+  "topology": {
+    "path": "benchmarks/chat-mode-scheduling-v2/phase4-endpoint-topology-base.json",
+    "sha256": "9b58135a4a527bc18c5d43456d6f92b384e5457ac2f12884520dac1eb9f38155",
+    "runtime_registry_sha256": "f75ea33783def327f542832ded790e5f5650f11304e3f968fe0c7c6c39d3cf26"
+  },
+  "lane_manifests": {
+    "A": {
+      "path": "benchmarks/chat-mode-scheduling-v2/phase4-lanes/A.json",
+      "sha256": "0bb2698d63c7e3c11b05a39981674a3976ded8fffd349a8f46e583c5a3520107"
+    },
+    "B": {
+      "path": "benchmarks/chat-mode-scheduling-v2/phase4-lanes/B.json",
+      "sha256": "a6c27c3611675e7d261d572d1edceae6a5a92ce2456c28d50335f68f051e41b4"
+    },
+    "C300": {
+      "path": "benchmarks/chat-mode-scheduling-v2/phase4-lanes/C300.json",
+      "sha256": "d413edb9f0eaca1471d99a6c1592a4ca19fd9a0af73611bf236def8bfd4ee8da"
+    },
+    "H": {
+      "path": "benchmarks/chat-mode-scheduling-v2/phase4-lanes/H.json",
+      "sha256": "d9bfc26661289baa2db99394fd2872d09965c06fa7bc26ff8cebaa18c4ccbed7"
+    }
+  },
+  "aggregate_passing_level_sessions": 3,
+  "matched_parallel_blocks": 1,
+  "per_endpoint_limits": {
+    "C300": {
+      "max_concurrent_sessions": 1,
+      "basis": "conservative cap released by first passing core admission baseline; no 4.6B:C300 refinement requested"
+    },
+    "H": {
+      "max_concurrent_sessions": 1,
+      "basis": "conservative cap released by first passing core admission baseline; no 4.6B:H refinement requested"
+    }
+  },
+  "qualification_cases": {
+    "read_heavy": "R2",
+    "wait_heavy": "R5"
+  },
+  "serial_reference": {
+    "source_request": "4.6B0-qual",
+    "wait_heavy_host_clean_submitted_samples": {
+      "A": 4,
+      "B": 3,
+      "C300": 5
+    },
+    "p95_method": "nearest-rank (conservative for the small frozen sample)",
+    "dispatch_ms_p95": {
+      "A": 1.0,
+      "B": 0.76,
+      "C300": 1.46
+    },
+    "non_blocking_local_overhead_ms_p95": {
+      "A": 0.08,
+      "B": 0.10,
+      "C300": 0.12
+    },
+    "derived_dispatch_ms_limits": {
+      "A": 21.0,
+      "B": 20.76,
+      "C300": 21.46
+    },
+    "derived_non_blocking_local_overhead_ms_limits": {
+      "A": 20.08,
+      "B": 20.10,
+      "C300": 20.12
+    }
+  },
+  "tested_levels": [
+    {
+      "aggregate_sessions": 3,
+      "parallel_blocks": 1,
+      "attempts": [
+        {
+          "request": "4.6B0-qual",
+          "result_sha256": "c5231c5e11f5de372d6e73dee0c90393a53387260676f5843f5404f95a335c4d",
+          "status": "partial_unscorable",
+          "reason": "q-read-1-a was a P4-A2 routing miss and the original Q-wait(1) rows failed before submission"
+        },
+        {
+          "request": "4.6B0-qual-2",
+          "result_sha256": "11ee72571dcdb91d48d1e4be4813332d404def1b6bd39938b7d3ea013445b0a8",
+          "status": "FAIL",
+          "reason": "owning A wait submission started at load1=4.63 > 3.00; timing/routing/correctness evidence otherwise remained usable as history"
+        },
+        {
+          "request": "4.6B0-qual-3",
+          "request_sha256": "03020cc89a595248715d54269ab1ff9069d42007c081d8013b0e3e6cf3bc62d6",
+          "result_sha256": "4a10e4e17961b07fbcf7ab8ac3f3ed04cb1466436182ac6685051375aecd0ea2",
+          "jsonl_sha256": "2ad5d1cc3308758fca09b09271a3a7e29cdaf6b4777ec9f25f20494842f5d50b",
+          "status": "PASS",
+          "read": {
+            "owning_trials": 3,
+            "exit0": 3,
+            "routing_misses": 0,
+            "correctness_passed": {
+              "A": true,
+              "B": true,
+              "C300": true
+            },
+            "tool_errors": {
+              "A": 0,
+              "B": 0,
+              "C300": 0
+            },
+            "matched_calls": {
+              "A": 10,
+              "B": 10,
+              "C300": 10
+            }
+          },
+          "wait": {
+            "owning_trials": 3,
+            "exit0": 3,
+            "routing_misses": 0,
+            "dispatch_ms": {
+              "A": 1.80,
+              "B": 1.11,
+              "C300": 1.49
+            },
+            "non_blocking_local_overhead_ms": {
+              "A": 0.13,
+              "B": 0.10,
+              "C300": 0.16
+            },
+            "correctness_passed": {
+              "A": true,
+              "B": true,
+              "C300": false
+            },
+            "serial_wait_correctness_pass_counts": {
+              "A": "4/5",
+              "B": "1/5",
+              "C300": "2/5"
+            },
+            "concurrency_only_correctness_or_reachability_loss": false,
+            "note": "C300's R5 missing-wait_result/premature-handoff signature was already present in 3/5 serial C300 references, so it is not a loss that appears only at K=1 concurrency."
+          },
+          "host": {
+            "nproc": 4,
+            "load1_limit": 3.0,
+            "maximum_observed_load1": 2.96,
+            "throttling_observed": false
+          }
+        }
+      ],
+      "combined_pass": true
+    }
+  ],
+  "criteria": [
+    {
+      "criterion": "no endpoint/tunnel/cross-spool/cross-Project error",
+      "result": "PASS",
+      "evidence": "4.6B0-qual-3 has 6/6 owning trials exit 0, routing_misses={}, production_unchanged=true, instructions verified, evidence_integrity_error=false and normalized_foreign_calls=0 for every owning trial."
+    },
+    {
+      "criterion": "Pi load1 <= 0.75*nproc and no throttling",
+      "result": "PASS",
+      "evidence": "nproc=4, limit=3.00, maximum observed qualification load1=2.96, throttled=0x0 throughout owning rows."
+    },
+    {
+      "criterion": "per-arm dispatch_ms p95 <= max(serial_p95 + 20 ms, serial_p95 * 2)",
+      "result": "PASS",
+      "evidence": "wait-heavy owning dispatch_ms A/B/C300=1.80/1.11/1.49 versus limits 21.00/20.76/21.46 ms."
+    },
+    {
+      "criterion": "non-blocking local implementation overhead p95 <= max(serial_p95 + 20 ms, serial_p95 * 1.25)",
+      "result": "PASS",
+      "evidence": "using impl_ms-state_ms on matched job_status timing lines, A/B/C300=0.13/0.10/0.16 versus limits 20.08/20.10/20.12 ms."
+    },
+    {
+      "criterion": "maximum dispatch_ms <= 100 ms",
+      "result": "PASS",
+      "evidence": "maximum owning qualification dispatch_ms=1.80 ms."
+    },
+    {
+      "criterion": "no correctness/reachability loss only at that concurrency",
+      "result": "PASS",
+      "evidence": "all R2 owning analyzers pass; A/B R5 owning analyzers pass; C300 R5 repeats a serial-baseline signature already seen in 3/5 serial C300 R5 references."
+    },
+    {
+      "criterion": "P4-A2 routing-miss rate <= 10% per arm",
+      "result": "PASS",
+      "evidence": "A=1/13 (7.69%), B=0/13 (0%), C=0/14 (0%); H has no qualification submissions yet."
+    }
+  ],
+  "routing_miss_rates": {
+    "A": {
+      "misses": 1,
+      "submitted_trials": 13,
+      "rate": 0.0769230769
+    },
+    "B": {
+      "misses": 0,
+      "submitted_trials": 13,
+      "rate": 0.0
+    },
+    "C": {
+      "misses": 0,
+      "submitted_trials": 14,
+      "rate": 0.0
+    },
+    "H": {
+      "misses": 0,
+      "submitted_trials": 0,
+      "rate": null,
+      "note": "not yet observed in qualification"
+    }
+  },
+  "routing_incidents": [
+    {
+      "request": "4.6B0-qual",
+      "slot_id": "q-read-1-a",
+      "arm": "A",
+      "classification": "ROUTING_MISS",
+      "disposition": "excluded from all arm metrics and gates under P4-A2; 10 read-only fixture reads reached production; no primary config/schema mutation"
+    }
+  ]
+}
