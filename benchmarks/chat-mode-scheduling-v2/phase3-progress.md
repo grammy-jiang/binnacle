@@ -1,8 +1,8 @@
 # Chat mode scheduling v2 — Phase 3 progress
 
-Status: IN_PROGRESS
+Status: BLOCKED
 
-Updated: 2026-09-25T10:17:18+10:00
+Updated: 2026-09-25T10:36:23+10:00
 
 ## Canonical state
 
@@ -10,7 +10,7 @@ Updated: 2026-09-25T10:17:18+10:00
 - Worktree: /home/grammy-jiang/Projects/binnacle-chat-scheduling-phase3
 - Audited source HEAD: 5f2be143352aaa63fb680c1c79e289d46be201fe
 - Last completed step: 3.10
-- Next step: 3.7-amend (run r02 under owner-approved Amendment A1).
+- Next step: 3.7-amend is BLOCKED pending resolution of the C120 gate-2/gate-3 expectation contradiction.
 - Dependency audit: phase3-dependency-audit-2026-09-25-r01.json, r01, SHA-256 d3bec25ba8d49ed4db78e07930542b9e963608ad264c198f8fbf04c4ccfa473a
 - Task graph: phase3-task-graph.json, r01, SHA-256 44cbedb0524fe87a9d111579a96d0d33f4171dfee6ece34eb53baa4c506696b2
 - Initial orchestrator-state checkpoint SHA-256: cec108b23fcf319a48d699f123b8fbf713919f3873d1cae4968a16844b80ed12
@@ -84,7 +84,7 @@ Updated: 2026-09-25T10:17:18+10:00
 | 3.6B | complete |
 | 3.6C | complete |
 | 3H | complete |
-| 3.7 | running (r02 / Amendment A1) |
+| 3.7 | blocked (r02 / Amendment A1) |
 | 3.8 | complete |
 | 3.9 | complete |
 | 3.10 | complete |
@@ -471,13 +471,42 @@ Updated: 2026-09-25T10:17:18+10:00
 
 ## Step 3.7 amended run r02 status
 
-- Status: RUNNING under Amendment A1 (owner-approved 2026-09-25 10:01 +10:00).
+- Status: BLOCKED under Amendment A1 (owner-approved 2026-09-25 10:01 +10:00).
 - Gate 4 will use repeated-wait definition (b): per (turn, job), the union of
   the second and later positive waits on the same job id, with a named 60%
   reduction threshold.
 - Definition (a) and its original 70% figure remain non-gating continuity
   evidence. The r01 Step-3.7 notes and validation below are historical and
   superseded for the current Phase-3 decision.
+
+## Step 3.7 amended run r02 validation and blocker
+
+- Focused replay/report tests: PASS, 20 tests in 0.76 s; nproc=4 and
+  pre-run loadavg=0.92 1.17 1.20 under parallel-programme load.
+- Definition (b) matches the read-only A1 analysis to six decimals:
+  observed 55911.013516 s; C120 7086.384091 s / 87.325603%; C300
+  20436.314672 s / 63.448499%; C600 35451.046526 s / 36.593805%.
+- Fresh cumulative replay reproduced all 326 committed per-turn rows exactly
+  for C120, C300 and C600. Promoted replay rows therefore remain valid and
+  unchanged.
+- The shortlist CLI preview has sole live candidate C300. C600 fails gate 4
+  at 36.593805%, as expected.
+- C120 fails gate 1 at 88.888889% and gate 2 at 15.384615% (2/13 canonical
+  positive-wait turns), while gate 3 has zero early exhaustions. The assignment
+  requires C120 to fail gates 1 and 3. Per the explicit mismatch rule, r02 is
+  BLOCKED rather than changing frozen gate semantics or evidence.
+- Canonical shortlist artifacts were not regenerated. Existing SHA-256 values
+  remain 51db08d70ad8ebfcc46de9e53c661b517b9f3ed41b10579d49057aa395f8d11d
+  (JSON) and bd4a258152e66277e663af2a5d7e6fbac0daa2592cfe51d2d3caf1bb644a9c85
+  (Markdown).
+- Preview-only shortlist SHA-256 values are
+  072556e60fb55f686d872bce4da004bc272e9162e32459f2dc276657faa0e094
+  (JSON) and bb6794ed021f2965bf7094c82ce3d713a795a3e47d53623c695a923ee7dba50d
+  (Markdown); these /tmp/p36-manager files are not frozen artifacts.
+- File-scoped pre-commit: PASS after helper extraction kept both changed Python
+  modules under the module-size ratchet.
+- The task-specific instruction assigns pushing to 3.9-amend, so this blocked
+  r02 is not pushed.
 
 ## Step 3.7 run r01 notes (superseded)
 

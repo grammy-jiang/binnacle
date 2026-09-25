@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "phase": 3,
-  "status": "in_progress",
+  "status": "blocked",
   "branch": "feature/chat-mode-scheduling-v2-phase3",
   "worktree": "/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase3",
   "source_branch": "feature/chat-mode-blocking-wall-guard",
@@ -762,12 +762,24 @@
       "worker_branch": "feature/chat-mode-scheduling-v2-phase3-h10"
     },
     "3.7": {
-      "status": "running",
-      "tests": [],
+      "status": "blocked",
+      "tests": [
+        "uv run pytest -q tests/scripts/test_chat_scheduling_replay.py tests/scripts/test_chat_scheduling_phase3_report.py -> PASS: 20 passed in 0.76s; nproc=4; pre-run loadavg=0.92 1.17 1.20 under parallel-programme load.",
+        "Definition-(b) operational validation -> PASS: observed 55911.013516 s; C120 7086.384091 s / 87.325603%; C300 20436.314672 s / 63.448499%; C600 35451.046526 s / 36.593805%, matching the read-only A1 analysis to six decimals.",
+        "Fresh in-memory cumulative replay versus committed promoted reports -> PASS: all 326 per-turn replay rows identical for C120, C300 and C600.",
+        "Shortlist CLI preview -> BLOCKED expectation mismatch: live_candidates=[C300], but C120 fails gates 1 and 2 (88.888889% completion, 15.384615% exhaustion, gate-3 early-exhaustion count 0) rather than assignment-expected gates 1 and 3.",
+        "File-scoped pre-commit for replay/report tooling and focused tests -> PASS after extracting helpers to satisfy the module-size ratchet."
+      ],
       "notes": [
-        "Run r02 is the owner-approved Amendment A1 re-run of Step 3.7.",
-        "Amendment A1 changes gate 4 to repeated-wait definition (b) with a named 60% threshold while retaining definition (a) / 70% as non-gating continuity evidence.",
-        "Run r01 is preserved in run_history and is superseded for the current Phase-3 decision."
+        "Run r02 is the owner-approved Amendment A1 re-run of Step 3.7; run r01 remains preserved in run_history and superseded for the current decision.",
+        "The A/B plan target is amended to at least 60% definition-(b) repeated-wait reduction per (turn, job); the original 70% definition-(a) total per-turn union remains non-gating continuity evidence.",
+        "Definition (b) is implemented without changing frozen cumulative replay semantics. Population summaries and shortlist gate 4 now carry both definition-(a) burden_reduction_percent with observed/candidate blocking-wall seconds and definition-(b) repeated_wait_burden_reduction_percent with observed/candidate repeated-wait seconds.",
+        "Promoted C120/C300/C600 replay rows remain valid and unchanged. Their committed report files were not regenerated; all 326 per-turn rows reproduce identically under the amended tooling.",
+        "Preview gate 4: C120 87.325603% PASS, C300 63.448499% PASS, C600 36.593805% FAIL against the named 60.0% threshold; definition-(a) continuity values are 75.772057%, 52.927366%, and 29.824066% respectively.",
+        "Preview shortlist has sole live candidate C300. C120 fails gate 1 at 88.888889% and gate 2 at 15.384615% (2/13 canonical positive-wait turns); gate 3 reports 0 early exhaustions. The assignment requires C120 to fail gates 1 and 3, so the mandated mismatch rule blocks r02 rather than changing gate semantics or evidence.",
+        "Canonical shortlist artifacts were not regenerated because the preview outcome differs from the assignment expectation. Existing canonical shortlist SHA-256 remains 51db08d70ad8ebfcc46de9e53c661b517b9f3ed41b10579d49057aa395f8d11d (JSON) / bd4a258152e66277e663af2a5d7e6fbac0daa2592cfe51d2d3caf1bb644a9c85 (Markdown).",
+        "Preview-only shortlist SHA-256 is 072556e60fb55f686d872bce4da004bc272e9162e32459f2dc276657faa0e094 (JSON) / bb6794ed021f2965bf7094c82ce3d713a795a3e47d53623c695a923ee7dba50d (Markdown); preview files live under /tmp/p36-manager and are not frozen artifacts.",
+        "No production budget was declared and production state was not modified. The task-specific instruction assigns pushing to 3.9-amend, so this blocked r02 is not pushed."
       ],
       "worker_branch": null,
       "run": "r02",
@@ -800,7 +812,8 @@
           "run": "r01",
           "superseded_by": "r02 / Amendment A1"
         }
-      ]
+      ],
+      "commit": "15ef3a7272ac1fcef3ae3d2194e28c98fcef0b8f"
     },
     "3.8": {
       "status": "complete",
@@ -958,7 +971,7 @@
     "validated_ci_conclusion": "success"
   },
   "created_at": "2026-09-25T00:51:02+10:00",
-  "updated_at": "2026-09-25T10:17:18+10:00",
+  "updated_at": "2026-09-25T10:36:23+10:00",
   "orchestrator_state_checkpoint_path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase3/checkpoints/orchestrator-state-initial.json",
   "ready_count": 1,
   "claimed_count": 0,
