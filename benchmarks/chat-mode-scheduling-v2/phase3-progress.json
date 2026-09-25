@@ -6,8 +6,8 @@
   "worktree": "/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase3",
   "source_branch": "feature/chat-mode-blocking-wall-guard",
   "audited_source_head": "5f2be143352aaa63fb680c1c79e289d46be201fe",
-  "last_completed_step": "3.10",
-  "next_step": "3.7-amend",
+  "last_completed_step": "3.7",
+  "next_step": "3.8-amend",
   "dependency_audit": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase3-dependency-audit-2026-09-25-r01.json",
     "revision": "r01",
@@ -151,7 +151,7 @@
     "phase3_corpus_path_head_r2": "19d5951b9617936c655664a992dc0c419051c4f7",
     "phase3_corpus_audit_head": "207000caa3727f37f494675f34934fd61fc6cdd5",
     "phase3_replay_promotion_head": "2382ae0dca4fee931d9af33c049e9dad97514e64",
-    "phase3_candidate_shortlist_head": "06c86f8db508be2d311ccd27f5aaffe2740597a3",
+    "phase3_candidate_shortlist_head": "8c456ff5b9e595ddb3b7793bb11cd1cabd7ae207",
     "phase4_input_contract_head": "be92c23118a714fabef2c09fb9dc7b8c51c67bd8",
     "phase3_validation_head": "d5a322375b37dffe8d02421df79a222e9cadaaf2"
   },
@@ -199,8 +199,8 @@
     "phase3_replay_c600_promoted_md": "05191f6ef6cab7c5626e797aeb201644cd34e105564567aff5f976be637637d1",
     "phase3_replay_h10_promoted_json": "b769fb75cd4159bf2c12fd92e33c0df62b7dfee775dfb8fb2c5ea6cb5110621c",
     "phase3_replay_h10_promoted_md": "580e05f39f30427a911f9ff7f955561c5e8bc03bf8a63b2e3b06afacdabfb031",
-    "phase3_candidate_shortlist_json": "51db08d70ad8ebfcc46de9e53c661b517b9f3ed41b10579d49057aa395f8d11d",
-    "phase3_candidate_shortlist_md": "bd4a258152e66277e663af2a5d7e6fbac0daa2592cfe51d2d3caf1bb644a9c85",
+    "phase3_candidate_shortlist_json": "072556e60fb55f686d872bce4da004bc272e9162e32459f2dc276657faa0e094",
+    "phase3_candidate_shortlist_md": "dea813747ee3f6234dada113dd56a7b9af4de9f770838667a804d115ef8592ea",
     "phase4_input_contract_json": "bc2fc07ab945504b3acc726c1779d2b46533f43472535f803f2f17b986321024",
     "phase3_final_report_json": "1689cca8c152d7ec6474e99ba7bf005c8f3b3425f181d90cc44a5fe73b544277",
     "phase3_final_report_md": "ab0be93752fa94f79700ec9c2c6f59e83a4331e1db5f4dad236afa88505c4bc8"
@@ -762,24 +762,26 @@
       "worker_branch": "feature/chat-mode-scheduling-v2-phase3-h10"
     },
     "3.7": {
-      "status": "running",
+      "status": "complete",
       "tests": [
-        "uv run pytest -q tests/scripts/test_chat_scheduling_replay.py tests/scripts/test_chat_scheduling_phase3_report.py -> PASS: 20 passed in 0.76s; nproc=4; pre-run loadavg=0.92 1.17 1.20 under parallel-programme load.",
+        "uv run pytest -q tests/scripts/test_chat_scheduling_replay.py tests/scripts/test_chat_scheduling_phase3_report.py -> PASS: 20 passed in 0.76s during a1; definition-(b) implementation and replay/report integration covered.",
         "Definition-(b) operational validation -> PASS: observed 55911.013516 s; C120 7086.384091 s / 87.325603%; C300 20436.314672 s / 63.448499%; C600 35451.046526 s / 36.593805%, matching the read-only A1 analysis to six decimals.",
-        "Fresh in-memory cumulative replay versus committed promoted reports -> PASS: all 326 per-turn replay rows identical for C120, C300 and C600.",
-        "Shortlist CLI preview -> BLOCKED expectation mismatch: live_candidates=[C300], but C120 fails gates 1 and 2 (88.888889% completion, 15.384615% exhaustion, gate-3 early-exhaustion count 0) rather than assignment-expected gates 1 and 3.",
-        "File-scoped pre-commit for replay/report tooling and focused tests -> PASS after extracting helpers to satisfy the module-size ratchet."
+        "Fresh cumulative replay versus committed promoted reports -> PASS: all 326 per-turn replay rows identical for C120, C300 and C600.",
+        "Shortlist CLI canonical regeneration -> PASS: C300 sole live candidate; C120 failed gates 1 and 2 with gate 3 passing; C600 failed gate 4 under definition (b).",
+        "uv run pytest -q tests/scripts/test_chat_scheduling_phase3_report.py -> PASS: 6 passed in 0.68s; nproc=4; pre-run loadavg=0.33 0.52 0.78 under parallel-programme load.",
+        "Post-lint-fix shortlist rerun -> PASS: byte-identical to frozen commit; JSON SHA-256 072556e60fb55f686d872bce4da004bc272e9162e32459f2dc276657faa0e094; Markdown SHA-256 dea813747ee3f6234dada113dd56a7b9af4de9f770838667a804d115ef8592ea."
       ],
       "notes": [
         "Run r02 is the owner-approved Amendment A1 re-run of Step 3.7; run r01 remains preserved in run_history and superseded for the current decision.",
         "The A/B plan target is amended to at least 60% definition-(b) repeated-wait reduction per (turn, job); the original 70% definition-(a) total per-turn union remains non-gating continuity evidence.",
-        "Definition (b) is implemented without changing frozen cumulative replay semantics. Population summaries and shortlist gate 4 now carry both definition-(a) burden_reduction_percent with observed/candidate blocking-wall seconds and definition-(b) repeated_wait_burden_reduction_percent with observed/candidate repeated-wait seconds.",
-        "Promoted C120/C300/C600 replay rows remain valid and unchanged. Their committed report files were not regenerated; all 326 per-turn rows reproduce identically under the amended tooling.",
-        "Preview gate 4: C120 87.325603% PASS, C300 63.448499% PASS, C600 36.593805% FAIL against the named 60.0% threshold; definition-(a) continuity values are 75.772057%, 52.927366%, and 29.824066% respectively.",
-        "Preview shortlist has sole live candidate C300. C120 fails gate 1 at 88.888889% and gate 2 at 15.384615% (2/13 canonical positive-wait turns); gate 3 reports 0 early exhaustions. The assignment requires C120 to fail gates 1 and 3, so the mandated mismatch rule blocks r02 rather than changing gate semantics or evidence.",
-        "Canonical shortlist artifacts were not regenerated because the preview outcome differs from the assignment expectation. Existing canonical shortlist SHA-256 remains 51db08d70ad8ebfcc46de9e53c661b517b9f3ed41b10579d49057aa395f8d11d (JSON) / bd4a258152e66277e663af2a5d7e6fbac0daa2592cfe51d2d3caf1bb644a9c85 (Markdown).",
-        "Preview-only shortlist SHA-256 is 072556e60fb55f686d872bce4da004bc272e9162e32459f2dc276657faa0e094 (JSON) / bb6794ed021f2965bf7094c82ce3d713a795a3e47d53623c695a923ee7dba50d (Markdown); preview files live under /tmp/p36-manager and are not frozen artifacts.",
-        "No production budget was declared and production state was not modified. The task-specific instruction assigns pushing to 3.9-amend, so this blocked r02 is not pushed."
+        "Definition (b) is implemented without changing frozen cumulative replay semantics. Population summaries and shortlist gate 4 carry both definition-(a) burden_reduction_percent with observed/candidate blocking-wall seconds and definition-(b) repeated_wait_burden_reduction_percent with observed/candidate repeated-wait seconds.",
+        "Promoted C120/C300/C600 replay rows remain valid and unchanged; no new replay was required and all 326 committed per-turn rows reproduced identically.",
+        "Gate 4 r02: C120 87.325603% PASS, C300 63.448499% PASS, C600 36.593805% FAIL against the named 60.0% threshold; definition-(a) continuity values are 75.772057%, 52.927366%, and 29.824066% respectively.",
+        "Canonical shortlist verdict is LIVE_CANDIDATES_AVAILABLE with live_candidates=[C300] and preferred_live_candidate=C300. C120 fails gate 1 at 88.888889% and gate 2 at 15.384615% (2/13 canonical positive-wait turns) while gate 3 passes with 0 early exhaustions; C600 fails gate 4 only.",
+        "The a1 blocker at cd2bc45101cdb47101d8f4bc298ace14f68197d1 was an assignment expectation error, not an evidence problem. The corrected a2 brief and Amendment A1 agree with the frozen evidence.",
+        "The first canonical regeneration matched the a1 preview hashes exactly. Required markdownlint then exposed a renderer-only double-blank defect; the deterministic one-line renderer fix changed only the Markdown hash from bb6794ed021f2965bf7094c82ce3d713a795a3e47d53623c695a923ee7dba50d to dea813747ee3f6234dada113dd56a7b9af4de9f770838667a804d115ef8592ea. JSON remains 072556e60fb55f686d872bce4da004bc272e9162e32459f2dc276657faa0e094 and all gate numbers/verdicts are unchanged.",
+        "Frozen amended shortlist commit is 8c456ff5b9e595ddb3b7793bb11cd1cabd7ae207; attempt a2 resume-state commit is b9aef06. No production budget was declared and no production state was modified.",
+        "Step 3.8 r01 input-contract evidence and the r01 3.9/3.10 validation/handoff remain historical until their amended reruns; next step is 3.8-amend."
       ],
       "worker_branch": null,
       "run": "r02",
@@ -813,7 +815,7 @@
           "superseded_by": "r02 / Amendment A1"
         }
       ],
-      "commit": "15ef3a7272ac1fcef3ae3d2194e28c98fcef0b8f"
+      "commit": "8c456ff5b9e595ddb3b7793bb11cd1cabd7ae207"
     },
     "3.8": {
       "status": "complete",
@@ -971,7 +973,7 @@
     "validated_ci_conclusion": "success"
   },
   "created_at": "2026-09-25T00:51:02+10:00",
-  "updated_at": "2026-09-25T10:36:23+10:00",
+  "updated_at": "2026-09-25T10:51:30+10:00",
   "orchestrator_state_checkpoint_path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase3/checkpoints/orchestrator-state-initial.json",
   "ready_count": 1,
   "claimed_count": 0,
@@ -1070,12 +1072,14 @@
     }
   ],
   "candidate_shortlist_path": "benchmarks/chat-mode-scheduling-v2/phase3-candidate-shortlist.json",
-  "candidate_shortlist_sha256": "51db08d70ad8ebfcc46de9e53c661b517b9f3ed41b10579d49057aa395f8d11d",
+  "candidate_shortlist_sha256": "072556e60fb55f686d872bce4da004bc272e9162e32459f2dc276657faa0e094",
   "candidate_shortlist_md_path": "benchmarks/chat-mode-scheduling-v2/phase3-candidate-shortlist.md",
-  "candidate_shortlist_md_sha256": "bd4a258152e66277e663af2a5d7e6fbac0daa2592cfe51d2d3caf1bb644a9c85",
-  "live_candidates": [],
-  "preferred_live_candidate": null,
-  "phase3_offline_verdict": "NO_LIVE_CANDIDATE",
+  "candidate_shortlist_md_sha256": "dea813747ee3f6234dada113dd56a7b9af4de9f770838667a804d115ef8592ea",
+  "live_candidates": [
+    "C300"
+  ],
+  "preferred_live_candidate": "C300",
+  "phase3_offline_verdict": "LIVE_CANDIDATES_AVAILABLE",
   "phase4_input_contract_path": "benchmarks/chat-mode-scheduling-v2/phase4-input-contract.json",
   "phase4_input_contract_sha256": "bc2fc07ab945504b3acc726c1779d2b46533f43472535f803f2f17b986321024",
   "scenario_catalog_sha256": "45002efd15fe7aa07fa5933180752c6537bea6584520f41a4e1d6b6de61ab5fd",
