@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "phase": 4,
-  "status": "blocked",
+  "status": "in_progress",
   "branch": "feature/chat-mode-scheduling-v2-phase4",
   "worktree": "/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4",
   "source_branch": "feature/chat-mode-scheduling-v2-phase3",
   "audited_source_head": "3a4dfb1b248e4530fb09013976abb863c8e35eaf",
   "last_completed_step": "4H-R",
-  "next_step": "STOP at Step 4.7: C300 failed the targeted live budget-selection gates; no C endpoint is selected and no 4.6A:selected run request is emitted. Continuing Phase 4 requires a new owner-approved experiment.",
+  "next_step": "4.7-fix \u2014 apply P4-A3 wait-node argument-matching correction, audit scenario manifests, and re-analyze retained C300 R5 calibration evidence.",
   "dependency_audit": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase4-dependency-audit-2026-09-25-r01.json",
     "revision": "r01",
@@ -578,6 +578,15 @@
         "The first file-scoped pre-commit pass autoformatted the new code and exposed three mypy narrowing errors; the explicit non-empty route-field check resolved them and the final pre-commit pass is clean."
       ],
       "commit": "acdb2088584382c6496d10c2a170d2217135e550",
+      "worker_branch": null
+    },
+    "4.7-fix": {
+      "status": "running",
+      "tests": [],
+      "notes": [
+        "P4-A3 analyzer matcher correction is in progress; Step 4.7 remains historical NO_GO pending the manager-dispatched re-judgment."
+      ],
+      "commit": null,
       "worker_branch": null
     }
   },

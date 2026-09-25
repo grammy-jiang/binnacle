@@ -109,6 +109,12 @@ def _auto_reasoning_nodes(scenario: Scenario, completed: set[str]) -> bool:
 def _node_matches(node: Node, call: RawCall, expected: dict[str, Any]) -> bool:
     if node.tool != call.tool:
         return False
+    advisory_positive_wait = (
+        node.tool == "job_status"
+        and node.allow_repeats
+        and isinstance(node.completion_condition, str)
+        and node.completion_condition.startswith("job_state=")
+    )
     for key, value in expected.items():
         if key in {"operation", "tail_lines"}:
             continue
@@ -116,6 +122,15 @@ def _node_matches(node: Node, call: RawCall, expected: dict[str, Any]) -> bool:
             continue
         if key not in call.args:
             return False
+        if key == "wait_seconds" and advisory_positive_wait:
+            actual_wait = call.args[key]
+            if (
+                not isinstance(actual_wait, int)
+                or isinstance(actual_wait, bool)
+                or not 1 <= actual_wait <= 50
+            ):
+                return False
+            continue
         if call.args[key] != value:
             return False
     return True

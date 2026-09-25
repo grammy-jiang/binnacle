@@ -1,6 +1,6 @@
 # Chat mode scheduling v2 — Phase 4 progress
 
-Status: **blocked**
+Status: **in_progress**
 
 Branch: `feature/chat-mode-scheduling-v2-phase4`
 
@@ -8,9 +8,9 @@ Worktree: `/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4`
 
 Audited source HEAD: `3a4dfb1b248e4530fb09013976abb863c8e35eaf`
 
-Last completed step: **4.6B0**
+Last completed step: **4H-R**
 
-Next step: **STOP at Step 4.7 — C300 failed the targeted live budget-selection gates; no selected C endpoint and no 4.6A:selected request. A new owner-approved experiment is required to continue Phase 4.**
+Next step: **4.7-fix — P4-A3 wait-node argument-matching correction is running; Step 4.7 will be re-judged separately by the manager after this fix is verified.**
 
 ## Frozen Step 4.0 entry gate
 
@@ -44,6 +44,7 @@ Next step: **STOP at Step 4.7 — C300 failed the targeted live budget-selection
 | 4.6A | not_started | — |
 | 4.6B0 | complete | — |
 | 4.7 | blocked | — |
+| 4.7-fix | running | — |
 | 4.6A:selected | not_started | — |
 | 4.8 | not_started | — |
 | 4.9.1 | not_started | — |
