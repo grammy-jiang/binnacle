@@ -874,25 +874,42 @@
       ]
     },
     "3.9": {
-      "status": "complete",
-      "tests": [
-        "uv run python scripts/run_test_suite.py --workers 4 --seed 12345 -> PASS: parallel-safe 1207 passed/3 skipped; no_xdist 2 passed/1210 deselected; aggregate 1209 passed, 0 failed, 3 skipped; runner elapsed 32.69 s; MCP job runtime 32.774 s; pre-run nproc=4 loadavg=0.18 0.34 0.45 (timing under foreign parallel-programme load).",
-        "uv run tox -e coverage-policy -- --seed 12345 -> PASS: unit 336+1 passed; non-unit 871+1 passed/3 skipped; aggregate 1209 passed/3 skipped; 95 production modules, 0 below final target, 0 errors; tox 61.56 s; MCP job runtime 62.298 s; pre-run nproc=4 loadavg=0.88 0.53 0.51 (timing under foreign parallel-programme load).",
-        "uv run pre-commit run --all-files -> PASS: 21/21 hooks; MCP job runtime 23.246 s; pre-run nproc=4 loadavg=1.61 0.86 0.63 (timing under foreign parallel-programme load).",
-        "bash /tmp/p36-manager/run-3.9-determinism.sh -> PASS: C120/C300/C600 each matched 326/326 committed policy rows plus summary/per-scenario/core policy fields; shortlist JSON and Markdown byte-identical to committed artifacts; MCP job runtime 0.615 s; pre-run nproc=4 loadavg=1.86 1.03 0.70 (timing under foreign parallel-programme load).",
-        "bash /tmp/p36-manager/isolation-check.sh -> PASS after external-drift reconciliation: production baseline r2 observed at 2026-09-25T06:34:38+10:00 with clean master/origin-master 0f8136aadf9f074d025864b0b130fad6230324e4; config SHA-256 9564cec6b4e994287b2136d4f63db9bac4a2d5fe02425c0eb76863354c88fd5d; original unit-file/profile hashes unchanged; all four services active/running; blocking_wall_budget_s_by_client absent; listening ports exactly 127.0.0.1:8000; MCP job runtime 0.114 s; pre-run nproc=4 loadavg=1.13 0.58 0.48."
-      ],
+      "status": "running",
+      "tests": [],
       "notes": [
-        "Direct predecessor 3.8 remains verified at canonical commit 87253c3edd9f986138beef0cce97f7db336fcfad; its a2 completion packet, canonical history, and Step-3.8 progress status agree.",
-        "The optimized suite, coverage-policy gate, pre-commit --all-files, and replay/shortlist determinism checks from attempt a1 are accepted for a2 under the task-manager correction because the only commit since those validations, a91300ce5fe868ef8f852eafef4429a42e5b39e0, changed only phase3-progress.json and phase3-progress.md; no source, test, replay, shortlist, or input-contract bytes changed.",
-        "Determinism evidence remains PASS: C120/C300/C600 each matched 326/326 policy rows and core report fields; shortlist JSON/Markdown remain byte-identical at SHA-256 51db08d70ad8ebfcc46de9e53c661b517b9f3ed41b10579d49057aa395f8d11d and bd4a258152e66277e663af2a5d7e6fbac0daa2592cfe51d2d3caf1bb644a9c85.",
-        "The production drift is reconciled rather than blocking. Task-manager journal evidence attributes it to the owner's separate run-command phase5 readiness workflow in turn 8adec04a-fc39-4a82-8a69-d6514492d5d3: commit c082cea35b55bd497e849131b266990c4738edc5 at 01:41:00, config rewrite/backup at 01:41:49, binnacle-mcp.service restart at 01:42:06, and commit 0f8136aadf9f074d025864b0b130fad6230324e4 at 01:44:27.",
-        "The observed config backup is /home/grammy-jiang/.config/binnacle/config.toml.pre-phase5-readiness-20260925. The new config contains the owner's run-command readiness sections while blocking_wall_budget_s_by_client remains absent.",
-        "No scheduling-v2 chat caused or normalized the production drift. Phase-3 production access was read-only observation only, satisfying the runbook's Production isolation rule.",
-        "The original production_baseline is retained as history; production_baseline_r2 records the reconciled observation at 2026-09-25T06:34:38+10:00."
+        "Run r02 is the Amendment A1 rerun of Step 3.9; the previous Step-3.9 validation is preserved in run_history as superseded evidence.",
+        "Direct predecessor 3.8-amend is verified at canonical commit 9cf95f1138e7025de98403e78d88a4139bd61589; its completion packet, canonical HEAD/origin ref, and Step-3.8 r02 progress all agree.",
+        "The amended validation reruns the authoritative optimized suite, full pre-commit, C-candidate replay/shortlist determinism, and production isolation against the r02 C300-only shortlist/input contract."
       ],
       "commit": null,
-      "worker_branch": null
+      "worker_branch": null,
+      "run": "r02",
+      "amendment": "A1",
+      "run_history": [
+        {
+          "status": "superseded",
+          "tests": [
+            "uv run python scripts/run_test_suite.py --workers 4 --seed 12345 -> PASS: parallel-safe 1207 passed/3 skipped; no_xdist 2 passed/1210 deselected; aggregate 1209 passed, 0 failed, 3 skipped; runner elapsed 32.69 s; MCP job runtime 32.774 s; pre-run nproc=4 loadavg=0.18 0.34 0.45 (timing under foreign parallel-programme load).",
+            "uv run tox -e coverage-policy -- --seed 12345 -> PASS: unit 336+1 passed; non-unit 871+1 passed/3 skipped; aggregate 1209 passed/3 skipped; 95 production modules, 0 below final target, 0 errors; tox 61.56 s; MCP job runtime 62.298 s; pre-run nproc=4 loadavg=0.88 0.53 0.51 (timing under foreign parallel-programme load).",
+            "uv run pre-commit run --all-files -> PASS: 21/21 hooks; MCP job runtime 23.246 s; pre-run nproc=4 loadavg=1.61 0.86 0.63 (timing under foreign parallel-programme load).",
+            "bash /tmp/p36-manager/run-3.9-determinism.sh -> PASS: C120/C300/C600 each matched 326/326 committed policy rows plus summary/per-scenario/core policy fields; shortlist JSON and Markdown byte-identical to committed artifacts; MCP job runtime 0.615 s; pre-run nproc=4 loadavg=1.86 1.03 0.70 (timing under foreign parallel-programme load).",
+            "bash /tmp/p36-manager/isolation-check.sh -> PASS after external-drift reconciliation: production baseline r2 observed at 2026-09-25T06:34:38+10:00 with clean master/origin-master 0f8136aadf9f074d025864b0b130fad6230324e4; config SHA-256 9564cec6b4e994287b2136d4f63db9bac4a2d5fe02425c0eb76863354c88fd5d; original unit-file/profile hashes unchanged; all four services active/running; blocking_wall_budget_s_by_client absent; listening ports exactly 127.0.0.1:8000; MCP job runtime 0.114 s; pre-run nproc=4 loadavg=1.13 0.58 0.48."
+          ],
+          "notes": [
+            "Direct predecessor 3.8 remains verified at canonical commit 87253c3edd9f986138beef0cce97f7db336fcfad; its a2 completion packet, canonical history, and Step-3.8 progress status agree.",
+            "The optimized suite, coverage-policy gate, pre-commit --all-files, and replay/shortlist determinism checks from attempt a1 are accepted for a2 under the task-manager correction because the only commit since those validations, a91300ce5fe868ef8f852eafef4429a42e5b39e0, changed only phase3-progress.json and phase3-progress.md; no source, test, replay, shortlist, or input-contract bytes changed.",
+            "Determinism evidence remains PASS: C120/C300/C600 each matched 326/326 policy rows and core report fields; shortlist JSON/Markdown remain byte-identical at SHA-256 51db08d70ad8ebfcc46de9e53c661b517b9f3ed41b10579d49057aa395f8d11d and bd4a258152e66277e663af2a5d7e6fbac0daa2592cfe51d2d3caf1bb644a9c85.",
+            "The production drift is reconciled rather than blocking. Task-manager journal evidence attributes it to the owner's separate run-command phase5 readiness workflow in turn 8adec04a-fc39-4a82-8a69-d6514492d5d3: commit c082cea35b55bd497e849131b266990c4738edc5 at 01:41:00, config rewrite/backup at 01:41:49, binnacle-mcp.service restart at 01:42:06, and commit 0f8136aadf9f074d025864b0b130fad6230324e4 at 01:44:27.",
+            "The observed config backup is /home/grammy-jiang/.config/binnacle/config.toml.pre-phase5-readiness-20260925. The new config contains the owner's run-command readiness sections while blocking_wall_budget_s_by_client remains absent.",
+            "No scheduling-v2 chat caused or normalized the production drift. Phase-3 production access was read-only observation only, satisfying the runbook's Production isolation rule.",
+            "The original production_baseline is retained as history; production_baseline_r2 records the reconciled observation at 2026-09-25T06:34:38+10:00."
+          ],
+          "commit": null,
+          "worker_branch": null,
+          "run": "r01",
+          "superseded_by": "r02 / Amendment A1"
+        }
+      ]
     },
     "3.10": {
       "status": "complete",

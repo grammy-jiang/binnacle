@@ -2,7 +2,7 @@
 
 Status: IN PROGRESS
 
-Updated: 2026-09-25T11:10:21+10:00
+Updated: 2026-09-25T11:17:06+10:00
 
 ## Canonical state
 
@@ -87,7 +87,7 @@ Updated: 2026-09-25T11:10:21+10:00
 | 3H | complete |
 | 3.7 | complete (r02 / Amendment A1) |
 | 3.8 | complete (r02 / Amendment A1) |
-| 3.9 | complete |
+| 3.9 | running (r02 / Amendment A1) |
 | 3.10 | complete |
 
 ## Step 3.0 notes
@@ -667,6 +667,18 @@ Updated: 2026-09-25T11:10:21+10:00
 - The focused test matrix defines no dedicated Step-3.8 pytest target; the
   relevant manifest/oracle/provenance/report tests and explicit contract
   validator were rerun.
+
+## Step 3.9 amended run r02 status
+
+- Status: RUNNING under Amendment A1.
+- Direct predecessor 3.8-amend is verified at canonical commit
+  9cf95f1138e7025de98403e78d88a4139bd61589; canonical HEAD and origin
+  matched that commit before this run started.
+- The authoritative optimized suite, full pre-commit, C-candidate
+  replay/shortlist determinism, and production isolation are being rerun
+  against the amended r02 artifacts.
+- The Step-3.9 r01 material below is retained as historical, superseded
+  evidence.
 
 ## Step 3.9 notes
 
