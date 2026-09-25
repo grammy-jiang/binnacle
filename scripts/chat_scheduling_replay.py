@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import json
 import math
+import sys
 from collections import defaultdict
 from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
@@ -146,6 +147,17 @@ def _validate_row(row: Mapping[str, Any]) -> None:
         raise ValueError("observed_required_completions must be >= 0")
 
 
+def repeated_wait_burden(
+    row: Mapping[str, Any], *, policy: str, budget_s: float
+) -> dict[str, float | None]:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from scripts import chat_scheduling_repeated_wait_burden as repeated_wait
+
+    return repeated_wait.calculate_repeated_wait_burden(
+        row, policy=policy, budget_s=budget_s
+    )
+
+
 def replay_turn(
     row: Mapping[str, Any], *, policy: str, budget_s: float
 ) -> dict[str, Any]:
@@ -262,14 +274,17 @@ def replay_turn(
     }
 
 
-def _aggregate(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+def _aggregate(
+    rows: Sequence[Mapping[str, Any]],
+    repeated_wait_metrics: Sequence[Mapping[str, Any]] | None = None,
+) -> dict[str, Any]:
     observed_wall = sum(float(row["observed_blocking_wall_s"]) for row in rows)
     candidate_wall = sum(float(row["candidate_blocking_wall_s"]) for row in rows)
     positive_turns = sum(int(row["positive_waits_observed"]) > 0 for row in rows)
     exhausted = sum(row["candidate_exhaustion_offset_s"] is not None for row in rows)
     observed_required = sum(int(row["observed_required_completions"]) for row in rows)
     preserved = sum(int(row["required_completions_preserved"]) for row in rows)
-    return {
+    result = {
         "turns": len(rows),
         "turns_with_positive_waits": positive_turns,
         "observed_blocking_wall_s": _rounded(observed_wall),
@@ -297,6 +312,27 @@ def _aggregate(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
             else _rounded(exhausted * 100.0 / positive_turns)
         ),
     }
+    if repeated_wait_metrics is not None:
+        if len(repeated_wait_metrics) != len(rows):
+            raise ValueError("repeated-wait metrics must align with replay rows")
+        observed_repeated = sum(
+            float(item["observed_repeated_wait_burden_s"])
+            for item in repeated_wait_metrics
+        )
+        candidate_repeated = sum(
+            float(item["candidate_repeated_wait_burden_s"])
+            for item in repeated_wait_metrics
+        )
+        result.update(
+            {
+                "observed_repeated_wait_burden_s": _rounded(observed_repeated),
+                "candidate_repeated_wait_burden_s": _rounded(candidate_repeated),
+                "repeated_wait_burden_reduction_percent": _percent(
+                    observed_repeated, candidate_repeated
+                ),
+            }
+        )
+    return result
 
 
 def canonical_json(payload: Mapping[str, Any]) -> str:
@@ -317,20 +353,36 @@ def replay_corpus(
     rows = corpus.get("rows")
     if not isinstance(rows, list):
         raise TypeError("replay corpus rows must be a list")
-    replayed = [replay_turn(row, policy=policy, budget_s=budget_s) for row in rows]
-    replayed.sort(
-        key=lambda row: (
-            str(row["source_id"]),
-            str(row["trial_id"]),
-            str(row["base_turn"]),
+    replayed_with_metrics = [
+        (
+            replay_turn(row, policy=policy, budget_s=budget_s),
+            repeated_wait_burden(row, policy=policy, budget_s=budget_s),
+        )
+        for row in rows
+    ]
+    replayed_with_metrics.sort(
+        key=lambda pair: (
+            str(pair[0]["source_id"]),
+            str(pair[0]["trial_id"]),
+            str(pair[0]["base_turn"]),
         )
     )
-    grouped: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
-    for row in replayed:
-        grouped[str(row["scenario"])].append(row)
+    replayed = [pair[0] for pair in replayed_with_metrics]
+    repeated_metrics = [pair[1] for pair in replayed_with_metrics]
+    grouped: dict[str, list[tuple[Mapping[str, Any], Mapping[str, Any]]]] = defaultdict(
+        list
+    )
+    for row, metrics in replayed_with_metrics:
+        grouped[str(row["scenario"])].append((row, metrics))
     per_scenario = [
-        {"scenario": scenario, **_aggregate(scenario_rows)}
-        for scenario, scenario_rows in sorted(grouped.items())
+        {
+            "scenario": scenario,
+            **_aggregate(
+                [pair[0] for pair in scenario_pairs],
+                [pair[1] for pair in scenario_pairs],
+            ),
+        }
+        for scenario, scenario_pairs in sorted(grouped.items())
     ]
     if corpus_sha256 is None:
         corpus_sha256 = hashlib.sha256(
@@ -342,7 +394,7 @@ def replay_corpus(
         "corpus_sha256": corpus_sha256,
         "policy": policy,
         "budget_s": _rounded(float(budget_s)),
-        "summary": _aggregate(replayed),
+        "summary": _aggregate(replayed, repeated_metrics),
         "per_scenario": per_scenario,
         "rows": replayed,
     }
@@ -371,6 +423,9 @@ def render_markdown(report: Mapping[str, Any]) -> str:
         "observed_blocking_wall_s",
         "candidate_blocking_wall_s",
         "burden_reduction_percent",
+        "observed_repeated_wait_burden_s",
+        "candidate_repeated_wait_burden_s",
+        "repeated_wait_burden_reduction_percent",
         "positive_waits_observed",
         "waits_clipped",
         "waits_converted_to_nonblocking",

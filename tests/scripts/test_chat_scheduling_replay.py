@@ -9,6 +9,7 @@ import pytest
 
 from scripts.chat_scheduling_replay import (
     interval_union_seconds,
+    repeated_wait_burden,
     replay_corpus,
     replay_turn,
 )
@@ -25,12 +26,13 @@ def make_wait(
     required: bool = False,
     observed: bool = False,
     exit_offset: float | None = None,
+    job_id: str | None = None,
 ) -> dict:
     end = start + duration
     return {
         "wait_index": index,
         "node_id": f"wait_{index}",
-        "job_id_hash": f"job-{index}",
+        "job_id_hash": job_id or f"job-{index}",
         "requested_wait_s": requested,
         "call_start_offset_s": start,
         "call_end_offset_s": end,
@@ -121,6 +123,70 @@ def test_cumulative_partial_overlap_clips_against_elapsed_union_not_sum():
     assert result["candidate_blocking_wall_s"] == 60.0
     assert result["waits_clipped"] == 1
     assert result["candidate_exhaustion_offset_s"] == 60.0
+
+
+def test_repeated_wait_burden_one_job_with_one_wait_is_zero():
+    metrics = repeated_wait_burden(
+        make_row([make_wait(1, 0.0, 10.0, job_id="job-a")]),
+        policy="cumulative",
+        budget_s=120,
+    )
+
+    assert metrics["observed_repeated_wait_burden_s"] == 0.0
+    assert metrics["candidate_repeated_wait_burden_s"] == 0.0
+    assert metrics["repeated_wait_burden_reduction_percent"] is None
+
+
+def test_repeated_wait_burden_two_waits_on_one_job_counts_only_second():
+    metrics = repeated_wait_burden(
+        make_row(
+            [
+                make_wait(1, 0.0, 10.0, job_id="job-a"),
+                make_wait(2, 20.0, 20.0, job_id="job-a"),
+            ]
+        ),
+        policy="cumulative",
+        budget_s=120,
+    )
+
+    assert metrics["observed_repeated_wait_burden_s"] == 20.0
+    assert metrics["candidate_repeated_wait_burden_s"] == 20.0
+    assert metrics["repeated_wait_burden_reduction_percent"] == 0.0
+
+
+def test_repeated_wait_burden_two_jobs_with_one_wait_each_is_zero():
+    metrics = repeated_wait_burden(
+        make_row(
+            [
+                make_wait(1, 0.0, 10.0, job_id="job-a"),
+                make_wait(2, 20.0, 20.0, job_id="job-b"),
+            ]
+        ),
+        policy="cumulative",
+        budget_s=120,
+    )
+
+    assert metrics["observed_repeated_wait_burden_s"] == 0.0
+    assert metrics["candidate_repeated_wait_burden_s"] == 0.0
+    assert metrics["repeated_wait_burden_reduction_percent"] is None
+
+
+def test_repeated_wait_burden_overlapping_second_waits_are_charged_once():
+    metrics = repeated_wait_burden(
+        make_row(
+            [
+                make_wait(1, 0.0, 10.0, job_id="job-a"),
+                make_wait(2, 20.0, 20.0, job_id="job-a"),
+                make_wait(3, 30.0, 20.0, job_id="job-a"),
+            ]
+        ),
+        policy="cumulative",
+        budget_s=120,
+    )
+
+    assert metrics["observed_repeated_wait_burden_s"] == 30.0
+    assert metrics["candidate_repeated_wait_burden_s"] == 30.0
+    assert metrics["repeated_wait_burden_reduction_percent"] == 0.0
 
 
 def test_cumulative_nearly_exhausted_budget_converts_later_positive_wait():
@@ -219,6 +285,9 @@ def test_replay_corpus_sorts_rows_and_builds_summary_and_scenario_table():
     assert report["summary"]["observed_blocking_wall_s"] == 30.0
     assert report["summary"]["candidate_blocking_wall_s"] == 30.0
     assert report["summary"]["burden_reduction_percent"] == 0.0
+    assert report["summary"]["observed_repeated_wait_burden_s"] == 0.0
+    assert report["summary"]["candidate_repeated_wait_burden_s"] == 0.0
+    assert report["summary"]["repeated_wait_burden_reduction_percent"] is None
     assert [item["scenario"] for item in report["per_scenario"]] == ["R5", "R6"]
     assert report["corpus_sha256"] == "f" * 64
     assert report["algorithm_id"] == "phase3-replay-v1"

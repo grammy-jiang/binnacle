@@ -24,9 +24,10 @@ def render_shortlist_markdown(report: Mapping[str, Any]) -> str:
         "",
         (
             "| Candidate | Budget (s) | Completion % | Exhaustion % | "
-            "Early exhaustions | Burden reduction % | Evidence complete | Result |"
+            "Early exhaustions | Def. (a) reduction % (non-gating) | "
+            "Def. (b) repeated-wait reduction % | Evidence complete | Result |"
         ),
-        "| --- | ---: | ---: | ---: | ---: | ---: | --- | --- |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |",
     ]
     for item in report["candidate_evaluations"]:
         gates = item["gates"]
@@ -35,10 +36,23 @@ def render_shortlist_markdown(report: Mapping[str, Any]) -> str:
             f"{gates['gate_1_completion_preservation']['value_percent']} | "
             f"{gates['gate_2_exhaustion']['value_percent']} | "
             f"{gates['gate_3_no_early_exhaustion']['early_exhaustion_turns']} | "
-            f"{gates['gate_4_repeated_wait_burden_reduction']['value_percent']} | "
+            f"{gates['gate_4_repeated_wait_burden_reduction']['burden_reduction_percent']} | "
+            f"{gates['gate_4_repeated_wait_burden_reduction']['repeated_wait_burden_reduction_percent']} | "
             f"{gates['gate_5_evidence_completeness']['passed']} | "
             f"{'PASS' if item['passed'] else 'REJECT'} |"
         )
+
+    lines.extend(
+        [
+            "",
+            "## Gate 4 burden definitions",
+            "",
+            "- Definition (a), non-gating continuity column: total per-turn positive-wait union.",
+            "- Definition (b), gating: per `(turn, job)`, union of the second and later positive waits.",
+            f"- Gate 4 minimum definition-(b) reduction: {report['candidate_gate_thresholds']['repeated_wait_burden_reduction_min_percent']}%.",
+            "",
+        ]
+    )
 
     lines.extend(["", "## Gate populations", ""])
     for item in report["candidate_evaluations"]:

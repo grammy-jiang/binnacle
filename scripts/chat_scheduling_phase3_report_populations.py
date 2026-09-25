@@ -6,6 +6,8 @@ import math
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from scripts.chat_scheduling_replay import repeated_wait_burden
+
 OPERATIONAL_SOURCE_ID = "operational-journal"
 EPSILON = 1e-9
 
@@ -140,6 +142,45 @@ def burden_reduction_metrics(
         "observed_blocking_wall_s": round(observed, 6),
         "candidate_blocking_wall_s": round(candidate, 6),
         "value_percent": round(100.0 * (observed - candidate) / observed, 6),
+    }
+
+
+def repeated_wait_burden_reduction_metrics(
+    rows: Sequence[Mapping[str, Any]], *, budget_s: float, field: str
+) -> dict[str, Any]:
+    """Aggregate repeated-wait definition (b) over source rows."""
+
+    if not rows:
+        raise ValueError(f"{field} repeated-wait burden population must not be empty")
+    metrics = [
+        repeated_wait_burden(row, policy="cumulative", budget_s=budget_s)
+        for row in rows
+    ]
+    observed = sum(
+        _number(
+            item.get("observed_repeated_wait_burden_s"),
+            f"{field} observed repeated-wait burden",
+        )
+        for item in metrics
+    )
+    candidate = sum(
+        _number(
+            item.get("candidate_repeated_wait_burden_s"),
+            f"{field} candidate repeated-wait burden",
+        )
+        for item in metrics
+    )
+    if observed <= EPSILON:
+        raise ValueError(
+            f"{field} repeated-wait burden-reduction denominator must be positive"
+        )
+    reduction = round(100.0 * (observed - candidate) / observed, 6)
+    return {
+        "turns": len(rows),
+        "observed_repeated_wait_burden_s": round(observed, 6),
+        "candidate_repeated_wait_burden_s": round(candidate, 6),
+        "repeated_wait_burden_reduction_percent": reduction,
+        "value_percent": reduction,
     }
 
 

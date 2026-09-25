@@ -24,23 +24,29 @@ def _corpus(
 ) -> tuple[Path, str, list[dict]]:
     rows = []
     for index in range(10):
-        wait = {
-            "wait_index": 1,
-            "node_id": f"wait-{index}",
-            "job_id_hash": f"job-{index}",
-            "requested_wait_s": 50.0,
-            "call_start_offset_s": 0.0,
-            "call_end_offset_s": 20.0,
-            "blocking_start_offset_s": 0.0,
-            "blocking_end_offset_s": 20.0,
-            "waited_s": 20.0,
-            "state": "exited",
-            "job_exit_offset_s": 10.0,
-            "required_completion": True,
-            "observed_completion": True,
-        }
+        waits = []
+        for wait_index in range(1, 16):
+            start = float((wait_index - 1) * 50)
+            first = wait_index == 1
+            waits.append(
+                {
+                    "wait_index": wait_index,
+                    "node_id": f"wait-{index}-{wait_index}",
+                    "job_id_hash": f"job-{index}",
+                    "requested_wait_s": 50.0,
+                    "call_start_offset_s": start,
+                    "call_end_offset_s": start + 50.0,
+                    "blocking_start_offset_s": start,
+                    "blocking_end_offset_s": start + 50.0,
+                    "waited_s": 50.0,
+                    "state": "exited" if first else "running",
+                    "job_exit_offset_s": 10.0 if first else None,
+                    "required_completion": first,
+                    "observed_completion": first,
+                }
+            )
         if missing_state and index == 0:
-            wait.pop("state")
+            waits[0].pop("state")
         rows.append(
             {
                 "source_id": "source",
@@ -49,8 +55,8 @@ def _corpus(
                 "scenario": "R6",
                 "arm": "B",
                 "base_turn": "base/1",
-                "observed_blocking_wall_s": 20.0,
-                "waits": [wait],
+                "observed_blocking_wall_s": 750.0,
+                "waits": waits,
                 "observed_required_completions": 1,
                 "terminal_state": "complete",
                 "correct": True,
@@ -103,7 +109,7 @@ def _candidate_report(
                 ),
                 "burden_reduction_percent": None,
                 "candidate_exhaustion_offset_s": None,
-                "positive_waits_observed": 1,
+                "positive_waits_observed": len(row["waits"]),
                 "waits_clipped": 0,
                 "waits_converted_to_nonblocking": 0,
                 "observed_required_completions": observed_required,
