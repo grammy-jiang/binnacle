@@ -1,3 +1,4 @@
+import hashlib
 import json
 import subprocess
 from pathlib import Path
@@ -233,38 +234,96 @@ def test_restore_probe_injects_failure_but_returns_success_after_restore(
     assert record["instructions"]["restored"] is True
 
 
-def test_trial_failure_after_instruction_apply_restores_and_cleans(
-    monkeypatch, tmp_path
-):
-    project = FakeProject("baseline")
-    monkeypatch.setattr(harness, "ProjectClient", lambda *args, **kwargs: project)
-    monkeypatch.setattr(harness, "new_state_dir", _state_dir_factory(tmp_path))
-    monkeypatch.setattr(harness, "LocalMCP", FakeMCP)
-    monkeypatch.setattr(harness, "ProductionSnapshot", FakeProduction)
-    monkeypatch.setattr(harness, "arm_instructions", lambda arm: "variant-B")
-    monkeypatch.setattr(
-        harness,
-        "capture_journal",
-        lambda start, end, target: target.write_text(""),
+@pytest.mark.parametrize(
+    ("arm", "budget", "endpoint", "normalized"),
+    [
+        ("A", None, "A", None),
+        ("B", None, "B", None),
+        ("C", 300, "C300", 300),
+        ("H", None, "H", 10),
+    ],
+)
+def test_phase4_arm_budget_endpoint_contract(arm, budget, endpoint, normalized):
+    assert runtime.validate_arm_endpoint(arm, budget, endpoint) == normalized
+
+
+@pytest.mark.parametrize(
+    ("arm", "budget", "endpoint"),
+    [
+        ("A", 10, "A"),
+        ("B", None, "A"),
+        ("C", None, "C300"),
+        ("C", 120, "C300"),
+        ("H", 11, "H"),
+    ],
+)
+def test_phase4_arm_budget_endpoint_mismatch_is_hard_error(arm, budget, endpoint):
+    with pytest.raises(runtime.HarnessError, match="arm/budget/endpoint"):
+        runtime.validate_arm_endpoint(arm, budget, endpoint)
+
+
+def test_r12_runtime_placeholder_uses_selected_budget(tmp_path):
+    identity = runtime.TrialIdentity("R12", "r12", "nonce")
+    assert (
+        runtime.render_text(
+            "{budget_plus_margin_s}", identity, tmp_path, budget_s=300, margin_s=30
+        )
+        == "330"
     )
 
-    code, state = harness.run_trial("M1", "B", fail_after_instructions=True)
 
-    assert code == 1
-    assert project.text == "baseline"
+def test_trial_failure_does_not_mutate_lane_project_and_records_identity(
+    monkeypatch, tmp_path
+):
+    project = FakeProject("variant-B")
+    selected = {
+        "logical_arm": "B",
+        "budget_s": None,
+        "endpoint_id": "B",
+        "connector_logical_name": "Raspberry Pi MCP Scheduling B",
+        "project_id": "g-p-B",
+        "project_name": "rp-sched-B",
+        "model_thinking": {"thinking_effort": "max"},
+        "phase4_source_head": "0" * 40,
+        "instruction_sha256": hashlib.sha256(b"variant-B").hexdigest(),
+        "base_topology_sha256": "a" * 64,
+        "lane_manifest_path": "B.json",
+        "lane_manifest_sha256": "b" * 64,
+        "runtime_registry_sha256": "c" * 64,
+        "admission_envelope_revision": "r01",
+        "host": "127.0.0.1",
+        "port": 8111,
+        "token_path": "token",
+    }
+    monkeypatch.setattr(harness, "resolve_phase4_endpoint", lambda *a, **k: selected)
+    monkeypatch.setattr(harness, "_begin_endpoint_capture", lambda *a, **k: {})
+    monkeypatch.setattr(
+        harness,
+        "_finalize_endpoint_capture",
+        lambda *a, **k: {"evidence_integrity_error": False},
+    )
+    monkeypatch.setattr(harness, "ProjectClient", lambda *args, **kwargs: project)
+    monkeypatch.setattr(harness, "new_state_dir", _state_dir_factory(tmp_path / "runs"))
+    monkeypatch.setattr(harness, "ProductionSnapshot", FakeProduction)
+    monkeypatch.setattr(harness, "LocalMCP", lambda *args, **kwargs: FakeMCP())
+
+    code, state = harness.run_trial(
+        "M1", "B", budget_s=None, endpoint_id="B", fail_after_instructions=True
+    )
+
     record = json.loads((state / "trial.json").read_text())
-    assert record["instructions"]["restored"] is True
-    assert record["production_unchanged"] is True
-    assert record["cleanup"]["fixture"]["root_removed"] is True
-    assert not Path(record["fixture"]["root"]).exists()
-    assert record["chat"] == {}
-
-
-def test_arm_a_instructions_preserve_exact_backend_trailing_newlines():
-    text = harness.arm_instructions("A")
-
-    assert text.endswith("\n\n")
-    assert not text.endswith("\n\n\n")
+    assert code == 1 and project.sets == []
+    assert record["instructions"]["mutated"] is False
+    assert record["submission_status"] == "pre_submit_failure"
+    assert record["provenance_classification"] == "pre_mcp_submission_failure"
+    assert (record["arm"], record["budget_s"], record["endpoint_id"]) == (
+        "B",
+        None,
+        "B",
+    )
+    assert record["connector_logical_name"] == "Raspberry Pi MCP Scheduling B"
+    assert record["model_thinking_snapshot"]["thinking_effort"] == "max"
+    assert record["source_head"] == "0" * 40 and record["manifest_sha256"]
 
 
 def test_fixture_snapshot_preserves_final_files_and_git_diff(monkeypatch, tmp_path):
@@ -290,23 +349,6 @@ def test_fixture_snapshot_preserves_final_files_and_git_diff(monkeypatch, tmp_pa
         assert json.loads(target.read_text())["file_sha256"]["app.py"]
     finally:
         fixture.cleanup()
-
-
-def test_capture_journal_freezes_requested_window(monkeypatch, tmp_path):
-    seen = {}
-
-    def fake_run(args, **kwargs):
-        seen["args"] = args
-        return subprocess.CompletedProcess(args, 0, "journal-evidence\n", "")
-
-    monkeypatch.setattr(runtime, "_run", fake_run)
-    target = tmp_path / "journal.log"
-
-    runtime.capture_journal(100.0, 110.0, target)
-
-    assert target.read_text() == "journal-evidence\n"
-    assert seen["args"][seen["args"].index("--since") + 1] == "@99.000"
-    assert seen["args"][seen["args"].index("--until") + 1] == "@111.000"
 
 
 def test_chat_artifact_cleanup_retries_transient_delete_failures(monkeypatch, tmp_path):
@@ -427,3 +469,32 @@ def test_send_project_chat_does_not_retry_after_enter_evidence(monkeypatch, tmp_
         )
 
     assert attempts == 1
+
+
+def test_endpoint_capture_freezes_new_bytes_and_marks_truncation(tmp_path):
+    logs = {name: tmp_path / f"{name}.log" for name in ("server", "manager", "tunnel")}
+    for path in logs.values():
+        path.write_text("old\n")
+    selected = {
+        "endpoint_id": "C300",
+        "logical_arm": "C",
+        "admission_envelope_revision": "r01",
+        **{f"{name}_log_path": str(path) for name, path in logs.items()},
+    }
+    identity = runtime.TrialIdentity("R5", "run", "nonce")
+    state = tmp_path / "state"
+    state.mkdir()
+    capture = harness._begin_endpoint_capture(selected, state, identity, "R5")
+    for path in logs.values():
+        with path.open("a") as handle:
+            handle.write("new\n")
+    evidence = harness._finalize_endpoint_capture(capture, state)
+    assert not evidence["evidence_integrity_error"]
+    assert (state / "endpoint-server.log").read_text() == "new\n"
+    bad = tmp_path / "bad"
+    bad.mkdir()
+    capture = harness._begin_endpoint_capture(selected, bad, identity, "R5")
+    logs["server"].write_text("")
+    evidence = harness._finalize_endpoint_capture(capture, bad)
+    assert evidence["evidence_integrity_error"]
+    assert not (bad / "endpoint-server.log").exists()

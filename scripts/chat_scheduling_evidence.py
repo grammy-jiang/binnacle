@@ -1,7 +1,6 @@
-"""Convert frozen benchmark evidence into a normalized TrialTrace."""
-
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -14,22 +13,21 @@ from scripts.chat_scheduling_journal import (
     parse_journal,
 )
 from scripts.chat_scheduling_manifest import Node, Scenario
-from scripts.chat_scheduling_runtime import TrialIdentity, render_text
+from scripts.chat_scheduling_runtime import (
+    HarnessError,
+    TrialIdentity,
+    render_text,
+    write_json,
+)
 from scripts.chat_scheduling_trace import JobInterval, ToolInterval, TrialTrace
+
+
+class EvidenceIntegrityError(HarnessError): ...
+
 
 _RESULT_REF = re.compile(r"\{result:([^.{}]+)\.([^{}]+)\}")
 _ABS_PATH = re.compile(r'(?<![A-Za-z0-9_])(/[^\s\'";|&<>]+)')
-_INTERRUPTION_TEXT = (
-    "streaming interrupted",
-    "request timed out",
-    "request timeout",
-    "no complete reply within",
-    "connection interrupted",
-    "connection lost",
-    "network error",
-    "something went wrong",
-    "error generating a response",
-)
+_INTERRUPTION_TEXT = ["streaming interrupted", "request timed out", "request timeout", "no complete reply within", "connection interrupted", "connection lost", "network error", "something went wrong", "error generating a response"]  # fmt: skip
 
 
 def _conversation_facts(path: Path) -> tuple[str, bool, int, str | None]:
@@ -83,10 +81,10 @@ def _seed_strings(record: dict[str, Any]) -> list[str]:
     return [value for value in values if value]
 
 
-def _trial_calls(record: dict[str, Any], calls: list[RawCall]) -> list[RawCall]:
+def _trial_calls(record: dict, calls: list[RawCall], *, strict=False) -> list[RawCall]:
     openai = [call for call in calls if call.client.startswith("openai-mcp")]
     seeds = _seed_strings(record)
-    matching_turns = {
+    turns = {
         call.turn
         for call in openai
         if call.turn
@@ -95,9 +93,9 @@ def _trial_calls(record: dict[str, Any], calls: list[RawCall]) -> list[RawCall]:
             for seed in seeds
         )
     }
-    if not matching_turns:
-        return []
-    return [call for call in openai if call.turn in matching_turns]
+    if strict and len(turns) != 1:
+        raise EvidenceIntegrityError(f"base turn matches: {sorted(turns)}")
+    return [call for call in openai if call.turn in turns]
 
 
 def _render_expected(
@@ -106,9 +104,13 @@ def _render_expected(
     root: Path,
     jobs: dict[str, str],
     node_results: dict[str, dict[str, Any]],
+    budget_s: int | None = None,
+    margin_s: int | None = 0,
 ) -> Any:
     if isinstance(value, str):
-        rendered = render_text(value, identity, root, jobs)
+        rendered = render_text(
+            value, identity, root, jobs, budget_s=budget_s, margin_s=margin_s
+        )
 
         def replace(match: re.Match[str]) -> str:
             node_id, field = match.groups()
@@ -118,15 +120,16 @@ def _render_expected(
             return str(result[field])
 
         return _RESULT_REF.sub(replace, rendered)
+
+    def render(item: Any) -> Any:
+        return _render_expected(
+            item, identity, root, jobs, node_results, budget_s, margin_s
+        )
+
     if isinstance(value, list):
-        return [
-            _render_expected(item, identity, root, jobs, node_results) for item in value
-        ]
+        return [render(item) for item in value]
     if isinstance(value, dict):
-        return {
-            key: _render_expected(item, identity, root, jobs, node_results)
-            for key, item in value.items()
-        }
+        return {key: render(item) for key, item in value.items()}
     return value
 
 
@@ -141,16 +144,10 @@ def _auto_reasoning_nodes(scenario: Scenario, completed: set[str]) -> bool:
     return changed
 
 
-def _node_matches(
-    node: Node,
-    call: RawCall,
-    expected: dict[str, Any],
-) -> bool:
+def _node_matches(node: Node, call: RawCall, expected: dict[str, Any]) -> bool:
     if node.tool != call.tool:
         return False
     for key, value in expected.items():
-        # These fields affect presentation/test metadata, not scheduler
-        # semantics, so they must not participate in logical DAG identity.
         if key in {"operation", "tail_lines"}:
             continue
         if isinstance(value, str) and "{result:" in value:
@@ -168,6 +165,7 @@ def _assign_nodes(
     identity: TrialIdentity,
     root: Path,
     jobs: dict[str, str],
+    budget_s: int | None = None,
 ) -> tuple[dict[str, str], set[str], dict[str, dict[str, Any]]]:
     assigned: dict[str, str] = {}
     completed: set[str] = set()
@@ -188,7 +186,13 @@ def _assign_nodes(
             if node.id in final_for_repeat:
                 continue
             expected = _render_expected(
-                node.arguments, identity, root, jobs, node_results
+                node.arguments,
+                identity,
+                root,
+                jobs,
+                node_results,
+                budget_s,
+                scenario.runtime_budget_margin_s,
             )
             if _node_matches(node, call, expected):
                 candidates.append(node)
@@ -333,6 +337,42 @@ def _mutation_scope_ok(
     return True
 
 
+def _phase4_source(
+    state_dir: Path, record: dict[str, Any]
+) -> tuple[str, dict[str, Any]]:
+    path = state_dir / "endpoint-evidence.json"
+    evidence = json.loads(path.read_text(encoding="utf-8"))
+    if evidence.get("evidence_integrity_error"):
+        raise EvidenceIntegrityError("endpoint slice was marked invalid")
+    actual = (
+        evidence.get("endpoint_id"),
+        evidence.get("logical_arm"),
+        evidence.get("trial_run_id"),
+        evidence.get("trial_nonce_sha256"),
+    )
+    expected = (
+        record.get("endpoint_id"),
+        record.get("arm"),
+        record.get("run_id"),
+        hashlib.sha256(str(record["nonce"]).encode()).hexdigest(),
+    )
+    if actual != expected:
+        raise EvidenceIntegrityError("endpoint evidence identity mismatch")
+    parts = []
+    for name in ("server", "manager", "tunnel"):
+        data = (state_dir / f"endpoint-{name}.log").read_bytes()
+        if hashlib.sha256(data).hexdigest() != evidence.get(f"{name}_log_sha256"):
+            raise EvidenceIntegrityError(f"{name} log hash mismatch")
+        span = evidence.get(f"{name}_log_end_offset", -1) - evidence.get(
+            f"{name}_log_start_offset", 0
+        )
+        if len(data) != span:
+            raise EvidenceIntegrityError(f"{name} log offset mismatch")
+        if name != "tunnel":
+            parts.append(data.decode(errors="replace"))
+    return "\\n".join(parts), evidence
+
+
 def load_trial_trace(state_dir: Path, scenario: Scenario) -> TrialTrace:
     record = json.loads((state_dir / "trial.json").read_text(encoding="utf-8"))
     timing_path = state_dir / "chat-timing.json"
@@ -361,9 +401,27 @@ def load_trial_trace(state_dir: Path, scenario: Scenario) -> TrialTrace:
     if timing_status == "timeout" and interruption is None:
         interruption = "timeout"
 
-    journal = (state_dir / "journal.log").read_text(encoding="utf-8")
-    raw_calls, raw_jobs = parse_journal(journal)
-    calls = _trial_calls(record, raw_calls)
+    phase4 = record.get("phase") == 4
+    evidence = None
+    try:
+        journal, evidence = (
+            _phase4_source(state_dir, record)
+            if phase4
+            else ((state_dir / "journal.log").read_text(encoding="utf-8"), None)
+        )
+        raw_calls, raw_jobs = parse_journal(journal)
+        calls = _trial_calls(record, raw_calls, strict=phase4)
+    except (EvidenceIntegrityError, OSError, json.JSONDecodeError) as exc:
+        record["evidence_integrity_error"] = True
+        write_json(state_dir / "trial.json", record)
+        if (state_dir / "endpoint-evidence.json").exists():
+            failed = evidence or json.loads(
+                (state_dir / "endpoint-evidence.json").read_text()
+            )
+            failed["evidence_integrity_error"] = True
+            failed["evidence_integrity_errors"] = [str(exc)]
+            write_json(state_dir / "endpoint-evidence.json", failed)
+        raise EvidenceIntegrityError(str(exc)) from exc
     root = Path((record.get("fixture") or {}).get("root") or "/tmp")
     jobs = {
         str(key): str(value)
@@ -375,15 +433,35 @@ def load_trial_trace(state_dir: Path, scenario: Scenario) -> TrialTrace:
         nonce=str(record["nonce"]),
     )
     assigned, completed, node_results = _assign_nodes(
-        scenario, calls, identity, root, jobs
+        scenario, calls, identity, root, jobs, record.get("budget_s")
     )
     tools = _tool_intervals(calls, assigned, origin)
 
     trial_job_ids = set(jobs.values())
+    for call in calls:
+        for job_id in (
+            call.args.get("job_id"),
+            (call.result_fields or {}).get("job_id"),
+        ):
+            if isinstance(job_id, str):
+                trial_job_ids.add(job_id)
     for result in node_results.values():
         job_id = result.get("job_id")
         if isinstance(job_id, str):
             trial_job_ids.add(job_id)
+    if phase4 and evidence is not None:
+        matched_turn = calls[0].turn
+        evidence.update(
+            matched_base_turn=matched_turn,
+            matched_call_ids=[call.call_id for call in calls],
+            matched_job_ids=sorted(trial_job_ids),
+            raw_foreign_turns_present=any(
+                call.client.startswith("openai-mcp") and call.turn != matched_turn
+                for call in raw_calls
+            ),
+            normalized_foreign_calls=0,
+        )
+        write_json(state_dir / "endpoint-evidence.json", evidence)
 
     fixture_snapshot_path = state_dir / "fixture-final.json"
     fixture_snapshot = (
