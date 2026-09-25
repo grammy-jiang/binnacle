@@ -210,9 +210,11 @@
       "worker_branch": null
     },
     "5.1E": {
-      "status": "not_started",
+      "status": "running",
       "tests": [],
-      "notes": [],
+      "notes": [
+        "Pre-deployment integration and validation started from canonical HEAD e991c4b30df305f29e1e78fa4696ff23115ff8a2 after verified 5.1A and 5.1D predecessor evidence."
+      ],
       "commit": null,
       "worker_branch": null
     },

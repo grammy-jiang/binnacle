@@ -30,7 +30,7 @@ continues. Step `5.0F` remains the mandatory final audit before Step `5.2`.
 | 5.1C3 | not_started | — |
 | 5.1C4 | complete | Staging stack PASS; addendum freezes the new primary baseline and staging connector ids. |
 | 5.1D | complete | Throwaway rollback rehearsal PASS; release-freeze evidence frozen. |
-| 5.1E | not_started | — |
+| 5.1E | running | Canonical pre-deployment integration/validation in progress. |
 | 5.2 | not_started | — |
 | 5.3 | not_started | — |
 | 5.4 | not_started | — |
