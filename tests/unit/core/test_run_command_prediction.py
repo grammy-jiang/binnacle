@@ -165,6 +165,7 @@ def test_prediction_judge_success_uses_fake_transport(monkeypatch, tmp_path):
     assert result.p90_s == 75
     assert result.prompt_tokens == 12
     assert captured["headers"]["Authorization"] == "Bearer unit-test-key"
+    assert captured["headers"]["User-Agent"] == "binnacle-shadow-judge/1"
     assert captured["timeout"] == pytest.approx(0.8)
     assert captured["body"]["response_format"]["type"] == "json_schema"
     assert captured["body"]["response_format"]["json_schema"]["strict"] is True

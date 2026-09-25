@@ -288,6 +288,7 @@ class CerebrasJudgeClient:
                 {
                     "Authorization": f"Bearer {self._api_key()}",
                     "Content-Type": "application/json",
+                    "User-Agent": "binnacle-shadow-judge/1",
                 },
                 body,
                 self.settings.judge_timeout_ms / 1000,
