@@ -1,6 +1,6 @@
 # Chat mode scheduling v2 — Phase 5 staged deployment execution plan
 
-Status: **PLANNED; BLOCKED UNTIL PHASE 4 GO_PHASE5 + OWNER APPROVAL**
+Status: **PLANNED; BLOCKED UNTIL PHASE 4 GO_PHASE5 (owner approval given in advance, Amendment P5-A2)**
 
 This is the authoritative execution document for Phase 5 only. It does not
 assume Phase 4 passed. Step 5.0 must independently inspect the final Phase-4
@@ -865,6 +865,28 @@ the preparation if Step 4.12 is not `GO_PHASE5` or selects another budget.
   services, remove the staging units/config/token/tunnel/profile/connector and
   the throwaway Project, and archive the Phase-5 branch; nothing reached a
   rollout Project.
+
+### Amendment P5-A2: owner pre-approval of GO_PHASE5 (2026-09-25)
+
+Owner decision 2026-09-25 22:50, in the owner's words: "if you got GO_PHASE5,
+you can just start and no need for my approval; while i still want a summary
+but you don't need to wait for me".
+
+- The owner approval that Step 5.0 and 5.0F require ("explicit owner decision
+  to proceed", `owner_approval`, `explicit_owner_approval_after_GO_PHASE5`) is
+  given in advance. It takes effect only when Step 4.12's frozen verdict is
+  exactly `GO_PHASE5` and Step 4.13 has closed Phase 4 with the selected budget
+  recorded. 5.0F cites this section and its planning commit as the approval
+  evidence.
+- On that verdict the orchestrator starts 5.0F at once and sends the owner a
+  summary of the Phase-4 result (verdict, selected budget, gate matrix,
+  deviations, what Phase 5 does next) without waiting for a reply.
+- The pre-approval covers the start of Phase 5 only. It never covers a
+  `NO_GO_*` verdict, a different selected budget, a failed 5.0F row, or a later
+  decision that this plan reserves for the owner (for example
+  `project_connector_routing` before 5.2, or the no-auto-extension rule at 72
+  hours). A `NO_GO_*` verdict still blocks Phase 5 and triggers the P5-A1
+  discard rule after the owner is told.
 
 ## Phase-5 canonical staging workspace
 
