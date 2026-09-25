@@ -1,0 +1,73 @@
+{
+  "schema_version": 1,
+  "phase": 4,
+  "phase4_source_head": "06bc1649c4bad9449470366da971649bb7620020",
+  "endpoints": [
+    {
+      "endpoint_id": "A",
+      "logical_arm": "A",
+      "budget_s": null,
+      "host": "127.0.0.1",
+      "port": 8110,
+      "server_process_identity": "binnacle-sched-a",
+      "tunnel_profile": "binnacle-sched-a",
+      "connector_logical_name": "Raspberry Pi MCP Scheduling A",
+      "project_name": "rp-sched-A"
+    },
+    {
+      "endpoint_id": "B",
+      "logical_arm": "B",
+      "budget_s": null,
+      "host": "127.0.0.1",
+      "port": 8111,
+      "server_process_identity": "binnacle-sched-b",
+      "tunnel_profile": "binnacle-sched-b",
+      "connector_logical_name": "Raspberry Pi MCP Scheduling B",
+      "project_name": "rp-sched-B"
+    },
+    {
+      "endpoint_id": "C120",
+      "logical_arm": "C",
+      "budget_s": 120,
+      "host": "127.0.0.1",
+      "port": 8112,
+      "server_process_identity": "binnacle-sched-c120",
+      "tunnel_profile": "binnacle-sched-c120",
+      "connector_logical_name": "Raspberry Pi MCP Scheduling C120",
+      "project_name": "rp-sched-C120"
+    },
+    {
+      "endpoint_id": "C300",
+      "logical_arm": "C",
+      "budget_s": 300,
+      "host": "127.0.0.1",
+      "port": 8113,
+      "server_process_identity": "binnacle-sched-c300",
+      "tunnel_profile": "binnacle-sched-c300",
+      "connector_logical_name": "Raspberry Pi MCP Scheduling C300",
+      "project_name": "rp-sched-C300"
+    },
+    {
+      "endpoint_id": "C600",
+      "logical_arm": "C",
+      "budget_s": 600,
+      "host": "127.0.0.1",
+      "port": 8114,
+      "server_process_identity": "binnacle-sched-c600",
+      "tunnel_profile": "binnacle-sched-c600",
+      "connector_logical_name": "Raspberry Pi MCP Scheduling C600",
+      "project_name": "rp-sched-C600"
+    },
+    {
+      "endpoint_id": "H",
+      "logical_arm": "H",
+      "budget_s": 10,
+      "host": "127.0.0.1",
+      "port": 8115,
+      "server_process_identity": "binnacle-sched-h",
+      "tunnel_profile": "binnacle-sched-h",
+      "connector_logical_name": "Raspberry Pi MCP Scheduling H",
+      "project_name": "rp-sched-H"
+    }
+  ]
+}
