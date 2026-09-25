@@ -36,6 +36,7 @@ Next step: **4.5 core pre-run M1/M2/M3**
 | 4.2C | complete | `6c473ce` |
 | 4.2D | not_started | — |
 | 4.3A | complete | — |
+| 4.3A-fix | running | — |
 | 4.3B | complete | — |
 | 4.4A | complete | — |
 | 4.5 | not_started | — |

@@ -407,6 +407,15 @@
       "notes": [],
       "commit": null,
       "worker_branch": null
+    },
+    "4.3A-fix": {
+      "status": "running",
+      "tests": [],
+      "notes": [
+        "Repairing D3 launcher/harness process-start identity contract mismatch before any live trial submission."
+      ],
+      "commit": null,
+      "worker_branch": null
     }
   },
   "checkpoints": [
