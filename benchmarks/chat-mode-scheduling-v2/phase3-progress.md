@@ -2,7 +2,7 @@
 
 Status: IN PROGRESS
 
-Updated: 2026-09-25T11:24:05+10:00
+Updated: 2026-09-25T11:38:48+10:00
 
 ## Canonical state
 
@@ -10,7 +10,7 @@ Updated: 2026-09-25T11:24:05+10:00
 - Worktree: /home/grammy-jiang/Projects/binnacle-chat-scheduling-phase3
 - Audited source HEAD: 5f2be143352aaa63fb680c1c79e289d46be201fe
 - Last completed step: 3.9
-- Next step: 3.10-amend; regenerate the final replay report/handoff against the amended r02 validation.
+- Next step: 3.10 r02 closeout after evidence-commit CI; do not start Phase 4 before closeout.
 - Dependency audit: phase3-dependency-audit-2026-09-25-r01.json, r01, SHA-256 d3bec25ba8d49ed4db78e07930542b9e963608ad264c198f8fbf04c4ccfa473a
 - Task graph: phase3-task-graph.json, r01, SHA-256 44cbedb0524fe87a9d111579a96d0d33f4171dfee6ece34eb53baa4c506696b2
 - Initial orchestrator-state checkpoint SHA-256: cec108b23fcf319a48d699f123b8fbf713919f3873d1cae4968a16844b80ed12
@@ -46,7 +46,7 @@ Updated: 2026-09-25T11:24:05+10:00
 
 ## Deviation
 
-- public_base_freshness: DEVIATION — public master and proof-of-concept advanced to 821cd3addc787a3ec6c6764ebc2327a67de72dd0 during preflight. The epoch-1 orchestrator deferred the lower-stack restack pending owner ratification; catch-up is scheduled for Step 4.0 or earlier at the owner's request. This does not block Phase 3 under the binding task-manager decision.
+- public_base_freshness: RESOLVED — owner-approved restacks p3-restack and p3-restack-2 refreshed the full lower stack onto public master 260bc009; the second restack used lower base ea6cbff, and the Phase-2 tree exactly matches public tree 0efd7739. Restacked Phase-3 tip 999c3c9 passed CI run 36073531402. The r02 handoff supersedes r01 closeout a272b62 and the unfinished stale 3.10-restack-closeout task.
 - production_drift: RECONCILED EXTERNAL DRIFT — task-manager connector-journal verification attributes the 01:30–01:44 production movement to the owner's separate run-command phase5 readiness workflow, journal turn 8adec04a-fc39-4a82-8a69-d6514492d5d3. It produced commits c082cea35b55bd497e849131b266990c4738edc5 and 0f8136aadf9f074d025864b0b130fad6230324e4, rewrote the config at 01:41:49 after saving /home/grammy-jiang/.config/binnacle/config.toml.pre-phase5-readiness-20260925, and restarted binnacle-mcp.service at 01:42:06. This was not caused by scheduling-v2 work; Phase-3 production access was read-only observation only.
 
 - production_drift_r3: RECONCILED EXTERNAL DRIFT — production master/origin-master advanced to 260bc009a55e7a78716ac42faf64ae88cf2c6724 via the already-observed parallel-programme test-only commit Phase 3 master: cover run-command groups and evidence branches. Step-3.7-amend a2 had already attributed this change as unrelated to scheduling-v2; the Step-3.9 r02 production git log/diff confirms only two unit-test files changed. Runtime config/unit/profile hashes, services, budget-key absence, and port baseline are unchanged.
@@ -91,7 +91,7 @@ Updated: 2026-09-25T11:24:05+10:00
 | 3.7 | complete (r02 / Amendment A1) |
 | 3.8 | complete (r02 / Amendment A1) |
 | 3.9 | complete (r02 / Amendment A1) |
-| 3.10 | complete |
+| 3.10 | running (r02 / Amendment A1) |
 
 ## Step 3.0 notes
 
@@ -782,7 +782,38 @@ Updated: 2026-09-25T11:24:05+10:00
   owner's separate workflow, not scheduling-v2. MCP job runtime 0.114 s.
   Pre-run: 4 cores, load average 1.13 0.58 0.48.
 
-## Step 3.10 evidence-commit notes
+## Step 3.10 amended run r02 status
+
+- Status: RUNNING under Amendment A1; evidence commit is ready for CI.
+- Direct predecessor 3.9-amend is verified at canonical commit
+  `02919486e8bb7da2e03c64ddd2ab6db698bd44a4`.
+- H10 was already integrated/promoted and was not rerun. Its SHA-256 is
+  `b769fb75cd4159bf2c12fd92e33c0df62b7dfee775dfb8fb2c5ea6cb5110621c`,
+  bound to audited corpus
+  `4dd1e387c42d6fccd37d60795b00192144f3b4d93c57d9eb54ab527a72e8e94d`.
+- The dated r02 final report copies the frozen shortlist unchanged:
+  `live_candidates=[C300]`, `preferred_live_candidate=C300`, verdict
+  `LIVE_CANDIDATES_AVAILABLE`; `phase4_ready=true` after closeout.
+- Final r02 report SHA-256: JSON
+  `54e46772ba0a1ee06b2c4d92cf5a55036e8bedd106466e25916ff6fab5c1aaae`;
+  Markdown
+  `c7b114dfdf7cce106c6f68f3e71896aece9c8220baec807b0e6df1d35cdde47a`.
+- Final-copy validator: PASS for all six shortlist-owned fields, H10/corpus
+  binding, r01 history preservation, and scenario-catalog SHA-256.
+- Focused report tests: PASS, 6 passed in 0.54 s. Timing was measured under
+  foreign parallel-programme load; pre-run load average was 0.67 0.95 0.98.
+- Production isolation: PASS at 2026-09-25T11:36:00+10:00; clean production
+  master/origin-master `260bc009a55e7a78716ac42faf64ae88cf2c6724`, with config,
+  unit, tunnel, service, budget-key and port baseline unchanged.
+- The public-base freshness deviation is resolved by `p3-restack` and
+  `p3-restack-2`: the second restack carries public master `260bc009` through
+  refreshed lower base `ea6cbff`, and Phase-2 tree `0efd7739` exactly matches
+  the public tree. Restacked Phase-3 tip `999c3c9` passed CI run `36073531402`.
+- This r02 handoff supersedes r01 closeout `a272b62` and the unfinished stale
+  `3.10-restack-closeout` task. Phase 4 must not start until evidence-commit CI
+  is green and the closeout commit is pushed and green.
+
+## Step 3.10 run r01 evidence-commit notes (superseded)
 
 - Evidence commit `80e10c6c8728a9113c79181795b0f5da805f02e0` is validated by
   CI run `36057278878`; its head SHA matches and the conclusion is `success`.
@@ -807,7 +838,7 @@ Updated: 2026-09-25T11:24:05+10:00
 - Final report Markdown SHA-256:
   `ab0be93752fa94f79700ec9c2c6f59e83a4331e1db5f4dad236afa88505c4bc8`.
 
-## Step 3.10 focused validation
+## Step 3.10 run r01 focused validation (superseded)
 
 - Frozen `final` report command: PASS; shortlist selection copied unchanged and
   H10 corpus SHA matched the audited revision-2 corpus. Pre-run: 4 cores, load
@@ -823,7 +854,7 @@ Updated: 2026-09-25T11:24:05+10:00
   reconciled config/unit/profile hashes unchanged, all four services active/running,
   blocking-wall budget key absent, and only `127.0.0.1:8000` listening.
 
-## Phase-3 handoff (complete)
+## Phase-3 handoff r01 (superseded)
 
 - Final report JSON: `benchmarks/chat-mode-scheduling-v2/phase3-policy-replay-2026-09-25-r01.json`.
 - Final report Markdown: `benchmarks/chat-mode-scheduling-v2/phase3-policy-replay-2026-09-25-r01.md`.
@@ -847,3 +878,36 @@ Updated: 2026-09-25T11:24:05+10:00
 - Validated CI run id: `36057278878`.
 - Validated CI head SHA: `80e10c6c8728a9113c79181795b0f5da805f02e0`.
 - Validated CI conclusion: `success`.
+
+## Phase-3 handoff r02 (pending evidence-commit CI)
+
+- Final report JSON:
+  `benchmarks/chat-mode-scheduling-v2/phase3-policy-replay-2026-09-25-r02.json`.
+- Final report Markdown:
+  `benchmarks/chat-mode-scheduling-v2/phase3-policy-replay-2026-09-25-r02.md`.
+- Pre-evidence locally validated Phase-3 source head:
+  `35e483b74fd82f608747ef8c26373d09e0534a6e`.
+- Replay corpus SHA-256:
+  `4dd1e387c42d6fccd37d60795b00192144f3b4d93c57d9eb54ab527a72e8e94d`.
+- Candidate shortlist SHA-256:
+  `072556e60fb55f686d872bce4da004bc272e9162e32459f2dc276657faa0e094`.
+- Historical H10 SHA-256:
+  `b769fb75cd4159bf2c12fd92e33c0df62b7dfee775dfb8fb2c5ea6cb5110621c`.
+- Live candidates: C300; preferred live candidate: C300.
+- Scenario catalog SHA-256:
+  `45002efd15fe7aa07fa5933180752c6537bea6584520f41a4e1d6b6de61ab5fd`.
+- Provenance classifier commit:
+  `2b5e83c4f8015f3077794dabb9e864a3c4d806b6`.
+- Phase-4 input-contract SHA-256:
+  `189bec8bbcff9b6e4e873ccc8310cf4725e85451df276d9fee10f64662ad7bfa`.
+- Phase-4 ready: true after the fixed two-commit closeout; Phase 3 declares no
+  production budget.
+- Restack resolution: original Phase-3 bootstrap used Phase-2 head `5f2be14`;
+  owner-approved tasks `p3-restack` and `p3-restack-2` moved the stack onto
+  public master `260bc00` via refreshed lower base `ea6cbff`. The resulting
+  Phase-2 tree equals the public master tree exactly. Restacked Phase-3 tip
+  `999c3c9` passed CI run `36073531402` with conclusion `success`.
+- This r02 handoff supersedes r01 closeout `a272b62` and the unfinished stale
+  `3.10-restack-closeout` task.
+- Evidence-commit CI attestation fields are intentionally absent until that
+  exact commit completes CI, preventing self-reference.
