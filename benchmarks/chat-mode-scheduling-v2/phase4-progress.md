@@ -8,9 +8,9 @@ Worktree: `/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4`
 
 Audited source HEAD: `3a4dfb1b248e4530fb09013976abb863c8e35eaf`
 
-Last completed step: **4.3A-fix2**
+Last completed step: **4.5**
 
-Next step: **4.5 core pre-run M1/M2/M3**
+Next step: **4.6B0 qualification via manager runner request 4.6B0-qual**
 
 ## Frozen Step 4.0 entry gate
 
@@ -40,7 +40,7 @@ Next step: **4.5 core pre-run M1/M2/M3**
 | 4.3A-fix2 | complete | `acdb208` |
 | 4.3B | complete | — |
 | 4.4A | complete | — |
-| 4.5 | running | Evaluating canonical attempt-3 M1/M2/M3 lane evidence. |
+| 4.5 | complete | 389e6a5 |
 | 4.6A | not_started | — |
 | 4.6B0 | not_started | — |
 | 4.7 | not_started | — |
@@ -174,20 +174,37 @@ Next step: **4.5 core pre-run M1/M2/M3**
   `e8ece81d57dd2a478dd636d2b4f409519b845605` /
   `d24dadcc87e04096fdd960fc7d1543fca02ea53814b15ccd51fd9b1eb1153195`.
 
-## Step 4.5 micro sanity — RUNNING
+## Step 4.5 micro sanity — COMPLETE
 
-- D5 is resolved in benchmark-only tooling: routed reply reads retry transient
-  timeouts/HTTP 429 with bounded backoff and never resubmit; cleanup errors after
-  an already completed submission are recorded but nonfatal; analysis falls back
-  to the captured send reply when a cleanup failure prevented transcript backup.
-- Focused D5 regression: **34/34 PASS** in 1.54 seconds; 4 CPUs; pre-run load
-  average 0.09 / 0.40 / 0.93; helper factoring keeps every touched Python file at
-  or below the repository 500-line ratchet.
-- C300/M1 and B/M2 have intact lane evidence and captured `DONE` replies despite
-  cleanup failures. B/M3 reached lane B and later produced `DONE`, but its
-  prelaunched fixture job had already exited before `job_status`, so the required
-  wait/read overlap relation was not exercised; that one infrastructure-invalid
-  micro will be rerun after D5.
+- Mechanical gate: **PASS** across nine valid A/B/C300 M1/M2/M3 trials:
+  9/9 deterministic correctness, zero duplicate non-repeat logical calls, M2
+  minimum peak inflight 3 and minimum overlap ratio 0.375, M3 wait/read
+  relation true 3/3, routing correct 9/9, and zero tool/schema errors.
+- C300/M1 and B/M2 completed their measured MCP work and captured DONE before
+  cleanup HTTP 429. D5 (389e6a5) keeps completed submissions successful when
+  cleanup fails, retries transient reply reads with bounded backoff without
+  resubmission, and permits analysis fallback to the captured send reply.
+- The original B/M3 attempt was infrastructure-invalid: its 300-second
+  prelaunched fixture job had already exited before job_status, so no wait
+  interval existed to test refill. The single permitted rerun
+  m3-20260925T222215-4ab7c62230 passed with peak inflight 4, overlap ratio
+  1.0, one positive job_status, relation true, and zero duplicates/errors.
+- Focused D5 regression: **34/34 PASS**. Full Step-4.5 integration matrix:
+  **114/114 PASS** in 2.65 seconds; 4 CPUs; pre-run load average
+  0.53 / 0.58 / 0.90.
+- Production isolation remains at D2 baseline
+  e8ece81d57dd2a478dd636d2b4f409519b845605 /
+  d24dadcc87e04096fdd960fc7d1543fca02ea53814b15ccd51fd9b1eb1153195.
+- Evidence JSON SHA-256:
+  ff8f81d718e476df160d83149d72c99ecaee1e1a0774fd8c4df4434a117d7e22;
+  Markdown SHA-256:
+  a117c7d02bace0c6d28881e7f224a2df96c9af707b28d5443ff15c78f59fd8d7.
+- 4.6B0 is prepared, not executed. R2 is the fixed read-heavy case and R5 the
+  fixed wait-heavy case. 4.6B0-qual uses five serial references per arm/case,
+  then separate Q-read(1) and Q-wait(1) matched A/B/C300 blocks; request
+  SHA-256 deb26d1d621be0a53933be1b0cb983d8ab6eaae19da47203f22ac645b6f769b4.
+- C300/M1 chat 6ab6608c-98a0-83ec-8a5a-d73296f7b4a1 may remain from the
+  cleanup-429 attempt and is explicitly listed for manager cleanup.
 
 ## Step 4.3B analyzer integration
 

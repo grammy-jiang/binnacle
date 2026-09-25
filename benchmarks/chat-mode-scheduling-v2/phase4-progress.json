@@ -6,8 +6,8 @@
   "worktree": "/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4",
   "source_branch": "feature/chat-mode-scheduling-v2-phase3",
   "audited_source_head": "3a4dfb1b248e4530fb09013976abb863c8e35eaf",
-  "last_completed_step": "4.3A-fix2",
-  "next_step": "4.5 core pre-run M1/M2/M3",
+  "last_completed_step": "4.5",
+  "next_step": "4.6B0 qualification via manager runner request 4.6B0-qual",
   "dependency_audit": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase4-dependency-audit-2026-09-25-r01.json",
     "revision": "r01",
@@ -74,7 +74,8 @@
     "phase4_source_head": "06bc1649c4bad9449470366da971649bb7620020",
     "phase4_analyzer_path_head": "6073902ba1e72a946da0ea7d7e901e36f47f96a3",
     "phase4_runtime_path_head": "acdb2088584382c6496d10c2a170d2217135e550",
-    "phase4_core_manifest_validation_head": "e0cb1ce6eead5b021fbe079edef70ec4276a0851"
+    "phase4_core_manifest_validation_head": "e0cb1ce6eead5b021fbe079edef70ec4276a0851",
+    "phase4_postsend_robustness_head": "389e6a5b7db05a316032340bc6a8dbf34a562b8d"
   },
   "frozen_hashes": {
     "phase3_progress_json": "984ba7891843a6eb3a15b750e95177d3a325f14280990f47be62527d44482bde",
@@ -116,7 +117,10 @@
     "phase4_lane_C300_readiness_fragment": "c1cef4d74073db5fb1d9d45fa2439a6ad5d9c2627367a0957d8420e0a03365a4",
     "phase4_lane_C300_provisioning_fragment": "3bbe50326ac2b29b5b944c85e14ca7b117cd3e0955fc61edef7c4abc3adcb001",
     "phase4_lane_C300_manifest_json": "d413edb9f0eaca1471d99a6c1592a4ca19fd9a0af73611bf236def8bfd4ee8da",
-    "phase4_runtime_registry_at_core_manifest_freeze": "f75ea33783def327f542832ded790e5f5650f11304e3f968fe0c7c6c39d3cf26"
+    "phase4_runtime_registry_at_core_manifest_freeze": "f75ea33783def327f542832ded790e5f5650f11304e3f968fe0c7c6c39d3cf26",
+    "phase4_micro_sanity_json": "ff8f81d718e476df160d83149d72c99ecaee1e1a0774fd8c4df4434a117d7e22",
+    "phase4_micro_sanity_md": "a117c7d02bace0c6d28881e7f224a2df96c9af707b28d5443ff15c78f59fd8d7",
+    "phase4_4_6B0_qual_run_request": "deb26d1d621be0a53933be1b0cb983d8ab6eaae19da47203f22ac645b6f769b4"
   },
   "preflight_findings": {
     "p4-preflight-git-lineage": "804da7b66ddc1f0e71ddf3106790989f50a0f320de4cd3b3f0aedaf962d68461",
@@ -301,14 +305,24 @@
       "worker_branch": null
     },
     "4.5": {
-      "status": "running",
+      "status": "complete",
       "tests": [
-        "uv run pytest -q tests/scripts/test_chat_scheduling_harness.py tests/scripts/test_chat_scheduling_evidence.py tests/scripts/test_chat_scheduling_postsend.py -> PASS: 34 passed in 1.54s; nproc=4; pre-run loadavg=0.09 0.40 0.93 (foreign parallel-programme load possible)."
+        "uv run pytest -q tests/scripts/test_chat_scheduling_harness.py tests/scripts/test_chat_scheduling_evidence.py tests/scripts/test_chat_scheduling_postsend.py -> PASS: 34 passed in 1.54s; nproc=4; pre-run loadavg=0.09 0.40 0.93.",
+        "Step-4.5 analyzer gate over nine valid M1/M2/M3 trials -> PASS: 9/9 deterministic correctness; duplicate calls 0; M2 min peak inflight=3 and min overlap ratio=0.375; M3 relation true 3/3; routing 9/9; tool errors 0.",
+        "B/M3 infrastructure-invalid attempt rerun only -> PASS: m3-20260925T222215-4ab7c62230; exit 0; correctness true; peak inflight 4; overlap ratio 1.0; one positive job_status; relation true; zero tool errors/duplicates.",
+        "uv run pytest -q focused Step-4.5 integration matrix -> PASS: 114 passed in 2.65s; nproc=4; pre-run loadavg=0.53 0.58 0.90.",
+        "bash /tmp/p36-manager/isolation-check.sh -> PASS: production HEAD e8ece81d57dd2a478dd636d2b4f409519b845605; config SHA-256 d24dadcc87e04096fdd960fc7d1543fca02ea53814b15ccd51fd9b1eb1153195; blocking-wall budget key absent.",
+        "bash /tmp/p36-manager/rr-validate.sh 4.6B0-qual -> PASS: valid=true, 36 trials, four ordered groups, no errors."
       ],
       "notes": [
-        "Deviation D5 resolved the attempt-3 post-send robustness defects without changing scenario semantics, lane routing, frozen experiment source, or endpoint processes.",
-        "C300/M1 and B/M2 completed their MCP work and captured reply DONE before cleanup failed; their endpoint evidence is intact. C300/M1 transcript was recovered read-only; B/M2 had already been deleted, so the immutable captured send reply is the final-reply evidence.",
-        "B/M3 attempt-3 reached the correct lane and final reply DONE, but its prelaunched 300-second fixture job had already exited before job_status, so the required wait/read overlap relation was not exercised. It is an infrastructure-invalid micro and will be rerun once after D5."
+        "Step 4.5 mechanical gate PASS. Evidence artifact phase4-micro-sanity-2026-09-25-r01.{json,md} freezes the nine valid A/B/C300 M1/M2/M3 evaluations.",
+        "D5 is RESOLVED at 389e6a5b7db05a316032340bc6a8dbf34a562b8d: benchmark-only reply-read backoff, completed-submission cleanup tolerance, and captured-send-reply fallback. Frozen experiment source 06bc1649c4bad9449470366da971649bb7620020 and endpoint processes remain unchanged.",
+        "C300/M1 and B/M2 had completed submission and captured DONE before cleanup HTTP 429; endpoint evidence is intact and the D5 analyzer fallback scores both PASS without rerunning them.",
+        "The original B/M3 attempt is infrastructure-invalid because its 300-second prelaunched fixture job had already exited before job_status; the single permitted B/M3 rerun passed and is the valid gate evidence.",
+        "No connector-routing mismatch, foreign normalized call, evidence-integrity error, duplicate non-repeat call, or benchmark-attributable tool/schema error remains in the valid evidence set.",
+        "One C300/M1 chat (6ab6608c-98a0-83ec-8a5a-d73296f7b4a1) may remain from the cleanup-429 attempt and is listed in the evidence artifact for manager cleanup; B/M2 subsequently returned conversation_deleted and the invalid B/M3 chat was deleted by cleanup.",
+        "4.6B0 is prepared but not executed. Qualification cases are frozen to R2 read-heavy (ten known independent reads) and R5 wait-heavy (shortest true dependency barrier); these same cases must be reused by later qualification.",
+        "Run request 4.6B0-qual SHA-256 deb26d1d621be0a53933be1b0cb983d8ab6eaae19da47203f22ac645b6f769b4: five serial reference repeats per arm/case, then separate Q-read(1) and Q-wait(1) matched A/B/C300 blocks."
       ],
       "commit": null,
       "worker_branch": null
@@ -322,8 +336,14 @@
     },
     "4.6B0": {
       "status": "not_started",
-      "tests": [],
-      "notes": [],
+      "tests": [
+        "bash /tmp/p36-manager/rr-validate.sh 4.6B0-qual -> PASS: valid=true, 36 trials, no errors."
+      ],
+      "notes": [
+        "Prepared after Step 4.5 PASS: run request 4.6B0-qual, SHA-256 deb26d1d621be0a53933be1b0cb983d8ab6eaae19da47203f22ac645b6f769b4.",
+        "Qualification cases fixed to R2 (read-heavy) and R5 (wait-heavy). Serial reference uses five repeats per arm/case; Q-read(1) and Q-wait(1) are separate matched A/B/C300 concurrent blocks.",
+        "Live execution is manager-runner owned; Step 4.6B0 remains not_started until the request is executed and evaluated."
+      ],
       "commit": null,
       "worker_branch": null
     },
