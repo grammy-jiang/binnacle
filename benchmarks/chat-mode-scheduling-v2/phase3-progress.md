@@ -2,15 +2,15 @@
 
 Status: IN PROGRESS
 
-Updated: 2026-09-25T10:51:30+10:00
+Updated: 2026-09-25T11:10:21+10:00
 
 ## Canonical state
 
 - Branch: feature/chat-mode-scheduling-v2-phase3
 - Worktree: /home/grammy-jiang/Projects/binnacle-chat-scheduling-phase3
 - Audited source HEAD: 5f2be143352aaa63fb680c1c79e289d46be201fe
-- Last completed step: 3.7
-- Next step: 3.8-amend; refresh the Phase-4 input contract against the amended C300 shortlist.
+- Last completed step: 3.8
+- Next step: 3.9-amend; repeat full Phase-3 validation against the amended r02 artifacts.
 - Dependency audit: phase3-dependency-audit-2026-09-25-r01.json, r01, SHA-256 d3bec25ba8d49ed4db78e07930542b9e963608ad264c198f8fbf04c4ccfa473a
 - Task graph: phase3-task-graph.json, r01, SHA-256 44cbedb0524fe87a9d111579a96d0d33f4171dfee6ece34eb53baa4c506696b2
 - Initial orchestrator-state checkpoint SHA-256: cec108b23fcf319a48d699f123b8fbf713919f3873d1cae4968a16844b80ed12
@@ -34,7 +34,8 @@ Updated: 2026-09-25T10:51:30+10:00
 - Live candidates: C300
 - Preferred live candidate: C300
 - Phase-4 input contract: benchmarks/chat-mode-scheduling-v2/phase4-input-contract.json
-- Phase-4 input contract SHA-256: bc2fc07ab945504b3acc726c1779d2b46533f43472535f803f2f17b986321024
+- Phase-4 input contract SHA-256: 189bec8bbcff9b6e4e873ccc8310cf4725e85451df276d9fee10f64662ad7bfa
+- Frozen Phase-4 input contract HEAD: 9f33a47b69e62f09b2b03fee1b74ed4de763145b
 - Scenario catalog SHA-256: 45002efd15fe7aa07fa5933180752c6537bea6584520f41a4e1d6b6de61ab5fd
 - Provenance classifier commit: 2b5e83c4f8015f3077794dabb9e864a3c4d806b6
 - Canonical v2 instruction SHA-256: b7df6953a3c64bd245b3d5ff13b6f2667e940d5a154e650fec0b10e6a22cf094
@@ -85,7 +86,7 @@ Updated: 2026-09-25T10:51:30+10:00
 | 3.6C | complete |
 | 3H | complete |
 | 3.7 | complete (r02 / Amendment A1) |
-| 3.8 | running (r02 / Amendment A1) |
+| 3.8 | complete (r02 / Amendment A1) |
 | 3.9 | complete |
 | 3.10 | complete |
 
@@ -555,7 +556,63 @@ Updated: 2026-09-25T10:51:30+10:00
 - File-scoped pre-commit for the corrected report CLI, population helper,
   renderer, tests and shortlist artifacts: PASS.
 
-## Step 3.8 notes
+## Step 3.8 amended run r02 status
+
+- Status: COMPLETE under Amendment A1.
+- The Phase-4 input contract now consumes the r02 shortlist with C300 as the
+  sole live and preferred candidate; Phase 3 still does not declare a
+  production budget.
+- The r01 Step-3.8 material below is retained as historical, superseded
+  evidence.
+
+## Step 3.8 amended run r02 validation and completion
+
+- Dry-run validator: PASS; all 12 R manifests load. R12 renders H10/C120/C300/
+  C600 job runtimes as 40/150/330/630 s and preserves the frozen
+  budget-exhaustion safety oracle.
+- Frozen provenance examples: PASS, 2/2. r7-20260923T211346-942d651555
+  classifies as active_turn_browser_timeout; r7-20260923T203622-d51ce307ef
+  classifies as mcp_completed_browser_timeout.
+- Replay binding: PASS; the 326-row corpus, all three C reports, and the r02
+  shortlist independently parse and share audited corpus SHA-256
+  4dd1e387c42d6fccd37d60795b00192144f3b4d93c57d9eb54ab527a72e8e94d.
+- Phase-4 contract binding: PASS. The contract binds shortlist SHA-256
+  072556e60fb55f686d872bce4da004bc272e9162e32459f2dc276657faa0e094,
+  has SHA-256 189bec8bbcff9b6e4e873ccc8310cf4725e85451df276d9fee10f64662ad7bfa,
+  and is frozen at 9f33a47b69e62f09b2b03fee1b74ed4de763145b.
+- C120 is blocked by gates 1 and 2: completion preservation 88.888889%,
+  predicted exhaustion 15.384615%, definition-(b) repeated-wait reduction
+  87.325603% against 60.0%, and definition-(a) non-gating reduction
+  75.772057% against the 70.0% reference.
+- C300 passes all offline gates. Gate 4 is 63.448499% under definition (b);
+  definition (a) remains non-gating continuity evidence at 52.927366%.
+- C600 is blocked by gate 4: definition-(b) reduction 36.593805% against
+  60.0%; definition-(a) non-gating reduction is 29.824066% against the 70.0%
+  reference.
+- Historical A Project identity refresh: PASS;
+  g-p-6aaea9da2bc881918d6f9eb5177cf904 / rp-test-sandbox, with established
+  normalized current instructions SHA-256
+  dd81ecafb56bf235fa1933a0727fb5fd196c7e5ae86519e39866234a6f4b2b78.
+  The instruction text is not stored.
+- Scenario catalog SHA-256 remains
+  45002efd15fe7aa07fa5933180752c6537bea6584520f41a4e1d6b6de61ab5fd;
+  provenance classifier commit remains
+  2b5e83c4f8015f3077794dabb9e864a3c4d806b6; canonical v2 instruction
+  SHA-256 remains
+  b7df6953a3c64bd245b3d5ff13b6f2667e940d5a154e650fec0b10e6a22cf094.
+- H10 remains historical-only with historical_one_shot semantics. Its
+  Phase-4 adapter remains benchmark-only; no production runtime mode is
+  allowed.
+- Required logical arms remain exactly A/B/C/H. Endpoint routing and C/H
+  harness support remain intentionally unimplemented in Phase 3.
+- Relevant pytest: PASS, 41 tests in 1.95 s (real 2.89 s); nproc=4,
+  pre-run loadavg=0.20 0.28 0.45, measured under foreign parallel-programme
+  load.
+- File-scoped pre-commit for the refreshed Phase-4 input contract: PASS.
+- No live ChatGPT trials were run. Step 3.9 r01 and Step 3.10 r01 remain
+  historical pending their amended reruns; next step is 3.9-amend.
+
+## Step 3.8 run r01 notes (superseded)
 
 - Step-3.7 attempt a2 corrected gate populations and changed the shortlist
   SHA-256 from `23edc0fbba3210aae5da205122be51a806b7be54ab5ca5c590d98de6c931b975` to `51db08d70ad8ebfcc46de9e53c661b517b9f3ed41b10579d49057aa395f8d11d`.
@@ -591,7 +648,7 @@ Updated: 2026-09-25T10:51:30+10:00
 - The Step-3.7 correction invalidation is resolved: the Phase-4 input contract
   now binds the corrected shortlist and Step 3.8 is complete again.
 
-## Step 3.8 validation
+## Step 3.8 run r01 validation (superseded)
 
 - Refresh validator: PASS; 12/12 R manifests loaded, R12 rendered
   H10/C120/C300/C600 runtimes 40/150/330/630 s with the expected safety oracle,

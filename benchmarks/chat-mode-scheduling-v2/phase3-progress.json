@@ -6,8 +6,8 @@
   "worktree": "/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase3",
   "source_branch": "feature/chat-mode-blocking-wall-guard",
   "audited_source_head": "5f2be143352aaa63fb680c1c79e289d46be201fe",
-  "last_completed_step": "3.7",
-  "next_step": "3.8-amend",
+  "last_completed_step": "3.8",
+  "next_step": "3.9-amend",
   "dependency_audit": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase3-dependency-audit-2026-09-25-r01.json",
     "revision": "r01",
@@ -152,7 +152,7 @@
     "phase3_corpus_audit_head": "207000caa3727f37f494675f34934fd61fc6cdd5",
     "phase3_replay_promotion_head": "2382ae0dca4fee931d9af33c049e9dad97514e64",
     "phase3_candidate_shortlist_head": "8c456ff5b9e595ddb3b7793bb11cd1cabd7ae207",
-    "phase4_input_contract_head": "be92c23118a714fabef2c09fb9dc7b8c51c67bd8",
+    "phase4_input_contract_head": "9f33a47b69e62f09b2b03fee1b74ed4de763145b",
     "phase3_validation_head": "d5a322375b37dffe8d02421df79a222e9cadaaf2"
   },
   "frozen_hashes": {
@@ -201,7 +201,7 @@
     "phase3_replay_h10_promoted_md": "580e05f39f30427a911f9ff7f955561c5e8bc03bf8a63b2e3b06afacdabfb031",
     "phase3_candidate_shortlist_json": "072556e60fb55f686d872bce4da004bc272e9162e32459f2dc276657faa0e094",
     "phase3_candidate_shortlist_md": "dea813747ee3f6234dada113dd56a7b9af4de9f770838667a804d115ef8592ea",
-    "phase4_input_contract_json": "bc2fc07ab945504b3acc726c1779d2b46533f43472535f803f2f17b986321024",
+    "phase4_input_contract_json": "189bec8bbcff9b6e4e873ccc8310cf4725e85451df276d9fee10f64662ad7bfa",
     "phase3_final_report_json": "1689cca8c152d7ec6474e99ba7bf005c8f3b3425f181d90cc44a5fe73b544277",
     "phase3_final_report_md": "ab0be93752fa94f79700ec9c2c6f59e83a4331e1db5f4dad236afa88505c4bc8"
   },
@@ -818,29 +818,60 @@
       "commit": "8c456ff5b9e595ddb3b7793bb11cd1cabd7ae207"
     },
     "3.8": {
-      "status": "running",
+      "status": "complete",
       "tests": [
-        "Step-3.8 refresh validator -> PASS: R1-R12 all load; R12 renders H10/C120/C300/C600 job runtimes 40/150/330/630 s with the frozen budget-exhaustion safety oracle; two frozen Phase-1 R7 timeout examples classify as active-turn vs MCP-completed browser timeout; 326-row corpus, all 3 C reports and corrected shortlist parse and share audited corpus SHA; refreshed contract binds corrected shortlist SHA 51db08d70ad8ebfcc46de9e53c661b517b9f3ed41b10579d49057aa395f8d11d.",
-        "uv run pytest -q tests/scripts/test_chat_scheduling_manifest.py tests/scripts/test_chat_scheduling_oracle.py tests/scripts/test_chat_scheduling_provenance.py tests/scripts/test_chat_scheduling_phase3_report.py -> PASS: 41 passed in 1.91s; real 2.86s; nproc=4; pre-run loadavg=0.37 0.42 0.52 (timing under foreign parallel-programme load).",
-        "Historical A baseline source Project identity refresh -> PASS: g-p-6aaea9da2bc881918d6f9eb5177cf904 / rp-test-sandbox; current instructions SHA-256 dd81ecafb56bf235fa1933a0727fb5fd196c7e5ae86519e39866234a6f4b2b78; text not stored.",
+        "Step-3.8 amended dry-run validator -> PASS: R1-R12 all 12/12 load; R12 renders H10/C120/C300/C600 runtimes 40/150/330/630 s with the frozen budget-exhaustion safety oracle; 2/2 frozen Phase-1 R7 timeout examples classify as active-turn vs MCP-completed browser timeout; 326-row corpus, all 3 C reports and r02 shortlist parse and share audited corpus SHA; C300 is sole live/preferred candidate.",
+        "uv run pytest -q tests/scripts/test_chat_scheduling_manifest.py tests/scripts/test_chat_scheduling_oracle.py tests/scripts/test_chat_scheduling_provenance.py tests/scripts/test_chat_scheduling_phase3_report.py -> PASS: 41 passed in 1.95s; real 2.89s; nproc=4; pre-run loadavg=0.20 0.28 0.45 (timing under foreign parallel-programme load).",
+        "Phase-4 input-contract binding validator -> PASS: contract binds r02 shortlist SHA 072556e60fb55f686d872bce4da004bc272e9162e32459f2dc276657faa0e094, live/preferred C300, and blocked C120/C600 with gate-4 values under definitions (b) and (a).",
+        "Historical A baseline source Project identity refresh -> PASS: g-p-6aaea9da2bc881918d6f9eb5177cf904 / rp-test-sandbox; normalized current instructions SHA-256 dd81ecafb56bf235fa1933a0727fb5fd196c7e5ae86519e39866234a6f4b2b78; text not stored.",
         "uv run pre-commit run --files benchmarks/chat-mode-scheduling-v2/phase4-input-contract.json -> PASS."
       ],
       "notes": [
-        "Step-3.7 attempt a2 corrected gate populations and changed candidate shortlist SHA-256 from 23edc0fbba3210aae5da205122be51a806b7be54ab5ca5c590d98de6c931b975 to 51db08d70ad8ebfcc46de9e53c661b517b9f3ed41b10579d49057aa395f8d11d; live_candidates=[], preferred_live_candidate=null and verdict=NO_LIVE_CANDIDATE remained unchanged.",
-        "Refreshed benchmarks/chat-mode-scheduling-v2/phase4-input-contract.json at commit be92c23118a714fabef2c09fb9dc7b8c51c67bd8; contract SHA-256 changed from da56f269c247dde80b5327b8e317a8b6fbf2985b45dd98c0264c3ec9a01ddc29 to bc2fc07ab945504b3acc726c1779d2b46533f43472535f803f2f17b986321024. The only contract byte change was candidate_shortlist_sha256.",
-        "Candidate budgets remain C120=120 s, C300=300 s and C600=600 s; H10 remains historical-only and is not eligible as a live candidate.",
-        "Scenario catalog SHA-256 remains 45002efd15fe7aa07fa5933180752c6537bea6584520f41a4e1d6b6de61ab5fd, computed from the canonical sorted R*.json relative-path-to-file-SHA object required by the handoff contract.",
-        "Provenance classifier commit remains 2b5e83c4f8015f3077794dabb9e864a3c4d806b6; frozen Phase-1 examples r7-20260923T211346-942d651555 and r7-20260923T203622-d51ce307ef classify as active_turn_browser_timeout and mcp_completed_browser_timeout respectively.",
-        "Canonical v2 instruction SHA-256 remains b7df6953a3c64bd245b3d5ff13b6f2667e940d5a154e650fec0b10e6a22cf094 for .claude/skills/chatgpt-mcp-dev/references/project-instructions-chat-scheduling-v2.txt.",
-        "Current historical A baseline source Project identity remains g-p-6aaea9da2bc881918d6f9eb5177cf904 / rp-test-sandbox with instructions SHA-256 dd81ecafb56bf235fa1933a0727fb5fd196c7e5ae86519e39866234a6f4b2b78; the instructions text is not stored in Phase-3 artifacts.",
-        "Frozen H10 semantics remain historical_one_shot: first original-positive wait effective=min(bounded_wait, 10), later original-positive waits effective=0, exhausted policy historical_one_shot_exhausted; Phase 4 must provide the benchmark-only adapter and must not add a production runtime mode.",
-        "Required logical arm vocabulary remains exactly A/B/C/H.",
-        "Endpoint routing and C/H harness support are not implemented or required in Phase 3. The existing Phase-3 harness remains A/B-only and scripts/chat_scheduling_endpoints.py is absent; those capabilities belong to Phase 4.",
-        "No live ChatGPT trials were run. The corrected Phase-3 offline verdict remains NO_LIVE_CANDIDATE, so Phase-4 live calibration remains blocked unless a future Phase-3 revision yields at least one passing C candidate.",
-        "The Step-3.7 correction invalidation is resolved: phase4-input-contract.json now binds the corrected shortlist SHA and Step 3.8 is complete again."
+        "Run r02 is the Amendment A1 re-run of Step 3.8; run r01 is preserved in run_history and superseded for the current Phase-3 handoff.",
+        "Refreshed phase4-input-contract.json from the r02 shortlist: shortlist SHA-256 072556e60fb55f686d872bce4da004bc272e9162e32459f2dc276657faa0e094; contract SHA-256 189bec8bbcff9b6e4e873ccc8310cf4725e85451df276d9fee10f64662ad7bfa.",
+        "C300 is the sole live and preferred candidate. No production budget is declared by Phase 3.",
+        "C120 is blocked by gates 1 and 2: completion preservation 88.888889%, predicted exhaustion 15.384615%, gate 4 definition-(b) reduction 87.325603% against 60.0%, and definition-(a) non-gating reduction 75.772057% against the 70.0% reference.",
+        "C600 is blocked by gate 4: definition-(b) reduction 36.593805% against 60.0%; definition-(a) non-gating reduction 29.824066% against the 70.0% reference.",
+        "Frozen Phase-4 input-contract HEAD is 9f33a47b69e62f09b2b03fee1b74ed4de763145b.",
+        "Scenario catalog SHA-256 remains 45002efd15fe7aa07fa5933180752c6537bea6584520f41a4e1d6b6de61ab5fd; provenance classifier commit remains 2b5e83c4f8015f3077794dabb9e864a3c4d806b6; canonical v2 instruction SHA-256 remains b7df6953a3c64bd245b3d5ff13b6f2667e940d5a154e650fec0b10e6a22cf094.",
+        "Historical A source Project remains g-p-6aaea9da2bc881918d6f9eb5177cf904 / rp-test-sandbox; its established normalized current instructions SHA-256 remains dd81ecafb56bf235fa1933a0727fb5fd196c7e5ae86519e39866234a6f4b2b78 and the instruction text is not stored.",
+        "H10 remains historical_one_shot and historical-only, with the benchmark-only Phase-4 adapter required and no production runtime mode allowed.",
+        "Required logical arm vocabulary remains A/B/C/H. Endpoint routing and C/H harness support remain intentionally unimplemented in Phase 3.",
+        "No live ChatGPT trials were run. Step 3.9 r01 and Step 3.10 r01 remain historical pending their amended reruns; next step is 3.9-amend."
       ],
-      "commit": "be92c23118a714fabef2c09fb9dc7b8c51c67bd8",
-      "worker_branch": null
+      "commit": "9f33a47b69e62f09b2b03fee1b74ed4de763145b",
+      "worker_branch": null,
+      "run": "r02",
+      "amendment": "A1",
+      "run_history": [
+        {
+          "status": "superseded",
+          "tests": [
+            "Step-3.8 refresh validator -> PASS: R1-R12 all load; R12 renders H10/C120/C300/C600 job runtimes 40/150/330/630 s with the frozen budget-exhaustion safety oracle; two frozen Phase-1 R7 timeout examples classify as active-turn vs MCP-completed browser timeout; 326-row corpus, all 3 C reports and corrected shortlist parse and share audited corpus SHA; refreshed contract binds corrected shortlist SHA 51db08d70ad8ebfcc46de9e53c661b517b9f3ed41b10579d49057aa395f8d11d.",
+            "uv run pytest -q tests/scripts/test_chat_scheduling_manifest.py tests/scripts/test_chat_scheduling_oracle.py tests/scripts/test_chat_scheduling_provenance.py tests/scripts/test_chat_scheduling_phase3_report.py -> PASS: 41 passed in 1.91s; real 2.86s; nproc=4; pre-run loadavg=0.37 0.42 0.52 (timing under foreign parallel-programme load).",
+            "Historical A baseline source Project identity refresh -> PASS: g-p-6aaea9da2bc881918d6f9eb5177cf904 / rp-test-sandbox; current instructions SHA-256 dd81ecafb56bf235fa1933a0727fb5fd196c7e5ae86519e39866234a6f4b2b78; text not stored.",
+            "uv run pre-commit run --files benchmarks/chat-mode-scheduling-v2/phase4-input-contract.json -> PASS."
+          ],
+          "notes": [
+            "Step-3.7 attempt a2 corrected gate populations and changed candidate shortlist SHA-256 from 23edc0fbba3210aae5da205122be51a806b7be54ab5ca5c590d98de6c931b975 to 51db08d70ad8ebfcc46de9e53c661b517b9f3ed41b10579d49057aa395f8d11d; live_candidates=[], preferred_live_candidate=null and verdict=NO_LIVE_CANDIDATE remained unchanged.",
+            "Refreshed benchmarks/chat-mode-scheduling-v2/phase4-input-contract.json at commit be92c23118a714fabef2c09fb9dc7b8c51c67bd8; contract SHA-256 changed from da56f269c247dde80b5327b8e317a8b6fbf2985b45dd98c0264c3ec9a01ddc29 to bc2fc07ab945504b3acc726c1779d2b46533f43472535f803f2f17b986321024. The only contract byte change was candidate_shortlist_sha256.",
+            "Candidate budgets remain C120=120 s, C300=300 s and C600=600 s; H10 remains historical-only and is not eligible as a live candidate.",
+            "Scenario catalog SHA-256 remains 45002efd15fe7aa07fa5933180752c6537bea6584520f41a4e1d6b6de61ab5fd, computed from the canonical sorted R*.json relative-path-to-file-SHA object required by the handoff contract.",
+            "Provenance classifier commit remains 2b5e83c4f8015f3077794dabb9e864a3c4d806b6; frozen Phase-1 examples r7-20260923T211346-942d651555 and r7-20260923T203622-d51ce307ef classify as active_turn_browser_timeout and mcp_completed_browser_timeout respectively.",
+            "Canonical v2 instruction SHA-256 remains b7df6953a3c64bd245b3d5ff13b6f2667e940d5a154e650fec0b10e6a22cf094 for .claude/skills/chatgpt-mcp-dev/references/project-instructions-chat-scheduling-v2.txt.",
+            "Current historical A baseline source Project identity remains g-p-6aaea9da2bc881918d6f9eb5177cf904 / rp-test-sandbox with instructions SHA-256 dd81ecafb56bf235fa1933a0727fb5fd196c7e5ae86519e39866234a6f4b2b78; the instructions text is not stored in Phase-3 artifacts.",
+            "Frozen H10 semantics remain historical_one_shot: first original-positive wait effective=min(bounded_wait, 10), later original-positive waits effective=0, exhausted policy historical_one_shot_exhausted; Phase 4 must provide the benchmark-only adapter and must not add a production runtime mode.",
+            "Required logical arm vocabulary remains exactly A/B/C/H.",
+            "Endpoint routing and C/H harness support are not implemented or required in Phase 3. The existing Phase-3 harness remains A/B-only and scripts/chat_scheduling_endpoints.py is absent; those capabilities belong to Phase 4.",
+            "No live ChatGPT trials were run. The corrected Phase-3 offline verdict remains NO_LIVE_CANDIDATE, so Phase-4 live calibration remains blocked unless a future Phase-3 revision yields at least one passing C candidate.",
+            "The Step-3.7 correction invalidation is resolved: phase4-input-contract.json now binds the corrected shortlist SHA and Step 3.8 is complete again."
+          ],
+          "commit": "be92c23118a714fabef2c09fb9dc7b8c51c67bd8",
+          "worker_branch": null,
+          "run": "r01",
+          "superseded_by": "r02 / Amendment A1"
+        }
+      ]
     },
     "3.9": {
       "status": "complete",
@@ -973,7 +1004,7 @@
     "validated_ci_conclusion": "success"
   },
   "created_at": "2026-09-25T00:51:02+10:00",
-  "updated_at": "2026-09-25T10:51:30+10:00",
+  "updated_at": "2026-09-25T11:10:21+10:00",
   "orchestrator_state_checkpoint_path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase3/checkpoints/orchestrator-state-initial.json",
   "ready_count": 1,
   "claimed_count": 0,
@@ -1081,7 +1112,7 @@
   "preferred_live_candidate": "C300",
   "phase3_offline_verdict": "LIVE_CANDIDATES_AVAILABLE",
   "phase4_input_contract_path": "benchmarks/chat-mode-scheduling-v2/phase4-input-contract.json",
-  "phase4_input_contract_sha256": "bc2fc07ab945504b3acc726c1779d2b46533f43472535f803f2f17b986321024",
+  "phase4_input_contract_sha256": "189bec8bbcff9b6e4e873ccc8310cf4725e85451df276d9fee10f64662ad7bfa",
   "scenario_catalog_sha256": "45002efd15fe7aa07fa5933180752c6537bea6584520f41a4e1d6b6de61ab5fd",
   "provenance_classifier_commit": "2b5e83c4f8015f3077794dabb9e864a3c4d806b6",
   "canonical_v2_instruction_sha256": "b7df6953a3c64bd245b3d5ff13b6f2667e940d5a154e650fec0b10e6a22cf094",
