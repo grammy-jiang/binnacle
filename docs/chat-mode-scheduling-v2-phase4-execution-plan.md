@@ -2526,9 +2526,9 @@ once; the orchestrator's other sends keep >= 2 minutes).
   Phase-4 record is called complete; it does not block the GO/NO-GO verdict,
   which never used H.
 
-### Amendment P4-A2: routing-miss rule (2026-09-26)
+### Amendment P4-A2: routing-miss rule (2026-09-25)
 
-Owner decision 2026-09-26 00:00 ("Exclude and rerun"). Evidence: ChatGPT has
+Owner decision 2026-09-25 23:50 ("Exclude and rerun"). Evidence: ChatGPT has
 no per-Project connector pinning. A trial reaches its lane through the lane
 app's composer system hint, which makes ChatGPT prefer that app but does not
 force it. After the D4 fix, 1 of 44 trials (`q-read-1-a`, lane A, 2026-09-25
