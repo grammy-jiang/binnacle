@@ -22,7 +22,7 @@ continues. Step `5.0F` remains the mandatory final audit before Step `5.2`.
 | --- | --- | --- |
 | 5.0S | complete | Speculative audit and scheduler bootstrap complete. |
 | 5.0F | not_started | Required before 5.2; waits for Phase-4 closeout, final owner approval, and routing confirmation. |
-| 5.1A | not_started | Released by 5.0S; external gates remain claim-time preconditions where declared. |
+| 5.1A | complete | Operational tooling worker 9d008ce integrated canonically as c4f25e8; focused worker tests PASS 10/10. |
 | 5.1B | complete | Helper commit 62ce74b integrated canonically as 7c7fd00; focused test PASS 14/14. |
 | 5.1C0 | not_started | Released by 5.0S; external gates remain claim-time preconditions where declared. |
 | 5.1C1 | not_started | Released by 5.0S; external gates remain claim-time preconditions where declared. |
@@ -30,8 +30,8 @@ continues. Step `5.0F` remains the mandatory final audit before Step `5.2`.
 | 5.1C3 | not_started | — |
 | 5.1C4 | complete | Staging stack PASS; addendum freezes the new primary baseline and staging connector ids. |
 | 5.1D | complete | Throwaway rollback rehearsal PASS; release-freeze evidence frozen. |
-| 5.1E | running | Canonical pre-deployment integration/validation in progress. |
-| 5.2 | not_started | — |
+| 5.1E | complete | Integrated 5.1A, retained 5.1B, combined focused tests PASS 24/24, and froze pre-deployment evidence. |
+| 5.2 | not_started | Not ready: mandatory speculative-to-final audit 5.0F must pass after GO_PHASE5 and owner approval. |
 | 5.3 | not_started | — |
 | 5.4 | not_started | — |
 | 5A | not_started | — |
@@ -75,3 +75,12 @@ Phase-4 live-host isolation rule.
 - Production baseline uses owner-approved post-shadow-predictor HEAD e8ece81d57dd2a478dd636d2b4f409519b845605 and config SHA-256 d24dadcc87e04096fdd960fc7d1543fca02ea53814b15ccd51fd9b1eb1153195; post-rehearsal isolation checks matched it.
 - Release-freeze evidence is /home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase5/rehearsal/5.1D.json with SHA-256 f45651c7999ec89d5c443e65d503738327f8ccde4db80758a933d6ba13f2bb19.
 - Persistent per-Project connector pinning is still not exposed by current tooling; the rehearsal uses the measured per-send system-hint route and mandatory Step 5.0F remains responsible for final routing confirmation before Step 5.2.
+
+## Step 5.1E notes
+
+- Integrated verified operational-tooling worker 9d008cedea741ef711c739077e59d5ef7af88689 as canonical commit c4f25e89f9003b69c67d4725445896d1d2007961; the 5.1B helper remains integrated as 7c7fd00d8030421a0f8bfcd7ff57a321008609ec.
+- Combined focused validation passed 24/24 tests with nproc=4 and pre-run load average 0.64 0.82 0.81; timing was measured under possible foreign parallel load.
+- Re-verification matched the frozen 5.1C4 runtime/config/unit/tunnel hashes, including the owner-approved addendum baseline, and all three staging services remained active.
+- Rollback rehearsal evidence remained PASS at SHA-256 f45651c7999ec89d5c443e65d503738327f8ccde4db80758a933d6ba13f2bb19.
+- Pre-deployment evidence is frozen at /home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase5/predeployment/5.1E.json with SHA-256 f8f861b9effb594ce8f02b2f89e9ccd0b50012773c44295baf8b05b04ad23d04.
+- No Project routing changes occurred. Under Amendment P5-A1 and the assignment override, Step 5.2 remains not ready until mandatory Step 5.0F passes after GO_PHASE5 and owner approval.

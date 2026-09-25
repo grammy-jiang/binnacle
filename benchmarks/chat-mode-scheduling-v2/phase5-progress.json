@@ -6,8 +6,8 @@
   "worktree": "/home/grammy-jiang/Projects/binnacle-chat-scheduling-staging",
   "source_branch": "feature/chat-mode-scheduling-v2-phase4",
   "audited_source_head": "9e165fd26bda57d938c24c78a826f66f2d5f0440",
-  "last_completed_step": "5.1D",
-  "next_step": "5.1E pre-deployment integration/validation",
+  "last_completed_step": "5.1E",
+  "next_step": "5.0F final audit after GO_PHASE5 + owner approval; 5.2 remains not_ready",
   "dependency_audit": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase5-dependency-audit-2026-09-25-r01.json",
     "revision": "r01",
@@ -65,7 +65,10 @@
     "phase5_5_1B_worker": "62ce74bf25535e019525d2afe94a8de376c7e7df",
     "phase5_5_1B_canonical_cherry_pick": "7c7fd00d8030421a0f8bfcd7ff57a321008609ec",
     "pinned_staging_runtime": "06bc1649c4bad9449470366da971649bb7620020",
-    "primary_production_baseline": "e8ece81d57dd2a478dd636d2b4f409519b845605"
+    "primary_production_baseline": "e8ece81d57dd2a478dd636d2b4f409519b845605",
+    "phase5_5_1A_worker": "9d008cedea741ef711c739077e59d5ef7af88689",
+    "phase5_5_1A_canonical_cherry_pick": "c4f25e89f9003b69c67d4725445896d1d2007961",
+    "phase5_5_1E_integration_head": "c4f25e89f9003b69c67d4725445896d1d2007961"
   },
   "frozen_hashes": {
     "phase4_progress_speculative_snapshot": "a122c4c782214021c2f22c314c72bef9374369ca9c1b0babc1a947da1fdf0c54",
@@ -89,7 +92,8 @@
     "pinned_runtime_head_status": "14c9f8e7ba0891e567361affb2424ab96ce7db8644442c262e895b7a6eedd001",
     "staging_endpoint_config": "cf75c98c8e15c1ca8a535b20143e3e7f27ddfb325296a97831eba31165d70b9c",
     "primary_production_config": "d24dadcc87e04096fdd960fc7d1543fca02ea53814b15ccd51fd9b1eb1153195",
-    "phase5_5_1D_rehearsal": "f45651c7999ec89d5c443e65d503738327f8ccde4db80758a933d6ba13f2bb19"
+    "phase5_5_1D_rehearsal": "f45651c7999ec89d5c443e65d503738327f8ccde4db80758a933d6ba13f2bb19",
+    "phase5_5_1E_predeployment": "f8f861b9effb594ce8f02b2f89e9ccd0b50012773c44295baf8b05b04ad23d04"
   },
   "preflight_findings": {
     "p5s-preflight-lineage": "ad2ea68f733a2a8502c5bb76dcc373bf3c294df5a0541bfa1be87e1f07b0971e",
@@ -128,10 +132,16 @@
       "worker_branch": null
     },
     "5.1A": {
-      "status": "not_started",
-      "tests": [],
-      "notes": [],
-      "commit": null,
+      "status": "complete",
+      "tests": [
+        "worker uv run pytest -q tests/scripts/test_chat_scheduling_operational.py -> PASS 10/10",
+        "canonical file-scoped pre-commit for 5.1A tooling/tests -> PASS"
+      ],
+      "notes": [
+        "Verified worker commit 9d008cedea741ef711c739077e59d5ef7af88689 and integrated it canonically as c4f25e89f9003b69c67d4725445896d1d2007961.",
+        "Worker completion packet reports deterministic privacy-minimizing operational freeze/review tooling with no external side effects."
+      ],
+      "commit": "9d008cedea741ef711c739077e59d5ef7af88689",
       "worker_branch": "feature/chat-mode-scheduling-v2-phase5-operational"
     },
     "5.1B": {
@@ -210,10 +220,18 @@
       "worker_branch": null
     },
     "5.1E": {
-      "status": "running",
-      "tests": [],
+      "status": "complete",
+      "tests": [
+        "uv run pytest -q tests/scripts/test_chat_scheduling_operational.py tests/scripts/test_chat_scheduling_project_instructions.py -> PASS 24/24; nproc=4, pre-run loadavg=0.64 0.82 0.81",
+        "5.1C4 pinned runtime/config/unit/tunnel SHA-256 re-verification -> PASS; staging jobs/server/tunnel services active",
+        "5.1D rollback rehearsal evidence -> PASS; SHA-256 f45651c7999ec89d5c443e65d503738327f8ccde4db80758a933d6ba13f2bb19",
+        "5.1E pre-deployment evidence freeze -> PASS; SHA-256 f8f861b9effb594ce8f02b2f89e9ccd0b50012773c44295baf8b05b04ad23d04"
+      ],
       "notes": [
-        "Pre-deployment integration and validation started from canonical HEAD e991c4b30df305f29e1e78fa4696ff23115ff8a2 after verified 5.1A and 5.1D predecessor evidence."
+        "5.1A worker commit 9d008cedea741ef711c739077e59d5ef7af88689 is integrated canonically as c4f25e89f9003b69c67d4725445896d1d2007961; 5.1B helper remains integrated canonically as 7c7fd00d8030421a0f8bfcd7ff57a321008609ec.",
+        "Pre-deployment evidence is frozen at /home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase5/predeployment/5.1E.json.",
+        "No Project routing changes occurred in 5.1E.",
+        "Per Amendment P5-A1 and the assignment override, 5.2 remains not_ready until mandatory 5.0F passes after GO_PHASE5 and owner approval."
       ],
       "commit": null,
       "worker_branch": null
@@ -221,7 +239,9 @@
     "5.2": {
       "status": "not_started",
       "tests": [],
-      "notes": [],
+      "notes": [
+        "Step 5.1E pre-deployment integration/validation passed, but speculative preparation does not release 5.2. Mandatory 5.0F after GO_PHASE5 and owner approval must pass first."
+      ],
       "commit": null,
       "worker_branch": null
     },
@@ -328,6 +348,16 @@
       "selected_budget_s": 300,
       "approved_runtime_source_head": "06bc1649c4bad9449470366da971649bb7620020",
       "next_step": "5.1E"
+    },
+    {
+      "kind": "5.1E_predeployment_freeze",
+      "at": "2026-09-25T20:49:11+10:00",
+      "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase5/predeployment/5.1E.json",
+      "sha256": "f8f861b9effb594ce8f02b2f89e9ccd0b50012773c44295baf8b05b04ad23d04",
+      "integration_head": "c4f25e89f9003b69c67d4725445896d1d2007961",
+      "focused_tests_passed": 24,
+      "next_step": "5.0F",
+      "stage2_ready": false
     }
   ],
   "handoff": null,
@@ -378,6 +408,8 @@
     "primary_production_baseline_head": "e8ece81d57dd2a478dd636d2b4f409519b845605",
     "primary_production_config_sha256": "d24dadcc87e04096fdd960fc7d1543fca02ea53814b15ccd51fd9b1eb1153195",
     "rollback_rehearsal_path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase5/rehearsal/5.1D.json",
-    "rollback_rehearsal_sha256": "f45651c7999ec89d5c443e65d503738327f8ccde4db80758a933d6ba13f2bb19"
+    "rollback_rehearsal_sha256": "f45651c7999ec89d5c443e65d503738327f8ccde4db80758a933d6ba13f2bb19",
+    "predeployment_evidence_path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase5/predeployment/5.1E.json",
+    "predeployment_evidence_sha256": "f8f861b9effb594ce8f02b2f89e9ccd0b50012773c44295baf8b05b04ad23d04"
   }
 }
