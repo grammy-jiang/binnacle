@@ -6,8 +6,8 @@
   "worktree": "/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase3",
   "source_branch": "feature/chat-mode-blocking-wall-guard",
   "audited_source_head": "5f2be143352aaa63fb680c1c79e289d46be201fe",
-  "last_completed_step": "3.8",
-  "next_step": "3.9-amend",
+  "last_completed_step": "3.9",
+  "next_step": "3.10-amend",
   "dependency_audit": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase3-dependency-audit-2026-09-25-r01.json",
     "revision": "r01",
@@ -134,6 +134,19 @@
       "scheduling_v2_production_access": "read-only observation only",
       "attribution_source": "task-manager connector-journal verification",
       "disposition": "non-blocking: Phase-3 scheduling-v2 observed but did not cause or normalize the production drift"
+    },
+    {
+      "id": "phase3_master_coverage_parallel_programme",
+      "status": "RECONCILED_EXTERNAL_DRIFT",
+      "production_commit": "260bc009a55e7a78716ac42faf64ae88cf2c6724",
+      "committed_at": "2026-09-25T09:22:43+10:00",
+      "subject": "Phase 3 master: cover run-command groups and evidence branches",
+      "change_summary": "tests/unit/core/test_logstats_run_command.py and tests/unit/core/test_run_command_evidence.py only",
+      "first_phase3_observation": "Step 3.7-amend a2 completion packet",
+      "attribution_source": "Step-3.7-amend a2 completion packet plus production git log/diff verification",
+      "not_caused_by_scheduling_v2_work": true,
+      "scheduling_v2_production_access": "read-only observation only",
+      "disposition": "non-blocking: already-observed clean external parallel-programme test-only change; production runtime/config/service baseline unchanged"
     }
   ],
   "frozen_heads": {
@@ -153,7 +166,8 @@
     "phase3_replay_promotion_head": "2382ae0dca4fee931d9af33c049e9dad97514e64",
     "phase3_candidate_shortlist_head": "8c456ff5b9e595ddb3b7793bb11cd1cabd7ae207",
     "phase4_input_contract_head": "9f33a47b69e62f09b2b03fee1b74ed4de763145b",
-    "phase3_validation_head": "d5a322375b37dffe8d02421df79a222e9cadaaf2"
+    "phase3_validation_head": "35e483b74fd82f608747ef8c26373d09e0534a6e",
+    "phase3_validation_head_r02": "35e483b74fd82f608747ef8c26373d09e0534a6e"
   },
   "frozen_hashes": {
     "phase2_progress_json": "bcfc0413457b00dd935ab5ba5cc11b35d4e3dd3e9c81edd54e429c599f8cc809",
@@ -874,14 +888,23 @@
       ]
     },
     "3.9": {
-      "status": "running",
-      "tests": [],
-      "notes": [
-        "Run r02 is the Amendment A1 rerun of Step 3.9; the previous Step-3.9 validation is preserved in run_history as superseded evidence.",
-        "Direct predecessor 3.8-amend is verified at canonical commit 9cf95f1138e7025de98403e78d88a4139bd61589; its completion packet, canonical HEAD/origin ref, and Step-3.8 r02 progress all agree.",
-        "The amended validation reruns the authoritative optimized suite, full pre-commit, C-candidate replay/shortlist determinism, and production isolation against the r02 C300-only shortlist/input contract."
+      "status": "complete",
+      "tests": [
+        "uv run python scripts/run_test_suite.py --workers 4 --seed 12345 -> PASS: parallel-safe 1253 passed/3 skipped; no_xdist 2 passed/1256 deselected; aggregate 1255 passed, 0 failed, 3 skipped; runner elapsed 45.08 s; MCP runtime 45.213 s; pre-run nproc=4 loadavg=1.33 0.66 0.50 (timing under foreign parallel-programme load).",
+        "uv run pre-commit run --all-files -> PASS: 21/21 hooks; MCP runtime 28.327 s; pre-run nproc=4 loadavg=3.51 1.40 0.76 (timing under foreign parallel-programme load).",
+        "Step-3.9 r02 replay/shortlist determinism -> PASS: C120/C300/C600 each matched 326/326 frozen replay rows and every previously frozen summary/per-scenario field; the only fresh replay additions are the Amendment-A1 definition-(b) repeated-wait summary fields. Regenerated shortlist JSON/Markdown are byte-identical at 072556e60fb55f686d872bce4da004bc272e9162e32459f2dc276657faa0e094 and dea813747ee3f6234dada113dd56a7b9af4de9f770838667a804d115ef8592ea; verdict LIVE_CANDIDATES_AVAILABLE with sole/preferred C300; MCP runtime 1.016 s; pre-run nproc=4 loadavg=1.26 1.46 0.90.",
+        "bash /tmp/p36-manager/isolation-check.sh -> PASS with reconciled external production drift: clean production master/origin-master 260bc009a55e7a78716ac42faf64ae88cf2c6724; config/unit/profile hashes unchanged; all four services active/running; blocking_wall_budget_s_by_client absent; listening ports exactly 127.0.0.1:8000; MCP runtime 0.114 s; pre-run nproc=4 loadavg=1.32 1.47 0.91."
       ],
-      "commit": null,
+      "notes": [
+        "Run r02 is the Amendment A1 rerun of Step 3.9; the previous Step-3.9 validation remains preserved in run_history as superseded evidence.",
+        "Direct predecessor 3.8-amend is verified at canonical commit 9cf95f1138e7025de98403e78d88a4139bd61589; its completion packet, canonical HEAD/origin ref, and Step-3.8 r02 progress all agree.",
+        "The locally validated Phase-3 head is 35e483b74fd82f608747ef8c26373d09e0534a6e. This head differs from the 3.8 predecessor only by the Step-3.9 running-state progress commit; no source/test/replay/shortlist/input-contract bytes changed before the full validation.",
+        "The legacy r01 determinism helper /tmp/p36-manager/run-3.9-determinism.sh initially failed because it requires exact summary/per_scenario equality, while Amendment A1 deliberately makes current replay output add three definition-(b) repeated-wait fields that are absent from the frozen promoted C reports. Investigation confirmed all 326 replay rows and all previously frozen fields are identical for C120/C300/C600, with no unexpected additions; the r02-compatible determinism check then passed and the shortlist regenerated byte-identically from the frozen promoted reports.",
+        "Gate-4 definition-(b) values remain C120 87.325603% PASS, C300 63.448499% PASS, C600 36.593805% FAIL; C300 remains the sole live/preferred candidate.",
+        "Production master 260bc009a55e7a78716ac42faf64ae88cf2c6724 is the same unrelated clean parallel-programme test-only commit already observed and attributed in the Step-3.7-amend a2 completion packet (subject: Phase 3 master: cover run-command groups and evidence branches; only two test files changed). Production config, unit files, tunnel profile, service states, budget-key absence, and listening-port baseline all match the reconciled r2 observation.",
+        "No production checkout/config/service mutation and no live ChatGPT trial occurred. CI will be triggered by the required canonical push; per the amended task procedure this chat uses push-and-watch.sh --no-wait and does not wait for CI."
+      ],
+      "commit": "35e483b74fd82f608747ef8c26373d09e0534a6e",
       "worker_branch": null,
       "run": "r02",
       "amendment": "A1",
@@ -1143,5 +1166,43 @@
     "B",
     "C",
     "H"
-  ]
+  ],
+  "production_baseline_r3": {
+    "observed_at": "2026-09-25T11:21:19+10:00",
+    "path": "/home/grammy-jiang/Projects/binnacle",
+    "branch": "master",
+    "head": "260bc009a55e7a78716ac42faf64ae88cf2c6724",
+    "origin_master": "260bc009a55e7a78716ac42faf64ae88cf2c6724",
+    "clean": true,
+    "services": {
+      "binnacle-mcp.service": {
+        "active_state": "active",
+        "sub_state": "running"
+      },
+      "binnacle-jobs.service": {
+        "active_state": "active",
+        "sub_state": "running"
+      },
+      "binnacle-tunnel.service": {
+        "active_state": "active",
+        "sub_state": "running"
+      },
+      "binnacle-watchdog.service": {
+        "active_state": "active",
+        "sub_state": "running"
+      }
+    },
+    "unit_file_hashes": {
+      "/home/grammy-jiang/.config/systemd/user/binnacle-mcp.service": "d7b8475f8e3fec783552c3676210622181e8563a85f3918938c912f321fe0759",
+      "/home/grammy-jiang/.config/systemd/user/binnacle-jobs.service": "afcaff05eb85821812081167f84cf1b8c7712e2f66a8e85e94e72a1ce09f01ae",
+      "/home/grammy-jiang/.config/systemd/user/binnacle-tunnel.service": "1b9572d46cc52ce056958eb23a2fba69dec6fd47eb7a70bc2668c3cd88609475"
+    },
+    "config_sha256": "9564cec6b4e994287b2136d4f63db9bac4a2d5fe02425c0eb76863354c88fd5d",
+    "primary_tunnel_profile_sha256": "c8e2a608779109854e6d3aae921a2cb1fbbe1b6511f1630990899052a6b74ecb",
+    "blocking_wall_budget_key_present": false,
+    "listening_ports": [
+      "127.0.0.1:8000"
+    ],
+    "reconciles_baseline_r2": true
+  }
 }

@@ -2,15 +2,15 @@
 
 Status: IN PROGRESS
 
-Updated: 2026-09-25T11:17:06+10:00
+Updated: 2026-09-25T11:24:05+10:00
 
 ## Canonical state
 
 - Branch: feature/chat-mode-scheduling-v2-phase3
 - Worktree: /home/grammy-jiang/Projects/binnacle-chat-scheduling-phase3
 - Audited source HEAD: 5f2be143352aaa63fb680c1c79e289d46be201fe
-- Last completed step: 3.8
-- Next step: 3.9-amend; repeat full Phase-3 validation against the amended r02 artifacts.
+- Last completed step: 3.9
+- Next step: 3.10-amend; regenerate the final replay report/handoff against the amended r02 validation.
 - Dependency audit: phase3-dependency-audit-2026-09-25-r01.json, r01, SHA-256 d3bec25ba8d49ed4db78e07930542b9e963608ad264c198f8fbf04c4ccfa473a
 - Task graph: phase3-task-graph.json, r01, SHA-256 44cbedb0524fe87a9d111579a96d0d33f4171dfee6ece34eb53baa4c506696b2
 - Initial orchestrator-state checkpoint SHA-256: cec108b23fcf319a48d699f123b8fbf713919f3873d1cae4968a16844b80ed12
@@ -42,11 +42,14 @@ Updated: 2026-09-25T11:17:06+10:00
 - Required logical arms: A/B/C/H
 - Original production baseline observed: 2026-09-25T01:10:16+10:00
 - Reconciled production baseline r2 observed: 2026-09-25T06:34:38+10:00
+- Reconciled production baseline r3 observed: 2026-09-25T11:21:19+10:00
 
 ## Deviation
 
 - public_base_freshness: DEVIATION — public master and proof-of-concept advanced to 821cd3addc787a3ec6c6764ebc2327a67de72dd0 during preflight. The epoch-1 orchestrator deferred the lower-stack restack pending owner ratification; catch-up is scheduled for Step 4.0 or earlier at the owner's request. This does not block Phase 3 under the binding task-manager decision.
 - production_drift: RECONCILED EXTERNAL DRIFT — task-manager connector-journal verification attributes the 01:30–01:44 production movement to the owner's separate run-command phase5 readiness workflow, journal turn 8adec04a-fc39-4a82-8a69-d6514492d5d3. It produced commits c082cea35b55bd497e849131b266990c4738edc5 and 0f8136aadf9f074d025864b0b130fad6230324e4, rewrote the config at 01:41:49 after saving /home/grammy-jiang/.config/binnacle/config.toml.pre-phase5-readiness-20260925, and restarted binnacle-mcp.service at 01:42:06. This was not caused by scheduling-v2 work; Phase-3 production access was read-only observation only.
+
+- production_drift_r3: RECONCILED EXTERNAL DRIFT — production master/origin-master advanced to 260bc009a55e7a78716ac42faf64ae88cf2c6724 via the already-observed parallel-programme test-only commit Phase 3 master: cover run-command groups and evidence branches. Step-3.7-amend a2 had already attributed this change as unrelated to scheduling-v2; the Step-3.9 r02 production git log/diff confirms only two unit-test files changed. Runtime config/unit/profile hashes, services, budget-key absence, and port baseline are unchanged.
 
 ## Step status
 
@@ -87,7 +90,7 @@ Updated: 2026-09-25T11:17:06+10:00
 | 3H | complete |
 | 3.7 | complete (r02 / Amendment A1) |
 | 3.8 | complete (r02 / Amendment A1) |
-| 3.9 | running (r02 / Amendment A1) |
+| 3.9 | complete (r02 / Amendment A1) |
 | 3.10 | complete |
 
 ## Step 3.0 notes
@@ -670,15 +673,52 @@ Updated: 2026-09-25T11:17:06+10:00
 
 ## Step 3.9 amended run r02 status
 
-- Status: RUNNING under Amendment A1.
+- Status: COMPLETE under Amendment A1.
 - Direct predecessor 3.8-amend is verified at canonical commit
-  9cf95f1138e7025de98403e78d88a4139bd61589; canonical HEAD and origin
-  matched that commit before this run started.
-- The authoritative optimized suite, full pre-commit, C-candidate
-  replay/shortlist determinism, and production isolation are being rerun
-  against the amended r02 artifacts.
-- The Step-3.9 r01 material below is retained as historical, superseded
-  evidence.
+  9cf95f1138e7025de98403e78d88a4139bd61589.
+- Frozen locally validated Phase-3 HEAD:
+  35e483b74fd82f608747ef8c26373d09e0534a6e.
+- Step 3.10 r01 remains historical; next step is 3.10-amend.
+
+## Step 3.9 amended run r02 validation
+
+- Authoritative optimized suite: PASS. Parallel-safe lane: 1,253 passed /
+  3 skipped. Ordinary-process lane: 2 passed / 1,256 deselected. Aggregate:
+  1,255 passed, 0 failed, 3 skipped. Runner elapsed 45.08 s; MCP runtime
+  45.213 s. Pre-run: 4 cores, load average 1.33 0.66 0.50; timing measured
+  under foreign parallel-programme load.
+- uv run pre-commit run --all-files: PASS, 21/21 hooks. MCP runtime
+  28.327 s. Pre-run: 4 cores, load average 3.51 1.40 0.76; timing measured
+  under foreign parallel-programme load.
+- C-candidate replay determinism: PASS under the amended r02 compatibility
+  check. C120/C300/C600 each matched 326/326 frozen policy rows and every
+  previously frozen summary/per-scenario field. Current replay output adds
+  only the three Amendment-A1 definition-(b) repeated-wait fields.
+- Shortlist determinism: PASS. Regenerated JSON/Markdown are byte-identical
+  at SHA-256
+  072556e60fb55f686d872bce4da004bc272e9162e32459f2dc276657faa0e094
+  and
+  dea813747ee3f6234dada113dd56a7b9af4de9f770838667a804d115ef8592ea.
+  Verdict remains LIVE_CANDIDATES_AVAILABLE; C300 is the sole live and
+  preferred candidate. Gate-4 definition-(b) reductions remain C120
+  87.325603%, C300 63.448499%, and C600 36.593805%.
+- The legacy r01 helper /tmp/p36-manager/run-3.9-determinism.sh initially
+  failed because it requires exact summary/per-scenario equality while the
+  current replay code intentionally adds the new definition-(b) fields and
+  the frozen promoted C reports remain unchanged. The investigation found no
+  row or previously frozen-field mismatch; an r02-compatible comparison was
+  used for the final passing determinism check.
+- Production isolation: PASS after reconciling the already-observed external
+  master advance. Production master/origin-master is clean at
+  260bc009a55e7a78716ac42faf64ae88cf2c6724; Step-3.7-amend a2 had already
+  attributed that test-only commit to an unrelated parallel programme.
+  Config/unit/profile hashes are unchanged, all four services are
+  active/running, the blocking-wall budget key is absent, and only
+  127.0.0.1:8000 is listening. MCP runtime 0.114 s. Pre-run: 4 cores, load
+  average 1.32 1.47 0.91.
+- No production mutation and no live ChatGPT trial occurred. CI is triggered
+  by the canonical push; the task-specific procedure requires
+  push-and-watch.sh --no-wait, so this chat does not wait for CI.
 
 ## Step 3.9 notes
 
