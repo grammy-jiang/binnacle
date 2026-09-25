@@ -2526,6 +2526,37 @@ once; the orchestrator's other sends keep >= 2 minutes).
   Phase-4 record is called complete; it does not block the GO/NO-GO verdict,
   which never used H.
 
+### Amendment P4-A2: routing-miss rule (2026-09-26)
+
+Owner decision 2026-09-26 00:00 ("Exclude and rerun"). Evidence: ChatGPT has
+no per-Project connector pinning. A trial reaches its lane through the lane
+app's composer system hint, which makes ChatGPT prefer that app but does not
+force it. After the D4 fix, 1 of 44 trials (`q-read-1-a`, lane A, 2026-09-25
+23:45) sent all its calls to the production connector although its recorded
+send body carried lane A's hint.
+
+- **Definition.** A trial is a `ROUTING_MISS` when none of its fixture calls
+  appear in its own lane's endpoint server log and at least one appears in
+  another server's log (the production `binnacle-mcp` journal or another
+  lane's server log), matched by the trial's unique fixture root. The routing
+  choice happens at the first tool call, before any outcome exists, so this
+  classification cannot favor an arm.
+- **Handling.** A `ROUTING_MISS` did not receive its arm's treatment. It is
+  recorded with its evidence (state dir, where the calls went, the send body
+  with its hint), excluded from every arm metric and gate, and its slot is
+  submitted again; the first correctly routed submission owns the slot. At
+  most three submissions per slot; a slot that misses three times is
+  unscorable under the existing evidence-integrity rules.
+- **Reporting.** Every report states the routing-miss count and rate per arm.
+  A rate above 10% in any arm makes the Phase-4 verdict
+  `NO_GO_EVIDENCE_INTEGRITY`.
+- **Isolation.** Calls that a miss sent to the production server are recorded
+  as non-mutating isolation incidents (read-only fixture reads, fixture jobs
+  under `/tmp`). The hard gate "primary connector/config/schema untouched" is
+  not affected, because nothing is changed.
+- **Scope.** This amends "first submitted outcome owns each slot" only for
+  `ROUTING_MISS`. Every other failure keeps that rule.
+
 ### Step 4H-R — aggregate historical H comparator
 
 Predecessor: every canonical H R5/R6/R7/R12 task is frozen. This step may run in
