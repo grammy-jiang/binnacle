@@ -369,3 +369,60 @@ def test_phase5_groups_account_for_dispatch_errors_and_missing_dispatches():
     assert stats.auto_behavior_groups["bE"].dispatch_errors == 1
     assert stats.auto_behavior_groups["bM"].dispatch_missing == 1
     assert stats.auto_rule_groups == {}
+
+
+from binnacle.logstats_predictions import prediction_report
+
+PREDICTION_SAMPLE = """\
+2026-09-25T10:00:00.000 INFO: event=tool_config tool=run_command shadow_prediction=on predictors=memory,rules,judge judge_model=gpt-oss-120b filter_hash=f123 sanitizer_hash=s123
+2026-09-25T10:00:00.100 INFO: event=run_command_prediction schema=1 call=a feature_hash=fa shape_hash=sa first_token_class=uv heredoc=0 chain_n=0 max_delay_s=0 len_chars=30 declared_wait_s=30 declared_background=none auto_rule=- memory_bucket=long memory_p90_s=90 memory_n=3 memory_source=shape memory_store_keys=12 rules_bucket=- rules_p90_s=- rules_hits=- judge=queued judge_skip_reason=- judge_cache=miss
+2026-09-25T10:00:00.110 INFO: event=run_command_dispatch call=a client=x job_id=ja owner=manager owner_instance=o requested_wait_s=30 bounded_wait_s=30 effective_wait_s=30 background_arg=omitted auto_background=false handoff_reason=synchronous owner_roundtrip_ms=2 command_hash=h command_chars=30 state=exited
+2026-09-25T10:00:12.000 INFO: event=job_exit job_id=ja owner=manager owner_instance=o runtime_s=12.0 exit_code=0 signal=- log_bytes=10
+2026-09-25T10:00:12.010 INFO: event=run_command_prediction_judge schema=1 call=a model=gpt-oss-120b bucket=medium p90_s=20 latency_ms=410 prompt_tokens=100 completion_tokens=20 error=-
+2026-09-25T10:00:13.000 INFO: event=run_command_prediction schema=1 call=b feature_hash=fb shape_hash=sb first_token_class=other heredoc=0 chain_n=0 max_delay_s=0 len_chars=5 declared_wait_s=30 declared_background=none auto_rule=- memory_bucket=short memory_p90_s=2 memory_n=4 memory_source=exact memory_store_keys=14 rules_bucket=short rules_p90_s=1 rules_hits=sleep_ge_10 judge=skipped judge_skip_reason=history judge_cache=-
+2026-09-25T10:00:13.010 INFO: event=run_command_dispatch call=b client=x job_id=jb owner=manager owner_instance=o requested_wait_s=30 bounded_wait_s=30 effective_wait_s=30 background_arg=omitted auto_background=false handoff_reason=synchronous owner_roundtrip_ms=2 command_hash=h2 command_chars=5 state=exited
+2026-09-25T10:00:15.000 INFO: event=job_exit job_id=jb owner=manager owner_instance=o runtime_s=2.0 exit_code=0 signal=- log_bytes=5
+2026-09-25T10:00:16.000 INFO: event=run_command_prediction schema=1 call=c feature_hash=fc shape_hash=sc first_token_class=other heredoc=1 chain_n=3 max_delay_s=0 len_chars=900 declared_wait_s=30 declared_background=none auto_rule=- memory_bucket=- memory_p90_s=- memory_n=0 memory_source=none memory_store_keys=14 rules_bucket=- rules_p90_s=- rules_hits=- judge=skipped judge_skip_reason=budget judge_cache=miss
+"""
+
+
+def test_stats_shadow_join_late_judge_and_no_judge_line():
+    records, starts = logstats.parse(PREDICTION_SAMPLE)
+    stats = logstats.analyze(records, starts)
+    shadow = stats.predictions
+    assert shadow.dispatches == 3
+    assert shadow.outcomes == 2
+    assert shadow.coverage["memory"] == 2
+    assert shadow.coverage["rules"] == 1
+    assert shadow.coverage["judge"] == 1
+    assert shadow.confusion["memory:10"]["tp"] == 1
+    assert shadow.confusion["memory:10"]["tn"] == 1
+    assert shadow.calibration["memory"]["long->medium"] == 1
+    assert shadow.judge_latency_ms == [410.0]
+    assert shadow.judge_network_results == 1
+    assert shadow.memory_sample_counts == {3: 1, 4: 1, 0: 1}
+    assert shadow.judge_cache == {"miss": 2}
+    assert shadow.judge_skip_reasons == {"history": 1, "budget": 1}
+    assert shadow.memory_store_keys == 14
+    assert shadow.filter_hash == "f123"
+    assert shadow.judge_model == "gpt-oss-120b"
+    assert len(shadow.rows) == 3
+    assert shadow.rows[0]["actual_runtime_s"] == 12.0
+    assert shadow.rows[2]["judge_bucket"] is None
+
+
+def test_stats_shadow_report_and_render():
+    records, starts = logstats.parse(PREDICTION_SAMPLE)
+    stats = logstats.analyze(records, starts)
+    report = prediction_report(stats.predictions)
+    assert report["predictors"]["memory"]["coverage"] == 2 / 3
+    assert report["predictors"]["judge"]["thresholds"]["10"]["tp"] == 1
+    assert report["judge"]["latency_ms"]["p50"] == 410.0
+    assert report["judge"]["cache_hit_rate"] == 0.0
+    assert report["memory_store_keys"] == 14
+    assert report["judge_model"] == "gpt-oss-120b"
+    assert report["memory_sample_counts"] == {"0": 1, "3": 1, "4": 1}
+    text = logstats.render(stats)
+    assert "predictions:" in text
+    assert "memory: coverage=2/3" in text
+    assert "judge: results=1" in text

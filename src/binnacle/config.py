@@ -17,6 +17,11 @@ server start -- the same restart model the systemd deployment already has.
 
 import os
 import re
+import threading
+import time
+import urllib.error
+import urllib.request
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -177,9 +182,120 @@ class AutoBackgroundMatch:
     match_end: int
 
 
+class RunCommandShadowPredictionSettings(BaseModel):
+    enabled: bool = False
+    predictors: tuple[Literal["memory", "rules", "judge"], ...] = ()
+    memory_min_samples: int = Field(2, ge=1, le=100)
+    memory_max_keys: int = Field(4096, ge=16, le=100_000)
+    memory_samples_per_key: int = Field(32, ge=1, le=1024)
+    memory_dir: Path = Field(
+        default_factory=lambda: (
+            Path.home() / ".local" / "state" / "binnacle" / "run-command-prediction"
+        )
+    )
+    judge_enabled: bool = False
+    judge_endpoint: str = "https://api.cerebras.ai/v1/chat/completions"
+    judge_model: str = "gpt-oss-120b"
+    judge_timeout_ms: int = Field(800, ge=100, le=10_000)
+    judge_minute_budget: int = Field(4, ge=0, le=5)
+    judge_hour_budget: int = Field(120, ge=0, le=150)
+    judge_day_budget: int = Field(2_000, ge=0, le=2_400)
+    judge_cache_ttl_s: int = Field(86_400, ge=0, le=2_592_000)
+    judge_complex_chain_threshold: int = Field(2, ge=0, le=100)
+    judge_complex_length_threshold: int = Field(800, ge=1, le=100_000)
+    sanitized_command_max_chars: int = Field(1200, ge=100, le=10_000)
+    judge_workers: int = Field(2, ge=1, le=8)
+    judge_api_key_file: Path | None = None
+
+
+class JudgeBudget:
+    """Process-local shadow-judge request budget."""
+
+    def __init__(
+        self,
+        settings: RunCommandShadowPredictionSettings,
+        *,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
+        self._clock = clock
+        self._lock = threading.Lock()
+        self._events: list[float] = []
+        self._paused_until = 0.0
+        self._limits = (
+            (60.0, settings.judge_minute_budget),
+            (3600.0, settings.judge_hour_budget),
+            (86400.0, settings.judge_day_budget),
+        )
+
+    def take(self) -> bool:
+        now = self._clock()
+        with self._lock:
+            if now < self._paused_until:
+                return False
+            self._events = [stamp for stamp in self._events if now - stamp < 86400]
+            for window_s, limit in self._limits:
+                used = sum(now - stamp < window_s for stamp in self._events)
+                if limit <= 0 or used >= limit:
+                    return False
+            self._events.append(now)
+            return True
+
+    def pause_for(self, seconds: float | None) -> None:
+        delay = 60.0 if seconds is None else max(0.0, min(float(seconds), 86400.0))
+        with self._lock:
+            self._paused_until = max(self._paused_until, self._clock() + delay)
+
+
+def run_command_cerebras_transport(
+    url: str, headers: dict[str, str], body: bytes, timeout_s: float
+) -> tuple[int, bytes, Mapping[str, str]]:
+    request = urllib.request.Request(url, data=body, headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(request, timeout=timeout_s) as response:  # nosec B310
+            return int(response.status), response.read(), dict(response.headers.items())
+    except urllib.error.HTTPError as exc:
+        response_headers = dict(exc.headers.items()) if exc.headers else {}
+        return int(exc.code), exc.read(), response_headers
+
+
+def run_command_cerebras_reset_seconds(headers: Mapping[str, str]) -> float:
+    lowered = {str(key).lower(): str(value).strip() for key, value in headers.items()}
+    value = lowered.get("retry-after") or lowered.get("x-ratelimit-reset-requests")
+    if not value:
+        return 60.0
+    try:
+        raw = float(value)
+    except ValueError:
+        units = {"ms": 0.001, "s": 1.0, "m": 60.0, "h": 3600.0, "d": 86400.0}
+        parts = re.findall(r"(\d+(?:\.\d+)?)(ms|s|m|h|d)", value.lower())
+        if not parts:
+            return 60.0
+        return max(0.0, sum(float(number) * units[unit] for number, unit in parts))
+    if raw > 1_000_000_000:
+        return max(0.0, raw - time.time())
+    return max(0.0, raw)
+
+
+def read_cerebras_api_key(settings: RunCommandShadowPredictionSettings) -> str:
+    if key := os.environ.get("CEREBRAS_API_KEY"):
+        return key
+    path = settings.judge_api_key_file
+    if path is None:
+        raise RuntimeError("missing_api_key")
+    if path.stat().st_mode & 0o777 != 0o600:
+        raise RuntimeError("unsafe_key_file_mode")
+    key = path.read_text(encoding="utf-8").strip()
+    if not key:
+        raise RuntimeError("missing_api_key")
+    return key
+
+
 class RunCommandSettings(BaseModel):
     """run_command wait policy (spec docs/tools/run_command.md §3)."""
 
+    shadow_prediction: RunCommandShadowPredictionSettings = Field(
+        default_factory=RunCommandShadowPredictionSettings
+    )
     wait_default_s: int = 30
     wait_max_s: int = Field(
         50, description="Below ChatGPT's hard 60 s client cap (design §5)."

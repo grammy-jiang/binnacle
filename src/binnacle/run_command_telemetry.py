@@ -5,8 +5,11 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import re
+import shlex
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 log = logging.getLogger("binnacle.run_command")
@@ -45,6 +48,187 @@ def auto_background_behavior_hash(
             auto_warmup_s,
             [[prefix, list(rules)] for prefix, rules in patterns.items()],
         ]
+    )
+
+
+_CHAIN = re.compile(r"&&|\|\||;|\n|\|")
+_DELAY = re.compile(r"(?i)\b(?:sleep|timeout)\s+(?:--\s+)?(\d+(?:\.\d+)?)([smhd]?)")
+_SIMPLE_RUNNERS = [
+    "pytest",
+    "tox",
+    "pip",
+    "apt",
+    "npm",
+    "cargo",
+    "make",
+    "curl",
+    "wget",
+    "rsync",
+    "tar",
+    "find",
+    "systemctl",
+    "docker",
+    "ssh",
+]
+_SPECIAL_RUNNERS: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
+    (name, re.compile(pattern, re.IGNORECASE))
+    for name, pattern in (
+        ("pre-commit", r"\bpre-commit\b"),
+        ("uv-run", r"(?:^|[\s;&|])uv\s+run(?:\s|$)"),
+        ("uv-sync", r"(?:^|[\s;&|])uv\s+sync(?:\s|$)"),
+        ("uv-tool", r"(?:^|[\s;&|])uv\s+tool(?:\s|$)"),
+        ("git-push", r"(?:^|[\s;&|])git\s+push(?:\s|$)"),
+        ("git-fetch", r"(?:^|[\s;&|])git\s+fetch(?:\s|$)"),
+        ("git-clone", r"(?:^|[\s;&|])git\s+clone(?:\s|$)"),
+        ("git-pull", r"(?:^|[\s;&|])git\s+pull(?:\s|$)"),
+        ("gh-run-watch", r"(?:^|[\s;&|])gh\s+run\s+watch(?:\s|$)"),
+        ("journalctl-f", r"(?:^|[\s;&|])journalctl\b[^;&\n]*\s-f(?:\s|$)"),
+        ("sleep", r"(?:^|[\s;&|])sleep\s+\d"),
+        ("timeout", r"(?:^|[\s;&|])timeout\s+\d"),
+    )
+)
+
+
+@dataclass(frozen=True)
+class CommandFeatures:
+    command_hash: str
+    shape_key: str
+    shape_hash: str
+    feature_hash: str
+    first_token_class: str
+    runner_flags: tuple[str, ...]
+    max_delay_s: float
+    heredoc: bool
+    len_chars: int
+    chain_n: int
+    declared_wait_s: int
+    declared_background: str
+    declared_tail_lines: int | None
+
+
+def _effective_token(command: str) -> str:
+    text = command.strip()
+    for _ in range(4):
+        changed = re.sub(r"^set\s+-[^;\n]+(?:;|&&)\s*", "", text, count=1)
+        changed = re.sub(r"^cd\s+[^;&\n]+&&\s*", "", changed, count=1)
+        if changed == text:
+            break
+        text = changed.strip()
+    try:
+        tokens = shlex.split(text)
+    except ValueError:
+        tokens = re.findall(r"[^\s;&|]+", text)
+    i = int(bool(tokens and tokens[0] == "env"))
+    while i < len(tokens) and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", tokens[i]):
+        i += 1
+    if i < len(tokens) and tokens[i] == "sudo":
+        i += 1
+        while i < len(tokens) and tokens[i].startswith("-"):
+            i += 1
+    if i < len(tokens) and tokens[i] == "timeout":
+        i += 1
+        while i < len(tokens) and tokens[i].startswith("-"):
+            i += 1
+        if i < len(tokens) and re.fullmatch(r"\d+(?:\.\d+)?[smhd]?", tokens[i]):
+            i += 1
+    return tokens[i] if i < len(tokens) else ""
+
+
+def _first_token_class(token: str) -> str:
+    base = Path(token).name.lower()
+    if base == "python" or re.fullmatch(r"python3(?:\.\d+)?", base):
+        return "python"
+    if base in {"uv", "pytest", "git"}:
+        return base
+    if base in [
+        "cd",
+        "set",
+        "export",
+        "source",
+        ".",
+        "printf",
+        "echo",
+        "read",
+        "test",
+        "[",
+    ]:
+        return "shell-builtin"
+    return "script-path" if "/" in token or base.endswith((".py", ".sh")) else "other"
+
+
+def build_command_features(
+    command: str,
+    *,
+    wait_seconds: int,
+    declared_background: str,
+    tail_lines: int | None,
+) -> CommandFeatures:
+    token_class = _first_token_class(_effective_token(command))
+    simple = tuple(
+        name
+        for name in _SIMPLE_RUNNERS
+        if re.search(
+            rf"(?:^|[\s;&|]){re.escape(name)}(?:-get)?(?:\s|$)", command, re.IGNORECASE
+        )
+    )
+    special = tuple(
+        name for name, pattern in _SPECIAL_RUNNERS if pattern.search(command)
+    )
+    runners = tuple(dict.fromkeys((*simple, *special)))
+    unit_seconds = {"": 1.0, "s": 1.0, "m": 60.0, "h": 3600.0, "d": 86400.0}
+    delays = [
+        float(value) * unit_seconds[unit.lower()]
+        for value, unit in _DELAY.findall(command)
+    ]
+    max_delay = max(delays, default=0.0)
+    chain_n = len(_CHAIN.findall(command))
+    heredoc = "<<" in command
+    delay = (
+        "0"
+        if max_delay <= 0
+        else "1-9"
+        if max_delay < 10
+        else "10-60"
+        if max_delay <= 60
+        else "60+"
+    )
+    length = (
+        "<200" if len(command) < 200 else "200-799" if len(command) < 800 else "800+"
+    )
+    chain = "0" if chain_n == 0 else "1-2" if chain_n <= 2 else "3+"
+    shape = "|".join(
+        (
+            f"first={token_class}",
+            f"runners={','.join(runners) or '-'}",
+            f"delay={delay}",
+            f"heredoc={int(heredoc)}",
+            f"len={length}",
+            f"chain={chain}",
+            f"wait={wait_seconds}",
+            f"background={declared_background}",
+            f"tail={tail_lines if tail_lines is not None else '-'}",
+        )
+    )
+    material = {
+        "shape": shape,
+        "delay": round(max_delay, 3),
+        "chars": len(command),
+        "chain": chain_n,
+    }
+    return CommandFeatures(
+        hashlib.sha256(command.encode()).hexdigest(),
+        shape,
+        _short_hash(shape),
+        _short_hash(material),
+        token_class,
+        runners,
+        max_delay,
+        heredoc,
+        len(command),
+        chain_n,
+        wait_seconds,
+        declared_background,
+        tail_lines,
     )
 
 
@@ -197,3 +381,123 @@ class DispatchPlan:
             self.command_chars,
             type(exc).__name__,
         )
+
+
+@dataclass(frozen=True)
+class Prediction:
+    bucket: str
+    p90_s: float
+
+
+@dataclass(frozen=True)
+class MemoryLookup:
+    prediction: Prediction | None
+    sample_count: int
+    source: str
+    exact_n: int
+    shape_n: int
+
+
+@dataclass(frozen=True)
+class JudgeResult:
+    bucket: str | None
+    p90_s: float | None
+    latency_ms: float
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    error: str | None = None
+    retry_after_s: float | None = None
+
+
+def _prediction_number(value: float | None) -> str:
+    return "-" if value is None else f"{value:.3f}".rstrip("0").rstrip(".")
+
+
+def log_shadow_config(
+    enabled: bool, predictors: tuple[str, ...], judge_model: str,
+    filter_hash: str, sanitizer_hash: str,
+) -> None:
+    log.info(
+        "event=tool_config tool=run_command shadow_prediction=%s predictors=%s "
+        "judge_model=%s filter_hash=%s sanitizer_hash=%s",
+        "on" if enabled else "off",
+        ",".join(predictors) or "-",
+        judge_model,
+        filter_hash,
+        sanitizer_hash,
+    )
+
+
+def log_shadow_prediction(
+    call_id: str, features: CommandFeatures, auto_rule_hash: str | None,
+    memory: MemoryLookup, memory_store_keys: int, rules: Prediction | None,
+    hits: tuple[str, ...], judge: tuple[str, str | None, str],
+) -> None:
+    mp = memory.prediction
+    judge_state, judge_skip_reason, judge_cache = judge
+    values = (
+        call_id,
+        features.feature_hash,
+        features.shape_hash,
+        features.first_token_class,
+        int(features.heredoc),
+        features.chain_n,
+        _prediction_number(features.max_delay_s),
+        features.len_chars,
+        features.declared_wait_s,
+        features.declared_background,
+        auto_rule_hash or "-",
+        mp.bucket if mp else "-",
+        _prediction_number(mp.p90_s if mp else None),
+        memory.sample_count,
+        memory.source,
+        memory_store_keys,
+        rules.bucket if rules else "-",
+        _prediction_number(rules.p90_s if rules else None),
+        ",".join(hits) or "-",
+        judge_state,
+        judge_skip_reason or "-",
+        judge_cache,
+    )
+    log.info(
+        "event=run_command_prediction schema=1 call=%s feature_hash=%s shape_hash=%s "
+        "first_token_class=%s heredoc=%d chain_n=%d max_delay_s=%s len_chars=%d "
+        "declared_wait_s=%d declared_background=%s auto_rule=%s memory_bucket=%s "
+        "memory_p90_s=%s memory_n=%d memory_source=%s memory_store_keys=%d "
+        "rules_bucket=%s rules_p90_s=%s rules_hits=%s judge=%s "
+        "judge_skip_reason=%s judge_cache=%s",
+        *values,
+    )
+
+
+def log_shadow_judge(call_id: str, model: str, result: JudgeResult) -> None:
+    values = (
+        call_id,
+        model,
+        result.bucket or "-",
+        _prediction_number(result.p90_s),
+        result.latency_ms,
+        result.prompt_tokens if result.prompt_tokens is not None else "-",
+        result.completion_tokens if result.completion_tokens is not None else "-",
+        (result.error or "-").replace(" ", "_")[:80],
+    )
+    log.info(
+        "event=run_command_prediction_judge schema=1 call=%s model=%s bucket=%s "
+        "p90_s=%s latency_ms=%.2f prompt_tokens=%s completion_tokens=%s error=%s",
+        *values,
+    )
+
+
+def prediction_optional_int(value: Any) -> int | None:
+    try:
+        return int(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def log_shadow_memory_error(error: str) -> None:
+    log.warning("event=run_command_prediction_memory_error schema=1 error=%s", error)
+
+
+def prediction_runtime_bucket(seconds: float) -> str:
+    return "short" if seconds < 10 else "medium" if seconds <= 60 else "long"
