@@ -10,7 +10,7 @@ Audited source HEAD: `3a4dfb1b248e4530fb09013976abb863c8e35eaf`
 
 Last completed step: **4.3A**
 
-Next step: **4.2D readiness + 4.4A/4.4B provisioning frontier**
+Next step: **4.4B:H lane-manifest freeze running; other provisioning remains independent**
 
 ## Frozen Step 4.0 entry gate
 
@@ -56,6 +56,12 @@ Next step: **4.2D readiness + 4.4A/4.4B provisioning frontier**
 | 4.12 | not_started | — |
 | 4H-R | not_started | — |
 | 4.13 | not_started | — |
+
+### Dynamic lane manifest freezes
+
+| Task | Status | Lane manifest |
+| --- | --- | --- |
+| 4.4B:H | running | — |
 
 ## Step 4.1 source checkpoint
 

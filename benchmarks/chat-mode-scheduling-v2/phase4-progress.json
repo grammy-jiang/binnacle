@@ -7,7 +7,7 @@
   "source_branch": "feature/chat-mode-scheduling-v2-phase3",
   "audited_source_head": "3a4dfb1b248e4530fb09013976abb863c8e35eaf",
   "last_completed_step": "4.3A",
-  "next_step": "4.2D readiness + 4.4A/4.4B provisioning frontier",
+  "next_step": "4.4B:H lane-manifest freeze running; other provisioning remains independent",
   "dependency_audit": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase4-dependency-audit-2026-09-25-r01.json",
     "revision": "r01",
@@ -432,11 +432,20 @@
         "C300"
       ],
       "preferred_live_candidate": "C300"
+    },
+    {
+      "kind": "supplemental_lane_manifest_freeze",
+      "task_id": "4.4B-freeze:H",
+      "plan_task_id": "4.4B:H",
+      "lane": "H",
+      "status": "running",
+      "at": "2026-09-25T19:36:37+10:00",
+      "predecessor_fragment": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase4/provisioning/4.4B:H.json"
     }
   ],
   "handoff": null,
   "created_at": "2026-09-25T15:31:10+10:00",
-  "updated_at": "2026-09-25T18:30:23+10:00",
+  "updated_at": "2026-09-25T19:36:37+10:00",
   "phase4_source_head": "06bc1649c4bad9449470366da971649bb7620020",
   "baseline_snapshot": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase4-baseline.json",
