@@ -1,16 +1,16 @@
 # Chat mode scheduling v2 — Phase 3 progress
 
-Status: IN PROGRESS
+Status: COMPLETE
 
-Updated: 2026-09-25T11:38:48+10:00
+Updated: 2026-09-25T11:43:18+10:00
 
 ## Canonical state
 
 - Branch: feature/chat-mode-scheduling-v2-phase3
 - Worktree: /home/grammy-jiang/Projects/binnacle-chat-scheduling-phase3
 - Audited source HEAD: 5f2be143352aaa63fb680c1c79e289d46be201fe
-- Last completed step: 3.9
-- Next step: 3.10 r02 closeout after evidence-commit CI; do not start Phase 4 before closeout.
+- Last completed step: 3.10
+- Next step: Phase 4.0 dependency audit in a separate task; Phase 4 must branch from completed Phase 3.
 - Dependency audit: phase3-dependency-audit-2026-09-25-r01.json, r01, SHA-256 d3bec25ba8d49ed4db78e07930542b9e963608ad264c198f8fbf04c4ccfa473a
 - Task graph: phase3-task-graph.json, r01, SHA-256 44cbedb0524fe87a9d111579a96d0d33f4171dfee6ece34eb53baa4c506696b2
 - Initial orchestrator-state checkpoint SHA-256: cec108b23fcf319a48d699f123b8fbf713919f3873d1cae4968a16844b80ed12
@@ -91,7 +91,7 @@ Updated: 2026-09-25T11:38:48+10:00
 | 3.7 | complete (r02 / Amendment A1) |
 | 3.8 | complete (r02 / Amendment A1) |
 | 3.9 | complete (r02 / Amendment A1) |
-| 3.10 | running (r02 / Amendment A1) |
+| 3.10 | complete (r02 / Amendment A1) |
 
 ## Step 3.0 notes
 
@@ -784,7 +784,9 @@ Updated: 2026-09-25T11:38:48+10:00
 
 ## Step 3.10 amended run r02 status
 
-- Status: RUNNING under Amendment A1; evidence commit is ready for CI.
+- Status: COMPLETE under Amendment A1.
+- Evidence commit `83a3d2a9a19592fdb32e08885310f79a0f936e68` is validated by
+  CI run `36083115418`; its head SHA matches and the conclusion is `success`.
 - Direct predecessor 3.9-amend is verified at canonical commit
   `02919486e8bb7da2e03c64ddd2ab6db698bd44a4`.
 - H10 was already integrated/promoted and was not rerun. Its SHA-256 is
@@ -793,7 +795,7 @@ Updated: 2026-09-25T11:38:48+10:00
   `4dd1e387c42d6fccd37d60795b00192144f3b4d93c57d9eb54ab527a72e8e94d`.
 - The dated r02 final report copies the frozen shortlist unchanged:
   `live_candidates=[C300]`, `preferred_live_candidate=C300`, verdict
-  `LIVE_CANDIDATES_AVAILABLE`; `phase4_ready=true` after closeout.
+  `LIVE_CANDIDATES_AVAILABLE`; `phase4_ready=true`.
 - Final r02 report SHA-256: JSON
   `54e46772ba0a1ee06b2c4d92cf5a55036e8bedd106466e25916ff6fab5c1aaae`;
   Markdown
@@ -810,8 +812,7 @@ Updated: 2026-09-25T11:38:48+10:00
   refreshed lower base `ea6cbff`, and Phase-2 tree `0efd7739` exactly matches
   the public tree. Restacked Phase-3 tip `999c3c9` passed CI run `36073531402`.
 - This r02 handoff supersedes r01 closeout `a272b62` and the unfinished stale
-  `3.10-restack-closeout` task. Phase 4 must not start until evidence-commit CI
-  is green and the closeout commit is pushed and green.
+  `3.10-restack-closeout` task.
 
 ## Step 3.10 run r01 evidence-commit notes (superseded)
 
@@ -879,14 +880,14 @@ Updated: 2026-09-25T11:38:48+10:00
 - Validated CI head SHA: `80e10c6c8728a9113c79181795b0f5da805f02e0`.
 - Validated CI conclusion: `success`.
 
-## Phase-3 handoff r02 (pending evidence-commit CI)
+## Phase-3 handoff r02 (complete)
 
 - Final report JSON:
   `benchmarks/chat-mode-scheduling-v2/phase3-policy-replay-2026-09-25-r02.json`.
 - Final report Markdown:
   `benchmarks/chat-mode-scheduling-v2/phase3-policy-replay-2026-09-25-r02.md`.
-- Pre-evidence locally validated Phase-3 source head:
-  `35e483b74fd82f608747ef8c26373d09e0534a6e`.
+- Phase-3 source/evidence head:
+  `83a3d2a9a19592fdb32e08885310f79a0f936e68`.
 - Replay corpus SHA-256:
   `4dd1e387c42d6fccd37d60795b00192144f3b4d93c57d9eb54ab527a72e8e94d`.
 - Candidate shortlist SHA-256:
@@ -909,5 +910,11 @@ Updated: 2026-09-25T11:38:48+10:00
   `999c3c9` passed CI run `36073531402` with conclusion `success`.
 - This r02 handoff supersedes r01 closeout `a272b62` and the unfinished stale
   `3.10-restack-closeout` task.
-- Evidence-commit CI attestation fields are intentionally absent until that
-  exact commit completes CI, preventing self-reference.
+- Validated evidence commit:
+  `83a3d2a9a19592fdb32e08885310f79a0f936e68`.
+- Validated CI run id: `36083115418`.
+- Validated CI head SHA:
+  `83a3d2a9a19592fdb32e08885310f79a0f936e68`.
+- Validated CI conclusion: `success`.
+- The closeout commit records this evidence-commit CI only; its own CI run is
+  verified externally and is not written back, avoiding self-reference.

@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "phase": 3,
-  "status": "in_progress",
+  "status": "complete",
   "branch": "feature/chat-mode-scheduling-v2-phase3",
   "worktree": "/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase3",
   "source_branch": "feature/chat-mode-blocking-wall-guard",
   "audited_source_head": "5f2be143352aaa63fb680c1c79e289d46be201fe",
-  "last_completed_step": "3.9",
-  "next_step": "3.10 r02 closeout after evidence-commit CI attestation; do not start Phase 4 before closeout",
+  "last_completed_step": "3.10",
+  "next_step": "Phase 4.0 dependency audit in a separate task; Phase 4 must branch from the completed Phase-3 branch",
   "dependency_audit": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase3-dependency-audit-2026-09-25-r01.json",
     "revision": "r01",
@@ -172,7 +172,8 @@
     "phase1_restacked_r02": "8f97df84aaff72ddda55fb79e10cc4e38fba1dc7",
     "phase2_restacked_r02": "8d8c8f137aa7bc6bc4e0157e5a8a7c87139924d6",
     "planning_restacked_r02": "e02c7cd9cff4fce26d131d1a977a3f5edbee8328",
-    "phase3_post_restack_r02_base": "999c3c9271c30e6be1724b717cbf63fb9e801edf"
+    "phase3_post_restack_r02_base": "999c3c9271c30e6be1724b717cbf63fb9e801edf",
+    "phase3_final_evidence_head_r02": "83a3d2a9a19592fdb32e08885310f79a0f936e68"
   },
   "frozen_hashes": {
     "phase2_progress_json": "bcfc0413457b00dd935ab5ba5cc11b35d4e3dd3e9c81edd54e429c599f8cc809",
@@ -966,25 +967,26 @@
       ]
     },
     "3.10": {
-      "status": "running",
+      "status": "complete",
       "tests": [
         "uv run python scripts/chat_scheduling_phase3_report.py final ... -> PASS: H10 corpus SHA matched audited revision-2 corpus and frozen shortlist selection was copied unchanged; r02 dated report generated.",
         "python3 /tmp/p36-manager/validate-3.10-amend.py -> PASS: all 6 shortlist-owned selection fields match, C300 is sole/preferred, H10/corpus hashes match, r01 evidence history is preserved, and scenario-catalog SHA recomputes exactly.",
         "uv run pytest -q tests/scripts/test_chat_scheduling_phase3_report.py -> PASS: 6 passed in 0.54s; pre-run nproc=4 loadavg=0.67 0.95 0.98 (timing under foreign parallel-programme load).",
         "bash /tmp/p36-manager/isolation-check.sh -> PASS at 2026-09-25T11:36:00+10:00: production master/origin-master 260bc009a55e7a78716ac42faf64ae88cf2c6724 clean; runtime config/unit/profile/service/budget-key/port baseline unchanged.",
-        "gh run view 36073531402 --repo grammy-jiang/binnacle --json databaseId,headSha,conclusion,status,event,workflowName -> PASS: completed CI on restacked Phase-3 tip 999c3c9271c30e6be1724b717cbf63fb9e801edf, conclusion success."
+        "gh run view 36073531402 --repo grammy-jiang/binnacle --json databaseId,headSha,conclusion,status,event,workflowName -> PASS: completed CI on restacked Phase-3 tip 999c3c9271c30e6be1724b717cbf63fb9e801edf, conclusion success.",
+        "gh run view 36083115418 --repo grammy-jiang/binnacle --json databaseId,headSha,conclusion,status,event,workflowName -> PASS: evidence commit CI completed with matching head SHA and conclusion success."
       ],
       "notes": [
-        "Run r02 is the Amendment A1 rerun of Step 3.10; the prior r01 Step-3.10 closeout remains preserved in run_history as superseded evidence.",
-        "Direct predecessor 3.9-amend is verified at canonical commit 02919486e8bb7da2e03c64ddd2ab6db698bd44a4.",
+        "Run r02 under Amendment A1 is complete. The prior r01 Step-3.10 closeout remains preserved in run_history as superseded evidence.",
+        "Evidence commit 83a3d2a9a19592fdb32e08885310f79a0f936e68 is validated by CI run 36083115418 with matching head SHA and conclusion success.",
         "H10 was already integrated/promoted and was not rerun: SHA-256 b769fb75cd4159bf2c12fd92e33c0df62b7dfee775dfb8fb2c5ea6cb5110621c, corpus SHA-256 4dd1e387c42d6fccd37d60795b00192144f3b4d93c57d9eb54ab527a72e8e94d, audit_status=pass, provisional=false.",
         "Final report revision r02 is dated 2026-09-25. live_candidates=[C300] and preferred_live_candidate=C300 exactly match the frozen shortlist; verdict LIVE_CANDIDATES_AVAILABLE and phase4_ready=true.",
         "Final r02 report SHA-256: JSON 54e46772ba0a1ee06b2c4d92cf5a55036e8bedd106466e25916ff6fab5c1aaae; Markdown c7b114dfdf7cce106c6f68f3e71896aece9c8220baec807b0e6df1d35cdde47a.",
         "The r01 revision-1 corpus and operational-journal audit failure are retained in r02 as historical diagnostics only; revision 2 remains the sole acceptance corpus.",
         "The original public-base freshness deviation is resolved by p3-restack and p3-restack-2. The second restack carried public master 260bc009 through refreshed base ea6cbff; Phase-2 tree equals public master tree 0efd7739 exactly; restacked Phase-3 tip 999c3c9 has CI run 36073531402 success.",
-        "This r02 handoff supersedes r01 closeout a272b62d1a7acf006cc268a88a341aaab276f17d and the unfinished stale 3.10-restack-closeout task. Evidence commit CI is still pending; Phase 4 must not start until the fixed two-commit closeout is complete."
+        "This r02 handoff supersedes r01 closeout a272b62d1a7acf006cc268a88a341aaab276f17d and the unfinished stale 3.10-restack-closeout task. The closeout commit contains attestation/progress changes only and does not alter substantive evidence."
       ],
-      "commit": null,
+      "commit": "83a3d2a9a19592fdb32e08885310f79a0f936e68",
       "worker_branch": null,
       "run": "r02",
       "amendment": "A1",
@@ -1083,7 +1085,7 @@
     "final_report_md": "benchmarks/chat-mode-scheduling-v2/phase3-policy-replay-2026-09-25-r02.md",
     "final_report_json_sha256": "54e46772ba0a1ee06b2c4d92cf5a55036e8bedd106466e25916ff6fab5c1aaae",
     "final_report_md_sha256": "c7b114dfdf7cce106c6f68f3e71896aece9c8220baec807b0e6df1d35cdde47a",
-    "phase3_source_head": "35e483b74fd82f608747ef8c26373d09e0534a6e",
+    "phase3_source_head": "83a3d2a9a19592fdb32e08885310f79a0f936e68",
     "replay_corpus_path": "benchmarks/chat-mode-scheduling-v2/phase3-replay-corpus.json",
     "replay_corpus_sha256": "4dd1e387c42d6fccd37d60795b00192144f3b4d93c57d9eb54ab527a72e8e94d",
     "candidate_shortlist_path": "benchmarks/chat-mode-scheduling-v2/phase3-candidate-shortlist.json",
@@ -1122,10 +1124,14 @@
       "supersedes_r01_closeout": "a272b62d1a7acf006cc268a88a341aaab276f17d",
       "supersedes_unfinished_task": "3.10-restack-closeout",
       "note": "The public coverage fix 260bc009 is represented in the refreshed stack by cherry-picked lower base ea6cbff; Phase-2 tree equality with public master is exact, so direct ancestry of the original public commit is not required."
-    }
+    },
+    "validated_evidence_commit": "83a3d2a9a19592fdb32e08885310f79a0f936e68",
+    "validated_ci_run_id": 36083115418,
+    "validated_ci_head_sha": "83a3d2a9a19592fdb32e08885310f79a0f936e68",
+    "validated_ci_conclusion": "success"
   },
   "created_at": "2026-09-25T00:51:02+10:00",
-  "updated_at": "2026-09-25T11:38:48+10:00",
+  "updated_at": "2026-09-25T11:43:18+10:00",
   "orchestrator_state_checkpoint_path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase3/checkpoints/orchestrator-state-initial.json",
   "ready_count": 1,
   "claimed_count": 0,
