@@ -6,7 +6,7 @@
   "worktree": "/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4",
   "source_branch": "feature/chat-mode-scheduling-v2-phase3",
   "audited_source_head": "3a4dfb1b248e4530fb09013976abb863c8e35eaf",
-  "last_completed_step": "4.4A",
+  "last_completed_step": "4.3A-fix",
   "next_step": "4.5 core pre-run M1/M2/M3",
   "dependency_audit": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase4-dependency-audit-2026-09-25-r01.json",
@@ -73,7 +73,7 @@
     "phase4_dependency_audit_head": "89a206d24185284de278df18fe77ac0e4eccbb01",
     "phase4_source_head": "06bc1649c4bad9449470366da971649bb7620020",
     "phase4_analyzer_path_head": "6073902ba1e72a946da0ea7d7e901e36f47f96a3",
-    "phase4_runtime_path_head": "2e7889f3552e5d9bb6c26a38c7aab444ebbe8b90",
+    "phase4_runtime_path_head": "22f9556017b630061f2fb03d2ac989c6970ffde2",
     "phase4_core_manifest_validation_head": "e0cb1ce6eead5b021fbe079edef70ec4276a0851"
   },
   "frozen_hashes": {
@@ -139,6 +139,12 @@
       "status": "ACCEPTED",
       "description": "Owner-approved run_command shadow runtime predictor deployment moved the public base 260bc009a55e7a78716ac42faf64ae88cf2c6724 -> eb25554 -> e8ece81d57dd2a478dd636d2b4f409519b845605. Changed production files are limited to docs/logging.md, docs/run-command-shadow-prediction-design-2026-09-25.md, src/binnacle/config.py, src/binnacle/logstats.py, src/binnacle/logstats_models.py, src/binnacle/logstats_predictions.py, src/binnacle/logstats_render.py, src/binnacle/run_command_prediction.py, src/binnacle/run_command_telemetry.py, src/binnacle/tools/run_command.py, tests/unit/core/test_logstats_predictions_edges.py, tests/unit/core/test_logstats_run_command.py, tests/unit/core/test_run_command_prediction.py, tests/unit/core/test_run_command_prediction_edges.py. None is part of the frozen Phase-4 experiment source 06bc1649c4bad9449470366da971649bb7620020, benchmark scripts, or lane topology.",
       "disposition": "Accepted without Phase-4 restack by orchestrator decision at 2026-09-25 20:50 because restacking would change the frozen experiment source with no measurement benefit. Phase-5 Step 5.0F will rebase the staging/release line onto then-current master. Production config baseline is now d24dadcc87e04096fdd960fc7d1543fca02ea53814b15ccd51fd9b1eb1153195; the blocking-wall budget key remains absent and the primary tunnel profile is unchanged."
+    },
+    {
+      "id": "D3",
+      "status": "RESOLVED",
+      "description": "Benchmark-infrastructure process-identity contract defect found at the first live harness micro-trial attempt: chat_scheduling_endpoints.py writes each server/manager/tunnel process_start_identity as {pid, start_time_ticks}, while resolve_phase4_endpoint compared only the legacy 'pid:start_time_ticks' string form. All nine attempted 4.5 micros failed before a chat opened; no trial was submitted and no canonical slot was created.",
+      "disposition": "resolve_phase4_endpoint now accepts the launcher's dict form by comparing pid and start_time_ticks and retains legacy string compatibility. Focused tests and direct read-only resolution against live A/B/C300/H endpoints pass. Frozen experiment source 06bc1649c4bad9449470366da971649bb7620020 is unchanged, running endpoints require no restart, and phase4_runtime_path_head advances 2e7889f3552e5d9bb6c26a38c7aab444ebbe8b90 -> 22f9556017b630061f2fb03d2ac989c6970ffde2. Failed pre-submit evidence remains at ~/.local/state/binnacle/chat-scheduling-v2/phase4/runs/failed-2104-identity/."
     }
   ],
   "steps": {
@@ -409,12 +415,23 @@
       "worker_branch": null
     },
     "4.3A-fix": {
-      "status": "running",
-      "tests": [],
-      "notes": [
-        "Repairing D3 launcher/harness process-start identity contract mismatch before any live trial submission."
+      "status": "complete",
+      "tests": [
+        "uv run pytest -q tests/scripts/test_chat_scheduling_analyzer_identity.py tests/scripts/test_chat_scheduling_endpoints.py tests/scripts/test_chat_scheduling_harness.py -> PASS: 57 passed in 1.56s; nproc=4; pre-run loadavg=0.51 0.98 1.01 under foreign parallel-programme load.",
+        "Direct resolve_phase4_endpoint read-only validation against live A/B/C300/H registry -> PASS 4/4; runtime registry SHA-256 f75ea33783def327f542832ded790e5f5650f11304e3f968fe0c7c6c39d3cf26; no chat opened and no trial submitted.",
+        "uv run pre-commit run --files scripts/chat_scheduling_runtime.py tests/scripts/test_chat_scheduling_analyzer_identity.py -> PASS after condensing the regression test to satisfy the 500-line module-size ratchet.",
+        "bash /tmp/p36-manager/isolation-check.sh -> PASS for production baseline e8ece81d57dd2a478dd636d2b4f409519b845605; config/unit/profile hashes unchanged and blocking-wall budget key absent."
       ],
-      "commit": null,
+      "notes": [
+        "Verified 4.2A a2 and 4.2B a2 completion packets and confirmed both worker commits are ancestors of canonical HEAD before mutation.",
+        "Launcher registry contract is authoritative dict identity per role: {pid, start_time_ticks}; resolver now validates that shape and continues to accept the legacy 'pid:ticks' form.",
+        "Regression coverage uses the launcher's real dict registry shape and independently rejects stale server, manager, and tunnel identities.",
+        "Frozen phase4_runtime_path_head advanced 2e7889f3552e5d9bb6c26a38c7aab444ebbe8b90 -> 22f9556017b630061f2fb03d2ac989c6970ffde2; phase4_source_head remains 06bc1649c4bad9449470366da971649bb7620020.",
+        "The existing A/B/C300/H processes were not restarted; direct resolver validation passed against their current registry identities.",
+        "No live trial was run by this task. The nine failed 4.5 micro attempts occurred before chat creation/submission and therefore created no canonical trial slots.",
+        "An unrelated listener on 127.0.0.1:8120 was present during the final isolation check; this task did not create, modify, or stop it."
+      ],
+      "commit": "22f9556017b630061f2fb03d2ac989c6970ffde2",
       "worker_branch": null
     }
   },

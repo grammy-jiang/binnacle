@@ -8,7 +8,7 @@ Worktree: `/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4`
 
 Audited source HEAD: `3a4dfb1b248e4530fb09013976abb863c8e35eaf`
 
-Last completed step: **4.4A**
+Last completed step: **4.3A-fix**
 
 Next step: **4.5 core pre-run M1/M2/M3**
 
@@ -36,7 +36,7 @@ Next step: **4.5 core pre-run M1/M2/M3**
 | 4.2C | complete | `6c473ce` |
 | 4.2D | not_started | — |
 | 4.3A | complete | — |
-| 4.3A-fix | running | — |
+| 4.3A-fix | complete | `22f9556` |
 | 4.3B | complete | — |
 | 4.4A | complete | — |
 | 4.5 | not_started | — |
@@ -107,6 +107,35 @@ Next step: **4.5 core pre-run M1/M2/M3**
 - The 4.2A packet's older runbook hash was investigated. Its difference is the
   downstream P4-A1 H/4.13 critical-path amendment, so it does not change 4.2A or
   4.3A semantics. There is no semantic Step-4.3A deviation.
+
+## Step 4.3A-fix process-identity contract repair — COMPLETE
+
+- Deviation D3 was found at the first live harness micro-trial attempt: the
+  launcher stores each server/manager/tunnel start identity as
+  `{"pid": N, "start_time_ticks": "T"}`, while the resolver accepted only
+  the legacy `"N:T"` form.
+- All nine attempted 4.5 micros failed before a chat opened. No trial was
+  submitted, no canonical slot was created, and the failed pre-submit evidence
+  remains under
+  `~/.local/state/binnacle/chat-scheduling-v2/phase4/runs/failed-2104-identity/`.
+- `resolve_phase4_endpoint` now validates the launcher's dict form by matching
+  both PID and start-time ticks while retaining string-form compatibility.
+- Focused regression matrix: **PASS**, 57 tests in 1.56 seconds; 4 CPUs; pre-run
+  load average 0.51 / 0.98 / 1.01 under foreign parallel-programme load. The
+  regression covers the real dict registry shape plus stale server, manager,
+  and tunnel identities.
+- Direct read-only resolution against live A/B/C300/H passed **4/4** using
+  runtime registry SHA-256
+  `f75ea33783def327f542832ded790e5f5650f11304e3f968fe0c7c6c39d3cf26`.
+  No chat was opened and no trial was submitted.
+- Frozen `phase4_runtime_path_head` advanced
+  `2e7889f3552e5d9bb6c26a38c7aab444ebbe8b90` -> `22f9556017b630061f2fb03d2ac989c6970ffde2`.
+  Frozen experiment source remains
+  `06bc1649c4bad9449470366da971649bb7620020`, so the healthy running
+  endpoints require no restart.
+- Production isolation remains intact at the accepted D2 baseline. An unrelated
+  listener on 127.0.0.1:8120 was observed but not created, modified, or stopped
+  by this task.
 
 ## Step 4.3B analyzer integration
 
