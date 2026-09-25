@@ -1,0 +1,296 @@
+{
+  "schema_version": 1,
+  "phase": 5,
+  "step": "5.0S",
+  "revision": "r01",
+  "audit_mode": "speculative",
+  "audited_at": "2026-09-25T18:57:37+10:00",
+  "audited_source_head": "9e165fd26bda57d938c24c78a826f66f2d5f0440",
+  "source_branch": "feature/chat-mode-scheduling-v2-phase4",
+  "approved_runtime_source_head": "06bc1649c4bad9449470366da971649bb7620020",
+  "selected_candidate": "C300",
+  "selected_budget_s": 300,
+  "previous_phase_progress": {
+    "path": "benchmarks/chat-mode-scheduling-v2/phase4-progress.json",
+    "sha256": "a122c4c782214021c2f22c314c72bef9374369ca9c1b0babc1a947da1fdf0c54",
+    "status": "PENDING_FINAL"
+  },
+  "previous_phase_report": {
+    "path": null,
+    "sha256": null,
+    "status": "PENDING"
+  },
+  "required_supporting_artifacts": [
+    {
+      "path": "benchmarks/chat-mode-scheduling-v2/phase3-progress.json",
+      "sha256": "984ba7891843a6eb3a15b750e95177d3a325f14280990f47be62527d44482bde"
+    },
+    {
+      "path": "benchmarks/chat-mode-scheduling-v2/phase3-policy-replay-2026-09-25-r02.json",
+      "sha256": "54e46772ba0a1ee06b2c4d92cf5a55036e8bedd106466e25916ff6fab5c1aaae"
+    },
+    {
+      "path": "benchmarks/chat-mode-scheduling-v2/phase3-policy-replay-2026-09-25-r02.md",
+      "sha256": "c7b114dfdf7cce106c6f68f3e71896aece9c8220baec807b0e6df1d35cdde47a"
+    },
+    {
+      "path": "benchmarks/chat-mode-scheduling-v2/phase3-candidate-shortlist.json",
+      "sha256": "072556e60fb55f686d872bce4da004bc272e9162e32459f2dc276657faa0e094"
+    },
+    {
+      "path": ".claude/skills/chatgpt-mcp-dev/references/project-instructions-chat-scheduling-v2.txt",
+      "sha256": "b7df6953a3c64bd245b3d5ff13b6f2667e940d5a154e650fec0b10e6a22cf094"
+    }
+  ],
+  "required_ci": {
+    "run_id": null,
+    "head_sha": null,
+    "conclusion": "PENDING"
+  },
+  "preflight_fanin": {
+    "findings": {
+      "p5s-preflight-lineage": {
+        "sha256": "ad2ea68f733a2a8502c5bb76dcc373bf3c294df5a0541bfa1be87e1f07b0971e",
+        "attempt_id": "a1",
+        "claim_id": "d30827149a25",
+        "status": "verified"
+      },
+      "p5s-preflight-production": {
+        "sha256": "0cb822f752d4e3373420b22bc3f17516cb307eb290815fde52486bfb807f1067",
+        "attempt_id": "a1",
+        "claim_id": "1fa80df4aa47",
+        "status": "verified"
+      },
+      "p5s-preflight-external": {
+        "sha256": "95264aafb8543e4575531eefea8ba9a18551c762c02d2b1cf48c6c7853fd6b5a",
+        "attempt_id": "a1",
+        "claim_id": "2a834103885e",
+        "status": "verified"
+      },
+      "p5s-preflight-runtime": {
+        "sha256": "5514f8c1b6909e2ae9c128cb62c6f1f6ee750e45f857368df4a33e9f80c956d9",
+        "attempt_id": "a1",
+        "claim_id": "40721aa2b0ce",
+        "status": "verified"
+      },
+      "p5s-preflight-tooling": {
+        "sha256": "22f21cb19f02833769f1e0be09408dffcf600cb81a893cc76bb3020a1f2344a5",
+        "attempt_id": "a1",
+        "claim_id": "e7554f98e332",
+        "status": "verified"
+      }
+    },
+    "bootstrap_state_path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase5/bootstrap-state.json",
+    "bootstrap_state_sha256": "8971e241f24c4198d94838aeeaf730a2063954edadb4a1d48911568a8abe0edb",
+    "bootstrap_reconciliation": "bootstrap-state is dispatcher-owned and still records the matching claims; the assignment packet marks those exact task/attempt/claim ids verified, and all five findings have no blockers. No bootstrap-state mutation was performed."
+  },
+  "rows": {
+    "phase4_progress": {
+      "status": "PENDING",
+      "evidence": {
+        "snapshot_head": "9e165fd26bda57d938c24c78a826f66f2d5f0440",
+        "progress_sha256": "a122c4c782214021c2f22c314c72bef9374369ca9c1b0babc1a947da1fdf0c54",
+        "progress_status": "in_progress",
+        "last_completed_step": "4.3A"
+      },
+      "notes": "Expected under P5-A1; 5.0F re-verifies the final Phase-4 progress."
+    },
+    "phase4_final_report": {
+      "status": "PENDING",
+      "evidence": {},
+      "notes": "Phase-4 handoff is not yet available; 5.0F must freeze and hash it."
+    },
+    "verdict_GO_PHASE5": {
+      "status": "PENDING",
+      "evidence": {},
+      "notes": "Phase 4 has not reached Step 4.12."
+    },
+    "selected_budget": {
+      "status": "PASS",
+      "evidence": {
+        "phase3_live_candidates": [
+          "C300"
+        ],
+        "selected_candidate": "C300",
+        "selected_budget_s": 300,
+        "phase3_handoff_head": "3a4dfb1b248e4530fb09013976abb863c8e35eaf"
+      },
+      "notes": "Speculative selection follows the Phase-3 sole live candidate exactly."
+    },
+    "all_acceptance_gates": {
+      "status": "PENDING",
+      "evidence": {},
+      "notes": "Requires final Phase-4 gate matrix and verdict."
+    },
+    "phase4_ci": {
+      "status": "PENDING",
+      "evidence": {},
+      "notes": "Requires Phase-4 evidence and closeout CI attestation."
+    },
+    "benchmark_cleanup": {
+      "status": "PENDING",
+      "evidence": {
+        "currently_expected_phase4_listeners": [
+          8110,
+          8111,
+          8113,
+          8115
+        ],
+        "staging_port_8120_free": true
+      },
+      "notes": "Phase-4 endpoints are still active by design; 5.0F must verify cleanup."
+    },
+    "owner_approval": {
+      "status": "PENDING",
+      "evidence": {
+        "speculative_preparation_approved_at": "2026-09-25T17:55:00+10:00"
+      },
+      "notes": "Speculative preparation is approved; explicit post-GO progression approval remains required."
+    },
+    "project_instruction_snapshots": {
+      "status": "PASS",
+      "evidence": {
+        "Binnacle": {
+          "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase5/preflight/snapshots/Binnacle.instructions.txt",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "mode": "0600"
+        },
+        "Raspberry Pi 5": {
+          "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase5/preflight/snapshots/Raspberry-Pi-5.instructions.txt",
+          "sha256": "0a5c27fac185f7ebbe609aecceee55863a7bdca13d04250810f3bf22595c7db9",
+          "mode": "0600"
+        }
+      },
+      "notes": "Exact current instruction snapshots are private and hash-verified."
+    },
+    "staging_topology_ready": {
+      "status": "PASS",
+      "evidence": {
+        "serve_port": 8120,
+        "port_free": true,
+        "runtime_worktree_absent": true,
+        "config_absent": true,
+        "staging_units_absent": true,
+        "approved_runtime_source_head": "06bc1649c4bad9449470366da971649bb7620020",
+        "uv_lock_sha256": "1139d2c5c17a3f6c6b8301bdbbc904ccf307e921fe070530d0d0aa221aef6278"
+      },
+      "notes": "Only the coordination worktree created by 5.0S now exists; all later staging runtime/config/service identities remain free."
+    },
+    "project_connector_attachment_ready": {
+      "status": "PASS",
+      "evidence": {
+        "account_model": "account-level custom MCP app plus connected link",
+        "staging_connector_name": "Raspberry Pi MCP Scheduling Staging",
+        "staging_connector_present": false,
+        "control_plane_authenticated": true,
+        "per_send_system_hint_supported": true,
+        "owner_ui_action_required": false
+      },
+      "notes": "Provisioning and explicit per-send routing are scriptable without modifying the primary connector."
+    },
+    "project_connector_routing": {
+      "status": "PENDING_OWNER_CONFIRMATION",
+      "evidence": {
+        "persistent_project_app_pinning_verified": false,
+        "existing_helper_patch_fields": [
+          "apps_privacy_control"
+        ],
+        "disable_auto_invocation_supported_by_existing_helper": false,
+        "proposal": [
+          "Provision a distinct account-level staging app/link and retain its exact app/link ids.",
+          "Use the staging app system hint for orchestrated rollout verification chats.",
+          "Before 5.2, owner confirms a Project-scoped routing convention that names the staging connector while preserving the canonical scheduling block.",
+          "If the link PATCH schema is verified to accept disable_auto_invocation, set it true on the staging link; current connect_connector.py does not expose or verify that field.",
+          "5.0F records the confirmed mechanism and blocks 5.2 if routing containment is unresolved."
+        ]
+      },
+      "notes": "No persistent per-Project connector pinning exists in the observed control plane. This is not a 5.1 preparation blocker, but must be resolved before 5.2."
+    },
+    "rollback_ready": {
+      "status": "PASS",
+      "evidence": {
+        "instruction_snapshots": true,
+        "connector_delete_script": true,
+        "tunnel_teardown_script": true,
+        "speculative_discard_rule": "P5-A1"
+      },
+      "notes": "Rollback inputs exist before any rollout-Project mutation."
+    },
+    "production_isolation": {
+      "status": "PASS",
+      "evidence": {
+        "observed_at": "2026-09-25T18:52:08+10:00",
+        "production_head": "260bc009a55e7a78716ac42faf64ae88cf2c6724",
+        "config_sha256": "9564cec6b4e994287b2136d4f63db9bac4a2d5fe02425c0eb76863354c88fd5d",
+        "unit_sha256": {
+          "binnacle-mcp.service": "d7b8475f8e3fec783552c3676210622181e8563a85f3918938c912f321fe0759",
+          "binnacle-jobs.service": "afcaff05eb85821812081167f84cf1b8c7712e2f66a8e85e94e72a1ce09f01ae",
+          "binnacle-tunnel.service": "1b9572d46cc52ce056958eb23a2fba69dec6fd47eb7a70bc2668c3cd88609475",
+          "binnacle-watchdog.service": "db915157b3d4bfcddb644784248919ea3e91f6adf3114666d98e7d7803903cf0"
+        },
+        "primary_tunnel_profile_sha256": "c8e2a608779109854e6d3aae921a2cb1fbbe1b6511f1630990899052a6b74ecb",
+        "blocking_wall_budget_key_present": false
+      },
+      "notes": "Production checkout/config/unit/profile identities remain unchanged."
+    },
+    "runtime_source_drift": {
+      "status": "PASS",
+      "evidence": {
+        "approved_runtime_source_head": "06bc1649c4bad9449470366da971649bb7620020",
+        "phase4_speculative_base": "9e165fd26bda57d938c24c78a826f66f2d5f0440",
+        "checked_paths": [
+          "src",
+          "pyproject.toml",
+          "uv.lock"
+        ],
+        "diff_stat": ""
+      },
+      "notes": "No runtime/dependency drift from the approved speculative runtime source to the staging branch base."
+    },
+    "test_tooling": {
+      "status": "PASS",
+      "evidence": {
+        "run_test_suite_sha256": "9020b340a0fbbafd645658f0efd09d06c68b1e366815ffaba926e626bb819106",
+        "tox_ini_sha256": "244323e4443a5f645de6e1700530d5ec737a4e971496e9c561e1ed561679dd0e",
+        "pyproject_sha256": "9be34cce308e5abeafd018b2b1c1348c32db15283395f301846a0c5e4dc5f4c8",
+        "uv_lock_sha256": "1139d2c5c17a3f6c6b8301bdbbc904ccf307e921fe070530d0d0aa221aef6278"
+      },
+      "notes": "Pinned test/runtime tooling is available at the approved source."
+    }
+  },
+  "pending_rows": [
+    "phase4_progress",
+    "phase4_final_report",
+    "verdict_GO_PHASE5",
+    "all_acceptance_gates",
+    "phase4_ci",
+    "benchmark_cleanup",
+    "owner_approval",
+    "project_connector_routing"
+  ],
+  "external_prerequisites": {
+    "staging_control_plane": "PASS",
+    "instruction_snapshots": "PASS",
+    "production_isolation": "PASS",
+    "project_connector_routing": "PENDING_OWNER_CONFIRMATION"
+  },
+  "production_observation_baseline": {
+    "observed_at": "2026-09-25T18:52:08+10:00",
+    "production_head": "260bc009a55e7a78716ac42faf64ae88cf2c6724",
+    "config_sha256": "9564cec6b4e994287b2136d4f63db9bac4a2d5fe02425c0eb76863354c88fd5d",
+    "unit_sha256": {
+      "binnacle-mcp.service": "d7b8475f8e3fec783552c3676210622181e8563a85f3918938c912f321fe0759",
+      "binnacle-jobs.service": "afcaff05eb85821812081167f84cf1b8c7712e2f66a8e85e94e72a1ce09f01ae",
+      "binnacle-tunnel.service": "1b9572d46cc52ce056958eb23a2fba69dec6fd47eb7a70bc2668c3cd88609475",
+      "binnacle-watchdog.service": "db915157b3d4bfcddb644784248919ea3e91f6adf3114666d98e7d7803903cf0"
+    },
+    "primary_tunnel_profile_sha256": "c8e2a608779109854e6d3aae921a2cb1fbbe1b6511f1630990899052a6b74ecb",
+    "blocking_wall_budget_key_present": false
+  },
+  "overall_status": "PASS",
+  "speculative_status": "PASS_WITH_PENDING_FINAL_GATE",
+  "preparation_allowed_through": "5.1E",
+  "deployment_allowed": false,
+  "final_audit_required": "5.0F before 5.2",
+  "blockers": []
+}

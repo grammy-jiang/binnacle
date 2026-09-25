@@ -1,0 +1,297 @@
+{
+  "schema_version": 1,
+  "phase": 5,
+  "status": "in_progress",
+  "branch": "release/chat-mode-scheduling-v2-staging",
+  "worktree": "/home/grammy-jiang/Projects/binnacle-chat-scheduling-staging",
+  "source_branch": "feature/chat-mode-scheduling-v2-phase4",
+  "audited_source_head": "9e165fd26bda57d938c24c78a826f66f2d5f0440",
+  "last_completed_step": "5.0S",
+  "next_step": "5.1A/5.1B/5.1C0/5.1C1/5.1C2 speculative preparation frontier",
+  "dependency_audit": {
+    "path": "benchmarks/chat-mode-scheduling-v2/phase5-dependency-audit-2026-09-25-r01.json",
+    "revision": "r01",
+    "sha256": "e27269fba4b0d95a8ae84c0bd85ed71057a381ee27e89f90ce4d916a215f538a"
+  },
+  "task_graph_path": "benchmarks/chat-mode-scheduling-v2/phase5-task-graph.json",
+  "task_graph_revision": "r01",
+  "task_graph_sha256": "777a7953c9c46665fb1cd9aa932c4bd1b2f7fe941ac212223d322f34566892eb",
+  "orchestrator_state_path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase5/orchestrator-state.json",
+  "orchestrator_state_checkpoint_sha256": "26fe1b263d77cc9400fbbfff87e239e240756a02aed70ce44fc1a99680f662aa",
+  "orchestrator_state_checkpoint_at": "2026-09-25T19:01:23+10:00",
+  "test_commands": {
+    "fast_full_suite": "uv run python scripts/run_test_suite.py --workers 4 --seed 12345",
+    "coverage_policy": "uv run tox -e coverage-policy -- --seed 12345",
+    "predeployment_focused": "uv run pytest -q tests/scripts/test_chat_scheduling_operational.py tests/scripts/test_chat_scheduling_project_instructions.py"
+  },
+  "production_baseline": {
+    "observed_at": "2026-09-25T18:52:08+10:00",
+    "path": "/home/grammy-jiang/Projects/binnacle",
+    "branch": "master",
+    "head": "260bc009a55e7a78716ac42faf64ae88cf2c6724",
+    "clean": true,
+    "services": {
+      "binnacle-mcp.service": "active/running",
+      "binnacle-jobs.service": "active/running",
+      "binnacle-tunnel.service": "active/running",
+      "binnacle-watchdog.service": "active/running"
+    },
+    "config_sha256": "9564cec6b4e994287b2136d4f63db9bac4a2d5fe02425c0eb76863354c88fd5d",
+    "unit_file_hashes": {
+      "binnacle-mcp.service": "d7b8475f8e3fec783552c3676210622181e8563a85f3918938c912f321fe0759",
+      "binnacle-jobs.service": "afcaff05eb85821812081167f84cf1b8c7712e2f66a8e85e94e72a1ce09f01ae",
+      "binnacle-tunnel.service": "1b9572d46cc52ce056958eb23a2fba69dec6fd47eb7a70bc2668c3cd88609475",
+      "binnacle-watchdog.service": "db915157b3d4bfcddb644784248919ea3e91f6adf3114666d98e7d7803903cf0"
+    },
+    "primary_tunnel_profile_sha256": "c8e2a608779109854e6d3aae921a2cb1fbbe1b6511f1630990899052a6b74ecb",
+    "blocking_wall_budget_key_present": false,
+    "observed_phase4_benchmark_listeners": [
+      8110,
+      8111,
+      8113,
+      8115
+    ],
+    "staging_port_8120_free": true
+  },
+  "speculative": true,
+  "selected_candidate": "C300",
+  "selected_budget_s": 300,
+  "approved_runtime_source_head": "06bc1649c4bad9449470366da971649bb7620020",
+  "final_audit_required_before": "5.2",
+  "frozen_heads": {
+    "phase3_handoff": "3a4dfb1b248e4530fb09013976abb863c8e35eaf",
+    "phase4_speculative_base": "9e165fd26bda57d938c24c78a826f66f2d5f0440",
+    "approved_runtime_source_head": "06bc1649c4bad9449470366da971649bb7620020"
+  },
+  "frozen_hashes": {
+    "phase4_progress_speculative_snapshot": "a122c4c782214021c2f22c314c72bef9374369ca9c1b0babc1a947da1fdf0c54",
+    "phase3_progress_json": "984ba7891843a6eb3a15b750e95177d3a325f14280990f47be62527d44482bde",
+    "phase3_final_report_json": "54e46772ba0a1ee06b2c4d92cf5a55036e8bedd106466e25916ff6fab5c1aaae",
+    "phase3_final_report_md": "c7b114dfdf7cce106c6f68f3e71896aece9c8220baec807b0e6df1d35cdde47a",
+    "phase3_candidate_shortlist_json": "072556e60fb55f686d872bce4da004bc272e9162e32459f2dc276657faa0e094",
+    "canonical_v2_instruction": "b7df6953a3c64bd245b3d5ff13b6f2667e940d5a154e650fec0b10e6a22cf094",
+    "uv_lock": "1139d2c5c17a3f6c6b8301bdbbc904ccf307e921fe070530d0d0aa221aef6278",
+    "pyproject": "9be34cce308e5abeafd018b2b1c1348c32db15283395f301846a0c5e4dc5f4c8",
+    "bootstrap_state": "8971e241f24c4198d94838aeeaf730a2063954edadb4a1d48911568a8abe0edb",
+    "dependency_audit_json": "e27269fba4b0d95a8ae84c0bd85ed71057a381ee27e89f90ce4d916a215f538a",
+    "dependency_audit_md": "f886bb83551e82fd59e2019357a9f55cfd6f157b3a79637c011ab94429591257",
+    "task_graph": "777a7953c9c46665fb1cd9aa932c4bd1b2f7fe941ac212223d322f34566892eb",
+    "orchestrator_state_initial_checkpoint": "26fe1b263d77cc9400fbbfff87e239e240756a02aed70ce44fc1a99680f662aa"
+  },
+  "preflight_findings": {
+    "p5s-preflight-lineage": "ad2ea68f733a2a8502c5bb76dcc373bf3c294df5a0541bfa1be87e1f07b0971e",
+    "p5s-preflight-production": "0cb822f752d4e3373420b22bc3f17516cb307eb290815fde52486bfb807f1067",
+    "p5s-preflight-external": "95264aafb8543e4575531eefea8ba9a18551c762c02d2b1cf48c6c7853fd6b5a",
+    "p5s-preflight-runtime": "5514f8c1b6909e2ae9c128cb62c6f1f6ee750e45f857368df4a33e9f80c956d9",
+    "p5s-preflight-tooling": "22f21cb19f02833769f1e0be09408dffcf600cb81a893cc76bb3020a1f2344a5"
+  },
+  "steps": {
+    "5.0S": {
+      "status": "complete",
+      "tests": [
+        "phase5-task-graph.json mechanical validator -> PASS 9/9 plus speculative audit contract PASS",
+        "python3 -m json.tool phase5-task-graph.json phase5-dependency-audit-2026-09-25-r01.json phase5-progress.json -> PASS",
+        "fresh Phase-4 lineage/runtime diff -> PASS: canonical/origin HEAD 9e165fd; 06bc164..HEAD diff empty for src, pyproject.toml, uv.lock",
+        "fresh production isolation -> PASS: production HEAD/config/unit/profile hashes unchanged; staging port 8120 free",
+        "uv run pre-commit run --files phase5 progress/audit/task-graph artifacts -> PASS; nproc=4; pre-run loadavg=0.67 0.66 0.85"
+      ],
+      "notes": [
+        "Formal speculative dependency audit r01 is PASS for preparation through 5.1E only; 5.0F remains mandatory before 5.2.",
+        "P5-A1 rows phase4_progress, phase4_final_report, verdict_GO_PHASE5, all_acceptance_gates, phase4_ci, benchmark_cleanup and owner_approval remain PENDING.",
+        "project_connector_routing is PENDING_OWNER_CONFIRMATION: observed connectors are account-level app+link; no persistent per-Project app pinning is exposed/verified.",
+        "The proposed routing containment is recorded in the audit; current connect_connector.py patches apps_privacy_control but does not expose/verify disable_auto_invocation.",
+        "Manager-owned bootstrap-state.json remained unchanged. Its stale claimed states were reconciled against the assignment packet verified statuses and matching no-blocker findings.",
+        "The canonical Phase-4 branch advanced during preflight; the staging branch was created only after a fresh origin/local reconciliation at 9e165fd.",
+        "No Project, connector, service, Phase-4 benchmark resource, primary config/profile, or production checkout was mutated."
+      ],
+      "commit": null,
+      "worker_branch": null
+    },
+    "5.0F": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "5.1A": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": "feature/chat-mode-scheduling-v2-phase5-operational"
+    },
+    "5.1B": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": "feature/chat-mode-scheduling-v2-phase5-instructions"
+    },
+    "5.1C0": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "5.1C1": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "5.1C2": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "5.1C3": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "5.1C4": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "5.1D": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "5.1E": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "5.2": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "5.3": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "5.4": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "5A": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "5.5@24": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "5E48": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "5.5@48": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "5E72": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "5.5@72": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "5.6A": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "5.6B": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "5.7": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    }
+  },
+  "checkpoints": [
+    {
+      "kind": "initial_orchestrator_state",
+      "at": "2026-09-25T19:01:23+10:00",
+      "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase5/checkpoints/orchestrator-state-initial-r01.json",
+      "sha256": "26fe1b263d77cc9400fbbfff87e239e240756a02aed70ce44fc1a99680f662aa",
+      "ready_task_ids": [
+        "5.1A",
+        "5.1B",
+        "5.1C0",
+        "5.1C1",
+        "5.1C2"
+      ],
+      "ready_count": 5,
+      "blocked_count": 17,
+      "complete_count": 1
+    }
+  ],
+  "handoff": null,
+  "task_graph_mode": "speculative",
+  "orchestrator_state_checkpoint_path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase5/checkpoints/orchestrator-state-initial-r01.json",
+  "ready_count": 5,
+  "claimed_count": 0,
+  "running_count": 0,
+  "blocked_count": 17,
+  "running_task_ids_at_checkpoint": [],
+  "completed_task_count": 1,
+  "completed_worker_commits_since_checkpoint": {},
+  "blocked_task_summary": {
+    "count": 17,
+    "reason": "direct predecessors, conditional verdicts, wall-clock gates, or the mandatory 5.0F final audit remain unsatisfied"
+  }
+}

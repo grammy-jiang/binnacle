@@ -1,0 +1,760 @@
+{
+  "schema_version": 1,
+  "phase": 5,
+  "source_head": "9e165fd26bda57d938c24c78a826f66f2d5f0440",
+  "audited_source_head": "9e165fd26bda57d938c24c78a826f66f2d5f0440",
+  "approved_runtime_source_head": "06bc1649c4bad9449470366da971649bb7620020",
+  "revision": "r01",
+  "mode": "speculative",
+  "amendment": "P5-A1",
+  "static_tasks": [
+    {
+      "task_id": "5.0S",
+      "task_kind": "orchestrator_gate",
+      "predecessor_ids": [],
+      "required_input_artifacts": [
+        {
+          "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase5/preflight/p5s-preflight-lineage.json",
+          "sha256": "ad2ea68f733a2a8502c5bb76dcc373bf3c294df5a0541bfa1be87e1f07b0971e"
+        },
+        {
+          "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase5/preflight/p5s-preflight-production.json",
+          "sha256": "0cb822f752d4e3373420b22bc3f17516cb307eb290815fde52486bfb807f1067"
+        },
+        {
+          "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase5/preflight/p5s-preflight-external.json",
+          "sha256": "95264aafb8543e4575531eefea8ba9a18551c762c02d2b1cf48c6c7853fd6b5a"
+        },
+        {
+          "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase5/preflight/p5s-preflight-runtime.json",
+          "sha256": "5514f8c1b6909e2ae9c128cb62c6f1f6ee750e45f857368df4a33e9f80c956d9"
+        },
+        {
+          "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase5/preflight/p5s-preflight-tooling.json",
+          "sha256": "22f21cb19f02833769f1e0be09408dffcf600cb81a893cc76bb3020a1f2344a5"
+        },
+        {
+          "path": "benchmarks/chat-mode-scheduling-v2/phase4-progress.json",
+          "sha256": "a122c4c782214021c2f22c314c72bef9374369ca9c1b0babc1a947da1fdf0c54"
+        },
+        {
+          "path": "benchmarks/chat-mode-scheduling-v2/phase3-candidate-shortlist.json",
+          "sha256": "072556e60fb55f686d872bce4da004bc272e9162e32459f2dc276657faa0e094"
+        }
+      ],
+      "resource_locks": [
+        "p5-canonical-integration",
+        "p5-canonical-progress"
+      ],
+      "expected_output_paths": [
+        "benchmarks/chat-mode-scheduling-v2/phase5-dependency-audit-2026-09-25-r01.json",
+        "benchmarks/chat-mode-scheduling-v2/phase5-dependency-audit-2026-09-25-r01.md",
+        "benchmarks/chat-mode-scheduling-v2/phase5-task-graph.json",
+        "benchmarks/chat-mode-scheduling-v2/phase5-progress.json",
+        "benchmarks/chat-mode-scheduling-v2/phase5-progress.md"
+      ],
+      "side_effect_class": "canonical_git_write",
+      "external_gates": [
+        "owner_approved_P5-A1_speculative_preparation"
+      ],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "critical"
+    },
+    {
+      "task_id": "5.1A",
+      "task_kind": "worker_implementation",
+      "predecessor_ids": [
+        "5.0S"
+      ],
+      "required_input_artifacts": [
+        {
+          "path": "benchmarks/chat-mode-scheduling-v2/phase5-dependency-audit-2026-09-25-r01.json",
+          "sha256": "e27269fba4b0d95a8ae84c0bd85ed71057a381ee27e89f90ce4d916a215f538a"
+        }
+      ],
+      "resource_locks": [
+        "git-write:feature/chat-mode-scheduling-v2-phase5-operational"
+      ],
+      "expected_output_paths": [
+        "scripts/chat_scheduling_operational.py",
+        "tests/scripts/test_chat_scheduling_operational.py"
+      ],
+      "side_effect_class": "worker_git_write",
+      "external_gates": [],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "critical"
+    },
+    {
+      "task_id": "5.1B",
+      "task_kind": "worker_implementation",
+      "predecessor_ids": [
+        "5.0S"
+      ],
+      "required_input_artifacts": [
+        {
+          "path": "benchmarks/chat-mode-scheduling-v2/phase5-dependency-audit-2026-09-25-r01.json",
+          "sha256": "e27269fba4b0d95a8ae84c0bd85ed71057a381ee27e89f90ce4d916a215f538a"
+        },
+        {
+          "path": ".claude/skills/chatgpt-mcp-dev/references/project-instructions-chat-scheduling-v2.txt",
+          "sha256": "b7df6953a3c64bd245b3d5ff13b6f2667e940d5a154e650fec0b10e6a22cf094"
+        }
+      ],
+      "resource_locks": [
+        "git-write:feature/chat-mode-scheduling-v2-phase5-instructions"
+      ],
+      "expected_output_paths": [
+        "scripts/chat_scheduling_project_instructions.py",
+        "tests/scripts/test_chat_scheduling_project_instructions.py"
+      ],
+      "side_effect_class": "worker_git_write",
+      "external_gates": [],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "critical"
+    },
+    {
+      "task_id": "5.1C0",
+      "task_kind": "staging_identity_seed",
+      "predecessor_ids": [
+        "5.0S"
+      ],
+      "required_input_artifacts": [
+        {
+          "path": "benchmarks/chat-mode-scheduling-v2/phase5-dependency-audit-2026-09-25-r01.json",
+          "sha256": "e27269fba4b0d95a8ae84c0bd85ed71057a381ee27e89f90ce4d916a215f538a"
+        }
+      ],
+      "resource_locks": [
+        "staging-token",
+        "staging-resource-identity"
+      ],
+      "expected_output_paths": [
+        "/home/grammy-jiang/.config/binnacle-scheduling-staging/token"
+      ],
+      "side_effect_class": "external_mutation",
+      "external_gates": [],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "critical"
+    },
+    {
+      "task_id": "5.1C1",
+      "task_kind": "staging_runtime_prepare",
+      "predecessor_ids": [
+        "5.0S"
+      ],
+      "required_input_artifacts": [
+        {
+          "path": "benchmarks/chat-mode-scheduling-v2/phase5-dependency-audit-2026-09-25-r01.json",
+          "sha256": "e27269fba4b0d95a8ae84c0bd85ed71057a381ee27e89f90ce4d916a215f538a"
+        },
+        {
+          "path": "uv.lock",
+          "sha256": "1139d2c5c17a3f6c6b8301bdbbc904ccf307e921fe070530d0d0aa221aef6278"
+        }
+      ],
+      "resource_locks": [
+        "staging-runtime-worktree",
+        "dependency-environment"
+      ],
+      "expected_output_paths": [
+        "/home/grammy-jiang/Projects/binnacle-chat-scheduling-staging-runtime"
+      ],
+      "side_effect_class": "external_mutation",
+      "external_gates": [
+        "phase4_live_host_mode_idle_for_uv_sync"
+      ],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "critical"
+    },
+    {
+      "task_id": "5.1C2",
+      "task_kind": "staging_config_render",
+      "predecessor_ids": [
+        "5.0S"
+      ],
+      "required_input_artifacts": [
+        {
+          "path": "benchmarks/chat-mode-scheduling-v2/phase5-dependency-audit-2026-09-25-r01.json",
+          "sha256": "e27269fba4b0d95a8ae84c0bd85ed71057a381ee27e89f90ce4d916a215f538a"
+        }
+      ],
+      "resource_locks": [
+        "staging-config",
+        "staging-systemd-unit-files"
+      ],
+      "expected_output_paths": [
+        "/home/grammy-jiang/.config/binnacle-scheduling-staging/config.toml",
+        "/home/grammy-jiang/.config/systemd/user/binnacle-scheduling-staging-jobs.service",
+        "/home/grammy-jiang/.config/systemd/user/binnacle-scheduling-staging.service"
+      ],
+      "side_effect_class": "external_mutation",
+      "external_gates": [],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "critical"
+    },
+    {
+      "task_id": "5.1C3",
+      "task_kind": "staging_tunnel_prepare",
+      "predecessor_ids": [
+        "5.1C0"
+      ],
+      "required_input_artifacts": [
+        {
+          "path": "benchmarks/chat-mode-scheduling-v2/phase5-dependency-audit-2026-09-25-r01.json",
+          "sha256": "e27269fba4b0d95a8ae84c0bd85ed71057a381ee27e89f90ce4d916a215f538a"
+        }
+      ],
+      "resource_locks": [
+        "staging-tunnel-profile",
+        "tunnel-control-plane"
+      ],
+      "expected_output_paths": [
+        "/home/grammy-jiang/.config/tunnel-client/binnacle-scheduling-staging.yaml",
+        "/home/grammy-jiang/.config/tunnel-client/binnacle-scheduling-staging-tunnel.env",
+        "/home/grammy-jiang/.config/systemd/user/binnacle-scheduling-staging-tunnel.service",
+        "/home/grammy-jiang/.local/state/tunnel-client/health/binnacle-scheduling-staging.url"
+      ],
+      "side_effect_class": "external_mutation",
+      "external_gates": [
+        "authenticated_tunnel_control_plane"
+      ],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "critical"
+    },
+    {
+      "task_id": "5.1C4",
+      "task_kind": "staging_stack_start",
+      "predecessor_ids": [
+        "5.1C0",
+        "5.1C1",
+        "5.1C2",
+        "5.1C3"
+      ],
+      "required_input_artifacts": [
+        {
+          "path": "benchmarks/chat-mode-scheduling-v2/phase5-dependency-audit-2026-09-25-r01.json",
+          "sha256": "e27269fba4b0d95a8ae84c0bd85ed71057a381ee27e89f90ce4d916a215f538a"
+        }
+      ],
+      "resource_locks": [
+        "staging-jobs-service",
+        "staging-server-service",
+        "staging-tunnel-service"
+      ],
+      "expected_output_paths": [],
+      "side_effect_class": "external_mutation",
+      "external_gates": [
+        "phase4_live_host_mode_idle",
+        "primary_isolation_recheck"
+      ],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "critical",
+      "fan_in": {
+        "type": "all_of",
+        "requires": [
+          "5.1C0 identity/token",
+          "5.1C1 pinned runtime",
+          "5.1C2 config/units",
+          "5.1C3 tunnel/control plane"
+        ]
+      }
+    },
+    {
+      "task_id": "5.1D",
+      "task_kind": "rollback_rehearsal",
+      "predecessor_ids": [
+        "5.1B",
+        "5.1C4"
+      ],
+      "required_input_artifacts": [
+        {
+          "path": "benchmarks/chat-mode-scheduling-v2/phase5-dependency-audit-2026-09-25-r01.json",
+          "sha256": "e27269fba4b0d95a8ae84c0bd85ed71057a381ee27e89f90ce4d916a215f538a"
+        }
+      ],
+      "resource_locks": [
+        "p5-canonical-integration",
+        "project-mutate:rp-sched-staging-rehearsal",
+        "staging-connector-budget"
+      ],
+      "expected_output_paths": [],
+      "side_effect_class": "external_mutation",
+      "external_gates": [
+        "phase4_live_host_mode_idle",
+        "throwaway_rehearsal_project_only"
+      ],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "critical",
+      "fan_in": {
+        "type": "all_of",
+        "requires": [
+          "5.1B instruction helper PASS",
+          "5.1C4 staging stack PASS"
+        ]
+      }
+    },
+    {
+      "task_id": "5.1E",
+      "task_kind": "orchestrator_integration",
+      "predecessor_ids": [
+        "5.1A",
+        "5.1D"
+      ],
+      "required_input_artifacts": [
+        {
+          "path": "benchmarks/chat-mode-scheduling-v2/phase5-dependency-audit-2026-09-25-r01.json",
+          "sha256": "e27269fba4b0d95a8ae84c0bd85ed71057a381ee27e89f90ce4d916a215f538a"
+        }
+      ],
+      "resource_locks": [
+        "p5-canonical-integration",
+        "p5-canonical-progress"
+      ],
+      "expected_output_paths": [],
+      "side_effect_class": "canonical_git_write",
+      "external_gates": [],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "critical",
+      "fan_in": {
+        "type": "all_of",
+        "requires": [
+          "5.1A operational tooling commit/test PASS",
+          "5.1D rollback rehearsal/release freeze PASS",
+          "5.1B helper integrated"
+        ]
+      }
+    },
+    {
+      "task_id": "5.0F",
+      "task_kind": "orchestrator_final_gate",
+      "predecessor_ids": [
+        "5.1E"
+      ],
+      "required_input_artifacts": [
+        {
+          "path": "benchmarks/chat-mode-scheduling-v2/phase5-dependency-audit-2026-09-25-r01.json",
+          "sha256": "e27269fba4b0d95a8ae84c0bd85ed71057a381ee27e89f90ce4d916a215f538a"
+        }
+      ],
+      "resource_locks": [
+        "p5-canonical-integration",
+        "p5-canonical-progress"
+      ],
+      "expected_output_paths": [
+        "benchmarks/chat-mode-scheduling-v2/phase5-dependency-audit-YYYY-MM-DD-r02.json",
+        "benchmarks/chat-mode-scheduling-v2/phase5-dependency-audit-YYYY-MM-DD-r02.md"
+      ],
+      "side_effect_class": "canonical_git_write",
+      "external_gates": [
+        "phase4_progress_complete",
+        "phase4_final_report_frozen",
+        "verdict_GO_PHASE5",
+        "all_acceptance_gates_PASS",
+        "phase4_ci_green",
+        "benchmark_cleanup_complete",
+        "explicit_owner_approval_after_GO_PHASE5",
+        "project_connector_routing_owner_confirmed"
+      ],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "critical",
+      "fan_in": {
+        "type": "all_of",
+        "requires": [
+          "5.1E pre-deployment preparation PASS",
+          "all P5-A1 pending rows resolved",
+          "runtime drift recheck PASS",
+          "5.1C4/5.1D/5.1E hashes reverified"
+        ]
+      }
+    },
+    {
+      "task_id": "5.2",
+      "task_kind": "stage1_project_cutover",
+      "predecessor_ids": [
+        "5.0F"
+      ],
+      "required_input_artifacts": [],
+      "resource_locks": [
+        "p5-canonical-progress",
+        "project-mutate:Binnacle",
+        "connector-route:Binnacle"
+      ],
+      "expected_output_paths": [],
+      "side_effect_class": "external_mutation",
+      "external_gates": [
+        "final_audit_PASS",
+        "staging_stack_healthy",
+        "quiet_point_no_required_active_staging_job"
+      ],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "critical"
+    },
+    {
+      "task_id": "5.3",
+      "task_kind": "stage1_smoke_60m",
+      "predecessor_ids": [
+        "5.2"
+      ],
+      "required_input_artifacts": [],
+      "resource_locks": [
+        "p5-canonical-progress"
+      ],
+      "expected_output_paths": [
+        "benchmarks/chat-mode-scheduling-v2/phase5-stage1-smoke-60m.json",
+        "benchmarks/chat-mode-scheduling-v2/phase5-stage1-smoke-60m.md"
+      ],
+      "side_effect_class": "observation",
+      "external_gates": [
+        "stage1_started_at_frozen"
+      ],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "critical"
+    },
+    {
+      "task_id": "5.4",
+      "task_kind": "stage1_observation_24h",
+      "predecessor_ids": [
+        "5.2"
+      ],
+      "required_input_artifacts": [],
+      "resource_locks": [
+        "p5-canonical-progress"
+      ],
+      "expected_output_paths": [],
+      "side_effect_class": "observation",
+      "external_gates": [
+        "stage1_started_at_frozen"
+      ],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "critical"
+    },
+    {
+      "task_id": "5A",
+      "task_kind": "stage1_review_frontier",
+      "predecessor_ids": [
+        "5.3",
+        "5.4"
+      ],
+      "required_input_artifacts": [],
+      "resource_locks": [
+        "p5-canonical-progress"
+      ],
+      "expected_output_paths": [
+        "benchmarks/chat-mode-scheduling-v2/phase5-stage1-24h-evidence.json",
+        "benchmarks/chat-mode-scheduling-v2/phase5-stage1-24h-evidence.md",
+        "benchmarks/chat-mode-scheduling-v2/phase5-stage1-24h-reliability.json",
+        "benchmarks/chat-mode-scheduling-v2/phase5-stage1-24h-blocking-wall.json",
+        "benchmarks/chat-mode-scheduling-v2/phase5-stage1-24h-efficiency.json",
+        "benchmarks/chat-mode-scheduling-v2/phase5-stage1-24h-workflow-ux.json"
+      ],
+      "side_effect_class": "canonical_git_write",
+      "external_gates": [
+        "wall_clock_at_or_after_stage1_T_plus_24h"
+      ],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "critical",
+      "fan_in": {
+        "type": "all_of",
+        "requires": [
+          "5.3 final PASS",
+          "5.4 observation window elapsed",
+          "24h evidence freeze",
+          "dynamic review partitions/focus leads complete"
+        ]
+      }
+    },
+    {
+      "task_id": "5.5@24",
+      "task_kind": "stage1_decision",
+      "predecessor_ids": [
+        "5A"
+      ],
+      "required_input_artifacts": [],
+      "resource_locks": [
+        "p5-canonical-progress"
+      ],
+      "expected_output_paths": [],
+      "side_effect_class": "canonical_git_write",
+      "external_gates": [],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "critical"
+    },
+    {
+      "task_id": "5E48",
+      "task_kind": "stage1_extension_frontier",
+      "predecessor_ids": [
+        "5.5@24"
+      ],
+      "required_input_artifacts": [],
+      "resource_locks": [
+        "p5-canonical-progress"
+      ],
+      "expected_output_paths": [
+        "benchmarks/chat-mode-scheduling-v2/phase5-stage1-extension-24-48h-evidence.json",
+        "benchmarks/chat-mode-scheduling-v2/phase5-stage1-extension-24-48h-evidence.md",
+        "benchmarks/chat-mode-scheduling-v2/phase5-stage1-through-48h-evidence.json",
+        "benchmarks/chat-mode-scheduling-v2/phase5-stage1-through-48h-evidence.md"
+      ],
+      "side_effect_class": "canonical_git_write",
+      "external_gates": [
+        "wall_clock_at_or_after_stage1_T_plus_48h"
+      ],
+      "enabled_condition": "(5.5@24.verdict == INSUFFICIENT_ACTIVITY)",
+      "required_for_phase": true,
+      "scheduling_class": "critical"
+    },
+    {
+      "task_id": "5.5@48",
+      "task_kind": "stage1_decision",
+      "predecessor_ids": [
+        "5E48"
+      ],
+      "required_input_artifacts": [],
+      "resource_locks": [
+        "p5-canonical-progress"
+      ],
+      "expected_output_paths": [],
+      "side_effect_class": "canonical_git_write",
+      "external_gates": [],
+      "enabled_condition": "(5E48.state == complete)",
+      "required_for_phase": true,
+      "scheduling_class": "critical"
+    },
+    {
+      "task_id": "5E72",
+      "task_kind": "stage1_extension_frontier",
+      "predecessor_ids": [
+        "5.5@48"
+      ],
+      "required_input_artifacts": [],
+      "resource_locks": [
+        "p5-canonical-progress"
+      ],
+      "expected_output_paths": [
+        "benchmarks/chat-mode-scheduling-v2/phase5-stage1-extension-48-72h-evidence.json",
+        "benchmarks/chat-mode-scheduling-v2/phase5-stage1-extension-48-72h-evidence.md",
+        "benchmarks/chat-mode-scheduling-v2/phase5-stage1-through-72h-evidence.json",
+        "benchmarks/chat-mode-scheduling-v2/phase5-stage1-through-72h-evidence.md"
+      ],
+      "side_effect_class": "canonical_git_write",
+      "external_gates": [
+        "wall_clock_at_or_after_stage1_T_plus_72h"
+      ],
+      "enabled_condition": "(5.5@48.verdict == INSUFFICIENT_ACTIVITY)",
+      "required_for_phase": true,
+      "scheduling_class": "critical"
+    },
+    {
+      "task_id": "5.5@72",
+      "task_kind": "stage1_decision",
+      "predecessor_ids": [
+        "5E72"
+      ],
+      "required_input_artifacts": [],
+      "resource_locks": [
+        "p5-canonical-progress"
+      ],
+      "expected_output_paths": [],
+      "side_effect_class": "canonical_git_write",
+      "external_gates": [],
+      "enabled_condition": "(5E72.state == complete)",
+      "required_for_phase": true,
+      "scheduling_class": "critical"
+    },
+    {
+      "task_id": "5.6A",
+      "task_kind": "stage2_project_cutover",
+      "predecessor_ids": [],
+      "required_input_artifacts": [],
+      "resource_locks": [
+        "p5-canonical-progress",
+        "project-mutate:Raspberry Pi 5",
+        "connector-route:Raspberry Pi 5"
+      ],
+      "expected_output_paths": [],
+      "side_effect_class": "external_mutation",
+      "external_gates": [
+        "fresh_target_project_refresh",
+        "latest_enabled_stage1_decision_PASS_STAGE1"
+      ],
+      "enabled_condition": "(latest_enabled(5.5@24,5.5@48,5.5@72).verdict == PASS_STAGE1)",
+      "required_for_phase": true,
+      "scheduling_class": "critical",
+      "fan_in": {
+        "type": "latest_enabled",
+        "candidates": [
+          "5.5@24",
+          "5.5@48",
+          "5.5@72"
+        ],
+        "required_verdict": "PASS_STAGE1"
+      }
+    },
+    {
+      "task_id": "5.6B",
+      "task_kind": "stage2_smoke_frontier",
+      "predecessor_ids": [
+        "5.6A"
+      ],
+      "required_input_artifacts": [],
+      "resource_locks": [
+        "p5-canonical-progress"
+      ],
+      "expected_output_paths": [
+        "benchmarks/chat-mode-scheduling-v2/phase5-stage2-smoke.json",
+        "benchmarks/chat-mode-scheduling-v2/phase5-stage2-smoke.md"
+      ],
+      "side_effect_class": "canonical_git_write",
+      "external_gates": [],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "critical"
+    },
+    {
+      "task_id": "5.7",
+      "task_kind": "orchestrator_closeout",
+      "predecessor_ids": [
+        "5.6B"
+      ],
+      "required_input_artifacts": [],
+      "resource_locks": [
+        "p5-canonical-integration",
+        "p5-canonical-progress"
+      ],
+      "expected_output_paths": [
+        "benchmarks/chat-mode-scheduling-v2/phase5-staged-deployment-YYYY-MM-DD-rNN.json",
+        "benchmarks/chat-mode-scheduling-v2/phase5-staged-deployment-YYYY-MM-DD-rNN.md"
+      ],
+      "side_effect_class": "canonical_git_write",
+      "external_gates": [],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "critical"
+    }
+  ],
+  "dynamic_templates": [
+    {
+      "template_id": "stage1_smoke_task",
+      "expansion_source": "fixed Stage-1 smoke set: reachability, effective-config, durable-job, primary-isolation, telemetry, rollback-readiness",
+      "task_id_pattern": "p5-stage1-smoke-<check>",
+      "predecessor_rule": {
+        "type": "all_of",
+        "requires": [
+          "5.2",
+          "stage1_started_at frozen"
+        ]
+      },
+      "resource_lock_pattern": "staging-disposable-job:<turn-id> when needed",
+      "output_path_pattern": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase5/smoke/stage1/<check>.json",
+      "side_effect_class": "disposable",
+      "external_gates": [],
+      "required_for_phase": true,
+      "scheduling_class": "critical"
+    },
+    {
+      "template_id": "stage1_validation_turn",
+      "expansion_source": "V1-V5 tagged rollout-validation turns",
+      "task_id_pattern": "p5-stage1-validation-v<1-5>",
+      "predecessor_rule": {
+        "type": "all_of",
+        "requires": [
+          "5.4 running",
+          "5.3 critical_smoke_pass=true"
+        ]
+      },
+      "resource_lock_pattern": "staging-disposable-job:<turn-id>",
+      "output_path_pattern": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase5/validation/<validation-id>.json",
+      "side_effect_class": "disposable",
+      "external_gates": [
+        "staging_health_within_operational_envelope"
+      ],
+      "required_for_phase": true,
+      "scheduling_class": "normal"
+    },
+    {
+      "template_id": "stage1_review_partition",
+      "expansion_source": "enabled 24h/48h/72h cumulative evidence window x focus x partition set",
+      "task_id_pattern": "p5-review<window>-<focus>-<partition>",
+      "predecessor_rule": {
+        "type": "all_of",
+        "requires": [
+          "owning window evidence frozen"
+        ]
+      },
+      "resource_lock_pattern": "none",
+      "output_path_pattern": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase5/review/<window>/<focus>/<partition>.json",
+      "side_effect_class": "none",
+      "external_gates": [],
+      "required_for_phase": true,
+      "scheduling_class": "critical"
+    },
+    {
+      "template_id": "stage1_focus_lead",
+      "expansion_source": "enabled window x reliability/blocking/efficiency/workflow focus",
+      "task_id_pattern": "p5-review<window>-<focus>-lead",
+      "predecessor_rule": {
+        "type": "all_of",
+        "requires": [
+          "all required partition fragments for same window/focus"
+        ]
+      },
+      "resource_lock_pattern": "git-write:phase5-review<window>-<focus>",
+      "output_path_pattern": "benchmarks/chat-mode-scheduling-v2/phase5-stage1-<window>-<focus>.json",
+      "side_effect_class": "worker_git_write",
+      "external_gates": [],
+      "required_for_phase": true,
+      "scheduling_class": "critical"
+    },
+    {
+      "template_id": "extension_incremental_integrity",
+      "expansion_source": "enabled 24-48h or 48-72h incremental window",
+      "task_id_pattern": "p5-extension-<window>-<check>",
+      "predecessor_rule": {
+        "type": "all_of",
+        "requires": [
+          "incremental evidence frozen"
+        ]
+      },
+      "resource_lock_pattern": "none",
+      "output_path_pattern": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase5/review/<window>/incremental/<check>.json",
+      "side_effect_class": "none",
+      "external_gates": [],
+      "required_for_phase": true,
+      "scheduling_class": "critical"
+    },
+    {
+      "template_id": "stage2_smoke_task",
+      "expansion_source": "fixed Stage-2 smoke set: reachability, effective-config, durable-job, telemetry, rollback-readiness, binnacle-isolation, primary-isolation",
+      "task_id_pattern": "p5-stage2-smoke-<check>",
+      "predecessor_rule": {
+        "type": "all_of",
+        "requires": [
+          "5.6A",
+          "stage2_started_at frozen"
+        ]
+      },
+      "resource_lock_pattern": "staging-disposable-job:<turn-id> when needed",
+      "output_path_pattern": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase5/smoke/stage2/<check>.json",
+      "side_effect_class": "disposable",
+      "external_gates": [],
+      "required_for_phase": true,
+      "scheduling_class": "critical"
+    }
+  ]
+}
