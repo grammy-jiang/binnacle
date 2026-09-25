@@ -1,0 +1,133 @@
+{
+  "schema_version": 1,
+  "phase": 4,
+  "task_id": "4.3A",
+  "status": "PASS",
+  "generated_at": "2026-09-25T18:30:23+10:00",
+  "phase4_source_head": "06bc1649c4bad9449470366da971649bb7620020",
+  "phase4_runtime_path_head": "2e7889f3552e5d9bb6c26a38c7aab444ebbe8b90",
+  "integration": {
+    "worker_order": [
+      "4.2A",
+      "4.2B"
+    ],
+    "worker_commits": [
+      "87466c77f5e759a3b8da8467639ba773c5126a04",
+      "456b3c150661db0500954f2482d466da5778f567"
+    ],
+    "canonical_cherry_picks": [
+      "083f7869da2f4a3324d85ba3ec3b459b9f6d1909",
+      "2e7889f3552e5d9bb6c26a38c7aab444ebbe8b90"
+    ]
+  },
+  "focused_integration_tests": {
+    "command": "uv run pytest -q tests/scripts/test_chat_scheduling_endpoints.py tests/scripts/test_chat_scheduling_historical_guard.py tests/scripts/test_chat_scheduling_harness.py tests/scripts/test_chat_scheduling_evidence.py tests/scripts/test_chat_scheduling_analyzer_identity.py tests/scripts/test_chat_scheduling_manifest.py",
+    "result": "PASS",
+    "passed": 86,
+    "duration_s": 2.29,
+    "nproc": 4,
+    "pre_run_loadavg": [
+      0.13,
+      0.74,
+      2.57
+    ],
+    "timing_context": "foreign parallel-programme load"
+  },
+  "runtime_root": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase4/endpoints",
+  "runtime_registry_path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase4/endpoints.json",
+  "runtime_registry_sha256": "0c67d3b566f784b41f5cd5436939aebe22c6808a2ff241a46aaeba918480ed5a",
+  "started_endpoints": [
+    "A",
+    "B",
+    "C300",
+    "H"
+  ],
+  "core_endpoints": [
+    "A",
+    "B",
+    "C300"
+  ],
+  "supplemental_endpoints": [
+    "H"
+  ],
+  "all_started_local_healthy": true,
+  "all_started_smoke_green": true,
+  "core_smoke_green": true,
+  "supplemental_smoke_green": true,
+  "tunnels_started": false,
+  "endpoints": {
+    "A": {
+      "logical_arm": "A",
+      "port": 8110,
+      "budget_s": null,
+      "expected_policy": "no_policy",
+      "first_policy": "no_policy",
+      "first_effective_wait_s": 1,
+      "second_policy": "no_policy",
+      "second_effective_wait_s": 1,
+      "smoke_job_stop_state": "exited",
+      "status": "PASS",
+      "fragment_path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase4/endpoints/A/local-smoke.json",
+      "fragment_sha256": "6df20760e213fad7ee572f2ff86e878427fbcc1891561ed6a7c4b8b88fe3c33b",
+      "jobs_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase4/endpoints/A/jobs",
+      "socket_path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase4/endpoints/A/jobs.sock",
+      "server_log_path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase4/endpoints/A/server.log",
+      "manager_log_path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase4/endpoints/A/manager.log"
+    },
+    "B": {
+      "logical_arm": "B",
+      "port": 8111,
+      "budget_s": null,
+      "expected_policy": "no_policy",
+      "first_policy": "no_policy",
+      "first_effective_wait_s": 1,
+      "second_policy": "no_policy",
+      "second_effective_wait_s": 1,
+      "smoke_job_stop_state": "exited",
+      "status": "PASS",
+      "fragment_path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase4/endpoints/B/local-smoke.json",
+      "fragment_sha256": "36d5dd913b4523e02d8bbb509363d91e792570b2c2dad50a42a4df3e8dde5a05",
+      "jobs_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase4/endpoints/B/jobs",
+      "socket_path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase4/endpoints/B/jobs.sock",
+      "server_log_path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase4/endpoints/B/server.log",
+      "manager_log_path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase4/endpoints/B/manager.log"
+    },
+    "C300": {
+      "logical_arm": "C",
+      "port": 8113,
+      "budget_s": 300,
+      "expected_policy": "tracked",
+      "first_policy": "tracked",
+      "first_effective_wait_s": 1,
+      "second_policy": "tracked",
+      "second_effective_wait_s": 1,
+      "smoke_job_stop_state": "exited",
+      "status": "PASS",
+      "fragment_path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase4/endpoints/C300/local-smoke.json",
+      "fragment_sha256": "d872553c69ee513580e6bbccc989dfae2b8262b683892fe2fed3d3f8683a24ed",
+      "jobs_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase4/endpoints/C300/jobs",
+      "socket_path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase4/endpoints/C300/jobs.sock",
+      "server_log_path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase4/endpoints/C300/server.log",
+      "manager_log_path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase4/endpoints/C300/manager.log"
+    },
+    "H": {
+      "logical_arm": "H",
+      "port": 8115,
+      "budget_s": 10,
+      "expected_policy": "historical_one_shot_then_exhausted",
+      "first_policy": "historical_one_shot",
+      "first_effective_wait_s": 1,
+      "second_policy": "historical_one_shot_exhausted",
+      "second_effective_wait_s": 0,
+      "second_blocking_budget_exhausted": true,
+      "smoke_job_stop_state": "exited",
+      "status": "PASS",
+      "fragment_path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase4/endpoints/H/local-smoke.json",
+      "fragment_sha256": "b2e5a00246c6cde21c5882d3c0837e0b1df202ca1d616b86af4aa2804f7bf12b",
+      "jobs_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase4/endpoints/H/jobs",
+      "socket_path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase4/endpoints/H/jobs.sock",
+      "server_log_path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase4/endpoints/H/server.log",
+      "manager_log_path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase4/endpoints/H/manager.log"
+    }
+  }
+}

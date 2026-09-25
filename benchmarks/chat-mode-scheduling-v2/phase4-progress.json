@@ -6,8 +6,8 @@
   "worktree": "/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4",
   "source_branch": "feature/chat-mode-scheduling-v2-phase3",
   "audited_source_head": "3a4dfb1b248e4530fb09013976abb863c8e35eaf",
-  "last_completed_step": "4.3B",
-  "next_step": "4.3A/4.4A integration/provisioning frontier",
+  "last_completed_step": "4.3A",
+  "next_step": "4.2D readiness + 4.4A/4.4B provisioning frontier",
   "dependency_audit": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase4-dependency-audit-2026-09-25-r01.json",
     "revision": "r01",
@@ -72,7 +72,8 @@
     "phase4_bootstrap_base": "3a4dfb1b248e4530fb09013976abb863c8e35eaf",
     "phase4_dependency_audit_head": "89a206d24185284de278df18fe77ac0e4eccbb01",
     "phase4_source_head": "06bc1649c4bad9449470366da971649bb7620020",
-    "phase4_analyzer_path_head": "6073902ba1e72a946da0ea7d7e901e36f47f96a3"
+    "phase4_analyzer_path_head": "6073902ba1e72a946da0ea7d7e901e36f47f96a3",
+    "phase4_runtime_path_head": "2e7889f3552e5d9bb6c26a38c7aab444ebbe8b90"
   },
   "frozen_hashes": {
     "phase3_progress_json": "984ba7891843a6eb3a15b750e95177d3a325f14280990f47be62527d44482bde",
@@ -98,7 +99,8 @@
     "orchestrator_state_initial_checkpoint": "8b592e2e58fdcda6d861c498b617b5b28d22ea94a4663ab5d8e5bfbe6a2e7111",
     "baseline_instruction": "f1c100d0ddb93c29f8f78e5a2d28e297d861ba6e2c7e53712ec886dea06bafa5",
     "phase4_baseline_json": "e8a6c5149185dfb32e9810be1610cd63011b08837f2562cf8780a3df3d6a61d3",
-    "phase4_baseline_md": "c41c44ec771495c26b43ffefc2831b0a877587fe329ec5475fd340be30ab3be0"
+    "phase4_baseline_md": "c41c44ec771495c26b43ffefc2831b0a877587fe329ec5475fd340be30ab3be0",
+    "phase4_local_smoke_json": "445a8e18c04e708987a319fbd752521597d34123ee8bc2246e86b018ced4d321"
   },
   "preflight_findings": {
     "p4-preflight-git-lineage": "804da7b66ddc1f0e71ddf3106790989f50a0f320de4cd3b3f0aedaf962d68461",
@@ -160,17 +162,28 @@
       "worker_branch": null
     },
     "4.2A": {
-      "status": "not_started",
-      "tests": [],
-      "notes": [],
-      "commit": null,
+      "status": "complete",
+      "tests": [
+        "uv run pytest -q tests/scripts/test_chat_scheduling_endpoints.py tests/scripts/test_chat_scheduling_historical_guard.py -> PASS in worker: 20 passed in 2.81s."
+      ],
+      "notes": [
+        "Verified 4.2A completion packet a2: worker base 06bc1649c4bad9449470366da971649bb7620020 matches frozen phase4_source_head; worker branch tip and recorded commit agree.",
+        "Verified committed worker output SHA-256 values against the completion packet for endpoint launcher, historical adapter, both focused tests, and phase4-endpoint-topology-base.json.",
+        "Worker packet predates runbook Amendment P4-A1; read-only diff verified the hash change affects only the later H-comparator/4.13 critical-path amendment and does not alter 4.2A or 4.3A semantics."
+      ],
+      "commit": "87466c77f5e759a3b8da8467639ba773c5126a04",
       "worker_branch": "feature/chat-mode-scheduling-v2-phase4-endpoints"
     },
     "4.2B": {
-      "status": "not_started",
-      "tests": [],
-      "notes": [],
-      "commit": null,
+      "status": "complete",
+      "tests": [
+        "uv run pytest -q tests/scripts/test_chat_scheduling_harness.py tests/scripts/test_chat_scheduling_analyzer_identity.py tests/scripts/test_chat_scheduling_manifest.py -> PASS in worker: 64 passed in 1.72s."
+      ],
+      "notes": [
+        "Verified 4.2B completion packet a2: worker base 06bc1649c4bad9449470366da971649bb7620020 matches frozen phase4_source_head; current runbook hash, worker branch tip, recorded commit, and committed output hashes agree.",
+        "Worker validation includes shared FIFO ChatGPT send serialization and exact A/B/C/H runtime/evidence identity plumbing; no external side effects were recorded by the worker."
+      ],
+      "commit": "456b3c150661db0500954f2482d466da5778f567",
       "worker_branch": "feature/chat-mode-scheduling-v2-phase4-harness"
     },
     "4.2C": {
@@ -193,9 +206,21 @@
       "worker_branch": "feature/chat-mode-scheduling-v2-phase4-readiness"
     },
     "4.3A": {
-      "status": "running",
-      "tests": [],
-      "notes": [],
+      "status": "complete",
+      "tests": [
+        "uv run pytest -q tests/scripts/test_chat_scheduling_endpoints.py tests/scripts/test_chat_scheduling_historical_guard.py tests/scripts/test_chat_scheduling_harness.py tests/scripts/test_chat_scheduling_evidence.py tests/scripts/test_chat_scheduling_analyzer_identity.py tests/scripts/test_chat_scheduling_manifest.py -> PASS: 86 passed in 2.29s; nproc=4; pre-run loadavg=0.13 0.74 2.57 (timing under foreign parallel-programme load).",
+        "Parallel local endpoint smoke A/B/C300/H -> PASS 4/4: A/B no_policy; C300 tracked with blocking_budget_s=300; H first historical_one_shot wait=1s then historical_one_shot_exhausted effective_wait=0s; all disposable smoke jobs stopped cleanly.",
+        "chat_scheduling_endpoints.py status -> PASS: A/B/C300/H locally healthy; all tunnels not_started by design.",
+        "bash /tmp/p36-manager/isolation-check.sh -> PASS: production master/config/unit/profile identities unchanged; expected benchmark listeners 8110/8111/8113/8115 present in addition to production 8000."
+      ],
+      "notes": [
+        "Integrated verified 4.2A then 4.2B in deterministic order by cherry-pick: 87466c77f5e759a3b8da8467639ba773c5126a04 -> 083f7869da2f4a3324d85ba3ec3b459b9f6d1909; 456b3c150661db0500954f2482d466da5778f567 -> 2e7889f3552e5d9bb6c26a38c7aab444ebbe8b90.",
+        "Frozen phase4_runtime_path_head at 2e7889f3552e5d9bb6c26a38c7aab444ebbe8b90; endpoint processes and smoke fragments were launched from exactly this immutable code commit.",
+        "Local smoke aggregate benchmarks/chat-mode-scheduling-v2/phase4-local-smoke.json is PASS at SHA-256 445a8e18c04e708987a319fbd752521597d34123ee8bc2246e86b018ced4d321; runtime registry SHA-256 is 0c67d3b566f784b41f5cd5436939aebe22c6808a2ff241a46aaeba918480ed5a.",
+        "Started exactly A/B/C300/H from the Phase-3 C300-only live shortlist. Reserved C120/C600 ports remain unused, and no benchmark tunnel was started.",
+        "Each lane has distinct job spool, Unix socket, server/manager logs, token/config identity, and endpoint-local smoke fragment; smoke workers were launched concurrently rather than serialized by endpoint id.",
+        "No semantic deviation from Step 4.3A or its focused test matrix. The only predecessor-evidence discrepancy was the older 4.2A runbook hash, investigated and shown to be unrelated P4-A1 downstream text drift."
+      ],
       "commit": null,
       "worker_branch": null
     },
@@ -411,7 +436,7 @@
   ],
   "handoff": null,
   "created_at": "2026-09-25T15:31:10+10:00",
-  "updated_at": "2026-09-25T18:22:50+10:00",
+  "updated_at": "2026-09-25T18:30:23+10:00",
   "phase4_source_head": "06bc1649c4bad9449470366da971649bb7620020",
   "baseline_snapshot": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase4-baseline.json",

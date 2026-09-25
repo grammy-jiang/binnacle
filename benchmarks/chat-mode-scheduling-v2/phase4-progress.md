@@ -8,9 +8,9 @@ Worktree: `/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4`
 
 Audited source HEAD: `3a4dfb1b248e4530fb09013976abb863c8e35eaf`
 
-Last completed step: **4.3B**
+Last completed step: **4.3A**
 
-Next step: **4.3A / 4.4A integration/provisioning frontier**
+Next step: **4.2D readiness + 4.4A/4.4B provisioning frontier**
 
 ## Frozen Step 4.0 entry gate
 
@@ -31,11 +31,11 @@ Next step: **4.3A / 4.4A integration/provisioning frontier**
 | --- | --- | --- |
 | 4.0 | complete | — |
 | 4.1 | complete | — |
-| 4.2A | not_started | — |
-| 4.2B | not_started | — |
+| 4.2A | complete | `87466c7` |
+| 4.2B | complete | `456b3c1` |
 | 4.2C | complete | `6c473ce` |
 | 4.2D | not_started | — |
-| 4.3A | running | — |
+| 4.3A | complete | — |
 | 4.3B | complete | — |
 | 4.4A | not_started | — |
 | 4.5 | not_started | — |
@@ -72,6 +72,33 @@ Next step: **4.3A / 4.4A integration/provisioning frontier**
 - Coverage policy: **PASS**, 1,255 passed / 3 skipped; 99 production modules, 0 below target, 0 errors.
 - Implementation workers 4.2A/B/C/D are created/recovered at the exact frozen source HEAD on the documented endpoint, harness, analysis, and readiness branches/worktrees.
 - File-scoped pre-commit: **PASS**; production isolation recheck: **PASS** with the production baseline unchanged.
+
+## Step 4.3A runtime/harness integration and local endpoint smoke
+
+- Verified 4.2A completion packet `a2` and 4.2B completion packet `a2`;
+  both worker bases match the frozen `phase4_source_head`.
+- Integrated in deterministic order: 4.2A
+  `87466c77f5e759a3b8da8467639ba773c5126a04` -> `083f7869da2f4a3324d85ba3ec3b459b9f6d1909`, then 4.2B
+  `456b3c150661db0500954f2482d466da5778f567` -> `2e7889f3552e5d9bb6c26a38c7aab444ebbe8b90`.
+- Frozen `phase4_runtime_path_head`:
+  `2e7889f3552e5d9bb6c26a38c7aab444ebbe8b90`.
+- Focused runtime/harness integration: **PASS**, 86 tests in 2.29 seconds; 4
+  CPUs; pre-run load average 0.13 / 0.74 / 2.57 under foreign
+  parallel-programme load.
+- Started exactly A/B/C300/H locally on 8110/8111/8113/8115 from the C300-only
+  Phase-3 shortlist. C120/C600 stay unused and no benchmark tunnel was started.
+- Four endpoint-local smoke workers ran concurrently and passed: A/B
+  `no_policy`; C300 `tracked` with budget 300; H first
+  `historical_one_shot`, then `historical_one_shot_exhausted` with effective
+  wait 0. Every smoke job was stopped cleanly and retained only lane-local spool
+  evidence.
+- Local-smoke aggregate: `benchmarks/chat-mode-scheduling-v2/phase4-local-smoke.json`
+  SHA-256 `445a8e18c04e708987a319fbd752521597d34123ee8bc2246e86b018ced4d321`; runtime registry SHA-256 `0c67d3b566f784b41f5cd5436939aebe22c6808a2ff241a46aaeba918480ed5a`.
+- Production isolation remains intact: production HEAD/config/unit/profile hashes
+  are unchanged; only the expected isolated benchmark listeners were added.
+- The 4.2A packet's older runbook hash was investigated. Its difference is the
+  downstream P4-A1 H/4.13 critical-path amendment, so it does not change 4.2A or
+  4.3A semantics. There is no semantic Step-4.3A deviation.
 
 ## Step 4.3B analyzer integration
 
