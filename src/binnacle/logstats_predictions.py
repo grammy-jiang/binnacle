@@ -259,10 +259,12 @@ def render_predictions(stats: PredictionStats) -> list[str]:
     report = prediction_report(stats)
     out = [
         "\npredictions:",
-        f"  dispatches={stats.dispatches} outcomes={stats.outcomes} "
-        f"filter_hash={stats.filter_hash or '-'} "
-        f"judge_model={stats.judge_model or '-'} "
-        f"memory_store_keys={stats.memory_store_keys}",
+        (
+            f"  dispatches={stats.dispatches} outcomes={stats.outcomes} "
+            f"filter_hash={stats.filter_hash or '-'} "
+            f"judge_model={stats.judge_model or '-'} "
+            f"memory_store_keys={stats.memory_store_keys}"
+        ),
     ]
     if stats.memory_sample_counts:
         out.append(

@@ -53,23 +53,10 @@ def auto_background_behavior_hash(
 
 _CHAIN = re.compile(r"&&|\|\||;|\n|\|")
 _DELAY = re.compile(r"(?i)\b(?:sleep|timeout)\s+(?:--\s+)?(\d+(?:\.\d+)?)([smhd]?)")
-_SIMPLE_RUNNERS = [
-    "pytest",
-    "tox",
-    "pip",
-    "apt",
-    "npm",
-    "cargo",
-    "make",
-    "curl",
-    "wget",
-    "rsync",
-    "tar",
-    "find",
-    "systemctl",
-    "docker",
-    "ssh",
-]
+_SIMPLE_RUNNERS_TEXT = (
+    "pytest tox pip apt npm cargo make curl wget rsync tar find systemctl docker ssh"
+)
+_SIMPLE_RUNNERS = _SIMPLE_RUNNERS_TEXT.split()
 _SPECIAL_RUNNERS: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
     (name, re.compile(pattern, re.IGNORECASE))
     for name, pattern in (
@@ -140,7 +127,7 @@ def _first_token_class(token: str) -> str:
         return "python"
     if base in {"uv", "pytest", "git"}:
         return base
-    if base in [
+    if base in {
         "cd",
         "set",
         "export",
@@ -151,7 +138,7 @@ def _first_token_class(token: str) -> str:
         "read",
         "test",
         "[",
-    ]:
+    }:
         return "shell-builtin"
     return "script-path" if "/" in token or base.endswith((".py", ".sh")) else "other"
 
@@ -414,8 +401,11 @@ def _prediction_number(value: float | None) -> str:
 
 
 def log_shadow_config(
-    enabled: bool, predictors: tuple[str, ...], judge_model: str,
-    filter_hash: str, sanitizer_hash: str,
+    enabled: bool,
+    predictors: tuple[str, ...],
+    judge_model: str,
+    filter_hash: str,
+    sanitizer_hash: str,
 ) -> None:
     log.info(
         "event=tool_config tool=run_command shadow_prediction=%s predictors=%s "
@@ -429,9 +419,14 @@ def log_shadow_config(
 
 
 def log_shadow_prediction(
-    call_id: str, features: CommandFeatures, auto_rule_hash: str | None,
-    memory: MemoryLookup, memory_store_keys: int, rules: Prediction | None,
-    hits: tuple[str, ...], judge: tuple[str, str | None, str],
+    call_id: str,
+    features: CommandFeatures,
+    auto_rule_hash: str | None,
+    memory: MemoryLookup,
+    memory_store_keys: int,
+    rules: Prediction | None,
+    hits: tuple[str, ...],
+    judge: tuple[str, str | None, str],
 ) -> None:
     mp = memory.prediction
     judge_state, judge_skip_reason, judge_cache = judge

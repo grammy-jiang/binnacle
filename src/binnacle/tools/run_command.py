@@ -128,7 +128,7 @@ def run_command_impl(
             features=features,
             auto_rule_hash=plan.auto_rule_hash,
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - shadow telemetry must fail open
         log.warning(
             "event=run_command_prediction_error schema=1 call=%s error=%s",
             call_id,
@@ -183,7 +183,7 @@ def run_command_impl(
     if state and state["state"] == "exited":
         try:
             SHADOW_PREDICTOR.record_runtime(features, float(state["runtime_s"]))
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - shadow telemetry must fail open
             log.warning(
                 "event=run_command_prediction_memory_error schema=1 call=%s error=%s",
                 call_id,

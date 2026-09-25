@@ -24,19 +24,19 @@ def feat(command="uv run pytest tests/unit"):
 
 
 def cfg(tmp_path, **overrides):
-    values = dict(
-        enabled=True,
-        predictors=("memory", "rules", "judge"),
-        memory_dir=tmp_path,
-        memory_min_samples=2,
-        memory_max_keys=16,
-        memory_samples_per_key=4,
-        judge_enabled=True,
-        judge_minute_budget=2,
-        judge_complex_chain_threshold=0,
-        judge_complex_length_threshold=1,
-        judge_workers=1,
-    )
+    values = {
+        "enabled": True,
+        "predictors": ("memory", "rules", "judge"),
+        "memory_dir": tmp_path,
+        "memory_min_samples": 2,
+        "memory_max_keys": 16,
+        "memory_samples_per_key": 4,
+        "judge_enabled": True,
+        "judge_minute_budget": 2,
+        "judge_complex_chain_threshold": 0,
+        "judge_complex_length_threshold": 1,
+        "judge_workers": 1,
+    }
     values.update(overrides)
     return RunCommandShadowPredictionSettings(**values)
 

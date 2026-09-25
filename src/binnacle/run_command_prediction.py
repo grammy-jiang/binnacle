@@ -60,17 +60,10 @@ _BLOB = re.compile(
     r"(?<![A-Za-z0-9])(?:[A-Fa-f0-9]{21,}|[A-Za-z0-9+/=_-]{32,})(?![A-Za-z0-9])"
 )
 _LONG_QUOTED = re.compile(r"(['\"])(?:(?!\1).){80,}\1", re.DOTALL)
-Transport = Callable[
-    [str, dict[str, str], bytes, float], tuple[int, bytes, Mapping[str, str]]
-]
-
-
+Transport = Callable[..., tuple[int, bytes, Mapping[str, str]]]
 _JUDGE_SYSTEM = "Estimate runtime; prefer local history. Return requested JSON only."
 _JUDGE_FORMAT = json.loads(
-    '{"type":"json_schema","json_schema":{"name":"run_command_runtime_prediction",'
-    '"strict":true,"schema":{"type":"object","properties":{"bucket":{"type":"string",'
-    '"enum":["short","medium","long"]},"p90_s":{"type":"number","minimum":0}},'
-    '"required":["bucket","p90_s"],"additionalProperties":false}}}'
+    """{"type":"json_schema","json_schema":{"name":"run_command_runtime_prediction","strict":true,"schema":{"type":"object","properties":{"bucket":{"type":"string","enum":["short","medium","long"]},"p90_s":{"type":"number","minimum":0}},"required":["bucket","p90_s"],"additionalProperties":false}}}"""
 )
 
 
@@ -431,9 +424,7 @@ class ShadowPredictionEngine:
             memory_store_keys=store.key_count,
             rules=rules,
             hits=hits,
-            judge_state=state,
-            judge_skip_reason=skip,
-            judge_cache=cache_state,
+            judge=(state, skip, cache_state),
         )
         if cached is not None:
             self._log_judge(call_id, cached)
@@ -465,7 +456,7 @@ class ShadowPredictionEngine:
                 features=features,
                 local_stats=store.local_stats(features),
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - shadow work must fail open
             result = JudgeResult(None, None, 0.0, error=type(exc).__name__)
         if result.error == "http_429":
             self._budget.pause_for(result.retry_after_s)
