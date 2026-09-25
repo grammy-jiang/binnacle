@@ -2557,6 +2557,34 @@ send body carried lane A's hint.
 - **Scope.** This amends "first submitted outcome owns each slot" only for
   `ROUTING_MISS`. Every other failure keeps that rule.
 
+### Amendment P4-A3: wait-node argument matching (2026-09-26)
+
+Owner decision 2026-09-26, recorded 07:27 ("Fix and re-judge"). Evidence: the
+Step-4.7 NO-GO (commit `74249499`) rested on C300 R5 repeats 1 and 3 scored as
+premature handoffs. In both trials the model started the 25-second job in the
+background, called `job_status` with `wait_seconds=30`, saw `state=exited`
+(exit code 0, about 278 s of the 300 s budget left) and returned the exact
+`R5-<nonce>` reply in the same prompt. The R5 manifest's `wait_result` node
+carries `wait_seconds: 50`, and the evidence matcher (`_node_matches`)
+required every expected argument to be equal, so a valid 30-second wait left
+the node unmatched and the trace nonterminal. A read-only diagnostic found the
+same false label on all 12 analyzer "premature handoff" results for R5 across
+A, B and C300.
+
+- **Rule.** For a `job_status` node with `allow_repeats` and a
+  `completion_condition` on the job state, `wait_seconds` in the manifest is
+  advisory: any schema-valid positive wait satisfies the node. Other expected
+  arguments keep exact matching. Every scenario manifest is audited for the
+  same trap on model-chosen parameters, and each case found is listed.
+- **Symmetry and timing.** The correction applies to every arm and to H, and
+  it is made before any confirmatory data exists, which this plan requires of
+  a measurement change.
+- **Re-judgment.** The analyzer fix gets focused tests and a new
+  `phase4_analyzer_path_head`. The frozen C300 calibration trials are then
+  re-analyzed, and Step 4.7 is decided again. The first verdict stays in the
+  history as superseded. If C300 is selected, Phase 4 continues at
+  4.6A:selected. H is re-analyzed for 4H-R the same way.
+
 ### Step 4H-R — aggregate historical H comparator
 
 Predecessor: every canonical H R5/R6/R7/R12 task is frozen. This step may run in
