@@ -1,0 +1,834 @@
+{
+  "schema_version": 1,
+  "phase": 4,
+  "source_head": "89a206d24185284de278df18fe77ac0e4eccbb01",
+  "audited_source_head": "3a4dfb1b248e4530fb09013976abb863c8e35eaf",
+  "revision": "r01",
+  "static_tasks": [
+    {
+      "task_id": "4.0",
+      "task_kind": "orchestrator_gate",
+      "predecessor_ids": [],
+      "required_input_artifacts": [
+        {
+          "path": "benchmarks/chat-mode-scheduling-v2/phase3-progress.json",
+          "sha256": "984ba7891843a6eb3a15b750e95177d3a325f14280990f47be62527d44482bde"
+        },
+        {
+          "path": "benchmarks/chat-mode-scheduling-v2/phase3-policy-replay-2026-09-25-r02.json",
+          "sha256": "54e46772ba0a1ee06b2c4d92cf5a55036e8bedd106466e25916ff6fab5c1aaae"
+        },
+        {
+          "path": "benchmarks/chat-mode-scheduling-v2/phase3-candidate-shortlist.json",
+          "sha256": "072556e60fb55f686d872bce4da004bc272e9162e32459f2dc276657faa0e094"
+        },
+        {
+          "path": "benchmarks/chat-mode-scheduling-v2/phase4-input-contract.json",
+          "sha256": "189bec8bbcff9b6e4e873ccc8310cf4725e85451df276d9fee10f64662ad7bfa"
+        }
+      ],
+      "resource_locks": [
+        "canonical-integration",
+        "canonical-progress"
+      ],
+      "expected_output_paths": [
+        "benchmarks/chat-mode-scheduling-v2/phase4-dependency-audit-2026-09-25-r01.json",
+        "benchmarks/chat-mode-scheduling-v2/phase4-dependency-audit-2026-09-25-r01.md",
+        "benchmarks/chat-mode-scheduling-v2/phase4-task-graph.json"
+      ],
+      "side_effect_class": "canonical_git_write",
+      "external_gates": [],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "critical"
+    },
+    {
+      "task_id": "4.1",
+      "task_kind": "orchestrator_validation",
+      "predecessor_ids": [
+        "4.0"
+      ],
+      "required_input_artifacts": [
+        {
+          "path": "benchmarks/chat-mode-scheduling-v2/phase4-dependency-audit-2026-09-25-r01.json",
+          "sha256": "6ffa479be73acf488f1e627f50160b41f3473c6ea990f2a88afe18312e4ef893"
+        },
+        {
+          "path": "benchmarks/chat-mode-scheduling-v2/phase3-candidate-shortlist.json",
+          "sha256": "072556e60fb55f686d872bce4da004bc272e9162e32459f2dc276657faa0e094"
+        }
+      ],
+      "resource_locks": [
+        "canonical-progress"
+      ],
+      "expected_output_paths": [
+        "benchmarks/chat-mode-scheduling-v2/phase4-baseline.json",
+        "benchmarks/chat-mode-scheduling-v2/phase4-baseline.md"
+      ],
+      "side_effect_class": "canonical_git_write",
+      "external_gates": [],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "critical",
+      "fan_in": {
+        "type": "all_of",
+        "requires": [
+          "4.0 dependency audit PASS",
+          "audited Phase-3 source HEAD",
+          "frozen Phase-3 shortlist"
+        ]
+      }
+    },
+    {
+      "task_id": "4.2A",
+      "task_kind": "worker_implementation",
+      "predecessor_ids": [
+        "4.1"
+      ],
+      "required_input_artifacts": [],
+      "resource_locks": [
+        "git-write:feature/chat-mode-scheduling-v2-phase4-endpoints"
+      ],
+      "expected_output_paths": [
+        "scripts/chat_scheduling_endpoints.py",
+        "scripts/chat_scheduling_historical_guard.py",
+        "tests/scripts/test_chat_scheduling_endpoints.py",
+        "tests/scripts/test_chat_scheduling_historical_guard.py"
+      ],
+      "side_effect_class": "worker_git_write",
+      "external_gates": [],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "critical"
+    },
+    {
+      "task_id": "4.2B",
+      "task_kind": "worker_implementation",
+      "predecessor_ids": [
+        "4.1"
+      ],
+      "required_input_artifacts": [],
+      "resource_locks": [
+        "git-write:feature/chat-mode-scheduling-v2-phase4-harness"
+      ],
+      "expected_output_paths": [
+        "scripts/chat_scheduling_harness.py",
+        "scripts/chat_scheduling_evidence.py",
+        "scripts/chat_scheduling_analyzer_identity.py",
+        "tests/scripts/test_chat_scheduling_harness.py",
+        "tests/scripts/test_chat_scheduling_evidence.py",
+        "tests/scripts/test_chat_scheduling_analyzer_identity.py"
+      ],
+      "side_effect_class": "worker_git_write",
+      "external_gates": [],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "critical"
+    },
+    {
+      "task_id": "4.2C",
+      "task_kind": "worker_implementation",
+      "predecessor_ids": [
+        "4.1"
+      ],
+      "required_input_artifacts": [],
+      "resource_locks": [
+        "git-write:feature/chat-mode-scheduling-v2-phase4-analysis"
+      ],
+      "expected_output_paths": [
+        "scripts/chat_scheduling_confirmatory.py",
+        "scripts/chat_scheduling_analyzer.py",
+        "tests/scripts/test_chat_scheduling_confirmatory.py",
+        "tests/scripts/test_chat_scheduling_analyzer.py"
+      ],
+      "side_effect_class": "worker_git_write",
+      "external_gates": [],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "critical"
+    },
+    {
+      "task_id": "4.2D",
+      "task_kind": "worker_external_readiness",
+      "predecessor_ids": [
+        "4.1"
+      ],
+      "required_input_artifacts": [
+        {
+          "path": "benchmarks/chat-mode-scheduling-v2/phase3-candidate-shortlist.json",
+          "sha256": "072556e60fb55f686d872bce4da004bc272e9162e32459f2dc276657faa0e094"
+        }
+      ],
+      "resource_locks": [
+        "git-write:feature/chat-mode-scheduling-v2-phase4-readiness",
+        "project-mutate:<lane>",
+        "connector-mutate:<lane>"
+      ],
+      "expected_output_paths": [
+        "benchmarks/chat-mode-scheduling-v2/phase4-readiness.json",
+        "benchmarks/chat-mode-scheduling-v2/phase4-readiness.md"
+      ],
+      "side_effect_class": "external_mutation",
+      "external_gates": [
+        "authenticated_chatgpt_project_connector_tunnel_control_plane"
+      ],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "critical"
+    },
+    {
+      "task_id": "4.3A",
+      "task_kind": "orchestrator_integration",
+      "predecessor_ids": [
+        "4.2A",
+        "4.2B"
+      ],
+      "required_input_artifacts": [],
+      "resource_locks": [
+        "canonical-integration",
+        "canonical-progress"
+      ],
+      "expected_output_paths": [
+        "benchmarks/chat-mode-scheduling-v2/phase4-local-smoke.json"
+      ],
+      "side_effect_class": "canonical_git_write",
+      "external_gates": [],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "critical",
+      "fan_in": {
+        "type": "all_of",
+        "requires": [
+          "4.2A endpoint launcher/historical adapter commit and focused tests PASS",
+          "4.2B harness/evidence commit and focused tests PASS"
+        ]
+      }
+    },
+    {
+      "task_id": "4.3B",
+      "task_kind": "orchestrator_integration",
+      "predecessor_ids": [
+        "4.2C"
+      ],
+      "required_input_artifacts": [],
+      "resource_locks": [
+        "canonical-integration",
+        "canonical-progress"
+      ],
+      "expected_output_paths": [],
+      "side_effect_class": "canonical_git_write",
+      "external_gates": [],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "critical",
+      "fan_in": {
+        "type": "all_of",
+        "requires": [
+          "4.2C confirmatory/analyzer commit and focused tests PASS"
+        ]
+      }
+    },
+    {
+      "task_id": "4.4A",
+      "task_kind": "orchestrator_core_provisioning",
+      "predecessor_ids": [
+        "4.3A",
+        "4.2D"
+      ],
+      "required_input_artifacts": [],
+      "resource_locks": [
+        "canonical-progress",
+        "project-mutate:<core-lane>",
+        "connector-mutate:<core-lane>"
+      ],
+      "expected_output_paths": [
+        "benchmarks/chat-mode-scheduling-v2/phase4-lanes/A.json",
+        "benchmarks/chat-mode-scheduling-v2/phase4-lanes/B.json",
+        "benchmarks/chat-mode-scheduling-v2/phase4-lanes/C300.json"
+      ],
+      "side_effect_class": "external_mutation",
+      "external_gates": [
+        "core_lane_readiness_and_local_smoke_verified"
+      ],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "critical",
+      "fan_in": {
+        "type": "all_of",
+        "requires": [
+          "4.3A local smoke PASS for A/B/C300",
+          "4.2D readiness PASS for A/B/C300"
+        ]
+      }
+    },
+    {
+      "task_id": "4.5",
+      "task_kind": "orchestrator_live_micro_gate",
+      "predecessor_ids": [
+        "4.4A"
+      ],
+      "required_input_artifacts": [],
+      "resource_locks": [
+        "live-host-mode"
+      ],
+      "expected_output_paths": [],
+      "side_effect_class": "live_benchmark",
+      "external_gates": [
+        "A_B_C300_lane_manifests_frozen"
+      ],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "critical",
+      "fan_in": {
+        "type": "all_of",
+        "requires": [
+          "A/B/C300 immutable lane manifests",
+          "M1/M2/M3 pre-run mechanical PASS"
+        ]
+      }
+    },
+    {
+      "task_id": "4.6A",
+      "task_kind": "timing_precompute",
+      "predecessor_ids": [
+        "4.5"
+      ],
+      "required_input_artifacts": [],
+      "resource_locks": [
+        "live-host-mode"
+      ],
+      "expected_output_paths": [],
+      "side_effect_class": "live_benchmark",
+      "external_gates": [],
+      "enabled_condition": "live-host-mode=qualification available and no admission-critical or ready canonical calibration work would be delayed",
+      "required_for_phase": false,
+      "scheduling_class": "opportunistic"
+    },
+    {
+      "task_id": "4.6B0",
+      "task_kind": "orchestrator_admission_baseline",
+      "predecessor_ids": [
+        "4.5"
+      ],
+      "required_input_artifacts": [],
+      "resource_locks": [
+        "live-host-mode",
+        "canonical-progress"
+      ],
+      "expected_output_paths": [
+        "benchmarks/chat-mode-scheduling-v2/phase4-live-admission-rNN.json"
+      ],
+      "side_effect_class": "live_benchmark",
+      "external_gates": [],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "critical",
+      "fan_in": {
+        "type": "all_of",
+        "requires": [
+          "4.5 micro scheduler sanity PASS",
+          "first immutable admission revision with conservative per-endpoint cap=1"
+        ]
+      }
+    },
+    {
+      "task_id": "4.7",
+      "task_kind": "orchestrator_selection",
+      "predecessor_ids": [
+        "4.3B",
+        "4.6B0"
+      ],
+      "required_input_artifacts": [],
+      "resource_locks": [
+        "canonical-progress"
+      ],
+      "expected_output_paths": [],
+      "side_effect_class": "canonical_git_write",
+      "external_gates": [],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "critical",
+      "fan_in": {
+        "type": "all_of",
+        "requires": [
+          "all enabled 4B:C calibration trial tasks frozen",
+          "4.3B analyzer integration PASS",
+          "final C-lane admission summary frozen"
+        ],
+        "excludes": [
+          "4H tasks"
+        ]
+      },
+      "dynamic_predecessor_rules": [
+        {
+          "template_id": "c_calibration_trial",
+          "rule": "all_instances"
+        }
+      ]
+    },
+    {
+      "task_id": "4.6A:selected",
+      "task_kind": "orchestrator_selected_timing_qualification",
+      "predecessor_ids": [
+        "4.7"
+      ],
+      "required_input_artifacts": [],
+      "resource_locks": [
+        "live-host-mode",
+        "canonical-progress"
+      ],
+      "expected_output_paths": [],
+      "side_effect_class": "live_benchmark",
+      "external_gates": [],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "critical",
+      "fan_in": {
+        "type": "all_of",
+        "requires": [
+          "4.7 selected C endpoint",
+          "selected-C immutable lane manifest",
+          "matching reusable 4.6A identity/criteria hashes or fresh selected-C qualification"
+        ]
+      }
+    },
+    {
+      "task_id": "4.8",
+      "task_kind": "orchestrator_schedule_freeze",
+      "predecessor_ids": [
+        "4.7",
+        "4.6A:selected"
+      ],
+      "required_input_artifacts": [],
+      "resource_locks": [
+        "canonical-progress"
+      ],
+      "expected_output_paths": [
+        "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-schedule.json"
+      ],
+      "side_effect_class": "canonical_git_write",
+      "external_gates": [],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "critical",
+      "fan_in": {
+        "type": "all_of",
+        "requires": [
+          "4.7 selected C endpoint",
+          "4.6A:selected final max_safe_parallel_blocks"
+        ]
+      }
+    },
+    {
+      "task_id": "4.9.1",
+      "task_kind": "orchestrator_confirmatory_partition",
+      "predecessor_ids": [
+        "4.8"
+      ],
+      "required_input_artifacts": [],
+      "resource_locks": [
+        "live-host-mode",
+        "canonical-progress"
+      ],
+      "expected_output_paths": [],
+      "side_effect_class": "live_benchmark",
+      "external_gates": [
+        "frozen_confirmatory_schedule"
+      ],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "critical",
+      "fan_in": {
+        "type": "all_of",
+        "requires": [
+          "all frozen schedule slots for partition R1/R2"
+        ]
+      }
+    },
+    {
+      "task_id": "4.9.2",
+      "task_kind": "orchestrator_confirmatory_partition",
+      "predecessor_ids": [
+        "4.8"
+      ],
+      "required_input_artifacts": [],
+      "resource_locks": [
+        "live-host-mode",
+        "canonical-progress"
+      ],
+      "expected_output_paths": [],
+      "side_effect_class": "live_benchmark",
+      "external_gates": [
+        "frozen_confirmatory_schedule"
+      ],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "critical",
+      "fan_in": {
+        "type": "all_of",
+        "requires": [
+          "all frozen schedule slots for partition R3/R4"
+        ]
+      }
+    },
+    {
+      "task_id": "4.9.3",
+      "task_kind": "orchestrator_confirmatory_partition",
+      "predecessor_ids": [
+        "4.8"
+      ],
+      "required_input_artifacts": [],
+      "resource_locks": [
+        "live-host-mode",
+        "canonical-progress"
+      ],
+      "expected_output_paths": [],
+      "side_effect_class": "live_benchmark",
+      "external_gates": [
+        "frozen_confirmatory_schedule"
+      ],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "critical",
+      "fan_in": {
+        "type": "all_of",
+        "requires": [
+          "all frozen schedule slots for partition R5/R6"
+        ]
+      }
+    },
+    {
+      "task_id": "4.9.4",
+      "task_kind": "orchestrator_confirmatory_partition",
+      "predecessor_ids": [
+        "4.8"
+      ],
+      "required_input_artifacts": [],
+      "resource_locks": [
+        "live-host-mode",
+        "canonical-progress"
+      ],
+      "expected_output_paths": [],
+      "side_effect_class": "live_benchmark",
+      "external_gates": [
+        "frozen_confirmatory_schedule"
+      ],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "critical",
+      "fan_in": {
+        "type": "all_of",
+        "requires": [
+          "all frozen schedule slots for partition R7"
+        ]
+      }
+    },
+    {
+      "task_id": "4.9.5",
+      "task_kind": "orchestrator_confirmatory_partition",
+      "predecessor_ids": [
+        "4.8"
+      ],
+      "required_input_artifacts": [],
+      "resource_locks": [
+        "live-host-mode",
+        "canonical-progress"
+      ],
+      "expected_output_paths": [],
+      "side_effect_class": "live_benchmark",
+      "external_gates": [
+        "frozen_confirmatory_schedule"
+      ],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "critical",
+      "fan_in": {
+        "type": "all_of",
+        "requires": [
+          "all frozen schedule slots for partition R8/R9"
+        ]
+      }
+    },
+    {
+      "task_id": "4.9.6",
+      "task_kind": "orchestrator_confirmatory_partition",
+      "predecessor_ids": [
+        "4.8"
+      ],
+      "required_input_artifacts": [],
+      "resource_locks": [
+        "live-host-mode",
+        "canonical-progress"
+      ],
+      "expected_output_paths": [],
+      "side_effect_class": "live_benchmark",
+      "external_gates": [
+        "frozen_confirmatory_schedule"
+      ],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "critical",
+      "fan_in": {
+        "type": "all_of",
+        "requires": [
+          "all frozen schedule slots for partition R10/R11"
+        ]
+      }
+    },
+    {
+      "task_id": "4.10",
+      "task_kind": "orchestrator_postrun_micro_gate",
+      "predecessor_ids": [
+        "4.9.1",
+        "4.9.2",
+        "4.9.3",
+        "4.9.4",
+        "4.9.5",
+        "4.9.6"
+      ],
+      "required_input_artifacts": [],
+      "resource_locks": [
+        "live-host-mode",
+        "canonical-progress"
+      ],
+      "expected_output_paths": [],
+      "side_effect_class": "live_benchmark",
+      "external_gates": [],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "critical",
+      "fan_in": {
+        "type": "all_of",
+        "requires": [
+          "all six confirmatory partition checkpoints frozen",
+          "post-run M1/M2/M3 PASS"
+        ]
+      }
+    },
+    {
+      "task_id": "4C",
+      "task_kind": "orchestrator_review_frontier",
+      "predecessor_ids": [
+        "4.10"
+      ],
+      "required_input_artifacts": [],
+      "resource_locks": [],
+      "expected_output_paths": [
+        "benchmarks/chat-mode-scheduling-v2/phase4-review-correctness-safety.json",
+        "benchmarks/chat-mode-scheduling-v2/phase4-review-correctness-safety.md",
+        "benchmarks/chat-mode-scheduling-v2/phase4-review-performance-bootstrap.json",
+        "benchmarks/chat-mode-scheduling-v2/phase4-review-performance-bootstrap.md",
+        "benchmarks/chat-mode-scheduling-v2/phase4-review-reliability-provenance.json",
+        "benchmarks/chat-mode-scheduling-v2/phase4-review-reliability-provenance.md",
+        "benchmarks/chat-mode-scheduling-v2/phase4-review-scheduling-efficiency.json",
+        "benchmarks/chat-mode-scheduling-v2/phase4-review-scheduling-efficiency.md"
+      ],
+      "side_effect_class": "worker_git_write",
+      "external_gates": [],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "critical"
+    },
+    {
+      "task_id": "4.11",
+      "task_kind": "orchestrator_gate_aggregation",
+      "predecessor_ids": [
+        "4C"
+      ],
+      "required_input_artifacts": [],
+      "resource_locks": [
+        "canonical-integration",
+        "canonical-progress"
+      ],
+      "expected_output_paths": [
+        "benchmarks/chat-mode-scheduling-v2/phase4-hard-gate-matrix.json"
+      ],
+      "side_effect_class": "canonical_git_write",
+      "external_gates": [],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "critical",
+      "fan_in": {
+        "type": "all_of",
+        "requires": [
+          "phase4-review-correctness-safety.json",
+          "phase4-review-performance-bootstrap.json",
+          "phase4-review-reliability-provenance.json",
+          "phase4-review-scheduling-efficiency.json"
+        ]
+      }
+    },
+    {
+      "task_id": "4.12",
+      "task_kind": "orchestrator_go_no_go",
+      "predecessor_ids": [
+        "4.11"
+      ],
+      "required_input_artifacts": [],
+      "resource_locks": [
+        "canonical-progress"
+      ],
+      "expected_output_paths": [],
+      "side_effect_class": "canonical_git_write",
+      "external_gates": [],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "critical",
+      "fan_in": {
+        "type": "all_of",
+        "requires": [
+          "4.11 canonical hard-gate matrix reconciled",
+          "one explicit verdict from GO_PHASE5/NO_GO_RELIABILITY/NO_GO_CORRECTNESS/NO_GO_SAFETY/NO_GO_PERFORMANCE/NO_GO_SCHEDULING/NO_GO_EVIDENCE_INTEGRITY"
+        ]
+      }
+    },
+    {
+      "task_id": "4H-R",
+      "task_kind": "orchestrator_historical_fanin",
+      "predecessor_ids": [
+        "4.6B0"
+      ],
+      "required_input_artifacts": [],
+      "resource_locks": [
+        "canonical-progress"
+      ],
+      "expected_output_paths": [
+        "benchmarks/chat-mode-scheduling-v2/phase4-historical-comparator.json",
+        "benchmarks/chat-mode-scheduling-v2/phase4-historical-comparator.md"
+      ],
+      "side_effect_class": "canonical_git_write",
+      "external_gates": [],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "normal",
+      "fan_in": {
+        "type": "all_of",
+        "requires": [
+          "all enabled 4H historical trial tasks frozen"
+        ],
+        "excluded_from": [
+          "4.11",
+          "4.12"
+        ]
+      },
+      "dynamic_predecessor_rules": [
+        {
+          "template_id": "historical_h_trial",
+          "rule": "all_instances"
+        }
+      ]
+    },
+    {
+      "task_id": "4.13",
+      "task_kind": "orchestrator_closeout",
+      "predecessor_ids": [
+        "4.12",
+        "4H-R"
+      ],
+      "required_input_artifacts": [],
+      "resource_locks": [
+        "canonical-integration",
+        "canonical-progress"
+      ],
+      "expected_output_paths": [
+        "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-YYYY-MM-DD-rNN.json",
+        "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-YYYY-MM-DD-rNN.md"
+      ],
+      "side_effect_class": "canonical_git_write",
+      "external_gates": [],
+      "enabled_condition": null,
+      "required_for_phase": true,
+      "scheduling_class": "critical",
+      "fan_in": {
+        "type": "all_of",
+        "requires": [
+          "4.12 go/no-go verdict frozen",
+          "phase4-historical-comparator.json/md frozen",
+          "optimized full tests/pre-commit/CI/production isolation/endpoint cleanup validation PASS"
+        ]
+      }
+    }
+  ],
+  "dynamic_templates": [
+    {
+      "template_id": "supplemental_lane",
+      "expansion_source": "Phase-3 live C shortlist + H, excluding preferred-C",
+      "task_id_pattern": "4.4B:<lane>",
+      "predecessor_rule": {
+        "type": "all_of",
+        "requires": [
+          "4.3A local-smoke:<lane>",
+          "4.2D readiness:<lane>"
+        ]
+      },
+      "resource_lock_pattern": "project-mutate:<project-id> + connector-mutate:<profile> + live-host-mode",
+      "output_path_pattern": "benchmarks/chat-mode-scheduling-v2/phase4-lanes/<lane>.json",
+      "side_effect_class": "external_mutation",
+      "external_gates": [
+        "lane_readiness_verified"
+      ],
+      "required_for_phase": true,
+      "scheduling_class": "critical"
+    },
+    {
+      "template_id": "calibration_lane_refinement",
+      "expansion_source": "every started C/H lane manifest",
+      "task_id_pattern": "4.6B:<lane>",
+      "predecessor_rule": {
+        "type": "all_of",
+        "requires": [
+          "4.6B0",
+          "lane_manifest:<lane>"
+        ]
+      },
+      "resource_lock_pattern": "live-host-mode",
+      "output_path_pattern": "benchmarks/chat-mode-scheduling-v2/phase4-live-admission-rNN.json",
+      "side_effect_class": "live_benchmark",
+      "external_gates": [],
+      "required_for_phase": false,
+      "scheduling_class": "opportunistic"
+    },
+    {
+      "template_id": "c_calibration_trial",
+      "expansion_source": "surviving C candidates x {R5,R6,R7,R12} x repeats (R5/R6/R7=1..3; R12=1)",
+      "task_id_pattern": "4B:C:<candidate>:<scenario>:<repeat>",
+      "predecessor_rule": {
+        "type": "all_of",
+        "requires": [
+          "4.6B0",
+          "lane_manifest:<candidate>"
+        ]
+      },
+      "resource_lock_pattern": "live-host-mode",
+      "output_path_pattern": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/<trial-id>",
+      "side_effect_class": "live_benchmark",
+      "external_gates": [],
+      "required_for_phase": true,
+      "scheduling_class": "critical",
+      "live_mode": "calibration"
+    },
+    {
+      "template_id": "historical_h_trial",
+      "expansion_source": "H x {R5,R6,R7,R12} x repeats (R5/R6/R7=1..3; R12=1)",
+      "task_id_pattern": "4H:<scenario>:<repeat>",
+      "predecessor_rule": {
+        "type": "all_of",
+        "requires": [
+          "4.6B0",
+          "lane_manifest:H"
+        ]
+      },
+      "resource_lock_pattern": "live-host-mode",
+      "output_path_pattern": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/<trial-id>",
+      "side_effect_class": "live_benchmark",
+      "external_gates": [],
+      "required_for_phase": true,
+      "scheduling_class": "normal",
+      "live_mode": "calibration",
+      "excluded_from_fan_ins": [
+        "4.7",
+        "4.12"
+      ]
+    }
+  ]
+}

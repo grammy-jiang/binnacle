@@ -6,19 +6,19 @@
   "worktree": "/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4",
   "source_branch": "feature/chat-mode-scheduling-v2-phase3",
   "audited_source_head": "3a4dfb1b248e4530fb09013976abb863c8e35eaf",
-  "last_completed_step": null,
-  "next_step": "4.0",
+  "last_completed_step": "4.0",
+  "next_step": "4.1",
   "dependency_audit": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase4-dependency-audit-2026-09-25-r01.json",
     "revision": "r01",
     "sha256": "6ffa479be73acf488f1e627f50160b41f3473c6ea990f2a88afe18312e4ef893"
   },
-  "task_graph_path": null,
-  "task_graph_revision": null,
-  "task_graph_sha256": null,
+  "task_graph_path": "benchmarks/chat-mode-scheduling-v2/phase4-task-graph.json",
+  "task_graph_revision": "r01",
+  "task_graph_sha256": "371dac292442c10d5c845f30bc71759e7f8422ceaa0ba998ad56b730c20fde17",
   "orchestrator_state_path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase4/orchestrator-state.json",
-  "orchestrator_state_checkpoint_sha256": null,
-  "orchestrator_state_checkpoint_at": null,
+  "orchestrator_state_checkpoint_sha256": "8b592e2e58fdcda6d861c498b617b5b28d22ea94a4663ab5d8e5bfbe6a2e7111",
+  "orchestrator_state_checkpoint_at": "2026-09-25T15:41:02+10:00",
   "test_commands": {
     "fast_full_suite": "uv run python scripts/run_test_suite.py --workers 4 --seed 12345",
     "coverage_policy": "uv run tox -e coverage-policy -- --seed 12345",
@@ -68,7 +68,9 @@
     "phase3_predecessor": "3a4dfb1b248e4530fb09013976abb863c8e35eaf",
     "phase3_validated_evidence": "83a3d2a9a19592fdb32e08885310f79a0f936e68",
     "origin_master_at_audit": "260bc009a55e7a78716ac42faf64ae88cf2c6724",
-    "origin_proof_of_concept_at_audit": "260bc009a55e7a78716ac42faf64ae88cf2c6724"
+    "origin_proof_of_concept_at_audit": "260bc009a55e7a78716ac42faf64ae88cf2c6724",
+    "phase4_bootstrap_base": "3a4dfb1b248e4530fb09013976abb863c8e35eaf",
+    "phase4_dependency_audit_head": "89a206d24185284de278df18fe77ac0e4eccbb01"
   },
   "frozen_hashes": {
     "phase3_progress_json": "984ba7891843a6eb3a15b750e95177d3a325f14280990f47be62527d44482bde",
@@ -89,7 +91,9 @@
     "coverage_runner": "d37ecbda26e4f48b44d700257f3e41bc067f7b701964cc418ec29499950cf80d",
     "quality_policy": "7ef91e25e3af206a115efd03cdced916f7fb71912c98539be122d2e46a62e736",
     "tox_ini": "244323e4443a5f645de6e1700530d5ec737a4e971496e9c561e1ed561679dd0e",
-    "host_safety_guard": "2ced4609e58cd3c5ff3a6db9be66c1255fd44b1e4ea73ced02f94dd7f1e81624"
+    "host_safety_guard": "2ced4609e58cd3c5ff3a6db9be66c1255fd44b1e4ea73ced02f94dd7f1e81624",
+    "task_graph": "371dac292442c10d5c845f30bc71759e7f8422ceaa0ba998ad56b730c20fde17",
+    "orchestrator_state_initial_checkpoint": "8b592e2e58fdcda6d861c498b617b5b28d22ea94a4663ab5d8e5bfbe6a2e7111"
   },
   "preflight_findings": {
     "p4-preflight-git-lineage": "804da7b66ddc1f0e71ddf3106790989f50a0f320de4cd3b3f0aedaf962d68461",
@@ -110,16 +114,21 @@
   ],
   "steps": {
     "4.0": {
-      "status": "running",
+      "status": "complete",
       "tests": [
-        "uv run pytest -q tests/unit/core/test_config_loading.py tests/unit/core/test_blocking_wall_guard.py tests/contracts/test_job_schemas.py tests/contracts/test_protocol.py -> PASS: 63 passed in 10.63s; pre-run nproc=4 loadavg=1.68 2.37 2.63"
+        "uv run pytest -q tests/unit/core/test_config_loading.py tests/unit/core/test_blocking_wall_guard.py tests/contracts/test_job_schemas.py tests/contracts/test_protocol.py -> PASS: 63 passed in 10.63s; pre-run nproc=4 loadavg=1.68 2.37 2.63",
+        "phase4-task-graph.json validator -> GRAPH VALIDATION PASS 9/9",
+        "python3 -m json.tool phase4-task-graph.json + phase4-dependency-audit-2026-09-25-r01.json + phase4-progress.json -> PASS",
+        "initial orchestrator-state checkpoint -> PASS: 27 static tasks; 4.0 complete, 4.1 ready, 25 blocked, 0 claimed/running; state/checkpoint mode 0600"
       ],
       "notes": [
-        "All twelve mandatory dependency-audit rows PASS; dependency audit r01 is frozen at SHA-256 6ffa479be73acf488f1e627f50160b41f3473c6ea990f2a88afe18312e4ef893.",
+        "All twelve mandatory dependency-audit rows PASS; dependency audit r01 SHA-256 is 6ffa479be73acf488f1e627f50160b41f3473c6ea990f2a88afe18312e4ef893.",
         "Canonical Phase-4 workspace was created directly from current green Phase-3 closeout HEAD 3a4dfb1b248e4530fb09013976abb863c8e35eaf.",
         "Phase-3 live shortlist is frozen to C300 only at SHA-256 072556e60fb55f686d872bce4da004bc272e9162e32459f2dc276657faa0e094.",
-        "Deviation D1 is informational: the pre-restack provenance SHA maps to byte-equivalent current-lineage commit b09cb68b9b764c7066beef1932f14f2cde217e51.",
-        "Task graph r01 and initial orchestrator-state checkpoint remain to be materialized before Step 4.0 can be marked complete."
+        "Task graph r01 validated 9/9 and is frozen at SHA-256 371dac292442c10d5c845f30bc71759e7f8422ceaa0ba998ad56b730c20fde17.",
+        "Initial orchestrator state has 4.0 complete, 4.1 ready, every other static task blocked on predecessors; checkpoint SHA-256 8b592e2e58fdcda6d861c498b617b5b28d22ea94a4663ab5d8e5bfbe6a2e7111.",
+        "Deviation D1 is informational: the Phase-3 handoff's pre-restack provenance SHA maps to byte-equivalent current-lineage ancestor b09cb68b9b764c7066beef1932f14f2cde217e51; housekeeping/restack follow-up remains separately scheduled.",
+        "The first graph-validator draft over-broadly treated the GO_PHASE5 verdict token as a later-phase dependency; the corrected validator restricts that rule to predecessor ids and immutable input paths and passes all 9 contract checks."
       ],
       "commit": null,
       "worker_branch": null
@@ -307,8 +316,53 @@
       "worker_branch": null
     }
   },
-  "checkpoints": [],
+  "checkpoints": [
+    {
+      "kind": "initial_orchestrator_state",
+      "at": "2026-09-25T15:41:02+10:00",
+      "task_graph_revision": "r01",
+      "task_graph_sha256": "371dac292442c10d5c845f30bc71759e7f8422ceaa0ba998ad56b730c20fde17",
+      "orchestrator_state_checkpoint_path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase4/checkpoints/orchestrator-state-initial.json",
+      "orchestrator_state_checkpoint_sha256": "8b592e2e58fdcda6d861c498b617b5b28d22ea94a4663ab5d8e5bfbe6a2e7111",
+      "ready_count": 1,
+      "claimed_count": 0,
+      "running_count": 0,
+      "blocked_count": 25,
+      "running_task_ids_at_checkpoint": [],
+      "completed_task_count": 1,
+      "completed_worker_commits_since_checkpoint": {},
+      "blocked_task_summary": {
+        "waiting_on_predecessors": [
+          "4.2A",
+          "4.2B",
+          "4.2C",
+          "4.2D",
+          "4.3A",
+          "4.3B",
+          "4.4A",
+          "4.5",
+          "4.6A",
+          "4.6B0",
+          "4.7",
+          "4.6A:selected",
+          "4.8",
+          "4.9.1",
+          "4.9.2",
+          "4.9.3",
+          "4.9.4",
+          "4.9.5",
+          "4.9.6",
+          "4.10",
+          "4C",
+          "4.11",
+          "4.12",
+          "4H-R",
+          "4.13"
+        ]
+      }
+    }
+  ],
   "handoff": null,
   "created_at": "2026-09-25T15:31:10+10:00",
-  "updated_at": "2026-09-25T15:36:59+10:00"
+  "updated_at": "2026-09-25T15:41:48+10:00"
 }
