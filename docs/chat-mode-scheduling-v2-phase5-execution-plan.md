@@ -832,6 +832,40 @@ rollback snapshots ready
 next allowed step: 5.1
 ```
 
+### Amendment P5-A1: speculative preparation during Phase 4 (2026-09-25)
+
+Owner decision 2026-09-25 17:55: prepare Phase 5 while Phase 4 is still
+running, assuming the Phase-3 sole live candidate C300 is selected, and discard
+the preparation if Step 4.12 is not `GO_PHASE5` or selects another budget.
+
+- **5.0S (speculative audit)** replaces 5.0 as the entry gate for 5.1A-5.1E
+  only. It runs the preflight categories on what exists now: the Phase-3 handoff
+  (C300 sole live candidate), the frozen Phase-4 source head `06bc164`
+  (speculative `approved_runtime_source_head`), the in-progress Phase-4 branch,
+  production state, both rollout Projects' current instructions (snapshots only,
+  read-only), staging paths/ports, and the staging control plane. Rows that need
+  the Phase-4 verdict (`phase4_progress`, `phase4_final_report`,
+  `verdict_GO_PHASE5`, `all_acceptance_gates`, `phase4_ci`, `benchmark_cleanup`,
+  `owner_approval`) are recorded as `PENDING`, not `BLOCKED`. 5.0S creates the
+  Phase-5 branch from the current Phase-4 canonical HEAD.
+- **5.0F (final audit)** runs after `GO_PHASE5` and the owner's approval and
+  before 5.2: it verifies every PENDING row, rebases the Phase-5 branch onto the
+  Phase-4 closeout HEAD, checks that there is no runtime drift between `06bc164`
+  and that HEAD (the plan's existing rule), and re-verifies the 5.1C4/5.1D/5.1E
+  hashes. A failure sends Phase 5 back to the affected 5.1 step.
+- **5.1D uses a throwaway rehearsal Project** (`rp-sched-staging-rehearsal`)
+  while Phase 4 still uses `rp-sched-C300`, so no Phase-4 lane is touched; it is
+  deleted afterwards. `Binnacle` and `Raspberry Pi 5` are never mutated before
+  5.2.
+- **Measurement isolation:** CPU-heavy preparation (test suites, `uv sync`)
+  and 5.1C4/5.1D run only while the Phase-4 live-host mode is `idle`; during
+  `qualification` or `confirmatory` they wait. The staging services started by
+  5.1C4 stay idle (no traffic) until 5.2.
+- **Discard rule:** on `NO_GO_*` or another selected budget, stop the staging
+  services, remove the staging units/config/token/tunnel/profile/connector and
+  the throwaway Project, and archive the Phase-5 branch; nothing reached a
+  rollout Project.
+
 ## Phase-5 canonical staging workspace
 
 ```text
