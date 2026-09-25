@@ -13,6 +13,7 @@ from scripts.chat_scheduling_journal import (
     parse_journal,
 )
 from scripts.chat_scheduling_manifest import Node, Scenario
+from scripts.chat_scheduling_postsend import captured_send_reply, conversation_facts
 from scripts.chat_scheduling_runtime import (
     HarnessError,
     TrialIdentity,
@@ -27,45 +28,6 @@ class EvidenceIntegrityError(HarnessError): ...
 
 _RESULT_REF = re.compile(r"\{result:([^.{}]+)\.([^{}]+)\}")
 _ABS_PATH = re.compile(r'(?<![A-Za-z0-9_])(/[^\s\'";|&<>]+)')
-_INTERRUPTION_TEXT = ["streaming interrupted", "request timed out", "request timeout", "no complete reply within", "connection interrupted", "connection lost", "network error", "something went wrong", "error generating a response"]  # fmt: skip
-
-
-def _conversation_facts(path: Path) -> tuple[str, bool, int, str | None]:
-    if not path.exists():
-        return "", False, 1, None
-    data = json.loads(path.read_text(encoding="utf-8"))
-    mapping = data.get("mapping") or {}
-    user_messages = 0
-    assistants: list[dict[str, Any]] = []
-    for node in mapping.values():
-        message = node.get("message") if isinstance(node, dict) else None
-        if not isinstance(message, dict):
-            continue
-        role = (message.get("author") or {}).get("role")
-        if role == "user":
-            user_messages += 1
-        elif role == "assistant":
-            assistants.append(message)
-    current = mapping.get(data.get("current_node"), {})
-    final = current.get("message") if isinstance(current, dict) else None
-    if (
-        not isinstance(final, dict)
-        or (final.get("author") or {}).get("role") != "assistant"
-    ):
-        final = assistants[-1] if assistants else None
-    if not isinstance(final, dict):
-        return "", False, max(user_messages, 1), "missing_final_assistant"
-    content = final.get("content") or {}
-    parts = content.get("parts") if isinstance(content, dict) else []
-    reply = "\n".join(part for part in (parts or []) if isinstance(part, str))
-    metadata = final.get("metadata") or {}
-    complete = (
-        bool(metadata.get("is_complete"))
-        or final.get("status") == "finished_successfully"
-    )
-    low = reply.lower()
-    interruption = next((item for item in _INTERRUPTION_TEXT if item in low), None)
-    return reply, complete, max(user_messages, 1), interruption
 
 
 def _seed_strings(record: dict[str, Any]) -> list[str]:
@@ -386,8 +348,14 @@ def load_trial_trace(state_dir: Path, scenario: Scenario) -> TrialTrace:
         timing_status = "unknown"
 
     reply, assistant_complete, user_messages, conversation_interruption = (
-        _conversation_facts(state_dir / "conversation.json")
+        conversation_facts(state_dir / "conversation.json")
     )
+    if not reply:
+        captured_reply, captured_complete = captured_send_reply(record)
+        if captured_reply:
+            reply = captured_reply
+            assistant_complete = assistant_complete or captured_complete
+            conversation_interruption = None
     error = record.get("error") or {}
     error_text = json.dumps(error).lower()
     interruption = conversation_interruption
@@ -395,7 +363,21 @@ def load_trial_trace(state_dir: Path, scenario: Scenario) -> TrialTrace:
         interruption = "harness_timeout"
     if interruption is None:
         interruption = next(
-            (item for item in _INTERRUPTION_TEXT if item in error_text),
+            (
+                item
+                for item in (
+                    "streaming interrupted",
+                    "request timed out",
+                    "request timeout",
+                    "no complete reply within",
+                    "connection interrupted",
+                    "connection lost",
+                    "network error",
+                    "something went wrong",
+                    "error generating a response",
+                )
+                if item in error_text
+            ),
             None,
         )
     if timing_status == "timeout" and interruption is None:

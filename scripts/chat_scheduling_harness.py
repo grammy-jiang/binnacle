@@ -22,6 +22,7 @@ from scripts.chat_scheduling_chat import (
 )
 from scripts.chat_scheduling_manifest import ROOT as SCENARIO_ROOT
 from scripts.chat_scheduling_manifest import load_scenario
+from scripts.chat_scheduling_postsend import cleanup_failure_is_fatal
 from scripts.chat_scheduling_runtime import (
     FixtureLease,
     HarnessError,
@@ -282,7 +283,8 @@ def run_trial(
         record["cleanup"]["chat"] = chat_cleanup
         if cleanup_error:
             record["cleanup"]["chat_error"] = cleanup_error
-            trial_error = trial_error or HarnessError("chat cleanup was incomplete")
+            if cleanup_failure_is_fatal(record["submission_status"]):
+                trial_error = trial_error or HarnessError("chat cleanup was incomplete")
         record["cleanup"]["fixture"] = (
             fixture.cleanup()
             if fixture_entered

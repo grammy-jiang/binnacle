@@ -40,7 +40,7 @@ Next step: **4.5 core pre-run M1/M2/M3**
 | 4.3A-fix2 | complete | `acdb208` |
 | 4.3B | complete | — |
 | 4.4A | complete | — |
-| 4.5 | not_started | — |
+| 4.5 | running | Evaluating canonical attempt-3 M1/M2/M3 lane evidence. |
 | 4.6A | not_started | — |
 | 4.6B0 | not_started | — |
 | 4.7 | not_started | — |
@@ -173,6 +173,21 @@ Next step: **4.5 core pre-run M1/M2/M3**
 - Final production-isolation check remains at accepted D2 baseline
   `e8ece81d57dd2a478dd636d2b4f409519b845605` /
   `d24dadcc87e04096fdd960fc7d1543fca02ea53814b15ccd51fd9b1eb1153195`.
+
+## Step 4.5 micro sanity — RUNNING
+
+- D5 is resolved in benchmark-only tooling: routed reply reads retry transient
+  timeouts/HTTP 429 with bounded backoff and never resubmit; cleanup errors after
+  an already completed submission are recorded but nonfatal; analysis falls back
+  to the captured send reply when a cleanup failure prevented transcript backup.
+- Focused D5 regression: **34/34 PASS** in 1.54 seconds; 4 CPUs; pre-run load
+  average 0.09 / 0.40 / 0.93; helper factoring keeps every touched Python file at
+  or below the repository 500-line ratchet.
+- C300/M1 and B/M2 have intact lane evidence and captured `DONE` replies despite
+  cleanup failures. B/M3 reached lane B and later produced `DONE`, but its
+  prelaunched fixture job had already exited before `job_status`, so the required
+  wait/read overlap relation was not exercised; that one infrastructure-invalid
+  micro will be rerun after D5.
 
 ## Step 4.3B analyzer integration
 

@@ -13,6 +13,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
 
+from scripts.chat_scheduling_postsend import sleep_poll_backoff, transient_read_failure
 from scripts.chat_scheduling_runtime import HarnessError, RestoreError, _run
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -350,9 +351,17 @@ def _routed_project_chat(
 
     deadline = time.monotonic() + timeout_s
     last_text = ""
+    transient_failures = 0
     while time.monotonic() < deadline:
         poll_args = ["python3", str(API_READ_CHAT), conversation_id, "--text"]
-        poll = _run(poll_args, timeout=30, check=False)
+        try:
+            poll = _run(poll_args, timeout=30, check=False)
+        except subprocess.TimeoutExpired as exc:
+            transient_failures += 1
+            if isinstance(exc.output, str) and exc.output.strip():
+                last_text = exc.output.strip()
+            sleep_poll_backoff(transient_failures, deadline)
+            continue
         if poll.returncode == 0:
             _header, separator, reply = poll.stdout.partition("\n\n")
             if not separator:
@@ -380,6 +389,10 @@ def _routed_project_chat(
             )
             return result
         if poll.returncode != 1:
+            if transient_read_failure(f"{poll.stdout}\n{poll.stderr}"):
+                transient_failures += 1
+                sleep_poll_backoff(transient_failures, deadline)
+                continue
             raise HarnessError(
                 f"read_chat.py failed with exit code {poll.returncode}: "
                 f"{poll.stderr.strip()}"
@@ -387,6 +400,7 @@ def _routed_project_chat(
         _header, separator, tail = poll.stdout.partition("\n\n")
         if separator:
             last_text = tail.strip()
+        transient_failures = 0
         time.sleep(1.0)
 
     observed_epoch = time.time()

@@ -151,6 +151,12 @@
       "status": "RESOLVED",
       "description": "Benchmark-infrastructure connector-routing defect found at the first chat-opening 4.5 micro attempt after D3: the harness used branch-local chatgpt-send without a connector system hint and rendered prompts named the bare production connector. M1-B, M1-C300 and M2-C300 therefore completed through production Raspberry Pi MCP; 14 read-only read_file calls against disposable /tmp fixtures reached production between 21:18 and 21:23, with no job start, write or persistent production mutation. M1-A separately timed out after 80.611 s with no reply text, conversation URL or MCP call on either production or lane A. The manager stopped the remaining micros, the attempt evidence was quarantined under phase4/runs/failed-2116-routing/, and no canonical 4.5 trial slot was created.",
       "disposition": "Canonical trial sends now use the ChatGPT skill API-path send_prompt.py with the exact lane Project id, lane manifest system_hint, and frozen gpt-5-6-thinking/max state; rendered prompts replace only the bare production connector token with the lane connector_logical_name while scenario templates and hashes remain unchanged. The shared send gate, exact conversation URL recovery, sent/settled timing evidence, single-submit/no-unsafe-retry rule and endpoint evidence guard are preserved. A non-canonical M1/B validation probe at /home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/m1-20260925T214221-c8c630aecf passed with matched base turn d0d25db8-d70d-4e13-bdcf-3ded89d1dc12, three lane-B read_file calls and zero production fixture-path hits. Frozen phase4_runtime_path_head advances 22f9556017b630061f2fb03d2ac989c6970ffde2 -> acdb2088584382c6496d10c2a170d2217135e550; frozen experiment source 06bc1649c4bad9449470366da971649bb7620020 and running endpoints are unchanged."
+    },
+    {
+      "id": "D5",
+      "status": "RESOLVED",
+      "description": "Attempt-3 exposed post-send benchmark robustness defects: two completed chats returned DONE but cleanup HTTP 429 made the harness exit 1, and one B/M3 reply read timed out after submission. These failures were downstream of the measured MCP workload and must not convert a completed trial into a scheduler failure.",
+      "disposition": "Benchmark-only post-send handling now retries read_chat timeouts and HTTP 429 with bounded backoff without resubmitting, treats cleanup failure as nonfatal after a completed submission, and lets evidence analysis fall back to the captured send_result reply when conversation backup is unavailable. Focused regression is 34/34 PASS after factoring helpers under the 500-line module-size ratchet; frozen experiment source and running endpoints are unchanged."
     }
   ],
   "steps": {
@@ -295,9 +301,15 @@
       "worker_branch": null
     },
     "4.5": {
-      "status": "not_started",
-      "tests": [],
-      "notes": [],
+      "status": "running",
+      "tests": [
+        "uv run pytest -q tests/scripts/test_chat_scheduling_harness.py tests/scripts/test_chat_scheduling_evidence.py tests/scripts/test_chat_scheduling_postsend.py -> PASS: 34 passed in 1.54s; nproc=4; pre-run loadavg=0.09 0.40 0.93 (foreign parallel-programme load possible)."
+      ],
+      "notes": [
+        "Deviation D5 resolved the attempt-3 post-send robustness defects without changing scenario semantics, lane routing, frozen experiment source, or endpoint processes.",
+        "C300/M1 and B/M2 completed their MCP work and captured reply DONE before cleanup failed; their endpoint evidence is intact. C300/M1 transcript was recovered read-only; B/M2 had already been deleted, so the immutable captured send reply is the final-reply evidence.",
+        "B/M3 attempt-3 reached the correct lane and final reply DONE, but its prelaunched 300-second fixture job had already exited before job_status, so the required wait/read overlap relation was not exercised. It is an infrastructure-invalid micro and will be rerun once after D5."
+      ],
       "commit": null,
       "worker_branch": null
     },
