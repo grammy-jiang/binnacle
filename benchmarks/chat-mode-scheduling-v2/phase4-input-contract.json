@@ -5,9 +5,11 @@
   "replay_corpus_path": "benchmarks/chat-mode-scheduling-v2/phase3-replay-corpus.json",
   "replay_corpus_sha256": "4dd1e387c42d6fccd37d60795b00192144f3b4d93c57d9eb54ab527a72e8e94d",
   "candidate_shortlist_path": "benchmarks/chat-mode-scheduling-v2/phase3-candidate-shortlist.json",
-  "candidate_shortlist_sha256": "51db08d70ad8ebfcc46de9e53c661b517b9f3ed41b10579d49057aa395f8d11d",
-  "live_candidates": [],
-  "preferred_live_candidate": null,
+  "candidate_shortlist_sha256": "072556e60fb55f686d872bce4da004bc272e9162e32459f2dc276657faa0e094",
+  "live_candidates": [
+    "C300"
+  ],
+  "preferred_live_candidate": "C300",
   "candidate_budgets_s": {
     "C120": 120,
     "C300": 300,
@@ -61,5 +63,38 @@
     "endpoint_routing_implemented_in_phase3": false,
     "c_h_harness_support_implemented_in_phase3": false
   },
-  "phase3_offline_verdict": "NO_LIVE_CANDIDATE"
+  "phase3_offline_verdict": "LIVE_CANDIDATES_AVAILABLE",
+  "source_shortlist_run": "r02",
+  "gate_4_amendment": "A1",
+  "blocked_candidates": {
+    "C120": {
+      "budget_s": 120.0,
+      "failed_gates": [
+        "gate_1_completion_preservation",
+        "gate_2_exhaustion"
+      ],
+      "completion_preservation_percent": 88.888889,
+      "predicted_exhaustion_percent": 15.384615,
+      "early_exhaustion_turns": 0,
+      "definition_b_repeated_wait_burden_reduction_percent": 87.325603,
+      "definition_b_minimum_percent": 60.0,
+      "definition_a_total_wait_burden_reduction_percent": 75.772057,
+      "definition_a_non_gating_reference_percent": 70.0,
+      "missing_evidence_count": 0
+    },
+    "C600": {
+      "budget_s": 600.0,
+      "failed_gates": [
+        "gate_4_repeated_wait_burden_reduction"
+      ],
+      "completion_preservation_percent": 100.0,
+      "predicted_exhaustion_percent": 0.0,
+      "early_exhaustion_turns": 0,
+      "definition_b_repeated_wait_burden_reduction_percent": 36.593805,
+      "definition_b_minimum_percent": 60.0,
+      "definition_a_total_wait_burden_reduction_percent": 29.824066,
+      "definition_a_non_gating_reference_percent": 70.0,
+      "missing_evidence_count": 0
+    }
+  }
 }
