@@ -890,7 +890,7 @@ branch/worktree or reset it.
 | **4.11** hard-gate matrix | all canonical 4C focus artifacts | all focus aggregations + canonical metrics reconcile |
 | **4.12** GO/NO-GO | 4.11 | hard-gate matrix internally consistent |
 | **4H-R** historical H comparator report | all required 4H tasks | H R5/R6/R7/R12 diagnostic/control evidence aggregated; not part of C hard-gate verdict |
-| **4.13** final checkpoint | 4.12 + 4H-R | C verdict fixed + H comparator complete; no open evidence-integrity blocker |
+| **4.13** final checkpoint | 4.12 (Amendment P4-A1: not 4H-R) | C verdict fixed; H comparator complete or recorded as pending with its own follow-up; no open evidence-integrity blocker |
 
 ### Phase-4 dynamic/optional task-graph rules
 
@@ -947,7 +947,8 @@ back into global barriers:
   excluded_from = 4.11/4.12 C gate verdict
 
 4.13:
-  fan_in = all_of(4.12, 4H-R)
+  fan_in = all_of(4.12)          # Amendment P4-A1: 4H-R is no longer a predecessor
+  follow_up = 4H-R               # completes later; its report is appended to the handoff
 ```
 
 Admission revisions are **artifacts/state**, not task predecessors that force old
@@ -2509,6 +2510,22 @@ NO_GO_EVIDENCE_INTEGRITY
 There is no ambiguous "mostly pass" deployment state. Any hard gate failure is
 NO-GO.
 
+### Amendment P4-A1: H comparator off the critical path (2026-09-25)
+
+Owner decision 2026-09-25 17:50, together with two execution changes that do
+not alter this plan's content: sequential orchestrator-owned steps may be run
+in one chat, and benchmark trial sends may be 45-60 s apart (never two at
+once; the orchestrator's other sends keep >= 2 minutes).
+
+- H stays a required diagnostic comparator; its trials keep running in
+  `calibration` mode whenever no C/qualification/confirmatory work needs the
+  live host (the critical-path priority list above is unchanged).
+- 4.13 no longer waits for 4H-R. A Phase-4 handoff with H `pending` is valid;
+  the 4H-R report is appended to the handoff when it is frozen.
+- An H evidence-integrity failure is still disclosed and resolved before the
+  Phase-4 record is called complete; it does not block the GO/NO-GO verdict,
+  which never used H.
+
 ### Step 4H-R — aggregate historical H comparator
 
 Predecessor: every canonical H R5/R6/R7/R12 task is frozen. This step may run in
@@ -2529,7 +2546,11 @@ resolved/reported before Phase 4 can be called complete.
 
 ### Step 4.13 — Phase-4 final validation/checkpoint
 
-Verify the 4H-R historical-comparator artifact/hashes are frozen, then write the dated Phase-4 JSON/Markdown report, update progress, run optimized full tests,
+Amendment P4-A1 (owner, 2026-09-25 17:50): 4.13 does not wait for 4H-R. If
+the 4H-R artifact/hashes are frozen, verify them; otherwise record H as
+`pending` in the handoff with the H tasks still open, and 4H-R completes as a
+follow-up whose report is appended to the handoff when it is frozen. Then write
+the dated Phase-4 JSON/Markdown report, update progress, run optimized full tests,
 pre-commit, CI, production isolation, and endpoint cleanup validation. Do not
 delete evidence required by Phase 5/6.
 
