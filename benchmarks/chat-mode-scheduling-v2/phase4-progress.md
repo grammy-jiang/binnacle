@@ -8,9 +8,9 @@ Worktree: `/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4`
 
 Audited source HEAD: `3a4dfb1b248e4530fb09013976abb863c8e35eaf`
 
-Last completed step: **4.3A-fix**
+Last completed step: **4.3A-fix2**
 
-Next step: **4.3A-fix2 connector-routing repair**
+Next step: **4.5 core pre-run M1/M2/M3**
 
 ## Frozen Step 4.0 entry gate
 
@@ -37,7 +37,7 @@ Next step: **4.3A-fix2 connector-routing repair**
 | 4.2D | not_started | — |
 | 4.3A | complete | — |
 | 4.3A-fix | complete | `22f9556` |
-| 4.3A-fix2 | running | — |
+| 4.3A-fix2 | complete | `acdb208` |
 | 4.3B | complete | — |
 | 4.4A | complete | — |
 | 4.5 | not_started | — |
@@ -138,12 +138,41 @@ Next step: **4.3A-fix2 connector-routing repair**
   listener on 127.0.0.1:8120 was observed but not created, modified, or stopped
   by this task.
 
-## Step 4.3A-fix2 connector-routing repair — RUNNING
+## Step 4.3A-fix2 connector-routing repair — COMPLETE
 
-- D4 repair started after verifying predecessor `4.3A-fix` completion commit
-  `ee9094102dca3d66d2818a38eb23c84b0a1fd7f5` equals canonical HEAD.
-- Scope is benchmark harness/sender routing plus focused tests and progress evidence;
-  frozen experiment server source and already-running endpoints are unchanged.
+- D4 was a benchmark-infrastructure routing defect at the first chat-opening
+  4.5 micro attempt after D3. The branch-local sender could not pin a connector,
+  while rendered scenario prompts still named the bare production connector.
+- M1-B, M1-C300 and M2-C300 completed through production instead of their lane:
+  14 read-only `read_file` calls against disposable `/tmp` fixtures reached
+  production at 21:18-21:23. No job was started and no write or persistent
+  production mutation occurred. M1-A separately timed out after 80.611 seconds
+  with no assistant text, conversation URL or MCP call on production or lane A.
+  The manager quarantined this failed attempt under
+  `phase4/runs/failed-2116-routing/`; it created no canonical 4.5 slot.
+- Canonical trial sends now use the ChatGPT skill API sender with the exact lane
+  Project id, lane manifest `system_hint`, and frozen
+  `gpt-5-6-thinking` / `max` state. The rendered prompt replaces only the
+  bare production connector token with that lane's `connector_logical_name`;
+  scenario templates and their hashes remain unchanged.
+- The shared send gate, exact conversation URL artifact, sent/settled timing,
+  single-submit/no-unsafe-retry rule and endpoint evidence guard are preserved.
+- Focused routing/harness/evidence/manifest regression: **77/77 PASS** in
+  1.88 seconds; 4 CPUs; pre-run load average 0.54 / 0.51 / 0.85. Final
+  file-scoped pre-commit, including mypy and module-size ratchet: **PASS**.
+- Frozen `phase4_runtime_path_head` advanced
+  `22f9556017b630061f2fb03d2ac989c6970ffde2` ->
+  `acdb2088584382c6496d10c2a170d2217135e550`. Frozen experiment source remains
+  `06bc1649c4bad9449470366da971649bb7620020`; endpoints required no restart.
+- One non-canonical M1/B validation probe passed at
+  `m1-20260925T214221-c8c630aecf`: chat reply `DONE`, 14.77-second
+  send-to-settle wall time, matched base turn
+  `d0d25db8-d70d-4e13-bdcf-3ded89d1dc12`, exactly three lane-B
+  `read_file` calls, and **0** production journal matches for its fixture path
+  since probe start. The disposable chat and fixture were cleaned by the harness.
+- Final production-isolation check remains at accepted D2 baseline
+  `e8ece81d57dd2a478dd636d2b4f409519b845605` /
+  `d24dadcc87e04096fdd960fc7d1543fca02ea53814b15ccd51fd9b1eb1153195`.
 
 ## Step 4.3B analyzer integration
 

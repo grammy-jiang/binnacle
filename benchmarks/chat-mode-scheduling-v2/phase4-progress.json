@@ -6,8 +6,8 @@
   "worktree": "/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4",
   "source_branch": "feature/chat-mode-scheduling-v2-phase3",
   "audited_source_head": "3a4dfb1b248e4530fb09013976abb863c8e35eaf",
-  "last_completed_step": "4.3A-fix",
-  "next_step": "4.3A-fix2 connector-routing repair",
+  "last_completed_step": "4.3A-fix2",
+  "next_step": "4.5 core pre-run M1/M2/M3",
   "dependency_audit": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase4-dependency-audit-2026-09-25-r01.json",
     "revision": "r01",
@@ -73,7 +73,7 @@
     "phase4_dependency_audit_head": "89a206d24185284de278df18fe77ac0e4eccbb01",
     "phase4_source_head": "06bc1649c4bad9449470366da971649bb7620020",
     "phase4_analyzer_path_head": "6073902ba1e72a946da0ea7d7e901e36f47f96a3",
-    "phase4_runtime_path_head": "22f9556017b630061f2fb03d2ac989c6970ffde2",
+    "phase4_runtime_path_head": "acdb2088584382c6496d10c2a170d2217135e550",
     "phase4_core_manifest_validation_head": "e0cb1ce6eead5b021fbe079edef70ec4276a0851"
   },
   "frozen_hashes": {
@@ -145,6 +145,12 @@
       "status": "RESOLVED",
       "description": "Benchmark-infrastructure process-identity contract defect found at the first live harness micro-trial attempt: chat_scheduling_endpoints.py writes each server/manager/tunnel process_start_identity as {pid, start_time_ticks}, while resolve_phase4_endpoint compared only the legacy 'pid:start_time_ticks' string form. All nine attempted 4.5 micros failed before a chat opened; no trial was submitted and no canonical slot was created.",
       "disposition": "resolve_phase4_endpoint now accepts the launcher's dict form by comparing pid and start_time_ticks and retains legacy string compatibility. Focused tests and direct read-only resolution against live A/B/C300/H endpoints pass. Frozen experiment source 06bc1649c4bad9449470366da971649bb7620020 is unchanged, running endpoints require no restart, and phase4_runtime_path_head advances 2e7889f3552e5d9bb6c26a38c7aab444ebbe8b90 -> 22f9556017b630061f2fb03d2ac989c6970ffde2. Failed pre-submit evidence remains at ~/.local/state/binnacle/chat-scheduling-v2/phase4/runs/failed-2104-identity/."
+    },
+    {
+      "id": "D4",
+      "status": "RESOLVED",
+      "description": "Benchmark-infrastructure connector-routing defect found at the first chat-opening 4.5 micro attempt after D3: the harness used branch-local chatgpt-send without a connector system hint and rendered prompts named the bare production connector. M1-B, M1-C300 and M2-C300 therefore completed through production Raspberry Pi MCP; 14 read-only read_file calls against disposable /tmp fixtures reached production between 21:18 and 21:23, with no job start, write or persistent production mutation. M1-A separately timed out after 80.611 s with no reply text, conversation URL or MCP call on either production or lane A. The manager stopped the remaining micros, the attempt evidence was quarantined under phase4/runs/failed-2116-routing/, and no canonical 4.5 trial slot was created.",
+      "disposition": "Canonical trial sends now use the ChatGPT skill API-path send_prompt.py with the exact lane Project id, lane manifest system_hint, and frozen gpt-5-6-thinking/max state; rendered prompts replace only the bare production connector token with the lane connector_logical_name while scenario templates and hashes remain unchanged. The shared send gate, exact conversation URL recovery, sent/settled timing evidence, single-submit/no-unsafe-retry rule and endpoint evidence guard are preserved. A non-canonical M1/B validation probe at /home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/m1-20260925T214221-c8c630aecf passed with matched base turn d0d25db8-d70d-4e13-bdcf-3ded89d1dc12, three lane-B read_file calls and zero production fixture-path hits. Frozen phase4_runtime_path_head advances 22f9556017b630061f2fb03d2ac989c6970ffde2 -> acdb2088584382c6496d10c2a170d2217135e550; frozen experiment source 06bc1649c4bad9449470366da971649bb7620020 and running endpoints are unchanged."
     }
   ],
   "steps": {
@@ -435,12 +441,23 @@
       "worker_branch": null
     },
     "4.3A-fix2": {
-      "status": "running",
-      "tests": [],
-      "notes": [
-        "D4 connector-routing repair started after verifying predecessor 4.3A-fix completion packet commit ee9094102dca3d66d2818a38eb23c84b0a1fd7f5 matches canonical HEAD."
+      "status": "complete",
+      "tests": [
+        "uv run pytest -q tests/scripts/test_chat_scheduling_routing.py tests/scripts/test_chat_scheduling_harness.py tests/scripts/test_chat_scheduling_analyzer_identity.py tests/scripts/test_chat_scheduling_evidence.py tests/scripts/test_chat_scheduling_manifest.py -> PASS: 77 passed in 1.88s; nproc=4; pre-run loadavg=0.54 0.51 0.85 under foreign parallel-programme load.",
+        "uv run pre-commit run --files scripts/chat_scheduling_chat.py scripts/chat_scheduling_harness.py tests/scripts/test_chat_scheduling_routing.py -> PASS: ruff, format, mypy, deptry, module-size and all applicable hooks passed.",
+        "uv run python -m scripts.chat_scheduling_harness --browser chrome trial --arm B --endpoint B M1 -> PASS: exit 0; state m1-20260925T214221-c8c630aecf; matched_base_turn=d0d25db8-d70d-4e13-bdcf-3ded89d1dc12; 3/3 read_file calls in lane B; production fixture-path matches since 2026-09-25T21:42:15+10:00 = 0; chat wall_s=14.77; pre-run nproc=4 loadavg=0.38 0.48 0.83.",
+        "bash /tmp/p36-manager/isolation-check.sh -> PASS: production master clean at e8ece81d57dd2a478dd636d2b4f409519b845605; config SHA-256 d24dadcc87e04096fdd960fc7d1543fca02ea53814b15ccd51fd9b1eb1153195; unit/profile hashes stable; blocking-wall budget key absent."
       ],
-      "commit": null,
+      "notes": [
+        "Verified predecessor 4.3A-fix completion packet a1 at ee9094102dca3d66d2818a38eb23c84b0a1fd7f5 before mutation.",
+        "D4 root cause had two parts: branch-local chatgpt-send cannot carry a connector system hint, and scenario prompt templates name the production connector. The fixed trial path uses send_prompt.py with lane Project/system_hint/model/effort and rewrites only the rendered prompt, leaving every scenario manifest/template and hash unchanged.",
+        "Focused regression covers actual frozen A/B/C300/H lane manifests, sender argv pinning for Project/system_hint/model/effort, prompt lane naming, timing/url artifacts and single-submit behavior.",
+        "Production-isolation incident record: 14 read-only read_file calls on disposable /tmp fixtures reached production at 21:18-21:23 in the failed 4.5 micro attempt; no jobs or writes occurred. M1-A had no connector call and timed out after 80.611 s with no reply or conversation URL. No canonical 4.5 slot exists for that attempt.",
+        "Non-canonical validation probe /home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/m1-20260925T214221-c8c630aecf completed, replied DONE, routed with lane-B hint/plugin identity, matched base turn d0d25db8-d70d-4e13-bdcf-3ded89d1dc12, captured three lane-B read_file calls, and had zero production fixture-path matches; its disposable chat and fixture were deleted/cleaned by the harness.",
+        "Frozen phase4_runtime_path_head advanced 22f9556017b630061f2fb03d2ac989c6970ffde2 -> acdb2088584382c6496d10c2a170d2217135e550; phase4_source_head remains 06bc1649c4bad9449470366da971649bb7620020 and endpoints required no restart.",
+        "The first file-scoped pre-commit pass autoformatted the new code and exposed three mypy narrowing errors; the explicit non-empty route-field check resolved them and the final pre-commit pass is clean."
+      ],
+      "commit": "acdb2088584382c6496d10c2a170d2217135e550",
       "worker_branch": null
     }
   },
