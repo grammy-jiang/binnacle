@@ -1,6 +1,6 @@
 # Chat mode scheduling v2 — Phase 4 progress
 
-Status: **in_progress**
+Status: **blocked**
 
 Branch: `feature/chat-mode-scheduling-v2-phase4`
 
@@ -10,7 +10,7 @@ Audited source HEAD: `3a4dfb1b248e4530fb09013976abb863c8e35eaf`
 
 Last completed step: **4.4B:H**
 
-Next step: **4.4A core lane-manifest freeze running; 4.6B:H remains independently eligible**
+Next step: **restack/re-audit from the earliest affected lower phase, rerun Phase-4 Step 4.0, then retry 4.4A-freeze**
 
 ## Frozen Step 4.0 entry gate
 
@@ -37,7 +37,7 @@ Next step: **4.4A core lane-manifest freeze running; 4.6B:H remains independentl
 | 4.2D | not_started | — |
 | 4.3A | complete | — |
 | 4.3B | complete | — |
-| 4.4A | running | — |
+| 4.4A | blocked | — |
 | 4.5 | not_started | — |
 | 4.6A | not_started | — |
 | 4.6B0 | not_started | — |
@@ -119,6 +119,37 @@ Next step: **4.4A core lane-manifest freeze running; 4.6B:H remains independentl
 - Endpoint smoke inputs remain frozen independently; Step 4.7 is the first hard
   fan-in that requires this analyzer path.
 - No semantic deviation from the Step-4.3B runbook or focused test matrix.
+
+## Step 4.4A core lane manifest freeze — BLOCKED
+
+- Provisioning fragments 4.4A:A, 4.4A:B and 4.4A:C300 are blocker-free with
+  **5/5 PASS** rows each.
+- Fragment/base/readiness/runtime validation passed for all three lanes. Base
+  topology SHA-256 is
+  9b58135a4a527bc18c5d43456d6f92b384e5457ac2f12884520dac1eb9f38155;
+  runtime registry SHA-256 is
+  f75ea33783def327f542832ded790e5f5650f11304e3f968fe0c7c6c39d3cf26.
+- Focused runtime/harness integration matrix: **PASS**, 86 tests in 2.13
+  seconds; 4 CPUs; pre-run load average 0.48 / 1.06 / 0.88 under foreign
+  parallel-programme load.
+- The dependency-audit freshness check is **BLOCKED**. origin/master and
+  origin/proof-of-concept advanced from the audited
+  260bc009a55e7a78716ac42faf64ae88cf2c6724 to
+  e8ece81d57dd2a478dd636d2b4f409519b845605, while frozen Phase-3 remains
+  3a4dfb1b248e4530fb09013976abb863c8e35eaf; current master is not an
+  ancestor of that Phase-3 head.
+- Production observation also drifted: the checkout is clean and all four
+  services remain active, the blocking-wall budget key is absent, and the
+  primary tunnel profile hash is unchanged, but production config SHA-256 is
+  now d24dadcc87e04096fdd960fc7d1543fca02ea53814b15ccd51fd9b1eb1153195
+  rather than the recorded
+  9564cec6b4e994287b2136d4f63db9bac4a2d5fe02425c0eb76863354c88fd5d.
+- Per the runbook invalidation rule, unexpected upstream drift stops further
+  implementation until re-audit. The validation-only A/B/C300 manifests were
+  removed uncommitted, so no core lane manifest is frozen.
+- The 4.2D readiness worker commit
+  0930075df3ffa879f0dc0066de70870bd86d0008 was consumed read-only; no
+  worker commit was integrated by this task.
 
 ## Step 4.4B supplemental H lane manifest freeze
 
