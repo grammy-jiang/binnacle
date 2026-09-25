@@ -23,13 +23,13 @@ continues. Step `5.0F` remains the mandatory final audit before Step `5.2`.
 | 5.0S | complete | Speculative audit and scheduler bootstrap complete. |
 | 5.0F | not_started | Required before 5.2; waits for Phase-4 closeout, final owner approval, and routing confirmation. |
 | 5.1A | not_started | Released by 5.0S; external gates remain claim-time preconditions where declared. |
-| 5.1B | not_started | Released by 5.0S; external gates remain claim-time preconditions where declared. |
+| 5.1B | complete | Helper commit 62ce74b integrated canonically as 7c7fd00; focused test PASS 14/14. |
 | 5.1C0 | not_started | Released by 5.0S; external gates remain claim-time preconditions where declared. |
 | 5.1C1 | not_started | Released by 5.0S; external gates remain claim-time preconditions where declared. |
 | 5.1C2 | not_started | Released by 5.0S; external gates remain claim-time preconditions where declared. |
 | 5.1C3 | not_started | — |
-| 5.1C4 | not_started | — |
-| 5.1D | running | 5.1B/5.1C4 verified; throwaway rollback rehearsal in progress. |
+| 5.1C4 | complete | Staging stack PASS; addendum freezes the new primary baseline and staging connector ids. |
+| 5.1D | complete | Throwaway rollback rehearsal PASS; release-freeze evidence frozen. |
 | 5.1E | not_started | — |
 | 5.2 | not_started | — |
 | 5.3 | not_started | — |
@@ -64,3 +64,14 @@ continues. Step `5.0F` remains the mandatory final audit before Step `5.2`.
 The ready nodes still re-check their declared external gates at claim time. In
 particular, CPU-heavy preparation and staging-stack work must respect the
 Phase-4 live-host isolation rule.
+
+## Step 5.1D notes
+
+- Integrated the verified 5.1B instruction helper and reran its focused test: 14/14 passed.
+- Created rp-sched-staging-rehearsal, merged and verified the canonical scheduling block, then restored the exact pre-mutation snapshot byte-for-byte.
+- Verified one read-only Project chat through Raspberry Pi MCP Scheduling Staging, then exercised the rollback SOP unguarded-route alternative with a read-only Project chat through the primary Raspberry Pi MCP connector.
+- Deleted the throwaway Project afterward; its two chats were deleted with it and a name lookup returned zero Projects.
+- Selected budget remains 300 s; pinned runtime remains detached/clean at 06bc1649c4bad9449470366da971649bb7620020; staging config SHA-256 is cf75c98c8e15c1ca8a535b20143e3e7f27ddfb325296a97831eba31165d70b9c.
+- Production baseline uses owner-approved post-shadow-predictor HEAD e8ece81d57dd2a478dd636d2b4f409519b845605 and config SHA-256 d24dadcc87e04096fdd960fc7d1543fca02ea53814b15ccd51fd9b1eb1153195; post-rehearsal isolation checks matched it.
+- Release-freeze evidence is /home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase5/rehearsal/5.1D.json with SHA-256 f45651c7999ec89d5c443e65d503738327f8ccde4db80758a933d6ba13f2bb19.
+- Persistent per-Project connector pinning is still not exposed by current tooling; the rehearsal uses the measured per-send system-hint route and mandatory Step 5.0F remains responsible for final routing confirmation before Step 5.2.

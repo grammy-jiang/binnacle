@@ -6,8 +6,8 @@
   "worktree": "/home/grammy-jiang/Projects/binnacle-chat-scheduling-staging",
   "source_branch": "feature/chat-mode-scheduling-v2-phase4",
   "audited_source_head": "9e165fd26bda57d938c24c78a826f66f2d5f0440",
-  "last_completed_step": "5.0S",
-  "next_step": "5.1A/5.1B/5.1C0/5.1C1/5.1C2 speculative preparation frontier",
+  "last_completed_step": "5.1D",
+  "next_step": "5.1E pre-deployment integration/validation",
   "dependency_audit": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase5-dependency-audit-2026-09-25-r01.json",
     "revision": "r01",
@@ -25,10 +25,10 @@
     "predeployment_focused": "uv run pytest -q tests/scripts/test_chat_scheduling_operational.py tests/scripts/test_chat_scheduling_project_instructions.py"
   },
   "production_baseline": {
-    "observed_at": "2026-09-25T18:52:08+10:00",
+    "observed_at": "2026-09-25T20:35:18+10:00",
     "path": "/home/grammy-jiang/Projects/binnacle",
     "branch": "master",
-    "head": "260bc009a55e7a78716ac42faf64ae88cf2c6724",
+    "head": "e8ece81d57dd2a478dd636d2b4f409519b845605",
     "clean": true,
     "services": {
       "binnacle-mcp.service": "active/running",
@@ -36,7 +36,7 @@
       "binnacle-tunnel.service": "active/running",
       "binnacle-watchdog.service": "active/running"
     },
-    "config_sha256": "9564cec6b4e994287b2136d4f63db9bac4a2d5fe02425c0eb76863354c88fd5d",
+    "config_sha256": "d24dadcc87e04096fdd960fc7d1543fca02ea53814b15ccd51fd9b1eb1153195",
     "unit_file_hashes": {
       "binnacle-mcp.service": "d7b8475f8e3fec783552c3676210622181e8563a85f3918938c912f321fe0759",
       "binnacle-jobs.service": "afcaff05eb85821812081167f84cf1b8c7712e2f66a8e85e94e72a1ce09f01ae",
@@ -51,7 +51,7 @@
       8113,
       8115
     ],
-    "staging_port_8120_free": true
+    "staging_port_8120_free": false
   },
   "speculative": true,
   "selected_candidate": "C300",
@@ -61,7 +61,11 @@
   "frozen_heads": {
     "phase3_handoff": "3a4dfb1b248e4530fb09013976abb863c8e35eaf",
     "phase4_speculative_base": "9e165fd26bda57d938c24c78a826f66f2d5f0440",
-    "approved_runtime_source_head": "06bc1649c4bad9449470366da971649bb7620020"
+    "approved_runtime_source_head": "06bc1649c4bad9449470366da971649bb7620020",
+    "phase5_5_1B_worker": "62ce74bf25535e019525d2afe94a8de376c7e7df",
+    "phase5_5_1B_canonical_cherry_pick": "7c7fd00d8030421a0f8bfcd7ff57a321008609ec",
+    "pinned_staging_runtime": "06bc1649c4bad9449470366da971649bb7620020",
+    "primary_production_baseline": "e8ece81d57dd2a478dd636d2b4f409519b845605"
   },
   "frozen_hashes": {
     "phase4_progress_speculative_snapshot": "a122c4c782214021c2f22c314c72bef9374369ca9c1b0babc1a947da1fdf0c54",
@@ -76,7 +80,16 @@
     "dependency_audit_json": "e27269fba4b0d95a8ae84c0bd85ed71057a381ee27e89f90ce4d916a215f538a",
     "dependency_audit_md": "f886bb83551e82fd59e2019357a9f55cfd6f157b3a79637c011ab94429591257",
     "task_graph": "777a7953c9c46665fb1cd9aa932c4bd1b2f7fe941ac212223d322f34566892eb",
-    "orchestrator_state_initial_checkpoint": "26fe1b263d77cc9400fbbfff87e239e240756a02aed70ce44fc1a99680f662aa"
+    "orchestrator_state_initial_checkpoint": "26fe1b263d77cc9400fbbfff87e239e240756a02aed70ce44fc1a99680f662aa",
+    "phase5_5_1C4": "36084d1dfb99ec5b0834c322d6a0f48e8de7dc699aedcad55c0255d82658f30c",
+    "phase5_5_1C4_addendum": "c0cb7fb2d0c709a1155d330ddd15da905cf0da8dca33d53be31d6417bb5c11bc",
+    "binnacle_instructions_snapshot": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "raspberry_pi_5_instructions_snapshot": "0a5c27fac185f7ebbe609aecceee55863a7bdca13d04250810f3bf22595c7db9",
+    "pinned_runtime_status": "ba051334ebc33f3162a4fd5be48615e03c8dac8ec7977e7c2752dbc1cf981841",
+    "pinned_runtime_head_status": "14c9f8e7ba0891e567361affb2424ab96ce7db8644442c262e895b7a6eedd001",
+    "staging_endpoint_config": "cf75c98c8e15c1ca8a535b20143e3e7f27ddfb325296a97831eba31165d70b9c",
+    "primary_production_config": "d24dadcc87e04096fdd960fc7d1543fca02ea53814b15ccd51fd9b1eb1153195",
+    "phase5_5_1D_rehearsal": "f45651c7999ec89d5c443e65d503738327f8ccde4db80758a933d6ba13f2bb19"
   },
   "preflight_findings": {
     "p5s-preflight-lineage": "ad2ea68f733a2a8502c5bb76dcc373bf3c294df5a0541bfa1be87e1f07b0971e",
@@ -122,10 +135,16 @@
       "worker_branch": "feature/chat-mode-scheduling-v2-phase5-operational"
     },
     "5.1B": {
-      "status": "not_started",
-      "tests": [],
-      "notes": [],
-      "commit": null,
+      "status": "complete",
+      "tests": [
+        "uv run pytest -q tests/scripts/test_chat_scheduling_project_instructions.py -> PASS 14/14",
+        "worker pre-commit on helper/tests -> PASS"
+      ],
+      "notes": [
+        "Worker commit 62ce74bf25535e019525d2afe94a8de376c7e7df was verified and cherry-picked as canonical commit 7c7fd00d8030421a0f8bfcd7ff57a321008609ec.",
+        "Canonical scheduling block SHA-256 remains b7df6953a3c64bd245b3d5ff13b6f2667e940d5a154e650fec0b10e6a22cf094."
+      ],
+      "commit": "62ce74bf25535e019525d2afe94a8de376c7e7df",
       "worker_branch": "feature/chat-mode-scheduling-v2-phase5-instructions"
     },
     "5.1C0": {
@@ -157,19 +176,35 @@
       "worker_branch": null
     },
     "5.1C4": {
-      "status": "not_started",
-      "tests": [],
-      "notes": [],
+      "status": "complete",
+      "tests": [
+        "5.1C4 local MCP/job/tunnel smoke -> PASS; staging stack active with selected budget 300 s",
+        "5.1C4 orchestrator addendum resolved primary-baseline drift and staging connector creation"
+      ],
+      "notes": [
+        "Provisioning fragment SHA-256 36084d1dfb99ec5b0834c322d6a0f48e8de7dc699aedcad55c0255d82658f30c consumed by 5.1D.",
+        "Addendum SHA-256 c0cb7fb2d0c709a1155d330ddd15da905cf0da8dca33d53be31d6417bb5c11bc freezes the owner-approved post-shadow-predictor production baseline and staging connector ids."
+      ],
       "commit": null,
       "worker_branch": null
     },
     "5.1D": {
-      "status": "running",
-      "tests": [],
+      "status": "complete",
+      "tests": [
+        "uv run pytest -q tests/scripts/test_chat_scheduling_project_instructions.py -> PASS 14/14; nproc=4, pre-run loadavg=1.26 0.89 0.62",
+        "throwaway instruction merge/readback verify -> PASS; merged/readback SHA-256 2ca93cea9f3b5a2ef858749518a5f6e6261aaae21eb2fb936f21a03607f106c5",
+        "exact instruction restore -> PASS; original/restored SHA-256 d1523912456c0ddcc0a40deb7920a8919dc6a2e3ef45af1a5bdff7b21e536492",
+        "guarded staging read-only Project chat -> STAGING_REHEARSAL_READONLY_OK",
+        "unguarded primary rollback read-only Project chat -> PRIMARY_REHEARSAL_READONLY_OK",
+        "post-rehearsal isolation-check -> production HEAD/config/unit/profile baseline unchanged",
+        "throwaway Project delete/readback -> PASS HTTP 404; zero matching Projects remain"
+      ],
       "notes": [
-        "Started after verified 5.1B completion commit 62ce74bf25535e019525d2afe94a8de376c7e7df and 5.1C4 provisioning evidence plus orchestrator addendum.",
-        "P5-A1 applies: rehearsal is restricted to throwaway Project rp-sched-staging-rehearsal; rollout Projects and Phase-4 lane Projects remain untouched.",
-        "Phase-4 live-host isolation recheck found no qualification/confirmatory live-host lock before rehearsal."
+        "P5-A1 throwaway Project rp-sched-staging-rehearsal was created, used only for rehearsal, then deleted with its two smoke chats.",
+        "Server-guard rollback exercised the SOP alternative of switching Project-chat routing from the guarded staging connector to the unguarded primary connector; no staging service/config or Phase-4 lane was mutated.",
+        "Current connector control is account-level app/link plus per-send system hint; persistent per-Project connector pinning remains unexposed and is still subject to mandatory 5.0F routing confirmation.",
+        "The shared spaced-send.sh successfully sent/resolved both chats but its optional reply collector used a missing .venv path; read_chat.py verified both exact replies before Project deletion.",
+        "Release-freeze evidence is /home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase5/rehearsal/5.1D.json with SHA-256 f45651c7999ec89d5c443e65d503738327f8ccde4db80758a933d6ba13f2bb19."
       ],
       "commit": null,
       "worker_branch": null
@@ -282,6 +317,15 @@
       "ready_count": 5,
       "blocked_count": 17,
       "complete_count": 1
+    },
+    {
+      "kind": "5.1D_release_freeze",
+      "at": "2026-09-25T20:35:18+10:00",
+      "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase5/rehearsal/5.1D.json",
+      "sha256": "f45651c7999ec89d5c443e65d503738327f8ccde4db80758a933d6ba13f2bb19",
+      "selected_budget_s": 300,
+      "approved_runtime_source_head": "06bc1649c4bad9449470366da971649bb7620020",
+      "next_step": "5.1E"
     }
   ],
   "handoff": null,
@@ -297,5 +341,41 @@
   "blocked_task_summary": {
     "count": 17,
     "reason": "direct predecessors, conditional verdicts, wall-clock gates, or the mandatory 5.0F final audit remain unsatisfied"
+  },
+  "release_freeze": {
+    "selected_budget_s": 300,
+    "project_instruction_snapshots": {
+      "Binnacle": {
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase5/preflight/snapshots/Binnacle.instructions.txt",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "Raspberry Pi 5": {
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase5/preflight/snapshots/Raspberry-Pi-5.instructions.txt",
+        "sha256": "0a5c27fac185f7ebbe609aecceee55863a7bdca13d04250810f3bf22595c7db9"
+      }
+    },
+    "connectors": {
+      "primary": {
+        "name": "Raspberry Pi MCP",
+        "app_id": "asdk_app_6a8af16275ac8191a891cf48118748f5",
+        "link_id": "link_6a8af17294788191b9e35978879baaf3",
+        "tunnel_id": "tunnel_6a8adbbdd4408191b4df1f0898c32550"
+      },
+      "staging": {
+        "name": "Raspberry Pi MCP Scheduling Staging",
+        "app_id": "asdk_app_6ab64c357a7881919ef5190fb0f0cf93",
+        "link_id": "link_6ab64c437c3c8191a352793416facbbd",
+        "tunnel_id": "tunnel_6ab63fbacc00819185596d528b66fe47"
+      }
+    },
+    "approved_runtime_source_head": "06bc1649c4bad9449470366da971649bb7620020",
+    "pinned_runtime_worktree": "/home/grammy-jiang/Projects/binnacle-chat-scheduling-staging-runtime",
+    "pinned_runtime_status_sha256": "ba051334ebc33f3162a4fd5be48615e03c8dac8ec7977e7c2752dbc1cf981841",
+    "pinned_runtime_head_status_sha256": "14c9f8e7ba0891e567361affb2424ab96ce7db8644442c262e895b7a6eedd001",
+    "staging_endpoint_config_sha256": "cf75c98c8e15c1ca8a535b20143e3e7f27ddfb325296a97831eba31165d70b9c",
+    "primary_production_baseline_head": "e8ece81d57dd2a478dd636d2b4f409519b845605",
+    "primary_production_config_sha256": "d24dadcc87e04096fdd960fc7d1543fca02ea53814b15ccd51fd9b1eb1153195",
+    "rollback_rehearsal_path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase5/rehearsal/5.1D.json",
+    "rollback_rehearsal_sha256": "f45651c7999ec89d5c443e65d503738327f8ccde4db80758a933d6ba13f2bb19"
   }
 }
