@@ -164,9 +164,13 @@
       "worker_branch": null
     },
     "5.1D": {
-      "status": "not_started",
+      "status": "running",
       "tests": [],
-      "notes": [],
+      "notes": [
+        "Started after verified 5.1B completion commit 62ce74bf25535e019525d2afe94a8de376c7e7df and 5.1C4 provisioning evidence plus orchestrator addendum.",
+        "P5-A1 applies: rehearsal is restricted to throwaway Project rp-sched-staging-rehearsal; rollout Projects and Phase-4 lane Projects remain untouched.",
+        "Phase-4 live-host isolation recheck found no qualification/confirmatory live-host lock before rehearsal."
+      ],
       "commit": null,
       "worker_branch": null
     },

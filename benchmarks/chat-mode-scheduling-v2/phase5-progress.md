@@ -29,7 +29,7 @@ continues. Step `5.0F` remains the mandatory final audit before Step `5.2`.
 | 5.1C2 | not_started | Released by 5.0S; external gates remain claim-time preconditions where declared. |
 | 5.1C3 | not_started | — |
 | 5.1C4 | not_started | — |
-| 5.1D | not_started | — |
+| 5.1D | running | 5.1B/5.1C4 verified; throwaway rollback rehearsal in progress. |
 | 5.1E | not_started | — |
 | 5.2 | not_started | — |
 | 5.3 | not_started | — |
