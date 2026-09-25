@@ -35,7 +35,7 @@ Next step: **4.3A / 4.4A integration/provisioning frontier**
 | 4.2B | not_started | — |
 | 4.2C | complete | `6c473ce` |
 | 4.2D | not_started | — |
-| 4.3A | not_started | — |
+| 4.3A | running | — |
 | 4.3B | complete | — |
 | 4.4A | not_started | — |
 | 4.5 | not_started | — |
