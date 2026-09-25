@@ -85,7 +85,7 @@ Updated: 2026-09-25T10:51:30+10:00
 | 3.6C | complete |
 | 3H | complete |
 | 3.7 | complete (r02 / Amendment A1) |
-| 3.8 | complete |
+| 3.8 | running (r02 / Amendment A1) |
 | 3.9 | complete |
 | 3.10 | complete |
 
