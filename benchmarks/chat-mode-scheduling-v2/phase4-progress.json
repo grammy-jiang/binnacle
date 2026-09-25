@@ -7,7 +7,7 @@
   "source_branch": "feature/chat-mode-scheduling-v2-phase3",
   "audited_source_head": "3a4dfb1b248e4530fb09013976abb863c8e35eaf",
   "last_completed_step": "4.7",
-  "next_step": "Manager executes run request 4.6A-sel-qual for Step 4.6A:selected; evaluate the selected-C timing qualification from that frozen result.",
+  "next_step": "Complete 4H-R P4-A3 reanalysis of every H trial and selected C300 comparison, then freeze the updated historical comparator.",
   "dependency_audit": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase4-dependency-audit-2026-09-25-r01.json",
     "revision": "r01",
@@ -536,7 +536,7 @@
       "worker_branch": null
     },
     "4H-R": {
-      "status": "complete",
+      "status": "running",
       "tests": [
         "Analyzer fan-in -> PASS: 10/10 owning H state directories analyzed with the canonical analyzer (R5 x3, R6 x3, R7 x3, R12 x1); invocation required PYTHONPATH=. so the repository scripts package resolved.",
         "Bounded H diagnostic -> 0/9 correctness, 0/9 same-prompt completion, 9/9 budget-exhaustion handoffs, 0/9 premature handoffs, 0/9 interruptions, 9 total required continuations.",
@@ -546,6 +546,7 @@
         "Focused 4.3B analyzer/confirmatory regression -> PASS: 21 passed in 2.05s; nproc=4; pre-run loadavg=1.74 1.99 2.01 under foreign parallel-programme load."
       ],
       "notes": [
+        "P4-A3 reanalysis reopened by task 4H-R2: prior f600a1dc comparator used analyzer head 6073902ba1e72a946da0ea7d7e901e36f47f96a3 and is historical/superseded pending reanalysis at 76ec24eed464e1162f4b51d9549143bf6175d8bb.",
         "Historical H comparator JSON SHA-256 12e477d0c6e16dfa41a3bbfd61dab1ba783486c83b2668ab8ee30812b9753f4f and Markdown SHA-256 50e7393adbb9d61016afb996cdf96f82ba60dae497ea9c156eb26424e5f85762 are frozen.",
         "4H request SHA-256 ef2af7dee0d3152222e64598bcc4fc8234d02f5bcc86e96018a001301bc2cb41 produced 10 owning submitted slots plus one excluded pre-submit failure; manager result SHA-256 is 3747ac0a13b0a399b3dde86e278ec4593e602b6c0bb37b794911601e87eab8b5.",
         "Step 4.7 selected no C endpoint, so the plan-required H comparison uses the C300 calibration trials; this report is diagnostic only and does not alter the C gate matrix or the Step 4.7/4.12 verdict path.",

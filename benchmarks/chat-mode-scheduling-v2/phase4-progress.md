@@ -57,7 +57,7 @@ Next step: **manager-dispatched Step 4.7 re-judgment under P4-A3 using the corre
 | 4C | not_started | — |
 | 4.11 | not_started | — |
 | 4.12 | not_started | — |
-| 4H-R | complete | H comparator frozen; routing 0/10 misses |
+| 4H-R | running | P4-A3 reanalysis in progress; prior comparator superseded |
 | 4.13 | not_started | — |
 
 ### Dynamic lane manifest freezes
@@ -406,7 +406,9 @@ Next step: **manager-dispatched Step 4.7 re-judgment under P4-A3 using the corre
 Next step: **manager executes 4.6A-sel-qual and dispatches evaluation of
 Step 4.6A:selected from the frozen result**.
 
-## Step 4H-R historical H comparator — COMPLETE
+## Step 4H-R historical H comparator — RUNNING (P4-A3 REANALYSIS)
+
+The prior comparator at commit `f600a1dc` used analyzer head `6073902b` and is historical evidence only; task 4H-R2 is re-analyzing the frozen H and selected-C300 trials at corrected analyzer head `76ec24ee`.
 
 - Frozen comparator JSON SHA-256
   `12e477d0c6e16dfa41a3bbfd61dab1ba783486c83b2668ab8ee30812b9753f4f` and Markdown SHA-256
