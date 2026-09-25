@@ -504,7 +504,7 @@
       "worker_branch": null
     },
     "4H-R": {
-      "status": "not_started",
+      "status": "running",
       "tests": [],
       "notes": [],
       "commit": null,

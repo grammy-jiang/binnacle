@@ -56,7 +56,7 @@ Next step: **STOP at Step 4.7 — C300 failed the targeted live budget-selection
 | 4C | not_started | — |
 | 4.11 | not_started | — |
 | 4.12 | not_started | — |
-| 4H-R | not_started | — |
+| 4H-R | running | historical H comparator aggregation |
 | 4.13 | not_started | — |
 
 ### Dynamic lane manifest freezes
