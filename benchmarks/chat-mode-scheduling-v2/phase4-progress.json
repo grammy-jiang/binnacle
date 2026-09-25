@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "phase": 4,
-  "status": "blocked",
+  "status": "in_progress",
   "branch": "feature/chat-mode-scheduling-v2-phase4",
   "worktree": "/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4",
   "source_branch": "feature/chat-mode-scheduling-v2-phase3",
   "audited_source_head": "3a4dfb1b248e4530fb09013976abb863c8e35eaf",
   "last_completed_step": "4.5",
-  "next_step": "rerun 4.6B0 aggregate level 3 (K=1) wait-heavy qualification under host load1 <= 3.00, then reevaluate admission r01",
+  "next_step": "evaluate 4.6B0 aggregate level 3 (K=1) from 4.6B0-qual-3 against frozen serial references, then write admission r01 on PASS",
   "dependency_audit": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase4-dependency-audit-2026-09-25-r01.json",
     "revision": "r01",
@@ -342,7 +342,7 @@
       "worker_branch": null
     },
     "4.6B0": {
-      "status": "blocked",
+      "status": "running",
       "tests": [
         "bash /tmp/p36-manager/rr-validate.sh 4.6B0-qual -> PASS: valid=true, 36 trials, no errors.",
         "Step-4.6B0 serial wait reference gate (host-clean submitted samples only) -> A dispatch p95=1.00 ms / overhead p95=0.08 ms, B=0.76/0.10 ms, C300=1.46/0.12 ms; derived limits A=21.00/20.08 ms, B=20.76/20.10 ms, C300=21.46/20.12 ms; absolute dispatch ceiling=100 ms.",

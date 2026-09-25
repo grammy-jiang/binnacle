@@ -1,6 +1,6 @@
 # Chat mode scheduling v2 — Phase 4 progress
 
-Status: **blocked**
+Status: **in_progress**
 
 Branch: `feature/chat-mode-scheduling-v2-phase4`
 
@@ -10,7 +10,7 @@ Audited source HEAD: `3a4dfb1b248e4530fb09013976abb863c8e35eaf`
 
 Last completed step: **4.5**
 
-Next step: **repeat 4.6B0 aggregate level 3 (K=1) under host load1 <= 3.00, then reevaluate admission r01**
+Next step: **evaluate 4.6B0 aggregate level 3 (K=1) from 4.6B0-qual-3 against frozen serial references, then write admission r01 on PASS**
 
 ## Frozen Step 4.0 entry gate
 
@@ -42,7 +42,7 @@ Next step: **repeat 4.6B0 aggregate level 3 (K=1) under host load1 <= 3.00, then
 | 4.4A | complete | — |
 | 4.5 | complete | 389e6a5 |
 | 4.6A | not_started | — |
-| 4.6B0 | blocked | — |
+| 4.6B0 | running | — |
 | 4.7 | not_started | — |
 | 4.6A:selected | not_started | — |
 | 4.8 | not_started | — |
@@ -206,7 +206,7 @@ Next step: **repeat 4.6B0 aggregate level 3 (K=1) under host load1 <= 3.00, then
 - C300/M1 chat 6ab6608c-98a0-83ec-8a5a-d73296f7b4a1 may remain from the
   cleanup-429 attempt and is explicitly listed for manager cleanup.
 
-## Step 4.6B0 core admission baseline — BLOCKED
+## Step 4.6B0 core admission baseline — RUNNING
 
 - Predecessor 4.5 is complete. The original 4.6B0-qual result is frozen at
   SHA-256
