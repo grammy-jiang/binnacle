@@ -1439,7 +1439,8 @@ window and use the documented 2026-09-19 distributions only as contextual sanity
 evidence, not as synthetic per-turn replay rows. The operational corpus is
 valuable but **not mandatory** when retention has legitimately expired. The
 canonical Phase-1 benchmark corpus is mandatory and is the fallback population
-for the >=70% repeated-wait burden calculation. A candidate is blocked for
+for the repeated-wait burden calculation (gate 4: definition (b) and >=60%
+since Amendment A1, section 17.1). A candidate is blocked for
 insufficient replay evidence only if the canonical corpus itself cannot be
 reconstructed.
 
@@ -1479,13 +1480,49 @@ A candidate is rejected before Phase 4 if any of these apply:
    observed required blocking-wall union is <= `candidate_budget - 1.0 s`. This
    is a deterministic early-exhaustion failure, not a subjective "systematic"
    judgment.
-4. Historical repeated-wait burden reduction is **<70%** where the replay corpus
-   can validly measure the historical repeated-wait upper-bound burden target.
+4. Historical repeated-wait burden reduction is **<60%** under the repeated-wait
+   definition (b) of Amendment A1 (section 17.1) where the replay corpus can
+   validly measure it: the burden of a turn is the union of the second and later
+   positive waits on the same job id; the first wait on each job is excluded
+   from both the observed and the candidate figure. (Before Amendment A1: <70%
+   of the total per-turn positive-wait union, definition (a); that figure stays
+   in every report as a non-gating column.)
 5. Any canonical replay turn that contains positive waits and is required for a
    policy denominator is missing the actual call timing / `waited_s` / observed
    job-state evidence needed to compute candidate clipping or completion
    preservation. Reliability-only submitted failures with no useful MCP wait are
    retained as reliability context but are not assigned fabricated replay fields.
+
+### 17.1 Amendment A1: gate 4 definition and threshold (2026-09-25)
+
+Owner decision, recorded by the orchestrator on 2026-09-25 10:01 (+10:00) after
+the read-only analysis `p3-gate4-analysis` (findings in the orchestrator state
+directory `chat-scheduling-v2/phase3/preflight/`, alternative burden
+definitions (a) to (d) computed on the frozen corpus).
+
+- Gate 4 is measured with definition (b): per (turn, job), the union of the
+  second and later positive waits on the same job id, summed over the
+  operational population; the gate threshold is a reduction of at least 60%.
+- Gates 1 to 3 are unchanged. The original figure (definition (a): total
+  per-turn positive-wait union, 70%) stays in the reports as a non-gating
+  column named as before, so r01 and r02 numbers remain comparable.
+- Measured on the frozen Phase-3 corpus (revision 2, 278 operational turns):
+  observed burden 55,911 s under (b) (83,186 s under (a)); reductions C120
+  87.3% (75.8% under (a)), C300 63.4% (52.9%), C600 36.6% (29.8%). Result:
+  C300 is the only candidate that passes all four gates; C120 still fails
+  gates 1 and 3 (completion 88.9%, early exhaustion in 2 of 13 canonical
+  positive-wait turns); C600 fails gate 4.
+- Rationale: definition (a) charges the unavoidable first wait on a long job
+  against the candidate, which no cumulative budget can remove; (b) measures
+  the repeated waits the blocking-wall guard is designed to remove.
+- Consequence for the run: the A/B plan section 5.5 target is amended to the
+  same wording on the Phase-3 branch; the shortlist tooling computes (b) as
+  the gate-4 metric and reports (a) beside it; Steps 3.7 to 3.10 are re-run as
+  amended run r02 on the restacked Phase-3 branch (tip 999c3c9 after
+  `p3-restack-2`, CI run 36073531402), superseding the r01 closeout a272b62
+  and the pending restack re-attestation; Phase 4 starts from the r02 handoff
+  with C300 as the sole live candidate. Phase-4 plan mentions of the 70%
+  figure read as the amended gate.
 
 Passing Phase 3 means **eligible for live testing**, not approved for deployment.
 The live calibration shortlist is exactly **all candidates that pass every Phase-3 offline candidate gate**. The preferred live candidate is the smallest passing

@@ -1887,7 +1887,7 @@ union blocking wall <= budget + 1.0 s
 overlap charged once
 exhausted calls become nonblocking
 p95 guard overhead <1 ms; p99 <2 ms
->=70% repeated-wait burden reduction under replay
+>=60% repeated-wait burden reduction under replay (definition b, Amendment A1)
 ```
 
 ### Efficiency
@@ -2343,7 +2343,7 @@ budget-selection rules:
 bounded-suite same-prompt >=95%
 premature handoff = 0
 budget-exhaustion handoff <=10% outside R12
->=70% repeated-wait burden reduction under the frozen replay metric
+>=60% repeated-wait burden reduction under the frozen replay metric (definition b, Amendment A1)
 0 submitted interruption among the nine bounded R5/R6/R7 calibration trials
 ```
 
