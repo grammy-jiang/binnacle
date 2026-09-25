@@ -868,7 +868,7 @@ the preparation if Step 4.12 is not `GO_PHASE5` or selects another budget.
 
 ### Amendment P5-A2: owner pre-approval of GO_PHASE5 (2026-09-25)
 
-Owner decision 2026-09-25 22:50, in the owner's words: "if you got GO_PHASE5,
+Owner decision 2026-09-25, recorded 22:56, in the owner's words: "if you got GO_PHASE5,
 you can just start and no need for my approval; while i still want a summary
 but you don't need to wait for me".
 
@@ -890,7 +890,7 @@ but you don't need to wait for me".
 
 ### Amendment P5-A3: owner confirmation of `project_connector_routing` (2026-09-25)
 
-Owner decision 2026-09-25 23:00 ("agree - it is okay") on the containment
+Owner decision 2026-09-25, recorded 23:42 ("agree - it is okay") on the containment
 mechanism the 5.0S audit proposed: a distinct staging app/link; explicit
 staging-app system hints on every orchestrated rollout chat; the `Binnacle`
 Project instructions name the staging connector while keeping the canonical
@@ -903,7 +903,7 @@ citing this section and its planning commit.
 
 ### Amendment P5-A4: manager-dispatched development counts toward Stage-1 activity (2026-09-25)
 
-Owner decision 2026-09-25 23:10 ("ok, this is good"), made because the owner
+Owner decision 2026-09-25, recorded 23:45 ("ok, this is good"), made because the owner
 may not have enough own development work in `Binnacle` during Stage 1:
 
 - During every Stage-1 window the manager dispatches real development tasks
