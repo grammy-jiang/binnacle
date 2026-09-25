@@ -6,8 +6,8 @@
   "worktree": "/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4",
   "source_branch": "feature/chat-mode-scheduling-v2-phase3",
   "audited_source_head": "3a4dfb1b248e4530fb09013976abb863c8e35eaf",
-  "last_completed_step": "4.7-fix",
-  "next_step": "Manager-dispatched Step 4.7 re-judgment under Amendment P4-A3 using the corrected analyzer; this task does not re-decide Step 4.7.",
+  "last_completed_step": "4.7",
+  "next_step": "Manager executes run request 4.6A-sel-qual for Step 4.6A:selected; evaluate the selected-C timing qualification from that frozen result.",
   "dependency_audit": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase4-dependency-audit-2026-09-25-r01.json",
     "revision": "r01",
@@ -412,7 +412,7 @@
       "worker_branch": null
     },
     "4.7": {
-      "status": "blocked",
+      "status": "complete",
       "tests": [
         "Analyzer fan-in -> 10/10 C300 calibration state directories analyzed successfully (R5 x3, R6 x3, R7 x3, R12 x1).",
         "Step-4.7 bounded-suite gate -> FAIL: same-prompt completion 7/9 (77.78%, required 9/9), premature handoff 2/9 (required 0), unexpected budget-exhaustion handoff outside R12 0/9, submitted interruptions 0/9.",
@@ -420,7 +420,15 @@
         "R12 expected-exhaustion safety case -> budget_exhaustion_handoff=true and no premature handoff/interruption, but analyzer correctness=false because the required successful wait_result with blocking_budget_exhausted=true,state=running was absent.",
         "P4-A2 routing recovery audit -> PASS evidence integrity for 4B-C300: all 10 run ids occur only in C300 server logs; zero occurrences in A/B/H lane logs and zero in production journal for the trial window; calibration routing misses C=0/10 (0%).",
         "Frozen admission routing rates before calibration: A=1/13 (7.69%), B=0/13 (0%), C=0/14 (0%), H=0/0; after adding 4B-C300, C=0/24 (0%). No observed arm exceeds the >10% evidence-integrity threshold.",
-        "Focused 4.3B analyzer/confirmatory regression -> PASS: 21 passed in 2.15s; nproc=4; pre-run loadavg=1.32 1.56 1.97 under foreign parallel-programme load."
+        "Focused 4.3B analyzer/confirmatory regression -> PASS: 21 passed in 2.15s; nproc=4; pre-run loadavg=1.32 1.56 1.97 under foreign parallel-programme load.",
+        "P4-A3 corrected-analyzer fan-in -> PASS: 10/10 frozen C300 calibration state directories re-analyzed successfully at analyzer head 76ec24eed464e1162f4b51d9549143bf6175d8bb.",
+        "P4-A3 Step-4.7 bounded-suite gate -> PASS: same-prompt completion 9/9 (100%, required 9/9), premature handoff 0/9, unexpected budget-exhaustion handoff outside R12 0/9, submitted interruptions 0/9, manual continuations 0/9.",
+        "Frozen replay gate 4 definition (b) -> PASS unchanged: C300 repeated-wait burden reduction 63.448499% >= 60%.",
+        "R12 expected-exhaustion safety case -> PASS after P4-A3: correctness_passed=true, budget_exhaustion_handoff=true, premature_handoff=false, interrupted=false, manual_continuations_required=1.",
+        "P4-A2 routing integrity -> PASS: calibration C routing misses 0/10 (0%); current observed campaign rates A=1/13 (7.69%), B=0/13 (0%), C=0/24 (0%), H=0/10 (0%); no arm exceeds 10%.",
+        "Selected-C serial reference reuse -> PASS: phase4 source and A/B/C300 manifest identities match admission commit 695c7326a58058352b24341e870f95a17b32395d; R2/R5 qualification-case+criteria fingerprint historical/current bf832bad314ce4266179e4f4126358fb83f86610f78f2dd13d2a8b4f4dfcf5b2.",
+        "bash /tmp/p36-manager/rr-validate.sh 4.6A-sel-qual -> PASS: valid=true, 84 trials, six ordered Q-read/Q-wait groups with K=1,2,4 and 2*K matched blocks per group.",
+        "Focused P4-A3 analyzer/evidence/confirmatory regression -> PASS: 27 passed in 2.11s; nproc=4; pre-run loadavg=1.68 2.12 2.53 under foreign parallel-programme load."
       ],
       "notes": [
         "4.3B analyzer integration is complete and frozen at phase4_analyzer_path_head 6073902ba1e72a946da0ea7d7e901e36f47f96a3.",
@@ -429,7 +437,14 @@
         "The manager result rows serialize routing as null despite Amendment P4-A2 requiring a routing object. Read-only recovery against retained lane logs and the production journal proves all ten slots were correctly routed to C300, so this is recorded as deviation D6 rather than an unscorable evidence-integrity failure.",
         "C300 fails Step 4.7 independently of the routing serialization gap: R5 repeats 1 and 3 have same_prompt_completion=false and premature_handoff=true. The bounded denominator is therefore 7/9 same-prompt with 2 premature handoffs, below the required 9/9 and zero.",
         "The frozen replay repeated-wait metric passes at 63.448499%, and the bounded live suite has 0/9 unexpected exhaustion and 0/9 submitted interruption, but all targeted rules must pass simultaneously.",
-        "Verdict is NO_GO. selected_c_endpoint is null. Per the explicit fail branch, no 4.6A:selected request is written and Phase 4 stops pending a new owner-approved experiment."
+        "Verdict is NO_GO. selected_c_endpoint is null. Per the explicit fail branch, no 4.6A:selected request is written and Phase 4 stops pending a new owner-approved experiment.",
+        "P4-A3 re-judgment started from frozen 4B-C300 evidence at corrected analyzer head 76ec24eed464e1162f4b51d9549143bf6175d8bb; the 74249499 verdict is retained as superseded history until this re-judgment completes.",
+        "SUPERSEDED P4-A3 history: the original Step-4.7 NO_GO at commit 74249499c0e097f8e9a2fbb263528d54a78e8e0b used the pre-fix analyzer and reported 7/9 same-prompt plus 2/9 premature handoffs. P4-A3 preserves that verdict as historical evidence but supersedes it for the current decision.",
+        "Corrected analyzer classification changes only the evidence interpretation: frozen 4B-C300 trials, request/result hashes, endpoint source, lane manifests and live observations are unchanged.",
+        "C300 is the sole Phase-3 live candidate and now satisfies every Step-4.7 rule simultaneously: 9/9 bounded same-prompt, zero premature handoff, zero unexpected exhaustion outside R12, 63.448499% definition-(b) burden reduction, zero bounded submitted interruptions, and a valid expected-exhaustion R12 case.",
+        "Step-4.7 verdict is GO with selected_c_endpoint=C300 and selected budget 300 s. Final C-lane admission remains immutable r01 at aggregate cap 3, C300 cap 1, H cap 1.",
+        "No early 4.6A result exists, so 4.6A:selected requires fresh live qualification. The 4.6B0 serial timing reference is reused because selected endpoint C300 equals preferred-C and the frozen source/lane identities plus qualification criteria fingerprint all match exactly.",
+        "Manager-run request 4.6A-sel-qual SHA-256 7858204fdf01ab51741a733fd30cb64079c7cc94d3ac0ddd49286f36d3c0b440 contains fresh Q-read/Q-wait K=1,2,4 groups only; it schedules 84 trials total with 2*K matched A/B/C300 blocks per group. No live qualification trial was started by this chat."
       ],
       "commit": null,
       "worker_branch": null
@@ -437,7 +452,9 @@
     "4.6A:selected": {
       "status": "not_started",
       "tests": [],
-      "notes": [],
+      "notes": [
+        "Prepared by Step 4.7: 4.6A-sel-qual request is valid (84 trials, SHA-256 7858204fdf01ab51741a733fd30cb64079c7cc94d3ac0ddd49286f36d3c0b440); status remains not_started until the manager-run result is available."
+      ],
       "commit": null,
       "worker_branch": null
     },
@@ -810,7 +827,11 @@
         "B": "0/13",
         "C": "0/24",
         "H": "0/0 (4H excluded from fan-in)"
-      }
+      },
+      "historical_commit": "74249499c0e097f8e9a2fbb263528d54a78e8e0b",
+      "superseded_by_revision": "r02",
+      "superseded_under": "P4-A3",
+      "superseded_reason": "wait_seconds exact matching falsely left valid repeated completion waits unmatched"
     },
     {
       "kind": "historical_h_comparator",
@@ -825,11 +846,50 @@
         "benchmarks/chat-mode-scheduling-v2/phase4-historical-comparator.json": "12e477d0c6e16dfa41a3bbfd61dab1ba783486c83b2668ab8ee30812b9753f4f",
         "benchmarks/chat-mode-scheduling-v2/phase4-historical-comparator.md": "50e7393adbb9d61016afb996cdf96f82ba60dae497ea9c156eb26424e5f85762"
       }
+    },
+    {
+      "kind": "c_budget_selection_rejudgment",
+      "at": "2026-09-26T07:54:45+10:00",
+      "task_id": "4.7",
+      "revision": "r02",
+      "verdict": "GO",
+      "selected_c_endpoint": "C300",
+      "selected_budget_s": 300,
+      "supersedes_commit": "74249499c0e097f8e9a2fbb263528d54a78e8e0b",
+      "analyzer_head": "76ec24eed464e1162f4b51d9549143bf6175d8bb",
+      "final_admission_revision": "r01",
+      "final_admission_sha256": "16671e4aa1dbeaf07acc09c481aae59f645ee2185b6c7cbdbe822bdefec37eaf",
+      "calibration_result_json_sha256": "4ecbbd622113c843e7542b2eb67678fd7bf3daf0c51229dfb10c7acf06adbee5",
+      "calibration_result_jsonl_sha256": "51c4a3dadf977f9fab8601ae0e145e283020222929b0584cc4be1cc978dbdfce",
+      "bounded_gate": {
+        "same_prompt": "9/9",
+        "premature_handoff": "0/9",
+        "unexpected_exhaustion": "0/9",
+        "submitted_interruption": "0/9"
+      },
+      "replay_definition_b_reduction_percent": 63.448499,
+      "r12": {
+        "correctness_passed": true,
+        "budget_exhaustion_handoff": true,
+        "premature_handoff": false,
+        "interrupted": false,
+        "manual_continuations_required": 1
+      },
+      "routing_miss_rates": {
+        "A": "1/13 (7.69%)",
+        "B": "0/13 (0%)",
+        "C": "0/24 (0%)",
+        "H": "0/10 (0%; diagnostic/non-blocking)"
+      },
+      "qualification_serial_reference_reused": true,
+      "qualification_criteria_sha256": "bf832bad314ce4266179e4f4126358fb83f86610f78f2dd13d2a8b4f4dfcf5b2",
+      "qualification_request": "4.6A-sel-qual",
+      "qualification_request_sha256": "7858204fdf01ab51741a733fd30cb64079c7cc94d3ac0ddd49286f36d3c0b440"
     }
   ],
   "handoff": null,
   "created_at": "2026-09-25T15:31:10+10:00",
-  "updated_at": "2026-09-26T02:30:10+10:00",
+  "updated_at": "2026-09-26T07:54:45+10:00",
   "phase4_source_head": "06bc1649c4bad9449470366da971649bb7620020",
   "baseline_snapshot": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase4-baseline.json",
@@ -891,7 +951,7 @@
       "H": 1
     }
   },
-  "selected_c_endpoint": null,
+  "selected_c_endpoint": "C300",
   "final_c_lane_admission_summary": {
     "revision": "r01",
     "path": "benchmarks/chat-mode-scheduling-v2/phase4-live-admission-r01.json",
@@ -904,19 +964,29 @@
     "calibration_request": "4B-C300",
     "calibration_request_sha256": "7340637573297ff6e859fedb9620559b41a1939c33364f9d101df8c69be4a28c",
     "calibration_result_json_sha256": "4ecbbd622113c843e7542b2eb67678fd7bf3daf0c51229dfb10c7acf06adbee5",
-    "calibration_result_jsonl_sha256": "51c4a3dadf977f9fab8601ae0e145e283020222929b0584cc4be1cc978dbdfce"
+    "calibration_result_jsonl_sha256": "51c4a3dadf977f9fab8601ae0e145e283020222929b0584cc4be1cc978dbdfce",
+    "selected_c_endpoint": "C300",
+    "selection_revision": "r02",
+    "selection_verdict": "GO",
+    "calibration_routing_misses": 0,
+    "calibration_submitted_trials": 10,
+    "calibration_routing_miss_rate": 0.0
   },
   "c_budget_selection": {
-    "revision": "r01",
-    "evaluated_at": "2026-09-26T02:30:10+10:00",
-    "verdict": "NO_GO",
+    "revision": "r02",
+    "evaluated_at": "2026-09-26T07:54:45+10:00",
+    "verdict": "GO",
     "candidate": "C300",
     "budget_s": 300,
-    "selected_c_endpoint": null,
+    "selected_c_endpoint": "C300",
+    "supersedes_revision": "r01",
+    "supersedes_commit": "74249499c0e097f8e9a2fbb263528d54a78e8e0b",
+    "amendment": "P4-A3",
+    "analyzer_head": "76ec24eed464e1162f4b51d9549143bf6175d8bb",
     "bounded_trials": 9,
-    "same_prompt_completed": 7,
+    "same_prompt_completed": 9,
     "same_prompt_required": 9,
-    "premature_handoff": 2,
+    "premature_handoff": 0,
     "premature_handoff_required": 0,
     "unexpected_budget_exhaustion_handoff": 0,
     "unexpected_budget_exhaustion_max": 0,
@@ -928,8 +998,9 @@
       "budget_exhaustion_handoff": true,
       "premature_handoff": false,
       "interrupted": false,
-      "correctness_passed": false,
-      "oracle_failure": "required successful wait_result with blocking_budget_exhausted=true,state=running absent"
+      "correctness_passed": true,
+      "manual_continuations_required": 1,
+      "oracle_failures": []
     },
     "routing": {
       "calibration_C": {
@@ -955,12 +1026,27 @@
         },
         "H": {
           "misses": 0,
-          "submitted_trials": 0,
-          "rate": null,
-          "note": "4H excluded from the 4.7 fan-in"
+          "submitted_trials": 10,
+          "rate": 0.0,
+          "note": "diagnostic and not a 4.7 predecessor"
         }
       },
       "recovery_note": "4B-C300 rows had routing=null; retained-log audit found every run id only on C300, with no A/B/H/production occurrence."
+    },
+    "qualification": {
+      "early_4_6A_result_exists": false,
+      "fresh_selected_qualification_required": true,
+      "serial_reference_reused": true,
+      "serial_reference_source_request": "4.6B0-qual",
+      "criteria_sha256": "bf832bad314ce4266179e4f4126358fb83f86610f78f2dd13d2a8b4f4dfcf5b2",
+      "request": "4.6A-sel-qual",
+      "request_sha256": "7858204fdf01ab51741a733fd30cb64079c7cc94d3ac0ddd49286f36d3c0b440",
+      "requested_k": [
+        1,
+        2,
+        4
+      ],
+      "requested_trials": 84
     }
   },
   "historical_comparator": {

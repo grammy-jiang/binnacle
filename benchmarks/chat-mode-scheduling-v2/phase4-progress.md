@@ -356,36 +356,55 @@ Next step: **manager-dispatched Step 4.7 re-judgment under P4-A3 using the corre
 - The first local graph-validator draft used an over-broad Phase-5 text check;
   its corrected dependency-only check passes the authoritative 9-point contract.
 
-## Step 4.7 C budget selection — BLOCKED / NO-GO
+## Step 4.7 C budget selection — COMPLETE / C300 SELECTED
 
-- C300 is the only Phase-3 live candidate. Final C-lane admission remains
-  immutable admission r01, SHA-256
-  16671e4aa1dbeaf07acc09c481aae59f645ee2185b6c7cbdbe822bdefec37eaf:
+### Superseded r01 verdict
+
+- Commit 74249499c0e097f8e9a2fbb263528d54a78e8e0b recorded the original NO-GO from the pre-P4-A3
+  analyzer: 7/9 bounded same-prompt completions and 2/9 premature handoffs.
+- Amendment P4-A3 identified both failures as analyzer false labels caused by
+  exact matching of advisory wait_seconds. That r01 verdict remains historical
+  evidence and is explicitly superseded by r02; the frozen live trials were not
+  rerun or replaced.
+
+### P4-A3 r02 re-judgment
+
+- Corrected analyzer head: 76ec24eed464e1162f4b51d9549143bf6175d8bb. All 10 frozen 4B-C300 state
+  directories re-analyze successfully.
+- The nine bounded R5/R6/R7 trials are **9/9 same-prompt**, **0/9 premature
+  handoff**, **0/9 unexpected budget-exhaustion handoff**, **0/9 interrupted**,
+  and **0/9 manual continuation**.
+- Frozen replay definition-(b) repeated-wait burden reduction is unchanged at
+  **63.448499%**, above the required 60%.
+- R12 is a valid expected-exhaustion safety case:
+  correctness_passed=true, budget_exhaustion_handoff=true,
+  premature_handoff=false, interrupted=false, with one required continuation.
+- P4-A2 routing integrity remains PASS. Current observed routing-miss rates are
+  A **1/13 (7.69%)**, B **0/13 (0%)**, C **0/24 (0%)**, H **0/10 (0%)**.
+  H remains diagnostic and is not a Step-4.7 predecessor. No arm exceeds 10%.
+- Final C-lane admission remains immutable r01, SHA-256 16671e4aa1dbeaf07acc09c481aae59f645ee2185b6c7cbdbe822bdefec37eaf:
   aggregate cap 3 sessions, C300 cap 1, H cap 1.
-- Every 4B-C300 state directory was analyzed: R5 x3, R6 x3, R7 x3 and R12 x1.
-  On the nine bounded R5/R6/R7 trials, same-prompt completion is **7/9**
-  (required 9/9), premature handoff is **2/9** (required 0), unexpected
-  budget-exhaustion handoff is **0/9**, and submitted interruption is **0/9**.
-- The frozen replay definition-(b) repeated-wait burden reduction remains
-  **63.448499%**, passing the >=60% gate.
-- R12 produced the expected budget-exhaustion handoff and no premature handoff or
-  interruption, but its analyzer correctness is false because the required
-  successful wait_result carrying blocking_budget_exhausted=true and
-  state=running is absent.
-- Amendment P4-A2 routing recovery: the manager rows contain routing=null, but a
-  read-only retained-log audit found every one of the ten calibration run ids only
-  in C300's server log, with zero matches in A, B, H, or the production journal.
-  Calibration C routing misses are **0/10 (0%)**. Frozen qualification rates were
-  A 1/13 (7.69%), B 0/13, C 0/14, H 0/0; including this calibration, C is
-  0/24. No observed arm exceeds the >10% evidence-integrity threshold.
-- Result hashes: 4B-C300.json
-  4ecbbd622113c843e7542b2eb67678fd7bf3daf0c51229dfb10c7acf06adbee5;
-  4B-C300.jsonl
-  51c4a3dadf977f9fab8601ae0e145e283020222929b0584cc4be1cc978dbdfce.
-- Focused analyzer/confirmatory regression revalidation: **21 passed in 2.15s**;
-  nproc=4; pre-run load average 1.32 / 1.56 / 1.97 under foreign load.
-- Because all Step-4.7 rules must pass simultaneously, the verdict is **NO_GO**.
-  selected_c_endpoint is null. No 4.6A:selected run request is written.
+- **Verdict: GO. selected_c_endpoint=C300; selected budget=300 s.**
+
+### 4.6A:selected preparation
+
+- No early 4.6A result exists, so selected-C timing requires a fresh live
+  qualification.
+- The 4.6B0 serial timing reference is reused. Phase-4 source and A/B/C300 lane
+  identities are unchanged from admission commit
+  695c7326a58058352b24341e870f95a17b32395d, and the normalized R2/R5
+  qualification-case plus seven-criterion fingerprint matches historical/current
+  at SHA-256 bf832bad314ce4266179e4f4126358fb83f86610f78f2dd13d2a8b4f4dfcf5b2.
+- Manager-run request 4.6A-sel-qual validates with **84 trials** in six ordered
+  Q-read/Q-wait groups for K=1,2,4. Each group contains exactly 2*K matched
+  A/B/C300 blocks and uses parallel_blocks=K, block_order=concurrent.
+- Request SHA-256: 7858204fdf01ab51741a733fd30cb64079c7cc94d3ac0ddd49286f36d3c0b440. No live qualification trial was started by this
+  chat.
+- Focused P4-A3 analyzer/evidence/confirmatory regression: **27 passed in 2.11s**;
+  nproc=4; pre-run load average 1.68 / 2.12 / 2.53 under foreign load.
+
+Next step: **manager executes 4.6A-sel-qual and dispatches evaluation of
+Step 4.6A:selected from the frozen result**.
 
 ## Step 4H-R historical H comparator — COMPLETE
 
