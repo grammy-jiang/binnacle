@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "phase": 4,
+  "phase4_source_head": "06bc1649c4bad9449470366da971649bb7620020",
+  "base_topology_sha256": "9b58135a4a527bc18c5d43456d6f92b384e5457ac2f12884520dac1eb9f38155",
+  "endpoint_id": "A",
+  "logical_arm": "A",
+  "budget_s": null,
+  "port": 8110,
+  "project_name": "rp-sched-A",
+  "project_id": "g-p-6ab618e071c88191aec9db5d6945b7df",
+  "connector_logical_name": "Raspberry Pi MCP Scheduling A",
+  "tunnel_profile": "binnacle-sched-a",
+  "attachment_status": "verified",
+  "smoke_evidence_sha256": "ef4cb0d749e5efad04d74da974f3931edf53516d30c758c1c479ee6f315153bf",
+  "instruction_sha256": "f1c100d0ddb93c29f8f78e5a2d28e297d861ba6e2c7e53712ec886dea06bafa5",
+  "verified_at": "2026-09-25T19:07:32+10:00",
+  "app_id": "asdk_app_6ab633b890dc8191b94ad79f16fd0065",
+  "link_id": "link_6ab633cfefc48191b80f17422ee3e864",
+  "tunnel_id": "tunnel_6ab61ead7888819192ae433585833638",
+  "system_hint": "plugin:plugin_asdk_app_6ab633b890dc8191b94ad79f16fd0065",
+  "tool_names_sha256": "5773857fa60ed65fc63135794172b536f088a0bad6d31b12ce98eecfd567afc1"
+}

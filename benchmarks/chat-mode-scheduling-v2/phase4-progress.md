@@ -8,9 +8,9 @@ Worktree: `/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4`
 
 Audited source HEAD: `3a4dfb1b248e4530fb09013976abb863c8e35eaf`
 
-Last completed step: **4.4B:H**
+Last completed step: **4.4A**
 
-Next step: **4.4A core lane-manifest freeze running under accepted deviation D2; 4.6B:H remains independently eligible**
+Next step: **4.5 core pre-run M1/M2/M3**
 
 ## Frozen Step 4.0 entry gate
 
@@ -37,7 +37,7 @@ Next step: **4.4A core lane-manifest freeze running under accepted deviation D2;
 | 4.2D | not_started | — |
 | 4.3A | complete | — |
 | 4.3B | complete | — |
-| 4.4A | running | — |
+| 4.4A | complete | — |
 | 4.5 | not_started | — |
 | 4.6A | not_started | — |
 | 4.6B0 | not_started | — |
@@ -62,6 +62,7 @@ Next step: **4.4A core lane-manifest freeze running under accepted deviation D2;
 | Task | Status | Lane manifest |
 | --- | --- | --- |
 | 4.4B:H | complete | phase4-lanes/H.json (d9bfc266) |
+| 4.4A | complete | A.json (0bb2698d), B.json (a6c27c36), C300.json (d413edb9) |
 
 ## Step 4.1 source checkpoint
 
@@ -120,30 +121,43 @@ Next step: **4.4A core lane-manifest freeze running under accepted deviation D2;
   fan-in that requires this analyzer path.
 - No semantic deviation from the Step-4.3B runbook or focused test matrix.
 
-## Step 4.4A core lane manifest freeze — RESUMED UNDER D2
+## Step 4.4A core lane manifest freeze — COMPLETE
 
-- Attempt a1 correctly stopped before freezing manifests when upstream drift was
-  first observed.
-- Deviation D2 is now **ACCEPTED** by orchestrator decision at
-  2026-09-25 20:50: the owner-approved run_command shadow runtime predictor
-  deployment moved the public base from 260bc009 through eb25554 to
-  e8ece81d57dd2a478dd636d2b4f409519b845605.
-- The deployment does not touch frozen Phase-4 source
-  06bc1649c4bad9449470366da971649bb7620020, the benchmark scripts, or the lane
-  topology. Phase 4 therefore continues without restack; Phase-5 Step 5.0F will
-  rebase the staging/release line onto then-current master.
-- Production observation baseline is updated to clean master
+- Attempt a1 correctly stopped before freezing manifests on unexpected public-base
+  drift. Deviation D2 now accepts that drift as the owner-approved run_command
+  shadow runtime predictor deployment and continues Phase 4 without restack.
+- The accepted production baseline is clean master
   e8ece81d57dd2a478dd636d2b4f409519b845605 with config SHA-256
   d24dadcc87e04096fdd960fc7d1543fca02ea53814b15ccd51fd9b1eb1153195.
-  All four production services remain active, the blocking-wall budget key is
-  absent, and the primary tunnel profile hash remains
-  c8e2a608779109854e6d3aae921a2cb1fbbe1b6511f1630990899052a6b74ecb.
-- Provisioning fragments 4.4A:A, 4.4A:B and 4.4A:C300 remain blocker-free with
-  **5/5 PASS** rows each. Their prior base/readiness/runtime validation remains
-  recorded and will be rerun before the manifests are frozen.
+  Unit/profile hashes are stable and the blocking-wall budget key remains absent.
+- Revalidation at canonical HEAD
+  e0cb1ce6eead5b021fbe079edef70ec4276a0851 passed **168 assertions**.
+  A/B/C300 are blocker-free with **15/15 provisioning rows PASS** and agree with
+  immutable base topology SHA-256
+  9b58135a4a527bc18c5d43456d6f92b384e5457ac2f12884520dac1eb9f38155,
+  their 4.2D readiness fragments, runtime registry SHA-256
+  f75ea33783def327f542832ded790e5f5650f11304e3f968fe0c7c6c39d3cf26,
+  and the pre-provisioned tunnel identities.
+- Frozen immutable A manifest:
+  benchmarks/chat-mode-scheduling-v2/phase4-lanes/A.json,
+  SHA-256 0bb2698d63c7e3c11b05a39981674a3976ded8fffd349a8f46e583c5a3520107.
+- Frozen immutable B manifest:
+  benchmarks/chat-mode-scheduling-v2/phase4-lanes/B.json,
+  SHA-256 a6c27c3611675e7d261d572d1edceae6a5a92ce2456c28d50335f68f051e41b4.
+- Frozen immutable C300 manifest:
+  benchmarks/chat-mode-scheduling-v2/phase4-lanes/C300.json,
+  SHA-256 d413edb9f0eaca1471d99a6c1592a4ca19fd9a0af73611bf236def8bfd4ee8da.
+- Each manifest records the plan-required source/base/endpoint/arm/budget/Project/
+  connector/profile/attachment/smoke/instruction/verified-at fields plus app id,
+  link id, tunnel id, system hint and tool-names SHA-256.
+- Focused runtime/harness integration matrix: **PASS**, 86 tests in 2.19 seconds;
+  4 CPUs; pre-run load average 0.56 / 0.96 / 0.95 under foreign
+  parallel-programme load.
+- Manifest JSON syntax and git diff checks pass. Final production isolation check
+  also passes against the D2 baseline.
 - The 4.2D readiness worker commit
-  0930075df3ffa879f0dc0066de70870bd86d0008 is consumed read-only; this freeze
-  task does not integrate worker commits.
+  0930075df3ffa879f0dc0066de70870bd86d0008 was consumed read-only; no worker
+  commit was integrated and this freeze task performed no external side effect.
 
 ## Step 4.4B supplemental H lane manifest freeze
 

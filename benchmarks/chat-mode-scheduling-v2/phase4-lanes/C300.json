@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "phase": 4,
+  "phase4_source_head": "06bc1649c4bad9449470366da971649bb7620020",
+  "base_topology_sha256": "9b58135a4a527bc18c5d43456d6f92b384e5457ac2f12884520dac1eb9f38155",
+  "endpoint_id": "C300",
+  "logical_arm": "C",
+  "budget_s": 300,
+  "port": 8113,
+  "project_name": "rp-sched-C300",
+  "project_id": "g-p-6ab618e926c48191a9aa444fbc08ab58",
+  "connector_logical_name": "Raspberry Pi MCP Scheduling C300",
+  "tunnel_profile": "binnacle-sched-c300",
+  "attachment_status": "verified",
+  "smoke_evidence_sha256": "9ee5ff97a55c56f803344a225e873fa169c4df40eb4664459d46a93b80e8989c",
+  "instruction_sha256": "b7df6953a3c64bd245b3d5ff13b6f2667e940d5a154e650fec0b10e6a22cf094",
+  "verified_at": "2026-09-25T20:34:19+10:00",
+  "app_id": "asdk_app_6ab634aa33bc8191adcf93d5b02c9f26",
+  "link_id": "link_6ab634be3dac81918d9b3b71adc73752",
+  "tunnel_id": "tunnel_6ab61eb175388191bfdc4c3e25bcefe5",
+  "system_hint": "plugin:plugin_asdk_app_6ab634aa33bc8191adcf93d5b02c9f26",
+  "tool_names_sha256": "5925891e77a724ca7dcb9322ce99edd50f49955967c696c910eb0d4b22d87d1b"
+}

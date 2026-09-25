@@ -6,8 +6,8 @@
   "worktree": "/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4",
   "source_branch": "feature/chat-mode-scheduling-v2-phase3",
   "audited_source_head": "3a4dfb1b248e4530fb09013976abb863c8e35eaf",
-  "last_completed_step": "4.4B:H",
-  "next_step": "4.4A core lane-manifest freeze running under accepted deviation D2; 4.6B:H remains independently eligible",
+  "last_completed_step": "4.4A",
+  "next_step": "4.5 core pre-run M1/M2/M3",
   "dependency_audit": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase4-dependency-audit-2026-09-25-r01.json",
     "revision": "r01",
@@ -25,7 +25,7 @@
     "compatibility_matrix": "env BINNACLE_TEST_WORKERS=4 uv run tox run -- --seed 12345"
   },
   "production_baseline": {
-    "observed_at": "2026-09-25T20:52:21+10:00",
+    "observed_at": "2026-09-25T20:58:57+10:00",
     "path": "/home/grammy-jiang/Projects/binnacle",
     "branch": "master",
     "head": "e8ece81d57dd2a478dd636d2b4f409519b845605",
@@ -73,7 +73,8 @@
     "phase4_dependency_audit_head": "89a206d24185284de278df18fe77ac0e4eccbb01",
     "phase4_source_head": "06bc1649c4bad9449470366da971649bb7620020",
     "phase4_analyzer_path_head": "6073902ba1e72a946da0ea7d7e901e36f47f96a3",
-    "phase4_runtime_path_head": "2e7889f3552e5d9bb6c26a38c7aab444ebbe8b90"
+    "phase4_runtime_path_head": "2e7889f3552e5d9bb6c26a38c7aab444ebbe8b90",
+    "phase4_core_manifest_validation_head": "e0cb1ce6eead5b021fbe079edef70ec4276a0851"
   },
   "frozen_hashes": {
     "phase3_progress_json": "984ba7891843a6eb3a15b750e95177d3a325f14280990f47be62527d44482bde",
@@ -105,7 +106,17 @@
     "phase4_lane_H_readiness_fragment": "730e7330504c6faf298a766feca6139858aa10db4bf71349454d5340435aae79",
     "phase4_lane_H_provisioning_fragment": "082d0e49696e416622c6e8f94ed2803b1d8e963b98e55e9749c2ce42ab26447d",
     "phase4_runtime_registry_at_H_manifest_freeze": "f75ea33783def327f542832ded790e5f5650f11304e3f968fe0c7c6c39d3cf26",
-    "phase4_lane_H_manifest_json": "d9bfc26661289baa2db99394fd2872d09965c06fa7bc26ff8cebaa18c4ccbed7"
+    "phase4_lane_H_manifest_json": "d9bfc26661289baa2db99394fd2872d09965c06fa7bc26ff8cebaa18c4ccbed7",
+    "phase4_lane_A_readiness_fragment": "3d5d7fa6fe77e7b6aff318882d50a9f5afb3e2fe2da2592659d3088e3fc82b20",
+    "phase4_lane_A_provisioning_fragment": "015a7a891d19c266539bc3bcb0a31e990f418e23986cba28ac74d26dee486884",
+    "phase4_lane_A_manifest_json": "0bb2698d63c7e3c11b05a39981674a3976ded8fffd349a8f46e583c5a3520107",
+    "phase4_lane_B_readiness_fragment": "6e01d227466bba66cdd332e88621aa81a23c220038fb71798d56601eed33ed14",
+    "phase4_lane_B_provisioning_fragment": "ea5072f3a23d5e4caffae207a5dab1414b09c8a353f4a58054443943d37fce25",
+    "phase4_lane_B_manifest_json": "a6c27c3611675e7d261d572d1edceae6a5a92ce2456c28d50335f68f051e41b4",
+    "phase4_lane_C300_readiness_fragment": "c1cef4d74073db5fb1d9d45fa2439a6ad5d9c2627367a0957d8420e0a03365a4",
+    "phase4_lane_C300_provisioning_fragment": "3bbe50326ac2b29b5b944c85e14ca7b117cd3e0955fc61edef7c4abc3adcb001",
+    "phase4_lane_C300_manifest_json": "d413edb9f0eaca1471d99a6c1592a4ca19fd9a0af73611bf236def8bfd4ee8da",
+    "phase4_runtime_registry_at_core_manifest_freeze": "f75ea33783def327f542832ded790e5f5650f11304e3f968fe0c7c6c39d3cf26"
   },
   "preflight_findings": {
     "p4-preflight-git-lineage": "804da7b66ddc1f0e71ddf3106790989f50a0f320de4cd3b3f0aedaf962d68461",
@@ -251,20 +262,22 @@
       "worker_branch": null
     },
     "4.4A": {
-      "status": "running",
+      "status": "complete",
       "tests": [
-        "fragment/base/readiness/runtime validator -> PASS: A/B/C300 each have 5/5 provisioning rows PASS, blockers empty, and base/readiness/runtime identities agree",
-        "uv run pytest -q tests/scripts/test_chat_scheduling_endpoints.py tests/scripts/test_chat_scheduling_historical_guard.py tests/scripts/test_chat_scheduling_harness.py tests/scripts/test_chat_scheduling_evidence.py tests/scripts/test_chat_scheduling_analyzer_identity.py tests/scripts/test_chat_scheduling_manifest.py -> PASS: 86 passed in 2.13s; nproc=4; pre-run loadavg=0.48 1.06 0.88 under foreign parallel-programme load",
-        "dependency-audit freshness check -> BLOCKED: origin/master and origin/proof-of-concept advanced from audited 260bc009a55e7a78716ac42faf64ae88cf2c6724 to e8ece81d57dd2a478dd636d2b4f409519b845605; current master is not an ancestor of frozen Phase-3 head 3a4dfb1b248e4530fb09013976abb863c8e35eaf",
-        "dependency-audit freshness deviation D2 -> ACCEPTED: owner-approved run_command shadow predictor deployment advanced public master to e8ece81d57dd2a478dd636d2b4f409519b845605 without touching frozen Phase-4 source/topology; continue Phase 4 without restack and rebase staging at Phase-5 Step 5.0F"
+        "fragment/base/readiness/runtime validator rerun at canonical HEAD e0cb1ce6eead5b021fbe079edef70ec4276a0851 -> PASS: 168 assertions; A/B/C300 each 5/5 provisioning rows PASS, blockers empty, and base/readiness/runtime/tunnel identities agree",
+        "uv run pytest -q tests/scripts/test_chat_scheduling_endpoints.py tests/scripts/test_chat_scheduling_historical_guard.py tests/scripts/test_chat_scheduling_harness.py tests/scripts/test_chat_scheduling_evidence.py tests/scripts/test_chat_scheduling_analyzer_identity.py tests/scripts/test_chat_scheduling_manifest.py -> PASS: 86 passed in 2.19s; nproc=4; pre-run loadavg=0.56 0.96 0.95 under foreign parallel-programme load",
+        "attempt a1 dependency-audit freshness check -> BLOCKED on public-base drift; superseded by accepted orchestrator deviation D2 at 2026-09-25 20:50",
+        "dependency-audit freshness deviation D2 -> ACCEPTED: owner-approved run_command shadow predictor deployment advanced public master to e8ece81d57dd2a478dd636d2b4f409519b845605 without touching frozen Phase-4 source/topology; continue Phase 4 without restack and rebase staging at Phase-5 Step 5.0F",
+        "python3 -m json.tool on phase4-lanes/A.json, B.json, C300.json + git diff --check -> PASS",
+        "bash /tmp/p36-manager/isolation-check.sh -> PASS: production master clean at e8ece81d57dd2a478dd636d2b4f409519b845605; config SHA-256 d24dadcc87e04096fdd960fc7d1543fca02ea53814b15ccd51fd9b1eb1153195; unit/profile hashes stable; blocking-wall budget key absent"
       ],
       "notes": [
-        "Provisioning fragments 4.4A:A, 4.4A:B and 4.4A:C300 are blocker-free with 5/5 PASS rows, and their Project, connector, tunnel, instruction, smoke and tool-schema identities matched the immutable base topology, 4.2D readiness fragments and current runtime registry.",
-        "The three candidate manifests were generated only for validation, remained untracked, and were removed without commit when the dependency-audit invalidation was discovered; no A/B/C300 lane manifest is frozen.",
+        "Deviation D2 is accepted: the owner-approved run_command shadow predictor deployment is production-only relative to the frozen experiment source, so Phase 4 continues without restack and Phase-5 Step 5.0F owns the later rebase.",
+        "Revalidated 4.4A:A, 4.4A:B and 4.4A:C300 at canonical HEAD e0cb1ce6eead5b021fbe079edef70ec4276a0851 against immutable base topology, 4.2D readiness fragments, the current runtime registry and pre-provisioned tunnel identities; 168 assertions passed.",
+        "Frozen A manifest SHA-256 0bb2698d63c7e3c11b05a39981674a3976ded8fffd349a8f46e583c5a3520107, B manifest SHA-256 a6c27c3611675e7d261d572d1edceae6a5a92ce2456c28d50335f68f051e41b4, and C300 manifest SHA-256 d413edb9f0eaca1471d99a6c1592a4ca19fd9a0af73611bf236def8bfd4ee8da.",
+        "Each canonical manifest records schema/source/base topology, endpoint/arm/budget/port, Project and connector identities, verified attachment status, smoke/instruction hashes, verified_at, app/link/tunnel ids, system_hint and tool_names_sha256.",
         "Consumed 4.2D readiness worker commit 0930075df3ffa879f0dc0066de70870bd86d0008 read-only; no worker commit was cherry-picked by this freeze task.",
-        "The Phase-4 runbook requires unexpected upstream drift to invalidate the dependency audit and stop further implementation until re-audit. origin/master and origin/proof-of-concept now point to e8ece81d57dd2a478dd636d2b4f409519b845605 rather than the audited 260bc009a55e7a78716ac42faf64ae88cf2c6724.",
-        "Production observation also changed from the recorded baseline: the checkout is clean and services remain active with the blocking-wall budget key absent and primary tunnel profile unchanged, but the production config SHA-256 is now d24dadcc87e04096fdd960fc7d1543fca02ea53814b15ccd51fd9b1eb1153195 instead of the recorded 9564cec6b4e994287b2136d4f63db9bac4a2d5fe02425c0eb76863354c88fd5d.",
-        "Deviation D2 resolves the prior upstream-drift block: the public-base/config changes are the owner-approved run_command shadow predictor deployment and are accepted without restack; frozen phase4_source_head 06bc1649c4bad9449470366da971649bb7620020 remains authoritative."
+        "No external side effect was performed by the freeze task; it only committed canonical manifests/progress from already-verified provisioning evidence."
       ],
       "commit": null,
       "worker_branch": null
@@ -496,7 +509,7 @@
         "B",
         "C300"
       ],
-      "status": "running",
+      "status": "complete",
       "at": "2026-09-25T20:40:48+10:00",
       "predecessor_fragments": {
         "A": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase4/provisioning/4.4A:A.json",
@@ -518,29 +531,38 @@
         },
         "runtime_registry_sha256": "f75ea33783def327f542832ded790e5f5650f11304e3f968fe0c7c6c39d3cf26",
         "phase4_source_head": "06bc1649c4bad9449470366da971649bb7620020",
-        "phase4_runtime_path_head": "2e7889f3552e5d9bb6c26a38c7aab444ebbe8b90"
+        "phase4_runtime_path_head": "2e7889f3552e5d9bb6c26a38c7aab444ebbe8b90",
+        "current_canonical_head": "e0cb1ce6eead5b021fbe079edef70ec4276a0851"
       },
       "tests": [
-        "fragment/base/readiness/runtime validator -> PASS: A/B/C300 each have 5/5 provisioning rows PASS, blockers empty, and base/readiness/runtime identities agree",
-        "uv run pytest -q tests/scripts/test_chat_scheduling_endpoints.py tests/scripts/test_chat_scheduling_historical_guard.py tests/scripts/test_chat_scheduling_harness.py tests/scripts/test_chat_scheduling_evidence.py tests/scripts/test_chat_scheduling_analyzer_identity.py tests/scripts/test_chat_scheduling_manifest.py -> PASS: 86 passed in 2.13s; nproc=4; pre-run loadavg=0.48 1.06 0.88 under foreign parallel-programme load",
-        "dependency-audit freshness check -> BLOCKED: origin/master and origin/proof-of-concept advanced from audited 260bc009a55e7a78716ac42faf64ae88cf2c6724 to e8ece81d57dd2a478dd636d2b4f409519b845605; current master is not an ancestor of frozen Phase-3 head 3a4dfb1b248e4530fb09013976abb863c8e35eaf",
-        "dependency-audit freshness deviation D2 -> ACCEPTED: owner-approved run_command shadow predictor deployment advanced public master to e8ece81d57dd2a478dd636d2b4f409519b845605 without touching frozen Phase-4 source/topology; continue Phase 4 without restack and rebase staging at Phase-5 Step 5.0F"
+        "fragment/base/readiness/runtime validator rerun at canonical HEAD e0cb1ce6eead5b021fbe079edef70ec4276a0851 -> PASS: 168 assertions; A/B/C300 each 5/5 provisioning rows PASS, blockers empty, and base/readiness/runtime/tunnel identities agree",
+        "uv run pytest -q tests/scripts/test_chat_scheduling_endpoints.py tests/scripts/test_chat_scheduling_historical_guard.py tests/scripts/test_chat_scheduling_harness.py tests/scripts/test_chat_scheduling_evidence.py tests/scripts/test_chat_scheduling_analyzer_identity.py tests/scripts/test_chat_scheduling_manifest.py -> PASS: 86 passed in 2.19s; nproc=4; pre-run loadavg=0.56 0.96 0.95 under foreign parallel-programme load",
+        "attempt a1 dependency-audit freshness check -> BLOCKED on public-base drift; superseded by accepted orchestrator deviation D2 at 2026-09-25 20:50",
+        "dependency-audit freshness deviation D2 -> ACCEPTED: owner-approved run_command shadow predictor deployment advanced public master to e8ece81d57dd2a478dd636d2b4f409519b845605 without touching frozen Phase-4 source/topology; continue Phase 4 without restack and rebase staging at Phase-5 Step 5.0F",
+        "python3 -m json.tool on phase4-lanes/A.json, B.json, C300.json + git diff --check -> PASS",
+        "bash /tmp/p36-manager/isolation-check.sh -> PASS: production master clean at e8ece81d57dd2a478dd636d2b4f409519b845605; config SHA-256 d24dadcc87e04096fdd960fc7d1543fca02ea53814b15ccd51fd9b1eb1153195; unit/profile hashes stable; blocking-wall budget key absent"
       ],
       "blockers": [],
       "notes": [
-        "Provisioning fragments 4.4A:A, 4.4A:B and 4.4A:C300 are blocker-free with 5/5 PASS rows, and their Project, connector, tunnel, instruction, smoke and tool-schema identities matched the immutable base topology, 4.2D readiness fragments and current runtime registry.",
-        "The three candidate manifests were generated only for validation, remained untracked, and were removed without commit when the dependency-audit invalidation was discovered; no A/B/C300 lane manifest is frozen.",
+        "Deviation D2 is accepted: the owner-approved run_command shadow predictor deployment is production-only relative to the frozen experiment source, so Phase 4 continues without restack and Phase-5 Step 5.0F owns the later rebase.",
+        "Revalidated 4.4A:A, 4.4A:B and 4.4A:C300 at canonical HEAD e0cb1ce6eead5b021fbe079edef70ec4276a0851 against immutable base topology, 4.2D readiness fragments, the current runtime registry and pre-provisioned tunnel identities; 168 assertions passed.",
+        "Frozen A manifest SHA-256 0bb2698d63c7e3c11b05a39981674a3976ded8fffd349a8f46e583c5a3520107, B manifest SHA-256 a6c27c3611675e7d261d572d1edceae6a5a92ce2456c28d50335f68f051e41b4, and C300 manifest SHA-256 d413edb9f0eaca1471d99a6c1592a4ca19fd9a0af73611bf236def8bfd4ee8da.",
+        "Each canonical manifest records schema/source/base topology, endpoint/arm/budget/port, Project and connector identities, verified attachment status, smoke/instruction hashes, verified_at, app/link/tunnel ids, system_hint and tool_names_sha256.",
         "Consumed 4.2D readiness worker commit 0930075df3ffa879f0dc0066de70870bd86d0008 read-only; no worker commit was cherry-picked by this freeze task.",
-        "The Phase-4 runbook requires unexpected upstream drift to invalidate the dependency audit and stop further implementation until re-audit. origin/master and origin/proof-of-concept now point to e8ece81d57dd2a478dd636d2b4f409519b845605 rather than the audited 260bc009a55e7a78716ac42faf64ae88cf2c6724.",
-        "Production observation also changed from the recorded baseline: the checkout is clean and services remain active with the blocking-wall budget key absent and primary tunnel profile unchanged, but the production config SHA-256 is now d24dadcc87e04096fdd960fc7d1543fca02ea53814b15ccd51fd9b1eb1153195 instead of the recorded 9564cec6b4e994287b2136d4f63db9bac4a2d5fe02425c0eb76863354c88fd5d.",
-        "Deviation D2 resolves the prior upstream-drift block: the public-base/config changes are the owner-approved run_command shadow predictor deployment and are accepted without restack; frozen phase4_source_head 06bc1649c4bad9449470366da971649bb7620020 remains authoritative."
+        "No external side effect was performed by the freeze task; it only committed canonical manifests/progress from already-verified provisioning evidence."
       ],
-      "resumed_at": "2026-09-25T20:53:56+10:00"
+      "resumed_at": "2026-09-25T20:53:56+10:00",
+      "completed_at": "2026-09-25T20:59:57+10:00",
+      "output_paths": {
+        "benchmarks/chat-mode-scheduling-v2/phase4-lanes/A.json": "0bb2698d63c7e3c11b05a39981674a3976ded8fffd349a8f46e583c5a3520107",
+        "benchmarks/chat-mode-scheduling-v2/phase4-lanes/B.json": "a6c27c3611675e7d261d572d1edceae6a5a92ce2456c28d50335f68f051e41b4",
+        "benchmarks/chat-mode-scheduling-v2/phase4-lanes/C300.json": "d413edb9f0eaca1471d99a6c1592a4ca19fd9a0af73611bf236def8bfd4ee8da"
+      }
     }
   ],
   "handoff": null,
   "created_at": "2026-09-25T15:31:10+10:00",
-  "updated_at": "2026-09-25T20:53:56+10:00",
+  "updated_at": "2026-09-25T20:59:57+10:00",
   "phase4_source_head": "06bc1649c4bad9449470366da971649bb7620020",
   "baseline_snapshot": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase4-baseline.json",
