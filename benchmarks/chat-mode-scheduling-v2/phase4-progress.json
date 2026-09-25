@@ -6,8 +6,8 @@
   "worktree": "/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4",
   "source_branch": "feature/chat-mode-scheduling-v2-phase3",
   "audited_source_head": "3a4dfb1b248e4530fb09013976abb863c8e35eaf",
-  "last_completed_step": "4H-R",
-  "next_step": "4.7-fix \u2014 apply P4-A3 wait-node argument-matching correction, audit scenario manifests, and re-analyze retained C300 R5 calibration evidence.",
+  "last_completed_step": "4.7-fix",
+  "next_step": "Manager-dispatched Step 4.7 re-judgment under Amendment P4-A3 using the corrected analyzer; this task does not re-decide Step 4.7.",
   "dependency_audit": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase4-dependency-audit-2026-09-25-r01.json",
     "revision": "r01",
@@ -72,7 +72,7 @@
     "phase4_bootstrap_base": "3a4dfb1b248e4530fb09013976abb863c8e35eaf",
     "phase4_dependency_audit_head": "89a206d24185284de278df18fe77ac0e4eccbb01",
     "phase4_source_head": "06bc1649c4bad9449470366da971649bb7620020",
-    "phase4_analyzer_path_head": "6073902ba1e72a946da0ea7d7e901e36f47f96a3",
+    "phase4_analyzer_path_head": "76ec24eed464e1162f4b51d9549143bf6175d8bb",
     "phase4_runtime_path_head": "acdb2088584382c6496d10c2a170d2217135e550",
     "phase4_core_manifest_validation_head": "e0cb1ce6eead5b021fbe079edef70ec4276a0851",
     "phase4_postsend_robustness_head": "389e6a5b7db05a316032340bc6a8dbf34a562b8d"
@@ -192,6 +192,12 @@
       "status": "RESOLVED",
       "description": "The manager 4H result rows contain routing=null even though Amendment P4-A2 requires a routing object on every row.",
       "disposition": "Read-only retained-log recovery found every one of the ten owning H run ids exactly once in the H server log, zero occurrences in A/B/C300 lane logs, and zero in the production binnacle-mcp journal during the trial window. H routing misses are therefore 0/10 (0%); current observed rates A=1/13, B=0/13, C=0/24, H=0/10, with no arm above the >10% evidence-integrity threshold."
+    },
+    {
+      "id": "D7-P4A3",
+      "status": "RESOLVED",
+      "description": "Amendment P4-A3 identifies the wait-node analyzer false-label correction as deviation D7. Canonical progress at dispatch already contained an unrelated committed D7 for the 4H routing=null serialization finding.",
+      "disposition": "Preserve the prior D7 record unchanged rather than overwrite committed H evidence; record the P4-A3 correction as D7-P4A3. The analyzer matcher now accepts schema-valid positive model-chosen waits on repeated job-state completion nodes, focused tests pass, retained C300 R5 repeats 1 and 3 re-analyze as same-prompt completions, and phase4_analyzer_path_head advances from 6073902ba1e72a946da0ea7d7e901e36f47f96a3 to 76ec24eed464e1162f4b51d9549143bf6175d8bb."
     }
   ],
   "steps": {
@@ -581,12 +587,36 @@
       "worker_branch": null
     },
     "4.7-fix": {
-      "status": "running",
-      "tests": [],
-      "notes": [
-        "P4-A3 analyzer matcher correction is in progress; Step 4.7 remains historical NO_GO pending the manager-dispatched re-judgment."
+      "status": "complete",
+      "tests": [
+        "uv run pytest -q tests/scripts/test_chat_scheduling_evidence.py tests/scripts/test_chat_scheduling_analyzer.py tests/scripts/test_chat_scheduling_confirmatory.py -> PASS: 27 passed in 4.62s; nproc=4; pre-run loadavg=2.35 2.87 2.41 under foreign parallel-programme load.",
+        "Retained C300 calibration 4B:C300:R5:1 -> PASS after re-analysis: correctness_passed=true, same_prompt_completion=true, premature_handoff=false, manual_continuations_required=0, one positive job_status wait.",
+        "Retained C300 calibration 4B:C300:R5:3 -> PASS after re-analysis: correctness_passed=true, same_prompt_completion=true, premature_handoff=false, manual_continuations_required=0, one positive job_status wait.",
+        "File-scoped pre-commit -> PASS for analyzer, focused evidence tests, and canonical progress; git diff --check -> PASS."
       ],
-      "commit": null,
+      "notes": [
+        "P4-A3 matcher rule implemented: for job_status nodes with allow_repeats=true and a job_state=* completion condition, a manifest wait_seconds value is advisory; any schema-valid positive integer wait_seconds in 1..50 matches. Missing, zero, boolean, non-integer, or out-of-range waits do not match. Other expected arguments retain existing exact-match behavior.",
+        "R1 audit: no amendment trap. search_text expects only path/pattern; model-chosen max_results/context_lines/fixed_strings or other omitted optional arguments are not exact-matched.",
+        "R2 audit: no amendment trap. read_file nodes expect only path; model-chosen optional range/limit arguments are absent from expected arguments and therefore cannot cause a false mismatch.",
+        "R3 audit: amendment-covered trap. validation_result is repeated job_status with job_state=exited and manifest wait_seconds=50 while the prompt leaves result-wait duration open; positive model-chosen waits are now accepted. The run_command background=true/wait_seconds=1/command/workdir values remain prompt-fixed exact arguments.",
+        "R4 audit: amendment-covered trap. validation_result is repeated job_status with job_state=exited and manifest wait_seconds=50 while the prompt only requires continued checking; positive model-chosen waits are now accepted.",
+        "R5 audit: amendment-covered trap and observed false label source. wait_result is repeated job_status with job_state=exited and manifest wait_seconds=50; 30-second waits now match while zero or missing waits do not.",
+        "R6 audit: amendment-covered trap. wait_result is repeated job_status with job_state=exited and manifest wait_seconds=50 while the prompt leaves wait duration open; positive model-chosen waits are now accepted.",
+        "R7 audit: already safe. wait_first and wait_second are repeated job_status completion nodes but the manifest deliberately omits wait_seconds, so model-chosen waits were never exact-matched.",
+        "R8 audit: no amendment trap. read_file paths are exact task semantics; the run_command operation pseudo-argument is already intentionally ignored and no model-chosen wait/search limit is encoded.",
+        "R9 audit: no amendment trap. read_file paths are exact task semantics; the run_command operation pseudo-argument is already intentionally ignored and no model-chosen wait/search limit is encoded.",
+        "R10 audit: amendment-covered trap. wait_result is repeated job_status with job_state=exited and manifest wait_seconds=50 while the prompt leaves wait duration open; positive model-chosen waits are now accepted.",
+        "R11 audit: no amendment trap. search_text expects path/pattern only; the wave-two dynamic pattern is already treated as a rendered result dependency, while model-chosen max_results/context_lines/other omitted search options are not exact-matched.",
+        "R12 audit: amendment-covered trap. wait_result is repeated job_status with job_state=exited and manifest wait_seconds=50 while the prompt requires continued checking until completion or budget exhaustion; positive model-chosen waits are now accepted.",
+        "M1 audit: no amendment trap. read_file nodes are path-only.",
+        "M2 audit: no amendment trap. read_file nodes are path-only; no model-chosen limit or batching parameter is encoded in expected arguments.",
+        "M3 audit: exact wait is intentional and unchanged. slow_status is non-repeating job_status and the prompt explicitly requires wait_seconds=5, so a different wait remains a mismatch.",
+        "Across R1-R12 and M1-M3, no max_results, context_lines, read limits, or analogous model-chosen optional parameter is both encoded as an expected argument and left unspecified by the prompt. No additional matcher change is justified by P4-A3.",
+        "The read-only preflight diagnostic was consumed as directed and attributes the R5 analyzer mismatch to the same wait_seconds exact-match defect across A/B/C300; this task changes analyzer matching only and leaves server source, harness, manifests, endpoints, and frozen experiment source untouched.",
+        "phase4_analyzer_path_head advances from 6073902ba1e72a946da0ea7d7e901e36f47f96a3 to 76ec24eed464e1162f4b51d9549143bf6175d8bb.",
+        "Step 4.7 historical NO_GO remains recorded and is not re-decided here; the manager owns the immediate P4-A3 re-judgment."
+      ],
+      "commit": "76ec24eed464e1162f4b51d9549143bf6175d8bb",
       "worker_branch": null
     }
   },

@@ -8,9 +8,9 @@ Worktree: `/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4`
 
 Audited source HEAD: `3a4dfb1b248e4530fb09013976abb863c8e35eaf`
 
-Last completed step: **4H-R**
+Last completed step: **4.7-fix**
 
-Next step: **4.7-fix — P4-A3 wait-node argument-matching correction is running; Step 4.7 will be re-judged separately by the manager after this fix is verified.**
+Next step: **manager-dispatched Step 4.7 re-judgment under P4-A3 using the corrected analyzer; this task does not re-decide Step 4.7.**
 
 ## Frozen Step 4.0 entry gate
 
@@ -44,7 +44,7 @@ Next step: **4.7-fix — P4-A3 wait-node argument-matching correction is running
 | 4.6A | not_started | — |
 | 4.6B0 | complete | — |
 | 4.7 | blocked | — |
-| 4.7-fix | running | — |
+| 4.7-fix | complete | `76ec24e` |
 | 4.6A:selected | not_started | — |
 | 4.8 | not_started | — |
 | 4.9.1 | not_started | — |
@@ -411,3 +411,49 @@ Next step: **4.7-fix — P4-A3 wait-node argument-matching correction is running
   the same analyzer with `PYTHONPATH=.` resolved imports with no semantic change.
 - H remains diagnostic and does not alter Step 4.7 or any Step 4.12 verdict.
   Phase 4 remains blocked at Step 4.7, so no Step 4.13 handoff exists to append.
+
+## Step 4.7-fix P4-A3 analyzer wait matching — COMPLETE
+
+- Frozen `phase4_analyzer_path_head` advanced from
+  `6073902ba1e72a946da0ea7d7e901e36f47f96a3` to
+  `76ec24eed464e1162f4b51d9549143bf6175d8bb`.
+- Repeated `job_status` nodes with `allow_repeats=true` and a `job_state=*`
+  completion condition now treat manifest `wait_seconds` as advisory. Only
+  schema-valid positive integer waits `1..50` match; zero/missing/out-of-range
+  waits still fail, and every other expected argument keeps its prior matching
+  rule.
+- Required manifest audit dispositions:
+  - R1: no trap; search optional `max_results`/`context_lines`-style arguments
+    are absent from expected arguments.
+  - R2: no trap; read nodes are path-only.
+  - R3: fixed by P4-A3; repeated completion wait had advisory `50`.
+  - R4: fixed by P4-A3; repeated completion wait had advisory `50`.
+  - R5: fixed by P4-A3; observed 30-second waits now match advisory `50`.
+  - R6: fixed by P4-A3; repeated completion wait had advisory `50`.
+  - R7: already safe; repeated wait nodes omit `wait_seconds`.
+  - R8: no trap; path/workdir semantics remain exact and operation is already
+    intentionally ignored.
+  - R9: no trap; path/workdir semantics remain exact and operation is already
+    intentionally ignored.
+  - R10: fixed by P4-A3; repeated completion wait had advisory `50`.
+  - R11: no trap; optional search limits are absent, and the dynamic wave-two
+    pattern is already a result dependency.
+  - R12: fixed by P4-A3; repeated completion wait had advisory `50`.
+  - M1: no trap; read nodes are path-only.
+  - M2: no trap; read nodes are path-only and batching/limits are not expected
+    arguments.
+  - M3: exact `wait_seconds=5` is intentional because the prompt specifies it
+    and the node is non-repeating.
+- No additional `max_results`, `context_lines`, read-limit, or analogous
+  model-chosen parameter trap exists in R1-R12/M1-M3. No manifest was changed.
+- Focused regression: **27 passed in 4.62s** with `nproc=4`; pre-run load
+  average 2.35 / 2.87 / 2.41 under foreign parallel-programme load.
+- Retained C300 calibration `4B:C300:R5:1` and `4B:C300:R5:3` both now report
+  `correctness_passed=true`, `same_prompt_completion=true`,
+  `premature_handoff=false`, and zero manual continuations.
+- The owner amendment calls this correction deviation D7, but canonical progress
+  at dispatch already contained an unrelated committed D7 for H `routing=null`.
+  That prior record is preserved unchanged; this correction is recorded as
+  `D7-P4A3` to avoid duplicate/corrupted deviation identity.
+- Step 4.7 remains historical NO_GO in this commit. Re-judgment is a separate
+  manager-dispatched step, as required by P4-A3.
