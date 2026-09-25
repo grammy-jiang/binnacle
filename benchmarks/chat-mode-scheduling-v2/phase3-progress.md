@@ -1,8 +1,8 @@
 # Chat mode scheduling v2 — Phase 3 progress
 
-Status: COMPLETE
+Status: IN_PROGRESS
 
-Updated: 2026-09-25T06:52:45+10:00
+Updated: 2026-09-25T10:17:18+10:00
 
 ## Canonical state
 
@@ -10,7 +10,7 @@ Updated: 2026-09-25T06:52:45+10:00
 - Worktree: /home/grammy-jiang/Projects/binnacle-chat-scheduling-phase3
 - Audited source HEAD: 5f2be143352aaa63fb680c1c79e289d46be201fe
 - Last completed step: 3.10
-- Next step: none; Phase 3 is complete. Phase 4 must not start without a new owner-approved experiment (NO_LIVE_CANDIDATE).
+- Next step: 3.7-amend (run r02 under owner-approved Amendment A1).
 - Dependency audit: phase3-dependency-audit-2026-09-25-r01.json, r01, SHA-256 d3bec25ba8d49ed4db78e07930542b9e963608ad264c198f8fbf04c4ccfa473a
 - Task graph: phase3-task-graph.json, r01, SHA-256 44cbedb0524fe87a9d111579a96d0d33f4171dfee6ece34eb53baa4c506696b2
 - Initial orchestrator-state checkpoint SHA-256: cec108b23fcf319a48d699f123b8fbf713919f3873d1cae4968a16844b80ed12
@@ -84,7 +84,7 @@ Updated: 2026-09-25T06:52:45+10:00
 | 3.6B | complete |
 | 3.6C | complete |
 | 3H | complete |
-| 3.7 | complete |
+| 3.7 | running (r02 / Amendment A1) |
 | 3.8 | complete |
 | 3.9 | complete |
 | 3.10 | complete |
@@ -469,7 +469,17 @@ Updated: 2026-09-25T06:52:45+10:00
 - H10 remains historical-comparator evidence only and is excluded from the
   C-candidate shortlist.
 
-## Step 3.7 notes
+## Step 3.7 amended run r02 status
+
+- Status: RUNNING under Amendment A1 (owner-approved 2026-09-25 10:01 +10:00).
+- Gate 4 will use repeated-wait definition (b): per (turn, job), the union of
+  the second and later positive waits on the same job id, with a named 60%
+  reduction threshold.
+- Definition (a) and its original 70% figure remain non-gating continuity
+  evidence. The r01 Step-3.7 notes and validation below are historical and
+  superseded for the current Phase-3 decision.
+
+## Step 3.7 run r01 notes (superseded)
 
 - Attempt a2 corrects the gate-population error found after repository
   verification; thresholds and gate definitions are unchanged.
@@ -501,7 +511,7 @@ Updated: 2026-09-25T06:52:45+10:00
 - Step 3.8 is invalidated only because its Phase-4 input contract embeds the
   superseded shortlist hash; its live-candidate semantics remain unchanged.
 
-## Step 3.7 validation
+## Step 3.7 run r01 validation (superseded)
 
 - Focused report pytest: PASS, 6 tests including a mixed canonical/operational
   regression proving gate 2 counts canonical positive-wait turns only.

@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "phase": 3,
-  "status": "complete",
+  "status": "in_progress",
   "branch": "feature/chat-mode-scheduling-v2-phase3",
   "worktree": "/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase3",
   "source_branch": "feature/chat-mode-blocking-wall-guard",
   "audited_source_head": "5f2be143352aaa63fb680c1c79e289d46be201fe",
   "last_completed_step": "3.10",
-  "next_step": null,
+  "next_step": "3.7-amend",
   "dependency_audit": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase3-dependency-audit-2026-09-25-r01.json",
     "revision": "r01",
@@ -762,29 +762,45 @@
       "worker_branch": "feature/chat-mode-scheduling-v2-phase3-h10"
     },
     "3.7": {
-      "status": "complete",
-      "tests": [
-        "uv run pytest -q tests/scripts/test_chat_scheduling_phase3_report.py -> PASS: 6 passed, including mixed canonical/operational gate-population regression.",
-        "Frozen shortlist command run twice exactly -> PASS: JSON/Markdown byte-identical at corrected SHA-256 values.",
-        "Corrected population validator -> PASS: gates 1/2/3 canonical Phase-1; gate 4 operational-journal; gate 5 canonical; operational and combined exhaustion retained as diagnostics.",
-        "uv run pre-commit run --files corrected report CLI/population helper/renderer/tests/shortlist artifacts -> PASS."
-      ],
+      "status": "running",
+      "tests": [],
       "notes": [
-        "Attempt a2 corrects the Step-3.7 gate-population error found after repository verification; thresholds and gate definitions are unchanged.",
-        "Superseded shortlist JSON SHA-256 23edc0fbba3210aae5da205122be51a806b7be54ab5ca5c590d98de6c931b975; corrected shortlist JSON SHA-256 51db08d70ad8ebfcc46de9e53c661b517b9f3ed41b10579d49057aa395f8d11d.",
-        "Superseded shortlist Markdown SHA-256 cfaf76ecaa4d8ac462e916b2ccf4de9c8f3666f68532a0594a3e0e2878fb941e; corrected shortlist Markdown SHA-256 bd4a258152e66277e663af2a5d7e6fbac0daa2592cfe51d2d3caf1bb644a9c85.",
-        "Gate populations are now explicit per candidate: gates 1, 2, 3 and 5 use canonical Phase-1 evidence; gate 4 uses the available 278-row operational-journal population with canonical fallback only when operational history is unavailable.",
-        "C120 before/after: gate1 88.888889% -> 88.888889%; gate2 47.766323% -> 15.384615%; gate3 0 -> 0 early exhaustions; gate4 75.123692% -> 75.772057%; gate5 0 -> 0 missing-evidence records.",
-        "C300 before/after: gate1 100.0% -> 100.0%; gate2 29.209622% -> 0.0%; gate3 0 -> 0 early exhaustions; gate4 52.467818% -> 52.927366%; gate5 0 -> 0 missing-evidence records.",
-        "C600 before/after: gate1 100.0% -> 100.0%; gate2 17.869416% -> 0.0%; gate3 0 -> 0 early exhaustions; gate4 29.565116% -> 29.824066%; gate5 0 -> 0 missing-evidence records.",
-        "Corrected gate-2 canonical denominators are 13 positive-wait turns for each candidate: C120 exhausts 2/13, C300 0/13, C600 0/13.",
-        "Operational exhaustion remains diagnostic only: C120 137/278=49.280576%, C300 85/278=30.57554%, C600 52/278=18.705036%; combined diagnostic values remain 47.766323%, 29.209622%, 17.869416%.",
-        "Corrected verdict remains NO_LIVE_CANDIDATE: C120 fails gates 1 and 2; C300 and C600 fail gate 4 only; live_candidates=[] and preferred_live_candidate=null.",
-        "No production budget is declared and open_evidence_limitations remains empty.",
-        "The Step-3.8 Phase-4 input contract still embeds the superseded shortlist hash even though live_candidates/preferred remain semantically unchanged; Step 3.8 is therefore invalidated pending revalidation before Step 3.9."
+        "Run r02 is the owner-approved Amendment A1 re-run of Step 3.7.",
+        "Amendment A1 changes gate 4 to repeated-wait definition (b) with a named 60% threshold while retaining definition (a) / 70% as non-gating continuity evidence.",
+        "Run r01 is preserved in run_history and is superseded for the current Phase-3 decision."
       ],
-      "commit": "06c86f8db508be2d311ccd27f5aaffe2740597a3",
-      "worker_branch": null
+      "worker_branch": null,
+      "run": "r02",
+      "amendment": "A1",
+      "run_history": [
+        {
+          "status": "superseded",
+          "tests": [
+            "uv run pytest -q tests/scripts/test_chat_scheduling_phase3_report.py -> PASS: 6 passed, including mixed canonical/operational gate-population regression.",
+            "Frozen shortlist command run twice exactly -> PASS: JSON/Markdown byte-identical at corrected SHA-256 values.",
+            "Corrected population validator -> PASS: gates 1/2/3 canonical Phase-1; gate 4 operational-journal; gate 5 canonical; operational and combined exhaustion retained as diagnostics.",
+            "uv run pre-commit run --files corrected report CLI/population helper/renderer/tests/shortlist artifacts -> PASS."
+          ],
+          "notes": [
+            "Attempt a2 corrects the Step-3.7 gate-population error found after repository verification; thresholds and gate definitions are unchanged.",
+            "Superseded shortlist JSON SHA-256 23edc0fbba3210aae5da205122be51a806b7be54ab5ca5c590d98de6c931b975; corrected shortlist JSON SHA-256 51db08d70ad8ebfcc46de9e53c661b517b9f3ed41b10579d49057aa395f8d11d.",
+            "Superseded shortlist Markdown SHA-256 cfaf76ecaa4d8ac462e916b2ccf4de9c8f3666f68532a0594a3e0e2878fb941e; corrected shortlist Markdown SHA-256 bd4a258152e66277e663af2a5d7e6fbac0daa2592cfe51d2d3caf1bb644a9c85.",
+            "Gate populations are now explicit per candidate: gates 1, 2, 3 and 5 use canonical Phase-1 evidence; gate 4 uses the available 278-row operational-journal population with canonical fallback only when operational history is unavailable.",
+            "C120 before/after: gate1 88.888889% -> 88.888889%; gate2 47.766323% -> 15.384615%; gate3 0 -> 0 early exhaustions; gate4 75.123692% -> 75.772057%; gate5 0 -> 0 missing-evidence records.",
+            "C300 before/after: gate1 100.0% -> 100.0%; gate2 29.209622% -> 0.0%; gate3 0 -> 0 early exhaustions; gate4 52.467818% -> 52.927366%; gate5 0 -> 0 missing-evidence records.",
+            "C600 before/after: gate1 100.0% -> 100.0%; gate2 17.869416% -> 0.0%; gate3 0 -> 0 early exhaustions; gate4 29.565116% -> 29.824066%; gate5 0 -> 0 missing-evidence records.",
+            "Corrected gate-2 canonical denominators are 13 positive-wait turns for each candidate: C120 exhausts 2/13, C300 0/13, C600 0/13.",
+            "Operational exhaustion remains diagnostic only: C120 137/278=49.280576%, C300 85/278=30.57554%, C600 52/278=18.705036%; combined diagnostic values remain 47.766323%, 29.209622%, 17.869416%.",
+            "Corrected verdict remains NO_LIVE_CANDIDATE: C120 fails gates 1 and 2; C300 and C600 fail gate 4 only; live_candidates=[] and preferred_live_candidate=null.",
+            "No production budget is declared and open_evidence_limitations remains empty.",
+            "The Step-3.8 Phase-4 input contract still embeds the superseded shortlist hash even though live_candidates/preferred remain semantically unchanged; Step 3.8 is therefore invalidated pending revalidation before Step 3.9."
+          ],
+          "commit": "06c86f8db508be2d311ccd27f5aaffe2740597a3",
+          "worker_branch": null,
+          "run": "r01",
+          "superseded_by": "r02 / Amendment A1"
+        }
+      ]
     },
     "3.8": {
       "status": "complete",
@@ -942,7 +958,7 @@
     "validated_ci_conclusion": "success"
   },
   "created_at": "2026-09-25T00:51:02+10:00",
-  "updated_at": "2026-09-25T06:52:45+10:00",
+  "updated_at": "2026-09-25T10:17:18+10:00",
   "orchestrator_state_checkpoint_path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase3/checkpoints/orchestrator-state-initial.json",
   "ready_count": 1,
   "claimed_count": 0,
