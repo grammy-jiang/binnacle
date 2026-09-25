@@ -7,7 +7,7 @@
   "source_branch": "feature/chat-mode-scheduling-v2-phase3",
   "audited_source_head": "3a4dfb1b248e4530fb09013976abb863c8e35eaf",
   "last_completed_step": "4.4B:H",
-  "next_step": "4.6B:H qualification path; remaining 4.2D/4.4A integration frontier is independent",
+  "next_step": "4.4A core lane-manifest freeze running; 4.6B:H remains independently eligible",
   "dependency_audit": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase4-dependency-audit-2026-09-25-r01.json",
     "revision": "r01",
@@ -245,7 +245,7 @@
       "worker_branch": null
     },
     "4.4A": {
-      "status": "not_started",
+      "status": "running",
       "tests": [],
       "notes": [],
       "commit": null,
@@ -468,11 +468,28 @@
         "The verified provisioning fragment records app/link/tunnel/system-hint/tool-schema identities and clean smoke evidence; all five fragment rows are PASS with no blockers.",
         "A long helper heredoc command was refused by the platform safety layer; the same helper was transferred through run_command stdin and executed successfully without semantic change."
       ]
+    },
+    {
+      "kind": "core_lane_manifest_freeze",
+      "task_id": "4.4A-freeze",
+      "plan_task_id": "4.4A",
+      "lanes": [
+        "A",
+        "B",
+        "C300"
+      ],
+      "status": "running",
+      "at": "2026-09-25T20:40:48+10:00",
+      "predecessor_fragments": {
+        "A": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase4/provisioning/4.4A:A.json",
+        "B": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase4/provisioning/4.4A:B.json",
+        "C300": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase4/provisioning/4.4A:C300.json"
+      }
     }
   ],
   "handoff": null,
   "created_at": "2026-09-25T15:31:10+10:00",
-  "updated_at": "2026-09-25T19:41:56+10:00",
+  "updated_at": "2026-09-25T20:40:48+10:00",
   "phase4_source_head": "06bc1649c4bad9449470366da971649bb7620020",
   "baseline_snapshot": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase4-baseline.json",

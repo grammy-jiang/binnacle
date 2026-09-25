@@ -10,7 +10,7 @@ Audited source HEAD: `3a4dfb1b248e4530fb09013976abb863c8e35eaf`
 
 Last completed step: **4.4B:H**
 
-Next step: **4.6B:H qualification path; remaining 4.2D/4.4A integration frontier is independent**
+Next step: **4.4A core lane-manifest freeze running; 4.6B:H remains independently eligible**
 
 ## Frozen Step 4.0 entry gate
 
@@ -37,7 +37,7 @@ Next step: **4.6B:H qualification path; remaining 4.2D/4.4A integration frontier
 | 4.2D | not_started | — |
 | 4.3A | complete | — |
 | 4.3B | complete | — |
-| 4.4A | not_started | — |
+| 4.4A | running | — |
 | 4.5 | not_started | — |
 | 4.6A | not_started | — |
 | 4.6B0 | not_started | — |
