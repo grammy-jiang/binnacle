@@ -6,7 +6,7 @@
   "worktree": "/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4",
   "source_branch": "feature/chat-mode-scheduling-v2-phase3",
   "audited_source_head": "3a4dfb1b248e4530fb09013976abb863c8e35eaf",
-  "last_completed_step": "4.6B0",
+  "last_completed_step": "4H-R",
   "next_step": "STOP at Step 4.7: C300 failed the targeted live budget-selection gates; no C endpoint is selected and no 4.6A:selected run request is emitted. Continuing Phase 4 requires a new owner-approved experiment.",
   "dependency_audit": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase4-dependency-audit-2026-09-25-r01.json",
@@ -136,7 +136,10 @@
     "phase4_4H_run_request": "ef2af7dee0d3152222e64598bcc4fc8234d02f5bcc86e96018a001301bc2cb41",
     "phase4_4B_C300_result_json": "4ecbbd622113c843e7542b2eb67678fd7bf3daf0c51229dfb10c7acf06adbee5",
     "phase4_4B_C300_result_jsonl": "51c4a3dadf977f9fab8601ae0e145e283020222929b0584cc4be1cc978dbdfce",
-    "phase4_4_7_final_c_lane_admission": "16671e4aa1dbeaf07acc09c481aae59f645ee2185b6c7cbdbe822bdefec37eaf"
+    "phase4_4_7_final_c_lane_admission": "16671e4aa1dbeaf07acc09c481aae59f645ee2185b6c7cbdbe822bdefec37eaf",
+    "phase4_4H_result_json": "3747ac0a13b0a399b3dde86e278ec4593e602b6c0bb37b794911601e87eab8b5",
+    "phase4_historical_comparator_json": "12e477d0c6e16dfa41a3bbfd61dab1ba783486c83b2668ab8ee30812b9753f4f",
+    "phase4_historical_comparator_md": "50e7393adbb9d61016afb996cdf96f82ba60dae497ea9c156eb26424e5f85762"
   },
   "preflight_findings": {
     "p4-preflight-git-lineage": "804da7b66ddc1f0e71ddf3106790989f50a0f320de4cd3b3f0aedaf962d68461",
@@ -183,6 +186,12 @@
       "status": "RESOLVED",
       "description": "The manager 4B-C300 result rows contain routing=null even though Amendment P4-A2 specifies a routing object on every row.",
       "disposition": "Read-only recovery from retained logs found all ten trial run ids exclusively in the C300 server log, zero in A/B/H lane logs, and zero in the production binnacle-mcp journal during the trial window. Calibration routing-miss count is therefore 0/10; exact source evidence is retained, so this serialization defect does not create an unscorable evidence-integrity verdict."
+    },
+    {
+      "id": "D7",
+      "status": "RESOLVED",
+      "description": "The manager 4H result rows contain routing=null even though Amendment P4-A2 requires a routing object on every row.",
+      "disposition": "Read-only retained-log recovery found every one of the ten owning H run ids exactly once in the H server log, zero occurrences in A/B/C300 lane logs, and zero in the production binnacle-mcp journal during the trial window. H routing misses are therefore 0/10 (0%); current observed rates A=1/13, B=0/13, C=0/24, H=0/10, with no arm above the >10% evidence-integrity threshold."
     }
   ],
   "steps": {
@@ -504,9 +513,23 @@
       "worker_branch": null
     },
     "4H-R": {
-      "status": "running",
-      "tests": [],
-      "notes": [],
+      "status": "complete",
+      "tests": [
+        "Analyzer fan-in -> PASS: 10/10 owning H state directories analyzed with the canonical analyzer (R5 x3, R6 x3, R7 x3, R12 x1); invocation required PYTHONPATH=. so the repository scripts package resolved.",
+        "Bounded H diagnostic -> 0/9 correctness, 0/9 same-prompt completion, 9/9 budget-exhaustion handoffs, 0/9 premature handoffs, 0/9 interruptions, 9 total required continuations.",
+        "R12 historical-budget diagnostic -> assistant emitted the requested textual BUDGET_EXHAUSTED handoff, but its sole job_status result had state=running, blocking_remaining_s=0.0 and blocking_budget_exhausted=false; analyzer therefore records correctness=false, budget_exhaustion_handoff=false and premature_handoff=true.",
+        "P4-A2 routing recovery -> PASS: all ten owning H run ids occur exactly once in H server logs, zero in A/B/C300 logs and zero in the production journal; H routing misses 0/10 (0%). Current observed arm rates A=1/13 (7.69%), B=0/13, C=0/24, H=0/10; none exceeds 10%.",
+        "C300 targeted comparison -> H 0/9 same-prompt and 9 continuations versus C300 7/9 same-prompt and 2 continuations. Raw bounded median wall is H 62.556s vs C300 108.399s, but H terminates via early budget handoff rather than successful completion.",
+        "Focused 4.3B analyzer/confirmatory regression -> PASS: 21 passed in 2.05s; nproc=4; pre-run loadavg=1.74 1.99 2.01 under foreign parallel-programme load."
+      ],
+      "notes": [
+        "Historical H comparator JSON SHA-256 12e477d0c6e16dfa41a3bbfd61dab1ba783486c83b2668ab8ee30812b9753f4f and Markdown SHA-256 50e7393adbb9d61016afb996cdf96f82ba60dae497ea9c156eb26424e5f85762 are frozen.",
+        "4H request SHA-256 ef2af7dee0d3152222e64598bcc4fc8234d02f5bcc86e96018a001301bc2cb41 produced 10 owning submitted slots plus one excluded pre-submit failure; manager result SHA-256 is 3747ac0a13b0a399b3dde86e278ec4593e602b6c0bb37b794911601e87eab8b5.",
+        "Step 4.7 selected no C endpoint, so the plan-required H comparison uses the C300 calibration trials; this report is diagnostic only and does not alter the C gate matrix or the Step 4.7/4.12 verdict path.",
+        "The 4H manager rows serialize routing=null. Retained-log recovery proves 0/10 H routing misses, so this is resolved evidence serialization deviation D7 rather than an unscorable evidence-integrity failure.",
+        "R12 exposes the historical one-shot semantics: the first bounded positive wait consumes the 10s allowance but does not itself return blocking_budget_exhausted=true; no second call was made to observe the exhausted result, so the textual handoff is not supported by the required tool-result signature.",
+        "Phase 4 remains blocked at Step 4.7 pending a new owner-approved experiment. Step 4.13 has not closed the phase, so there is no handoff object to append; these comparator hashes are retained for any later resumed closeout."
+      ],
       "commit": null,
       "worker_branch": null
     },
@@ -749,6 +772,20 @@
         "C": "0/24",
         "H": "0/0 (4H excluded from fan-in)"
       }
+    },
+    {
+      "kind": "historical_h_comparator",
+      "at": "2026-09-26T02:48:21+10:00",
+      "task_id": "4H-R",
+      "h_result_json_sha256": "3747ac0a13b0a399b3dde86e278ec4593e602b6c0bb37b794911601e87eab8b5",
+      "comparison_basis": "C300 calibration because Step 4.7 selected no C endpoint",
+      "evidence_integrity_passed": true,
+      "h_routing_misses": 0,
+      "h_submitted_trials": 10,
+      "output_paths": {
+        "benchmarks/chat-mode-scheduling-v2/phase4-historical-comparator.json": "12e477d0c6e16dfa41a3bbfd61dab1ba783486c83b2668ab8ee30812b9753f4f",
+        "benchmarks/chat-mode-scheduling-v2/phase4-historical-comparator.md": "50e7393adbb9d61016afb996cdf96f82ba60dae497ea9c156eb26424e5f85762"
+      }
     }
   ],
   "handoff": null,
@@ -885,6 +922,59 @@
         }
       },
       "recovery_note": "4B-C300 rows had routing=null; retained-log audit found every run id only on C300, with no A/B/H/production occurrence."
+    }
+  },
+  "historical_comparator": {
+    "revision": "r01",
+    "evaluated_at": "2026-09-26T02:48:21+10:00",
+    "json_path": "benchmarks/chat-mode-scheduling-v2/phase4-historical-comparator.json",
+    "json_sha256": "12e477d0c6e16dfa41a3bbfd61dab1ba783486c83b2668ab8ee30812b9753f4f",
+    "md_path": "benchmarks/chat-mode-scheduling-v2/phase4-historical-comparator.md",
+    "md_sha256": "50e7393adbb9d61016afb996cdf96f82ba60dae497ea9c156eb26424e5f85762",
+    "h_result_json_sha256": "3747ac0a13b0a399b3dde86e278ec4593e602b6c0bb37b794911601e87eab8b5",
+    "selected_c_endpoint": null,
+    "comparison_basis": "C300 calibration because Step 4.7 selected no C endpoint",
+    "diagnostic_only": true,
+    "alters_c_gate_matrix": false,
+    "evidence_integrity_passed": true,
+    "routing": {
+      "A": {
+        "misses": 1,
+        "submitted_trials": 13,
+        "rate": 0.0769230769
+      },
+      "B": {
+        "misses": 0,
+        "submitted_trials": 13,
+        "rate": 0.0
+      },
+      "C": {
+        "misses": 0,
+        "submitted_trials": 24,
+        "rate": 0.0
+      },
+      "H": {
+        "misses": 0,
+        "submitted_trials": 10,
+        "rate": 0.0
+      }
+    },
+    "bounded_r5_r6_r7": {
+      "trials": 9,
+      "correctness_passes": 0,
+      "same_prompt_completions": 0,
+      "budget_exhaustion_handoffs": 9,
+      "premature_handoffs": 0,
+      "interruptions": 0,
+      "manual_continuations_total": 9,
+      "median_wall_s": 62.556
+    },
+    "r12": {
+      "correctness_passed": false,
+      "budget_exhaustion_handoff": false,
+      "premature_handoff": true,
+      "interrupted": false,
+      "tool_result_blocking_budget_exhausted": false
     }
   }
 }

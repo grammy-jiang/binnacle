@@ -56,7 +56,7 @@ Next step: **STOP at Step 4.7 — C300 failed the targeted live budget-selection
 | 4C | not_started | — |
 | 4.11 | not_started | — |
 | 4.12 | not_started | — |
-| 4H-R | running | historical H comparator aggregation |
+| 4H-R | complete | H comparator frozen; routing 0/10 misses |
 | 4.13 | not_started | — |
 
 ### Dynamic lane manifest freezes
@@ -385,3 +385,28 @@ Next step: **STOP at Step 4.7 — C300 failed the targeted live budget-selection
   nproc=4; pre-run load average 1.32 / 1.56 / 1.97 under foreign load.
 - Because all Step-4.7 rules must pass simultaneously, the verdict is **NO_GO**.
   selected_c_endpoint is null. No 4.6A:selected run request is written.
+
+## Step 4H-R historical H comparator — COMPLETE
+
+- Frozen comparator JSON SHA-256
+  `12e477d0c6e16dfa41a3bbfd61dab1ba783486c83b2668ab8ee30812b9753f4f` and Markdown SHA-256
+  `50e7393adbb9d61016afb996cdf96f82ba60dae497ea9c156eb26424e5f85762`.
+- The 10 owning H trials cover R5/R6/R7 x3 plus R12 x1. One earlier R5
+  attempt failed before MCP submission and does not own a canonical slot.
+- P4-A2 retained-log recovery resolves the manager's `routing=null` serialization
+  gap: H routing misses are **0/10 (0%)**. Current observed rates are A 1/13
+  (7.69%), B 0/13, C 0/24, H 0/10; no arm exceeds the >10% integrity threshold.
+- On bounded R5/R6/R7, H is **0/9 correct**, **0/9 same-prompt**, and **9/9
+  budget-exhaustion handoffs**, with zero interruptions and nine required
+  continuations. C300 calibration is 7/9 same-prompt with two continuations.
+- H's raw bounded median wall time is 62.556 s versus 108.399 s for C300, but
+  this is early handoff rather than successful-completion acceleration.
+- R12 emitted the requested textual budget handoff, but its only `job_status`
+  result returned `blocking_budget_exhausted=false`; the canonical analyzer
+  therefore classifies it as premature and incorrect.
+- Focused 4.3B analyzer/confirmatory regression: **21 passed in 2.05s**; 4 CPUs;
+  pre-run load average 1.74 / 1.99 / 2.01 under foreign parallel-programme load.
+- Direct analyzer execution initially lacked the repository module path; rerunning
+  the same analyzer with `PYTHONPATH=.` resolved imports with no semantic change.
+- H remains diagnostic and does not alter Step 4.7 or any Step 4.12 verdict.
+  Phase 4 remains blocked at Step 4.7, so no Step 4.13 handoff exists to append.
