@@ -8,9 +8,9 @@ Worktree: `/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4`
 
 Audited source HEAD: `3a4dfb1b248e4530fb09013976abb863c8e35eaf`
 
-Last completed step: **4.1**
+Last completed step: **4.3B**
 
-Next step: **4.2A / 4.2B / 4.2C / 4.2D**
+Next step: **4.3A / 4.4A integration/provisioning frontier**
 
 ## Frozen Step 4.0 entry gate
 
@@ -33,10 +33,10 @@ Next step: **4.2A / 4.2B / 4.2C / 4.2D**
 | 4.1 | complete | — |
 | 4.2A | not_started | — |
 | 4.2B | not_started | — |
-| 4.2C | not_started | — |
+| 4.2C | complete | `6c473ce` |
 | 4.2D | not_started | — |
 | 4.3A | not_started | — |
-| 4.3B | running | — |
+| 4.3B | complete | — |
 | 4.4A | not_started | — |
 | 4.5 | not_started | — |
 | 4.6A | not_started | — |
@@ -72,6 +72,20 @@ Next step: **4.2A / 4.2B / 4.2C / 4.2D**
 - Coverage policy: **PASS**, 1,255 passed / 3 skipped; 99 production modules, 0 below target, 0 errors.
 - Implementation workers 4.2A/B/C/D are created/recovered at the exact frozen source HEAD on the documented endpoint, harness, analysis, and readiness branches/worktrees.
 - File-scoped pre-commit: **PASS**; production isolation recheck: **PASS** with the production baseline unchanged.
+
+## Step 4.3B analyzer integration
+
+- Verified 4.2C completion packet `a1`: worker base matches the frozen
+  `phase4_source_head`, and branch tip/commit/output hashes are consistent.
+- Integrated worker commit `6c473cec6537b0e80a969ddaae62ea8097dccb95` as
+  canonical cherry-pick `6073902ba1e72a946da0ea7d7e901e36f47f96a3`.
+- Frozen `phase4_analyzer_path_head`:
+  `6073902ba1e72a946da0ea7d7e901e36f47f96a3`.
+- Focused analyzer integration: **PASS**, 21 tests in 2.05 seconds; 4 CPUs;
+  pre-run load average 0.96 / 1.17 / 2.63 under foreign parallel-programme load.
+- Endpoint smoke inputs remain frozen independently; Step 4.7 is the first hard
+  fan-in that requires this analyzer path.
+- No semantic deviation from the Step-4.3B runbook or focused test matrix.
 
 ## Step 4.0 validation
 
