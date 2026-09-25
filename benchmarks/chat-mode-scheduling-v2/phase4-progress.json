@@ -1,0 +1,314 @@
+{
+  "schema_version": 1,
+  "phase": 4,
+  "status": "in_progress",
+  "branch": "feature/chat-mode-scheduling-v2-phase4",
+  "worktree": "/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4",
+  "source_branch": "feature/chat-mode-scheduling-v2-phase3",
+  "audited_source_head": "3a4dfb1b248e4530fb09013976abb863c8e35eaf",
+  "last_completed_step": null,
+  "next_step": "4.0",
+  "dependency_audit": {
+    "path": "benchmarks/chat-mode-scheduling-v2/phase4-dependency-audit-2026-09-25-r01.json",
+    "revision": "r01",
+    "sha256": "6ffa479be73acf488f1e627f50160b41f3473c6ea990f2a88afe18312e4ef893"
+  },
+  "task_graph_path": null,
+  "task_graph_revision": null,
+  "task_graph_sha256": null,
+  "orchestrator_state_path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase4/orchestrator-state.json",
+  "orchestrator_state_checkpoint_sha256": null,
+  "orchestrator_state_checkpoint_at": null,
+  "test_commands": {
+    "fast_full_suite": "uv run python scripts/run_test_suite.py --workers 4 --seed 12345",
+    "coverage_policy": "uv run tox -e coverage-policy -- --seed 12345",
+    "compatibility_matrix": "env BINNACLE_TEST_WORKERS=4 uv run tox run -- --seed 12345"
+  },
+  "production_baseline": {
+    "observed_at": "2026-09-25T15:30:26+10:00",
+    "path": "/home/grammy-jiang/Projects/binnacle",
+    "branch": "master",
+    "head": "260bc009a55e7a78716ac42faf64ae88cf2c6724",
+    "origin_master": "260bc009a55e7a78716ac42faf64ae88cf2c6724",
+    "clean": true,
+    "services": {
+      "binnacle-mcp.service": {
+        "active_state": "active",
+        "sub_state": "running"
+      },
+      "binnacle-jobs.service": {
+        "active_state": "active",
+        "sub_state": "running"
+      },
+      "binnacle-tunnel.service": {
+        "active_state": "active",
+        "sub_state": "running"
+      },
+      "binnacle-watchdog.service": {
+        "active_state": "active",
+        "sub_state": "running"
+      }
+    },
+    "unit_file_hashes": {
+      "/home/grammy-jiang/.config/systemd/user/binnacle-mcp.service": "d7b8475f8e3fec783552c3676210622181e8563a85f3918938c912f321fe0759",
+      "/home/grammy-jiang/.config/systemd/user/binnacle-jobs.service": "afcaff05eb85821812081167f84cf1b8c7712e2f66a8e85e94e72a1ce09f01ae",
+      "/home/grammy-jiang/.config/systemd/user/binnacle-tunnel.service": "1b9572d46cc52ce056958eb23a2fba69dec6fd47eb7a70bc2668c3cd88609475"
+    },
+    "config_sha256": "9564cec6b4e994287b2136d4f63db9bac4a2d5fe02425c0eb76863354c88fd5d",
+    "primary_tunnel_profile_sha256": "c8e2a608779109854e6d3aae921a2cb1fbbe1b6511f1630990899052a6b74ecb",
+    "blocking_wall_budget_key_present": false,
+    "listening_ports": [
+      "127.0.0.1:8000"
+    ]
+  },
+  "frozen_heads": {
+    "phase0": "8c6dd3cca421011dcdc632b1f553ad16d9c5eafb",
+    "phase1": "8f97df84aaff72ddda55fb79e10cc4e38fba1dc7",
+    "phase2": "8d8c8f137aa7bc6bc4e0157e5a8a7c87139924d6",
+    "phase3_predecessor": "3a4dfb1b248e4530fb09013976abb863c8e35eaf",
+    "phase3_validated_evidence": "83a3d2a9a19592fdb32e08885310f79a0f936e68",
+    "origin_master_at_audit": "260bc009a55e7a78716ac42faf64ae88cf2c6724",
+    "origin_proof_of_concept_at_audit": "260bc009a55e7a78716ac42faf64ae88cf2c6724"
+  },
+  "frozen_hashes": {
+    "phase3_progress_json": "984ba7891843a6eb3a15b750e95177d3a325f14280990f47be62527d44482bde",
+    "phase3_progress_md": "a60504ed43b20037753968b284a011898091406c6f97bf45160b5eed202ffb44",
+    "phase3_final_report_json": "54e46772ba0a1ee06b2c4d92cf5a55036e8bedd106466e25916ff6fab5c1aaae",
+    "phase3_final_report_md": "c7b114dfdf7cce106c6f68f3e71896aece9c8220baec807b0e6df1d35cdde47a",
+    "phase3_candidate_shortlist_json": "072556e60fb55f686d872bce4da004bc272e9162e32459f2dc276657faa0e094",
+    "phase3_replay_corpus_json": "4dd1e387c42d6fccd37d60795b00192144f3b4d93c57d9eb54ab527a72e8e94d",
+    "phase4_input_contract_json": "189bec8bbcff9b6e4e873ccc8310cf4725e85451df276d9fee10f64662ad7bfa",
+    "scenario_catalog": "45002efd15fe7aa07fa5933180752c6537bea6584520f41a4e1d6b6de61ab5fd",
+    "phase4_runbook": "85faf9411a319bd6903fc340bf27b635b49725ef947b786f8ac635605b373248",
+    "canonical_v2_instruction": "b7df6953a3c64bd245b3d5ff13b6f2667e940d5a154e650fec0b10e6a22cf094",
+    "benchmark_source_project_instruction": "f1c100d0ddb93c29f8f78e5a2d28e297d861ba6e2c7e53712ec886dea06bafa5",
+    "bootstrap_fanin": "cdcef7310ddd78b210949e5e5512dae31193b28e810af7f6d046f8dce7f5bca8",
+    "dependency_audit_json": "6ffa479be73acf488f1e627f50160b41f3473c6ea990f2a88afe18312e4ef893",
+    "dependency_audit_md": "bdde3d1b9b6f9b6cf9ff1c91370563496f7b0f95e72b167026d36deb0c5c62ba",
+    "test_runner": "9020b340a0fbbafd645658f0efd09d06c68b1e366815ffaba926e626bb819106",
+    "coverage_runner": "d37ecbda26e4f48b44d700257f3e41bc067f7b701964cc418ec29499950cf80d",
+    "quality_policy": "7ef91e25e3af206a115efd03cdced916f7fb71912c98539be122d2e46a62e736",
+    "tox_ini": "244323e4443a5f645de6e1700530d5ec737a4e971496e9c561e1ed561679dd0e",
+    "host_safety_guard": "2ced4609e58cd3c5ff3a6db9be66c1255fd44b1e4ea73ced02f94dd7f1e81624"
+  },
+  "preflight_findings": {
+    "p4-preflight-git-lineage": "804da7b66ddc1f0e71ddf3106790989f50a0f320de4cd3b3f0aedaf962d68461",
+    "p4-preflight-previous-artifacts": "d76fcd2c84f233cfb45587f6ddaef557ad7e17a2900e6cac93189e6794a13414",
+    "p4-preflight-previous-ci": "c3959a97daabb9bd89ac121995a86d9f93849a48b417214ef6c67cd18191ccb1",
+    "p4-preflight-test-tooling": "e14758ad7f3825aff7edfa878ffcd0a9e7416f34f9aec2dee95ee57cf147b1e2",
+    "p4-preflight-production-state": "9cd026c5d69ce11494dd7d3d53bacc5f07db4263039e69055b8db536538a2bd0",
+    "p4-preflight-external-control": "cb2da30381b3df94aa93e2482d8fdd81256acec0caeec751c58b6a8105b7b499",
+    "p4-preflight-runtime-state": "276a6fa30bbb6b3183af3d86ebb01682c7775cb5a603fb8d1e80958c6d1e89dc"
+  },
+  "deviations": [
+    {
+      "id": "D1",
+      "status": "INFO",
+      "description": "Phase-3 handoff provenance_classifier_commit is the pre-restack SHA 2b5e83c4f8015f3077794dabb9e864a3c4d806b6; byte-equivalent restacked commit b09cb68b9b764c7066beef1932f14f2cde217e51 is on the current lineage.",
+      "disposition": "Record mapping as non-blocking; Phase-3 housekeeping fix and Phase-4 restack are scheduled separately."
+    }
+  ],
+  "steps": {
+    "4.0": {
+      "status": "running",
+      "tests": [
+        "uv run pytest -q tests/unit/core/test_config_loading.py tests/unit/core/test_blocking_wall_guard.py tests/contracts/test_job_schemas.py tests/contracts/test_protocol.py -> PASS: 63 passed in 10.63s; pre-run nproc=4 loadavg=1.68 2.37 2.63"
+      ],
+      "notes": [
+        "All twelve mandatory dependency-audit rows PASS; dependency audit r01 is frozen at SHA-256 6ffa479be73acf488f1e627f50160b41f3473c6ea990f2a88afe18312e4ef893.",
+        "Canonical Phase-4 workspace was created directly from current green Phase-3 closeout HEAD 3a4dfb1b248e4530fb09013976abb863c8e35eaf.",
+        "Phase-3 live shortlist is frozen to C300 only at SHA-256 072556e60fb55f686d872bce4da004bc272e9162e32459f2dc276657faa0e094.",
+        "Deviation D1 is informational: the pre-restack provenance SHA maps to byte-equivalent current-lineage commit b09cb68b9b764c7066beef1932f14f2cde217e51.",
+        "Task graph r01 and initial orchestrator-state checkpoint remain to be materialized before Step 4.0 can be marked complete."
+      ],
+      "commit": null,
+      "worker_branch": null
+    },
+    "4.1": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "4.2A": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "4.2B": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "4.2C": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "4.2D": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "4.3A": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "4.3B": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "4.4A": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "4.5": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "4.6A": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "4.6B0": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "4.7": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "4.6A:selected": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "4.8": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "4.9.1": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "4.9.2": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "4.9.3": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "4.9.4": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "4.9.5": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "4.9.6": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "4.10": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "4C": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "4.11": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "4.12": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "4H-R": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    },
+    "4.13": {
+      "status": "not_started",
+      "tests": [],
+      "notes": [],
+      "commit": null,
+      "worker_branch": null
+    }
+  },
+  "checkpoints": [],
+  "handoff": null,
+  "created_at": "2026-09-25T15:31:10+10:00",
+  "updated_at": "2026-09-25T15:36:59+10:00"
+}

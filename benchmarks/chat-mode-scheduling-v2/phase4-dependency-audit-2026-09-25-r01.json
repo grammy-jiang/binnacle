@@ -1,0 +1,274 @@
+{
+  "schema_version": 1,
+  "phase": 4,
+  "report_kind": "phase4-dependency-audit",
+  "revision": "r01",
+  "audited_at": "2026-09-25T15:36:28+10:00",
+  "overall_status": "PASS",
+  "branch": "feature/chat-mode-scheduling-v2-phase4",
+  "worktree": "/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4",
+  "source_branch": "feature/chat-mode-scheduling-v2-phase3",
+  "audited_source_head": "3a4dfb1b248e4530fb09013976abb863c8e35eaf",
+  "workspace_base_commit": "3a4dfb1b248e4530fb09013976abb863c8e35eaf",
+  "phase4_runbook_sha256": "85faf9411a319bd6903fc340bf27b635b49725ef947b786f8ac635605b373248",
+  "bootstrap_fanin": {
+    "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase4/checkpoints/bootstrap-fanin-r01.json",
+    "sha256": "cdcef7310ddd78b210949e5e5512dae31193b28e810af7f6d046f8dce7f5bca8"
+  },
+  "previous_phase_progress": {
+    "path": "benchmarks/chat-mode-scheduling-v2/phase3-progress.json",
+    "sha256": "984ba7891843a6eb3a15b750e95177d3a325f14280990f47be62527d44482bde"
+  },
+  "previous_phase_report": {
+    "path": "benchmarks/chat-mode-scheduling-v2/phase3-policy-replay-2026-09-25-r02.json",
+    "sha256": "54e46772ba0a1ee06b2c4d92cf5a55036e8bedd106466e25916ff6fab5c1aaae"
+  },
+  "required_supporting_artifacts": [
+    {
+      "path": "benchmarks/chat-mode-scheduling-v2/phase3-candidate-shortlist.json",
+      "sha256": "072556e60fb55f686d872bce4da004bc272e9162e32459f2dc276657faa0e094"
+    },
+    {
+      "path": "benchmarks/chat-mode-scheduling-v2/phase3-replay-corpus.json",
+      "sha256": "4dd1e387c42d6fccd37d60795b00192144f3b4d93c57d9eb54ab527a72e8e94d"
+    },
+    {
+      "path": "benchmarks/chat-mode-scheduling-v2/phase3-replay-c300.json",
+      "sha256": "db8081d25139192a6b1eb7dfeb0b948ddbabbacbca87b2cf0e34acb3a9896cf6"
+    },
+    {
+      "path": "benchmarks/chat-mode-scheduling-v2/phase3-replay-h10.json",
+      "sha256": "b769fb75cd4159bf2c12fd92e33c0df62b7dfee775dfb8fb2c5ea6cb5110621c"
+    },
+    {
+      "path": "benchmarks/chat-mode-scheduling-v2/phase4-input-contract.json",
+      "sha256": "189bec8bbcff9b6e4e873ccc8310cf4725e85451df276d9fee10f64662ad7bfa"
+    }
+  ],
+  "required_ci": {
+    "validated_evidence_run_id": 36083115418,
+    "validated_evidence_head": "83a3d2a9a19592fdb32e08885310f79a0f936e68",
+    "validated_evidence_conclusion": "success",
+    "current_closeout_run_id": 36083288849,
+    "current_closeout_head": "3a4dfb1b248e4530fb09013976abb863c8e35eaf",
+    "current_closeout_conclusion": "success"
+  },
+  "inherited_source_smoke": {
+    "command": "uv run pytest -q tests/unit/core/test_config_loading.py tests/unit/core/test_blocking_wall_guard.py tests/contracts/test_job_schemas.py tests/contracts/test_protocol.py",
+    "pre_run_nproc": 4,
+    "pre_run_loadavg": "1.68 2.37 2.63",
+    "job_id": "840cea2670b1",
+    "result": "PASS",
+    "summary": "63 passed in 10.63s",
+    "runtime_s": 14.5,
+    "timing_note": "Measured under possible foreign parallel-programme load; this is a bounded source-level viability smoke, not the Step-4.1 optimized full test/coverage gate."
+  },
+  "rows": {
+    "phase3_progress": {
+      "status": "PASS",
+      "evidence": {
+        "path": "benchmarks/chat-mode-scheduling-v2/phase3-progress.json",
+        "sha256": "984ba7891843a6eb3a15b750e95177d3a325f14280990f47be62527d44482bde",
+        "phase_status": "complete",
+        "last_completed_step": "3.10",
+        "active_task_slots_complete": true,
+        "phase4_ready": true
+      },
+      "notes": "Canonical Phase-3 progress is complete, all active slots are complete, and the r02 handoff explicitly enables Phase 4."
+    },
+    "phase3_replay_report": {
+      "status": "PASS",
+      "evidence": {
+        "json_path": "benchmarks/chat-mode-scheduling-v2/phase3-policy-replay-2026-09-25-r02.json",
+        "json_sha256": "54e46772ba0a1ee06b2c4d92cf5a55036e8bedd106466e25916ff6fab5c1aaae",
+        "md_path": "benchmarks/chat-mode-scheduling-v2/phase3-policy-replay-2026-09-25-r02.md",
+        "md_sha256": "c7b114dfdf7cce106c6f68f3e71896aece9c8220baec807b0e6df1d35cdde47a",
+        "corpus_sha256": "4dd1e387c42d6fccd37d60795b00192144f3b4d93c57d9eb54ab527a72e8e94d",
+        "verdict": "LIVE_CANDIDATES_AVAILABLE"
+      },
+      "notes": "The handoff-selected r02 report hashes, replay corpus, and candidate report hashes were recomputed by the predecessor-artifact preflight."
+    },
+    "live_candidate_shortlist": {
+      "status": "PASS",
+      "evidence": {
+        "path": "benchmarks/chat-mode-scheduling-v2/phase3-candidate-shortlist.json",
+        "sha256": "072556e60fb55f686d872bce4da004bc272e9162e32459f2dc276657faa0e094",
+        "live_candidates": [
+          "C300"
+        ],
+        "preferred_live_candidate": "C300",
+        "preferred_budget_s": 300,
+        "gate_4_definition": "b_repeat_per_turn_job_union",
+        "gate_4_minimum_percent": 60.0,
+        "c300_gate_4_reduction_percent": 63.448499,
+        "rejected": {
+          "C120": [
+            "gate_1_completion_preservation",
+            "gate_2_exhaustion"
+          ],
+          "C600": [
+            "gate_4_repeated_wait_burden_reduction"
+          ]
+        }
+      },
+      "notes": "C300 is the sole all-gates-passing cumulative candidate and therefore the smallest passing budget."
+    },
+    "scenario_catalog": {
+      "status": "PASS",
+      "evidence": {
+        "scenario_count": 12,
+        "catalog_sha256": "45002efd15fe7aa07fa5933180752c6537bea6584520f41a4e1d6b6de61ab5fd",
+        "required_manifest_hashes": {
+          "R4": "9a1dffd2e308629b3e8cfa4940c15808a6b84ca2fe94582f6f8059a633f0392a",
+          "R6": "21004dab007d3f53ad4e1f11c3692218621d79463ff68a24ddad8f85ac961f26",
+          "R10": "b30ba2a1774a9f03be6da41932d1820805ca9a6321523f28cc088fa81b9cd8c9",
+          "R12": "13d9d82ffa3b99194ef89fed10ae5f7f0c322f6f3f48344cbf11248ca120e424"
+        },
+        "validation": "26 passed in 2.48s"
+      },
+      "notes": "R1-R12 are hash-stable; R4/R6/R10/R12 exist and manifest/oracle validation is green."
+    },
+    "provenance_classifier": {
+      "status": "PASS",
+      "evidence": {
+        "handoff_recorded_commit": "2b5e83c4f8015f3077794dabb9e864a3c4d806b6",
+        "current_lineage_byte_equivalent_commit": "b09cb68b9b764c7066beef1932f14f2cde217e51",
+        "current_equivalent_is_ancestor": true,
+        "implementation_and_test_byte_equivalent": true,
+        "validation": "9 passed in 1.72s",
+        "frozen_phase1_classifications": {
+          "r7-20260923T203622-d51ce307ef": "mcp_completed_browser_timeout",
+          "r7-20260923T211346-942d651555": "active_turn_browser_timeout"
+        }
+      },
+      "notes": "Deviation D1 is non-blocking because the classifier and test blobs are byte-identical at the restacked current-lineage ancestor."
+    },
+    "phase3_ci": {
+      "status": "PASS",
+      "evidence": {
+        "validated_evidence_commit": "83a3d2a9a19592fdb32e08885310f79a0f936e68",
+        "validated_ci_run_id": 36083115418,
+        "validated_ci_head_sha": "83a3d2a9a19592fdb32e08885310f79a0f936e68",
+        "validated_ci_conclusion": "success",
+        "closeout_head": "3a4dfb1b248e4530fb09013976abb863c8e35eaf",
+        "fresh_closeout_ci_run_id": 36083288849,
+        "fresh_closeout_ci_conclusion": "success"
+      },
+      "notes": "Recorded evidence CI and a fresh query for the current closeout HEAD are both completed/success and lie on the expected lineage."
+    },
+    "stacked_lineage_phase0_phase1_phase2_phase3": {
+      "status": "PASS",
+      "evidence": {
+        "phase0": "8c6dd3cca421011dcdc632b1f553ad16d9c5eafb",
+        "phase1": "8f97df84aaff72ddda55fb79e10cc4e38fba1dc7",
+        "phase2": "8d8c8f137aa7bc6bc4e0157e5a8a7c87139924d6",
+        "phase3": "3a4dfb1b248e4530fb09013976abb863c8e35eaf",
+        "all_direct_ancestor_checks": true
+      },
+      "notes": "Fresh merge-base checks confirm Phase0 -> Phase1 -> Phase2 -> Phase3 and evidence-commit -> closeout ancestry."
+    },
+    "public_base_freshness_master_and_poc": {
+      "status": "PASS",
+      "evidence": {
+        "origin_master": "260bc009a55e7a78716ac42faf64ae88cf2c6724",
+        "origin_proof_of_concept": "260bc009a55e7a78716ac42faf64ae88cf2c6724",
+        "recorded_final_restack_fingerprint": "260bc009a55e7a78716ac42faf64ae88cf2c6724",
+        "phase2_tree": "0efd7739d2ef14b978bd9c058af1a9d9d13f9742",
+        "public_tree": "0efd7739d2ef14b978bd9c058af1a9d9d13f9742",
+        "new_public_commit_count": 0,
+        "restack_required": false
+      },
+      "notes": "Public refs are synchronized and unchanged from the final-restack fingerprint; Phase-2 tree equality with the public tree is exact."
+    },
+    "test_runner_inheritance": {
+      "status": "PASS",
+      "evidence": {
+        "fast_full_suite": "uv run python scripts/run_test_suite.py --workers 4 --seed 12345",
+        "coverage_policy": "uv run tox -e coverage-policy -- --seed 12345",
+        "compatibility_matrix": "env BINNACLE_TEST_WORKERS=4 uv run tox run -- --seed 12345",
+        "runner_sha256": "9020b340a0fbbafd645658f0efd09d06c68b1e366815ffaba926e626bb819106",
+        "coverage_runner_sha256": "d37ecbda26e4f48b44d700257f3e41bc067f7b701964cc418ec29499950cf80d",
+        "quality_policy_sha256": "7ef91e25e3af206a115efd03cdced916f7fb71912c98539be122d2e46a62e736",
+        "tox_ini_sha256": "244323e4443a5f645de6e1700530d5ec737a4e971496e9c561e1ed561679dd0e",
+        "host_safety_guard_sha256": "2ced4609e58cd3c5ff3a6db9be66c1255fd44b1e4ea73ced02f94dd7f1e81624",
+        "repository_default_budget_map_empty": true
+      },
+      "notes": "The Phase-2/3 optimized runner, coverage policy, compatibility command, empty default budget map, and autouse host-safety guard remain authoritative."
+    },
+    "benchmark_project_snapshot": {
+      "status": "PASS",
+      "evidence": {
+        "project_name": "rp-test-sandbox",
+        "project_id": "g-p-6aaea9da2bc881918d6f9eb5177cf904",
+        "current_instruction_length": 107,
+        "current_instruction_sha256": "f1c100d0ddb93c29f8f78e5a2d28e297d861ba6e2c7e53712ec886dea06bafa5",
+        "memory_enabled": false,
+        "memory_scope": "project_v2",
+        "instruction_text_recorded": false,
+        "historical_phase3_input_contract_instruction_sha256": "dd81ecafb56bf235fa1933a0727fb5fd196c7e5ae86519e39866234a6f4b2b78"
+      },
+      "notes": "Current source-Project instructions were fingerprinted without storing private text. Their current fingerprint differs from the historical Phase-3 input-contract snapshot, which is expected because Phase 4 recaptures baseline Project state before benchmark mutation."
+    },
+    "isolated_endpoint_prerequisites": {
+      "status": "PASS",
+      "evidence": {
+        "ports_8110_8115_free": true,
+        "required_started_lanes": [
+          "A",
+          "B",
+          "C300",
+          "H"
+        ],
+        "reserved_not_started_lanes": [
+          "C120",
+          "C600"
+        ],
+        "explicit_chrome_session_healthy": true,
+        "project_create_available": true,
+        "connector_create_connect_delete_available": true,
+        "tunnel_list_get_available": true,
+        "tunnel_create_delete_unattended_available": true,
+        "tunnel_profile_start_teardown_available": true,
+        "owner_ui_action_required_now": false,
+        "production_connector_fallback_forbidden": true
+      },
+      "notes": "All required isolated topology capabilities are available; no benchmark Projects/connectors were created during preflight."
+    },
+    "production_isolation": {
+      "status": "PASS",
+      "evidence": {
+        "observed_at": "2026-09-25T15:30:26+10:00",
+        "production_head": "260bc009a55e7a78716ac42faf64ae88cf2c6724",
+        "origin_master": "260bc009a55e7a78716ac42faf64ae88cf2c6724",
+        "clean": true,
+        "services_active_running": true,
+        "config_sha256": "9564cec6b4e994287b2136d4f63db9bac4a2d5fe02425c0eb76863354c88fd5d",
+        "primary_tunnel_profile_sha256": "c8e2a608779109854e6d3aae921a2cb1fbbe1b6511f1630990899052a6b74ecb",
+        "blocking_wall_budget_key_present": false,
+        "scheduler_namespace_absent": true
+      },
+      "notes": "Production was observation-only and remained clean with its runtime/config/service baseline unchanged."
+    }
+  },
+  "external_setup_blockers": [],
+  "blockers": [],
+  "deviations": [
+    {
+      "id": "D1",
+      "status": "INFO",
+      "blocking": false,
+      "description": "Phase-3 handoff provenance_classifier_commit records pre-restack SHA 2b5e83c4f8015f3077794dabb9e864a3c4d806b6.",
+      "current_lineage_equivalent": "b09cb68b9b764c7066beef1932f14f2cde217e51",
+      "evidence": "Implementation and test blobs are byte-equivalent and the restacked equivalent is an ancestor of the current Phase-3 closeout.",
+      "disposition": "Record the mapping without treating it as a contradiction; Phase-3 housekeeping correction and any required Phase-4 restack are scheduled later by the orchestrator."
+    },
+    {
+      "id": "E1",
+      "status": "INFO",
+      "blocking": false,
+      "description": "Default chatgpt-project/chatgpt-refresh auto-profile selection observed a stale Chromium token, while explicit Chrome access is healthy.",
+      "disposition": "Benchmark scripts use explicit Chrome; no owner action is required."
+    }
+  ],
+  "next_allowed_step": "4.1"
+}
