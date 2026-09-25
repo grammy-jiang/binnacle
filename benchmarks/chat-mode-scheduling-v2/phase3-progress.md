@@ -1,8 +1,8 @@
 # Chat mode scheduling v2 — Phase 3 progress
 
-Status: BLOCKED
+Status: IN PROGRESS
 
-Updated: 2026-09-25T10:36:23+10:00
+Updated: 2026-09-25T10:46:08+10:00
 
 ## Canonical state
 
@@ -10,7 +10,7 @@ Updated: 2026-09-25T10:36:23+10:00
 - Worktree: /home/grammy-jiang/Projects/binnacle-chat-scheduling-phase3
 - Audited source HEAD: 5f2be143352aaa63fb680c1c79e289d46be201fe
 - Last completed step: 3.10
-- Next step: 3.7-amend is BLOCKED pending resolution of the C120 gate-2/gate-3 expectation contradiction.
+- Next step: 3.7-amend r02 is RUNNING under corrected Amendment A1 expectations.
 - Dependency audit: phase3-dependency-audit-2026-09-25-r01.json, r01, SHA-256 d3bec25ba8d49ed4db78e07930542b9e963608ad264c198f8fbf04c4ccfa473a
 - Task graph: phase3-task-graph.json, r01, SHA-256 44cbedb0524fe87a9d111579a96d0d33f4171dfee6ece34eb53baa4c506696b2
 - Initial orchestrator-state checkpoint SHA-256: cec108b23fcf319a48d699f123b8fbf713919f3873d1cae4968a16844b80ed12
@@ -84,7 +84,7 @@ Updated: 2026-09-25T10:36:23+10:00
 | 3.6B | complete |
 | 3.6C | complete |
 | 3H | complete |
-| 3.7 | blocked (r02 / Amendment A1) |
+| 3.7 | running (r02 / Amendment A1) |
 | 3.8 | complete |
 | 3.9 | complete |
 | 3.10 | complete |
@@ -471,7 +471,7 @@ Updated: 2026-09-25T10:36:23+10:00
 
 ## Step 3.7 amended run r02 status
 
-- Status: BLOCKED under Amendment A1 (owner-approved 2026-09-25 10:01 +10:00).
+- Status: RUNNING under Amendment A1 (owner-approved 2026-09-25 10:01 +10:00); attempt a2 resumes from the a1 blocker after correction of the assignment expectation.
 - Gate 4 will use repeated-wait definition (b): per (turn, job), the union of
   the second and later positive waits on the same job id, with a named 60%
   reduction threshold.

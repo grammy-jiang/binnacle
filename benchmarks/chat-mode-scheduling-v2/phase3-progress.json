@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "phase": 3,
-  "status": "blocked",
+  "status": "in_progress",
   "branch": "feature/chat-mode-scheduling-v2-phase3",
   "worktree": "/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase3",
   "source_branch": "feature/chat-mode-blocking-wall-guard",
@@ -762,7 +762,7 @@
       "worker_branch": "feature/chat-mode-scheduling-v2-phase3-h10"
     },
     "3.7": {
-      "status": "blocked",
+      "status": "running",
       "tests": [
         "uv run pytest -q tests/scripts/test_chat_scheduling_replay.py tests/scripts/test_chat_scheduling_phase3_report.py -> PASS: 20 passed in 0.76s; nproc=4; pre-run loadavg=0.92 1.17 1.20 under parallel-programme load.",
         "Definition-(b) operational validation -> PASS: observed 55911.013516 s; C120 7086.384091 s / 87.325603%; C300 20436.314672 s / 63.448499%; C600 35451.046526 s / 36.593805%, matching the read-only A1 analysis to six decimals.",
