@@ -8,9 +8,9 @@ Worktree: `/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4`
 
 Audited source HEAD: `3a4dfb1b248e4530fb09013976abb863c8e35eaf`
 
-Last completed step: **4.3A**
+Last completed step: **4.4B:H**
 
-Next step: **4.4B:H lane-manifest freeze running; other provisioning remains independent**
+Next step: **4.6B:H qualification path; remaining 4.2D/4.4A integration frontier is independent**
 
 ## Frozen Step 4.0 entry gate
 
@@ -61,7 +61,7 @@ Next step: **4.4B:H lane-manifest freeze running; other provisioning remains ind
 
 | Task | Status | Lane manifest |
 | --- | --- | --- |
-| 4.4B:H | running | — |
+| 4.4B:H | complete | phase4-lanes/H.json (d9bfc266) |
 
 ## Step 4.1 source checkpoint
 
@@ -119,6 +119,33 @@ Next step: **4.4B:H lane-manifest freeze running; other provisioning remains ind
 - Endpoint smoke inputs remain frozen independently; Step 4.7 is the first hard
   fan-in that requires this analyzer path.
 - No semantic deviation from the Step-4.3B runbook or focused test matrix.
+
+## Step 4.4B supplemental H lane manifest freeze
+
+- Provisioning fragment 4.4B:H is blocker-free with **5/5 PASS** rows.
+- Validated H against base topology SHA-256
+  9b58135a4a527bc18c5d43456d6f92b384e5457ac2f12884520dac1eb9f38155,
+  4.2D readiness fragment SHA-256
+  730e7330504c6faf298a766feca6139858aa10db4bf71349454d5340435aae79,
+  and runtime registry SHA-256
+  f75ea33783def327f542832ded790e5f5650f11304e3f968fe0c7c6c39d3cf26.
+- Frozen immutable manifest
+  benchmarks/chat-mode-scheduling-v2/phase4-lanes/H.json at SHA-256
+  d9bfc26661289baa2db99394fd2872d09965c06fa7bc26ff8cebaa18c4ccbed7;
+  attachment status is verified.
+- Focused runtime/harness integration matrix: **PASS**, 86 tests in 2.59 seconds;
+  4 CPUs; pre-run load average 1.29 / 2.34 / 2.08 under foreign
+  parallel-programme load.
+- Production isolation recheck: **PASS**; production master remains clean at
+  260bc009a55e7a78716ac42faf64ae88cf2c6724 with unit/config/profile hashes
+  unchanged.
+- The 4.2D readiness worker commit
+  0930075df3ffa879f0dc0066de70870bd86d0008 was consumed read-only. This lane
+  freeze does not integrate that worker, so the static 4.2D status row remains
+  unchanged.
+- A long helper heredoc command was refused by the platform safety layer; the
+  equivalent helper was supplied through run_command stdin and executed
+  successfully with no semantic deviation.
 
 ## Step 4.0 validation
 

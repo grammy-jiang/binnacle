@@ -6,8 +6,8 @@
   "worktree": "/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4",
   "source_branch": "feature/chat-mode-scheduling-v2-phase3",
   "audited_source_head": "3a4dfb1b248e4530fb09013976abb863c8e35eaf",
-  "last_completed_step": "4.3A",
-  "next_step": "4.4B:H lane-manifest freeze running; other provisioning remains independent",
+  "last_completed_step": "4.4B:H",
+  "next_step": "4.6B:H qualification path; remaining 4.2D/4.4A integration frontier is independent",
   "dependency_audit": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase4-dependency-audit-2026-09-25-r01.json",
     "revision": "r01",
@@ -100,7 +100,12 @@
     "baseline_instruction": "f1c100d0ddb93c29f8f78e5a2d28e297d861ba6e2c7e53712ec886dea06bafa5",
     "phase4_baseline_json": "e8a6c5149185dfb32e9810be1610cd63011b08837f2562cf8780a3df3d6a61d3",
     "phase4_baseline_md": "c41c44ec771495c26b43ffefc2831b0a877587fe329ec5475fd340be30ab3be0",
-    "phase4_local_smoke_json": "445a8e18c04e708987a319fbd752521597d34123ee8bc2246e86b018ced4d321"
+    "phase4_local_smoke_json": "445a8e18c04e708987a319fbd752521597d34123ee8bc2246e86b018ced4d321",
+    "phase4_endpoint_topology_base": "9b58135a4a527bc18c5d43456d6f92b384e5457ac2f12884520dac1eb9f38155",
+    "phase4_lane_H_readiness_fragment": "730e7330504c6faf298a766feca6139858aa10db4bf71349454d5340435aae79",
+    "phase4_lane_H_provisioning_fragment": "082d0e49696e416622c6e8f94ed2803b1d8e963b98e55e9749c2ce42ab26447d",
+    "phase4_runtime_registry_at_H_manifest_freeze": "f75ea33783def327f542832ded790e5f5650f11304e3f968fe0c7c6c39d3cf26",
+    "phase4_lane_H_manifest_json": "d9bfc26661289baa2db99394fd2872d09965c06fa7bc26ff8cebaa18c4ccbed7"
   },
   "preflight_findings": {
     "p4-preflight-git-lineage": "804da7b66ddc1f0e71ddf3106790989f50a0f320de4cd3b3f0aedaf962d68461",
@@ -438,14 +443,36 @@
       "task_id": "4.4B-freeze:H",
       "plan_task_id": "4.4B:H",
       "lane": "H",
-      "status": "running",
+      "status": "complete",
       "at": "2026-09-25T19:36:37+10:00",
-      "predecessor_fragment": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase4/provisioning/4.4B:H.json"
+      "predecessor_fragment": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase4/provisioning/4.4B:H.json",
+      "completed_at": "2026-09-25T19:41:56+10:00",
+      "lane_manifest_path": "benchmarks/chat-mode-scheduling-v2/phase4-lanes/H.json",
+      "lane_manifest_sha256": "d9bfc26661289baa2db99394fd2872d09965c06fa7bc26ff8cebaa18c4ccbed7",
+      "validation_inputs": {
+        "base_topology_sha256": "9b58135a4a527bc18c5d43456d6f92b384e5457ac2f12884520dac1eb9f38155",
+        "readiness_fragment_sha256": "730e7330504c6faf298a766feca6139858aa10db4bf71349454d5340435aae79",
+        "provisioning_fragment_sha256": "082d0e49696e416622c6e8f94ed2803b1d8e963b98e55e9749c2ce42ab26447d",
+        "runtime_registry_sha256": "f75ea33783def327f542832ded790e5f5650f11304e3f968fe0c7c6c39d3cf26",
+        "phase4_source_head": "06bc1649c4bad9449470366da971649bb7620020",
+        "phase4_runtime_path_head": "2e7889f3552e5d9bb6c26a38c7aab444ebbe8b90"
+      },
+      "tests": [
+        "fragment/base/readiness/runtime validator -> PASS: 5/5 provisioning rows PASS, blockers empty, all H identities and hashes agree",
+        "uv run pytest -q tests/scripts/test_chat_scheduling_endpoints.py tests/scripts/test_chat_scheduling_historical_guard.py tests/scripts/test_chat_scheduling_harness.py tests/scripts/test_chat_scheduling_evidence.py tests/scripts/test_chat_scheduling_analyzer_identity.py tests/scripts/test_chat_scheduling_manifest.py -> PASS: 86 passed in 2.59s; nproc=4; pre-run loadavg=1.29 2.34 2.08 under foreign parallel-programme load",
+        "bash /tmp/p36-manager/isolation-check.sh -> PASS: production master clean at 260bc009a55e7a78716ac42faf64ae88cf2c6724; production unit/config/profile hashes unchanged"
+      ],
+      "notes": [
+        "Frozen H independently as required by Step 4.4B; no all-supplemental-lane fan-in was introduced.",
+        "Consumed 4.2D readiness worker commit 0930075df3ffa879f0dc0066de70870bd86d0008 read-only; this freeze does not cherry-pick that worker, so the static 4.2D progress row remains unchanged.",
+        "The verified provisioning fragment records app/link/tunnel/system-hint/tool-schema identities and clean smoke evidence; all five fragment rows are PASS with no blockers.",
+        "A long helper heredoc command was refused by the platform safety layer; the same helper was transferred through run_command stdin and executed successfully without semantic change."
+      ]
     }
   ],
   "handoff": null,
   "created_at": "2026-09-25T15:31:10+10:00",
-  "updated_at": "2026-09-25T19:36:37+10:00",
+  "updated_at": "2026-09-25T19:41:56+10:00",
   "phase4_source_head": "06bc1649c4bad9449470366da971649bb7620020",
   "baseline_snapshot": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase4-baseline.json",
