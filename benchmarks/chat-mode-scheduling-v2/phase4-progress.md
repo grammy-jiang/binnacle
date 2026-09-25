@@ -10,7 +10,7 @@ Audited source HEAD: `3a4dfb1b248e4530fb09013976abb863c8e35eaf`
 
 Last completed step: **4.3A-fix**
 
-Next step: **4.5 core pre-run M1/M2/M3**
+Next step: **4.3A-fix2 connector-routing repair**
 
 ## Frozen Step 4.0 entry gate
 
@@ -37,6 +37,7 @@ Next step: **4.5 core pre-run M1/M2/M3**
 | 4.2D | not_started | — |
 | 4.3A | complete | — |
 | 4.3A-fix | complete | `22f9556` |
+| 4.3A-fix2 | running | — |
 | 4.3B | complete | — |
 | 4.4A | complete | — |
 | 4.5 | not_started | — |
@@ -136,6 +137,13 @@ Next step: **4.5 core pre-run M1/M2/M3**
 - Production isolation remains intact at the accepted D2 baseline. An unrelated
   listener on 127.0.0.1:8120 was observed but not created, modified, or stopped
   by this task.
+
+## Step 4.3A-fix2 connector-routing repair — RUNNING
+
+- D4 repair started after verifying predecessor `4.3A-fix` completion commit
+  `ee9094102dca3d66d2818a38eb23c84b0a1fd7f5` equals canonical HEAD.
+- Scope is benchmark harness/sender routing plus focused tests and progress evidence;
+  frozen experiment server source and already-running endpoints are unchanged.
 
 ## Step 4.3B analyzer integration
 

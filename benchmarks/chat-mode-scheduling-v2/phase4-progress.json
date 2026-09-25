@@ -7,7 +7,7 @@
   "source_branch": "feature/chat-mode-scheduling-v2-phase3",
   "audited_source_head": "3a4dfb1b248e4530fb09013976abb863c8e35eaf",
   "last_completed_step": "4.3A-fix",
-  "next_step": "4.5 core pre-run M1/M2/M3",
+  "next_step": "4.3A-fix2 connector-routing repair",
   "dependency_audit": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase4-dependency-audit-2026-09-25-r01.json",
     "revision": "r01",
@@ -432,6 +432,15 @@
         "An unrelated listener on 127.0.0.1:8120 was present during the final isolation check; this task did not create, modify, or stop it."
       ],
       "commit": "22f9556017b630061f2fb03d2ac989c6970ffde2",
+      "worker_branch": null
+    },
+    "4.3A-fix2": {
+      "status": "running",
+      "tests": [],
+      "notes": [
+        "D4 connector-routing repair started after verifying predecessor 4.3A-fix completion packet commit ee9094102dca3d66d2818a38eb23c84b0a1fd7f5 matches canonical HEAD."
+      ],
+      "commit": null,
       "worker_branch": null
     }
   },
