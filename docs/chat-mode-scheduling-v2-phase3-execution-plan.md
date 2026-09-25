@@ -1510,8 +1510,9 @@ definitions (a) to (d) computed on the frozen corpus).
   observed burden 55,911 s under (b) (83,186 s under (a)); reductions C120
   87.3% (75.8% under (a)), C300 63.4% (52.9%), C600 36.6% (29.8%). Result:
   C300 is the only candidate that passes all four gates; C120 still fails
-  gates 1 and 3 (completion 88.9%, early exhaustion in 2 of 13 canonical
-  positive-wait turns); C600 fails gate 4.
+  gates 1 and 2 (completion 88.9%; predicted exhaustion in 2 of 13 canonical
+  positive-wait turns = 15.4% > 10%; gate 3 passes with 0 early
+  exhaustions); C600 fails gate 4.
 - Rationale: definition (a) charges the unavoidable first wait on a long job
   against the candidate, which no cumulative budget can remove; (b) measures
   the repeated waits the blocking-wall guard is designed to remove.
