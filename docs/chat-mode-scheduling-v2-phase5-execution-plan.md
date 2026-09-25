@@ -901,6 +901,26 @@ staging with it on. Name-based routing of untagged chats is best effort: a
 reported as a routing miss, never counted. 5.0F records this row as confirmed,
 citing this section and its planning commit.
 
+### Amendment P5-A4: manager-dispatched development counts toward Stage-1 activity (2026-09-25)
+
+Owner decision 2026-09-25 23:10 ("ok, this is good"), made because the owner
+may not have enough own development work in `Binnacle` during Stage 1:
+
+- During every Stage-1 window the manager dispatches real development tasks
+  from the existing backlog (for example run_command shadow-predictor
+  follow-ups, the watchdog items still open from the 2026-09-23 plan, an MCP
+  usage-review round, or any task the owner adds) as chats in the `Binnacle`
+  Project, with the staging system hint (P5-A3). They are real work with real
+  commits, not generated solely for rollout validation, so their turns count
+  as ordinary `Binnacle` development turns for the minimum evidence volume;
+  their `job_status` waits count like any other.
+- Each such turn is recorded in the rollout notes as `manager-dispatched
+  development` with its chat id and task; every decision node reports the
+  owner-initiated and manager-dispatched counts separately. The five tagged
+  V1-V5 validation turns stay excluded from the ordinary count.
+- These tasks change branches only. Nothing is deployed to production during a
+  Stage-1 window, so the production observation baseline stays frozen.
+
 ## Phase-5 canonical staging workspace
 
 ```text
