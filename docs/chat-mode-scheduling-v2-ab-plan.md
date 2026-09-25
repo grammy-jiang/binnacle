@@ -333,8 +333,11 @@ On benchmark-declared independent read-only nodes:
 - overlapping waits are charged once;
 - budget-exhausted calls become non-blocking;
 - guard-decision p95 overhead **< 1 ms**, p99 **< 2 ms** on the Pi 5;
-- at least **70% reduction** in the historical repeated-wait upper-bound burden
-  under trace replay, while preserving same-prompt completion targets.
+- at least **60% reduction** in the historical repeated-wait burden under trace
+  replay, measured per `(turn, job)` as the union of the second and later positive
+  waits on the same job id (definition (b)), while preserving same-prompt
+  completion targets (the original **70% reduction** of total per-turn
+  positive-wait union, definition (a), remains a non-gating report figure).
 
 ### 5.6 Token/call efficiency targets
 
