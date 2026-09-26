@@ -6,8 +6,8 @@
   "worktree": "/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4",
   "source_branch": "feature/chat-mode-scheduling-v2-phase3",
   "audited_source_head": "3a4dfb1b248e4530fb09013976abb863c8e35eaf",
-  "last_completed_step": "4.10",
-  "next_step": "4C evidence-review frontier is ready: four canonical focus leads may start from the immutable post-run integration head after this Step 4.10 commit.",
+  "last_completed_step": "4C-fix",
+  "next_step": "4C evidence-review frontier: rerun correctness-safety, performance-bootstrap, reliability-provenance and scheduling-efficiency as attempt a2 from the P4-A6 fixed canonical head.",
   "dependency_audit": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase4-dependency-audit-2026-09-25-r01.json",
     "revision": "r01",
@@ -75,7 +75,8 @@
     "phase4_analyzer_path_head": "76ec24eed464e1162f4b51d9549143bf6175d8bb",
     "phase4_runtime_path_head": "c06518bf477f3c49811d4708dfd66507065d6996",
     "phase4_core_manifest_validation_head": "e0cb1ce6eead5b021fbe079edef70ec4276a0851",
-    "phase4_postsend_robustness_head": "389e6a5b7db05a316032340bc6a8dbf34a562b8d"
+    "phase4_postsend_robustness_head": "389e6a5b7db05a316032340bc6a8dbf34a562b8d",
+    "phase4_p4a6_analysis_repair_head": "0df91ce582f0c987f3c13fdc17385f7a4a7c2a62"
   },
   "frozen_hashes": {
     "phase3_progress_json": "984ba7891843a6eb3a15b750e95177d3a325f14280990f47be62527d44482bde",
@@ -147,7 +148,21 @@
     "phase4_4_10_micro_result_json": "69884e281ac4576becfea1762dbc2a3086fefe4648bf2e5c15c748c2b1d9cf05",
     "phase4_4_10_micro_a_m3_replacement_run_request": "5ebd585429861abc2111d7b4f08e93ae5428719a21bec4beb80427e02a3d657c",
     "phase4_4_10_micro_a_m3_replacement_result_json": "e6aa8ceb38b9937e808d44303ed52b72479b2353602827616c94107f07be74c9",
-    "phase4_4_10_micro_a_m3_replacement_result_jsonl": "897ac28d3f04ee0af181104c3db35b6b54aea0c02e1280ce2a6063e0e25a153f"
+    "phase4_4_10_micro_a_m3_replacement_result_jsonl": "897ac28d3f04ee0af181104c3db35b6b54aea0c02e1280ce2a6063e0e25a153f",
+    "phase4_confirmatory_R1_R2_timing_addendum_json": "042ebd866e134141fad41d37c9fabde017cd4eb084d5ef898664fafb39b1f4a8",
+    "phase4_confirmatory_R1_R2_timing_addendum_md": "8cbcd213ace9585a1b13eecb7f7908331118d9d35f714d8c45ffbeb69d7de4f7",
+    "phase4_confirmatory_R3_R4_timing_addendum_json": "a900482a52f997432fd8b75356572c6d452e2349337a171bf60a40e6a130b295",
+    "phase4_confirmatory_R3_R4_timing_addendum_md": "afc64e2832150d4c38798fadb1dd9b76ab0e7eab97c9b2344f5cc080e709ee5d",
+    "phase4_confirmatory_R5_R6_timing_addendum_json": "82e12eefca1fe11eb07470548ba50f6fa7140b073a8dcb92162e3e737a35effa",
+    "phase4_confirmatory_R5_R6_timing_addendum_md": "3a8ee4b9778f6f965e56e1ca2afc87fa7fc62a6dcf3c654ef5e0fba6a202e765",
+    "phase4_confirmatory_R7_timing_addendum_json": "b473d7c4c62982d3cff4e283d9f4f08a564cfac97aa0b410169bbdba0e9792ea",
+    "phase4_confirmatory_R7_timing_addendum_md": "102304253f16658cc4e192a4945c671fea88555080e095f04e08645def615483",
+    "phase4_confirmatory_R8_R9_timing_addendum_json": "30cc571c8131534ce1ae0c1404954a17b8e69446f7ec54ade28e717613af939c",
+    "phase4_confirmatory_R8_R9_timing_addendum_md": "8a97f99be98925a513e570268e16460f7d8e95a5d99b4bfcec0474ee6abc94a8",
+    "phase4_confirmatory_R10_R11_timing_addendum_json": "73cf2c7fb65ae852977566d1938aef24330bf16be5bc433fddb2f59a7a5bb672",
+    "phase4_confirmatory_R10_R11_timing_addendum_md": "28684b63960ef2b221c0026ead3099bd7954e3e3534d1fabc7a12b1f9ae7c8ac",
+    "phase4_confirmatory_gate_aggregation_p4a6_json": "e76d9f78194ad6e8c5f1d7bc3489a4ecae3c2b071d6a3216dfb512e3729af56f",
+    "phase4_confirmatory_gate_aggregation_p4a6_md": "03de3b85d5d5bea4d1da25d2501e3960d9b579d8be85e2d140641813d1366326"
   },
   "preflight_findings": {
     "p4-preflight-git-lineage": "804da7b66ddc1f0e71ddf3106790989f50a0f320de4cd3b3f0aedaf962d68461",
@@ -658,6 +673,27 @@
       "tests": [],
       "notes": [],
       "commit": null,
+      "worker_branch": null
+    },
+    "4C-fix": {
+      "status": "complete",
+      "tests": [
+        "uv run pytest -q tests/scripts/test_chat_scheduling_confirmatory.py tests/scripts/test_chat_scheduling_analyzer.py -> PASS: 22 passed in 2.07s; nproc=4; pre-run loadavg=1.95 1.02 0.62 under foreign parallel-programme load.",
+        "P4-A6 timing-addendum validation -> PASS: 79 changed canonical rows (R1-R2=10, R3-R4=19, R5-R6=12, R7=2, R8-R9=23, R10-R11=13); 79 metrics.json.pre-p4a6 and 79 trace.json.pre-p4a6 backups match recorded old hashes.",
+        "Computed-only confirmatory gate aggregation -> PASS population integrity: 160/160 submitted, 160/160 scorable, zero issues, six checkpoint owner lists plus frozen C300 R12 only; no global runs-directory discovery.",
+        "uv run pre-commit run --files <4C-fix code/evidence files> -> PASS: all hooks including ruff, mypy, deptry, module-size, markdownlint and bandit.",
+        "bash /tmp/p36-manager/isolation-check.sh -> OBSERVED: production master clean at cbafe8aff48ac1c0e518b34b6a4f54f62f162864; services active/running; no blocking-wall budget key. Frozen Phase-4 baseline remains unchanged."
+      ],
+      "notes": [
+        "D10a fixed: confirmatory aggregation loads exactly 159 canonical slot owners from the six immutable checkpoint canonical_slots lists plus the one frozen reused C300 R12 owner from 4B-C300.json; foreign calibration/micro/diagnostic runs are not scanned or assigned.",
+        "D10b fixed: submission_status=failed_after_submission is submitted. R7-r02-B therefore remains its frozen slot owner and participates in every submitted-trial metric; R2-r04-A remains the frozen submitted owner despite its end-check harness error.",
+        "D10c fixed: 79 rows whose current chat-timing.json SHA-256 differs from the frozen checkpoint hash were re-analyzed with the unchanged per-trial analyzer after preserving metrics/trace as .pre-p4a6. Six JSON/Markdown timing addenda extend the checkpoints; no checkpoint was rewritten.",
+        "Fixed-population computed snapshot: A/C overall medians 45.225/42.207 s (C/A 0.933267); read-heavy C/A 0.802584; mixed-long C/A 1.140670; paired bootstrap upper 0.996546; eligible overlap 0.534783; tool-result token ratio 0.999393. Correctness, premature handoff and same-prompt completion compute PASS on the repaired population.",
+        "The P4-A6 gate aggregation uses empty review shims intentionally and is not the Step 4.11 final hard-gate matrix. All four 4C focus reviews must rerun as attempt a2 against the fixed head before Step 4.11.",
+        "No further analysis-pipeline blocker was found in the other 4C a1 packets: reliability loose assignment is D10a; scheduling's old runbook-hash mismatch is superseded by P4-A6. Remaining performance/scheduling/reliability findings are preserved for the a2 reviews and Step 4.12.",
+        "Final read-only isolation observation differs from the older frozen Phase-4 production HEAD/config hash because the parallel programme advanced them; this task did not touch production checkout, config, systemd units or services."
+      ],
+      "commit": "0df91ce582f0c987f3c13fdc17385f7a4a7c2a62",
       "worker_branch": null
     },
     "4.11": {
@@ -1301,6 +1337,44 @@
       "pre_submit_failure_count": 0,
       "routing_resubmission_count": 0,
       "evidence_archive_count": 30
+    },
+    {
+      "kind": "p4a6_confirmatory_analysis_repair",
+      "at": "2026-09-27T03:32:20+10:00",
+      "source_head": "1de4b72503e39e53a01fc431b6a3eca70728f324",
+      "repair_commit": "0df91ce582f0c987f3c13fdc17385f7a4a7c2a62",
+      "timing_regenerated_rows": 79,
+      "population": {
+        "checkpoint_owners": 159,
+        "r12_owners": 1,
+        "submitted_main_slots": 160,
+        "scorable_main_slots": 160,
+        "issues": 0
+      },
+      "computed_snapshot": {
+        "overall_c_a_ratio": 0.933267,
+        "read_heavy_c_a_ratio": 0.802584,
+        "mixed_long_c_a_ratio": 1.14067,
+        "paired_bootstrap_ci95_upper": 0.996546,
+        "eligible_overlap_ratio": 0.534783,
+        "tool_result_tokens_c_a_ratio": 0.999393
+      },
+      "output_paths": {
+        "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-R1-R2-timing-addendum.json": "042ebd866e134141fad41d37c9fabde017cd4eb084d5ef898664fafb39b1f4a8",
+        "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-R1-R2-timing-addendum.md": "8cbcd213ace9585a1b13eecb7f7908331118d9d35f714d8c45ffbeb69d7de4f7",
+        "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-R3-R4-timing-addendum.json": "a900482a52f997432fd8b75356572c6d452e2349337a171bf60a40e6a130b295",
+        "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-R3-R4-timing-addendum.md": "afc64e2832150d4c38798fadb1dd9b76ab0e7eab97c9b2344f5cc080e709ee5d",
+        "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-R5-R6-timing-addendum.json": "82e12eefca1fe11eb07470548ba50f6fa7140b073a8dcb92162e3e737a35effa",
+        "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-R5-R6-timing-addendum.md": "3a8ee4b9778f6f965e56e1ca2afc87fa7fc62a6dcf3c654ef5e0fba6a202e765",
+        "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-R7-timing-addendum.json": "b473d7c4c62982d3cff4e283d9f4f08a564cfac97aa0b410169bbdba0e9792ea",
+        "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-R7-timing-addendum.md": "102304253f16658cc4e192a4945c671fea88555080e095f04e08645def615483",
+        "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-R8-R9-timing-addendum.json": "30cc571c8131534ce1ae0c1404954a17b8e69446f7ec54ade28e717613af939c",
+        "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-R8-R9-timing-addendum.md": "8a97f99be98925a513e570268e16460f7d8e95a5d99b4bfcec0474ee6abc94a8",
+        "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-R10-R11-timing-addendum.json": "73cf2c7fb65ae852977566d1938aef24330bf16be5bc433fddb2f59a7a5bb672",
+        "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-R10-R11-timing-addendum.md": "28684b63960ef2b221c0026ead3099bd7954e3e3534d1fabc7a12b1f9ae7c8ac",
+        "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-gate-aggregation-p4a6.json": "e76d9f78194ad6e8c5f1d7bc3489a4ecae3c2b071d6a3216dfb512e3729af56f",
+        "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-gate-aggregation-p4a6.md": "03de3b85d5d5bea4d1da25d2501e3960d9b579d8be85e2d140641813d1366326"
+      }
     }
   ],
   "handoff": null,

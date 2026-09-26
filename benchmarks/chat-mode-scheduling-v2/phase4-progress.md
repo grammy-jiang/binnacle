@@ -8,10 +8,9 @@ Worktree: `/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4`
 
 Audited source HEAD: `3a4dfb1b248e4530fb09013976abb863c8e35eaf`
 
-Last completed step: **4.10**
+Last completed step: **4C-fix**
 
-Next step: **4C evidence-review frontier is ready: four canonical focus leads
-may start from the immutable post-run integration head after this Step 4.10 commit.**
+Next step: **4C evidence-review frontier reruns all four focus leads as attempt a2 from P4-A6 fixed head 0df91ce582f0c987f3c13fdc17385f7a4a7c2a62.**
 
 ## Frozen Step 4.0 entry gate
 
@@ -57,7 +56,8 @@ may start from the immutable post-run integration head after this Step 4.10 comm
 | 4.9.5 | complete | R8/R9 30/30 frozen; integrity PASS; commit pending |
 | 4.9.6 | complete | R10/R11 30/30 frozen; integrity PASS; commit pending |
 | 4.10 | complete | post-run M1/M2/M3 PASS; replacement A/M3 is canonical |
-| 4C | not_started | — |
+| 4C | not_started | a1 blocked on P4-A6/D10; a2 pending |
+| 4C-fix | complete | P4-A6/D10 repair; 160/160 fixed population |
 | 4.11 | not_started | — |
 | 4.12 | not_started | — |
 | 4H-R | complete | P4-A3 comparator frozen; H outcomes unchanged; selected C300 9/9 |
@@ -823,3 +823,22 @@ Step 4.6A:selected from the frozen result**.
   unit/profile hashes are stable and the blocking-wall budget key is absent.
 - Step 4.10 is complete and releases the four 4C focus leads from this immutable
   post-run integration checkpoint.
+
+## Step 4C-fix P4-A6 confirmatory analysis repair — COMPLETE
+
+- D10a: aggregation now selects exactly the 159 immutable checkpoint owners plus
+  frozen reused C300 R12; no global runs-directory scan remains.
+- D10b: `failed_after_submission` is submitted, so R7-r02-B owns its frozen slot.
+- D10c: 79 changed timing rows were regenerated with the unchanged analyzer after
+  preserving metrics/trace backups; six JSON/Markdown addenda extend the frozen
+  checkpoints without rewriting them.
+- Fixed-population integrity is 160/160 submitted and 160/160 scorable, with zero
+  issues.
+- Focused confirmatory/analyzer regression is 22/22 PASS; pre-commit is PASS.
+- The computed-only P4-A6 snapshot records A/C overall 45.225/42.207 s
+  (ratio 0.933267), read-heavy ratio 0.802584, mixed-long ratio 1.140670,
+  bootstrap upper 0.996546, eligible overlap 0.534783 and token ratio 0.999393.
+- This snapshot is not Step 4.11: all four 4C reviews rerun as attempt a2 from the
+  fixed head. Remaining gate findings route to those reviews and Step 4.12.
+- Final read-only isolation observation found production master clean and services
+  active; the older frozen Phase-4 production baseline remains unchanged.
