@@ -1,0 +1,795 @@
+{
+ "chatgpt_tool_names": [
+  "job_status",
+  "list_files",
+  "read_file",
+  "run_command",
+  "search_text",
+  "stop_job"
+ ],
+ "instructions": "binnacle: a Raspberry Pi 5 development workstation. Paths live under ~/Projects and /tmp. list_files (browse or glob), search_text (regex over contents), read_file, edit_file (exact-string replace), write_file (whole file), run_command (shell; long commands become jobs for job_status/stop_job). Pi hardware and health: run_command (vcgencmd, pinctrl, i2cdetect, libcamera-still).",
+ "tools": [
+  {
+   "annotations": {
+    "destructiveHint": true,
+    "idempotentHint": false,
+    "openWorldHint": false,
+    "readOnlyHint": false,
+    "title": null
+   },
+   "description": "Replace an exact string in a text file. old_string must match\nthe file byte-for-byte (copy it from read_file content; never\ninclude line-number prefixes) and must be unique unless\nreplace_all=true. A whitespace-normalized fallback match is\nattempted and reported. Returns a snippet of the changed region.\nUse write_file to create files.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "new_string": {
+      "description": "Replacement text; empty string deletes old_string.",
+      "type": "string"
+     },
+     "old_string": {
+      "description": "Exact text to replace, copied verbatim from the file.",
+      "type": "string"
+     },
+     "path": {
+      "description": "Absolute path (~ ok); relative resolves against ~/Projects.",
+      "type": "string"
+     },
+     "replace_all": {
+      "default": false,
+      "description": "Replace every occurrence instead of requiring uniqueness.",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "path",
+     "old_string",
+     "new_string"
+    ],
+    "type": "object"
+   },
+   "name": "edit_file",
+   "outputSchema": {
+    "properties": {
+     "bytes": {
+      "type": "integer"
+     },
+     "first_change_line": {
+      "type": "integer"
+     },
+     "match": {
+      "enum": [
+       "exact",
+       "whitespace_normalized"
+      ],
+      "type": "string"
+     },
+     "path": {
+      "type": "string"
+     },
+     "replacements": {
+      "type": "integer"
+     },
+     "snippet": {
+      "type": "string"
+     },
+     "snippet_first_line": {
+      "type": "integer"
+     }
+    },
+    "required": [
+     "path",
+     "replacements",
+     "match"
+    ],
+    "type": "object"
+   }
+  },
+  {
+   "annotations": {
+    "destructiveHint": null,
+    "idempotentHint": null,
+    "openWorldHint": false,
+    "readOnlyHint": true,
+    "title": null
+   },
+   "description": "Status of a job from run_command, or the recent-jobs list when\njob_id is omitted. Only needed when run_command returned a job_id.\nA positive wait blocks up to the requested duration (max 50 seconds)\nor any smaller effective turn budget; waiting never kills a still-running\njob. Returns state, exit code, output tail, and live processes;\nquiet=true means no recent output.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "job_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "Job to check. Omit to list recent jobs."
+     },
+     "tail_lines": {
+      "default": 100,
+      "description": "Lines of merged output to tail.",
+      "minimum": 1,
+      "type": "integer"
+     },
+     "wait_seconds": {
+      "default": 0,
+      "description": "Block up to this long (max 50) for the job to exit before answering; 0 answers at once.",
+      "maximum": 50,
+      "minimum": 0,
+      "type": "integer"
+     }
+    },
+    "type": "object"
+   },
+   "name": "job_status",
+   "outputSchema": {
+    "properties": {
+     "blocking_budget_exhausted": {
+      "type": "boolean"
+     },
+     "blocking_budget_s": {
+      "type": [
+       "integer",
+       "null"
+      ]
+     },
+     "blocking_policy": {
+      "type": "string"
+     },
+     "blocking_remaining_s": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "command": {
+      "type": "string"
+     },
+     "exit_code": {
+      "type": [
+       "integer",
+       "null"
+      ]
+     },
+     "job_id": {
+      "type": "string"
+     },
+     "jobs": {
+      "items": {
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "last_output_age_s": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "log_bytes": {
+      "type": "integer"
+     },
+     "log_path": {
+      "type": "string"
+     },
+     "log_tail": {
+      "type": "string"
+     },
+     "processes": {
+      "items": {
+       "properties": {
+        "cmd": {
+         "type": "string"
+        },
+        "cpu_s": {
+         "type": "number"
+        },
+        "etime_s": {
+         "type": "number"
+        },
+        "pid": {
+         "type": "integer"
+        },
+        "state": {
+         "type": "string"
+        }
+       },
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "quiet": {
+      "type": "boolean"
+     },
+     "runtime_s": {
+      "type": "number"
+     },
+     "signal": {
+      "type": [
+       "integer",
+       "null"
+      ]
+     },
+     "state": {
+      "type": "string"
+     },
+     "wait_effective_s": {
+      "type": "integer"
+     },
+     "wait_requested_s": {
+      "type": "integer"
+     },
+     "waited_s": {
+      "type": "number"
+     },
+     "workdir": {
+      "type": "string"
+     }
+    },
+    "type": "object"
+   }
+  },
+  {
+   "annotations": {
+    "destructiveHint": null,
+    "idempotentHint": null,
+    "openWorldHint": false,
+    "readOnlyHint": true,
+    "title": null
+   },
+   "description": "List a directory (no glob: one level, dirs first) or find files\nrecursively by glob (e.g. **/*.py), newest first, gitignore\nrespected. Names only; for contents use search_text or read_file.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "glob": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "Glob pattern like **/*.py. Present = recursive find; absent = one-level listing."
+     },
+     "include_hidden": {
+      "default": false,
+      "description": "Include dotfiles (.git always excluded).",
+      "type": "boolean"
+     },
+     "max_results": {
+      "default": 200,
+      "description": "Cap on returned entries.",
+      "maximum": 2000,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "path": {
+      "default": "~/Projects",
+      "description": "Directory to list or search under. Absolute (~ allowed); relative resolves against ~/Projects.",
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "name": "list_files",
+   "outputSchema": {
+    "properties": {
+     "count": {
+      "type": "integer"
+     },
+     "entries": {
+      "items": {
+       "properties": {
+        "bytes": {
+         "type": "integer"
+        },
+        "path": {
+         "type": "string"
+        },
+        "type": {
+         "enum": [
+          "file",
+          "dir"
+         ],
+         "type": "string"
+        }
+       },
+       "required": [
+        "path",
+        "type"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "mode": {
+      "enum": [
+       "list",
+       "glob"
+      ],
+      "type": "string"
+     },
+     "note": {
+      "type": "string"
+     },
+     "path": {
+      "type": "string"
+     },
+     "truncated": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "path",
+     "mode",
+     "count",
+     "truncated"
+    ],
+    "type": "object"
+   }
+  },
+  {
+   "annotations": {
+    "destructiveHint": null,
+    "idempotentHint": null,
+    "openWorldHint": false,
+    "readOnlyHint": true,
+    "title": null
+   },
+   "description": "Read a text file, optionally a line range (1-based, inclusive). One call returns at most 24k chars (about 6k tokens, ~480 lines of prose); a file within that comes back whole, so omit the range. For a larger file do not page through it: search_text to locate, then read only that range. Returns plain content without line numbers, plus total_lines and next_start_line when truncated. Binary or media files return a note; inspect those with run_command (file, xxd, pdftotext).",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "end_line": {
+      "anyOf": [
+       {
+        "minimum": 1,
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "1-based last line, inclusive. Values past the end of the file are clamped."
+     },
+     "path": {
+      "description": "Absolute path (~ allowed). A relative path resolves against ~/Projects.",
+      "type": "string"
+     },
+     "start_line": {
+      "default": 1,
+      "description": "1-based first line to read.",
+      "minimum": 1,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "path"
+    ],
+    "type": "object"
+   },
+   "name": "read_file",
+   "outputSchema": {
+    "properties": {
+     "bytes": {
+      "type": "integer"
+     },
+     "content": {
+      "type": "string"
+     },
+     "end_line": {
+      "type": "integer"
+     },
+     "fits_in_one_call": {
+      "type": "boolean"
+     },
+     "kind": {
+      "enum": [
+       "text",
+       "binary",
+       "empty"
+      ],
+      "type": "string"
+     },
+     "lines_clipped": {
+      "type": "integer"
+     },
+     "lossy": {
+      "type": "boolean"
+     },
+     "mime_guess": {
+      "type": "string"
+     },
+     "next_start_line": {
+      "type": "integer"
+     },
+     "note": {
+      "type": "string"
+     },
+     "path": {
+      "type": "string"
+     },
+     "start_line": {
+      "type": "integer"
+     },
+     "total_lines": {
+      "type": "integer"
+     },
+     "truncated": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "path",
+     "kind",
+     "bytes"
+    ],
+    "type": "object"
+   }
+  },
+  {
+   "annotations": {
+    "destructiveHint": true,
+    "idempotentHint": null,
+    "openWorldHint": true,
+    "readOnlyHint": false,
+    "title": null
+   },
+   "description": "Run a shell command with bash -c; several commands can go in one\ncall (set -e; a && b). Waits up to wait_seconds; a command still\nrunning then is not killed: you get a job_id for job_status and\nstop_job. A command that finished created no job. Output merges\nstdout and stderr.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "background": {
+      "default": false,
+      "description": "Return at once with a job_id after a 1 s warm-up. Local policy may also auto-background matching commands.",
+      "type": "boolean"
+     },
+     "command": {
+      "description": "Shell command, run as bash -c.",
+      "type": "string"
+     },
+     "stdin": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "Text piped to the command's stdin."
+     },
+     "tail_lines": {
+      "anyOf": [
+       {
+        "minimum": 1,
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "Return only the last N lines of output (no need to pipe through tail)."
+     },
+     "wait_seconds": {
+      "default": 30,
+      "description": "Seconds to wait before yielding a job_id (max 50).",
+      "maximum": 50,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "workdir": {
+      "default": "~/Projects",
+      "description": "Working directory; absolute (~ ok) or relative to ~/Projects. Must be inside ~/Projects or /tmp.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "command"
+    ],
+    "type": "object"
+   },
+   "name": "run_command",
+   "outputSchema": {
+    "properties": {
+     "background_job": {
+      "type": "boolean"
+     },
+     "duration_s": {
+      "type": "number"
+     },
+     "exit_code": {
+      "type": [
+       "integer",
+       "null"
+      ]
+     },
+     "job_id": {
+      "type": "string"
+     },
+     "log_path": {
+      "type": "string"
+     },
+     "output": {
+      "type": "string"
+     },
+     "output_bytes": {
+      "type": "integer"
+     },
+     "runtime_s": {
+      "type": "number"
+     },
+     "signal": {
+      "type": [
+       "integer",
+       "null"
+      ]
+     },
+     "state": {
+      "enum": [
+       "exited",
+       "running"
+      ],
+      "type": "string"
+     },
+     "truncated": {
+      "type": "boolean"
+     },
+     "workdir": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "job_id",
+     "state"
+    ],
+    "type": "object"
+   }
+  },
+  {
+   "annotations": {
+    "destructiveHint": null,
+    "idempotentHint": null,
+    "openWorldHint": false,
+    "readOnlyHint": true,
+    "title": null
+   },
+   "description": "Search repository content. Normal regex search replaces grep -rn;\nnames_only replaces grep -c; line_numbers supplies grep -n style context.\nPrefer this over grep in run_command. When the implementation location is\nunknown, use ``@context <query>`` with ``path`` set to the Git worktree\nroot, then verify/narrow with exact search as needed.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "context_lines": {
+      "anyOf": [
+       {
+        "maximum": 100,
+        "minimum": 0,
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "Context lines around each match. Omit for automatic context on few matches."
+     },
+     "fixed_strings": {
+      "default": false,
+      "description": "Treat pattern as literal text.",
+      "type": "boolean"
+     },
+     "glob": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "Only search files matching this glob (e.g. *.py)."
+     },
+     "line_numbers": {
+      "default": false,
+      "description": "Prefix each context line with its line number (grep -n style).",
+      "type": "boolean"
+     },
+     "max_results": {
+      "default": 100,
+      "description": "Cap on returned matches.",
+      "maximum": 1000,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "names_only": {
+      "default": false,
+      "description": "Return only files and their match counts.",
+      "type": "boolean"
+     },
+     "path": {
+      "default": "~/Projects",
+      "description": "File or directory to search. Absolute (~ ok); relative resolves against ~/Projects.",
+      "type": "string"
+     },
+     "pattern": {
+      "description": "Regex (Rust syntax), or `@context <query>` for indexed repository discovery when path is the Git worktree root. Use fixed_strings for literal text.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "pattern"
+    ],
+    "type": "object"
+   },
+   "name": "search_text",
+   "outputSchema": {
+    "properties": {
+     "count": {
+      "type": "integer"
+     },
+     "entries": {
+      "items": {
+       "properties": {
+        "context": {
+         "type": "string"
+        },
+        "context_first_line": {
+         "type": "integer"
+        },
+        "count": {
+         "type": "integer"
+        },
+        "file": {
+         "type": "string"
+        },
+        "line": {
+         "type": "integer"
+        },
+        "text": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "file"
+       ],
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "note": {
+      "type": "string"
+     },
+     "path": {
+      "type": "string"
+     },
+     "pattern": {
+      "type": "string"
+     },
+     "truncated": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "path",
+     "pattern",
+     "count",
+     "truncated"
+    ],
+    "type": "object"
+   }
+  },
+  {
+   "annotations": {
+    "destructiveHint": true,
+    "idempotentHint": true,
+    "openWorldHint": false,
+    "readOnlyHint": false,
+    "title": null
+   },
+   "description": "Stop a job (SIGTERM, then SIGKILL after 5 s) and its whole\nprocess group. An already-finished job returns its final state\nwithout error.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "job_id": {
+      "description": "Job to stop.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "job_id"
+    ],
+    "type": "object"
+   },
+   "name": "stop_job",
+   "outputSchema": {
+    "properties": {
+     "exit_code": {
+      "type": [
+       "integer",
+       "null"
+      ]
+     },
+     "job_id": {
+      "type": "string"
+     },
+     "signal": {
+      "type": [
+       "integer",
+       "null"
+      ]
+     },
+     "state": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "job_id",
+     "state"
+    ],
+    "type": "object"
+   }
+  },
+  {
+   "annotations": {
+    "destructiveHint": true,
+    "idempotentHint": true,
+    "openWorldHint": false,
+    "readOnlyHint": false,
+    "title": null
+   },
+   "description": "Create a new file or fully overwrite an existing one; parent\ndirectories are created. Content is written verbatim (UTF-8) —\nprovide the COMPLETE file, never placeholders like '... rest\nunchanged'. Prefer edit_file for changing part of an existing file.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "content": {
+      "description": "Complete file content, written byte-for-byte.",
+      "type": "string"
+     },
+     "path": {
+      "description": "Absolute path (~ ok); relative resolves against ~/Projects.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "path",
+     "content"
+    ],
+    "type": "object"
+   },
+   "name": "write_file",
+   "outputSchema": {
+    "properties": {
+     "action": {
+      "enum": [
+       "created",
+       "overwritten"
+      ],
+      "type": "string"
+     },
+     "bytes": {
+      "type": "integer"
+     },
+     "path": {
+      "type": "string"
+     },
+     "previous_bytes": {
+      "type": "integer"
+     }
+    },
+    "required": [
+     "path",
+     "bytes",
+     "action"
+    ],
+    "type": "object"
+   }
+  }
+ ]
+}

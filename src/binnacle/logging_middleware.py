@@ -92,6 +92,12 @@ RESULT_KEYS = (
     "action",
     "previous_bytes",
     "bytes",
+    # Multi-file reads (read_file.files / read_files candidates, 2026-09-27).
+    "files_requested",
+    "files_read",
+    "files_failed",
+    "files_not_read",
+    "files_duplicate",
 )
 #: List-valued keys logged as their length.
 RESULT_LIST_KEYS = ("entries", "jobs", "processes")
@@ -317,12 +323,12 @@ class ToolLoggingMiddleware(Middleware):
         who.update(_header_fields())
         arguments = getattr(context.message, "arguments", None) or {}
         args_chars, args_text = _args_json(arguments)
-        self._log(
-            "tool_call",
-            logging.INFO,
-            who,
-            {"args_chars": str(args_chars), "args": args_text},
-        )
+        call_fields = {"args_chars": str(args_chars), "args": args_text}
+        requested = arguments.get("files") if isinstance(arguments, dict) else None
+        if isinstance(requested, list):
+            # A multi-file read: the count survives the args clip.
+            call_fields = {"files_requested": str(len(requested)), **call_fields}
+        self._log("tool_call", logging.INFO, who, call_fields)
         token = current_call.set(call_id)
         client_token = current_client.set(
             None if who["client"] == "-" else who["client"]

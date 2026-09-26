@@ -102,6 +102,28 @@ class ReadFileSettings(BaseModel):
     max_chars: int = Field(24_000, description="Content chars per call.")
     max_line_chars: int = Field(2_000, description="Per-line clip.")
     max_file_bytes: int = Field(20 * 1024 * 1024, description="Stat guard.")
+    # Multi-file read candidates under evaluation (2026-09-27; specs
+    # docs/tools/read_file.md 4.8 and docs/tools/read_files.md). "off" serves
+    # exactly the pre-candidate surface.
+    multi_mode: Literal["off", "param", "tool"] = Field(
+        "off",
+        description=(
+            "off: single-file read_file only; param: read_file also takes "
+            "files; tool: a separate read_files tool."
+        ),
+    )
+    multi_max_files: int = Field(8, ge=2, le=20, description="Files per multi call.")
+    multi_max_chars: int | None = Field(
+        None,
+        ge=4_000,
+        le=200_000,
+        description="Content chars per multi call; unset means twice max_chars.",
+    )
+
+    @property
+    def multi_budget_chars(self) -> int:
+        """The shared content budget of one multi-file call."""
+        return self.multi_max_chars or 2 * self.max_chars
 
 
 class ListFilesSettings(BaseModel):

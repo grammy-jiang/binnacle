@@ -25,6 +25,7 @@ from binnacle.run_command_telemetry import (
     auto_background_policy_hash,
 )
 from binnacle.tools import register_all
+from binnacle.tools.read_files import effective_client_tools
 from binnacle.visibility import ClientToolVisibility
 
 # binnacle's own lines (event=tool_call/tool_result/job_*/config) go through
@@ -85,6 +86,9 @@ def log_effective_config() -> None:
         max_chars=s.read_file.max_chars,
         max_line_chars=s.read_file.max_line_chars,
         max_file_bytes=s.read_file.max_file_bytes,
+        multi_mode=s.read_file.multi_mode,
+        multi_max_files=s.read_file.multi_max_files,
+        multi_budget_chars=s.read_file.multi_budget_chars,
     )
     _log_tool_config(
         "list_files",
@@ -190,7 +194,9 @@ mcp.add_middleware(
     RequestLoggingMiddleware(_identity, include_payloads=True, max_payload_length=500)
 )
 mcp.add_middleware(ToolLoggingMiddleware(_identity))
-mcp.add_middleware(ClientToolVisibility(get_settings().client_tools, _identity))
+mcp.add_middleware(
+    ClientToolVisibility(effective_client_tools(get_settings().client_tools), _identity)
+)
 register_all(mcp)
 log_effective_config()
 

@@ -221,6 +221,53 @@ looks like image/png) — content not shown.`
 - `list_files` is the answer for E1/E2 recovery.
 - `run_command` is the escape hatch for binary, media, and >20 MB files.
 
+### 4.8 Experimental: `files` (candidate "param", 2026-09-27)
+
+Off by default. Served only when `read_file.multi_mode = "param"`; with
+`off` the tool is byte-identical to §4.1-4.4 (proved by
+`tests/contracts/test_tool_surface_off.py`). The sibling candidate is a
+separate `read_files` tool (`docs/tools/read_files.md`); both return the
+same result, and the evidence, limits, result shape and behavior are the
+ones in that spec (§1, §4-§6).
+
+Evidence, 2026-09-27: since 2026-09-14 ChatGPT made 2,801 read_file calls
+right after a read of a different file (10.6 % of its 26,342 tool calls):
+1,058 runs, median 3 distinct files, p90 6, max 18; 54 % of adjacent pairs
+in the same directory.
+
+Input in this mode:
+
+| Param | Type | Required | Description (to ship) |
+| --- | --- | --- | --- |
+| `path` | string | no | §4.2 text + "Omit it when you pass files." |
+| `start_line`, `end_line` | as §4.2 | no | as §4.2; apply to `path` only |
+| `files` | array of `{path, start_line, end_line}`, `minItems: 1`, `maxItems: 8`, no other keys | no | "Several files instead of path: 1-8 entries, read in this order." |
+
+Exactly one of `path` and `files` is required. Both: error `path_and_files`
+("Give path (one file) or files (several), not both."). Neither: error
+`path_or_files_missing`. `files` with a non-default `start_line` or any
+`end_line`: error `range_with_files` ("put the range in each entry").
+Default values sent explicitly (`start_line: 1`, `end_line: null`,
+`files: null`) are accepted, because ChatGPT sends defaults.
+
+Description in this mode: §4.1's text plus "To read several known files in
+one call, pass files instead of path (up to 8 entries of path, start_line,
+end_line), read in order under one 48k-char budget: small files come back
+whole, larger ones are cut and give next_start_line. Each entry succeeds or
+fails on its own (kind, error); entries the budget cannot reach come back
+not_read, and next_call holds the arguments to continue."
+
+Result: a `path` call returns §4.4 unchanged; a `files` call returns
+`kind: "files"` (`docs/tools/read_files.md` §5). The output schema in this
+mode is the union of both, with only `kind` required.
+
+Test checklist: `tests/contracts/test_read_files_protocol.py` (the schema
+offers `files` with its limits; a `files` call validates against the
+advertised schema; a `path` call equals §4.4; explicit defaults are
+accepted; both, neither and a range beside `files` are rejected; more than
+8 entries names the limit; an unknown entry key is rejected) and the core
+checklist in `docs/tools/read_files.md` §7.
+
 ## 5. Test checklist (implementation gate)
 
 Unit: empty file; exactly-at-cap file; CRLF file → `content` bytes equal
