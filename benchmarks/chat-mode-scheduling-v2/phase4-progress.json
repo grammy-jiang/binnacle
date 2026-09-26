@@ -6,7 +6,7 @@
   "worktree": "/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4",
   "source_branch": "feature/chat-mode-scheduling-v2-phase3",
   "audited_source_head": "3a4dfb1b248e4530fb09013976abb863c8e35eaf",
-  "last_completed_step": "4.9.4",
+  "last_completed_step": "4.9.5",
   "next_step": "Complete the remaining independent 4.9 confirmatory partitions; Step 4.10 becomes ready only after 4.9.1 through 4.9.6 all checkpoint complete.",
   "dependency_audit": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase4-dependency-audit-2026-09-25-r01.json",
@@ -551,9 +551,21 @@
       "worker_branch": null
     },
     "4.9.5": {
-      "status": "not_started",
-      "tests": [],
-      "notes": [],
+      "status": "complete",
+      "tests": [
+        "R8/R9 slot integrity -> PASS: 30/30 canonical owners; R9-r03-A pre-submit failure and routing miss are non-owning under P4-A2; attempt 2 owns; no unscorable routing; all state_dir and host_load_flagged fields present.",
+        "R8/R9 routing integrity -> PASS: A=1/11 routed submissions (9.09%), B=0/10, C=0/10; no arm exceeds >10%. The A miss made 8 production fixture calls and is recorded as a non-mutating isolation incident.",
+        "R8/R9 analyzer -> PASS: 30/30 analyzed; 30/30 same-prompt, 0 interrupted, 0 premature handoff, 0 failed trial states, 0 host-load flags.",
+        "uv run pytest -q tests/scripts/test_chat_scheduling_confirmatory.py tests/scripts/test_chat_scheduling_analyzer.py -> PASS: 21 passed in 3.79s; nproc=4; pre-run loadavg=2.19 2.96 2.28 under foreign parallel-programme load.",
+        "Frozen evidence verification -> PASS: 397/397 source files and all 30 deterministic archives verified; source-manifest SHA-256 e86cf96dd2b58c9402d9b7d4adf0440189c369da79dddd000ac6528108c844f7."
+      ],
+      "notes": [
+        "Frozen R8/R9 checkpoint JSON SHA-256 f58ec042664049bb0df964c4a035f96d6378f82f45fe820e7af41718e44453c8; Markdown SHA-256 4a9da1f99ba73a26747866b9e8f6d2a60d3316ec33dcc66827defb430d1809a6.",
+        "Frozen R8/R9 source-file manifest SHA-256 e86cf96dd2b58c9402d9b7d4adf0440189c369da79dddd000ac6528108c844f7 across 397 files in 30 deterministic archives under phase4-confirmatory-evidence/R8-R9/.",
+        "D9: 7/30 owners already used conversation_final_assistant_timestamp; bounded recovery recomputed 0; 23 remain explicitly poll-observed and are individually listed with reasons in the checkpoint. A direct raw-fetch diagnostic was also throttled.",
+        "R9-r03-A follows P4-A2: pre-submit failure owns nothing; production routing miss owns nothing; attempt 2 is first correctly routed owner. A routing miss rate is 1/11 = 9.09%.",
+        "No endpoint, Project, production config/service, or non-R8/R9 confirmatory slot was mutated or rerun."
+      ],
       "commit": null,
       "worker_branch": null
     },
@@ -1082,11 +1094,38 @@
         "stayed_observed": 3
       },
       "evidence_archive_count": 9
+    },
+    {
+      "kind": "confirmatory_partition_checkpoint",
+      "at": "2026-09-26T23:08:47+10:00",
+      "task_id": "4.9.5",
+      "partition": "R8/R9",
+      "schedule_sha256": "516938320afdf9dade5e03b8262a9e6ef9c95ad5d0330c20d1ce23d0ec68e734",
+      "checkpoint_path": "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-R8-R9-checkpoint.json",
+      "checkpoint_sha256": "f58ec042664049bb0df964c4a035f96d6378f82f45fe820e7af41718e44453c8",
+      "checkpoint_md_path": "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-R8-R9-checkpoint.md",
+      "checkpoint_md_sha256": "4a9da1f99ba73a26747866b9e8f6d2a60d3316ec33dcc66827defb430d1809a6",
+      "evidence_root": "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-evidence/R8-R9",
+      "evidence_file_count": 397,
+      "evidence_tree_sha256": "e86cf96dd2b58c9402d9b7d4adf0440189c369da79dddd000ac6528108c844f7",
+      "routing_miss_rates": {
+        "A": "1/11 (9.09%)",
+        "B": "0/10 (0%)",
+        "C": "0/10 (0%)"
+      },
+      "timing_recovery": {
+        "already_conversation_timestamp": 7,
+        "recomputed": 0,
+        "stayed_observed": 23
+      },
+      "pre_submit_failure_count": 1,
+      "routing_resubmission_count": 1,
+      "evidence_archive_count": 30
     }
   ],
   "handoff": null,
   "created_at": "2026-09-25T15:31:10+10:00",
-  "updated_at": "2026-09-26T20:46:20+10:00",
+  "updated_at": "2026-09-26T23:11:53+10:00",
   "phase4_source_head": "06bc1649c4bad9449470366da971649bb7620020",
   "baseline_snapshot": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase4-baseline.json",
