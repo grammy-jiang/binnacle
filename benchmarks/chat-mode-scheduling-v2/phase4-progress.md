@@ -8,9 +8,9 @@ Worktree: `/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4`
 
 Audited source HEAD: `3a4dfb1b248e4530fb09013976abb863c8e35eaf`
 
-Last completed step: **4.7-fix**
+Last completed step: **4.3A-fix4**
 
-Next step: **manager-dispatched Step 4.7 re-judgment under P4-A3 using the corrected analyzer; this task does not re-decide Step 4.7.**
+Next step: **manager re-executes `4.6A-sel-qual` under the P4-A4 post-release gate, then evaluates Step 4.6A:selected from that fresh result.**
 
 ## Frozen Step 4.0 entry gate
 
@@ -38,7 +38,7 @@ Next step: **manager-dispatched Step 4.7 re-judgment under P4-A3 using the corre
 | 4.3A | complete | — |
 | 4.3A-fix | complete | `22f9556` |
 | 4.3A-fix2 | complete | `acdb208` |
-| 4.3A-fix4 | running | — |
+| 4.3A-fix4 | complete | `6ff1161` |
 | 4.3B | complete | — |
 | 4.4A | complete | — |
 | 4.5 | complete | 389e6a5 |
@@ -492,7 +492,30 @@ Step 4.6A:selected from the frozen result**.
 - Step 4.7 remains historical NO_GO in this commit. Re-judgment is a separate
   manager-dispatched step, as required by P4-A3.
 
-## Step 4.3A-fix4 send-gate release — RUNNING
+## Step 4.3A-fix4 send-gate release — COMPLETE
 
-- P4-A4 benchmark-harness correction started at canonical HEAD `1dc37f101c89268dfee8a3acc7903dcbddfc0476`.
-- Scope is benchmark scripts/tests and canonical progress only; no live trial, endpoint restart, production mutation, or server-source change is permitted.
+- **D8 RESOLVED:** the shared benchmark send gate no longer remains held while
+  `read_chat.py` polls for a reply. `shared_send_gate` yields a post-confirmation
+  release callback, and the routed sender invokes it after exact conversation-id
+  resolution plus URL/running-timing writes, before reply polling begins.
+- FIFO queueing and `flock` are unchanged, so posts remain strictly one at a
+  time. Reply polling and all later work may overlap across different trials.
+- The trial gap still comes from the manager `trialgap` file, but its floor is
+  now **15 s** rather than 60 s. The manager file was verified at exactly `15`.
+- Sent bookkeeping retains its prior meaning: confirmed posts release as `sent`
+  and update `last-send`; a failure before post confirmation releases as not sent.
+- Final combined P4-A4 + routing + Step-4.3A focused regression: **105/105
+  PASS** in 2.54 s; `nproc=4`; pre-run load average 1.27 / 1.67 / 1.89 under
+  foreign parallel-programme load. Dedicated coverage proves early release,
+  concurrent second-gate entry while the first reply is still outstanding, the
+  15 s floor, and pre-post failure release.
+- File-scoped pre-commit is **PASS**, including Ruff, mypy and the 500-line
+  module-size ratchet.
+- Frozen `phase4_runtime_path_head` advanced
+  `acdb2088584382c6496d10c2a170d2217135e550` ->
+  `6ff1161e039d976f8e53a0d4d277c9258b15da29`. Frozen experiment source remains
+  `06bc1649c4bad9449470366da971649bb7620020`; running endpoints were not
+  restarted.
+- No live trial was executed here. The earlier `4.6A-sel-qual` run remains a
+  serial diagnostic; the manager must rerun it under P4-A4 before
+  Step 4.6A:selected is evaluated.

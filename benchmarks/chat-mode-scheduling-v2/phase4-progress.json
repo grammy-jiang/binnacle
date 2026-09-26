@@ -6,8 +6,8 @@
   "worktree": "/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4",
   "source_branch": "feature/chat-mode-scheduling-v2-phase3",
   "audited_source_head": "3a4dfb1b248e4530fb09013976abb863c8e35eaf",
-  "last_completed_step": "4H-R",
-  "next_step": "Manager executes run request 4.6A-sel-qual for Step 4.6A:selected; evaluate the selected-C timing qualification from that frozen result.",
+  "last_completed_step": "4.3A-fix4",
+  "next_step": "Manager re-executes run request 4.6A-sel-qual under the P4-A4 post-release gate, then evaluates Step 4.6A:selected from that fresh result.",
   "dependency_audit": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase4-dependency-audit-2026-09-25-r01.json",
     "revision": "r01",
@@ -73,7 +73,7 @@
     "phase4_dependency_audit_head": "89a206d24185284de278df18fe77ac0e4eccbb01",
     "phase4_source_head": "06bc1649c4bad9449470366da971649bb7620020",
     "phase4_analyzer_path_head": "76ec24eed464e1162f4b51d9549143bf6175d8bb",
-    "phase4_runtime_path_head": "acdb2088584382c6496d10c2a170d2217135e550",
+    "phase4_runtime_path_head": "6ff1161e039d976f8e53a0d4d277c9258b15da29",
     "phase4_core_manifest_validation_head": "e0cb1ce6eead5b021fbe079edef70ec4276a0851",
     "phase4_postsend_robustness_head": "389e6a5b7db05a316032340bc6a8dbf34a562b8d"
   },
@@ -198,6 +198,12 @@
       "status": "RESOLVED",
       "description": "Amendment P4-A3 identifies the wait-node analyzer false-label correction as deviation D7. Canonical progress at dispatch already contained an unrelated committed D7 for the 4H routing=null serialization finding.",
       "disposition": "Preserve the prior D7 record unchanged rather than overwrite committed H evidence; record the P4-A3 correction as D7-P4A3. The analyzer matcher now accepts schema-valid positive model-chosen waits on repeated job-state completion nodes, focused tests pass, retained C300 R5 repeats 1 and 3 re-analyze as same-prompt completions, and phase4_analyzer_path_head advances from 6073902ba1e72a946da0ea7d7e901e36f47f96a3 to 76ec24eed464e1162f4b51d9549143bf6175d8bb."
+    },
+    {
+      "id": "D8",
+      "status": "RESOLVED",
+      "description": "P4-A4 found that the shared benchmark send gate stayed held through send_project_chat reply polling and imposed a 60 s trial-gap floor, serializing the first 4.6A-sel-qual execution even at K=2/K=4.",
+      "disposition": "The benchmark harness now releases the unchanged FIFO queue/flock gate immediately after the routed sender resolves the exact conversation id, writes the URL and running timing marker, and confirms the post; reply polling then runs outside the gate. The trialgap floor is 15 s and the manager trialgap file is 15. Pre-post failures release as not sent, while sent/last-send bookkeeping remains tied to confirmed posts. The prior 4.6A-sel-qual execution remains a serial diagnostic and the manager must rerun it under this gate before Step 4.6A:selected evaluation."
     }
   ],
   "steps": {
@@ -641,12 +647,22 @@
       "worker_branch": null
     },
     "4.3A-fix4": {
-      "status": "running",
-      "tests": [],
-      "notes": [
-        "P4-A4 benchmark-harness correction in progress: release the shared send gate after post confirmation and use the manager trialgap with a 15 s floor; no live trials are run by this task."
+      "status": "complete",
+      "tests": [
+        "P4-A4 gate/routing regression plus Step-4.3A focused runtime/harness matrix -> PASS: 105 passed in 2.54s; nproc=4; pre-run loadavg=1.27 1.67 1.89 under foreign parallel-programme load.",
+        "Dedicated P4-A4 assertions cover: 15 s trial floor; release before read_chat polling; a second trial enters/posts while the first context remains active outside the gate; pre-post failure releases as not sent.",
+        "bash /tmp/p36-manager/statecat.sh ~/.local/state/binnacle/p36-manager/trialgap -> PASS: value 15.",
+        "uv run pre-commit run --files scripts/chat_scheduling_runtime.py scripts/chat_scheduling_chat.py scripts/chat_scheduling_harness.py tests/scripts/test_chat_scheduling_send_gate.py benchmarks/chat-mode-scheduling-v2/phase4-progress.json benchmarks/chat-mode-scheduling-v2/phase4-progress.md -> PASS: all hooks including ruff, mypy and module-size ratchet."
       ],
-      "commit": null,
+      "notes": [
+        "P4-A4/D8 advances frozen phase4_runtime_path_head acdb2088584382c6496d10c2a170d2217135e550 -> 6ff1161e039d976f8e53a0d4d277c9258b15da29; frozen experiment source 06bc1649c4bad9449470366da971649bb7620020 and running endpoints are unchanged.",
+        "shared_send_gate now yields a post-confirmation release callback. The routed sender invokes it only after exact conversation resolution, URL write and running timing write, before reply polling begins.",
+        "The same FIFO send queue and flock remain authoritative, so posts stay strictly one at a time; only reply polling and later work overlap across trials.",
+        "The shell gate reads the manager trialgap file and enforces a 15 s minimum instead of 60 s. The manager file was observed at exactly 15.",
+        "Context cleanup preserves sent bookkeeping if post evidence exists and releases a true pre-post failure as not sent, so last-send is written only for confirmed posts.",
+        "No live trial, endpoint restart, server-source change, production config/service mutation, or worker commit integration occurred in this task. The manager owns the fresh 4.6A-sel-qual execution."
+      ],
+      "commit": "6ff1161e039d976f8e53a0d4d277c9258b15da29",
       "worker_branch": null
     }
   },
