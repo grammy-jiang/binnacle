@@ -8,7 +8,7 @@ import secrets
 import shutil
 import subprocess
 import uuid
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -33,34 +33,35 @@ PHASE4_BASELINE = PHASE4_BENCH / "phase4-baseline.json"
 PHASE4_TOPOLOGY = PHASE4_BENCH / "phase4-endpoint-topology-base.json"
 PHASE4_LANES = PHASE4_BENCH / "phase4-lanes"
 PHASE4_REGISTRY = PHASE4 / "endpoints.json"
-SEND_GATE_SH = r"""set -euo pipefail; M=/home/grammy-jiang/.local/state/binnacle/p36-manager; Q=$M/sendq; mkdir -p "$Q"; T=$Q/$(date +%s%N)-$$; echo $$ > "$T"; trap 'rm -f "$T"' EXIT; while true; do O=$(ls "$Q" 2>/dev/null | sort | head -1); [ "$Q/$O" = "$T" ] && break; P=$(printf %s "$O" | sed "s/.*-//"); kill -0 "$P" 2>/dev/null || { rm -f "$Q/$O"; continue; }; sleep 5; done; exec 9>"$M/send.lock"; flock 9; G=$(cat "$M/$1" 2>/dev/null || echo 120); [ "$1" != trialgap ] || [ "$G" -ge 60 ] || G=60; L=$(cat "$M/last-send" 2>/dev/null || echo 0); N=$(date +%s); W=$((L+G-N)); [ "$W" -le 0 ] || sleep "$W"; printf "READY\n"; read -r S; [ "$S" != sent ] || date +%s > "$M/last-send" """
+SEND_GATE_SH = r"""set -euo pipefail; M=/home/grammy-jiang/.local/state/binnacle/p36-manager; Q=$M/sendq; mkdir -p "$Q"; T=$Q/$(date +%s%N)-$$; echo $$ > "$T"; trap 'rm -f "$T"' EXIT; while true; do O=$(ls "$Q" 2>/dev/null | sort | head -1); [ "$Q/$O" = "$T" ] && break; P=$(printf %s "$O" | sed "s/.*-//"); kill -0 "$P" 2>/dev/null || { rm -f "$Q/$O"; continue; }; sleep 5; done; exec 9>"$M/send.lock"; flock 9; G=$(cat "$M/$1" 2>/dev/null || echo 120); [ "$1" != trialgap ] || [ "$G" -ge 15 ] || G=15; L=$(cat "$M/last-send" 2>/dev/null || echo 0); N=$(date +%s); W=$((L+G-N)); [ "$W" -le 0 ] || sleep "$W"; printf "READY\n"; read -r S; [ "$S" != sent ] || date +%s > "$M/last-send" """
 
 
 @contextmanager
 def shared_send_gate(
-    *, trial: bool, url_file: Path, timing_file: Path | None
-) -> Generator[None, None, None]:
+    trial: bool, url_file: Path, timing_file: Path | None
+) -> Generator[Callable[[], None], None, None]:
+    gap = "trialgap" if trial else "sendgap"
+    args = ["bash", "-c", SEND_GATE_SH, "send-gate", gap]
     gate = subprocess.Popen(
-        ["bash", "-c", SEND_GATE_SH, "send-gate", "trialgap" if trial else "sendgap"],
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        text=True,
+        args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True
     )
-    if not gate.stdout or not gate.stdin or gate.stdout.readline().strip() != "READY":
+    gate_in, gate_out = gate.stdin, gate.stdout
+    if not gate_in or not gate_out or gate_out.readline().strip() != "READY":
         raise HarnessError("shared ChatGPT send gate failed")
-    status = ""
-    try:
-        yield
-    except BaseException:
-        if url_file.exists() or (timing_file is not None and timing_file.exists()):
-            status = "sent"
-        raise
-    else:
-        status = "sent"
-    finally:
-        gate.stdin.write(status + "\n")
-        gate.stdin.close()
+    released: list[bool] = []
+
+    def release(status: str) -> None:
+        gate_in.write(status + "\n")
+        gate_in.close()
         gate.wait(timeout=5)
+        released.append(True)
+
+    try:
+        yield lambda: release("sent")
+    finally:
+        if not released:
+            sent = url_file.exists() or bool(timing_file and timing_file.exists())
+            release("sent" if sent else "")
 
 
 class HarnessError(RuntimeError): ...

@@ -285,6 +285,7 @@ def _routed_project_chat(
     system_hint: str,
     model: str,
     effort: str,
+    on_posted: Callable[[], None] | None,
 ) -> dict[str, Any]:
     prompt_file = url_file.with_name("chat-prompt.txt")
     result_file = url_file.with_name("chat-send.json")
@@ -348,6 +349,8 @@ def _routed_project_chat(
             "sent_at_epoch_s": sent_epoch,
         },
     )
+    if on_posted is not None:
+        on_posted()
 
     deadline = time.monotonic() + timeout_s
     last_text = ""
@@ -428,6 +431,7 @@ def send_project_chat(
     system_hint: str | None = None,
     model: str | None = None,
     effort: str | None = None,
+    on_posted: Callable[[], None] | None = None,
 ) -> dict[str, Any]:
     routed = (system_hint, model, effort)
     if any(value is not None for value in routed):
@@ -445,6 +449,7 @@ def send_project_chat(
             system_hint=system_hint,
             model=model,
             effort=effort,
+            on_posted=on_posted,
         )
 
     args = [
@@ -468,6 +473,8 @@ def send_project_chat(
             proc = _run(args, timeout=timeout_s + 30)
             result = json.loads(proc.stdout)
             result["submit_attempts"] = attempt + 1
+            if on_posted is not None:
+                on_posted()
             return result
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
             last_error = exc

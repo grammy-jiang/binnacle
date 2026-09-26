@@ -230,10 +230,9 @@ def run_trial(
         )
         record["prompt_sha256"] = hashlib.sha256(record["prompt"].encode()).hexdigest()
         route = lane_send_options(selected)
-        record["chat_routing"] = route
-        record["stage"] = "chat_running"
+        record.update(chat_routing=route, stage="chat_running")
         write_json(record_path, record)
-        with shared_send_gate(trial=True, url_file=url_file, timing_file=timing_file):
+        with shared_send_gate(True, url_file, timing_file) as release_send_gate:
             result = send_project_chat(
                 selected["project_id"],
                 record["prompt"],
@@ -244,6 +243,7 @@ def run_trial(
                 system_hint=route["system_hint"],
                 model=route["model"],
                 effort=route["effort"],
+                on_posted=release_send_gate,
             )
         record["submission_status"] = "completed"
         record["chat"]["send_result"] = result

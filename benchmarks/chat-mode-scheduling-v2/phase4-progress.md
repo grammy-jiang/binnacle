@@ -38,6 +38,7 @@ Next step: **manager-dispatched Step 4.7 re-judgment under P4-A3 using the corre
 | 4.3A | complete | — |
 | 4.3A-fix | complete | `22f9556` |
 | 4.3A-fix2 | complete | `acdb208` |
+| 4.3A-fix4 | running | — |
 | 4.3B | complete | — |
 | 4.4A | complete | — |
 | 4.5 | complete | 389e6a5 |
@@ -490,3 +491,8 @@ Step 4.6A:selected from the frozen result**.
   `D7-P4A3` to avoid duplicate/corrupted deviation identity.
 - Step 4.7 remains historical NO_GO in this commit. Re-judgment is a separate
   manager-dispatched step, as required by P4-A3.
+
+## Step 4.3A-fix4 send-gate release — RUNNING
+
+- P4-A4 benchmark-harness correction started at canonical HEAD `1dc37f101c89268dfee8a3acc7903dcbddfc0476`.
+- Scope is benchmark scripts/tests and canonical progress only; no live trial, endpoint restart, production mutation, or server-source change is permitted.

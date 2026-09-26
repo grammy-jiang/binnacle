@@ -639,6 +639,15 @@
       ],
       "commit": "76ec24eed464e1162f4b51d9549143bf6175d8bb",
       "worker_branch": null
+    },
+    "4.3A-fix4": {
+      "status": "running",
+      "tests": [],
+      "notes": [
+        "P4-A4 benchmark-harness correction in progress: release the shared send gate after post confirmation and use the manager trialgap with a 15 s floor; no live trials are run by this task."
+      ],
+      "commit": null,
+      "worker_branch": null
     }
   },
   "checkpoints": [
