@@ -246,23 +246,6 @@ class ExactSearchStats:
 
 
 @dataclass
-class PredictionStats:
-    dispatches: int = 0
-    outcomes: int = 0
-    coverage: Counter = field(default_factory=Counter)
-    confusion: dict[str, Counter] = field(default_factory=lambda: defaultdict(Counter))
-    calibration: dict[str, Counter] = field(
-        default_factory=lambda: defaultdict(Counter)
-    )
-    memory_store_keys: int = 0
-    memory_sample_counts: Counter = field(default_factory=Counter)
-    filter_hash: str | None = None
-    window_start: str | None = None
-    window_end: str | None = None
-    rows: list[dict[str, Any]] = field(default_factory=list)
-
-
-@dataclass
 class Stats:
     records: int = 0
     startups: int = 0
@@ -299,5 +282,4 @@ class Stats:
     run_command: RunCommandWorkflowStats = field(
         default_factory=RunCommandWorkflowStats
     )
-    predictions: PredictionStats = field(default_factory=PredictionStats)
     exact_search: ExactSearchStats = field(default_factory=ExactSearchStats)

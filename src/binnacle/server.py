@@ -79,6 +79,11 @@ def log_effective_config() -> None:
         s.telemetry.tokenizer.encoding,
         ",".join(s.telemetry.tokenizer.client_prefixes),
     )
+    for section in s.run_command.removed_sections:
+        logger.warning(
+            "event=config_warning section=run_command.%s reason=removed action=ignored",
+            section,
+        )
     _log_tool_config(
         "read_file",
         max_lines=s.read_file.max_lines,

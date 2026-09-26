@@ -285,3 +285,31 @@ loading: the keys are ignored, the predictor is dropped, and one
 `run_command_prediction_config_warning` record reports it at startup. The
 memory store drops its old judge-answer cache on its next write. The
 `CEREBRAS_API_KEY` environment variable and any key file are no longer read.
+
+## 12. Removal of the experiment (2026-09-27)
+
+The owner removed the whole shadow-prediction experiment on 2026-09-27, the
+same day as the judge. Sections 1-11 are the record of what was built; none
+of it is in the code any more.
+
+Live evidence (v2 window, 2026-09-26 15:25 to 2026-09-27 07:2x, 1,555
+`run_command` calls):
+
+- `memory` covered 60% of the calls. At the 10 s threshold its precision was
+  0.68 and its recall 0.57. It never predicted a run of 60 s or more
+  correctly.
+- `rules` (explicit sleeps of 10 s or more) matched 3 calls.
+- The model's own `wait_seconds=1` request predicted runs of 60 s or more at
+  precision 0.76 and recall 0.81. Nothing consumed the predictions: the
+  chat-mode scheduling v2 programme that could have used them closed with
+  `NO_GO_PERFORMANCE` on the same day.
+
+Removed: `run_command_prediction.py`, the command-feature extraction and the
+prediction records in `run_command_telemetry.py`, the stats predictions
+section and `binnacle stats --predictions-csv`, and the
+`[run_command.shadow_prediction]` settings. The `run_command` tool surface is
+unchanged (pinned by `tests/contracts/test_run_command_surface.py`). A host
+configuration that still has the table keeps loading: it is ignored, and one
+startup WARNING (`event=config_warning section=run_command.shadow_prediction`)
+names it. Old journals still parse. The memory store under
+`~/.local/state/binnacle/run-command-prediction` is no longer read or written.

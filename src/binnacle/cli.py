@@ -381,9 +381,6 @@ def stats(
     system_resources: Annotated[
         bool, cyclopts.Parameter(name="--system-resources")
     ] = False,
-    predictions_csv: Annotated[
-        Path | None, cyclopts.Parameter(name="--predictions-csv")
-    ] = None,
 ) -> None:
     """Usage statistics from the server journal.
 
@@ -398,8 +395,6 @@ def stats(
         Systemd user unit whose journal to analyze.
     system_resources
         Also read Webmin system-status history for the same time window.
-    predictions_csv
-        Write privacy-safe joined run-command prediction rows to this CSV path.
     """
     from binnacle import logstats
 
@@ -416,8 +411,6 @@ def stats(
     )
     analysis = logstats.analyze(records, startups)
     print(logstats.render(analysis))
-    if predictions_csv is not None:
-        logstats.export_prediction_rows(analysis.predictions, predictions_csv)
     if system_resources:
         from binnacle import webminstats
 

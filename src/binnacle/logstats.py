@@ -27,11 +27,6 @@ from binnacle.logstats_adaptive import analyze_adaptive_discovery
 from binnacle.logstats_io import fetch_journal
 from binnacle.logstats_jobs import analyze_job_telemetry
 from binnacle.logstats_models import IndexedContextStats, Record, Stats
-from binnacle.logstats_predictions import (
-    analyze_predictions,
-    export_prediction_rows,
-    prediction_report,
-)
 from binnacle.logstats_render import indexed_context_report, render
 from binnacle.logstats_run_command import analyze_run_command_workflow
 from binnacle.logstats_search_exact import analyze_exact_search
@@ -130,12 +125,10 @@ __all__ = [
     "Stats",
     "analyze",
     "analyze_indexed_context",
-    "export_prediction_rows",
     "fetch_journal",
     "indexed_context_report",
     "parse",
     "plain_fields",
-    "prediction_report",
     "render",
 ]
 
@@ -449,6 +442,5 @@ def analyze(records: list[Record], startups: int = 0) -> Stats:
     st.adaptive = analyze_adaptive_discovery(records)
     st.jobs = analyze_job_telemetry(records, plain_fields)
     st.run_command = analyze_run_command_workflow(records, plain_fields)
-    st.predictions = analyze_predictions(records, plain_fields)
     st.exact_search = analyze_exact_search(records, plain_fields)
     return st

@@ -441,64 +441,21 @@ scripts/analyze_indexed_pilot.py --since '7 days ago' --json
 Both use the same `binnacle.logstats` analysis code. See
 `docs/indexed-context-pilot.md` for interpretation and rollout/rollback policy.
 
-## run_command shadow prediction telemetry
+## run_command shadow prediction telemetry (removed 2026-09-27)
 
-The shadow prediction experiment is observational only. It never changes explicit
-`background`, automatic-background policy, wait bounds, job ownership, or result
-payloads. Repository defaults leave it disabled.
+The run_command shadow-prediction experiment ran from 2026-09-25 to
+2026-09-27. It was removed on 2026-09-27; see
+`docs/run-command-shadow-prediction-design-2026-09-25.md`, section 12. The
+server no longer writes `run_command_prediction`,
+`run_command_prediction_judge`, `run_command_prediction_config_warning` or
+`run_command_prediction_memory_error` records, or the `shadow_prediction=`
+startup field, and `binnacle stats` has no predictions section or
+`--predictions-csv` option. Journals from that window still hold the records;
+`binnacle stats` parses past them.
 
-The journal is the primary experiment dataset. Prediction records are INFO-level,
-single-line, `key=value` schemas. They never contain raw command text, configured
-regex text, or credentials.
-
-Two local predictors remain: `memory` (the p90 runtime of earlier runs of the same
-command or command shape) and `rules` (explicit sleeps of 10 s or more). The Cerebras
-`judge` predictor was removed on 2026-09-27; see
-`docs/run-command-shadow-prediction-design-2026-09-25.md`, "Removal of the judge".
-Journals written before that date also hold `judge=`, `judge_skip_reason=` and
-`judge_cache=` fields and `run_command_prediction_judge` records; `binnacle stats`
-ignores them.
-
-### Dispatch prediction
-
-One record is emitted per dispatch when shadow prediction is enabled, immediately
-after the existing dispatch decision is fixed:
+A host configuration that still has a `[run_command.shadow_prediction]` table
+keeps loading. The table is ignored, and one startup WARNING names it:
 
 ```text
-event=run_command_prediction schema=1 call=abc123 feature_hash=5e93514612f1 shape_hash=e17b0130f534 first_token_class=uv heredoc=0 chain_n=0 max_delay_s=0 len_chars=41 declared_wait_s=30 declared_background=none auto_rule=- memory_bucket=long memory_p90_s=98 memory_n=7 memory_source=shape memory_store_keys=412 rules_bucket=- rules_p90_s=- rules_hits=-
+event=config_warning section=run_command.shadow_prediction reason=removed action=ignored
 ```
-
-Stable fields include the joinable `call`, non-reversible feature and shape hashes,
-closed-vocabulary first-token class, structural features, caller declarations
-(`declared_wait_s` is the model's own requested wait), automatic-rule hash, predictor
-outputs, and bounded memory-store size. The feature fields are derived before request
-argument clipping.
-
-### Effective shadow configuration
-
-At tool registration the server emits the experiment identity:
-
-```text
-event=tool_config tool=run_command shadow_prediction=on predictors=memory,rules filter_hash=d3fa15d2a4eb
-```
-
-Use `filter_hash` when comparing experiment windows; it covers the memory threshold.
-A configuration that still names the removed `judge` predictor keeps loading; the
-predictor is dropped and one WARNING record says so at the same moment:
-
-```text
-event=run_command_prediction_config_warning schema=1 dropped_predictors=judge reason=removed_predictor
-```
-
-### Join and analysis recipe
-
-Join `run_command_prediction.call` to `run_command_dispatch.call`, take its
-`job_id`, and use `job_exit.runtime_s` as the terminal outcome.
-
-`binnacle stats` renders a `predictions` section with per-predictor coverage,
-10-second and 60-second confusion counts, precision/recall/F1, calibration buckets,
-memory-store size and sample-count distribution, window identity, and the filter hash.
-The JSON-safe `logstats.prediction_report` contains the same metrics plus privacy-safe
-joined rows. `logstats.export_prediction_rows` (and `binnacle stats --predictions-csv`)
-writes those rows as JSONL or CSV; exported rows contain only call IDs, hashes, classes,
-predictions, and runtimes, never command text.
