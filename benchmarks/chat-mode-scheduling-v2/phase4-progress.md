@@ -8,11 +8,10 @@ Worktree: `/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4`
 
 Audited source HEAD: `3a4dfb1b248e4530fb09013976abb863c8e35eaf`
 
-Last completed step: **4.9.6**
+Last completed step: **4.10**
 
-Next step: **Step 4.10 is blocked pending one valid A/M3 post-run micro.
-The owning run was infrastructure-invalid, and two safe replacement attempts
-failed before submission when send_prompt timed out.**
+Next step: **4C evidence-review frontier is ready: four canonical focus leads
+may start from the immutable post-run integration head after this Step 4.10 commit.**
 
 ## Frozen Step 4.0 entry gate
 
@@ -57,7 +56,7 @@ failed before submission when send_prompt timed out.**
 | 4.9.4 | complete | R7 9/9 frozen; integrity PASS; commit pending |
 | 4.9.5 | complete | R8/R9 30/30 frozen; integrity PASS; commit pending |
 | 4.9.6 | complete | R10/R11 30/30 frozen; integrity PASS; commit pending |
-| 4.10 | blocked | A/M3 infrastructure-invalid; replacement pre-submit path timed out twice |
+| 4.10 | complete | post-run M1/M2/M3 PASS; replacement A/M3 is canonical |
 | 4C | not_started | — |
 | 4.11 | not_started | — |
 | 4.12 | not_started | — |
@@ -770,47 +769,57 @@ Step 4.6A:selected from the frozen result**.
 - No endpoint, Project, production config/service, lane worktree, or non-R10/R11
   confirmatory slot was mutated or rerun.
 
-## Step 4.10 post-run M1/M2/M3 sanity — BLOCKED
+## Step 4.10 post-run M1/M2/M3 sanity — COMPLETE
 
-- Predecessors are verified: all six Step 4.9 completion commits are ancestors
-  of canonical HEAD 1ae321074c1aed4d76aabf345eb0743298d98f4c, and their
-  completion packets are pushed, clean, and blocker-free.
-- Manager result
-  /home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase4/runs/4.10-micro.json
-  has SHA-256
+- All six Step 4.9 predecessors are verified pushed, clean, blocker-free, and
+  ancestor-valid. The original manager result remains frozen at SHA-256
   69884e281ac4576becfea1762dbc2a3086fefe4648bf2e5c15c748c2b1d9cf05.
-  It contains nine owning exit-zero rows, zero routing misses, and one
-  additional B/M2 pre-submit attempt that owns no slot.
-- Mechanical analysis of the manager rows is 8/9 deterministic correctness,
-  zero duplicate non-repeat calls, zero tool errors, M2 minimum peak inflight
-  3 with minimum overlap ratio 0.375, and M3 relation true 2/3. Routing is
-  9/9 correct.
-- The apparent A/M3 failure
-  m3-20260927T000129-78a521b526 is infrastructure-invalid under the same
-  rule used by Step 4.5. Its 300-second prelaunched job was already exited at
-  job_status (runtime_s=300.023, waited_s=0.003) because about 660.5
-  seconds elapsed between trial start and chat submission. Therefore no live
-  wait interval existed and the required
-  later_read_starts_before_slow_status_ends relation could not be exercised.
-- The single permitted A/M3 replacement path could not produce a submitted
-  trial. Two safe attempts,
-  m3-20260927T014559-cb79bdaeb4 and
-  m3-20260927T014827-96d28656a7, both ended as
-  pre_mcp_submission_failure after send_prompt timed out at 125 seconds.
-  Neither discovered a chat id or made benchmark MCP calls; cleanup removed
-  the fixtures and stopped their prelaunched jobs.
-- Step 4.5's pre-run gate was 9/9 correctness, M2 minimum peak 3 / overlap
-  0.375, M3 relation 3/3, routing 9/9, and zero duplicates/tool errors. The
-  eight valid post-run rows preserve those conditions, and B/C300 M3 both
-  pass. Available evidence therefore does not show a session-wide
-  scheduler/client/product regression, but the required A/M3 end-of-session
-  evidence is missing.
-- Focused Step-4.10/Step-4.5 integration matrix: **115 passed in 2.65 s**;
-  nproc=4; pre-run load average 0.67 / 0.76 / 0.87 under foreign
+- The original A/M3 row m3-20260927T000129-78a521b526 remains
+  infrastructure-invalid rather than an arm failure. Submission occurred
+  660.509 seconds after trial start, so its prelaunched 300-second job was
+  already exited at job_status (runtime_s=300.023, waited_s=0.003);
+  the required wait/read relation could not be exercised.
+- The manager-authorized replacement m3-20260927T020014-a92cd7dc7d is the
+  canonical A/M3 row. Its request JSON, result JSON, and result JSONL SHA-256
+  values are respectively
+  5ebd585429861abc2111d7b4f08e93ae5428719a21bec4beb80427e02a3d657c,
+  e6aa8ceb38b9937e808d44303ed52b72479b2353602827616c94107f07be74c9,
+  and 897ac28d3f04ee0af181104c3db35b6b54aea0c02e1280ce2a6063e0e25a153f.
+- Replacement A/M3 is mechanically valid: job_status observed the job running
+  with waited_s=5.001; reads started while the status call was blocked; peak
+  read-only inflight was 3 with overlap ratio 0.666667; deterministic
+  correctness passed with zero duplicate calls and zero tool errors.
+- Canonical Step-4.10 gate: **PASS** across nine rows. Deterministic correctness
+  is 9/9; duplicate non-repeat logical calls are 0; M2 minimum peak inflight is
+  3 with minimum overlap ratio 0.375; M3
+  later_read_starts_before_slow_status_ends is true 3/3; tool errors are 0.
+  Routing misses are A 0/3 (0%), B 0/3 (0%), and C 0/3 (0%).
+- D9 timing recovery is complete. Six poll-observed rows were recovered from
+  raw conversation payloads and re-analyzed: C/M2 75.420 -> 21.239 s, C/M3
+  73.336 -> 22.098 s, B/M2 61.599 -> 16.075 s, B/M3 62.029 -> 21.903 s,
+  A/M2 272.333 -> 16.679 s, and replacement A/M3 102.079 -> 23.058 s.
+  C/M1, B/M1, and A/M1 were already timestamped from the final assistant
+  message. All nine canonical rows now use
+  conversation_final_assistant_timestamp; none remains poll-observed.
+  Wall time is diagnostic only and is not a Step-4.10 hard gate.
+- Step 4.5 and Step 4.10 therefore match mechanically at 9/9 correctness, M2
+  minimum peak 3 / overlap 0.375, M3 relation 3/3, routing 9/9, and zero
+  duplicates/tool errors. The specified sanity check detects no session-wide
+  scheduler/client/product change between beginning and end.
+- The manager's confirmatory queue check covered 149 trials with send records:
+  submission-delay median 2.5 s, p90 8.2 s, and maximum 509.1 s at R2-r04-A.
+  Confirmatory scenarios do not prelaunch fixture jobs, so the queue-before-send
+  weakness can invalidate M3-type micros but does not invalidate the frozen
+  confirmatory macro evidence.
+- The two earlier a1 replacement attempts m3-20260927T014559-cb79bdaeb4 and
+  m3-20260927T014827-96d28656a7 remain non-owning pre-submission failures.
+  Attempt a2 started no live trial.
+- Focused Step-4.10/Step-4.5 integration matrix: **115 passed in 2.52 s**;
+  nproc=4; pre-run load average 0.49 / 0.93 / 0.98 under foreign
   parallel-programme load.
 - Production isolation is **PASS** at clean master
   cbafe8aff48ac1c0e518b34b6a4f54f62f162864; config SHA-256
   22f7ed9c2053c9fb20574fe4086fff797e197e2da40080e92f503213061188da;
   unit/profile hashes are stable and the blocking-wall budget key is absent.
-- Step 4.10 remains blocked because the task graph requires post-run M1/M2/M3
-  PASS before 4C. No 4C focus lead is released by this checkpoint.
+- Step 4.10 is complete and releases the four 4C focus leads from this immutable
+  post-run integration checkpoint.
