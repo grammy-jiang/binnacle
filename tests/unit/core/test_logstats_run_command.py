@@ -371,9 +371,10 @@ def test_phase5_groups_account_for_dispatch_errors_and_missing_dispatches():
     assert stats.auto_rule_groups == {}
 
 
-from binnacle.logstats_predictions import prediction_report
-
-PREDICTION_SAMPLE = """\
+# Journal lines written by the run_command shadow-prediction experiment
+# (2026-09-25 to 2026-09-27, removed on 2026-09-27). Old journals still hold
+# them; stats must parse past them and keep the run_command workflow.
+OLD_PREDICTION_SAMPLE = """\
 2026-09-25T10:00:00.000 INFO: event=tool_config tool=run_command shadow_prediction=on predictors=memory,rules,judge judge_model=gpt-oss-120b filter_hash=f123 sanitizer_hash=s123
 2026-09-25T10:00:00.100 INFO: event=run_command_prediction schema=1 call=a feature_hash=fa shape_hash=sa first_token_class=uv heredoc=0 chain_n=0 max_delay_s=0 len_chars=30 declared_wait_s=30 declared_background=none auto_rule=- memory_bucket=long memory_p90_s=90 memory_n=3 memory_source=shape memory_store_keys=12 rules_bucket=- rules_p90_s=- rules_hits=- judge=queued judge_skip_reason=- judge_cache=miss
 2026-09-25T10:00:00.110 INFO: event=run_command_dispatch call=a client=x job_id=ja owner=manager owner_instance=o requested_wait_s=30 bounded_wait_s=30 effective_wait_s=30 background_arg=omitted auto_background=false handoff_reason=synchronous owner_roundtrip_ms=2 command_hash=h command_chars=30 state=exited
@@ -386,37 +387,11 @@ PREDICTION_SAMPLE = """\
 """
 
 
-def test_stats_shadow_join_ignores_old_judge_lines():
-    records, starts = logstats.parse(PREDICTION_SAMPLE)
+def test_stats_skips_lines_of_the_removed_prediction_experiment():
+    records, starts = logstats.parse(OLD_PREDICTION_SAMPLE)
     stats = logstats.analyze(records, starts)
-    shadow = stats.predictions
-    assert shadow.dispatches == 3
-    assert shadow.outcomes == 2
-    assert shadow.coverage["memory"] == 2
-    assert shadow.coverage["rules"] == 1
-    assert "judge" not in shadow.coverage
-    assert shadow.confusion["memory:10"]["tp"] == 1
-    assert shadow.confusion["memory:10"]["tn"] == 1
-    assert shadow.calibration["memory"]["long->medium"] == 1
-    assert shadow.memory_sample_counts == {3: 1, 4: 1, 0: 1}
-    assert shadow.memory_store_keys == 14
-    assert shadow.filter_hash == "f123"
-    assert len(shadow.rows) == 3
-    assert shadow.rows[0]["actual_runtime_s"] == 12.0
-    assert "judge_bucket" not in shadow.rows[2]
-
-
-def test_stats_shadow_report_and_render():
-    records, starts = logstats.parse(PREDICTION_SAMPLE)
-    stats = logstats.analyze(records, starts)
-    report = prediction_report(stats.predictions)
-    assert report["predictors"]["memory"]["coverage"] == 2 / 3
-    assert report["predictors"]["memory"]["thresholds"]["10"]["tp"] == 1
-    assert "judge" not in report["predictors"]
-    assert "judge" not in report
-    assert report["memory_store_keys"] == 14
-    assert report["memory_sample_counts"] == {"0": 1, "3": 1, "4": 1}
+    assert not hasattr(stats, "predictions")
+    assert stats.events["run_command_prediction"] == 3
     text = logstats.render(stats)
-    assert "predictions:" in text
-    assert "memory: coverage=2/3" in text
-    assert "judge" not in text.split("predictions:", 1)[1].split("\n\n", 1)[0]
+    assert "predictions:" not in text
+    assert "dispatches=2 dispatch_errors=0" in text

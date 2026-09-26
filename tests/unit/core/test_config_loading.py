@@ -370,3 +370,44 @@ def test_run_command_evidence_retention_accepts_bounds(days):
 def test_run_command_evidence_retention_rejects_out_of_range(days):
     with pytest.raises(ValidationError):
         config.RunCommandSettings(auto_background_evidence_retention_days=days)
+
+
+def test_removed_run_command_shadow_prediction_section_is_ignored(
+    tmp_path, monkeypatch
+):
+    # The shadow-prediction experiment was removed on 2026-09-27. A host
+    # configuration that still has its table (judge keys included) loads.
+    clear_binnacle_env(monkeypatch)
+    cfg = tmp_path / "config.toml"
+    cfg.write_text(
+        "[run_command]\n"
+        "wait_default_s = 20\n"
+        "\n"
+        "[run_command.shadow_prediction]\n"
+        "enabled = true\n"
+        'predictors = ["memory", "rules", "judge"]\n'
+        "judge_enabled = true\n"
+        "judge_day_budget = 800\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv(config.CONFIG_FILE_ENV, str(cfg))
+
+    settings = config.Settings()
+
+    assert settings.run_command.wait_default_s == 20
+    assert settings.run_command.removed_sections == ("shadow_prediction",)
+    assert not hasattr(settings.run_command, "shadow_prediction")
+
+
+def test_run_command_without_removed_sections_reports_none(tmp_path, monkeypatch):
+    clear_binnacle_env(monkeypatch)
+    monkeypatch.setenv(config.CONFIG_FILE_ENV, str(tmp_path / "missing.toml"))
+
+    assert config.Settings().run_command.removed_sections == ()
+    assert config.RunCommandSettings().removed_sections == ()
+    assert (
+        config.RunCommandSettings.model_validate(
+            config.RunCommandSettings(wait_default_s=12)
+        ).wait_default_s
+        == 12
+    )

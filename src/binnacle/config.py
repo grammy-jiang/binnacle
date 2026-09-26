@@ -184,65 +184,16 @@ class AutoBackgroundMatch:
     match_end: int
 
 
-REMOVED_SHADOW_PREDICTORS = ("judge",)
-
-
-class RunCommandShadowPredictionSettings(BaseModel):
-    """Shadow runtime predictors for run_command: logged, never acted on.
-
-    The Cerebras "judge" predictor was removed on 2026-09-27. A configuration
-    that still lists it or still sets ``judge_*`` keys keeps loading: unknown
-    keys are ignored, and the predictor is dropped from ``predictors`` and
-    reported once in the engine's startup log (``dropped_predictors``).
-    """
-
-    enabled: bool = False
-    predictors: tuple[Literal["memory", "rules"], ...] = ()
-    memory_min_samples: int = Field(2, ge=1, le=100)
-    memory_max_keys: int = Field(4096, ge=16, le=100_000)
-    memory_samples_per_key: int = Field(32, ge=1, le=1024)
-    memory_dir: Path = Field(
-        default_factory=lambda: (
-            Path.home() / ".local" / "state" / "binnacle" / "run-command-prediction"
-        )
-    )
-    _dropped_predictors: tuple[str, ...] = PrivateAttr(default=())
-
-    @model_validator(mode="wrap")
-    @classmethod
-    def _drop_removed_predictors(
-        cls,
-        data: Any,
-        handler: ModelWrapValidatorHandler["RunCommandShadowPredictionSettings"],
-    ) -> "RunCommandShadowPredictionSettings":
-        if isinstance(data, cls):
-            return handler(data)
-        dropped: tuple[str, ...] = ()
-        if isinstance(data, Mapping):
-            values = data.get("predictors")
-            if isinstance(values, (list, tuple)):
-                dropped = tuple(
-                    name for name in REMOVED_SHADOW_PREDICTORS if name in values
-                )
-                if dropped:
-                    kept = tuple(v for v in values if v not in dropped)
-                    data = {**data, "predictors": kept}
-        model = handler(data)
-        model._dropped_predictors = dropped
-        return model
-
-    @property
-    def dropped_predictors(self) -> tuple[str, ...]:
-        """Removed predictors the configuration still named (logged at startup)."""
-        return self._dropped_predictors
+# Sections of [run_command] that no longer exist. A host configuration that
+# still has one keeps loading: the section is ignored and named once in a
+# startup WARNING (event=config_warning). shadow_prediction: the run_command
+# shadow-prediction experiment, removed 2026-09-27.
+REMOVED_RUN_COMMAND_SECTIONS = ("shadow_prediction",)
 
 
 class RunCommandSettings(BaseModel):
     """run_command wait policy (spec docs/tools/run_command.md §3)."""
 
-    shadow_prediction: RunCommandShadowPredictionSettings = Field(
-        default_factory=RunCommandShadowPredictionSettings
-    )
     wait_default_s: int = 30
     wait_max_s: int = Field(
         50, description="Below ChatGPT's hard 60 s client cap (design §5)."
@@ -269,6 +220,33 @@ class RunCommandSettings(BaseModel):
         ),
         description="Private local evidence directory for automatic-background matches.",
     )
+
+    _removed_sections: tuple[str, ...] = PrivateAttr(default=())
+
+    @model_validator(mode="wrap")
+    @classmethod
+    def _drop_removed_sections(
+        cls,
+        data: Any,
+        handler: ModelWrapValidatorHandler["RunCommandSettings"],
+    ) -> "RunCommandSettings":
+        if isinstance(data, cls):
+            return handler(data)
+        removed: tuple[str, ...] = ()
+        if isinstance(data, Mapping):
+            removed = tuple(
+                name for name in REMOVED_RUN_COMMAND_SECTIONS if name in data
+            )
+            if removed:
+                data = {k: v for k, v in data.items() if k not in removed}
+        model = handler(data)
+        model._removed_sections = removed
+        return model
+
+    @property
+    def removed_sections(self) -> tuple[str, ...]:
+        """Removed [run_command] sections the configuration still has."""
+        return self._removed_sections
 
     @model_validator(mode="after")
     def validate_auto_background_patterns(self) -> "RunCommandSettings":

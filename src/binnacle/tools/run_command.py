@@ -18,13 +18,11 @@ from binnacle.config import get_settings
 from binnacle.errors import CodedToolError
 from binnacle.paths import resolve_path
 from binnacle.run_command_evidence import record_auto_match
-from binnacle.run_command_prediction import ShadowPredictionEngine
-from binnacle.run_command_telemetry import DispatchPlan, build_command_features
+from binnacle.run_command_telemetry import DispatchPlan
 
 RUN_SETTINGS = get_settings().run_command
 RUN_WAIT_DEFAULT = RUN_SETTINGS.wait_default_s
 RUN_WAIT_MAX = RUN_SETTINGS.wait_max_s
-SHADOW_PREDICTOR = ShadowPredictionEngine(RUN_SETTINGS.shadow_prediction)
 log = logging.getLogger("binnacle.run_command")
 
 OUTPUT_SCHEMA = {
@@ -112,28 +110,6 @@ def run_command_impl(
         owner=jobs.OWNER_MODE,
     )
     call_id = current_call.get()
-    declared_background = (
-        str(background).lower() if "background" in argument_names else "none"
-    )
-    features = build_command_features(
-        command,
-        wait_seconds=wait_seconds,
-        declared_background=declared_background,
-        tail_lines=tail_lines,
-    )
-    try:
-        SHADOW_PREDICTOR.submit(
-            call_id=call_id,
-            command=command,
-            features=features,
-            auto_rule_hash=plan.auto_rule_hash,
-        )
-    except Exception as exc:  # noqa: BLE001 - shadow telemetry must fail open
-        log.warning(
-            "event=run_command_prediction_error schema=1 call=%s error=%s",
-            call_id,
-            type(exc).__name__,
-        )
     plan.log_auto_background(call_id)
     if plan.auto_background and plan.auto_rule_hash is not None:
         record_auto_match(
@@ -181,14 +157,6 @@ def run_command_impl(
     )
 
     if state and state["state"] == "exited":
-        try:
-            SHADOW_PREDICTOR.record_runtime(features, float(state["runtime_s"]))
-        except Exception as exc:  # noqa: BLE001 - shadow telemetry must fail open
-            log.warning(
-                "event=run_command_prediction_memory_error schema=1 call=%s error=%s",
-                call_id,
-                type(exc).__name__,
-            )
         payload = {
             "job_id": job_id,
             "state": "exited",
@@ -243,8 +211,6 @@ def run_command_impl(
 
 
 def register(mcp: FastMCP) -> None:
-    SHADOW_PREDICTOR.log_config()
-
     @mcp.tool(
         annotations={
             "readOnlyHint": False,
