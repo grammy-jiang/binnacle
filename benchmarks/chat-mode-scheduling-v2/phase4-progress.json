@@ -6,8 +6,8 @@
   "worktree": "/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4",
   "source_branch": "feature/chat-mode-scheduling-v2-phase3",
   "audited_source_head": "3a4dfb1b248e4530fb09013976abb863c8e35eaf",
-  "last_completed_step": "4.3A-fix4",
-  "next_step": "Manager re-executes run request 4.6A-sel-qual under the P4-A4 post-release gate, then evaluates Step 4.6A:selected from that fresh result.",
+  "last_completed_step": "4.3A-fix5",
+  "next_step": "Manager re-executes run request 4.6A-sel-qual under P4-A5 gentle polling and conversation-timestamp timing, then evaluates Step 4.6A:selected from that fresh result.",
   "dependency_audit": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase4-dependency-audit-2026-09-25-r01.json",
     "revision": "r01",
@@ -73,7 +73,7 @@
     "phase4_dependency_audit_head": "89a206d24185284de278df18fe77ac0e4eccbb01",
     "phase4_source_head": "06bc1649c4bad9449470366da971649bb7620020",
     "phase4_analyzer_path_head": "76ec24eed464e1162f4b51d9549143bf6175d8bb",
-    "phase4_runtime_path_head": "6ff1161e039d976f8e53a0d4d277c9258b15da29",
+    "phase4_runtime_path_head": "c06518bf477f3c49811d4708dfd66507065d6996",
     "phase4_core_manifest_validation_head": "e0cb1ce6eead5b021fbe079edef70ec4276a0851",
     "phase4_postsend_robustness_head": "389e6a5b7db05a316032340bc6a8dbf34a562b8d"
   },
@@ -204,6 +204,12 @@
       "status": "RESOLVED",
       "description": "P4-A4 found that the shared benchmark send gate stayed held through send_project_chat reply polling and imposed a 60 s trial-gap floor, serializing the first 4.6A-sel-qual execution even at K=2/K=4.",
       "disposition": "The benchmark harness now releases the unchanged FIFO queue/flock gate immediately after the routed sender resolves the exact conversation id, writes the URL and running timing marker, and confirms the post; reply polling then runs outside the gate. The trialgap floor is 15 s and the manager trialgap file is 15. Pre-post failures release as not sent, while sent/last-send bookkeeping remains tied to confirmed posts. The prior 4.6A-sel-qual execution remains a serial diagnostic and the manager must rerun it under this gate before Step 4.6A:selected evaluation."
+    },
+    {
+      "id": "D9",
+      "status": "RESOLVED",
+      "description": "P4-A5 found that overlapping post-P4-A4 trials polled read_chat.py about once per second, causing HTTP 403 Cloudflare challenges on the authenticated read path and false harness timeouts even when final assistant replies already existed in the retained conversation.",
+      "disposition": "Canonical trial observation now first polls about 5 s after post and then no more often than every 10 s with jitter; read timeouts and HTTP 403/429 responses back off exponentially to 60 s and do not terminate observation, which can continue 600 s past the nominal turn limit. The deleted-chat conversation backup canonicalizes settle time from the final turn-ending assistant message timestamp while retaining first-seen poll time diagnostically; the evidence loader derives wall_s from settled_at_epoch_s when present. Regression coverage includes a turn settled at +18 s but first seen at +130 s and confirms it is within a 110 s limit. phase4_runtime_path_head advances 6ff1161e039d976f8e53a0d4d277c9258b15da29 -> c06518bf477f3c49811d4708dfd66507065d6996; no live trials were run in this fix."
     }
   ],
   "steps": {
@@ -663,6 +669,23 @@
         "No live trial, endpoint restart, server-source change, production config/service mutation, or worker commit integration occurred in this task. The manager owns the fresh 4.6A-sel-qual execution."
       ],
       "commit": "6ff1161e039d976f8e53a0d4d277c9258b15da29",
+      "worker_branch": null
+    },
+    "4.3A-fix5": {
+      "status": "complete",
+      "tests": [
+        "P4-A5 focused polling/timing/analyzer regression -> PASS: 31 passed in 1.66s; nproc=4; pre-run loadavg=1.92 1.90 2.19 under foreign parallel-programme load.",
+        "Step-4.3A focused runtime/harness matrix -> PASS: 94 passed in 2.31s; nproc=4; pre-run loadavg=2.31 1.98 2.21 under foreign parallel-programme load.",
+        "uv run pre-commit run --files on seven P4-A5 implementation/test files -> PASS: all hooks including Ruff, Bandit, mypy and module-size ratchet."
+      ],
+      "notes": [
+        "P4-A5/D9 advances frozen phase4_runtime_path_head 6ff1161e039d976f8e53a0d4d277c9258b15da29 -> c06518bf477f3c49811d4708dfd66507065d6996; frozen experiment source 06bc1649c4bad9449470366da971649bb7620020 and running endpoints are unchanged.",
+        "Routed reply observation first waits about 5 s, then polls at most once per 10 s plus jitter. HTTP 403/429 and read timeouts use exponential 10/20/40/60 s backoff capped at 60 s and never independently terminate observation; the observation deadline is the turn limit plus 600 s.",
+        "chat-timing.json retains first_seen_at_epoch_s/observed_wall_s as diagnostics. During cleanup, conversation.json supplies the final turn-ending assistant message timestamp; settled_at_epoch_s and wall_s are rewritten from that timestamp relative to the send-body mtime.",
+        "Analyzer input loading now recomputes wall_s from settled_at_epoch_s when available; regression proves a stored observed wall of 130 s with settled_at=sent+4 is analyzed as wall_s=4 s.",
+        "No live trial, endpoint restart, server-source change, production config/service mutation, or worker commit integration occurred. The manager owns the fresh 4.6A-sel-qual execution under P4-A5."
+      ],
+      "commit": "c06518bf477f3c49811d4708dfd66507065d6996",
       "worker_branch": null
     }
   },

@@ -8,9 +8,9 @@ Worktree: `/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4`
 
 Audited source HEAD: `3a4dfb1b248e4530fb09013976abb863c8e35eaf`
 
-Last completed step: **4.3A-fix4**
+Last completed step: **4.3A-fix5**
 
-Next step: **manager re-executes `4.6A-sel-qual` under the P4-A4 post-release gate, then evaluates Step 4.6A:selected from that fresh result.**
+Next step: **manager re-executes `4.6A-sel-qual` under P4-A5 gentle polling and conversation-timestamp timing, then evaluates Step 4.6A:selected from that fresh result.**
 
 ## Frozen Step 4.0 entry gate
 
@@ -39,6 +39,7 @@ Next step: **manager re-executes `4.6A-sel-qual` under the P4-A4 post-release ga
 | 4.3A-fix | complete | `22f9556` |
 | 4.3A-fix2 | complete | `acdb208` |
 | 4.3A-fix4 | complete | `6ff1161` |
+| 4.3A-fix5 | complete | `c06518b` |
 | 4.3B | complete | — |
 | 4.4A | complete | — |
 | 4.5 | complete | 389e6a5 |
@@ -519,3 +520,34 @@ Step 4.6A:selected from the frozen result**.
 - No live trial was executed here. The earlier `4.6A-sel-qual` run remains a
   serial diagnostic; the manager must rerun it under P4-A4 before
   Step 4.6A:selected is evaluated.
+
+## Step 4.3A-fix5 gentle reply polling and conversation settle time — COMPLETE
+
+- **D9 RESOLVED:** overlapping trials no longer hammer the authenticated
+  `read_chat.py` path once per second. The first observation is about 5 seconds
+  after post; subsequent normal polls are at least 10 seconds apart plus jitter.
+- HTTP 403/429 responses and read timeouts back off exponentially at
+  10/20/40/60 seconds, capped at 60 seconds. They never independently terminate
+  observation, which may continue 600 seconds past the nominal turn limit.
+- `chat-timing.json` keeps `first_seen_at_epoch_s` and observed wall time as
+  diagnostics. Cleanup then reads the retained `conversation.json` and rewrites
+  `settled_at_epoch_s` / `wall_s` from the final turn-ending assistant
+  message timestamp relative to the send-body mtime.
+- Regression coverage proves a turn settled at +18 seconds but first seen at
+  +130 seconds remains complete and within a 110-second turn limit.
+- Analyzer input loading derives `wall_s` from `settled_at_epoch_s` when it is
+  present. A dedicated regression stores an observed 130-second wall with a
+  settled timestamp at sent+4 and verifies the analyzer receives 4 seconds.
+- P4-A5-specific polling/timing/analyzer regression: **31/31 PASS** in 1.66
+  seconds; `nproc=4`; pre-run load average 1.92 / 1.90 / 2.19 under foreign
+  parallel-programme load.
+- Authoritative Step-4.3A runtime/harness matrix: **94/94 PASS** in 2.31 seconds;
+  `nproc=4`; pre-run load average 2.31 / 1.98 / 2.21 under foreign
+  parallel-programme load. File-scoped pre-commit passes Ruff, Bandit, mypy and
+  the 500-line module-size ratchet.
+- Frozen `phase4_runtime_path_head` advanced
+  `6ff1161e039d976f8e53a0d4d277c9258b15da29` ->
+  `c06518bf477f3c49811d4708dfd66507065d6996`. Frozen experiment source remains
+  `06bc1649c4bad9449470366da971649bb7620020`; running endpoints were not restarted.
+- No live trial was executed here. The manager must rerun
+  `4.6A-sel-qual` under P4-A5 before Step 4.6A:selected is evaluated.
