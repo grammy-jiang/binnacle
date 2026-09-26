@@ -8,7 +8,7 @@ Worktree: `/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4`
 
 Audited source HEAD: `3a4dfb1b248e4530fb09013976abb863c8e35eaf`
 
-Last completed step: **4.9.3**
+Last completed step: **4.9.1**
 
 Next step: **complete the remaining independent 4.9 confirmatory partitions;
 Step 4.10 becomes ready only after 4.9.1 through 4.9.6 all checkpoint
@@ -51,7 +51,7 @@ complete.**
 | 4.7-fix | complete | `76ec24e` |
 | 4.6A:selected | complete | — |
 | 4.8 | complete | — |
-| 4.9.1 | not_started | — |
+| 4.9.1 | complete | R1/R2 30/30 frozen; integrity PASS; commit pending |
 | 4.9.2 | complete | R3/R4 30/30 frozen; integrity PASS; commit pending |
 | 4.9.3 | complete | R5/R6 30/30 frozen; integrity PASS; commit pending |
 | 4.9.4 | complete | R7 9/9 frozen; integrity PASS; commit pending |
@@ -709,3 +709,35 @@ Step 4.6A:selected from the frozen result**.
   evidence or trial semantics.
 - No endpoint, Project, production config/service, or non-R5/R6 confirmatory
   slot was mutated or rerun.
+
+## Step 4.9.1 confirmatory R1/R2 checkpoint — COMPLETE
+
+- Slot integrity is **PASS**: 30/30 R1/R2 slots have one canonical owning
+  outcome. The original R2-r04-A get-instructions harness failure had no
+  state directory and no submission; the manager corrected it to non-owning
+  pre_submit_failure and resubmitted the same frozen slot once.
+- Routing integrity is **PASS**: A 0/10, B 0/10, and C 0/10 routing misses.
+  There are no unscorable-routing slots and no arm exceeds the 10% threshold.
+- The R2-r04-A submitted resubmission owns the slot even though its harness
+  end check exited 1. The frozen classification is other_submitted_error;
+  trial status is failed, while the analyzer reports same-prompt completion.
+  The end-check difference was only the disappearance of an unrelated
+  untracked production document. Production HEAD, config hash, unit hash,
+  ActiveState, and SubState were unchanged, and the benchmark did not touch
+  production. The row was not rerun after submission.
+- Analyzer result: **30/30 same-prompt**, 0 interrupted, 0 premature handoff,
+  1 failed trial status, and 3 host-load flags.
+- D9 timing evidence: 20/30 owners already use final-assistant timestamps.
+  One bounded 30 s read_chat.py recovery was attempted for each of the ten
+  still-live poll-observed chats; all ten timed out and remain explicitly
+  poll-observed in the checkpoint.
+- Checkpoint JSON SHA-256:
+  bf8bdc772fe586cef3bd893df44144f126d891357d81b9002e921798a4da292b.
+  Checkpoint Markdown SHA-256:
+  2eb4a88855ef9692af7805c9e675ecf4123c281ba8efc89ac317477de5095c2e.
+- Frozen source-manifest SHA-256:
+  b36db72b69392d863401faaa452992077ab3ae45661b8dd3bbb1ef990e0030f1
+  across 416 source files in 30 deterministic archives.
+- Focused analyzer/confirmatory regression: **21 passed in 1.95 s**; nproc=4,
+  pre-run load average 0.48 / 0.62 / 2.15 under foreign parallel-programme
+  load. Archive verification passed for all 416 source files.

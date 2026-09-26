@@ -6,7 +6,7 @@
   "worktree": "/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4",
   "source_branch": "feature/chat-mode-scheduling-v2-phase3",
   "audited_source_head": "3a4dfb1b248e4530fb09013976abb863c8e35eaf",
-  "last_completed_step": "4.9.3",
+  "last_completed_step": "4.9.1",
   "next_step": "Complete the remaining independent 4.9 confirmatory partitions; Step 4.10 becomes ready only after 4.9.1 through 4.9.6 all checkpoint complete.",
   "dependency_audit": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase4-dependency-audit-2026-09-25-r01.json",
@@ -512,9 +512,22 @@
       "worker_branch": null
     },
     "4.9.1": {
-      "status": "not_started",
-      "tests": [],
-      "notes": [],
+      "status": "complete",
+      "tests": [
+        "R1/R2 slot integrity -> PASS: 30/30 canonical owners; the original R2-r04-A get-instructions failure is corrected to non-owning pre_submit_failure and its same-slot resubmission is the first submitted owner; no reruns or unscorable routing; every owning state_dir is present and every owning row records host_load_flagged.",
+        "R1/R2 routing integrity -> PASS: A=0/10, B=0/10, C=0/10 routing misses; no arm exceeds the >10% evidence-integrity threshold.",
+        "R1/R2 analyzer -> PASS: 30/30 state directories analyzed with the frozen corrected analyzer; 30/30 same-prompt, 0 interrupted, 0 premature handoff, 1 failed trial state, 3 host-load flags.",
+        "D9 timing provenance -> PASS: 20/30 owners already use conversation_final_assistant_timestamp; bounded one-shot read_chat.py recovery was attempted for all 10 still-live poll-observed chats and each timed out at 30 s; all 10 remain explicitly observed and are listed in the checkpoint.",
+        "python3 /tmp/p36-manager/verify-r12.py -> PASS: 30 deterministic evidence archives, 416 source files, normalized source-manifest SHA-256 b36db72b69392d863401faaa452992077ab3ae45661b8dd3bbb1ef990e0030f1.",
+        "uv run pytest -q tests/scripts/test_chat_scheduling_confirmatory.py tests/scripts/test_chat_scheduling_analyzer.py -> PASS: 21 passed in 1.95s; nproc=4; pre-run loadavg=0.48 0.62 2.15 under foreign parallel-programme load."
+      ],
+      "notes": [
+        "Frozen R1/R2 checkpoint: benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-R1-R2-checkpoint.json SHA-256 bf8bdc772fe586cef3bd893df44144f126d891357d81b9002e921798a4da292b; Markdown SHA-256 2eb4a88855ef9692af7805c9e675ecf4123c281ba8efc89ac317477de5095c2e.",
+        "Frozen R1/R2 source-file tree SHA-256 b36db72b69392d863401faaa452992077ab3ae45661b8dd3bbb1ef990e0030f1 across 416 files, preserved byte-for-byte in 30 deterministic tar.gz archives under benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-evidence/R1-R2/.",
+        "Attempt a1 blocker was corrected by the manager: the original R2-r04-A row had no state directory and no submission, so it is now pre_submit_failure and non-owning. The same frozen slot was resubmitted once; this is not an outcome rerun because no first submission existed.",
+        "The submitted R2-r04-A resubmission owns the slot with runner exit 1 and trial status failed, provenance_classification=other_submitted_error. Its chat completed and the frozen analyzer reports same-prompt completion=true. The end-check error was production invariant changed during benchmark: status; only an unrelated untracked docs/lsp-development-intelligence-design-2026-09-27.md disappeared while HEAD, config SHA-256, unit SHA-256, ActiveState and SubState stayed unchanged. The manager attributed the disappearance to a concurrent non-benchmark session moving its document to /home/grammy-jiang/Projects/binnacle-lsp-development-intelligence. No resubmission was made after this submitted outcome.",
+        "No endpoint, Project, production config/service, lane worktree, or non-R1/R2 confirmatory slot was mutated or rerun."
+      ],
       "commit": null,
       "worker_branch": null
     },
@@ -1198,6 +1211,35 @@
       },
       "pre_submit_failure_count": 0,
       "routing_resubmission_count": 0,
+      "evidence_archive_count": 30
+    },
+    {
+      "kind": "confirmatory_partition_checkpoint",
+      "at": "2026-09-27T01:19:29+10:00",
+      "task_id": "4.9.1",
+      "partition": "R1/R2",
+      "schedule_sha256": "516938320afdf9dade5e03b8262a9e6ef9c95ad5d0330c20d1ce23d0ec68e734",
+      "checkpoint_path": "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-R1-R2-checkpoint.json",
+      "checkpoint_sha256": "bf8bdc772fe586cef3bd893df44144f126d891357d81b9002e921798a4da292b",
+      "checkpoint_md_path": "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-R1-R2-checkpoint.md",
+      "checkpoint_md_sha256": "2eb4a88855ef9692af7805c9e675ecf4123c281ba8efc89ac317477de5095c2e",
+      "evidence_root": "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-evidence/R1-R2",
+      "evidence_file_count": 416,
+      "evidence_tree_sha256": "b36db72b69392d863401faaa452992077ab3ae45661b8dd3bbb1ef990e0030f1",
+      "routing_miss_rates": {
+        "A": "0/10 (0%)",
+        "B": "0/10 (0%)",
+        "C": "0/10 (0%)"
+      },
+      "timing_recovery": {
+        "already_conversation_timestamp": 20,
+        "recomputed": 0,
+        "stayed_observed": 10
+      },
+      "pre_submit_failure_count": 1,
+      "pre_submit_resubmission_count": 1,
+      "routing_resubmission_count": 0,
+      "submitted_error_count": 1,
       "evidence_archive_count": 30
     }
   ],
