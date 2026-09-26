@@ -79,7 +79,8 @@
     "phase4_p4a6_analysis_repair_head": "0df91ce582f0c987f3c13fdc17385f7a4a7c2a62",
     "phase4_4c_review_fanin_head": "7ad86bc0f7dab83229c908e24c498c6b4218fb16",
     "phase4_hard_gate_matrix_head": "9466d5078db2875e7f5141fdf74d525d9704e7ac",
-    "phase4_go_no_go_head": "f5093ae613c4627639f04bacc51219a50ebdee2c"
+    "phase4_go_no_go_head": "f5093ae613c4627639f04bacc51219a50ebdee2c",
+    "phase4_final_evidence_head": "5922138d1a9155c0266d0d4a7a764f6051c2b363"
   },
   "frozen_hashes": {
     "phase3_progress_json": "984ba7891843a6eb3a15b750e95177d3a325f14280990f47be62527d44482bde",
@@ -790,7 +791,8 @@
         "H comparator verification -> PASS: JSON 13f1fae101ccf9de63b7c45ed593b4827ba8df4cd7a7943079ec214d812eecb7; Markdown 25345d3d5567878ef226d13d11d820357bf55eec8d9930402dd0bbd10de06b51; H routing integrity PASS.",
         "Optimized full suite -> PASS under test-isolated config: parallel-safe 1324 passed, 3 skipped; ordinary-process 2 passed, 1327 deselected; 32.88s; nproc=4; pre-run loadavg 0.49/0.61/0.72.",
         "Production isolation -> PASS after cleanup: production clean at cbafe8aff48ac1c0e518b34b6a4f54f62f162864; services active; blocking-wall budget key absent; primary tunnel profile unchanged.",
-        "Endpoint cleanup -> PASS: A/B/C300/H stopped; endpoint registry empty; ports 8110/8111/8113/8115 closed; evidence retained."
+        "Endpoint cleanup -> PASS: A/B/C300/H stopped; endpoint registry empty; ports 8110/8111/8113/8115 closed; evidence retained.",
+        "Pre-commit on final report/progress evidence set -> PASS; git diff --check -> PASS."
       ],
       "notes": [
         "Final canonical report is phase4-live-confirmatory-2026-09-27-r01.{json,md}; canonical runbook filename is used instead of the assignment shorthand phase4-confirmatory-*.",
@@ -799,9 +801,10 @@
         "Routing misses in the final C-gate evidence: A 1/54 (1.8519%), B 0/53, C 0/53. H diagnostic routing: 0/10.",
         "P4-A6 timing addenda are authoritative; five trials remain explicitly poll-observed: R5-r03-C, R6-r01-C, R6-r02-C, R7-r02-C, R12-r01-C.",
         "Initial full-suite run inherited the staging connector config whose jobs.owner=manager and produced 55 integration failures. Rerun changed only BINNACLE_CONFIG_FILE to an absent test path, restoring repository default embedded mode; test selection, seed and workers were unchanged.",
-        "CI waiting is intentionally delegated to the task manager by the assignment procedure; handoff CI fields remain pending until manager observation."
+        "CI waiting is intentionally delegated to the task manager by the assignment procedure; handoff CI fields remain pending until manager observation.",
+        "Validated evidence commit frozen at 5922138d1a9155c0266d0d4a7a764f6051c2b363; CI run id/head/conclusion are intentionally pending manager observation under the assignment one-push --no-wait workflow."
       ],
-      "commit": null,
+      "commit": "5922138d1a9155c0266d0d4a7a764f6051c2b363",
       "worker_branch": null
     },
     "4.3A-fix": {
@@ -1495,7 +1498,7 @@
     "historical_comparator_md_path": "benchmarks/chat-mode-scheduling-v2/phase4-historical-comparator.md",
     "historical_comparator_md_sha256": "25345d3d5567878ef226d13d11d820357bf55eec8d9930402dd0bbd10de06b51",
     "h_status": "complete",
-    "validated_evidence_commit": null,
+    "validated_evidence_commit": "5922138d1a9155c0266d0d4a7a764f6051c2b363",
     "validated_ci_run_id": null,
     "validated_ci_head_sha": null,
     "validated_ci_conclusion": null,

@@ -61,7 +61,7 @@ Next step: **Phase 4 closed with NO_GO_PERFORMANCE; Phase 5 is not ready. CI obs
 | 4.11 | complete | 20/26 required gates PASS; 6 FAIL; matrix frozen |
 | 4.12 | complete | NO_GO_PERFORMANCE; Phase 5 not ready |
 | 4H-R | complete | P4-A3 comparator frozen; H outcomes unchanged; selected C300 9/9 |
-| 4.13 | complete | final report frozen; validation and endpoint cleanup PASS |
+| 4.13 | complete | evidence `5922138`; validation and endpoint cleanup PASS |
 
 ### Dynamic lane manifest freezes
 
@@ -908,3 +908,5 @@ but Phase 5 is not ready.
 - Per the assignment's one-push `--no-wait` procedure, CI observation is delegated
   to the task manager. No CI run id or success conclusion is fabricated into the
   repository; a red run is routed to a follow-up task.
+
+Closeout evidence commit: `5922138d1a9155c0266d0d4a7a764f6051c2b363`. CI run/head/conclusion remain pending task-manager observation under the assignment one-push `--no-wait` workflow.
