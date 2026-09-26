@@ -1,0 +1,1553 @@
+{
+  "a1_blocker_resolution": [
+    {
+      "a1_status": "BLOCKING",
+      "a2_status": "RESOLVED",
+      "evidence": "P4-A6 D10b adds failed_after_submission to _submitted(); the frozen owner R7-r02-B remains retained and the re-run analyzer reports 160/160 submitted and scorable main slots.",
+      "id": "frozen_analyzer_submission_status_incompatibility"
+    },
+    {
+      "a1_status": "BLOCKING",
+      "a2_status": "RESOLVED",
+      "evidence": "a2 packet and current planning worktree both pin runbook SHA-256 4b6ca10e642ec760c9b16bbf8f0af2cdd494211623307ca046e42b85fd91eb43.",
+      "id": "assignment_runbook_hash_mismatch"
+    }
+  ],
+  "a1_metric_comparison": {
+    "avoidable_blocking_wall_p90_c_s": 0.0,
+    "duplicate_calls_a": 0,
+    "duplicate_calls_c": 0,
+    "eligible_overlap_ratio_c": 0.534783,
+    "long_job_status_calls_a": 52,
+    "long_job_status_calls_c": 53,
+    "status": "UNCHANGED_FOR_FOCUS_METRICS",
+    "tool_result_tokens_a": 46159,
+    "tool_result_tokens_c": 46131
+  },
+  "aggregate_by_arm": {
+    "A": {
+      "canonical_slots": 53,
+      "duplicate_calls_total": 0,
+      "eligible_overlap_ratio": 0.495652,
+      "eligible_read_only_calls": 230,
+      "job_status_calls_total": 52,
+      "job_status_result_tokens_total": 10166,
+      "overlapped_eligible_read_only_calls": 114,
+      "redundant_exact_calls_total": 14,
+      "routing_miss_rate": 0.018519,
+      "routing_misses": 1,
+      "routing_submissions": 54,
+      "tool_result_bytes_total": 185034,
+      "tool_result_tokens_total": 46159
+    },
+    "B": {
+      "canonical_slots": 53,
+      "duplicate_calls_total": 0,
+      "eligible_overlap_ratio": 0.443478,
+      "eligible_read_only_calls": 230,
+      "job_status_calls_total": 52,
+      "job_status_result_tokens_total": 10163,
+      "overlapped_eligible_read_only_calls": 102,
+      "redundant_exact_calls_total": 14,
+      "routing_miss_rate": 0.0,
+      "routing_misses": 0,
+      "routing_submissions": 53,
+      "tool_result_bytes_total": 184977,
+      "tool_result_tokens_total": 46145
+    },
+    "C": {
+      "canonical_slots": 53,
+      "duplicate_calls_total": 0,
+      "eligible_overlap_ratio": 0.534783,
+      "eligible_read_only_calls": 230,
+      "job_status_calls_total": 53,
+      "job_status_result_tokens_total": 10576,
+      "overlapped_eligible_read_only_calls": 123,
+      "redundant_exact_calls_total": 14,
+      "routing_miss_rate": 0.0,
+      "routing_misses": 0,
+      "routing_submissions": 53,
+      "tool_result_bytes_total": 184886,
+      "tool_result_tokens_total": 46131
+    }
+  },
+  "base_commit": "9af889cafad774d7c0db530775e1df0191d95495",
+  "blockers": [],
+  "deviations": [
+    {
+      "id": "D2",
+      "note": "production shadow-predictor drift is outside frozen Phase-4 source; observation baseline config SHA-256 d24dadcc87e04096fdd960fc7d1543fca02ea53814b15ccd51fd9b1eb1153195",
+      "status": "accepted_inherited"
+    },
+    {
+      "id": "P4-A2",
+      "note": "routing misses excluded; R9-r03-A routing-miss attempt does not own the slot",
+      "status": "applied"
+    },
+    {
+      "id": "D9",
+      "note": "79 macro slots recovered to conversation_final_assistant_timestamp after checkpoint freeze; four macro C slots remain observed-time and are listed explicitly",
+      "status": "applied"
+    },
+    {
+      "id": "P4-A6/D10",
+      "note": "population now comes from the six frozen checkpoint owner lists plus reused R12; failed_after_submission is submitted; timing addenda bind regenerated metrics/trace hashes to recovered wall times",
+      "status": "applied"
+    }
+  ],
+  "focus": "scheduling/guard/efficiency",
+  "gates": {
+    "avoidable_blocking_wall_p90_le_2s": {
+      "classification": "REQUIRED",
+      "maximum_s": 2.0,
+      "passed": true,
+      "value_s": 0.0
+    },
+    "duplicate_completed_reads_no_increase": {
+      "a_duplicate_calls": 0,
+      "c_duplicate_calls": 0,
+      "classification": "REQUIRED",
+      "passed": true
+    },
+    "eligible_overlap_ratio_ge_80_percent": {
+      "classification": "REQUIRED",
+      "denominator": 230,
+      "minimum": 0.8,
+      "numerator": 123,
+      "passed": false,
+      "value": 0.534783
+    },
+    "exhausted_calls_nonblocking": {
+      "classification": "REQUIRED",
+      "evidence": {
+        "blocking_budget_exhausted": true,
+        "final_call_wait_effective_s": 0,
+        "final_call_wait_requested_s": 1,
+        "final_call_waited_s": 0.0,
+        "scenario": "R12"
+      },
+      "passed": true
+    },
+    "guard_overhead_p95_lt_1ms": {
+      "classification": "REQUIRED",
+      "maximum_ms": 1.0,
+      "passed": true,
+      "value_ms": 0.006445
+    },
+    "guard_overhead_p99_lt_2ms": {
+      "classification": "REQUIRED",
+      "maximum_ms": 2.0,
+      "passed": true,
+      "value_ms": 0.007259
+    },
+    "long_job_status_call_result_burden_reduction_ge_10_percent": {
+      "a_job_status_calls": 52,
+      "a_job_status_result_tokens": 10166,
+      "c_job_status_calls": 53,
+      "c_job_status_result_tokens": 10576,
+      "call_reduction_percent": -1.923077,
+      "classification": "DIAGNOSTIC_TARGET",
+      "minimum_percent": 10.0,
+      "passed": false,
+      "result_token_reduction_percent": -4.033051,
+      "scenarios": [
+        "R10",
+        "R3",
+        "R4",
+        "R5",
+        "R6",
+        "R7"
+      ]
+    },
+    "m2_m3_sliding_refill_demonstrated": {
+      "classification": "REQUIRED",
+      "evidence": {
+        "m2_min_overlap_ratio": 0.375,
+        "m2_min_read_only_peak_inflight": 3,
+        "m3_relations_true": "3/3",
+        "post_run_micro_correctness": "9/9"
+      },
+      "passed": true
+    },
+    "overlap_charged_once": {
+      "classification": "REQUIRED",
+      "evidence": "phase2 blocking-wall guard concurrency evidence; frozen guard source unchanged for Phase 4",
+      "passed": true
+    },
+    "repeated_wait_burden_reduction_ge_60_percent": {
+      "classification": "REQUIRED",
+      "definition": "b_repeat_per_turn_job_union",
+      "minimum_percent": 60.0,
+      "passed": true,
+      "value_percent": 63.448499
+    },
+    "tool_result_tokens_le_a_plus_5_percent": {
+      "a_total": 46159,
+      "c_a_ratio": 0.999393,
+      "c_total": 46131,
+      "classification": "REQUIRED",
+      "maximum_ratio": 1.05,
+      "passed": true
+    },
+    "union_blocking_wall_le_budget_plus_1s": {
+      "budget_s": 300,
+      "classification": "REQUIRED",
+      "maximum_observed_c_s": 299.003,
+      "maximum_s": 301.0,
+      "passed": true,
+      "r12_blocking_wall_s": 299.003
+    }
+  },
+  "inputs": {
+    "benchmarks/chat-mode-scheduling-v2/phase2-blocking-wall-guard-2026-09-24.json": "2548bb6bdcff0e2767eba4aea54f9168d27d10abc878bc34e29a8105e303a5d7",
+    "benchmarks/chat-mode-scheduling-v2/phase2-step11-guard-overhead-2026-09-24.json": "8052607553f0ac6bf92320288a8d7f81733fae0f4d72742531937f831408c94b",
+    "benchmarks/chat-mode-scheduling-v2/phase3-candidate-shortlist.json": "072556e60fb55f686d872bce4da004bc272e9162e32459f2dc276657faa0e094",
+    "benchmarks/chat-mode-scheduling-v2/phase3-policy-replay-2026-09-25-r02.json": "54e46772ba0a1ee06b2c4d92cf5a55036e8bedd106466e25916ff6fab5c1aaae",
+    "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-R1-R2-checkpoint.json": "bf8bdc772fe586cef3bd893df44144f126d891357d81b9002e921798a4da292b",
+    "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-R1-R2-timing-addendum.json": "042ebd866e134141fad41d37c9fabde017cd4eb084d5ef898664fafb39b1f4a8",
+    "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-R10-R11-checkpoint.json": "d7dbe437d1ca39c090bad760eecee647115a059f782aef39b5fb086414b3de14",
+    "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-R10-R11-timing-addendum.json": "73cf2c7fb65ae852977566d1938aef24330bf16be5bc433fddb2f59a7a5bb672",
+    "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-R3-R4-checkpoint.json": "6f1ac078cab68ecbbf2435e688e040ca0453992e411eb427624595ed43f17bdd",
+    "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-R3-R4-timing-addendum.json": "a900482a52f997432fd8b75356572c6d452e2349337a171bf60a40e6a130b295",
+    "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-R5-R6-checkpoint.json": "0938d4b6abc7cd5258591f46c142a28dde963e32dfe30ffc8ead1f4a78fcc589",
+    "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-R5-R6-timing-addendum.json": "82e12eefca1fe11eb07470548ba50f6fa7140b073a8dcb92162e3e737a35effa",
+    "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-R7-checkpoint.json": "344e2b5f372e46dc80dab7df0166a86e58cf5624b358664d2d48bd3b8ffec63a",
+    "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-R7-timing-addendum.json": "b473d7c4c62982d3cff4e283d9f4f08a564cfac97aa0b410169bbdba0e9792ea",
+    "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-R8-R9-checkpoint.json": "f58ec042664049bb0df964c4a035f96d6378f82f45fe820e7af41718e44453c8",
+    "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-R8-R9-timing-addendum.json": "30cc571c8131534ce1ae0c1404954a17b8e69446f7ec54ade28e717613af939c",
+    "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-gate-aggregation-p4a6.json": "e76d9f78194ad6e8c5f1d7bc3489a4ecae3c2b071d6a3216dfb512e3729af56f",
+    "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-schedule.json": "516938320afdf9dade5e03b8262a9e6ef9c95ad5d0330c20d1ce23d0ec68e734",
+    "benchmarks/chat-mode-scheduling-v2/phase4-micro-sanity-2026-09-25-r01.json": "ff8f81d718e476df160d83149d72c99ecaee1e1a0774fd8c4df4434a117d7e22",
+    "scripts/chat_scheduling_confirmatory.py": "bc3ff37a4eec55cd605594ee4ba2eab829f35358687fb0c01d78724a51e9d5b1",
+    "scripts/chat_scheduling_confirmatory_population.py": "6fce7b64338919cdde720ec1c72e049500a539e36e58945bc8691f309dd9e355"
+  },
+  "long_job_burden": {
+    "by_arm": {
+      "A": {
+        "job_status_calls": 52,
+        "job_status_result_tokens": 10166,
+        "slots": 28
+      },
+      "C": {
+        "job_status_calls": 53,
+        "job_status_result_tokens": 10576,
+        "slots": 28
+      }
+    },
+    "call_reduction_percent_c_vs_a": -1.923077,
+    "definition": "canonical macro scenarios with job_status dependency work: R3,R4,R5,R6,R7,R10",
+    "result_token_reduction_percent_c_vs_a": -4.033051
+  },
+  "note": "Focus review only. No Phase-4 GO/NO-GO verdict is written here.",
+  "overall_verdict": null,
+  "partition_fragments": {
+    "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase4/review/scheduling-efficiency/R1-R2.json": "3621cacdfb35ae99d2d4f770e6e155917b042ed78e94333c735b7eb29dfb3433",
+    "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase4/review/scheduling-efficiency/R10-R11.json": "df13a504e2fc5cf494b469fe1522e68c59e586770d36fcc394fbfe59b4305d72",
+    "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase4/review/scheduling-efficiency/R3-R4.json": "0bbc0b1824f3ab56d1fbc72701853c8a4e9bec3427fa0b42819794b26015df69",
+    "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase4/review/scheduling-efficiency/R5-R6.json": "581e8c1b47523e17aafe9fa729d9815f31410ac5152a76f0ca2b2e28dfef4fd4",
+    "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase4/review/scheduling-efficiency/R7.json": "79d6275706cdb10c857409725f8a248787c06bf629533484d53c6128278038cb",
+    "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase4/review/scheduling-efficiency/R8-R9.json": "febca8af55f91ce5a49c0e5ce259a7a17907e0822065b029093a24c1cb79e3ae"
+  },
+  "partitions": [
+    {
+      "checkpoint_sha256": "bf8bdc772fe586cef3bd893df44144f126d891357d81b9002e921798a4da292b",
+      "fragment_sha256": "3621cacdfb35ae99d2d4f770e6e155917b042ed78e94333c735b7eb29dfb3433",
+      "metrics_by_arm": {
+        "A": {
+          "avoidable_idle_wall_p90_s": 0.0,
+          "blocking_wall_max_s": 0.0,
+          "canonical_slots": 10,
+          "duplicate_calls_total": 0,
+          "eligible_overlap_ratio": 0.6,
+          "eligible_read_only_calls": 80,
+          "job_status_calls_total": 0,
+          "job_status_result_tokens_total": 0,
+          "overlapped_eligible_read_only_calls": 48,
+          "positive_job_status_calls_total": 0,
+          "redundant_exact_calls_total": 0,
+          "tool_errors_total": 0,
+          "tool_result_bytes_total": 33255,
+          "tool_result_tokens_total": 8295
+        },
+        "B": {
+          "avoidable_idle_wall_p90_s": 0.0,
+          "blocking_wall_max_s": 0.0,
+          "canonical_slots": 10,
+          "duplicate_calls_total": 0,
+          "eligible_overlap_ratio": 0.5625,
+          "eligible_read_only_calls": 80,
+          "job_status_calls_total": 0,
+          "job_status_result_tokens_total": 0,
+          "overlapped_eligible_read_only_calls": 45,
+          "positive_job_status_calls_total": 0,
+          "redundant_exact_calls_total": 0,
+          "tool_errors_total": 0,
+          "tool_result_bytes_total": 33255,
+          "tool_result_tokens_total": 8295
+        },
+        "C": {
+          "avoidable_idle_wall_p90_s": 0.0,
+          "blocking_wall_max_s": 0.0,
+          "canonical_slots": 10,
+          "duplicate_calls_total": 0,
+          "eligible_overlap_ratio": 0.6125,
+          "eligible_read_only_calls": 80,
+          "job_status_calls_total": 0,
+          "job_status_result_tokens_total": 0,
+          "overlapped_eligible_read_only_calls": 49,
+          "positive_job_status_calls_total": 0,
+          "redundant_exact_calls_total": 0,
+          "tool_errors_total": 0,
+          "tool_result_bytes_total": 33255,
+          "tool_result_tokens_total": 8295
+        }
+      },
+      "partition": "R1/R2",
+      "payload_sha256": "44e60e3337ed52854097a0ffc752195564024e34ffb19a5a0461e099e9448042",
+      "recomputed_timing_slots": [
+        "R1-r01-C",
+        "R1-r03-A",
+        "R1-r03-B",
+        "R1-r05-A",
+        "R1-r05-B",
+        "R1-r05-C",
+        "R2-r02-B",
+        "R2-r02-C",
+        "R2-r03-A",
+        "R2-r04-A"
+      ],
+      "routing": {
+        "A": {
+          "pre_submit_failures": 1,
+          "rate": 0.0,
+          "routing_misses": 0,
+          "submitted_slots": 10
+        },
+        "B": {
+          "pre_submit_failures": 0,
+          "rate": 0.0,
+          "routing_misses": 0,
+          "submitted_slots": 10
+        },
+        "C": {
+          "pre_submit_failures": 0,
+          "rate": 0.0,
+          "routing_misses": 0,
+          "submitted_slots": 10
+        }
+      },
+      "stayed_observed_slots": [],
+      "timing_addendum_sha256": "042ebd866e134141fad41d37c9fabde017cd4eb084d5ef898664fafb39b1f4a8"
+    },
+    {
+      "checkpoint_sha256": "6f1ac078cab68ecbbf2435e688e040ca0453992e411eb427624595ed43f17bdd",
+      "fragment_sha256": "0bbc0b1824f3ab56d1fbc72701853c8a4e9bec3427fa0b42819794b26015df69",
+      "metrics_by_arm": {
+        "A": {
+          "avoidable_idle_wall_p90_s": 0.0,
+          "blocking_wall_max_s": 74.013,
+          "canonical_slots": 10,
+          "duplicate_calls_total": 0,
+          "eligible_overlap_ratio": 0.4125,
+          "eligible_read_only_calls": 80,
+          "job_status_calls_total": 15,
+          "job_status_result_tokens_total": 3005,
+          "overlapped_eligible_read_only_calls": 33,
+          "positive_job_status_calls_total": 15,
+          "redundant_exact_calls_total": 0,
+          "tool_errors_total": 0,
+          "tool_result_bytes_total": 55751,
+          "tool_result_tokens_total": 13925
+        },
+        "B": {
+          "avoidable_idle_wall_p90_s": 0.0,
+          "blocking_wall_max_s": 73.51,
+          "canonical_slots": 10,
+          "duplicate_calls_total": 0,
+          "eligible_overlap_ratio": 0.3875,
+          "eligible_read_only_calls": 80,
+          "job_status_calls_total": 15,
+          "job_status_result_tokens_total": 3005,
+          "overlapped_eligible_read_only_calls": 31,
+          "positive_job_status_calls_total": 15,
+          "redundant_exact_calls_total": 0,
+          "tool_errors_total": 0,
+          "tool_result_bytes_total": 55743,
+          "tool_result_tokens_total": 13925
+        },
+        "C": {
+          "avoidable_idle_wall_p90_s": 0.0,
+          "blocking_wall_max_s": 74.511,
+          "canonical_slots": 10,
+          "duplicate_calls_total": 0,
+          "eligible_overlap_ratio": 0.4625,
+          "eligible_read_only_calls": 80,
+          "job_status_calls_total": 15,
+          "job_status_result_tokens_total": 3056,
+          "overlapped_eligible_read_only_calls": 37,
+          "positive_job_status_calls_total": 15,
+          "redundant_exact_calls_total": 0,
+          "tool_errors_total": 0,
+          "tool_result_bytes_total": 56011,
+          "tool_result_tokens_total": 13993
+        }
+      },
+      "partition": "R3/R4",
+      "payload_sha256": "f228016d76fa85423b24f3c57da31d09c466ee467b9ec40df75ee7b6aa0ae3f2",
+      "recomputed_timing_slots": [
+        "R3-r02-A",
+        "R3-r02-B",
+        "R3-r03-B",
+        "R3-r03-C",
+        "R3-r04-B",
+        "R3-r05-A",
+        "R4-r01-A",
+        "R4-r01-B",
+        "R4-r01-C",
+        "R4-r02-A",
+        "R4-r02-B",
+        "R4-r02-C",
+        "R4-r03-B",
+        "R4-r03-C",
+        "R4-r04-A",
+        "R4-r04-C",
+        "R4-r05-A",
+        "R4-r05-B",
+        "R4-r05-C"
+      ],
+      "routing": {
+        "A": {
+          "pre_submit_failures": 1,
+          "rate": 0.0,
+          "routing_misses": 0,
+          "submitted_slots": 10
+        },
+        "B": {
+          "pre_submit_failures": 0,
+          "rate": 0.0,
+          "routing_misses": 0,
+          "submitted_slots": 10
+        },
+        "C": {
+          "pre_submit_failures": 0,
+          "rate": 0.0,
+          "routing_misses": 0,
+          "submitted_slots": 10
+        }
+      },
+      "stayed_observed_slots": [],
+      "timing_addendum_sha256": "a900482a52f997432fd8b75356572c6d452e2349337a171bf60a40e6a130b295"
+    },
+    {
+      "checkpoint_sha256": "0938d4b6abc7cd5258591f46c142a28dde963e32dfe30ffc8ead1f4a78fcc589",
+      "fragment_sha256": "581e8c1b47523e17aafe9fa729d9815f31410ac5152a76f0ca2b2e28dfef4fd4",
+      "metrics_by_arm": {
+        "A": {
+          "avoidable_idle_wall_p90_s": 0.0,
+          "blocking_wall_max_s": 84.024,
+          "canonical_slots": 10,
+          "duplicate_calls_total": 0,
+          "eligible_overlap_ratio": null,
+          "eligible_read_only_calls": 0,
+          "job_status_calls_total": 15,
+          "job_status_result_tokens_total": 2923,
+          "overlapped_eligible_read_only_calls": 0,
+          "positive_job_status_calls_total": 15,
+          "redundant_exact_calls_total": 0,
+          "tool_errors_total": 0,
+          "tool_result_bytes_total": 16145,
+          "tool_result_tokens_total": 4023
+        },
+        "B": {
+          "avoidable_idle_wall_p90_s": 0.0,
+          "blocking_wall_max_s": 84.521,
+          "canonical_slots": 10,
+          "duplicate_calls_total": 0,
+          "eligible_overlap_ratio": null,
+          "eligible_read_only_calls": 0,
+          "job_status_calls_total": 15,
+          "job_status_result_tokens_total": 2919,
+          "overlapped_eligible_read_only_calls": 0,
+          "positive_job_status_calls_total": 15,
+          "redundant_exact_calls_total": 0,
+          "tool_errors_total": 0,
+          "tool_result_bytes_total": 16133,
+          "tool_result_tokens_total": 4019
+        },
+        "C": {
+          "avoidable_idle_wall_p90_s": 0.0,
+          "blocking_wall_max_s": 84.028,
+          "canonical_slots": 10,
+          "duplicate_calls_total": 0,
+          "eligible_overlap_ratio": null,
+          "eligible_read_only_calls": 0,
+          "job_status_calls_total": 15,
+          "job_status_result_tokens_total": 2970,
+          "overlapped_eligible_read_only_calls": 0,
+          "positive_job_status_calls_total": 15,
+          "redundant_exact_calls_total": 0,
+          "tool_errors_total": 0,
+          "tool_result_bytes_total": 16358,
+          "tool_result_tokens_total": 4080
+        }
+      },
+      "partition": "R5/R6",
+      "payload_sha256": "dac8347415e174f8ea71b7960e7f0c70ac2c9139f8a5ddcd7ce52ebadb923293",
+      "recomputed_timing_slots": [
+        "R5-r01-B",
+        "R5-r04-A",
+        "R5-r04-C",
+        "R5-r05-A",
+        "R6-r01-A",
+        "R6-r02-A",
+        "R6-r02-B",
+        "R6-r03-A",
+        "R6-r04-B",
+        "R6-r04-C",
+        "R6-r05-A",
+        "R6-r05-B"
+      ],
+      "routing": {
+        "A": {
+          "rate": 0.0,
+          "routing_misses": 0,
+          "submitted_slots": 10
+        },
+        "B": {
+          "rate": 0.0,
+          "routing_misses": 0,
+          "submitted_slots": 10
+        },
+        "C": {
+          "rate": 0.0,
+          "routing_misses": 0,
+          "submitted_slots": 10
+        }
+      },
+      "stayed_observed_slots": [
+        "R5-r03-C",
+        "R6-r01-C",
+        "R6-r02-C"
+      ],
+      "timing_addendum_sha256": "82e12eefca1fe11eb07470548ba50f6fa7140b073a8dcb92162e3e737a35effa"
+    },
+    {
+      "checkpoint_sha256": "344e2b5f372e46dc80dab7df0166a86e58cf5624b358664d2d48bd3b8ffec63a",
+      "fragment_sha256": "79d6275706cdb10c857409725f8a248787c06bf629533484d53c6128278038cb",
+      "metrics_by_arm": {
+        "A": {
+          "avoidable_idle_wall_p90_s": 0.0,
+          "blocking_wall_max_s": 118.494,
+          "canonical_slots": 3,
+          "duplicate_calls_total": 0,
+          "eligible_overlap_ratio": null,
+          "eligible_read_only_calls": 0,
+          "job_status_calls_total": 12,
+          "job_status_result_tokens_total": 2436,
+          "overlapped_eligible_read_only_calls": 0,
+          "positive_job_status_calls_total": 12,
+          "redundant_exact_calls_total": 0,
+          "tool_errors_total": 0,
+          "tool_result_bytes_total": 12413,
+          "tool_result_tokens_total": 3096
+        },
+        "B": {
+          "avoidable_idle_wall_p90_s": 0.0,
+          "blocking_wall_max_s": 119.996,
+          "canonical_slots": 3,
+          "duplicate_calls_total": 0,
+          "eligible_overlap_ratio": null,
+          "eligible_read_only_calls": 0,
+          "job_status_calls_total": 12,
+          "job_status_result_tokens_total": 2436,
+          "overlapped_eligible_read_only_calls": 0,
+          "positive_job_status_calls_total": 12,
+          "redundant_exact_calls_total": 0,
+          "tool_errors_total": 0,
+          "tool_result_bytes_total": 12419,
+          "tool_result_tokens_total": 3096
+        },
+        "C": {
+          "avoidable_idle_wall_p90_s": 0.0,
+          "blocking_wall_max_s": 123.508,
+          "canonical_slots": 3,
+          "duplicate_calls_total": 0,
+          "eligible_overlap_ratio": null,
+          "eligible_read_only_calls": 0,
+          "job_status_calls_total": 13,
+          "job_status_result_tokens_total": 2707,
+          "overlapped_eligible_read_only_calls": 0,
+          "positive_job_status_calls_total": 13,
+          "redundant_exact_calls_total": 0,
+          "tool_errors_total": 0,
+          "tool_result_bytes_total": 13525,
+          "tool_result_tokens_total": 3373
+        }
+      },
+      "partition": "R7",
+      "payload_sha256": "7320ba80b9a62bc221fc5b028187efae4a2edd80abf5ffe9fdf23f174b205ae3",
+      "recomputed_timing_slots": [
+        "R7-r01-A",
+        "R7-r01-B"
+      ],
+      "routing": {
+        "A": {
+          "rate": 0.0,
+          "routing_misses": 0,
+          "submitted_slots": 3
+        },
+        "B": {
+          "rate": 0.0,
+          "routing_misses": 0,
+          "submitted_slots": 3
+        },
+        "C": {
+          "rate": 0.0,
+          "routing_misses": 0,
+          "source": "D6 retained-log recovery for reused C300 calibration rows",
+          "submitted_slots": 3
+        }
+      },
+      "stayed_observed_slots": [
+        "R7-r02-C"
+      ],
+      "timing_addendum_sha256": "b473d7c4c62982d3cff4e283d9f4f08a564cfac97aa0b410169bbdba0e9792ea"
+    },
+    {
+      "checkpoint_sha256": "f58ec042664049bb0df964c4a035f96d6378f82f45fe820e7af41718e44453c8",
+      "fragment_sha256": "febca8af55f91ce5a49c0e5ce259a7a17907e0822065b029093a24c1cb79e3ae",
+      "metrics_by_arm": {
+        "A": {
+          "avoidable_idle_wall_p90_s": 0.0,
+          "blocking_wall_max_s": 0.0,
+          "canonical_slots": 10,
+          "duplicate_calls_total": 0,
+          "eligible_overlap_ratio": 0.24,
+          "eligible_read_only_calls": 25,
+          "job_status_calls_total": 0,
+          "job_status_result_tokens_total": 0,
+          "overlapped_eligible_read_only_calls": 6,
+          "positive_job_status_calls_total": 0,
+          "redundant_exact_calls_total": 14,
+          "tool_errors_total": 0,
+          "tool_result_bytes_total": 32793,
+          "tool_result_tokens_total": 8172
+        },
+        "B": {
+          "avoidable_idle_wall_p90_s": 0.0,
+          "blocking_wall_max_s": 0.0,
+          "canonical_slots": 10,
+          "duplicate_calls_total": 0,
+          "eligible_overlap_ratio": 0.0,
+          "eligible_read_only_calls": 25,
+          "job_status_calls_total": 0,
+          "job_status_result_tokens_total": 0,
+          "overlapped_eligible_read_only_calls": 0,
+          "positive_job_status_calls_total": 0,
+          "redundant_exact_calls_total": 14,
+          "tool_errors_total": 0,
+          "tool_result_bytes_total": 32752,
+          "tool_result_tokens_total": 8161
+        },
+        "C": {
+          "avoidable_idle_wall_p90_s": 0.0,
+          "blocking_wall_max_s": 0.0,
+          "canonical_slots": 10,
+          "duplicate_calls_total": 0,
+          "eligible_overlap_ratio": 0.32,
+          "eligible_read_only_calls": 25,
+          "job_status_calls_total": 0,
+          "job_status_result_tokens_total": 0,
+          "overlapped_eligible_read_only_calls": 8,
+          "positive_job_status_calls_total": 0,
+          "redundant_exact_calls_total": 14,
+          "tool_errors_total": 0,
+          "tool_result_bytes_total": 31341,
+          "tool_result_tokens_total": 7812
+        }
+      },
+      "partition": "R8/R9",
+      "payload_sha256": "e3cfa1fa44c6988e4a2550ae68694e4dda8b8ca9f185bc8f0fc1639c17ae620d",
+      "recomputed_timing_slots": [
+        "R8-r01-A",
+        "R8-r01-B",
+        "R8-r02-B",
+        "R8-r02-C",
+        "R8-r03-C",
+        "R8-r04-A",
+        "R8-r04-B",
+        "R8-r04-C",
+        "R8-r05-A",
+        "R8-r05-B",
+        "R8-r05-C",
+        "R9-r01-A",
+        "R9-r01-B",
+        "R9-r01-C",
+        "R9-r02-A",
+        "R9-r02-C",
+        "R9-r03-B",
+        "R9-r03-C",
+        "R9-r04-A",
+        "R9-r04-B",
+        "R9-r04-C",
+        "R9-r05-A",
+        "R9-r05-C"
+      ],
+      "routing": {
+        "A": {
+          "note": "R9-r03-A attempt 1 first failed before submission, then a correctly detected production routing miss (8 production calls) did not own the slot; attempt 2 was the first correctly routed submission and owns the slot.",
+          "pre_submit_failures": 1,
+          "rate": 0.09090909090909091,
+          "routing_misses": 1,
+          "submitted_slots": 11
+        },
+        "B": {
+          "pre_submit_failures": 0,
+          "rate": 0.0,
+          "routing_misses": 0,
+          "submitted_slots": 10
+        },
+        "C": {
+          "pre_submit_failures": 0,
+          "rate": 0.0,
+          "routing_misses": 0,
+          "submitted_slots": 10
+        }
+      },
+      "stayed_observed_slots": [],
+      "timing_addendum_sha256": "30cc571c8131534ce1ae0c1404954a17b8e69446f7ec54ade28e717613af939c"
+    },
+    {
+      "checkpoint_sha256": "d7dbe437d1ca39c090bad760eecee647115a059f782aef39b5fb086414b3de14",
+      "fragment_sha256": "df13a504e2fc5cf494b469fe1522e68c59e586770d36fcc394fbfe59b4305d72",
+      "metrics_by_arm": {
+        "A": {
+          "avoidable_idle_wall_p90_s": 0.0,
+          "blocking_wall_max_s": 83.522,
+          "canonical_slots": 10,
+          "duplicate_calls_total": 0,
+          "eligible_overlap_ratio": 0.6,
+          "eligible_read_only_calls": 45,
+          "job_status_calls_total": 10,
+          "job_status_result_tokens_total": 1802,
+          "overlapped_eligible_read_only_calls": 27,
+          "positive_job_status_calls_total": 10,
+          "redundant_exact_calls_total": 0,
+          "tool_errors_total": 0,
+          "tool_result_bytes_total": 34677,
+          "tool_result_tokens_total": 8648
+        },
+        "B": {
+          "avoidable_idle_wall_p90_s": 0.0,
+          "blocking_wall_max_s": 82.524,
+          "canonical_slots": 10,
+          "duplicate_calls_total": 0,
+          "eligible_overlap_ratio": 0.577778,
+          "eligible_read_only_calls": 45,
+          "job_status_calls_total": 10,
+          "job_status_result_tokens_total": 1803,
+          "overlapped_eligible_read_only_calls": 26,
+          "positive_job_status_calls_total": 10,
+          "redundant_exact_calls_total": 0,
+          "tool_errors_total": 0,
+          "tool_result_bytes_total": 34675,
+          "tool_result_tokens_total": 8649
+        },
+        "C": {
+          "avoidable_idle_wall_p90_s": 0.0,
+          "blocking_wall_max_s": 83.018,
+          "canonical_slots": 10,
+          "duplicate_calls_total": 0,
+          "eligible_overlap_ratio": 0.644444,
+          "eligible_read_only_calls": 45,
+          "job_status_calls_total": 10,
+          "job_status_result_tokens_total": 1843,
+          "overlapped_eligible_read_only_calls": 29,
+          "positive_job_status_calls_total": 10,
+          "redundant_exact_calls_total": 0,
+          "tool_errors_total": 0,
+          "tool_result_bytes_total": 34396,
+          "tool_result_tokens_total": 8578
+        }
+      },
+      "partition": "R10/R11",
+      "payload_sha256": "316f9657fb42e95f567dd65cbc8697a03d737d06ae18449d38cadb6d4870df8a",
+      "recomputed_timing_slots": [
+        "R10-r01-A",
+        "R10-r01-B",
+        "R10-r01-C",
+        "R10-r02-A",
+        "R10-r02-B",
+        "R10-r02-C",
+        "R10-r04-A",
+        "R10-r04-B",
+        "R10-r04-C",
+        "R11-r01-B",
+        "R11-r05-A",
+        "R11-r05-B",
+        "R11-r05-C"
+      ],
+      "routing": {
+        "A": {
+          "pre_submit_failures": 0,
+          "rate": 0.0,
+          "routing_misses": 0,
+          "submitted_slots": 10
+        },
+        "B": {
+          "pre_submit_failures": 0,
+          "rate": 0.0,
+          "routing_misses": 0,
+          "submitted_slots": 10
+        },
+        "C": {
+          "pre_submit_failures": 0,
+          "rate": 0.0,
+          "routing_misses": 0,
+          "submitted_slots": 10
+        }
+      },
+      "stayed_observed_slots": [],
+      "timing_addendum_sha256": "73cf2c7fb65ae852977566d1938aef24330bf16be5bc433fddb2f59a7a5bb672"
+    }
+  ],
+  "phase4_source_head": "06bc1649c4bad9449470366da971649bb7620020",
+  "r12_guard_evidence": {
+    "blocking_wall_s": 299.003,
+    "budget_exhaustion_handoff": true,
+    "budget_s": 300,
+    "correctness_passed": true,
+    "final_exhausted_call": {
+      "blocking_budget_exhausted": true,
+      "wait_effective_s": 0,
+      "wait_requested_s": 1,
+      "waited_s": 0.0
+    },
+    "run_id": "r12-20260926T020504-5d723b73e5"
+  },
+  "report_kind": "phase4-review-scheduling-efficiency",
+  "routing_integrity": {
+    "by_arm": {
+      "A": {
+        "rate": 0.018519,
+        "routing_misses": 1,
+        "submitted_slots": 54
+      },
+      "B": {
+        "rate": 0.0,
+        "routing_misses": 0,
+        "submitted_slots": 53
+      },
+      "C": {
+        "rate": 0.0,
+        "routing_misses": 0,
+        "submitted_slots": 53
+      }
+    },
+    "production_routing_incidents": [
+      {
+        "disposition": "routing miss excluded; correctly routed attempt 2 owns slot; non-mutating isolation incident",
+        "production_calls": 8,
+        "slot_id": "R9-r03-A"
+      }
+    ],
+    "threshold": 0.1
+  },
+  "schema_version": 1,
+  "selected_budget_s": 300,
+  "selected_c_endpoint": "C300",
+  "task_id": "4C:scheduling-efficiency",
+  "timing_recovery": {
+    "macro_recomputed": [
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R1/R2",
+        "run_id": "r1-20260926T232128-6390f9871b",
+        "slot_id": "R1-r01-C",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r1-20260926T232128-6390f9871b"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R1/R2",
+        "run_id": "r1-20260926T203729-8abe9e86ac",
+        "slot_id": "R1-r03-A",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r1-20260926T203729-8abe9e86ac"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R1/R2",
+        "run_id": "r1-20260926T203525-6ee550efc2",
+        "slot_id": "R1-r03-B",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r1-20260926T203525-6ee550efc2"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R1/R2",
+        "run_id": "r1-20260926T205656-617f5b0e7c",
+        "slot_id": "R1-r05-A",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r1-20260926T205656-617f5b0e7c"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R1/R2",
+        "run_id": "r1-20260926T205837-a6adfedbc7",
+        "slot_id": "R1-r05-B",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r1-20260926T205837-a6adfedbc7"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R1/R2",
+        "run_id": "r1-20260926T210029-8045d731db",
+        "slot_id": "R1-r05-C",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r1-20260926T210029-8045d731db"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R1/R2",
+        "run_id": "r2-20260926T205130-8876637d74",
+        "slot_id": "R2-r02-B",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r2-20260926T205130-8876637d74"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R1/R2",
+        "run_id": "r2-20260926T205244-0ba07f1e5d",
+        "slot_id": "R2-r02-C",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r2-20260926T205244-0ba07f1e5d"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R1/R2",
+        "run_id": "r2-20260926T221656-22d7f01d6f",
+        "slot_id": "R2-r03-A",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r2-20260926T221656-22d7f01d6f"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R1/R2",
+        "run_id": "r2-20260927T003210-7c2132fad3",
+        "slot_id": "R2-r04-A",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r2-20260927T003210-7c2132fad3"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R3/R4",
+        "run_id": "r3-20260926T214500-5a03f81a00",
+        "slot_id": "R3-r02-A",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r3-20260926T214500-5a03f81a00"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R3/R4",
+        "run_id": "r3-20260926T214642-5ebcd84104",
+        "slot_id": "R3-r02-B",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r3-20260926T214642-5ebcd84104"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R3/R4",
+        "run_id": "r3-20260926T230442-fe3705276a",
+        "slot_id": "R3-r03-B",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r3-20260926T230442-fe3705276a"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R3/R4",
+        "run_id": "r3-20260926T230256-0cc9d192de",
+        "slot_id": "R3-r03-C",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r3-20260926T230256-0cc9d192de"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R3/R4",
+        "run_id": "r3-20260926T191952-841fbe993f",
+        "slot_id": "R3-r04-B",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r3-20260926T191952-841fbe993f"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R3/R4",
+        "run_id": "r3-20260926T195201-fefc5ce1bd",
+        "slot_id": "R3-r05-A",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r3-20260926T195201-fefc5ce1bd"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R3/R4",
+        "run_id": "r4-20260926T174331-52f9ca9835",
+        "slot_id": "R4-r01-A",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r4-20260926T174331-52f9ca9835"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R3/R4",
+        "run_id": "r4-20260926T173333-32be35d755",
+        "slot_id": "R4-r01-B",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r4-20260926T173333-32be35d755"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R3/R4",
+        "run_id": "r4-20260926T173658-4c0f611091",
+        "slot_id": "R4-r01-C",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r4-20260926T173658-4c0f611091"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R3/R4",
+        "run_id": "r4-20260926T220228-61f5d422e3",
+        "slot_id": "R4-r02-A",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r4-20260926T220228-61f5d422e3"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R3/R4",
+        "run_id": "r4-20260926T215658-b07da72b14",
+        "slot_id": "R4-r02-B",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r4-20260926T215658-b07da72b14"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R3/R4",
+        "run_id": "r4-20260926T215940-934717f21a",
+        "slot_id": "R4-r02-C",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r4-20260926T215940-934717f21a"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R3/R4",
+        "run_id": "r4-20260926T224526-8d9ea11bf6",
+        "slot_id": "R4-r03-B",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r4-20260926T224526-8d9ea11bf6"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R3/R4",
+        "run_id": "r4-20260926T225056-cb4bc539d3",
+        "slot_id": "R4-r03-C",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r4-20260926T225056-cb4bc539d3"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R3/R4",
+        "run_id": "r4-20260926T170143-1203fcbcca",
+        "slot_id": "R4-r04-A",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r4-20260926T170143-1203fcbcca"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R3/R4",
+        "run_id": "r4-20260926T165830-b01ee98fd3",
+        "slot_id": "R4-r04-C",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r4-20260926T165830-b01ee98fd3"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R3/R4",
+        "run_id": "r4-20260926T231235-7ff3c866ac",
+        "slot_id": "R4-r05-A",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r4-20260926T231235-7ff3c866ac"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R3/R4",
+        "run_id": "r4-20260926T231827-e372a9e8f8",
+        "slot_id": "R4-r05-B",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r4-20260926T231827-e372a9e8f8"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R3/R4",
+        "run_id": "r4-20260926T231532-bdefeb0234",
+        "slot_id": "R4-r05-C",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r4-20260926T231532-bdefeb0234"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R5/R6",
+        "run_id": "r5-20260926T190946-e6cc605c99",
+        "slot_id": "R5-r01-B",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r5-20260926T190946-e6cc605c99"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R5/R6",
+        "run_id": "r5-20260926T231038-7f1c642969",
+        "slot_id": "R5-r04-A",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r5-20260926T231038-7f1c642969"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R5/R6",
+        "run_id": "r5-20260926T230857-d085096042",
+        "slot_id": "R5-r04-C",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r5-20260926T230857-d085096042"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R5/R6",
+        "run_id": "r5-20260926T193900-f171fb5412",
+        "slot_id": "R5-r05-A",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r5-20260926T193900-f171fb5412"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R5/R6",
+        "run_id": "r6-20260926T200405-849aff78d2",
+        "slot_id": "R6-r01-A",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r6-20260926T200405-849aff78d2"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R5/R6",
+        "run_id": "r6-20260926T234127-a2b52ceb93",
+        "slot_id": "R6-r02-A",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r6-20260926T234127-a2b52ceb93"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R5/R6",
+        "run_id": "r6-20260926T233833-69d6ae63c0",
+        "slot_id": "R6-r02-B",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r6-20260926T233833-69d6ae63c0"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R5/R6",
+        "run_id": "r6-20260926T223603-40ca551ab7",
+        "slot_id": "R6-r03-A",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r6-20260926T223603-40ca551ab7"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R5/R6",
+        "run_id": "r6-20260926T193256-156a9d2f3e",
+        "slot_id": "R6-r04-B",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r6-20260926T193256-156a9d2f3e"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R5/R6",
+        "run_id": "r6-20260926T192727-e12075f8c6",
+        "slot_id": "R6-r04-C",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r6-20260926T192727-e12075f8c6"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R5/R6",
+        "run_id": "r6-20260926T202954-f42c537d09",
+        "slot_id": "R6-r05-A",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r6-20260926T202954-f42c537d09"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R5/R6",
+        "run_id": "r6-20260926T203231-0bceaf425e",
+        "slot_id": "R6-r05-B",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r6-20260926T203231-0bceaf425e"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R7",
+        "run_id": "r7-20260926T181657-83b81b3556",
+        "slot_id": "R7-r01-A",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r7-20260926T181657-83b81b3556"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R7",
+        "run_id": "r7-20260926T182033-09141708b5",
+        "slot_id": "R7-r01-B",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r7-20260926T182033-09141708b5"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R8/R9",
+        "run_id": "r8-20260926T185958-f1a56adbf8",
+        "slot_id": "R8-r01-A",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r8-20260926T185958-f1a56adbf8"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R8/R9",
+        "run_id": "r8-20260926T185329-13bfd189f0",
+        "slot_id": "R8-r01-B",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r8-20260926T185329-13bfd189f0"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R8/R9",
+        "run_id": "r8-20260926T175139-e7cc4d893c",
+        "slot_id": "R8-r02-B",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r8-20260926T175139-e7cc4d893c"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R8/R9",
+        "run_id": "r8-20260926T174957-87a5d299a2",
+        "slot_id": "R8-r02-C",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r8-20260926T174957-87a5d299a2"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R8/R9",
+        "run_id": "r8-20260926T214825-e33a94540d",
+        "slot_id": "R8-r03-C",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r8-20260926T214825-e33a94540d"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R8/R9",
+        "run_id": "r8-20260926T224126-3ebfc36216",
+        "slot_id": "R8-r04-A",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r8-20260926T224126-3ebfc36216"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R8/R9",
+        "run_id": "r8-20260926T223928-5398cde99e",
+        "slot_id": "R8-r04-B",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r8-20260926T223928-5398cde99e"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R8/R9",
+        "run_id": "r8-20260926T224330-e5a3d07fae",
+        "slot_id": "R8-r04-C",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r8-20260926T224330-e5a3d07fae"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R8/R9",
+        "run_id": "r8-20260926T213243-6fc24b6480",
+        "slot_id": "R8-r05-A",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r8-20260926T213243-6fc24b6480"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R8/R9",
+        "run_id": "r8-20260926T212856-d9857d7de6",
+        "slot_id": "R8-r05-B",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r8-20260926T212856-d9857d7de6"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R8/R9",
+        "run_id": "r8-20260926T213042-5e27c27b63",
+        "slot_id": "R8-r05-C",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r8-20260926T213042-5e27c27b63"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R8/R9",
+        "run_id": "r9-20260926T214029-bcbe900b68",
+        "slot_id": "R9-r01-A",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r9-20260926T214029-bcbe900b68"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R8/R9",
+        "run_id": "r9-20260926T213639-3066107040",
+        "slot_id": "R9-r01-B",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r9-20260926T213639-3066107040"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R8/R9",
+        "run_id": "r9-20260926T213444-7a34f53da1",
+        "slot_id": "R9-r01-C",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r9-20260926T213444-7a34f53da1"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R8/R9",
+        "run_id": "r9-20260926T192358-44dc6afbc0",
+        "slot_id": "R9-r02-A",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r9-20260926T192358-44dc6afbc0"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R8/R9",
+        "run_id": "r9-20260926T192535-b9bb574f29",
+        "slot_id": "R9-r02-C",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r9-20260926T192535-b9bb574f29"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R8/R9",
+        "run_id": "r9-20260926T182633-da25215d9d",
+        "slot_id": "R9-r03-B",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r9-20260926T182633-da25215d9d"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R8/R9",
+        "run_id": "r9-20260926T182427-ca17fa57f2",
+        "slot_id": "R9-r03-C",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r9-20260926T182427-ca17fa57f2"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R8/R9",
+        "run_id": "r9-20260926T171433-61c8f2f318",
+        "slot_id": "R9-r04-A",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r9-20260926T171433-61c8f2f318"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R8/R9",
+        "run_id": "r9-20260926T171156-9e2d3b4f55",
+        "slot_id": "R9-r04-B",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r9-20260926T171156-9e2d3b4f55"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R8/R9",
+        "run_id": "r9-20260926T171726-80b4d2f934",
+        "slot_id": "R9-r04-C",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r9-20260926T171726-80b4d2f934"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R8/R9",
+        "run_id": "r9-20260926T204735-b4486903fa",
+        "slot_id": "R9-r05-A",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r9-20260926T204735-b4486903fa"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R8/R9",
+        "run_id": "r9-20260926T204936-bd0aa28852",
+        "slot_id": "R9-r05-C",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r9-20260926T204936-bd0aa28852"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R10/R11",
+        "run_id": "r10-20260926T210827-42f18f9d43",
+        "slot_id": "R10-r01-A",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r10-20260926T210827-42f18f9d43"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R10/R11",
+        "run_id": "r10-20260926T210229-269635dd8d",
+        "slot_id": "R10-r01-B",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r10-20260926T210229-269635dd8d"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R10/R11",
+        "run_id": "r10-20260926T210529-fcd281e693",
+        "slot_id": "R10-r01-C",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r10-20260926T210529-fcd281e693"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R10/R11",
+        "run_id": "r10-20260926T220537-4a16a7a653",
+        "slot_id": "R10-r02-A",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r10-20260926T220537-4a16a7a653"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R10/R11",
+        "run_id": "r10-20260926T221136-cc88039020",
+        "slot_id": "R10-r02-B",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r10-20260926T221136-cc88039020"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R10/R11",
+        "run_id": "r10-20260926T220841-c79ce8945b",
+        "slot_id": "R10-r02-C",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r10-20260926T220841-c79ce8945b"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R10/R11",
+        "run_id": "r10-20260926T233046-eab06ceb13",
+        "slot_id": "R10-r04-A",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r10-20260926T233046-eab06ceb13"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R10/R11",
+        "run_id": "r10-20260926T232759-d4a5465607",
+        "slot_id": "R10-r04-B",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r10-20260926T232759-d4a5465607"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R10/R11",
+        "run_id": "r10-20260926T233448-cd6f149f35",
+        "slot_id": "R10-r04-C",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r10-20260926T233448-cd6f149f35"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R10/R11",
+        "run_id": "r11-20260926T222300-e24c838366",
+        "slot_id": "R11-r01-B",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r11-20260926T222300-e24c838366"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R10/R11",
+        "run_id": "r11-20260926T211127-0d064f8436",
+        "slot_id": "R11-r05-A",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r11-20260926T211127-0d064f8436"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R10/R11",
+        "run_id": "r11-20260926T211524-0f5885a101",
+        "slot_id": "R11-r05-B",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r11-20260926T211524-0f5885a101"
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": "conversation_final_assistant_timestamp",
+        "partition": "R10/R11",
+        "run_id": "r11-20260926T211327-11e5aba83b",
+        "slot_id": "R11-r05-C",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r11-20260926T211327-11e5aba83b"
+      }
+    ],
+    "macro_recomputed_count": 79,
+    "macro_stayed_observed": [
+      {
+        "checkpoint_source": null,
+        "current_source": null,
+        "partition": "R5/R6",
+        "reason": "deferred cleanup could not save/delete retained chat; settle_time_source remains absent",
+        "run_id": "r5-20260926T011904-c834d991d6",
+        "slot_id": "R5-r03-C",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r5-20260926T011904-c834d991d6",
+        "wall_s": 40.268
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": null,
+        "partition": "R5/R6",
+        "reason": "deferred cleanup could not save/delete retained chat; settle_time_source remains absent",
+        "run_id": "r6-20260926T012431-17c772cd31",
+        "slot_id": "R6-r01-C",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r6-20260926T012431-17c772cd31",
+        "wall_s": 104.552
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": null,
+        "partition": "R5/R6",
+        "reason": "deferred cleanup could not save/delete retained chat; settle_time_source remains absent",
+        "run_id": "r6-20260926T012946-4ee162a667",
+        "slot_id": "R6-r02-C",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r6-20260926T012946-4ee162a667",
+        "wall_s": 108.399
+      },
+      {
+        "checkpoint_source": null,
+        "current_source": null,
+        "partition": "R7",
+        "reason": "deferred cleanup could not save/delete retained chat; settle_time_source remains absent",
+        "run_id": "r7-20260926T014904-e32fdb3f45",
+        "slot_id": "R7-r02-C",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r7-20260926T014904-e32fdb3f45",
+        "wall_s": 155.16
+      }
+    ],
+    "macro_stayed_observed_count": 4,
+    "r12": {
+      "conversation_saved": true,
+      "deleted": true,
+      "note": "safety-only calibration slot; excluded from macro performance timing; legacy chat-timing lacks settle_time_source",
+      "settle_time_source": null,
+      "slot_id": "R12-r01-C",
+      "wall_s": 347.819
+    }
+  },
+  "validation_blocker": {
+    "id": "frozen_analyzer_submission_status_incompatibility",
+    "resolved_by": "Amendment P4-A6 D10a/D10b/D10c",
+    "status": "RESOLVED"
+  }
+}
