@@ -63,6 +63,18 @@ def validated(mode: str, name: str, result) -> dict:
     return result.structured_content
 
 
+def array_schema(schema: dict) -> dict:
+    """The array member of a (possibly nested) anyOf: pydantic nests it one
+    level deeper on Python 3.10."""
+    if schema.get("type") == "array":
+        return schema
+    for member in schema.get("anyOf", []):
+        found = array_schema(member)
+        if found:
+            return found
+    return {}
+
+
 def fixture_files(tmp_path) -> list[dict]:
     good = tmp_path / "mod.py"
     good.write_text("def f():\n    return 1\n")
@@ -81,7 +93,7 @@ def fixture_files(tmp_path) -> list[dict]:
 
 def test_param_schema_offers_files_with_limits():
     t = tools("param")["read_file"]
-    files = t.input_schema["properties"]["files"]["anyOf"][0]
+    files = array_schema(t.input_schema["properties"]["files"])
     assert files["maxItems"] == rfs.MULTI_MAX_FILES and files["minItems"] == 1
     entry = files["items"]
     assert entry["additionalProperties"] is False and entry["required"] == ["path"]
