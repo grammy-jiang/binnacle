@@ -1,0 +1,2704 @@
+{
+  "blocks": [
+    {
+      "arm_order": [
+        "C",
+        "B",
+        "A"
+      ],
+      "block_id": "R10-r03",
+      "kind": "performance",
+      "parallel_block_lane": null,
+      "partition": "quiet_job_multi_round",
+      "repeat": 3,
+      "scenario_id": "R10",
+      "sequence_index": 1,
+      "slots": [
+        {
+          "arm": "C",
+          "budget_s": 300,
+          "endpoint_id": "C300",
+          "execution_index": 1,
+          "repeat": 3,
+          "reused_calibration_slot": false,
+          "scenario_id": "R10",
+          "session_lane": null,
+          "slot_id": "R10-r03-C"
+        },
+        {
+          "arm": "B",
+          "budget_s": null,
+          "endpoint_id": "B",
+          "execution_index": 2,
+          "repeat": 3,
+          "reused_calibration_slot": false,
+          "scenario_id": "R10",
+          "session_lane": null,
+          "slot_id": "R10-r03-B"
+        },
+        {
+          "arm": "A",
+          "budget_s": null,
+          "endpoint_id": "A",
+          "execution_index": 3,
+          "repeat": 3,
+          "reused_calibration_slot": false,
+          "scenario_id": "R10",
+          "session_lane": null,
+          "slot_id": "R10-r03-A"
+        }
+      ],
+      "wave_index": 1
+    },
+    {
+      "arm_order": [
+        "B",
+        "C",
+        "A"
+      ],
+      "block_id": "R4-r04",
+      "kind": "performance",
+      "parallel_block_lane": null,
+      "partition": "overlap_long",
+      "repeat": 4,
+      "scenario_id": "R4",
+      "sequence_index": 2,
+      "slots": [
+        {
+          "arm": "B",
+          "budget_s": null,
+          "endpoint_id": "B",
+          "execution_index": 4,
+          "repeat": 4,
+          "reused_calibration_slot": false,
+          "scenario_id": "R4",
+          "session_lane": null,
+          "slot_id": "R4-r04-B"
+        },
+        {
+          "arm": "C",
+          "budget_s": 300,
+          "endpoint_id": "C300",
+          "execution_index": 5,
+          "repeat": 4,
+          "reused_calibration_slot": false,
+          "scenario_id": "R4",
+          "session_lane": null,
+          "slot_id": "R4-r04-C"
+        },
+        {
+          "arm": "A",
+          "budget_s": null,
+          "endpoint_id": "A",
+          "execution_index": 6,
+          "repeat": 4,
+          "reused_calibration_slot": false,
+          "scenario_id": "R4",
+          "session_lane": null,
+          "slot_id": "R4-r04-A"
+        }
+      ],
+      "wave_index": 2
+    },
+    {
+      "arm_order": [
+        "A",
+        "C",
+        "B"
+      ],
+      "block_id": "R11-r02",
+      "kind": "performance",
+      "parallel_block_lane": null,
+      "partition": "quiet_job_multi_round",
+      "repeat": 2,
+      "scenario_id": "R11",
+      "sequence_index": 3,
+      "slots": [
+        {
+          "arm": "A",
+          "budget_s": null,
+          "endpoint_id": "A",
+          "execution_index": 7,
+          "repeat": 2,
+          "reused_calibration_slot": false,
+          "scenario_id": "R11",
+          "session_lane": null,
+          "slot_id": "R11-r02-A"
+        },
+        {
+          "arm": "C",
+          "budget_s": 300,
+          "endpoint_id": "C300",
+          "execution_index": 8,
+          "repeat": 2,
+          "reused_calibration_slot": false,
+          "scenario_id": "R11",
+          "session_lane": null,
+          "slot_id": "R11-r02-C"
+        },
+        {
+          "arm": "B",
+          "budget_s": null,
+          "endpoint_id": "B",
+          "execution_index": 9,
+          "repeat": 2,
+          "reused_calibration_slot": false,
+          "scenario_id": "R11",
+          "session_lane": null,
+          "slot_id": "R11-r02-B"
+        }
+      ],
+      "wave_index": 3
+    },
+    {
+      "arm_order": [
+        "B",
+        "A",
+        "C"
+      ],
+      "block_id": "R9-r04",
+      "kind": "performance",
+      "parallel_block_lane": null,
+      "partition": "development_recovery",
+      "repeat": 4,
+      "scenario_id": "R9",
+      "sequence_index": 4,
+      "slots": [
+        {
+          "arm": "B",
+          "budget_s": null,
+          "endpoint_id": "B",
+          "execution_index": 10,
+          "repeat": 4,
+          "reused_calibration_slot": false,
+          "scenario_id": "R9",
+          "session_lane": null,
+          "slot_id": "R9-r04-B"
+        },
+        {
+          "arm": "A",
+          "budget_s": null,
+          "endpoint_id": "A",
+          "execution_index": 11,
+          "repeat": 4,
+          "reused_calibration_slot": false,
+          "scenario_id": "R9",
+          "session_lane": null,
+          "slot_id": "R9-r04-A"
+        },
+        {
+          "arm": "C",
+          "budget_s": 300,
+          "endpoint_id": "C300",
+          "execution_index": 12,
+          "repeat": 4,
+          "reused_calibration_slot": false,
+          "scenario_id": "R9",
+          "session_lane": null,
+          "slot_id": "R9-r04-C"
+        }
+      ],
+      "wave_index": 4
+    },
+    {
+      "arm_order": [
+        "B",
+        "C",
+        "A"
+      ],
+      "block_id": "R2-r04",
+      "kind": "performance",
+      "parallel_block_lane": null,
+      "partition": "read_heavy",
+      "repeat": 4,
+      "scenario_id": "R2",
+      "sequence_index": 5,
+      "slots": [
+        {
+          "arm": "B",
+          "budget_s": null,
+          "endpoint_id": "B",
+          "execution_index": 13,
+          "repeat": 4,
+          "reused_calibration_slot": false,
+          "scenario_id": "R2",
+          "session_lane": null,
+          "slot_id": "R2-r04-B"
+        },
+        {
+          "arm": "C",
+          "budget_s": 300,
+          "endpoint_id": "C300",
+          "execution_index": 14,
+          "repeat": 4,
+          "reused_calibration_slot": false,
+          "scenario_id": "R2",
+          "session_lane": null,
+          "slot_id": "R2-r04-C"
+        },
+        {
+          "arm": "A",
+          "budget_s": null,
+          "endpoint_id": "A",
+          "execution_index": 15,
+          "repeat": 4,
+          "reused_calibration_slot": false,
+          "scenario_id": "R2",
+          "session_lane": null,
+          "slot_id": "R2-r04-A"
+        }
+      ],
+      "wave_index": 5
+    },
+    {
+      "arm_order": [
+        "C",
+        "A",
+        "B"
+      ],
+      "block_id": "R1-r04",
+      "kind": "performance",
+      "parallel_block_lane": null,
+      "partition": "read_heavy",
+      "repeat": 4,
+      "scenario_id": "R1",
+      "sequence_index": 6,
+      "slots": [
+        {
+          "arm": "C",
+          "budget_s": 300,
+          "endpoint_id": "C300",
+          "execution_index": 16,
+          "repeat": 4,
+          "reused_calibration_slot": false,
+          "scenario_id": "R1",
+          "session_lane": null,
+          "slot_id": "R1-r04-C"
+        },
+        {
+          "arm": "A",
+          "budget_s": null,
+          "endpoint_id": "A",
+          "execution_index": 17,
+          "repeat": 4,
+          "reused_calibration_slot": false,
+          "scenario_id": "R1",
+          "session_lane": null,
+          "slot_id": "R1-r04-A"
+        },
+        {
+          "arm": "B",
+          "budget_s": null,
+          "endpoint_id": "B",
+          "execution_index": 18,
+          "repeat": 4,
+          "reused_calibration_slot": false,
+          "scenario_id": "R1",
+          "session_lane": null,
+          "slot_id": "R1-r04-B"
+        }
+      ],
+      "wave_index": 6
+    },
+    {
+      "arm_order": [
+        "B",
+        "C",
+        "A"
+      ],
+      "block_id": "R4-r01",
+      "kind": "performance",
+      "parallel_block_lane": null,
+      "partition": "overlap_long",
+      "repeat": 1,
+      "scenario_id": "R4",
+      "sequence_index": 7,
+      "slots": [
+        {
+          "arm": "B",
+          "budget_s": null,
+          "endpoint_id": "B",
+          "execution_index": 19,
+          "repeat": 1,
+          "reused_calibration_slot": false,
+          "scenario_id": "R4",
+          "session_lane": null,
+          "slot_id": "R4-r01-B"
+        },
+        {
+          "arm": "C",
+          "budget_s": 300,
+          "endpoint_id": "C300",
+          "execution_index": 20,
+          "repeat": 1,
+          "reused_calibration_slot": false,
+          "scenario_id": "R4",
+          "session_lane": null,
+          "slot_id": "R4-r01-C"
+        },
+        {
+          "arm": "A",
+          "budget_s": null,
+          "endpoint_id": "A",
+          "execution_index": 21,
+          "repeat": 1,
+          "reused_calibration_slot": false,
+          "scenario_id": "R4",
+          "session_lane": null,
+          "slot_id": "R4-r01-A"
+        }
+      ],
+      "wave_index": 7
+    },
+    {
+      "arm_order": [
+        "A",
+        "C",
+        "B"
+      ],
+      "block_id": "R8-r02",
+      "kind": "performance",
+      "parallel_block_lane": null,
+      "partition": "development_recovery",
+      "repeat": 2,
+      "scenario_id": "R8",
+      "sequence_index": 8,
+      "slots": [
+        {
+          "arm": "A",
+          "budget_s": null,
+          "endpoint_id": "A",
+          "execution_index": 22,
+          "repeat": 2,
+          "reused_calibration_slot": false,
+          "scenario_id": "R8",
+          "session_lane": null,
+          "slot_id": "R8-r02-A"
+        },
+        {
+          "arm": "C",
+          "budget_s": 300,
+          "endpoint_id": "C300",
+          "execution_index": 23,
+          "repeat": 2,
+          "reused_calibration_slot": false,
+          "scenario_id": "R8",
+          "session_lane": null,
+          "slot_id": "R8-r02-C"
+        },
+        {
+          "arm": "B",
+          "budget_s": null,
+          "endpoint_id": "B",
+          "execution_index": 24,
+          "repeat": 2,
+          "reused_calibration_slot": false,
+          "scenario_id": "R8",
+          "session_lane": null,
+          "slot_id": "R8-r02-B"
+        }
+      ],
+      "wave_index": 8
+    },
+    {
+      "arm_order": [
+        "C",
+        "B",
+        "A"
+      ],
+      "block_id": "R5-r02",
+      "kind": "performance",
+      "parallel_block_lane": null,
+      "partition": "dependency_barriers",
+      "repeat": 2,
+      "scenario_id": "R5",
+      "sequence_index": 9,
+      "slots": [
+        {
+          "arm": "C",
+          "budget_s": 300,
+          "endpoint_id": "C300",
+          "execution_index": 25,
+          "repeat": 2,
+          "reused_calibration_slot": true,
+          "scenario_id": "R5",
+          "session_lane": null,
+          "slot_id": "R5-r02-C"
+        },
+        {
+          "arm": "B",
+          "budget_s": null,
+          "endpoint_id": "B",
+          "execution_index": 26,
+          "repeat": 2,
+          "reused_calibration_slot": false,
+          "scenario_id": "R5",
+          "session_lane": null,
+          "slot_id": "R5-r02-B"
+        },
+        {
+          "arm": "A",
+          "budget_s": null,
+          "endpoint_id": "A",
+          "execution_index": 27,
+          "repeat": 2,
+          "reused_calibration_slot": false,
+          "scenario_id": "R5",
+          "session_lane": null,
+          "slot_id": "R5-r02-A"
+        }
+      ],
+      "wave_index": 9
+    },
+    {
+      "arm_order": [
+        "C",
+        "A",
+        "B"
+      ],
+      "block_id": "R7-r03",
+      "kind": "performance",
+      "parallel_block_lane": null,
+      "partition": "repeated_long_barriers",
+      "repeat": 3,
+      "scenario_id": "R7",
+      "sequence_index": 10,
+      "slots": [
+        {
+          "arm": "C",
+          "budget_s": 300,
+          "endpoint_id": "C300",
+          "execution_index": 28,
+          "repeat": 3,
+          "reused_calibration_slot": true,
+          "scenario_id": "R7",
+          "session_lane": null,
+          "slot_id": "R7-r03-C"
+        },
+        {
+          "arm": "A",
+          "budget_s": null,
+          "endpoint_id": "A",
+          "execution_index": 29,
+          "repeat": 3,
+          "reused_calibration_slot": false,
+          "scenario_id": "R7",
+          "session_lane": null,
+          "slot_id": "R7-r03-A"
+        },
+        {
+          "arm": "B",
+          "budget_s": null,
+          "endpoint_id": "B",
+          "execution_index": 30,
+          "repeat": 3,
+          "reused_calibration_slot": false,
+          "scenario_id": "R7",
+          "session_lane": null,
+          "slot_id": "R7-r03-B"
+        }
+      ],
+      "wave_index": 10
+    },
+    {
+      "arm_order": [
+        "B",
+        "C",
+        "A"
+      ],
+      "block_id": "R1-r02",
+      "kind": "performance",
+      "parallel_block_lane": null,
+      "partition": "read_heavy",
+      "repeat": 2,
+      "scenario_id": "R1",
+      "sequence_index": 11,
+      "slots": [
+        {
+          "arm": "B",
+          "budget_s": null,
+          "endpoint_id": "B",
+          "execution_index": 31,
+          "repeat": 2,
+          "reused_calibration_slot": false,
+          "scenario_id": "R1",
+          "session_lane": null,
+          "slot_id": "R1-r02-B"
+        },
+        {
+          "arm": "C",
+          "budget_s": 300,
+          "endpoint_id": "C300",
+          "execution_index": 32,
+          "repeat": 2,
+          "reused_calibration_slot": false,
+          "scenario_id": "R1",
+          "session_lane": null,
+          "slot_id": "R1-r02-C"
+        },
+        {
+          "arm": "A",
+          "budget_s": null,
+          "endpoint_id": "A",
+          "execution_index": 33,
+          "repeat": 2,
+          "reused_calibration_slot": false,
+          "scenario_id": "R1",
+          "session_lane": null,
+          "slot_id": "R1-r02-A"
+        }
+      ],
+      "wave_index": 11
+    },
+    {
+      "arm_order": [
+        "A",
+        "B",
+        "C"
+      ],
+      "block_id": "R7-r01",
+      "kind": "performance",
+      "parallel_block_lane": null,
+      "partition": "repeated_long_barriers",
+      "repeat": 1,
+      "scenario_id": "R7",
+      "sequence_index": 12,
+      "slots": [
+        {
+          "arm": "A",
+          "budget_s": null,
+          "endpoint_id": "A",
+          "execution_index": 34,
+          "repeat": 1,
+          "reused_calibration_slot": false,
+          "scenario_id": "R7",
+          "session_lane": null,
+          "slot_id": "R7-r01-A"
+        },
+        {
+          "arm": "B",
+          "budget_s": null,
+          "endpoint_id": "B",
+          "execution_index": 35,
+          "repeat": 1,
+          "reused_calibration_slot": false,
+          "scenario_id": "R7",
+          "session_lane": null,
+          "slot_id": "R7-r01-B"
+        },
+        {
+          "arm": "C",
+          "budget_s": 300,
+          "endpoint_id": "C300",
+          "execution_index": 36,
+          "repeat": 1,
+          "reused_calibration_slot": true,
+          "scenario_id": "R7",
+          "session_lane": null,
+          "slot_id": "R7-r01-C"
+        }
+      ],
+      "wave_index": 12
+    },
+    {
+      "arm_order": [
+        "C",
+        "B",
+        "A"
+      ],
+      "block_id": "R9-r03",
+      "kind": "performance",
+      "parallel_block_lane": null,
+      "partition": "development_recovery",
+      "repeat": 3,
+      "scenario_id": "R9",
+      "sequence_index": 13,
+      "slots": [
+        {
+          "arm": "C",
+          "budget_s": 300,
+          "endpoint_id": "C300",
+          "execution_index": 37,
+          "repeat": 3,
+          "reused_calibration_slot": false,
+          "scenario_id": "R9",
+          "session_lane": null,
+          "slot_id": "R9-r03-C"
+        },
+        {
+          "arm": "B",
+          "budget_s": null,
+          "endpoint_id": "B",
+          "execution_index": 38,
+          "repeat": 3,
+          "reused_calibration_slot": false,
+          "scenario_id": "R9",
+          "session_lane": null,
+          "slot_id": "R9-r03-B"
+        },
+        {
+          "arm": "A",
+          "budget_s": null,
+          "endpoint_id": "A",
+          "execution_index": 39,
+          "repeat": 3,
+          "reused_calibration_slot": false,
+          "scenario_id": "R9",
+          "session_lane": null,
+          "slot_id": "R9-r03-A"
+        }
+      ],
+      "wave_index": 13
+    },
+    {
+      "arm_order": [
+        "B",
+        "C",
+        "A"
+      ],
+      "block_id": "R2-r05",
+      "kind": "performance",
+      "parallel_block_lane": null,
+      "partition": "read_heavy",
+      "repeat": 5,
+      "scenario_id": "R2",
+      "sequence_index": 14,
+      "slots": [
+        {
+          "arm": "B",
+          "budget_s": null,
+          "endpoint_id": "B",
+          "execution_index": 40,
+          "repeat": 5,
+          "reused_calibration_slot": false,
+          "scenario_id": "R2",
+          "session_lane": null,
+          "slot_id": "R2-r05-B"
+        },
+        {
+          "arm": "C",
+          "budget_s": 300,
+          "endpoint_id": "C300",
+          "execution_index": 41,
+          "repeat": 5,
+          "reused_calibration_slot": false,
+          "scenario_id": "R2",
+          "session_lane": null,
+          "slot_id": "R2-r05-C"
+        },
+        {
+          "arm": "A",
+          "budget_s": null,
+          "endpoint_id": "A",
+          "execution_index": 42,
+          "repeat": 5,
+          "reused_calibration_slot": false,
+          "scenario_id": "R2",
+          "session_lane": null,
+          "slot_id": "R2-r05-A"
+        }
+      ],
+      "wave_index": 14
+    },
+    {
+      "arm_order": [
+        "A",
+        "B",
+        "C"
+      ],
+      "block_id": "R10-r05",
+      "kind": "performance",
+      "parallel_block_lane": null,
+      "partition": "quiet_job_multi_round",
+      "repeat": 5,
+      "scenario_id": "R10",
+      "sequence_index": 15,
+      "slots": [
+        {
+          "arm": "A",
+          "budget_s": null,
+          "endpoint_id": "A",
+          "execution_index": 43,
+          "repeat": 5,
+          "reused_calibration_slot": false,
+          "scenario_id": "R10",
+          "session_lane": null,
+          "slot_id": "R10-r05-A"
+        },
+        {
+          "arm": "B",
+          "budget_s": null,
+          "endpoint_id": "B",
+          "execution_index": 44,
+          "repeat": 5,
+          "reused_calibration_slot": false,
+          "scenario_id": "R10",
+          "session_lane": null,
+          "slot_id": "R10-r05-B"
+        },
+        {
+          "arm": "C",
+          "budget_s": 300,
+          "endpoint_id": "C300",
+          "execution_index": 45,
+          "repeat": 5,
+          "reused_calibration_slot": false,
+          "scenario_id": "R10",
+          "session_lane": null,
+          "slot_id": "R10-r05-C"
+        }
+      ],
+      "wave_index": 15
+    },
+    {
+      "arm_order": [
+        "B",
+        "C",
+        "A"
+      ],
+      "block_id": "R8-r01",
+      "kind": "performance",
+      "parallel_block_lane": null,
+      "partition": "development_recovery",
+      "repeat": 1,
+      "scenario_id": "R8",
+      "sequence_index": 16,
+      "slots": [
+        {
+          "arm": "B",
+          "budget_s": null,
+          "endpoint_id": "B",
+          "execution_index": 46,
+          "repeat": 1,
+          "reused_calibration_slot": false,
+          "scenario_id": "R8",
+          "session_lane": null,
+          "slot_id": "R8-r01-B"
+        },
+        {
+          "arm": "C",
+          "budget_s": 300,
+          "endpoint_id": "C300",
+          "execution_index": 47,
+          "repeat": 1,
+          "reused_calibration_slot": false,
+          "scenario_id": "R8",
+          "session_lane": null,
+          "slot_id": "R8-r01-C"
+        },
+        {
+          "arm": "A",
+          "budget_s": null,
+          "endpoint_id": "A",
+          "execution_index": 48,
+          "repeat": 1,
+          "reused_calibration_slot": false,
+          "scenario_id": "R8",
+          "session_lane": null,
+          "slot_id": "R8-r01-A"
+        }
+      ],
+      "wave_index": 16
+    },
+    {
+      "arm_order": [
+        "C",
+        "A",
+        "B"
+      ],
+      "block_id": "R11-r04",
+      "kind": "performance",
+      "parallel_block_lane": null,
+      "partition": "quiet_job_multi_round",
+      "repeat": 4,
+      "scenario_id": "R11",
+      "sequence_index": 17,
+      "slots": [
+        {
+          "arm": "C",
+          "budget_s": 300,
+          "endpoint_id": "C300",
+          "execution_index": 49,
+          "repeat": 4,
+          "reused_calibration_slot": false,
+          "scenario_id": "R11",
+          "session_lane": null,
+          "slot_id": "R11-r04-C"
+        },
+        {
+          "arm": "A",
+          "budget_s": null,
+          "endpoint_id": "A",
+          "execution_index": 50,
+          "repeat": 4,
+          "reused_calibration_slot": false,
+          "scenario_id": "R11",
+          "session_lane": null,
+          "slot_id": "R11-r04-A"
+        },
+        {
+          "arm": "B",
+          "budget_s": null,
+          "endpoint_id": "B",
+          "execution_index": 51,
+          "repeat": 4,
+          "reused_calibration_slot": false,
+          "scenario_id": "R11",
+          "session_lane": null,
+          "slot_id": "R11-r04-B"
+        }
+      ],
+      "wave_index": 17
+    },
+    {
+      "arm_order": [
+        "C",
+        "B",
+        "A"
+      ],
+      "block_id": "R5-r01",
+      "kind": "performance",
+      "parallel_block_lane": null,
+      "partition": "dependency_barriers",
+      "repeat": 1,
+      "scenario_id": "R5",
+      "sequence_index": 18,
+      "slots": [
+        {
+          "arm": "C",
+          "budget_s": 300,
+          "endpoint_id": "C300",
+          "execution_index": 52,
+          "repeat": 1,
+          "reused_calibration_slot": true,
+          "scenario_id": "R5",
+          "session_lane": null,
+          "slot_id": "R5-r01-C"
+        },
+        {
+          "arm": "B",
+          "budget_s": null,
+          "endpoint_id": "B",
+          "execution_index": 53,
+          "repeat": 1,
+          "reused_calibration_slot": false,
+          "scenario_id": "R5",
+          "session_lane": null,
+          "slot_id": "R5-r01-B"
+        },
+        {
+          "arm": "A",
+          "budget_s": null,
+          "endpoint_id": "A",
+          "execution_index": 54,
+          "repeat": 1,
+          "reused_calibration_slot": false,
+          "scenario_id": "R5",
+          "session_lane": null,
+          "slot_id": "R5-r01-A"
+        }
+      ],
+      "wave_index": 18
+    },
+    {
+      "arm_order": [
+        "A",
+        "C",
+        "B"
+      ],
+      "block_id": "R3-r04",
+      "kind": "performance",
+      "parallel_block_lane": null,
+      "partition": "overlap_long",
+      "repeat": 4,
+      "scenario_id": "R3",
+      "sequence_index": 19,
+      "slots": [
+        {
+          "arm": "A",
+          "budget_s": null,
+          "endpoint_id": "A",
+          "execution_index": 55,
+          "repeat": 4,
+          "reused_calibration_slot": false,
+          "scenario_id": "R3",
+          "session_lane": null,
+          "slot_id": "R3-r04-A"
+        },
+        {
+          "arm": "C",
+          "budget_s": 300,
+          "endpoint_id": "C300",
+          "execution_index": 56,
+          "repeat": 4,
+          "reused_calibration_slot": false,
+          "scenario_id": "R3",
+          "session_lane": null,
+          "slot_id": "R3-r04-C"
+        },
+        {
+          "arm": "B",
+          "budget_s": null,
+          "endpoint_id": "B",
+          "execution_index": 57,
+          "repeat": 4,
+          "reused_calibration_slot": false,
+          "scenario_id": "R3",
+          "session_lane": null,
+          "slot_id": "R3-r04-B"
+        }
+      ],
+      "wave_index": 19
+    },
+    {
+      "arm_order": [
+        "B",
+        "A",
+        "C"
+      ],
+      "block_id": "R9-r02",
+      "kind": "performance",
+      "parallel_block_lane": null,
+      "partition": "development_recovery",
+      "repeat": 2,
+      "scenario_id": "R9",
+      "sequence_index": 20,
+      "slots": [
+        {
+          "arm": "B",
+          "budget_s": null,
+          "endpoint_id": "B",
+          "execution_index": 58,
+          "repeat": 2,
+          "reused_calibration_slot": false,
+          "scenario_id": "R9",
+          "session_lane": null,
+          "slot_id": "R9-r02-B"
+        },
+        {
+          "arm": "A",
+          "budget_s": null,
+          "endpoint_id": "A",
+          "execution_index": 59,
+          "repeat": 2,
+          "reused_calibration_slot": false,
+          "scenario_id": "R9",
+          "session_lane": null,
+          "slot_id": "R9-r02-A"
+        },
+        {
+          "arm": "C",
+          "budget_s": 300,
+          "endpoint_id": "C300",
+          "execution_index": 60,
+          "repeat": 2,
+          "reused_calibration_slot": false,
+          "scenario_id": "R9",
+          "session_lane": null,
+          "slot_id": "R9-r02-C"
+        }
+      ],
+      "wave_index": 20
+    },
+    {
+      "arm_order": [
+        "C",
+        "A",
+        "B"
+      ],
+      "block_id": "R6-r04",
+      "kind": "performance",
+      "parallel_block_lane": null,
+      "partition": "dependency_barriers",
+      "repeat": 4,
+      "scenario_id": "R6",
+      "sequence_index": 21,
+      "slots": [
+        {
+          "arm": "C",
+          "budget_s": 300,
+          "endpoint_id": "C300",
+          "execution_index": 61,
+          "repeat": 4,
+          "reused_calibration_slot": false,
+          "scenario_id": "R6",
+          "session_lane": null,
+          "slot_id": "R6-r04-C"
+        },
+        {
+          "arm": "A",
+          "budget_s": null,
+          "endpoint_id": "A",
+          "execution_index": 62,
+          "repeat": 4,
+          "reused_calibration_slot": false,
+          "scenario_id": "R6",
+          "session_lane": null,
+          "slot_id": "R6-r04-A"
+        },
+        {
+          "arm": "B",
+          "budget_s": null,
+          "endpoint_id": "B",
+          "execution_index": 63,
+          "repeat": 4,
+          "reused_calibration_slot": false,
+          "scenario_id": "R6",
+          "session_lane": null,
+          "slot_id": "R6-r04-B"
+        }
+      ],
+      "wave_index": 21
+    },
+    {
+      "arm_order": [
+        "B",
+        "A",
+        "C"
+      ],
+      "block_id": "R5-r05",
+      "kind": "performance",
+      "parallel_block_lane": null,
+      "partition": "dependency_barriers",
+      "repeat": 5,
+      "scenario_id": "R5",
+      "sequence_index": 22,
+      "slots": [
+        {
+          "arm": "B",
+          "budget_s": null,
+          "endpoint_id": "B",
+          "execution_index": 64,
+          "repeat": 5,
+          "reused_calibration_slot": false,
+          "scenario_id": "R5",
+          "session_lane": null,
+          "slot_id": "R5-r05-B"
+        },
+        {
+          "arm": "A",
+          "budget_s": null,
+          "endpoint_id": "A",
+          "execution_index": 65,
+          "repeat": 5,
+          "reused_calibration_slot": false,
+          "scenario_id": "R5",
+          "session_lane": null,
+          "slot_id": "R5-r05-A"
+        },
+        {
+          "arm": "C",
+          "budget_s": 300,
+          "endpoint_id": "C300",
+          "execution_index": 66,
+          "repeat": 5,
+          "reused_calibration_slot": false,
+          "scenario_id": "R5",
+          "session_lane": null,
+          "slot_id": "R5-r05-C"
+        }
+      ],
+      "wave_index": 22
+    },
+    {
+      "arm_order": [
+        "C",
+        "B",
+        "A"
+      ],
+      "block_id": "R3-r05",
+      "kind": "performance",
+      "parallel_block_lane": null,
+      "partition": "overlap_long",
+      "repeat": 5,
+      "scenario_id": "R3",
+      "sequence_index": 23,
+      "slots": [
+        {
+          "arm": "C",
+          "budget_s": 300,
+          "endpoint_id": "C300",
+          "execution_index": 67,
+          "repeat": 5,
+          "reused_calibration_slot": false,
+          "scenario_id": "R3",
+          "session_lane": null,
+          "slot_id": "R3-r05-C"
+        },
+        {
+          "arm": "B",
+          "budget_s": null,
+          "endpoint_id": "B",
+          "execution_index": 68,
+          "repeat": 5,
+          "reused_calibration_slot": false,
+          "scenario_id": "R3",
+          "session_lane": null,
+          "slot_id": "R3-r05-B"
+        },
+        {
+          "arm": "A",
+          "budget_s": null,
+          "endpoint_id": "A",
+          "execution_index": 69,
+          "repeat": 5,
+          "reused_calibration_slot": false,
+          "scenario_id": "R3",
+          "session_lane": null,
+          "slot_id": "R3-r05-A"
+        }
+      ],
+      "wave_index": 23
+    },
+    {
+      "arm_order": [
+        "C",
+        "B",
+        "A"
+      ],
+      "block_id": "R11-r03",
+      "kind": "performance",
+      "parallel_block_lane": null,
+      "partition": "quiet_job_multi_round",
+      "repeat": 3,
+      "scenario_id": "R11",
+      "sequence_index": 24,
+      "slots": [
+        {
+          "arm": "C",
+          "budget_s": 300,
+          "endpoint_id": "C300",
+          "execution_index": 70,
+          "repeat": 3,
+          "reused_calibration_slot": false,
+          "scenario_id": "R11",
+          "session_lane": null,
+          "slot_id": "R11-r03-C"
+        },
+        {
+          "arm": "B",
+          "budget_s": null,
+          "endpoint_id": "B",
+          "execution_index": 71,
+          "repeat": 3,
+          "reused_calibration_slot": false,
+          "scenario_id": "R11",
+          "session_lane": null,
+          "slot_id": "R11-r03-B"
+        },
+        {
+          "arm": "A",
+          "budget_s": null,
+          "endpoint_id": "A",
+          "execution_index": 72,
+          "repeat": 3,
+          "reused_calibration_slot": false,
+          "scenario_id": "R11",
+          "session_lane": null,
+          "slot_id": "R11-r03-A"
+        }
+      ],
+      "wave_index": 24
+    },
+    {
+      "arm_order": [
+        "B",
+        "C",
+        "A"
+      ],
+      "block_id": "R6-r01",
+      "kind": "performance",
+      "parallel_block_lane": null,
+      "partition": "dependency_barriers",
+      "repeat": 1,
+      "scenario_id": "R6",
+      "sequence_index": 25,
+      "slots": [
+        {
+          "arm": "B",
+          "budget_s": null,
+          "endpoint_id": "B",
+          "execution_index": 73,
+          "repeat": 1,
+          "reused_calibration_slot": false,
+          "scenario_id": "R6",
+          "session_lane": null,
+          "slot_id": "R6-r01-B"
+        },
+        {
+          "arm": "C",
+          "budget_s": 300,
+          "endpoint_id": "C300",
+          "execution_index": 74,
+          "repeat": 1,
+          "reused_calibration_slot": true,
+          "scenario_id": "R6",
+          "session_lane": null,
+          "slot_id": "R6-r01-C"
+        },
+        {
+          "arm": "A",
+          "budget_s": null,
+          "endpoint_id": "A",
+          "execution_index": 75,
+          "repeat": 1,
+          "reused_calibration_slot": false,
+          "scenario_id": "R6",
+          "session_lane": null,
+          "slot_id": "R6-r01-A"
+        }
+      ],
+      "wave_index": 25
+    },
+    {
+      "arm_order": [
+        "B",
+        "C",
+        "A"
+      ],
+      "block_id": "R7-r02",
+      "kind": "performance",
+      "parallel_block_lane": null,
+      "partition": "repeated_long_barriers",
+      "repeat": 2,
+      "scenario_id": "R7",
+      "sequence_index": 26,
+      "slots": [
+        {
+          "arm": "B",
+          "budget_s": null,
+          "endpoint_id": "B",
+          "execution_index": 76,
+          "repeat": 2,
+          "reused_calibration_slot": false,
+          "scenario_id": "R7",
+          "session_lane": null,
+          "slot_id": "R7-r02-B"
+        },
+        {
+          "arm": "C",
+          "budget_s": 300,
+          "endpoint_id": "C300",
+          "execution_index": 77,
+          "repeat": 2,
+          "reused_calibration_slot": true,
+          "scenario_id": "R7",
+          "session_lane": null,
+          "slot_id": "R7-r02-C"
+        },
+        {
+          "arm": "A",
+          "budget_s": null,
+          "endpoint_id": "A",
+          "execution_index": 78,
+          "repeat": 2,
+          "reused_calibration_slot": false,
+          "scenario_id": "R7",
+          "session_lane": null,
+          "slot_id": "R7-r02-A"
+        }
+      ],
+      "wave_index": 26
+    },
+    {
+      "arm_order": [
+        "C",
+        "A",
+        "B"
+      ],
+      "block_id": "R6-r05",
+      "kind": "performance",
+      "parallel_block_lane": null,
+      "partition": "dependency_barriers",
+      "repeat": 5,
+      "scenario_id": "R6",
+      "sequence_index": 27,
+      "slots": [
+        {
+          "arm": "C",
+          "budget_s": 300,
+          "endpoint_id": "C300",
+          "execution_index": 79,
+          "repeat": 5,
+          "reused_calibration_slot": false,
+          "scenario_id": "R6",
+          "session_lane": null,
+          "slot_id": "R6-r05-C"
+        },
+        {
+          "arm": "A",
+          "budget_s": null,
+          "endpoint_id": "A",
+          "execution_index": 80,
+          "repeat": 5,
+          "reused_calibration_slot": false,
+          "scenario_id": "R6",
+          "session_lane": null,
+          "slot_id": "R6-r05-A"
+        },
+        {
+          "arm": "B",
+          "budget_s": null,
+          "endpoint_id": "B",
+          "execution_index": 81,
+          "repeat": 5,
+          "reused_calibration_slot": false,
+          "scenario_id": "R6",
+          "session_lane": null,
+          "slot_id": "R6-r05-B"
+        }
+      ],
+      "wave_index": 27
+    },
+    {
+      "arm_order": [
+        "B",
+        "A",
+        "C"
+      ],
+      "block_id": "R1-r03",
+      "kind": "performance",
+      "parallel_block_lane": null,
+      "partition": "read_heavy",
+      "repeat": 3,
+      "scenario_id": "R1",
+      "sequence_index": 28,
+      "slots": [
+        {
+          "arm": "B",
+          "budget_s": null,
+          "endpoint_id": "B",
+          "execution_index": 82,
+          "repeat": 3,
+          "reused_calibration_slot": false,
+          "scenario_id": "R1",
+          "session_lane": null,
+          "slot_id": "R1-r03-B"
+        },
+        {
+          "arm": "A",
+          "budget_s": null,
+          "endpoint_id": "A",
+          "execution_index": 83,
+          "repeat": 3,
+          "reused_calibration_slot": false,
+          "scenario_id": "R1",
+          "session_lane": null,
+          "slot_id": "R1-r03-A"
+        },
+        {
+          "arm": "C",
+          "budget_s": 300,
+          "endpoint_id": "C300",
+          "execution_index": 84,
+          "repeat": 3,
+          "reused_calibration_slot": false,
+          "scenario_id": "R1",
+          "session_lane": null,
+          "slot_id": "R1-r03-C"
+        }
+      ],
+      "wave_index": 28
+    },
+    {
+      "arm_order": [
+        "B",
+        "A",
+        "C"
+      ],
+      "block_id": "R9-r05",
+      "kind": "performance",
+      "parallel_block_lane": null,
+      "partition": "development_recovery",
+      "repeat": 5,
+      "scenario_id": "R9",
+      "sequence_index": 29,
+      "slots": [
+        {
+          "arm": "B",
+          "budget_s": null,
+          "endpoint_id": "B",
+          "execution_index": 85,
+          "repeat": 5,
+          "reused_calibration_slot": false,
+          "scenario_id": "R9",
+          "session_lane": null,
+          "slot_id": "R9-r05-B"
+        },
+        {
+          "arm": "A",
+          "budget_s": null,
+          "endpoint_id": "A",
+          "execution_index": 86,
+          "repeat": 5,
+          "reused_calibration_slot": false,
+          "scenario_id": "R9",
+          "session_lane": null,
+          "slot_id": "R9-r05-A"
+        },
+        {
+          "arm": "C",
+          "budget_s": 300,
+          "endpoint_id": "C300",
+          "execution_index": 87,
+          "repeat": 5,
+          "reused_calibration_slot": false,
+          "scenario_id": "R9",
+          "session_lane": null,
+          "slot_id": "R9-r05-C"
+        }
+      ],
+      "wave_index": 29
+    },
+    {
+      "arm_order": [
+        "B",
+        "C",
+        "A"
+      ],
+      "block_id": "R2-r02",
+      "kind": "performance",
+      "parallel_block_lane": null,
+      "partition": "read_heavy",
+      "repeat": 2,
+      "scenario_id": "R2",
+      "sequence_index": 30,
+      "slots": [
+        {
+          "arm": "B",
+          "budget_s": null,
+          "endpoint_id": "B",
+          "execution_index": 88,
+          "repeat": 2,
+          "reused_calibration_slot": false,
+          "scenario_id": "R2",
+          "session_lane": null,
+          "slot_id": "R2-r02-B"
+        },
+        {
+          "arm": "C",
+          "budget_s": 300,
+          "endpoint_id": "C300",
+          "execution_index": 89,
+          "repeat": 2,
+          "reused_calibration_slot": false,
+          "scenario_id": "R2",
+          "session_lane": null,
+          "slot_id": "R2-r02-C"
+        },
+        {
+          "arm": "A",
+          "budget_s": null,
+          "endpoint_id": "A",
+          "execution_index": 90,
+          "repeat": 2,
+          "reused_calibration_slot": false,
+          "scenario_id": "R2",
+          "session_lane": null,
+          "slot_id": "R2-r02-A"
+        }
+      ],
+      "wave_index": 30
+    },
+    {
+      "arm_order": [
+        "A",
+        "B",
+        "C"
+      ],
+      "block_id": "R1-r05",
+      "kind": "performance",
+      "parallel_block_lane": null,
+      "partition": "read_heavy",
+      "repeat": 5,
+      "scenario_id": "R1",
+      "sequence_index": 31,
+      "slots": [
+        {
+          "arm": "A",
+          "budget_s": null,
+          "endpoint_id": "A",
+          "execution_index": 91,
+          "repeat": 5,
+          "reused_calibration_slot": false,
+          "scenario_id": "R1",
+          "session_lane": null,
+          "slot_id": "R1-r05-A"
+        },
+        {
+          "arm": "B",
+          "budget_s": null,
+          "endpoint_id": "B",
+          "execution_index": 92,
+          "repeat": 5,
+          "reused_calibration_slot": false,
+          "scenario_id": "R1",
+          "session_lane": null,
+          "slot_id": "R1-r05-B"
+        },
+        {
+          "arm": "C",
+          "budget_s": 300,
+          "endpoint_id": "C300",
+          "execution_index": 93,
+          "repeat": 5,
+          "reused_calibration_slot": false,
+          "scenario_id": "R1",
+          "session_lane": null,
+          "slot_id": "R1-r05-C"
+        }
+      ],
+      "wave_index": 31
+    },
+    {
+      "arm_order": [
+        "B",
+        "C",
+        "A"
+      ],
+      "block_id": "R10-r01",
+      "kind": "performance",
+      "parallel_block_lane": null,
+      "partition": "quiet_job_multi_round",
+      "repeat": 1,
+      "scenario_id": "R10",
+      "sequence_index": 32,
+      "slots": [
+        {
+          "arm": "B",
+          "budget_s": null,
+          "endpoint_id": "B",
+          "execution_index": 94,
+          "repeat": 1,
+          "reused_calibration_slot": false,
+          "scenario_id": "R10",
+          "session_lane": null,
+          "slot_id": "R10-r01-B"
+        },
+        {
+          "arm": "C",
+          "budget_s": 300,
+          "endpoint_id": "C300",
+          "execution_index": 95,
+          "repeat": 1,
+          "reused_calibration_slot": false,
+          "scenario_id": "R10",
+          "session_lane": null,
+          "slot_id": "R10-r01-C"
+        },
+        {
+          "arm": "A",
+          "budget_s": null,
+          "endpoint_id": "A",
+          "execution_index": 96,
+          "repeat": 1,
+          "reused_calibration_slot": false,
+          "scenario_id": "R10",
+          "session_lane": null,
+          "slot_id": "R10-r01-A"
+        }
+      ],
+      "wave_index": 32
+    },
+    {
+      "arm_order": [
+        "A",
+        "C",
+        "B"
+      ],
+      "block_id": "R11-r05",
+      "kind": "performance",
+      "parallel_block_lane": null,
+      "partition": "quiet_job_multi_round",
+      "repeat": 5,
+      "scenario_id": "R11",
+      "sequence_index": 33,
+      "slots": [
+        {
+          "arm": "A",
+          "budget_s": null,
+          "endpoint_id": "A",
+          "execution_index": 97,
+          "repeat": 5,
+          "reused_calibration_slot": false,
+          "scenario_id": "R11",
+          "session_lane": null,
+          "slot_id": "R11-r05-A"
+        },
+        {
+          "arm": "C",
+          "budget_s": 300,
+          "endpoint_id": "C300",
+          "execution_index": 98,
+          "repeat": 5,
+          "reused_calibration_slot": false,
+          "scenario_id": "R11",
+          "session_lane": null,
+          "slot_id": "R11-r05-C"
+        },
+        {
+          "arm": "B",
+          "budget_s": null,
+          "endpoint_id": "B",
+          "execution_index": 99,
+          "repeat": 5,
+          "reused_calibration_slot": false,
+          "scenario_id": "R11",
+          "session_lane": null,
+          "slot_id": "R11-r05-B"
+        }
+      ],
+      "wave_index": 33
+    },
+    {
+      "arm_order": [
+        "C",
+        "B",
+        "A"
+      ],
+      "block_id": "R2-r01",
+      "kind": "performance",
+      "parallel_block_lane": null,
+      "partition": "read_heavy",
+      "repeat": 1,
+      "scenario_id": "R2",
+      "sequence_index": 34,
+      "slots": [
+        {
+          "arm": "C",
+          "budget_s": 300,
+          "endpoint_id": "C300",
+          "execution_index": 100,
+          "repeat": 1,
+          "reused_calibration_slot": false,
+          "scenario_id": "R2",
+          "session_lane": null,
+          "slot_id": "R2-r01-C"
+        },
+        {
+          "arm": "B",
+          "budget_s": null,
+          "endpoint_id": "B",
+          "execution_index": 101,
+          "repeat": 1,
+          "reused_calibration_slot": false,
+          "scenario_id": "R2",
+          "session_lane": null,
+          "slot_id": "R2-r01-B"
+        },
+        {
+          "arm": "A",
+          "budget_s": null,
+          "endpoint_id": "A",
+          "execution_index": 102,
+          "repeat": 1,
+          "reused_calibration_slot": false,
+          "scenario_id": "R2",
+          "session_lane": null,
+          "slot_id": "R2-r01-A"
+        }
+      ],
+      "wave_index": 34
+    },
+    {
+      "arm_order": [
+        "C",
+        "A",
+        "B"
+      ],
+      "block_id": "R5-r03",
+      "kind": "performance",
+      "parallel_block_lane": null,
+      "partition": "dependency_barriers",
+      "repeat": 3,
+      "scenario_id": "R5",
+      "sequence_index": 35,
+      "slots": [
+        {
+          "arm": "C",
+          "budget_s": 300,
+          "endpoint_id": "C300",
+          "execution_index": 103,
+          "repeat": 3,
+          "reused_calibration_slot": true,
+          "scenario_id": "R5",
+          "session_lane": null,
+          "slot_id": "R5-r03-C"
+        },
+        {
+          "arm": "A",
+          "budget_s": null,
+          "endpoint_id": "A",
+          "execution_index": 104,
+          "repeat": 3,
+          "reused_calibration_slot": false,
+          "scenario_id": "R5",
+          "session_lane": null,
+          "slot_id": "R5-r03-A"
+        },
+        {
+          "arm": "B",
+          "budget_s": null,
+          "endpoint_id": "B",
+          "execution_index": 105,
+          "repeat": 3,
+          "reused_calibration_slot": false,
+          "scenario_id": "R5",
+          "session_lane": null,
+          "slot_id": "R5-r03-B"
+        }
+      ],
+      "wave_index": 35
+    },
+    {
+      "arm_order": [
+        "B",
+        "C",
+        "A"
+      ],
+      "block_id": "R8-r05",
+      "kind": "performance",
+      "parallel_block_lane": null,
+      "partition": "development_recovery",
+      "repeat": 5,
+      "scenario_id": "R8",
+      "sequence_index": 36,
+      "slots": [
+        {
+          "arm": "B",
+          "budget_s": null,
+          "endpoint_id": "B",
+          "execution_index": 106,
+          "repeat": 5,
+          "reused_calibration_slot": false,
+          "scenario_id": "R8",
+          "session_lane": null,
+          "slot_id": "R8-r05-B"
+        },
+        {
+          "arm": "C",
+          "budget_s": 300,
+          "endpoint_id": "C300",
+          "execution_index": 107,
+          "repeat": 5,
+          "reused_calibration_slot": false,
+          "scenario_id": "R8",
+          "session_lane": null,
+          "slot_id": "R8-r05-C"
+        },
+        {
+          "arm": "A",
+          "budget_s": null,
+          "endpoint_id": "A",
+          "execution_index": 108,
+          "repeat": 5,
+          "reused_calibration_slot": false,
+          "scenario_id": "R8",
+          "session_lane": null,
+          "slot_id": "R8-r05-A"
+        }
+      ],
+      "wave_index": 36
+    },
+    {
+      "arm_order": [
+        "C",
+        "B",
+        "A"
+      ],
+      "block_id": "R9-r01",
+      "kind": "performance",
+      "parallel_block_lane": null,
+      "partition": "development_recovery",
+      "repeat": 1,
+      "scenario_id": "R9",
+      "sequence_index": 37,
+      "slots": [
+        {
+          "arm": "C",
+          "budget_s": 300,
+          "endpoint_id": "C300",
+          "execution_index": 109,
+          "repeat": 1,
+          "reused_calibration_slot": false,
+          "scenario_id": "R9",
+          "session_lane": null,
+          "slot_id": "R9-r01-C"
+        },
+        {
+          "arm": "B",
+          "budget_s": null,
+          "endpoint_id": "B",
+          "execution_index": 110,
+          "repeat": 1,
+          "reused_calibration_slot": false,
+          "scenario_id": "R9",
+          "session_lane": null,
+          "slot_id": "R9-r01-B"
+        },
+        {
+          "arm": "A",
+          "budget_s": null,
+          "endpoint_id": "A",
+          "execution_index": 111,
+          "repeat": 1,
+          "reused_calibration_slot": false,
+          "scenario_id": "R9",
+          "session_lane": null,
+          "slot_id": "R9-r01-A"
+        }
+      ],
+      "wave_index": 37
+    },
+    {
+      "arm_order": [
+        "C",
+        "A",
+        "B"
+      ],
+      "block_id": "R3-r02",
+      "kind": "performance",
+      "parallel_block_lane": null,
+      "partition": "overlap_long",
+      "repeat": 2,
+      "scenario_id": "R3",
+      "sequence_index": 38,
+      "slots": [
+        {
+          "arm": "C",
+          "budget_s": 300,
+          "endpoint_id": "C300",
+          "execution_index": 112,
+          "repeat": 2,
+          "reused_calibration_slot": false,
+          "scenario_id": "R3",
+          "session_lane": null,
+          "slot_id": "R3-r02-C"
+        },
+        {
+          "arm": "A",
+          "budget_s": null,
+          "endpoint_id": "A",
+          "execution_index": 113,
+          "repeat": 2,
+          "reused_calibration_slot": false,
+          "scenario_id": "R3",
+          "session_lane": null,
+          "slot_id": "R3-r02-A"
+        },
+        {
+          "arm": "B",
+          "budget_s": null,
+          "endpoint_id": "B",
+          "execution_index": 114,
+          "repeat": 2,
+          "reused_calibration_slot": false,
+          "scenario_id": "R3",
+          "session_lane": null,
+          "slot_id": "R3-r02-B"
+        }
+      ],
+      "wave_index": 38
+    },
+    {
+      "arm_order": [
+        "C",
+        "A",
+        "B"
+      ],
+      "block_id": "R8-r03",
+      "kind": "performance",
+      "parallel_block_lane": null,
+      "partition": "development_recovery",
+      "repeat": 3,
+      "scenario_id": "R8",
+      "sequence_index": 39,
+      "slots": [
+        {
+          "arm": "C",
+          "budget_s": 300,
+          "endpoint_id": "C300",
+          "execution_index": 115,
+          "repeat": 3,
+          "reused_calibration_slot": false,
+          "scenario_id": "R8",
+          "session_lane": null,
+          "slot_id": "R8-r03-C"
+        },
+        {
+          "arm": "A",
+          "budget_s": null,
+          "endpoint_id": "A",
+          "execution_index": 116,
+          "repeat": 3,
+          "reused_calibration_slot": false,
+          "scenario_id": "R8",
+          "session_lane": null,
+          "slot_id": "R8-r03-A"
+        },
+        {
+          "arm": "B",
+          "budget_s": null,
+          "endpoint_id": "B",
+          "execution_index": 117,
+          "repeat": 3,
+          "reused_calibration_slot": false,
+          "scenario_id": "R8",
+          "session_lane": null,
+          "slot_id": "R8-r03-B"
+        }
+      ],
+      "wave_index": 39
+    },
+    {
+      "arm_order": [
+        "B",
+        "C",
+        "A"
+      ],
+      "block_id": "R4-r02",
+      "kind": "performance",
+      "parallel_block_lane": null,
+      "partition": "overlap_long",
+      "repeat": 2,
+      "scenario_id": "R4",
+      "sequence_index": 40,
+      "slots": [
+        {
+          "arm": "B",
+          "budget_s": null,
+          "endpoint_id": "B",
+          "execution_index": 118,
+          "repeat": 2,
+          "reused_calibration_slot": false,
+          "scenario_id": "R4",
+          "session_lane": null,
+          "slot_id": "R4-r02-B"
+        },
+        {
+          "arm": "C",
+          "budget_s": 300,
+          "endpoint_id": "C300",
+          "execution_index": 119,
+          "repeat": 2,
+          "reused_calibration_slot": false,
+          "scenario_id": "R4",
+          "session_lane": null,
+          "slot_id": "R4-r02-C"
+        },
+        {
+          "arm": "A",
+          "budget_s": null,
+          "endpoint_id": "A",
+          "execution_index": 120,
+          "repeat": 2,
+          "reused_calibration_slot": false,
+          "scenario_id": "R4",
+          "session_lane": null,
+          "slot_id": "R4-r02-A"
+        }
+      ],
+      "wave_index": 40
+    },
+    {
+      "arm_order": [
+        "A",
+        "C",
+        "B"
+      ],
+      "block_id": "R10-r02",
+      "kind": "performance",
+      "parallel_block_lane": null,
+      "partition": "quiet_job_multi_round",
+      "repeat": 2,
+      "scenario_id": "R10",
+      "sequence_index": 41,
+      "slots": [
+        {
+          "arm": "A",
+          "budget_s": null,
+          "endpoint_id": "A",
+          "execution_index": 121,
+          "repeat": 2,
+          "reused_calibration_slot": false,
+          "scenario_id": "R10",
+          "session_lane": null,
+          "slot_id": "R10-r02-A"
+        },
+        {
+          "arm": "C",
+          "budget_s": 300,
+          "endpoint_id": "C300",
+          "execution_index": 122,
+          "repeat": 2,
+          "reused_calibration_slot": false,
+          "scenario_id": "R10",
+          "session_lane": null,
+          "slot_id": "R10-r02-C"
+        },
+        {
+          "arm": "B",
+          "budget_s": null,
+          "endpoint_id": "B",
+          "execution_index": 123,
+          "repeat": 2,
+          "reused_calibration_slot": false,
+          "scenario_id": "R10",
+          "session_lane": null,
+          "slot_id": "R10-r02-B"
+        }
+      ],
+      "wave_index": 41
+    },
+    {
+      "arm_order": [
+        "C",
+        "A",
+        "B"
+      ],
+      "block_id": "R2-r03",
+      "kind": "performance",
+      "parallel_block_lane": null,
+      "partition": "read_heavy",
+      "repeat": 3,
+      "scenario_id": "R2",
+      "sequence_index": 42,
+      "slots": [
+        {
+          "arm": "C",
+          "budget_s": 300,
+          "endpoint_id": "C300",
+          "execution_index": 124,
+          "repeat": 3,
+          "reused_calibration_slot": false,
+          "scenario_id": "R2",
+          "session_lane": null,
+          "slot_id": "R2-r03-C"
+        },
+        {
+          "arm": "A",
+          "budget_s": null,
+          "endpoint_id": "A",
+          "execution_index": 125,
+          "repeat": 3,
+          "reused_calibration_slot": false,
+          "scenario_id": "R2",
+          "session_lane": null,
+          "slot_id": "R2-r03-A"
+        },
+        {
+          "arm": "B",
+          "budget_s": null,
+          "endpoint_id": "B",
+          "execution_index": 126,
+          "repeat": 3,
+          "reused_calibration_slot": false,
+          "scenario_id": "R2",
+          "session_lane": null,
+          "slot_id": "R2-r03-B"
+        }
+      ],
+      "wave_index": 42
+    },
+    {
+      "arm_order": [
+        "C",
+        "B",
+        "A"
+      ],
+      "block_id": "R11-r01",
+      "kind": "performance",
+      "parallel_block_lane": null,
+      "partition": "quiet_job_multi_round",
+      "repeat": 1,
+      "scenario_id": "R11",
+      "sequence_index": 43,
+      "slots": [
+        {
+          "arm": "C",
+          "budget_s": 300,
+          "endpoint_id": "C300",
+          "execution_index": 127,
+          "repeat": 1,
+          "reused_calibration_slot": false,
+          "scenario_id": "R11",
+          "session_lane": null,
+          "slot_id": "R11-r01-C"
+        },
+        {
+          "arm": "B",
+          "budget_s": null,
+          "endpoint_id": "B",
+          "execution_index": 128,
+          "repeat": 1,
+          "reused_calibration_slot": false,
+          "scenario_id": "R11",
+          "session_lane": null,
+          "slot_id": "R11-r01-B"
+        },
+        {
+          "arm": "A",
+          "budget_s": null,
+          "endpoint_id": "A",
+          "execution_index": 129,
+          "repeat": 1,
+          "reused_calibration_slot": false,
+          "scenario_id": "R11",
+          "session_lane": null,
+          "slot_id": "R11-r01-A"
+        }
+      ],
+      "wave_index": 43
+    },
+    {
+      "arm_order": [
+        "B",
+        "A",
+        "C"
+      ],
+      "block_id": "R3-r01",
+      "kind": "performance",
+      "parallel_block_lane": null,
+      "partition": "overlap_long",
+      "repeat": 1,
+      "scenario_id": "R3",
+      "sequence_index": 44,
+      "slots": [
+        {
+          "arm": "B",
+          "budget_s": null,
+          "endpoint_id": "B",
+          "execution_index": 130,
+          "repeat": 1,
+          "reused_calibration_slot": false,
+          "scenario_id": "R3",
+          "session_lane": null,
+          "slot_id": "R3-r01-B"
+        },
+        {
+          "arm": "A",
+          "budget_s": null,
+          "endpoint_id": "A",
+          "execution_index": 131,
+          "repeat": 1,
+          "reused_calibration_slot": false,
+          "scenario_id": "R3",
+          "session_lane": null,
+          "slot_id": "R3-r01-A"
+        },
+        {
+          "arm": "C",
+          "budget_s": 300,
+          "endpoint_id": "C300",
+          "execution_index": 132,
+          "repeat": 1,
+          "reused_calibration_slot": false,
+          "scenario_id": "R3",
+          "session_lane": null,
+          "slot_id": "R3-r01-C"
+        }
+      ],
+      "wave_index": 44
+    },
+    {
+      "arm_order": [
+        "B",
+        "A",
+        "C"
+      ],
+      "block_id": "R6-r03",
+      "kind": "performance",
+      "parallel_block_lane": null,
+      "partition": "dependency_barriers",
+      "repeat": 3,
+      "scenario_id": "R6",
+      "sequence_index": 45,
+      "slots": [
+        {
+          "arm": "B",
+          "budget_s": null,
+          "endpoint_id": "B",
+          "execution_index": 133,
+          "repeat": 3,
+          "reused_calibration_slot": false,
+          "scenario_id": "R6",
+          "session_lane": null,
+          "slot_id": "R6-r03-B"
+        },
+        {
+          "arm": "A",
+          "budget_s": null,
+          "endpoint_id": "A",
+          "execution_index": 134,
+          "repeat": 3,
+          "reused_calibration_slot": false,
+          "scenario_id": "R6",
+          "session_lane": null,
+          "slot_id": "R6-r03-A"
+        },
+        {
+          "arm": "C",
+          "budget_s": 300,
+          "endpoint_id": "C300",
+          "execution_index": 135,
+          "repeat": 3,
+          "reused_calibration_slot": true,
+          "scenario_id": "R6",
+          "session_lane": null,
+          "slot_id": "R6-r03-C"
+        }
+      ],
+      "wave_index": 45
+    },
+    {
+      "arm_order": [
+        "B",
+        "A",
+        "C"
+      ],
+      "block_id": "R8-r04",
+      "kind": "performance",
+      "parallel_block_lane": null,
+      "partition": "development_recovery",
+      "repeat": 4,
+      "scenario_id": "R8",
+      "sequence_index": 46,
+      "slots": [
+        {
+          "arm": "B",
+          "budget_s": null,
+          "endpoint_id": "B",
+          "execution_index": 136,
+          "repeat": 4,
+          "reused_calibration_slot": false,
+          "scenario_id": "R8",
+          "session_lane": null,
+          "slot_id": "R8-r04-B"
+        },
+        {
+          "arm": "A",
+          "budget_s": null,
+          "endpoint_id": "A",
+          "execution_index": 137,
+          "repeat": 4,
+          "reused_calibration_slot": false,
+          "scenario_id": "R8",
+          "session_lane": null,
+          "slot_id": "R8-r04-A"
+        },
+        {
+          "arm": "C",
+          "budget_s": 300,
+          "endpoint_id": "C300",
+          "execution_index": 138,
+          "repeat": 4,
+          "reused_calibration_slot": false,
+          "scenario_id": "R8",
+          "session_lane": null,
+          "slot_id": "R8-r04-C"
+        }
+      ],
+      "wave_index": 46
+    },
+    {
+      "arm_order": [
+        "B",
+        "A",
+        "C"
+      ],
+      "block_id": "R4-r03",
+      "kind": "performance",
+      "parallel_block_lane": null,
+      "partition": "overlap_long",
+      "repeat": 3,
+      "scenario_id": "R4",
+      "sequence_index": 47,
+      "slots": [
+        {
+          "arm": "B",
+          "budget_s": null,
+          "endpoint_id": "B",
+          "execution_index": 139,
+          "repeat": 3,
+          "reused_calibration_slot": false,
+          "scenario_id": "R4",
+          "session_lane": null,
+          "slot_id": "R4-r03-B"
+        },
+        {
+          "arm": "A",
+          "budget_s": null,
+          "endpoint_id": "A",
+          "execution_index": 140,
+          "repeat": 3,
+          "reused_calibration_slot": false,
+          "scenario_id": "R4",
+          "session_lane": null,
+          "slot_id": "R4-r03-A"
+        },
+        {
+          "arm": "C",
+          "budget_s": 300,
+          "endpoint_id": "C300",
+          "execution_index": 141,
+          "repeat": 3,
+          "reused_calibration_slot": false,
+          "scenario_id": "R4",
+          "session_lane": null,
+          "slot_id": "R4-r03-C"
+        }
+      ],
+      "wave_index": 47
+    },
+    {
+      "arm_order": [
+        "A",
+        "C",
+        "B"
+      ],
+      "block_id": "R3-r03",
+      "kind": "performance",
+      "parallel_block_lane": null,
+      "partition": "overlap_long",
+      "repeat": 3,
+      "scenario_id": "R3",
+      "sequence_index": 48,
+      "slots": [
+        {
+          "arm": "A",
+          "budget_s": null,
+          "endpoint_id": "A",
+          "execution_index": 142,
+          "repeat": 3,
+          "reused_calibration_slot": false,
+          "scenario_id": "R3",
+          "session_lane": null,
+          "slot_id": "R3-r03-A"
+        },
+        {
+          "arm": "C",
+          "budget_s": 300,
+          "endpoint_id": "C300",
+          "execution_index": 143,
+          "repeat": 3,
+          "reused_calibration_slot": false,
+          "scenario_id": "R3",
+          "session_lane": null,
+          "slot_id": "R3-r03-C"
+        },
+        {
+          "arm": "B",
+          "budget_s": null,
+          "endpoint_id": "B",
+          "execution_index": 144,
+          "repeat": 3,
+          "reused_calibration_slot": false,
+          "scenario_id": "R3",
+          "session_lane": null,
+          "slot_id": "R3-r03-B"
+        }
+      ],
+      "wave_index": 48
+    },
+    {
+      "arm_order": [
+        "B",
+        "C",
+        "A"
+      ],
+      "block_id": "R5-r04",
+      "kind": "performance",
+      "parallel_block_lane": null,
+      "partition": "dependency_barriers",
+      "repeat": 4,
+      "scenario_id": "R5",
+      "sequence_index": 49,
+      "slots": [
+        {
+          "arm": "B",
+          "budget_s": null,
+          "endpoint_id": "B",
+          "execution_index": 145,
+          "repeat": 4,
+          "reused_calibration_slot": false,
+          "scenario_id": "R5",
+          "session_lane": null,
+          "slot_id": "R5-r04-B"
+        },
+        {
+          "arm": "C",
+          "budget_s": 300,
+          "endpoint_id": "C300",
+          "execution_index": 146,
+          "repeat": 4,
+          "reused_calibration_slot": false,
+          "scenario_id": "R5",
+          "session_lane": null,
+          "slot_id": "R5-r04-C"
+        },
+        {
+          "arm": "A",
+          "budget_s": null,
+          "endpoint_id": "A",
+          "execution_index": 147,
+          "repeat": 4,
+          "reused_calibration_slot": false,
+          "scenario_id": "R5",
+          "session_lane": null,
+          "slot_id": "R5-r04-A"
+        }
+      ],
+      "wave_index": 49
+    },
+    {
+      "arm_order": [
+        "A",
+        "C",
+        "B"
+      ],
+      "block_id": "R4-r05",
+      "kind": "performance",
+      "parallel_block_lane": null,
+      "partition": "overlap_long",
+      "repeat": 5,
+      "scenario_id": "R4",
+      "sequence_index": 50,
+      "slots": [
+        {
+          "arm": "A",
+          "budget_s": null,
+          "endpoint_id": "A",
+          "execution_index": 148,
+          "repeat": 5,
+          "reused_calibration_slot": false,
+          "scenario_id": "R4",
+          "session_lane": null,
+          "slot_id": "R4-r05-A"
+        },
+        {
+          "arm": "C",
+          "budget_s": 300,
+          "endpoint_id": "C300",
+          "execution_index": 149,
+          "repeat": 5,
+          "reused_calibration_slot": false,
+          "scenario_id": "R4",
+          "session_lane": null,
+          "slot_id": "R4-r05-C"
+        },
+        {
+          "arm": "B",
+          "budget_s": null,
+          "endpoint_id": "B",
+          "execution_index": 150,
+          "repeat": 5,
+          "reused_calibration_slot": false,
+          "scenario_id": "R4",
+          "session_lane": null,
+          "slot_id": "R4-r05-B"
+        }
+      ],
+      "wave_index": 50
+    },
+    {
+      "arm_order": [
+        "C",
+        "B",
+        "A"
+      ],
+      "block_id": "R1-r01",
+      "kind": "performance",
+      "parallel_block_lane": null,
+      "partition": "read_heavy",
+      "repeat": 1,
+      "scenario_id": "R1",
+      "sequence_index": 51,
+      "slots": [
+        {
+          "arm": "C",
+          "budget_s": 300,
+          "endpoint_id": "C300",
+          "execution_index": 151,
+          "repeat": 1,
+          "reused_calibration_slot": false,
+          "scenario_id": "R1",
+          "session_lane": null,
+          "slot_id": "R1-r01-C"
+        },
+        {
+          "arm": "B",
+          "budget_s": null,
+          "endpoint_id": "B",
+          "execution_index": 152,
+          "repeat": 1,
+          "reused_calibration_slot": false,
+          "scenario_id": "R1",
+          "session_lane": null,
+          "slot_id": "R1-r01-B"
+        },
+        {
+          "arm": "A",
+          "budget_s": null,
+          "endpoint_id": "A",
+          "execution_index": 153,
+          "repeat": 1,
+          "reused_calibration_slot": false,
+          "scenario_id": "R1",
+          "session_lane": null,
+          "slot_id": "R1-r01-A"
+        }
+      ],
+      "wave_index": 51
+    },
+    {
+      "arm_order": [
+        "B",
+        "A",
+        "C"
+      ],
+      "block_id": "R10-r04",
+      "kind": "performance",
+      "parallel_block_lane": null,
+      "partition": "quiet_job_multi_round",
+      "repeat": 4,
+      "scenario_id": "R10",
+      "sequence_index": 52,
+      "slots": [
+        {
+          "arm": "B",
+          "budget_s": null,
+          "endpoint_id": "B",
+          "execution_index": 154,
+          "repeat": 4,
+          "reused_calibration_slot": false,
+          "scenario_id": "R10",
+          "session_lane": null,
+          "slot_id": "R10-r04-B"
+        },
+        {
+          "arm": "A",
+          "budget_s": null,
+          "endpoint_id": "A",
+          "execution_index": 155,
+          "repeat": 4,
+          "reused_calibration_slot": false,
+          "scenario_id": "R10",
+          "session_lane": null,
+          "slot_id": "R10-r04-A"
+        },
+        {
+          "arm": "C",
+          "budget_s": 300,
+          "endpoint_id": "C300",
+          "execution_index": 156,
+          "repeat": 4,
+          "reused_calibration_slot": false,
+          "scenario_id": "R10",
+          "session_lane": null,
+          "slot_id": "R10-r04-C"
+        }
+      ],
+      "wave_index": 52
+    },
+    {
+      "arm_order": [
+        "B",
+        "A",
+        "C"
+      ],
+      "block_id": "R6-r02",
+      "kind": "performance",
+      "parallel_block_lane": null,
+      "partition": "dependency_barriers",
+      "repeat": 2,
+      "scenario_id": "R6",
+      "sequence_index": 53,
+      "slots": [
+        {
+          "arm": "B",
+          "budget_s": null,
+          "endpoint_id": "B",
+          "execution_index": 157,
+          "repeat": 2,
+          "reused_calibration_slot": false,
+          "scenario_id": "R6",
+          "session_lane": null,
+          "slot_id": "R6-r02-B"
+        },
+        {
+          "arm": "A",
+          "budget_s": null,
+          "endpoint_id": "A",
+          "execution_index": 158,
+          "repeat": 2,
+          "reused_calibration_slot": false,
+          "scenario_id": "R6",
+          "session_lane": null,
+          "slot_id": "R6-r02-A"
+        },
+        {
+          "arm": "C",
+          "budget_s": 300,
+          "endpoint_id": "C300",
+          "execution_index": 159,
+          "repeat": 2,
+          "reused_calibration_slot": true,
+          "scenario_id": "R6",
+          "session_lane": null,
+          "slot_id": "R6-r02-C"
+        }
+      ],
+      "wave_index": 53
+    },
+    {
+      "arm_order": [
+        "C"
+      ],
+      "block_id": "R12-r01-C",
+      "kind": "safety",
+      "parallel_block_lane": null,
+      "partition": "safety",
+      "repeat": 1,
+      "scenario_id": "R12",
+      "sequence_index": 54,
+      "slots": [
+        {
+          "arm": "C",
+          "budget_s": 300,
+          "endpoint_id": "C300",
+          "execution_index": 160,
+          "repeat": 1,
+          "reused_calibration_slot": true,
+          "scenario_id": "R12",
+          "session_lane": null,
+          "slot_id": "R12-r01-C"
+        }
+      ],
+      "wave_index": null
+    }
+  ],
+  "execution_mode": "serial_randomized",
+  "max_safe_parallel_blocks": 0,
+  "report_kind": "phase4-confirmatory-schedule",
+  "schema_version": 1,
+  "seed": 12345,
+  "selected_budget_s": 300,
+  "selected_c_endpoint": "C300",
+  "summary": {
+    "canonical_slots_by_arm": {
+      "A": 53,
+      "B": 53,
+      "C": 54
+    },
+    "performance_blocks": 53,
+    "performance_slots": 159,
+    "performance_slots_by_arm": {
+      "A": 53,
+      "B": 53,
+      "C": 53
+    },
+    "reused_calibration_slots": 10,
+    "safety_slots": 1,
+    "total_slots": 160
+  }
+}

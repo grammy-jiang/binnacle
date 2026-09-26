@@ -6,8 +6,8 @@
   "worktree": "/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4",
   "source_branch": "feature/chat-mode-scheduling-v2-phase3",
   "audited_source_head": "3a4dfb1b248e4530fb09013976abb863c8e35eaf",
-  "last_completed_step": "4.6A:selected",
-  "next_step": "Step 4.8: generate and freeze the deterministic serial-randomized A/B/C300 confirmatory schedule, then write and validate the 4.9-confirmatory and 4.10-micro run requests.",
+  "last_completed_step": "4.8",
+  "next_step": "Manager executes frozen run request 4.9-confirmatory; after its last trial, manager executes 4.10-micro. Partition review tasks 4.9-part-1 through 4.9-part-6 consume the confirmatory rows.",
   "dependency_audit": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase4-dependency-audit-2026-09-25-r01.json",
     "revision": "r01",
@@ -140,7 +140,10 @@
     "phase4_4H_result_json": "3747ac0a13b0a399b3dde86e278ec4593e602b6c0bb37b794911601e87eab8b5",
     "phase4_historical_comparator_json": "13f1fae101ccf9de63b7c45ed593b4827ba8df4cd7a7943079ec214d812eecb7",
     "phase4_historical_comparator_md": "25345d3d5567878ef226d13d11d820357bf55eec8d9930402dd0bbd10de06b51",
-    "phase4_selected_c_timing_qualification_json": "c308d01491d66e14515f5e554913342c9e715e872ff4b4fdd68356847d9723f6"
+    "phase4_selected_c_timing_qualification_json": "c308d01491d66e14515f5e554913342c9e715e872ff4b4fdd68356847d9723f6",
+    "phase4_confirmatory_schedule_json": "516938320afdf9dade5e03b8262a9e6ef9c95ad5d0330c20d1ce23d0ec68e734",
+    "phase4_4_9_confirmatory_run_request": "c2a137fa05eb68960bfbda7443b4bd914fe3c1b2bd65dd938b3d80904e85d7ee",
+    "phase4_4_10_micro_run_request": "522b4eae38fa306bd48102444a4b68e25992f967c3e0a3a2ff809cbce11b6476"
   },
   "preflight_findings": {
     "p4-preflight-git-lineage": "804da7b66ddc1f0e71ddf3106790989f50a0f320de4cd3b3f0aedaf962d68461",
@@ -211,6 +214,11 @@
       "status": "RESOLVED",
       "description": "P4-A5 found that overlapping post-P4-A4 trials polled read_chat.py about once per second, causing HTTP 403 Cloudflare challenges on the authenticated read path and false harness timeouts even when final assistant replies already existed in the retained conversation.",
       "disposition": "Canonical trial observation now first polls about 5 s after post and then no more often than every 10 s with jitter; read timeouts and HTTP 403/429 responses back off exponentially to 60 s and do not terminate observation, which can continue 600 s past the nominal turn limit. The deleted-chat conversation backup canonicalizes settle time from the final turn-ending assistant message timestamp while retaining first-seen poll time diagnostically; the evidence loader derives wall_s from settled_at_epoch_s when present. Regression coverage includes a turn settled at +18 s but first seen at +130 s and confirms it is within a 110 s limit. phase4_runtime_path_head advances 6ff1161e039d976f8e53a0d4d277c9258b15da29 -> c06518bf477f3c49811d4708dfd66507065d6996; no live trials were run in this fix."
+    },
+    {
+      "id": "D10",
+      "status": "INFO",
+      "description": "During the fourth selected-C qualification, production advanced from the accepted D2 observation baseline e8ece81 to cbafe8a through run-command shadow-predictor commits 42a3001, 4e31012 and cbafe8a; external config SHA-256 became 22f7ed9c2053c9fb20574fe4086fff797e197e2da40080e92f503213061188da. Five K=4 wait trials crossed this drift and record production_unchanged=false. K=1, which deterministically selects K=0, does not depend on this drift. Frozen Phase-4 source/lane/scenario/endpoint identities are unchanged; production checkout is clean, services/unit hashes/primary tunnel profile are stable, and blocking_wall_budget_s_by_client remains absent."
     }
   ],
   "steps": {
@@ -479,13 +487,27 @@
         "46 unrecovered D9 wall times are listed individually as stayed_observed with reason http_429_after_one_shot_fetch_attempt; they are not silently mixed with conversation-timestamp wall times.",
         "Calibration reuse audit passed for all 10 C300 R5/R6/R7/R12 slots: frozen source, endpoint/lane, Project, instruction, model/effort and scenario-manifest hashes match current confirmatory identities."
       ],
-      "commit": null,
+      "commit": "dd0b72a",
       "worker_branch": null
     },
     "4.8": {
-      "status": "running",
-      "tests": [],
-      "notes": [],
+      "status": "complete",
+      "tests": [
+        "uv run pytest -q tests/scripts/test_chat_scheduling_confirmatory.py tests/scripts/test_chat_scheduling_analyzer.py -> PASS: 21 passed in 1.88s; nproc=4; pre-run loadavg=0.43 0.63 0.75.",
+        "Deterministic schedule replay -> PASS: seed 12345 / C300 / 300 s / K=0 reproduces SHA-256 516938320afdf9dade5e03b8262a9e6ef9c95ad5d0330c20d1ce23d0ec68e734.",
+        "Calibration reuse identity audit -> PASS: 10/10 C300 R5/R6/R7/R12 slots match frozen source/lane/Project/instruction/model-effort/current scenario manifests.",
+        "bash /tmp/p36-manager/rr-validate.sh 4.9-confirmatory -> PASS: valid=true, 150 trials, one serial group, 53 schedule blocks.",
+        "4.9 schedule/request order cross-check -> PASS: exact frozen order after excluding the 10 reused C300 slots; partition tasks and trial partitions match the six canonical partitions.",
+        "bash /tmp/p36-manager/rr-validate.sh 4.10-micro -> PASS: valid=true, 9 trials, three lane blocks, parallel_blocks=3, block_order=sequential.",
+        "bash /tmp/p36-manager/isolation-check.sh -> PASS for service/unit/profile/budget-key invariants; production checkout clean at cbafe8a; shadow-predictor config drift recorded as D10."
+      ],
+      "notes": [
+        "Frozen confirmatory schedule: benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-schedule.json SHA-256 516938320afdf9dade5e03b8262a9e6ef9c95ad5d0330c20d1ce23d0ec68e734; seed=12345; selected C300/300s; K=0; serial_randomized; 160 canonical slots.",
+        "Ten valid selected-C calibration slots are reused: C R5/R6/R7 repeats 1-3 and R12. The 4.9 request therefore contains 150 live trials; R12 is absent from the request because its sole C safety slot is reused.",
+        "4.9-confirmatory request SHA-256 c2a137fa05eb68960bfbda7443b4bd914fe3c1b2bd65dd938b3d80904e85d7ee; task 4.9-runs; partition tasks exactly 4.9-part-1 through 4.9-part-6.",
+        "4.10-micro request SHA-256 522b4eae38fa306bd48102444a4b68e25992f967c3e0a3a2ff809cbce11b6476; task 4.10-runs; A/B/C300 lanes each run M1,M2,M3 sequentially while the three lane blocks may overlap.",
+        "D10: production advanced e8ece81 -> cbafe8a through three run-command shadow-predictor commits (42a3001, 4e31012, cbafe8a); config hash changed d24dad... -> 22f7ed... . These changes do not touch frozen Phase-4 source/scenario/lane/endpoint artifacts; unit files, primary tunnel profile and absent blocking-wall budget key remain unchanged."
+      ],
       "commit": null,
       "worker_branch": null
     },
@@ -992,11 +1014,44 @@
         "recomputed": 14,
         "stayed_observed_http_429": 46
       }
+    },
+    {
+      "kind": "confirmatory_schedule_freeze",
+      "at": "2026-09-26T16:15:11+10:00",
+      "task_id": "4.8",
+      "path": "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-schedule.json",
+      "sha256": "516938320afdf9dade5e03b8262a9e6ef9c95ad5d0330c20d1ce23d0ec68e734",
+      "seed": 12345,
+      "selected_c_endpoint": "C300",
+      "selected_budget_s": 300,
+      "max_safe_parallel_blocks": 0,
+      "execution_mode": "serial_randomized",
+      "canonical_slots": {
+        "A": 53,
+        "B": 53,
+        "C": 54
+      },
+      "reused_calibration_slots": 10
+    },
+    {
+      "kind": "confirmatory_schedule_and_run_requests",
+      "at": "2026-09-26T16:18:22+10:00",
+      "task_id": "4.8",
+      "schedule_sha256": "516938320afdf9dade5e03b8262a9e6ef9c95ad5d0330c20d1ce23d0ec68e734",
+      "seed": 12345,
+      "max_safe_parallel_blocks": 0,
+      "execution_mode": "serial_randomized",
+      "reused_calibration_slots": 10,
+      "remaining_live_trials": 150,
+      "run_requests": {
+        "4.9-confirmatory": "c2a137fa05eb68960bfbda7443b4bd914fe3c1b2bd65dd938b3d80904e85d7ee",
+        "4.10-micro": "522b4eae38fa306bd48102444a4b68e25992f967c3e0a3a2ff809cbce11b6476"
+      }
     }
   ],
   "handoff": null,
   "created_at": "2026-09-25T15:31:10+10:00",
-  "updated_at": "2026-09-26T16:13:23+10:00",
+  "updated_at": "2026-09-26T16:18:22+10:00",
   "phase4_source_head": "06bc1649c4bad9449470366da971649bb7620020",
   "baseline_snapshot": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase4-baseline.json",
@@ -1225,5 +1280,31 @@
     },
     "settle_recomputed": 14,
     "settle_stayed_observed_http_429": 46
+  },
+  "confirmatory_schedule": {
+    "path": "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-schedule.json",
+    "sha256": "516938320afdf9dade5e03b8262a9e6ef9c95ad5d0330c20d1ce23d0ec68e734",
+    "seed": 12345,
+    "selected_c_endpoint": "C300",
+    "selected_budget_s": 300,
+    "max_safe_parallel_blocks": 0,
+    "execution_mode": "serial_randomized",
+    "total_slots": 160,
+    "reused_calibration_slots": 10,
+    "remaining_live_trials": 150
+  },
+  "confirmatory_run_requests": {
+    "4.9-confirmatory": {
+      "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase4/run-requests/4.9-confirmatory.json",
+      "sha256": "c2a137fa05eb68960bfbda7443b4bd914fe3c1b2bd65dd938b3d80904e85d7ee",
+      "trials": 150,
+      "task": "4.9-runs"
+    },
+    "4.10-micro": {
+      "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase4/run-requests/4.10-micro.json",
+      "sha256": "522b4eae38fa306bd48102444a4b68e25992f967c3e0a3a2ff809cbce11b6476",
+      "trials": 9,
+      "task": "4.10-runs"
+    }
   }
 }

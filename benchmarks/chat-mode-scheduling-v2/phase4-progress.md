@@ -8,9 +8,9 @@ Worktree: `/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4`
 
 Audited source HEAD: `3a4dfb1b248e4530fb09013976abb863c8e35eaf`
 
-Last completed step: **4.6A:selected**
+Last completed step: **4.8**
 
-Next step: **Step 4.8: generate and freeze the deterministic serial-randomized A/B/C300 confirmatory schedule, then write and validate the 4.9-confirmatory and 4.10-micro run requests.**
+Next step: **manager executes frozen `4.9-confirmatory`; after its last trial, manager executes `4.10-micro`. Partition review tasks `4.9-part-1` through `4.9-part-6` consume the confirmatory rows.**
 
 ## Frozen Step 4.0 entry gate
 
@@ -48,7 +48,7 @@ Next step: **Step 4.8: generate and freeze the deterministic serial-randomized A
 | 4.7 | complete | — |
 | 4.7-fix | complete | `76ec24e` |
 | 4.6A:selected | complete | — |
-| 4.8 | running | — |
+| 4.8 | complete | — |
 | 4.9.1 | not_started | — |
 | 4.9.2 | not_started | — |
 | 4.9.3 | not_started | — |
@@ -430,6 +430,31 @@ Step 4.6A:selected from the frozen result**.
   scenario-manifest identities.
 - Focused analyzer/confirmatory regression: **21 passed in 1.88 s**; nproc=4,
   pre-run load average 0.43 / 0.63 / 0.75.
+
+## Step 4.8 deterministic confirmatory schedule — COMPLETE
+
+- Frozen schedule: `phase4-confirmatory-schedule.json`, seed **12345**,
+  selected endpoint **C300 / 300 s**, `max_safe_parallel_blocks=0`,
+  execution mode `serial_randomized`, SHA-256
+  `516938320afdf9dade5e03b8262a9e6ef9c95ad5d0330c20d1ce23d0ec68e734`.
+- Population is 160 canonical slots: A=53, B=53, C=54. Ten valid C300
+  calibration slots are reused, leaving **150 live 4.9 trials**. Replay with
+  the same seed/budget/K is byte-identical.
+- `4.9-confirmatory` validates with 150 trials in one fully serial group and
+  preserves the frozen schedule order exactly after reused C slots are removed.
+  Request SHA-256:
+  `c2a137fa05eb68960bfbda7443b4bd914fe3c1b2bd65dd938b3d80904e85d7ee`.
+- `4.10-micro` validates with nine trials: three lane blocks (A, B, C300), each
+  sequential M1 -> M2 -> M3, `parallel_blocks=3`. Request SHA-256:
+  `522b4eae38fa306bd48102444a4b68e25992f967c3e0a3a2ff809cbce11b6476`.
+- **D10 / INFO:** production advanced from the accepted D2 baseline `e8ece81`
+  to clean `cbafe8a` through the owner-approved run-command shadow-predictor
+  line; config SHA-256 is now
+  `22f7ed9c2053c9fb20574fe4086fff797e197e2da40080e92f503213061188da`.
+  Five K=4 wait trials crossed this drift, but the K=1 host-load failure that
+  selects K=0 is independent of it. Frozen Phase-4 identities are unchanged;
+  services, unit hashes, primary tunnel profile and absent blocking-wall budget
+  key remain stable.
 
 ## Step 4H-R historical H comparator — COMPLETE (P4-A3 REANALYSIS)
 
