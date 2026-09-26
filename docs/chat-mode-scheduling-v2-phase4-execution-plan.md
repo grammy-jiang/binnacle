@@ -2631,6 +2631,47 @@ timeouts for turns that had finished: in the third execution of
   their records; the 4.6A:selected qualification runs again under this rule,
   and 4.8 decides whether any earlier calibration slot is still reusable.
 
+### Amendment P4-A6: confirmatory analysis population, status and timing fixes; 4C re-judged (2026-09-27)
+
+Manager decision 2026-09-27, recorded 03:00, under the owner's standing
+instructions (do not wait; take the recommended option, record it, proceed),
+following the precedent of P4-A3 ("fix and re-judge"). Evidence: the first
+two 4C reviews (correctness/safety a1 at 02:50, performance/bootstrap a1 at
+02:56) blocked on three defects in the analysis pipeline. None is in an arm.
+
+- **D10a Population.** The confirmatory gate aggregation finds trials by
+  scanning `~/.local/state/binnacle/chat-scheduling-v2/runs`. That directory
+  also holds submitted calibration, micro and diagnostic runs, so the
+  aggregation does not reproduce the six frozen checkpoint populations.
+- **D10b Status.** The submission classifier does not recognize
+  `submission_status: failed_after_submission` (R7-r02-B) and drops the row.
+  The submitted-trial inclusion rule and the 4.9 checkpoint keep that row as
+  the slot owner. Slot integrity becomes 159/160, and the hard gates
+  `correctness_100_percent` and `premature_handoff_zero` are forced false.
+- **D10c Timing.** The manager's deferred cleanup recovered the settle time
+  from the conversation (P4-A5) in `chat-timing.json` for 95 confirmatory
+  rows, 79 of them after their checkpoint froze. `trace.json` and
+  `metrics.json`, which the aggregation reads, were not regenerated (for
+  example, R10-r01-A: 102.436 s recovered, 130.823 s in `metrics.json`).
+
+Decision:
+
+- **Population.** The aggregation reads exactly the canonical slot owners
+  that the six frozen checkpoints list, plus canonical R12 as frozen. It
+  never scans a directory.
+- **Status.** `failed_after_submission` is a submitted status. The row owns
+  its slot and enters every metric under the frozen rules for a submitted
+  trial.
+- **Timing addendum.** For every canonical row whose `chat-timing.json`
+  differs from its frozen checkpoint hash, the frozen per-trial analyzer
+  (unchanged) regenerates `trace.json` and `metrics.json`. The old files are
+  kept as `*.pre-p4a6`. One addendum per partition records the old and new
+  hashes and the old and new settle times. The frozen checkpoints are not
+  rewritten; the addenda extend them.
+- **Scope.** No change to arms, thresholds, statistics or the schedule. Task
+  4C-fix implements this. All four 4C reviews then run again on the fixed
+  head (a2).
+
 ### Step 4H-R — aggregate historical H comparator
 
 Predecessor: every canonical H R5/R6/R7/R12 task is frozen. This step may run in
