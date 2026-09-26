@@ -8,9 +8,11 @@ Worktree: `/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4`
 
 Audited source HEAD: `3a4dfb1b248e4530fb09013976abb863c8e35eaf`
 
-Last completed step: **4.8**
+Last completed step: **4.9.4**
 
-Next step: **manager executes frozen `4.9-confirmatory`; after its last trial, manager executes `4.10-micro`. Partition review tasks `4.9-part-1` through `4.9-part-6` consume the confirmatory rows.**
+Next step: **complete the remaining independent 4.9 confirmatory partitions;
+Step 4.10 becomes ready only after 4.9.1 through 4.9.6 all checkpoint
+complete.**
 
 ## Frozen Step 4.0 entry gate
 
@@ -52,7 +54,7 @@ Next step: **manager executes frozen `4.9-confirmatory`; after its last trial, m
 | 4.9.1 | not_started | — |
 | 4.9.2 | not_started | — |
 | 4.9.3 | not_started | — |
-| 4.9.4 | not_started | — |
+| 4.9.4 | complete | R7 9/9 frozen; integrity PASS; commit pending |
 | 4.9.5 | not_started | — |
 | 4.9.6 | not_started | — |
 | 4.10 | not_started | — |
@@ -455,6 +457,32 @@ Step 4.6A:selected from the frozen result**.
   selects K=0 is independent of it. Frozen Phase-4 identities are unchanged;
   services, unit hashes, primary tunnel profile and absent blocking-wall budget
   key remain stable.
+
+## Step 4.9.4 confirmatory R7 checkpoint — COMPLETE
+
+- Slot integrity is **PASS**: 9/9 canonical R7 slots are frozen, comprising six
+  live A/B outcomes and three reused C300 calibration outcomes. There are no
+  reruns or unscorable-routing slots, and every owning row records host load.
+- Routing misses are A 0/3, B 0/3, C 0/3. C uses the already-resolved D6
+  retained-log routing recovery for the reused calibration rows.
+- The first submitted R7-r02-B outcome remains canonical despite runner exit
+  1; it was correctly routed and therefore was not rerun.
+- Analyzer results are 8/9 same-prompt and 1/9 interrupted. The failed B repeat
+  is preserved as evidence rather than replaced.
+- D9 recovery recomputed R7-r01-C to 154.656 s and R7-r03-C to 157.100 s
+  from final-assistant timestamps. R7-r01-A, R7-r01-B, and R7-r02-C
+  remain poll-observed after bounded read_chat.py attempts returned no
+  conversation payload.
+- Canonical checkpoint: phase4-confirmatory-R7-checkpoint.json, SHA-256
+  344e2b5f372e46dc80dab7df0166a86e58cf5624b358664d2d48bd3b8ffec63a;
+  Markdown SHA-256 9894c06a2b349ad6bf45ee41640cd1fac7242ef4f2430451a4cc6bd20bca9f94.
+- Frozen source-file tree SHA-256
+  e64ba86062d91863653bfed02946b9e0fb95ed0285009af8c9bdfb4d82a5ecf6 across
+  126 files, preserved byte-for-byte in nine deterministic tar.gz archives
+  under phase4-confirmatory-evidence/R7/.
+- Focused analyzer/confirmatory regression: **21 passed in 1.93 s**; nproc=4,
+  pre-run load average 0.42 / 0.60 / 0.56. Evidence verification passed for
+  all 126 source files and all nine deterministic archives.
 
 ## Step 4H-R historical H comparator — COMPLETE (P4-A3 REANALYSIS)
 

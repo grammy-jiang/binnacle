@@ -6,8 +6,8 @@
   "worktree": "/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4",
   "source_branch": "feature/chat-mode-scheduling-v2-phase3",
   "audited_source_head": "3a4dfb1b248e4530fb09013976abb863c8e35eaf",
-  "last_completed_step": "4.8",
-  "next_step": "Manager executes frozen run request 4.9-confirmatory; after its last trial, manager executes 4.10-micro. Partition review tasks 4.9-part-1 through 4.9-part-6 consume the confirmatory rows.",
+  "last_completed_step": "4.9.4",
+  "next_step": "Complete the remaining independent 4.9 confirmatory partitions; Step 4.10 becomes ready only after 4.9.1 through 4.9.6 all checkpoint complete.",
   "dependency_audit": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase4-dependency-audit-2026-09-25-r01.json",
     "revision": "r01",
@@ -533,9 +533,20 @@
       "worker_branch": null
     },
     "4.9.4": {
-      "status": "not_started",
-      "tests": [],
-      "notes": [],
+      "status": "complete",
+      "tests": [
+        "R7 slot-integrity validation -> PASS: 9/9 canonical slots, 6 live + 3 reused C300; no duplicates/reruns/unscorable routing; every state_dir present; every host_load_flagged recorded.",
+        "R7 routing integrity -> PASS: A=0/3, B=0/3, C=0/3 routing misses; reused C uses resolved D6 retained-log recovery.",
+        "R7 analyzer pass -> 9/9 state directories analyzed with corrected analyzer; 8/9 same-prompt, 1/9 interrupted; first submitted R7-r02-B exit 1 preserved.",
+        "uv run pytest -q tests/scripts/test_chat_scheduling_confirmatory.py tests/scripts/test_chat_scheduling_analyzer.py -> PASS: 21 passed in 1.93s; nproc=4; pre-run loadavg=0.42 0.60 0.56.",
+        "Frozen evidence verification -> PASS: 126/126 authoritative source files match checkpoint digests and all 9 deterministic archives preserve those bytes; tree SHA-256 e64ba86062d91863653bfed02946b9e0fb95ed0285009af8c9bdfb4d82a5ecf6."
+      ],
+      "notes": [
+        "Frozen R7 checkpoint: benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-R7-checkpoint.json SHA-256 344e2b5f372e46dc80dab7df0166a86e58cf5624b358664d2d48bd3b8ffec63a; Markdown SHA-256 9894c06a2b349ad6bf45ee41640cd1fac7242ef4f2430451a4cc6bd20bca9f94.",
+        "Frozen R7 source-file tree SHA-256 e64ba86062d91863653bfed02946b9e0fb95ed0285009af8c9bdfb4d82a5ecf6 across 126 files, preserved byte-for-byte in 9 deterministic tar.gz archives under benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-evidence/R7/.",
+        "D9 timing recovery recomputed R7-r01-C and R7-r03-C from final assistant timestamps; R7-r01-A, R7-r01-B and R7-r02-C stay poll-observed after bounded read_chat.py attempts returned no payload.",
+        "No endpoint, Project, production config/service, or non-R7 confirmatory slot was mutated or rerun."
+      ],
       "commit": null,
       "worker_branch": null
     },
@@ -1047,11 +1058,35 @@
         "4.9-confirmatory": "c2a137fa05eb68960bfbda7443b4bd914fe3c1b2bd65dd938b3d80904e85d7ee",
         "4.10-micro": "522b4eae38fa306bd48102444a4b68e25992f967c3e0a3a2ff809cbce11b6476"
       }
+    },
+    {
+      "kind": "confirmatory_partition_checkpoint",
+      "at": "2026-09-26T20:43:38+10:00",
+      "task_id": "4.9.4",
+      "partition": "R7",
+      "schedule_sha256": "516938320afdf9dade5e03b8262a9e6ef9c95ad5d0330c20d1ce23d0ec68e734",
+      "checkpoint_path": "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-R7-checkpoint.json",
+      "checkpoint_sha256": "344e2b5f372e46dc80dab7df0166a86e58cf5624b358664d2d48bd3b8ffec63a",
+      "checkpoint_md_path": "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-R7-checkpoint.md",
+      "checkpoint_md_sha256": "9894c06a2b349ad6bf45ee41640cd1fac7242ef4f2430451a4cc6bd20bca9f94",
+      "evidence_root": "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-evidence/R7",
+      "evidence_file_count": 126,
+      "evidence_tree_sha256": "e64ba86062d91863653bfed02946b9e0fb95ed0285009af8c9bdfb4d82a5ecf6",
+      "routing_miss_rates": {
+        "A": "0/3 (0%)",
+        "B": "0/3 (0%)",
+        "C": "0/3 (0%)"
+      },
+      "timing_recovery": {
+        "recomputed": 2,
+        "stayed_observed": 3
+      },
+      "evidence_archive_count": 9
     }
   ],
   "handoff": null,
   "created_at": "2026-09-25T15:31:10+10:00",
-  "updated_at": "2026-09-26T16:18:22+10:00",
+  "updated_at": "2026-09-26T20:46:20+10:00",
   "phase4_source_head": "06bc1649c4bad9449470366da971649bb7620020",
   "baseline_snapshot": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase4-baseline.json",
