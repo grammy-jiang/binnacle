@@ -4,6 +4,7 @@ SAMPLE = """\
 2026-09-26T10:00:00.000 INFO: event=run_command_prediction schema=1 call=a feature_hash=fa shape_hash=sa first_token_class=uv heredoc=0 chain_n=0 max_delay_s=0 len_chars=12 declared_wait_s=30 declared_background=none auto_rule=- memory_bucket=- memory_p90_s=- memory_n=0 memory_source=none memory_store_keys=0 rules_bucket=- rules_p90_s=- rules_hits=- judge=skipped judge_skip_reason=budget judge_cache=miss
 2026-09-26T10:00:00.010 INFO: event=run_command_dispatch call=a client=x job_id=ja state=exited
 2026-09-26T10:00:12.000 INFO: event=job_exit job_id=ja runtime_s=12 exit_code=0 signal=- log_bytes=1
+2026-09-26T10:00:12.010 INFO: event=run_command_prediction_judge schema=1 call=a prompt_version=2026-09-26.1 prompt_hash=abc123 model=gpt-oss-120b bucket=medium p90_s=20 confidence=0.64 reason=test_suite latency_ms=10 prompt_tokens=100 completion_tokens=20 error=-
 """
 
 
@@ -23,3 +24,5 @@ def test_stats_predictions_csv_exports_joined_privacy_safe_rows(
     assert "12.0" in exported
     assert "command" not in exported
     assert "prompt" not in exported
+    assert "judge_confidence" in exported and "0.64" in exported
+    assert "judge_reason" in exported and "test_suite" in exported

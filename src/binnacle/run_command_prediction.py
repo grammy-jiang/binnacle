@@ -1,46 +1,40 @@
 from __future__ import annotations
+# ruff: noqa: I001
 
 import hashlib
 import json
+import logging
 import math
 import os
 import re
 import threading
 import time
 import urllib.error
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 from binnacle.config import (
     JudgeBudget,
     read_cerebras_api_key,
-)
-from binnacle.config import (
     run_command_cerebras_reset_seconds as _reset_seconds,
-)
-from binnacle.config import (
     run_command_cerebras_transport as _urlopen_transport,
 )
 from binnacle.run_command_telemetry import (
     CommandFeatures,
-    JudgeResult,
     MemoryLookup,
     Prediction,
     log_shadow_config,
-    log_shadow_judge,
     log_shadow_memory_error,
     log_shadow_prediction,
-)
-from binnacle.run_command_telemetry import (
     prediction_optional_int as _optional_int,
-)
-from binnacle.run_command_telemetry import (
     prediction_runtime_bucket as runtime_bucket,
 )
 
 _BUCKETS = {"short", "medium", "long"}
+_REASON_CODES = {"explicit_delay", "local_history", "test_suite", "build_or_install", "network", "heavy_io", "loop_or_chain", "simple_command", "unknown"}  # fmt: skip
+JUDGE_PROMPT_VERSION, JUDGE_MAX_DAY_CALLS = "2026-09-26.1", 800
 _SLEEP = re.compile(
     r'(?ix)(?:^|(?:&&|\|\||[;|&({"\'])\s*|\b(?:do|then)\s+)sleep\s+'
     r'(\d+(?:\.\d+)?)([sm]?)(?=$|[\s;|&)}"\'])'
@@ -62,10 +56,24 @@ _BLOB = re.compile(
     r"(?<![A-Za-z0-9])(?:[A-Fa-f0-9]{21,}|[A-Za-z0-9+/=_-]{32,})(?![A-Za-z0-9])"
 )
 _LONG_QUOTED = re.compile(r"(['\"])(?:(?!\1).){80,}\1", re.DOTALL)
-Transport = Callable[..., tuple[int, bytes, Mapping[str, str]]]
-_JUDGE_SYSTEM = "Estimate runtime; prefer local history. Return requested JSON only."
+
+
+class JudgeResult(NamedTuple):
+    bucket: str | None
+    p90_s: float | None
+    latency_ms: float
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    error: str | None = None
+    retry_after_s: float | None = None
+    confidence: float | None = None
+    reason: str | None = None
+
+
+_JUDGE_SYSTEM = "Estimate run_command wall runtime on a Raspberry Pi 5 with 4 Cortex-A76 cores, 16 GB RAM, NVMe, Wi-Fi uplink, in a Python repository using uv, pytest, tox, pre-commit and git. Runtime is wall time from dispatch until the command exits; for a background job, until that job exits. Buckets: short <10 s, medium 10-60 s inclusive, long >60 s. p90_s is a 90th-percentile estimate in seconds. Evidence order: explicit sleep/delay adds its seconds; timeout N only caps the maximum and does not imply N seconds of work. Local history for this shape with n>=3 outweighs general knowledge; then use tool knowledge; then structure: loops multiply, chains add, and a heredoc script is at least as slow as its slowest part. Anchors: git status/diff/log, ls, cat, grep, sed -n are short; focused pytest file or -k is usually short-medium; full suites, tox, pre-commit --all-files, uv sync or pip install, builds, and Wi-Fi downloads are medium-long. With weak evidence use the 14-day host base rate: about 87% short, 9% medium, 4% long. Redaction placeholders hide values, not work. Return only the requested JSON schema."
+JUDGE_PROMPT_HASH = hashlib.sha256(_JUDGE_SYSTEM.encode()).hexdigest()[:12]
 _JUDGE_FORMAT = json.loads(
-    """{"type":"json_schema","json_schema":{"name":"run_command_runtime_prediction","strict":true,"schema":{"type":"object","properties":{"bucket":{"type":"string","enum":["short","medium","long"]},"p90_s":{"type":"number","minimum":0}},"required":["bucket","p90_s"],"additionalProperties":false}}}"""
+    """{"type":"json_schema","json_schema":{"name":"run_command_runtime_prediction","strict":true,"schema":{"type":"object","properties":{"bucket":{"type":"string","enum":["short","medium","long"]},"p90_s":{"type":"number","minimum":0},"confidence":{"type":"number","minimum":0,"maximum":1},"reason":{"type":"string","enum":["explicit_delay","local_history","test_suite","build_or_install","network","heavy_io","loop_or_chain","simple_command","unknown"]}},"required":["bucket","p90_s","confidence","reason"],"additionalProperties":false}}}"""
 )
 
 
@@ -171,36 +179,37 @@ class MemoryStore:
                     table.pop(next(iter(table)))
             self._write()
 
-    def cache_get(self, command_hash: str) -> JudgeResult | None:
+    # fmt: off
+    def cache_get(self, command_hash: str, prompt_hash: str = JUDGE_PROMPT_HASH) -> JudgeResult | None:
+        key = f"{command_hash}:{prompt_hash}"
         with self._lock:
-            row = self._data["cache"].get(command_hash)
+            row = self._data["cache"].get(key)
             if not row or float(row.get("expires", 0)) <= time.time():
-                self._data["cache"].pop(command_hash, None)
+                self._data["cache"].pop(key, None)
                 return None
-            return JudgeResult(
-                str(row["bucket"]),
-                float(row["p90_s"]),
-                0.0,
-                _optional_int(row.get("prompt_tokens")),
-                _optional_int(row.get("completion_tokens")),
-            )
+            try:
+                result = JudgeResult(str(row["bucket"]), float(row["p90_s"]), 0.0, _optional_int(row.get("prompt_tokens")), _optional_int(row.get("completion_tokens")), confidence=float(row["confidence"]), reason=str(row["reason"]))
+                if result.confidence is None or not 0 <= result.confidence <= 1 or result.reason not in _REASON_CODES:
+                    raise ValueError
+                return result
+            except (KeyError, TypeError, ValueError):
+                self._data["cache"].pop(key, None)
+                return None
 
-    def cache_set(self, command_hash: str, result: JudgeResult) -> None:
+    def cache_set(self, command_hash: str, result: JudgeResult, prompt_hash: str = JUDGE_PROMPT_HASH) -> None:
         if result.bucket not in _BUCKETS or result.p90_s is None:
             return
+        if result.confidence is None or not 0 <= result.confidence <= 1 or result.reason not in _REASON_CODES:
+            return
+        key = f"{command_hash}:{prompt_hash}"
         with self._lock:
             cache = self._data["cache"]
-            cache.pop(command_hash, None)
-            cache[command_hash] = {
-                "expires": time.time() + self.cache_ttl_s,
-                "bucket": result.bucket,
-                "p90_s": result.p90_s,
-                "prompt_tokens": result.prompt_tokens,
-                "completion_tokens": result.completion_tokens,
-            }
+            cache.pop(key, None)
+            cache[key] = {"expires": time.time() + self.cache_ttl_s, "bucket": result.bucket, "p90_s": result.p90_s, "confidence": result.confidence, "reason": result.reason, "prompt_tokens": result.prompt_tokens, "completion_tokens": result.completion_tokens}
             while len(cache) > self.max_keys:
                 cache.pop(next(iter(cache)))
             self._write()
+    # fmt: on
 
     @property
     def key_count(self) -> int:
@@ -246,7 +255,7 @@ def judge_skip_reason(
 
 
 class CerebrasJudgeClient:
-    def __init__(self, settings: Any, transport: Transport | None = None) -> None:
+    def __init__(self, settings: Any, transport: Any = None) -> None:
         self.settings = settings
         self.transport = transport or _urlopen_transport
 
@@ -262,45 +271,19 @@ class CerebrasJudgeClient:
     ) -> JudgeResult:
         started = time.perf_counter()
         try:
-            prompt = {
-                "host": "Raspberry Pi 5, 4 cores",
-                "command": sanitized_command,
-                "shape_hash": features.shape_hash,
-                "first_token_class": features.first_token_class,
-                "runner_flags": list(features.runner_flags),
-                "max_delay_s": features.max_delay_s,
-                "heredoc": features.heredoc,
-                "chain_n": features.chain_n,
-                "len_chars": features.len_chars,
-                "local_history": dict(local_stats),
-                "output": {"bucket": "short|medium|long", "p90_s": "number"},
-            }
-            body = json.dumps(
-                {
-                    "model": self.settings.judge_model,
-                    "reasoning_effort": "low",
-                    "messages": [
-                        {"role": "system", "content": _JUDGE_SYSTEM},
-                        {
-                            "role": "user",
-                            "content": json.dumps(prompt, separators=(",", ":")),
-                        },
-                    ],
-                    "response_format": _JUDGE_FORMAT,
-                    "temperature": 0,
-                },
-                separators=(",", ":"),
-            ).encode()
+            # fmt: off
+            prompt = {"prompt_version": JUDGE_PROMPT_VERSION, "command": sanitized_command, "shape_hash": features.shape_hash, "first_token_class": features.first_token_class, "runner_flags": list(features.runner_flags), "max_delay_s": features.max_delay_s, "heredoc": features.heredoc, "chain_n": features.chain_n, "len_chars": features.len_chars, "local_history": dict(local_stats)}
+            body = json.dumps({
+                "model": self.settings.judge_model, "reasoning_effort": "low",
+                "messages": [{"role": "system", "content": _JUDGE_SYSTEM}, {"role": "user", "content": json.dumps(prompt, separators=(",", ":"))}],
+                "response_format": _JUDGE_FORMAT, "temperature": 0,
+            }, separators=(",", ":")).encode()
             status, payload, response_headers = self.transport(
                 self.settings.judge_endpoint,
-                {
-                    "Authorization": f"Bearer {self._api_key()}",
-                    "Content-Type": "application/json",
-                    "User-Agent": "binnacle-shadow-judge/1",
-                },
-                body,
-                self.settings.judge_timeout_ms / 1000,
+                {"Authorization": f"Bearer {self._api_key()}", "Content-Type": "application/json", "User-Agent": "binnacle-shadow-judge/1"},
+                body, self.settings.judge_timeout_ms / 1000,
             )
+            # fmt: on
             if status >= 400:
                 error = f"http_{status}"
                 retry = _reset_seconds(response_headers) if status == 429 else None
@@ -309,16 +292,19 @@ class CerebrasJudgeClient:
             decoded = json.loads(payload)
             answer = json.loads(decoded["choices"][0]["message"]["content"])
             bucket, p90 = str(answer["bucket"]), float(answer["p90_s"])
-            if bucket not in _BUCKETS or p90 < 0:
+            confidence, reason = float(answer["confidence"]), str(answer["reason"])
+            if (
+                bucket not in _BUCKETS
+                or p90 < 0
+                or isinstance(answer["confidence"], bool)
+                or not 0 <= confidence <= 1
+                or reason not in _REASON_CODES
+            ):
                 raise ValueError
             usage = decoded.get("usage") or {}
-            return JudgeResult(
-                bucket,
-                p90,
-                (time.perf_counter() - started) * 1000,
-                _optional_int(usage.get("prompt_tokens")),
-                _optional_int(usage.get("completion_tokens")),
-            )
+            # fmt: off
+            return JudgeResult(bucket, p90, (time.perf_counter() - started) * 1000, _optional_int(usage.get("prompt_tokens")), _optional_int(usage.get("completion_tokens")), confidence=confidence, reason=reason)
+            # fmt: on
         except TimeoutError:
             error = "TimeoutError"
         except (OSError, urllib.error.URLError):
@@ -332,7 +318,12 @@ class CerebrasJudgeClient:
 
 
 class ShadowPredictionEngine:
-    def __init__(self, settings: Any, *, transport: Transport | None = None) -> None:
+    def __init__(self, settings: Any, *, transport: Any = None) -> None:
+        settings = settings.model_copy(
+            update={
+                "judge_day_budget": min(settings.judge_day_budget, JUDGE_MAX_DAY_CALLS)
+            }
+        )
         self.settings = settings
         self.enabled = bool(settings.enabled)
         self.predictors = tuple(settings.predictors)
@@ -363,7 +354,7 @@ class ShadowPredictionEngine:
             s.judge_complex_length_threshold,
             s.judge_minute_budget,
             s.judge_hour_budget,
-            s.judge_day_budget,
+            min(s.judge_day_budget, JUDGE_MAX_DAY_CALLS),
             s.judge_cache_ttl_s,
         )
         log_shadow_config(
@@ -476,7 +467,14 @@ class ShadowPredictionEngine:
 
     def _log_judge(self, call_id: str, result: JudgeResult) -> None:
         model = self.settings.judge_model.replace(" ", "_")[:80]
-        log_shadow_judge(call_id, model, result)
+        confidence = result.confidence if result.confidence is not None else "-"
+        reason = result.reason if result.reason in _REASON_CODES else "-"
+        # fmt: off
+        logging.getLogger("binnacle.run_command").info(
+            "event=run_command_prediction_judge schema=1 call=%s prompt_version=%s prompt_hash=%s model=%s bucket=%s p90_s=%s confidence=%s reason=%s latency_ms=%.2f prompt_tokens=%s completion_tokens=%s error=%s",
+            call_id, JUDGE_PROMPT_VERSION, JUDGE_PROMPT_HASH, model, result.bucket or "-", result.p90_s if result.p90_s is not None else "-", confidence, reason, result.latency_ms, result.prompt_tokens if result.prompt_tokens is not None else "-", result.completion_tokens if result.completion_tokens is not None else "-", (result.error or "-").replace(" ", "_")[:80],
+        )
+        # fmt: on
 
     def record_runtime(self, features: CommandFeatures, runtime_s: float) -> None:
         if not self.enabled or self.store is None or self.executor is None:

@@ -7,6 +7,9 @@ import pytest
 
 from binnacle.config import RunCommandShadowPredictionSettings
 from binnacle.run_command_prediction import (
+    JUDGE_MAX_DAY_CALLS,
+    JUDGE_PROMPT_HASH,
+    JUDGE_PROMPT_VERSION,
     CerebrasJudgeClient,
     JudgeBudget,
     JudgeResult,
@@ -48,14 +51,25 @@ def cfg(tmp_path, **overrides):
     return RunCommandShadowPredictionSettings(**values)
 
 
-def fake_ok(captured, bucket="long", p90=75.0):
+def fake_ok(captured, bucket="long", p90=75.0, confidence=0.82, reason="test_suite"):
     def transport(url, headers, body, timeout):
         captured.update(
             url=url, headers=headers, body=json.loads(body), timeout=timeout
         )
         payload = {
             "choices": [
-                {"message": {"content": json.dumps({"bucket": bucket, "p90_s": p90})}}
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "bucket": bucket,
+                                "p90_s": p90,
+                                "confidence": confidence,
+                                "reason": reason,
+                            }
+                        )
+                    }
+                }
             ],
             "usage": {"prompt_tokens": 12, "completion_tokens": 4},
         }
@@ -164,11 +178,34 @@ def test_prediction_judge_success_uses_fake_transport(monkeypatch, tmp_path):
     assert result.bucket == "long"
     assert result.p90_s == 75
     assert result.prompt_tokens == 12
+    assert result.confidence == pytest.approx(0.82)
+    assert result.reason == "test_suite"
     assert captured["headers"]["Authorization"] == "Bearer unit-test-key"
     assert captured["headers"]["User-Agent"] == "binnacle-shadow-judge/1"
     assert captured["timeout"] == pytest.approx(0.8)
     assert captured["body"]["response_format"]["type"] == "json_schema"
-    assert captured["body"]["response_format"]["json_schema"]["strict"] is True
+    schema = captured["body"]["response_format"]["json_schema"]
+    assert schema["strict"] is True
+    assert {"bucket", "p90_s", "confidence", "reason"} == set(
+        schema["schema"]["required"]
+    )
+    assert set(schema["schema"]["properties"]["reason"]["enum"]) == {
+        "explicit_delay",
+        "local_history",
+        "test_suite",
+        "build_or_install",
+        "network",
+        "heavy_io",
+        "loop_or_chain",
+        "simple_command",
+        "unknown",
+    }
+    system = captured["body"]["messages"][0]["content"]
+    assert "wall time from dispatch until the command exits" in system
+    assert "4 Cortex-A76 cores" in system and "87% short" in system
+    assert len(system) < 1800
+    user = json.loads(captured["body"]["messages"][1]["content"])
+    assert user["prompt_version"] == JUDGE_PROMPT_VERSION
 
 
 def test_prediction_rule_and_filter():
@@ -219,6 +256,9 @@ def test_prediction_engine_async(caplog, monkeypatch, tmp_path):
     assert "shadow_prediction=on" in caplog.text
     assert "judge=queued" in caplog.text
     assert "event=run_command_prediction_judge schema=1 call=c1" in caplog.text
+    assert f"prompt_hash={JUDGE_PROMPT_HASH}" in caplog.text
+    assert f"prompt_version={JUDGE_PROMPT_VERSION}" in caplog.text
+    assert "confidence=0.82 reason=test_suite" in caplog.text
 
 
 def test_prediction_delay_units_and_secret_flag_sanitizing():
@@ -237,6 +277,10 @@ def test_prediction_default_judge_budgets_stay_below_provider_limits():
     assert settings.judge_minute_budget == 4
     assert settings.judge_hour_budget == 120
     assert settings.judge_day_budget == 2000
+    assert JUDGE_MAX_DAY_CALLS == 800
+    engine = ShadowPredictionEngine(settings)
+    assert engine.settings.judge_day_budget == 800
+    engine.close()
 
 
 def test_prediction_budget_enforces_windows_and_pause(tmp_path):
@@ -320,11 +364,16 @@ def test_prediction_store_cache_and_shape_stats(monkeypatch, tmp_path):
     assert stats["shape_p50_s"] == 20
     assert stats["shape_p90_s"] == 80
 
-    result = JudgeResult("long", 80, 123, 30, 8)
+    result = JudgeResult(
+        "long", 80, 123, 30, 8, confidence=0.91, reason="local_history"
+    )
     store.cache_set(one.command_hash, result)
     cached = store.cache_get(one.command_hash)
     assert cached is not None
     assert cached.bucket == "long"
+    assert cached.confidence == pytest.approx(0.91)
+    assert cached.reason == "local_history"
+    assert cached.prompt_tokens == 30 and cached.completion_tokens == 8
     clock[0] = 111
     assert store.cache_get(one.command_hash) is None
 

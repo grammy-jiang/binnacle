@@ -238,6 +238,25 @@ Two selection defects were found and corrected:
 joined rows for 7-day, 14-day, and scheduled evaluations without raw command
 or prompt text.
 
+The Cerebras judge prompt is now an explicit, versioned contract. Version
+`2026-09-26.1` defines wall runtime, bucket boundaries, the `p90_s` meaning,
+the Raspberry Pi 5 execution environment, evidence precedence, concrete tool
+anchors, the 14-day 87%/9%/4% base rate, and redaction semantics. The system
+prompt is about 277 tokens by the conservative characters/4 estimate, below
+the 450-token target. Its SHA-256-derived `prompt_hash` is logged on every
+judge result and is part of the cache key, so an answer from an older prompt
+cannot be reused.
+
+The strict response schema now includes confidence from 0 to 1 and a closed
+reason-code vocabulary. Both values are journalled without free text; stats
+report confidence deciles and reason counts, and joined CSV/JSONL exports carry
+the same fields. The configured default remains 2,000 calls/day, but the judge
+engine clamps the effective daily budget to 800 calls (1,200 fewer) so the
+expanded prompt, request metadata, and completion remain inside the 800k-token
+daily operating envelope against the provider key's 1M-token limit. Tests use
+only the fake transport, including malformed-response and prompt-hash cache
+regressions.
+
 There were 21 judge timeouts among 492 calls at the deployed 3,000 ms timeout;
 observed p95 judge latency was 2,478 ms. No code timeout change is made here:
 the deployment owner will raise the host configuration to 5,000 ms.

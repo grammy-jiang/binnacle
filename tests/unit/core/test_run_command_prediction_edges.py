@@ -45,14 +45,25 @@ def cfg(tmp_path, **overrides):
     return RunCommandShadowPredictionSettings(**values)
 
 
-def fake_ok(captured, bucket="long", p90=75.0):
+def fake_ok(captured, bucket="long", p90=75.0, confidence=0.82, reason="test_suite"):
     def transport(url, headers, body, timeout):
         captured.update(
             url=url, headers=headers, body=json.loads(body), timeout=timeout
         )
         payload = {
             "choices": [
-                {"message": {"content": json.dumps({"bucket": bucket, "p90_s": p90})}}
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "bucket": bucket,
+                                "p90_s": p90,
+                                "confidence": confidence,
+                                "reason": reason,
+                            }
+                        )
+                    }
+                }
             ],
             "usage": {"prompt_tokens": 12, "completion_tokens": 4},
         }
@@ -173,6 +184,10 @@ def test_prediction_store_load_fallback_eviction_and_invalid_inputs(tmp_path):
     assert reloaded.cache_get("missing") is None
     reloaded.cache_set("bad", JudgeResult(None, None, 0))
     assert reloaded.cache_get("bad") is None
+    versioned = JudgeResult("medium", 20, 0, confidence=0.7, reason="local_history")
+    reloaded.cache_set("versioned", versioned, prompt_hash="hash-a")
+    assert reloaded.cache_get("versioned", prompt_hash="hash-a") == versioned
+    assert reloaded.cache_get("versioned", prompt_hash="hash-b") is None
 
     reloaded.path.write_text("{bad json")
     corrupted = Store(tmp_path, max_keys=2, samples_per_key=2, cache_ttl_s=60)
@@ -340,7 +355,7 @@ def test_prediction_engine_history_simple_and_cached_paths(
         complex_item = feat(complex_command)
         engine.store.cache_set(
             complex_item.command_hash,
-            JudgeResult("medium", 20, 0, 1, 1),
+            JudgeResult("medium", 20, 0, 1, 1, confidence=0.8, reason="test_suite"),
         )
         engine.submit(
             call_id="cached",

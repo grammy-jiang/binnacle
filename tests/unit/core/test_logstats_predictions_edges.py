@@ -6,7 +6,7 @@ PREDICTION_SAMPLE = """\
 2026-09-25T10:00:00.100 INFO: event=run_command_prediction schema=1 call=a feature_hash=fa shape_hash=sa first_token_class=uv heredoc=0 chain_n=0 max_delay_s=0 len_chars=30 declared_wait_s=30 declared_background=none auto_rule=- memory_bucket=long memory_p90_s=90 memory_n=3 memory_source=shape memory_store_keys=12 rules_bucket=- rules_p90_s=- rules_hits=- judge=queued judge_skip_reason=- judge_cache=miss
 2026-09-25T10:00:00.110 INFO: event=run_command_dispatch call=a client=x job_id=ja owner=manager owner_instance=o requested_wait_s=30 bounded_wait_s=30 effective_wait_s=30 background_arg=omitted auto_background=false handoff_reason=synchronous owner_roundtrip_ms=2 command_hash=h command_chars=30 state=exited
 2026-09-25T10:00:12.000 INFO: event=job_exit job_id=ja owner=manager owner_instance=o runtime_s=12.0 exit_code=0 signal=- log_bytes=10
-2026-09-25T10:00:12.010 INFO: event=run_command_prediction_judge schema=1 call=a model=gpt-oss-120b bucket=medium p90_s=20 latency_ms=410 prompt_tokens=100 completion_tokens=20 error=-
+2026-09-25T10:00:12.010 INFO: event=run_command_prediction_judge schema=1 call=a prompt_version=2026-09-26.1 prompt_hash=abc123 model=gpt-oss-120b bucket=medium p90_s=20 confidence=0.82 reason=test_suite latency_ms=410 prompt_tokens=100 completion_tokens=20 error=-
 2026-09-25T10:00:13.000 INFO: event=run_command_prediction schema=1 call=b feature_hash=fb shape_hash=sb first_token_class=other heredoc=0 chain_n=0 max_delay_s=0 len_chars=5 declared_wait_s=30 declared_background=none auto_rule=- memory_bucket=short memory_p90_s=2 memory_n=4 memory_source=exact memory_store_keys=14 rules_bucket=short rules_p90_s=1 rules_hits=sleep_ge_10 judge=skipped judge_skip_reason=history judge_cache=-
 2026-09-25T10:00:13.010 INFO: event=run_command_dispatch call=b client=x job_id=jb owner=manager owner_instance=o requested_wait_s=30 bounded_wait_s=30 effective_wait_s=30 background_arg=omitted auto_background=false handoff_reason=synchronous owner_roundtrip_ms=2 command_hash=h2 command_chars=5 state=exited
 2026-09-25T10:00:15.000 INFO: event=job_exit job_id=jb owner=manager owner_instance=o runtime_s=2.0 exit_code=0 signal=- log_bytes=5
@@ -27,6 +27,11 @@ def test_stats_shadow_export_is_privacy_safe_jsonl_and_csv(tmp_path):
     assert "feature_hash" in csv_text
     assert "command" not in json_text
     assert "prompt" not in json_text
+    assert '"judge_confidence":0.82' in json_text
+    assert '"judge_reason":"test_suite"' in json_text
+    report = logstats.prediction_report(stats)
+    assert report["judge"]["confidence_deciles"] == {"0.8-0.9": 1}
+    assert report["judge"]["reason_counts"] == {"test_suite": 1}
 
 
 def test_stats_shadow_malformed_sparse_and_error_records():
@@ -79,9 +84,12 @@ def test_stats_shadow_render_empty_and_error_sections():
     stats.judge_network_results = 1
     stats.judge_errors["TimeoutError"] = 1
     stats.judge_skip_reasons["fast_shell"] = 1
+    stats.rows.append({"judge_confidence": 1.0, "judge_reason": "network"})
     lines = render_predictions(stats)
     assert any("errors: TimeoutError:1" in line for line in lines)
     assert any("skip reasons: fast_shell:1" in line for line in lines)
+    assert any("confidence deciles: 0.9-1.0:1" in line for line in lines)
+    assert any("reason codes: network:1" in line for line in lines)
 
 
 def test_stats_shadow_tool_result_runtime_s_fallback():

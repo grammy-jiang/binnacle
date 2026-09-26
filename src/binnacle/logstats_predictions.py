@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import json
+from collections import Counter
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
@@ -14,6 +15,17 @@ from binnacle.logstats_run_command import build_run_command_index
 Fields = dict[str, str]
 Parser = Callable[[str], Fields]
 PREDICTORS = ("memory", "rules", "judge")
+JUDGE_REASONS = {
+    "explicit_delay",
+    "local_history",
+    "test_suite",
+    "build_or_install",
+    "network",
+    "heavy_io",
+    "loop_or_chain",
+    "simple_command",
+    "unknown",
+}
 
 
 def _num(fields: Fields, key: str) -> float | None:
@@ -118,6 +130,10 @@ def analyze_predictions(records: list[Record], fields: Parser) -> PredictionStat
             "judge_state": prediction.get("judge", "-"),
             "judge_skip_reason": prediction.get("judge_skip_reason", "-"),
             "judge_cache": prediction.get("judge_cache", "-"),
+            "judge_confidence": _num(judge, "confidence"),
+            "judge_reason": (
+                judge.get("reason") if judge.get("reason") in JUDGE_REASONS else None
+            ),
         }
         for name in PREDICTORS:
             source = judge if name == "judge" else prediction
@@ -189,6 +205,16 @@ def prediction_report(stats: PredictionStats) -> dict[str, Any]:
         for name in PREDICTORS
     }
     cache_n = sum(stats.judge_cache.values())
+    confidence_deciles: Counter[str] = Counter()
+    reason_counts: Counter[str] = Counter()
+    for row in stats.rows:
+        confidence = row.get("judge_confidence")
+        if isinstance(confidence, (int, float)) and 0 <= confidence <= 1:
+            decile = min(9, int(confidence * 10))
+            confidence_deciles[f"{decile / 10:.1f}-{(decile + 1) / 10:.1f}"] += 1
+        reason = row.get("judge_reason")
+        if reason in JUDGE_REASONS:
+            reason_counts[str(reason)] += 1
     return {
         "dispatches": stats.dispatches,
         "outcomes": stats.outcomes,
@@ -213,6 +239,8 @@ def prediction_report(stats: PredictionStats) -> dict[str, Any]:
             "cache": dict(stats.judge_cache),
             "cache_hit_rate": (stats.judge_cache["hit"] / cache_n if cache_n else 0.0),
             "skip_reasons": dict(stats.judge_skip_reasons),
+            "confidence_deciles": dict(sorted(confidence_deciles.items())),
+            "reason_counts": dict(reason_counts),
         },
         "memory_store_keys": stats.memory_store_keys,
         "memory_sample_counts": {
@@ -234,6 +262,8 @@ def export_prediction_rows(stats: PredictionStats, path: Path) -> None:
         "judge_state",
         "judge_skip_reason",
         "judge_cache",
+        "judge_confidence",
+        "judge_reason",
         "memory_bucket",
         "memory_p90_s",
         "rules_bucket",
@@ -308,6 +338,20 @@ def render_predictions(stats: PredictionStats) -> list[str]:
             "    errors: "
             + ", ".join(
                 f"{key}:{value}" for key, value in stats.judge_errors.most_common()
+            )
+        )
+    if judge["confidence_deciles"]:
+        out.append(
+            "    confidence deciles: "
+            + ", ".join(
+                f"{key}:{value}" for key, value in judge["confidence_deciles"].items()
+            )
+        )
+    if judge["reason_counts"]:
+        out.append(
+            "    reason codes: "
+            + ", ".join(
+                f"{key}:{value}" for key, value in judge["reason_counts"].items()
             )
         )
     if stats.judge_skip_reasons:
