@@ -8,7 +8,7 @@ Worktree: `/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4`
 
 Audited source HEAD: `3a4dfb1b248e4530fb09013976abb863c8e35eaf`
 
-Last completed step: **4.9.5**
+Last completed step: **4.9.2**
 
 Next step: **complete the remaining independent 4.9 confirmatory partitions;
 Step 4.10 becomes ready only after 4.9.1 through 4.9.6 all checkpoint
@@ -52,7 +52,7 @@ complete.**
 | 4.6A:selected | complete | — |
 | 4.8 | complete | — |
 | 4.9.1 | not_started | — |
-| 4.9.2 | not_started | — |
+| 4.9.2 | complete | R3/R4 30/30 frozen; integrity PASS; commit pending |
 | 4.9.3 | not_started | — |
 | 4.9.4 | complete | R7 9/9 frozen; integrity PASS; commit pending |
 | 4.9.5 | complete | R8/R9 30/30 frozen; integrity PASS; commit pending |
@@ -508,6 +508,31 @@ Step 4.6A:selected from the frozen result**.
 - Focused analyzer/confirmatory regression: **21 passed in 3.79 s**; nproc=4,
   pre-run load average 2.19 / 2.96 / 2.28 under foreign parallel-programme
   load. Archive verification passed for all 397 source files.
+
+## Step 4.9.2 confirmatory R3/R4 checkpoint — COMPLETE
+
+- Slot integrity is **PASS**: 30/30 R3/R4 slots have one canonical owning
+  outcome. R3-r04-A had one pre-submit failure; it did not submit and therefore
+  did not own the slot. The subsequent finished row is the first submitted
+  outcome and owns it.
+- Routing misses are A 0/10, B 0/10, C 0/10. No arm exceeds the >10%
+  evidence-integrity threshold.
+- Analyzer results are 26/30 same-prompt completion, 0 interruptions,
+  0 premature handoffs, 0 failed trial states, and 4 host-load flags.
+- D9 timing evidence: 11/30 owners already use the final-assistant timestamp;
+  bounded recovery recomputed no additional trials. The other 19 remain
+  explicitly poll-observed; the checkpoint lists every slot and reason.
+- Checkpoint JSON SHA-256:
+  6f1ac078cab68ecbbf2435e688e040ca0453992e411eb427624595ed43f17bdd.
+  Checkpoint Markdown SHA-256:
+  f0cf54ac83ee30abaccb20b91f9a80db66a3c3d9fee773a78c284443443d8d36.
+- Frozen source-manifest SHA-256:
+  3c73d3025bf97e5f477e1a30e11f56ad8bba81a1180293bac0e937ef1fd11ef5
+  across 401 files in 30 deterministic archives under
+  phase4-confirmatory-evidence/R3-R4/.
+- Focused analyzer/confirmatory regression: **21 passed in 2.12 s**; nproc=4,
+  pre-run load average 2.70 / 3.48 / 3.04 under foreign parallel-programme
+  load. Archive verification passed for all 401 source files.
 
 ## Step 4H-R historical H comparator — COMPLETE (P4-A3 REANALYSIS)
 

@@ -6,7 +6,7 @@
   "worktree": "/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4",
   "source_branch": "feature/chat-mode-scheduling-v2-phase3",
   "audited_source_head": "3a4dfb1b248e4530fb09013976abb863c8e35eaf",
-  "last_completed_step": "4.9.5",
+  "last_completed_step": "4.9.2",
   "next_step": "Complete the remaining independent 4.9 confirmatory partitions; Step 4.10 becomes ready only after 4.9.1 through 4.9.6 all checkpoint complete.",
   "dependency_audit": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase4-dependency-audit-2026-09-25-r01.json",
@@ -519,9 +519,21 @@
       "worker_branch": null
     },
     "4.9.2": {
-      "status": "not_started",
-      "tests": [],
-      "notes": [],
+      "status": "complete",
+      "tests": [
+        "R3/R4 slot integrity -> PASS: 30/30 canonical owners; R3-r04-A pre-submit failure is non-owning; no reruns or unscorable routing; every state_dir is present and every owning row records host_load_flagged.",
+        "R3/R4 routing integrity -> PASS: A=0/10, B=0/10, C=0/10 routing misses; no arm exceeds the >10% evidence-integrity threshold.",
+        "R3/R4 analyzer -> PASS: 30/30 state directories analyzed with corrected analyzer; 26/30 same-prompt, 0 interrupted, 0 premature handoff, 0 failed trial states, 4 host-load flags.",
+        "uv run pytest -q tests/scripts/test_chat_scheduling_confirmatory.py tests/scripts/test_chat_scheduling_analyzer.py -> PASS: 21 passed in 2.12s; nproc=4; pre-run loadavg=2.70 3.48 3.04 under foreign parallel-programme load.",
+        "Frozen evidence verification -> PASS: 401/401 authoritative source files match checkpoint digests and all 30 deterministic archives preserve those bytes; tree SHA-256 3c73d3025bf97e5f477e1a30e11f56ad8bba81a1180293bac0e937ef1fd11ef5."
+      ],
+      "notes": [
+        "Frozen R3/R4 checkpoint JSON SHA-256 6f1ac078cab68ecbbf2435e688e040ca0453992e411eb427624595ed43f17bdd; Markdown SHA-256 f0cf54ac83ee30abaccb20b91f9a80db66a3c3d9fee773a78c284443443d8d36.",
+        "Frozen R3/R4 source-file manifest SHA-256 3c73d3025bf97e5f477e1a30e11f56ad8bba81a1180293bac0e937ef1fd11ef5 across 401 files in 30 deterministic archives under phase4-confirmatory-evidence/R3-R4/.",
+        "D9: 11/30 owners already used conversation_final_assistant_timestamp; bounded recovery recomputed 0; 19 remain explicitly poll-observed and are individually listed with reasons in the checkpoint.",
+        "R3-r04-A had one pre-submit failure; because it did not submit it owns nothing. The subsequent finished row is the first submitted outcome and owns the slot.",
+        "No endpoint, Project, production config/service, or non-R3/R4 confirmatory slot was mutated or rerun."
+      ],
       "commit": null,
       "worker_branch": null
     },
@@ -1120,6 +1132,33 @@
       },
       "pre_submit_failure_count": 1,
       "routing_resubmission_count": 1,
+      "evidence_archive_count": 30
+    },
+    {
+      "kind": "confirmatory_partition_checkpoint",
+      "at": "2026-09-26T23:40:39+10:00",
+      "task_id": "4.9.2",
+      "partition": "R3/R4",
+      "schedule_sha256": "516938320afdf9dade5e03b8262a9e6ef9c95ad5d0330c20d1ce23d0ec68e734",
+      "checkpoint_path": "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-R3-R4-checkpoint.json",
+      "checkpoint_sha256": "6f1ac078cab68ecbbf2435e688e040ca0453992e411eb427624595ed43f17bdd",
+      "checkpoint_md_path": "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-R3-R4-checkpoint.md",
+      "checkpoint_md_sha256": "f0cf54ac83ee30abaccb20b91f9a80db66a3c3d9fee773a78c284443443d8d36",
+      "evidence_root": "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-evidence/R3-R4",
+      "evidence_file_count": 401,
+      "evidence_tree_sha256": "3c73d3025bf97e5f477e1a30e11f56ad8bba81a1180293bac0e937ef1fd11ef5",
+      "routing_miss_rates": {
+        "A": "0/10 (0%)",
+        "B": "0/10 (0%)",
+        "C": "0/10 (0%)"
+      },
+      "timing_recovery": {
+        "already_conversation_timestamp": 11,
+        "recomputed": 0,
+        "stayed_observed": 19
+      },
+      "pre_submit_failure_count": 1,
+      "routing_resubmission_count": 0,
       "evidence_archive_count": 30
     }
   ],
