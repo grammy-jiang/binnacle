@@ -78,7 +78,8 @@
     "phase4_postsend_robustness_head": "389e6a5b7db05a316032340bc6a8dbf34a562b8d",
     "phase4_p4a6_analysis_repair_head": "0df91ce582f0c987f3c13fdc17385f7a4a7c2a62",
     "phase4_4c_review_fanin_head": "7ad86bc0f7dab83229c908e24c498c6b4218fb16",
-    "phase4_hard_gate_matrix_head": "9466d5078db2875e7f5141fdf74d525d9704e7ac"
+    "phase4_hard_gate_matrix_head": "9466d5078db2875e7f5141fdf74d525d9704e7ac",
+    "phase4_go_no_go_head": "f5093ae613c4627639f04bacc51219a50ebdee2c"
   },
   "frozen_hashes": {
     "phase3_progress_json": "984ba7891843a6eb3a15b750e95177d3a325f14280990f47be62527d44482bde",
@@ -751,7 +752,7 @@
         "Phase 5 is not ready. The owner-pending category-regression exception cannot repair the other failed performance targets and therefore cannot change this verdict by itself.",
         "Known harness weakness carried forward: run_trial enters FixtureLease before the shared send gate, so queued M3-style fixtures can age before submission; any future benchmark use must take the gate first or record and bound fixture age."
       ],
-      "commit": null,
+      "commit": "f5093ae613c4627639f04bacc51219a50ebdee2c",
       "worker_branch": null,
       "verdict": "NO_GO_PERFORMANCE"
     },
@@ -1463,7 +1464,8 @@
       "category_median_regression_within_10_percent",
       "eligible_overlap_ratio_ge_80_percent"
     ],
-    "note": "Interim Step-4.12 handoff fields required by the manager; Step 4.13 adds the canonical final-report and CI-attestation fields."
+    "note": "Interim Step-4.12 handoff fields required by the manager; Step 4.13 adds the canonical final-report and CI-attestation fields.",
+    "verdict_commit": "f5093ae613c4627639f04bacc51219a50ebdee2c"
   },
   "created_at": "2026-09-25T15:31:10+10:00",
   "updated_at": "2026-09-27T04:09:04+10:00",
