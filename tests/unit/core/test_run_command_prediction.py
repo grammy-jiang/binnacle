@@ -201,9 +201,17 @@ def test_prediction_judge_success_uses_fake_transport(monkeypatch, tmp_path):
         "unknown",
     }
     system = captured["body"]["messages"][0]["content"]
-    assert "wall time from dispatch until the command exits" in system
+    assert "wall-clock seconds from dispatch until the command exits" in system
     assert "4 Cortex-A76 cores" in system and "87% short" in system
-    assert len(system) < 1800
+    assert (
+        "Do not default to short" in system
+    )  # the 2026-09-26 offline evaluation: "prefer short" missed long commands
+    assert (
+        len(system) < 2600
+    )  # about 600 tokens; 800 calls a day stay under the 800k-token daily target
+    assert (
+        captured["body"]["reasoning_effort"] == "medium"
+    )  # the setting's default, chosen by the same evaluation
     user = json.loads(captured["body"]["messages"][1]["content"])
     assert user["prompt_version"] == JUDGE_PROMPT_VERSION
 

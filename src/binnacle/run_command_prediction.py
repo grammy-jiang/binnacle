@@ -21,6 +21,7 @@ from binnacle.config import (
     run_command_cerebras_reset_seconds as _reset_seconds,
     run_command_cerebras_transport as _urlopen_transport,
 )
+from binnacle import run_command_judge_prompt as _jp
 from binnacle.run_command_telemetry import (
     CommandFeatures,
     MemoryLookup,
@@ -34,7 +35,7 @@ from binnacle.run_command_telemetry import (
 
 _BUCKETS = {"short", "medium", "long"}
 _REASON_CODES = {"explicit_delay", "local_history", "test_suite", "build_or_install", "network", "heavy_io", "loop_or_chain", "simple_command", "unknown"}  # fmt: skip
-JUDGE_PROMPT_VERSION, JUDGE_MAX_DAY_CALLS = "2026-09-26.1", 800
+JUDGE_PROMPT_VERSION, JUDGE_MAX_DAY_CALLS = _jp.JUDGE_PROMPT_VERSION, 800
 _SLEEP = re.compile(
     r'(?ix)(?:^|(?:&&|\|\||[;|&({"\'])\s*|\b(?:do|then)\s+)sleep\s+'
     r'(\d+(?:\.\d+)?)([sm]?)(?=$|[\s;|&)}"\'])'
@@ -70,8 +71,7 @@ class JudgeResult(NamedTuple):
     reason: str | None = None
 
 
-_JUDGE_SYSTEM = "Estimate run_command wall runtime on a Raspberry Pi 5 with 4 Cortex-A76 cores, 16 GB RAM, NVMe, Wi-Fi uplink, in a Python repository using uv, pytest, tox, pre-commit and git. Runtime is wall time from dispatch until the command exits; for a background job, until that job exits. Buckets: short <10 s, medium 10-60 s inclusive, long >60 s. p90_s is a 90th-percentile estimate in seconds. Evidence order: explicit sleep/delay adds its seconds; timeout N only caps the maximum and does not imply N seconds of work. Local history for this shape with n>=3 outweighs general knowledge; then use tool knowledge; then structure: loops multiply, chains add, and a heredoc script is at least as slow as its slowest part. Anchors: git status/diff/log, ls, cat, grep, sed -n are short; focused pytest file or -k is usually short-medium; full suites, tox, pre-commit --all-files, uv sync or pip install, builds, and Wi-Fi downloads are medium-long. With weak evidence use the 14-day host base rate: about 87% short, 9% medium, 4% long. Redaction placeholders hide values, not work. Return only the requested JSON schema."
-JUDGE_PROMPT_HASH = hashlib.sha256(_JUDGE_SYSTEM.encode()).hexdigest()[:12]
+_JUDGE_SYSTEM, JUDGE_PROMPT_HASH = _jp.JUDGE_SYSTEM, _jp.JUDGE_PROMPT_HASH
 _JUDGE_FORMAT = json.loads(
     """{"type":"json_schema","json_schema":{"name":"run_command_runtime_prediction","strict":true,"schema":{"type":"object","properties":{"bucket":{"type":"string","enum":["short","medium","long"]},"p90_s":{"type":"number","minimum":0},"confidence":{"type":"number","minimum":0,"maximum":1},"reason":{"type":"string","enum":["explicit_delay","local_history","test_suite","build_or_install","network","heavy_io","loop_or_chain","simple_command","unknown"]}},"required":["bucket","p90_s","confidence","reason"],"additionalProperties":false}}}"""
 )
@@ -274,7 +274,7 @@ class CerebrasJudgeClient:
             # fmt: off
             prompt = {"prompt_version": JUDGE_PROMPT_VERSION, "command": sanitized_command, "shape_hash": features.shape_hash, "first_token_class": features.first_token_class, "runner_flags": list(features.runner_flags), "max_delay_s": features.max_delay_s, "heredoc": features.heredoc, "chain_n": features.chain_n, "len_chars": features.len_chars, "local_history": dict(local_stats)}
             body = json.dumps({
-                "model": self.settings.judge_model, "reasoning_effort": "low",
+                "model": self.settings.judge_model, "reasoning_effort": getattr(self.settings, "judge_reasoning_effort", "medium"),
                 "messages": [{"role": "system", "content": _JUDGE_SYSTEM}, {"role": "user", "content": json.dumps(prompt, separators=(",", ":"))}],
                 "response_format": _JUDGE_FORMAT, "temperature": 0,
             }, separators=(",", ":")).encode()

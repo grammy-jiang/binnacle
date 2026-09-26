@@ -196,6 +196,7 @@ class RunCommandShadowPredictionSettings(BaseModel):
     judge_enabled: bool = False
     judge_endpoint: str = "https://api.cerebras.ai/v1/chat/completions"
     judge_model: str = "gpt-oss-120b"
+    judge_reasoning_effort: Literal["low", "medium", "high"] = "medium"
     judge_timeout_ms: int = Field(800, ge=100, le=10_000)
     judge_minute_budget: int = Field(4, ge=0, le=5)
     judge_hour_budget: int = Field(120, ge=0, le=150)
