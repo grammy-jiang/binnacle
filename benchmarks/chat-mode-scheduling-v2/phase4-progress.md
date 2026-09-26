@@ -8,9 +8,9 @@ Worktree: `/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4`
 
 Audited source HEAD: `3a4dfb1b248e4530fb09013976abb863c8e35eaf`
 
-Last completed step: **4C-fix**
+Last completed step: **4.12**
 
-Next step: **Task 4.12 in progress: integrate 4C a2 reviews, aggregate Step 4.11 hard-gate matrix, decide Step 4.12 verdict.**
+Next step: **4.13 final report, final validation, endpoint cleanup, and CI attestation.**
 
 ## Frozen Step 4.0 entry gate
 
@@ -56,10 +56,10 @@ Next step: **Task 4.12 in progress: integrate 4C a2 reviews, aggregate Step 4.11
 | 4.9.5 | complete | R8/R9 30/30 frozen; integrity PASS; commit pending |
 | 4.9.6 | complete | R10/R11 30/30 frozen; integrity PASS; commit pending |
 | 4.10 | complete | post-run M1/M2/M3 PASS; replacement A/M3 is canonical |
-| 4C | running | integrating verified a2 focus reviews |
+| 4C | complete | four verified a2 focus reviews integrated |
 | 4C-fix | complete | P4-A6/D10 repair; 160/160 fixed population |
-| 4.11 | running | hard-gate aggregation pending review integration |
-| 4.12 | running | verdict pending Step 4.11 matrix |
+| 4.11 | complete | 20/26 required gates PASS; 6 FAIL; matrix frozen |
+| 4.12 | complete | NO_GO_PERFORMANCE; Phase 5 not ready |
 | 4H-R | complete | P4-A3 comparator frozen; H outcomes unchanged; selected C300 9/9 |
 | 4.13 | not_started | — |
 
@@ -842,3 +842,41 @@ Step 4.6A:selected from the frozen result**.
   fixed head. Remaining gate findings route to those reviews and Step 4.12.
 - Final read-only isolation observation found production master clean and services
   active; the older frozen Phase-4 production baseline remains unchanged.
+
+## Steps 4.11 + 4.12 hard-gate aggregation and go/no-go — COMPLETE
+
+Verdict: **NO_GO_PERFORMANCE**. Selected endpoint remains **C300** at **300 s**,
+but Phase 5 is not ready.
+
+- The four a2 focus reviews were integrated in deterministic order and their
+  canonical file hashes exactly match the verified completion packets.
+- Step 4.11 reconciled the reviews against the canonical 160-slot population with
+  no disagreement: 160/160 submitted, 160/160 scorable, zero integrity issues.
+- Hard-gate matrix SHA-256:
+  d4ab68331cf9058e6d0726fc97554a9e6bfbdae94b34681326991e0a53e870b3.
+- Required gates: **20/26 PASS**, **6/26 FAIL**. The failures are the continuation
+  reduction target, three fixed median-performance targets, the category median
+  regression gate, and the eligible-overlap target.
+- Performance is independently disqualifying: overall C/A is 0.933267 against
+  <=0.8, read-heavy is 0.802584 against <=0.7, and mixed-long is 1.140670
+  against <=0.8. The paired bootstrap upper bound is 0.996546 and passes.
+- The R3/R4 category-regression exception request remains pending owner approval;
+  without approval that gate stays failed, and approval could not repair the
+  other failed performance targets.
+- Scheduling eligible overlap is 123/230 = 0.534783 against >=0.8. The
+  same-prompt/UX continuation-reduction gate is also failed because A and C both
+  have zero required continuations, making the computed reduction null.
+- Routing-miss integrity remains within P4-A2: A=1/54 (1.8519%), B=0/53,
+  C=0/53. Evidence integrity therefore does not select the verdict.
+- Timing provenance remains explicit: 79 performance rows were recomputed from
+  final-assistant timestamps. R5-r03-C, R6-r01-C, R6-r02-C, and R7-r02-C
+  remain poll-observed; reused safety row R12-r01-C is also poll-observed.
+  No timing source is mixed silently.
+- The long-job status/result burden reduction target is TARGET_MISSED, but is
+  diagnostic only. All required guard gates, the token gate, and the
+  duplicate-completed-read gate pass.
+- Focused confirmatory/analyzer tests: **22 passed in 1.99 s** at nproc=4 with
+  pre-run load average 0.17 / 0.40 / 0.95 under parallel-programme load.
+- Known harness weakness carried forward: run_trial acquires FixtureLease before
+  the shared send gate, so queued M3-style fixtures can age before submission.
+  Future benchmark use must acquire the gate first or record and bound fixture age.

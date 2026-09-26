@@ -6,8 +6,8 @@
   "worktree": "/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4",
   "source_branch": "feature/chat-mode-scheduling-v2-phase3",
   "audited_source_head": "3a4dfb1b248e4530fb09013976abb863c8e35eaf",
-  "last_completed_step": "4C-fix",
-  "next_step": "Task 4.12 in progress: integrate 4C a2 reviews, aggregate Step 4.11 hard-gate matrix, decide Step 4.12 verdict.",
+  "last_completed_step": "4.12",
+  "next_step": "4.13 final report, final validation, endpoint cleanup, and CI attestation.",
   "dependency_audit": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase4-dependency-audit-2026-09-25-r01.json",
     "revision": "r01",
@@ -76,7 +76,9 @@
     "phase4_runtime_path_head": "c06518bf477f3c49811d4708dfd66507065d6996",
     "phase4_core_manifest_validation_head": "e0cb1ce6eead5b021fbe079edef70ec4276a0851",
     "phase4_postsend_robustness_head": "389e6a5b7db05a316032340bc6a8dbf34a562b8d",
-    "phase4_p4a6_analysis_repair_head": "0df91ce582f0c987f3c13fdc17385f7a4a7c2a62"
+    "phase4_p4a6_analysis_repair_head": "0df91ce582f0c987f3c13fdc17385f7a4a7c2a62",
+    "phase4_4c_review_fanin_head": "7ad86bc0f7dab83229c908e24c498c6b4218fb16",
+    "phase4_hard_gate_matrix_head": "9466d5078db2875e7f5141fdf74d525d9704e7ac"
   },
   "frozen_hashes": {
     "phase3_progress_json": "984ba7891843a6eb3a15b750e95177d3a325f14280990f47be62527d44482bde",
@@ -162,7 +164,16 @@
     "phase4_confirmatory_R10_R11_timing_addendum_json": "73cf2c7fb65ae852977566d1938aef24330bf16be5bc433fddb2f59a7a5bb672",
     "phase4_confirmatory_R10_R11_timing_addendum_md": "28684b63960ef2b221c0026ead3099bd7954e3e3534d1fabc7a12b1f9ae7c8ac",
     "phase4_confirmatory_gate_aggregation_p4a6_json": "e76d9f78194ad6e8c5f1d7bc3489a4ecae3c2b071d6a3216dfb512e3729af56f",
-    "phase4_confirmatory_gate_aggregation_p4a6_md": "03de3b85d5d5bea4d1da25d2501e3960d9b579d8be85e2d140641813d1366326"
+    "phase4_confirmatory_gate_aggregation_p4a6_md": "03de3b85d5d5bea4d1da25d2501e3960d9b579d8be85e2d140641813d1366326",
+    "phase4_review_correctness_safety_json": "71e1661b9150f6cdfe2d23eb2bc4dc540e650aab7a209f15a26c31c45ea64aa7",
+    "phase4_review_correctness_safety_md": "cdc71cd28adc98bb5fdaba1ba9870f939a194cc1285bb51b48193d9df924e11a",
+    "phase4_review_performance_bootstrap_json": "32ebb201579319f8505746a61d83fc3129b6ebeb33361917816ec2cbcbe514cc",
+    "phase4_review_performance_bootstrap_md": "3de97e45df5022b2dcc296709e1e9ab2e58964e27d2aef7bbc49ade0e3f5a897",
+    "phase4_review_reliability_provenance_json": "0dfcae4f5cb9300faa72afb88d8710ef670eb7f64ae521191d301d6b3177801d",
+    "phase4_review_reliability_provenance_md": "3d10e0798977ddaff332c5c411ea3be55efea7985972ab958346d0d1b698e8bc",
+    "phase4_review_scheduling_efficiency_json": "33571c4e59efafb87d5a394420c2abed95b9f0357dccfccd5767bc6d70800283",
+    "phase4_review_scheduling_efficiency_md": "b38d37f3bf1f2d7ca23d865aabe73263dad8fdcb74c54bb6300061f25cd6100c",
+    "phase4_hard_gate_matrix_json": "d4ab68331cf9058e6d0726fc97554a9e6bfbdae94b34681326991e0a53e870b3"
   },
   "preflight_findings": {
     "p4-preflight-git-lineage": "804da7b66ddc1f0e71ddf3106790989f50a0f320de4cd3b3f0aedaf962d68461",
@@ -669,10 +680,21 @@
       "worker_branch": null
     },
     "4C": {
-      "status": "running",
-      "tests": [],
-      "notes": [],
-      "commit": null,
+      "status": "complete",
+      "tests": [
+        "Four a2 completion packets verified blocker-free and clean; integrated review file SHA-256 values exactly match each packet.",
+        "Each integrated review pair passed its worker focused validation and pre-commit; canonical integration re-ran pre-commit on each pair.",
+        "Review/canonical reconciliation in Step 4.11 accepted all four review inputs without disagreement."
+      ],
+      "notes": [
+        "Integrated in deterministic focus order: correctness-safety, performance-bootstrap, reliability-provenance, scheduling-efficiency.",
+        "Worker commits: 6dbbe460711ba2d8460c0b1e83028975309577b2, e8e9c887a1431034830e2465e7944ff3935fc90d, 7008d31e579cab5ed9b35fb59691b4bca212e831, db3c95bebbba7f0c63d9975bed53c4ccd66d50ba.",
+        "Canonical integration commits: b18471ed1223670806716a37f49382f46b7cb5f6, c051b9d1e25a2badb17b816964618d86a1dce73e, 72141594df06c5c14bf5aa2b4ed485805857c59a, 7ad86bc0f7dab83229c908e24c498c6b4218fb16.",
+        "Correctness/safety reports all required focus gates PASS; performance reports 1/5 performance gates PASS; reliability reports continuation-reduction required gate FAIL with A=0 and C=0 continuations; scheduling/efficiency reports eligible-overlap required gate FAIL and the long-job burden diagnostic target missed.",
+        "Routing misses remain below the P4-A2 10% integrity threshold: A=1/54 (1.8519%), B=0/53, C=0/53 in the confirmatory performance population.",
+        "P4-A6 timing provenance is explicit: 79 performance rows were recomputed from final-assistant timestamps; R5-r03-C, R6-r01-C, R6-r02-C and R7-r02-C remain poll-observed, and reused safety row R12-r01-C is also poll-observed."
+      ],
+      "commit": "7ad86bc0f7dab83229c908e24c498c6b4218fb16",
       "worker_branch": null
     },
     "4C-fix": {
@@ -697,18 +719,41 @@
       "worker_branch": null
     },
     "4.11": {
-      "status": "running",
-      "tests": [],
-      "notes": [],
-      "commit": null,
+      "status": "complete",
+      "tests": [
+        "Gate aggregation -> PASS: no review/canonical disagreement; 160/160 submitted and 160/160 scorable.",
+        "uv run pytest -q tests/scripts/test_chat_scheduling_confirmatory.py tests/scripts/test_chat_scheduling_analyzer.py -> PASS: 22 passed in 1.99s; nproc=4; pre-run loadavg=0.17 0.40 0.95 under parallel-programme load.",
+        "uv run pre-commit run --files benchmarks/chat-mode-scheduling-v2/phase4-hard-gate-matrix.json -> PASS."
+      ],
+      "notes": [
+        "Frozen hard-gate matrix SHA-256 d4ab68331cf9058e6d0726fc97554a9e6bfbdae94b34681326991e0a53e870b3; matrix commit 9466d5078db2875e7f5141fdf74d525d9704e7ac.",
+        "Required gates: 20/26 PASS and 6/26 FAIL; diagnostic targets: 0/1 met, 1/1 TARGET_MISSED.",
+        "Required failures: continuation_reduction_ge_80_percent, overall_median_wall_ge_20_percent_faster, read_heavy_median_ge_30_percent_faster, mixed_long_median_ge_20_percent_faster, category_median_regression_within_10_percent, eligible_overlap_ratio_ge_80_percent.",
+        "Performance ratios: overall C/A=0.933267 (target <=0.8), read-heavy=0.802584 (target <=0.7), mixed-long=1.140670 (target <=0.8), paired bootstrap 95% CI upper=0.996546 (PASS).",
+        "The R3/R4 >10% category-regression exception request remains pending owner approval; per runbook the gate remains FAIL without approval.",
+        "Scheduling eligible overlap is 123/230=0.534783 (target >=0.8); all required guard gates, tool-result-token gate and duplicate-completed-read gate PASS.",
+        "Slot integrity PASS: 160 expected, 160 submitted, 160 scorable, zero issues."
+      ],
+      "commit": "9466d5078db2875e7f5141fdf74d525d9704e7ac",
       "worker_branch": null
     },
     "4.12": {
-      "status": "running",
-      "tests": [],
-      "notes": [],
+      "status": "complete",
+      "tests": [
+        "Verdict enum check -> PASS: NO_GO_PERFORMANCE is one of the seven runbook outcomes.",
+        "Evidence-integrity check -> PASS: slot integrity is complete and every arm routing-miss rate is <=10%; NO_GO_EVIDENCE_INTEGRITY is not applicable.",
+        "GO gate check -> FAIL as expected for NO-GO: all_required_gates_pass=false with 20/26 required gates passing."
+      ],
+      "notes": [
+        "Final verdict is NO_GO_PERFORMANCE because multiple fixed performance targets fail outright; this alone prohibits Phase 5 even before considering other failures.",
+        "Independent additional blockers are preserved rather than hidden by the single verdict: continuation_reduction_ge_80_percent FAIL in same-prompt/UX/reliability evidence and eligible_overlap_ratio_ge_80_percent FAIL in scheduling evidence.",
+        "Correctness, safety, tool contract, production isolation, premature-handoff, same-prompt completion, manual-continuation median/p90, interruption, guard, token and duplicate-read required gates PASS.",
+        "Phase 5 is not ready. The owner-pending category-regression exception cannot repair the other failed performance targets and therefore cannot change this verdict by itself.",
+        "Known harness weakness carried forward: run_trial enters FixtureLease before the shared send gate, so queued M3-style fixtures can age before submission; any future benchmark use must take the gate first or record and bound fixture age."
+      ],
       "commit": null,
-      "worker_branch": null
+      "worker_branch": null,
+      "verdict": "NO_GO_PERFORMANCE"
     },
     "4H-R": {
       "status": "complete",
@@ -1375,11 +1420,53 @@
         "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-gate-aggregation-p4a6.json": "e76d9f78194ad6e8c5f1d7bc3489a4ecae3c2b071d6a3216dfb512e3729af56f",
         "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-gate-aggregation-p4a6.md": "03de3b85d5d5bea4d1da25d2501e3960d9b579d8be85e2d140641813d1366326"
       }
+    },
+    {
+      "kind": "phase4_go_no_go",
+      "at": "2026-09-27T04:09:04+10:00",
+      "task_id": "4.12",
+      "verdict": "NO_GO_PERFORMANCE",
+      "selected_c_endpoint": "C300",
+      "selected_budget_s": 300,
+      "hard_gate_matrix_sha256": "d4ab68331cf9058e6d0726fc97554a9e6bfbdae94b34681326991e0a53e870b3",
+      "required_gate_pass_count": 20,
+      "required_gate_count": 26,
+      "failed_required_gates": [
+        "continuation_reduction_ge_80_percent",
+        "overall_median_wall_ge_20_percent_faster",
+        "read_heavy_median_ge_30_percent_faster",
+        "mixed_long_median_ge_20_percent_faster",
+        "category_median_regression_within_10_percent",
+        "eligible_overlap_ratio_ge_80_percent"
+      ],
+      "phase5_ready": false
     }
   ],
-  "handoff": null,
+  "handoff": {
+    "verdict": "NO_GO_PERFORMANCE",
+    "selected_c_endpoint": "C300",
+    "selected_budget_s": 300,
+    "phase4_source_head": "06bc1649c4bad9449470366da971649bb7620020",
+    "baseline_instruction_sha256": "f1c100d0ddb93c29f8f78e5a2d28e297d861ba6e2c7e53712ec886dea06bafa5",
+    "v2_instruction_sha256": "b7df6953a3c64bd245b3d5ff13b6f2667e940d5a154e650fec0b10e6a22cf094",
+    "canonical_schedule_path": "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-schedule.json",
+    "canonical_schedule_sha256": "516938320afdf9dade5e03b8262a9e6ef9c95ad5d0330c20d1ce23d0ec68e734",
+    "hard_gate_matrix_path": "benchmarks/chat-mode-scheduling-v2/phase4-hard-gate-matrix.json",
+    "hard_gate_matrix_sha256": "d4ab68331cf9058e6d0726fc97554a9e6bfbdae94b34681326991e0a53e870b3",
+    "all_hard_gates_pass": false,
+    "phase5_ready": false,
+    "failed_required_gates": [
+      "continuation_reduction_ge_80_percent",
+      "overall_median_wall_ge_20_percent_faster",
+      "read_heavy_median_ge_30_percent_faster",
+      "mixed_long_median_ge_20_percent_faster",
+      "category_median_regression_within_10_percent",
+      "eligible_overlap_ratio_ge_80_percent"
+    ],
+    "note": "Interim Step-4.12 handoff fields required by the manager; Step 4.13 adds the canonical final-report and CI-attestation fields."
+  },
   "created_at": "2026-09-25T15:31:10+10:00",
-  "updated_at": "2026-09-27T01:04:24+10:00",
+  "updated_at": "2026-09-27T04:09:04+10:00",
   "phase4_source_head": "06bc1649c4bad9449470366da971649bb7620020",
   "baseline_snapshot": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase4-baseline.json",
