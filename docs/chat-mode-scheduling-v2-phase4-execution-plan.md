@@ -2607,6 +2607,30 @@ in fact. A confirmatory suite of about 150 trials would take 6-7 hours.
   a serial diagnostic and is not used to choose K. `4.6A-sel-qual` runs again
   under the new gate, and 4.8 chooses K from that run only.
 
+### Amendment P4-A5: reply timing from the conversation, gentle polling (2026-09-26)
+
+Manager decision 2026-09-26, recorded 12:16, under the owner's standing
+instructions (speed; do not wait). Evidence: with turns overlapping (P4-A4),
+the harness polled `read_chat.py` about once a second per trial, and each
+poll authenticates again. The ChatGPT read path answered HTTP 403 (a
+Cloudflare challenge; the skill's health check reported "rate limited on the
+read path"), so the harness saw "no visible reply yet" and recorded turn
+timeouts for turns that had finished: in the third execution of
+`4.6A-sel-qual` the conversation records show the final replies at +18 s,
++19 s and +39 s while the harness gave up after 130-141 s.
+
+- **Polling.** At most one read every 10 s per trial, with jitter. A 403,
+  429 or read timeout backs off exponentially up to 60 s and never ends the
+  observation by itself; observation may continue up to 10 minutes past the
+  turn limit to collect a turn that already ended.
+- **Timing.** A turn's settle time is the final assistant message's own
+  timestamp in the conversation, not the moment a poll first saw it. The turn
+  counts as within its limit when that timestamp is within the limit of the
+  send time. The observed poll time is kept as a diagnostic.
+- **Scope.** All arms and H use the same rule. Trials already frozen keep
+  their records; the 4.6A:selected qualification runs again under this rule,
+  and 4.8 decides whether any earlier calibration slot is still reusable.
+
 ### Step 4H-R — aggregate historical H comparator
 
 Predecessor: every canonical H R5/R6/R7/R12 task is frozen. This step may run in
