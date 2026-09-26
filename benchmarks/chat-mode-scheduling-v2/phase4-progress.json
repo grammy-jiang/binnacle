@@ -7,7 +7,7 @@
   "source_branch": "feature/chat-mode-scheduling-v2-phase3",
   "audited_source_head": "3a4dfb1b248e4530fb09013976abb863c8e35eaf",
   "last_completed_step": "4.12",
-  "next_step": "4.13 final report, final validation, endpoint cleanup, and CI attestation.",
+  "next_step": "4.13 final report, final validation, endpoint cleanup, and CI attestation (running).",
   "dependency_audit": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase4-dependency-audit-2026-09-25-r01.json",
     "revision": "r01",
@@ -782,9 +782,11 @@
       "worker_branch": null
     },
     "4.13": {
-      "status": "not_started",
+      "status": "running",
       "tests": [],
-      "notes": [],
+      "notes": [
+        "Step 4.13 started from verified predecessor commit 1d2eefc45e18c59f3e5daa595264614c30b5e469; Step 4.12 is complete and 4H-R is already complete with frozen comparator evidence."
+      ],
       "commit": null,
       "worker_branch": null
     },

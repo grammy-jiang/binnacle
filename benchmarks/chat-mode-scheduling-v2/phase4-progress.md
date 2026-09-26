@@ -10,7 +10,7 @@ Audited source HEAD: `3a4dfb1b248e4530fb09013976abb863c8e35eaf`
 
 Last completed step: **4.12**
 
-Next step: **4.13 final report, final validation, endpoint cleanup, and CI attestation.**
+Next step: **4.13 final report, final validation, endpoint cleanup, and CI attestation (running).**
 
 ## Frozen Step 4.0 entry gate
 
@@ -61,7 +61,7 @@ Next step: **4.13 final report, final validation, endpoint cleanup, and CI attes
 | 4.11 | complete | 20/26 required gates PASS; 6 FAIL; matrix frozen |
 | 4.12 | complete | NO_GO_PERFORMANCE; Phase 5 not ready |
 | 4H-R | complete | P4-A3 comparator frozen; H outcomes unchanged; selected C300 9/9 |
-| 4.13 | not_started | — |
+| 4.13 | running | predecessor 4.12 verified; 4H-R already frozen |
 
 ### Dynamic lane manifest freezes
 
