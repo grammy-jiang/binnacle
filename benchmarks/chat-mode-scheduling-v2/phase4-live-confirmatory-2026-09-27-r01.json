@@ -1,0 +1,192 @@
+{
+  "schema_version": 1,
+  "report_kind": "phase4-live-confirmatory",
+  "phase": 4,
+  "revision": "r01",
+  "generated_at": "2026-09-27T04:20:15+10:00",
+  "verdict": "NO_GO_PERFORMANCE",
+  "phase5_ready": false,
+  "selected_c_endpoint": "C300",
+  "selected_budget_s": 300,
+  "all_hard_gates_pass": false,
+  "required_gate_count": 26,
+  "required_gate_pass_count": 20,
+  "failed_required_gates": [
+    "category_median_regression_within_10_percent",
+    "continuation_reduction_ge_80_percent",
+    "eligible_overlap_ratio_ge_80_percent",
+    "mixed_long_median_ge_20_percent_faster",
+    "overall_median_wall_ge_20_percent_faster",
+    "read_heavy_median_ge_30_percent_faster"
+  ],
+  "diagnostic_target_count": 1,
+  "diagnostic_target_missed_count": 1,
+  "phase4_source_head": "06bc1649c4bad9449470366da971649bb7620020",
+  "baseline_instruction_sha256": "f1c100d0ddb93c29f8f78e5a2d28e297d861ba6e2c7e53712ec886dea06bafa5",
+  "v2_instruction_sha256": "b7df6953a3c64bd245b3d5ff13b6f2667e940d5a154e650fec0b10e6a22cf094",
+  "canonical_schedule": {
+    "path": "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-schedule.json",
+    "sha256": "516938320afdf9dade5e03b8262a9e6ef9c95ad5d0330c20d1ce23d0ec68e734",
+    "selected_c_endpoint": "C300",
+    "selected_budget_s": 300,
+    "execution_mode": "serial_randomized",
+    "max_safe_parallel_blocks": 0,
+    "canonical_trial_count_A": 53,
+    "canonical_trial_count_B": 53,
+    "canonical_trial_count_C": 54,
+    "canonical_trial_count_H": 10,
+    "total_main_slots": 160
+  },
+  "hard_gate_matrix": {
+    "path": "benchmarks/chat-mode-scheduling-v2/phase4-hard-gate-matrix.json",
+    "sha256": "d4ab68331cf9058e6d0726fc97554a9e6bfbdae94b34681326991e0a53e870b3",
+    "required_pass": 20,
+    "required_total": 26,
+    "failed_required_gates": [
+      "category_median_regression_within_10_percent",
+      "continuation_reduction_ge_80_percent",
+      "eligible_overlap_ratio_ge_80_percent",
+      "mixed_long_median_ge_20_percent_faster",
+      "overall_median_wall_ge_20_percent_faster",
+      "read_heavy_median_ge_30_percent_faster"
+    ],
+    "diagnostic_target_missed_count": 1
+  },
+  "review_inputs": {
+    "correctness_safety": {
+      "path": "benchmarks/chat-mode-scheduling-v2/phase4-review-correctness-safety.json",
+      "report_kind": "phase4-review-correctness-safety",
+      "sha256": "71e1661b9150f6cdfe2d23eb2bc4dc540e650aab7a209f15a26c31c45ea64aa7"
+    },
+    "performance_bootstrap": {
+      "path": "benchmarks/chat-mode-scheduling-v2/phase4-review-performance-bootstrap.json",
+      "report_kind": "phase4-review-performance-bootstrap",
+      "sha256": "32ebb201579319f8505746a61d83fc3129b6ebeb33361917816ec2cbcbe514cc"
+    },
+    "reliability_provenance": {
+      "path": "benchmarks/chat-mode-scheduling-v2/phase4-review-reliability-provenance.json",
+      "report_kind": "phase4-review-reliability-provenance",
+      "sha256": "0dfcae4f5cb9300faa72afb88d8710ef670eb7f64ae521191d301d6b3177801d"
+    },
+    "scheduling_efficiency": {
+      "path": "benchmarks/chat-mode-scheduling-v2/phase4-review-scheduling-efficiency.json",
+      "report_kind": "phase4-review-scheduling-efficiency",
+      "sha256": "33571c4e59efafb87d5a394420c2abed95b9f0357dccfccd5767bc6d70800283"
+    }
+  },
+  "routing_miss_rates": {
+    "A": {
+      "routing_misses": 1,
+      "submitted_trials": 54,
+      "rate": 0.018518519
+    },
+    "B": {
+      "routing_misses": 0,
+      "submitted_trials": 53,
+      "rate": 0.0
+    },
+    "C": {
+      "routing_misses": 0,
+      "submitted_trials": 53,
+      "rate": 0.0
+    },
+    "H": {
+      "routing_misses": 0,
+      "submitted_trials": 10,
+      "rate": 0.0
+    }
+  },
+  "routing_integrity_pass": true,
+  "slot_integrity": {
+    "expected_main_slots": 160,
+    "h": {
+      "expected_slots": 0,
+      "issues": [],
+      "note": "H is a separate historical comparator and is not scanned into the confirmatory gate population.",
+      "scorable_slots": 0,
+      "submitted_slots": 0,
+      "unscheduled_run_ids": []
+    },
+    "issues": [],
+    "passed": true,
+    "scorable_main_slots": 160,
+    "submitted_main_slots": 160,
+    "unscheduled_main_run_ids": []
+  },
+  "timing_provenance": {
+    "p4_a6_recomputed_rows": 79,
+    "remaining_observed_time_trials": [
+      "R5-r03-C",
+      "R6-r01-C",
+      "R6-r02-C",
+      "R7-r02-C",
+      "R12-r01-C"
+    ],
+    "note": "Recovered conversation-final-assistant timestamps were consumed through the P4-A6 timing addenda; the five listed trials remain explicitly poll-observed."
+  },
+  "historical_comparator": {
+    "status": "complete",
+    "path": "benchmarks/chat-mode-scheduling-v2/phase4-historical-comparator.json",
+    "sha256": "13f1fae101ccf9de63b7c45ed593b4827ba8df4cd7a7943079ec214d812eecb7",
+    "markdown_path": "benchmarks/chat-mode-scheduling-v2/phase4-historical-comparator.md",
+    "markdown_sha256": "25345d3d5567878ef226d13d11d820357bf55eec8d9930402dd0bbd10de06b51",
+    "evidence_integrity_pass": true,
+    "bounded_trials": 9,
+    "bounded_same_prompt_completions": 0,
+    "bounded_manual_continuations_total": 9,
+    "r12_correctness_passed": false,
+    "diagnostic_only": true,
+    "alters_c_gate_matrix": false,
+    "alters_4_12_verdict": false
+  },
+  "validation": {
+    "optimized_full_suite": {
+      "command": "BINNACLE_CONFIG_FILE=/tmp/p36-manager/phase4-test-empty-config.toml uv run python scripts/run_test_suite.py --workers 4 --seed 12345",
+      "result": "pass",
+      "parallel_safe": "1324 passed, 3 skipped",
+      "ordinary_process": "2 passed, 1327 deselected",
+      "elapsed_s": 32.88,
+      "nproc": 4,
+      "loadavg_before": "0.49 0.61 0.72",
+      "note": "Initial inherited staging connector config selected jobs.owner=manager and caused 55 environment-induced integration failures; rerun redirected only BINNACLE_CONFIG_FILE to a nonexistent test path so repository defaults selected embedded execution. Tests, seed and worker count were unchanged."
+    },
+    "production_isolation": {
+      "result": "pass",
+      "observed_head": "cbafe8aff48ac1c0e518b34b6a4f54f62f162864",
+      "worktree_clean": true,
+      "services_active": [
+        "binnacle-mcp.service",
+        "binnacle-jobs.service",
+        "binnacle-tunnel.service",
+        "binnacle-watchdog.service"
+      ],
+      "config_sha256": "22f7ed9c2053c9fb20574fe4086fff797e197e2da40080e92f503213061188da",
+      "primary_tunnel_profile_sha256": "c8e2a608779109854e6d3aae921a2cb1fbbe1b6511f1630990899052a6b74ecb",
+      "blocking_wall_budget_key_present": false
+    },
+    "endpoint_cleanup": {
+      "result": "pass",
+      "stopped_endpoints": [
+        "A",
+        "B",
+        "C300",
+        "H"
+      ],
+      "stop_order": "tunnel -> server -> manager",
+      "registry_endpoints_after": [],
+      "closed_ports": [
+        8110,
+        8111,
+        8113,
+        8115
+      ],
+      "evidence_deleted": false
+    },
+    "ci_attestation": {
+      "status": "pending_manager_observation",
+      "reason": "Assignment procedure requires one final push with --no-wait and explicitly delegates CI tracking/follow-up to the task manager."
+    }
+  },
+  "production_drift_note": "Final observation is cbafe8a/config 22f7ed9c after the owner-approved run_command shadow-prediction line advanced beyond the earlier D2 baseline. Phase-4 frozen experiment source 06bc164 remains unchanged and this task made no production mutation.",
+  "conclusion": "Phase 4 closes with NO_GO_PERFORMANCE. C300/300 s remains the selected C endpoint/budget for evidence identity, but Phase 5 is not ready because six required gates fail. H is fully frozen and diagnostic only."
+}

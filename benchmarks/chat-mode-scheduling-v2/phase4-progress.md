@@ -1,6 +1,6 @@
 # Chat mode scheduling v2 — Phase 4 progress
 
-Status: **in_progress**
+Status: **complete**
 
 Branch: `feature/chat-mode-scheduling-v2-phase4`
 
@@ -8,9 +8,9 @@ Worktree: `/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4`
 
 Audited source HEAD: `3a4dfb1b248e4530fb09013976abb863c8e35eaf`
 
-Last completed step: **4.12**
+Last completed step: **4.13**
 
-Next step: **4.13 final report, final validation, endpoint cleanup, and CI attestation (running).**
+Next step: **Phase 4 closed with NO_GO_PERFORMANCE; Phase 5 is not ready. CI observation is delegated to the task manager.**
 
 ## Frozen Step 4.0 entry gate
 
@@ -61,7 +61,7 @@ Next step: **4.13 final report, final validation, endpoint cleanup, and CI attes
 | 4.11 | complete | 20/26 required gates PASS; 6 FAIL; matrix frozen |
 | 4.12 | complete | NO_GO_PERFORMANCE; Phase 5 not ready |
 | 4H-R | complete | P4-A3 comparator frozen; H outcomes unchanged; selected C300 9/9 |
-| 4.13 | running | predecessor 4.12 verified; 4H-R already frozen |
+| 4.13 | complete | final report frozen; validation and endpoint cleanup PASS |
 
 ### Dynamic lane manifest freezes
 
@@ -880,3 +880,31 @@ but Phase 5 is not ready.
 - Known harness weakness carried forward: run_trial acquires FixtureLease before
   the shared send gate, so queued M3-style fixtures can age before submission.
   Future benchmark use must acquire the gate first or record and bound fixture age.
+
+## Step 4.13 final validation/checkpoint — COMPLETE
+
+- Canonical final report: `phase4-live-confirmatory-2026-09-27-r01.json`
+  (`d69f163bad667c996053dd1d38326792c9e5b4d4d4ebb103a37b2fcf3663bfa5`) and Markdown (`d9f245857f70417ab7f2411494ecd0ef53b1c774441ac243d25ebd53937df405`).
+- Final verdict remains **NO_GO_PERFORMANCE**; C300 at 300 s is retained only as
+  the selected evidence identity. Phase 5 is not ready.
+- Hard-gate matrix remains **20/26 required PASS**, six FAIL; slot integrity is
+  160/160 submitted and 160/160 scorable.
+- H comparator is frozen complete: JSON `13f1fae101ccf9de63b7c45ed593b4827ba8df4cd7a7943079ec214d812eecb7` and Markdown
+  `25345d3d5567878ef226d13d11d820357bf55eec8d9930402dd0bbd10de06b51`. H evidence integrity passes and
+  H remains diagnostic only.
+- Routing misses: A 1/54 (1.8519%), B 0/53, C 0/53; H diagnostic 0/10.
+- P4-A6 timing is authoritative. Five trials remain explicitly poll-observed:
+  `R5-r03-C`, `R6-r01-C`, `R6-r02-C`, `R7-r02-C`, `R12-r01-C`.
+- Optimized full suite passes with test-isolated config: 1324 passed, 3 skipped in
+  the parallel-safe lane and 2 passed in the ordinary-process lane. The initial
+  inherited staging-config run produced 55 job-manager-mode integration failures;
+  only `BINNACLE_CONFIG_FILE` was redirected for the passing rerun.
+- Production isolation passes after cleanup at clean master
+  `cbafe8aff48ac1c0e518b34b6a4f54f62f162864`; services remain active, the
+  blocking-wall budget key is absent, and the primary tunnel profile is unchanged.
+- A/B/C300/H disposable benchmark endpoints were stopped through the benchmark
+  cleanup command. The runtime registry is empty and ports 8110/8111/8113/8115
+  are closed; evidence was retained for Phase 5/6 review.
+- Per the assignment's one-push `--no-wait` procedure, CI observation is delegated
+  to the task manager. No CI run id or success conclusion is fabricated into the
+  repository; a red run is routed to a follow-up task.

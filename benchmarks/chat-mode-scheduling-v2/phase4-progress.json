@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "phase": 4,
-  "status": "in_progress",
+  "status": "complete",
   "branch": "feature/chat-mode-scheduling-v2-phase4",
   "worktree": "/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4",
   "source_branch": "feature/chat-mode-scheduling-v2-phase3",
   "audited_source_head": "3a4dfb1b248e4530fb09013976abb863c8e35eaf",
-  "last_completed_step": "4.12",
-  "next_step": "4.13 final report, final validation, endpoint cleanup, and CI attestation (running).",
+  "last_completed_step": "4.13",
+  "next_step": "Phase 4 closed with NO_GO_PERFORMANCE; Phase 5 is not ready. CI observation is delegated to the task manager per assignment.",
   "dependency_audit": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase4-dependency-audit-2026-09-25-r01.json",
     "revision": "r01",
@@ -174,7 +174,9 @@
     "phase4_review_reliability_provenance_md": "3d10e0798977ddaff332c5c411ea3be55efea7985972ab958346d0d1b698e8bc",
     "phase4_review_scheduling_efficiency_json": "33571c4e59efafb87d5a394420c2abed95b9f0357dccfccd5767bc6d70800283",
     "phase4_review_scheduling_efficiency_md": "b38d37f3bf1f2d7ca23d865aabe73263dad8fdcb74c54bb6300061f25cd6100c",
-    "phase4_hard_gate_matrix_json": "d4ab68331cf9058e6d0726fc97554a9e6bfbdae94b34681326991e0a53e870b3"
+    "phase4_hard_gate_matrix_json": "d4ab68331cf9058e6d0726fc97554a9e6bfbdae94b34681326991e0a53e870b3",
+    "phase4_final_report_json": "d69f163bad667c996053dd1d38326792c9e5b4d4d4ebb103a37b2fcf3663bfa5",
+    "phase4_final_report_md": "d9f245857f70417ab7f2411494ecd0ef53b1c774441ac243d25ebd53937df405"
   },
   "preflight_findings": {
     "p4-preflight-git-lineage": "804da7b66ddc1f0e71ddf3106790989f50a0f320de4cd3b3f0aedaf962d68461",
@@ -782,10 +784,22 @@
       "worker_branch": null
     },
     "4.13": {
-      "status": "running",
-      "tests": [],
+      "status": "complete",
+      "tests": [
+        "Predecessor verification -> PASS: Step 4.12 complete at 1d2eefc45e18c59f3e5daa595264614c30b5e469 and 4H-R complete with frozen comparator hashes.",
+        "H comparator verification -> PASS: JSON 13f1fae101ccf9de63b7c45ed593b4827ba8df4cd7a7943079ec214d812eecb7; Markdown 25345d3d5567878ef226d13d11d820357bf55eec8d9930402dd0bbd10de06b51; H routing integrity PASS.",
+        "Optimized full suite -> PASS under test-isolated config: parallel-safe 1324 passed, 3 skipped; ordinary-process 2 passed, 1327 deselected; 32.88s; nproc=4; pre-run loadavg 0.49/0.61/0.72.",
+        "Production isolation -> PASS after cleanup: production clean at cbafe8aff48ac1c0e518b34b6a4f54f62f162864; services active; blocking-wall budget key absent; primary tunnel profile unchanged.",
+        "Endpoint cleanup -> PASS: A/B/C300/H stopped; endpoint registry empty; ports 8110/8111/8113/8115 closed; evidence retained."
+      ],
       "notes": [
-        "Step 4.13 started from verified predecessor commit 1d2eefc45e18c59f3e5daa595264614c30b5e469; Step 4.12 is complete and 4H-R is already complete with frozen comparator evidence."
+        "Final canonical report is phase4-live-confirmatory-2026-09-27-r01.{json,md}; canonical runbook filename is used instead of the assignment shorthand phase4-confirmatory-*.",
+        "Final verdict remains NO_GO_PERFORMANCE with selected_c_endpoint=C300 and selected_budget_s=300; Phase 5 is not ready.",
+        "Required hard gates: 20/26 PASS and 6/26 FAIL; slot/evidence integrity passes.",
+        "Routing misses in the final C-gate evidence: A 1/54 (1.8519%), B 0/53, C 0/53. H diagnostic routing: 0/10.",
+        "P4-A6 timing addenda are authoritative; five trials remain explicitly poll-observed: R5-r03-C, R6-r01-C, R6-r02-C, R7-r02-C, R12-r01-C.",
+        "Initial full-suite run inherited the staging connector config whose jobs.owner=manager and produced 55 integration failures. Rerun changed only BINNACLE_CONFIG_FILE to an absent test path, restoring repository default embedded mode; test selection, seed and workers were unchanged.",
+        "CI waiting is intentionally delegated to the task manager by the assignment procedure; handoff CI fields remain pending until manager observation."
       ],
       "commit": null,
       "worker_branch": null
@@ -1466,8 +1480,26 @@
       "category_median_regression_within_10_percent",
       "eligible_overlap_ratio_ge_80_percent"
     ],
-    "note": "Interim Step-4.12 handoff fields required by the manager; Step 4.13 adds the canonical final-report and CI-attestation fields.",
-    "verdict_commit": "f5093ae613c4627639f04bacc51219a50ebdee2c"
+    "note": "Step 4.13 final handoff. Verdict/selected endpoint/selected budget preserved. H is frozen complete. CI observation is delegated to the task manager per assignment --no-wait workflow.",
+    "verdict_commit": "f5093ae613c4627639f04bacc51219a50ebdee2c",
+    "final_report_json": "benchmarks/chat-mode-scheduling-v2/phase4-live-confirmatory-2026-09-27-r01.json",
+    "final_report_md": "benchmarks/chat-mode-scheduling-v2/phase4-live-confirmatory-2026-09-27-r01.md",
+    "final_report_json_sha256": "d69f163bad667c996053dd1d38326792c9e5b4d4d4ebb103a37b2fcf3663bfa5",
+    "final_report_md_sha256": "d9f245857f70417ab7f2411494ecd0ef53b1c774441ac243d25ebd53937df405",
+    "canonical_trial_count_A": 53,
+    "canonical_trial_count_B": 53,
+    "canonical_trial_count_C": 54,
+    "canonical_trial_count_H": 10,
+    "historical_comparator_path": "benchmarks/chat-mode-scheduling-v2/phase4-historical-comparator.json",
+    "historical_comparator_sha256": "13f1fae101ccf9de63b7c45ed593b4827ba8df4cd7a7943079ec214d812eecb7",
+    "historical_comparator_md_path": "benchmarks/chat-mode-scheduling-v2/phase4-historical-comparator.md",
+    "historical_comparator_md_sha256": "25345d3d5567878ef226d13d11d820357bf55eec8d9930402dd0bbd10de06b51",
+    "h_status": "complete",
+    "validated_evidence_commit": null,
+    "validated_ci_run_id": null,
+    "validated_ci_head_sha": null,
+    "validated_ci_conclusion": null,
+    "ci_attestation_status": "pending_manager_observation"
   },
   "created_at": "2026-09-25T15:31:10+10:00",
   "updated_at": "2026-09-27T04:09:04+10:00",
