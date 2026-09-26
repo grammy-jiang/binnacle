@@ -55,3 +55,7 @@ This is not reconciled by changing the checkpoint owner or smoothing metrics. St
 - D2 is accepted inherited production drift outside the frozen Phase-4 source; observation baseline config hash remains d24dadcc87e04096fdd960fc7d1543fca02ea53814b15ccd51fd9b1eb1153195.
 - P4-A2 routing exclusion is applied exactly.
 - D9 timing recovery is applied and all remaining observed-time macro slots are explicit.
+
+## Assignment/runbook hash blocker
+
+The assignment packet pins runbook SHA-256 8206b1560a06c12f6fbf98754cd94915f415694903a3f334c295e1a14c1f8697, while the current clean planning worktree is at SHA-256 4b6ca10e642ec760c9b16bbf8f0af2cdd494211623307ca046e42b85fd91eb43 and its plan history now includes commit 52a1b00 (P4-A6). This attempt does not reinterpret scope against a moving runbook.

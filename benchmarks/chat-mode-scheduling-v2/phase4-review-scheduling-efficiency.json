@@ -47,6 +47,22 @@
     }
   },
   "base_commit": "1de4b72503e39e53a01fc431b6a3eca70728f324",
+  "blockers": [
+    {
+      "action_required": "Reconcile frozen analyzer submission classification with already-frozen canonical checkpoint semantics before Step 4.11 gate fan-in.",
+      "detail": "scripts.chat_scheduling_confirmatory._submitted() does not recognize submission_status='failed_after_submission'. Canonical checkpoint owner R7-r02-B (run r7-20260926T200743-e7db9a34ac, provenance mcp_completed_browser_timeout) is therefore dropped. A canonical-only staged analyzer run reports 159/160 and marks complete-dependent computed gates false; the prescribed global runs root is additionally polluted by historical/qualification trials and reports 153/160.",
+      "id": "frozen_analyzer_submission_status_incompatibility",
+      "status": "BLOCKING"
+    },
+    {
+      "assignment_sha256": "8206b1560a06c12f6fbf98754cd94915f415694903a3f334c295e1a14c1f8697",
+      "detail": "The assignment packet pins a different runbook hash than the current clean planning worktree. The planning log now includes Phase 4 amendment P4-A6 after the packet was issued, so this worker does not reinterpret scope mid-attempt.",
+      "id": "assignment_runbook_hash_mismatch",
+      "observed_plan_commit": "52a1b00",
+      "observed_sha256": "4b6ca10e642ec760c9b16bbf8f0af2cdd494211623307ca046e42b85fd91eb43",
+      "status": "BLOCKING"
+    }
+  ],
   "deviations": [
     {
       "id": "D2",
