@@ -134,4 +134,26 @@ short wait looked like the responsive choice.
 
 ## 9. Shipped
 
-Recorded when the change is live: see below.
+2026-09-27 09:22:32, `master` and `proof-of-concept` at `6c5f261`: the
+job_status description and the `wait_seconds` parameters of job_status and
+run_command state that a wait returns as soon as the job or command exits.
+
+- **Baseline, saved before the change:** `docs/usage-baselines/2026-09-27.json`.
+  The step and polling numbers for the same window come from the extended
+  script (`bde4018`, 2026-09-14 to the ship time): 33,407 model steps; solo
+  polls 17.0 % of the steps, 58.9 % of them at 50 s; 985 polls over the
+  realistic minimum (29.5 per 1,000 steps).
+- **Verified end to end the same morning:** `chatgpt-refresh` refreshed the
+  connector (after its cookie fix, `988ef2f`). A message in the standing test
+  chat with the nonce `e2e-wait-093651` ran `sleep 75; echo ...`. run_command
+  waited its 30 s; one job_status with `wait_seconds` 50 then returned after
+  41.5 s, when the job exited at 75.0 s; the reply was the nonce line. The
+  standing chat's Project instructions already ask for 50 s, so this proves
+  the loop, not the effect.
+- **Review:** `~/.local/bin/binnacle-wait-review.sh` runs daily at 07:43
+  through `cron-report` until 2026-10-11 and mails the three numbers against
+  the baseline. It warns when, after five days, the share of solo polls at
+  50 s has not risen by five points: then the model did not notice the text.
+- **Found on the way:** `chatgpt-send` fails since the 2026-09-26 ChatGPT UI
+  change (the composer selector); the ChatGPT skill's `send_prompt.py` was
+  used instead.
