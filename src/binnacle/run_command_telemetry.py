@@ -385,17 +385,6 @@ class MemoryLookup:
     shape_n: int
 
 
-@dataclass(frozen=True)
-class JudgeResult:
-    bucket: str | None
-    p90_s: float | None
-    latency_ms: float
-    prompt_tokens: int | None = None
-    completion_tokens: int | None = None
-    error: str | None = None
-    retry_after_s: float | None = None
-
-
 def _prediction_number(value: float | None) -> str:
     return "-" if value is None else f"{value:.3f}".rstrip("0").rstrip(".")
 
@@ -403,18 +392,22 @@ def _prediction_number(value: float | None) -> str:
 def log_shadow_config(
     enabled: bool,
     predictors: tuple[str, ...],
-    judge_model: str,
     filter_hash: str,
-    sanitizer_hash: str,
 ) -> None:
     log.info(
         "event=tool_config tool=run_command shadow_prediction=%s predictors=%s "
-        "judge_model=%s filter_hash=%s sanitizer_hash=%s",
+        "filter_hash=%s",
         "on" if enabled else "off",
         ",".join(predictors) or "-",
-        judge_model,
         filter_hash,
-        sanitizer_hash,
+    )
+
+
+def log_shadow_dropped_predictors(dropped: tuple[str, ...]) -> None:
+    log.warning(
+        "event=run_command_prediction_config_warning schema=1 "
+        "dropped_predictors=%s reason=removed_predictor",
+        ",".join(dropped),
     )
 
 
@@ -426,10 +419,8 @@ def log_shadow_prediction(
     memory_store_keys: int,
     rules: Prediction | None,
     hits: tuple[str, ...],
-    judge: tuple[str, str | None, str],
 ) -> None:
     mp = memory.prediction
-    judge_state, judge_skip_reason, judge_cache = judge
     values = (
         call_id,
         features.feature_hash,
@@ -450,44 +441,15 @@ def log_shadow_prediction(
         rules.bucket if rules else "-",
         _prediction_number(rules.p90_s if rules else None),
         ",".join(hits) or "-",
-        judge_state,
-        judge_skip_reason or "-",
-        judge_cache,
     )
     log.info(
         "event=run_command_prediction schema=1 call=%s feature_hash=%s shape_hash=%s "
         "first_token_class=%s heredoc=%d chain_n=%d max_delay_s=%s len_chars=%d "
         "declared_wait_s=%d declared_background=%s auto_rule=%s memory_bucket=%s "
         "memory_p90_s=%s memory_n=%d memory_source=%s memory_store_keys=%d "
-        "rules_bucket=%s rules_p90_s=%s rules_hits=%s judge=%s "
-        "judge_skip_reason=%s judge_cache=%s",
+        "rules_bucket=%s rules_p90_s=%s rules_hits=%s",
         *values,
     )
-
-
-def log_shadow_judge(call_id: str, model: str, result: JudgeResult) -> None:
-    values = (
-        call_id,
-        model,
-        result.bucket or "-",
-        _prediction_number(result.p90_s),
-        result.latency_ms,
-        result.prompt_tokens if result.prompt_tokens is not None else "-",
-        result.completion_tokens if result.completion_tokens is not None else "-",
-        (result.error or "-").replace(" ", "_")[:80],
-    )
-    log.info(
-        "event=run_command_prediction_judge schema=1 call=%s model=%s bucket=%s "
-        "p90_s=%s latency_ms=%.2f prompt_tokens=%s completion_tokens=%s error=%s",
-        *values,
-    )
-
-
-def prediction_optional_int(value: Any) -> int | None:
-    try:
-        return int(value) if value is not None else None
-    except (TypeError, ValueError):
-        return None
 
 
 def log_shadow_memory_error(error: str) -> None:

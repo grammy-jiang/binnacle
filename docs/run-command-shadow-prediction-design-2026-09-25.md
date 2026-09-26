@@ -260,3 +260,28 @@ regressions.
 There were 21 judge timeouts among 492 calls at the deployed 3,000 ms timeout;
 observed p95 judge latency was 2,478 ms. No code timeout change is made here:
 the deployment owner will raise the host configuration to 5,000 ms.
+
+## 11. Removal of the judge (2026-09-27)
+
+The owner removed the Cerebras judge predictor on 2026-09-27 ("it is useless").
+Sections 4-9 above describe the judge as it was built; they are kept as the
+record of that design and no longer describe the code.
+
+Live evidence (v2 prompt, 2026-09-26 15:25 to 2026-09-27 07:2x, 1555
+`run_command` calls):
+
+- Judge coverage was 34%. At the 10 s threshold its precision was 0.24 and
+  its recall 0.56. At the 60 s threshold its precision was 0.05 and its
+  recall 0.03.
+- It made 532 Cerebras calls in about 16 hours, close to its 800-a-day budget.
+- The model's own `wait_seconds=1` request predicted runs of 60 s or more at
+  precision 0.76 and recall 0.81, better than every shadow predictor.
+
+What remains: the `memory` and `rules` predictors, the
+`run_command_prediction` record (its `declared_wait_s` field is the model's
+own requested wait), and the `binnacle stats` predictions section and export.
+A host configuration that still lists `judge` or sets `judge_*` keys keeps
+loading: the keys are ignored, the predictor is dropped, and one
+`run_command_prediction_config_warning` record reports it at startup. The
+memory store drops its old judge-answer cache on its next write. The
+`CEREBRAS_API_KEY` environment variable and any key file are no longer read.

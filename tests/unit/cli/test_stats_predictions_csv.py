@@ -24,5 +24,5 @@ def test_stats_predictions_csv_exports_joined_privacy_safe_rows(
     assert "12.0" in exported
     assert "command" not in exported
     assert "prompt" not in exported
-    assert "judge_confidence" in exported and "0.64" in exported
-    assert "judge_reason" in exported and "test_suite" in exported
+    assert "judge" not in exported
+    assert "judge" not in rendered

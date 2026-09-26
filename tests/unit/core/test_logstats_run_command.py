@@ -386,7 +386,7 @@ PREDICTION_SAMPLE = """\
 """
 
 
-def test_stats_shadow_join_late_judge_and_no_judge_line():
+def test_stats_shadow_join_ignores_old_judge_lines():
     records, starts = logstats.parse(PREDICTION_SAMPLE)
     stats = logstats.analyze(records, starts)
     shadow = stats.predictions
@@ -394,21 +394,16 @@ def test_stats_shadow_join_late_judge_and_no_judge_line():
     assert shadow.outcomes == 2
     assert shadow.coverage["memory"] == 2
     assert shadow.coverage["rules"] == 1
-    assert shadow.coverage["judge"] == 1
+    assert "judge" not in shadow.coverage
     assert shadow.confusion["memory:10"]["tp"] == 1
     assert shadow.confusion["memory:10"]["tn"] == 1
     assert shadow.calibration["memory"]["long->medium"] == 1
-    assert shadow.judge_latency_ms == [410.0]
-    assert shadow.judge_network_results == 1
     assert shadow.memory_sample_counts == {3: 1, 4: 1, 0: 1}
-    assert shadow.judge_cache == {"miss": 2}
-    assert shadow.judge_skip_reasons == {"history": 1, "budget": 1}
     assert shadow.memory_store_keys == 14
     assert shadow.filter_hash == "f123"
-    assert shadow.judge_model == "gpt-oss-120b"
     assert len(shadow.rows) == 3
     assert shadow.rows[0]["actual_runtime_s"] == 12.0
-    assert shadow.rows[2]["judge_bucket"] is None
+    assert "judge_bucket" not in shadow.rows[2]
 
 
 def test_stats_shadow_report_and_render():
@@ -416,13 +411,12 @@ def test_stats_shadow_report_and_render():
     stats = logstats.analyze(records, starts)
     report = prediction_report(stats.predictions)
     assert report["predictors"]["memory"]["coverage"] == 2 / 3
-    assert report["predictors"]["judge"]["thresholds"]["10"]["tp"] == 1
-    assert report["judge"]["latency_ms"]["p50"] == 410.0
-    assert report["judge"]["cache_hit_rate"] == 0.0
+    assert report["predictors"]["memory"]["thresholds"]["10"]["tp"] == 1
+    assert "judge" not in report["predictors"]
+    assert "judge" not in report
     assert report["memory_store_keys"] == 14
-    assert report["judge_model"] == "gpt-oss-120b"
     assert report["memory_sample_counts"] == {"0": 1, "3": 1, "4": 1}
     text = logstats.render(stats)
     assert "predictions:" in text
     assert "memory: coverage=2/3" in text
-    assert "judge: results=1" in text
+    assert "judge" not in text.split("predictions:", 1)[1].split("\n\n", 1)[0]

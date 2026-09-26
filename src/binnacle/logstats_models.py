@@ -254,17 +254,9 @@ class PredictionStats:
     calibration: dict[str, Counter] = field(
         default_factory=lambda: defaultdict(Counter)
     )
-    judge_latency_ms: list[float] = field(default_factory=list)
-    judge_results: int = 0
-    judge_network_results: int = 0
-    judge_errors: Counter = field(default_factory=Counter)
-    judge_cache: Counter = field(default_factory=Counter)
-    judge_skip_reasons: Counter = field(default_factory=Counter)
     memory_store_keys: int = 0
     memory_sample_counts: Counter = field(default_factory=Counter)
     filter_hash: str | None = None
-    sanitizer_hash: str | None = None
-    judge_model: str | None = None
     window_start: str | None = None
     window_end: str | None = None
     rows: list[dict[str, Any]] = field(default_factory=list)

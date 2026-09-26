@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import csv
 import json
-from collections import Counter
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -14,18 +13,7 @@ from binnacle.logstats_run_command import build_run_command_index
 
 Fields = dict[str, str]
 Parser = Callable[[str], Fields]
-PREDICTORS = ("memory", "rules", "judge")
-JUDGE_REASONS = {
-    "explicit_delay",
-    "local_history",
-    "test_suite",
-    "build_or_install",
-    "network",
-    "heavy_io",
-    "loop_or_chain",
-    "simple_command",
-    "unknown",
-}
+PREDICTORS = ("memory", "rules")
 
 
 def _num(fields: Fields, key: str) -> float | None:
@@ -75,14 +63,11 @@ def analyze_predictions(records: list[Record], fields: Parser) -> PredictionStat
     out = PredictionStats()
     index = build_run_command_index(records, fields)
     dispatches: dict[str, Fields] = {}
-    judges: dict[str, Fields] = {}
     for record in records:
         f = fields(record.body)
         if record.event == "tool_config":
             if f.get("tool") == "run_command" and "shadow_prediction" in f:
                 out.filter_hash = f.get("filter_hash")
-                out.sanitizer_hash = f.get("sanitizer_hash")
-                out.judge_model = f.get("judge_model")
         elif record.event == "run_command_prediction":
             call = f.get("call")
             if not call:
@@ -102,24 +87,11 @@ def analyze_predictions(records: list[Record], fields: Parser) -> PredictionStat
                 out.memory_sample_counts[int(f.get("memory_n", "0"))] += 1
             except ValueError:
                 pass
-            cache = f.get("judge_cache")
-            if cache in {"hit", "miss"}:
-                out.judge_cache[cache] += 1
-            reason = f.get("judge_skip_reason")
-            if reason and reason != "-":
-                out.judge_skip_reasons[reason] += 1
-        elif record.event == "run_command_prediction_judge":
-            call = f.get("call")
-            if not call:
-                continue
-            judges[call] = f
-            out.judge_results += 1
 
     for call, prediction in dispatches.items():
         actual = _runtime(call, index)
         if actual is not None:
             out.outcomes += 1
-        judge = judges.get(call, {})
         row: dict[str, Any] = {
             "call": call,
             "feature_hash": prediction.get("feature_hash", "-"),
@@ -127,50 +99,20 @@ def analyze_predictions(records: list[Record], fields: Parser) -> PredictionStat
             "first_token_class": prediction.get("first_token_class", "-"),
             "actual_runtime_s": actual,
             "actual_bucket": _bucket(actual) if actual is not None else None,
-            "judge_state": prediction.get("judge", "-"),
-            "judge_skip_reason": prediction.get("judge_skip_reason", "-"),
-            "judge_cache": prediction.get("judge_cache", "-"),
-            "judge_confidence": _num(judge, "confidence"),
-            "judge_reason": (
-                judge.get("reason") if judge.get("reason") in JUDGE_REASONS else None
-            ),
         }
         for name in PREDICTORS:
-            source = judge if name == "judge" else prediction
-            bucket_key = "bucket" if name == "judge" else f"{name}_bucket"
-            p90_key = "p90_s" if name == "judge" else f"{name}_p90_s"
-            bucket = source.get(bucket_key)
+            bucket = prediction.get(f"{name}_bucket")
             row[f"{name}_bucket"] = (
                 bucket if bucket in {"short", "medium", "long"} else None
             )
-            row[f"{name}_p90_s"] = _num(source, p90_key)
+            row[f"{name}_p90_s"] = _num(prediction, f"{name}_p90_s")
             if bucket not in {"short", "medium", "long"}:
                 continue
             out.coverage[name] += 1
             if actual is not None:
                 _score(out, name, bucket, actual)
-        is_network_result = (
-            bool(judge)
-            and prediction.get("judge") == "queued"
-            and prediction.get("judge_cache") == "miss"
-        )
-        if is_network_result:
-            out.judge_network_results += 1
-            error = judge.get("error")
-            if error and error != "-":
-                out.judge_errors[error] += 1
-            latency = _num(judge, "latency_ms")
-            if latency is not None:
-                out.judge_latency_ms.append(latency)
         out.rows.append(row)
     return out
-
-
-def _quantile(values: Sequence[float], q: float) -> float | None:
-    if not values:
-        return None
-    ordered = sorted(values)
-    return float(ordered[min(len(ordered) - 1, int(q * len(ordered)))])
 
 
 def _metrics(counter: Any) -> dict[str, Any]:
@@ -204,44 +146,12 @@ def prediction_report(stats: PredictionStats) -> dict[str, Any]:
         }
         for name in PREDICTORS
     }
-    cache_n = sum(stats.judge_cache.values())
-    confidence_deciles: Counter[str] = Counter()
-    reason_counts: Counter[str] = Counter()
-    for row in stats.rows:
-        confidence = row.get("judge_confidence")
-        if isinstance(confidence, (int, float)) and 0 <= confidence <= 1:
-            decile = min(9, int(confidence * 10))
-            confidence_deciles[f"{decile / 10:.1f}-{(decile + 1) / 10:.1f}"] += 1
-        reason = row.get("judge_reason")
-        if reason in JUDGE_REASONS:
-            reason_counts[str(reason)] += 1
     return {
         "dispatches": stats.dispatches,
         "outcomes": stats.outcomes,
         "window": {"start": stats.window_start, "end": stats.window_end},
         "filter_hash": stats.filter_hash,
-        "sanitizer_hash": stats.sanitizer_hash,
-        "judge_model": stats.judge_model,
         "predictors": predictors,
-        "judge": {
-            "latency_ms": {
-                "p50": _quantile(stats.judge_latency_ms, 0.50),
-                "p95": _quantile(stats.judge_latency_ms, 0.95),
-            },
-            "results": stats.judge_results,
-            "network_results": stats.judge_network_results,
-            "errors": dict(stats.judge_errors),
-            "error_rate": (
-                sum(stats.judge_errors.values()) / stats.judge_network_results
-                if stats.judge_network_results
-                else 0.0
-            ),
-            "cache": dict(stats.judge_cache),
-            "cache_hit_rate": (stats.judge_cache["hit"] / cache_n if cache_n else 0.0),
-            "skip_reasons": dict(stats.judge_skip_reasons),
-            "confidence_deciles": dict(sorted(confidence_deciles.items())),
-            "reason_counts": dict(reason_counts),
-        },
         "memory_store_keys": stats.memory_store_keys,
         "memory_sample_counts": {
             str(key): value for key, value in sorted(stats.memory_sample_counts.items())
@@ -259,17 +169,10 @@ def export_prediction_rows(stats: PredictionStats, path: Path) -> None:
         "first_token_class",
         "actual_runtime_s",
         "actual_bucket",
-        "judge_state",
-        "judge_skip_reason",
-        "judge_cache",
-        "judge_confidence",
-        "judge_reason",
         "memory_bucket",
         "memory_p90_s",
         "rules_bucket",
         "rules_p90_s",
-        "judge_bucket",
-        "judge_p90_s",
     )
     rows = [{key: row.get(key) for key in allowed} for row in stats.rows]
     if path.suffix.lower() == ".csv":
@@ -292,7 +195,6 @@ def render_predictions(stats: PredictionStats) -> list[str]:
         (
             f"  dispatches={stats.dispatches} outcomes={stats.outcomes} "
             f"filter_hash={stats.filter_hash or '-'} "
-            f"judge_model={stats.judge_model or '-'} "
             f"memory_store_keys={stats.memory_store_keys}"
         ),
     ]
@@ -325,41 +227,4 @@ def render_predictions(stats: PredictionStats) -> list[str]:
                     for key, value in sorted(item["calibration"].items())
                 )
             )
-    judge = report["judge"]
-    out.append(
-        f"  judge: results={judge['results']} network_results={judge['network_results']} "
-        f"latency_p50_ms={judge['latency_ms']['p50']} "
-        f"latency_p95_ms={judge['latency_ms']['p95']} "
-        f"error_rate={judge['error_rate']:.3f} "
-        f"cache_hit_rate={judge['cache_hit_rate']:.3f}"
-    )
-    if stats.judge_errors:
-        out.append(
-            "    errors: "
-            + ", ".join(
-                f"{key}:{value}" for key, value in stats.judge_errors.most_common()
-            )
-        )
-    if judge["confidence_deciles"]:
-        out.append(
-            "    confidence deciles: "
-            + ", ".join(
-                f"{key}:{value}" for key, value in judge["confidence_deciles"].items()
-            )
-        )
-    if judge["reason_counts"]:
-        out.append(
-            "    reason codes: "
-            + ", ".join(
-                f"{key}:{value}" for key, value in judge["reason_counts"].items()
-            )
-        )
-    if stats.judge_skip_reasons:
-        out.append(
-            "    skip reasons: "
-            + ", ".join(
-                f"{key}:{value}"
-                for key, value in stats.judge_skip_reasons.most_common()
-            )
-        )
     return out

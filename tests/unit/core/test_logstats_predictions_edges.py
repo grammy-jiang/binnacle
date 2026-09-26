@@ -27,11 +27,17 @@ def test_stats_shadow_export_is_privacy_safe_jsonl_and_csv(tmp_path):
     assert "feature_hash" in csv_text
     assert "command" not in json_text
     assert "prompt" not in json_text
-    assert '"judge_confidence":0.82' in json_text
-    assert '"judge_reason":"test_suite"' in json_text
+    # journals written while the Cerebras judge ran (until 2026-09-27) still
+    # parse; its fields and events are ignored and never exported
+    assert "judge" not in json_text
+    assert "judge" not in csv_text
+    assert csv_text.splitlines()[0] == (
+        "call,feature_hash,shape_hash,first_token_class,actual_runtime_s,"
+        "actual_bucket,memory_bucket,memory_p90_s,rules_bucket,rules_p90_s"
+    )
     report = logstats.prediction_report(stats)
-    assert report["judge"]["confidence_deciles"] == {"0.8-0.9": 1}
-    assert report["judge"]["reason_counts"] == {"test_suite": 1}
+    assert "judge" not in report
+    assert set(report["predictors"]) == {"memory", "rules"}
 
 
 def test_stats_shadow_malformed_sparse_and_error_records():
@@ -51,9 +57,7 @@ def test_stats_shadow_malformed_sparse_and_error_records():
     assert shadow.rows[0]["actual_runtime_s"] == 5.5
     assert shadow.memory_store_keys == 0
     assert shadow.memory_sample_counts == {}
-    assert shadow.judge_network_results == 1
-    assert shadow.judge_errors == {"TimeoutError": 1}
-    assert shadow.judge_latency_ms == []
+    assert set(shadow.coverage) == set()
 
 
 def test_stats_shadow_runtime_and_metric_edge_helpers():
@@ -61,7 +65,6 @@ def test_stats_shadow_runtime_and_metric_edge_helpers():
 
     import binnacle.logstats_predictions as predictions
 
-    assert predictions._quantile([], 0.5) is None
     empty = predictions._metrics(Counter())
     assert empty["precision"] == 0
     assert empty["recall"] == 0
@@ -73,23 +76,17 @@ def test_stats_shadow_runtime_and_metric_edge_helpers():
     assert mixed["f1"] == 0.5
 
 
-def test_stats_shadow_render_empty_and_error_sections():
+def test_stats_shadow_render_empty_and_minimal_sections():
     from binnacle.logstats_models import PredictionStats
     from binnacle.logstats_predictions import render_predictions
 
     assert render_predictions(PredictionStats()) == []
 
-    stats = PredictionStats(dispatches=1, outcomes=0)
-    stats.judge_results = 1
-    stats.judge_network_results = 1
-    stats.judge_errors["TimeoutError"] = 1
-    stats.judge_skip_reasons["fast_shell"] = 1
-    stats.rows.append({"judge_confidence": 1.0, "judge_reason": "network"})
-    lines = render_predictions(stats)
-    assert any("errors: TimeoutError:1" in line for line in lines)
-    assert any("skip reasons: fast_shell:1" in line for line in lines)
-    assert any("confidence deciles: 0.9-1.0:1" in line for line in lines)
-    assert any("reason codes: network:1" in line for line in lines)
+    lines = render_predictions(PredictionStats(dispatches=1, outcomes=0))
+    assert lines[1].startswith("  dispatches=1 outcomes=0 filter_hash=- ")
+    assert any(line.startswith("  memory: coverage=0/1") for line in lines)
+    assert any(line.startswith("  rules: coverage=0/1") for line in lines)
+    assert not any("judge" in line for line in lines)
 
 
 def test_stats_shadow_tool_result_runtime_s_fallback():

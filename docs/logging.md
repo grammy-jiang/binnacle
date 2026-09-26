@@ -449,7 +449,15 @@ payloads. Repository defaults leave it disabled.
 
 The journal is the primary experiment dataset. Prediction records are INFO-level,
 single-line, `key=value` schemas. They never contain raw command text, configured
-regex text, judge prompt text, credentials, or sanitized command text.
+regex text, or credentials.
+
+Two local predictors remain: `memory` (the p90 runtime of earlier runs of the same
+command or command shape) and `rules` (explicit sleeps of 10 s or more). The Cerebras
+`judge` predictor was removed on 2026-09-27; see
+`docs/run-command-shadow-prediction-design-2026-09-25.md`, "Removal of the judge".
+Journals written before that date also hold `judge=`, `judge_skip_reason=` and
+`judge_cache=` fields and `run_command_prediction_judge` records; `binnacle stats`
+ignores them.
 
 ### Dispatch prediction
 
@@ -457,52 +465,40 @@ One record is emitted per dispatch when shadow prediction is enabled, immediatel
 after the existing dispatch decision is fixed:
 
 ```text
-event=run_command_prediction schema=1 call=abc123 feature_hash=5e93514612f1 shape_hash=e17b0130f534 first_token_class=uv heredoc=0 chain_n=0 max_delay_s=0 len_chars=41 declared_wait_s=30 declared_background=none auto_rule=- memory_bucket=long memory_p90_s=98 memory_n=7 memory_source=shape memory_store_keys=412 rules_bucket=- rules_p90_s=- rules_hits=- judge=skipped judge_skip_reason=history judge_cache=-
+event=run_command_prediction schema=1 call=abc123 feature_hash=5e93514612f1 shape_hash=e17b0130f534 first_token_class=uv heredoc=0 chain_n=0 max_delay_s=0 len_chars=41 declared_wait_s=30 declared_background=none auto_rule=- memory_bucket=long memory_p90_s=98 memory_n=7 memory_source=shape memory_store_keys=412 rules_bucket=- rules_p90_s=- rules_hits=-
 ```
 
 Stable fields include the joinable `call`, non-reversible feature and shape hashes,
-closed-vocabulary first-token class, structural features, caller declarations,
-automatic-rule hash, predictor outputs, judge disposition, skip reason, cache state,
-and bounded memory-store size. The feature fields are derived before request argument
-clipping.
-
-### Asynchronous judge result
-
-A queued or cached judge produces a second record. It may arrive before or after
-the command outcome, so consumers must join by `call` rather than event order. Exact-hash
-requests already in flight are coalesced onto the existing provider call; those dispatches
-use `judge_cache=hit` and receive the same later result without a second network request.
-
-```text
-event=run_command_prediction_judge schema=1 call=abc123 model=gpt-oss-120b bucket=medium p90_s=42 latency_ms=387.40 prompt_tokens=214 completion_tokens=24 error=-
-```
-
-On failure the bucket and p90 are `-` and `error` contains only a stable error
-class. No exception from this path is allowed to affect `run_command`.
+closed-vocabulary first-token class, structural features, caller declarations
+(`declared_wait_s` is the model's own requested wait), automatic-rule hash, predictor
+outputs, and bounded memory-store size. The feature fields are derived before request
+argument clipping.
 
 ### Effective shadow configuration
 
 At tool registration the server emits the experiment identity:
 
 ```text
-event=tool_config tool=run_command shadow_prediction=on predictors=memory,rules,judge judge_model=gpt-oss-120b filter_hash=d3fa15d2a4eb sanitizer_hash=f1d38448894d
+event=tool_config tool=run_command shadow_prediction=on predictors=memory,rules filter_hash=d3fa15d2a4eb
 ```
 
-Use `filter_hash` and `sanitizer_hash` when comparing experiment windows. The filter hash
-includes the memory threshold, complexity thresholds, cache TTL, and minute/hour/day judge
-request budgets. Provider HTTP 429 responses pause new judge requests until the advertised
-reset interval and are logged only as `error=http_429` on the result event.
+Use `filter_hash` when comparing experiment windows; it covers the memory threshold.
+A configuration that still names the removed `judge` predictor keeps loading; the
+predictor is dropped and one WARNING record says so at the same moment:
+
+```text
+event=run_command_prediction_config_warning schema=1 dropped_predictors=judge reason=removed_predictor
+```
 
 ### Join and analysis recipe
 
 Join `run_command_prediction.call` to `run_command_dispatch.call`, take its
-`job_id`, and use `job_exit.runtime_s` as the terminal outcome. A late
-`run_command_prediction_judge` is still joined by `call`.
+`job_id`, and use `job_exit.runtime_s` as the terminal outcome.
 
 `binnacle stats` renders a `predictions` section with per-predictor coverage,
 10-second and 60-second confusion counts, precision/recall/F1, calibration buckets,
-judge latency p50/p95, judge errors, cache-hit rate, skip reasons, memory-store size and
-sample-count distribution, window identity, and configuration hashes. The JSON-safe
-`logstats.prediction_report` contains the same metrics plus privacy-safe joined rows.
-`logstats.export_prediction_rows` writes those rows as JSONL or CSV; exported rows contain
-only call IDs, hashes, classes, predictions, and runtimes, never command or prompt text.
+memory-store size and sample-count distribution, window identity, and the filter hash.
+The JSON-safe `logstats.prediction_report` contains the same metrics plus privacy-safe
+joined rows. `logstats.export_prediction_rows` (and `binnacle stats --predictions-csv`)
+writes those rows as JSONL or CSV; exported rows contain only call IDs, hashes, classes,
+predictions, and runtimes, never command text.
