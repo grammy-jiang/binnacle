@@ -7,7 +7,7 @@
   "source_branch": "feature/chat-mode-scheduling-v2-phase3",
   "audited_source_head": "3a4dfb1b248e4530fb09013976abb863c8e35eaf",
   "last_completed_step": "4C-fix",
-  "next_step": "4C evidence-review frontier: rerun correctness-safety, performance-bootstrap, reliability-provenance and scheduling-efficiency as attempt a2 from the P4-A6 fixed canonical head.",
+  "next_step": "Task 4.12 in progress: integrate 4C a2 reviews, aggregate Step 4.11 hard-gate matrix, decide Step 4.12 verdict.",
   "dependency_audit": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase4-dependency-audit-2026-09-25-r01.json",
     "revision": "r01",
@@ -669,7 +669,7 @@
       "worker_branch": null
     },
     "4C": {
-      "status": "not_started",
+      "status": "running",
       "tests": [],
       "notes": [],
       "commit": null,
@@ -697,14 +697,14 @@
       "worker_branch": null
     },
     "4.11": {
-      "status": "not_started",
+      "status": "running",
       "tests": [],
       "notes": [],
       "commit": null,
       "worker_branch": null
     },
     "4.12": {
-      "status": "not_started",
+      "status": "running",
       "tests": [],
       "notes": [],
       "commit": null,

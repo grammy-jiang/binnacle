@@ -10,7 +10,7 @@ Audited source HEAD: `3a4dfb1b248e4530fb09013976abb863c8e35eaf`
 
 Last completed step: **4C-fix**
 
-Next step: **4C evidence-review frontier reruns all four focus leads as attempt a2 from P4-A6 fixed head 0df91ce582f0c987f3c13fdc17385f7a4a7c2a62.**
+Next step: **Task 4.12 in progress: integrate 4C a2 reviews, aggregate Step 4.11 hard-gate matrix, decide Step 4.12 verdict.**
 
 ## Frozen Step 4.0 entry gate
 
@@ -56,10 +56,10 @@ Next step: **4C evidence-review frontier reruns all four focus leads as attempt 
 | 4.9.5 | complete | R8/R9 30/30 frozen; integrity PASS; commit pending |
 | 4.9.6 | complete | R10/R11 30/30 frozen; integrity PASS; commit pending |
 | 4.10 | complete | post-run M1/M2/M3 PASS; replacement A/M3 is canonical |
-| 4C | not_started | a1 blocked on P4-A6/D10; a2 pending |
+| 4C | running | integrating verified a2 focus reviews |
 | 4C-fix | complete | P4-A6/D10 repair; 160/160 fixed population |
-| 4.11 | not_started | — |
-| 4.12 | not_started | — |
+| 4.11 | running | hard-gate aggregation pending review integration |
+| 4.12 | running | verdict pending Step 4.11 matrix |
 | 4H-R | complete | P4-A3 comparator frozen; H outcomes unchanged; selected C300 9/9 |
 | 4.13 | not_started | — |
 
