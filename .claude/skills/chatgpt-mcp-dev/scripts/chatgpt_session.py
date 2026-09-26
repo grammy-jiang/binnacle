@@ -94,22 +94,31 @@ def _make_decryptor(app: str):
 
     keys = {b"v10": derive(b"peanuts"), b"v11": derive(_keyring_password(app))}
 
-    def decrypt(enc: bytes) -> str:
+    def decrypt(enc: bytes) -> "str | None":
+        """The cookie's value, or None when it does not decode.
+
+        Accepts any valid UTF-8 without control characters, empty included:
+        Chrome keeps analytics cookies (_dd_s, g_state, oai_consent_marketing)
+        whose values are empty or hold tabs or non-ASCII text, and the old
+        printable-ASCII rule made one of them end the whole run with "could not
+        decode a decrypted cookie value" (2026-09-27; the ChatGPT skill's
+        client had the same fix as _tolerant_decryptor).
+        """
         key = keys.get(enc[:3])
         if key is None:
-            fail(f"unexpected cookie encryption version {enc[:3]!r}")
+            return None
         d = Cipher(algorithms.AES(key), modes.CBC(b" " * 16)).decryptor()
         pt = d.update(enc[3:]) + d.finalize()
-        pad = pt[-1]
+        pad = pt[-1] if pt else 0
         pt = pt[:-pad] if 0 < pad <= 16 else pt
         for cand in (pt, pt[32:]):  # newer Chromium prepends a 32-byte domain hash
             try:
                 s = cand.decode("utf-8")
             except UnicodeDecodeError:
                 continue
-            if s and all(32 <= ord(c) < 127 for c in s):
+            if all(ord(c) >= 32 and ord(c) != 127 for c in s):
                 return s
-        fail("could not decode a decrypted cookie value")
+        return None
 
     return decrypt
 
@@ -135,9 +144,14 @@ def _cookie_header(browser: str) -> str:
         con.close()
     pairs, have_session = [], False
     for name, value, enc in rows:
-        pairs.append(f"{name}={decrypt(enc) if enc else value}")
-        if name.startswith("__Secure-next-auth.session-token"):
-            have_session = True
+        text = decrypt(enc) if enc else value
+        is_session = name.startswith("__Secure-next-auth.session-token")
+        if text is None:
+            if is_session:
+                fail("could not decode the ChatGPT session cookie")
+            continue  # an unreadable analytics cookie is not needed
+        pairs.append(f"{name}={text}")
+        have_session = have_session or is_session
     if not have_session:
         fail(
             f"no ChatGPT session cookie in {browser} (is it logged in to chatgpt.com?)"
