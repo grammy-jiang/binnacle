@@ -8,11 +8,10 @@ Worktree: `/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4`
 
 Audited source HEAD: `3a4dfb1b248e4530fb09013976abb863c8e35eaf`
 
-Last completed step: **4.9.1**
+Last completed step: **4.9.6**
 
-Next step: **complete the remaining independent 4.9 confirmatory partitions;
-Step 4.10 becomes ready only after 4.9.1 through 4.9.6 all checkpoint
-complete.**
+Next step: **Step 4.10 is ready now that all six independent Step 4.9
+confirmatory partitions are checkpoint complete.**
 
 ## Frozen Step 4.0 entry gate
 
@@ -56,7 +55,7 @@ complete.**
 | 4.9.3 | complete | R5/R6 30/30 frozen; integrity PASS; commit pending |
 | 4.9.4 | complete | R7 9/9 frozen; integrity PASS; commit pending |
 | 4.9.5 | complete | R8/R9 30/30 frozen; integrity PASS; commit pending |
-| 4.9.6 | not_started | — |
+| 4.9.6 | complete | R10/R11 30/30 frozen; integrity PASS; commit pending |
 | 4.10 | not_started | — |
 | 4C | not_started | — |
 | 4.11 | not_started | — |
@@ -741,3 +740,31 @@ Step 4.6A:selected from the frozen result**.
 - Focused analyzer/confirmatory regression: **21 passed in 1.95 s**; nproc=4,
   pre-run load average 0.48 / 0.62 / 2.15 under foreign parallel-programme
   load. Archive verification passed for all 416 source files.
+
+## Step 4.9.6 confirmatory R10/R11 checkpoint — COMPLETE
+
+- Slot integrity is **PASS**: 30/30 R10/R11 slots have one canonical owning
+  outcome. Every owner is attempt 1 and the first submitted outcome; there are
+  no pre-submit failures, reruns, routing misses, or unscorable-routing slots.
+- Routing integrity is **PASS**: A 0/10, B 0/10, and C 0/10 routing misses.
+  No arm exceeds the >10% evidence-integrity threshold.
+- Analyzer result: **30/30 same-prompt**, 0 interrupted, 0 premature handoff,
+  0 failed trial status, and 5 host-load flags. The flagged slots are
+  R10-r02-A, R10-r02-C, R10-r04-A, R10-r04-B, and R10-r04-C; their outcomes
+  remain canonical and were not filtered or rerun.
+- D9 timing evidence: 17/30 owners already use final-assistant timestamps.
+  One bounded recovery pass covered all 13 still-live poll-observed chats:
+  9 timed out at 30 s and 4 returned human-view/invalid payloads. None could be
+  recomputed, so all 13 remain explicitly poll-observed in the checkpoint.
+- Checkpoint JSON SHA-256:
+  d7dbe437d1ca39c090bad760eecee647115a059f782aef39b5fb086414b3de14.
+  Checkpoint Markdown SHA-256:
+  bf3ed94bbe8b0565975abd2790a532d478292c82a7971f16329b7b75dde0c718.
+- Frozen source-manifest SHA-256:
+  4d626494f71b0465e797adf13ccfeeba7eed5a82ff74d72d116961abb006e6d2
+  across 415 source files in 30 deterministic archives.
+- Focused analyzer/confirmatory regression: **21 passed in 1.96 s**; nproc=4,
+  pre-run load average 0.21 / 0.30 / 1.08. Archive verification passed for all
+  415 source files and all 30 deterministic archives.
+- No endpoint, Project, production config/service, lane worktree, or non-R10/R11
+  confirmatory slot was mutated or rerun.
