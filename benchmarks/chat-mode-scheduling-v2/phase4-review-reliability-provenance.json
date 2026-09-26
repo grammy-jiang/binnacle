@@ -1,0 +1,2071 @@
+{
+  "analyzer_cross_check": {
+    "command": "uv run python -m scripts.chat_scheduling_confirmatory gates --schedule benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-schedule.json --runs-root /home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs --correctness /tmp/4c-empty-correctness.json --performance /tmp/4c-empty-performance.json --reliability benchmarks/chat-mode-scheduling-v2/phase4-review-reliability-provenance.json --efficiency /tmp/4c-empty-efficiency.json --output /tmp/4c-reliability-gates.json",
+    "explanation": "The frozen analyzer scans the entire historical runs root. Trials without explicit schedule slot/repeat identity are assigned by earliest (scenario, arm) order, so historical submissions can own schedule slots. Its owners therefore differ from the six frozen 4.9 checkpoint owners. Per the assignment, this disagreement is reported as a blocker and is not reconciled by changing either side.",
+    "first_reported_mismatch": "premature_handoff_zero",
+    "frozen_checkpoint_aggregate": {
+      "A": {
+        "canonical_slots": 53,
+        "host_load_flagged": 6,
+        "interruptions": 0,
+        "manual_continuations_required": 0,
+        "premature_handoffs": 0,
+        "same_prompt_completions": 51,
+        "trial_status_failed": 1
+      },
+      "B": {
+        "canonical_slots": 53,
+        "host_load_flagged": 4,
+        "interruptions": 1,
+        "manual_continuations_required": 0,
+        "premature_handoffs": 0,
+        "same_prompt_completions": 50,
+        "trial_status_failed": 1
+      },
+      "C": {
+        "canonical_slots": 53,
+        "host_load_flagged": 8,
+        "interruptions": 0,
+        "manual_continuations_required": 0,
+        "premature_handoffs": 0,
+        "same_prompt_completions": 53,
+        "trial_status_failed": 0
+      }
+    },
+    "raw_analyzer_aggregate_by_arm": {
+      "A": {
+        "arm": "A",
+        "avoidable_idle_wall_p90_s": 0.0,
+        "correctness_passes": 48,
+        "correctness_rate": 0.90566,
+        "eligible_overlap_ratio": 0.345455,
+        "eligible_read_only_calls": 220,
+        "expected_performance_slots": 53,
+        "expected_slots": 53,
+        "interruption_rate_submitted": 0.018868,
+        "interruptions": 1,
+        "median_manual_continuations": 0.0,
+        "median_wall_s": 54.137,
+        "overlapped_eligible_read_only_calls": 76,
+        "p90_manual_continuations": 0.0,
+        "p90_wall_s": 155.591,
+        "premature_handoff_rate": 0.018868,
+        "premature_handoffs": 1,
+        "same_prompt_completion_rate": 0.886792,
+        "same_prompt_completions": 47,
+        "scored_performance_slots": 51,
+        "scored_slots": 51,
+        "submitted_performance_slots": 53,
+        "submitted_slots": 53,
+        "tool_result_tokens_total": 56826
+      },
+      "B": {
+        "arm": "B",
+        "avoidable_idle_wall_p90_s": 0.0,
+        "correctness_passes": 48,
+        "correctness_rate": 0.90566,
+        "eligible_overlap_ratio": 0.478261,
+        "eligible_read_only_calls": 230,
+        "expected_performance_slots": 53,
+        "expected_slots": 53,
+        "interruption_rate_submitted": 0.0,
+        "interruptions": 0,
+        "median_manual_continuations": 0.0,
+        "median_wall_s": 53.378,
+        "overlapped_eligible_read_only_calls": 110,
+        "p90_manual_continuations": 0.0,
+        "p90_wall_s": 131.1278,
+        "premature_handoff_rate": 0.056604,
+        "premature_handoffs": 3,
+        "same_prompt_completion_rate": 0.90566,
+        "same_prompt_completions": 48,
+        "scored_performance_slots": 53,
+        "scored_slots": 53,
+        "submitted_performance_slots": 53,
+        "submitted_slots": 53,
+        "tool_result_tokens_total": 53951
+      },
+      "C": {
+        "arm": "C",
+        "avoidable_idle_wall_p90_s": 0.0,
+        "correctness_passes": 46,
+        "correctness_rate": 0.851852,
+        "eligible_overlap_ratio": 0.5,
+        "eligible_read_only_calls": 180,
+        "expected_performance_slots": 53,
+        "expected_slots": 54,
+        "interruption_rate_submitted": 0.0,
+        "interruptions": 0,
+        "median_manual_continuations": 0.0,
+        "median_wall_s": 67.3375,
+        "overlapped_eligible_read_only_calls": 90,
+        "p90_manual_continuations": 0.0,
+        "p90_wall_s": 155.7054,
+        "premature_handoff_rate": 0.056604,
+        "premature_handoffs": 3,
+        "same_prompt_completion_rate": 0.849057,
+        "same_prompt_completions": 45,
+        "scored_performance_slots": 48,
+        "scored_slots": 49,
+        "submitted_performance_slots": 53,
+        "submitted_slots": 54,
+        "tool_result_tokens_total": 41882
+      },
+      "H": {
+        "arm": "H",
+        "avoidable_idle_wall_p90_s": 0.0,
+        "correctness_passes": 0,
+        "correctness_rate": 0.0,
+        "eligible_overlap_ratio": null,
+        "eligible_read_only_calls": 0,
+        "expected_performance_slots": 9,
+        "expected_slots": 10,
+        "interruption_rate_submitted": 0.0,
+        "interruptions": 0,
+        "median_manual_continuations": 1.0,
+        "median_wall_s": 62.556,
+        "overlapped_eligible_read_only_calls": 0,
+        "p90_manual_continuations": 1.0,
+        "p90_wall_s": 94.5336,
+        "premature_handoff_rate": 0.0,
+        "premature_handoffs": 0,
+        "same_prompt_completion_rate": 0.0,
+        "same_prompt_completions": 0,
+        "scored_performance_slots": 9,
+        "scored_slots": 10,
+        "submitted_performance_slots": 9,
+        "submitted_slots": 10,
+        "tool_result_tokens_total": 7634
+      }
+    },
+    "raw_analyzer_focus_gates": {
+      "continuation_reduction_ge_80_percent": {
+        "passed": false,
+        "threshold_percent": 80,
+        "value_percent": null
+      },
+      "interruption_rate_le_a_plus_2pp": {
+        "delta_pp_c_minus_a": -1.8868,
+        "passed": false,
+        "threshold_pp": 2
+      },
+      "median_manual_continuation_zero": {
+        "passed": false,
+        "threshold": 0,
+        "value": 0.0
+      },
+      "p90_manual_continuation_zero": {
+        "passed": false,
+        "threshold": 0,
+        "value": 0.0
+      },
+      "premature_handoff_zero": {
+        "passed": false,
+        "threshold": 0,
+        "value": 3
+      },
+      "same_prompt_completion_ge_95_percent": {
+        "arithmetic": "at least 51/53 bounded C macro slots",
+        "passed": false,
+        "threshold": 0.95,
+        "value": 0.849057
+      }
+    },
+    "raw_analyzer_slot_integrity": {
+      "expected_main_slots": 160,
+      "h": {
+        "expected_slots": 10,
+        "issues": [],
+        "scorable_slots": 10,
+        "submitted_slots": 10,
+        "unscheduled_run_ids": []
+      },
+      "issues": [
+        "R2-r04-C: no metrics.json",
+        "R7-r03-A: no metrics.json",
+        "R2-r05-C: no metrics.json",
+        "R9-r05-A: evidence_integrity_error=true",
+        "R9-r05-A: no metrics.json",
+        "R2-r02-C: no metrics.json",
+        "R2-r01-C: no metrics.json",
+        "R2-r03-C: no metrics.json",
+        "unscheduled submitted A/B/C run: m1-20260923T124850-79ad48cbc1",
+        "unscheduled submitted A/B/C run: m1-20260923T145220-2d166c0ea2",
+        "unscheduled submitted A/B/C run: m1-20260923T145841-729813112f",
+        "unscheduled submitted A/B/C run: m1-20260923T150006-ea1f998359",
+        "unscheduled submitted A/B/C run: m2-20260923T150228-62c10a4d57",
+        "unscheduled submitted A/B/C run: m2-20260923T150429-62fc843337",
+        "unscheduled submitted A/B/C run: m3-20260923T150618-dbf6089189",
+        "unscheduled submitted A/B/C run: m3-20260923T150919-46d496e895",
+        "unscheduled submitted A/B/C run: m3-20260923T151237-1605a360f7",
+        "unscheduled submitted A/B/C run: m3-20260923T151401-085319717c",
+        "unscheduled submitted A/B/C run: m1-20260925T211640-f8d1448ff9",
+        "unscheduled submitted A/B/C run: m1-20260925T211640-192b110613",
+        "unscheduled submitted A/B/C run: m2-20260925T211805-d05f089a80",
+        "unscheduled submitted A/B/C run: m1-20260925T214221-c8c630aecf",
+        "unscheduled submitted A/B/C run: m1-20260925T214710-a4a5b8ac09",
+        "unscheduled submitted A/B/C run: m1-20260925T214711-7ef198a354",
+        "unscheduled submitted A/B/C run: m1-20260925T214711-a6a1c9ee58",
+        "unscheduled submitted A/B/C run: m2-20260925T214804-89b88c4c65",
+        "unscheduled submitted A/B/C run: m2-20260925T215104-ec1b8f4f13",
+        "unscheduled submitted A/B/C run: m2-20260925T215338-0967382ff6",
+        "unscheduled submitted A/B/C run: m3-20260925T215709-c97ff5991f",
+        "unscheduled submitted A/B/C run: m3-20260925T215906-ced5213528",
+        "unscheduled submitted A/B/C run: m3-20260925T222215-4ab7c62230",
+        "unscheduled submitted A/B/C run: m1-20260926T234631-c1ddc6ed86",
+        "unscheduled submitted A/B/C run: m1-20260926T234631-14caebb525",
+        "unscheduled submitted A/B/C run: m1-20260926T234631-1aa5a5a6ee",
+        "unscheduled submitted A/B/C run: m2-20260926T234801-feea155fcc",
+        "unscheduled submitted A/B/C run: m3-20260926T235024-08a0669d02",
+        "unscheduled submitted A/B/C run: m2-20260926T235600-b26b28ac55",
+        "unscheduled submitted A/B/C run: m2-20260926T235606-ae34d37e69",
+        "unscheduled submitted A/B/C run: m3-20260926T235837-43ad66858a",
+        "unscheduled submitted A/B/C run: m3-20260927T000129-78a521b526",
+        "unscheduled submitted A/B/C run: m3-20260927T020014-a92cd7dc7d",
+        "unscheduled submitted A/B/C run: r1-20260926T203729-8abe9e86ac",
+        "unscheduled submitted A/B/C run: r1-20260926T205656-617f5b0e7c",
+        "unscheduled submitted A/B/C run: r1-20260926T232602-32f8001447",
+        "unscheduled submitted A/B/C run: r1-20260926T203525-6ee550efc2",
+        "unscheduled submitted A/B/C run: r1-20260926T205837-a6adfedbc7",
+        "unscheduled submitted A/B/C run: r1-20260926T232325-a02d18845f",
+        "unscheduled submitted A/B/C run: r2-20260923T162336-0352c7d3e4",
+        "unscheduled submitted A/B/C run: r2-20260923T163518-e553e05bd8",
+        "unscheduled submitted A/B/C run: r2-20260925T223603-687c8a8609",
+        "unscheduled submitted A/B/C run: r2-20260925T224342-bffc3e7483",
+        "unscheduled submitted A/B/C run: r2-20260925T225456-facfbd933a",
+        "unscheduled submitted A/B/C run: r2-20260925T230106-ea620ade72",
+        "unscheduled submitted A/B/C run: r2-20260925T230645-34582326eb",
+        "unscheduled submitted A/B/C run: r2-20260925T234505-88feb809ac",
+        "unscheduled submitted A/B/C run: r2-20260926T004112-70576113e5",
+        "unscheduled submitted A/B/C run: r2-20260926T084738-c885084c8c",
+        "unscheduled submitted A/B/C run: r2-20260926T085237-6e908cc3dc",
+        "unscheduled submitted A/B/C run: r2-20260926T091204-84f3440c5b",
+        "unscheduled submitted A/B/C run: r2-20260926T091204-49145e1d4f",
+        "unscheduled submitted A/B/C run: r2-20260926T092058-d7efe2ff5b",
+        "unscheduled submitted A/B/C run: r2-20260926T092644-1cdd9f59da",
+        "unscheduled submitted A/B/C run: r2-20260926T101701-12708ebc58",
+        "unscheduled submitted A/B/C run: r2-20260926T101704-6544848eb8",
+        "unscheduled submitted A/B/C run: r2-20260926T101704-cf204ccf76",
+        "unscheduled submitted A/B/C run: r2-20260926T102959-70884f2761",
+        "unscheduled submitted A/B/C run: r2-20260926T104235-c621103965",
+        "unscheduled submitted A/B/C run: r2-20260926T112630-ef9333044b",
+        "unscheduled submitted A/B/C run: r2-20260926T114001-b7a37ae1e8",
+        "unscheduled submitted A/B/C run: r2-20260926T115503-1f9cfa2ed1",
+        "unscheduled submitted A/B/C run: r2-20260926T115503-fb60556bb3",
+        "unscheduled submitted A/B/C run: r2-20260926T120756-784f25d2ad",
+        "unscheduled submitted A/B/C run: r2-20260926T120948-4ad8d94fe6",
+        "unscheduled submitted A/B/C run: r2-20260926T123510-b9608c0570",
+        "unscheduled submitted A/B/C run: r2-20260926T123740-89b15b9dcb",
+        "unscheduled submitted A/B/C run: r2-20260926T130127-97ee924564",
+        "unscheduled submitted A/B/C run: r2-20260926T130128-9be2579c84",
+        "unscheduled submitted A/B/C run: r2-20260926T131302-d05fdb3b41",
+        "unscheduled submitted A/B/C run: r2-20260926T131704-f5218af8fe",
+        "unscheduled submitted A/B/C run: r2-20260926T135730-38eacc3add",
+        "unscheduled submitted A/B/C run: r2-20260926T135731-b53bd73d9e",
+        "unscheduled submitted A/B/C run: r2-20260926T135732-28c2c13312",
+        "unscheduled submitted A/B/C run: r2-20260926T142442-c421c1465e",
+        "unscheduled submitted A/B/C run: r2-20260926T142501-1c26863ad7",
+        "unscheduled submitted A/B/C run: r2-20260926T143033-cf181bf02f",
+        "unscheduled submitted A/B/C run: r2-20260926T143129-4cb4c09c4c",
+        "unscheduled submitted A/B/C run: r2-20260926T143628-76fb28e8ee",
+        "unscheduled submitted A/B/C run: r2-20260926T171927-121288fa4d",
+        "unscheduled submitted A/B/C run: r2-20260926T183917-c7ca125402",
+        "unscheduled submitted A/B/C run: r2-20260926T205130-8876637d74",
+        "unscheduled submitted A/B/C run: r2-20260926T211857-870de21478",
+        "unscheduled submitted A/B/C run: r2-20260926T221840-fdfceec144",
+        "unscheduled submitted A/B/C run: r2-20260923T162542-d60b924eed",
+        "unscheduled submitted A/B/C run: r2-20260925T223444-39869ac4da",
+        "unscheduled submitted A/B/C run: r2-20260925T224703-23f8d24020",
+        "unscheduled submitted A/B/C run: r2-20260925T225637-a85d182263",
+        "unscheduled submitted A/B/C run: r2-20260925T230843-f9f2b48902",
+        "unscheduled submitted A/B/C run: r2-20260925T234505-08f59d9e7a",
+        "unscheduled submitted A/B/C run: r2-20260926T003739-368ab18305",
+        "unscheduled submitted A/B/C run: r2-20260926T084738-1deb3e6b60",
+        "unscheduled submitted A/B/C run: r2-20260926T085238-1286d21b26",
+        "unscheduled submitted A/B/C run: r2-20260926T091204-7c767ee0dd",
+        "unscheduled submitted A/B/C run: r2-20260926T091204-79d8421f30",
+        "unscheduled submitted A/B/C run: r2-20260926T092058-f69356b1eb",
+        "unscheduled submitted A/B/C run: r2-20260926T092644-434c87a51c",
+        "unscheduled submitted A/B/C run: r2-20260926T101703-1c490fa284",
+        "unscheduled submitted A/B/C run: r2-20260926T101703-5b60f17830",
+        "unscheduled submitted A/B/C run: r2-20260926T101704-eddf165e4b",
+        "unscheduled submitted A/B/C run: r2-20260926T101704-9fa6bb42c2",
+        "unscheduled submitted A/B/C run: r2-20260926T104044-e11b5b59c5",
+        "unscheduled submitted A/B/C run: r2-20260926T104235-7718feaa1b",
+        "unscheduled submitted A/B/C run: r2-20260926T104957-09af427527",
+        "unscheduled submitted A/B/C run: r2-20260926T113354-931e527d6f",
+        "unscheduled submitted A/B/C run: r2-20260926T115504-21d1b47ad4",
+        "unscheduled submitted A/B/C run: r2-20260926T120109-77e7d3b41b",
+        "unscheduled submitted A/B/C run: r2-20260926T123510-163aab1c2b",
+        "unscheduled submitted A/B/C run: r2-20260926T124143-2177e3613a",
+        "unscheduled submitted A/B/C run: r2-20260926T130127-30f10ed59d",
+        "unscheduled submitted A/B/C run: r2-20260926T130750-478472986d",
+        "unscheduled submitted A/B/C run: r2-20260926T131302-50aa2c58ad",
+        "unscheduled submitted A/B/C run: r2-20260926T132146-577a7c10e6",
+        "unscheduled submitted A/B/C run: r2-20260926T135731-ae275c5e8d",
+        "unscheduled submitted A/B/C run: r2-20260926T135731-4d5afe90f5",
+        "unscheduled submitted A/B/C run: r2-20260926T135731-81dd565754",
+        "unscheduled submitted A/B/C run: r2-20260926T140803-74dd19d01e",
+        "unscheduled submitted A/B/C run: r2-20260926T141042-91f097582c",
+        "unscheduled submitted A/B/C run: r2-20260926T144355-8a818794af",
+        "unscheduled submitted A/B/C run: r2-20260926T144649-719393d8e4",
+        "unscheduled submitted A/B/C run: r2-20260926T145453-f3251d0190",
+        "unscheduled submitted A/B/C run: r2-20260926T184241-58bd83c90c",
+        "unscheduled submitted A/B/C run: r2-20260926T205447-826ff2bc35",
+        "unscheduled submitted A/B/C run: r2-20260926T212055-27314e8b6f",
+        "unscheduled submitted A/B/C run: r2-20260926T221656-22d7f01d6f",
+        "unscheduled submitted A/B/C run: r2-20260927T003210-7c2132fad3",
+        "unscheduled submitted A/B/C run: r3-20260926T214500-5a03f81a00",
+        "unscheduled submitted A/B/C run: r3-20260926T222915-5bff1ef675",
+        "unscheduled submitted A/B/C run: r3-20260926T225427-9346ba3c7a",
+        "unscheduled submitted A/B/C run: r3-20260926T222600-61eb0f7a08",
+        "unscheduled submitted A/B/C run: r3-20260926T230442-fe3705276a",
+        "unscheduled submitted A/B/C run: r5-20260925T232953-e4c682c6fd",
+        "unscheduled submitted A/B/C run: r5-20260925T234239-eb03b89175",
+        "unscheduled submitted A/B/C run: r5-20260926T001004-5382623ee3",
+        "unscheduled submitted A/B/C run: r5-20260926T004304-df8a5d8721",
+        "unscheduled submitted A/B/C run: r5-20260926T085904-ae4580790a",
+        "unscheduled submitted A/B/C run: r5-20260926T090501-02189b2b32",
+        "unscheduled submitted A/B/C run: r5-20260926T093956-f03d721f0f",
+        "unscheduled submitted A/B/C run: r5-20260926T095156-beb8e6fa39",
+        "unscheduled submitted A/B/C run: r5-20260926T100631-e41af23e77",
+        "unscheduled submitted A/B/C run: r5-20260926T114157-502261c47b",
+        "unscheduled submitted A/B/C run: r5-20260926T124413-6e7cef7421",
+        "unscheduled submitted A/B/C run: r5-20260926T125640-cac4cc709a",
+        "unscheduled submitted A/B/C run: r5-20260926T132331-bff4dd7a9b",
+        "unscheduled submitted A/B/C run: r5-20260926T132849-23e0462427",
+        "unscheduled submitted A/B/C run: r5-20260926T133407-600abc1ef2",
+        "unscheduled submitted A/B/C run: r5-20260926T134357-948b6297be",
+        "unscheduled submitted A/B/C run: r5-20260926T145842-0293675a71",
+        "unscheduled submitted A/B/C run: r5-20260926T150240-c53df7c03a",
+        "unscheduled submitted A/B/C run: r5-20260926T151049-5904a610ce",
+        "unscheduled submitted A/B/C run: r5-20260926T151732-aad78a5cee",
+        "unscheduled submitted A/B/C run: r5-20260926T152034-fe00a9ceb4",
+        "unscheduled submitted A/B/C run: r5-20260926T153341-e357d805dd",
+        "unscheduled submitted A/B/C run: r5-20260926T153456-4e6d307093",
+        "unscheduled submitted A/B/C run: r5-20260926T154638-b70f8357e0",
+        "unscheduled submitted A/B/C run: r5-20260926T175528-138523a997",
+        "unscheduled submitted A/B/C run: r5-20260926T191136-9765afada8",
+        "unscheduled submitted A/B/C run: r5-20260926T193900-f171fb5412",
+        "unscheduled submitted A/B/C run: r5-20260926T212257-56f0ade9c7",
+        "unscheduled submitted A/B/C run: r5-20260926T231038-7f1c642969",
+        "unscheduled submitted A/B/C run: r5-20260925T233511-553f7f4395",
+        "unscheduled submitted A/B/C run: r5-20260926T000518-f3b986cde4",
+        "unscheduled submitted A/B/C run: r5-20260926T004303-e67fd85de2",
+        "unscheduled submitted A/B/C run: r5-20260926T085903-0d988bfddb",
+        "unscheduled submitted A/B/C run: r5-20260926T090501-6392706b06",
+        "unscheduled submitted A/B/C run: r5-20260926T093956-d9f1e29f59",
+        "unscheduled submitted A/B/C run: r5-20260926T095156-3ae6d32ae3",
+        "unscheduled submitted A/B/C run: r5-20260926T095537-2fed535a13",
+        "unscheduled submitted A/B/C run: r5-20260926T100630-877564e237",
+        "unscheduled submitted A/B/C run: r5-20260926T114740-8c13c34d65",
+        "unscheduled submitted A/B/C run: r5-20260926T114942-8f7853df44",
+        "unscheduled submitted A/B/C run: r5-20260926T124738-815456cbb3",
+        "unscheduled submitted A/B/C run: r5-20260926T125344-2ce69f5766",
+        "unscheduled submitted A/B/C run: r5-20260926T132332-7bc3dd38a0",
+        "unscheduled submitted A/B/C run: r5-20260926T133733-2e737b2c3d",
+        "unscheduled submitted A/B/C run: r5-20260926T134142-3b1b9e42b6",
+        "unscheduled submitted A/B/C run: r5-20260926T135346-230a88dc88",
+        "unscheduled submitted A/B/C run: r5-20260926T145841-afcb128fa7",
+        "unscheduled submitted A/B/C run: r5-20260926T145841-33873ae618",
+        "unscheduled submitted A/B/C run: r5-20260926T145842-289ec63156",
+        "unscheduled submitted A/B/C run: r5-20260926T151732-867db8275b",
+        "unscheduled submitted A/B/C run: r5-20260926T151740-b963858a89",
+        "unscheduled submitted A/B/C run: r5-20260926T151824-55b9e19a8f",
+        "unscheduled submitted A/B/C run: r5-20260926T151956-c55cb7b579",
+        "unscheduled submitted A/B/C run: r5-20260926T153456-bac88b1247",
+        "unscheduled submitted A/B/C run: r5-20260926T175329-8d9f86f9de",
+        "unscheduled submitted A/B/C run: r5-20260926T190946-e6cc605c99",
+        "unscheduled submitted A/B/C run: r5-20260926T193640-c87be0bac9",
+        "unscheduled submitted A/B/C run: r5-20260926T212616-622c32f5b3",
+        "unscheduled submitted A/B/C run: r5-20260926T230648-9bb083dca0",
+        "unscheduled submitted A/B/C run: r8-20260926T213243-6fc24b6480",
+        "unscheduled submitted A/B/C run: r8-20260926T215240-6712dc83ac",
+        "unscheduled submitted A/B/C run: r8-20260926T224126-3ebfc36216",
+        "unscheduled submitted A/B/C run: r8-20260926T212856-d9857d7de6",
+        "unscheduled submitted A/B/C run: r8-20260926T215506-3fd04faca2",
+        "unscheduled submitted A/B/C run: r8-20260926T223928-5398cde99e",
+        "unscheduled submitted A/B/C run: r9-20260926T183433-10ee9b73b4",
+        "unscheduled submitted A/B/C run: r9-20260926T192358-44dc6afbc0",
+        "unscheduled submitted A/B/C run: r9-20260926T204735-b4486903fa",
+        "unscheduled submitted A/B/C run: r9-20260926T214029-bcbe900b68",
+        "unscheduled submitted A/B/C run: r9-20260926T204156-5de980ddc8",
+        "unscheduled submitted A/B/C run: r9-20260926T213639-3066107040",
+        "unscheduled submitted A/B/C run: r11-20260926T195728-268911e217",
+        "unscheduled submitted A/B/C run: r11-20260926T211127-0d064f8436",
+        "unscheduled submitted A/B/C run: r11-20260926T222439-e382f957d3",
+        "unscheduled submitted A/B/C run: r11-20260926T211524-0f5885a101",
+        "unscheduled submitted A/B/C run: r11-20260926T222300-e24c838366",
+        "unscheduled submitted A/B/C run: r7-20260923T210916-adb0ab6d70",
+        "unscheduled submitted A/B/C run: r7-20260926T175936-2605f95749",
+        "unscheduled submitted A/B/C run: r7-20260926T181657-83b81b3556",
+        "unscheduled submitted A/B/C run: r7-20260926T202240-bf043fc386",
+        "unscheduled submitted A/B/C run: r7-20260926T182033-09141708b5",
+        "unscheduled submitted A/B/C run: r2-20260926T003308-2ecb477262",
+        "unscheduled submitted A/B/C run: r2-20260926T084738-739100c890",
+        "unscheduled submitted A/B/C run: r2-20260926T085238-245b41e776",
+        "unscheduled submitted A/B/C run: r2-20260926T091204-d3f8e802f5",
+        "unscheduled submitted A/B/C run: r2-20260926T091204-0821601ce1",
+        "unscheduled submitted A/B/C run: r2-20260926T092058-d75dfcaa52",
+        "unscheduled submitted A/B/C run: r2-20260926T092644-30b6c1bab0",
+        "unscheduled submitted A/B/C run: r2-20260926T101702-0cfb907ecd",
+        "unscheduled submitted A/B/C run: r2-20260926T101704-5be5286695",
+        "unscheduled submitted A/B/C run: r2-20260926T101704-1d6a781f53",
+        "unscheduled submitted A/B/C run: r2-20260926T102739-7786bdab60",
+        "unscheduled submitted A/B/C run: r2-20260926T104044-6dd84c29d5",
+        "unscheduled submitted A/B/C run: r2-20260926T104235-300b9aa045",
+        "unscheduled submitted A/B/C run: r2-20260926T112630-89189b141c",
+        "unscheduled submitted A/B/C run: r2-20260926T113354-a177583423",
+        "unscheduled submitted A/B/C run: r2-20260926T120251-1a43ac3e41",
+        "unscheduled submitted A/B/C run: r2-20260926T120756-5e97404456",
+        "unscheduled submitted A/B/C run: r2-20260926T123510-a57052a8fc",
+        "unscheduled submitted A/B/C run: r2-20260926T123739-5ec0c579a2",
+        "unscheduled submitted A/B/C run: r2-20260926T130126-c2b1bc6628",
+        "unscheduled submitted A/B/C run: r2-20260926T131012-40ea08a5e2",
+        "unscheduled submitted A/B/C run: r2-20260926T131302-c1d4a7a7b1",
+        "unscheduled submitted A/B/C run: r2-20260926T131703-03f81474d1",
+        "unscheduled submitted A/B/C run: r2-20260926T135730-e0e993e7bf",
+        "unscheduled submitted A/B/C run: r2-20260926T135731-f65791c6c7",
+        "unscheduled submitted A/B/C run: r2-20260926T140803-da19e2795b",
+        "unscheduled submitted A/B/C run: r2-20260926T141826-d2a0381e19",
+        "unscheduled submitted A/B/C run: r2-20260926T142501-5ee6fe8581",
+        "unscheduled submitted A/B/C run: r2-20260926T142741-960652d63c",
+        "unscheduled submitted A/B/C run: r2-20260926T143129-8e2be8b7c2",
+        "unscheduled submitted A/B/C run: r2-20260926T145133-ba34ebcd53",
+        "unscheduled submitted A/B/C run: r2-20260926T172128-880ff57c6b",
+        "unscheduled submitted A/B/C run: r2-20260926T184048-269748114c",
+        "unscheduled submitted A/B/C run: r2-20260926T205244-0ba07f1e5d",
+        "unscheduled submitted A/B/C run: r2-20260926T211734-598a0a3bd3",
+        "unscheduled submitted A/B/C run: r2-20260926T221424-29c948f9b9",
+        "unscheduled submitted A/B/C run: r5-20260926T001851-f24002ffa1",
+        "unscheduled submitted A/B/C run: r5-20260926T004304-d442ac28e6",
+        "unscheduled submitted A/B/C run: r5-20260926T011201-fc8affc406",
+        "unscheduled submitted A/B/C run: r5-20260926T011406-18b15002f6",
+        "unscheduled submitted A/B/C run: r5-20260926T011904-c834d991d6",
+        "unscheduled submitted A/B/C run: r5-20260926T085903-7cb19e71c9",
+        "unscheduled submitted A/B/C run: r5-20260926T090501-d660fd8158",
+        "unscheduled submitted A/B/C run: r5-20260926T093956-e5ecec7622",
+        "unscheduled submitted A/B/C run: r5-20260926T093956-772708eb02",
+        "unscheduled submitted A/B/C run: r5-20260926T095156-03e836b418",
+        "unscheduled submitted A/B/C run: r5-20260926T100630-657235135c",
+        "unscheduled submitted A/B/C run: r5-20260926T124413-0427272c2b",
+        "unscheduled submitted A/B/C run: r5-20260926T125226-d109e17990",
+        "unscheduled submitted A/B/C run: r5-20260926T132332-b82eb185fa",
+        "unscheduled submitted A/B/C run: r5-20260926T133406-196eee1763",
+        "unscheduled submitted A/B/C run: r5-20260926T133438-de7a210d6b",
+        "unscheduled submitted A/B/C run: r5-20260926T135054-a35975c3fc",
+        "unscheduled submitted A/B/C run: r5-20260926T145840-a1cf9d0f85",
+        "unscheduled submitted A/B/C run: r5-20260926T145842-7d5cb97ba6",
+        "unscheduled submitted A/B/C run: r5-20260926T145842-2ccebecccb",
+        "unscheduled submitted A/B/C run: r5-20260926T145843-3127f41010",
+        "unscheduled submitted A/B/C run: r5-20260926T152826-a51716453d",
+        "unscheduled submitted A/B/C run: r5-20260926T153641-587f505756",
+        "unscheduled submitted A/B/C run: r5-20260926T154340-1a45c7d6e9",
+        "unscheduled submitted A/B/C run: r5-20260926T194035-5382dc8178",
+        "unscheduled submitted A/B/C run: r5-20260926T230857-d085096042"
+      ],
+      "passed": false,
+      "scorable_main_slots": 153,
+      "submitted_main_slots": 160,
+      "unscheduled_main_run_ids": [
+        "m1-20260923T124850-79ad48cbc1",
+        "m1-20260923T145220-2d166c0ea2",
+        "m1-20260923T145841-729813112f",
+        "m1-20260923T150006-ea1f998359",
+        "m2-20260923T150228-62c10a4d57",
+        "m2-20260923T150429-62fc843337",
+        "m3-20260923T150618-dbf6089189",
+        "m3-20260923T150919-46d496e895",
+        "m3-20260923T151237-1605a360f7",
+        "m3-20260923T151401-085319717c",
+        "m1-20260925T211640-f8d1448ff9",
+        "m1-20260925T211640-192b110613",
+        "m2-20260925T211805-d05f089a80",
+        "m1-20260925T214221-c8c630aecf",
+        "m1-20260925T214710-a4a5b8ac09",
+        "m1-20260925T214711-7ef198a354",
+        "m1-20260925T214711-a6a1c9ee58",
+        "m2-20260925T214804-89b88c4c65",
+        "m2-20260925T215104-ec1b8f4f13",
+        "m2-20260925T215338-0967382ff6",
+        "m3-20260925T215709-c97ff5991f",
+        "m3-20260925T215906-ced5213528",
+        "m3-20260925T222215-4ab7c62230",
+        "m1-20260926T234631-c1ddc6ed86",
+        "m1-20260926T234631-14caebb525",
+        "m1-20260926T234631-1aa5a5a6ee",
+        "m2-20260926T234801-feea155fcc",
+        "m3-20260926T235024-08a0669d02",
+        "m2-20260926T235600-b26b28ac55",
+        "m2-20260926T235606-ae34d37e69",
+        "m3-20260926T235837-43ad66858a",
+        "m3-20260927T000129-78a521b526",
+        "m3-20260927T020014-a92cd7dc7d",
+        "r1-20260926T203729-8abe9e86ac",
+        "r1-20260926T205656-617f5b0e7c",
+        "r1-20260926T232602-32f8001447",
+        "r1-20260926T203525-6ee550efc2",
+        "r1-20260926T205837-a6adfedbc7",
+        "r1-20260926T232325-a02d18845f",
+        "r2-20260923T162336-0352c7d3e4",
+        "r2-20260923T163518-e553e05bd8",
+        "r2-20260925T223603-687c8a8609",
+        "r2-20260925T224342-bffc3e7483",
+        "r2-20260925T225456-facfbd933a",
+        "r2-20260925T230106-ea620ade72",
+        "r2-20260925T230645-34582326eb",
+        "r2-20260925T234505-88feb809ac",
+        "r2-20260926T004112-70576113e5",
+        "r2-20260926T084738-c885084c8c",
+        "r2-20260926T085237-6e908cc3dc",
+        "r2-20260926T091204-84f3440c5b",
+        "r2-20260926T091204-49145e1d4f",
+        "r2-20260926T092058-d7efe2ff5b",
+        "r2-20260926T092644-1cdd9f59da",
+        "r2-20260926T101701-12708ebc58",
+        "r2-20260926T101704-6544848eb8",
+        "r2-20260926T101704-cf204ccf76",
+        "r2-20260926T102959-70884f2761",
+        "r2-20260926T104235-c621103965",
+        "r2-20260926T112630-ef9333044b",
+        "r2-20260926T114001-b7a37ae1e8",
+        "r2-20260926T115503-1f9cfa2ed1",
+        "r2-20260926T115503-fb60556bb3",
+        "r2-20260926T120756-784f25d2ad",
+        "r2-20260926T120948-4ad8d94fe6",
+        "r2-20260926T123510-b9608c0570",
+        "r2-20260926T123740-89b15b9dcb",
+        "r2-20260926T130127-97ee924564",
+        "r2-20260926T130128-9be2579c84",
+        "r2-20260926T131302-d05fdb3b41",
+        "r2-20260926T131704-f5218af8fe",
+        "r2-20260926T135730-38eacc3add",
+        "r2-20260926T135731-b53bd73d9e",
+        "r2-20260926T135732-28c2c13312",
+        "r2-20260926T142442-c421c1465e",
+        "r2-20260926T142501-1c26863ad7",
+        "r2-20260926T143033-cf181bf02f",
+        "r2-20260926T143129-4cb4c09c4c",
+        "r2-20260926T143628-76fb28e8ee",
+        "r2-20260926T171927-121288fa4d",
+        "r2-20260926T183917-c7ca125402",
+        "r2-20260926T205130-8876637d74",
+        "r2-20260926T211857-870de21478",
+        "r2-20260926T221840-fdfceec144",
+        "r2-20260923T162542-d60b924eed",
+        "r2-20260925T223444-39869ac4da",
+        "r2-20260925T224703-23f8d24020",
+        "r2-20260925T225637-a85d182263",
+        "r2-20260925T230843-f9f2b48902",
+        "r2-20260925T234505-08f59d9e7a",
+        "r2-20260926T003739-368ab18305",
+        "r2-20260926T084738-1deb3e6b60",
+        "r2-20260926T085238-1286d21b26",
+        "r2-20260926T091204-7c767ee0dd",
+        "r2-20260926T091204-79d8421f30",
+        "r2-20260926T092058-f69356b1eb",
+        "r2-20260926T092644-434c87a51c",
+        "r2-20260926T101703-1c490fa284",
+        "r2-20260926T101703-5b60f17830",
+        "r2-20260926T101704-eddf165e4b",
+        "r2-20260926T101704-9fa6bb42c2",
+        "r2-20260926T104044-e11b5b59c5",
+        "r2-20260926T104235-7718feaa1b",
+        "r2-20260926T104957-09af427527",
+        "r2-20260926T113354-931e527d6f",
+        "r2-20260926T115504-21d1b47ad4",
+        "r2-20260926T120109-77e7d3b41b",
+        "r2-20260926T123510-163aab1c2b",
+        "r2-20260926T124143-2177e3613a",
+        "r2-20260926T130127-30f10ed59d",
+        "r2-20260926T130750-478472986d",
+        "r2-20260926T131302-50aa2c58ad",
+        "r2-20260926T132146-577a7c10e6",
+        "r2-20260926T135731-ae275c5e8d",
+        "r2-20260926T135731-4d5afe90f5",
+        "r2-20260926T135731-81dd565754",
+        "r2-20260926T140803-74dd19d01e",
+        "r2-20260926T141042-91f097582c",
+        "r2-20260926T144355-8a818794af",
+        "r2-20260926T144649-719393d8e4",
+        "r2-20260926T145453-f3251d0190",
+        "r2-20260926T184241-58bd83c90c",
+        "r2-20260926T205447-826ff2bc35",
+        "r2-20260926T212055-27314e8b6f",
+        "r2-20260926T221656-22d7f01d6f",
+        "r2-20260927T003210-7c2132fad3",
+        "r3-20260926T214500-5a03f81a00",
+        "r3-20260926T222915-5bff1ef675",
+        "r3-20260926T225427-9346ba3c7a",
+        "r3-20260926T222600-61eb0f7a08",
+        "r3-20260926T230442-fe3705276a",
+        "r5-20260925T232953-e4c682c6fd",
+        "r5-20260925T234239-eb03b89175",
+        "r5-20260926T001004-5382623ee3",
+        "r5-20260926T004304-df8a5d8721",
+        "r5-20260926T085904-ae4580790a",
+        "r5-20260926T090501-02189b2b32",
+        "r5-20260926T093956-f03d721f0f",
+        "r5-20260926T095156-beb8e6fa39",
+        "r5-20260926T100631-e41af23e77",
+        "r5-20260926T114157-502261c47b",
+        "r5-20260926T124413-6e7cef7421",
+        "r5-20260926T125640-cac4cc709a",
+        "r5-20260926T132331-bff4dd7a9b",
+        "r5-20260926T132849-23e0462427",
+        "r5-20260926T133407-600abc1ef2",
+        "r5-20260926T134357-948b6297be",
+        "r5-20260926T145842-0293675a71",
+        "r5-20260926T150240-c53df7c03a",
+        "r5-20260926T151049-5904a610ce",
+        "r5-20260926T151732-aad78a5cee",
+        "r5-20260926T152034-fe00a9ceb4",
+        "r5-20260926T153341-e357d805dd",
+        "r5-20260926T153456-4e6d307093",
+        "r5-20260926T154638-b70f8357e0",
+        "r5-20260926T175528-138523a997",
+        "r5-20260926T191136-9765afada8",
+        "r5-20260926T193900-f171fb5412",
+        "r5-20260926T212257-56f0ade9c7",
+        "r5-20260926T231038-7f1c642969",
+        "r5-20260925T233511-553f7f4395",
+        "r5-20260926T000518-f3b986cde4",
+        "r5-20260926T004303-e67fd85de2",
+        "r5-20260926T085903-0d988bfddb",
+        "r5-20260926T090501-6392706b06",
+        "r5-20260926T093956-d9f1e29f59",
+        "r5-20260926T095156-3ae6d32ae3",
+        "r5-20260926T095537-2fed535a13",
+        "r5-20260926T100630-877564e237",
+        "r5-20260926T114740-8c13c34d65",
+        "r5-20260926T114942-8f7853df44",
+        "r5-20260926T124738-815456cbb3",
+        "r5-20260926T125344-2ce69f5766",
+        "r5-20260926T132332-7bc3dd38a0",
+        "r5-20260926T133733-2e737b2c3d",
+        "r5-20260926T134142-3b1b9e42b6",
+        "r5-20260926T135346-230a88dc88",
+        "r5-20260926T145841-afcb128fa7",
+        "r5-20260926T145841-33873ae618",
+        "r5-20260926T145842-289ec63156",
+        "r5-20260926T151732-867db8275b",
+        "r5-20260926T151740-b963858a89",
+        "r5-20260926T151824-55b9e19a8f",
+        "r5-20260926T151956-c55cb7b579",
+        "r5-20260926T153456-bac88b1247",
+        "r5-20260926T175329-8d9f86f9de",
+        "r5-20260926T190946-e6cc605c99",
+        "r5-20260926T193640-c87be0bac9",
+        "r5-20260926T212616-622c32f5b3",
+        "r5-20260926T230648-9bb083dca0",
+        "r8-20260926T213243-6fc24b6480",
+        "r8-20260926T215240-6712dc83ac",
+        "r8-20260926T224126-3ebfc36216",
+        "r8-20260926T212856-d9857d7de6",
+        "r8-20260926T215506-3fd04faca2",
+        "r8-20260926T223928-5398cde99e",
+        "r9-20260926T183433-10ee9b73b4",
+        "r9-20260926T192358-44dc6afbc0",
+        "r9-20260926T204735-b4486903fa",
+        "r9-20260926T214029-bcbe900b68",
+        "r9-20260926T204156-5de980ddc8",
+        "r9-20260926T213639-3066107040",
+        "r11-20260926T195728-268911e217",
+        "r11-20260926T211127-0d064f8436",
+        "r11-20260926T222439-e382f957d3",
+        "r11-20260926T211524-0f5885a101",
+        "r11-20260926T222300-e24c838366",
+        "r7-20260923T210916-adb0ab6d70",
+        "r7-20260926T175936-2605f95749",
+        "r7-20260926T181657-83b81b3556",
+        "r7-20260926T202240-bf043fc386",
+        "r7-20260926T182033-09141708b5",
+        "r2-20260926T003308-2ecb477262",
+        "r2-20260926T084738-739100c890",
+        "r2-20260926T085238-245b41e776",
+        "r2-20260926T091204-d3f8e802f5",
+        "r2-20260926T091204-0821601ce1",
+        "r2-20260926T092058-d75dfcaa52",
+        "r2-20260926T092644-30b6c1bab0",
+        "r2-20260926T101702-0cfb907ecd",
+        "r2-20260926T101704-5be5286695",
+        "r2-20260926T101704-1d6a781f53",
+        "r2-20260926T102739-7786bdab60",
+        "r2-20260926T104044-6dd84c29d5",
+        "r2-20260926T104235-300b9aa045",
+        "r2-20260926T112630-89189b141c",
+        "r2-20260926T113354-a177583423",
+        "r2-20260926T120251-1a43ac3e41",
+        "r2-20260926T120756-5e97404456",
+        "r2-20260926T123510-a57052a8fc",
+        "r2-20260926T123739-5ec0c579a2",
+        "r2-20260926T130126-c2b1bc6628",
+        "r2-20260926T131012-40ea08a5e2",
+        "r2-20260926T131302-c1d4a7a7b1",
+        "r2-20260926T131703-03f81474d1",
+        "r2-20260926T135730-e0e993e7bf",
+        "r2-20260926T135731-f65791c6c7",
+        "r2-20260926T140803-da19e2795b",
+        "r2-20260926T141826-d2a0381e19",
+        "r2-20260926T142501-5ee6fe8581",
+        "r2-20260926T142741-960652d63c",
+        "r2-20260926T143129-8e2be8b7c2",
+        "r2-20260926T145133-ba34ebcd53",
+        "r2-20260926T172128-880ff57c6b",
+        "r2-20260926T184048-269748114c",
+        "r2-20260926T205244-0ba07f1e5d",
+        "r2-20260926T211734-598a0a3bd3",
+        "r2-20260926T221424-29c948f9b9",
+        "r5-20260926T001851-f24002ffa1",
+        "r5-20260926T004304-d442ac28e6",
+        "r5-20260926T011201-fc8affc406",
+        "r5-20260926T011406-18b15002f6",
+        "r5-20260926T011904-c834d991d6",
+        "r5-20260926T085903-7cb19e71c9",
+        "r5-20260926T090501-d660fd8158",
+        "r5-20260926T093956-e5ecec7622",
+        "r5-20260926T093956-772708eb02",
+        "r5-20260926T095156-03e836b418",
+        "r5-20260926T100630-657235135c",
+        "r5-20260926T124413-0427272c2b",
+        "r5-20260926T125226-d109e17990",
+        "r5-20260926T132332-b82eb185fa",
+        "r5-20260926T133406-196eee1763",
+        "r5-20260926T133438-de7a210d6b",
+        "r5-20260926T135054-a35975c3fc",
+        "r5-20260926T145840-a1cf9d0f85",
+        "r5-20260926T145842-7d5cb97ba6",
+        "r5-20260926T145842-2ccebecccb",
+        "r5-20260926T145843-3127f41010",
+        "r5-20260926T152826-a51716453d",
+        "r5-20260926T153641-587f505756",
+        "r5-20260926T154340-1a45c7d6e9",
+        "r5-20260926T194035-5382dc8178",
+        "r5-20260926T230857-d085096042"
+      ]
+    },
+    "result": "BLOCKING_DISAGREEMENT"
+  },
+  "blockers": [
+    {
+      "detail": "Frozen checkpoints aggregate selected C as 53/53 same-prompt with 0 premature handoffs; the frozen analyzer over the full historical runs root aggregates selected C as 45/53 same-prompt with 3 premature handoffs and fails slot integrity. The gate command raises on the first mismatch, premature_handoff_zero.",
+      "id": "frozen_analyzer_vs_frozen_checkpoint_owner_disagreement"
+    }
+  ],
+  "focus": "reliability-provenance",
+  "gates": {
+    "continuation_reduction_ge_80_percent": {
+      "a_required_continuations": 0,
+      "c_required_continuations": 0,
+      "classification": "REQUIRED",
+      "note": "Frozen analyzer returns null when A has zero required continuations.",
+      "passed": false,
+      "threshold_percent": 80,
+      "value_percent": null
+    },
+    "interruption_rate_le_a_plus_2pp": {
+      "a_rate": 0.0,
+      "c_rate": 0.0,
+      "classification": "REQUIRED",
+      "delta_pp_c_minus_a": 0.0,
+      "passed": true,
+      "threshold_pp": 2
+    },
+    "median_manual_continuation_zero": {
+      "classification": "REQUIRED",
+      "passed": true,
+      "threshold": 0,
+      "value": 0.0
+    },
+    "p90_manual_continuation_zero": {
+      "classification": "REQUIRED",
+      "passed": true,
+      "threshold": 0,
+      "value": 0.0
+    },
+    "premature_handoff_zero": {
+      "classification": "REQUIRED",
+      "passed": true,
+      "threshold": 0,
+      "value": 0
+    },
+    "same_prompt_completion_ge_95_percent": {
+      "arithmetic": "53/53; threshold is at least 51/53",
+      "classification": "REQUIRED",
+      "passed": true,
+      "threshold": 0.95,
+      "value": 1.0
+    }
+  },
+  "notes": [
+    "This focus artifact intentionally contains no Phase-4 overall verdict.",
+    "All 159 R1-R11 canonical performance owners match the frozen source HEAD, endpoint identity, verified unmutated instructions, archived run identity, and evidence-integrity flags.",
+    "D2 production deployment drift is accepted external baseline evolution and does not alter the frozen experiment source HEAD.",
+    "Four retained reused-C300 chats could not be recovered by unchanged ChatArtifact.cleanup and remain explicitly poll-observed."
+  ],
+  "partition_checkpoints": {
+    "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-R1-R2-checkpoint.json": "bf8bdc772fe586cef3bd893df44144f126d891357d81b9002e921798a4da292b",
+    "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-R10-R11-checkpoint.json": "d7dbe437d1ca39c090bad760eecee647115a059f782aef39b5fb086414b3de14",
+    "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-R3-R4-checkpoint.json": "6f1ac078cab68ecbbf2435e688e040ca0453992e411eb427624595ed43f17bdd",
+    "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-R5-R6-checkpoint.json": "0938d4b6abc7cd5258591f46c142a28dde963e32dfe30ffc8ead1f4a78fcc589",
+    "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-R7-checkpoint.json": "344e2b5f372e46dc80dab7df0166a86e58cf5624b358664d2d48bd3b8ffec63a",
+    "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-R8-R9-checkpoint.json": "f58ec042664049bb0df964c4a035f96d6378f82f45fe820e7af41718e44453c8"
+  },
+  "partition_order": [
+    "R1-R2",
+    "R3-R4",
+    "R5-R6",
+    "R7",
+    "R8-R9",
+    "R10-R11"
+  ],
+  "partition_reviews": [
+    {
+      "canonical_slots": 30,
+      "checkpoint_sha256": "bf8bdc772fe586cef3bd893df44144f126d891357d81b9002e921798a4da292b",
+      "current_timing_sources": {
+        "conversation_final_assistant_timestamp": 30
+      },
+      "evidence_tree_sha256": "b36db72b69392d863401faaa452992077ab3ae45661b8dd3bbb1ef990e0030f1",
+      "interruptions_by_arm": {
+        "A": 0,
+        "B": 0,
+        "C": 0
+      },
+      "partition": "R1-R2",
+      "premature_handoffs_by_arm": {
+        "A": 0,
+        "B": 0,
+        "C": 0
+      },
+      "routing_miss_rates": {
+        "A": {
+          "pre_submit_failures": 1,
+          "rate": 0.0,
+          "routing_misses": 0,
+          "submitted_slots": 10
+        },
+        "B": {
+          "pre_submit_failures": 0,
+          "rate": 0.0,
+          "routing_misses": 0,
+          "submitted_slots": 10
+        },
+        "C": {
+          "pre_submit_failures": 0,
+          "rate": 0.0,
+          "routing_misses": 0,
+          "submitted_slots": 10
+        }
+      },
+      "same_prompt_by_arm": {
+        "A": 10,
+        "B": 10,
+        "C": 10
+      }
+    },
+    {
+      "canonical_slots": 30,
+      "checkpoint_sha256": "6f1ac078cab68ecbbf2435e688e040ca0453992e411eb427624595ed43f17bdd",
+      "current_timing_sources": {
+        "conversation_final_assistant_timestamp": 30
+      },
+      "evidence_tree_sha256": "3c73d3025bf97e5f477e1a30e11f56ad8bba81a1180293bac0e937ef1fd11ef5",
+      "interruptions_by_arm": {
+        "A": 0,
+        "B": 0,
+        "C": 0
+      },
+      "partition": "R3-R4",
+      "premature_handoffs_by_arm": {
+        "A": 0,
+        "B": 0,
+        "C": 0
+      },
+      "routing_miss_rates": {
+        "A": {
+          "pre_submit_failures": 1,
+          "rate": 0.0,
+          "routing_misses": 0,
+          "submitted_slots": 10
+        },
+        "B": {
+          "pre_submit_failures": 0,
+          "rate": 0.0,
+          "routing_misses": 0,
+          "submitted_slots": 10
+        },
+        "C": {
+          "pre_submit_failures": 0,
+          "rate": 0.0,
+          "routing_misses": 0,
+          "submitted_slots": 10
+        }
+      },
+      "same_prompt_by_arm": {
+        "A": 8,
+        "B": 8,
+        "C": 10
+      }
+    },
+    {
+      "canonical_slots": 30,
+      "checkpoint_sha256": "0938d4b6abc7cd5258591f46c142a28dde963e32dfe30ffc8ead1f4a78fcc589",
+      "current_timing_sources": {
+        "conversation_final_assistant_timestamp": 27,
+        "poll_observed": 3
+      },
+      "evidence_tree_sha256": "50c4524bf5a9b14df36d6973333cf51882fcade84daac3e3088476b75c7c3a3a",
+      "interruptions_by_arm": {
+        "A": 0,
+        "B": 0,
+        "C": 0
+      },
+      "partition": "R5-R6",
+      "premature_handoffs_by_arm": {
+        "A": 0,
+        "B": 0,
+        "C": 0
+      },
+      "routing_miss_rates": {
+        "A": {
+          "rate": 0.0,
+          "routing_misses": 0,
+          "submitted_slots": 10
+        },
+        "B": {
+          "rate": 0.0,
+          "routing_misses": 0,
+          "submitted_slots": 10
+        },
+        "C": {
+          "rate": 0.0,
+          "routing_misses": 0,
+          "submitted_slots": 10
+        }
+      },
+      "same_prompt_by_arm": {
+        "A": 10,
+        "B": 10,
+        "C": 10
+      }
+    },
+    {
+      "canonical_slots": 9,
+      "checkpoint_sha256": "344e2b5f372e46dc80dab7df0166a86e58cf5624b358664d2d48bd3b8ffec63a",
+      "current_timing_sources": {
+        "conversation_final_assistant_timestamp": 8,
+        "poll_observed": 1
+      },
+      "evidence_tree_sha256": "e64ba86062d91863653bfed02946b9e0fb95ed0285009af8c9bdfb4d82a5ecf6",
+      "interruptions_by_arm": {
+        "A": 0,
+        "B": 1,
+        "C": 0
+      },
+      "partition": "R7",
+      "premature_handoffs_by_arm": {
+        "A": 0,
+        "B": 0,
+        "C": 0
+      },
+      "routing_miss_rates": {
+        "A": {
+          "rate": 0.0,
+          "routing_misses": 0,
+          "submitted_slots": 3
+        },
+        "B": {
+          "rate": 0.0,
+          "routing_misses": 0,
+          "submitted_slots": 3
+        },
+        "C": {
+          "rate": 0.0,
+          "routing_misses": 0,
+          "source": "D6 retained-log recovery for reused C300 calibration rows",
+          "submitted_slots": 3
+        }
+      },
+      "same_prompt_by_arm": {
+        "A": 3,
+        "B": 2,
+        "C": 3
+      }
+    },
+    {
+      "canonical_slots": 30,
+      "checkpoint_sha256": "f58ec042664049bb0df964c4a035f96d6378f82f45fe820e7af41718e44453c8",
+      "current_timing_sources": {
+        "conversation_final_assistant_timestamp": 30
+      },
+      "evidence_tree_sha256": "e86cf96dd2b58c9402d9b7d4adf0440189c369da79dddd000ac6528108c844f7",
+      "interruptions_by_arm": {
+        "A": 0,
+        "B": 0,
+        "C": 0
+      },
+      "partition": "R8-R9",
+      "premature_handoffs_by_arm": {
+        "A": 0,
+        "B": 0,
+        "C": 0
+      },
+      "routing_miss_rates": {
+        "A": {
+          "note": "R9-r03-A attempt 1 first failed before submission, then a correctly detected production routing miss (8 production calls) did not own the slot; attempt 2 was the first correctly routed submission and owns the slot.",
+          "pre_submit_failures": 1,
+          "rate": 0.09090909090909091,
+          "routing_misses": 1,
+          "submitted_slots": 11
+        },
+        "B": {
+          "pre_submit_failures": 0,
+          "rate": 0.0,
+          "routing_misses": 0,
+          "submitted_slots": 10
+        },
+        "C": {
+          "pre_submit_failures": 0,
+          "rate": 0.0,
+          "routing_misses": 0,
+          "submitted_slots": 10
+        }
+      },
+      "same_prompt_by_arm": {
+        "A": 10,
+        "B": 10,
+        "C": 10
+      }
+    },
+    {
+      "canonical_slots": 30,
+      "checkpoint_sha256": "d7dbe437d1ca39c090bad760eecee647115a059f782aef39b5fb086414b3de14",
+      "current_timing_sources": {
+        "conversation_final_assistant_timestamp": 30
+      },
+      "evidence_tree_sha256": "4d626494f71b0465e797adf13ccfeeba7eed5a82ff74d72d116961abb006e6d2",
+      "interruptions_by_arm": {
+        "A": 0,
+        "B": 0,
+        "C": 0
+      },
+      "partition": "R10-R11",
+      "premature_handoffs_by_arm": {
+        "A": 0,
+        "B": 0,
+        "C": 0
+      },
+      "routing_miss_rates": {
+        "A": {
+          "pre_submit_failures": 0,
+          "rate": 0.0,
+          "routing_misses": 0,
+          "submitted_slots": 10
+        },
+        "B": {
+          "pre_submit_failures": 0,
+          "rate": 0.0,
+          "routing_misses": 0,
+          "submitted_slots": 10
+        },
+        "C": {
+          "pre_submit_failures": 0,
+          "rate": 0.0,
+          "routing_misses": 0,
+          "submitted_slots": 10
+        }
+      },
+      "same_prompt_by_arm": {
+        "A": 10,
+        "B": 10,
+        "C": 10
+      }
+    }
+  ],
+  "phase4_source_head": "06bc1649c4bad9449470366da971649bb7620020",
+  "provenance": {
+    "R2_r04_A_attribution": "First correctly routed submitted A-arm owner; frozen provenance_classification=other_submitted_error for unrelated production Git-status drift. Same-prompt=true and interruption=false.",
+    "R7_r02_B_attribution": "Correctly routed B-arm MCP work completed; browser/send observation timed out. Frozen provenance_classification=mcp_completed_browser_timeout and metrics interruption_kind=harness_timeout.",
+    "archive_or_evidence_error_count": 0,
+    "canonical_performance_slots_validated": 159,
+    "classified_or_failed_rows": [
+      {
+        "arm": "A",
+        "error_type": "HarnessError",
+        "partition": "R1-R2",
+        "provenance_classification": "other_submitted_error",
+        "run_id": "r2-20260927T003210-7c2132fad3",
+        "slot_id": "R2-r04-A",
+        "submission_status": "completed",
+        "trial_status": "failed"
+      },
+      {
+        "arm": "B",
+        "error_type": "TimeoutExpired",
+        "partition": "R7",
+        "provenance_classification": "mcp_completed_browser_timeout",
+        "run_id": "r7-20260926T200743-e7db9a34ac",
+        "slot_id": "R7-r02-B",
+        "submission_status": "failed_after_submission",
+        "trial_status": "failed"
+      }
+    ],
+    "identity_error_count": 0,
+    "identity_values": {
+      "base_topology_sha256": [
+        "9b58135a4a527bc18c5d43456d6f92b384e5457ac2f12884520dac1eb9f38155"
+      ],
+      "instruction_sha256": {
+        "A": [
+          "f1c100d0ddb93c29f8f78e5a2d28e297d861ba6e2c7e53712ec886dea06bafa5"
+        ],
+        "B": [
+          "b7df6953a3c64bd245b3d5ff13b6f2667e940d5a154e650fec0b10e6a22cf094"
+        ],
+        "C": [
+          "b7df6953a3c64bd245b3d5ff13b6f2667e940d5a154e650fec0b10e6a22cf094"
+        ]
+      },
+      "lane_manifest_sha256": {
+        "A": [
+          "0bb2698d63c7e3c11b05a39981674a3976ded8fffd349a8f46e583c5a3520107"
+        ],
+        "B": [
+          "a6c27c3611675e7d261d572d1edceae6a5a92ce2456c28d50335f68f051e41b4"
+        ],
+        "C": [
+          "d413edb9f0eaca1471d99a6c1592a4ca19fd9a0af73611bf236def8bfd4ee8da"
+        ]
+      },
+      "manifest_sha256": [
+        "0b543dec7b997d15470120c34a59cb7ca035e3da3ae5a01f95b17b5217ec11dd",
+        "1126f1b010889aedf9c86bdac6d01f5c967c89c4ef901f9a45aa385044cc030b",
+        "1514cad3a57e6fd807f0695525ca73da87f0dc8491a0f8a263e9454c8caac90c",
+        "21004dab007d3f53ad4e1f11c3692218621d79463ff68a24ddad8f85ac961f26",
+        "2a6d6a6c19a87a431a7b90841920b392e9bbfeb8961aaa714a4c8a8db8308f4b",
+        "9a1dffd2e308629b3e8cfa4940c15808a6b84ca2fe94582f6f8059a633f0392a",
+        "b30ba2a1774a9f03be6da41932d1820805ca9a6321523f28cc088fa81b9cd8c9",
+        "b69889e036bcd5ad2e1c2ace673f79466a0423cdc011491466ff0591d0d912db",
+        "bb05587dba7dce648eeccb14aea0ea3db2cd14d9ac5e7cb4fe46c65737193bfd",
+        "f656dc41f29797410de6b4802e019f0ddbb4828a51fa4c82586d74e23a8a3c5c",
+        "f9ddbebf2b64cc56d88725742c0b6f9310640270524fb4662186089f8bf3fdf7"
+      ],
+      "models": {
+        "A": [
+          "gpt-5-6-thinking"
+        ],
+        "B": [
+          "gpt-5-6-thinking"
+        ],
+        "C": [
+          "gpt-5-6-thinking"
+        ]
+      },
+      "phase4_source_heads": [
+        "06bc1649c4bad9449470366da971649bb7620020"
+      ],
+      "project_ids": {
+        "A": [
+          "g-p-6ab618e071c88191aec9db5d6945b7df"
+        ],
+        "B": [
+          "g-p-6ab618e4bb488191ad96651caa1592b0"
+        ],
+        "C": [
+          "g-p-6ab618e926c48191a9aa444fbc08ab58"
+        ]
+      },
+      "project_names": {
+        "A": [
+          "rp-sched-A"
+        ],
+        "B": [
+          "rp-sched-B"
+        ],
+        "C": [
+          "rp-sched-C300"
+        ]
+      },
+      "runtime_registry_sha256": [
+        "f75ea33783def327f542832ded790e5f5650f11304e3f968fe0c7c6c39d3cf26"
+      ],
+      "source_heads": [
+        "06bc1649c4bad9449470366da971649bb7620020"
+      ],
+      "thinking_efforts": {
+        "A": [
+          "max"
+        ],
+        "B": [
+          "max"
+        ],
+        "C": [
+          "max"
+        ]
+      }
+    }
+  },
+  "reliability": {
+    "a_required_continuations": 0,
+    "by_arm": {
+      "A": {
+        "canonical_slots": 53,
+        "host_load_flagged": 6,
+        "interruptions": 0,
+        "manual_continuations_required": 0,
+        "premature_handoffs": 0,
+        "same_prompt_completions": 51,
+        "trial_status_failed": 1
+      },
+      "B": {
+        "canonical_slots": 53,
+        "host_load_flagged": 4,
+        "interruptions": 1,
+        "manual_continuations_required": 0,
+        "premature_handoffs": 0,
+        "same_prompt_completions": 50,
+        "trial_status_failed": 1
+      },
+      "C": {
+        "canonical_slots": 53,
+        "host_load_flagged": 8,
+        "interruptions": 0,
+        "manual_continuations_required": 0,
+        "premature_handoffs": 0,
+        "same_prompt_completions": 53,
+        "trial_status_failed": 0
+      }
+    },
+    "c_required_continuations": 0,
+    "interruption_rate_delta_pp_c_minus_a": 0.0,
+    "required_continuation_reduction_percent": null,
+    "same_prompt_completion_delta_pp_c_minus_a": 3.773585
+  },
+  "report_kind": "phase4-review-reliability-provenance",
+  "routing_integrity": {
+    "R9_r03_A_incident": {
+      "non_owning": true,
+      "note": "P4-A2 excludes the miss from arm metrics/gates and treats production miss traffic as a non-mutating isolation incident.",
+      "owning_attempt": 2,
+      "production_calls": 8,
+      "routing_miss": true
+    },
+    "any_arm_above_10_percent": false,
+    "by_arm": {
+      "A": {
+        "pre_submit_failures": 3,
+        "rate": 0.018518519,
+        "routing_misses": 1,
+        "submitted_trials": 54,
+        "threshold": 0.1,
+        "threshold_exceeded": false
+      },
+      "B": {
+        "pre_submit_failures": 0,
+        "rate": 0.0,
+        "routing_misses": 0,
+        "submitted_trials": 53,
+        "threshold": 0.1,
+        "threshold_exceeded": false
+      },
+      "C": {
+        "pre_submit_failures": 0,
+        "rate": 0.0,
+        "routing_misses": 0,
+        "submitted_trials": 53,
+        "threshold": 0.1,
+        "threshold_exceeded": false
+      }
+    },
+    "unscorable_routing_slots": 0
+  },
+  "schema_version": 1,
+  "scratch_fragments": [
+    {
+      "partition": "R1-R2",
+      "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase4/review/reliability-provenance/R1-R2.json",
+      "sha256": "180e6940e2d6e7e910c7453953baeae73d365eb3dd2ba025c4c17d6d082eacd0"
+    },
+    {
+      "partition": "R3-R4",
+      "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase4/review/reliability-provenance/R3-R4.json",
+      "sha256": "350842b5527d09e8c8f1b1cb4be39466730ce199e82dd10ee09c23856cc6a466"
+    },
+    {
+      "partition": "R5-R6",
+      "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase4/review/reliability-provenance/R5-R6.json",
+      "sha256": "c5e6c10f8356612cfa8f2ba49a0b31b060277f0898f1e6bede025ec7e91452c9"
+    },
+    {
+      "partition": "R7",
+      "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase4/review/reliability-provenance/R7.json",
+      "sha256": "f59de892697916e8d4cc063590403c1c6117d6fab691e16122a2037e022e13d8"
+    },
+    {
+      "partition": "R8-R9",
+      "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase4/review/reliability-provenance/R8-R9.json",
+      "sha256": "6f40af60b5982c35c5de1d91856702c2c05b5f0c57f7cfe0577a140072f09656"
+    },
+    {
+      "partition": "R10-R11",
+      "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase4/review/reliability-provenance/R10-R11.json",
+      "sha256": "4805777cc4d4cc65da92deae8dd4606105744a6b3187e37cd06dab6ad8999880"
+    }
+  ],
+  "task_id": "4C:reliability-provenance",
+  "timing_provenance": {
+    "checkpoint_recomputed_count": 7,
+    "current_conversation_timestamp_count": 155,
+    "current_poll_observed_count": 4,
+    "policy": "No wall-time aggregate is computed in this focus; D9 timing provenance is disclosed row by row.",
+    "post_checkpoint_deferred_recomputed_count": 79,
+    "recomputed_total_count": 86,
+    "recomputed_trials": [
+      {
+        "old_wall_s": 68.848,
+        "partition": "R1-R2",
+        "run_id": "r1-20260926T232128-6390f9871b",
+        "slot_id": "R1-r01-C",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 18.055
+      },
+      {
+        "old_wall_s": 70.709,
+        "partition": "R1-R2",
+        "run_id": "r1-20260926T203729-8abe9e86ac",
+        "slot_id": "R1-r03-A",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 24.385
+      },
+      {
+        "old_wall_s": 75.802,
+        "partition": "R1-R2",
+        "run_id": "r1-20260926T203525-6ee550efc2",
+        "slot_id": "R1-r03-B",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 17.95
+      },
+      {
+        "old_wall_s": 51.664,
+        "partition": "R1-R2",
+        "run_id": "r1-20260926T205656-617f5b0e7c",
+        "slot_id": "R1-r05-A",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 18.74
+      },
+      {
+        "old_wall_s": 63.412,
+        "partition": "R1-R2",
+        "run_id": "r1-20260926T205837-a6adfedbc7",
+        "slot_id": "R1-r05-B",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 19.238
+      },
+      {
+        "old_wall_s": 70.931,
+        "partition": "R1-R2",
+        "run_id": "r1-20260926T210029-8045d731db",
+        "slot_id": "R1-r05-C",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 19.571
+      },
+      {
+        "old_wall_s": 25.373,
+        "partition": "R1-R2",
+        "run_id": "r2-20260926T205130-8876637d74",
+        "slot_id": "R2-r02-B",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 15.862
+      },
+      {
+        "old_wall_s": 72.551,
+        "partition": "R1-R2",
+        "run_id": "r2-20260926T205244-0ba07f1e5d",
+        "slot_id": "R2-r02-C",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 17.613
+      },
+      {
+        "old_wall_s": 50.09,
+        "partition": "R1-R2",
+        "run_id": "r2-20260926T221656-22d7f01d6f",
+        "slot_id": "R2-r03-A",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 20.48
+      },
+      {
+        "old_wall_s": 54.22,
+        "partition": "R1-R2",
+        "run_id": "r2-20260927T003210-7c2132fad3",
+        "slot_id": "R2-r04-A",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 16.722
+      },
+      {
+        "old_wall_s": 130.823,
+        "partition": "R10-R11",
+        "run_id": "r10-20260926T210827-42f18f9d43",
+        "slot_id": "R10-r01-A",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 102.436
+      },
+      {
+        "old_wall_s": 131.224,
+        "partition": "R10-R11",
+        "run_id": "r10-20260926T210229-269635dd8d",
+        "slot_id": "R10-r01-B",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 106.72
+      },
+      {
+        "old_wall_s": 128.197,
+        "partition": "R10-R11",
+        "run_id": "r10-20260926T210529-fcd281e693",
+        "slot_id": "R10-r01-C",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 101.059
+      },
+      {
+        "old_wall_s": 110.064,
+        "partition": "R10-R11",
+        "run_id": "r10-20260926T220537-4a16a7a653",
+        "slot_id": "R10-r02-A",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 104.888
+      },
+      {
+        "old_wall_s": 115.15,
+        "partition": "R10-R11",
+        "run_id": "r10-20260926T221136-cc88039020",
+        "slot_id": "R10-r02-B",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 105.644
+      },
+      {
+        "old_wall_s": 116.765,
+        "partition": "R10-R11",
+        "run_id": "r10-20260926T220841-c79ce8945b",
+        "slot_id": "R10-r02-C",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 104.096
+      },
+      {
+        "old_wall_s": 172.378,
+        "partition": "R10-R11",
+        "run_id": "r10-20260926T233046-eab06ceb13",
+        "slot_id": "R10-r04-A",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 115.091
+      },
+      {
+        "old_wall_s": 104.774,
+        "partition": "R10-R11",
+        "run_id": "r10-20260926T232759-d4a5465607",
+        "slot_id": "R10-r04-B",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 103.143
+      },
+      {
+        "old_wall_s": 156.978,
+        "partition": "R10-R11",
+        "run_id": "r10-20260926T233448-cd6f149f35",
+        "slot_id": "R10-r04-C",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 104.43
+      },
+      {
+        "old_wall_s": 51.781,
+        "partition": "R10-R11",
+        "run_id": "r11-20260926T222300-e24c838366",
+        "slot_id": "R11-r01-B",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 31.483
+      },
+      {
+        "old_wall_s": 70.239,
+        "partition": "R10-R11",
+        "run_id": "r11-20260926T211127-0d064f8436",
+        "slot_id": "R11-r05-A",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 30.393
+      },
+      {
+        "old_wall_s": 73.622,
+        "partition": "R10-R11",
+        "run_id": "r11-20260926T211524-0f5885a101",
+        "slot_id": "R11-r05-B",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 29.061
+      },
+      {
+        "old_wall_s": 70.806,
+        "partition": "R10-R11",
+        "run_id": "r11-20260926T211327-11e5aba83b",
+        "slot_id": "R11-r05-C",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 27.828
+      },
+      {
+        "old_wall_s": 50.526,
+        "partition": "R3-R4",
+        "run_id": "r3-20260926T214500-5a03f81a00",
+        "slot_id": "R3-r02-A",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 43.92
+      },
+      {
+        "old_wall_s": 52.603,
+        "partition": "R3-R4",
+        "run_id": "r3-20260926T214642-5ebcd84104",
+        "slot_id": "R3-r02-B",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 45.124
+      },
+      {
+        "old_wall_s": 63.789,
+        "partition": "R3-R4",
+        "run_id": "r3-20260926T230442-fe3705276a",
+        "slot_id": "R3-r03-B",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 44.85
+      },
+      {
+        "old_wall_s": 52.166,
+        "partition": "R3-R4",
+        "run_id": "r3-20260926T230256-0cc9d192de",
+        "slot_id": "R3-r03-C",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 46.12
+      },
+      {
+        "old_wall_s": 51.6,
+        "partition": "R3-R4",
+        "run_id": "r3-20260926T191952-841fbe993f",
+        "slot_id": "R3-r04-B",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 45.651
+      },
+      {
+        "old_wall_s": 75.465,
+        "partition": "R3-R4",
+        "run_id": "r3-20260926T195201-fefc5ce1bd",
+        "slot_id": "R3-r05-A",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 44.15
+      },
+      {
+        "old_wall_s": 124.615,
+        "partition": "R3-R4",
+        "run_id": "r4-20260926T174331-52f9ca9835",
+        "slot_id": "R4-r01-A",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 106.955
+      },
+      {
+        "old_wall_s": 150.05,
+        "partition": "R3-R4",
+        "run_id": "r4-20260926T173333-32be35d755",
+        "slot_id": "R4-r01-B",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 109.289
+      },
+      {
+        "old_wall_s": 339.255,
+        "partition": "R3-R4",
+        "run_id": "r4-20260926T173658-4c0f611091",
+        "slot_id": "R4-r01-C",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 110.934
+      },
+      {
+        "old_wall_s": 129.725,
+        "partition": "R3-R4",
+        "run_id": "r4-20260926T220228-61f5d422e3",
+        "slot_id": "R4-r02-A",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 108.481
+      },
+      {
+        "old_wall_s": 105.805,
+        "partition": "R3-R4",
+        "run_id": "r4-20260926T215658-b07da72b14",
+        "slot_id": "R4-r02-B",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 104.523
+      },
+      {
+        "old_wall_s": 113.551,
+        "partition": "R3-R4",
+        "run_id": "r4-20260926T215940-934717f21a",
+        "slot_id": "R4-r02-C",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 106.782
+      },
+      {
+        "old_wall_s": 127.739,
+        "partition": "R3-R4",
+        "run_id": "r4-20260926T224526-8d9ea11bf6",
+        "slot_id": "R4-r03-B",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 103.214
+      },
+      {
+        "old_wall_s": 161.673,
+        "partition": "R3-R4",
+        "run_id": "r4-20260926T225056-cb4bc539d3",
+        "slot_id": "R4-r03-C",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 108.355
+      },
+      {
+        "old_wall_s": 174.695,
+        "partition": "R3-R4",
+        "run_id": "r4-20260926T170143-1203fcbcca",
+        "slot_id": "R4-r04-A",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 104.19
+      },
+      {
+        "old_wall_s": 127.515,
+        "partition": "R3-R4",
+        "run_id": "r4-20260926T165830-b01ee98fd3",
+        "slot_id": "R4-r04-C",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 106.725
+      },
+      {
+        "old_wall_s": 122.636,
+        "partition": "R3-R4",
+        "run_id": "r4-20260926T231235-7ff3c866ac",
+        "slot_id": "R4-r05-A",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 108.637
+      },
+      {
+        "old_wall_s": 130.743,
+        "partition": "R3-R4",
+        "run_id": "r4-20260926T231827-e372a9e8f8",
+        "slot_id": "R4-r05-B",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 111.233
+      },
+      {
+        "old_wall_s": 126.057,
+        "partition": "R3-R4",
+        "run_id": "r4-20260926T231532-bdefeb0234",
+        "slot_id": "R4-r05-C",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 106.218
+      },
+      {
+        "old_wall_s": 51.311,
+        "partition": "R5-R6",
+        "run_id": "r5-20260926T190946-e6cc605c99",
+        "slot_id": "R5-r01-B",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 39.389
+      },
+      {
+        "old_wall_s": 39.867,
+        "partition": "R5-R6",
+        "slot_id": "R5-r01-C",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 35.378
+      },
+      {
+        "old_wall_s": 187.849,
+        "partition": "R5-R6",
+        "slot_id": "R5-r02-A",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 48.802
+      },
+      {
+        "old_wall_s": 70.774,
+        "partition": "R5-R6",
+        "slot_id": "R5-r02-B",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 43.491
+      },
+      {
+        "old_wall_s": 73.489,
+        "partition": "R5-R6",
+        "slot_id": "R5-r02-C",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 38.046
+      },
+      {
+        "old_wall_s": 63.92,
+        "partition": "R5-R6",
+        "run_id": "r5-20260926T231038-7f1c642969",
+        "slot_id": "R5-r04-A",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 38.776
+      },
+      {
+        "old_wall_s": 51.24,
+        "partition": "R5-R6",
+        "run_id": "r5-20260926T230857-d085096042",
+        "slot_id": "R5-r04-C",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 37.001
+      },
+      {
+        "old_wall_s": 50.147,
+        "partition": "R5-R6",
+        "run_id": "r5-20260926T193900-f171fb5412",
+        "slot_id": "R5-r05-A",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 39.654
+      },
+      {
+        "old_wall_s": 172.771,
+        "partition": "R5-R6",
+        "run_id": "r6-20260926T200405-849aff78d2",
+        "slot_id": "R6-r01-A",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 103.87
+      },
+      {
+        "old_wall_s": 129.431,
+        "partition": "R5-R6",
+        "run_id": "r6-20260926T234127-a2b52ceb93",
+        "slot_id": "R6-r02-A",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 103.016
+      },
+      {
+        "old_wall_s": 117.778,
+        "partition": "R5-R6",
+        "run_id": "r6-20260926T233833-69d6ae63c0",
+        "slot_id": "R6-r02-B",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 106.392
+      },
+      {
+        "old_wall_s": 155.591,
+        "partition": "R5-R6",
+        "run_id": "r6-20260926T223603-40ca551ab7",
+        "slot_id": "R6-r03-A",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 102.347
+      },
+      {
+        "old_wall_s": 136.337,
+        "partition": "R5-R6",
+        "slot_id": "R6-r03-C",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 101.081
+      },
+      {
+        "old_wall_s": 173.411,
+        "partition": "R5-R6",
+        "run_id": "r6-20260926T193256-156a9d2f3e",
+        "slot_id": "R6-r04-B",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 101.32
+      },
+      {
+        "old_wall_s": 130.239,
+        "partition": "R5-R6",
+        "run_id": "r6-20260926T192727-e12075f8c6",
+        "slot_id": "R6-r04-C",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 105.69
+      },
+      {
+        "old_wall_s": 108.206,
+        "partition": "R5-R6",
+        "run_id": "r6-20260926T202954-f42c537d09",
+        "slot_id": "R6-r05-A",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 104.7
+      },
+      {
+        "old_wall_s": 114.779,
+        "partition": "R5-R6",
+        "run_id": "r6-20260926T203231-0bceaf425e",
+        "slot_id": "R6-r05-B",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 104.824
+      },
+      {
+        "old_wall_s": 168.054,
+        "partition": "R7",
+        "run_id": "r7-20260926T181657-83b81b3556",
+        "slot_id": "R7-r01-A",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 157.185
+      },
+      {
+        "old_wall_s": 186.229,
+        "partition": "R7",
+        "run_id": "r7-20260926T182033-09141708b5",
+        "slot_id": "R7-r01-B",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 157.27
+      },
+      {
+        "old_wall_s": 158.269,
+        "partition": "R7",
+        "slot_id": "R7-r01-C",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 154.656
+      },
+      {
+        "old_wall_s": 160.772,
+        "partition": "R7",
+        "slot_id": "R7-r03-C",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 157.1
+      },
+      {
+        "old_wall_s": 53.014,
+        "partition": "R8-R9",
+        "run_id": "r8-20260926T185958-f1a56adbf8",
+        "slot_id": "R8-r01-A",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 25.173
+      },
+      {
+        "old_wall_s": 69.297,
+        "partition": "R8-R9",
+        "run_id": "r8-20260926T185329-13bfd189f0",
+        "slot_id": "R8-r01-B",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 27.84
+      },
+      {
+        "old_wall_s": 61.271,
+        "partition": "R8-R9",
+        "run_id": "r8-20260926T175139-e7cc4d893c",
+        "slot_id": "R8-r02-B",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 34.528
+      },
+      {
+        "old_wall_s": 54.012,
+        "partition": "R8-R9",
+        "run_id": "r8-20260926T174957-87a5d299a2",
+        "slot_id": "R8-r02-C",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 46.598
+      },
+      {
+        "old_wall_s": 190.069,
+        "partition": "R8-R9",
+        "run_id": "r8-20260926T214825-e33a94540d",
+        "slot_id": "R8-r03-C",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 33.195
+      },
+      {
+        "old_wall_s": 65.032,
+        "partition": "R8-R9",
+        "run_id": "r8-20260926T224126-3ebfc36216",
+        "slot_id": "R8-r04-A",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 31.519
+      },
+      {
+        "old_wall_s": 68.53,
+        "partition": "R8-R9",
+        "run_id": "r8-20260926T223928-5398cde99e",
+        "slot_id": "R8-r04-B",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 28.584
+      },
+      {
+        "old_wall_s": 65.486,
+        "partition": "R8-R9",
+        "run_id": "r8-20260926T224330-e5a3d07fae",
+        "slot_id": "R8-r04-C",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 25.237
+      },
+      {
+        "old_wall_s": 61.632,
+        "partition": "R8-R9",
+        "run_id": "r8-20260926T213243-6fc24b6480",
+        "slot_id": "R8-r05-A",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 26.418
+      },
+      {
+        "old_wall_s": 51.18,
+        "partition": "R8-R9",
+        "run_id": "r8-20260926T212856-d9857d7de6",
+        "slot_id": "R8-r05-B",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 24.782
+      },
+      {
+        "old_wall_s": 64.08,
+        "partition": "R8-R9",
+        "run_id": "r8-20260926T213042-5e27c27b63",
+        "slot_id": "R8-r05-C",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 28.271
+      },
+      {
+        "old_wall_s": 63.91,
+        "partition": "R8-R9",
+        "run_id": "r9-20260926T214029-bcbe900b68",
+        "slot_id": "R9-r01-A",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 52.51
+      },
+      {
+        "old_wall_s": 175.869,
+        "partition": "R8-R9",
+        "run_id": "r9-20260926T213639-3066107040",
+        "slot_id": "R9-r01-B",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 63.281
+      },
+      {
+        "old_wall_s": 62.845,
+        "partition": "R8-R9",
+        "run_id": "r9-20260926T213444-7a34f53da1",
+        "slot_id": "R9-r01-C",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 53.674
+      },
+      {
+        "old_wall_s": 51.972,
+        "partition": "R8-R9",
+        "run_id": "r9-20260926T192358-44dc6afbc0",
+        "slot_id": "R9-r02-A",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 43.762
+      },
+      {
+        "old_wall_s": 64.861,
+        "partition": "R8-R9",
+        "run_id": "r9-20260926T192535-b9bb574f29",
+        "slot_id": "R9-r02-C",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 41.332
+      },
+      {
+        "old_wall_s": 122.803,
+        "partition": "R8-R9",
+        "run_id": "r9-20260926T182633-da25215d9d",
+        "slot_id": "R9-r03-B",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 70.673
+      },
+      {
+        "old_wall_s": 70.738,
+        "partition": "R8-R9",
+        "run_id": "r9-20260926T182427-ca17fa57f2",
+        "slot_id": "R9-r03-C",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 59.37
+      },
+      {
+        "old_wall_s": 124.946,
+        "partition": "R8-R9",
+        "run_id": "r9-20260926T171433-61c8f2f318",
+        "slot_id": "R9-r04-A",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 73.475
+      },
+      {
+        "old_wall_s": 101.649,
+        "partition": "R8-R9",
+        "run_id": "r9-20260926T171156-9e2d3b4f55",
+        "slot_id": "R9-r04-B",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 68.163
+      },
+      {
+        "old_wall_s": 75.257,
+        "partition": "R8-R9",
+        "run_id": "r9-20260926T171726-80b4d2f934",
+        "slot_id": "R9-r04-C",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 62.502
+      },
+      {
+        "old_wall_s": 51.208,
+        "partition": "R8-R9",
+        "run_id": "r9-20260926T204735-b4486903fa",
+        "slot_id": "R9-r05-A",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 41.18
+      },
+      {
+        "old_wall_s": 62.079,
+        "partition": "R8-R9",
+        "run_id": "r9-20260926T204936-bd0aa28852",
+        "slot_id": "R9-r05-C",
+        "source": "conversation_final_assistant_timestamp",
+        "wall_s": 54.978
+      }
+    ],
+    "stayed_observed_count": 4,
+    "stayed_observed_trials": [
+      {
+        "checkpoint_reason": "read_chat_timeout_12s",
+        "partition": "R5-R6",
+        "recovery_attempt": {
+          "deleted": false,
+          "errors": [
+            "CalledProcessError: Command '['/usr/bin/python3', '/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4-review-reliability-provenance/.claude/skills/chatgpt-mcp-dev/scripts/chatgpt-chats', '--browser', 'chrome', '--id', '6ab691e5-fe58-83ec-a8cd-69d1f0063531', '--delete']' returned non-zero exit status 1."
+          ],
+          "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r5-20260926T011904-c834d991d6/deferred-cleanup.json",
+          "saved": false
+        },
+        "run_id": "r5-20260926T011904-c834d991d6",
+        "slot_id": "R5-r03-C",
+        "wall_s": 40.268
+      },
+      {
+        "checkpoint_reason": "read_chat_timeout_12s",
+        "partition": "R5-R6",
+        "recovery_attempt": {
+          "deleted": false,
+          "errors": [
+            "CalledProcessError: Command '['/usr/bin/python3', '/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4-review-reliability-provenance/.claude/skills/chatgpt-mcp-dev/scripts/chatgpt-chats', '--browser', 'chrome', '--id', '6ab692e0-e7c4-83ec-9e3f-a1f69dede754', '--delete']' returned non-zero exit status 1."
+          ],
+          "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r6-20260926T012431-17c772cd31/deferred-cleanup.json",
+          "saved": false
+        },
+        "run_id": "r6-20260926T012431-17c772cd31",
+        "slot_id": "R6-r01-C",
+        "wall_s": 104.552
+      },
+      {
+        "checkpoint_reason": "read_chat_timeout_12s",
+        "partition": "R5-R6",
+        "recovery_attempt": {
+          "deleted": false,
+          "errors": [
+            "CalledProcessError: Command '['/usr/bin/python3', '/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4-review-reliability-provenance/.claude/skills/chatgpt-mcp-dev/scripts/chatgpt-chats', '--browser', 'chrome', '--id', '6ab6940b-36a8-83ec-ac04-396785988af1', '--delete']' returned non-zero exit status 1."
+          ],
+          "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r6-20260926T012946-4ee162a667/deferred-cleanup.json",
+          "saved": false
+        },
+        "run_id": "r6-20260926T012946-4ee162a667",
+        "slot_id": "R6-r02-C",
+        "wall_s": 108.399
+      },
+      {
+        "checkpoint_reason": "read_chat_timeout_30s",
+        "partition": "R7",
+        "recovery_attempt": {
+          "deleted": false,
+          "errors": [
+            "CalledProcessError: Command '['/usr/bin/python3', '/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4-review-reliability-provenance/.claude/skills/chatgpt-mcp-dev/scripts/chatgpt-chats', '--browser', 'chrome', '--id', '6ab6992c-8b00-83ec-8a12-1343f148d63e', '--delete']' returned non-zero exit status 1."
+          ],
+          "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r7-20260926T014904-e32fdb3f45/deferred-cleanup.json",
+          "saved": false
+        },
+        "run_id": "r7-20260926T014904-e32fdb3f45",
+        "slot_id": "R7-r02-C",
+        "wall_s": 155.16
+      }
+    ]
+  }
+}
