@@ -8,7 +8,7 @@ Worktree: `/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4`
 
 Audited source HEAD: `3a4dfb1b248e4530fb09013976abb863c8e35eaf`
 
-Last completed step: **4.9.2**
+Last completed step: **4.9.3**
 
 Next step: **complete the remaining independent 4.9 confirmatory partitions;
 Step 4.10 becomes ready only after 4.9.1 through 4.9.6 all checkpoint
@@ -53,7 +53,7 @@ complete.**
 | 4.8 | complete | — |
 | 4.9.1 | not_started | — |
 | 4.9.2 | complete | R3/R4 30/30 frozen; integrity PASS; commit pending |
-| 4.9.3 | not_started | — |
+| 4.9.3 | complete | R5/R6 30/30 frozen; integrity PASS; commit pending |
 | 4.9.4 | complete | R7 9/9 frozen; integrity PASS; commit pending |
 | 4.9.5 | complete | R8/R9 30/30 frozen; integrity PASS; commit pending |
 | 4.9.6 | not_started | — |
@@ -677,3 +677,35 @@ Step 4.6A:selected from the frozen result**.
   `06bc1649c4bad9449470366da971649bb7620020`; running endpoints were not restarted.
 - No live trial was executed here. The manager must rerun
   `4.6A-sel-qual` under P4-A5 before Step 4.6A:selected is evaluated.
+
+## Step 4.9.3 confirmatory R5/R6 checkpoint — COMPLETE
+
+- Slot integrity is **PASS**: 30/30 R5/R6 canonical slots have one owning
+  outcome: 24 live confirmatory rows plus 6 reused C300 calibration slots.
+  There are no reruns or unscorable-routing slots.
+- Routing misses are A 0/10, B 0/10, C 0/10. Reused C300 routing uses the
+  resolved D6 retained-log recovery. No arm exceeds the >10% evidence-integrity
+  threshold.
+- Analyzer results are 30/30 same-prompt completion, 0 interruptions,
+  0 premature handoffs, 0 failed trial states, and 6 host-load flags.
+- D9 timing evidence: 10/30 owners already used the final-assistant timestamp;
+  5 additional trials were recomputed from saved raw conversations. The other
+  15 remain explicitly poll-observed; the checkpoint lists every slot and
+  recovery reason.
+- Checkpoint JSON SHA-256:
+  0938d4b6abc7cd5258591f46c142a28dde963e32dfe30ffc8ead1f4a78fcc589.
+  Checkpoint Markdown SHA-256:
+  b8ae51916de16d2539f43ff8c9a80e0e9c61c7201808d39f479b80ef6ba37a95.
+- Frozen source-manifest SHA-256:
+  50c4524bf5a9b14df36d6973333cf51882fcade84daac3e3088476b75c7c3a3a
+  across 413 files in 30 deterministic archives under
+  phase4-confirmatory-evidence/R5-R6/.
+- Focused analyzer/confirmatory regression: **21 passed in 1.94 s**; nproc=4,
+  pre-run load average 1.00 / 4.68 / 5.39 under foreign parallel-programme
+  load. Archive verification passed for all 413 source files.
+- Two long compound D9 recovery helper commands were intercepted by the client
+  before reaching the connector. Equivalent simple direct `read_chat.py` calls
+  were used; this is an execution-mechanism deviation only and does not change
+  evidence or trial semantics.
+- No endpoint, Project, production config/service, or non-R5/R6 confirmatory
+  slot was mutated or rerun.

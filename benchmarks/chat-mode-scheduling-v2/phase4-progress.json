@@ -6,7 +6,7 @@
   "worktree": "/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4",
   "source_branch": "feature/chat-mode-scheduling-v2-phase3",
   "audited_source_head": "3a4dfb1b248e4530fb09013976abb863c8e35eaf",
-  "last_completed_step": "4.9.2",
+  "last_completed_step": "4.9.3",
   "next_step": "Complete the remaining independent 4.9 confirmatory partitions; Step 4.10 becomes ready only after 4.9.1 through 4.9.6 all checkpoint complete.",
   "dependency_audit": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase4-dependency-audit-2026-09-25-r01.json",
@@ -538,9 +538,21 @@
       "worker_branch": null
     },
     "4.9.3": {
-      "status": "not_started",
-      "tests": [],
-      "notes": [],
+      "status": "complete",
+      "tests": [
+        "R5/R6 slot integrity -> PASS: 30/30 canonical owners, 24 live + 6 reused C300; no reruns or unscorable routing; every state_dir is present and every owning row records host_load_flagged.",
+        "R5/R6 routing integrity -> PASS: A=0/10, B=0/10, C=0/10 routing misses; reused C uses resolved D6 retained-log recovery; no arm exceeds the >10% evidence-integrity threshold.",
+        "R5/R6 analyzer -> PASS: 30/30 state directories analyzed with corrected analyzer; 30/30 same-prompt, 0 interrupted, 0 premature handoff, 0 failed trial states, 6 host-load flags.",
+        "uv run pytest -q tests/scripts/test_chat_scheduling_confirmatory.py tests/scripts/test_chat_scheduling_analyzer.py -> PASS: 21 passed in 1.94s; nproc=4; pre-run loadavg=1.00 4.68 5.39 under foreign parallel-programme load.",
+        "Frozen evidence verification -> PASS: 413/413 authoritative source files match checkpoint digests and all 30 deterministic archives preserve those bytes; tree SHA-256 50c4524bf5a9b14df36d6973333cf51882fcade84daac3e3088476b75c7c3a3a."
+      ],
+      "notes": [
+        "Frozen R5/R6 checkpoint JSON SHA-256 0938d4b6abc7cd5258591f46c142a28dde963e32dfe30ffc8ead1f4a78fcc589; Markdown SHA-256 b8ae51916de16d2539f43ff8c9a80e0e9c61c7201808d39f479b80ef6ba37a95.",
+        "Frozen R5/R6 source-file manifest SHA-256 50c4524bf5a9b14df36d6973333cf51882fcade84daac3e3088476b75c7c3a3a across 413 files in 30 deterministic archives under phase4-confirmatory-evidence/R5-R6/.",
+        "D9: 10/30 owners already used conversation_final_assistant_timestamp; 5 additional trials were recomputed from saved raw conversations; 15 remain explicitly poll-observed and are individually listed with reasons in the checkpoint.",
+        "Six reused C300 slots are R5/R6 repeats 1-3; their reuse identity was frozen by Step 4.8 and their routing is the resolved D6 retained-log recovery. All six and all 24 live rows preserve the first-submitted-outcome rule.",
+        "No endpoint, Project, production config/service, or non-R5/R6 confirmatory slot was mutated or rerun. Two long compound recovery helpers were intercepted client-side before connector execution; equivalent direct read_chat.py calls were used."
+      ],
       "commit": null,
       "worker_branch": null
     },
@@ -1160,11 +1172,38 @@
       "pre_submit_failure_count": 1,
       "routing_resubmission_count": 0,
       "evidence_archive_count": 30
+    },
+    {
+      "kind": "confirmatory_partition_checkpoint",
+      "at": "2026-09-27T01:02:43+10:00",
+      "task_id": "4.9.3",
+      "partition": "R5/R6",
+      "schedule_sha256": "516938320afdf9dade5e03b8262a9e6ef9c95ad5d0330c20d1ce23d0ec68e734",
+      "checkpoint_path": "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-R5-R6-checkpoint.json",
+      "checkpoint_sha256": "0938d4b6abc7cd5258591f46c142a28dde963e32dfe30ffc8ead1f4a78fcc589",
+      "checkpoint_md_path": "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-R5-R6-checkpoint.md",
+      "checkpoint_md_sha256": "b8ae51916de16d2539f43ff8c9a80e0e9c61c7201808d39f479b80ef6ba37a95",
+      "evidence_root": "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-evidence/R5-R6",
+      "evidence_file_count": 413,
+      "evidence_tree_sha256": "50c4524bf5a9b14df36d6973333cf51882fcade84daac3e3088476b75c7c3a3a",
+      "routing_miss_rates": {
+        "A": "0/10 (0%)",
+        "B": "0/10 (0%)",
+        "C": "0/10 (0%)"
+      },
+      "timing_recovery": {
+        "already_conversation_timestamp": 10,
+        "recomputed": 5,
+        "stayed_observed": 15
+      },
+      "pre_submit_failure_count": 0,
+      "routing_resubmission_count": 0,
+      "evidence_archive_count": 30
     }
   ],
   "handoff": null,
   "created_at": "2026-09-25T15:31:10+10:00",
-  "updated_at": "2026-09-26T23:11:53+10:00",
+  "updated_at": "2026-09-27T01:04:24+10:00",
   "phase4_source_head": "06bc1649c4bad9449470366da971649bb7620020",
   "baseline_snapshot": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase4-baseline.json",
