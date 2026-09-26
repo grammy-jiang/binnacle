@@ -26,7 +26,10 @@ def main() -> None:
     )
     a = ap.parse_args()
 
-    journal = analysis.logstats.fetch_journal("binnacle-mcp", a.since, a.until)
+    # binnacle-jobs holds the job_exit records of manager-owned jobs (runtimes).
+    journal = analysis.logstats.fetch_journal(
+        ("binnacle-mcp", "binnacle-jobs"), a.since, a.until
+    )
     records, _ = analysis.logstats.parse(journal)
     rep = analysis.build_report(
         records,
@@ -57,6 +60,23 @@ def main() -> None:
         f"run_command background=true: {rep['run_command']['background']}"
     )
     print("turns:", rep["turns"])
+    st, jp = rep["steps"], rep["job_polling"]
+    print(
+        f"turn-attributed calls: {rep['attribution']['turn_attributed_calls']} "
+        f"(timestamp-matched total {rep['attribution']['tool_calls']})"
+    )
+    print(
+        f"model steps: {st['steps']} in {st['turns']} turns, {st['calls_per_step']} "
+        f"calls per step; steps per turn median {st['steps_per_turn_median']} "
+        f"p90 {st['steps_per_turn_p90']} max {st['steps_per_turn_max']}; "
+        f"read after a read of another file {st['read_after_other_read']}"
+    )
+    print(
+        f"job polling: {jp['solo_polls']} of {jp['polls']} polls alone in their step "
+        f"({100 * jp['solo_share_of_steps']:.1f}% of steps); waits {jp['solo_wait_seconds']}; "
+        f"at 50 s {100 * jp['solo_at_max_share']:.0f}%; excess over the realistic "
+        f"minimum {jp['excess_over_minimum']} ({jp['jobs_with_runtime']} jobs with a runtime)"
+    )
     n_run = rep["run_command"]["calls"]
     print(f"\nrun_command traits ({n_run} calls with a visible command):")
     for k, n in rep["run_command"]["traits"].items():

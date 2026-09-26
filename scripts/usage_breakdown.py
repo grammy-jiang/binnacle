@@ -30,6 +30,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "src"))
 from binnacle import logstats
+from scripts import usage_steps
 
 TUNNEL_LOG = Path.home() / ".local/state/tunnel-client/logs/binnacle.log"
 NAME = re.compile(r'"name":"([a-z_]+)","arguments"')
@@ -478,6 +479,9 @@ def build_report(
             "became_jobs": became_jobs,
             "job_exits": dict(job_exits.most_common()),
         },
+        **usage_steps.measure(
+            records, total, test_jobs, None if keep_tests else is_test_traffic
+        ),
         "turns_journal": {
             "turns": len(per_turn),
             "calls": sum(per_turn),

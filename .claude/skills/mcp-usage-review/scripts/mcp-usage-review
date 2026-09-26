@@ -123,6 +123,44 @@ def _turns_line(cur: dict | None, base: dict | None) -> str:
     )
 
 
+def _steps_lines(cur: dict, base: dict | None) -> list[str]:
+    """Section 2c (2026-09-27): model steps and job-polling efficiency."""
+    st, jp, at = cur.get("steps"), cur.get("job_polling"), cur.get("attribution")
+    if not st or not jp or not at:
+        return ["no step data (usage_breakdown.py older than 2026-09-27)"]
+    bst, bjp = (base or {}).get("steps") or {}, (base or {}).get("job_polling") or {}
+    rr = st["read_after_other_read"]
+    return [
+        (
+            f"ChatGPT calls by turn id: {at['turn_attributed_calls']} (timestamp-matched "
+            f"total {at['tool_calls']}). Calls of one turn less than {st['step_gap_s']:g} s "
+            "apart are one model step (ChatGPT sends parallel calls)."
+        ),
+        "",
+        (
+            f"Model steps: {st['steps']} in {st['turns']} turns, {st['calls_per_step']} calls "
+            f"per step; steps per turn median {st['steps_per_turn_median']}"
+            f"{delta(st['steps_per_turn_median'], bst.get('steps_per_turn_median'))}, p90 "
+            f"{st['steps_per_turn_p90']}{delta(st['steps_per_turn_p90'], bst.get('steps_per_turn_p90'))}, "
+            f"max {st['steps_per_turn_max']}. read_file after a read of another file: "
+            f"{rr['parallel']} parallel (same step), {rr['serial']} serial."
+        ),
+        "",
+        (
+            f"job_status polls alone in their step: {jp['solo_polls']} of {jp['polls']} "
+            f"({100 * jp['solo_share_of_steps']:.1f}% of all steps"
+            f"{delta(round(100 * jp['solo_share_of_steps'], 1), round(100 * bjp['solo_share_of_steps'], 1) if bjp else None)}); "
+            f"at the 50 s maximum: {100 * jp['solo_at_max_share']:.0f}%"
+            f"{delta(round(100 * jp['solo_at_max_share']), round(100 * bjp['solo_at_max_share']) if bjp else None)}; "
+            f"waits {jp['solo_wait_seconds']}. Polls per polled job median "
+            f"{jp['polls_per_polled_job_median']}, max {jp['polls_per_polled_job_max']}. "
+            f"Excess over the realistic minimum (ceil((runtime - initial wait) / "
+            f"{jp['poll_cycle_s']} s) per job, {jp['jobs_with_runtime']} jobs with a runtime): "
+            f"{jp['excess_over_minimum']}{delta(jp['excess_over_minimum'], bjp.get('excess_over_minimum'))}."
+        ),
+    ]
+
+
 def render(cur: dict, base: dict | None, base_path: Path | None, today: str) -> str:
     window = cur["since"] + (f" to {cur['until']}" if cur.get("until") else " onward")
     bwin = (
@@ -134,8 +172,9 @@ def render(cur: dict, base: dict | None, base_path: Path | None, today: str) -> 
     lines = [
         f"# Usage analysis, {today} — window {window}",
         "",
-        "Source: `scripts/usage_breakdown.py` over the `binnacle-mcp` journal, calls",
-        "attributed to ChatGPT via the tunnel log, nonce-marked test traffic excluded.",
+        "Source: `scripts/usage_breakdown.py` over the `binnacle-mcp` and `binnacle-jobs`",
+        "journals, calls attributed to ChatGPT via the tunnel (turn id or log match),",
+        "nonce-marked test traffic excluded.",
         f"Baseline for deltas: `{base_path.name if base_path else 'none'}` ({bwin}).",
         "",
         "## 1. Tool mix",
@@ -176,6 +215,10 @@ def render(cur: dict, base: dict | None, base_path: Path | None, today: str) -> 
         "## 2b. Calls per turn",
         "",
         _turns_line(cur.get("turns"), (base or {}).get("turns")),
+        "",
+        "## 2c. Model steps and job polling",
+        "",
+        *_steps_lines(cur, base),
         "",
         "## 3. New-parameter uptake",
         "",

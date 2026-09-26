@@ -111,3 +111,21 @@ Each item cost time once. Check them before repeating the loop.
   09-07 rewrite cut the gap between calls 3.5x but turns got longer with
   the task (agent mode). Report per-call latency and calls per turn as two
   numbers; only the first is the server's.
+
+## Fourth round (2026-09-27)
+
+- **Count model steps, not calls.** ChatGPT sends parallel tool calls in
+  one model step: 86 % of the reads of a different file right after a read
+  (2,408 of 2,801, 2026-09-14 to 09-27) started less than 2 s after the
+  previous call. A multi-file read tool had a ceiling of 393 serial steps
+  (about 2 %), not 2,801 calls (10.6 %), and its evaluation stopped before
+  any ChatGPT run. `usage_breakdown.py` now reports model steps (calls of
+  one turn less than 2 s apart) and job_status polls alone in their step.
+- **Attribute by turn id.** Every tunnel-forwarded `tool_call` record
+  carries `turn=`; its format changed from `wfr_<id>` to `<uuid>` around
+  2026-09-21/22. The ±2 s tunnel-log match over-attributes busy local
+  agents; the turn id is exact. The tunnel-log turn metric (section 2b)
+  still reads `wfr_` ids only.
+- **Job runtimes of manager-owned jobs are in the binnacle-jobs journal.**
+  The breakdown reads both units; the runtime join needs `job_exit ...
+  call=` (about 2026-09-21 on).
