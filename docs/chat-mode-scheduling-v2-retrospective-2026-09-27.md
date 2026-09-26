@@ -93,17 +93,24 @@ lesson.
 
 ## What remains, and where
 
-- Branches, not merged: `planning/chat-mode-scheduling-v2-phase3-6`
-  (plans and amendments), `feature/chat-mode-scheduling-v2-phase4` (Phase-4
-  code, evidence and reports, final head `0b5b593`),
-  `feature/chat-mode-blocking-wall-guard` (Phase 2),
-  `design/chat-mode-scheduling-v2` (test-suite performance work). Phase-5
-  preparation is archived by the tags
-  `archive/chat-mode-scheduling-v2-phase5-instructions-2026-09-27` and
-  `archive/chat-mode-scheduling-v2-phase5-operational-2026-09-27`.
+- The v2 branches were removed on 2026-09-27. Archive tags keep every phase:
+  - `archive/chat-mode-scheduling-v2-planning-2026-09-27`: plans and amendments
+  - `archive/chat-mode-scheduling-v2-phase0-2026-09-27`
+  - `archive/chat-mode-scheduling-v2-phase1-2026-09-27`
+  - `archive/chat-mode-scheduling-v2-phase2-blocking-wall-guard-2026-09-27`
+  - `archive/chat-mode-scheduling-v2-phase3-2026-09-27`
+  - `archive/chat-mode-scheduling-v2-phase4-2026-09-27`: Phase-4 code,
+    evidence and reports (final head `0b5b593`)
+  - `archive/chat-mode-scheduling-v2-staging-2026-09-27`
+  - `archive/chat-mode-scheduling-v2-phase5-instructions-2026-09-27` and
+    `archive/chat-mode-scheduling-v2-phase5-operational-2026-09-27`
+- The worker branches and the pre-restack backups are in the local bundle
+  `~/.local/state/binnacle/backups/binnacle-cleanup-branches-2026-09-27.bundle`
+  (`git fetch <bundle> <branch>:<branch>` restores one). The test-suite
+  performance work is already in `master`.
 - Phase-4 report:
   `benchmarks/chat-mode-scheduling-v2/phase4-live-confirmatory-2026-09-27-r01.md`
-  and `phase4-hard-gate-matrix.json` on the Phase-4 branch.
+  and `phase4-hard-gate-matrix.json` under the Phase-4 archive tag.
 - Trial evidence: `~/.local/state/binnacle/chat-scheduling-v2/` (runs, run
   requests, completions, checkpoints).
 - Removed: the staging server, its connector and tunnel (P5-A1, record in
