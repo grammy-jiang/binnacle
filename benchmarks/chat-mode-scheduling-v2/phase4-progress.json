@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "phase": 4,
-  "status": "in_progress",
+  "status": "blocked",
   "branch": "feature/chat-mode-scheduling-v2-phase4",
   "worktree": "/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4",
   "source_branch": "feature/chat-mode-scheduling-v2-phase3",
   "audited_source_head": "3a4dfb1b248e4530fb09013976abb863c8e35eaf",
   "last_completed_step": "4.9.6",
-  "next_step": "Step 4.10 is ready now that all six independent Step 4.9 confirmatory partitions are checkpoint complete.",
+  "next_step": "Step 4.10 is blocked pending one valid A/M3 post-run micro: the owning run was infrastructure-invalid because its prelaunched 300-second job expired before chat submission, and two replacement attempts failed before submission when send_prompt timed out.",
   "dependency_audit": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase4-dependency-audit-2026-09-25-r01.json",
     "revision": "r01",
@@ -143,7 +143,8 @@
     "phase4_selected_c_timing_qualification_json": "c308d01491d66e14515f5e554913342c9e715e872ff4b4fdd68356847d9723f6",
     "phase4_confirmatory_schedule_json": "516938320afdf9dade5e03b8262a9e6ef9c95ad5d0330c20d1ce23d0ec68e734",
     "phase4_4_9_confirmatory_run_request": "c2a137fa05eb68960bfbda7443b4bd914fe3c1b2bd65dd938b3d80904e85d7ee",
-    "phase4_4_10_micro_run_request": "522b4eae38fa306bd48102444a4b68e25992f967c3e0a3a2ff809cbce11b6476"
+    "phase4_4_10_micro_run_request": "522b4eae38fa306bd48102444a4b68e25992f967c3e0a3a2ff809cbce11b6476",
+    "phase4_4_10_micro_result_json": "69884e281ac4576becfea1762dbc2a3086fefe4648bf2e5c15c748c2b1d9cf05"
   },
   "preflight_findings": {
     "p4-preflight-git-lineage": "804da7b66ddc1f0e71ddf3106790989f50a0f320de4cd3b3f0aedaf962d68461",
@@ -627,9 +628,21 @@
       "worker_branch": null
     },
     "4.10": {
-      "status": "not_started",
-      "tests": [],
-      "notes": [],
+      "status": "blocked",
+      "tests": [
+        "Step-4.10 analyzer over the manager's nine owning rows -> 8/9 deterministic correctness; duplicate calls 0; M2 min peak inflight=3 and min overlap ratio=0.375; M3 relation true 2/3; routing 9/9; tool errors 0. The sole apparent failure is A/M3 m3-20260927T000129-78a521b526.",
+        "A/M3 validity investigation -> infrastructure-invalid under the same rule used by Step 4.5: the 300-second prelaunched fixture job was already exited when job_status ran (runtime_s=300.023, waited_s=0.003) because the trial waited about 660.5 seconds from trial start to chat submission; the required wait/read relation could not be exercised.",
+        "Single permitted A/M3 replacement path -> BLOCKED before submission twice: m3-20260927T014559-cb79bdaeb4 and m3-20260927T014827-96d28656a7 both ended provenance_classification=pre_mcp_submission_failure after send_prompt timed out at 125 seconds, with no chat id and no MCP benchmark calls. No replacement slot was submitted.",
+        "uv run pytest -q focused Step-4.10/Step-4.5 integration matrix -> PASS: 115 passed in 2.65s; nproc=4; pre-run loadavg=0.67 0.76 0.87 under foreign parallel-programme load.",
+        "bash /tmp/p36-manager/isolation-check.sh -> PASS: production master clean at cbafe8aff48ac1c0e518b34b6a4f54f62f162864; config SHA-256 22f7ed9c2053c9fb20574fe4086fff797e197e2da40080e92f503213061188da; unit/profile hashes stable; blocking-wall budget key absent."
+      ],
+      "notes": [
+        "Predecessor verification PASS: all six 4.9 completion packets are pushed/clean/blocker-free and their commits are ancestors of canonical HEAD 1ae321074c1aed4d76aabf345eb0743298d98f4c; manager post-run micro result reports nine owning slots, nine exit-zero outcomes, zero routing misses, and one additional pre-submit B/M2 attempt that does not own a slot.",
+        "Frozen manager result /home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase4/runs/4.10-micro.json SHA-256 69884e281ac4576becfea1762dbc2a3086fefe4648bf2e5c15c748c2b1d9cf05; run-request SHA-256 remains 522b4eae38fa306bd48102444a4b68e25992f967c3e0a3a2ff809cbce11b6476.",
+        "Step 4.5 baseline was PASS at 9/9 correctness, M2 min peak=3/min overlap=0.375, M3 relation 3/3, routing 9/9, duplicates/tool errors 0. The eight valid Step-4.10 post-run rows preserve those mechanical conditions; B and C300 M3 both pass, so the available evidence does not show a session-wide scheduler/client/product regression.",
+        "Step 4.10 cannot be marked complete because its required A/M3 post-run evidence is unscorable, and the two safe replacement attempts both failed before submission. 4C remains blocked by the task-graph fan-in requirement 'post-run M1/M2/M3 PASS'.",
+        "No production mutation occurred. The two replacement attempts created only disposable local fixture state; both fixtures were removed/stopped by cleanup and neither attempt discovered a chat id or made benchmark MCP calls."
+      ],
       "commit": null,
       "worker_branch": null
     },

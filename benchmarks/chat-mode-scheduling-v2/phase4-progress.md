@@ -10,8 +10,9 @@ Audited source HEAD: `3a4dfb1b248e4530fb09013976abb863c8e35eaf`
 
 Last completed step: **4.9.6**
 
-Next step: **Step 4.10 is ready now that all six independent Step 4.9
-confirmatory partitions are checkpoint complete.**
+Next step: **Step 4.10 is blocked pending one valid A/M3 post-run micro.
+The owning run was infrastructure-invalid, and two safe replacement attempts
+failed before submission when send_prompt timed out.**
 
 ## Frozen Step 4.0 entry gate
 
@@ -56,7 +57,7 @@ confirmatory partitions are checkpoint complete.**
 | 4.9.4 | complete | R7 9/9 frozen; integrity PASS; commit pending |
 | 4.9.5 | complete | R8/R9 30/30 frozen; integrity PASS; commit pending |
 | 4.9.6 | complete | R10/R11 30/30 frozen; integrity PASS; commit pending |
-| 4.10 | not_started | — |
+| 4.10 | blocked | A/M3 infrastructure-invalid; replacement pre-submit path timed out twice |
 | 4C | not_started | — |
 | 4.11 | not_started | — |
 | 4.12 | not_started | — |
@@ -768,3 +769,48 @@ Step 4.6A:selected from the frozen result**.
   415 source files and all 30 deterministic archives.
 - No endpoint, Project, production config/service, lane worktree, or non-R10/R11
   confirmatory slot was mutated or rerun.
+
+## Step 4.10 post-run M1/M2/M3 sanity — BLOCKED
+
+- Predecessors are verified: all six Step 4.9 completion commits are ancestors
+  of canonical HEAD 1ae321074c1aed4d76aabf345eb0743298d98f4c, and their
+  completion packets are pushed, clean, and blocker-free.
+- Manager result
+  /home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase4/runs/4.10-micro.json
+  has SHA-256
+  69884e281ac4576becfea1762dbc2a3086fefe4648bf2e5c15c748c2b1d9cf05.
+  It contains nine owning exit-zero rows, zero routing misses, and one
+  additional B/M2 pre-submit attempt that owns no slot.
+- Mechanical analysis of the manager rows is 8/9 deterministic correctness,
+  zero duplicate non-repeat calls, zero tool errors, M2 minimum peak inflight
+  3 with minimum overlap ratio 0.375, and M3 relation true 2/3. Routing is
+  9/9 correct.
+- The apparent A/M3 failure
+  m3-20260927T000129-78a521b526 is infrastructure-invalid under the same
+  rule used by Step 4.5. Its 300-second prelaunched job was already exited at
+  job_status (runtime_s=300.023, waited_s=0.003) because about 660.5
+  seconds elapsed between trial start and chat submission. Therefore no live
+  wait interval existed and the required
+  later_read_starts_before_slow_status_ends relation could not be exercised.
+- The single permitted A/M3 replacement path could not produce a submitted
+  trial. Two safe attempts,
+  m3-20260927T014559-cb79bdaeb4 and
+  m3-20260927T014827-96d28656a7, both ended as
+  pre_mcp_submission_failure after send_prompt timed out at 125 seconds.
+  Neither discovered a chat id or made benchmark MCP calls; cleanup removed
+  the fixtures and stopped their prelaunched jobs.
+- Step 4.5's pre-run gate was 9/9 correctness, M2 minimum peak 3 / overlap
+  0.375, M3 relation 3/3, routing 9/9, and zero duplicates/tool errors. The
+  eight valid post-run rows preserve those conditions, and B/C300 M3 both
+  pass. Available evidence therefore does not show a session-wide
+  scheduler/client/product regression, but the required A/M3 end-of-session
+  evidence is missing.
+- Focused Step-4.10/Step-4.5 integration matrix: **115 passed in 2.65 s**;
+  nproc=4; pre-run load average 0.67 / 0.76 / 0.87 under foreign
+  parallel-programme load.
+- Production isolation is **PASS** at clean master
+  cbafe8aff48ac1c0e518b34b6a4f54f62f162864; config SHA-256
+  22f7ed9c2053c9fb20574fe4086fff797e197e2da40080e92f503213061188da;
+  unit/profile hashes are stable and the blocking-wall budget key is absent.
+- Step 4.10 remains blocked because the task graph requires post-run M1/M2/M3
+  PASS before 4C. No 4C focus lead is released by this checkpoint.
