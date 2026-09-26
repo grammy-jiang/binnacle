@@ -358,6 +358,9 @@ def load_trial_trace(state_dir: Path, scenario: Scenario) -> TrialTrace:
         timing.get("sent_at_epoch_s") or record.get("trial_start_epoch_s") or 0.0
     )
     wall = timing.get("wall_s")
+    settled = timing.get("settled_at_epoch_s")
+    if isinstance(settled, (int, float)) and origin > 0:
+        wall = round(max(0.0, float(settled) - origin), 3)
     timing_status = str(timing.get("status") or "unknown")
     if timing_status not in {"complete", "timeout"}:
         timing_status = "unknown"

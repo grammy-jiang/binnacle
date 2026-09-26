@@ -404,7 +404,7 @@ def test_real_evidence_loader_pairs_journal_calls_and_assigns_m2_nodes(tmp_path)
                 "status": "complete",
                 "sent_at_epoch_s": sent,
                 "settled_at_epoch_s": sent + 4,
-                "wall_s": 4.0,
+                "wall_s": 130.0,
             }
         )
     )
@@ -450,6 +450,8 @@ def test_real_evidence_loader_pairs_journal_calls_and_assigns_m2_nodes(tmp_path)
     assert metrics.eligible_read_only_overlap_ratio == 1.0
     assert metrics.tool_result_tokens == 56
     assert metrics.tool_result_bytes == 240
+    assert loaded.wall_s == 4.0
+    assert metrics.wall_s == 4.0
 
 
 def test_real_wait_interval_uses_same_rounding_as_tool_interval():

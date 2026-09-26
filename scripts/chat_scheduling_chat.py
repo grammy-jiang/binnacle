@@ -13,7 +13,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
 
-from scripts.chat_scheduling_postsend import sleep_poll_backoff, transient_read_failure
+from scripts import chat_scheduling_postsend as postsend
 from scripts.chat_scheduling_runtime import HarnessError, RestoreError, _run
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -102,7 +102,6 @@ class ProjectClient:
             raise HarnessError(
                 "chatgpt-project returned instructions without print newline"
             )
-        # chatgpt-project uses print(stored_text); remove only that print newline.
         return out[:-1]
 
     def set_instructions(self, text: str) -> None:
@@ -217,6 +216,9 @@ class ChatArtifact:
             )
         target = self.state_dir / "conversation.json"
         shutil.copy2(matches[-1], target)
+        postsend.finalize_conversation_timing(
+            self.state_dir / "chat-timing.json", target
+        )
         self.conversation_saved = True
         return target
 
@@ -314,9 +316,6 @@ def _routed_project_chat(
         "--no-wait",
     ]
 
-    # send_prompt.py's single-send failure path deliberately writes no JSON.
-    # Once it starts, a non-zero exit can mean the message posted but resolve
-    # failed, so trial sends are never automatically retried.
     _run(args, timeout=max(timeout_s + 30, 120))
     result = json.loads(result_file.read_text(encoding="utf-8"))
     conversation_id = str(result.get("conversation_id") or "")
@@ -333,9 +332,7 @@ def _routed_project_chat(
 
     sent_at = result.get("sent_at")
     if send_body_file.exists():
-        # The request recorder is written on the f/conversation POST, so its
-        # mtime preserves the old harness's Enter/send timing origin much more
-        # closely than send_prompt.py's pre-browser "sent_at" bookkeeping.
+        # The POST recorder mtime is the closest preserved send-time origin.
         sent_epoch = send_body_file.stat().st_mtime
     else:
         try:
@@ -347,14 +344,17 @@ def _routed_project_chat(
         {
             "status": "running",
             "sent_at_epoch_s": sent_epoch,
+            "turn_limit_s": timeout_s,
+            "observation_grace_s": postsend.OBSERVATION_GRACE_S,
         },
     )
     if on_posted is not None:
         on_posted()
 
-    deadline = time.monotonic() + timeout_s
+    deadline = time.monotonic() + timeout_s + postsend.OBSERVATION_GRACE_S
     last_text = ""
     transient_failures = 0
+    postsend.sleep_poll_interval(deadline, first=True)
     while time.monotonic() < deadline:
         poll_args = ["python3", str(API_READ_CHAT), conversation_id, "--text"]
         try:
@@ -363,21 +363,25 @@ def _routed_project_chat(
             transient_failures += 1
             if isinstance(exc.output, str) and exc.output.strip():
                 last_text = exc.output.strip()
-            sleep_poll_backoff(transient_failures, deadline)
+            postsend.sleep_poll_backoff(transient_failures, deadline)
             continue
         if poll.returncode == 0:
             _header, separator, reply = poll.stdout.partition("\n\n")
             if not separator:
                 raise HarnessError("read_chat.py returned an unexpected reply shape")
-            settled_epoch = time.time()
-            wall_s = round(max(0.0, settled_epoch - sent_epoch), 3)
+            first_seen_epoch = time.time()
+            observed_wall_s = round(max(0.0, first_seen_epoch - sent_epoch), 3)
             _write_timing(
                 timing_file,
                 {
                     "status": "complete",
                     "sent_at_epoch_s": sent_epoch,
-                    "settled_at_epoch_s": settled_epoch,
-                    "wall_s": wall_s,
+                    "first_seen_at_epoch_s": first_seen_epoch,
+                    "observed_at_epoch_s": first_seen_epoch,
+                    "observed_wall_s": observed_wall_s,
+                    "wall_s": observed_wall_s,
+                    "turn_limit_s": timeout_s,
+                    "observation_grace_s": postsend.OBSERVATION_GRACE_S,
                 },
             )
             result.update(
@@ -385,17 +389,20 @@ def _routed_project_chat(
                     "url": url,
                     "reply": reply.strip(),
                     "sent_at_epoch_s": sent_epoch,
-                    "settled_at_epoch_s": settled_epoch,
-                    "wall_s": wall_s,
+                    "first_seen_at_epoch_s": first_seen_epoch,
+                    "observed_at_epoch_s": first_seen_epoch,
+                    "observed_wall_s": observed_wall_s,
+                    "wall_s": observed_wall_s,
                     "submit_attempts": 1,
                 }
             )
             return result
+        failure_text = f"{poll.stdout}\n{poll.stderr}"
+        if postsend.transient_read_failure(failure_text):
+            transient_failures += 1
+            postsend.sleep_poll_backoff(transient_failures, deadline)
+            continue
         if poll.returncode != 1:
-            if transient_read_failure(f"{poll.stdout}\n{poll.stderr}"):
-                transient_failures += 1
-                sleep_poll_backoff(transient_failures, deadline)
-                continue
             raise HarnessError(
                 f"read_chat.py failed with exit code {poll.returncode}: "
                 f"{poll.stderr.strip()}"
@@ -404,7 +411,7 @@ def _routed_project_chat(
         if separator:
             last_text = tail.strip()
         transient_failures = 0
-        time.sleep(1.0)
+        postsend.sleep_poll_interval(deadline)
 
     observed_epoch = time.time()
     _write_timing(
@@ -414,6 +421,8 @@ def _routed_project_chat(
             "sent_at_epoch_s": sent_epoch,
             "observed_at_epoch_s": observed_epoch,
             "wall_s": round(max(0.0, observed_epoch - sent_epoch), 3),
+            "turn_limit_s": timeout_s,
+            "observation_grace_s": postsend.OBSERVATION_GRACE_S,
             "last_text": last_text,
         },
     )
@@ -478,9 +487,7 @@ def send_project_chat(
             return result
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
             last_error = exc
-            # Safe automatic retry is only allowed before any evidence that
-            # Enter created/submitted a conversation. Once either artifact
-            # exists, retrying could duplicate a real ChatGPT turn.
+            # Retry only before any artifact proves that a post may exist.
             submitted = url_file.exists() or (
                 timing_file is not None and timing_file.exists()
             )

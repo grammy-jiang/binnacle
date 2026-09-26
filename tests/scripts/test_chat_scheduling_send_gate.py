@@ -133,6 +133,7 @@ def test_routed_send_releases_gate_before_reply_poll(monkeypatch, tmp_path):
         events.append("posted")
 
     monkeypatch.setattr(chat, "_run", fake_run)
+    monkeypatch.setattr(chat.time, "sleep", lambda _value: None)
     result = chat.send_project_chat(
         "g-p-lane",
         "prompt",

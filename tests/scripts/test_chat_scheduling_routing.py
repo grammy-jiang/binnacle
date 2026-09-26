@@ -80,6 +80,7 @@ def test_routed_send_argv_pins_lane_project_hint_model_effort(monkeypatch, tmp_p
         )
 
     monkeypatch.setattr(chat, "_run", fake_run)
+    monkeypatch.setattr(chat.time, "sleep", lambda _value: None)
     timing = tmp_path / "chat-timing.json"
     url = tmp_path / "chat-url.txt"
     result = chat.send_project_chat(
@@ -105,7 +106,7 @@ def test_routed_send_argv_pins_lane_project_hint_model_effort(monkeypatch, tmp_p
     assert url.read_text().strip().endswith(cid)
     timing_doc = json.loads(timing.read_text())
     assert timing_doc["status"] == "complete"
-    assert timing_doc["settled_at_epoch_s"] >= timing_doc["sent_at_epoch_s"]
+    assert timing_doc["first_seen_at_epoch_s"] >= timing_doc["sent_at_epoch_s"]
     assert result["reply"] == "DONE"
     assert result["submit_attempts"] == 1
 
