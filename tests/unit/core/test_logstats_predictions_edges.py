@@ -78,10 +78,10 @@ def test_stats_shadow_render_empty_and_error_sections():
     stats.judge_results = 1
     stats.judge_network_results = 1
     stats.judge_errors["TimeoutError"] = 1
-    stats.judge_skip_reasons["simple"] = 1
+    stats.judge_skip_reasons["fast_shell"] = 1
     lines = render_predictions(stats)
     assert any("errors: TimeoutError:1" in line for line in lines)
-    assert any("skip reasons: simple:1" in line for line in lines)
+    assert any("skip reasons: fast_shell:1" in line for line in lines)
 
 
 def test_stats_shadow_tool_result_runtime_s_fallback():

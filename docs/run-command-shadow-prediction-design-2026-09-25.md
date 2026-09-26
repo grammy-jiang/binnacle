@@ -136,7 +136,7 @@ Telemetry is a dataset contract, not debug logging. Field order is fixed.
 One line is emitted per dispatch immediately after the existing dispatch decision:
 
 ```text
-event=run_command_prediction schema=1 call=<id> feature_hash=<12hex> shape_hash=<12hex> first_token_class=<class> heredoc=0|1 chain_n=<n> max_delay_s=<n> len_chars=<n> declared_wait_s=<n> declared_background=none|true|false auto_rule=<rule_hash|-> memory_bucket=short|medium|long|- memory_p90_s=<n|-> memory_n=<n> memory_source=exact|shape|none rules_bucket=short|medium|long|- rules_p90_s=<n|-> rules_hits=<ids|-> judge=queued|cached|skipped|disabled judge_skip_reason=history|simple|budget|- judge_cache=hit|miss|-
+event=run_command_prediction schema=1 call=<id> feature_hash=<12hex> shape_hash=<12hex> first_token_class=<class> heredoc=0|1 chain_n=<n> max_delay_s=<n> len_chars=<n> declared_wait_s=<n> declared_background=none|true|false auto_rule=<rule_hash|-> memory_bucket=short|medium|long|- memory_p90_s=<n|-> memory_n=<n> memory_source=exact|shape|none rules_bucket=short|medium|long|- rules_p90_s=<n|-> rules_hits=<ids|-> judge=queued|cached|skipped|disabled judge_skip_reason=history|fast_shell|fast_git_read|fast_file_read|budget|- judge_cache=hit|miss|-
 ```
 
 If the judge finishes later, exactly one result line is emitted:
@@ -211,3 +211,33 @@ The shadow engine is best-effort:
 - tests use a fake judge transport and never access the network.
 
 This experiment produces evidence only. Any future use of a prediction to alter wait/background behavior requires a separate owner decision and a new design/review.
+
+## 10. 2026-09-26 data-quality check
+
+The first deployed evaluation window contained 1,473 dispatches, all joined to
+terminal runtimes. Fifty-nine ran for at least 10 seconds and 21 ran for at
+least 60 seconds. There was no duplicate prediction per call, no prediction
+exception, and no raw command text in any journal line.
+
+Two selection defects were found and corrected:
+
+- The hand rule missed all four real sleeps of at least 10 seconds because the
+  duration regex required whitespace or end-of-string after the number. The
+  rule now recognizes shell separators and grouping/quoted command boundaries,
+  `do`/`then`, `s` and `m` suffixes, and Python `time.sleep(...)`.
+  `timeout` durations and `--timeout` options remain excluded from the
+  sleep rule.
+- The judge's old `simple` gate skipped 32 of the 59 long runs, including all
+  five longest runs (1,192-10,756 seconds), whose first-token class was
+  `other`; only 23 of the 59 long runs received any prediction. Short
+  commands that can launch long work are now judge-eligible within the
+  existing budget. Only clearly fast shapes are skipped, with explicit
+  reasons `fast_shell`, `fast_git_read`, and `fast_file_read`.
+
+`binnacle stats --predictions-csv PATH` now exports the existing privacy-safe
+joined rows for 7-day, 14-day, and scheduled evaluations without raw command
+or prompt text.
+
+There were 21 judge timeouts among 492 calls at the deployed 3,000 ms timeout;
+observed p95 judge latency was 2,478 ms. No code timeout change is made here:
+the deployment owner will raise the host configuration to 5,000 ms.

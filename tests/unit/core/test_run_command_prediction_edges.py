@@ -8,8 +8,12 @@ from binnacle.run_command_prediction import (
     CerebrasJudgeClient,
     JudgeBudget,
     JudgeResult,
+    MemoryLookup,
     Prediction,
     ShadowPredictionEngine,
+    hand_rule_prediction,
+    judge_skip_reason,
+    runtime_bucket,
 )
 from binnacle.run_command_prediction import (
     MemoryStore as Store,
@@ -55,6 +59,101 @@ def fake_ok(captured, bucket="long", p90=75.0):
         return 200, json.dumps(payload).encode(), {}
 
     return transport
+
+
+@pytest.mark.parametrize(
+    ("command", "seconds"),
+    [
+        ("sleep 35; pytest -q", 35),
+        ('bash -lc "sleep 12; ls"', 12),
+        ("(sleep 13)", 13),
+        ("{ sleep 14; }", 14),
+        ("printf x | sleep 15", 15),
+        ("printf x & sleep 16", 16),
+        ("for x in 1; do sleep 17; done", 17),
+        ("if true; then sleep 18; fi", 18),
+        ("python -c 'import time; time.sleep(25)'", 25),
+        ("sleep 20s", 20),
+        ("sleep 2m", 120),
+    ],
+)
+def test_prediction_rule_sleep_forms(command, seconds):
+    prediction, hits = hand_rule_prediction(command)
+    assert prediction == Prediction(runtime_bucket(seconds), seconds)
+    assert hits == ("sleep_ge_10",)
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "timeout 40 pytest -q",
+        "pytest --timeout 40",
+        "echo sleep 100",
+    ],
+)
+def test_prediction_rule_does_not_treat_timeout_as_sleep(command):
+    assert hand_rule_prediction(command) == (None, ())
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "python worker.py",
+        "uv sync",
+        "custom-executable --work",
+        "./scripts/build.sh",
+        "make all",
+        "tox -e py",
+        "pytest -q",
+    ],
+)
+def test_prediction_judge_selects_short_long_capable_commands(command):
+    empty = MemoryLookup(None, 0, "none", 0, 0)
+    assert (
+        judge_skip_reason(
+            feat(command),
+            empty,
+            chain_threshold=5,
+            length_threshold=500,
+            budget_available=True,
+            command=command,
+        )
+        is None
+    )
+
+
+@pytest.mark.parametrize(
+    ("command", "reason"),
+    [
+        ("cd /tmp", "fast_shell"),
+        ("ls -la", "fast_shell"),
+        ("cat README.md", "fast_shell"),
+        ("echo ok", "fast_shell"),
+        ("printf ok", "fast_shell"),
+        ("git status", "fast_git_read"),
+        ("git log -5", "fast_git_read"),
+        ("git diff --stat", "fast_git_read"),
+        ("git show HEAD", "fast_git_read"),
+        ("sed -n '1,10p' README.md", "fast_file_read"),
+        ("head -n 10 README.md", "fast_file_read"),
+        ("tail -n 10 README.md", "fast_file_read"),
+        ("wc -l README.md", "fast_file_read"),
+        ("grep needle README.md", "fast_file_read"),
+    ],
+)
+def test_prediction_judge_skips_only_clear_fast_shapes(command, reason):
+    empty = MemoryLookup(None, 0, "none", 0, 0)
+    assert (
+        judge_skip_reason(
+            feat(command),
+            empty,
+            chain_threshold=5,
+            length_threshold=500,
+            budget_available=True,
+            command=command,
+        )
+        == reason
+    )
 
 
 def test_prediction_store_load_fallback_eviction_and_invalid_inputs(tmp_path):
@@ -253,7 +352,7 @@ def test_prediction_engine_history_simple_and_cached_paths(
     simple_line = next(line for line in caplog.messages if "call=simple " in line)
     history_line = next(line for line in caplog.messages if "call=history " in line)
     cached_line = next(line for line in caplog.messages if "call=cached " in line)
-    assert "judge_skip_reason=simple" in simple_line
+    assert "judge_skip_reason=fast_shell" in simple_line
     assert "judge_skip_reason=history" in history_line
     assert "judge=cached" in cached_line
     assert "judge_cache=hit" in cached_line

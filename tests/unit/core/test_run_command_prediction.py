@@ -184,8 +184,9 @@ def test_prediction_rule_and_filter():
             chain_threshold=2,
             length_threshold=100,
             budget_available=True,
+            command="echo x",
         )
-        == "simple"
+        == "fast_shell"
     )
     complex_item = feat("echo a && echo b")
     assert (
@@ -195,6 +196,7 @@ def test_prediction_rule_and_filter():
             chain_threshold=0,
             length_threshold=100,
             budget_available=False,
+            command="echo a && echo b",
         )
         == "budget"
     )

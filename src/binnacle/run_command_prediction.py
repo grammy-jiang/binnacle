@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import logging
 import math
 import os
 import re
@@ -41,10 +40,13 @@ from binnacle.run_command_telemetry import (
     prediction_runtime_bucket as runtime_bucket,
 )
 
-log = logging.getLogger("binnacle.run_command")
 _BUCKETS = {"short", "medium", "long"}
 _SLEEP = re.compile(
-    r"(?i)(?:^|(?:&&|\|\||;|\n)\s*)sleep\s+(\d+(?:\.\d+)?)(?:s)?(?:\s|$)"
+    r'(?ix)(?:^|(?:&&|\|\||[;|&({"\'])\s*|\b(?:do|then)\s+)sleep\s+'
+    r'(\d+(?:\.\d+)?)([sm]?)(?=$|[\s;|&)}"\'])'
+)
+_FAST_SKIP = re.compile(
+    r"(?ix)^(?:(?P<fast_shell>cd|ls|cat|echo|printf)(?:\s|$)|(?P<fast_git_read>git(?:\s+(?:-C\s+\S+|--no-pager))*\s+(?:status|log|diff|show)\b)|(?P<fast_file_read>sed\s+-n\s+\S+\s+\S+|(?:head|tail|wc)\b.*\s+\S+|grep\b(?:\s+-\S+)*\s+\S+\s+\S+))"
 )
 _CREDENTIAL = re.compile(
     r"(?i)\b([A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL)[A-Z0-9_]*)"
@@ -91,8 +93,7 @@ def sanitize_command(command: str, *, max_chars: int = 1200) -> str:
 
 
 def _pctl(values: list[float], q: float) -> float:
-    ordered = sorted(values)
-    return float(ordered[max(0, math.ceil(q * len(ordered)) - 1)])
+    return float(sorted(values)[max(0, math.ceil(q * len(values)) - 1)])
 
 
 class MemoryStore:
@@ -127,10 +128,8 @@ class MemoryStore:
         self.root.mkdir(parents=True, exist_ok=True, mode=0o700)
         os.chmod(self.root, 0o700)
         tmp = self.path.with_suffix(".tmp")
-        tmp.write_text(
-            json.dumps({"version": 1, **self._data}, separators=(",", ":")),
-            encoding="utf-8",
-        )
+        payload = json.dumps({"version": 1, **self._data}, separators=(",", ":"))
+        tmp.write_text(payload, encoding="utf-8")
         os.chmod(tmp, 0o600)
         os.replace(tmp, self.path)
 
@@ -142,9 +141,8 @@ class MemoryStore:
         for values, source in ((exact, "exact"), (shape, "shape")):
             if len(values) >= min_samples:
                 p90 = _pctl(values, 0.90)
-                return MemoryLookup(
-                    Prediction(runtime_bucket(p90), p90), len(values), source, *counts
-                )
+                prediction = Prediction(runtime_bucket(p90), p90)
+                return MemoryLookup(prediction, len(values), source, *counts)
         return MemoryLookup(None, max(counts), "none", *counts)
 
     def local_stats(self, features: CommandFeatures) -> dict[str, Any]:
@@ -211,8 +209,17 @@ class MemoryStore:
 
 
 def hand_rule_prediction(command: str) -> tuple[Prediction | None, tuple[str, ...]]:
-    delays = [float(value) for value in _SLEEP.findall(command) if float(value) >= 10]
-    if not delays:
+    delays = [
+        float(value) * (60 if unit.lower() == "m" else 1)
+        for value, unit in _SLEEP.findall(command)
+    ]
+    delays.extend(
+        map(
+            float,
+            re.findall(r"(?i)\btime\.sleep\s*\(\s*(\d+(?:\.\d+)?)\s*\)", command),
+        )
+    )
+    if not (delays := [value for value in delays if value >= 10]):
         return None, ()
     p90 = max(delays)
     return Prediction(runtime_bucket(p90), p90), ("sleep_ge_10",)
@@ -225,15 +232,16 @@ def judge_skip_reason(
     chain_threshold: int,
     length_threshold: int,
     budget_available: bool,
+    command: str | None = None,
 ) -> str | None:
     if memory.prediction is not None:
         return "history"
-    if not (
-        features.heredoc
-        or features.chain_n > chain_threshold
-        or features.len_chars > length_threshold
-    ):
-        return "simple"
+    complex_shape = features.heredoc or features.chain_n > chain_threshold
+    complex_shape |= features.len_chars > length_threshold
+    if not complex_shape and command is not None:
+        match = _FAST_SKIP.match(command.lstrip())
+        if match is not None:
+            return match.lastgroup
     return None if budget_available else "budget"
 
 
@@ -294,15 +302,10 @@ class CerebrasJudgeClient:
                 self.settings.judge_timeout_ms / 1000,
             )
             if status >= 400:
-                return JudgeResult(
-                    None,
-                    None,
-                    (time.perf_counter() - started) * 1000,
-                    error=f"http_{status}",
-                    retry_after_s=_reset_seconds(response_headers)
-                    if status == 429
-                    else None,
-                )
+                error = f"http_{status}"
+                retry = _reset_seconds(response_headers) if status == 429 else None
+                latency = (time.perf_counter() - started) * 1000
+                return JudgeResult(None, None, latency, None, None, error, retry)
             decoded = json.loads(payload)
             answer = json.loads(decoded["choices"][0]["message"]["content"])
             bucket, p90 = str(answer["bucket"]), float(answer["p90_s"])
@@ -324,9 +327,8 @@ class CerebrasJudgeClient:
             error = "ParseError"
         except RuntimeError as exc:
             error = str(exc).replace(" ", "_")[:48]
-        return JudgeResult(
-            None, None, (time.perf_counter() - started) * 1000, error=error
-        )
+        latency = (time.perf_counter() - started) * 1000
+        return JudgeResult(None, None, latency, error=error)
 
 
 class ShadowPredictionEngine:
@@ -402,6 +404,7 @@ class ShadowPredictionEngine:
                 chain_threshold=self.settings.judge_complex_chain_threshold,
                 length_threshold=self.settings.judge_complex_length_threshold,
                 budget_available=True,
+                command=command,
             )
             state = "skipped"
             if skip is None:
@@ -472,11 +475,8 @@ class ShadowPredictionEngine:
             self._log_judge(call_id, result)
 
     def _log_judge(self, call_id: str, result: JudgeResult) -> None:
-        log_shadow_judge(
-            call_id,
-            self.settings.judge_model.replace(" ", "_")[:80],
-            result,
-        )
+        model = self.settings.judge_model.replace(" ", "_")[:80]
+        log_shadow_judge(call_id, model, result)
 
     def record_runtime(self, features: CommandFeatures, runtime_s: float) -> None:
         if not self.enabled or self.store is None or self.executor is None:
