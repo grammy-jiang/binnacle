@@ -11,10 +11,18 @@ import random
 import statistics
 from collections import defaultdict
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+if __package__ in {None, ""}:  # pragma: no cover - direct script execution
+    import sys
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from scripts.chat_scheduling_confirmatory_population import (
+    Trial,
+    load_frozen_population,
+)
 
 SCHEMA = 1
 ALLOWED_BUDGETS = (120, 300, 600)
@@ -48,18 +56,6 @@ REQUIRED_GATES = {
 GATE_SPECS = tuple((gate, family, "REQUIRED") for family, gates in REQUIRED_GATES.items() for gate in gates) + (("long_job_status_call_result_burden_reduction_ge_10_percent", "efficiency", "DIAGNOSTIC_TARGET"),)
 GATE_SPEC = {gate: (family, kind) for gate, family, kind in GATE_SPECS}
 EPS = 1e-12
-@dataclass(frozen=True)
-class Trial:
-    run_id: str
-    scenario: str
-    arm: str
-    endpoint: str | None
-    budget: int | None
-    repeat: int | None
-    slot_id: str | None
-    order: tuple[float, str]
-    metrics: dict[str, Any] | None
-    evidence_error: bool
 Assigned = tuple[dict[str, Any], Trial | None]
 def _load(path: Path) -> dict[str, Any]:
     value = json.loads(path.read_text(encoding="utf-8"))
@@ -197,7 +193,7 @@ def _submitted(record: Mapping[str, Any]) -> bool:
         value = value.lower().replace("-", "_")
         if value in {"not_submitted", "pre_submission", "created", "aborted_before_submission"}:
             return False
-        if value in {"submitted", "accepted", "running", "completed", "failed", "timeout", "interrupted"}:
+        if value in {"submitted", "accepted", "running", "completed", "failed", "failed_after_submission", "timeout", "interrupted"}:
             return True
     chat = record.get("chat")
     return isinstance(chat, Mapping) and (
@@ -205,57 +201,6 @@ def _submitted(record: Mapping[str, Any]) -> bool:
         or chat.get("chat_id") is not None
         or chat.get("submitted") is True
     )
-def _order(record: Mapping[str, Any], run_id: str) -> tuple[float, str]:
-    for key in ("submission_epoch_s", "submitted_epoch_s", "trial_start_epoch_s"):
-        value = record.get(key)
-        if isinstance(value, (int, float)) and not isinstance(value, bool):
-            return float(value), run_id
-    for key in ("submitted_at", "started_at"):
-        value = record.get(key)
-        if isinstance(value, str):
-            try:
-                return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp(), run_id
-            except ValueError:
-                pass
-    return math.inf, run_id
-def _int(value: Any) -> int | None:
-    if isinstance(value, int) and not isinstance(value, bool):
-        return value
-    if isinstance(value, str) and value.isdigit():
-        return int(value)
-    return None
-def _discover(root: Path) -> list[Trial]:
-    found: list[Trial] = []
-    for trial_path in sorted(root.glob("*/trial.json")) if root.exists() else []:
-        record = _load(trial_path)
-        if not _submitted(record):
-            continue
-        run_id = str(record.get("run_id") or trial_path.parent.name)
-        scenario, arm = record.get("scenario_id"), record.get("arm")
-        if not isinstance(scenario, str) or not isinstance(arm, str):
-            continue
-        metrics_path = trial_path.parent / "metrics.json"
-        metrics = _load(metrics_path) if metrics_path.exists() else None
-        evidence = bool(record.get("evidence_integrity_error"))
-        endpoint_evidence = trial_path.parent / "endpoint-evidence.json"
-        if endpoint_evidence.exists():
-            evidence |= bool(_load(endpoint_evidence).get("evidence_integrity_error"))
-        slot_id = record.get("schedule_slot_id", record.get("confirmatory_slot_id", record.get("slot_id")))
-        found.append(
-            Trial(
-                run_id,
-                scenario,
-                arm,
-                record.get("endpoint_id") if isinstance(record.get("endpoint_id"), str) else None,
-                _int(record.get("budget_s")),
-                _int(record.get("schedule_repeat", record.get("repeat"))),
-                slot_id if isinstance(slot_id, str) else None,
-                _order(record, run_id),
-                metrics,
-                evidence,
-            )
-        )
-    return sorted(found, key=lambda trial: trial.order)
 def _assign(expected: Sequence[dict[str, Any]], trials: Sequence[Trial], required: bool) -> tuple[list[Assigned], list[str], list[str]]:
     by_id = {slot["slot_id"]: slot for slot in expected}
     by_key = {(slot["scenario_id"], slot["repeat"], slot["arm"]): slot for slot in expected}
@@ -296,12 +241,6 @@ def _assign(expected: Sequence[dict[str, Any]], trials: Sequence[Trial], require
             issues.append(f"{slot['slot_id']}: replacement/duplicate submissions: " + ", ".join(t.run_id for t in owned[1:]))
         assigned.append((slot, owner))
     return assigned, issues, [trial.run_id for trial in still]
-def _h_slots() -> list[dict[str, Any]]:
-    return [
-        {"slot_id": _slot_id(s, r, "H"), "scenario_id": s, "repeat": r, "arm": "H", "endpoint_id": "H", "budget_s": 10}
-        for s, count in H_REPEATS.items()
-        for r in range(1, count + 1)
-    ]
 def _metrics(item: Assigned) -> dict[str, Any] | None:
     trial = item[1]
     return None if trial is None or trial.evidence_error else trial.metrics
@@ -364,12 +303,17 @@ def _bootstrap(rows: Sequence[Assigned], seed: int, samples: int) -> dict[str, A
     rng = random.Random(seed ^ 0xC0A4B0057)  # nosec B311 - deterministic bootstrap
     medians = [statistics.median(ratios[rng.randrange(len(ratios))] for _ in ratios) for _ in range(samples)]
     return {"pair_count": len(ratios), "expected_pair_count": 53, "complete_population": len(ratios) == 53, "median_ratio": _median(ratios), "ci_95_lower": _pct(medians, 0.025), "ci_95_upper": _pct(medians, 0.975), "bootstrap_samples": samples, "missing_pairs": missing}
-def _analyze(schedule: Mapping[str, Any], runs_root: Path, samples: int) -> dict[str, Any]:
-    trials = _discover(runs_root)
-    main, issues, extras = _assign(_slots(schedule), [t for t in trials if t.arm in MAIN_ARMS], True)
-    h, h_issues, h_extras = _assign(_h_slots(), [t for t in trials if t.arm == "H"], False)
-    issues.extend(f"unscheduled submitted A/B/C run: {run_id}" for run_id in extras)
-    integrity = {"passed": not issues, "expected_main_slots": 160, "submitted_main_slots": sum(t is not None for _, t in main), "scorable_main_slots": sum(_metrics(row) is not None for row in main), "issues": issues, "unscheduled_main_run_ids": extras, "h": {"expected_slots": 10, "submitted_slots": sum(t is not None for _, t in h), "scorable_slots": sum(_metrics(row) is not None for row in h), "issues": h_issues, "unscheduled_run_ids": h_extras}}
+def _analyze(schedule: Mapping[str, Any], schedule_path: Path, runs_root: Path, samples: int) -> dict[str, Any]:
+    trials, population = load_frozen_population(
+        schedule_path=schedule_path,
+        runs_root=runs_root,
+        expected_slots=_slots(schedule),
+        submitted=_submitted,
+    )
+    main, issues, extras = _assign(_slots(schedule), trials, True)
+    issues.extend(f"unexpected frozen A/B/C owner: {run_id}" for run_id in extras)
+    h: list[Assigned] = []
+    integrity = {"passed": not issues, "expected_main_slots": 160, "submitted_main_slots": sum(t is not None for _, t in main), "scorable_main_slots": sum(_metrics(row) is not None for row in main), "issues": issues, "unscheduled_main_run_ids": extras, "h": {"expected_slots": 0, "submitted_slots": 0, "scorable_slots": 0, "issues": [], "unscheduled_run_ids": [], "note": "H is a separate historical comparator and is not scanned into the confirmatory gate population."}}
     aggregate = {"A": _arm_summary(main, "A", 53, 53), "B": _arm_summary(main, "B", 53, 53), "C": _arm_summary(main, "C", 54, 53), "H": _arm_summary(h, "H", 10, 9)}
     scenarios = {s: {a: {"median_wall_s": _median_for(main, a, (s,)), "ratio_vs_a": _ratio(_median_for(main, a, (s,)), _median_for(main, "A", (s,))), "same_prompt_completion_rate": _completion_for(main, a, (s,))} for a in MAIN_ARMS} for s in PERFORMANCE_SCENARIOS}
     categories = {name: {"scenarios": list(ss), "arms": {a: {"median_wall_s": _median_for(main, a, ss), "ratio_vs_a": _ratio(_median_for(main, a, ss), _median_for(main, "A", ss)), "same_prompt_completion_rate": _completion_for(main, a, ss)} for a in MAIN_ARMS}} for name, ss in CATEGORY_SCENARIOS.items()}
@@ -378,7 +322,7 @@ def _analyze(schedule: Mapping[str, Any], runs_root: Path, samples: int) -> dict
     cont = {arm: sum(int(m.get("manual_continuations_required", 0)) for row in cont_rows if row[0]["arm"] == arm and (m := _metrics(row)) is not None) for arm in ("A", "C")}
     delta = lambda c, a: round(100 * (c - a), 6) if isinstance(c, (int, float)) and isinstance(a, (int, float)) else None
     reliability = {"same_prompt_completion_delta_pp_c_minus_a": delta(aggregate["C"]["same_prompt_completion_rate"], aggregate["A"]["same_prompt_completion_rate"]), "interruption_rate_delta_pp_c_minus_a": delta(aggregate["C"]["interruption_rate_submitted"], aggregate["A"]["interruption_rate_submitted"]), "premature_handoff_delta_pp_c_minus_a": delta(aggregate["C"]["premature_handoff_rate"], aggregate["A"]["premature_handoff_rate"]), "correctness_delta_pp_c_minus_a": delta(aggregate["C"]["correctness_rate"], aggregate["A"]["correctness_rate"]), "continuation_prone_scenarios": sorted(CONTINUATION_SCENARIOS), "a_required_continuations": cont["A"], "c_required_continuations": cont["C"], "required_continuation_reduction_percent": round(100 * (cont["A"] - cont["C"]) / cont["A"], 6) if cont["A"] else None}
-    return {"slot_integrity": integrity, "aggregate_by_arm": aggregate, "scenario_medians": scenarios, "category_medians": categories, "target_cohort_medians": cohorts, "paired_c_a_bootstrap": _bootstrap(main, int(schedule["seed"]), samples), "reliability_deltas": reliability}
+    return {"population": population, "slot_integrity": integrity, "aggregate_by_arm": aggregate, "scenario_medians": scenarios, "category_medians": categories, "target_cohort_medians": cohorts, "paired_c_a_bootstrap": _bootstrap(main, int(schedule["seed"]), samples), "reliability_deltas": reliability}
 def _computed(a: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
     arm_a, c, rel, cohorts, boot = a["aggregate_by_arm"]["A"], a["aggregate_by_arm"]["C"], a["reliability_deltas"], a["target_cohort_medians"], a["paired_c_a_bootstrap"]
     complete = bool(a["slot_integrity"]["passed"] and arm_a["scored_performance_slots"] == 53 and c["scored_performance_slots"] == 53)
@@ -436,7 +380,7 @@ def _review_gates(payload: Mapping[str, Any], source: str) -> dict[str, dict[str
 def build_gate_matrix(*, schedule_path: Path, runs_root: Path, correctness_path: Path, performance_path: Path, reliability_path: Path, efficiency_path: Path, bootstrap_samples: int = 10_000) -> dict[str, Any]:
     schedule = _load(schedule_path)
     validate_schedule(schedule)
-    analytics = _analyze(schedule, runs_root, bootstrap_samples)
+    analytics = _analyze(schedule, schedule_path, runs_root, bootstrap_samples)
     computed = _computed(analytics)
     paths = {"correctness_safety": correctness_path, "performance_bootstrap": performance_path, "reliability_provenance": reliability_path, "scheduling_efficiency": efficiency_path}
     review_records: dict[str, list[dict[str, Any]]] = defaultdict(list)

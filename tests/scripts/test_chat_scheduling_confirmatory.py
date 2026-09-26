@@ -11,134 +11,17 @@ from scripts.chat_scheduling_confirmatory import (
     build_schedule,
     validate_schedule,
 )
+from tests.chat_scheduling_confirmatory_support import (
+    create_trial,
+    populate_main_runs,
+    write_json,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def write_json(path: Path, payload: dict) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(payload, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
-
-
 def all_slots(schedule: dict) -> list[dict]:
     return [slot for block in schedule["blocks"] for slot in block["slots"]]
-
-
-def metric(
-    slot: dict,
-    run_id: str,
-    *,
-    wall_s: float,
-    same_prompt: bool,
-    continuations: int,
-    interrupted: bool = False,
-    correctness: bool = True,
-) -> dict:
-    arm = slot["arm"]
-    return {
-        "schema_version": 1,
-        "scenario_id": slot["scenario_id"],
-        "run_id": run_id,
-        "arm": arm,
-        "wall_s": wall_s,
-        "correctness_passed": correctness,
-        "oracle_failures": [] if correctness else ["synthetic failure"],
-        "same_prompt_completion": same_prompt,
-        "premature_handoff": False,
-        "budget_exhaustion_handoff": slot["scenario_id"] == "R12",
-        "manual_continuations_required": continuations,
-        "interrupted": interrupted,
-        "interruption_kind": "timeout" if interrupted else None,
-        "tool_calls": 10,
-        "duplicate_calls": 0,
-        "redundant_exact_calls": 0,
-        "job_status_calls": 2,
-        "positive_job_status_calls": 1,
-        "blocking_wall_s": 1.0,
-        "avoidable_idle_wall_s": 1.0 if arm == "C" else 5.0,
-        "read_only_peak_inflight": 3,
-        "eligible_read_only_calls": 10,
-        "overlapped_eligible_read_only_calls": 9 if arm == "C" else 5,
-        "eligible_read_only_overlap_ratio": 0.9 if arm == "C" else 0.5,
-        "tool_result_tokens": 100,
-        "tool_result_bytes": 500,
-        "tool_errors": 0,
-    }
-
-
-def create_trial(
-    runs_root: Path,
-    slot: dict,
-    *,
-    index: int,
-    wall_s: float,
-    same_prompt: bool,
-    continuations: int,
-    run_id: str | None = None,
-    explicit_slot: bool = True,
-) -> str:
-    run_id = run_id or f"run-{index:04d}"
-    run_dir = runs_root / run_id
-    record = {
-        "schema_version": 1,
-        "run_id": run_id,
-        "scenario_id": slot["scenario_id"],
-        "arm": slot["arm"],
-        "endpoint_id": slot["endpoint_id"],
-        "budget_s": slot["budget_s"],
-        "repeat": slot["repeat"],
-        "submission_status": "submitted",
-        "submission_epoch_s": float(index),
-        "evidence_integrity_error": False,
-    }
-    if explicit_slot:
-        record["schedule_slot_id"] = slot["slot_id"]
-    write_json(run_dir / "trial.json", record)
-    write_json(
-        run_dir / "metrics.json",
-        metric(
-            slot,
-            run_id,
-            wall_s=wall_s,
-            same_prompt=same_prompt,
-            continuations=continuations,
-        ),
-    )
-    return run_id
-
-
-def populate_main_runs(runs_root: Path, schedule: dict) -> None:
-    continuation_prone = {"R5", "R6", "R7", "R10"}
-    for index, slot in enumerate(all_slots(schedule), start=1):
-        arm = slot["arm"]
-        scenario_id = slot["scenario_id"]
-        if scenario_id == "R12":
-            wall_s = 330.0
-            same_prompt = False
-            continuations = 1
-        elif arm == "A":
-            wall_s = 100.0
-            continuations = 1 if scenario_id in continuation_prone else 0
-            same_prompt = continuations == 0
-        elif arm == "B":
-            wall_s = 85.0
-            same_prompt = True
-            continuations = 0
-        else:
-            wall_s = 70.0
-            same_prompt = True
-            continuations = 0
-        create_trial(
-            runs_root,
-            slot,
-            index=index,
-            wall_s=wall_s,
-            same_prompt=same_prompt,
-            continuations=continuations,
-        )
 
 
 def h_slots() -> list[dict]:
@@ -340,8 +223,8 @@ def test_gate_matrix_aggregates_all_arms_and_diagnostic_miss_is_non_gating(
     assert aggregate["A"]["expected_performance_slots"] == 53
     assert aggregate["C"]["same_prompt_completions"] == 53
     assert aggregate["C"]["same_prompt_completion_rate"] == 1.0
-    assert aggregate["H"]["submitted_slots"] == 10
-    assert aggregate["H"]["scored_performance_slots"] == 9
+    assert aggregate["H"]["submitted_slots"] == 0
+    assert matrix["analytics"]["slot_integrity"]["h"]["expected_slots"] == 0
 
     bootstrap = matrix["analytics"]["paired_c_a_bootstrap"]
     assert bootstrap["complete_population"] is True
@@ -363,7 +246,7 @@ def test_gate_matrix_aggregates_all_arms_and_diagnostic_miss_is_non_gating(
     assert diagnostic["status"] == "TARGET_MISSED"
 
 
-def test_first_submission_owns_slot_and_duplicate_is_integrity_failure(
+def test_foreign_submitted_run_does_not_change_frozen_population(
     tmp_path: Path,
 ):
     schedule = build_schedule(11, 300, 0)
@@ -394,9 +277,45 @@ def test_first_submission_owns_slot_and_duplicate_is_integrity_failure(
     )
 
     integrity = matrix["analytics"]["slot_integrity"]
-    assert integrity["passed"] is False
-    assert any(duplicate_id in issue for issue in integrity["issues"])
-    assert matrix["all_required_gates_pass"] is False
+    assert integrity["passed"] is True
+    assert integrity["submitted_main_slots"] == 160
+    assert integrity["scorable_main_slots"] == 160
+    assert duplicate_id not in integrity["unscheduled_main_run_ids"]
+    assert matrix["analytics"]["population"]["total_owners"] == 160
+
+
+def test_failed_after_submission_is_submitted_frozen_owner(tmp_path: Path):
+    schedule = build_schedule(14, 300, 0)
+    runs_root = tmp_path / "runs"
+    populate_main_runs(runs_root, schedule)
+    checkpoint_path = tmp_path / "phase4-confirmatory-R7-checkpoint.json"
+    checkpoint = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+    owner = next(
+        row for row in checkpoint["canonical_slots"] if row["slot_id"] == "R7-r02-B"
+    )
+    trial_path = Path(owner["state_dir"]) / "trial.json"
+    trial = json.loads(trial_path.read_text(encoding="utf-8"))
+    trial["submission_status"] = "failed_after_submission"
+    write_json(trial_path, trial)
+
+    schedule_path = tmp_path / "schedule.json"
+    write_json(schedule_path, schedule)
+    reviews = review_files(tmp_path)
+    matrix = build_gate_matrix(
+        schedule_path=schedule_path,
+        runs_root=runs_root,
+        correctness_path=reviews["correctness"],
+        performance_path=reviews["performance"],
+        reliability_path=reviews["reliability"],
+        efficiency_path=reviews["efficiency"],
+        bootstrap_samples=100,
+    )
+
+    integrity = matrix["analytics"]["slot_integrity"]
+    assert integrity["passed"] is True
+    assert integrity["submitted_main_slots"] == 160
+    assert integrity["scorable_main_slots"] == 160
+    assert matrix["analytics"]["aggregate_by_arm"]["B"]["submitted_slots"] == 53
 
 
 def test_missing_metric_is_not_silently_dropped_from_confirmatory_population(
