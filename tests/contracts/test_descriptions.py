@@ -52,11 +52,15 @@ def test_job_status_keeps_the_only_needed_clause_and_wait_contract():
     assert "smaller effective turn budget" in d
     assert "waiting never kills a still-running job" in d
     assert "wait_seconds=50" not in d and "instead of polling" not in d
+    # 2026-09-27: 47% of solo polls outside manager chats used waits under 50 s;
+    # the fact that a wait ends when the job exits is the contract that fixes it.
+    assert "returns as soon as the job exits" in d
 
 
 def test_run_command_keeps_not_killed_and_no_job_facts():
     d = descriptions()["run_command"].lower()
     assert "not killed" in d and "created no job" in d
+    assert "returns as soon as the command finishes" in d
     assert "several commands can go in one call" in d
     # workflow wording moved to the Project instructions
     assert "once at the end" not in d and "do not poll" not in d
@@ -112,3 +116,18 @@ def test_project_rules_own_the_workflow():
     ):
         assert phrase in rules, phrase
     assert tokens(rules) < 260
+
+
+def test_wait_parameters_state_that_a_wait_ends_early():
+    """2026-09-27: the wait facts live in the parameters (parameter facts)."""
+
+    async def run():
+        async with Client(server.mcp) as c:
+            return {t.name: t.input_schema["properties"] for t in await c.list_tools()}
+
+    props = asyncio.run(run())
+    job_wait = props["job_status"]["wait_seconds"]["description"].lower()
+    run_wait = props["run_command"]["wait_seconds"]["description"].lower()
+    assert "returns as soon as it exits" in job_wait
+    assert "returns as soon as it finishes" in run_wait
+    assert "wait_seconds=50" not in job_wait + run_wait

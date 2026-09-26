@@ -1,0 +1,311 @@
+{
+  "since": "2026-09-14",
+  "until": null,
+  "scope": "ChatGPT (tunnel-matched)",
+  "tool_calls": 42847,
+  "tools": {
+    "run_command": 22494,
+    "read_file": 9050,
+    "job_status": 6310,
+    "search_text": 4225,
+    "list_files": 602,
+    "stop_job": 101,
+    "async_probe_wait": 44,
+    "async_probe_seed": 7,
+    "async_probe_echo": 5,
+    "async_probe_nondestructive_wait": 4,
+    "-q": 3,
+    "--help": 1,
+    "async_probe_capabilities": 1
+  },
+  "days": {
+    "09/14/26": 2321,
+    "09/15/26": 1860,
+    "09/16/26": 333,
+    "09/17/26": 1538,
+    "09/18/26": 1761,
+    "09/19/26": 3992,
+    "09/20/26": 2432,
+    "09/21/26": 1163,
+    "09/22/26": 5472,
+    "09/23/26": 3864,
+    "09/24/26": 4666,
+    "09/25/26": 8234,
+    "09/26/26": 3277,
+    "09/27/26": 1934
+  },
+  "job_status": {
+    "listings": 122,
+    "calls": 6188,
+    "jobs": 2658,
+    "median_per_job": 1,
+    "max_per_job": 77
+  },
+  "param_uptake": {
+    "run_command.wait_seconds": 21571,
+    "run_command.tail_lines": 10295,
+    "search_text.context_lines": 3675,
+    "job_status.tail_lines": 4931,
+    "job_status.wait_seconds": 4772,
+    "search_text.line_numbers": 3836
+  },
+  "read_file": {
+    "calls": 9050,
+    "distinct_files": 3568,
+    "reads_per_file_max": 427,
+    "whole_file_reads": 3043,
+    "span_median": 96,
+    "span_p90": 320,
+    "longest_same_file_run": 20,
+    "sequential_continuations": 149
+  },
+  "run_command": {
+    "background": 1611,
+    "calls": 22489,
+    "traits": {
+      "python-heredoc": 5429,
+      "git": 4911,
+      "grep": 1280,
+      "hand-tail/head": 1221,
+      "hand-head": 826,
+      "grep-on-files": 515,
+      "hand-tail": 417,
+      "ps/pgrep": 310
+    }
+  },
+  "grep": {
+    "direct_on_files": 613,
+    "pipeline_filter": 1139
+  },
+  "turns": {
+    "turns": 496,
+    "calls": 16066,
+    "calls_per_turn_median": 10,
+    "calls_per_turn_p90": 106,
+    "calls_per_turn_max": 374,
+    "gap_median_s": 11.3,
+    "gap_p90_s": 55.2
+  },
+  "git_subcommands": {
+    "status": 2929,
+    "diff": 2200,
+    "log": 1415,
+    "rev-parse": 1274,
+    "show": 959,
+    "add": 717,
+    "commit": 593,
+    "worktree": 309,
+    "branch": 280,
+    "grep": 195,
+    "merge": 175,
+    "ls-files": 77,
+    "rev-list": 65,
+    "push": 62,
+    "fetch": 47,
+    "remote": 22,
+    "rebase": 21,
+    "switch": 19,
+    "config": 19,
+    "checkout": 17,
+    "cat-file": 16,
+    "init": 16,
+    "restore": 15,
+    "ls-tree": 10,
+    "reset": 9,
+    "stash": 8,
+    "tag": 7,
+    "clone": 5,
+    "describe": 4,
+    "blame": 3
+  },
+  "results": {
+    "calls_with_sizes": 42501,
+    "est_tokens_total": 53266975,
+    "by_tool": {
+      "run_command": {
+        "calls": 22367,
+        "est_tokens_median": 223,
+        "est_tokens_p90": 2055,
+        "est_tokens_max": 21138,
+        "est_tokens_total": 16553923,
+        "truncated": 810,
+        "errors": 13
+      },
+      "read_file": {
+        "calls": 8950,
+        "est_tokens_median": 1035,
+        "est_tokens_p90": 3643,
+        "est_tokens_max": 6917,
+        "est_tokens_total": 13869203,
+        "truncated": 300,
+        "errors": 100
+      },
+      "job_status": {
+        "calls": 6266,
+        "est_tokens_median": 499,
+        "est_tokens_p90": 2068,
+        "est_tokens_max": 195924,
+        "est_tokens_total": 10897111,
+        "truncated": 0,
+        "errors": 44
+      },
+      "search_text": {
+        "calls": 4186,
+        "est_tokens_median": 1218,
+        "est_tokens_p90": 7329,
+        "est_tokens_max": 162398,
+        "est_tokens_total": 11569218,
+        "truncated": 272,
+        "errors": 30
+      },
+      "list_files": {
+        "calls": 570,
+        "est_tokens_median": 268,
+        "est_tokens_p90": 1539,
+        "est_tokens_max": 14080,
+        "est_tokens_total": 372817,
+        "truncated": 16,
+        "errors": 32
+      },
+      "stop_job": {
+        "calls": 101,
+        "est_tokens_median": 27,
+        "est_tokens_p90": 27,
+        "est_tokens_max": 30,
+        "est_tokens_total": 2720,
+        "truncated": 0,
+        "errors": 0
+      },
+      "async_probe_wait": {
+        "calls": 44,
+        "est_tokens_median": 32,
+        "est_tokens_p90": 34,
+        "est_tokens_max": 35,
+        "est_tokens_total": 1430,
+        "truncated": 0,
+        "errors": 0
+      },
+      "async_probe_seed": {
+        "calls": 7,
+        "est_tokens_median": 27,
+        "est_tokens_p90": 31,
+        "est_tokens_max": 31,
+        "est_tokens_total": 198,
+        "truncated": 0,
+        "errors": 0
+      },
+      "async_probe_echo": {
+        "calls": 5,
+        "est_tokens_median": 27,
+        "est_tokens_p90": 27,
+        "est_tokens_max": 27,
+        "est_tokens_total": 134,
+        "truncated": 0,
+        "errors": 0
+      },
+      "async_probe_nondestructive_wait": {
+        "calls": 4,
+        "est_tokens_median": 31,
+        "est_tokens_p90": 33,
+        "est_tokens_max": 33,
+        "est_tokens_total": 126,
+        "truncated": 0,
+        "errors": 0
+      },
+      "async_probe_capabilities": {
+        "calls": 1,
+        "est_tokens_median": 95,
+        "est_tokens_p90": 95,
+        "est_tokens_max": 95,
+        "est_tokens_total": 95,
+        "truncated": 0,
+        "errors": 0
+      }
+    },
+    "errors_by_class": {
+      "read_file: ToolError": 100,
+      "job_status: ToolError": 44,
+      "list_files: ToolError": 32,
+      "search_text: ToolError": 30,
+      "run_command: ToolError": 13,
+      "-q: NotFoundError": 3,
+      "--help: NotFoundError": 1
+    },
+    "latency_ms": {
+      "run_command": {
+        "median": 117.32,
+        "p90": 3373.98
+      },
+      "read_file": {
+        "median": 1.75,
+        "p90": 15.48
+      },
+      "job_status": {
+        "median": 7011.32,
+        "p90": 50020.47
+      },
+      "search_text": {
+        "median": 10.94,
+        "p90": 39.83
+      },
+      "list_files": {
+        "median": 2.66,
+        "p90": 26.95
+      },
+      "stop_job": {
+        "median": 53.71,
+        "p90": 189.82
+      },
+      "async_probe_wait": {
+        "median": 4011.19,
+        "p90": 10000.61
+      },
+      "async_probe_seed": {
+        "median": 2.87,
+        "p90": 1003.01
+      },
+      "async_probe_echo": {
+        "median": 1.98,
+        "p90": 3.54
+      },
+      "async_probe_nondestructive_wait": {
+        "median": 4002.26,
+        "p90": 4002.95
+      },
+      "-q": {
+        "median": 0.35,
+        "p90": 0.45
+      },
+      "--help": {
+        "median": 0.44,
+        "p90": 0.44
+      },
+      "async_probe_capabilities": {
+        "median": 1.56,
+        "p90": 1.56
+      }
+    },
+    "became_jobs": 2783,
+    "job_exits": {
+      "0": 9289,
+      "1": 751,
+      "2": 97,
+      "signal 15": 35,
+      "5": 12,
+      "127": 10,
+      "143": 9,
+      "4": 8,
+      "128": 2,
+      "6": 1,
+      "124": 1,
+      "101": 1,
+      "3": 1
+    }
+  },
+  "turns_journal": {
+    "turns": 1190,
+    "calls": 42668,
+    "calls_per_turn_median": 17,
+    "calls_per_turn_max": 374
+  }
+}

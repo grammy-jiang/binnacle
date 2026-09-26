@@ -232,7 +232,7 @@ def register(mcp: FastMCP) -> None:
             Field(
                 ge=1,
                 le=RUN_WAIT_MAX,
-                description="Seconds to wait before yielding a job_id (max 50).",
+                description="Seconds to wait for the command to finish before yielding a job_id (max 50); returns as soon as it finishes, so a long wait costs nothing.",
             ),
         ] = RUN_WAIT_DEFAULT,
         background: Annotated[
@@ -253,8 +253,8 @@ def register(mcp: FastMCP) -> None:
         ] = None,
     ) -> ToolResult:
         """Run a shell command with bash -c; several commands can go in one
-        call (set -e; a && b). Waits up to wait_seconds; a command still
-        running then is not killed: you get a job_id for job_status and
+        call (set -e; a && b). Waits up to wait_seconds and returns as soon
+        as the command finishes; a command still running then is not killed: you get a job_id for job_status and
         stop_job. A command that finished created no job. Output merges
         stdout and stderr.
         """

@@ -440,15 +440,16 @@ def register(mcp: FastMCP) -> None:
             Field(
                 ge=0,
                 le=WAIT_MAX,
-                description="Block up to this long (max 50) for the job to exit before answering; 0 answers at once.",
+                description="Block up to this long (max 50) for the job to exit; returns as soon as it exits, so a long wait costs nothing. 0 answers at once.",
             ),
         ] = 0,
     ) -> ToolResult:
         """Status of a job from run_command, or the recent-jobs list when
         job_id is omitted. Only needed when run_command returned a job_id.
         A positive wait blocks up to the requested duration (max 50 seconds)
-        or any smaller effective turn budget; waiting never kills a still-running
-        job. Returns state, exit code, output tail, and live processes;
-        quiet=true means no recent output.
+        or any smaller effective turn budget, and returns as soon as the job
+        exits, so a long wait costs nothing when the job ends early; waiting
+        never kills a still-running job. Returns state, exit code, output tail,
+        and live processes; quiet=true means no recent output.
         """
         return job_status_impl(job_id, tail_lines, wait_seconds)

@@ -3,7 +3,9 @@
 The run_command shadow-prediction experiment (removed 2026-09-27) only
 logged; removing it must not change what a client sees. The hash covers the
 name, description, output schema, annotations and a normalized input schema,
-measured on master b040984 before the removal.
+measured on master b040984 before the removal. Updated 2026-09-27 when the
+description and wait_seconds began to state that a wait ends when the command
+finishes (docs/usage-analysis-2026-09-27.md).
 
 The input schema is normalized because its JSON form depends on the Python
 version: an optional parameter is `anyOf [T, null]` on 3.11+ and a nested
@@ -25,7 +27,7 @@ from fastmcp import Client
 from binnacle import server
 
 RUN_COMMAND_SURFACE_SHA256 = (
-    "52a4bd22d2b03f42b4c7b50675e98956cbe6ca0638a6bddb5f409ac9d90c61f7"
+    "0ac17d1fa543fdc90d9289df5a4e5c92e55683bad869ff74f238c9bd1886e8dd"
 )
 CONSTRAINTS = (
     "minimum",

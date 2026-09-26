@@ -59,11 +59,17 @@ stdin from the `stdin` param, no PTY.
 
 ## 3. `run_command`
 
-**Description (ship verbatim; consolidated 2026-09-07 review):**
+**Description (ship verbatim; consolidated 2026-09-07 review, amended
+2026-09-27):**
 > Run a shell command with bash -c; several commands can go in one call
-> (set -e; a && b). Waits up to wait_seconds; a command still running then
-> is not killed: you get a job_id for job_status and stop_job. A command
-> that finished created no job. Output merges stdout and stderr.
+> (set -e; a && b). Waits up to wait_seconds and returns as soon as the
+> command finishes; a command still running then is not killed: you get a
+> job_id for job_status and stop_job. A command that finished created no
+> job. Output merges stdout and stderr.
+
+The `wait_seconds` parameter says the same since 2026-09-27: "Seconds to
+wait for the command to finish before yielding a job_id (max 50); returns as
+soon as it finishes, so a long wait costs nothing." Evidence in section 4.
 
 Division of labor (2026-09-07 review): the description states the tool's
 contract only; parameter descriptions own wait_seconds/background/
@@ -141,12 +147,21 @@ command had left something running, always in sessions where no job existed
 
 ## 4. `job_status`
 
-**Description (consolidated 2026-09-24):** > Status of a job from
-run_command, or the recent-jobs list when job_id is omitted. Only needed
-when run_command returned a job_id. A positive wait blocks up to the
-requested duration (max 50 seconds) or any smaller effective turn budget;
-waiting never kills a still-running job. Returns state, exit code, output
-tail, and live processes; quiet=true means no recent output.
+**Description (consolidated 2026-09-24, amended 2026-09-27):** > Status of
+a job from run_command, or the recent-jobs list when job_id is omitted. Only
+needed when run_command returned a job_id. A positive wait blocks up to the
+requested duration (max 50 seconds) or any smaller effective turn budget, and
+returns as soon as the job exits, so a long wait costs nothing when the job
+ends early; waiting never kills a still-running job. Returns state, exit code,
+output tail, and live processes; quiet=true means no recent output.
+
+2026-09-27 (usage round, `docs/usage-analysis-2026-09-27.md`): outside the
+manager-dispatched chats, `job_status` calls alone in their model step were
+21.5 % of ChatGPT's model steps, and 47 % of them asked for less than the
+50 s maximum (0, 10, 20 or 30 s), so a short job was polled again and again.
+The description and the `wait_seconds` parameters of both tools now state
+that a wait ends when the job exits. Ceiling: about 1,100 model steps in two
+weeks (5.5 %) if every such poll had waited 50 s.
 
 **Input**: `job_id` (optional → list), `tail_lines` (int, default 100),
 `wait_seconds` (int 0–50, default 0; added 2026-09-03). With
