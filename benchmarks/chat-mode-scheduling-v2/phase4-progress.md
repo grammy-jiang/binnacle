@@ -8,9 +8,9 @@ Worktree: `/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4`
 
 Audited source HEAD: `3a4dfb1b248e4530fb09013976abb863c8e35eaf`
 
-Last completed step: **4.3A-fix5**
+Last completed step: **4.6A:selected**
 
-Next step: **manager re-executes `4.6A-sel-qual` under P4-A5 gentle polling and conversation-timestamp timing, then evaluates Step 4.6A:selected from that fresh result.**
+Next step: **Step 4.8: generate and freeze the deterministic serial-randomized A/B/C300 confirmatory schedule, then write and validate the 4.9-confirmatory and 4.10-micro run requests.**
 
 ## Frozen Step 4.0 entry gate
 
@@ -45,10 +45,10 @@ Next step: **manager re-executes `4.6A-sel-qual` under P4-A5 gentle polling and 
 | 4.5 | complete | 389e6a5 |
 | 4.6A | not_started | — |
 | 4.6B0 | complete | — |
-| 4.7 | blocked | — |
+| 4.7 | complete | — |
 | 4.7-fix | complete | `76ec24e` |
-| 4.6A:selected | not_started | — |
-| 4.8 | not_started | — |
+| 4.6A:selected | complete | — |
+| 4.8 | running | — |
 | 4.9.1 | not_started | — |
 | 4.9.2 | not_started | — |
 | 4.9.3 | not_started | — |
@@ -407,6 +407,29 @@ Next step: **manager re-executes `4.6A-sel-qual` under P4-A5 gentle polling and 
 
 Next step: **manager executes 4.6A-sel-qual and dispatches evaluation of
 Step 4.6A:selected from the frozen result**.
+
+## Step 4.6A:selected selected-C timing qualification — COMPLETE
+
+- Selected endpoint: **C300 / 300 s**. Final timing artifact:
+  `phase4-selected-c-timing-qualification.json`, SHA-256 `c308d01491d66e14515f5e554913342c9e715e872ff4b4fdd68356847d9723f6`.
+- **max_safe_parallel_blocks=0**. K=1 fails Q-read on the mandatory host-load
+  ceiling: two owning rows exceed load1 3.00 (maximum 3.61); Q-wait(1) passes
+  dispatch, local-overhead, correctness/reachability, routing and host-load
+  checks. The runbook therefore selects serial randomized confirmatory mode.
+- Higher levels are diagnostic only: K=2 wait has five host-load flags and
+  reaches 4/6 nominal sessions; K=4 wait has one host-load flag, one malformed
+  runner row with no state directory, and reaches 8/12 nominal sessions.
+- Routing integrity is clean in the fourth run: A/B/C each 0/28 routing misses.
+- D9 recovery found 60 owning trials without a final-conversation timestamp.
+  Fourteen were recomputed from saved conversation JSON. Every remaining chat
+  received a one-shot authenticated fetch attempt and returned HTTP 429; those
+  46 are listed individually as poll-observed and their wall times are excluded
+  from the K gate.
+- All ten reusable C300 calibration slots (R5/R6/R7 repeats 1-3 and R12) match
+  the frozen source, lane, Project, instruction, model/effort and current
+  scenario-manifest identities.
+- Focused analyzer/confirmatory regression: **21 passed in 1.88 s**; nproc=4,
+  pre-run load average 0.43 / 0.63 / 0.75.
 
 ## Step 4H-R historical H comparator — COMPLETE (P4-A3 REANALYSIS)
 

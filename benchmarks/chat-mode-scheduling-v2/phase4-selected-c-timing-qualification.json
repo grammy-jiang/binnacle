@@ -1,0 +1,1201 @@
+{
+  "schema_version": 1,
+  "phase": 4,
+  "step": "4.6A:selected",
+  "report_kind": "selected-c-timing-qualification",
+  "selected_c_endpoint": "C300",
+  "selected_budget_s": 300,
+  "timing_qualification_reused": false,
+  "identities": {
+    "phase4_source_head": "06bc1649c4bad9449470366da971649bb7620020",
+    "A_lane_manifest_sha256": "0bb2698d63c7e3c11b05a39981674a3976ded8fffd349a8f46e583c5a3520107",
+    "B_lane_manifest_sha256": "a6c27c3611675e7d261d572d1edceae6a5a92ce2456c28d50335f68f051e41b4",
+    "C300_lane_manifest_sha256": "d413edb9f0eaca1471d99a6c1592a4ca19fd9a0af73611bf236def8bfd4ee8da",
+    "qualification_criteria_sha256": "bf832bad314ce4266179e4f4126358fb83f86610f78f2dd13d2a8b4f4dfcf5b2"
+  },
+  "inputs": {
+    "request_path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase4/run-requests/4.6A-sel-qual.json",
+    "request_sha256": "7858204fdf01ab51741a733fd30cb64079c7cc94d3ac0ddd49286f36d3c0b440",
+    "result_path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase4/runs/4.6A-sel-qual.json",
+    "result_sha256": "bdc0e59f5b5ef8134a5f6c286364451a612146eaae515741bbfe1a2f46580590",
+    "serial_reference_source": "Step 4.6B0 frozen serial R5 host-clean references"
+  },
+  "serial_reference": {
+    "A": {
+      "dispatch_p95_ms": 1.0,
+      "nonblocking_overhead_p95_ms": 0.08
+    },
+    "B": {
+      "dispatch_p95_ms": 0.76,
+      "nonblocking_overhead_p95_ms": 0.1
+    },
+    "C": {
+      "dispatch_p95_ms": 1.46,
+      "nonblocking_overhead_p95_ms": 0.12
+    },
+    "absolute_dispatch_ceiling_ms": 100
+  },
+  "groups": {
+    "Q-read(1)-r2": {
+      "raw_rows": 7,
+      "pre_submit_failure_rows": 1,
+      "owned_slots": 6,
+      "finished_owned_slots": 6,
+      "achieved_peak_sessions": 3,
+      "achieved_peak_blocks": 1,
+      "host_load_limit_load1": 3.0,
+      "host_load_flagged_count": 2,
+      "host_load_flagged_slots": [
+        {
+          "slot_id": "sel-read-k1-b1-a",
+          "arm": "A",
+          "load1_start": 2.13,
+          "load1_end": 3.61,
+          "throttled_start": "0x0",
+          "throttled_end": "0x0"
+        },
+        {
+          "slot_id": "sel-read-k1-b2-c300",
+          "arm": "C",
+          "load1_start": 2.92,
+          "load1_end": 3.09,
+          "throttled_start": "0x0",
+          "throttled_end": "0x0"
+        }
+      ],
+      "routing_miss_rows": 0,
+      "evidence_integrity_error_slots": [],
+      "production_changed_during_trial_slots": [],
+      "settle_time_sources": {
+        "conversation_final_assistant_timestamp": 6
+      },
+      "timing_by_arm": {
+        "A": {
+          "dispatch_samples": 0,
+          "dispatch_p95_ms": null,
+          "dispatch_max_ms": null,
+          "dispatch_p95_limit_ms": 21.0,
+          "overhead_samples": 0,
+          "nonblocking_overhead_p95_ms": null,
+          "nonblocking_overhead_limit_ms": 20.08
+        },
+        "B": {
+          "dispatch_samples": 0,
+          "dispatch_p95_ms": null,
+          "dispatch_max_ms": null,
+          "dispatch_p95_limit_ms": 20.76,
+          "overhead_samples": 0,
+          "nonblocking_overhead_p95_ms": null,
+          "nonblocking_overhead_limit_ms": 20.1
+        },
+        "C": {
+          "dispatch_samples": 0,
+          "dispatch_p95_ms": null,
+          "dispatch_max_ms": null,
+          "dispatch_p95_limit_ms": 21.46,
+          "overhead_samples": 0,
+          "nonblocking_overhead_p95_ms": null,
+          "nonblocking_overhead_limit_ms": 20.12
+        }
+      },
+      "correctness_evaluated_slots": 6,
+      "correctness_or_reachability_failures": [],
+      "malformed_or_missing_state_rows": [],
+      "passed": false,
+      "fail_reasons": [
+        "host_load_flagged=2"
+      ]
+    },
+    "Q-read(2)-r2": {
+      "raw_rows": 15,
+      "pre_submit_failure_rows": 3,
+      "owned_slots": 12,
+      "finished_owned_slots": 12,
+      "achieved_peak_sessions": 4,
+      "achieved_peak_blocks": 2,
+      "host_load_limit_load1": 3.0,
+      "host_load_flagged_count": 0,
+      "host_load_flagged_slots": [],
+      "routing_miss_rows": 0,
+      "evidence_integrity_error_slots": [],
+      "production_changed_during_trial_slots": [],
+      "settle_time_sources": {
+        "conversation_final_assistant_timestamp": 5,
+        "absent": 7
+      },
+      "timing_by_arm": {
+        "A": {
+          "dispatch_samples": 0,
+          "dispatch_p95_ms": null,
+          "dispatch_max_ms": null,
+          "dispatch_p95_limit_ms": 21.0,
+          "overhead_samples": 0,
+          "nonblocking_overhead_p95_ms": null,
+          "nonblocking_overhead_limit_ms": 20.08
+        },
+        "B": {
+          "dispatch_samples": 0,
+          "dispatch_p95_ms": null,
+          "dispatch_max_ms": null,
+          "dispatch_p95_limit_ms": 20.76,
+          "overhead_samples": 0,
+          "nonblocking_overhead_p95_ms": null,
+          "nonblocking_overhead_limit_ms": 20.1
+        },
+        "C": {
+          "dispatch_samples": 0,
+          "dispatch_p95_ms": null,
+          "dispatch_max_ms": null,
+          "dispatch_p95_limit_ms": 21.46,
+          "overhead_samples": 0,
+          "nonblocking_overhead_p95_ms": null,
+          "nonblocking_overhead_limit_ms": 20.12
+        }
+      },
+      "correctness_evaluated_slots": 12,
+      "correctness_or_reachability_failures": [],
+      "malformed_or_missing_state_rows": [],
+      "passed": true,
+      "fail_reasons": []
+    },
+    "Q-read(4)-r2": {
+      "raw_rows": 38,
+      "pre_submit_failure_rows": 14,
+      "owned_slots": 24,
+      "finished_owned_slots": 24,
+      "achieved_peak_sessions": 8,
+      "achieved_peak_blocks": 4,
+      "host_load_limit_load1": 3.0,
+      "host_load_flagged_count": 0,
+      "host_load_flagged_slots": [],
+      "routing_miss_rows": 0,
+      "evidence_integrity_error_slots": [],
+      "production_changed_during_trial_slots": [],
+      "settle_time_sources": {
+        "conversation_final_assistant_timestamp": 10,
+        "absent": 14
+      },
+      "timing_by_arm": {
+        "A": {
+          "dispatch_samples": 0,
+          "dispatch_p95_ms": null,
+          "dispatch_max_ms": null,
+          "dispatch_p95_limit_ms": 21.0,
+          "overhead_samples": 0,
+          "nonblocking_overhead_p95_ms": null,
+          "nonblocking_overhead_limit_ms": 20.08
+        },
+        "B": {
+          "dispatch_samples": 0,
+          "dispatch_p95_ms": null,
+          "dispatch_max_ms": null,
+          "dispatch_p95_limit_ms": 20.76,
+          "overhead_samples": 0,
+          "nonblocking_overhead_p95_ms": null,
+          "nonblocking_overhead_limit_ms": 20.1
+        },
+        "C": {
+          "dispatch_samples": 0,
+          "dispatch_p95_ms": null,
+          "dispatch_max_ms": null,
+          "dispatch_p95_limit_ms": 21.46,
+          "overhead_samples": 0,
+          "nonblocking_overhead_p95_ms": null,
+          "nonblocking_overhead_limit_ms": 20.12
+        }
+      },
+      "correctness_evaluated_slots": 24,
+      "correctness_or_reachability_failures": [],
+      "malformed_or_missing_state_rows": [],
+      "passed": true,
+      "fail_reasons": []
+    },
+    "Q-wait(1)-r5": {
+      "raw_rows": 9,
+      "pre_submit_failure_rows": 3,
+      "owned_slots": 6,
+      "finished_owned_slots": 6,
+      "achieved_peak_sessions": 3,
+      "achieved_peak_blocks": 1,
+      "host_load_limit_load1": 3.0,
+      "host_load_flagged_count": 0,
+      "host_load_flagged_slots": [],
+      "routing_miss_rows": 0,
+      "evidence_integrity_error_slots": [],
+      "production_changed_during_trial_slots": [],
+      "settle_time_sources": {
+        "conversation_final_assistant_timestamp": 6
+      },
+      "timing_by_arm": {
+        "A": {
+          "dispatch_samples": 2,
+          "dispatch_p95_ms": 0.56,
+          "dispatch_max_ms": 0.56,
+          "dispatch_p95_limit_ms": 21.0,
+          "overhead_samples": 2,
+          "nonblocking_overhead_p95_ms": 0.1,
+          "nonblocking_overhead_limit_ms": 20.08
+        },
+        "B": {
+          "dispatch_samples": 2,
+          "dispatch_p95_ms": 0.59,
+          "dispatch_max_ms": 0.59,
+          "dispatch_p95_limit_ms": 20.76,
+          "overhead_samples": 2,
+          "nonblocking_overhead_p95_ms": 0.07,
+          "nonblocking_overhead_limit_ms": 20.1
+        },
+        "C": {
+          "dispatch_samples": 2,
+          "dispatch_p95_ms": 0.68,
+          "dispatch_max_ms": 0.68,
+          "dispatch_p95_limit_ms": 21.46,
+          "overhead_samples": 2,
+          "nonblocking_overhead_p95_ms": 0.1,
+          "nonblocking_overhead_limit_ms": 20.12
+        }
+      },
+      "correctness_evaluated_slots": 6,
+      "correctness_or_reachability_failures": [],
+      "malformed_or_missing_state_rows": [],
+      "passed": true,
+      "fail_reasons": []
+    },
+    "Q-wait(2)-r5": {
+      "raw_rows": 19,
+      "pre_submit_failure_rows": 7,
+      "owned_slots": 12,
+      "finished_owned_slots": 12,
+      "achieved_peak_sessions": 4,
+      "achieved_peak_blocks": 2,
+      "host_load_limit_load1": 3.0,
+      "host_load_flagged_count": 5,
+      "host_load_flagged_slots": [
+        {
+          "slot_id": "sel-wait-k2-b2-b",
+          "arm": "B",
+          "load1_start": 5.31,
+          "load1_end": 1.85,
+          "throttled_start": "0x0",
+          "throttled_end": "0x0"
+        },
+        {
+          "slot_id": "sel-wait-k2-b2-c300",
+          "arm": "C",
+          "load1_start": 1.16,
+          "load1_end": 4.15,
+          "throttled_start": "0x0",
+          "throttled_end": "0x0"
+        },
+        {
+          "slot_id": "sel-wait-k2-b3-a",
+          "arm": "A",
+          "load1_start": 1.44,
+          "load1_end": 10.84,
+          "throttled_start": "0x0",
+          "throttled_end": "0x0"
+        },
+        {
+          "slot_id": "sel-wait-k2-b3-c300",
+          "arm": "C",
+          "load1_start": 1.44,
+          "load1_end": 5.19,
+          "throttled_start": "0x0",
+          "throttled_end": "0x0"
+        },
+        {
+          "slot_id": "sel-wait-k2-b3-b",
+          "arm": "B",
+          "load1_start": 5.37,
+          "load1_end": 0.66,
+          "throttled_start": "0x0",
+          "throttled_end": "0x0"
+        }
+      ],
+      "routing_miss_rows": 0,
+      "evidence_integrity_error_slots": [],
+      "production_changed_during_trial_slots": [],
+      "settle_time_sources": {
+        "absent": 6,
+        "conversation_final_assistant_timestamp": 6
+      },
+      "timing_by_arm": {
+        "A": {
+          "dispatch_samples": 5,
+          "dispatch_p95_ms": 2.12,
+          "dispatch_max_ms": 2.12,
+          "dispatch_p95_limit_ms": 21.0,
+          "overhead_samples": 5,
+          "nonblocking_overhead_p95_ms": 0.09,
+          "nonblocking_overhead_limit_ms": 20.08
+        },
+        "B": {
+          "dispatch_samples": 5,
+          "dispatch_p95_ms": 0.74,
+          "dispatch_max_ms": 0.74,
+          "dispatch_p95_limit_ms": 20.76,
+          "overhead_samples": 5,
+          "nonblocking_overhead_p95_ms": 0.1,
+          "nonblocking_overhead_limit_ms": 20.1
+        },
+        "C": {
+          "dispatch_samples": 5,
+          "dispatch_p95_ms": 1.31,
+          "dispatch_max_ms": 1.31,
+          "dispatch_p95_limit_ms": 21.46,
+          "overhead_samples": 5,
+          "nonblocking_overhead_p95_ms": 0.23,
+          "nonblocking_overhead_limit_ms": 20.12
+        }
+      },
+      "correctness_evaluated_slots": 12,
+      "correctness_or_reachability_failures": [],
+      "malformed_or_missing_state_rows": [],
+      "passed": false,
+      "fail_reasons": [
+        "host_load_flagged=5"
+      ]
+    },
+    "Q-wait(4)-r5": {
+      "raw_rows": 38,
+      "pre_submit_failure_rows": 14,
+      "owned_slots": 24,
+      "finished_owned_slots": 24,
+      "achieved_peak_sessions": 8,
+      "achieved_peak_blocks": 4,
+      "host_load_limit_load1": 3.0,
+      "host_load_flagged_count": 1,
+      "host_load_flagged_slots": [
+        {
+          "slot_id": "sel-wait-k4-b2-b",
+          "arm": "B",
+          "load1_start": 0.72,
+          "load1_end": 3.25,
+          "throttled_start": "0x0",
+          "throttled_end": "0x0"
+        }
+      ],
+      "routing_miss_rows": 0,
+      "evidence_integrity_error_slots": [],
+      "production_changed_during_trial_slots": [
+        "sel-wait-k4-b4-b",
+        "sel-wait-k4-b4-a",
+        "sel-wait-k4-b5-a",
+        "sel-wait-k4-b6-b",
+        "sel-wait-k4-b7-b"
+      ],
+      "settle_time_sources": {
+        "absent": 19,
+        "conversation_final_assistant_timestamp": 4
+      },
+      "timing_by_arm": {
+        "A": {
+          "dispatch_samples": 17,
+          "dispatch_p95_ms": 0.77,
+          "dispatch_max_ms": 0.77,
+          "dispatch_p95_limit_ms": 21.0,
+          "overhead_samples": 17,
+          "nonblocking_overhead_p95_ms": 0.12,
+          "nonblocking_overhead_limit_ms": 20.08
+        },
+        "B": {
+          "dispatch_samples": 19,
+          "dispatch_p95_ms": 0.83,
+          "dispatch_max_ms": 0.83,
+          "dispatch_p95_limit_ms": 20.76,
+          "overhead_samples": 19,
+          "nonblocking_overhead_p95_ms": 0.1,
+          "nonblocking_overhead_limit_ms": 20.1
+        },
+        "C": {
+          "dispatch_samples": 13,
+          "dispatch_p95_ms": 3.78,
+          "dispatch_max_ms": 3.78,
+          "dispatch_p95_limit_ms": 21.46,
+          "overhead_samples": 13,
+          "nonblocking_overhead_p95_ms": 0.14,
+          "nonblocking_overhead_limit_ms": 20.12
+        }
+      },
+      "correctness_evaluated_slots": 23,
+      "correctness_or_reachability_failures": [],
+      "malformed_or_missing_state_rows": [
+        {
+          "slot_id": "sel-wait-k4-b7-c300",
+          "outcome": "finished",
+          "routing": null,
+          "exit_code": null,
+          "state_dir": null,
+          "harness_rc": 1
+        }
+      ],
+      "passed": false,
+      "fail_reasons": [
+        "host_load_flagged=1",
+        "malformed_or_missing_state_rows=1"
+      ]
+    }
+  },
+  "levels": {
+    "1": {
+      "read_pass": false,
+      "wait_pass": true,
+      "k_pass": false,
+      "nominal_sessions": 3,
+      "achieved_peak_sessions": {
+        "read": 3,
+        "wait": 3
+      },
+      "reasons": {
+        "read": [
+          "host_load_flagged=2"
+        ],
+        "wait": []
+      }
+    },
+    "2": {
+      "read_pass": true,
+      "wait_pass": false,
+      "k_pass": false,
+      "nominal_sessions": 6,
+      "achieved_peak_sessions": {
+        "read": 4,
+        "wait": 4
+      },
+      "reasons": {
+        "read": [],
+        "wait": [
+          "host_load_flagged=5"
+        ]
+      }
+    },
+    "4": {
+      "read_pass": true,
+      "wait_pass": false,
+      "k_pass": false,
+      "nominal_sessions": 12,
+      "achieved_peak_sessions": {
+        "read": 8,
+        "wait": 8
+      },
+      "reasons": {
+        "read": [],
+        "wait": [
+          "host_load_flagged=1",
+          "malformed_or_missing_state_rows=1"
+        ]
+      }
+    }
+  },
+  "routing_miss_by_arm": {
+    "A": {
+      "routing_misses": 0,
+      "submitted_or_finished_rows": 28,
+      "routing_miss_rate": 0.0
+    },
+    "B": {
+      "routing_misses": 0,
+      "submitted_or_finished_rows": 28,
+      "routing_miss_rate": 0.0
+    },
+    "C": {
+      "routing_misses": 0,
+      "submitted_or_finished_rows": 28,
+      "routing_miss_rate": 0.0
+    }
+  },
+  "settle_time_recovery": {
+    "schema_version": 1,
+    "run": "4.6A-sel-qual",
+    "missing_settle_before": 60,
+    "recomputed_count": 14,
+    "stayed_observed_count": 46,
+    "recomputed": [
+      {
+        "group": "Q-read(1)-r2",
+        "slot_id": "sel-read-k1-b1-b",
+        "arm": "B",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r2-20260926T123510-b9608c0570",
+        "chat_id": "6ab72f91-121c-83ec-aa1a-13fa0ee71a7d",
+        "observed_wall_s": 62.627,
+        "recomputed_wall_s": 18.084,
+        "settled_at_epoch_s": 1790390178.994461,
+        "within_turn_limit": true,
+        "conversation_saved": true
+      },
+      {
+        "group": "Q-read(1)-r2",
+        "slot_id": "sel-read-k1-b1-c300",
+        "arm": "C",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r2-20260926T123510-a57052a8fc",
+        "chat_id": "6ab72fb1-fc38-83ec-8e37-9fadf1b9f18a",
+        "observed_wall_s": 32.913,
+        "recomputed_wall_s": 24.171,
+        "settled_at_epoch_s": 1790390218.000562,
+        "within_turn_limit": true,
+        "conversation_saved": true
+      },
+      {
+        "group": "Q-read(2)-r2",
+        "slot_id": "sel-read-k2-b2-a",
+        "arm": "A",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r2-20260926T130750-478472986d",
+        "chat_id": "6ab737a0-c534-83ec-85a9-46bb0da67462",
+        "observed_wall_s": 354.044,
+        "recomputed_wall_s": 19.951,
+        "settled_at_epoch_s": 1790392244.51244,
+        "within_turn_limit": true,
+        "conversation_saved": true
+      },
+      {
+        "group": "Q-read(2)-r2",
+        "slot_id": "sel-read-k2-b2-c300",
+        "arm": "C",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r2-20260926T130126-c2b1bc6628",
+        "chat_id": "6ab73606-4460-83ec-8cd2-d3b53c0dfc01",
+        "observed_wall_s": 77.14,
+        "recomputed_wall_s": 19.491,
+        "settled_at_epoch_s": 1790391833.539798,
+        "within_turn_limit": true,
+        "conversation_saved": true
+      },
+      {
+        "group": "Q-read(2)-r2",
+        "slot_id": "sel-read-k2-b3-a",
+        "arm": "A",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r2-20260926T131302-50aa2c58ad",
+        "chat_id": "6ab7392d-f810-83ec-be26-2db0a5b7d604",
+        "observed_wall_s": 50.415,
+        "recomputed_wall_s": 22.889,
+        "settled_at_epoch_s": 1790392644.689925,
+        "within_turn_limit": true,
+        "conversation_saved": true
+      },
+      {
+        "group": "Q-read(2)-r2",
+        "slot_id": "sel-read-k2-b3-c300",
+        "arm": "C",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r2-20260926T131302-c1d4a7a7b1",
+        "chat_id": "6ab73890-b9c4-83ec-b8a3-0299b8740316",
+        "observed_wall_s": 29.25,
+        "recomputed_wall_s": 17.98,
+        "settled_at_epoch_s": 1790392482.521617,
+        "within_turn_limit": true,
+        "conversation_saved": true
+      },
+      {
+        "group": "Q-read(4)-r2",
+        "slot_id": "sel-read-k4-b2-c300",
+        "arm": "C",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r2-20260926T142741-960652d63c",
+        "chat_id": "6ab74b74-abfc-83ec-afba-756396461d49",
+        "observed_wall_s": 52.351,
+        "recomputed_wall_s": 19.769,
+        "settled_at_epoch_s": 1790397320.266103,
+        "within_turn_limit": true,
+        "conversation_saved": true
+      },
+      {
+        "group": "Q-wait(1)-r5",
+        "slot_id": "sel-wait-k1-b1-a",
+        "arm": "A",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r5-20260926T124413-6e7cef7421",
+        "chat_id": "6ab7325c-53ec-83ec-bdb4-7b52958039ff",
+        "observed_wall_s": 207.129,
+        "recomputed_wall_s": 41.847,
+        "settled_at_epoch_s": 1790390917.974363,
+        "within_turn_limit": true,
+        "conversation_saved": true
+      },
+      {
+        "group": "Q-wait(1)-r5",
+        "slot_id": "sel-wait-k1-b1-b",
+        "arm": "B",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r5-20260926T124738-815456cbb3",
+        "chat_id": "6ab7329a-fe60-83ec-bd90-73c0791d2c27",
+        "observed_wall_s": 51.662,
+        "recomputed_wall_s": 38.808,
+        "settled_at_epoch_s": 1790390977.604412,
+        "within_turn_limit": true,
+        "conversation_saved": true
+      },
+      {
+        "group": "Q-wait(1)-r5",
+        "slot_id": "sel-wait-k1-b1-c300",
+        "arm": "C",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r5-20260926T124413-0427272c2b",
+        "chat_id": "6ab7327a-ba48-83ec-886b-a481a93bbd34",
+        "observed_wall_s": 204.255,
+        "recomputed_wall_s": 40.927,
+        "settled_at_epoch_s": 1790390947.464027,
+        "within_turn_limit": true,
+        "conversation_saved": true
+      },
+      {
+        "group": "Q-wait(1)-r5",
+        "slot_id": "sel-wait-k1-b2-a",
+        "arm": "A",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r5-20260926T125640-cac4cc709a",
+        "chat_id": "6ab734f2-b34c-83ec-8f3d-c226033bfb0e",
+        "observed_wall_s": 113.71,
+        "recomputed_wall_s": 86.963,
+        "settled_at_epoch_s": 1790391625.443183,
+        "within_turn_limit": true,
+        "conversation_saved": true
+      },
+      {
+        "group": "Q-wait(1)-r5",
+        "slot_id": "sel-wait-k1-b2-b",
+        "arm": "B",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r5-20260926T125344-2ce69f5766",
+        "chat_id": "6ab73458-c28c-83ec-973c-6c220ed78035",
+        "observed_wall_s": 87.096,
+        "recomputed_wall_s": 38.715,
+        "settled_at_epoch_s": 1790391423.292298,
+        "within_turn_limit": true,
+        "conversation_saved": true
+      },
+      {
+        "group": "Q-wait(1)-r5",
+        "slot_id": "sel-wait-k1-b2-c300",
+        "arm": "C",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r5-20260926T125226-d109e17990",
+        "chat_id": "6ab7338b-d21c-83ec-855e-94570b0bb529",
+        "observed_wall_s": 50.826,
+        "recomputed_wall_s": 43.162,
+        "settled_at_epoch_s": 1790391222.80912,
+        "within_turn_limit": true,
+        "conversation_saved": true
+      },
+      {
+        "group": "Q-wait(4)-r5",
+        "slot_id": "sel-wait-k4-b6-c300",
+        "arm": "C",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r5-20260926T152826-a51716453d",
+        "chat_id": "6ab759be-5918-83ec-a7eb-b6f02c171562",
+        "observed_wall_s": 63.279,
+        "recomputed_wall_s": 40.265,
+        "settled_at_epoch_s": 1790400998.435392,
+        "within_turn_limit": true,
+        "conversation_saved": true
+      }
+    ],
+    "stayed_observed": [
+      {
+        "group": "Q-read(2)-r2",
+        "slot_id": "sel-read-k2-b1-a",
+        "arm": "A",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r2-20260926T130127-30f10ed59d",
+        "chat_id": "6ab7362a-b408-83ec-a446-db2396be69c9",
+        "observed_wall_s": 173.617,
+        "wall_s": 173.617,
+        "reason": "http_429_after_one_shot_fetch_attempt",
+        "conversation_saved": false
+      },
+      {
+        "group": "Q-read(2)-r2",
+        "slot_id": "sel-read-k2-b1-b",
+        "arm": "B",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r2-20260926T130128-9be2579c84",
+        "chat_id": "6ab73782-0fa8-83ec-be45-a4babd0be701",
+        "observed_wall_s": 64.832,
+        "wall_s": 64.832,
+        "reason": "http_429_after_one_shot_fetch_attempt",
+        "conversation_saved": false
+      },
+      {
+        "group": "Q-read(2)-r2",
+        "slot_id": "sel-read-k2-b2-b",
+        "arm": "B",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r2-20260926T130127-97ee924564",
+        "chat_id": "6ab735e2-4758-83ec-b7a6-f4a1901c42c7",
+        "observed_wall_s": 173.418,
+        "wall_s": 173.418,
+        "reason": "http_429_after_one_shot_fetch_attempt",
+        "conversation_saved": false
+      },
+      {
+        "group": "Q-read(2)-r2",
+        "slot_id": "sel-read-k2-b3-b",
+        "arm": "B",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r2-20260926T131302-d05fdb3b41",
+        "chat_id": "6ab7390f-b894-83ec-8d3b-108b2e20fba3",
+        "observed_wall_s": 262.683,
+        "wall_s": 262.683,
+        "reason": "http_429_after_one_shot_fetch_attempt",
+        "conversation_saved": false
+      },
+      {
+        "group": "Q-read(2)-r2",
+        "slot_id": "sel-read-k2-b4-a",
+        "arm": "A",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r2-20260926T132146-577a7c10e6",
+        "chat_id": "6ab73a59-47dc-83ec-ab10-015bc73a3f7d",
+        "observed_wall_s": 51.033,
+        "wall_s": 51.033,
+        "reason": "http_429_after_one_shot_fetch_attempt",
+        "conversation_saved": false
+      },
+      {
+        "group": "Q-read(2)-r2",
+        "slot_id": "sel-read-k2-b4-b",
+        "arm": "B",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r2-20260926T131704-f5218af8fe",
+        "chat_id": "6ab7396c-8284-83ec-84f8-371b6ccc7d84",
+        "observed_wall_s": 55.329,
+        "wall_s": 55.329,
+        "reason": "http_429_after_one_shot_fetch_attempt",
+        "conversation_saved": false
+      },
+      {
+        "group": "Q-read(2)-r2",
+        "slot_id": "sel-read-k2-b4-c300",
+        "arm": "C",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r2-20260926T131703-03f81474d1",
+        "chat_id": "6ab73a1c-aff0-83ec-baf7-ebfa5186a5c0",
+        "observed_wall_s": 51.77,
+        "wall_s": 51.77,
+        "reason": "http_429_after_one_shot_fetch_attempt",
+        "conversation_saved": false
+      },
+      {
+        "group": "Q-read(4)-r2",
+        "slot_id": "sel-read-k4-b1-b",
+        "arm": "B",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r2-20260926T143033-cf181bf02f",
+        "chat_id": "6ab74c93-1ba4-83ec-b576-5315a55d96e7",
+        "observed_wall_s": 34.471,
+        "wall_s": 34.471,
+        "reason": "http_429_after_one_shot_fetch_attempt",
+        "conversation_saved": false
+      },
+      {
+        "group": "Q-read(4)-r2",
+        "slot_id": "sel-read-k4-b1-c300",
+        "arm": "C",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r2-20260926T141826-d2a0381e19",
+        "chat_id": "6ab7498e-6f80-83ec-bd56-367ec05cfd1d",
+        "observed_wall_s": 60.758,
+        "wall_s": 60.758,
+        "reason": "http_429_after_one_shot_fetch_attempt",
+        "conversation_saved": false
+      },
+      {
+        "group": "Q-read(4)-r2",
+        "slot_id": "sel-read-k4-b3-b",
+        "arm": "B",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r2-20260926T135730-38eacc3add",
+        "chat_id": "6ab74332-dca0-83ec-bc14-056a7694cc72",
+        "observed_wall_s": 186.776,
+        "wall_s": 186.776,
+        "reason": "http_429_after_one_shot_fetch_attempt",
+        "conversation_saved": false
+      },
+      {
+        "group": "Q-read(4)-r2",
+        "slot_id": "sel-read-k4-b4-c300",
+        "arm": "C",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r2-20260926T135731-f65791c6c7",
+        "chat_id": "6ab74629-1974-83ec-bef0-e8a2e8d55c07",
+        "observed_wall_s": 22.785,
+        "wall_s": 22.785,
+        "reason": "http_429_after_one_shot_fetch_attempt",
+        "conversation_saved": false
+      },
+      {
+        "group": "Q-read(4)-r2",
+        "slot_id": "sel-read-k4-b5-a",
+        "arm": "A",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r2-20260926T140803-74dd19d01e",
+        "chat_id": "6ab7482f-c064-83ec-902f-8f767aec7085",
+        "observed_wall_s": 50.765,
+        "wall_s": 50.765,
+        "reason": "http_429_after_one_shot_fetch_attempt",
+        "conversation_saved": false
+      },
+      {
+        "group": "Q-read(4)-r2",
+        "slot_id": "sel-read-k4-b5-b",
+        "arm": "B",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r2-20260926T142442-c421c1465e",
+        "chat_id": "6ab74a3d-7170-83ec-a8c8-680ab201951f",
+        "observed_wall_s": 63.876,
+        "wall_s": 63.876,
+        "reason": "http_429_after_one_shot_fetch_attempt",
+        "conversation_saved": false
+      },
+      {
+        "group": "Q-read(4)-r2",
+        "slot_id": "sel-read-k4-b5-c300",
+        "arm": "C",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r2-20260926T140803-da19e2795b",
+        "chat_id": "6ab74812-a908-83ec-a9d5-a85672e18ce2",
+        "observed_wall_s": 169.546,
+        "wall_s": 169.546,
+        "reason": "http_429_after_one_shot_fetch_attempt",
+        "conversation_saved": false
+      },
+      {
+        "group": "Q-read(4)-r2",
+        "slot_id": "sel-read-k4-b6-b",
+        "arm": "B",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r2-20260926T142501-1c26863ad7",
+        "chat_id": "6ab74aeb-5610-83ec-8554-acb38de79a4a",
+        "observed_wall_s": 75.871,
+        "wall_s": 75.871,
+        "reason": "http_429_after_one_shot_fetch_attempt",
+        "conversation_saved": false
+      },
+      {
+        "group": "Q-read(4)-r2",
+        "slot_id": "sel-read-k4-b6-c300",
+        "arm": "C",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r2-20260926T142501-5ee6fe8581",
+        "chat_id": "6ab74b0a-e4b8-83ec-8427-8a5615c7f20d",
+        "observed_wall_s": 103.099,
+        "wall_s": 103.099,
+        "reason": "http_429_after_one_shot_fetch_attempt",
+        "conversation_saved": false
+      },
+      {
+        "group": "Q-read(4)-r2",
+        "slot_id": "sel-read-k4-b7-a",
+        "arm": "A",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r2-20260926T144355-8a818794af",
+        "chat_id": "6ab74f25-0994-83ec-a29b-3ebd6b83cad5",
+        "observed_wall_s": 68.047,
+        "wall_s": 68.047,
+        "reason": "http_429_after_one_shot_fetch_attempt",
+        "conversation_saved": false
+      },
+      {
+        "group": "Q-read(4)-r2",
+        "slot_id": "sel-read-k4-b7-c300",
+        "arm": "C",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r2-20260926T143129-8e2be8b7c2",
+        "chat_id": "6ab74cb0-aa1c-83ec-a174-1ff60baac3db",
+        "observed_wall_s": 61.845,
+        "wall_s": 61.845,
+        "reason": "http_429_after_one_shot_fetch_attempt",
+        "conversation_saved": false
+      },
+      {
+        "group": "Q-read(4)-r2",
+        "slot_id": "sel-read-k4-b8-a",
+        "arm": "A",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r2-20260926T145453-f3251d0190",
+        "chat_id": "6ab7509a-8a7c-83ec-88e8-9950ca39b9cd",
+        "observed_wall_s": 63.173,
+        "wall_s": 63.173,
+        "reason": "http_429_after_one_shot_fetch_attempt",
+        "conversation_saved": false
+      },
+      {
+        "group": "Q-read(4)-r2",
+        "slot_id": "sel-read-k4-b8-b",
+        "arm": "B",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r2-20260926T143628-76fb28e8ee",
+        "chat_id": "6ab74e0b-77f0-83ec-924a-6503d6940282",
+        "observed_wall_s": 50.174,
+        "wall_s": 50.174,
+        "reason": "http_429_after_one_shot_fetch_attempt",
+        "conversation_saved": false
+      },
+      {
+        "group": "Q-read(4)-r2",
+        "slot_id": "sel-read-k4-b8-c300",
+        "arm": "C",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r2-20260926T145133-ba34ebcd53",
+        "chat_id": "6ab75032-5d98-83ec-852e-8739d5d04805",
+        "observed_wall_s": 62.465,
+        "wall_s": 62.465,
+        "reason": "http_429_after_one_shot_fetch_attempt",
+        "conversation_saved": false
+      },
+      {
+        "group": "Q-wait(2)-r5",
+        "slot_id": "sel-wait-k2-b1-c300",
+        "arm": "C",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r5-20260926T132332-b82eb185fa",
+        "chat_id": "6ab73c73-7360-83ec-8cae-2a992a01dda1",
+        "observed_wall_s": 51.37,
+        "wall_s": 51.37,
+        "reason": "http_429_after_one_shot_fetch_attempt",
+        "conversation_saved": false
+      },
+      {
+        "group": "Q-wait(2)-r5",
+        "slot_id": "sel-wait-k2-b2-a",
+        "arm": "A",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r5-20260926T132849-23e0462427",
+        "chat_id": "6ab73d20-66a4-83ec-b271-cdeda6ac38f6",
+        "observed_wall_s": 58.649,
+        "wall_s": 58.649,
+        "reason": "http_429_after_one_shot_fetch_attempt",
+        "conversation_saved": false
+      },
+      {
+        "group": "Q-wait(2)-r5",
+        "slot_id": "sel-wait-k2-b2-c300",
+        "arm": "C",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r5-20260926T133438-de7a210d6b",
+        "chat_id": "6ab73ec4-a604-83ec-8879-1f050975231a",
+        "observed_wall_s": 65.156,
+        "wall_s": 65.156,
+        "reason": "http_429_after_one_shot_fetch_attempt",
+        "conversation_saved": false
+      },
+      {
+        "group": "Q-wait(2)-r5",
+        "slot_id": "sel-wait-k2-b4-a",
+        "arm": "A",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r5-20260926T134357-948b6297be",
+        "chat_id": "6ab740ee-0320-83ec-9087-b8fa69b36aac",
+        "observed_wall_s": 61.865,
+        "wall_s": 61.865,
+        "reason": "http_429_after_one_shot_fetch_attempt",
+        "conversation_saved": false
+      },
+      {
+        "group": "Q-wait(2)-r5",
+        "slot_id": "sel-wait-k2-b4-b",
+        "arm": "B",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r5-20260926T135346-230a88dc88",
+        "chat_id": "6ab74254-336c-83ec-8ff2-69b3221614d7",
+        "observed_wall_s": 49.982,
+        "wall_s": 49.982,
+        "reason": "http_429_after_one_shot_fetch_attempt",
+        "conversation_saved": false
+      },
+      {
+        "group": "Q-wait(2)-r5",
+        "slot_id": "sel-wait-k2-b4-c300",
+        "arm": "C",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r5-20260926T135054-a35975c3fc",
+        "chat_id": "6ab74236-c664-83ec-8172-ded4631487c1",
+        "observed_wall_s": 49.876,
+        "wall_s": 49.876,
+        "reason": "http_429_after_one_shot_fetch_attempt",
+        "conversation_saved": false
+      },
+      {
+        "group": "Q-wait(4)-r5",
+        "slot_id": "sel-wait-k4-b1-a",
+        "arm": "A",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r5-20260926T150240-c53df7c03a",
+        "chat_id": "6ab75499-9fec-83ec-8fdd-266013debb6c",
+        "observed_wall_s": 173.6,
+        "wall_s": 173.6,
+        "reason": "http_429_after_one_shot_fetch_attempt",
+        "conversation_saved": false
+      },
+      {
+        "group": "Q-wait(4)-r5",
+        "slot_id": "sel-wait-k4-b1-b",
+        "arm": "B",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r5-20260926T145842-289ec63156",
+        "chat_id": "6ab752fc-6b88-83ec-8930-22920a33dc4c",
+        "observed_wall_s": 51.011,
+        "wall_s": 51.011,
+        "reason": "http_429_after_one_shot_fetch_attempt",
+        "conversation_saved": false
+      },
+      {
+        "group": "Q-wait(4)-r5",
+        "slot_id": "sel-wait-k4-b1-c300",
+        "arm": "C",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r5-20260926T145843-3127f41010",
+        "chat_id": "6ab753ac-a9b8-83ec-88ba-c053f28b1e24",
+        "observed_wall_s": 51.084,
+        "wall_s": 51.084,
+        "reason": "http_429_after_one_shot_fetch_attempt",
+        "conversation_saved": false
+      },
+      {
+        "group": "Q-wait(4)-r5",
+        "slot_id": "sel-wait-k4-b2-b",
+        "arm": "B",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r5-20260926T145841-afcb128fa7",
+        "chat_id": "6ab751c0-bff8-83ec-90b9-c18d50df569a",
+        "observed_wall_s": 73.261,
+        "wall_s": 73.261,
+        "reason": "http_429_after_one_shot_fetch_attempt",
+        "conversation_saved": false
+      },
+      {
+        "group": "Q-wait(4)-r5",
+        "slot_id": "sel-wait-k4-b2-c300",
+        "arm": "C",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r5-20260926T145842-2ccebecccb",
+        "chat_id": "6ab75456-d57c-83ec-b7cc-46b3fc8f1bdf",
+        "observed_wall_s": 62.144,
+        "wall_s": 62.144,
+        "reason": "http_429_after_one_shot_fetch_attempt",
+        "conversation_saved": false
+      },
+      {
+        "group": "Q-wait(4)-r5",
+        "slot_id": "sel-wait-k4-b3-a",
+        "arm": "A",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r5-20260926T151049-5904a610ce",
+        "chat_id": "6ab75546-cf3c-83ec-b822-163245bc2dc7",
+        "observed_wall_s": 58.206,
+        "wall_s": 58.206,
+        "reason": "http_429_after_one_shot_fetch_attempt",
+        "conversation_saved": false
+      },
+      {
+        "group": "Q-wait(4)-r5",
+        "slot_id": "sel-wait-k4-b3-c300",
+        "arm": "C",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r5-20260926T145840-a1cf9d0f85",
+        "chat_id": "6ab75115-9e30-83ec-a68b-c0c42b5b0121",
+        "observed_wall_s": 62.247,
+        "wall_s": 62.247,
+        "reason": "http_429_after_one_shot_fetch_attempt",
+        "conversation_saved": false
+      },
+      {
+        "group": "Q-wait(4)-r5",
+        "slot_id": "sel-wait-k4-b4-b",
+        "arm": "B",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r5-20260926T151740-b963858a89",
+        "chat_id": "6ab75722-3a0c-83ec-ac10-5c02d41e00e3",
+        "observed_wall_s": 262.781,
+        "wall_s": 262.781,
+        "reason": "http_429_after_one_shot_fetch_attempt",
+        "conversation_saved": false
+      },
+      {
+        "group": "Q-wait(4)-r5",
+        "slot_id": "sel-wait-k4-b4-c300",
+        "arm": "C",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r5-20260926T145842-7d5cb97ba6",
+        "chat_id": "6ab75204-4c1c-83ec-a591-d331285eb59b",
+        "observed_wall_s": 51.584,
+        "wall_s": 51.584,
+        "reason": "http_429_after_one_shot_fetch_attempt",
+        "conversation_saved": false
+      },
+      {
+        "group": "Q-wait(4)-r5",
+        "slot_id": "sel-wait-k4-b5-a",
+        "arm": "A",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r5-20260926T151732-aad78a5cee",
+        "chat_id": "6ab75703-ca40-83ec-b124-52bdb5722938",
+        "observed_wall_s": 91.148,
+        "wall_s": 91.148,
+        "reason": "http_429_after_one_shot_fetch_attempt",
+        "conversation_saved": false
+      },
+      {
+        "group": "Q-wait(4)-r5",
+        "slot_id": "sel-wait-k4-b5-b",
+        "arm": "B",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r5-20260926T151732-867db8275b",
+        "chat_id": "6ab7563a-cf4c-83ec-a2b9-a092d3e73722",
+        "observed_wall_s": 55.5,
+        "wall_s": 55.5,
+        "reason": "http_429_after_one_shot_fetch_attempt",
+        "conversation_saved": false
+      },
+      {
+        "group": "Q-wait(4)-r5",
+        "slot_id": "sel-wait-k4-b5-c300",
+        "arm": "C",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r5-20260926T153641-587f505756",
+        "chat_id": "6ab75b62-3dd4-83ec-9dba-7f095b478613",
+        "observed_wall_s": 62.057,
+        "wall_s": 62.057,
+        "reason": "http_429_after_one_shot_fetch_attempt",
+        "conversation_saved": false
+      },
+      {
+        "group": "Q-wait(4)-r5",
+        "slot_id": "sel-wait-k4-b6-a",
+        "arm": "A",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r5-20260926T154638-b70f8357e0",
+        "chat_id": "6ab75c53-29d0-83ec-9ff5-b34a9ee0f596",
+        "observed_wall_s": 53.731,
+        "wall_s": 53.731,
+        "reason": "http_429_after_one_shot_fetch_attempt",
+        "conversation_saved": false
+      },
+      {
+        "group": "Q-wait(4)-r5",
+        "slot_id": "sel-wait-k4-b6-b",
+        "arm": "B",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r5-20260926T151824-55b9e19a8f",
+        "chat_id": "6ab757a3-2318-83ec-8621-faa1728e1172",
+        "observed_wall_s": 62.875,
+        "wall_s": 62.875,
+        "reason": "http_429_after_one_shot_fetch_attempt",
+        "conversation_saved": false
+      },
+      {
+        "group": "Q-wait(4)-r5",
+        "slot_id": "sel-wait-k4-b7-a",
+        "arm": "A",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r5-20260926T153341-e357d805dd",
+        "chat_id": "6ab75a6a-ec4c-83ec-8738-3e56bb8773e7",
+        "observed_wall_s": 72.051,
+        "wall_s": 72.051,
+        "reason": "http_429_after_one_shot_fetch_attempt",
+        "conversation_saved": false
+      },
+      {
+        "group": "Q-wait(4)-r5",
+        "slot_id": "sel-wait-k4-b7-b",
+        "arm": "B",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r5-20260926T151956-c55cb7b579",
+        "chat_id": "6ab75859-76fc-83ec-b633-ee18b3402ac3",
+        "observed_wall_s": 62.966,
+        "wall_s": 62.966,
+        "reason": "http_429_after_one_shot_fetch_attempt",
+        "conversation_saved": false
+      },
+      {
+        "group": "Q-wait(4)-r5",
+        "slot_id": "sel-wait-k4-b8-a",
+        "arm": "A",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r5-20260926T153456-4e6d307093",
+        "chat_id": "6ab75a8c-2150-83ec-93c0-bb5e5ff187d2",
+        "observed_wall_s": 172.36,
+        "wall_s": 172.36,
+        "reason": "http_429_after_one_shot_fetch_attempt",
+        "conversation_saved": false
+      },
+      {
+        "group": "Q-wait(4)-r5",
+        "slot_id": "sel-wait-k4-b8-b",
+        "arm": "B",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r5-20260926T153456-bac88b1247",
+        "chat_id": "6ab75ab0-6c34-83ec-ae9e-72e89e81dc04",
+        "observed_wall_s": 50.559,
+        "wall_s": 50.559,
+        "reason": "http_429_after_one_shot_fetch_attempt",
+        "conversation_saved": false
+      },
+      {
+        "group": "Q-wait(4)-r5",
+        "slot_id": "sel-wait-k4-b8-c300",
+        "arm": "C",
+        "state_dir": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r5-20260926T154340-1a45c7d6e9",
+        "chat_id": "6ab75c0e-3a84-83ec-85e3-1d55079f9d5e",
+        "observed_wall_s": 73.611,
+        "wall_s": 73.611,
+        "reason": "http_429_after_one_shot_fetch_attempt",
+        "conversation_saved": false
+      }
+    ],
+    "note": "Every stayed-observed chat was still undeleted and received a one-shot authenticated conversation fetch attempt; the backend returned HTTP 429. Observed wall_s is not used in the selected K gate."
+  },
+  "max_safe_parallel_blocks": 0,
+  "selection_reason": "K=1 fails because Q-read(1) has owning host-load checkpoints above load1 3.00; per the runbook K=1 failure deterministically selects serial randomized confirmatory mode. Higher K observations are diagnostic only.",
+  "integer_refinement_required": false,
+  "higher_level_diagnostics": {
+    "K2_and_K4_achieved_session_concurrency_below_nominal": true,
+    "K4_malformed_runner_row": "sel-wait-k4-b7-c300",
+    "production_drift_during_higher_K": "owner-approved run-command shadow predictor line advanced production independently; no Phase-4 frozen experiment identity changed."
+  }
+}

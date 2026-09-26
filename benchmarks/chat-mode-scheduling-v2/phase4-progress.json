@@ -6,8 +6,8 @@
   "worktree": "/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4",
   "source_branch": "feature/chat-mode-scheduling-v2-phase3",
   "audited_source_head": "3a4dfb1b248e4530fb09013976abb863c8e35eaf",
-  "last_completed_step": "4.3A-fix5",
-  "next_step": "Manager re-executes run request 4.6A-sel-qual under P4-A5 gentle polling and conversation-timestamp timing, then evaluates Step 4.6A:selected from that fresh result.",
+  "last_completed_step": "4.6A:selected",
+  "next_step": "Step 4.8: generate and freeze the deterministic serial-randomized A/B/C300 confirmatory schedule, then write and validate the 4.9-confirmatory and 4.10-micro run requests.",
   "dependency_audit": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase4-dependency-audit-2026-09-25-r01.json",
     "revision": "r01",
@@ -139,7 +139,8 @@
     "phase4_4_7_final_c_lane_admission": "16671e4aa1dbeaf07acc09c481aae59f645ee2185b6c7cbdbe822bdefec37eaf",
     "phase4_4H_result_json": "3747ac0a13b0a399b3dde86e278ec4593e602b6c0bb37b794911601e87eab8b5",
     "phase4_historical_comparator_json": "13f1fae101ccf9de63b7c45ed593b4827ba8df4cd7a7943079ec214d812eecb7",
-    "phase4_historical_comparator_md": "25345d3d5567878ef226d13d11d820357bf55eec8d9930402dd0bbd10de06b51"
+    "phase4_historical_comparator_md": "25345d3d5567878ef226d13d11d820357bf55eec8d9930402dd0bbd10de06b51",
+    "phase4_selected_c_timing_qualification_json": "c308d01491d66e14515f5e554913342c9e715e872ff4b4fdd68356847d9723f6"
   },
   "preflight_findings": {
     "p4-preflight-git-lineage": "804da7b66ddc1f0e71ddf3106790989f50a0f320de4cd3b3f0aedaf962d68461",
@@ -462,16 +463,27 @@
       "worker_branch": null
     },
     "4.6A:selected": {
-      "status": "not_started",
-      "tests": [],
+      "status": "complete",
+      "tests": [
+        "Fourth manager-run 4.6A-sel-qual -> evaluated 84 owning slots; 83/84 state directories re-analyzed successfully; sole malformed runner row sel-wait-k4-b7-c300 has no state_dir/routing/result.",
+        "Selected-C K gate -> K=1 FAIL because Q-read(1) has 2 owning host-load flags above load1 3.00 (max 3.61); Q-wait(1) timing/correctness/routing pass; therefore max_safe_parallel_blocks=0 by the explicit K=1 fail rule.",
+        "Higher K diagnostics -> K=2 wait FAIL (5 host-load flags; achieved 4/6 nominal sessions); K=4 wait FAIL (1 host-load flag + malformed row; achieved 8/12 nominal sessions).",
+        "P4-A2 routing integrity -> PASS: fourth-run routing misses A=0/28, B=0/28, C=0/28 (0% each).",
+        "D9 settle recovery -> 14/60 absent-source trials recomputed from saved conversation-final timestamps; 46/60 one-shot recovery attempts returned HTTP 429 and remain explicitly poll-observed; observed wall_s is excluded from the K gate.",
+        "Focused analyzer/confirmatory regression -> PASS: 21 passed in 1.88s; nproc=4; pre-run loadavg=0.43 0.63 0.75."
+      ],
       "notes": [
-        "Prepared by Step 4.7: 4.6A-sel-qual request is valid (84 trials, SHA-256 7858204fdf01ab51741a733fd30cb64079c7cc94d3ac0ddd49286f36d3c0b440); status remains not_started until the manager-run result is available."
+        "Final selected-C timing artifact: benchmarks/chat-mode-scheduling-v2/phase4-selected-c-timing-qualification.json SHA-256 c308d01491d66e14515f5e554913342c9e715e872ff4b4fdd68356847d9723f6.",
+        "Selected endpoint C300 at 300 s; timing_qualification_reused=false; max_safe_parallel_blocks=0, so Step 4.8 must generate serial randomized confirmatory execution.",
+        "The K=1 decision does not depend on wall_s: mandatory host-load evidence alone fails Q-read(1), while dispatch/overhead/correctness/routing at Q-wait(1) pass their thresholds.",
+        "46 unrecovered D9 wall times are listed individually as stayed_observed with reason http_429_after_one_shot_fetch_attempt; they are not silently mixed with conversation-timestamp wall times.",
+        "Calibration reuse audit passed for all 10 C300 R5/R6/R7/R12 slots: frozen source, endpoint/lane, Project, instruction, model/effort and scenario-manifest hashes match current confirmatory identities."
       ],
       "commit": null,
       "worker_branch": null
     },
     "4.8": {
-      "status": "not_started",
+      "status": "running",
       "tests": [],
       "notes": [],
       "commit": null,
@@ -959,11 +971,32 @@
         "benchmarks/chat-mode-scheduling-v2/phase4-historical-comparator.json": "13f1fae101ccf9de63b7c45ed593b4827ba8df4cd7a7943079ec214d812eecb7",
         "benchmarks/chat-mode-scheduling-v2/phase4-historical-comparator.md": "25345d3d5567878ef226d13d11d820357bf55eec8d9930402dd0bbd10de06b51"
       }
+    },
+    {
+      "kind": "selected_c_timing_qualification",
+      "at": "2026-09-26T16:13:23+10:00",
+      "task_id": "4.6A:selected",
+      "selected_c_endpoint": "C300",
+      "selected_budget_s": 300,
+      "max_safe_parallel_blocks": 0,
+      "timing_result_path": "benchmarks/chat-mode-scheduling-v2/phase4-selected-c-timing-qualification.json",
+      "timing_result_sha256": "c308d01491d66e14515f5e554913342c9e715e872ff4b4fdd68356847d9723f6",
+      "request_sha256": "7858204fdf01ab51741a733fd30cb64079c7cc94d3ac0ddd49286f36d3c0b440",
+      "result_sha256": "bdc0e59f5b5ef8134a5f6c286364451a612146eaae515741bbfe1a2f46580590",
+      "routing_miss_rates": {
+        "A": "0/28 (0%)",
+        "B": "0/28 (0%)",
+        "C": "0/28 (0%)"
+      },
+      "settle_time_recovery": {
+        "recomputed": 14,
+        "stayed_observed_http_429": 46
+      }
     }
   ],
   "handoff": null,
   "created_at": "2026-09-25T15:31:10+10:00",
-  "updated_at": "2026-09-26T08:09:20+10:00",
+  "updated_at": "2026-09-26T16:13:23+10:00",
   "phase4_source_head": "06bc1649c4bad9449470366da971649bb7620020",
   "baseline_snapshot": {
     "path": "benchmarks/chat-mode-scheduling-v2/phase4-baseline.json",
@@ -1175,5 +1208,22 @@
       "interrupted": false,
       "tool_result_blocking_budget_exhausted": false
     }
+  },
+  "selected_c_timing_qualification": {
+    "path": "benchmarks/chat-mode-scheduling-v2/phase4-selected-c-timing-qualification.json",
+    "sha256": "c308d01491d66e14515f5e554913342c9e715e872ff4b4fdd68356847d9723f6",
+    "request_sha256": "7858204fdf01ab51741a733fd30cb64079c7cc94d3ac0ddd49286f36d3c0b440",
+    "result_sha256": "bdc0e59f5b5ef8134a5f6c286364451a612146eaae515741bbfe1a2f46580590",
+    "selected_c_endpoint": "C300",
+    "selected_budget_s": 300,
+    "timing_qualification_reused": false,
+    "max_safe_parallel_blocks": 0,
+    "routing_miss_rates": {
+      "A": 0.0,
+      "B": 0.0,
+      "C": 0.0
+    },
+    "settle_recomputed": 14,
+    "settle_stayed_observed_http_429": 46
   }
 }
