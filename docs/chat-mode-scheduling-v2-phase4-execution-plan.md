@@ -2585,6 +2585,28 @@ A, B and C300.
   history as superseded. If C300 is selected, Phase 4 continues at
   4.6A:selected. H is re-analyzed for 4H-R the same way.
 
+### Amendment P4-A4: send gate releases after the post (2026-09-26)
+
+Manager decision 2026-09-26, recorded 11:11, under the owner's standing
+instructions: "You can run them parallel" (2026-09-25 19:15), which
+superseded the 45-60 s trial spacing of P4-A1, and "you should not wait for
+my reply" (2026-09-26 07:27). Evidence: the harness's shared send gate
+(`SEND_GATE_SH` in `scripts/chat_scheduling_runtime.py`) is held for the whole
+`send_project_chat` call, which includes polling for the reply, and it
+forces a 60 s floor on the trial gap. So only one trial's turn was ever in
+flight: the first execution of `4.6A-sel-qual` posted a message about every
+145 s while each turn took 20-70 s, and its K=2 and K=4 levels were serial
+in fact. A confirmatory suite of about 150 trials would take 6-7 hours.
+
+- **Change.** The gate is released as soon as the conversation id is known
+  (the message has posted); posting stays one at a time; the trial gap comes
+  from the manager's `trialgap` file with a 15 s floor. Turns of different
+  trials now overlap, which is the concurrency the matched-block design and
+  the K qualification assume.
+- **Consequence.** The qualification executed under the old gate is kept as
+  a serial diagnostic and is not used to choose K. `4.6A-sel-qual` runs again
+  under the new gate, and 4.8 chooses K from that run only.
+
 ### Step 4H-R — aggregate historical H comparator
 
 Predecessor: every canonical H R5/R6/R7/R12 task is frozen. This step may run in
