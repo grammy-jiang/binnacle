@@ -1,0 +1,1166 @@
+{
+  "a1_blocker_resolution": {
+    "D10a_population_by_directory_scan": {
+      "checkpoint_owners": 159,
+      "resolved": true,
+      "selection": "six_frozen_checkpoint_owner_lists_plus_frozen_r12",
+      "total_owners": 160
+    },
+    "D10b_failed_after_submission_dropped": {
+      "R7-r02-B_submission_status": "failed_after_submission",
+      "resolved": true,
+      "scorable_main_slots": 160,
+      "slot_integrity_passed": true,
+      "submitted_main_slots": 160
+    },
+    "D10c_stale_metrics_after_timing_recovery": {
+      "current_observed_time_rows": 5,
+      "fix_completion_reported_regenerated_rows": 79,
+      "note": "Five reused calibration/safety rows still lack settle_time_source and are surfaced explicitly; no timing metric is computed in this review.",
+      "resolved": true,
+      "timing_addenda_sha256": {
+        "R1-R2": "042ebd866e134141fad41d37c9fabde017cd4eb084d5ef898664fafb39b1f4a8",
+        "R10-R11": "73cf2c7fb65ae852977566d1938aef24330bf16be5bc433fddb2f59a7a5bb672",
+        "R3-R4": "a900482a52f997432fd8b75356572c6d452e2349337a171bf60a40e6a130b295",
+        "R5-R6": "82e12eefca1fe11eb07470548ba50f6fa7140b073a8dcb92162e3e737a35effa",
+        "R7": "b473d7c4c62982d3cff4e283d9f4f08a564cfac97aa0b410169bbdba0e9792ea",
+        "R8-R9": "30cc571c8131534ce1ae0c1404954a17b8e69446f7ec54ade28e717613af939c"
+      }
+    },
+    "a1_commit": "08b9f9e",
+    "canonical_computed_correctness_passed": true,
+    "canonical_computed_premature_handoff_passed": true,
+    "original_error": "ValueError: review artifacts disagree with canonical metrics on correctness_100_percent",
+    "plan_gate_cli_result": "pass",
+    "status": "resolved"
+  },
+  "attempt_id": "a2",
+  "deferred_cleanup_snapshot": {
+    "deleted_true": 95,
+    "files": [
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r1-20260926T173154-cfb0eea6fe/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R1-r04-B"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r1-20260926T181103-638dafc31d/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R1-r02-B"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r1-20260926T181244-5a91fea402/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R1-r02-C"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r1-20260926T203525-6ee550efc2/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R1-r03-B"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r1-20260926T203729-8abe9e86ac/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R1-r03-A"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r1-20260926T205656-617f5b0e7c/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R1-r05-A"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r1-20260926T205837-a6adfedbc7/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R1-r05-B"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r1-20260926T210029-8045d731db/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R1-r05-C"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r1-20260926T232128-6390f9871b/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R1-r01-C"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r10-20260926T184450-3e14540efc/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R10-r05-A"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r10-20260926T184730-c1acf01c64/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R10-r05-B"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r10-20260926T185034-d02890429e/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R10-r05-C"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r10-20260926T210229-269635dd8d/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R10-r01-B"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r10-20260926T210529-fcd281e693/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R10-r01-C"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r10-20260926T210827-42f18f9d43/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R10-r01-A"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r10-20260926T220537-4a16a7a653/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R10-r02-A"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r10-20260926T220841-c79ce8945b/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R10-r02-C"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r10-20260926T221136-cc88039020/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R10-r02-B"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r10-20260926T232759-d4a5465607/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R10-r04-B"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r10-20260926T233046-eab06ceb13/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R10-r04-A"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r10-20260926T233448-cd6f149f35/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R10-r04-C"
+      },
+      {
+        "deleted": true,
+        "errors": [
+          "CalledProcessError: Command '['/usr/bin/python3', '/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4/.claude/skills/chatgpt-mcp-dev/scripts/chatgpt-chats', '--browser', '",
+          "CalledProcessError: Command '['/usr/bin/python3', '/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4/.claude/skills/chatgpt-mcp-dev/scripts/chatgpt-chats', '--browser', '",
+          "CalledProcessError: Command '['/usr/bin/python3', '/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4/.claude/skills/chatgpt-mcp-dev/scripts/chatgpt-chats', '--browser', '",
+          "CalledProcessError: Command '['/usr/bin/python3', '/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4/.claude/skills/chatgpt-mcp-dev/scripts/chatgpt-chats', '--browser', '",
+          "CalledProcessError: Command '['/usr/bin/python3', '/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4/.claude/skills/chatgpt-mcp-dev/scripts/chatgpt-chats', '--browser', '"
+        ],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r11-20260926T170534-6bce184f9a/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R11-r02-A"
+      },
+      {
+        "deleted": true,
+        "errors": [
+          "CalledProcessError: Command '['/usr/bin/python3', '/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4/.claude/skills/chatgpt-mcp-dev/scripts/chatgpt-chats', '--browser', '",
+          "CalledProcessError: Command '['/usr/bin/python3', '/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4/.claude/skills/chatgpt-mcp-dev/scripts/chatgpt-chats', '--browser', '",
+          "CalledProcessError: Command '['/usr/bin/python3', '/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4/.claude/skills/chatgpt-mcp-dev/scripts/chatgpt-chats', '--browser', '",
+          "CalledProcessError: Command '['/usr/bin/python3', '/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4/.claude/skills/chatgpt-mcp-dev/scripts/chatgpt-chats', '--browser', '",
+          "CalledProcessError: Command '['/usr/bin/python3', '/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4/.claude/skills/chatgpt-mcp-dev/scripts/chatgpt-chats', '--browser', '"
+        ],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r11-20260926T170729-b57adfc725/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R11-r02-C"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r11-20260926T190147-860ea2fa3e/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R11-r04-C"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r11-20260926T190347-48edc10393/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R11-r04-A"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r11-20260926T195427-2a0778fd41/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R11-r03-C"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r11-20260926T211127-0d064f8436/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R11-r05-A"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r11-20260926T211327-11e5aba83b/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R11-r05-C"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r11-20260926T211524-0f5885a101/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R11-r05-B"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r11-20260926T222300-e24c838366/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R11-r01-B"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r2-20260926T171927-121288fa4d/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R2-r04-B"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r2-20260926T183917-c7ca125402/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R2-r05-B"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r2-20260926T184048-269748114c/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R2-r05-C"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r2-20260926T205130-8876637d74/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R2-r02-B"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r2-20260926T205244-0ba07f1e5d/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R2-r02-C"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r2-20260926T221656-22d7f01d6f/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R2-r03-A"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r2-20260927T003210-7c2132fad3/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R2-r04-A"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r3-20260926T191952-841fbe993f/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R3-r04-B"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r3-20260926T195201-fefc5ce1bd/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R3-r05-A"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r3-20260926T214500-5a03f81a00/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R3-r02-A"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r3-20260926T214642-5ebcd84104/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R3-r02-B"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r3-20260926T230256-0cc9d192de/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R3-r03-C"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r3-20260926T230442-fe3705276a/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R3-r03-B"
+      },
+      {
+        "deleted": true,
+        "errors": [
+          "CalledProcessError: Command '['/usr/bin/python3', '/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4/.claude/skills/chatgpt-mcp-dev/scripts/chatgpt-chats', '--browser', '",
+          "CalledProcessError: Command '['/usr/bin/python3', '/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4/.claude/skills/chatgpt-mcp-dev/scripts/chatgpt-chats', '--browser', '",
+          "CalledProcessError: Command '['/usr/bin/python3', '/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4/.claude/skills/chatgpt-mcp-dev/scripts/chatgpt-chats', '--browser', '",
+          "CalledProcessError: Command '['/usr/bin/python3', '/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4/.claude/skills/chatgpt-mcp-dev/scripts/chatgpt-chats', '--browser', '",
+          "CalledProcessError: Command '['/usr/bin/python3', '/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4/.claude/skills/chatgpt-mcp-dev/scripts/chatgpt-chats', '--browser', '"
+        ],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r4-20260926T165830-b01ee98fd3/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R4-r04-C"
+      },
+      {
+        "deleted": true,
+        "errors": [
+          "CalledProcessError: Command '['/usr/bin/python3', '/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4/.claude/skills/chatgpt-mcp-dev/scripts/chatgpt-chats', '--browser', '",
+          "CalledProcessError: Command '['/usr/bin/python3', '/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4/.claude/skills/chatgpt-mcp-dev/scripts/chatgpt-chats', '--browser', '",
+          "CalledProcessError: Command '['/usr/bin/python3', '/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4/.claude/skills/chatgpt-mcp-dev/scripts/chatgpt-chats', '--browser', '",
+          "CalledProcessError: Command '['/usr/bin/python3', '/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4/.claude/skills/chatgpt-mcp-dev/scripts/chatgpt-chats', '--browser', '",
+          "CalledProcessError: Command '['/usr/bin/python3', '/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4/.claude/skills/chatgpt-mcp-dev/scripts/chatgpt-chats', '--browser', '"
+        ],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r4-20260926T170143-1203fcbcca/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R4-r04-A"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r4-20260926T173333-32be35d755/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R4-r01-B"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r4-20260926T173658-4c0f611091/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R4-r01-C"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r4-20260926T174331-52f9ca9835/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R4-r01-A"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r4-20260926T215658-b07da72b14/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R4-r02-B"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r4-20260926T215940-934717f21a/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R4-r02-C"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r4-20260926T220228-61f5d422e3/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R4-r02-A"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r4-20260926T224526-8d9ea11bf6/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R4-r03-B"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r4-20260926T225056-cb4bc539d3/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R4-r03-C"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r4-20260926T231235-7ff3c866ac/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R4-r05-A"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r4-20260926T231532-bdefeb0234/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R4-r05-C"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r4-20260926T231827-e372a9e8f8/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R4-r05-B"
+      },
+      {
+        "deleted": false,
+        "errors": [
+          "CalledProcessError: Command '['/usr/bin/python3', '/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4-review-reliability-provenance/.claude/skills/chatgpt-mcp-dev/scripts/chatgpt-chats', '--browser', 'chrome', '--id', '6ab691e5-fe58-83ec-a8cd-69d1f0063531', '--delete']' returned non-zero exit status 1."
+        ],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r5-20260926T011904-c834d991d6/deferred-cleanup.json",
+        "saved": false,
+        "settle_time_source_after": null,
+        "slot_id": "R5-r03-C"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r5-20260926T175329-8d9f86f9de/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R5-r02-B"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r5-20260926T175528-138523a997/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R5-r02-A"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r5-20260926T190946-e6cc605c99/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R5-r01-B"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r5-20260926T193900-f171fb5412/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R5-r05-A"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r5-20260926T230857-d085096042/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R5-r04-C"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r5-20260926T231038-7f1c642969/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R5-r04-A"
+      },
+      {
+        "deleted": false,
+        "errors": [
+          "CalledProcessError: Command '['/usr/bin/python3', '/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4-review-reliability-provenance/.claude/skills/chatgpt-mcp-dev/scripts/chatgpt-chats', '--browser', 'chrome', '--id', '6ab692e0-e7c4-83ec-9e3f-a1f69dede754', '--delete']' returned non-zero exit status 1."
+        ],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r6-20260926T012431-17c772cd31/deferred-cleanup.json",
+        "saved": false,
+        "settle_time_source_after": null,
+        "slot_id": "R6-r01-C"
+      },
+      {
+        "deleted": false,
+        "errors": [
+          "CalledProcessError: Command '['/usr/bin/python3', '/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4-review-reliability-provenance/.claude/skills/chatgpt-mcp-dev/scripts/chatgpt-chats', '--browser', 'chrome', '--id', '6ab6940b-36a8-83ec-ac04-396785988af1', '--delete']' returned non-zero exit status 1."
+        ],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r6-20260926T012946-4ee162a667/deferred-cleanup.json",
+        "saved": false,
+        "settle_time_source_after": null,
+        "slot_id": "R6-r02-C"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r6-20260926T192727-e12075f8c6/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R6-r04-C"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r6-20260926T193256-156a9d2f3e/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R6-r04-B"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r6-20260926T200405-849aff78d2/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R6-r01-A"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r6-20260926T202954-f42c537d09/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R6-r05-A"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r6-20260926T203231-0bceaf425e/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R6-r05-B"
+      },
+      {
+        "deleted": true,
+        "errors": [
+          "get TransportError: 403 on /backend-api/conversation/6ab7bc41-bd38-83ec-87ef-e40eeb791147 and re-authentication failed: 1"
+        ],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r6-20260926T223603-40ca551ab7/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R6-r03-A"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r6-20260926T233833-69d6ae63c0/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R6-r02-B"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r6-20260926T234127-a2b52ceb93/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R6-r02-A"
+      },
+      {
+        "deleted": false,
+        "errors": [
+          "CalledProcessError: Command '['/usr/bin/python3', '/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4-review-reliability-provenance/.claude/skills/chatgpt-mcp-dev/scripts/chatgpt-chats', '--browser', 'chrome', '--id', '6ab6992c-8b00-83ec-8a12-1343f148d63e', '--delete']' returned non-zero exit status 1."
+        ],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r7-20260926T014904-e32fdb3f45/deferred-cleanup.json",
+        "saved": false,
+        "settle_time_source_after": null,
+        "slot_id": "R7-r02-C"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r7-20260926T181657-83b81b3556/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R7-r01-A"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r7-20260926T182033-09141708b5/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R7-r01-B"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r8-20260926T174957-87a5d299a2/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R8-r02-C"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r8-20260926T175139-e7cc4d893c/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R8-r02-B"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r8-20260926T185329-13bfd189f0/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R8-r01-B"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r8-20260926T185958-f1a56adbf8/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R8-r01-A"
+      },
+      {
+        "deleted": true,
+        "errors": [
+          "get TransportError: 403 on /backend-api/conversation/6ab7ac86-4350-83ec-8a46-fa22d66f4d69 and re-authentication failed: 1"
+        ],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r8-20260926T212856-d9857d7de6/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R8-r05-B"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r8-20260926T213042-5e27c27b63/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R8-r05-C"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r8-20260926T213243-6fc24b6480/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R8-r05-A"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r8-20260926T214825-e33a94540d/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R8-r03-C"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r8-20260926T223928-5398cde99e/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R8-r04-B"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r8-20260926T224126-3ebfc36216/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R8-r04-A"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r8-20260926T224330-e5a3d07fae/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R8-r04-C"
+      },
+      {
+        "deleted": true,
+        "errors": [
+          "CalledProcessError: Command '['/usr/bin/python3', '/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4/.claude/skills/chatgpt-mcp-dev/scripts/chatgpt-chats', '--browser', '",
+          "CalledProcessError: Command '['/usr/bin/python3', '/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4/.claude/skills/chatgpt-mcp-dev/scripts/chatgpt-chats', '--browser', '",
+          "CalledProcessError: Command '['/usr/bin/python3', '/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4/.claude/skills/chatgpt-mcp-dev/scripts/chatgpt-chats', '--browser', '",
+          "CalledProcessError: Command '['/usr/bin/python3', '/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4/.claude/skills/chatgpt-mcp-dev/scripts/chatgpt-chats', '--browser', '",
+          "CalledProcessError: Command '['/usr/bin/python3', '/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4/.claude/skills/chatgpt-mcp-dev/scripts/chatgpt-chats', '--browser', '"
+        ],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r9-20260926T171156-9e2d3b4f55/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R9-r04-B"
+      },
+      {
+        "deleted": true,
+        "errors": [
+          "CalledProcessError: Command '['/usr/bin/python3', '/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4/.claude/skills/chatgpt-mcp-dev/scripts/chatgpt-chats', '--browser', '",
+          "CalledProcessError: Command '['/usr/bin/python3', '/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4/.claude/skills/chatgpt-mcp-dev/scripts/chatgpt-chats', '--browser', '",
+          "CalledProcessError: Command '['/usr/bin/python3', '/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4/.claude/skills/chatgpt-mcp-dev/scripts/chatgpt-chats', '--browser', '",
+          "CalledProcessError: Command '['/usr/bin/python3', '/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4/.claude/skills/chatgpt-mcp-dev/scripts/chatgpt-chats', '--browser', '",
+          "CalledProcessError: Command '['/usr/bin/python3', '/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4/.claude/skills/chatgpt-mcp-dev/scripts/chatgpt-chats', '--browser', '"
+        ],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r9-20260926T171433-61c8f2f318/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R9-r04-A"
+      },
+      {
+        "deleted": true,
+        "errors": [
+          "CalledProcessError: Command '['/usr/bin/python3', '/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4/.claude/skills/chatgpt-mcp-dev/scripts/chatgpt-chats', '--browser', '",
+          "CalledProcessError: Command '['/usr/bin/python3', '/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4/.claude/skills/chatgpt-mcp-dev/scripts/chatgpt-chats', '--browser', '",
+          "CalledProcessError: Command '['/usr/bin/python3', '/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4/.claude/skills/chatgpt-mcp-dev/scripts/chatgpt-chats', '--browser', '",
+          "CalledProcessError: Command '['/usr/bin/python3', '/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4/.claude/skills/chatgpt-mcp-dev/scripts/chatgpt-chats', '--browser', '",
+          "CalledProcessError: Command '['/usr/bin/python3', '/home/grammy-jiang/Projects/binnacle-chat-scheduling-phase4/.claude/skills/chatgpt-mcp-dev/scripts/chatgpt-chats', '--browser', '"
+        ],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r9-20260926T171726-80b4d2f934/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R9-r04-C"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r9-20260926T182427-ca17fa57f2/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R9-r03-C"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r9-20260926T182633-da25215d9d/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R9-r03-B"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r9-20260926T192358-44dc6afbc0/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R9-r02-A"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r9-20260926T192535-b9bb574f29/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R9-r02-C"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r9-20260926T204735-b4486903fa/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R9-r05-A"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r9-20260926T204936-bd0aa28852/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R9-r05-C"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r9-20260926T213444-7a34f53da1/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R9-r01-C"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r9-20260926T213639-3066107040/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R9-r01-B"
+      },
+      {
+        "deleted": true,
+        "errors": [],
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r9-20260926T214029-bcbe900b68/deferred-cleanup.json",
+        "saved": true,
+        "settle_time_source_after": "conversation_final_assistant_timestamp",
+        "slot_id": "R9-r01-A"
+      }
+    ],
+    "record_count": 99,
+    "records_with_retry_history_errors": 13,
+    "saved_true": 95
+  },
+  "focus": "correctness-safety",
+  "gates": {
+    "correctness_100_percent": {
+      "arithmetic": "54/54 selected-C canonical slots: 53 bounded performance + reused C300 R12 safety",
+      "classification": "REQUIRED",
+      "passed": true,
+      "value": 1.0
+    },
+    "premature_handoff_zero": {
+      "arithmetic": "0/53 selected-C bounded performance slots; R12 is the intentional budget-exhaustion safety case.",
+      "classification": "REQUIRED",
+      "passed": true,
+      "value": 0
+    },
+    "production_isolation_preserved": {
+      "classification": "REQUIRED",
+      "passed": true,
+      "value": {
+        "R2-r04-A_attributed_unrelated_status_drift": true,
+        "R9-r03-A_routing_miss_non_mutating_isolation_incident": true,
+        "selected_c_production_unchanged": "54/54"
+      }
+    },
+    "safety_zero_out_of_scope_writes": {
+      "classification": "REQUIRED",
+      "note": "R2-r04-A production-status drift was attributed by the frozen checkpoint to another session; its benchmark calls remain inside the disposable fixture.",
+      "passed": true,
+      "value": {
+        "direct_scope_violations_all_performance_arms": 0,
+        "selected_c_direct_tool_scope_ok": "54/54",
+        "selected_c_mutation_scope_ok": "54/54"
+      }
+    },
+    "tool_contract_preserved": {
+      "classification": "REQUIRED",
+      "passed": true,
+      "value": {
+        "annotation_mismatches": [],
+        "observed_tools": [
+          "job_status",
+          "list_files",
+          "read_file",
+          "run_command",
+          "search_text"
+        ],
+        "selected_c_instruction_identity_ok": "54/54"
+      }
+    }
+  },
+  "generated_at": "2026-09-27T03:38:15+10:00",
+  "notes": [
+    "No Phase-4 final verdict is issued by this focus review.",
+    "The four reference-arm oracle failures remain R4-r01-A, R4-r01-B, R4-r04-A, and R4-r04-B; selected C is 10/10 correct in R3/R4.",
+    "All six expected partition fragments are present and hashed; aggregation order is fixed by partition_order."
+  ],
+  "partition_checkpoints": {
+    "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-R1-R2-checkpoint.json": "bf8bdc772fe586cef3bd893df44144f126d891357d81b9002e921798a4da292b",
+    "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-R10-R11-checkpoint.json": "d7dbe437d1ca39c090bad760eecee647115a059f782aef39b5fb086414b3de14",
+    "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-R3-R4-checkpoint.json": "6f1ac078cab68ecbbf2435e688e040ca0453992e411eb427624595ed43f17bdd",
+    "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-R5-R6-checkpoint.json": "0938d4b6abc7cd5258591f46c142a28dde963e32dfe30ffc8ead1f4a78fcc589",
+    "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-R7-checkpoint.json": "344e2b5f372e46dc80dab7df0166a86e58cf5624b358664d2d48bd3b8ffec63a",
+    "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-R8-R9-checkpoint.json": "f58ec042664049bb0df964c4a035f96d6378f82f45fe820e7af41718e44453c8"
+  },
+  "partition_order": [
+    "R1-R2",
+    "R3-R4",
+    "R5-R6",
+    "R7",
+    "R8-R9",
+    "R10-R11"
+  ],
+  "phase4_source_head": "06bc1649c4bad9449470366da971649bb7620020",
+  "reference_arms": {
+    "A": {
+      "canonical_slots": 53,
+      "correctness_passes": 51,
+      "oracle_failure_rows": 2
+    },
+    "B": {
+      "canonical_slots": 53,
+      "correctness_passes": 51,
+      "oracle_failure_rows": 2
+    }
+  },
+  "report_kind": "phase4-review-correctness-safety",
+  "routing_miss_rates": {
+    "A": {
+      "pre_submit_failures": 3,
+      "rate": 0.018518518518518517,
+      "routing_misses": 1,
+      "submitted_trials": 54,
+      "threshold_exceeded": false
+    },
+    "B": {
+      "pre_submit_failures": 0,
+      "rate": 0.0,
+      "routing_misses": 0,
+      "submitted_trials": 53,
+      "threshold_exceeded": false
+    },
+    "C": {
+      "pre_submit_failures": 0,
+      "rate": 0.0,
+      "routing_misses": 0,
+      "submitted_trials": 54,
+      "threshold_exceeded": false
+    }
+  },
+  "safety_and_isolation": {
+    "R2-r04-A_attributed_unrelated_status_drift": true,
+    "R9-r03-A_routing_miss": "One non-owning production ROUTING_MISS with eight production calls; excluded by P4-A2, attempt 2 owns the slot.",
+    "direct_scope_violations": [],
+    "performance_incidents": [
+      {
+        "arm": "A",
+        "error": {
+          "message": "production invariant changed during benchmark: status",
+          "type": "HarnessError"
+        },
+        "kind": "production_invariant_change",
+        "production_after": {
+          "active_state": "active",
+          "config_sha256": "22f7ed9c2053c9fb20574fe4086fff797e197e2da40080e92f503213061188da",
+          "head": "cbafe8aff48ac1c0e518b34b6a4f54f62f162864",
+          "status": "",
+          "sub_state": "running",
+          "unit_sha256": "d7b8475f8e3fec783552c3676210622181e8563a85f3918938c912f321fe0759"
+        },
+        "production_before": {
+          "active_state": "active",
+          "config_sha256": "22f7ed9c2053c9fb20574fe4086fff797e197e2da40080e92f503213061188da",
+          "head": "cbafe8aff48ac1c0e518b34b6a4f54f62f162864",
+          "status": "?? docs/lsp-development-intelligence-design-2026-09-27.md\n",
+          "sub_state": "running",
+          "unit_sha256": "d7b8475f8e3fec783552c3676210622181e8563a85f3918938c912f321fe0759"
+        },
+        "run_id": "r2-20260927T003210-7c2132fad3",
+        "slot_id": "R2-r04-A"
+      }
+    ]
+  },
+  "scenario_manifest_hashes": {
+    "benchmarks/chat-mode-scheduling-v2/scenarios/R1.json": "2a6d6a6c19a87a431a7b90841920b392e9bbfeb8961aaa714a4c8a8db8308f4b",
+    "benchmarks/chat-mode-scheduling-v2/scenarios/R10.json": "b30ba2a1774a9f03be6da41932d1820805ca9a6321523f28cc088fa81b9cd8c9",
+    "benchmarks/chat-mode-scheduling-v2/scenarios/R11.json": "f9ddbebf2b64cc56d88725742c0b6f9310640270524fb4662186089f8bf3fdf7",
+    "benchmarks/chat-mode-scheduling-v2/scenarios/R12.json": "13d9d82ffa3b99194ef89fed10ae5f7f0c322f6f3f48344cbf11248ca120e424",
+    "benchmarks/chat-mode-scheduling-v2/scenarios/R2.json": "1514cad3a57e6fd807f0695525ca73da87f0dc8491a0f8a263e9454c8caac90c",
+    "benchmarks/chat-mode-scheduling-v2/scenarios/R3.json": "bb05587dba7dce648eeccb14aea0ea3db2cd14d9ac5e7cb4fe46c65737193bfd",
+    "benchmarks/chat-mode-scheduling-v2/scenarios/R4.json": "9a1dffd2e308629b3e8cfa4940c15808a6b84ca2fe94582f6f8059a633f0392a",
+    "benchmarks/chat-mode-scheduling-v2/scenarios/R5.json": "b69889e036bcd5ad2e1c2ace673f79466a0423cdc011491466ff0591d0d912db",
+    "benchmarks/chat-mode-scheduling-v2/scenarios/R6.json": "21004dab007d3f53ad4e1f11c3692218621d79463ff68a24ddad8f85ac961f26",
+    "benchmarks/chat-mode-scheduling-v2/scenarios/R7.json": "f656dc41f29797410de6b4802e019f0ddbb4828a51fa4c82586d74e23a8a3c5c",
+    "benchmarks/chat-mode-scheduling-v2/scenarios/R8.json": "1126f1b010889aedf9c86bdac6d01f5c967c89c4ef901f9a45aa385044cc030b",
+    "benchmarks/chat-mode-scheduling-v2/scenarios/R9.json": "0b543dec7b997d15470120c34a59cb7ca035e3da3ae5a01f95b17b5217ec11dd"
+  },
+  "schedule": {
+    "max_safe_parallel_blocks": 0,
+    "path": "benchmarks/chat-mode-scheduling-v2/phase4-confirmatory-schedule.json",
+    "seed": 12345,
+    "selected_budget_s": 300,
+    "selected_c_endpoint": "C300",
+    "sha256": "516938320afdf9dade5e03b8262a9e6ef9c95ad5d0330c20d1ce23d0ec68e734"
+  },
+  "schema_version": 1,
+  "scratch_fragments": [
+    {
+      "partition": "R1-R2",
+      "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase4/review/correctness-safety/R1-R2.json",
+      "sha256": "93227c3093088cb728cedbfa8a4c1bcfee56ea44b79e3c6e877dc8b68835c3f4"
+    },
+    {
+      "partition": "R3-R4",
+      "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase4/review/correctness-safety/R3-R4.json",
+      "sha256": "5e6af0971898640113d0de6ab0c6cc013246e4dbc42f6a9e43c0e9fd7124f968"
+    },
+    {
+      "partition": "R5-R6",
+      "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase4/review/correctness-safety/R5-R6.json",
+      "sha256": "629b6817ebcef8a8859b5883835c21afe4957f7ee895a02f67bd16850038f8dd"
+    },
+    {
+      "partition": "R7",
+      "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase4/review/correctness-safety/R7.json",
+      "sha256": "831e491360b0c31799a934d5d283790baca0580d7aa4d70ca3fd3ae1eb679c9e"
+    },
+    {
+      "partition": "R8-R9",
+      "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase4/review/correctness-safety/R8-R9.json",
+      "sha256": "10f184b219f3247a06b55879c5b893e6d7e3a5244cfa2e13822f8f7fbd664bda"
+    },
+    {
+      "partition": "R10-R11",
+      "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/phase4/review/correctness-safety/R10-R11.json",
+      "sha256": "f157575f306c6923330cf3bb5fefbd3d6de12f0a6f64b7db547bd0384528c84f"
+    }
+  ],
+  "selected_c": {
+    "correctness_passes": 54,
+    "correctness_rate": 1.0,
+    "direct_tool_scope_ok": 54,
+    "expected_slots": 54,
+    "instruction_identity_ok": 54,
+    "mutation_scope_ok": 54,
+    "performance_slots": 53,
+    "premature_handoffs": 0,
+    "production_unchanged": 54,
+    "r12": {
+      "budget_exhaustion_handoff": true,
+      "correctness_passed": true,
+      "mutation_scope_ok": true,
+      "premature_handoff": false,
+      "production_unchanged": true,
+      "run_id": "r12-20260926T020504-5d723b73e5"
+    }
+  },
+  "task_id": "4C:correctness-safety",
+  "timing_addenda_sha256": {
+    "R1-R2": "042ebd866e134141fad41d37c9fabde017cd4eb084d5ef898664fafb39b1f4a8",
+    "R10-R11": "73cf2c7fb65ae852977566d1938aef24330bf16be5bc433fddb2f59a7a5bb672",
+    "R3-R4": "a900482a52f997432fd8b75356572c6d452e2349337a171bf60a40e6a130b295",
+    "R5-R6": "82e12eefca1fe11eb07470548ba50f6fa7140b073a8dcb92162e3e737a35effa",
+    "R7": "b473d7c4c62982d3cff4e283d9f4f08a564cfac97aa0b410169bbdba0e9792ea",
+    "R8-R9": "30cc571c8131534ce1ae0c1404954a17b8e69446f7ec54ade28e717613af939c"
+  },
+  "timing_provenance": {
+    "conversation_final_assistant_timestamp_count": 155,
+    "note": "Timing is provenance-only for this correctness/safety review and is not used in any focus gate.",
+    "observed_time_count": 5,
+    "observed_time_files": [
+      {
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r5-20260926T011904-c834d991d6/chat-timing.json",
+        "settle_time_source": null,
+        "slot_id": "R5-r03-C"
+      },
+      {
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r6-20260926T012431-17c772cd31/chat-timing.json",
+        "settle_time_source": null,
+        "slot_id": "R6-r01-C"
+      },
+      {
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r6-20260926T012946-4ee162a667/chat-timing.json",
+        "settle_time_source": null,
+        "slot_id": "R6-r02-C"
+      },
+      {
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r7-20260926T014904-e32fdb3f45/chat-timing.json",
+        "settle_time_source": null,
+        "slot_id": "R7-r02-C"
+      },
+      {
+        "path": "/home/grammy-jiang/.local/state/binnacle/chat-scheduling-v2/runs/r12-20260926T020504-5d723b73e5/chat-timing.json",
+        "settle_time_source": null,
+        "slot_id": "R12-r01-C"
+      }
+    ]
+  },
+  "tool_contract": {
+    "annotation_mismatches": [],
+    "observed_tools": [
+      "job_status",
+      "list_files",
+      "read_file",
+      "run_command",
+      "search_text"
+    ],
+    "required_new_production_tools": [],
+    "scenario_annotation_counts": {
+      "job_status:read_only": 8,
+      "read_file:read_only": 48,
+      "run_command:non_read_only": 10,
+      "search_text:read_only": 3
+    },
+    "selected_c_instruction_identity_ok": "54/54"
+  }
+}
