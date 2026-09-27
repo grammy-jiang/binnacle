@@ -269,12 +269,19 @@ def test_background_flag_with_fast_command_still_reports_exited():
 def test_stop_escalates_to_sigkill_when_sigterm_ignored(monkeypatch):
     # A process that ignores SIGTERM must still be stopped, by SIGKILL, and
     # the recorded signal must be 9. Shrink the grace so the test is quick.
+    # Stop only once the handler is in place: in a CPU-starved run (the
+    # weekly flake hunt's 1-CPU scope, 2026-09-28) python3 had not reached
+    # signal.signal() when the stop came, and SIGTERM ended it (signal 15).
     monkeypatch.setattr(jobstore, "STOP_SIGTERM_GRACE_S", 0.25)
     p = run(
         "exec python3 -c 'import signal, time; "
-        "signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(30)'",
+        "signal.signal(signal.SIGTERM, signal.SIG_IGN); "
+        'print("ignoring", flush=True); time.sleep(30)\'',
         background=True,
     )
+    assert _wait_until(
+        lambda: b"ignoring" in jobstore.read_log(p["job_id"]), timeout=30.0
+    ), "the job never installed its SIGTERM handler"
     r = stop(p["job_id"])
     assert r["state"] == "exited" and r["signal"] == 9
 
