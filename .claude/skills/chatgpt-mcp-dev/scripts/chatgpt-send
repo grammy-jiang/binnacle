@@ -6,14 +6,16 @@ conversation (or a new one), wait for the assistant to finish, and print its
 final message. Pair it with the server journal to prove a tool call went
 ChatGPT -> tunnel -> server and back.
 
-Since 2026-09-27 the send goes through the chatgpt-web-operations skill, the
-one maintained ChatGPT client on this host (~/.claude/skills/
-chatgpt-web-operations, override with CHATGPT_WEB_OPS_DIR): its send_prompt.py
-posts the message (--no-wait) and resolves the conversation id, and the reply
-is then read over HTTP with the skill's wait_for_reply. This script keeps only
-the command line, the output shapes and the evidence files. Before, it drove
-its own Playwright page and broke on every ChatGPT change the skill had
-already absorbed (2026-09-26: the composer lost #prompt-textarea).
+Since 2026-09-27 this is a thin wrapper around the chatgpt-web-operations
+skill, the one maintained ChatGPT client on this host (~/.claude/skills/
+chatgpt-web-operations; override with CHATGPT_WEB_OPS_DIR). It runs the
+skill's send_prompt.py once, in its own waiting mode: the skill posts the
+message in its browser window, waits for the reply over HTTP with its own
+403/429 handling, and writes a JSON document, which this script turns into
+its own outputs. This script never reads ChatGPT over HTTP itself. Before,
+it drove its own Playwright page and broke whenever ChatGPT changed a page
+the skill had already adapted to (2026-09-26: the composer lost
+#prompt-textarea).
 
     chatgpt-send --chat <id|url> "message"          # existing conversation
     chatgpt-send --new "message"                    # new chat; prints its URL
@@ -21,26 +23,36 @@ already absorbed (2026-09-26: the composer lost #prompt-textarea).
     [--timeout 180] [--browser chrome|chromium|auto] [--json] [--url-file PATH]
     [--timing-file PATH] [--visible]
 
-Differences from the script before 2026-09-27:
+How the options map to the skill, and what differs from the script before
+2026-09-27:
 
-- --timeout bounds the whole command: posting and the reply wait end within
-  TIMEOUT + 20 s, because callers such as scripts/chat_scheduling_chat.py
-  kill the process at TIMEOUT + 30 s. Before, it bounded only the reply wait.
-- --url-file is written right after the post, once the real conversation id
-  is known (the skill resolves a new chat's provisional id before it
-  returns), not while a page was still open.
-- --timing-file: "running" is written right after the post. If the post fails
-  after the skill recorded the POST body, "submitted_unconfirmed" is written,
-  so a caller never retries a turn that may have been submitted.
-  settled_at_epoch_s is the final assistant message's own create_time (the
-  2026-09-26 timing lesson); observed_at_epoch_s is when this script saw it.
-- confirmations_clicked is always 0 and buttons_seen is empty: the reply is
-  read over HTTP, not from a page, so a connector confirmation card would not
-  be approved and the command would time out. ChatGPT has not shown such
-  cards for this connector's tools in 2026.
-- A reply counts as final when the newest node is a finished visible assistant
-  message on two consecutive polls (10 s apart at first, growing to 30 s), so
-  a short reply is printed about 15-25 s after it ends, not 2 s.
+- --chat, --project, --browser, --visible and --timeout are passed on;
+  --new passes neither --chat nor --project. --timeout is the skill's reply
+  wait, whole. The skill polls the conversation every 60 s, growing to
+  150 s, and returns on the second poll that sees the same finished reply,
+  so a reply is printed one to two poll intervals after it ends, and the
+  wait can overrun --timeout by one interval. This script stops the send
+  after TIMEOUT + 300 s at the latest. A caller that kills this script ends
+  the skill's process too (PR_SET_PDEATHSIG), so no browser outlives it.
+- For --chat the skill opens its HTTP session before it posts; the new-chat
+  fast path it gets here (RP_NEWCHAT_FAST=1) skips that. Under read-path
+  throttling the session can take the skill's authentication backoff (up to
+  about 5 min) before a --chat post.
+- The skill records the message's POST body (--record-send-body, with
+  RP_RECORD_STREAM=0 so it does not wait for the reply stream). The file
+  appears at the moment of the POST, which is the evidence of submission:
+  --timing-file gets {"status": "running", "sent_at_epoch_s": <POST time>}
+  then, and for --chat the --url-file too. For a new chat the URL is known,
+  and --url-file written, when the skill returns.
+- On success --timing-file gets status "complete" with sent_at_epoch_s,
+  observed_at_epoch_s (when the skill returned), settled_at_epoch_s (the
+  same, settle_time_source "send_prompt_poll") and wall_s, which therefore
+  includes the skill's poll delay. A reply timeout after the POST gives
+  "timeout"; any other failure after the POST gives "submitted_unconfirmed",
+  so a caller never retries a turn that may exist.
+- confirmations_clicked is always 0 and buttons_seen is empty: the skill
+  does not approve connector confirmation cards (this connector's tools
+  showed none in 2026).
 
 Exit 0 with the reply on stdout; non-zero with a reason otherwise.
 """
@@ -48,29 +60,30 @@ Exit 0 with the reply on stdout; non-zero with a reason otherwise.
 from __future__ import annotations
 
 import argparse
+import contextlib
+import ctypes
 import json
 import os
 import re
+import signal
 import subprocess
 import sys
 import tempfile
 import time
 from collections.abc import Callable
+from datetime import datetime
 from pathlib import Path
 from typing import Any, NoReturn
 
 SKILL_DIR = Path(
     os.environ.get("CHATGPT_WEB_OPS_DIR", "~/.claude/skills/chatgpt-web-operations")
 ).expanduser()
-SKILL_SCRIPTS = SKILL_DIR / "scripts"
 SKILL_PYTHON = SKILL_DIR / ".venv" / "bin" / "python"
-REEXEC_FLAG = "CHATGPT_SEND_REEXEC"
+SEND_PROMPT = SKILL_DIR / "scripts" / "send_prompt.py"
 
-DEADLINE_ALLOWANCE_S = 20.0  # the whole command ends within TIMEOUT + this
-POST_BUDGET_S = 150.0  # browser start, page, composer, post and id resolution
-POLL_INTERVAL_S = 10.0  # first poll gap for the reply (grows to POLL_MAX_S)
-POLL_MAX_S = 30.0
-CONFIRM_POLL_S = 5.0  # gap of the second, confirming poll of a final reply
+OVERRUN_S = 300.0  # the send is stopped after TIMEOUT + this at the latest
+POLL_S = 0.5  # how often the skill's process and its POST record are checked
+STOP_GRACE_S = 10.0  # SIGTERM, then SIGKILL after this
 
 UUID = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
 
@@ -78,25 +91,6 @@ UUID = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
 def fail(msg: str) -> NoReturn:
     print(f"chatgpt-send: {msg}", file=sys.stderr)
     raise SystemExit(1)
-
-
-def _reexec_in_skill_venv() -> None:
-    """Run under the skill's own interpreter, which has its dependencies."""
-    venv = SKILL_DIR / ".venv"
-    if os.environ.get(REEXEC_FLAG) or Path(sys.prefix).resolve() == venv.resolve():
-        return
-    if not SKILL_PYTHON.exists():
-        fail(
-            f"the chatgpt-web-operations skill has no venv at {SKILL_PYTHON}; "
-            f"run {SKILL_DIR / 'bootstrap.sh'}"
-        )
-    env = dict(os.environ, **{REEXEC_FLAG: "1"})
-    # Intentional process replacement with the skill's interpreter; no shell.
-    os.execve(  # nosec B606
-        str(SKILL_PYTHON),
-        [str(SKILL_PYTHON), os.path.abspath(__file__), *sys.argv[1:]],
-        env,
-    )
 
 
 def _conversation_id(url: str) -> str | None:
@@ -119,45 +113,6 @@ def project_arg(project: str) -> str:
     if not match:
         fail(f"not a project id: {project!r} (use `chatgpt-project list`)")
     return match.group(1)
-
-
-def _final_from_conversation(data: object) -> tuple[bool, str]:
-    """Return backend final-completion state and final assistant text."""
-    if not isinstance(data, dict):
-        return False, ""
-    mapping = data.get("mapping")
-    if not isinstance(mapping, dict):
-        return False, ""
-    current = mapping.get(data.get("current_node"))
-    if not isinstance(current, dict):
-        return False, ""
-    message = current.get("message")
-    if not isinstance(message, dict):
-        return False, ""
-    author = message.get("author")
-    if not isinstance(author, dict) or author.get("role") != "assistant":
-        return False, ""
-    metadata = message.get("metadata")
-    metadata = metadata if isinstance(metadata, dict) else {}
-    complete = bool(metadata.get("is_complete")) or (
-        message.get("status") == "finished_successfully"
-        and message.get("end_turn") is True
-    )
-    content = message.get("content")
-    content = content if isinstance(content, dict) else {}
-    parts = content.get("parts")
-    text = "\n".join(part for part in (parts or []) if isinstance(part, str))
-    return complete, text
-
-
-def _final_create_time(data: object) -> float | None:
-    """create_time of the current node when it is a complete assistant reply."""
-    complete, _ = _final_from_conversation(data)
-    if not complete or not isinstance(data, dict):
-        return None
-    message = data["mapping"][data["current_node"]]["message"]
-    value = message.get("create_time")
-    return float(value) if isinstance(value, (int, float)) else None
 
 
 def _record_chat_url(path: str | None, url: str) -> None:
@@ -189,19 +144,21 @@ def send_argv(
     project: str | None,
     browser: str,
     visible: bool,
+    timeout_s: float,
 ) -> list[str]:
-    """The skill's send_prompt.py command line for one post without waiting."""
+    """The skill's send_prompt.py command line: one post, then its reply wait."""
     argv = [
         str(SKILL_PYTHON),
-        str(SKILL_SCRIPTS / "send_prompt.py"),
+        str(SEND_PROMPT),
         str(prompt_file),
-        "--no-wait",
         "--json",
         str(json_out),
         "--record-send-body",
         str(body_out),
         "--browser",
         browser,
+        "--timeout",
+        f"{timeout_s:g}",
     ]
     if chat:
         argv += ["--chat", chat]
@@ -212,16 +169,24 @@ def send_argv(
     return argv
 
 
-class _Recorder:
-    """Session proxy that keeps the last conversation wait_for_reply read."""
+def _die_with_parent() -> None:
+    """Run in the child before exec: SIGTERM it when this process dies."""
+    with contextlib.suppress(OSError, AttributeError):
+        ctypes.CDLL("libc.so.6", use_errno=True).prctl(1, signal.SIGTERM)  # PDEATHSIG
 
-    def __init__(self, session: Any) -> None:
-        self._session = session
-        self.last: object = None
 
-    def get_conversation(self, chat: str) -> dict:
-        self.last = self._session.get_conversation(chat)
-        return self.last  # type: ignore[return-value]
+def _epoch_of_iso(value: object) -> float | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return None
+
+
+def _last_line(text: str) -> str:
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    return lines[-1] if lines else ""
 
 
 def run(
@@ -234,33 +199,22 @@ def run(
     url_file: str | None = None,
     timing_file: str | None = None,
     *,
-    cc: Any,
-    session_factory: Callable[[str], Any],
-    runner: Callable[..., Any] = subprocess.run,
+    popen: Callable[..., Any] = subprocess.Popen,
     clock: Callable[[], float] = time.monotonic,
+    sleep: Callable[[float], None] = time.sleep,
 ) -> dict:
-    """Post through the skill, wait for the reply over HTTP, return the result."""
-    deadline = clock() + timeout_s + DEADLINE_ALLOWANCE_S
-    try:
-        session = session_factory(browser)
-    except Exception as exc:  # noqa: BLE001 - any auth failure; nothing was posted, a caller may retry
-        fail(f"could not open a ChatGPT session: {str(exc)[:200]}")
-    min_user_turns = 1
-    if chat:
-        try:
-            min_user_turns = cc.user_turns(session.get_conversation(chat)) + 1
-        except Exception as exc:  # noqa: BLE001 - the post still works; the guard is weaker
-            print(
-                f"chatgpt-send: could not count the chat's turns ({str(exc)[:120]}); "
-                "an earlier reply could be taken for this one",
-                file=sys.stderr,
-            )
-
+    """Run the skill's send_prompt.py once and turn its result into ours."""
+    chat_url = f"https://chatgpt.com/c/{chat}" if chat else None
+    deadline = clock() + timeout_s + OVERRUN_S
     with tempfile.TemporaryDirectory(prefix="chatgpt-send-") as tmp:
         work = Path(tmp)
         prompt_file = work / "prompt.txt"
         prompt_file.write_text(message, encoding="utf-8")
-        json_out, body_out = work / "send.json", work / "send-body.json"
+        json_out, body_out, log = (
+            work / "send.json",
+            work / "send-body.json",
+            work / "send.log",
+        )
         argv = send_argv(
             prompt_file,
             json_out,
@@ -269,99 +223,102 @@ def run(
             project=project,
             browser=browser,
             visible=visible,
+            timeout_s=timeout_s,
         )
         env = dict(os.environ)
-        env.setdefault("RP_NEWCHAT_FAST", "1")  # post first; no lock or listing
-        env.setdefault("RP_RECORD_STREAM", "0")  # the answer is read over HTTP
-        budget = max(1.0, min(POST_BUDGET_S, deadline - clock() - 5.0))
-        try:
-            proc = runner(argv, capture_output=True, text=True, timeout=budget, env=env)
-            rc, detail = proc.returncode, (proc.stdout or "") + (proc.stderr or "")
-        except subprocess.TimeoutExpired:
-            rc, detail = None, f"the post did not finish within {budget:g} s"
-        except OSError as exc:
-            rc, detail = None, f"could not run the skill's send_prompt.py: {exc}"
-        doc = None
-        if rc == 0 and json_out.exists():
+        env.setdefault("RP_NEWCHAT_FAST", "1")  # a new chat posts before any read
+        env.setdefault("RP_RECORD_STREAM", "0")  # the reply is read over HTTP
+        sent_at: float | None = None
+        stopped = False
+        with log.open("w", encoding="utf-8") as out:
             try:
+                proc = popen(
+                    argv,
+                    stdout=out,
+                    stderr=subprocess.STDOUT,
+                    env=env,
+                    preexec_fn=_die_with_parent,
+                )
+            except OSError as exc:
+                fail(f"could not start the skill's send_prompt.py: {exc}")
+            while proc.poll() is None:
+                if sent_at is None and body_out.exists():
+                    sent_at = body_out.stat().st_mtime
+                    _record_timing(
+                        timing_file, {"status": "running", "sent_at_epoch_s": sent_at}
+                    )
+                    if chat_url:
+                        _record_chat_url(url_file, chat_url)
+                if clock() >= deadline:
+                    stopped = True
+                    proc.terminate()
+                    try:
+                        proc.wait(timeout=STOP_GRACE_S)
+                    except subprocess.TimeoutExpired:
+                        proc.kill()
+                        proc.wait()
+                    break
+                sleep(POLL_S)
+        observed_at = time.time()
+        if sent_at is None and body_out.exists():  # posted just before it ended
+            sent_at = body_out.stat().st_mtime
+        doc: Any = None
+        if json_out.exists():
+            with contextlib.suppress(ValueError):
                 doc = json.loads(json_out.read_text(encoding="utf-8"))
-            except ValueError:
-                detail += "\nsend_prompt.py wrote an unreadable --json document"
-        submitted_at = body_out.stat().st_mtime if body_out.exists() else None
+        output = log.read_text(encoding="utf-8", errors="replace")
 
-    conversation_id = str((doc or {}).get("conversation_id") or "")
-    if (
-        doc is None
-        or not doc.get("resolved", True)
-        or cc.is_provisional(conversation_id)
-    ):
-        if submitted_at is not None:
-            _record_timing(
-                timing_file,
-                {"status": "submitted_unconfirmed", "sent_at_epoch_s": submitted_at},
-            )
-        last = detail.strip().splitlines()[-1:] or ["no output"]
-        fail(f"send failed (exit {rc}): {last[0][:200]}")
-
-    url = str(doc.get("url") or f"https://chatgpt.com/c/{conversation_id}")
-    sent_at = submitted_at if submitted_at is not None else time.time()
-    sent_mono = clock()
-    _record_chat_url(url_file, url)
-    _record_timing(timing_file, {"status": "running", "sent_at_epoch_s": sent_at})
-
-    recorder = _Recorder(session)
-    try:
-        reply = cc.wait_for_reply(
-            recorder,
-            conversation_id,
-            timeout=max(1.0, deadline - clock()),
-            interval=POLL_INTERVAL_S,
-            max_interval=POLL_MAX_S,
-            min_user_turns=min_user_turns,
-            confirm_interval=CONFIRM_POLL_S,
-        )
-    except (OSError, cc.TransportError) as exc:  # TimeoutError is an OSError
-        _, last_text = _final_from_conversation(recorder.last)
-        _record_timing(
-            timing_file,
-            {
-                "status": "timeout",
-                "sent_at_epoch_s": sent_at,
-                "observed_at_epoch_s": time.time(),
-                "wall_s": round(clock() - sent_mono, 3),
-                "last_text": last_text,
-            },
-        )
-        fail(f"no complete reply at {url}: {str(exc)[:200]}")
-
-    observed_at = time.time()
-    settled_at = _final_create_time(recorder.last)
-    source = "conversation_final_assistant_timestamp"
-    if settled_at is None:
-        settled_at, source = observed_at, "observed"
-    wall_s = round(max(0.0, settled_at - sent_at), 3)
-    _record_timing(
-        timing_file,
-        {
-            "status": "complete",
-            "sent_at_epoch_s": sent_at,
-            "settled_at_epoch_s": settled_at,
-            "observed_at_epoch_s": observed_at,
-            "settle_time_source": source,
-            "wall_s": wall_s,
-        },
+    rc = proc.returncode
+    done = (
+        not stopped
+        and rc == 0
+        and isinstance(doc, dict)
+        and isinstance(doc.get("reply"), str)
+        and bool(doc.get("conversation_id"))
+        and doc.get("resolved", True) is True
     )
+    if not done:
+        if isinstance(doc, dict) and doc.get("url"):
+            _record_chat_url(url_file, str(doc["url"]))
+        if stopped:
+            reason = f"stopped after {timeout_s + OVERRUN_S:g} s"
+        else:
+            reason = _last_line(output).removeprefix("send failed: ") or f"exit {rc}"
+        if sent_at is not None:
+            timed_out = stopped or "did not finish" in reason
+            payload: dict[str, Any] = {
+                "status": "timeout" if timed_out else "submitted_unconfirmed",
+                "sent_at_epoch_s": sent_at,
+            }
+            if timed_out:
+                payload["observed_at_epoch_s"] = observed_at
+                payload["wall_s"] = round(max(0.0, observed_at - sent_at), 3)
+            _record_timing(timing_file, payload)
+        posted = "posted" if sent_at is not None else "not posted"
+        fail(f"send failed ({posted}): {reason[:200]}")
+
+    url = str(doc.get("url") or f"https://chatgpt.com/c/{doc['conversation_id']}")
+    _record_chat_url(url_file, url)
+    sent_source = "post_record"
+    if sent_at is None:  # no POST record: the skill's own start time (seconds)
+        sent_at = _epoch_of_iso(doc.get("sent_at")) or observed_at
+        sent_source = "send_prompt_start"
+    timing = {
+        "sent_at_epoch_s": sent_at,
+        "sent_at_source": sent_source,
+        "settled_at_epoch_s": observed_at,
+        "observed_at_epoch_s": observed_at,
+        "settle_time_source": "send_prompt_poll",
+        "wall_s": round(max(0.0, observed_at - sent_at), 3),
+    }
+    _record_timing(timing_file, {"status": "complete", **timing})
     return {
         "url": url,
-        "conversation_id": conversation_id,
+        "conversation_id": str(doc["conversation_id"]),
         "confirmations_clicked": 0,
         "buttons_seen": [],
-        "reply": reply,
-        "sent_at_epoch_s": sent_at,
-        "settled_at_epoch_s": settled_at,
-        "observed_at_epoch_s": observed_at,
-        "settle_time_source": source,
-        "wall_s": wall_s,
+        "reply": doc["reply"],
+        **timing,
     }
 
 
@@ -381,7 +338,7 @@ def main() -> None:
         "--timeout",
         type=float,
         default=180.0,
-        help="seconds for the reply; the whole command ends within TIMEOUT + 20 s",
+        help="seconds the skill waits for the reply (the send stops after TIMEOUT + 300 s)",
     )
     ap.add_argument("--browser", choices=["auto", "chromium", "chrome"], default="auto")
     ap.add_argument(
@@ -389,7 +346,7 @@ def main() -> None:
     )
     ap.add_argument(
         "--url-file",
-        help="write the conversation URL right after the post (for exact cleanup after a timeout)",
+        help="write the conversation URL once it is known (for exact cleanup after a timeout)",
     )
     ap.add_argument(
         "--timing-file",
@@ -403,24 +360,21 @@ def main() -> None:
     args = ap.parse_args()
     chat = chat_arg(args.chat) if args.chat else None
     project = project_arg(args.project) if args.project else None
+    if not (SKILL_PYTHON.exists() and SEND_PROMPT.exists()):
+        fail(
+            f"the chatgpt-web-operations skill is missing at {SKILL_DIR} "
+            f"(or its venv: run {SKILL_DIR / 'bootstrap.sh'})"
+        )
 
-    _reexec_in_skill_venv()
-    sys.path.insert(0, str(SKILL_SCRIPTS))
-    import chatgpt_client as cc  # the skill's documented import bridge
-    import chatgpt_session as skill_session
-
-    browser = skill_session.pick_browser(args.browser)
     result = run(
         chat,
         args.message,
-        browser,
+        args.browser,
         args.timeout,
         args.visible,
         project,
         args.url_file,
         args.timing_file,
-        cc=cc,
-        session_factory=cc.ChatGPTSession,
     )
     if args.json:
         print(json.dumps(result, indent=2, ensure_ascii=False))
