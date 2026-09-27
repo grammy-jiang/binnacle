@@ -269,7 +269,8 @@ missing `out.log` on a running job → status still works (`log_bytes` 0);
 replaced; 200 KiB unread `stdin` returns at `wait_seconds` (spool file, not
 a pipe) and stdin is delivered; a `setsid` child dies with the job; a
 record whose pid was reused by an unrelated live process reads `unknown`
-and `stop_job` does not signal it, a matching `starttime` reads `running`,
+and `stop_job` does not signal it (its summary says the state is unknown;
+until 2026-09-28 it said "running"), a matching `starttime` reads `running`,
 a legacy record without one falls back to existence; the legacy embedded-owner
 orphan case remains covered for backwards compatibility, while manager-owned unfinished
 records recover as `owner_restart`/`host_reboot`; an unwritable spool is a clean

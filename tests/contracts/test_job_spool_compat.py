@@ -67,8 +67,12 @@ def test_finished_job_reads_as_exited(spool):
 
 
 def test_running_record_without_its_process_reads_as_unknown(spool):
-    status, _ = call("job_status", job_id=RUNNING)
+    status, text = call("job_status", job_id=RUNNING)
     assert status["state"] == "unknown"
+    assert text == (
+        f"Job {RUNNING} state unknown: its process is gone and no exit status "
+        "was recorded."
+    )
     assert (status["exit_code"], status["signal"]) == (None, None)
     assert status["log_tail"] == "" and status["processes"] == []
     assert status["command"] == "sleep 3600"

@@ -282,6 +282,12 @@ def job_status_impl(
         else:
             detail = "ended without a recorded exit status"
         summary = f"Job {job_id} {detail} after {state['runtime_s']} s."
+    elif state["state"] == "unknown":
+        # A legacy orphan or a reused pid: the job's own process is gone.
+        summary = (
+            f"Job {job_id} state unknown: its process is gone and no exit "
+            "status was recorded."
+        )
     elif quiet:
         summary = (
             f"Job {job_id} running but quiet for {state['last_output_age_s']} s "
