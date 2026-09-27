@@ -281,19 +281,11 @@ def test_job_status_timing_receives_call_start_across_thread_hop(caplog, monkeyp
     assert timing_fields["wait_bounded_s"] == "1"
     assert timing_fields["wait_effective_s"] == "1"
     assert timing_fields["waited_s"] == "0.1"
-    assert timing_fields["blocking_budget_s"] == "na"
-    assert timing_fields["blocking_spent_before_s"] == "na"
-    assert timing_fields["blocking_remaining_before_s"] == "na"
-    assert timing_fields["blocking_active_before"] == "0"
-    assert timing_fields["blocking_policy"] == "no_policy"
-    assert timing_fields["blocking_budget_exhausted"] == "false"
+    assert not any(name.startswith("blocking_") for name in timing_fields)
     assert result_fields["waited_s"] == "0.1"
     assert result_fields["wait_requested_s"] == "1"
     assert result_fields["wait_effective_s"] == "1"
-    assert result_fields["blocking_budget_s"] == "null"
-    assert result_fields["blocking_remaining_s"] == "null"
-    assert result_fields["blocking_budget_exhausted"] == "false"
-    assert result_fields["blocking_policy"] == "no_policy"
+    assert not any(name.startswith("blocking_") for name in result_fields)
 
 
 def test_job_lines_carry_the_call_id_and_the_outcome(caplog, tmp_path):
@@ -449,8 +441,8 @@ def test_effective_config_line(caplog):
     assert by_tool["search_text"]["exact_execution"] == "streaming"
     assert by_tool["run_command"]["wait_max_s"] == "50"
     assert by_tool["jobs"]["warmup_s"] == "1.0"
-    assert by_tool["jobs"]["blocking_wall_budget_clients"] == "0"
-    assert by_tool["jobs"]["blocking_wall_budgets"] == "-"
+    assert "blocking_wall_budget_clients" not in by_tool["jobs"]
+    assert "blocking_wall_budgets" not in by_tool["jobs"]
     assert by_tool["jobs"]["configured_owner"] in {"auto", "embedded", "manager"}
     assert by_tool["jobs"]["effective_owner"] in {"embedded", "manager"}
     assert by_tool["jobs"]["stop_sigterm_grace_s"] == "5.0"

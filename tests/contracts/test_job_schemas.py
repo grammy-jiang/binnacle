@@ -46,3 +46,25 @@ def test_listing_validates_with_mixed_states():
     rows = call("job_status")["jobs"]
     assert any(r["job_id"] == p["job_id"] and r["exit_code"] is None for r in rows)
     call("stop_job", job_id=p["job_id"])
+
+
+def test_job_status_schema_has_no_guard_fields():
+    """The blocking-wall guard was removed on 2026-09-27: its four fields left
+    job_status's output schema. The wait facts stay."""
+
+    async def run():
+        async with Client(server.mcp) as c:
+            return {t.name: t for t in await c.list_tools()}
+
+    props = asyncio.run(run())["job_status"].output_schema["properties"]
+    assert not any(name.startswith("blocking_") for name in props)
+    assert {"waited_s", "wait_requested_s", "wait_effective_s"} <= set(props)
+
+
+def test_positive_wait_job_status_validates_without_guard_fields():
+    p = call("run_command", command="sleep 30", workdir="/tmp", background=True)
+    s = call("job_status", job_id=p["job_id"], wait_seconds=1)
+    assert s["state"] == "running"
+    assert s["wait_requested_s"] == 1 and s["wait_effective_s"] == 1
+    assert not any(key.startswith("blocking_") for key in s)
+    call("stop_job", job_id=p["job_id"])

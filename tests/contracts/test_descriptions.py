@@ -49,7 +49,7 @@ def test_job_status_keeps_the_only_needed_clause_and_wait_contract():
     d = descriptions()["job_status"].lower()
     assert "only needed when run_command returned a job_id" in d
     assert "positive wait blocks up to the requested duration (max 50 seconds)" in d
-    assert "smaller effective turn budget" in d
+    assert "turn budget" not in d  # the blocking-wall guard was removed 2026-09-27
     assert "waiting never kills a still-running job" in d
     assert "wait_seconds=50" not in d and "instead of polling" not in d
     # 2026-09-27: 47% of solo polls outside manager chats used waits under 50 s;

@@ -4,8 +4,18 @@
 > ended `NO_GO_PERFORMANCE`, and nothing from v2 reached production. See
 > `docs/chat-mode-scheduling-v2-retrospective-2026-09-27.md`. The text below is the historical record.
 > The guard's code (`src/binnacle/blocking_wall_guard.py`, merged
-> 2026-09-24) was never enabled on this host. It will be removed after a
-> review (owner, 2026-09-27).
+> 2026-09-24) was removed on 2026-09-27, after a review and with the owner's
+> agreement. The review's facts:
+>
+> - **Never enabled on this host:** all 1,590 production decisions were
+>   `no_policy`, and no `blocking_window_closed` event was ever logged.
+> - **Its only measured effect** was in the v2 benchmark lanes. C300 against
+>   B: median wall 42.2 s against 45.7 s, and 53/53 same-prompt completions
+>   against 50/53.
+> - **Cost while disabled:** about 5 us per positive-wait call, and 31 tokens
+>   per positive-wait result.
+>
+> The code stays recoverable from commit `fb0ac00` and the archive tags.
 
 Status: design specification; no production change.
 

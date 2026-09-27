@@ -14,7 +14,6 @@ from fastmcp.tools.base import ToolResult
 from pydantic import Field
 
 from binnacle import jobs
-from binnacle.blocking_wall_guard import BlockingDecision, BlockingWallTracker
 from binnacle.callctx import (
     current_call,
     current_call_started,
@@ -29,7 +28,6 @@ LISTING_COMMAND_PREVIEW_CHARS = get_settings().jobs.listing_command_preview_char
 WAIT_MAX = get_settings().run_command.wait_max_s
 log = logging.getLogger("binnacle.job_status")
 _PERF_COUNTER = time.perf_counter
-blocking_wall_tracker = BlockingWallTracker()
 
 OUTPUT_SCHEMA = {
     "type": "object",
@@ -49,10 +47,6 @@ OUTPUT_SCHEMA = {
         "waited_s": {"type": "number"},
         "wait_requested_s": {"type": "integer"},
         "wait_effective_s": {"type": "integer"},
-        "blocking_budget_s": {"type": ["integer", "null"]},
-        "blocking_remaining_s": {"type": ["number", "null"]},
-        "blocking_budget_exhausted": {"type": "boolean"},
-        "blocking_policy": {"type": "string"},
         "processes": {
             "type": "array",
             "items": {
@@ -138,7 +132,6 @@ def _log_wait_exception_timing(
     job_id: str,
     requested_wait_s: int,
     bounded_wait_s: int,
-    decision: BlockingDecision,
     waited_s: float,
     state_start: float,
     impl_start: float,
@@ -147,32 +140,19 @@ def _log_wait_exception_timing(
     client: str | None,
     log_bytes: int,
 ) -> None:
-    """Preserve the full guard decision when a positive wait raises."""
+    """Keep the timing record when a positive wait raises."""
     dispatch_field = f"{dispatch_ms:.2f}" if dispatch_ms is not None else "na"
     log.info(
         "event=job_status_timing call=%s job_id=%s wait_requested_s=%s "
-        "wait_bounded_s=%s wait_effective_s=%s waited_s=%s "
-        "blocking_budget_s=%s blocking_spent_before_s=%s "
-        "blocking_remaining_before_s=%s blocking_active_before=%s "
-        "blocking_policy=%s blocking_budget_exhausted=%s turn=%s client=%s "
+        "wait_bounded_s=%s wait_effective_s=%s waited_s=%s turn=%s client=%s "
         "dispatch_ms=%s state_ms=%.2f read_log_ms=na process_scan_ms=na "
         "impl_ms=%.2f state=error processes=na log_bytes=%s",
         current_call.get(),
         job_id,
         requested_wait_s,
         bounded_wait_s,
-        decision.effective_wait_s,
+        bounded_wait_s,
         waited_s,
-        decision.budget_s if decision.budget_s is not None else "na",
-        decision.spent_before_s if decision.spent_before_s is not None else "na",
-        (
-            decision.remaining_before_s
-            if decision.remaining_before_s is not None
-            else "na"
-        ),
-        decision.active_before,
-        decision.policy,
-        str(decision.blocking_budget_exhausted).lower(),
         turn if turn is not None else "-",
         client if client is not None else "-",
         dispatch_field,
@@ -228,53 +208,16 @@ def job_status_impl(
 
     client = current_client.get()
     turn = current_turn.get()
-    decision = None
-    release = None
     if requested_wait_s > 0:
-        budget_s = get_settings().jobs.blocking_wall_budget_for_client(client)
-        lease = blocking_wall_tracker.acquire(
-            client=client,
-            turn=turn,
-            requested_wait_s=requested_wait_s,
-            bounded_wait_s=bounded_wait_s,
-            budget_s=budget_s,
-        )
-        decision = lease.decision
         wait_started = _PERF_COUNTER()
         state_before_wait = state
         try:
-            try:
-                if decision.effective_wait_s > 0:
-                    state, waited = _wait_for_exit(job_id, decision.effective_wait_s)
-                else:
-                    state, waited = jobs.job_state(job_id), 0.0
-            finally:
-                release = lease.release()
-                if release.window_closed:
-                    log.info(
-                        "event=blocking_window_closed call=%s turn=%s client=%s "
-                        "blocking_budget_s=%s blocking_window_wall_s=%s "
-                        "blocking_spent_after_s=%s blocking_remaining_after_s=%s",
-                        current_call.get(),
-                        turn if turn is not None else "-",
-                        client if client is not None else "-",
-                        decision.budget_s if decision.budget_s is not None else "na",
-                        release.window_wall_s
-                        if release.window_wall_s is not None
-                        else "na",
-                        release.spent_after_s
-                        if release.spent_after_s is not None
-                        else "na",
-                        release.remaining_after_s
-                        if release.remaining_after_s is not None
-                        else "na",
-                    )
+            state, waited = _wait_for_exit(job_id, bounded_wait_s)
         except BaseException:
             _log_wait_exception_timing(
                 job_id=job_id,
                 requested_wait_s=requested_wait_s,
                 bounded_wait_s=bounded_wait_s,
-                decision=decision,
                 waited_s=round(_PERF_COUNTER() - wait_started, 3),
                 state_start=state_start,
                 impl_start=impl_start,
@@ -320,25 +263,13 @@ def job_status_impl(
         "workdir": state["workdir"],
         "processes": processes,
     }
-    budget_exhausted_after_call = False
     if requested_wait_s > 0:
-        if decision is None or release is None:
-            raise RuntimeError("positive job_status wait missing blocking policy state")
         payload.update(
             {
                 "waited_s": waited,
                 "wait_requested_s": requested_wait_s,
-                "wait_effective_s": decision.effective_wait_s,
-                "blocking_budget_s": decision.budget_s,
-                "blocking_remaining_s": release.remaining_after_s,
-                "blocking_budget_exhausted": decision.blocking_budget_exhausted,
-                "blocking_policy": decision.policy,
+                "wait_effective_s": bounded_wait_s,
             }
-        )
-        budget_exhausted_after_call = decision.blocking_budget_exhausted or (
-            decision.budget_s is not None
-            and release.remaining_after_s is not None
-            and release.remaining_after_s < 1.0
         )
     if state["state"] == "exited":
         rc = state["exit_code"]
@@ -360,54 +291,19 @@ def job_status_impl(
         summary = f"Job {job_id} running ({state['runtime_s']} s)."
     if requested_wait_s > 0 and state["state"] == "running":
         summary += f" Still running after waiting {waited} s."
-        if budget_exhausted_after_call:
-            summary += (
-                " Turn blocking budget exhausted; further positive waits in this "
-                "turn will be non-blocking."
-            )
-    if decision is None:
-        wait_effective_s = bounded_wait_s
-        blocking_budget_s = None
-        blocking_spent_before_s = None
-        blocking_remaining_before_s = None
-        blocking_active_before = 0
-        blocking_policy = "no_policy"
-        blocking_budget_exhausted = False
-    else:
-        wait_effective_s = decision.effective_wait_s
-        blocking_budget_s = decision.budget_s
-        blocking_spent_before_s = decision.spent_before_s
-        blocking_remaining_before_s = decision.remaining_before_s
-        blocking_active_before = decision.active_before
-        blocking_policy = decision.policy
-        blocking_budget_exhausted = decision.blocking_budget_exhausted
-
     impl_ms = _elapsed_ms(impl_start)
     dispatch_field = f"{dispatch_ms:.2f}" if dispatch_ms is not None else "na"
     log.info(
         "event=job_status_timing call=%s job_id=%s wait_requested_s=%s "
-        "wait_bounded_s=%s wait_effective_s=%s waited_s=%s "
-        "blocking_budget_s=%s blocking_spent_before_s=%s "
-        "blocking_remaining_before_s=%s blocking_active_before=%s "
-        "blocking_policy=%s blocking_budget_exhausted=%s turn=%s client=%s "
+        "wait_bounded_s=%s wait_effective_s=%s waited_s=%s turn=%s client=%s "
         "dispatch_ms=%s state_ms=%.2f read_log_ms=%.2f process_scan_ms=%.2f "
         "impl_ms=%.2f state=%s processes=%s log_bytes=%s",
         current_call.get(),
         job_id,
         requested_wait_s,
         bounded_wait_s,
-        wait_effective_s,
+        bounded_wait_s,
         waited,
-        blocking_budget_s if blocking_budget_s is not None else "na",
-        blocking_spent_before_s if blocking_spent_before_s is not None else "na",
-        (
-            blocking_remaining_before_s
-            if blocking_remaining_before_s is not None
-            else "na"
-        ),
-        blocking_active_before,
-        blocking_policy,
-        str(blocking_budget_exhausted).lower(),
         turn if turn is not None else "-",
         client if client is not None else "-",
         dispatch_field,
@@ -447,9 +343,8 @@ def register(mcp: FastMCP) -> None:
         """Status of a job from run_command, or the recent-jobs list when
         job_id is omitted. Only needed when run_command returned a job_id.
         A positive wait blocks up to the requested duration (max 50 seconds)
-        or any smaller effective turn budget, and returns as soon as the job
-        exits, so a long wait costs nothing when the job ends early; waiting
-        never kills a still-running job. Returns state, exit code, output tail,
+        and returns as soon as the job exits, so a long wait costs nothing
+        when the job ends early; waiting never kills a still-running job. Returns state, exit code, output tail,
         and live processes; quiet=true means no recent output.
         """
         return job_status_impl(job_id, tail_lines, wait_seconds)

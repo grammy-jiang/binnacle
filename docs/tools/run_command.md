@@ -147,13 +147,20 @@ command had left something running, always in sessions where no job existed
 
 ## 4. `job_status`
 
-**Description (consolidated 2026-09-24, amended 2026-09-27):** > Status of
-a job from run_command, or the recent-jobs list when job_id is omitted. Only
-needed when run_command returned a job_id. A positive wait blocks up to the
-requested duration (max 50 seconds) or any smaller effective turn budget, and
-returns as soon as the job exits, so a long wait costs nothing when the job
-ends early; waiting never kills a still-running job. Returns state, exit code,
-output tail, and live processes; quiet=true means no recent output.
+**Description (consolidated 2026-09-24, amended twice on 2026-09-27):** >
+Status of a job from run_command, or the recent-jobs list when job_id is
+omitted. Only needed when run_command returned a job_id. A positive wait
+blocks up to the requested duration (max 50 seconds) and returns as soon as
+the job exits, so a long wait costs nothing when the job ends early; waiting
+never kills a still-running job. Returns state, exit code, output tail, and
+live processes; quiet=true means no recent output.
+
+2026-09-27 (blocking-wall guard removed): the phrase "or any smaller
+effective turn budget" and the guard's four result fields went with the guard.
+The guard was merged on 2026-09-24 for chat-mode scheduling v2 and never
+enabled on this host: all 1,590 production decisions were `no_policy`. It added
+31 tokens to every positive-wait result (`docs/logging.md`, "blocking-wall
+guard (removed 2026-09-27)").
 
 2026-09-27 (usage round, `docs/usage-analysis-2026-09-27.md`): outside the
 manager-dispatched chats, `job_status` calls alone in their model step were
@@ -166,19 +173,16 @@ weeks (5.5 %) if every such poll had waited 50 s.
 **Input**: `job_id` (optional → list), `tail_lines` (int, default 100),
 `wait_seconds` (int 0–50, default 0; added 2026-09-03). With
 `wait_seconds > 0` the call blocks, polling disk state with an adaptive
-interval (20 ms → 0.5 s), until the job exits, the requested time is up, or
-a smaller configured per-turn blocking-wall budget is reached; a job still
-running then is not killed (same wait-not-kill contract as run_command).
+interval (20 ms → 0.5 s), until the job exits or the requested time is up;
+a job still running then is not killed (same wait-not-kill contract as
+run_command).
 Evidence: 596 polls on 119 jobs, median gap 6 s.
 **Result** — one job: `{job_id, state, exit_code?, signal?, runtime_s,
 last_output_age_s, quiet, log_tail, log_bytes, log_path, command,
-workdir, processes, waited_s?}`. For an original positive wait, the result
-also includes additive policy fields `{wait_requested_s, wait_effective_s,
-blocking_budget_s, blocking_remaining_s, blocking_budget_exhausted,
-blocking_policy}`. Zero-wait and listing payloads retain their previous
-shape. When a still-running job has exhausted the turn blocking budget, the
-summary states that further positive waits in that turn will be non-blocking;
-the durable job itself is not stopped. A running job silent longer than 30 s is
+workdir, processes, waited_s?}`. A positive wait also returns
+`{wait_requested_s, wait_effective_s}`: the requested wait and the wait
+actually applied (the request bounded to 50 s). Zero-wait and listing payloads
+keep their previous shape. A running job silent longer than 30 s is
 flagged `quiet: true`. When `job_id` is omitted, the listing is compact:
 all running jobs plus the newest 20 non-running jobs, preserving newest-first
 order. Listing rows are `{job_id, state, exit_code, runtime_s, started_at,

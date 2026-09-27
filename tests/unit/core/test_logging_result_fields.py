@@ -27,9 +27,6 @@ def test_result_fields_lift_low_cardinality_tool_facts_only():
             "last_output_age_s": 0.5,
             "wait_requested_s": 50,
             "wait_effective_s": 3,
-            "blocking_budget_s": 5,
-            "blocking_remaining_s": 2.5,
-            "blocking_budget_exhausted": False,
             "blocking_policy": "tracked",
         },
     )
@@ -45,9 +42,6 @@ def test_result_fields_lift_low_cardinality_tool_facts_only():
     assert fields["last_output_age_s"] == "0.5"
     assert fields["wait_requested_s"] == "50"
     assert fields["wait_effective_s"] == "3"
-    assert fields["blocking_budget_s"] == "5"
-    assert fields["blocking_remaining_s"] == "2.5"
-    assert fields["blocking_budget_exhausted"] == "false"
-    assert fields["blocking_policy"] == "tracked"
+    assert "blocking_policy" not in fields  # guard removed 2026-09-27: not lifted
     serialized = json.dumps(fields)
     assert secret not in serialized and "/tmp/secret" not in serialized

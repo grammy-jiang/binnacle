@@ -4,7 +4,6 @@ from collections.abc import Sequence
 from typing import Any
 
 from binnacle.logstats_jobs import (
-    render_blocking_wall_guard,
     render_job_telemetry,
 )
 from binnacle.logstats_models import AdaptiveDiscoveryStats, IndexedContextStats, Stats
@@ -214,7 +213,6 @@ def render(st: Stats) -> str:
         )
     out.extend(render_job_telemetry(st.jobs))
     out.extend(render_run_command_workflow(st.run_command))
-    out.extend(render_blocking_wall_guard(st.jobs))
     out.extend(render_exact_search(st.exact_search))
     if st.turn_calls:
         per_turn = sorted(st.turn_calls.values())

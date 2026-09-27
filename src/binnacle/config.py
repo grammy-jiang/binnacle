@@ -190,6 +190,11 @@ class AutoBackgroundMatch:
 # shadow-prediction experiment, removed 2026-09-27.
 REMOVED_RUN_COMMAND_SECTIONS = ("shadow_prediction",)
 
+# Keys of [jobs] that no longer exist, handled the same way.
+# blocking_wall_budget_s_by_client: the chat-mode scheduling v2 blocking-wall
+# guard, never enabled on this host, removed 2026-09-27.
+REMOVED_JOBS_KEYS = ("blocking_wall_budget_s_by_client",)
+
 
 class RunCommandSettings(BaseModel):
     """run_command wait policy (spec docs/tools/run_command.md §3)."""
@@ -326,37 +331,31 @@ class JobsSettings(BaseModel):
     quiet_after_s: int = Field(
         30, description="A running job with no output this long is quiet=true."
     )
-    blocking_wall_budget_s_by_client: dict[str, int] = Field(
-        default_factory=dict,
-        description="Client-name PREFIX -> cumulative blocking-wall budget in seconds.",
-    )
 
-    @model_validator(mode="after")
-    def validate_blocking_wall_budgets(self) -> "JobsSettings":
-        for client, budget in self.blocking_wall_budget_s_by_client.items():
-            if not client.strip():
-                raise ValueError(
-                    "jobs.blocking_wall_budget_s_by_client keys must be non-empty "
-                    "and not whitespace-only"
-                )
-            if not 1 <= budget <= 3600:
-                raise ValueError(
-                    "jobs.blocking_wall_budget_s_by_client budgets must be in 1..3600"
-                )
-        return self
+    _removed_keys: tuple[str, ...] = PrivateAttr(default=())
 
-    def blocking_wall_budget_for_client(self, client: str | None) -> int | None:
-        if client is None:
-            return None
-        matches = (
-            prefix
-            for prefix in self.blocking_wall_budget_s_by_client
-            if client.startswith(prefix)
-        )
-        prefix = max(matches, key=len, default=None)
-        if prefix is None:
-            return None
-        return self.blocking_wall_budget_s_by_client[prefix]
+    @model_validator(mode="wrap")
+    @classmethod
+    def _drop_removed_keys(
+        cls,
+        data: Any,
+        handler: ModelWrapValidatorHandler["JobsSettings"],
+    ) -> "JobsSettings":
+        if isinstance(data, cls):
+            return handler(data)
+        removed: tuple[str, ...] = ()
+        if isinstance(data, Mapping):
+            removed = tuple(name for name in REMOVED_JOBS_KEYS if name in data)
+            if removed:
+                data = {k: v for k, v in data.items() if k not in removed}
+        model = handler(data)
+        model._removed_keys = removed
+        return model
+
+    @property
+    def removed_keys(self) -> tuple[str, ...]:
+        """Removed [jobs] keys the configuration still has."""
+        return self._removed_keys
 
 
 class Settings(BaseSettings):

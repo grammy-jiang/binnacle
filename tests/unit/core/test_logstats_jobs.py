@@ -68,10 +68,6 @@ def test_job_execution_telemetry_is_aggregated_and_rendered():
     assert jt.job_status_running_after_wait == 1
     assert jt.job_status_state_ms == [50000.0, 12000.0, 0.3]
     assert jt.job_status_wait_state_ms == [50000.0, 12000.0]
-    assert jt.job_status_positive_calls == 0
-    assert jt.job_status_nonblocking_calls == 0
-    assert jt.blocking_policies == {}
-    assert jt.blocking_wall_per_turn_s == []
 
     text = logstats.render(st)
     assert "run_command execution telemetry:" in text
@@ -88,67 +84,15 @@ def test_job_execution_telemetry_is_aggregated_and_rendered():
     assert "job_status blocking-wall guard:" not in text
 
 
-def test_blocking_wall_guard_telemetry_is_aggregated_per_turn_and_rendered():
+def test_old_guard_journal_lines_still_parse_without_a_guard_section():
+    """The blocking-wall guard was removed on 2026-09-27. Its old timing fields
+    and blocking_window_closed events in a journal are ignored, never an error."""
     records, _ = logstats.parse(GUARD_TELEMETRY_SAMPLE)
     st = logstats.analyze(records)
     jt = st.jobs
 
     assert jt.job_status_calls == 9
-    assert jt.job_status_positive_calls == 8
-    assert jt.job_status_nonblocking_calls == 2
-    assert jt.blocking_budget_exhausted_calls == 1
-    assert jt.blocking_policies == {
-        "tracked": 4,
-        "exhausted": 1,
-        "no_turn": 1,
-        "capacity_untracked": 1,
-        "no_policy": 2,
-    }
-    assert jt.job_status_requested_wait_s == [
-        5.0,
-        2.0,
-        4.0,
-        8.0,
-        5.0,
-        3.0,
-        4.0,
-        2.0,
-        0.0,
-    ]
-    assert jt.job_status_effective_wait_s == [
-        5.0,
-        2.0,
-        4.0,
-        8.0,
-        0.0,
-        3.0,
-        4.0,
-        2.0,
-        0.0,
-    ]
-    assert jt.blocking_wall_per_turn_s == [2.0, 6.0, 8.0]
-    assert jt.blocking_utilization_25 == 3
-    assert jt.blocking_utilization_50 == 2
-    assert jt.blocking_utilization_75 == 2
-    assert jt.blocking_utilization_100 == 1
-
+    assert jt.job_status_wait_calls == 8
+    assert not hasattr(jt, "blocking_policies")
     text = logstats.render(st)
-    assert "job_status blocking-wall guard:" in text
-    assert (
-        "policies: tracked=4 no_policy=2 no_turn=1 capacity_untracked=1 exhausted=1"
-        in text
-    )
-    assert "waits: positive / nonblocking / exhausted = 8 / 2 / 1" in text
-    assert (
-        "requested wait s: n / p50 / p90 / p95 / max = 9 / 4.00 / 8.00 / 8.00 / 8.00"
-    ) in text
-    assert (
-        "effective wait s: n / p50 / p90 / p95 / max = 9 / 3.00 / 8.00 / 8.00 / 8.00"
-    ) in text
-    assert (
-        "blocking wall / tracked turn s: n / p50 / p90 / p95 / max = "
-        "3 / 6.00 / 8.00 / 8.00 / 8.00"
-    ) in text
-    assert (
-        "utilization: >=25% / >=50% / >=75% / effectively-100% = 3 / 2 / 2 / 1" in text
-    )
+    assert "blocking-wall guard" not in text

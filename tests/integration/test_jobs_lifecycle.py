@@ -99,12 +99,7 @@ def test_single_job_timing_logs_stage_breakdown(monkeypatch, caplog):
     assert "wait_bounded_s=0" in line
     assert "wait_effective_s=0" in line
     assert "waited_s=0.0" in line
-    assert "blocking_budget_s=na" in line
-    assert "blocking_spent_before_s=na" in line
-    assert "blocking_remaining_before_s=na" in line
-    assert "blocking_active_before=0" in line
-    assert "blocking_policy=no_policy" in line
-    assert "blocking_budget_exhausted=false" in line
+    assert "blocking_" not in line  # the guard was removed on 2026-09-27
     assert "turn=-" in line and "client=-" in line
     assert "dispatch_ms=" in line and "dispatch_ms=na" not in line
     assert "state_ms=" in line
@@ -126,10 +121,7 @@ def test_status_wait_returns_when_job_exits():
     assert 0 < s["waited_s"] <= waited + 0.1
     assert s["wait_requested_s"] == 10
     assert s["wait_effective_s"] == 10
-    assert s["blocking_budget_s"] is None
-    assert s["blocking_remaining_s"] is None
-    assert s["blocking_budget_exhausted"] is False
-    assert s["blocking_policy"] == "no_policy"
+    assert not any(key.startswith("blocking_") for key in s)
 
 
 def test_status_wait_expires_leaves_job_running():

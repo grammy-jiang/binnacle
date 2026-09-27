@@ -4,14 +4,11 @@ import asyncio
 import json
 import logging
 import threading
-from types import SimpleNamespace
 
 import pytest
 
 from binnacle import jobs as jobstore
-from binnacle.blocking_wall_guard import BlockingWallTracker
 from binnacle.callctx import current_turn
-from binnacle.tools import job_status as js
 from binnacle.tools import list_files as lf
 from tests.integration.http_test_support import (
     http_tool_call,
@@ -301,20 +298,12 @@ def test_http_concurrent_requests_keep_distinct_base_turns(monkeypatch, tmp_path
     assert current_turn.get() is None
 
 
-def test_http_tracked_job_status_receives_base_turn_and_client(
-    monkeypatch, tmp_path, caplog
-):
+def test_http_job_status_receives_base_turn_and_client(monkeypatch, tmp_path, caplog):
+    """The turn correlation (X-Request-Id -> turn) reaches job_status's timing
+    line; it predates the removed blocking-wall guard and usage review needs it."""
     job_id = None
-    monkeypatch.setattr(jobstore, "JOBS_DIR", tmp_path / "jobs-http-guard")
+    monkeypatch.setattr(jobstore, "JOBS_DIR", tmp_path / "jobs-http-turn")
     monkeypatch.setattr(jobstore, "OWNER_MODE", "embedded")
-    tracker = BlockingWallTracker()
-    monkeypatch.setattr(js, "blocking_wall_tracker", tracker)
-    budget = SimpleNamespace(
-        blocking_wall_budget_for_client=lambda client: (
-            3 if client and client.startswith("phase2-http") else None
-        )
-    )
-    monkeypatch.setattr(js, "get_settings", lambda: SimpleNamespace(jobs=budget))
 
     async def go(c, headers):
         nonlocal job_id
@@ -339,11 +328,9 @@ def test_http_tracked_job_status_receives_base_turn_and_client(
         assert status["result"]["isError"] is False
         payload = status["result"]["structuredContent"]
         assert payload["state"] == "running"
-        assert payload["blocking_policy"] == "tracked"
         assert payload["wait_requested_s"] == 1
         assert payload["wait_effective_s"] == 1
-        assert payload["blocking_budget_s"] == 3
-        assert payload["blocking_budget_exhausted"] is False
+        assert not any(key.startswith("blocking_") for key in payload)
 
         stopped = await http_tool_call(c, headers, 82, "stop_job", {"job_id": job_id})
         assert stopped["result"]["isError"] is False
@@ -366,9 +353,8 @@ def test_http_tracked_job_status_receives_base_turn_and_client(
         if "event=job_status_timing" in record.getMessage()
     ]
     assert any(
-        "blocking_policy=tracked" in line
-        and "turn=turn-http-210" in line
+        "turn=turn-http-210" in line
         and "client=phase2-http" in line
+        and "blocking_" not in line
         for line in timing
     )
-    assert ("phase2-http", "turn-http-210") in tracker._states

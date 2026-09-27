@@ -28,8 +28,7 @@ def test_defaults_load_without_config_file(tmp_path, monkeypatch):
     assert settings.jobs.keep_newest == 50
     assert settings.jobs.owner == "auto"
     assert settings.jobs.warmup_s == 1.0
-    assert settings.jobs.blocking_wall_budget_s_by_client == {}
-    assert settings.jobs.blocking_wall_budget_for_client("openai-mcp") is None
+    assert settings.jobs.removed_keys == ()
     assert settings.run_command.auto_background_patterns == {}
     assert settings.telemetry.tokenizer.enabled is False
     assert settings.telemetry.tokenizer.encoding == "o200k_base"
@@ -99,12 +98,9 @@ adaptive_snippet_chars = 220
     assert settings.roots.extra_roots == (Path("/tmp"), Path("/var/tmp"))
     assert settings.jobs.keep_newest == 7
     assert settings.jobs.listing_history_limit == 3
-    assert settings.jobs.blocking_wall_budget_s_by_client == {
-        "openai-mcp": 120,
-        "openai-mcp(ChatGPT)": 90,
-    }
-    assert settings.jobs.blocking_wall_budget_for_client("openai-mcp") == 120
-    assert settings.jobs.blocking_wall_budget_for_client("openai-mcp(ChatGPT)") == 90
+    # The blocking-wall guard's table (removed 2026-09-27) still loads: ignored.
+    assert settings.jobs.removed_keys == ("blocking_wall_budget_s_by_client",)
+    assert not hasattr(settings.jobs, "blocking_wall_budget_s_by_client")
     assert settings.run_command.auto_background_patterns == {
         "openai-mcp": ("pytest", "tox")
     }
@@ -171,7 +167,7 @@ enabled = false
 
     assert settings.serve.port == 9456
     assert settings.jobs.keep_newest == 11
-    assert settings.jobs.blocking_wall_budget_s_by_client == {"openai-mcp": 120}
+    assert settings.jobs.removed_keys == ("blocking_wall_budget_s_by_client",)
     assert settings.telemetry.tokenizer.enabled is True
     assert settings.indexed_context.enabled is True
 
@@ -302,40 +298,34 @@ def test_should_auto_background_covers_client_prefix_matching():
     assert settings.should_auto_background("unmatched-client", "pytest -q") is False
 
 
-@pytest.mark.parametrize("budget", [1, 3600])
-def test_jobs_blocking_wall_budget_accepts_boundaries(budget):
-    settings = config.JobsSettings(
-        blocking_wall_budget_s_by_client={"openai-mcp": budget}
+@pytest.mark.parametrize(
+    "table",
+    [
+        '"openai-mcp" = 300',
+        '"openai-mcp" = 0',  # out of the old 1..3600 range: still ignored
+        '"" = 120',  # an old blank prefix: still ignored
+    ],
+)
+def test_removed_jobs_blocking_wall_budget_key_is_ignored(table, tmp_path, monkeypatch):
+    """The blocking-wall guard was removed on 2026-09-27. A host configuration
+    that still has its table keeps loading, whatever the old values were."""
+    clear_binnacle_env(monkeypatch)
+    cfg = tmp_path / "config.toml"
+    cfg.write_text(
+        f"[jobs]\nkeep_newest = 9\n\n[jobs.blocking_wall_budget_s_by_client]\n{table}\n",
+        encoding="utf-8",
     )
-    assert settings.blocking_wall_budget_for_client("openai-mcp") == budget
+    monkeypatch.setenv(config.CONFIG_FILE_ENV, str(cfg))
+    settings = config.Settings()
+    assert settings.jobs.keep_newest == 9
+    assert settings.jobs.removed_keys == ("blocking_wall_budget_s_by_client",)
+    assert not hasattr(settings.jobs, "blocking_wall_budget_s_by_client")
 
 
-@pytest.mark.parametrize("budget", [0, 3601])
-def test_jobs_blocking_wall_budget_rejects_out_of_range_values(budget):
-    with pytest.raises(ValidationError, match="budgets must be in 1..3600"):
-        config.JobsSettings(blocking_wall_budget_s_by_client={"openai-mcp": budget})
-
-
-@pytest.mark.parametrize("client_prefix", ["", "   "])
-def test_jobs_blocking_wall_budget_rejects_blank_client_prefix(client_prefix):
-    with pytest.raises(ValidationError, match="keys must be non-empty"):
-        config.JobsSettings(blocking_wall_budget_s_by_client={client_prefix: 120})
-
-
-def test_jobs_blocking_wall_budget_uses_longest_matching_client_prefix():
-    settings = config.JobsSettings(
-        blocking_wall_budget_s_by_client={
-            "openai-mcp": 120,
-            "openai-mcp(ChatGPT)": 60,
-            "other": 30,
-        }
-    )
-    assert settings.blocking_wall_budget_for_client("openai-mcp") == 120
-    assert settings.blocking_wall_budget_for_client("openai-mcp-legacy") == 120
-    assert settings.blocking_wall_budget_for_client("openai-mcp(ChatGPT)") == 60
-    assert settings.blocking_wall_budget_for_client("openai-mcp(ChatGPT)/desktop") == 60
-    assert settings.blocking_wall_budget_for_client("unrelated-client") is None
-    assert settings.blocking_wall_budget_for_client(None) is None
+def test_jobs_settings_model_input_keeps_no_removed_keys():
+    settings = config.JobsSettings(keep_newest=3)
+    assert settings.removed_keys == ()
+    assert config.JobsSettings.model_validate(settings).removed_keys == ()
 
 
 def test_match_auto_background_reports_rule_and_preserves_prefix_order():
