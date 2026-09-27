@@ -676,7 +676,8 @@ extend ChatGPT's timeout (§5.2), so binnacle does not emit them.
   (`journalctl --user`), `list_processes`, and `pi_status` (a structured
   `vcgencmd` / memory / disk / services summary — demoted from v1 on
   2026-08-30: no CLI agent ships such a tool, and `run_command` covers the
-  need). Driven by observed usage, not speculation.
+  need). Driven by observed usage, not speculation. `git_info` was deferred
+  again on 2026-09-27: git-after-git steps are 2 % of ChatGPT's model steps.
 - **`take_photo`** (`libcamera-still` → MCP image content block) — first
   verify ChatGPT renders image content from a connector tool.
 - **GPIO/I²C helpers** (`gpio_read`, `gpio_write`, `i2c_scan` via `pinctrl`
@@ -697,11 +698,19 @@ extend ChatGPT's timeout (§5.2), so binnacle does not emit them.
   sequential round-trip cost proves painful in practice. Demand is
   unproven: Gemini shipped `read_many_files` and then deregistered it, and
   no other agent has one. Measure before building.
+  **Measured 2026-09-27, stopped** (`docs/usage-analysis-2026-09-27.md`):
+  of 2,801 ChatGPT reads of a different file directly after a read, 2,408
+  were parallel calls in the same model step. The ceiling is 393 steps in two
+  weeks, about 2 %. The candidates and the evaluation plan are kept by the
+  tag `archive/read-files-eval-2026-09-27`.
 
 ## 10. Open questions — measure on this rig
 
 User-approved first batch (2026-08-30): **#1 response budget**, **#3
 `destructiveHint` UX**, **#4 chain length**.
+
+Status on 2026-09-27: #4 answered, #6 partly answered, #1, #2, #3 and #5 still
+open (no measurement is recorded).
 
 1. **Response budget threshold**: binary-search with a large-output tool
    (bytes and lines); test `structuredContent`-only vs dual content.
@@ -710,10 +719,16 @@ User-approved first batch (2026-08-30): **#1 response budget**, **#3
 3. **`destructiveHint` UX**: any effect beyond the badge, given the docs
    gate only on `readOnlyHint`? (Compare `write_file` with/without.)
 4. **Chain length**: how many sequential tool calls will one turn sustain?
+   *Answered:* turns of 188 calls (`docs/usage-analysis-2026-09-13.md`) and of
+   213 calls in 190 model steps (`docs/usage-analysis-2026-09-27.md`) ran to
+   completion.
 5. **Image content blocks**: does a connector tool result render an image?
    (Gates `take_photo`.)
 6. **Timeout margin**: measured wall-clock at which ChatGPT abandons a call
    through this tunnel (validates the 50 s cap).
+   *Partly answered:* blocking calls of 37 s (2026-09-03) and 41.5 s
+   (2026-09-27, `docs/usage-analysis-2026-09-27.md` section 9) completed. The
+   point at which ChatGPT abandons a call has not been measured.
 
 Method for all six: drive the browser per the `chatgpt-mcp-dev` skill, track
 test chats with `chatgpt-chats --track`, read truth from `mcp-probe` /

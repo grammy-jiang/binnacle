@@ -1,5 +1,9 @@
 # ChatGPT Chat mode MCP scheduling — final investigation
 
+> **Status update, 2026-09-27:** this investigation led to chat-mode
+> scheduling v2, which closed on 2026-09-27 (see
+> `docs/chat-mode-scheduling-v2-retrospective-2026-09-27.md`).
+
 **Date:** 2026-09-23 (Australia/Sydney)
 **Client:** ChatGPT Chat mode / `openai-mcp`
 **MCP protocol observed:** `2026-07-28`

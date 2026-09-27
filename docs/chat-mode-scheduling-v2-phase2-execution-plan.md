@@ -1,5 +1,9 @@
 # Chat mode scheduling v2 — Phase 2 execution plan and SOP
 
+> **Status update, 2026-09-27:** chat-mode scheduling v2 is closed. Phase 4
+> ended `NO_GO_PERFORMANCE`, and nothing from v2 reached production. See
+> `docs/chat-mode-scheduling-v2-retrospective-2026-09-27.md`. The text below is the historical record.
+
 Status: **PLANNED; NOT STARTED; NON-PRODUCTION ONLY**
 
 Date: 2026-09-23 (Australia/Sydney)

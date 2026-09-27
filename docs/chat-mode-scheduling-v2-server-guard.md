@@ -1,5 +1,12 @@
 # Chat mode scheduling v2 — server blocking-wall guard specification
 
+> **Status update, 2026-09-27:** chat-mode scheduling v2 is closed. Phase 4
+> ended `NO_GO_PERFORMANCE`, and nothing from v2 reached production. See
+> `docs/chat-mode-scheduling-v2-retrospective-2026-09-27.md`. The text below is the historical record.
+> The guard's code (`src/binnacle/blocking_wall_guard.py`, merged
+> 2026-09-24) was never enabled on this host. It will be removed after a
+> review (owner, 2026-09-27).
+
 Status: design specification; no production change.
 
 Parent design: `docs/chat-mode-scheduling-v2-design.md`.
