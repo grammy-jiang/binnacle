@@ -7,7 +7,8 @@ Each step either passes or stops the deploy before anything changes:
    are awaited up to ``--ci-timeout``);
 3. a quiet moment: no tool call in the last 30 s (awaited up to
    ``--quiet-timeout``), because a reload fails the calls in flight;
-4. fast-forward. When Python files changed, the dev-mode reload is awaited (a
+4. fast-forward. When Python files under ``src/`` changed (the dev unit's
+   ``--reload-dir`` watches nothing else), the dev-mode reload is awaited (a
    new ``event=config`` line), or in prod mode the unit is restarted;
 5. the live smoke (``scripts/smoke_checks.py``). On success ``master`` and
    ``proof-of-concept`` are pushed to origin. On failure ``master`` is reset
@@ -102,11 +103,20 @@ def _await_config(env: Env, since: float, timeout: float) -> bool:
         env.sleep(1)
 
 
+def _server_code_changed(names: str) -> bool:
+    """Did the diff touch the code the server runs? Both modes run the
+    package under ``src/``; the dev unit reloads on its ``*.py`` files only."""
+    return any(
+        n.strip().startswith("src/") and n.strip().endswith(".py")
+        for n in names.splitlines()
+    )
+
+
 def _make_live(
     env: Env, since: float, code_changed: bool, prod: bool, timeout: float
 ) -> bool:
     """Load the checkout's current code into the server; True once it runs."""
-    if not code_changed:  # only Python files trigger the dev-mode reload
+    if not code_changed:  # only *.py under src/ triggers the dev-mode reload
         return True
     if prod:
         rc, _ = env.run(["systemctl", "--user", "restart", UNIT], timeout)
@@ -159,8 +169,10 @@ def deploy(
     if not _wait_quiet(env, quiet_timeout):
         report.add("quiet", "alert", f"tool calls did not stop for {quiet_timeout:g} s")
         return done("alert", "no quiet moment; nothing deployed")
-    rc, names = _git(env, "diff", "--name-only", prev, sha)
-    code_changed = rc != 0 or any(n.strip().endswith(".py") for n in names.splitlines())
+    # --no-renames lists both sides of a move, so a module moved out of src/
+    # still counts as a server change.
+    rc, names = _git(env, "diff", "--name-only", "--no-renames", prev, sha)
+    code_changed = rc != 0 or _server_code_changed(names)
     prod = _prod_mode(env)
     timeout = restart_timeout if prod else reload_timeout
     started = env.now()
@@ -169,7 +181,11 @@ def deploy(
         report.add("fast-forward", "alert", last_line(out))
         return done("alert", f"fast-forward to {sha[:7]} failed; nothing deployed")
     live = _make_live(env, started, code_changed, prod, timeout)
-    how = ("restarted" if prod else "reloaded") if code_changed else "no Python change"
+    how = (
+        ("restarted" if prod else "reloaded")
+        if code_changed
+        else "no server code change"
+    )
     report.add(
         "reload",
         "ok" if live else "alert",

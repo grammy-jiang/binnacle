@@ -153,10 +153,21 @@ def test_a_good_deploy_reloads_smokes_and_pushes(
     assert any("HEAD:proof-of-concept" in c for c in host.calls)
 
 
-def test_a_docs_only_change_needs_no_reload(tmp_path: Path, smokes: list[str]) -> None:
-    host = Host(diff="docs/testing.md\n", reloads=False)
+@pytest.mark.parametrize(
+    "diff",
+    [
+        "docs/testing.md\n",
+        "tests/unit/core/test_units.py\nscripts/deploy_flow.py\n",
+        "src/binnacle/py.typed\n",
+    ],
+)
+def test_a_change_outside_the_server_code_needs_no_reload(
+    tmp_path: Path, smokes: list[str], diff: str
+) -> None:
+    host = Host(diff=diff, reloads=False)
     level, text = deploy(host, tmp_path)
-    assert level == "ok" and "no Python change" in text and pushed(host)
+    assert level == "ok" and "no server code change" in text and pushed(host)
+    assert any(" diff --name-only --no-renames " in c for c in host.calls)
 
 
 @pytest.mark.parametrize(

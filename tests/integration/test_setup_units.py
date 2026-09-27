@@ -75,7 +75,8 @@ def test_setup_dev_writes_a_marked_unit_and_runs_the_safe_boundaries(host, capsy
     assert marker.params["repo"] == str(host.repo.resolve())
     assert (
         f"ExecStart={host.repo.resolve()}/.venv/bin/uvicorn binnacle.server:app "
-        "--host 127.0.0.1 --port 8123 --reload --loop uvloop --http httptools\n"
+        f"--host 127.0.0.1 --port 8123 --reload --reload-dir {host.repo.resolve()}/src "
+        "--loop uvloop --http httptools\n"
     ) in text
     jobs_text = host.jobs_unit.read_text()
     assert f"ExecStart={host.repo.resolve()}/.venv/bin/binnacle-jobs\n" in jobs_text

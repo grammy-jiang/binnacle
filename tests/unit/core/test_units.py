@@ -351,7 +351,8 @@ def test_server_unit_dev_mode_runs_the_checkout_with_reload():
     assert "WorkingDirectory=/home/me/binnacle\n" in spec.body
     assert (
         "ExecStart=/home/me/binnacle/.venv/bin/uvicorn binnacle.server:app "
-        "--host 127.0.0.1 --port 8000 --reload --loop uvloop --http httptools\n"
+        "--host 127.0.0.1 --port 8000 --reload --reload-dir /home/me/binnacle/src "
+        "--loop uvloop --http httptools\n"
     ) in spec.body
     assert "Restart=on-failure" in spec.body and "/dev/tcp/127.0.0.1/8000" in spec.body
     assert "Wants=binnacle-jobs.service" in spec.body

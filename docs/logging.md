@@ -88,7 +88,7 @@ scalar facts only), the values of `X-Openai-Session` (hashed) and
 | job lifecycle lines | Present (`job_start`, `job_exit`, `jobs_pruned`, `job_exit_unrecorded`). |
 | resolved client name | Present (`client=openai-mcp`, `claude-code`, `codex-mcp-client`, `mcp`; one variant `openai-mcp (Codex)` has a space). |
 | response summaries | Present but useless: `content_chars` measured the one-line summary (median 126 chars for run_command) because the payload is `structured_content`; and no line was ever written for an error (0 `is_error=True` in 15 days against 29 `request_error`), because errors reach the middleware as exceptions. |
-| startup config line | Present; 122 in the last two days, one per `--reload` (the uvicorn watcher reloads on any `.py` save under the repo, `tests/` included). |
+| startup config line | Present; 122 in the last two days, one per `--reload` (the uvicorn watcher reloads on any `.py` save under the repo, `tests/` included; since 2026-09-28 the unit passes `--reload-dir <repo>/src`, so only a save under `src/` reloads). |
 
 ## 4. What a review needs, and where it comes from now
 

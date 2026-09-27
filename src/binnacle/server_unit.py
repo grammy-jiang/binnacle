@@ -43,8 +43,11 @@ def server_unit_spec(params: Mapping[str, str]) -> units.UnitSpec:
     and `repo` (dev: the checkout, run through its venv with auto-reload)
     or `binnacle` (prod: the installed executable, `serve`, no reload).
     The development command line is the one the host ran hand-written from
-    2026-09-03 to 2026-09-20; the two uvicorn flags select the uvloop and
-    httptools stack that `serve` also insists on."""
+    2026-09-03 to 2026-09-20, plus `--reload-dir <repo>/src` since
+    2026-09-28: the server imports nothing from the checkout outside
+    `src/`, and a reload fails the calls in flight, so a change to tests,
+    scripts or docs must not restart it. The two uvicorn flags select the
+    uvloop and httptools stack that `serve` also insists on."""
     mode = params.get("mode", "")
     host = params.get("host", "127.0.0.1")
     port = params.get("port", "")
@@ -52,7 +55,8 @@ def server_unit_spec(params: Mapping[str, str]) -> units.UnitSpec:
         repo = params["repo"]
         exec_start = (
             f"{repo}/.venv/bin/uvicorn binnacle.server:app --host {host} "
-            f"--port {port} --reload --loop uvloop --http httptools"
+            f"--port {port} --reload --reload-dir {repo}/src "
+            "--loop uvloop --http httptools"
         )
         body = SERVER_UNIT_TEMPLATE.format(
             description="development: checkout with auto-reload",

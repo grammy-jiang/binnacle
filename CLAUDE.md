@@ -8,8 +8,10 @@ OpenAI tunnel. `server.py` is assembly only; each tool lives in
 systemd services run it: `binnacle-mcp` (one unit whose content
 `binnacle setup` and `binnacle mode` render for the mode in use;
 development mode, which this host runs, is this checkout under uvicorn
-`--reload` on port 8000, reload watching `tools/` too; production mode is
-the installed `binnacle serve` without reload) and `binnacle-tunnel`.
+`--reload` on port 8000, the reload watching `src/` only (`--reload-dir`,
+since 2026-09-28: a change to tests, scripts or docs does not restart the
+server); production mode is the installed `binnacle serve` without
+reload) and `binnacle-tunnel`.
 
 v1 is complete: the full toolset is read_file, list_files, search_text,
 edit_file, write_file, run_command, job_status, stop_job (no `ping`; the
@@ -47,8 +49,9 @@ also means updating those registrations.
 
 ## Dev loop
 
-Saving `server.py` auto-reloads uvicorn (watchfiles, ~1-2s) — reloading is NOT a
-manual step. A manual `systemctl --user restart binnacle-mcp` is only for changes
+Saving `server.py` (any `.py` under `src/`) auto-reloads uvicorn (watchfiles,
+~1-2s) — reloading is NOT a manual step. Saving a test, a script or a doc does
+not reload the server. A manual `systemctl --user restart binnacle-mcp` is only for changes
 the reload can't pick up: the token file, new dependencies, the systemd unit, or
 `binnacle.yaml` (restart `binnacle-tunnel` too for the last two). For the
 unit itself use `binnacle mode dev` (or `prod`): it re-renders the unit,
@@ -99,7 +102,7 @@ doctor` (`src/binnacle/tunnel_doctor.py`): run all three.
 
 Deploys go through `.venv/bin/python scripts/deploy_smoke.py deploy <sha>`
 (since 2026-09-27): it checks CI, waits for a quiet moment, fast-forwards this
-checkout's `master`, waits for the reload, runs the live smoke, and then
+checkout's `master`, waits for the reload when `src/` changed, runs the live smoke, and then
 pushes `master` and `proof-of-concept`, or rolls back and pushes nothing.
 `scripts/deploy_smoke.py --full` is the daily live smoke (`docs/testing.md`,
 "Deploy and live smoke").
@@ -589,7 +592,7 @@ never touched the enable state). Decision with the user (option one of
 two): **one unit, `binnacle-mcp.service`, whose content is rendered for
 the mode** -- dev is the exact command line the host ran hand-written
 (uvicorn `--reload --loop uvloop --http httptools`, WorkingDirectory the
-checkout, Restart=on-failure), prod is `binnacle serve` from the resolved
+checkout, Restart=on-failure; `--reload-dir <repo>/src` added 2026-09-28), prod is `binnacle serve` from the resolved
 executable (Restart=always; the checkout's venv until a pipx install
 exists, then run `setup` from that binary). `mode dev|prod` re-renders,
 writes, daemon-reloads and restarts at a quiet moment; the mode survives
