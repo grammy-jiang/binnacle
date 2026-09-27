@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Sequence
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -125,8 +126,9 @@ def make_env(
             return 0, CGROUP + "\n"
         if "ExecMainStartTimestamp" in cmd:
             return 0, "Sun 2026-09-27 07:53:02.715341 AEST\n"
-        if argv[0] == "date":
-            return 0, "1790459582.715341000\n"
+        if argv[0] == "date":  # the journal's naive stamps are local time, like `date`
+            start = datetime.fromisoformat("2026-09-27T07:53:02.715341").timestamp()
+            return 0, f"{start:.6f}\n"
         for key in ("binnacle-tunnel", "binnacle-watchdog", "binnacle"):
             if argv[0].endswith(key):
                 return codes.get(key, 0), f"{key}: 30 ok, 0 warn, 0 fail\n"
