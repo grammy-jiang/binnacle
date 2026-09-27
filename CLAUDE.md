@@ -51,15 +51,19 @@ also means updating those registrations.
 
 Saving `server.py` (any `.py` under `src/`) auto-reloads uvicorn (watchfiles,
 ~1-2s) — reloading is NOT a manual step. Saving a test, a script or a doc does
-not reload the server. A manual `systemctl --user restart binnacle-mcp` is only for changes
-the reload can't pick up: the token file, new dependencies, the systemd unit, or
-`binnacle.yaml` (restart `binnacle-tunnel` too for the last two). For the
-unit itself use `binnacle mode dev` (or `prod`): it re-renders the unit,
-reloads systemd and restarts at a quiet moment (no background job running,
-no tool call in the last 30 s; `--force` overrides), because a unit restart
-kills the jobs in its cgroup and fails the calls in flight. Since
-2026-09-21 the unit is written and verified by the managed-unit mechanism
-(`src/binnacle/units.py`, see the Uplink watchdog section's sixth look).
+not reload the server. A manual `systemctl --user restart binnacle-mcp` is
+only for changes the reload can't pick up: the token file, new dependencies,
+the systemd unit, or `binnacle.yaml` (restart `binnacle-tunnel` too for the
+last two). For the unit itself use `binnacle mode dev` (or `prod`): it
+re-renders the unit, reloads systemd and restarts it only at a quiet
+moment, because a restart fails the calls in flight and kills any job in
+the unit's cgroup. It does not wait for one: a tool call in the last 30 s
+(or, when the embedded job owner is selected, a running background job)
+makes it refuse with exit 1; retry later (`--force` overrides). Right after
+a deploy the smoke's own calls block it for 30 s (measured 2026-09-28).
+Since 2026-09-21 the unit is written and verified by the managed-unit
+mechanism (`src/binnacle/units.py`, see the Uplink watchdog section's sixth
+look).
 
 The services get their `PATH` from the systemd user manager, which at boot has
 only the base system PATH. `~/.config/environment.d/50-path.conf` prepends
