@@ -180,6 +180,140 @@ run (install by hand):
 `tests/live/` remains the opt-in pytest version of the same idea
 (`BINNACLE_LIVE=1`).
 
+## Weekly quality run
+
+`scripts/weekly_quality.py` is step 3 of the quality guard plan
+(`docs/quality-guard-plan-2026-09-27.md`): the checks that are too slow for
+every commit, once a week, under the owner's isolation rules of 2026-09-28
+(other projects run on this host at the same time). What runs, in order:
+
+1. **usage** (`scripts/weekly_usage.py`): the week's production numbers,
+   read-only from the journal. p50 and p95 per tool, without the calls that
+   carry an `e2e-` nonce, are judged only for read_file, edit_file and
+   write_file (30 calls on both sides; WARN above 1.25 times the first
+   run's p95 plus 50 ms). list_files and search_text take as long as the
+   tree the model chose, and run_command, job_status and stop_job as long as
+   the command or the wait, so they are reported only. The model-step and
+   job-polling metrics of `scripts/usage_breakdown.py` WARN when solo
+   job_status polls take 25 % more of the steps, or excess polls per 1000
+   steps rise by 25 %, against the newest `docs/usage-baselines/` file with
+   step metrics (else the 2026-09-27 figures), with at least 300 steps.
+2. **bench** (`scripts/weekly_bench.py`): a fixed benchmark against a
+   temporary server from the weekly clone on a free port of 127.0.0.1, with
+   its own configuration, token, fixtures and job spool (embedded owner)
+   under `/tmp/binnacle-bench-<run>/`, deleted afterwards. Eleven cases,
+   20 rounds after two warm-up rounds; client and server share the scope's
+   CPU. WARN when a case's p95 is above 1.25 times the baseline p95 plus
+   5 ms. The first run records the baseline; `--rebaseline` records a new
+   one after an intended change.
+3. **flake**: the full suite once per seed (five by default), each run with
+   its own pytest-randomly seed, in the two lanes of
+   `scripts/run_test_suite.py`. The parallel lane's four workers share the
+   scope's one CPU: that is the load, and it stays inside the scope. Every
+   lane keeps its junit XML and its log, and the report names each failing
+   test with its seed. CI passed on the commit, so a failure here is a
+   flaky test: fix or quarantine it within a week.
+4. **mutation**: two core modules a week from `quality-policy.json`, in
+   rotation, `mutmut run --max-children 1` in the weekly clone, starting
+   from an empty `mutants/`. WARN below 80 % killed. A module stopped by its
+   timeout or by production calls is "incomplete", with its partial
+   numbers.
+
+Isolation:
+
+- It never runs in the production checkout. Its own clone
+  (`~/.local/state/binnacle/quality-weekly/checkout`, from GitHub) is
+  brought to `origin/master` with `uv sync --frozen`, and the run goes on
+  in that clone's copy of the script. It never calls the production
+  server; it only reads the journal.
+- Every job runs in its own user scope: `systemd-run --user --scope -p
+  CPUQuota=100% -p CPUWeight=idle -p MemoryMax=2G -p TasksMax=1024 -p
+  RuntimeMaxSec=<limit>`, then `nice -n 19 ionice -c3 timeout`. Measured on
+  this host (2026-09-28): the user manager delegates only the cpu and pids
+  controllers, so the CPU limit, the CPU weight, TasksMax and RuntimeMaxSec
+  hold and MemoryMax is ignored. The runner therefore sums the scope's RSS
+  every 10 s and stops the scope above 2 GiB. The NVMe queue has no I/O
+  scheduler (`none`), so ionice changes nothing there. Before anything
+  runs, a probe checks that `cpu.max` reads `100000 100000` and `cpu.idle`
+  reads `1` inside a scope; if not, the run is an ALERT and nothing runs.
+- `CPUWeight=idle` is what protects production. The scopes sit in the user
+  manager's `app.slice` beside `binnacle-mcp`, `binnacle-jobs` and
+  `binnacle-tunnel`, and get CPU only when those do not want it. `nice`
+  ranks processes only inside one cgroup, so nice 19 alone did not protect
+  it. The other projects run outside the user manager (in a login session
+  scope); for them the one-CPU cap and the load gate are the bound.
+- A job starts only when production had no tool call for 5 minutes, the
+  1-minute load is below 2.0 (`--load-max`) and 3 GiB of memory are
+  available. It waits up to 20 minutes, else it is skipped. While it runs,
+  checked every 10 s, a production tool call, less than 1 GiB available or
+  the scope above 2 GiB stops it: the scope is stopped by its exact unit name, and the job
+  is never paused, because a paused test run or benchmark gives false
+  results. A job stopped by production calls gets one more try at the next
+  quiet moment. A job that found no quiet moment, or was stopped twice, is
+  a WARN: a week without the check must not look like a clean week.
+- Each job has a timeout, the run a budget of 3 hours, and the flake hunt
+  at most half of what is left when it starts. The jobs see the settings'
+  defaults, as CI does (`BINNACLE_CONFIG_FILE` is an empty file), and never
+  the production job manager (`BINNACLE_MANAGED_DEPLOYMENT` is dropped).
+
+Results: each run keeps `report.txt` (the text of the mail), `report.json`,
+the junit files and every job's log in
+`~/.local/state/binnacle/quality-weekly/runs/<run>/` (the newest eight). The
+baselines and the mutation rotation are in the same state directory. The
+report ends with the run's timeline and its impact: load and memory while
+the jobs ran, and the production calls in the run's window against the
+hour before.
+
+First run (attended, 2026-09-28 03:02-03:41, two seeds and one mutation
+module, from a cron-like environment with no user-bus variables):
+
+- **Durations:** usage 34 s (a week: 31,594 calls, 24,528 model steps),
+  bench 38 s, flake 108 + 6 s and 78 + 10 s per seed (1317 and 2 tests
+  passed each time). Every job waited for the gate first: the jobs ran 4.6
+  minutes of the 40. The foreign load (a browser, another project's test
+  runs) kept the 1-minute load between 2 and 10 all night.
+- **Findings:** usage WARN, solo job_status polls 18.6 % of the steps
+  against 17.0 %, excess polls 49.3 against 29.5 per 1000 steps (the
+  2026-09-27 wait change is under review until 2026-10-11). Flake hunt
+  clean in that run. One flaky test was then found by the same suite in a
+  1-CPU scope: `test_stop_escalates_to_sigkill_when_sigterm_ignored`
+  stopped its job before the job ignored SIGTERM (signal 15 instead of 9);
+  with three busy loops in the scope the old test failed 1 of 5 runs and
+  the fixed one 0 of 15.
+- **Production:** no production call arrived during the run, so no job was
+  stopped. Load median 2.36 and maximum 4.35 while jobs ran; MemAvailable
+  never below 5.1 GiB; the flake scope's RSS 444 MiB, throttled 134 times
+  in its first 45 s.
+- **Impact on a server beside the jobs** (a benchmark server with
+  production's priority, measured before, during and after a flake lane):
+  at the default CPU weight, read_file p50 20.0 / 32.4 / 20.1 ms and
+  search_text p50 44 / 94 / 50 ms; with `CPUWeight=idle` 18.5 / 24.0 /
+  18.2 ms and 40.6 / 54.2 / 40.2 ms (p95 during the lane: 65 and 133 ms).
+  What remains is shared hardware and kernel work. It lasts only until the
+  next 10 s check sees a production call and stops the job.
+- **Mutation:** the first attempt (04:26-04:41) ran mutmut over all 95
+  source files (8.5 minutes of generation), and its stats pass stopped at a
+  test that reads `benchmarks/`, which `./mutants` did not hold. Both are
+  fixed: `only_mutate` limits generation to the week's modules, and
+  `also_copy` lists every path the suite reads (the whole suite passes in a
+  copy of that layout). The fixed job then found no quiet moment: four
+  gated attempts between 05:02 and 06:30 were skipped (load 3.9 to 9.6),
+  so the first measured mutation result is the first Sunday run's. That is
+  the gate working as designed.
+
+By hand (from any checkout; it updates and uses its own clone):
+
+```bash
+.venv/bin/python scripts/weekly_quality.py [--only usage,bench] [--seeds 2] [--mutation-modules 1] [--ref origin/<branch>]
+```
+
+The weekly run, Sunday 00:10, so that the budget ends before the 03:30
+backup (install by hand):
+
+```text
+10 0 * * 0 /home/grammy-jiang/.local/bin/cron-report --job binnacle-weekly-quality /home/grammy-jiang/.local/state/binnacle/quality-weekly/checkout/.venv/bin/python /home/grammy-jiang/.local/state/binnacle/quality-weekly/checkout/scripts/weekly_quality.py --quiet-ok
+```
+
 ## Coverage policy
 
 Coverage is a regression signal, not a target to game. The authoritative gate
@@ -223,7 +357,8 @@ uv run mutmut run '*textio*'
 uv run mutmut results
 ```
 
-Do not run the entire mutation tree as a routine hook.
+Do not run the entire mutation tree as a routine hook. The weekly quality run
+("Weekly quality run" above) covers two core modules a week in rotation.
 
 ## Pins and snapshots
 

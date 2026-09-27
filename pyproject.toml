@@ -95,9 +95,21 @@ skip_covered = true
 source_paths = ["src"]
 pytest_add_cli_args_test_selection = ["tests/"]
 do_not_mutate = ["src/binnacle/cli.py"]
-# tests/test_descriptions.py reads the ChatGPT Project rules from the skill
-# references by repo-relative path; the suite runs inside ./mutants, so copy them.
-also_copy = [".claude/skills/chatgpt-mcp-dev/references/"]
+# The suite runs inside ./mutants, which holds only src, tests and the lock and
+# config files unless listed here: tests/contracts/test_descriptions.py reads
+# the skill references, the chatgpt-send tests the skill's scripts, the
+# tests/scripts suite imports scripts/ and reads the chat-scheduling benchmark
+# scenarios, and the policy gates read quality-policy.json. Measured
+# 2026-09-28 by running the whole suite in a copy of that layout: without
+# scripts/, 20 test modules failed to import; without benchmarks/, 30 tests
+# failed; with this list, none.
+also_copy = [
+    ".claude/skills/chatgpt-mcp-dev/references/",
+    ".claude/skills/chatgpt-mcp-dev/scripts/",
+    "scripts/",
+    "benchmarks/chat-mode-scheduling-v2/",
+    "quality-policy.json",
+]
 
 [tool.bandit]
 # B404/B603/B607: subprocess execution is this server's core mechanism --

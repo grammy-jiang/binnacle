@@ -109,7 +109,10 @@ Deploys go through `.venv/bin/python scripts/deploy_smoke.py deploy <sha>`
 checkout's `master`, waits for the reload when `src/` changed, runs the live smoke, and then
 pushes `master` and `proof-of-concept`, or rolls back and pushes nothing.
 `scripts/deploy_smoke.py --full` is the daily live smoke (`docs/testing.md`,
-"Deploy and live smoke").
+"Deploy and live smoke"). `scripts/weekly_quality.py` is the weekly quality
+run (Sunday 00:10; `docs/testing.md`, "Weekly quality run"): usage numbers, a
+benchmark on a temporary server, a flake hunt and a mutation rotation, from
+its own clone, each job in a 1-CPU user scope and only at a quiet moment.
 
 ## Uplink watchdog
 
@@ -936,10 +939,14 @@ results`; never as a hook. Two things it needs on this repo: `source_paths
 = ["src"]` (mutmut runs the suite from inside `./mutants` and puts
 `mutants/<source_path>` first on `sys.path`; with the package directory as
 the entry, `import binnacle` still hit the editable install and 24/24
-mutants "survived" untested on 2026-09-13), and `also_copy` for the skill
-references `tests/contracts/test_descriptions.py` reads by repo-relative path. Budget: the
-25-statement `textio.py` took over 30 minutes on the Pi; run one module at
-a time, in the background, never the whole tree.
+mutants "survived" untested on 2026-09-13), and `also_copy` for every
+repo path the suite imports or reads outside `src` and `tests`: the skill's
+references and scripts, `scripts/`, `benchmarks/chat-mode-scheduling-v2/`
+and `quality-policy.json` (found 2026-09-28 by running the whole suite in a
+copy of the `./mutants` layout: without `scripts/`, 20 test modules failed
+to import; without `benchmarks/`, 30 tests failed). Budget: the 25-statement `textio.py` took over 30
+minutes on the Pi; run one module at a time, in the background, never the
+whole tree. The weekly quality run rotates two core modules a week.
 
 Pick the path by what changed:
 

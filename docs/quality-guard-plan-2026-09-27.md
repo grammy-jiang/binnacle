@@ -2,8 +2,8 @@
 
 Status: approved in principle by the owner on 2026-09-27 (all six proposed
 kinds of test). Step 2 was implemented on 2026-09-27 and step 1 on 2026-09-28
-(tests and docs only). Step 3 is approved with the isolation rules in §7;
-step 4 is deferred and event-driven (§7). This plan replaces sections 4 to 6
+(tests and docs only), step 3 on 2026-09-28 under the isolation rules in §7
+(`scripts/weekly_quality.py`); step 4 is deferred and event-driven (§7). This plan replaces sections 4 to 6
 of `docs/test-strategy-review-2026-09-27.md`.
 
 ## 1. Goal
@@ -34,8 +34,8 @@ stays silent when all is well.
 | No behavior regression | unit, property, contract, integration and system suites with the per-module coverage gate (95 % core from unit tests, 90 % other from the full suite) (exist) | every commit |
 | Tool results do not drift | golden outputs: each tool on fixed fixtures, with the structured result pinned (timestamps and ids masked) (`tests/contracts/test_golden_outputs.py`, snapshots in `tests/contracts/snapshots/`, since 2026-09-28) | every commit |
 | Old state still works after an upgrade | old configs load (exists); old journals parse (exists); a job spool in the 2026-09-28 format is readable, and each later format adds its own fixture (`tests/contracts/test_job_spool_compat.py`, since 2026-09-28) | every commit |
-| Tests do not flake | the full suite 5 times with different `pytest-randomly` seeds under load created inside the job's own cgroup (§7, isolation rules); any failure is a flaky test, fixed or quarantined within a week (new) | weekly |
-| Tests really assert | mutation testing (`mutmut`), two core modules per week in rotation, so each core module comes round every seven weeks; kill rate at least 80 % (new schedule) | weekly |
+| Tests do not flake | the full suite 5 times with different `pytest-randomly` seeds under load created inside the job's own cgroup (§7, isolation rules); any failure is a flaky test, fixed or quarantined within a week (`scripts/weekly_flake.py`, since 2026-09-28) | weekly |
+| Tests really assert | mutation testing (`mutmut`), two core modules per week in rotation, so each of the eight core modules comes round every four weeks; kill rate at least 80 % (`scripts/weekly_mutation.py`, since 2026-09-28) | weekly |
 | All supported Pythons work | the CI matrix 3.10 to 3.14 (exists) | every commit |
 
 ## 4. Reliable: it keeps working through deploys, faults and time
@@ -53,11 +53,11 @@ stays silent when all is well.
 
 | Invariant | Test | Runs |
 | --- | --- | --- |
-| Tools do not get slower | a fixed benchmark on the Pi against a temporary instance (same fixtures, same order; §7, isolation rules) plus p50 and p95 per tool from the week's journal, compared with the recorded baseline. WARN above 1.25 times the baseline p95 (new) | weekly |
+| Tools do not get slower | a fixed benchmark on the Pi against a temporary instance (same fixtures, same order; §7, isolation rules) plus p50 and p95 per tool from the week's journal, compared with the recorded baseline. WARN above 1.25 times the baseline p95 (`scripts/weekly_bench.py`, `scripts/weekly_usage.py`, since 2026-09-28; the journal judges only read_file, edit_file and write_file, whose time the server decides) | weekly |
 | Results do not grow | size budgets for the golden fixtures (structured bytes and tokens), part of the golden tests (since 2026-09-28) | every commit |
 | Start-up and memory stay low | start-up time and RSS after start, measured by the post-deploy smoke. WARN above 1.25 times the baseline (new) | every deploy, daily |
 | The suite stays fast | the test timing policy (exists) | every commit |
-| ChatGPT needs no more model steps than before | the usage report's step and polling metrics (`scripts/usage_breakdown.py`), compared with the latest baseline in `docs/usage-baselines/` (exists; the schedule is new) | weekly |
+| ChatGPT needs no more model steps than before | the usage report's step and polling metrics (`scripts/usage_breakdown.py`), compared with the latest baseline in `docs/usage-baselines/` (`scripts/weekly_usage.py`, since 2026-09-28) | weekly |
 
 ## 6. Schedule
 
@@ -66,7 +66,7 @@ stays silent when all is well.
 | Every commit (pre-commit and CI) | sections 2, 3 and 5 marked "every commit" | CI about 5 to 10 min | the merge is blocked |
 | Every deploy | post-deploy smoke, start-up and RSS | about 1 min | automatic rollback, then mail |
 | Daily, 06:50 | live smoke and the three doctors | about 2 min | ALERT mail |
-| Weekly, Saturday night, under the isolation rules (§7) | flake hunt, two mutation modules, the latency benchmark and journal percentiles, the usage steps and polling report | about 3 h | WARN or ALERT mail; a flaky test is fixed within a week |
+| Weekly, Sunday 00:10 (`scripts/weekly_quality.py`), under the isolation rules (§7) | flake hunt, two mutation modules, the latency benchmark and journal percentiles, the usage steps and polling report | about 3 h | WARN or ALERT mail; a flaky test is fixed within a week |
 | Event-driven (§7 step 4) | fault-injection drills (attended) after changes to jobs, tunnel or watchdog code; the client compatibility probe after a surface change; the 12-hour soak before a release milestone | drills about 1 h, soak about 12 h | recorded in `docs/`; fixed before the next release |
 
 ## 7. Order of work
@@ -78,21 +78,33 @@ stays silent when all is well.
 2. **Implemented 2026-09-27.** **Post-deploy smoke with rollback, and the daily live smoke:** one script
    (`scripts/deploy_smoke.py`), used by the deploy procedure and by cron.
    About 1 day.
-3. **Weekly jobs:** flake hunt, mutation rotation, latency and resource
-   report, usage report. About 1 to 2 days. The owner's isolation
-   requirement (2026-09-28), because other projects run on this host at the
-   same time:
+3. **Implemented 2026-09-28** (`scripts/weekly_quality.py`; `docs/testing.md`,
+   "Weekly quality run"). **Weekly jobs:** flake hunt, mutation rotation,
+   latency and resource report, usage report. About 1 to 2 days. The
+   owner's isolation requirement (2026-09-28), because other projects run
+   on this host at the same time:
    - Weekly jobs never run in the production checkout
      (`~/Projects/binnacle`) or against the production server.
    - The latency benchmark uses a temporary instance on another port, with
      its own configuration and fixtures under `/tmp`.
    - Every job runs in a cgroup limited to 1 CPU and 2 GB
      (`systemd-run --user --scope -p CPUQuota=100% -p MemoryMax=2G`), with
-     nice 19 and ionice idle.
+     nice 19 and ionice idle. (As built: this host's user manager has no
+     memory controller, so MemoryMax is ignored and the runner enforces the
+     2 GB by stopping a scope whose RSS passes it; ionice changes nothing on
+     the NVMe queue, which has no I/O scheduler; `CPUWeight=idle` is added,
+     because nice ranks processes only inside one cgroup and the scopes sit
+     beside the production units.)
    - A job starts only when the server is quiet and the load is low, and it
-     pauses or aborts when the server gets busy.
+     pauses or aborts when the server gets busy. (As built: it aborts; a
+     paused test run or benchmark would give false results.)
    - Each job has a timeout.
-   - The first run measures the impact on production latency.
+   - The first run measures the impact on production latency. (Measured
+     2026-09-28, `docs/testing.md`, "Weekly quality run": no production
+     call arrived during the run; a server with production's priority
+     beside a flake lane went from read_file p50 18.5 to 24.0 ms with
+     `CPUWeight=idle`, and from 20.0 to 32.4 ms without it, which is why
+     the scopes carry it; a job stops within 10 s of a production call.)
    - The flake hunt creates load only inside its own cgroup.
 4. **Deferred while the server is under active development** (owner,
    2026-09-28). Run event-driven: fault drills after changes to jobs,
