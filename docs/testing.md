@@ -137,6 +137,48 @@ uv run pre-commit run --all-files
 such as `mutmut` create test-shaped files outside this tree; default pytest
 discovery must never collect those copies.
 
+## Deploy and live smoke
+
+Production runs from the `~/Projects/binnacle` checkout, so a new `master` there
+is a deploy. Deploy only through the gate (quality guard plan, step 2):
+
+```bash
+.venv/bin/python scripts/deploy_smoke.py deploy <sha>
+```
+
+It refuses a dirty checkout, a target that is not a fast-forward, and a commit
+whose CI did not succeed. It waits for a quiet moment (no tool call for 30 s),
+fast-forwards, and waits for the reload when Python files changed (in prod mode
+it restarts the unit). Then it runs the live smoke. On success it pushes
+`master` and `proof-of-concept`. On failure it resets `master` to the previous
+commit, reloads, confirms the rollback with a second smoke, and pushes nothing.
+
+The live smoke (`scripts/deploy_smoke.py`, checks in `scripts/smoke_checks.py`)
+checks the running server as a client would:
+
+- `binnacle doctor` passes, and `tools/list` answers with authentication;
+- every tool answers one call with an `e2e-smoke-` nonce, which the usage
+  statistics treat as test traffic; the calls touch only a fixture under
+  `/tmp` and short jobs, all removed afterwards;
+- the journal holds a tool_call and a tool_result line for each call, and no
+  traceback;
+- the unit's RSS and start-up time (from the main process's start to the
+  server's `event=config` line) are within 1.25 times the baseline in
+  `~/.local/state/binnacle/smoke/baseline.json`. The first run records the
+  baseline; `--rebaseline` records a new one after an intended change.
+
+`--full` adds `binnacle-tunnel doctor` and `binnacle-watchdog doctor
+--no-probe`. The first output line is `OK`, `WARN` or `ALERT` for
+`cron-report`; `--quiet-ok` prints nothing when all checks pass. The daily
+run (install by hand):
+
+```text
+50 6 * * * /home/grammy-jiang/.local/bin/cron-report --job binnacle-smoke /home/grammy-jiang/Projects/binnacle/.venv/bin/python /home/grammy-jiang/Projects/binnacle/scripts/deploy_smoke.py --full --quiet-ok
+```
+
+`tests/live/` remains the opt-in pytest version of the same idea
+(`BINNACLE_LIVE=1`).
+
 ## Coverage policy
 
 Coverage is a regression signal, not a target to game. The authoritative gate

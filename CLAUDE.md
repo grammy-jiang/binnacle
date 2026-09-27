@@ -97,6 +97,13 @@ switch, `privileges`, the `driver` stability sample) live in
 unit, profile, health port and poller checks live in `binnacle-tunnel
 doctor` (`src/binnacle/tunnel_doctor.py`): run all three.
 
+Deploys go through `.venv/bin/python scripts/deploy_smoke.py deploy <sha>`
+(since 2026-09-27): it checks CI, waits for a quiet moment, fast-forwards this
+checkout's `master`, waits for the reload, runs the live smoke, and then
+pushes `master` and `proof-of-concept`, or rolls back and pushes nothing.
+`scripts/deploy_smoke.py --full` is the daily live smoke (`docs/testing.md`,
+"Deploy and live smoke").
+
 ## Uplink watchdog
 
 Everything in `doctor` except the last three checks is local, which is why

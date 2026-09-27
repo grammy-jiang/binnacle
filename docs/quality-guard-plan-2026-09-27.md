@@ -73,7 +73,7 @@ stays silent when all is well.
 1. **Every-commit additions:** surface pins for all tools, the tool count, the
    token budget, golden outputs with size budgets, the dependency pin, and
    job-spool compatibility. About 1 day.
-2. **Post-deploy smoke with rollback, and the daily live smoke:** one script
+2. **Implemented 2026-09-27.** **Post-deploy smoke with rollback, and the daily live smoke:** one script
    (`scripts/deploy_smoke.py`), used by the deploy procedure and by cron.
    About 1 day.
 3. **Weekly jobs:** flake hunt, mutation rotation, latency and resource
