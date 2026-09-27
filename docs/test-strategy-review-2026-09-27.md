@@ -12,6 +12,9 @@
 > in section 7. The policy stays as it is. The ChatGPT client work (the
 > browser tools, their copies of the session module, the end-to-end cadence)
 > moved to the chatgpt-web-operations skill (`PLAN-2026-09-27.md` there).
+>
+> Sections 4 to 6 are replaced by `docs/quality-guard-plan-2026-09-27.md`,
+> which the owner approved in principle on 2026-09-27.
 
 Status: plan for the owner's decisions (section 7). Measured on `master`
 `4b7cfb4` with `scripts/run_coverage_policy.py` (unit lanes: 376 tests;
