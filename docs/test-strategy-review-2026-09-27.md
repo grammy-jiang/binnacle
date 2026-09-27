@@ -1,5 +1,18 @@
 # Test strategy review and plan (2026-09-27)
 
+> **Correction, later on 2026-09-27 (owner):** binnacle meets its coverage
+> policy in full: 99 of 99 production modules, 0 below target
+> (`scripts/check_coverage_policy.py` on the reports measured below), and
+> 96.50 % branch coverage for the whole package. The policy in
+> `docs/testing.md` is the owner's rule: each core module reaches 95 % from
+> the unit suite; each other module reaches 90 % from the full suite. The
+> "gaps" in sections 3 and 5 came from two things this review added:
+> measuring the other modules with the unit lanes only, and a proposal to
+> grow the core list to 27. Both are withdrawn, and so are questions 1 and 2
+> in section 7. The policy stays as it is. The ChatGPT client work (the
+> browser tools, their copies of the session module, the end-to-end cadence)
+> moved to the chatgpt-web-operations skill (`PLAN-2026-09-27.md` there).
+
 Status: plan for the owner's decisions (section 7). Measured on `master`
 `4b7cfb4` with `scripts/run_coverage_policy.py` (unit lanes: 376 tests;
 non-unit lanes: 846 tests, 3 skipped).
