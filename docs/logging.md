@@ -392,8 +392,9 @@ The event separates result semantics from work:
 
 Auto-context remains one exact execution: `rg_calls=2`, `auto_context=true`, and phase/work
 metrics are cumulative. Errors after exact dispatch retain partial work and record the
-Phase-A stable `error_code` when available. Indexed `@context` keeps its existing telemetry
-and does not emit `search_exact`.
+Phase-A stable `error_code` when available. Until 2026-09-28, indexed `@context` calls had
+their own telemetry and did not emit `search_exact`; since the pilot's removal every
+`search_text` call is exact (§13).
 
 `binnacle stats` reports exact-dispatch/summary coverage for mixed old/new journal windows,
 strategy/budget/error counts, phase latency percentiles, work distributions, and
@@ -403,42 +404,33 @@ The rg JSON parser is `orjson` from Phase B. This was explicitly approved as par
 instrumentation change; the other optimization hypotheses in the Phase B plan remain
 unimplemented so observation data stays comparable.
 
-## 13. Indexed-context pilot records (2026-09-19)
+## 13. Indexed-context pilot records (2026-09-19, removed 2026-09-28)
 
-The development `search_text('@context ...')` pilot adds dedicated single-line
-telemetry without changing `tool_call`/`tool_result`.
+The development `search_text('@context ...')` pilot ran from 2026-09-19 to
+2026-09-28. It was removed on 2026-09-28 after its offline benchmark failed;
+see `docs/indexed-context-pilot.md`, "Closing: benchmark and removal". The
+server no longer writes these:
 
-| event | Fields |
-| --- | --- |
-| `search_dispatch` | `call mode path_hash pattern_chars` (`mode` is `exact` or `indexed`) |
-| `index_context` | `call root_hash query_hash query_chars head generation cold_open open_ms reconcile_ms freshness_ms changed_files deleted_files hashed_files query_ms surface_ms total_ms files nodes edges db_bytes related_items direct_items package_items package_bytes package_est_tokens evidence_hashes` |
-| `index_context_error` | `call root_hash phase error_class error total_ms` |
+- the `index_context` and `index_context_error` records;
+- `mode=indexed` on `search_dispatch`. The record stays, with the same
+  fields (`call mode path_hash pattern_chars`), and its `mode` is always
+  `exact`;
+- the `indexed_context`, `indexed_reconcile` and `indexed_max_open` fields of
+  the startup `config` record.
 
-`query_hash`, `root_hash`, `path_hash`, and `evidence_hashes` are short SHA-256
-prefixes used only for grouping/correlation. Query text and result excerpts are not
-added to these telemetry records. `evidence_hashes` lets the pilot analyzer match a
-later `read_file` or file-scoped exact search to an indexed candidate without logging
-the returned source text.
+`binnacle stats` no longer has an "indexed context pilot" section, and
+`scripts/analyze_indexed_pilot.py` is gone (the tag
+`archive/indexed-context-pilot-2026-09-28` keeps both). Journals from that
+window still hold the records, and `binnacle stats` parses past them; the
+exact-search section counts only `mode=exact` dispatches, as before.
 
-The startup `config` record also carries `indexed_context`, `indexed_reconcile`, and
-`indexed_max_open`, so a review can prove which service configuration produced a
-measurement window.
-
-Review normally with:
-
-```text
-binnacle stats --since "7 days ago"
-```
-
-The existing stats command automatically appends an indexed-context section when
-these records are present. For detailed JSON/per-call rows, use:
+A host configuration that still has an `[indexed_context]` section keeps
+loading, whatever its values. The section is ignored, and one startup
+WARNING names it:
 
 ```text
-scripts/analyze_indexed_pilot.py --since '7 days ago' --json
+event=config_warning section=indexed_context reason=removed action=ignored
 ```
-
-Both use the same `binnacle.logstats` analysis code. See
-`docs/indexed-context-pilot.md` for interpretation and rollout/rollback policy.
 
 ## blocking-wall guard (removed 2026-09-27)
 

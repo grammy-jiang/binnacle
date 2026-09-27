@@ -10,11 +10,11 @@ services, kernel modules, routes, or power state.
 | Directory | Responsibility | Typical examples |
 | --- | --- | --- |
 | `tests/unit/tools/` | One MCP tool or a small local helper in isolation | file read/write/edit/list/search |
-| `tests/unit/core/` | Pure or mostly local core logic shared across tools | text handling, indexed logic, statistics, property tests |
-| `tests/integration/` | Multiple Binnacle components cooperating across an internal boundary | authenticated HTTP MCP, config loading, CLI, jobs, logging, indexed context, state-machine flows |
+| `tests/unit/core/` | Pure or mostly local core logic shared across tools | text handling, statistics, property tests |
+| `tests/integration/` | Multiple Binnacle components cooperating across an internal boundary | authenticated HTTP MCP, config loading, CLI, jobs, logging, state-machine flows |
 | `tests/contracts/` | Externally visible protocol and schema contracts | MCP annotations, input validation, visibility, descriptions, output schemas |
 | `tests/system/` | Raspberry Pi/Linux system behaviour modelled with fakes or guarded probes | doctor, uplink, watchdog, Webmin statistics |
-| `tests/scripts/` | Repository maintenance and analysis scripts | usage analysis, indexed-pilot analysis |
+| `tests/scripts/` | Repository maintenance and analysis scripts | usage analysis |
 | `tests/live/` | Explicit opt-in read-only checks against the deployed Raspberry Pi | active server unit, authenticated localhost MCP smoke |
 
 `tests/conftest.py` is intentionally global. Its autouse safety fixture blocks
@@ -317,8 +317,9 @@ the former flat `tests/` directory as a permanent design.
 - Tool-local filesystem behaviour belongs under `unit/tools/`.
 - Pure shared helpers, invariants, parsing, and identity handling belong under
   `unit/core/`.
-- Jobs, logging, CLI composition, authentication, and indexed-context service
-  behaviour cross component boundaries and therefore remain `integration/`.
+- Jobs, logging, CLI composition, and authentication behaviour cross
+  component boundaries and therefore remain `integration/` (the
+  indexed-context service tests left with the pilot on 2026-09-28).
 - MCP schema and description guarantees are explicit `contracts/`.
 - Watchdog, uplink, doctor, Webmin history, and journal reconstruction model
   Linux or Raspberry Pi host behaviour and remain `system/`.

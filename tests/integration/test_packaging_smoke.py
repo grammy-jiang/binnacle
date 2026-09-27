@@ -80,6 +80,7 @@ def test_core_server_imports_when_watchdog_companion_is_blocked(tmp_path):
 [auth]
 token_file = "{token}"
 
+# Removed 2026-09-28: an old section must not break the import.
 [indexed_context]
 enabled = false
 """
@@ -106,7 +107,6 @@ import binnacle.config
 import binnacle.cli
 import binnacle.doctor
 import binnacle.jobs
-import binnacle.indexed_context
 import binnacle.server
 
 print("core-import-ok")

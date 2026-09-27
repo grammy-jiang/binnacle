@@ -15,34 +15,6 @@ class Record:
 
 
 @dataclass
-class IndexedContextStats:
-    successes: int = 0
-    errors: int = 0
-    error_phases: Counter = field(default_factory=Counter)
-    pilot_versions: Counter = field(default_factory=Counter)
-    schema_versions: Counter = field(default_factory=Counter)
-    parser_versions: Counter = field(default_factory=Counter)
-    cold_opens: int = 0
-    changed_files: int = 0
-    evidence_opened: int = 0
-    evidence_reads: int = 0
-    evidence_file_searches: int = 0
-    result_tokens: list[int] = field(default_factory=list)
-    package_est_tokens: list[int] = field(default_factory=list)
-    package_bytes: list[int] = field(default_factory=list)
-    package_items: list[int] = field(default_factory=list)
-    total_ms: list[float] = field(default_factory=list)
-    reconcile_ms: list[float] = field(default_factory=list)
-    query_ms: list[float] = field(default_factory=list)
-    followup_calls: list[int] = field(default_factory=list)
-    followup_exact_searches: list[int] = field(default_factory=list)
-    followup_reads: list[int] = field(default_factory=list)
-    followup_result_tokens: list[int] = field(default_factory=list)
-    investigation_result_tokens: list[int] = field(default_factory=list)
-    rows: list[dict[str, Any]] = field(default_factory=list)
-
-
-@dataclass
 class AdaptiveDiscoveryStats:
     calls: int = 0
     budget_trimmed: int = 0
@@ -265,7 +237,6 @@ class Stats:
     background_jobs: int = 0
     job_exits: Counter = field(default_factory=Counter)  # exit code / signal -> n
     turn_calls: Counter = field(default_factory=Counter)  # tunnel turn -> calls
-    indexed: IndexedContextStats = field(default_factory=IndexedContextStats)
     adaptive: AdaptiveDiscoveryStats = field(default_factory=AdaptiveDiscoveryStats)
     jobs: JobTelemetryStats = field(default_factory=JobTelemetryStats)
     run_command: RunCommandWorkflowStats = field(

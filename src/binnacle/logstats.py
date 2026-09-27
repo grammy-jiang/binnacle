@@ -26,8 +26,8 @@ from typing import Any
 from binnacle.logstats_adaptive import analyze_adaptive_discovery
 from binnacle.logstats_io import fetch_journal
 from binnacle.logstats_jobs import analyze_job_telemetry
-from binnacle.logstats_models import IndexedContextStats, Record, Stats
-from binnacle.logstats_render import indexed_context_report, render
+from binnacle.logstats_models import Record, Stats
+from binnacle.logstats_render import render
 from binnacle.logstats_run_command import analyze_run_command_workflow
 from binnacle.logstats_search_exact import analyze_exact_search
 from binnacle.logstats_tools import (
@@ -120,13 +120,10 @@ _ERROR = re.compile(r"error=(.*)$")
 STARTUP_MARK = "Application startup complete"
 
 __all__ = [
-    "IndexedContextStats",
     "Record",
     "Stats",
     "analyze",
-    "analyze_indexed_context",
     "fetch_journal",
-    "indexed_context_report",
     "parse",
     "plain_fields",
     "render",
@@ -235,141 +232,6 @@ def _int(value: str | None) -> int:
         return 0
 
 
-def _float(value: str | None) -> float:
-    try:
-        return float(value) if value is not None else 0.0
-    except (TypeError, ValueError):
-        return 0.0
-
-
-def analyze_indexed_context(records: list[Record]) -> IndexedContextStats:
-    """Join indexed first hops to later repository-tool calls in the same turn."""
-    out = IndexedContextStats()
-    calls: dict[str, dict[str, Any]] = {}
-    results: dict[str, dict[str, str]] = {}
-    dispatch: dict[str, str] = {}
-    indexed: list[tuple[int, dict[str, str]]] = []
-
-    for seq, record in enumerate(records):
-        if record.event == "tool_call":
-            f = plain_fields(record.body)
-            call = f.get("call")
-            if call:
-                calls[call] = {
-                    "seq": seq,
-                    "tool": f.get("tool", "?"),
-                    "turn": _base_turn(f.get("turn")),
-                    "args": _json_args(record.body),
-                }
-        elif record.event == "tool_result":
-            f = plain_fields(record.body)
-            if f.get("call"):
-                results[f["call"]] = f
-        elif record.event == "search_dispatch":
-            f = plain_fields(record.body)
-            if f.get("call"):
-                dispatch[f["call"]] = f.get("mode", "unknown")
-        elif record.event == "index_context_error":
-            f = plain_fields(record.body)
-            out.errors += 1
-            out.error_phases[f.get("phase", "unknown")] += 1
-        elif record.event == "index_context":
-            indexed.append((seq, plain_fields(record.body)))
-
-    ordered = sorted(calls.items(), key=lambda item: item[1]["seq"])
-    for seq, f in indexed:
-        call_id = f.get("call", "-")
-        origin = calls.get(call_id, {})
-        turn = origin.get("turn", "-")
-        evidence = {
-            item
-            for item in f.get("evidence_hashes", "").split(",")
-            if item and item != "-"
-        }
-        followups = [
-            (cid, call)
-            for cid, call in ordered
-            if call["seq"] > seq
-            and call["turn"] == turn
-            and cid != call_id
-            and call["tool"] in {"search_text", "read_file", "list_files"}
-        ]
-        exact = [
-            item
-            for item in followups
-            if item[1]["tool"] == "search_text" and dispatch.get(item[0]) == "exact"
-        ]
-        reads = [item for item in followups if item[1]["tool"] == "read_file"]
-        evidence_reads = sum(
-            isinstance(call["args"].get("path"), str)
-            and _path_hash(call["args"]["path"]) in evidence
-            for _, call in reads
-        )
-        evidence_searches = sum(
-            isinstance(call["args"].get("path"), str)
-            and Path(call["args"]["path"]).suffix != ""
-            and _path_hash(call["args"]["path"]) in evidence
-            for _, call in exact
-        )
-        follow_tokens = sum(
-            _int(results.get(cid, {}).get("est_tokens")) for cid, _ in followups
-        )
-        result_tokens = _int(results.get(call_id, {}).get("est_tokens"))
-        row = {
-            "call": call_id,
-            "turn": turn,
-            "pilot_version": f.get("pilot_version", "unknown"),
-            "schema_version": _int(f.get("schema_version")),
-            "parser_version": _int(f.get("parser_version")),
-            "root_hash": f.get("root_hash", "-"),
-            "query_hash": f.get("query_hash", "-"),
-            "head": f.get("head", "unknown"),
-            "generation": _int(f.get("generation")),
-            "result_tokens": result_tokens,
-            "package_est_tokens": _int(f.get("package_est_tokens")),
-            "package_bytes": _int(f.get("package_bytes")),
-            "package_items": _int(f.get("package_items")),
-            "total_ms": _float(f.get("total_ms")),
-            "reconcile_ms": _float(f.get("reconcile_ms")),
-            "query_ms": _float(f.get("query_ms")),
-            "changed_files": _int(f.get("changed_files")),
-            "cold_open": f.get("cold_open") == "true",
-            "followup_calls": len(followups),
-            "followup_exact_searches": len(exact),
-            "followup_reads": len(reads),
-            "followup_result_tokens": follow_tokens,
-            "investigation_result_tokens": result_tokens + follow_tokens,
-            "evidence_reads": evidence_reads,
-            "evidence_file_searches": evidence_searches,
-        }
-        out.successes += 1
-        out.pilot_versions[row["pilot_version"]] += 1
-        out.schema_versions[str(row["schema_version"])] += 1
-        out.parser_versions[str(row["parser_version"])] += 1
-        out.cold_opens += int(row["cold_open"])
-        out.changed_files += int(row["changed_files"])
-        out.evidence_opened += int(bool(evidence_reads or evidence_searches))
-        out.evidence_reads += evidence_reads
-        out.evidence_file_searches += evidence_searches
-        for attr in (
-            "result_tokens",
-            "package_est_tokens",
-            "package_bytes",
-            "package_items",
-            "total_ms",
-            "reconcile_ms",
-            "query_ms",
-            "followup_calls",
-            "followup_exact_searches",
-            "followup_reads",
-            "followup_result_tokens",
-            "investigation_result_tokens",
-        ):
-            getattr(out, attr).append(row[attr])
-        out.rows.append(row)
-    return out
-
-
 def analyze(records: list[Record], startups: int = 0) -> Stats:
     st = Stats(records=len(records), startups=startups)
     pending: dict[str, deque] = defaultdict(deque)
@@ -438,7 +300,6 @@ def analyze(records: list[Record], startups: int = 0) -> Stats:
                 st.job_exits[f"signal {signal}"] += 1
             else:
                 st.job_exits[f.get("exit_code", "?")] += 1
-    st.indexed = analyze_indexed_context(records)
     st.adaptive = analyze_adaptive_discovery(records)
     st.jobs = analyze_job_telemetry(records, plain_fields)
     st.run_command = analyze_run_command_workflow(records, plain_fields)

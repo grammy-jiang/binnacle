@@ -58,8 +58,8 @@ def log_effective_config() -> None:
     s = get_settings()
     logger.info(
         "event=config pid=%d version=%s roots=%s jobs_dir=%s keep_newest=%d "
-        "client_tools=%s auto_background=%s rg_bin=%s indexed_context=%s indexed_reconcile=%s "
-        "indexed_max_open=%d tokenizer_enabled=%s tokenizer_encoding=%s "
+        "client_tools=%s auto_background=%s rg_bin=%s "
+        "tokenizer_enabled=%s tokenizer_encoding=%s "
         "tokenizer_clients=%s",
         os.getpid(),
         _version(),
@@ -72,13 +72,15 @@ def log_effective_config() -> None:
             for prefix, patterns in s.run_command.auto_background_patterns.items()
         },
         s.rg_bin,
-        str(s.indexed_context.enabled).lower(),
-        str(s.indexed_context.reconcile_on_query).lower(),
-        s.indexed_context.max_open_indexes,
         str(s.telemetry.tokenizer.enabled).lower(),
         s.telemetry.tokenizer.encoding,
         ",".join(s.telemetry.tokenizer.client_prefixes),
     )
+    for section in s.removed_sections:
+        logger.warning(
+            "event=config_warning section=%s reason=removed action=ignored",
+            section,
+        )
     for section in s.run_command.removed_sections:
         logger.warning(
             "event=config_warning section=run_command.%s reason=removed action=ignored",

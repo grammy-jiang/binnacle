@@ -34,7 +34,7 @@ system observations, and deployment smoke tests must use their real boundary.
 | Missing file, directory-vs-file, binary/lossy text, BOM/CRLF, Unicode | Unit | read/edit/write suites |
 | Exact edit, delete-via-empty, replace-all, ambiguous/no-match errors | Unit / contract workflow | `test_edit_file.py`, `test_protocol.py` |
 | Glob behavior, hidden/gitignored files, rg missing/timeout/error | Unit | `test_list_files.py` |
-| Regex/fixed search, invalid regex, file-as-path, result count/byte budgets | Unit / integration | `test_search_text.py`, indexed-context integration |
+| Regex/fixed search, invalid regex, file-as-path, result count/byte budgets | Unit / integration | `test_search_text.py`, `test_search_text_plain_patterns.py` |
 
 ## Shell commands and durable jobs
 
@@ -51,18 +51,19 @@ system observations, and deployment smoke tests must use their real boundary.
 | randomized start/status/list/stop sequences preserve terminal-state invariants | Model-based integration | `test_jobs_state_machine.py` |
 | output truncation preserves full log on disk | Integration | `test_jobs.py` |
 
-## Indexed repository context
+## Indexed repository context (removed 2026-09-28)
+
+The `@context` pilot and its tests were removed on 2026-09-28
+(`docs/indexed-context-pilot.md`). What remains to prove is that nothing else
+changed.
 
 | Scenario | Layer | Primary tests |
 | --- | --- | --- |
-| Explicit @context query returns bounded absolute-path evidence | Integration | `test_indexed_context.py` |
-| Exact/fixed search remains exact instead of dispatching to index | Integration | `test_indexed_context.py` |
-| Disabled pilot, invalid scope, empty query, non-Git root | Integration failure | `test_indexed_context.py` |
-| Concurrent queries on one index are serialized | Integration concurrency | `test_indexed_context.py` |
-| LRU eviction and reconcile-disabled behavior | Integration | `test_indexed_context.py` |
-| Unexpected query/reconcile failure becomes a clean ToolError + telemetry | Integration fault injection | `test_indexed_context.py` |
-| Incremental edit produces the same query result as a clean rebuild | Differential unit | `test_indexed_index.py` |
-| Parser/store/query/refresh malformed and edge cases | Unit | indexed core suites |
+| A pattern that starts with `@context` and a space is an ordinary regex or literal pattern (at a Git root or not, with every argument) | Unit | `test_search_text_plain_patterns.py` |
+| Every other search returns the results of master 9b7d6d3 (golden digests) | Unit | `test_search_text_plain_patterns.py` |
+| The search_text surface is master's minus the removed text | Contract | `test_search_text_surface.py` |
+| An old `[indexed_context]` section loads, is ignored, and is named once at startup | Integration | `test_config_loading.py`, `test_config_warning_logging.py` |
+| A journal from the pilot window still parses in `binnacle stats` | Unit | `test_logstats.py` |
 
 ## Configuration, CLI, startup, and packaging
 

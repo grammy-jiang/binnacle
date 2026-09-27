@@ -150,28 +150,6 @@ class SearchTextSettings(BaseModel):
         return self
 
 
-class IndexedContextSettings(BaseModel):
-    """Development-pilot settings for ``search_text('@context ...')``."""
-
-    enabled: bool = Field(
-        False,
-        description="Enable explicit @context indexed repository discovery.",
-    )
-    index_dir: Path = Field(
-        default_factory=lambda: Path.home() / ".cache" / "binnacle" / "indexes",
-        description="Persistent per-worktree SQLite index directory.",
-    )
-    relation_items: int = Field(8, ge=1, le=20)
-    lexical_items: int = Field(2, ge=0, le=10)
-    snippet_chars: int = Field(700, ge=120, le=4_000)
-    package_max_bytes: int = Field(8_500, ge=2_000, le=32_000)
-    max_open_indexes: int = Field(2, ge=1, le=16)
-    reconcile_on_query: bool = Field(
-        True,
-        description="Reconcile the persistent index against the live worktree before each @context query.",
-    )
-
-
 class EditFileSettings(BaseModel):
     snippet_context_lines: int = 4
 
@@ -189,6 +167,11 @@ class AutoBackgroundMatch:
 # startup WARNING (event=config_warning). shadow_prediction: the run_command
 # shadow-prediction experiment, removed 2026-09-27.
 REMOVED_RUN_COMMAND_SECTIONS = ("shadow_prediction",)
+
+# Top-level sections that no longer exist, handled the same way.
+# indexed_context: the search_text '@context' indexed-discovery pilot, removed
+# 2026-09-28 after its retrieval benchmark failed (docs/indexed-context-pilot.md).
+REMOVED_SECTIONS = ("indexed_context",)
 
 # Keys of [jobs] that no longer exist, handled the same way.
 # blocking_wall_budget_s_by_client: the chat-mode scheduling v2 blocking-wall
@@ -372,9 +355,6 @@ class Settings(BaseSettings):
     read_file: ReadFileSettings = Field(default_factory=ReadFileSettings)
     list_files: ListFilesSettings = Field(default_factory=ListFilesSettings)
     search_text: SearchTextSettings = Field(default_factory=SearchTextSettings)
-    indexed_context: IndexedContextSettings = Field(
-        default_factory=IndexedContextSettings
-    )
     edit_file: EditFileSettings = Field(default_factory=EditFileSettings)
     run_command: RunCommandSettings = Field(default_factory=RunCommandSettings)
     jobs: JobsSettings = Field(default_factory=JobsSettings)
@@ -400,6 +380,31 @@ class Settings(BaseSettings):
             "modern discovery -- the prefix covers both."
         ),
     )
+
+    _removed_sections: tuple[str, ...] = PrivateAttr(default=())
+
+    @model_validator(mode="wrap")
+    @classmethod
+    def _drop_removed_sections(
+        cls,
+        data: Any,
+        handler: ModelWrapValidatorHandler["Settings"],
+    ) -> "Settings":
+        if isinstance(data, cls):
+            return handler(data)
+        removed: tuple[str, ...] = ()
+        if isinstance(data, Mapping):
+            removed = tuple(name for name in REMOVED_SECTIONS if name in data)
+            if removed:
+                data = {k: v for k, v in data.items() if k not in removed}
+        model = handler(data)
+        model._removed_sections = removed
+        return model
+
+    @property
+    def removed_sections(self) -> tuple[str, ...]:
+        """Removed top-level sections the configuration still has."""
+        return self._removed_sections
 
     @classmethod
     def settings_customise_sources(

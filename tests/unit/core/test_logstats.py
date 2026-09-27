@@ -262,114 +262,33 @@ def test_analysis_helpers_cover_malformed_and_non_project_inputs(monkeypatch):
 
     assert logstats._int(None) == 0
     assert logstats._int("bad") == 0
-    assert logstats._float(None) == 0.0
-    assert logstats._float("bad") == 0.0
 
 
-def test_indexed_context_analysis_joins_exact_search_and_read_evidence(tmp_path):
-    evidence = tmp_path / "repo" / "src" / "app.py"
-    evidence.parent.mkdir(parents=True)
-    evidence.write_text("x")
-    digest = logstats._path_hash(str(evidence))
+# The '@context' pilot (2026-09-19 to 2026-09-28) wrote these records. Its
+# stats section left with it; a journal from that window still parses
+# (docs/logging.md §13).
+PILOT_WINDOW = """\
+2026-09-20T10:00:00.000 INFO: event=tool_call call=i1 tool=search_text client=openai-mcp session=eeee request_id=0 turn=wfr_t9/a args_chars=46 args={"pattern":"@context where is x","path":"/tmp/r"}
+2026-09-20T10:00:00.010 INFO: event=search_dispatch call=i1 mode=indexed path_hash=abc pattern_chars=18
+2026-09-20T10:00:00.500 INFO: event=index_context call=i1 root_hash=r query_hash=q query_chars=10 head=h generation=3 cold_open=false total_ms=490 package_items=3 package_bytes=320 package_est_tokens=80 evidence_hashes=aaa,bbb
+2026-09-20T10:00:00.510 INFO: event=tool_result call=i1 tool=search_text client=openai-mcp session=eeee request_id=0 duration_ms=500.00 is_error=False content_chars=90 structured_bytes=320 est_tokens=80 truncated=false
+2026-09-20T10:00:01.000 WARNING: event=index_context_error call=i2 root_hash=r phase=query error_class=ToolError error=boom total_ms=3
+"""
 
-    records = [
-        logstats.Record(
-            "tool_call",
-            "event=tool_call call=idx tool=search_text turn=turn1/one "
-            'args={"path":"/tmp/repo","pattern":"@context app"}',
-        ),
-        logstats.Record(
-            "search_dispatch",
-            "event=search_dispatch call=idx mode=indexed",
-        ),
-        logstats.Record(
-            "index_context",
-            "event=index_context call=idx pilot_version=v1 schema_version=3 "
-            "parser_version=2 root_hash=root query_hash=query head=abc generation=4 "
-            "cold_open=true changed_files=2 package_est_tokens=80 package_bytes=320 "
-            "package_items=3 total_ms=12.5 reconcile_ms=3.5 query_ms=4.0 "
-            f"evidence_hashes={digest}",
-        ),
-        logstats.Record(
-            "tool_result",
-            "event=tool_result call=idx tool=search_text est_tokens=100",
-        ),
-        logstats.Record(
-            "tool_call",
-            f"event=tool_call call=search tool=search_text turn=turn1/two "
-            f'args={{"path":"{evidence}","pattern":"target"}}',
-        ),
-        logstats.Record(
-            "search_dispatch",
-            "event=search_dispatch call=search mode=exact",
-        ),
-        logstats.Record(
-            "tool_result",
-            "event=tool_result call=search tool=search_text est_tokens=20",
-        ),
-        logstats.Record(
-            "tool_call",
-            f"event=tool_call call=read tool=read_file turn=turn1/three "
-            f'args={{"path":"{evidence}"}}',
-        ),
-        logstats.Record(
-            "tool_result",
-            "event=tool_result call=read tool=read_file est_tokens=30",
-        ),
-        logstats.Record(
-            "tool_call",
-            "event=tool_call call=ignored tool=run_command turn=turn1/four "
-            'args={"command":"echo x"}',
-        ),
-        logstats.Record(
-            "index_context_error",
-            "event=index_context_error call=bad phase=query error_class=ToolError",
-        ),
+
+def test_pilot_window_records_parse_and_have_no_section():
+    records, _ = logstats.parse(PILOT_WINDOW)
+    assert [r.event for r in records] == [
+        "tool_call",
+        "search_dispatch",
+        "index_context",
+        "tool_result",
+        "index_context_error",
     ]
-
-    stats = logstats.analyze_indexed_context(records)
-
-    assert stats.successes == 1
-    assert stats.errors == 1
-    assert stats.error_phases == {"query": 1}
-    assert stats.cold_opens == 1
-    assert stats.changed_files == 2
-    assert stats.evidence_opened == 1
-    assert stats.evidence_reads == 1
-    assert stats.evidence_file_searches == 1
-    assert stats.followup_calls == [2]
-    assert stats.followup_exact_searches == [1]
-    assert stats.followup_reads == [1]
-    assert stats.followup_result_tokens == [50]
-    assert stats.investigation_result_tokens == [150]
-    row = stats.rows[0]
-    assert row["pilot_version"] == "v1"
-    assert row["schema_version"] == 3
-    assert row["parser_version"] == 2
-    assert row["generation"] == 4
-    assert row["package_est_tokens"] == 80
-    assert row["package_bytes"] == 320
-    assert row["package_items"] == 3
-
-
-def test_indexed_context_analysis_tolerates_missing_ids_and_bad_metrics():
-    records = [
-        logstats.Record("tool_call", "event=tool_call tool=search_text"),
-        logstats.Record("tool_result", "event=tool_result tool=search_text"),
-        logstats.Record("search_dispatch", "event=search_dispatch mode=exact"),
-        logstats.Record(
-            "index_context",
-            "event=index_context schema_version=x parser_version=x "
-            "generation=x package_bytes=x total_ms=x evidence_hashes=-",
-        ),
-    ]
-
-    stats = logstats.analyze_indexed_context(records)
-
-    assert stats.successes == 1
-    assert stats.rows[0]["call"] == "-"
-    assert stats.rows[0]["schema_version"] == 0
-    assert stats.rows[0]["total_ms"] == 0.0
+    st = logstats.analyze(records)
+    assert st.results == {"search_text": 1}
+    assert st.exact_search.dispatches == 0
+    assert "indexed" not in logstats.render(st).lower()
 
 
 def test_analyze_covers_unpaired_and_unsized_result_edges():

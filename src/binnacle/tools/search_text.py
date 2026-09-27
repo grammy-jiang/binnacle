@@ -1,4 +1,4 @@
-"""Regex search with ripgrep plus indexed/adaptive discovery (see docs/tools/search_text.md)."""
+"""Regex search with ripgrep plus adaptive discovery (see docs/tools/search_text.md)."""
 
 import hashlib
 import logging
@@ -13,8 +13,6 @@ from fastmcp.tools.base import ToolResult
 from binnacle.callctx import current_call
 from binnacle.config import get_settings
 from binnacle.errors import CodedToolError
-from binnacle.indexed_context import PREFIX as INDEXED_CONTEXT_PREFIX
-from binnacle.indexed_context import get_indexed_context_service
 from binnacle.paths import full_match, nearby_hint, resolve_path
 from binnacle.search_text_adaptive import (
     build_adaptive_result,
@@ -394,22 +392,14 @@ def search_text_impl(
         )
     max_results = max(1, min(max_results, SEARCH_MAX_RESULTS_CAP))
 
-    indexed_mode = not fixed_strings and pattern.startswith(INDEXED_CONTEXT_PREFIX)
+    # mode stays in the line for journal readers; since the removal of the
+    # indexed-context pilot (2026-09-28) every search is exact.
     log.info(
-        "event=search_dispatch call=%s mode=%s path_hash=%s pattern_chars=%s",
+        "event=search_dispatch call=%s mode=exact path_hash=%s pattern_chars=%s",
         current_call.get(),
-        "indexed" if indexed_mode else "exact",
         hashlib.sha256(str(resolved).encode("utf-8")).hexdigest()[:12],
         len(pattern),
     )
-    if indexed_mode:
-        if glob is not None or names_only or context_lines not in (None, 0):
-            raise CodedToolError(
-                "indexed_args_invalid",
-                "@context uses a fixed bounded context package; omit glob, "
-                "context_lines and names_only. Use ordinary regex mode for those controls.",
-            )
-        return get_indexed_context_service().search(pattern, resolved)
 
     metrics = ExactSearchMetrics(
         call=current_call.get(),

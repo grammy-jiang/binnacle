@@ -1,6 +1,8 @@
 # Indexed `@context` development pilot
 
-Status: development-machine pilot. Normal `search_text` regex/literal behavior remains the default.
+Status: **removed on 2026-09-28** (see "Closing: benchmark and removal" at the
+end). The sections before it describe the pilot as it ran from 2026-09-19 to
+2026-09-28. The code is kept by the tag `archive/indexed-context-pilot-2026-09-28`.
 
 ## Purpose
 
@@ -167,3 +169,105 @@ enabled = false
 and restart the service. Normal `search_text` remains independent of the persistent
 index. The SQLite index files are cache artifacts and may be removed/rebuilt without
 changing repository contents.
+
+## Closing: benchmark and removal (2026-09-28)
+
+**Decision: the owner approved the removal on 2026-09-28**, after the offline
+benchmark failed the rule that was set before it ran. The code is kept by the
+tag `archive/indexed-context-pilot-2026-09-28` (on master 9b7d6d3, pushed
+before anything was deleted).
+
+### Benchmark evidence
+
+The benchmark ran offline on 2026-09-28 against master 45f12b6, in process,
+with the production defaults. It used no ChatGPT and did not change the live
+index files (it worked on copies). Two question sets:
+
+- **Real queries:** the 35 `@context` calls ChatGPT made from 2026-09-19 to
+  2026-09-27, from the `binnacle-mcp` journal. 29 remained after the
+  exclusions. The answer file is the file the model read most in the next
+  20 calls of the same turn. The index was built for the tree the query
+  saw, as closely as git allows.
+- **Labelled questions:** 26 questions on binnacle, voice-input and
+  research-pipeline. Every answer location was verified by reading the
+  code. 20 describe behavior, 6 name an identifier.
+
+The rule: recall@3 of at least 70 % on both sets, and a clear step saving
+against exact search.
+
+| Condition | Required | Measured | Result |
+| --- | --- | --- | --- |
+| recall@3, real queries | >= 70 % | 4/29 = **14 %** (95 % CI 5–31 %) | fail |
+| recall@3, labelled questions | >= 70 % | 13/26 = **50 %** (95 % CI 32–68 %) | fail |
+| Step saving against exact search | a clear saving | −0.7 steps per labelled question, −1.5 per real query (conservative model) | fail |
+
+- Both upper confidence bounds are below 70 %, so the sample size does not
+  change the decision.
+- Calling `@context` first and reading its top 3 files **costs** steps. The
+  optimistic step model (the model skips the reads when the excerpts look
+  wrong) still gives −0.2 and −0.7.
+- Speed and size were not the problem: a warm call took 25–50 ms at p50
+  in process (481 ms end to end in production), and a result was about
+  2,050 tokens.
+
+Where it failed:
+
+1. **Behavior questions.** Identifier questions: recall@3 6/6. Behavior
+   questions: 7/20. The retriever is BM25 (SQLite FTS5) plus one hop over
+   a code graph, with no embeddings. A question whose words are not in the
+   answer's code cannot reach it. This pilot was indexed search, not
+   semantic search, so it did not test semantic search.
+2. **Hub bias.** The graph hop favors files with many edges:
+   `tools/job_status.py` was in the top 3 for 10 of the 55 questions,
+   `tools/run_command.py` for 9. On binnacle, real recall@3 was 1/14.
+3. **Tests and docs ahead of the code** for 7 of 26 labelled questions.
+4. **Real answers are often not code:** 17 of 29 were code (recall@3 2/17),
+   6 docs, 4 tests and 2 JSON files (JSON was not indexed).
+5. **The excerpt missed the answer lines** in 11 of 17 labelled cases where
+   the answer file was in the package.
+
+Better exposure does not help: direct entries first, BM25 without the graph
+hop and a larger package all stay far below the bar. The whole package (up
+to 10 files) held the answer for 38 % of the real queries and 77 % of the
+labelled questions.
+
+The bar for any future retriever, from the step model: recall@3 of about
+45 % on real queries and 73 % on labelled questions for a net saving
+(conservative model), or 29 % and 58 % (optimistic). A perfect top 3 would
+save about 2.4 steps per real query and 0.7 per labelled question.
+
+### What was removed
+
+- The pilot modules `indexed_context`, `indexed_parse`, `indexed_query`,
+  `indexed_refresh`, `indexed_retrieval`, `indexed_store` and
+  `indexed_surface`, `scripts/analyze_indexed_pilot.py`, and their tests.
+- The `@context` path of `search_text`: its sentence in the tool
+  description, its clause in the `pattern` parameter, and the
+  `indexed_args_invalid` error. A pattern that starts with `@context` and a
+  space is an ordinary regex or literal pattern again. Every other
+  `search_text` result is byte-identical to master 9b7d6d3; the tests
+  `tests/contracts/test_search_text_surface.py` and
+  `tests/unit/tools/test_search_text_plain_patterns.py` prove it.
+- The `index_context` and `index_context_error` records, `mode=indexed` on
+  `search_dispatch`, the `indexed_*` fields of the startup `config` record,
+  and the "indexed context pilot" section of `binnacle stats`
+  (`docs/logging.md` §13).
+
+An old `[indexed_context]` section in the host configuration keeps loading.
+It is ignored, and one startup WARNING names it:
+
+```text
+event=config_warning section=indexed_context reason=removed action=ignored
+```
+
+The server does not delete the index files. On this host they are in
+`~/.cache/binnacle/indexes`: 681 MiB on 2026-09-28, 13 indexes in 31 files
+(314 MB of it WAL and shared-memory files). 4 of the 13 indexes (128 MB)
+belong to worktrees that no longer exist. Deleting the directory is a host
+operation.
+
+### The LSP design branch
+
+The owner's LSP design branch `design/lsp-development-intelligence-2026-09-27`
+planned to route LSP queries through this `@context` path. That path no
+longer exists, so the LSP work must add its own entry point.

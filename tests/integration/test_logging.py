@@ -425,9 +425,11 @@ def test_effective_config_line(caplog):
     assert fields["pid"].isdigit()
     assert fields["version"] not in ("", "?")
     assert "keep_newest=" in lines[0] and "client_tools=" in lines[0]
-    assert "auto_background=" in lines[0] and "indexed_context=" in lines[0]
-    assert "indexed_reconcile=" in lines[0]
-    assert "indexed_max_open=" in lines[0]
+    assert "auto_background=" in lines[0]
+    # The indexed-context pilot's fields left the line on 2026-09-28.
+    assert "indexed_context=" not in lines[0]
+    assert "indexed_reconcile=" not in lines[0]
+    assert "indexed_max_open=" not in lines[0]
     assert "tokenizer_enabled=" in lines[0]
     assert "tokenizer_encoding=" in lines[0]
     assert "tokenizer_clients=" in lines[0]

@@ -107,8 +107,9 @@ adaptive_snippet_chars = 220
     assert settings.telemetry.tokenizer.enabled is True
     assert settings.telemetry.tokenizer.encoding == "o200k_base"
     assert settings.telemetry.tokenizer.client_prefixes == ("openai-mcp", "codex")
-    assert settings.indexed_context.enabled is True
-    assert settings.indexed_context.max_open_indexes == 4
+    # The indexed-context pilot's section (removed 2026-09-28) still loads: ignored.
+    assert settings.removed_sections == ("indexed_context",)
+    assert not hasattr(settings, "indexed_context")
     assert settings.search_text.timeout_s == 31
     assert settings.search_text.result_max_bytes == 70000
     assert settings.search_text.adaptive_discovery_enabled is True
@@ -169,7 +170,9 @@ enabled = false
     assert settings.jobs.keep_newest == 11
     assert settings.jobs.removed_keys == ("blocking_wall_budget_s_by_client",)
     assert settings.telemetry.tokenizer.enabled is True
-    assert settings.indexed_context.enabled is True
+    # Neither the removed section nor an environment override for it is an error.
+    assert settings.removed_sections == ("indexed_context",)
+    assert not hasattr(settings, "indexed_context")
 
 
 def test_invalid_toml_is_a_configuration_failure(tmp_path, monkeypatch):
@@ -401,3 +404,47 @@ def test_run_command_without_removed_sections_reports_none(tmp_path, monkeypatch
         ).wait_default_s
         == 12
     )
+
+
+@pytest.mark.parametrize(
+    "table",
+    [
+        "enabled = true\nmax_open_indexes = 4",
+        'index_dir = "~/.cache/binnacle/indexes"\nreconcile_on_query = false',
+        "max_open_indexes = 0\nsnippet_chars = -1",  # invalid for the old model
+        "unknown_key = 1",
+    ],
+)
+def test_removed_indexed_context_section_is_ignored(table, tmp_path, monkeypatch):
+    """The indexed-context pilot was removed on 2026-09-28. A host configuration
+    that still has its section keeps loading, whatever the old values were."""
+    clear_binnacle_env(monkeypatch)
+    cfg = tmp_path / "config.toml"
+    cfg.write_text(
+        f"[search_text]\ntimeout_s = 29\n\n[indexed_context]\n{table}\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv(config.CONFIG_FILE_ENV, str(cfg))
+
+    settings = config.Settings()
+
+    assert settings.search_text.timeout_s == 29
+    assert settings.removed_sections == ("indexed_context",)
+    assert not hasattr(settings, "indexed_context")
+    assert "indexed_context" not in settings.model_dump()
+
+
+def test_settings_without_removed_sections_reports_none(tmp_path, monkeypatch):
+    clear_binnacle_env(monkeypatch)
+    monkeypatch.setenv(config.CONFIG_FILE_ENV, str(tmp_path / "missing.toml"))
+
+    settings = config.Settings()
+
+    assert settings.removed_sections == ()
+    assert config.Settings.model_validate(settings).removed_sections == ()
+    assert config.Settings.model_validate({}).removed_sections == ()
+    assert config.Settings.model_validate(
+        {"indexed_context": {"enabled": True}}
+    ).removed_sections == ("indexed_context",)
+    with pytest.raises(ValidationError):
+        config.Settings.model_validate(["not", "a", "mapping"])

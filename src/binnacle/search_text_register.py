@@ -28,10 +28,7 @@ def register_search_text(
         pattern: Annotated[
             str,
             Field(
-                description=(
-                    "Regex (Rust syntax), or `@context <query>` for indexed repository "
-                    "discovery when path is the Git worktree root. Use fixed_strings for literal text."
-                )
+                description="Regex (Rust syntax). Use fixed_strings for literal text."
             ),
         ],
         path: Annotated[
@@ -71,9 +68,7 @@ def register_search_text(
     ) -> ToolResult:
         """Search repository content. Normal regex search replaces grep -rn;
         names_only replaces grep -c; line_numbers supplies grep -n style context.
-        Prefer this over grep in run_command. When the implementation location is
-        unknown, use ``@context <query>`` with ``path`` set to the Git worktree
-        root, then verify/narrow with exact search as needed.
+        Prefer this over grep in run_command.
         """
         return impl(
             pattern,

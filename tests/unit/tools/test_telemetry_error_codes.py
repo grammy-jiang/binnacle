@@ -146,10 +146,15 @@ def test_search_text_runtime_error_codes(tmp_path, monkeypatch):
     assert _code(exc) == "invalid_glob"
 
 
-def test_search_text_indexed_args_and_budget_codes(tmp_path, monkeypatch):
-    with pytest.raises(ToolError, match="fixed bounded context package") as exc:
-        st.search_text_impl("@context x", str(tmp_path), "*.py", False, None, False, 10)
-    assert _code(exc) == "indexed_args_invalid"
+def test_search_text_context_prefix_and_budget_codes(tmp_path, monkeypatch):
+    # The '@context' pilot was removed on 2026-09-28: its argument check
+    # (indexed_args_invalid) is gone and the pattern is searched as written.
+    (tmp_path / "a.py").write_text("@context x\n")
+    result = st.search_text_impl(
+        "@context x", str(tmp_path), "*.py", False, None, False, 10
+    )
+    assert result.structured_content is not None
+    assert result.structured_content["count"] == 1
 
     monkeypatch.setattr(st, "SEARCH_RESULT_MAX_BYTES", 8)
     payload = {

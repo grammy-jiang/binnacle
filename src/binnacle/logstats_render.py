@@ -6,7 +6,7 @@ from typing import Any
 from binnacle.logstats_jobs import (
     render_job_telemetry,
 )
-from binnacle.logstats_models import AdaptiveDiscoveryStats, IndexedContextStats, Stats
+from binnacle.logstats_models import AdaptiveDiscoveryStats, Stats
 from binnacle.logstats_run_command_render import render_run_command_workflow
 from binnacle.logstats_search_exact import render_exact_search
 
@@ -65,44 +65,6 @@ def adaptive_discovery_report(adaptive: AdaptiveDiscoveryStats) -> dict[str, Any
             [float(x) for x in adaptive.investigation_result_tokens]
         ),
         "rows": adaptive.rows,
-    }
-
-
-def indexed_context_report(idx: IndexedContextStats) -> dict[str, Any]:
-    """JSON-friendly summary used by the CLI section and detailed pilot script."""
-    return {
-        "indexed_successes": idx.successes,
-        "indexed_errors": idx.errors,
-        "error_phases": dict(idx.error_phases),
-        "pilot_versions": dict(idx.pilot_versions),
-        "schema_versions": dict(idx.schema_versions),
-        "parser_versions": dict(idx.parser_versions),
-        "cold_opens": idx.cold_opens,
-        "changed_files": idx.changed_files,
-        "evidence_open_conversion": (
-            idx.evidence_opened / idx.successes if idx.successes else 0.0
-        ),
-        "evidence_reads": idx.evidence_reads,
-        "evidence_file_searches": idx.evidence_file_searches,
-        "result_tokens": _distribution([float(x) for x in idx.result_tokens]),
-        "package_est_tokens": _distribution([float(x) for x in idx.package_est_tokens]),
-        "package_bytes": _distribution([float(x) for x in idx.package_bytes]),
-        "package_items": _distribution([float(x) for x in idx.package_items]),
-        "latency_total_ms": _distribution(idx.total_ms),
-        "latency_reconcile_ms": _distribution(idx.reconcile_ms),
-        "latency_query_ms": _distribution(idx.query_ms),
-        "followup_calls": _distribution([float(x) for x in idx.followup_calls]),
-        "followup_exact_searches": _distribution(
-            [float(x) for x in idx.followup_exact_searches]
-        ),
-        "followup_reads": _distribution([float(x) for x in idx.followup_reads]),
-        "followup_result_tokens": _distribution(
-            [float(x) for x in idx.followup_result_tokens]
-        ),
-        "investigation_result_tokens": _distribution(
-            [float(x) for x in idx.investigation_result_tokens]
-        ),
-        "rows": idx.rows,
     }
 
 
@@ -253,42 +215,4 @@ def render(st: Stats) -> str:
                     f"p90={_pct(values, 0.9):8.1f} max={max(values):9.1f}"
                 )
 
-    if st.indexed.successes or st.indexed.errors:
-        idx = st.indexed
-        out.append("\nindexed context pilot:")
-        out.append(
-            f"  success={idx.successes} errors={idx.errors} cold_opens={idx.cold_opens} "
-            f"changed_files={idx.changed_files}"
-        )
-        if idx.pilot_versions:
-            versions = ", ".join(
-                f"{k}:{v}" for k, v in idx.pilot_versions.most_common()
-            )
-            out.append(f"  pilot versions: {versions}")
-        if idx.error_phases:
-            phases = ", ".join(f"{k}:{v}" for k, v in idx.error_phases.most_common())
-            out.append(f"  error phases: {phases}")
-        if idx.successes:
-            conversion = 100 * idx.evidence_opened / idx.successes
-            out.append(
-                f"  evidence opened: {idx.evidence_opened}/{idx.successes} ({conversion:.1f}%) "
-                f"reads={idx.evidence_reads} file_searches={idx.evidence_file_searches}"
-            )
-            for label, values in (
-                ("result tokens", idx.result_tokens),
-                ("package bytes", idx.package_bytes),
-                ("total ms", idx.total_ms),
-                ("reconcile ms", idx.reconcile_ms),
-                ("query ms", idx.query_ms),
-                ("follow-up calls", idx.followup_calls),
-                ("follow-up exact", idx.followup_exact_searches),
-                ("follow-up reads", idx.followup_reads),
-                ("follow-up tokens", idx.followup_result_tokens),
-                ("investigation tokens", idx.investigation_result_tokens),
-            ):
-                if values:
-                    out.append(
-                        f"  {label:20s} n={len(values):4d} p50={_pct(values, 0.5):8.1f} "
-                        f"p90={_pct(values, 0.9):8.1f} max={max(values):9.1f}"
-                    )
     return "\n".join(out)

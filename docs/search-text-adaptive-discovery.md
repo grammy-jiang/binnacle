@@ -21,7 +21,9 @@ Small and ordinary results are unchanged. Adaptive discovery is considered only
 when all of these are true:
 
 1. adaptive discovery is enabled by server configuration;
-2. this is an ordinary content search, not names_only and not @context;
+2. this is an ordinary content search, not names_only (since the removal of the
+   indexed-context pilot on 2026-09-28, a pattern that starts with @context is
+   an ordinary search too);
 3. the result assembled by the existing behavior would exceed
    search_text.result_max_bytes.
 

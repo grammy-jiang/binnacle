@@ -156,31 +156,25 @@ input schema is unchanged; the budget is server configuration. Normal small
 results are unchanged byte-for-byte, while the largest replayable historical
 result fell from 655,605 bytes to 64,837 bytes.
 
-## 6. Development indexed-context mode (2026-09-19)
+## 6. Development indexed-context mode (2026-09-19, removed 2026-09-28)
 
-The development machine may enable explicit indexed discovery without adding an MCP
-parameter or a seventh tool:
+From 2026-09-19 to 2026-09-28 a development pilot answered
+`pattern="@context <natural-language repository question>"` from a
+persistent per-worktree SQLite/FTS5 index instead of ripgrep. It was removed
+on 2026-09-28 after its offline benchmark failed the rule set before it ran:
+recall@3 of 14 % on real ChatGPT queries and 50 % on labelled questions,
+against a 70 % bar, and more steps than exact search. The evidence and the
+decision are in `docs/indexed-context-pilot.md`; the tag
+`archive/indexed-context-pilot-2026-09-28` keeps the code.
 
-```text
-pattern="@context <natural-language repository question>"
-```
-
-Normal patterns retain the exact regex/literal contract above. `fixed_strings=true`
-forces literal mode even when the text begins with `@context` followed by a space. During the pilot the
-`path` must be the Git worktree root; indexed mode rejects `glob`, `names_only`, and
-non-zero `context_lines` rather than silently changing their meaning.
-
-Indexed mode uses a persistent per-worktree SQLite/FTS5 semantic index and typed
-relations, then maps a bounded path/symbol/provenance/excerpt package into the
-existing result schema. The package is an orientation aid, not proof: use ordinary
-regex/read_file to verify ambiguity, especially known-symbol or same-name questions.
-
-The public description continues to name the existing grep equivalents (`grep -rn`,
-`grep -c`, `grep -n`) so indexed discovery does not hide the deterministic search
-capabilities from the model.
-
-Repository default is disabled. Configuration, telemetry, review criteria, and
-rollback are in `docs/indexed-context-pilot.md`.
+Since the removal, a pattern that starts with `@context` and a space is an
+ordinary regex or literal pattern: no Git-root rule, no argument check, no
+index. The tool description and the `pattern` parameter no longer mention it;
+the rest of the surface and every other result are byte-identical to master
+9b7d6d3 (`tests/contracts/test_search_text_surface.py`,
+`tests/unit/tools/test_search_text_plain_patterns.py`). An old
+`[indexed_context]` configuration section still loads; it is ignored with one
+startup WARNING (`docs/logging.md` §13).
 
 ## 7. Adaptive broad-result representation (development pilot)
 
@@ -210,8 +204,8 @@ pre-adaptive byte size, total matches/files, detailed/candidate files,
 representative/tail entry counts, final bytes and whether this final hard-budget
 trim occurred.
 
-Small results, `names_only`, explicit `@context`, and ordinary results already under
-the byte budget retain their previous behavior. See
+Small results, `names_only`, and ordinary results already under the byte budget
+retain their previous behavior. See
 `docs/search-text-adaptive-discovery.md` for the pilot contract and rollback.
 
 ## 8. Exact-search Phase B telemetry — 2026-09-22
