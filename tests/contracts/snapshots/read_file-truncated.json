@@ -1,0 +1,26 @@
+{
+  "is_error": false,
+  "content": "Read lines 1-2000 of 2001 from <tmp>/work/long.txt; continue with start_line=2001.",
+  "structured": {
+    "path": "<tmp>/work/long.txt",
+    "kind": "text",
+    "content": {
+      "long_text": {
+        "chars": 8893,
+        "sha256": "6251e5743b6fd6a7d606130bdf7c15077ce85ebd3a0fdee284d15a46df199e38",
+        "head": "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16\n1",
+        "tail": "1993\n1994\n1995\n1996\n1997\n1998\n1999\n2000\n"
+      }
+    },
+    "start_line": 1,
+    "end_line": 2000,
+    "total_lines": 2001,
+    "bytes": 8898,
+    "truncated": true,
+    "next_start_line": 2001
+  },
+  "size": {
+    "structured_bytes": 11053,
+    "tokens": 5081
+  }
+}

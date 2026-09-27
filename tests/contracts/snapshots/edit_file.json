@@ -1,0 +1,17 @@
+{
+  "is_error": false,
+  "content": "Replaced 1 occurrence in <tmp>/work/new.txt (first change at line 2).",
+  "structured": {
+    "path": "<tmp>/work/new.txt",
+    "replacements": 1,
+    "match": "exact",
+    "first_change_line": 2,
+    "snippet": "one\nthree\n",
+    "snippet_first_line": 1,
+    "bytes": 10
+  },
+  "size": {
+    "structured_bytes": 143,
+    "tokens": 62
+  }
+}

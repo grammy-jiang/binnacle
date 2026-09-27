@@ -1,0 +1,23 @@
+{
+  "is_error": false,
+  "content": "Found 1 matches for '$5.00' under <tmp>/work.",
+  "structured": {
+    "path": "<tmp>/work",
+    "pattern": "$5.00",
+    "entries": [
+      {
+        "file": "<tmp>/work/notes.md",
+        "line": 3,
+        "text": "cost: $5.00 each",
+        "context_first_line": 1,
+        "context": "# Notes\ngamma ray\ncost: $5.00 each"
+      }
+    ],
+    "count": 1,
+    "truncated": false
+  },
+  "size": {
+    "structured_bytes": 217,
+    "tokens": 91
+  }
+}

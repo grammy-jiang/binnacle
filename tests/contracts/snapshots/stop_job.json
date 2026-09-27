@@ -1,0 +1,14 @@
+{
+  "is_error": false,
+  "content": "Job <job-1> stopped (signal 15).",
+  "structured": {
+    "job_id": "<job-1>",
+    "state": "exited",
+    "exit_code": null,
+    "signal": 15
+  },
+  "size": {
+    "structured_bytes": 66,
+    "tokens": 36
+  }
+}

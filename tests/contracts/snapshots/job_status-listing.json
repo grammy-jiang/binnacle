@@ -1,0 +1,21 @@
+{
+  "is_error": false,
+  "content": "1 job(s), newest first.",
+  "structured": {
+    "jobs": [
+      {
+        "job_id": "<job-1>",
+        "state": "exited",
+        "exit_code": 0,
+        "runtime_s": "<number>",
+        "started_at": "<number>",
+        "workdir": "<tmp>/work",
+        "command": "i=0; while [ ! -e release ] && [ $i -lt 200 ]; do sleep 0.05; i=$((i+1)); done; printf 'released\\n'"
+      }
+    ]
+  },
+  "size": {
+    "structured_bytes": 245,
+    "tokens": 98
+  }
+}

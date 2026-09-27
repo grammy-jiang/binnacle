@@ -1,0 +1,30 @@
+{
+  "is_error": false,
+  "content": "Found 2 matches for 'gam+a\\\\s\\\\w+' under <tmp>/work.",
+  "structured": {
+    "path": "<tmp>/work",
+    "pattern": "gam+a\\s\\w+",
+    "entries": [
+      {
+        "file": "<tmp>/work/notes.md",
+        "line": 2,
+        "text": "gamma ray",
+        "context_first_line": 1,
+        "context": "# Notes\ngamma ray\ncost: $5.00 each"
+      },
+      {
+        "file": "<tmp>/work/small.txt",
+        "line": 3,
+        "text": "gamma delta",
+        "context_first_line": 1,
+        "context": "alpha\nbeta gamma\ngamma delta\nnaïve café"
+      }
+    ],
+    "count": 2,
+    "truncated": false
+  },
+  "size": {
+    "structured_bytes": 359,
+    "tokens": 133
+  }
+}

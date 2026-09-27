@@ -1,0 +1,1 @@
+{"command": "sleep 3600", "workdir": "/tmp/binnacle-spool-fixture", "pid": 4194305, "pgid": 4194305, "starttime": 12345999, "started_at": 1790500100.5, "call_id": "5f4e3d2c1b0a", "command_hash": "8d2295448f27", "owner": "manager", "schema_version": 2, "owner_instance_id": "6d3c1f0e9b8a47d2a1c0f9e8d7c6b5a4", "boot_id": "4b2f3c1d-8e7a-4f60-9d1c-2b3a4c5d6e7f"}

@@ -1,0 +1,35 @@
+{
+  "is_error": false,
+  "content": "Listed 4 entries in <tmp>/work.",
+  "structured": {
+    "path": "<tmp>/work",
+    "mode": "list",
+    "entries": [
+      {
+        "path": "<tmp>/work/src",
+        "type": "dir"
+      },
+      {
+        "path": "<tmp>/work/long.txt",
+        "type": "file",
+        "bytes": 8898
+      },
+      {
+        "path": "<tmp>/work/notes.md",
+        "type": "file",
+        "bytes": 35
+      },
+      {
+        "path": "<tmp>/work/small.txt",
+        "type": "file",
+        "bytes": 42
+      }
+    ],
+    "count": 4,
+    "truncated": false
+  },
+  "size": {
+    "structured_bytes": 285,
+    "tokens": 102
+  }
+}

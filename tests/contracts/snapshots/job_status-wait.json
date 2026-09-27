@@ -1,0 +1,26 @@
+{
+  "is_error": false,
+  "content": "Job <job-1> exited 0 after <s> s.",
+  "structured": {
+    "job_id": "<job-1>",
+    "state": "exited",
+    "exit_code": 0,
+    "signal": null,
+    "runtime_s": "<number>",
+    "last_output_age_s": "<number>",
+    "quiet": false,
+    "log_tail": "released",
+    "log_bytes": 9,
+    "log_path": "<tmp>/jobs/<job-1>/out.log",
+    "command": "i=0; while [ ! -e release ] && [ $i -lt 200 ]; do sleep 0.05; i=$((i+1)); done; printf 'released\\n'",
+    "workdir": "<tmp>/work",
+    "processes": [],
+    "waited_s": "<number>",
+    "wait_requested_s": 10,
+    "wait_effective_s": 10
+  },
+  "size": {
+    "structured_bytes": 426,
+    "tokens": 162
+  }
+}

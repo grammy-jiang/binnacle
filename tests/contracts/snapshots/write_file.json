@@ -1,0 +1,13 @@
+{
+  "is_error": false,
+  "content": "Created <tmp>/work/new.txt (8 bytes).",
+  "structured": {
+    "path": "<tmp>/work/new.txt",
+    "bytes": 8,
+    "action": "created"
+  },
+  "size": {
+    "structured_bytes": 58,
+    "tokens": 29
+  }
+}

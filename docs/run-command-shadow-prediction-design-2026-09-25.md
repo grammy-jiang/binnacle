@@ -308,7 +308,8 @@ Removed: `run_command_prediction.py`, the command-feature extraction and the
 prediction records in `run_command_telemetry.py`, the stats predictions
 section and `binnacle stats --predictions-csv`, and the
 `[run_command.shadow_prediction]` settings. The `run_command` tool surface is
-unchanged (pinned by `tests/contracts/test_run_command_surface.py`). A host
+unchanged (pinned by `tests/contracts/test_run_command_surface.py`, which
+became `test_tool_surface.py` on 2026-09-28). A host
 configuration that still has the table keeps loading: it is ignored, and one
 startup WARNING (`event=config_warning section=run_command.shadow_prediction`)
 names it. Old journals still parse. The memory store under

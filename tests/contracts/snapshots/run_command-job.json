@@ -1,0 +1,19 @@
+{
+  "is_error": false,
+  "content": "Command still running after 1 s; job_id=<job-1>. Use job_status when the result is needed, or stop_job to cancel.",
+  "structured": {
+    "job_id": "<job-1>",
+    "state": "running",
+    "output": "",
+    "truncated": false,
+    "output_bytes": 0,
+    "runtime_s": "<number>",
+    "log_path": "<tmp>/jobs/<job-1>/out.log",
+    "workdir": "<tmp>/work",
+    "background_job": true
+  },
+  "size": {
+    "structured_bytes": 193,
+    "tokens": 91
+  }
+}

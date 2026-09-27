@@ -1,0 +1,18 @@
+{
+  "is_error": false,
+  "content": "Read all 4 lines from <tmp>/work/small.txt.",
+  "structured": {
+    "path": "<tmp>/work/small.txt",
+    "kind": "text",
+    "content": "alpha\nbeta gamma\ngamma delta\nnaïve café\n",
+    "start_line": 1,
+    "end_line": 4,
+    "total_lines": 4,
+    "bytes": 42,
+    "truncated": false
+  },
+  "size": {
+    "structured_bytes": 177,
+    "tokens": 70
+  }
+}

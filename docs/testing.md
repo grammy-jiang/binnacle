@@ -12,7 +12,7 @@ services, kernel modules, routes, or power state.
 | `tests/unit/tools/` | One MCP tool or a small local helper in isolation | file read/write/edit/list/search |
 | `tests/unit/core/` | Pure or mostly local core logic shared across tools | text handling, statistics, property tests |
 | `tests/integration/` | Multiple Binnacle components cooperating across an internal boundary | authenticated HTTP MCP, config loading, CLI, jobs, logging, state-machine flows |
-| `tests/contracts/` | Externally visible protocol and schema contracts | MCP annotations, input validation, visibility, descriptions, output schemas |
+| `tests/contracts/` | Externally visible protocol and schema contracts | MCP annotations, input validation, visibility, descriptions, output schemas, surface pins, golden outputs |
 | `tests/system/` | Raspberry Pi/Linux system behaviour modelled with fakes or guarded probes | doctor, uplink, watchdog, Webmin statistics |
 | `tests/scripts/` | Repository maintenance and analysis scripts | usage analysis |
 | `tests/live/` | Explicit opt-in read-only checks against the deployed Raspberry Pi | active server unit, authenticated localhost MCP smoke |
@@ -225,13 +225,65 @@ uv run mutmut results
 
 Do not run the entire mutation tree as a routine hook.
 
+## Pins and snapshots
+
+Step 1 of `docs/quality-guard-plan-2026-09-27.md` (2026-09-28) added guards
+that fail on any change to what a client sees, to the runtime dependencies or
+to the job-spool format. A change is then a decision: update the pin in the
+same commit and give the reason in the commit message. They live in
+`tests/contracts/`:
+
+| Guard | Test | What it pins |
+| --- | --- | --- |
+| Tool surface | `test_tool_surface.py` | per client profile (ChatGPT, client name `openai-mcp`: 6 tools; default: 8) the served tools in order, and per tool a sha256 over the name, description, output schema, annotations and normalized input schema; the sha256 of the server instructions |
+| Token budget | `test_surface_tokens.py` | the o200k_base tokens of what ChatGPT is served (the instructions, and per tool the name, description and both schemas): 2140 on 2026-09-28, at most 5 % more |
+| Golden outputs | `test_golden_outputs.py`, `snapshots/` | each tool's masked result on fixed fixtures in `tmp_path`, with its size budget (structured bytes and tokens) |
+| Dependencies | `test_dependency_pin.py` | the `[project]` dependencies list exactly, each entry with its reason |
+| Job spool | `test_job_spool_compat.py`, `fixtures/job_spool/` | a spool in the 2026-09-28 format stays readable: job_status and the listing |
+
+To update a guard on purpose:
+
+- **Surface or instructions:** run `uv run pytest
+  tests/contracts/test_tool_surface.py`, copy the new hash from the failure
+  into `SURFACE_SHA256` or `INSTRUCTIONS_SHA256`, and give the reason in the
+  commit message.
+- **Token budget:** a surface up to 5 % over `TOKEN_BUDGET` passes. For more,
+  set `TOKEN_BUDGET` to the measured count and add a `BUDGET_CHANGES` line
+  with the date and the reason; the test refuses a budget without one.
+- **Golden outputs:** rewrite the snapshots with
+
+  ```bash
+  BINNACLE_UPDATE_SNAPSHOTS=1 uv run pytest tests/contracts/test_golden_outputs.py
+  ```
+
+  then review `git diff tests/contracts/snapshots` (the `size` lines show
+  growth) and give the reason in the commit message. A new case needs its
+  name in `CASES`; a snapshot file without a case fails the suite.
+- **Dependencies:** edit `pyproject.toml` and `RUNTIME_DEPENDENCIES` together;
+  the new entry's value is its reason.
+- **Job spool:** never edit a dated fixture. A format change adds a new dated
+  directory with its own tests and keeps every old one readable.
+
+`golden_support.py` masks what changes from run to run: the tmp directory
+becomes `<tmp>`, job ids become `<job-1>`, `<job-2>` in order of appearance,
+timestamps, durations and process ids become `"<number>"`, and decimal
+seconds in the text become `<s>`. The sizes are measured on the masked
+result, so they do not depend on the machine. The pins hold on every
+supported Python: the surface hash normalizes the input schema, and the
+token count reads it in the form Python 3.11+ serves. They assume the
+default tool settings: `BINNACLE_CONFIG_FILE` pointing to a nonexistent file
+gives them, and CI's configuration sets only the roots. A local
+`config.toml` that changes a tool's limits changes its surface and its
+outputs.
+
 ## Test timing policy
 
 Production timing defaults are not test-performance knobs. In particular,
 production job background warm-up remains 1.0 second. Selected job-heavy
 integration modules explicitly opt in to the non-autouse
 `_short_job_warmup` fixture in `tests/integration/conftest.py`, which uses a
-0.05-second warm-up only inside those tests.
+0.05-second warm-up only inside those tests. The golden-output tests set the
+same warm-up in their own fixture (`tests/contracts/test_golden_outputs.py`).
 
 Real elapsed time is retained where wall time is itself part of the contract.
 The retained coverage includes:

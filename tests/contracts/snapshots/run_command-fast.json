@@ -1,0 +1,20 @@
+{
+  "is_error": false,
+  "content": "Command exited 0 in <s> s. It finished synchronously; no background job was created, so no job_status or stop_job is needed.",
+  "structured": {
+    "job_id": "<job-1>",
+    "state": "exited",
+    "exit_code": 0,
+    "output": "hello golden\n",
+    "truncated": false,
+    "output_bytes": 13,
+    "duration_s": "<number>",
+    "log_path": "<tmp>/jobs/<job-1>/out.log",
+    "workdir": "<tmp>/work",
+    "background_job": false
+  },
+  "size": {
+    "structured_bytes": 223,
+    "tokens": 102
+  }
+}
