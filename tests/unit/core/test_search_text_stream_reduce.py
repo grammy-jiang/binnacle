@@ -91,7 +91,12 @@ def event_stream(draw):
     return result
 
 
-@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+# too_slow: input generation for this strategy took 4.19 s on the Pi under load
+# (coverage instrumentation plus a parallel suite, 2026-09-27) and failed the run;
+# the check measures the machine, not the reducer.
+@settings(
+    suppress_health_check=[HealthCheck.function_scoped_fixture, HealthCheck.too_slow]
+)
 @given(
     items=event_stream(),
     glob=stg.sampled_from([None, "*.py", "*.txt"]),
