@@ -83,7 +83,7 @@ disabled when it hits a dead listener. Batch edits, or use the dev unit.
 
 A changed tool surface needs the **full loop**: `test_client.py` shows the
 new parameter → `chatgpt-refresh "Raspberry Pi MCP"` → a real message in
-the standing test chat with `chatgpt-send`. Listing tools is not a test.
+a new test chat with `chatgpt-send`, deleted when the test ends. Listing tools is not a test.
 The pass criterion is the nonce in three places: the chat reply, the
 journal's `arguments`, and the journal's `job_start`/`tool_result` line.
 

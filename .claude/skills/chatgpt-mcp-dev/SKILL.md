@@ -94,8 +94,9 @@ or its parameters, description, or annotations changed):
    reloaded, and a syntax error shows up here as a connection failure, so a
    broken build never reaches ChatGPT.
 3. `chatgpt-refresh "<connector name>"` — sync ChatGPT's cached schema.
-4. Verify in ChatGPT, in an existing chat when possible — `chatgpt-send`
-   does this from the terminal (see "Full pass test").
+4. Verify in ChatGPT in a new chat, and delete that chat when the test ends
+   (owner rule, 2026-09-27). `chatgpt-send` does this from the terminal (see
+   "Full pass test").
 
 ## Refresh the connector tool list
 
@@ -111,8 +112,9 @@ The name match is case-insensitive: exact first, then unique substring, so
 `chatgpt-refresh raspberry` works. The command prints the tool list it synced;
 report that list. It discovers connectors itself — there is nothing to register.
 
-A brand new chat re-syncs on its own, so a refresh is not needed there. Prefer a
-refresh plus an existing chat, because new chats clutter the chat list.
+A brand new chat re-syncs on its own. The refresh is still needed for the chats
+that already exist, such as the owner's own. Tests use a new chat and delete it
+when they end, so test chats never pile up (owner rule, 2026-09-27).
 
 If a chat still shows a stale tool list, that is a ChatGPT snapshot glitch, not
 a server fault. Resend the message, or refresh again.

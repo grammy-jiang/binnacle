@@ -951,18 +951,19 @@ Pick the path by what changed:
   3. `chatgpt-refresh "Raspberry Pi MCP"` — syncs ChatGPT's cached schema to the
      server (name is a case-insensitive substring, so `chatgpt-refresh raspberry`
      also works).
-  4. Test in the SAME chat. This is the only step that checks the ChatGPT
-     side: semantic discovery of the new tool, the READ/write labels, and
-     end-to-end through the tunnel. `chatgpt-send --chat <id> "..."` does it
-     from the terminal (headed Chrome via Playwright; see the skill's "Full
-     pass test"); the standing test chat is
-     `https://chatgpt.com/c/6a9827ce-c40c-83ec-91b4-f1f4e7cfd53c`. Put a nonce
-     in the command and match it in the journal and the reply. (A brand-new
-     chat re-syncs on its own with no refresh, but clutters the chat list —
-     prefer refresh + existing chat.)
+  4. Test in a NEW chat, and delete it when the test ends. This is the
+     owner's standing rule since 2026-09-27: every test chat is cleaned up,
+     and there is no standing test chat any more. This is the only step that
+     checks the ChatGPT side: semantic discovery of the new tool, the
+     READ/write labels, and end to end through the tunnel.
+     `chatgpt-send --new --json "..."` runs it from the terminal through the
+     chatgpt-web-operations skill's `send_prompt.py`, and prints the new
+     chat's URL. Put a nonce with the `e2e-` prefix in the command, so the
+     usage statistics leave it out, and match it in the journal and the
+     reply.
 
-When a test DOES need a fresh chat, record its id as soon as it exists — the
-browser tab shows it as `https://chatgpt.com/c/<id>` — then clean up by id:
+Record the test chat's id as soon as it exists, then clean up by id. Every
+test does this:
 
     chatgpt-chats --track <that url> --note "what this test was"
     chatgpt-chats --tracked            # review (dry run)
