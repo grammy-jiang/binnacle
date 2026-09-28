@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -16,6 +17,21 @@ from scripts.chat_scheduling_runtime import HarnessError, RestoreError, _run
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SKILL_SCRIPTS = PROJECT_ROOT / ".claude" / "skills" / "chatgpt-mcp-dev" / "scripts"
+
+
+# The ChatGPT client (session, projects, chats) is the chatgpt-web-operations
+# skill's since 2026-09-29: this repository keeps no copy of it. Its commands
+# re-execute themselves under the skill's own .venv.
+def chatgpt_skill_scripts() -> Path:
+    """The skill's ``scripts/`` directory: ``CHATGPT_WEB_OPS_DIR`` (the
+    variable ``chatgpt-send`` reads too) or its installed place."""
+    skill = os.environ.get(
+        "CHATGPT_WEB_OPS_DIR", "~/.claude/skills/chatgpt-web-operations"
+    )
+    return Path(skill).expanduser() / "scripts"
+
+
+CHATGPT_SKILL_SCRIPTS = chatgpt_skill_scripts()
 CHAT_BACKUP_DIR = Path.home() / ".local" / "share" / "chatgpt-chats" / "backups"
 CHAT_ID_RE = re.compile(
     r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
@@ -24,12 +40,13 @@ CHAT_ID_RE = re.compile(
 
 
 class ProjectClient:
-    """Exact Project-instruction read/write through the existing CLI helper."""
+    """Exact Project-instruction read/write through the skill's
+    ``project_settings.py`` (``--name``, ``--show``, ``--apply``)."""
 
     def __init__(self, project_name: str, browser: str = "chrome") -> None:
         self.project_name = project_name
         self.browser = browser
-        self.script = SKILL_SCRIPTS / "chatgpt-project"
+        self.script = CHATGPT_SKILL_SCRIPTS / "project_settings.py"
         self.system_python = Path("/usr/bin/python3")
 
     def _invoke(self, args: list[str]) -> subprocess.CompletedProcess[str]:
@@ -52,16 +69,17 @@ class ProjectClient:
                 str(self.script),
                 "--browser",
                 self.browser,
-                "get-instructions",
+                "--name",
                 self.project_name,
+                "--show",
             ]
         )
         out = proc.stdout
         if not out.endswith("\n"):
             raise HarnessError(
-                "chatgpt-project returned instructions without print newline"
+                "project_settings --show returned instructions without print newline"
             )
-        # chatgpt-project uses print(stored_text); remove only that print newline.
+        # --show uses print(stored_text); remove only that print newline.
         return out[:-1]
 
     def set_instructions(self, text: str) -> None:
@@ -71,10 +89,11 @@ class ProjectClient:
                 str(self.script),
                 "--browser",
                 self.browser,
-                "set-instructions",
+                "--name",
                 self.project_name,
-                "--text",
+                "--instructions-text",
                 text,
+                "--apply",
             ]
         )
         if self.instructions() != text:
@@ -143,7 +162,7 @@ class ChatArtifact:
 
     @property
     def chats_script(self) -> Path:
-        return SKILL_SCRIPTS / "chatgpt-chats"
+        return CHATGPT_SKILL_SCRIPTS / "clean_chats.py"
 
     def discover(self, url_file: Path) -> None:
         if not url_file.exists():
@@ -158,7 +177,14 @@ class ChatArtifact:
         if self.chat_id is None or self.tracked:
             return
         _run(
-            [str(self.chats_script), "--track", self.chat_id, "--note", note],
+            [
+                "/usr/bin/python3",
+                str(self.chats_script),
+                "--track",
+                self.chat_id,
+                "--note",
+                note,
+            ],
             timeout=10,
         )
         self.tracked = True
@@ -196,6 +222,9 @@ class ChatArtifact:
             "--id",
             self.chat_id,
             "--delete",
+            "--backup",
+            str(CHAT_BACKUP_DIR),
+            "--apply",
         ]
         last_delete_error: subprocess.SubprocessError | None = None
         for attempt in range(3):
@@ -210,9 +239,8 @@ class ChatArtifact:
         if last_delete_error is not None:
             raise last_delete_error
         backup = self._copy_delete_backup()
-        if self.tracked:
-            _run([str(self.chats_script), "--untrack", self.chat_id], timeout=10)
-            self.tracked = False
+        # The skill's delete drops a tracked id from the ledger itself.
+        self.tracked = False
         return {
             "chat_id": self.chat_id,
             "deleted": True,

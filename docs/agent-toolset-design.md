@@ -731,7 +731,8 @@ open (no measurement is recorded).
    point at which ChatGPT abandons a call has not been measured.
 
 Method for all six: drive the browser per the `chatgpt-mcp-dev` skill, track
-test chats with `chatgpt-chats --track`, read truth from `mcp-probe` /
+test chats with the chatgpt-web-operations skill's `clean_chats.py --track`
+(binnacle's `chatgpt-chats` until 2026-09-29), read truth from `mcp-probe` /
 server logs, keep `scripts/mcp_client.py` as the local control.
 
 ## 11. Sources

@@ -111,7 +111,10 @@ Arm B:
 Step 0.1 originally froze `chatgpt-project get-instructions` stdout. That CLI
 uses `print()`, adding one newline after the backend value. Step 0.3 corrected
 the machine-readable baseline to the exact backend bytes while retaining the
-original CLI stdout/hash for provenance.
+original CLI stdout/hash for provenance. Since 2026-09-29 the harness reads and
+writes the instructions through the chatgpt-web-operations skill's
+`project_settings.py --name <project> --show` (printed the same way) and
+`--instructions-text <text> --apply`; binnacle keeps no ChatGPT client.
 
 ## Fixture isolation
 
@@ -153,9 +156,11 @@ The benchmark uses the branch-local `chatgpt-send` with `--url-file`.
 As soon as the browser is on a `/c/<uuid>` URL, that exact URL is persisted.
 Therefore a later browser timeout does not make the test chat anonymous.
 
-Deletion is by exact UUID only. `chatgpt-chats` backs the conversation up
-before hiding it; the harness copies that JSON to the trial state directory and
-then removes the UUID from the tracked-test ledger.
+Deletion is by exact UUID only. The chatgpt-web-operations skill's
+`clean_chats.py --id <uuid> --delete --backup ~/.local/share/chatgpt-chats/backups
+--apply` backs the conversation up before hiding it and drops the UUID from the
+tracked-test ledger; the harness copies that JSON to the trial state directory.
+(Until 2026-09-29 this was binnacle's own `chatgpt-chats`.)
 
 If backup/delete fails, the trial fails and the tracked UUID remains visible in
 the ledger for explicit cleanup. The harness never falls back to title matching.

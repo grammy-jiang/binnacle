@@ -976,17 +976,21 @@ Pick the path by what changed:
      usage statistics leave it out, and match it in the journal and the
      reply.
 
-Record the test chat's id as soon as it exists, then clean up by id. Every
-test does this:
+Record the test chat's id as soon as it exists, then clean up by id with the
+chatgpt-web-operations skill's `clean_chats.py` (binnacle's `chatgpt-chats`
+until 2026-09-29; the same ledger file). Every test does this:
 
-    chatgpt-chats --track <that url> --note "what this test was"
-    chatgpt-chats --tracked            # review (dry run)
-    chatgpt-chats --tracked --delete   # backs each up, deletes, clears the ledger
+    W=~/.claude/skills/chatgpt-web-operations/scripts
+    python3 $W/clean_chats.py --track <that url> --note "what this test was"
+    python3 $W/clean_chats.py --tracked --delete     # review (dry run)
+    python3 $W/clean_chats.py --tracked --delete \
+      --backup ~/.local/share/chatgpt-chats/backups --apply   # back up, delete, clear the ledger
 
 Tracking by id is exact, so cleanup can never touch a real conversation. Nothing
 in a chat's metadata marks it as a test, and deletion is irreversible, so never
-clean up by guessing at titles; `chatgpt-chats --match` exists only for chats
-that were never tracked, and stays a dry run until `--delete`.
+clean up by guessing at titles; `clean_chats.py --match` exists only for chats
+that were never tracked, stays a dry run until `--apply`, refuses patterns under
+3 characters, and takes `--max 5` to refuse an apply to more than five chats.
 
 If a chat occasionally shows a stale tool list, that is a ChatGPT snapshot
 glitch, not the server: resend the message or run the refresh again.
@@ -1003,17 +1007,22 @@ One terminal command, no browser:
     chatgpt-refresh "Raspberry Pi MCP"   # prints "Refreshed Raspberry Pi MCP. Tools now: ..."
 
 `chatgpt-refresh` is a shared tool at `~/.local/bin/chatgpt-refresh`, reused by
-every ChatGPT MCP project. It is fully automatic — it discovers your connectors
-live and resolves the name to its link id itself (nothing to register); run
-`chatgpt-refresh --list` to see them. It reuses the browser's logged-in ChatGPT
-session on this Pi: it reads the chatgpt.com cookies from the local
-Chromium/Chrome cookie DB (decrypting with the GNOME-keyring key), mints a
-short-lived access token via /api/auth/session, lists connectors, then POSTs the
-connector-refresh endpoint. Nothing is written to disk; the durable credential
-stays in the browser's cookie/keyring store. The session cookie lasts ~months;
-when it finally expires, just re-log-in to ChatGPT in the browser. Must run as the
-desktop user (needs the session D-Bus + keyring). Run this automatically after
-changing the server's tool set; report the list.
+every ChatGPT MCP project. Since 2026-09-29 it is the chatgpt-web-operations
+skill's `refresh_connector.py` (`~/.claude/skills/chatgpt-web-operations`, the
+one ChatGPT client on this host; this repository keeps no copy of it) under
+its old name and command line. It is fully automatic — it discovers your
+connectors live and resolves the name to its link id itself (nothing to
+register); run `chatgpt-refresh --list` to see them. It reuses the browser's
+logged-in ChatGPT session on this Pi: it reads the chatgpt.com cookies from the
+local Chrome cookie DB (decrypting with the GNOME-keyring key), mints a
+short-lived access token via /api/auth/session, lists connectors, then POSTs
+the connector-refresh endpoint. The skill keeps a renewed copy of the session
+token in the keyring, and its daily health check renews it, so the login does
+not lapse while that check runs; a logout or password change still needs a new
+login in the browser. Must run as the desktop user (needs the session D-Bus +
+keyring). Run this automatically after changing the server's tool set; report
+the list. Session problems (403, a Cloudflare challenge, an expired login):
+the skill's `references/setup.md`.
 
 There is no public OpenAI API for this and no service-account path — the
 refresh always rides the user's ChatGPT web session; the tool just drives that

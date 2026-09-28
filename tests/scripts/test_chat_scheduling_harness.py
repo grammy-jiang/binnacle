@@ -203,7 +203,11 @@ def test_chat_artifact_cleanup_is_exact_and_copies_backup(monkeypatch, tmp_path)
     }
     delete_call = next(args for args in calls if "--delete" in args)
     assert delete_call[delete_call.index("--id") + 1] == cid
-    assert any("--untrack" in args for args in calls)
+    assert delete_call[delete_call.index("--backup") + 1] == str(backup_dir)
+    assert "--apply" in delete_call
+    # The skill's delete drops the id from the ledger; no separate untrack.
+    assert not any("--untrack" in args for args in calls)
+    assert artifact.tracked is False
 
 
 def test_url_file_discovers_exact_chat_id(tmp_path):
@@ -339,7 +343,7 @@ def test_chat_artifact_cleanup_retries_transient_delete_failures(monkeypatch, tm
 
     assert delete_attempts == 3
     assert delete_args[-1][0] == "/usr/bin/python3"
-    assert delete_args[-1][1].endswith("/chatgpt-chats")
+    assert delete_args[-1][1].endswith("/chatgpt-web-operations/scripts/clean_chats.py")
     assert result["deleted"] is True
     assert artifact.tracked is False
 
@@ -373,7 +377,8 @@ def test_project_client_uses_system_python_for_dbus_helper(monkeypatch):
     client = chat.ProjectClient("project")
     assert client.instructions() == "baseline"
     assert calls[0][0] == "/usr/bin/python3"
-    assert calls[0][1].endswith("/chatgpt-project")
+    assert calls[0][1].endswith("/chatgpt-web-operations/scripts/project_settings.py")
+    assert calls[0][-3:] == ["--name", "project", "--show"]
 
 
 def test_send_project_chat_retries_only_before_submission(monkeypatch, tmp_path):
@@ -427,3 +432,60 @@ def test_send_project_chat_does_not_retry_after_enter_evidence(monkeypatch, tmp_
         )
 
     assert attempts == 1
+
+
+def test_project_client_sets_by_name_with_apply_and_reads_back(monkeypatch):
+    """set_instructions: the skill's project_settings.py by name, applied,
+    then the exact text read back through --show."""
+    calls = []
+    stored = {"text": "old"}
+
+    def fake_run(args, **kwargs):
+        calls.append(args)
+        if "--apply" in args:
+            stored["text"] = args[args.index("--instructions-text") + 1]
+            return subprocess.CompletedProcess(args, 0, "changed\n", "")
+        return subprocess.CompletedProcess(args, 0, stored["text"] + "\n", "")
+
+    monkeypatch.setattr(chat, "_run", fake_run)
+    client = chat.ProjectClient("project")
+    client.set_instructions("new text")
+    apply_call = calls[0]
+    assert apply_call[-5:] == [
+        "--name",
+        "project",
+        "--instructions-text",
+        "new text",
+        "--apply",
+    ]
+    assert calls[1][-1] == "--show"
+
+
+def test_chat_artifact_tracks_through_the_skill_with_system_python(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        chat,
+        "_run",
+        lambda args, **kw: calls.append(args) or subprocess.CompletedProcess(args, 0),
+    )
+    artifact = chat.ChatArtifact("project", Path("/tmp"))
+    artifact.chat_id = "12345678-1234-1234-1234-123456789abc"
+    artifact.track("a note")
+    assert calls[0][0] == "/usr/bin/python3"
+    assert calls[0][1].endswith("/clean_chats.py")
+    assert calls[0][2:] == [
+        "--track",
+        "12345678-1234-1234-1234-123456789abc",
+        "--note",
+        "a note",
+    ]
+    assert artifact.tracked is True
+
+
+def test_the_skill_directory_follows_chatgpt_web_ops_dir(monkeypatch, tmp_path):
+    monkeypatch.setenv("CHATGPT_WEB_OPS_DIR", str(tmp_path / "skill"))
+    assert chat.chatgpt_skill_scripts() == tmp_path / "skill" / "scripts"
+    monkeypatch.delenv("CHATGPT_WEB_OPS_DIR")
+    assert chat.chatgpt_skill_scripts() == (
+        Path.home() / ".claude" / "skills" / "chatgpt-web-operations" / "scripts"
+    )
