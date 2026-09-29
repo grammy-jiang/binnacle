@@ -13,7 +13,7 @@ from fastmcp.exceptions import ToolError
 from fastmcp.tools.base import ToolResult
 from pydantic import Field
 
-from binnacle import jobs
+from binnacle import job_output, jobs
 from binnacle.callctx import (
     current_call,
     current_call_started,
@@ -238,7 +238,25 @@ def job_status_impl(
 
     read_start = _PERF_COUNTER()
     log_text = jobs.read_log(job_id).decode("utf-8", errors="replace")
+    selected_tail = _tail(log_text, max(1, tail_lines))
+    log_tail, log_tail_clipped, omitted_chars = job_output.clip_head_tail_hard(
+        selected_tail, jobs.RUN_MAX_OUTPUT_CHARS
+    )
     read_log_ms = _elapsed_ms(read_start)
+    if log_tail_clipped:
+        log.info(
+            "event=job_status_output_shaping call=%s job_id=%s reason=char_limit "
+            "tail_lines=%s limit_chars=%d selected_chars=%d returned_chars=%d "
+            "omitted_chars=%d log_bytes=%d",
+            current_call.get(),
+            job_id,
+            tail_lines,
+            jobs.RUN_MAX_OUTPUT_CHARS,
+            len(selected_tail),
+            len(log_tail),
+            omitted_chars,
+            state["log_bytes"],
+        )
     quiet = (
         state["state"] == "running"
         and state["last_output_age_s"] is not None
@@ -256,7 +274,7 @@ def job_status_impl(
         "runtime_s": state["runtime_s"],
         "last_output_age_s": state["last_output_age_s"],
         "quiet": quiet,
-        "log_tail": _tail(log_text, max(1, tail_lines)),
+        "log_tail": log_tail,
         "log_bytes": state["log_bytes"],
         "log_path": state["log_path"],
         "command": _command_preview(state["command"]),

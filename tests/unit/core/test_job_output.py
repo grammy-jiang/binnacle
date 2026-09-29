@@ -45,3 +45,19 @@ def test_shape_empty_and_non_ascii_count_source_characters():
     unicode_result = job_output.shape_run_command_output("猫猫猫猫", 2)
     assert unicode_result.char_clipped is True
     assert unicode_result.omitted_chars == 2
+
+
+def test_hard_clip_counts_elision_marker_inside_returned_budget():
+    text = "HEAD-" + "x" * 200_000 + "-TAIL"
+    output, clipped, omitted = job_output.clip_head_tail_hard(text, 24_000)
+
+    assert clipped is True
+    assert len(output) == 24_000
+    assert output.startswith("HEAD-")
+    assert output.endswith("-TAIL")
+    assert f"[… {omitted} chars elided …]" in output
+    assert omitted == len(text) - (24_000 - len(job_output._elision_marker(omitted)))
+
+
+def test_hard_clip_is_noop_below_budget():
+    assert job_output.clip_head_tail_hard("small", 24_000) == ("small", False, 0)

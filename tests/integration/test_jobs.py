@@ -254,6 +254,35 @@ def test_tail_lines_respected():
     assert s["log_tail"].splitlines() == ["line18", "line19", "line20"]
 
 
+def test_status_giant_single_line_is_hard_bounded_and_disk_log_stays_full(
+    caplog,
+):
+    source_chars = jobstore.RUN_MAX_OUTPUT_CHARS * 4
+    p = run(
+        f"python -c \"import sys; sys.stdout.write('H' + 'x' * "
+        f"{source_chars - 2} + 'T')\""
+    )
+    raw = jobstore.read_log(p["job_id"])
+    assert len(raw) == source_chars
+    assert raw.startswith(b"H") and raw.endswith(b"T")
+
+    token = current_call.set("giant-status-call")
+    try:
+        with caplog.at_level("INFO", logger="binnacle.job_status"):
+            s = status(p["job_id"], tail_lines=3)
+    finally:
+        current_call.reset(token)
+
+    assert len(s["log_tail"]) <= jobstore.RUN_MAX_OUTPUT_CHARS
+    assert s["log_tail"].startswith("H") and s["log_tail"].endswith("T")
+    assert "chars elided" in s["log_tail"]
+    assert s["log_bytes"] == source_chars
+    assert "event=job_status_output_shaping call=giant-status-call" in caplog.text
+    assert "reason=char_limit" in caplog.text
+    assert f"limit_chars={jobstore.RUN_MAX_OUTPUT_CHARS}" in caplog.text
+    assert "omitted_chars=" in caplog.text
+
+
 # -- stop_job --------------------------------------------------------------
 
 

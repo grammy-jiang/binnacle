@@ -24,6 +24,10 @@ class RunCommandOutputShape:
         return None
 
 
+def _elision_marker(omitted: int) -> str:
+    return f"\n[… {omitted} chars elided …]\n"
+
+
 def _clip_head_tail_details(text: str, limit: int) -> tuple[str, bool, int]:
     if len(text) <= limit:
         return text, False, 0
@@ -31,10 +35,42 @@ def _clip_head_tail_details(text: str, limit: int) -> tuple[str, bool, int]:
     tail = limit - head
     omitted = len(text) - limit
     return (
-        f"{text[:head]}\n[… {omitted} chars elided …]\n{text[len(text) - tail :]}",
+        f"{text[:head]}{_elision_marker(omitted)}{text[len(text) - tail :]}",
         True,
         omitted,
     )
+
+
+def clip_head_tail_hard(text: str, limit: int) -> tuple[str, bool, int]:
+    """Clip head+tail to a hard returned-character budget, marker included."""
+    if len(text) <= limit:
+        return text, False, 0
+    if limit <= 0:
+        return "", True, len(text)
+
+    # Reuse the existing elision vocabulary, but count the marker itself inside
+    # the hard budget. Recompute if the omitted-count digit width changes.
+    retained = max(0, limit - len(_elision_marker(len(text))))
+    while True:
+        omitted = len(text) - retained
+        marker = _elision_marker(omitted)
+        next_retained = max(0, limit - len(marker))
+        if next_retained == retained:
+            break
+        retained = next_retained
+
+    if len(marker) > limit:
+        # Pathological tiny configured budgets cannot fit the marker. Keep the
+        # hard ceiling and preserve both ends rather than exceeding the budget.
+        head = limit // 2
+        tail = limit - head
+        output = text[:head] + (text[len(text) - tail :] if tail else "")
+        return output, True, len(text) - limit
+
+    head = retained // 2
+    tail = retained - head
+    output = text[:head] + marker + (text[len(text) - tail :] if tail else "")
+    return output, True, omitted
 
 
 def clip_head_tail(text: str, limit: int) -> tuple[str, bool]:
