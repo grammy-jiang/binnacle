@@ -40,6 +40,11 @@ OUTPUT_SCHEMA = {
         "last_output_age_s": {"type": ["number", "null"]},
         "quiet": {"type": "boolean"},
         "log_tail": {"type": "string"},
+        "log_delta": {"type": "string"},
+        "delta_start": {"type": "integer"},
+        "delta_end": {"type": "integer"},
+        "next_cursor": {"type": "string"},
+        "has_more": {"type": "boolean"},
         "log_bytes": {"type": "integer"},
         "log_path": {"type": "string"},
         "command": {"type": "string"},
@@ -127,6 +132,62 @@ def _elapsed_ms(start: float) -> float:
     return (_PERF_COUNTER() - start) * 1_000
 
 
+def _no_job_error(job_id: str) -> ToolError:
+    return ToolError(
+        f"No job with id {job_id!r}. Call job_status without a job_id to list recent jobs."
+    )
+
+
+def _cursor_offset(cursor: str, job_id: str) -> int | None:
+    """Parse one v1 cursor; None means the explicit current-end seed."""
+    if cursor == "start":
+        return 0
+    if cursor == "end":
+        return None
+    parts = cursor.split(":")
+    if len(parts) != 3 or parts[0] != "v1" or not parts[1] or not parts[2].isdecimal():
+        raise ToolError(
+            "Invalid cursor: expected 'start', 'end', or v1:<job_id>:<offset>."
+        )
+    cursor_job = parts[1]
+    if cursor_job != job_id:
+        raise ToolError(f"cursor belongs to job {cursor_job}, not {job_id}")
+    return int(parts[2])
+
+
+def _cursor_delta(job_id: str, cursor: str, state: dict) -> tuple[dict, int]:
+    """Read and decode one bounded cursor chunk plus its open-file size."""
+    requested_start = _cursor_offset(cursor, job_id)
+    chunk_size = max(4, jobs.RUN_MAX_OUTPUT_CHARS)
+    read_start = 0 if requested_start is None else requested_start
+    read_limit = 0 if requested_start is None else chunk_size
+    try:
+        data, size_at_open = jobs.read_log_range(job_id, read_start, read_limit)
+    except jobs.JobGone:
+        raise _no_job_error(job_id) from None
+
+    delta_start = size_at_open if requested_start is None else requested_start
+    if delta_start > size_at_open:
+        raise ToolError("cursor beyond end of output")
+
+    at_eof = delta_start + len(data) >= size_at_open
+    final = state["state"] != "running"
+    log_delta, consumed = job_output.consume_utf8(data, at_eof=at_eof, final=final)
+    delta_end = delta_start + consumed
+    pending_suffix = at_eof and not final and consumed < len(data)
+    has_more = delta_end < size_at_open and not pending_suffix
+    return (
+        {
+            "log_delta": log_delta,
+            "delta_start": delta_start,
+            "delta_end": delta_end,
+            "next_cursor": f"v1:{job_id}:{delta_end}",
+            "has_more": has_more,
+        },
+        size_at_open,
+    )
+
+
 def _log_wait_exception_timing(
     *,
     job_id: str,
@@ -189,11 +250,17 @@ def _listing_result() -> ToolResult:
 
 
 def job_status_impl(
-    job_id: str | None, tail_lines: int, wait_seconds: int = 0
+    job_id: str | None,
+    tail_lines: int,
+    wait_seconds: int = 0,
+    *,
+    cursor: str | None = None,
 ) -> ToolResult:
     impl_start = _PERF_COUNTER()
     call_start = current_call_started.get()
     dispatch_ms = (impl_start - call_start) * 1_000 if call_start is not None else None
+    if cursor is not None and job_id is None:
+        raise ToolError("cursor requires job_id")
     if job_id is None:
         return _listing_result()
 
@@ -202,9 +269,7 @@ def job_status_impl(
     state_start = _PERF_COUNTER()
     state = jobs.job_state(job_id)
     if state is None:
-        raise ToolError(
-            f"No job with id {job_id!r}. Call job_status without a job_id to list recent jobs."
-        )
+        raise _no_job_error(job_id)
 
     client = current_client.get()
     turn = current_turn.get()
@@ -232,31 +297,34 @@ def job_status_impl(
 
     state_ms = _elapsed_ms(state_start)
     if state is None:
-        raise ToolError(
-            f"No job with id {job_id!r}. Call job_status without a job_id to list recent jobs."
-        )
+        raise _no_job_error(job_id)
 
     read_start = _PERF_COUNTER()
-    log_text = jobs.read_log(job_id).decode("utf-8", errors="replace")
-    selected_tail = _tail(log_text, max(1, tail_lines))
-    log_tail, log_tail_clipped, omitted_chars = job_output.clip_head_tail_hard(
-        selected_tail, jobs.RUN_MAX_OUTPUT_CHARS
-    )
-    read_log_ms = _elapsed_ms(read_start)
-    if log_tail_clipped:
-        log.info(
-            "event=job_status_output_shaping call=%s job_id=%s reason=char_limit "
-            "tail_lines=%s limit_chars=%d selected_chars=%d returned_chars=%d "
-            "omitted_chars=%d log_bytes=%d",
-            current_call.get(),
-            job_id,
-            tail_lines,
-            jobs.RUN_MAX_OUTPUT_CHARS,
-            len(selected_tail),
-            len(log_tail),
-            omitted_chars,
-            state["log_bytes"],
+    cursor_fields: dict | None = None
+    cursor_log_bytes: int | None = None
+    if cursor is None:
+        log_text = jobs.read_log(job_id).decode("utf-8", errors="replace")
+        selected_tail = _tail(log_text, max(1, tail_lines))
+        log_tail, log_tail_clipped, omitted_chars = job_output.clip_head_tail_hard(
+            selected_tail, jobs.RUN_MAX_OUTPUT_CHARS
         )
+        if log_tail_clipped:
+            log.info(
+                "event=job_status_output_shaping call=%s job_id=%s reason=char_limit "
+                "tail_lines=%s limit_chars=%d selected_chars=%d returned_chars=%d "
+                "omitted_chars=%d log_bytes=%d",
+                current_call.get(),
+                job_id,
+                tail_lines,
+                jobs.RUN_MAX_OUTPUT_CHARS,
+                len(selected_tail),
+                len(log_tail),
+                omitted_chars,
+                state["log_bytes"],
+            )
+    else:
+        cursor_fields, cursor_log_bytes = _cursor_delta(job_id, cursor, state)
+    read_log_ms = _elapsed_ms(read_start)
     quiet = (
         state["state"] == "running"
         and state["last_output_age_s"] is not None
@@ -274,13 +342,32 @@ def job_status_impl(
         "runtime_s": state["runtime_s"],
         "last_output_age_s": state["last_output_age_s"],
         "quiet": quiet,
-        "log_tail": log_tail,
-        "log_bytes": state["log_bytes"],
-        "log_path": state["log_path"],
-        "command": _command_preview(state["command"]),
-        "workdir": state["workdir"],
-        "processes": processes,
     }
+    if cursor_fields is None:
+        payload["log_tail"] = log_tail
+    else:
+        payload.update(cursor_fields)
+    payload.update(
+        {
+            "log_bytes": state["log_bytes"],
+            "log_path": state["log_path"],
+            "command": _command_preview(state["command"]),
+            "workdir": state["workdir"],
+            "processes": processes,
+        }
+    )
+    if cursor_fields is not None:
+        log.info(
+            "event=job_status_cursor call=%s job_id=%s delta_start=%s delta_end=%s "
+            "returned_chars=%s has_more=%s log_bytes=%s",
+            current_call.get(),
+            job_id,
+            cursor_fields["delta_start"],
+            cursor_fields["delta_end"],
+            len(cursor_fields["log_delta"]),
+            str(cursor_fields["has_more"]).lower(),
+            cursor_log_bytes,
+        )
     if requested_wait_s > 0:
         payload.update(
             {
@@ -363,12 +450,20 @@ def register(mcp: FastMCP) -> None:
                 description="Block up to this long (max 50) for the job to exit; returns as soon as it exits, so a long wait costs nothing. 0 answers at once.",
             ),
         ] = 0,
+        cursor: Annotated[
+            str | None,
+            Field(
+                description='"start" reads from the beginning, "end" from now; otherwise the next_cursor from your last cursor call for this job.'
+            ),
+        ] = None,
     ) -> ToolResult:
         """Status of a job from run_command, or the recent-jobs list when
         job_id is omitted. Only needed when run_command returned a job_id.
         A positive wait blocks up to the requested duration (max 50 seconds)
         and returns as soon as the job exits, so a long wait costs nothing
         when the job ends early; waiting never kills a still-running job. Returns state, exit code, output tail,
-        and live processes; quiet=true means no recent output.
+        and live processes; quiet=true means no recent output. For complete
+        output across turns, pass cursor ("start", or the next_cursor you got)
+        to read unseen output in bounded chunks until has_more is false.
         """
-        return job_status_impl(job_id, tail_lines, wait_seconds)
+        return job_status_impl(job_id, tail_lines, wait_seconds, cursor=cursor)

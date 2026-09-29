@@ -68,3 +68,14 @@ def test_positive_wait_job_status_validates_without_guard_fields():
     assert s["wait_requested_s"] == 1 and s["wait_effective_s"] == 1
     assert not any(key.startswith("blocking_") for key in s)
     call("stop_job", job_id=p["job_id"])
+
+
+def test_cursor_job_status_validates_and_omits_log_tail():
+    p = call("run_command", command="printf cursor-schema", workdir="/tmp")
+    s = call("job_status", job_id=p["job_id"], cursor="start")
+    assert s["log_delta"] == "cursor-schema"
+    assert s["delta_start"] == 0
+    assert s["delta_end"] == len(b"cursor-schema")
+    assert s["next_cursor"] == f"v1:{p['job_id']}:{len(b'cursor-schema')}"
+    assert s["has_more"] is False
+    assert "log_tail" not in s

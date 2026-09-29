@@ -16,6 +16,7 @@ commit message. docs/testing.md has the details.
 """
 
 import asyncio
+import json
 import os
 import signal
 
@@ -36,6 +37,7 @@ CASES = (
     "run_command-fast",
     "run_command-job",
     "job_status-wait",
+    "job_status-cursor",
     "job_status-listing",
     "run_command-background",
     "stop_job",
@@ -162,12 +164,19 @@ def test_job_that_outlives_its_wait(work, tmp_path):
         (work / "release").touch()
         job_id = started.structured_content["job_id"]
         waited = await call("job_status", job_id=job_id, wait_seconds=10)
+        cursor = await call("job_status", job_id=job_id, cursor="start")
         listing = await call("job_status")
-        return started, waited, listing
+        return started, waited, cursor, listing
 
-    started, waited, listing = run(steps)
+    started, waited, cursor, listing = run(steps)
     check("run_command-job", masker.record(started))
-    check("job_status-wait", masker.record(waited))
+    waited_record = masker.record(waited)
+    base_wait = json.loads((SNAPSHOT_DIR / "job_status-wait.json").read_text())[
+        "structured"
+    ]
+    assert list(waited_record["structured"]) == list(base_wait)
+    check("job_status-wait", waited_record)
+    check("job_status-cursor", masker.record(cursor))
     check("job_status-listing", masker.record(listing))
 
 
