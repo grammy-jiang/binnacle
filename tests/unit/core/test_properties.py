@@ -19,7 +19,7 @@ from fastmcp.exceptions import ToolError
 from hypothesis import assume, example, given, settings
 from hypothesis import strategies as st
 
-from binnacle import jobs, paths, textio
+from binnacle import job_output, jobs, paths, textio
 
 # -- paths.resolve_path: inside an allowed root, or ToolError, never anything else
 
@@ -168,6 +168,28 @@ def test_clip_head_tail_limit_zero_keeps_nothing_but_the_marker():
     out, clipped = jobs.clip_head_tail("abcdef", 0)
     assert clipped is True
     assert out == "\n[… 6 chars elided …]\n"
+
+
+# -- job_output.consume_utf8: chunked draining equals replacement decode
+
+
+@settings(max_examples=300, deadline=None)
+@given(st.binary(max_size=512), st.integers(min_value=4, max_value=64))
+def test_consume_utf8_chunked_drain_matches_replacement_decode(
+    data: bytes, chunk_size: int
+):
+    offset = 0
+    parts: list[str] = []
+
+    while offset < len(data):
+        chunk = data[offset : offset + chunk_size]
+        at_eof = offset + len(chunk) == len(data)
+        text, consumed = job_output.consume_utf8(chunk, at_eof=at_eof, final=at_eof)
+        parts.append(text)
+        assert consumed > 0
+        offset += consumed
+
+    assert "".join(parts) == data.decode("utf-8", "replace")
 
 
 # -- textio.decode_text / human_size: never crash, decisions stay honest

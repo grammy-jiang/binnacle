@@ -1,5 +1,6 @@
 """Output shaping shared by the command-job tools."""
 
+import codecs
 from dataclasses import dataclass
 
 
@@ -22,6 +23,22 @@ class RunCommandOutputShape:
         if self.char_clipped:
             return "char_limit"
         return None
+
+
+def consume_utf8(data: bytes, *, at_eof: bool, final: bool) -> tuple[str, int]:
+    """Decode one cursor chunk and report how many source bytes were consumed.
+
+    A valid incomplete UTF-8 suffix stays pending unless this is terminal
+    EOF. Invalid bytes are replaced and consumed so they cannot stall.
+    """
+    decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+    # A terminal job flushes an incomplete suffix only at the spool EOF.
+    # A bounded mid-spool chunk still backs off so the next range can complete
+    # that character from bytes already present in the spool.
+    text = decoder.decode(data, final=at_eof and final)
+    pending, _ = decoder.getstate()
+    consumed = len(data) - len(pending)
+    return text, consumed
 
 
 def _elision_marker(omitted: int) -> str:
