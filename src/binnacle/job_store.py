@@ -12,6 +12,10 @@ from pathlib import Path
 META_REQUIRED = ("command", "workdir", "pid", "started_at")
 
 
+class JobGone(Exception):
+    """The durable job or its output disappeared before a range read opened."""
+
+
 def new_job_id() -> str:
     return uuid.uuid4().hex[:12]
 
@@ -59,6 +63,28 @@ def read_log(root: Path, job_id: str) -> bytes:
         return (job_dir(root, job_id) / "out.log").read_bytes()
     except OSError:
         return b""
+
+
+def read_log_range(
+    root: Path, job_id: str, start: int, max_bytes: int
+) -> tuple[bytes, int]:
+    """Read a bounded byte range from one open snapshot of a job log."""
+    if start < 0:
+        raise ValueError("start must be >= 0")
+    if max_bytes < 0:
+        raise ValueError("max_bytes must be >= 0")
+
+    directory = job_dir(root, job_id)
+    if not (directory / "meta.json").is_file():
+        raise JobGone(job_id)
+
+    try:
+        with open(directory / "out.log", "rb") as log:
+            size_at_open = os.fstat(log.fileno()).st_size
+            log.seek(start)
+            return log.read(max_bytes), size_at_open
+    except (FileNotFoundError, NotADirectoryError):
+        raise JobGone(job_id) from None
 
 
 def list_job_ids(root: Path) -> list[str]:

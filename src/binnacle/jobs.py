@@ -36,6 +36,8 @@ WARMUP_S = get_settings().jobs.warmup_s
 _OWNER_SETTING = get_settings().jobs.owner
 MANAGER_SOCKET = get_settings().jobs.socket_path
 
+JobGone = job_store.JobGone
+
 
 def _resolve_owner_mode() -> str:
     if _OWNER_SETTING != "auto":
@@ -311,6 +313,10 @@ def start_job(
 
 def read_log(job_id: str) -> bytes:
     return job_store.read_log(JOBS_DIR, job_id)
+
+
+def read_log_range(job_id: str, start: int, max_bytes: int) -> tuple[bytes, int]:
+    return job_store.read_log_range(JOBS_DIR, job_id, start, max_bytes)
 
 
 def clip_head_tail(text: str, limit: int = RUN_MAX_OUTPUT_CHARS) -> tuple[str, bool]:
