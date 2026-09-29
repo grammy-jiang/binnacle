@@ -234,6 +234,7 @@ Append concise entries here during execution; do not paste huge worker replies.
 2026-09-29 14:53 R5   F5 NOT EXECUTED (session may not push master): owner runs .venv/bin/python scripts/deploy_smoke.py deploy 9ccfed5 then chatgpt-refresh "Raspberry Pi MCP"2026-09-29 15:33 R5   UX    PASS: 17cc21c adds default durable-job handoff UX (no schema/lifecycle change); descriptions 681 tokens (<700 guard), py310 full 1364 pass/7 skip, py313 full 1369 pass/3 skip, pre-commit pass, CI 36526411992 all green. F5 target updated from 9ccfed5 to 17cc21c
 
 2026-09-29 15:47 R5   F5 PASS: production master/origin master/origin proof-of-concept at 17cc21c; connector refreshed; production UX smoke chat 6abb4ed0 started durable job a98130cba698, returned control after ~22 s while it ran, then a later Status turn reported exit 0 after ~120 s; smoke chat backed up/deleted.
+2026-09-29 17:35 CLOSE cleanup complete: 7 remaining worker/reviewer chats backed up + exact-ID deleted; empty worker Project deleted (HTTP 200, read-back 404); 11 longrun worktrees plus local/remote longrun branches removed; coordinator 4bee5c0b stopped; temporary UX smoke directory removed; durable evidence retained in state archives.
 ```
 
 ### Coordinator decisions (recorded under the owner's standing instruction)

@@ -91,11 +91,15 @@ recommended if a latency number is wanted before it.
 
 - Staging: link, app and tunnel deleted (tunnel 404); both units stopped; config, token and state removed;
   evidence kept (1.7 MB).
-- Production: connector inventory equals the 09:55 baseline; `binnacle-mcp`, `binnacle-jobs` and `binnacle-tunnel`
-  kept their PIDs and start times throughout.
-- Round 4 chats: all 9 subject chats backed up (`~/.local/share/chatgpt-chats/backups/`) and deleted by exact id
-  (the last 4 after HTTP 429 back-offs, 14:52); none left in the tracking ledger.
-- Worker chats (lanes, reviewers, I-lanes) and worktrees are kept until the owner decides the deploy.
+- Production: connector inventory matched the pre-test baseline throughout the isolated test programme.
+- Round 4 chats: all 9 subject chats were backed up and deleted by exact ID.
+- The remaining 7 distinct Round-1/2/3 worker/reviewer chats were later backed up and deleted by exact ID; repeated
+  HTTP 429/403 responses were handled by low-frequency retries and no chat was deleted before its backup succeeded.
+- Worker Project `g-p-6abb0535b19c81919044ee821c246739` was verified empty, deleted with HTTP 200, and read back as 404.
+- All 11 `binnacle-longrun-*` worktrees, their local branches, and the remaining remote longrun branches were removed
+  after final reports/evidence were archived to `master` or the local final-evidence store.
+- Coordinator `4bee5c0b` was stopped and `/tmp/binnacle-ux-handoff-smoke` was removed after its evidence backup.
+- Durable local evidence remains under `~/.local/state/binnacle/long-running-chatgpt/{round4-evidence,round5-evidence,final-evidence}`.
 
 ## Residual risks / deferred work
 
