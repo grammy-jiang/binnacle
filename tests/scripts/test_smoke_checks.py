@@ -13,7 +13,7 @@ from typing import Any
 import pytest
 
 from scripts import deploy_smoke
-from scripts.smoke_checks import Env, measure, smoke
+from scripts.smoke_checks import CURSOR_FIXTURE_LINES, Env, measure, smoke
 
 CGROUP = "/user.slice/app.slice/binnacle-mcp.service"
 ALL_TOOLS = [
@@ -50,6 +50,7 @@ class FakeClient:
         self.fail = fail or {}  # tool -> "error" | "raise"
         self.calls: list[tuple[str, dict[str, Any]]] = []
         self.jobs: dict[str, str] = {}
+        self.cursor_reads: dict[str, int] = {}
 
     async def __aenter__(self) -> FakeClient:  # noqa: PYI034
         return self
@@ -87,7 +88,27 @@ class FakeClient:
             self.jobs[job] = cmd
             return {"state": "running", "job_id": job}
         if name == "job_status":
-            tail = self.jobs[args["job_id"]].split("echo ")[-1]
+            job = args["job_id"]
+            command = self.jobs[job]
+            if "cursor" in args:
+                nonce_match = re.search(r"--nonce ([^ ]+)", command)
+                nonce = nonce_match.group(1) if nonce_match else "missing-nonce"
+                read = self.cursor_reads.get(job, 0)
+                self.cursor_reads[job] = read + 1
+                split = CURSOR_FIXTURE_LINES // 2
+                start, end = (0, split) if read == 0 else (split, CURSOR_FIXTURE_LINES)
+                delta = "".join(
+                    f"fixture={nonce} seq={seq} mode=normal\n"
+                    for seq in range(start, end)
+                )
+                return {
+                    "state": "running" if read == 0 else "exited",
+                    "exit_code": None if read == 0 else 0,
+                    "log_delta": delta,
+                    "next_cursor": f"v1:{job}:{end}",
+                    "has_more": read == 0,
+                }
+            tail = command.split("echo ")[-1]
             return {"state": "exited", "exit_code": 0, "log_tail": tail}
         return {"state": "exited", "signal": 15}
 
@@ -165,7 +186,7 @@ def test_a_healthy_server_passes_and_records_the_baseline(tmp_path: Path) -> Non
     assert report.level == "ok", report.lines()
     called = [name for name, _ in client.calls]
     assert (
-        called.count("run_command") == 3
+        called.count("run_command") == 4
         and "stop_job" in called
         and "edit_file" in called
     )
@@ -177,6 +198,42 @@ def test_a_healthy_server_passes_and_records_the_baseline(tmp_path: Path) -> Non
     base = json.loads((tmp_path / "state" / "baseline.json").read_text())
     assert base["rss_kb"] == 50_000 and base["startup_s"] == 0.5
     assert not list(tmp_path.glob("binnacle-smoke-*")), "the fixture must be removed"
+
+
+def test_cursor_smoke_drains_fixture_with_opaque_next_cursor(tmp_path: Path) -> None:
+    client = FakeClient()
+    report = smoke(make_env(tmp_path, client))
+
+    cursor_calls = [
+        args for name, args in client.calls if name == "job_status" and "cursor" in args
+    ]
+    assert len(cursor_calls) == 2
+    assert cursor_calls[0]["cursor"] == "start"
+    assert cursor_calls[1]["cursor"].startswith("v1:")
+    cursor_check = next(c for c in report.checks if c.name == "job_status cursor")
+    assert cursor_check.level == "ok"
+
+
+def test_cursor_smoke_rejects_duplicate_sequence_numbers(tmp_path: Path) -> None:
+    class DuplicateCursor(FakeClient):
+        def _answer(self, name: str, args: dict[str, Any]) -> dict[str, Any]:
+            content = super()._answer(name, args)
+            if (
+                name == "job_status"
+                and "cursor" in args
+                and content.get("state") == "exited"
+            ):
+                content["log_delta"] = str(content["log_delta"]).replace(
+                    f"seq={CURSOR_FIXTURE_LINES // 2}",
+                    f"seq={CURSOR_FIXTURE_LINES // 2 - 1}",
+                    1,
+                )
+            return content
+
+    report = smoke(make_env(tmp_path, DuplicateCursor()))
+    cursor_check = next(c for c in report.checks if c.name == "job_status cursor")
+    assert cursor_check.level == "alert"
+    assert "sequence mismatch" in cursor_check.detail
 
 
 def test_memory_growth_over_the_ratio_warns(tmp_path: Path) -> None:

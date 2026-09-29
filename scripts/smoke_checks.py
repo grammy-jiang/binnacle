@@ -11,6 +11,7 @@ import asyncio
 import json
 import os
 import re
+import shlex
 import shutil
 import time
 from collections.abc import Callable, Sequence
@@ -34,6 +35,9 @@ WARN_RATIO = 1.25
 # measurement noise into a WARN.
 RSS_SLACK_KB = 8 * 1024
 STARTUP_SLACK_S = 1.0
+CURSOR_FIXTURE_MINUTES = 0.05
+CURSOR_FIXTURE_INTERVAL_S = 0.25
+CURSOR_FIXTURE_LINES = 12
 LEVELS = {"ok": 0, "warn": 1, "alert": 2}
 
 
@@ -171,7 +175,84 @@ def _job_started(c: dict[str, Any]) -> str:
     return _expect(c.get("state") == "running" and bool(c.get("job_id")), "no job")
 
 
-async def _job_tools(call: _Caller, nonce: str, fixture: Path) -> str | None:
+def _cursor_sequence_problem(text: str, nonce: str) -> str:
+    sequences: list[int] = []
+    pattern = re.compile(rf"^fixture={re.escape(nonce)} seq=(\d+) mode=normal$")
+    for line in text.splitlines():
+        match = pattern.fullmatch(line)
+        if not match:
+            return f"unexpected cursor output line {line[:100]!r}"
+        sequences.append(int(match.group(1)))
+    expected = list(range(CURSOR_FIXTURE_LINES))
+    return _expect(
+        sequences == expected,
+        f"sequence mismatch: got {sequences[:20]}, expected {expected}",
+    )
+
+
+async def _cursor_job(call: _Caller, nonce: str, fixture: Path, checkout: Path) -> None:
+    """Start and fully drain a short numbered fixture through cursor mode."""
+    cursor_nonce = f"{nonce}-cursor"
+    command = shlex.join(
+        [
+            str(checkout / ".venv/bin/python"),
+            str(checkout / "scripts/longrun_fixture.py"),
+            "normal",
+            "--nonce",
+            cursor_nonce,
+            "--n",
+            str(CURSOR_FIXTURE_MINUTES),
+            "--s",
+            str(CURSOR_FIXTURE_INTERVAL_S),
+        ]
+    )
+    started = await call(
+        "run_command",
+        {"command": command, "workdir": str(fixture), "wait_seconds": 1},
+        cursor_nonce,
+        _job_started,
+    )
+    if not started:
+        call.report.add("job_status cursor", "alert", "fixture did not start")
+        return
+
+    job = str(started["job_id"])
+    cursor = "start"
+    chunks: list[str] = []
+    for _ in range(100):
+        args = {"job_id": job, "cursor": cursor, "wait_seconds": 10}
+        try:
+            result = await call.client.call_tool("job_status", args)
+        except Exception as exc:  # noqa: BLE001 - any failure is the finding
+            call.report.add("job_status cursor", "alert", f"call failed: {exc}"[:200])
+            return
+        call.logged.append(("job_status", cursor))
+        content = getattr(result, "structured_content", None)
+        content = content if isinstance(content, dict) else {}
+        if getattr(result, "is_error", False):
+            call.report.add(
+                "job_status cursor", "alert", f"tool error: {str(content)[:160]}"
+            )
+            return
+        chunks.append(str(content.get("log_delta", "")))
+        if content.get("state") != "running" and content.get("has_more") is False:
+            problem = _cursor_sequence_problem("".join(chunks), cursor_nonce)
+            call.report.add(
+                "job_status cursor", "alert" if problem else "ok", problem or "ok"
+            )
+            return
+        next_cursor = content.get("next_cursor")
+        if not isinstance(next_cursor, str) or not next_cursor:
+            call.report.add("job_status cursor", "alert", "missing next_cursor")
+            return
+        cursor = next_cursor
+
+    call.report.add("job_status cursor", "alert", "cursor drain exceeded 100 calls")
+
+
+async def _job_tools(
+    call: _Caller, nonce: str, fixture: Path, checkout: Path
+) -> str | None:
     """run_command, job_status and stop_job; return a job id still to stop."""
     wd = str(fixture)
     await call(
@@ -204,6 +285,7 @@ async def _job_tools(call: _Caller, nonce: str, fixture: Path) -> str | None:
                 f"unexpected status {str(c)[:120]}",
             ),
         )
+    await _cursor_job(call, nonce, fixture, checkout)
     long_job = await call(
         "run_command",
         {"command": f"sleep 60; echo {nonce}-stop", "workdir": wd, "wait_seconds": 1},
@@ -242,7 +324,7 @@ async def exercise(
         leftover = None
         try:
             await _file_tools(call, names, nonce, fixture)
-            leftover = await _job_tools(call, nonce, fixture)
+            leftover = await _job_tools(call, nonce, fixture, env.checkout)
         finally:
             if leftover:  # never leave a sleep job behind
                 try:
