@@ -27,9 +27,16 @@ from tests.contracts.surface_support import PROFILES, served
 
 ENCODING = "o200k_base"
 TOLERANCE = 0.05
-TOKEN_BUDGET = 2140
+TOKEN_BUDGET = 2262
 #: (date, budget, reason): the last entry must match TOKEN_BUDGET.
-BUDGET_CHANGES = (("2026-09-28", 2140, "first measurement, master b857452 (6 tools)"),)
+BUDGET_CHANGES = (
+    ("2026-09-28", 2140, "first measurement, master b857452 (6 tools)"),
+    (
+        "2026-09-29",
+        2262,
+        "frozen cursor v1 adds job_status input/output schema and required description",
+    ),
+)
 
 
 def served_form(spec: dict) -> dict:

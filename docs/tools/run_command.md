@@ -147,13 +147,16 @@ command had left something running, always in sessions where no job existed
 
 ## 4. `job_status`
 
-**Description (consolidated 2026-09-24, amended twice on 2026-09-27):** >
+**Description (consolidated 2026-09-24; amended 2026-09-27 and
+2026-09-29):** >
 Status of a job from run_command, or the recent-jobs list when job_id is
 omitted. Only needed when run_command returned a job_id. A positive wait
 blocks up to the requested duration (max 50 seconds) and returns as soon as
 the job exits, so a long wait costs nothing when the job ends early; waiting
 never kills a still-running job. Returns state, exit code, output tail, and
-live processes; quiet=true means no recent output.
+live processes; quiet=true means no recent output. For complete output across
+turns, pass cursor ("start", or the next_cursor you got) to read unseen output
+in bounded chunks until has_more is false.
 
 2026-09-27 (blocking-wall guard removed): the phrase "or any smaller
 effective turn budget" and the guard's four result fields went with the guard.
@@ -171,35 +174,60 @@ that a wait ends when the job exits. Ceiling: about 1,100 model steps in two
 weeks (5.5 %) if every such poll had waited 50 s.
 
 **Input**: `job_id` (optional → list), `tail_lines` (int, default 100),
-`wait_seconds` (int 0–50, default 0; added 2026-09-03). With
-`wait_seconds > 0` the call blocks, polling disk state with an adaptive
+`wait_seconds` (int 0–50, default 0; added 2026-09-03), and `cursor`
+(optional string, added 2026-09-29). `cursor="start"` reads from byte 0;
+`cursor="end"` starts at the current end and explicitly skips existing
+output; otherwise pass the `next_cursor` from the previous cursor call.
+A cursor requires `job_id`; in cursor mode `tail_lines` is ignored.
+With `wait_seconds > 0` the call blocks, polling disk state with an adaptive
 interval (20 ms → 0.5 s), until the job exits or the requested time is up;
 a job still running then is not killed (same wait-not-kill contract as
-run_command).
-Evidence: 596 polls on 119 jobs, median gap 6 s.
-**Result** — one job: `{job_id, state, exit_code?, signal?, runtime_s,
-last_output_age_s, quiet, log_tail, log_bytes, log_path, command,
-workdir, processes, waited_s?}`. A positive wait also returns
-`{wait_requested_s, wait_effective_s}`: the requested wait and the wait
-actually applied (the request bounded to 50 s). Zero-wait and listing payloads
-keep their previous shape. A running job silent longer than 30 s is
-flagged `quiet: true`. When `job_id` is omitted, the listing is compact:
-all running jobs plus the newest 20 non-running jobs, preserving newest-first
-order. Listing rows are `{job_id, state, exit_code, runtime_s, started_at,
-workdir, command}`; `command` is a one-line 160-source-character head+tail
-preview with an explicit omitted-character marker. A single-job query uses
-the same preview representation, so polling never re-sends an arbitrarily large
-launch command. The limits are server settings
-`jobs.listing_history_limit` and `jobs.listing_command_preview_chars`, not MCP
-parameters. `processes` (added 2026-09-03) lists the live
-members of the job's process group from `/proc` — `{pid, state, etime_s,
-cpu_s, cmd}` — so the model need not run `ps -p PID` (151 such calls in
-week one); empty once the job has exited. `waited_s` is present only when
-a wait was requested, is measured with a monotonic performance counter, and the
-summary then ends `Still running after waiting N s.` when the wait expired. Each
-single-job call also emits an internal `job_status_timing` journal record with
-worker-dispatch, state/wait, log-read, process-scan, and total implementation
-milliseconds; no timing field is added to the MCP response.
+run_command). Evidence: 596 polls on 119 jobs, median gap 6 s.
+
+Without `cursor`, the one-job result is unchanged:
+`{job_id, state, exit_code?, signal?, runtime_s, last_output_age_s, quiet,
+log_tail, log_bytes, log_path, command, workdir, processes, waited_s?}`.
+A positive wait also returns `{wait_requested_s, wait_effective_s}`.
+Zero-wait and listing payloads keep their previous shape.
+
+With `cursor`, `log_tail` is omitted and the lifecycle fields above are
+returned with `{log_delta, delta_start, delta_end, next_cursor, has_more}`.
+`next_cursor` is an opaque job-bound value of the form
+`v1:<job_id>:<byte-offset>`. `delta_start` and `delta_end` identify the
+delivered byte range. `has_more=true` means another non-empty delta is
+readable now; `false` means caught up at this read, not necessarily that a
+running job is complete. `quiet` reports output age only and does not mean
+there is no unread output. A caller has drained retained output when the job
+is not running and `has_more=false`.
+
+Cursor reads are bounded to `max(4, jobs.max_output_chars)` bytes and do
+not use an elision marker. If a chunk would end inside a valid multi-byte
+UTF-8 character, it backs off to the character boundary. At the current EOF,
+a valid incomplete 1–3 byte suffix remains pending while the job is running;
+once the job is not running it is consumed as U+FFFD. Invalid bytes elsewhere
+are consumed as U+FFFD and never block progress.
+
+Cursor errors are tool errors: malformed or unknown-version cursor; a cursor
+bound to a different job; an offset beyond the current spool end; or a
+missing/pruned job (the existing `No job with id` error). Cursors do not
+extend retention. A v1 cursor is never valid for future rotated/replaced log
+content; such a storage change requires a new cursor version first.
+
+A running job silent longer than 30 s is flagged `quiet: true`. When
+`job_id` is omitted, the listing is compact: all running jobs plus the newest
+20 non-running jobs, preserving newest-first order. Listing rows are
+`{job_id, state, exit_code, runtime_s, started_at, workdir, command}`;
+`command` is a one-line 160-source-character head+tail preview with an
+explicit omitted-character marker. A single-job query uses the same preview
+representation. The limits are server settings
+`jobs.listing_history_limit` and `jobs.listing_command_preview_chars`, not
+MCP parameters. `processes` lists live process-group members from `/proc` as
+`{pid, state, etime_s, cpu_s, cmd}` and is empty once the job exits.
+`waited_s` is present only when a wait was requested. Each single-job call
+also emits internal `job_status_timing` telemetry; cursor calls additionally
+emit `job_status_cursor` with the delivered range and returned character
+count. No timing field is added to the MCP response.
+
 List: `{jobs: [{job_id, state, exit_code?, runtime_s, started_at, workdir,
 command}]}`, using the compact all-running + recent-history policy above.
 

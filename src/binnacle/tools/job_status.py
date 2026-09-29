@@ -40,6 +40,11 @@ OUTPUT_SCHEMA = {
         "last_output_age_s": {"type": ["number", "null"]},
         "quiet": {"type": "boolean"},
         "log_tail": {"type": "string"},
+        "log_delta": {"type": "string"},
+        "delta_start": {"type": "integer"},
+        "delta_end": {"type": "integer"},
+        "next_cursor": {"type": "string"},
+        "has_more": {"type": "boolean"},
         "log_bytes": {"type": "integer"},
         "log_path": {"type": "string"},
         "command": {"type": "string"},
@@ -254,6 +259,8 @@ def job_status_impl(
     impl_start = _PERF_COUNTER()
     call_start = current_call_started.get()
     dispatch_ms = (impl_start - call_start) * 1_000 if call_start is not None else None
+    if cursor is not None and job_id is None:
+        raise ToolError("cursor requires job_id")
     if job_id is None:
         return _listing_result()
 
@@ -335,16 +342,21 @@ def job_status_impl(
         "runtime_s": state["runtime_s"],
         "last_output_age_s": state["last_output_age_s"],
         "quiet": quiet,
-        "log_bytes": state["log_bytes"],
-        "log_path": state["log_path"],
-        "command": _command_preview(state["command"]),
-        "workdir": state["workdir"],
-        "processes": processes,
     }
     if cursor_fields is None:
         payload["log_tail"] = log_tail
     else:
         payload.update(cursor_fields)
+    payload.update(
+        {
+            "log_bytes": state["log_bytes"],
+            "log_path": state["log_path"],
+            "command": _command_preview(state["command"]),
+            "workdir": state["workdir"],
+            "processes": processes,
+        }
+    )
+    if cursor_fields is not None:
         log.info(
             "event=job_status_cursor call=%s job_id=%s delta_start=%s delta_end=%s "
             "returned_chars=%s has_more=%s log_bytes=%s",
@@ -438,12 +450,20 @@ def register(mcp: FastMCP) -> None:
                 description="Block up to this long (max 50) for the job to exit; returns as soon as it exits, so a long wait costs nothing. 0 answers at once.",
             ),
         ] = 0,
+        cursor: Annotated[
+            str | None,
+            Field(
+                description='"start" reads from the beginning, "end" from now; otherwise the next_cursor from your last cursor call for this job.'
+            ),
+        ] = None,
     ) -> ToolResult:
         """Status of a job from run_command, or the recent-jobs list when
         job_id is omitted. Only needed when run_command returned a job_id.
         A positive wait blocks up to the requested duration (max 50 seconds)
         and returns as soon as the job exits, so a long wait costs nothing
         when the job ends early; waiting never kills a still-running job. Returns state, exit code, output tail,
-        and live processes; quiet=true means no recent output.
+        and live processes; quiet=true means no recent output. For complete
+        output across turns, pass cursor ("start", or the next_cursor you got)
+        to read unseen output in bounded chunks until has_more is false.
         """
-        return job_status_impl(job_id, tail_lines, wait_seconds)
+        return job_status_impl(job_id, tail_lines, wait_seconds, cursor=cursor)

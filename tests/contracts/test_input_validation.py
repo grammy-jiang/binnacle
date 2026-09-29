@@ -106,3 +106,18 @@ def test_wrong_scalar_type_is_rejected():
 
     assert result.is_error
     assert "max_results" in text_of(result)
+
+
+def test_job_status_cursor_requires_job_id_before_listing():
+    result = call("job_status", {"cursor": "start"})
+
+    assert result.is_error
+    assert "cursor requires job_id" in text_of(result)
+
+
+def test_job_status_cursor_is_last_optional_parameter():
+    tool = next(tool for tool in list_tools() if tool.name == "job_status")
+    props = tool.input_schema["properties"]
+
+    assert list(props)[-1] == "cursor"
+    assert props["cursor"]["default"] is None
