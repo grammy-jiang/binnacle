@@ -236,3 +236,58 @@ def test_cleanup_none_missing_and_move_pid_paths(tmp_path):
     assert job_cgroup.move_pid(123, "/demo", cgroup_fs=tmp_path)
     assert procs.read_text() == "123\n"
     assert not job_cgroup.move_pid(123, "/missing", cgroup_fs=tmp_path)
+
+
+def test_wait_empty_uses_event_driven_poll_without_timeout(tmp_path, monkeypatch):
+    root = tmp_path / "demo"
+    root.mkdir()
+    events = root / "cgroup.events"
+    events.write_text("populated 1\nfrozen 0\n")
+    reads = iter([b"populated 1\nfrozen 0\n", b"populated 0\nfrozen 0\n"])
+    poll_calls: list[tuple[object, ...]] = []
+    closed: list[int] = []
+
+    monkeypatch.setattr(job_cgroup.os, "open", lambda *args: 42)
+    monkeypatch.setattr(job_cgroup.os, "lseek", lambda *args: 0)
+    monkeypatch.setattr(job_cgroup.os, "read", lambda *args: next(reads))
+    monkeypatch.setattr(job_cgroup.os, "close", lambda fd: closed.append(fd))
+
+    class FakePoll:
+        def register(self, fd, mask):
+            assert fd == 42
+            assert mask == job_cgroup.select.POLLPRI | job_cgroup.select.POLLERR
+
+        def poll(self, *args):
+            poll_calls.append(args)
+            return [(42, job_cgroup.select.POLLPRI)]
+
+    monkeypatch.setattr(job_cgroup.select, "poll", FakePoll)
+    assert job_cgroup.wait_empty("/demo", cgroup_fs=tmp_path)
+    assert poll_calls == [()]  # no timer: the kernel event is the only wakeup
+    assert closed == [42]
+
+
+def test_wait_empty_handles_open_missing_event_and_already_empty(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        job_cgroup.os, "open", lambda *args: (_ for _ in ()).throw(OSError("missing"))
+    )
+    assert not job_cgroup.wait_empty("/missing", cgroup_fs=tmp_path)
+
+    root = tmp_path / "demo"
+    root.mkdir()
+    (root / "cgroup.events").write_text("populated 0\nfrozen 0\n")
+    # Restore real os functions after the synthetic open failure.
+    monkeypatch.undo()
+    assert job_cgroup.wait_empty("/demo", cgroup_fs=tmp_path)
+
+
+def test_wait_empty_rejects_unreadable_or_unrecognised_events(tmp_path, monkeypatch):
+    root = tmp_path / "demo"
+    root.mkdir()
+    (root / "cgroup.events").write_text("frozen 0\n")
+    assert not job_cgroup.wait_empty("/demo", cgroup_fs=tmp_path)
+
+    monkeypatch.setattr(
+        job_cgroup.os, "read", lambda *args: (_ for _ in ()).throw(OSError("read"))
+    )
+    assert not job_cgroup.wait_empty("/demo", cgroup_fs=tmp_path)

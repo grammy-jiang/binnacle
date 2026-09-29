@@ -148,6 +148,18 @@ def _termination_reason(meta: dict, rc: int | None) -> str:
     return "normal_exit"
 
 
+def _save_final_resource_meta(job_id: str, final_meta: dict) -> None:
+    with _STORE_LOCK:
+        current = _read_meta(job_id)
+        if current is None:
+            return
+        job_resource_history.merge_final_meta(current, final_meta)
+        try:
+            _write_meta(job_id, current)
+        except OSError:
+            pass
+
+
 def record_exit(job_id: str, proc: subprocess.Popen) -> None:
     """Write an already-exited process's status to meta.json.
 
@@ -173,20 +185,16 @@ def record_exit(job_id: str, proc: subprocess.Popen) -> None:
         resources = job_cgroup.snapshot(cgroup if isinstance(cgroup, str) else None)
         if resources:
             meta["resource_usage"] = resources
+        cleanup_pending = False
         if isinstance(cgroup, str) and not job_cgroup.cleanup(cgroup):
+            cleanup_pending = True
             meta["cgroup_cleanup_pending"] = True
-        if resources:
-            try:
-                history = job_resource_history.append(
-                    JOBS_DIR.parent / "resource-jobs", job_id, meta, resources
-                )
-                meta["resource_history_path"] = str(history)
-            except OSError as exc:
-                logger.warning(
-                    "event=job_resource_history_error job_id=%s error_class=%s",
-                    job_id,
-                    type(exc).__name__,
-                )
+        elif resources:
+            history = job_resource_history.append_best_effort(
+                JOBS_DIR.parent / "resource-jobs", job_id, meta, resources
+            )
+            if history is not None:
+                meta["resource_history_path"] = history
         try:
             _write_meta(job_id, meta)
         except OSError:
@@ -204,6 +212,14 @@ def record_exit(job_id: str, proc: subprocess.Popen) -> None:
                 meta.get("command_hash", "-"),
             )
             return
+    if cleanup_pending and isinstance(cgroup, str):
+        job_resource_history.finalize_async(
+            job_id,
+            cgroup,
+            dict(meta),
+            history_root=JOBS_DIR.parent / "resource-jobs",
+            on_finalized=lambda final: _save_final_resource_meta(job_id, final),
+        )
     try:
         log_bytes = (_job_dir(job_id) / "out.log").stat().st_size
     except OSError:

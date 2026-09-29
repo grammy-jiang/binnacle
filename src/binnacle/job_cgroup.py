@@ -10,7 +10,9 @@ command. Descendants inherit the cgroup naturally. Monitoring must never make
 from __future__ import annotations
 
 import logging
+import os
 import re
+import select
 from pathlib import Path
 
 log = logging.getLogger("binnacle.jobs")
@@ -224,6 +226,50 @@ def snapshot(cgroup: str | None, *, cgroup_fs: Path = CGROUP_FS) -> dict[str, ob
     except OSError:
         pass
     return out
+
+
+def wait_empty(cgroup: str, *, cgroup_fs: Path = CGROUP_FS) -> bool:
+    """Block without polling until a populated cgroup becomes empty.
+
+    ``cgroup.events`` supports poll notifications.  This is used only for the
+    uncommon shell-exited/descendant-still-running case; ordinary jobs clean up
+    synchronously and never allocate a waiter thread.
+    """
+    events = _fs_path(cgroup, cgroup_fs=cgroup_fs) / "cgroup.events"
+    try:
+        fd = os.open(events, os.O_RDONLY | os.O_NONBLOCK)
+    except OSError:
+        return False
+
+    def populated() -> bool | None:
+        try:
+            os.lseek(fd, 0, os.SEEK_SET)
+            data = os.read(fd, 4096).decode("ascii", errors="replace")
+        except OSError:
+            return None
+        for line in data.splitlines():
+            key, _, value = line.partition(" ")
+            if key == "populated":
+                return value.strip() == "1"
+        return None
+
+    try:
+        state = populated()
+        if state is None:
+            return False
+        if not state:
+            return True
+        poller = select.poll()
+        poller.register(fd, select.POLLPRI | select.POLLERR)
+        while True:
+            poller.poll()  # no timeout: kernel event only
+            state = populated()
+            if state is None:
+                return False
+            if not state:
+                return True
+    finally:
+        os.close(fd)
 
 
 def cleanup(cgroup: str | None, *, cgroup_fs: Path = CGROUP_FS) -> bool:

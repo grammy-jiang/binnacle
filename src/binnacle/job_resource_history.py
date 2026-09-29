@@ -3,9 +3,16 @@
 from __future__ import annotations
 
 import json
+import logging
+import threading
 import time
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
+
+from binnacle import job_cgroup
+
+log = logging.getLogger("binnacle.jobs")
 
 SCHEMA_VERSION = 1
 RETENTION_DAYS = 365
@@ -71,3 +78,75 @@ def append(
     with path.open("a", encoding="utf-8") as out:
         out.write(json.dumps(row, separators=(",", ":"), ensure_ascii=False) + "\n")
     return path
+
+
+def append_best_effort(
+    root: Path, job_id: str, meta: dict, resources: dict[str, object]
+) -> str | None:
+    """Append a summary without ever making job completion fail."""
+    try:
+        return str(append(root, job_id, meta, resources))
+    except OSError as exc:
+        log.warning(
+            "event=job_resource_history_error job_id=%s error_class=%s",
+            job_id,
+            type(exc).__name__,
+        )
+        return None
+
+
+def merge_final_meta(current: dict, final_meta: dict) -> dict:
+    """Merge only resource-finalizer fields into one durable job record."""
+    keys = (
+        "resource_usage",
+        "resource_history_path",
+        "resource_finalized_at",
+        "cgroup_cleanup_pending",
+    )
+    for key in keys:
+        if key in final_meta:
+            current[key] = final_meta[key]
+        else:
+            current.pop(key, None)
+    return current
+
+
+def finalize_async(
+    job_id: str,
+    cgroup: str,
+    exit_meta: dict,
+    *,
+    history_root: Path,
+    on_finalized: Callable[[dict], None],
+) -> None:
+    """Finalize counters after a detached descendant empties its cgroup."""
+
+    def _watch() -> None:
+        if not job_cgroup.wait_empty(cgroup):
+            log.warning(
+                "event=job_cgroup_finalizer_unavailable job_id=%s cgroup=%s",
+                job_id,
+                cgroup,
+            )
+            return
+        resources = job_cgroup.snapshot(cgroup)
+        cleaned = job_cgroup.cleanup(cgroup)
+        final_meta = dict(exit_meta)
+        final_meta.pop("cgroup_cleanup_pending", None)
+        final_meta["resource_finalized_at"] = time.time()
+        if resources:
+            final_meta["resource_usage"] = resources
+            history = append_best_effort(history_root, job_id, final_meta, resources)
+            if history is not None:
+                final_meta["resource_history_path"] = history
+        if not cleaned:
+            final_meta["cgroup_cleanup_pending"] = True
+        on_finalized(final_meta)
+        log.info(
+            "event=job_cgroup_finalized job_id=%s cleaned=%s cgroup=%s",
+            job_id,
+            str(cleaned).lower(),
+            cgroup,
+        )
+
+    threading.Thread(target=_watch, name=f"job-cgroup-{job_id}", daemon=True).start()
