@@ -96,3 +96,143 @@ def test_cleanup_keeps_populated_cgroup_and_removes_empty(tmp_path):
     marker.unlink()
     assert job_cgroup.cleanup("/demo/job-012345abcdef", cgroup_fs=tmp_path)
     assert not cg.exists()
+
+
+def test_process_cgroup_missing_and_legacy_entries_return_none(tmp_path):
+    assert job_cgroup.process_cgroup(proc_root=tmp_path) is None
+    proc = tmp_path / "self"
+    proc.mkdir()
+    (proc / "cgroup").write_text("2:cpu:/legacy\n1:name=systemd:/user.slice\n")
+    assert job_cgroup.process_cgroup(proc_root=tmp_path) is None
+
+
+def test_accounting_root_handles_absent_plain_and_delegated(tmp_path, monkeypatch):
+    monkeypatch.setattr(job_cgroup, "process_cgroup", lambda **kw: None)
+    assert job_cgroup.accounting_root(proc_root=tmp_path) is None
+    monkeypatch.setattr(job_cgroup, "process_cgroup", lambda **kw: "/demo.service")
+    assert job_cgroup.accounting_root(proc_root=tmp_path) == "/demo.service"
+    monkeypatch.setattr(
+        job_cgroup,
+        "process_cgroup",
+        lambda **kw: "/demo.service/binnacle-manager",
+    )
+    assert job_cgroup.accounting_root(proc_root=tmp_path) == "/demo.service"
+
+
+def test_prepare_handles_absent_and_non_delegated_roots(tmp_path, monkeypatch):
+    monkeypatch.setattr(job_cgroup, "accounting_root", lambda **kw: None)
+    assert job_cgroup.prepare(cgroup_fs=tmp_path) is None
+
+    monkeypatch.setattr(job_cgroup, "accounting_root", lambda **kw: "/demo.service")
+    (tmp_path / "demo.service").mkdir()
+    # Missing controller files means cgroup accounting is optional, not fatal.
+    assert job_cgroup.prepare(cgroup_fs=tmp_path) == "/demo.service"
+
+
+def test_prepare_is_idempotent_and_can_log_ready(tmp_path, monkeypatch, caplog):
+    root = tmp_path / "demo.service"
+    root.mkdir()
+    (root / "cgroup.controllers").write_text("cpu memory pids\n")
+    (root / "cgroup.subtree_control").write_text("cpu memory pids\n")
+    monkeypatch.setattr(job_cgroup, "accounting_root", lambda **kw: "/demo.service")
+    with caplog.at_level("INFO", logger="binnacle.jobs"):
+        assert job_cgroup.prepare(cgroup_fs=tmp_path, log_ready=True) == "/demo.service"
+    assert "event=job_cgroup_ready" in caplog.text
+
+
+def test_prepare_controller_write_failure_is_best_effort(tmp_path, monkeypatch, caplog):
+    root = tmp_path / "demo.service"
+    root.mkdir()
+    controllers = root / "cgroup.controllers"
+    subtree = root / "cgroup.subtree_control"
+    controllers.write_text("cpu memory pids\n")
+    subtree.write_text("")
+    monkeypatch.setattr(job_cgroup, "accounting_root", lambda **kw: "/demo.service")
+    original = type(subtree).write_text
+
+    def fail_subtree(self, data, *args, **kwargs):
+        if self == subtree:
+            raise PermissionError("not delegated")
+        return original(self, data, *args, **kwargs)
+
+    monkeypatch.setattr(type(subtree), "write_text", fail_subtree)
+    with caplog.at_level("INFO", logger="binnacle.jobs"):
+        assert job_cgroup.prepare(cgroup_fs=tmp_path) == "/demo.service"
+    assert "event=job_cgroup_controller_unavailable" in caplog.text
+
+
+def test_prepare_second_subtree_read_failure_is_tolerated(tmp_path, monkeypatch):
+    root = tmp_path / "demo.service"
+    root.mkdir()
+    controllers = root / "cgroup.controllers"
+    subtree = root / "cgroup.subtree_control"
+    controllers.write_text("cpu memory pids\n")
+    subtree.write_text("")
+    monkeypatch.setattr(job_cgroup, "accounting_root", lambda **kw: "/demo.service")
+    original = type(subtree).read_text
+    reads = 0
+
+    def flaky_read(self, *args, **kwargs):
+        nonlocal reads
+        if self == subtree:
+            reads += 1
+            if reads == 2:
+                raise OSError("synthetic reread failure")
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(type(subtree), "read_text", flaky_read)
+    assert job_cgroup.prepare(cgroup_fs=tmp_path) == "/demo.service"
+    assert reads == 2
+
+
+def test_create_without_parent_or_writable_parent_is_best_effort(tmp_path, monkeypatch):
+    monkeypatch.setattr(job_cgroup, "prepare", lambda **kw: None)
+    assert job_cgroup.create("012345abcdef", cgroup_fs=tmp_path) is None
+
+    monkeypatch.setattr(job_cgroup, "prepare", lambda **kw: "/missing/service")
+    assert job_cgroup.create("012345abcdef", cgroup_fs=tmp_path) is None
+
+
+def test_launch_without_cgroup_is_plain_bash():
+    assert job_cgroup.launch_argv("printf ok", None) == ["bash", "-c", "printf ok"]
+
+
+def test_kv_and_io_parsers_ignore_malformed_values(tmp_path):
+    kv = tmp_path / "kv"
+    kv.write_text("good 7\nmissing\nextra 1 2\nbad nope\n")
+    assert job_cgroup._kv(kv) == {"good": 7}
+    assert job_cgroup._kv(tmp_path / "absent") == {}
+
+    io = tmp_path / "io"
+    io.write_text("259:0 rbytes=10 broken wbytes=nope rios=2\n259:1 rbytes=5 rios=3\n")
+    assert job_cgroup._io(io) == {"rbytes": 15, "rios": 5}
+    assert job_cgroup._io(tmp_path / "absent-io") == {}
+
+
+def test_snapshot_absent_and_partial_files_are_tolerated(tmp_path):
+    assert job_cgroup.snapshot(None, cgroup_fs=tmp_path) == {}
+    assert job_cgroup.snapshot("/missing", cgroup_fs=tmp_path) == {}
+
+    root = tmp_path / "demo"
+    root.mkdir()
+    (root / "cpu.stat").write_text("malformed\n")
+    (root / "io.stat").write_text("259:0 nope\n")
+    (root / "memory.stat").write_text("")
+    (root / "memory.events").write_text("")
+    (root / "memory.swap.events").write_text("")
+    (root / "memory.current").write_text("not-an-int\n")
+    # No cgroup.procs on purpose: missing optional files stay omitted.
+    assert job_cgroup.snapshot("/demo", cgroup_fs=tmp_path) == {}
+
+
+def test_cleanup_none_missing_and_move_pid_paths(tmp_path):
+    assert job_cgroup.cleanup(None, cgroup_fs=tmp_path)
+    assert job_cgroup.cleanup("/already-gone", cgroup_fs=tmp_path)
+
+    root = tmp_path / "demo"
+    root.mkdir()
+    procs = root / "cgroup.procs"
+    procs.write_text("")
+    assert job_cgroup.move_pid(123, "/demo", cgroup_fs=tmp_path)
+    assert procs.read_text() == "123\n"
+    assert not job_cgroup.move_pid(123, "/missing", cgroup_fs=tmp_path)
