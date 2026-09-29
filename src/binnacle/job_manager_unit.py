@@ -20,6 +20,9 @@ TimeoutStartSec=30
 Restart=always
 RestartSec=1
 KillMode=control-group
+# Binnacle creates per-job child cgroups for accounting only; no limits are set.
+Delegate=cpu memory pids
+DelegateSubgroup=binnacle-manager
 RuntimeDirectory=binnacle
 RuntimeDirectoryMode=0700
 UMask=0077

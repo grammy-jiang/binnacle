@@ -25,6 +25,8 @@ def test_job_manager_unit_is_stable_sibling_service(tmp_path, monkeypatch):
     assert "TimeoutStartSec=30" in spec.body
     assert "Restart=always" in spec.body
     assert "KillMode=control-group" in spec.body
+    assert "Delegate=cpu memory pids" in spec.body
+    assert "DelegateSubgroup=binnacle-manager" in spec.body
     assert "RuntimeDirectory=binnacle" in spec.body
     assert "ExecStartPost" not in spec.body
     assert spec.body.startswith("[Unit]\n")

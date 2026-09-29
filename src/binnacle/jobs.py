@@ -15,7 +15,7 @@ import threading
 import time
 from pathlib import Path
 
-from binnacle import job_store
+from binnacle import job_cgroup, job_resource_history, job_store
 from binnacle.callctx import current_call
 from binnacle.config import get_settings
 from binnacle.job_output import clip_head_tail as job_output_clip_head_tail
@@ -169,6 +169,24 @@ def record_exit(job_id: str, proc: subprocess.Popen) -> None:
             meta["exit_code"] = rc
         meta["ended_at"] = time.time()
         meta["termination_reason"] = _termination_reason(meta, rc)
+        cgroup = meta.get("cgroup")
+        resources = job_cgroup.snapshot(cgroup if isinstance(cgroup, str) else None)
+        if resources:
+            meta["resource_usage"] = resources
+        if isinstance(cgroup, str) and not job_cgroup.cleanup(cgroup):
+            meta["cgroup_cleanup_pending"] = True
+        if resources:
+            try:
+                history = job_resource_history.append(
+                    JOBS_DIR.parent / "resource-jobs", job_id, meta, resources
+                )
+                meta["resource_history_path"] = str(history)
+            except OSError as exc:
+                logger.warning(
+                    "event=job_resource_history_error job_id=%s error_class=%s",
+                    job_id,
+                    type(exc).__name__,
+                )
         try:
             _write_meta(job_id, meta)
         except OSError:
@@ -245,6 +263,10 @@ def start_job(
         log = d / "out.log"
         env = os.environ.copy()
         env.update(_ENV_OVERRIDES)
+        cgroup = job_cgroup.create(job_id) if owner_instance_id is not None else None
+        env["BINNACLE_JOB_ID"] = job_id
+        if cgroup:
+            env["BINNACLE_JOB_CGROUP"] = cgroup
         # stdin goes through a spool file, not a pipe: a pipe write blocks once
         # the 64 KiB buffer fills if the command never reads it, which would hold
         # start_job (and run_command) until the command ends, defeating
@@ -261,7 +283,7 @@ def start_job(
             else open(os.devnull, "rb") as inf,
         ):
             proc = subprocess.Popen(
-                ["bash", "-c", command],
+                job_cgroup.launch_argv(command, cgroup),
                 cwd=str(workdir),
                 env=env,
                 stdin=inf,
@@ -283,6 +305,8 @@ def start_job(
             "command_hash": command_hash,
             "owner": owner,
         }
+        if cgroup:
+            meta["cgroup"] = cgroup
         if owner_instance_id is not None:
             meta.update(
                 schema_version=2,
@@ -343,6 +367,12 @@ def job_state(job_id: str) -> dict | None:
         state = "running"
     else:
         state = "unknown"  # process gone but exit never recorded (server killed)
+    cgroup = meta.get("cgroup")
+    resources = meta.get("resource_usage")
+    if state == "running" and isinstance(cgroup, str):
+        live_resources = job_cgroup.snapshot(cgroup)
+        if live_resources:
+            resources = live_resources
     return {
         "job_id": job_id,
         "state": state,
@@ -360,6 +390,8 @@ def job_state(job_id: str) -> dict | None:
         "call_id": meta.get("call_id"),
         "command_hash": meta.get("command_hash"),
         "owner": meta.get("owner"),
+        "cgroup": cgroup,
+        "resource_usage": resources,
         "runtime_s": round((meta.get("ended_at") or now) - meta["started_at"], 3),
         "last_output_age_s": (
             round(last_output_age, 1) if last_output_age is not None else None
