@@ -55,6 +55,9 @@ def test_job_status_keeps_the_only_needed_clause_and_wait_contract():
     # 2026-09-27: 47% of solo polls outside manager chats used waits under 50 s;
     # the fact that a wait ends when the job exits is the contract that fixes it.
     assert "returns as soon as the job exits" in d
+    assert "for complete output across turns" in d
+    assert 'cursor ("start", or the next_cursor you got)' in d
+    assert "until has_more is false" in d
 
 
 def test_run_command_keeps_not_killed_and_no_job_facts():
@@ -127,7 +130,12 @@ def test_wait_parameters_state_that_a_wait_ends_early():
 
     props = asyncio.run(run())
     job_wait = props["job_status"]["wait_seconds"]["description"].lower()
+    job_cursor = props["job_status"]["cursor"]["description"].lower()
     run_wait = props["run_command"]["wait_seconds"]["description"].lower()
     assert "returns as soon as it exits" in job_wait
+    assert job_cursor == (
+        '"start" reads from the beginning, "end" from now; otherwise the '
+        "next_cursor from your last cursor call for this job."
+    )
     assert "returns as soon as it finishes" in run_wait
     assert "wait_seconds=50" not in job_wait + run_wait
