@@ -61,3 +61,61 @@ def test_hard_clip_counts_elision_marker_inside_returned_budget():
 
 def test_hard_clip_is_noop_below_budget():
     assert job_output.clip_head_tail_hard("small", 24_000) == ("small", False, 0)
+
+
+def test_consume_utf8_ascii_and_empty():
+    assert job_output.consume_utf8(b"plain", at_eof=False, final=False) == (
+        "plain",
+        5,
+    )
+    assert job_output.consume_utf8(b"", at_eof=True, final=False) == ("", 0)
+    assert job_output.consume_utf8(b"", at_eof=True, final=True) == ("", 0)
+
+
+def test_consume_utf8_split_multibyte_mid_chunk_backs_off():
+    for char in ("¢", "猫", "😀"):
+        encoded = char.encode()
+        for cut in range(1, len(encoded)):
+            data = b"A" + encoded[:cut]
+            assert job_output.consume_utf8(data, at_eof=False, final=False) == ("A", 1)
+
+
+def test_consume_utf8_split_multibyte_eof_running_stays_pending():
+    for char in ("¢", "猫", "😀"):
+        encoded = char.encode()
+        for cut in range(1, len(encoded)):
+            data = b"A" + encoded[:cut]
+            assert job_output.consume_utf8(data, at_eof=True, final=False) == ("A", 1)
+
+
+def test_consume_utf8_split_multibyte_terminal_flushes_replacement():
+    for char in ("¢", "猫", "😀"):
+        encoded = char.encode()
+        for cut in range(1, len(encoded)):
+            data = b"A" + encoded[:cut]
+            assert job_output.consume_utf8(data, at_eof=True, final=True) == (
+                "A�",
+                len(data),
+            )
+
+
+def test_consume_utf8_terminal_mid_chunk_still_backs_off():
+    data = b"A" + "😀".encode()[:2]
+
+    assert job_output.consume_utf8(data, at_eof=False, final=True) == ("A", 1)
+
+
+def test_consume_utf8_invalid_bytes_are_replaced_and_consumed():
+    data = b"A" + bytes([0xFF]) + b"B" + bytes([0x80]) + b"C"
+    assert job_output.consume_utf8(data, at_eof=False, final=False) == (
+        "A�B�C",
+        len(data),
+    )
+
+
+def test_consume_utf8_four_byte_chunk_consumes_complete_character():
+    data = "猫".encode() + bytes([0xF0])
+    text, consumed = job_output.consume_utf8(data, at_eof=False, final=False)
+
+    assert text == "猫"
+    assert consumed == 3
