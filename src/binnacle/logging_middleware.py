@@ -52,6 +52,8 @@ HEADER_MAX_CHARS = 80
 #: ``X-Request-Id`` is the OpenAI tunnel's ``wfr_<turn>/<call>``: the part
 #: before the slash is one agent turn (the tunnel log's cmd_request_id).
 CORRELATION_HEADERS: dict[str, str] = {"x-request-id": "turn"}
+#: One short generation marker per server process, shared by every tool record.
+SERVER_GEN = uuid.uuid4().hex[:12]
 #: Headers logged as a short SHA-256 prefix: a grouping key, not the value.
 HASHED_HEADERS: dict[str, str] = {"x-openai-session": "oai_session"}
 #: structured_content keys lifted into the tool_result line when present
@@ -303,6 +305,7 @@ class ToolLoggingMiddleware(Middleware):
             "client": _token(self._identity.resolve(context) or "-", 64),
             "session": _session_marker(context),
             "request_id": _token(_request_id(context), 40),
+            "server_gen": SERVER_GEN,
         }
 
     async def on_call_tool(
