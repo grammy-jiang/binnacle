@@ -1,6 +1,6 @@
 {
   "is_error": false,
-  "content": "Command still running after 1 s; job_id=<job-1>. Use job_status when the result is needed, or stop_job to cancel.",
+  "content": "Command still running after 1 s; job_id=<job-1>. This durable job keeps running without this ChatGPT turn. Unless the user explicitly asked you to wait for completion, report the job_id and current progress and return control instead of polling repeatedly; the user can ask for status later. Suggest a check-back interval only when grounded in the task or observed progress. Use job_status for a later update, or stop_job to cancel.",
   "structured": {
     "job_id": "<job-1>",
     "state": "running",
@@ -14,6 +14,6 @@
   },
   "size": {
     "structured_bytes": 193,
-    "tokens": 91
+    "tokens": 150
   }
 }

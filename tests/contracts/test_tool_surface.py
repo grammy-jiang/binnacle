@@ -34,15 +34,15 @@ from tests.contracts.surface_support import (
     surface,
 )
 
-# 2026-09-29: job_status hash intentionally changed for frozen cursor v1:
-# optional cursor input, cursor-only output properties, and §6 descriptions.
+# 2026-09-29: run_command/job_status hashes intentionally changed for the
+# default durable-job handoff UX; cursor v1 schema remains unchanged.
 SURFACE_SHA256 = {
     "chatgpt": {
         "read_file": "54ed0646b239adce52a7b872a26203f1d7547199d952d5eb78e8156cad1d0c30",
         "list_files": "3199643b89945d9c6a5f15522cf884d697b1e6b946c4a2528839304b471c24a2",
         "search_text": "bd6f6e576567dad6fd759fac233667aa4b6089d546b90079832fa4761739848a",
-        "run_command": "0ac17d1fa543fdc90d9289df5a4e5c92e55683bad869ff74f238c9bd1886e8dd",
-        "job_status": "0ece482b0ae5578487301344129c806b3020d11d1d6b975588fa2b4a2970f03e",
+        "run_command": "86bad9e89fba8852069598a9d415f0d556aa5ff0cef5c5f2497dfdc737c7abed",
+        "job_status": "943496173b29f5c8cf9746fb355fd5ccf4d7351089b6841202e0d8279aa7f1a3",
         "stop_job": "ef13121e05987b54c837ce1963f8b967cb67064e91e06604f7e6a63535d02a2d",
     },
     "default": {
@@ -51,8 +51,8 @@ SURFACE_SHA256 = {
         "search_text": "bd6f6e576567dad6fd759fac233667aa4b6089d546b90079832fa4761739848a",
         "edit_file": "de1636ef9ac176c7876f6418caaef428e33f8918e6c77cdc67fa55991684a83b",
         "write_file": "caed318767151115e1715c2cfb27400fa545019cbf3508c7cfb6de426a919e31",
-        "run_command": "0ac17d1fa543fdc90d9289df5a4e5c92e55683bad869ff74f238c9bd1886e8dd",
-        "job_status": "0ece482b0ae5578487301344129c806b3020d11d1d6b975588fa2b4a2970f03e",
+        "run_command": "86bad9e89fba8852069598a9d415f0d556aa5ff0cef5c5f2497dfdc737c7abed",
+        "job_status": "943496173b29f5c8cf9746fb355fd5ccf4d7351089b6841202e0d8279aa7f1a3",
         "stop_job": "ef13121e05987b54c837ce1963f8b967cb67064e91e06604f7e6a63535d02a2d",
     },
 }

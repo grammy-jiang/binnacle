@@ -132,7 +132,10 @@ def test_status_wait_expires_leaves_job_running():
     s = result.structured_content
     assert s is not None and 0.9 < elapsed < 3
     assert s["state"] == "running" and s["waited_s"] >= 0.9
-    assert "Still running after waiting" in result.content[0].text
+    text = result.content[0].text
+    assert "Still running after waiting" in text
+    assert "durable job keeps running without this ChatGPT turn" in text
+    assert "return control instead of starting another positive wait" in text
     stop(p["job_id"])
 
 
@@ -198,9 +201,9 @@ def test_background_run_marks_background_job_true():
     assert p["state"] == "running" and p["background_job"] is True
     content = rc.run_command_impl("sleep 30", "/tmp", 10, True, None).content[0].text
     assert "no background job" not in content.lower()
-    assert "Use job_status when the result is needed, or stop_job to cancel." in content
-    assert "continue independent work" not in content.lower()
-    assert "call job_status once" not in content.lower()
+    assert "durable job keeps running without this ChatGPT turn" in content
+    assert "report the job_id and current progress and return control" in content
+    assert "user can ask for status later" in content
     stop(p["job_id"])
     stop(p["job_id"])  # idempotent; also cleans the second job
 

@@ -1,10 +1,10 @@
 """The shipped prompt layers are the model's operating manual; this guards
 their content and their division of labor (2026-09-07 review):
 
-- tool descriptions: what the tool does and its contract, no workflow;
+- tool descriptions: tool contracts plus the generic durable-job handoff rule;
 - server instructions: a tool map only, first 512 chars self-contained;
 - the ChatGPT Project instructions (references/project-instructions.txt in
-  the chatgpt-mcp-dev skill) own the workflow rules.
+  the chatgpt-mcp-dev skill) own broader repository workflow rules.
 
 Phrases kept because they were measured to change behavior: search_text's
 grep equivalence (grep 435 -> 0), job_status "only needed when run_command
@@ -71,6 +71,8 @@ def test_job_status_keeps_the_only_needed_clause_and_wait_contract():
     assert "for complete output across turns" in d
     assert 'cursor ("start", or the next_cursor you got)' in d
     assert "until has_more is false" in d
+    assert "once caught up and still running, return control" in d
+    assert "later turn or new chat can resume by job_id/cursor" in d
 
 
 def test_run_command_keeps_not_killed_and_no_job_facts():
@@ -78,7 +80,9 @@ def test_run_command_keeps_not_killed_and_no_job_facts():
     assert "not killed" in d and "created no job" in d
     assert "returns as soon as the command finishes" in d
     assert "several commands can go in one call" in d
-    # workflow wording moved to the Project instructions
+    assert "report its job_id/progress and return control" in d
+    assert "they can ask for status later" in d
+    # Repository-specific sequencing still lives in Project instructions.
     assert "once at the end" not in d and "do not poll" not in d
 
 
@@ -89,7 +93,7 @@ def test_read_file_keeps_limit_and_no_paging():
     assert "edit_file" not in d  # hidden from ChatGPT, the only client
 
 
-def test_descriptions_carry_no_workflow_and_fit_the_budget():
+def test_descriptions_keep_generic_handoff_small_and_avoid_project_planning():
     d = descriptions()
     for name in (
         "read_file",

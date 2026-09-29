@@ -60,24 +60,29 @@ stdin from the `stdin` param, no PTY.
 ## 3. `run_command`
 
 **Description (ship verbatim; consolidated 2026-09-07 review, amended
-2026-09-27):**
+2026-09-27 and 2026-09-29):**
 > Run a shell command with bash -c; several commands can go in one call
 > (set -e; a && b). Waits up to wait_seconds and returns as soon as the
-> command finishes; a command still running then is not killed: you get a
-> job_id for job_status and stop_job. A command that finished created no
-> job. Output merges stdout and stderr.
+> command finishes; a command still running is not killed: you get a durable
+> job_id for job_status and stop_job. Unless the user asked you to wait for
+> completion, report its job_id/progress and return control; they can ask for
+> status later. Suggest a check-back interval only when grounded. A finished
+> command created no job. Output merges stdout and stderr.
 
 The `wait_seconds` parameter says the same since 2026-09-27: "Seconds to
 wait for the command to finish before yielding a job_id (max 50); returns as
 soon as it finishes, so a long wait costs nothing." Evidence in section 4.
 
-Division of labor (2026-09-07 review): the description states the tool's
-contract only; parameter descriptions own wait_seconds/background/
-tail_lines/workdir facts; workflow rules (batch into one call, checks once
-at the end, never poll, keep turns short) live in the ChatGPT Project
-instructions (`chatgpt-mcp-dev/references/project-instructions.txt`), the
-single client in use. "Not killed" stays (timeout ≠ kill, §1); "created no
-job" stays (the 50 blind job_status listings, docs/usage-analysis-2026-09-06.md).
+Division of labor: parameter descriptions own wait_seconds/background/
+tail_lines/workdir facts. The minimum long-job UX policy is now served by the
+tools themselves, so it does not depend on per-user or per-project
+instructions: once a durable running job is handed back, ChatGPT normally
+reports the job_id/progress and returns control instead of keeping the turn
+open with repeated waits. An explicit user request to keep waiting overrides
+that default. Repository/project-specific batching or workflow preferences
+remain outside the tool contract. "Not killed" stays (timeout ≠ kill, §1);
+"created no job" stays (the 50 blind job_status listings,
+docs/usage-analysis-2026-09-06.md).
 
 **Input**: `command` (required), `workdir` (default `~/Projects`),
 `wait_seconds` (int 1–50, default 30), `background` (bool, default false; deployment-local client policy may auto-background matching commands),
@@ -106,9 +111,12 @@ out of forks of the repository. Invalid regular expressions fail configuration l
 "openai-mcp" = ["<deployment-specific regex>"]
 ```
 
-The running-result summary names `job_status` and `stop_job` as the available job
-controls. Workflow sequencing belongs to the ChatGPT Project instructions, not the tool
-result.
+The running-result summary names `job_status` and `stop_job`, says that the job is
+durable without the current ChatGPT turn, and carries the default handoff policy directly:
+unless the user explicitly asked to wait for completion, report the job_id/current progress
+and return control instead of polling repeatedly. If a useful check-back interval is
+grounded in the task or observed progress, ChatGPT may state it; otherwise it must not
+invent one.
 
 Every successful call also emits `run_command_dispatch`, recording the selected owner,
 requested/bounded/effective wait, explicit/automatic background decision, handoff reason,
@@ -145,6 +153,26 @@ command had left something running, always in sessions where no job existed
 (docs/usage-analysis-2026-09-06.md). The running/background result keeps its
 `job_status` / `stop_job` pointer.
 
+### 3.2 Default long-job handoff UX
+
+The MCP server does not create a future ChatGPT message and does not require a ChatGPT
+turn to remain open. A running job is owned by Binnacle and is recoverable from a later
+turn or a new chat.
+
+Default model behavior after `run_command` yields a running `job_id`:
+
+1. report that the job is still running and show the `job_id`;
+2. summarize any useful current/partial progress;
+3. if a check-back interval is grounded in the task or observed progress, state it;
+4. return control to the user instead of repeatedly issuing positive waits;
+5. when the user later asks for status, call `job_status` again and continue from durable
+   state.
+
+If the user explicitly asks ChatGPT to remain in the turn until completion, repeated waits
+are allowed. In cursor mode, immediately available `has_more=true` chunks should be drained
+without waiting before deciding whether to hand back. `next_cursor` is continuation state
+for the model; the user normally only needs the `job_id`.
+
 ## 4. `job_status`
 
 **Description (consolidated 2026-09-24; amended 2026-09-27 and
@@ -152,11 +180,12 @@ command had left something running, always in sessions where no job existed
 Status of a job from run_command, or the recent-jobs list when job_id is
 omitted. Only needed when run_command returned a job_id. A positive wait
 blocks up to the requested duration (max 50 seconds) and returns as soon as
-the job exits, so a long wait costs nothing when the job ends early; waiting
-never kills a still-running job. Returns state, exit code, output tail, and
-live processes; quiet=true means no recent output. For complete output across
-turns, pass cursor ("start", or the next_cursor you got) to read unseen output
-in bounded chunks until has_more is false.
+the job exits; waiting never kills a still-running job. For complete output
+across turns, pass cursor ("start", or the next_cursor you got) and drain
+until has_more is false. Once caught up and still running, return control
+unless the user asked to wait; a later turn or new chat can resume by
+job_id/cursor. Keep cursor internal unless asked. Returns lifecycle fields,
+output, and live processes; quiet=true means no recent output.
 
 2026-09-27 (blocking-wall guard removed): the phrase "or any smaller
 effective turn budget" and the guard's four result fields went with the guard.

@@ -205,7 +205,12 @@ def run_command_impl(
     )
     summary = (
         f"Command {reason}; job_id={job_id}. "
-        "Use job_status when the result is needed, or stop_job to cancel."
+        "This durable job keeps running without this ChatGPT turn. Unless the "
+        "user explicitly asked you to wait for completion, report the job_id "
+        "and current progress and return control instead of polling repeatedly; "
+        "the user can ask for status later. Suggest a check-back interval only "
+        "when grounded in the task or observed progress. Use job_status for a "
+        "later update, or stop_job to cancel."
     )
     return ToolResult(content=summary, structured_content=payload)
 
@@ -254,9 +259,12 @@ def register(mcp: FastMCP) -> None:
     ) -> ToolResult:
         """Run a shell command with bash -c; several commands can go in one
         call (set -e; a && b). Waits up to wait_seconds and returns as soon
-        as the command finishes; a command still running then is not killed: you get a job_id for job_status and
-        stop_job. A command that finished created no job. Output merges
-        stdout and stderr.
+        as the command finishes; a command still running is not killed: you
+        get a durable job_id for job_status and stop_job. Unless the user
+        asked you to wait for completion, report its job_id/progress and
+        return control; they can ask for status later. Suggest a check-back
+        interval only when grounded. A finished command created no job.
+        Output merges stdout and stderr.
         """
         return run_command_impl(
             command, workdir, wait_seconds, background, stdin, tail_lines

@@ -402,6 +402,15 @@ def job_status_impl(
         summary = f"Job {job_id} running ({state['runtime_s']} s)."
     if requested_wait_s > 0 and state["state"] == "running":
         summary += f" Still running after waiting {waited} s."
+    if state["state"] == "running":
+        summary += (
+            " This durable job keeps running without this ChatGPT turn. If "
+            "cursor mode has_more=true, drain the immediately available output "
+            "first. Once caught up, unless the user explicitly asked you to "
+            "wait for completion, report the job_id and current status and "
+            "return control instead of starting another positive wait; the "
+            "user can ask for status later."
+        )
     impl_ms = _elapsed_ms(impl_start)
     dispatch_field = f"{dispatch_ms:.2f}" if dispatch_ms is not None else "na"
     log.info(
@@ -460,10 +469,12 @@ def register(mcp: FastMCP) -> None:
         """Status of a job from run_command, or the recent-jobs list when
         job_id is omitted. Only needed when run_command returned a job_id.
         A positive wait blocks up to the requested duration (max 50 seconds)
-        and returns as soon as the job exits, so a long wait costs nothing
-        when the job ends early; waiting never kills a still-running job. Returns state, exit code, output tail,
-        and live processes; quiet=true means no recent output. For complete
-        output across turns, pass cursor ("start", or the next_cursor you got)
-        to read unseen output in bounded chunks until has_more is false.
+        and returns as soon as the job exits; waiting never kills a
+        still-running job. For complete output across turns, pass cursor
+        ("start", or the next_cursor you got) and drain until has_more is
+        false. Once caught up and still running, return control unless the
+        user asked to wait; a later turn or new chat can resume by
+        job_id/cursor. Keep cursor internal unless asked. Returns lifecycle
+        fields, output, and live processes; quiet=true means no recent output.
         """
         return job_status_impl(job_id, tail_lines, wait_seconds, cursor=cursor)
