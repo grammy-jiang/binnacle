@@ -117,6 +117,7 @@ LIFECYCLE_SAMPLE = """
 2026-09-24T13:00:04.000 INFO: event=job_exit job_id=jauto exit_code=0 signal=None reason=normal_exit runtime_s=4 log_bytes=10 call=auto owner=manager owner_instance=o command_hash=aaaaaaaaaaaa
 2026-09-24T13:00:06.000 INFO: event=tool_call call=status tool=job_status client=openai-mcp session=s request_id=0 turn=turn-a/status args_chars=1 args={}
 2026-09-24T13:00:06.010 INFO: event=job_status_timing call=status job_id=jauto wait_requested_s=10 wait_bounded_s=10 wait_effective_s=10 waited_s=2 blocking_policy=no_policy state_ms=2000 state=exited
+2026-09-24T13:00:06.011 INFO: event=job_status_cursor call=status job_id=jauto delta_start=0 delta_end=10 returned_chars=10 has_more=false log_bytes=10
 2026-09-24T13:00:07.000 INFO: event=tool_call call=warm tool=run_command client=openai-mcp session=s request_id=0 turn=turn-b/run args_chars=1 args={}
 2026-09-24T13:00:07.010 INFO: event=job_start job_id=jwarm pid=11 command='x' workdir=/tmp call=warm owner=manager owner_instance=o command_hash=bbbbbbbbbbbb command_chars=1
 2026-09-24T13:00:07.020 INFO: event=job_owner_timing op=start call=warm job_id=jwarm owner_instance=o wait_s=1 launch_ms=2 impl_ms=10 state=exited

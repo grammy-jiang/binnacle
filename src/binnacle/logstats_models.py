@@ -66,6 +66,7 @@ class JobTelemetryStats:
     manager_invalid_requests: int = 0
     manager_request_errors: int = 0
     job_status_calls: int = 0
+    job_status_cursor_calls: int = 0
     job_status_wait_calls: int = 0
     job_status_running_after_wait: int = 0
     job_status_state_ms: list[float] = field(default_factory=list)

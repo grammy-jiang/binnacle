@@ -56,6 +56,8 @@ SAMPLE = """\
 2026-09-13T23:00:05.000 INFO: event=tool_call call=c2 tool=run_command client=openai-mcp session=cccc request_id=0 turn=wfr_turn1/x2 args_chars=40 args={"wait_seconds":1,"workdir":"/tmp","command":"sleep 5"}
 2026-09-13T23:00:05.001 INFO: event=job_start job_id=j1 pid=5 command='sleep 5' workdir=/tmp call=c2
 2026-09-13T23:00:06.002 INFO: event=tool_result call=c2 tool=run_command client=openai-mcp session=cccc request_id=0 duration_ms=1001.00 is_error=False content_chars=90 structured_bytes=220 est_tokens=77 job_id=j1 state=running background_job=true truncated=false output_bytes=0
+2026-09-13T23:00:06.100 INFO: event=job_status_timing call=js1 job_id=j1 wait_requested_s=0 state_ms=1 state=running log_bytes=0
+2026-09-13T23:00:06.101 INFO: event=job_status_cursor call=js1 job_id=j1 delta_start=0 delta_end=0 returned_chars=0 has_more=false log_bytes=0
 2026-09-13T23:00:07.000 INFO: event=tool_call call=c3 tool=read_file client=openai-mcp session=dddd request_id=0 turn=wfr_turn2/y1 args_chars=22 args={"path":"/etc/passwd"}
 2026-09-13T23:00:07.002 WARNING: event=tool_result call=c3 tool=read_file client=openai-mcp session=dddd request_id=0 duration_ms=2.00 is_error=True error_class=ToolError error=Path outside allowed roots (/tmp): /etc/passwd
 2026-09-13T23:00:08.000 INFO: event=tool_call call=c4 tool=run_command client=claude-code session=eeee request_id=3 args_chars=30 args={"workdir":"/tmp","command":"ls"}
@@ -73,6 +75,13 @@ DISPATCH = {datetime(2026, 9, 12, 10, 0, 0)}  # noqa: DTZ001 - the tunnel time o
 def _report(**kw):
     records, _ = logstats.parse(SAMPLE)
     return ub.build_report(records, SAMPLE, DISPATCH, "2026-09-12", None, **kw)
+
+
+def test_cursor_telemetry_is_accepted_without_becoming_a_tool_call():
+    records, _ = logstats.parse(SAMPLE)
+    cursor = next(r for r in records if r.event == "job_status_cursor")
+    assert logstats.plain_fields(cursor.body)["returned_chars"] == "0"
+    assert _report()["tool_calls"] == 5
 
 
 def test_each_call_counted_once_across_both_eras():
