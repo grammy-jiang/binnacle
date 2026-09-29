@@ -13,6 +13,7 @@ JOB_TELEMETRY_SAMPLE = """
 2026-09-22T16:00:06.001 INFO: event=job_owner_timing op=start call=c2 job_id=j2 owner_instance=owner123456 wait_s=50 launch_ms=2.5 impl_ms=11.5 state=exited
 2026-09-22T16:00:06.002 INFO: event=job_exit job_id=j2 exit_code=0 signal=None reason=normal_exit runtime_s=0.01 log_bytes=0 call=c2 owner=manager owner_instance=owner123456 command_hash=bbbbbbbbbbbb
 2026-09-22T16:00:06.100 INFO: event=job_status_timing call=js1 job_id=j1 wait_requested_s=50 dispatch_ms=1 state_ms=50000 read_log_ms=0.1 process_scan_ms=4 impl_ms=50004 state=running processes=2 log_bytes=10
+2026-09-22T16:00:06.150 INFO: event=job_status_cursor call=js1 job_id=j1 delta_start=0 delta_end=10 returned_chars=10 has_more=false log_bytes=10
 2026-09-22T16:00:06.200 INFO: event=job_status_timing call=js2 job_id=j1 wait_requested_s=50 dispatch_ms=1 state_ms=12000 read_log_ms=0.1 process_scan_ms=0 impl_ms=12001 state=exited processes=0 log_bytes=10
 2026-09-22T16:00:06.300 INFO: event=job_status_timing call=js3 job_id=j2 wait_requested_s=0 dispatch_ms=1 state_ms=0.3 read_log_ms=0.1 process_scan_ms=0 impl_ms=0.5 state=exited processes=0 log_bytes=0
 2026-09-22T16:00:07.000 INFO: event=job_stop_requested job_id=j3 call=s1 origin_call=c3 owner_instance=owner123456 command_hash=cccccccccccc
@@ -65,6 +66,7 @@ def test_job_execution_telemetry_is_aggregated_and_rendered():
     assert jt.manager_disconnects == 1 and jt.disconnect_ops == {"start": 1}
     assert jt.manager_invalid_requests == 1 and jt.manager_request_errors == 1
     assert jt.job_status_calls == 3 and jt.job_status_wait_calls == 2
+    assert jt.job_status_cursor_calls == 1
     assert jt.job_status_running_after_wait == 1
     assert jt.job_status_state_ms == [50000.0, 12000.0, 0.3]
     assert jt.job_status_wait_state_ms == [50000.0, 12000.0]
@@ -75,13 +77,27 @@ def test_job_execution_telemetry_is_aggregated_and_rendered():
     assert "auto_background=1" in text and "synchronous=1" in text
     assert "manager launch ms" in text
     assert "owner transport overhead ms" in text
-    assert "job_status: calls=3 wait_calls=2 running_after_wait=1" in text
+    assert (
+        "job_status: calls=3 cursor_calls=1 wait_calls=2 running_after_wait=1" in text
+    )
     assert "blocking_state_total_s=62.00" in text
     assert "exit reasons: normal_exit=2, stop_requested=1" in text
     assert "requested=1 escalated_to_kill=1" in text
     assert "starts=1 recovered_jobs=2 client_disconnects=1" in text
     assert "invalid_requests=1 request_errors=1" in text
     assert "job_status blocking-wall guard:" not in text
+
+    cursor = next(r for r in records if r.event == "job_status_cursor")
+    assert logstats.plain_fields(cursor.body) == {
+        "event": "job_status_cursor",
+        "call": "js1",
+        "job_id": "j1",
+        "delta_start": "0",
+        "delta_end": "10",
+        "returned_chars": "10",
+        "has_more": "false",
+        "log_bytes": "10",
+    }
 
 
 def test_old_guard_journal_lines_still_parse_without_a_guard_section():
@@ -92,6 +108,7 @@ def test_old_guard_journal_lines_still_parse_without_a_guard_section():
     jt = st.jobs
 
     assert jt.job_status_calls == 9
+    assert jt.job_status_cursor_calls == 0
     assert jt.job_status_wait_calls == 8
     assert not hasattr(jt, "blocking_policies")
     text = logstats.render(st)

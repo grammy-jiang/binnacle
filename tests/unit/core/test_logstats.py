@@ -195,17 +195,19 @@ def test_plain_records_parse_with_their_own_timestamps():
 
 def test_plain_fields_split_the_free_text_tail_first():
     f = logstats.plain_fields(
-        "event=tool_call call=c1 tool=run_command args_chars=44 "
+        "event=tool_call call=c1 tool=run_command server_gen=abc123def456 args_chars=44 "
         'args={"workdir":"/tmp","command":"grep error=1 f"}'
     )
     assert f["call"] == "c1" and f["args_chars"] == "44"
+    assert f["server_gen"] == "abc123def456"
     assert f["args"] == '{"workdir":"/tmp","command":"grep error=1 f"}'
     assert "error" not in f
     g = logstats.plain_fields(
         "event=tool_result call=c2 is_error=True error_class=ToolError "
-        "error=Path outside allowed roots: /etc/passwd"
+        "server_gen=abc123def456 error=Path outside allowed roots: /etc/passwd"
     )
     assert g["error_class"] == "ToolError"
+    assert g["server_gen"] == "abc123def456"
     assert g["error"] == "Path outside allowed roots: /etc/passwd"
 
 

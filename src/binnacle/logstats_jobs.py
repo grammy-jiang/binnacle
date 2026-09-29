@@ -58,6 +58,8 @@ def analyze_job_telemetry(
             elif op == "stop":
                 if (value := _number(f, "impl_ms")) is not None:
                     out.manager_stop_impl_ms.append(value)
+        elif record.event == "job_status_cursor":
+            out.job_status_cursor_calls += 1
         elif record.event == "job_status_timing":
             out.job_status_calls += 1
             wait_requested = _number(f, "wait_requested_s") or 0.0
@@ -143,6 +145,7 @@ def render_job_telemetry(jobs: JobTelemetryStats) -> list[str]:
         blocking_state_s = sum(jobs.job_status_wait_state_ms) / 1000
         out.append(
             f"  job_status: calls={jobs.job_status_calls} "
+            f"cursor_calls={jobs.job_status_cursor_calls} "
             f"wait_calls={jobs.job_status_wait_calls} "
             f"running_after_wait={jobs.job_status_running_after_wait} "
             f"blocking_state_total_s={blocking_state_s:.2f}"

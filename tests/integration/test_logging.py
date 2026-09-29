@@ -138,16 +138,22 @@ def test_explicit_background_false_overrides_auto_policy(monkeypatch):
 
 def test_tool_call_and_result_share_a_call_id_and_carry_sizes(caplog):
     with caplog.at_level("INFO"):
-        _run(("list_files", {"path": "/tmp", "max_results": 1}))
+        _run(*[("list_files", {"path": "/tmp", "max_results": 1})] * 2)
     calls = _messages(caplog, "tool_call")
     results = _messages(caplog, "tool_result")
-    assert len(calls) == 1 and len(results) == 1
+    assert len(calls) == 2 and len(results) == 2
+    assert {_fields(line)["server_gen"] for line in calls + results} == {
+        logging_middleware.SERVER_GEN
+    }
     call, result = _fields(calls[0]), _fields(results[0])
     assert call["tool"] == result["tool"] == "list_files"
     assert re.fullmatch(r"[0-9a-f]{12}", call["call"])
     assert call["call"] == result["call"]
     assert call["session"] == result["session"]
     assert call["request_id"] == result["request_id"] != "-"
+    assert call["server_gen"] == result["server_gen"] == logging_middleware.SERVER_GEN
+    assert re.fullmatch(r"[0-9a-f]{12}", call["server_gen"])
+    assert calls[0].index(" server_gen=") < calls[0].index(" args=")
     # arguments: full length, then the compact JSON with scalars first
     assert call["args_chars"] == str(len('{"max_results":1,"path":"/tmp"}'))
     assert calls[0].endswith(' args={"max_results":1,"path":"/tmp"}')
@@ -201,6 +207,9 @@ def test_tool_error_is_a_result_line_with_its_class(caplog):
     assert result["is_error"] == "True"
     assert result["error_class"] == "ToolError"
     assert result["error_code"] == "path_outside_root"
+    line = results[0]
+    assert result["server_gen"] == logging_middleware.SERVER_GEN
+    assert line.index(" server_gen=") < line.index(" error=")
     assert (
         results[0].endswith(
             "error=Path outside allowed roots (/home/grammy-jiang/Projects, /tmp): /etc/passwd"
