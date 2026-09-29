@@ -39,6 +39,19 @@ def tokens(text: str) -> int:
     return (len(text) + 3) // 4
 
 
+def parameter_description(spec: dict) -> str:
+    """Read a parameter description from either supported Pydantic schema form."""
+    if description := spec.get("description"):
+        return description
+    for branch in spec.get("anyOf", ()):
+        if isinstance(branch, dict):
+            try:
+                return parameter_description(branch)
+            except KeyError:
+                pass
+    raise KeyError("description")
+
+
 def test_search_text_keeps_grep_equivalence():
     d = descriptions()["search_text"].lower()
     assert "grep -rn" in d and "grep -c" in d and "grep -n" in d
@@ -129,9 +142,9 @@ def test_wait_parameters_state_that_a_wait_ends_early():
             return {t.name: t.input_schema["properties"] for t in await c.list_tools()}
 
     props = asyncio.run(run())
-    job_wait = props["job_status"]["wait_seconds"]["description"].lower()
-    job_cursor = props["job_status"]["cursor"]["description"].lower()
-    run_wait = props["run_command"]["wait_seconds"]["description"].lower()
+    job_wait = parameter_description(props["job_status"]["wait_seconds"]).lower()
+    job_cursor = parameter_description(props["job_status"]["cursor"]).lower()
+    run_wait = parameter_description(props["run_command"]["wait_seconds"]).lower()
     assert "returns as soon as it exits" in job_wait
     assert job_cursor == (
         '"start" reads from the beginning, "end" from now; otherwise the '
