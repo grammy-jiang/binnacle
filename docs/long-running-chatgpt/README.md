@@ -1,6 +1,6 @@
 # Long-running ChatGPT orchestration: execution plan
 
-Status: **PREPARATION ONLY — DO NOT START EXECUTION UNTIL THE OWNER EXPLICITLY SAYS TO START.**
+Status: **COMPLETE — deployed to production at `17cc21c` on 2026-09-29; CI and production UX smoke passed.**
 
 Date: 2026-09-29 (Australia/Sydney)
 Repository: `/home/grammy-jiang/Projects/binnacle`
@@ -21,17 +21,20 @@ These facts are the baseline for the programme. Do not re-litigate them unless n
 
 1. `binnacle-jobs.service` already gives durable local process ownership independent of an individual ChatGPT turn.
 2. A local job surviving for a long time does **not** prove that one ChatGPT turn waited for it.
-3. The strict same-turn test has been performed against production journal evidence since the 2026-09-27 wait-description change:
-   - 23 jobs with runtime >=5 min were observed to complete in the same turn and the same turn subsequently made another tool call;
-   - 9 at >=10 min;
-   - 2 at >=20 min;
-   - 1 at >=30 min;
-   - none at >=40 min or >=50 min in the observed population.
-4. The strongest positive example is job `b94de33877ec`, turn `397d96d9-f3c2-49ec-8f09-233125a00740`: the Codex job ran about 32.56 minutes, the same ChatGPT turn made 33 `job_status(wait_seconds=50)` calls, received `state=exited`, then continued with `run_command` and `read_file` calls.
-5. Therefore there is no evidence for a 20-minute hard expiry, but there is also no evidence that 40–50 minute foreground waiting is a dependable contract.
+3. The frozen Round-1 classifier found same-turn completions at >=5/10/20/30/40/50 minutes of **24/10/3/2/0/0** across 734 background jobs; the strongest Round-1 example was 33.34 minutes.
+4. Round 4 then produced stronger live evidence: T45 completed in the same ChatGPT turn after 45.0 minutes, while T60's foreground turn stopped mid-message after 40.3 minutes and the durable job continued to completion.
+5. Therefore there is no useful wall-clock expiry contract for a ChatGPT foreground turn. The production design does not depend on one: later turns or new chats resume durable work by `job_id` and, internally, a job-bound cursor.
 6. Some turns stop while their jobs are still running; some such jobs are later observed by another turn. This is a real recovery scenario, not a hypothetical one.
 7. Network/tunnel interruption is an independent failure mode. On 2026-09-29 around 08:21–08:23 the active uplink lost gateway/DNS/TCP reachability and the watchdog failed over and restarted `binnacle-tunnel.service`.
-8. `job_status` historically returned excessive repeated output. On 2026-09-27 single results reached about 181k estimated tokens; output sizes improved sharply afterward, but current `job_status` still limits by lines rather than a hard character/token budget and can regress on giant JSONL lines.
+8. `job_status` historically returned excessive repeated output. The deployed implementation now hard-caps legacy output at 24,000 characters and adds optional cursor mode for complete bounded deltas. In Round 5, normal long jobs returned about 6.1–26.7× fewer bytes with cursor polling than equivalent repeated legacy tails.
+
+## 2.1 Final production outcome
+
+The programme completed all five rounds and shipped `17cc21c` to `master`, `origin/master`, and `origin/proof-of-concept`. GitHub CI passed code quality, coverage policy, and Python 3.10–3.14. The isolated Round-4 endurance/fault gate passed all 16 scenario rows, including tunnel restart, MCP-server restart, natural/constructed foreground-turn loss, same-chat resume, new-chat resume by `job_id`, and new-chat resume by a carried cursor.
+
+The user-facing policy also changed: once a command yields a durable running `job_id`, ChatGPT normally reports the job ID/current progress and returns control rather than holding the turn open with repeated waits, unless the user explicitly asks it to wait for completion. A production smoke using a harmless two-minute job verified this behavior: the first turn returned after about 22 seconds with job `a98130cba698` still running; a later `Status` turn recovered the same job and reported its successful 120-second completion. The smoke chat was backed up and deleted by exact ID.
+
+`round2/e4-contract-v1.md`, `round4/report.md`, and `round5/decision.md` are the authoritative detailed records for the shipped contract, endurance/fault evidence, and release decision.
 
 ## 3. Architectural principle
 
