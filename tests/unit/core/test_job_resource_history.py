@@ -10,6 +10,7 @@ def test_history_is_daily_privacy_minimal_jsonl(tmp_path):
         "command": "secret payload",
         "workdir": "/tmp/demo",
         "command_hash": "abc123",
+        "call_id": "call-123",
         "started_at": 100.0,
         "ended_at": 101.0,
         "exit_code": 0,
@@ -19,8 +20,9 @@ def test_history_is_daily_privacy_minimal_jsonl(tmp_path):
         tmp_path, "012345abcdef", meta, {"memory_peak": 4096}, retention_days=365
     )
     row = json.loads(path.read_text())
-    assert row["schema_version"] == 1
+    assert row["schema_version"] == 2
     assert row["job_id"] == "012345abcdef"
+    assert row["call_id"] == "call-123"
     assert row["workdir"] == "/tmp/demo"
     assert row["resources"] == {"memory_peak": 4096}
     assert "command" not in row
@@ -196,3 +198,104 @@ def test_finalize_async_logs_when_event_wait_is_unavailable(
         )
     assert callbacks == []
     assert "event=job_cgroup_finalizer_unavailable" in caplog.text
+
+
+def test_history_resources_separates_final_gauges_from_cumulative_counters():
+    raw = {
+        "cpu": {"usage_usec": 123},
+        "memory_current": 10,
+        "memory_peak": 20,
+        "memory_swap_current": 3,
+        "memory_swap_peak": 5,
+        "pids_current": 2,
+        "pids_peak": 7,
+        "processes": 2,
+        "memory_events": {"oom_kill": 0},
+        "memory_stat": {
+            "anon": 100,
+            "file": 200,
+            "kernel": 30,
+            "pagetables": 4,
+            "pgfault": 50,
+            "pgmajfault": 6,
+            "pswpin": 7,
+            "workingset_refault_file": 8,
+        },
+    }
+    got = job_resource_history.history_resources(raw)
+    assert got["memory_current_final"] == 10
+    assert got["memory_swap_current_final"] == 3
+    assert got["pids_current_final"] == 2
+    assert got["processes_final"] == 2
+    assert got["memory_peak"] == 20
+    assert got["memory_swap_peak"] == 5
+    assert got["pids_peak"] == 7
+    assert got["memory_stat_final"] == {
+        "anon": 100,
+        "file": 200,
+        "kernel": 30,
+        "pagetables": 4,
+    }
+    assert got["memory_counters"] == {
+        "pgfault": 50,
+        "pgmajfault": 6,
+        "pswpin": 7,
+        "workingset_refault_file": 8,
+    }
+    assert "memory_stat" not in got
+    assert "memory_current" not in got
+    assert raw["memory_stat"]["anon"] == 100  # input is not mutated
+
+
+def test_history_resources_is_idempotent_for_v2_shape():
+    resources = {
+        "memory_peak": 20,
+        "memory_current_final": 10,
+        "memory_stat_final": {"anon": 3},
+        "memory_counters": {"pgfault": 4},
+    }
+    assert job_resource_history.history_resources(resources) == resources
+
+
+def test_upgrade_v1_row_adds_call_id_and_v2_resource_semantics():
+    old = {
+        "schema_version": 1,
+        "job_id": "012345abcdef",
+        "workdir": "/tmp",
+        "resources": {
+            "memory_current": 10,
+            "memory_peak": 20,
+            "processes": 0,
+            "memory_stat": {"anon": 0, "pgfault": 12},
+        },
+    }
+    got = job_resource_history.upgrade_row(old, call_id="call-xyz")
+    assert got["schema_version"] == 2
+    assert got["call_id"] == "call-xyz"
+    assert got["resources"] == {
+        "memory_peak": 20,
+        "memory_current_final": 10,
+        "processes_final": 0,
+        "memory_stat_final": {"anon": 0},
+        "memory_counters": {"pgfault": 12},
+    }
+    assert old["schema_version"] == 1
+
+
+def test_upgrade_v2_row_preserves_existing_call_id():
+    row = {
+        "schema_version": 2,
+        "call_id": "original",
+        "resources": {"memory_peak": 5, "memory_current_final": 0},
+    }
+    assert job_resource_history.upgrade_row(row, call_id="replacement") == row
+
+
+def test_missing_call_id_is_serialized_as_null(tmp_path):
+    path = job_resource_history.append(
+        tmp_path,
+        "012345abcdef",
+        {"ended_at": 100.0, "call_id": "-"},
+        {"memory_peak": 1},
+    )
+    assert json.loads(path.read_text())["call_id"] is None
