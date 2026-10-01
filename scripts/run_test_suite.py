@@ -12,6 +12,10 @@ from collections.abc import Mapping, Sequence
 
 WORKER_ENV = "BINNACLE_TEST_WORKERS"
 MAX_DEFAULT_WORKERS = 4
+SUITES = {
+    "full": ("tests",),
+    "fast": ("tests/unit", "tests/contracts"),
+}
 
 
 def _positive_int(value: str) -> int:
@@ -79,17 +83,19 @@ def build_lane_commands(
     workers: int,
     seed: int | None,
     shared_args: Sequence[str],
+    suite: str = "full",
 ) -> tuple[list[str], list[str]]:
     """Build the parallel-safe and ordinary-process pytest commands."""
+    test_args = list(SUITES[suite])
     main = build_pytest_lane_command(
-        test_args=["tests"],
+        test_args=test_args,
         workers=workers,
         seed=seed,
         shared_args=shared_args,
         no_xdist=False,
     )
     ordinary = build_pytest_lane_command(
-        test_args=["tests"],
+        test_args=test_args,
         workers=workers,
         seed=seed,
         shared_args=shared_args,
@@ -114,6 +120,12 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--workers", type=_positive_int)
     parser.add_argument("--seed", type=int)
+    parser.add_argument(
+        "--suite",
+        choices=tuple(SUITES),
+        default="full",
+        help="managed test population: full suite or fast unit+contract gate",
+    )
     return parser
 
 
@@ -134,6 +146,7 @@ def main(
         workers=workers,
         seed=args.seed,
         shared_args=shared_args,
+        suite=args.suite,
     )
 
     total_started = time.perf_counter()

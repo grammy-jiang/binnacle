@@ -66,6 +66,38 @@ def test_worker_one_omits_xdist_and_keeps_marker_split():
     assert "--dist=worksteal" not in ordinary
 
 
+def test_fast_suite_keeps_two_lanes_and_selects_only_unit_and_contracts():
+    main, ordinary = runner.build_lane_commands(
+        workers=1,
+        seed=12345,
+        shared_args=[],
+        suite="fast",
+    )
+
+    expected_roots = ["tests/unit", "tests/contracts"]
+    assert main[3:5] == expected_roots
+    assert ordinary[3:5] == expected_roots
+    assert "tests" not in main[3:5]
+    assert "tests" not in ordinary[3:5]
+    assert "not no_xdist" in main
+    assert "no_xdist" in ordinary
+
+
+def test_main_fast_suite_forwards_the_selection_to_both_lanes(monkeypatch):
+    commands = _mock_subprocess(monkeypatch, [0, 0])
+
+    assert (
+        runner.main(
+            ["--workers", "1", "--seed", "12345", "--suite", "fast"],
+            environ={},
+        )
+        == 0
+    )
+    assert all("tests/unit" in command for command in commands)
+    assert all("tests/contracts" in command for command in commands)
+    assert all("tests" not in command[3:5] for command in commands)
+
+
 def test_parallel_lane_gets_xdist_seed_and_shared_args_only_where_required():
     shared = ["--ignore=tests/integration/test_wheel_artifact.py"]
     main, ordinary = runner.build_lane_commands(

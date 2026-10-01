@@ -2,6 +2,8 @@
 # Install the git hook:  pre-commit install
 # Run on all files:      pre-commit run --all-files
 minimum_pre_commit_version: "4.0.0"
+default_install_hook_types: [pre-commit, pre-push]
+default_stages: [pre-commit]
 exclude: '^\.gitignore$'
 repos:
   # Base hygiene -- fast, universal checks from the pre-commit maintainers.
@@ -140,6 +142,13 @@ repos:
         language: system
         files: (^src/binnacle/.*\.py$|^pyproject\.toml$)
         pass_filenames: false
+      - id: fast-tests
+        name: fast unit and contract tests
+        entry: uv run --no-sync python scripts/run_test_suite.py --suite fast --seed 12345
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
   - repo: meta
     hooks:
       - id: check-hooks-apply
