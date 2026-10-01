@@ -83,10 +83,16 @@ def test_git_root_clears_repository_local_git_environment(
 ) -> None:
     outer = tmp_path / "outer"
     foreign = tmp_path / "foreign"
-    subprocess.run(["git", "init", "-q", str(outer)], check=True)
+    clean_env = _foreign_git_env()
+    subprocess.run(
+        ["git", "init", "-q", str(outer)],
+        check=True,
+        env=clean_env,
+    )
     subprocess.run(
         ["git", "-C", str(outer), "config", "core.bare", "false"],
         check=True,
+        env=clean_env,
     )
 
     monkeypatch.setenv("GIT_DIR", str(outer / ".git"))
@@ -99,6 +105,7 @@ def test_git_root_clears_repository_local_git_environment(
         check=True,
         capture_output=True,
         text=True,
+        env=clean_env,
     ).stdout.strip()
     assert bare == "false"
 
