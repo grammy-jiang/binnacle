@@ -112,5 +112,7 @@ scheduled Security workflow audits the locked runtime and development
 dependencies daily. Dependabot version updates and repository-side governance
 are documented in `docs/github-governance.md`.
 
-There is currently no GitHub release/publishing pipeline. Production deployment
-uses the repository's gated local live-smoke flow described in DEVELOPMENT.md.
+There is currently no GitHub release/publishing pipeline. The existing
+distribution-readiness gate is documented in
+`docs/release-readiness.md`; production deployment uses the repository's gated
+local live-smoke flow described in DEVELOPMENT.md.

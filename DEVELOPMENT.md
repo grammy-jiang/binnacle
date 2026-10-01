@@ -230,6 +230,7 @@ Keep volatile operational facts in one place:
 | GitHub rulesets and dependency automation | docs/github-governance.md |
 | Package version and runtime revision provenance | docs/versioning.md |
 | Agent-specific operational instructions | CLAUDE.md |
+| Distribution/release-readiness boundary | docs/release-readiness.md |
 
 CLAUDE.md should link to these documents instead of copying test counts,
 coverage measurements, or other values that routinely change.
