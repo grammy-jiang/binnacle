@@ -132,10 +132,34 @@ def _preflight(env: Env, target: str) -> tuple[str, str, str]:
     if rc != 0:
         return "", "", f"unknown target {target}"
     rc_b, branch = _git(env, "rev-parse", "--abbrev-ref", "HEAD")
-    rc_s, dirty = _git(env, "status", "--porcelain")
+    rc_s, tracked = _git(
+        env,
+        "status",
+        "--porcelain",
+        "--untracked-files=no",
+    )
+    rc_u, untracked = _git(
+        env,
+        "ls-files",
+        "--others",
+        "--exclude-standard",
+        "-z",
+    )
+    unsafe_untracked = [
+        path
+        for path in untracked.split("\0")
+        if path and path != "docs" and not path.startswith("docs/")
+    ]
     _, prev = _git(env, "rev-parse", "HEAD")
     sha, prev = sha.strip(), prev.strip()
-    if rc_b or rc_s or branch.strip() != "master" or dirty.strip():
+    if (
+        rc_b
+        or rc_s
+        or rc_u
+        or branch.strip() != "master"
+        or tracked.strip()
+        or unsafe_untracked
+    ):
         return sha, prev, "the checkout is not a clean master"
     if sha != prev and _git(env, "merge-base", "--is-ancestor", prev, sha)[0] != 0:
         return sha, prev, f"{sha[:7]} is not a fast-forward of {prev[:7]}"

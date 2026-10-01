@@ -211,6 +211,11 @@ fast-forwards the production checkout, loads the changed server code, runs the
 live smoke, and only then pushes master and proof-of-concept. On a failed live
 smoke it rolls the checkout back and pushes nothing.
 
+The deployment preflight requires a clean tracked tree. Untracked files are
+allowed only under `docs/`, because documentation cannot alter the running
+package or deployment scripts. Any untracked file elsewhere, including under
+`src/` or `scripts/`, still blocks deployment.
+
 Do not use an ordinary direct push to master or proof-of-concept as a
 substitute for that flow. The active `master deployment gate` ruleset is
 designed to reinforce this contract: it requires the reviewed CI checks and
