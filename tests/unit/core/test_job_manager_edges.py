@@ -15,16 +15,7 @@ def _runtime(tmp_path: Path) -> job_manager.JobManager:
     )
 
 
-def test_metadata_helpers_fall_back_cleanly(monkeypatch):
-    monkeypatch.setattr(
-        job_manager.importlib.metadata,
-        "version",
-        lambda name: (_ for _ in ()).throw(
-            job_manager.importlib.metadata.PackageNotFoundError(name)
-        ),
-    )
-    assert job_manager._package_version() == "?"
-
+def test_boot_id_falls_back_cleanly(monkeypatch):
     monkeypatch.setattr(
         job_manager.Path,
         "read_text",

@@ -926,11 +926,10 @@ while docs/quality-gates.md owns the layered pre-commit, pre-push, CI and
 scheduled-security policy. Do not copy test counts or measured coverage values
 into this agent guide; they drift as the suite changes.
 
-Use uv run python scripts/run_test_suite.py for managed full-suite feedback, or
-run the changed module directly for the shortest honest feedback loop. The
-authoritative per-module coverage gate is uv run tox -e coverage-policy --
---seed 12345; ordinary Python tox environments remain uncovered compatibility
-checks.
+For repository validation commands, follow `DEVELOPMENT.md` and
+`docs/testing.md`; `docs/quality-gates.md` defines which layer owns each gate.
+Keep this agent guide focused on Binnacle-specific behavior rather than
+duplicating commands or thresholds that change with the repository.
 
 Tool specs are docs/agent-toolset-design.md plus docs/tools/NAME.md. Property,
 contract and authenticated HTTP coverage still live in their documented test

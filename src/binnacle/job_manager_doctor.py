@@ -21,6 +21,8 @@ def check_job_manager(
     socket_path: Path,
     run: Systemctl = systemctl,
     ping: Callable[[Path], dict] = job_client.ping,
+    *,
+    expected_revision: str | None = None,
 ) -> tuple[list[Check], str | None]:
     state = unit_state(unit, run)
     if state != "active":
@@ -60,5 +62,35 @@ def check_job_manager(
         )
     else:
         owner = str(response.get("owner_instance_id", "?"))[:12]
-        checks.append(ok("jobs-service", f"manager socket responds (owner={owner})"))
+        package = str(response.get("package_version", "?"))
+        revision = str(response.get("revision", "?"))
+        detail = (
+            "manager socket responds "
+            f"(owner={owner} package={package} revision={revision})"
+        )
+        unknown = {"", "?", "unknown"}
+        expected_known = expected_revision not in (None, *unknown, "installed")
+        revision_known = revision not in unknown
+        if package in unknown or not revision_known:
+            checks.append(
+                warn(
+                    "jobs-service",
+                    detail,
+                    "restart the jobs service at a quiet moment after upgrading Binnacle",
+                )
+            )
+        elif expected_known and revision != expected_revision:
+            checks.append(
+                warn(
+                    "jobs-service",
+                    detail,
+                    (
+                        f"running revision {revision} differs from checkout "
+                        f"{expected_revision}; restart binnacle-jobs.service only "
+                        "when no jobs are running"
+                    ),
+                )
+            )
+        else:
+            checks.append(ok("jobs-service", detail))
     return checks, unit

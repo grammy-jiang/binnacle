@@ -20,6 +20,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from scripts.smoke_diagnostics import JournalExpectation, doctor_detail, missing_from
+
 UNIT = "binnacle-mcp.service"
 NONCE_PREFIX = "e2e-smoke-"  # usage statistics treat "e2e-" as test traffic
 EXPECTED_TOOLS = (
@@ -104,7 +106,7 @@ class _Caller:
     def __init__(self, client: Any, report: Report) -> None:
         self.client = client
         self.report = report
-        self.logged: list[tuple[str, str]] = []
+        self.logged: list[JournalExpectation] = []
 
     async def __call__(
         self,
@@ -118,7 +120,7 @@ class _Caller:
         except Exception as exc:  # noqa: BLE001 - any failure is the finding
             self.report.add(name, "alert", f"call failed: {exc}"[:200])
             return None
-        self.logged.append((name, token))
+        self.logged.append((name, (token,)))
         content = getattr(result, "structured_content", None)
         content = content if isinstance(content, dict) else {}
         if getattr(result, "is_error", False):
@@ -226,7 +228,7 @@ async def _cursor_job(call: _Caller, nonce: str, fixture: Path, checkout: Path) 
         except Exception as exc:  # noqa: BLE001 - any failure is the finding
             call.report.add("job_status cursor", "alert", f"call failed: {exc}"[:200])
             return
-        call.logged.append(("job_status", cursor))
+        call.logged.append(("job_status", (job, cursor)))
         content = getattr(result, "structured_content", None)
         content = content if isinstance(content, dict) else {}
         if getattr(result, "is_error", False):
@@ -309,7 +311,7 @@ async def _job_tools(
 
 async def exercise(
     env: Env, report: Report, nonce: str, fixture: Path
-) -> list[tuple[str, str]]:
+) -> list[JournalExpectation]:
     """Call every tool once through a real MCP client."""
     async with env.client() as client:
         call = _Caller(client, report)
@@ -335,29 +337,13 @@ async def exercise(
         return call.logged
 
 
-def _missing_from(lines: list[str], logged: list[tuple[str, str]]) -> list[str]:
-    missing = []
-    for tool, token in logged:
-        call_id = None
-        for ln in lines:
-            if "event=tool_call" in ln and f"tool={tool} " in ln and token in ln:
-                m = re.search(r"\bcall=([0-9a-f]+)", ln)
-                call_id = m.group(1) if m else None
-                break
-        if not call_id or not any(
-            "event=tool_result" in ln and f"call={call_id} " in ln for ln in lines
-        ):
-            missing.append(tool)
-    return missing
-
-
 def check_journal(
-    env: Env, report: Report, since: float, logged: list[tuple[str, str]]
+    env: Env, report: Report, since: float, logged: list[JournalExpectation]
 ) -> None:
     deadline = env.now() + 10  # the journal can lag the call by a moment
     while True:
         lines = env.journal(since, None)
-        missing = _missing_from(lines, logged)
+        missing = missing_from(lines, logged)
         if not missing or env.now() >= deadline:
             break
         env.sleep(1)
@@ -460,10 +446,11 @@ def smoke(env: Env, full: bool = False, rebaseline: bool = False) -> Report:
     report = Report()
     since = env.now()
     rc, out = env.run([str(env.checkout / ".venv/bin/binnacle"), "doctor"], 180)
-    report.add("doctor", "ok" if rc == 0 else "alert", last_line(out))
+    detail = doctor_detail(out, rc != 0)
+    report.add("doctor", "ok" if rc == 0 else "alert", detail)
     nonce = f"{NONCE_PREFIX}{time.strftime('%Y%m%d%H%M%S')}-{os.getpid()}"
     fixture = env.tmp_root / f"binnacle-smoke-{nonce}"
-    logged: list[tuple[str, str]] = []
+    logged: list[JournalExpectation] = []
     try:
         fixture.mkdir(parents=True)
         (fixture / "a.txt").write_text(f"hello {nonce}\n", encoding="utf-8")

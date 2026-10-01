@@ -153,7 +153,7 @@ jobs:
       - name: Sync test dependencies
         run: uv sync --locked --no-default-groups --group test
 
-      - name: Build and inspect wheel artifact
+      - name: Build and smoke distribution artifacts
         run: >-
           uv run --no-sync pytest -q tests/integration/test_wheel_artifact.py
           --randomly-seed=12345

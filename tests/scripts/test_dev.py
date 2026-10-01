@@ -65,14 +65,20 @@ locked agent owns this worktree
 worktree /repo/detached
 HEAD cccccccccccccccccccccccccccccccccccccccc
 detached
+
+worktree /repo/bare-main
+bare
 """
     )
     assert [(item.path, item.branch) for item in parsed] == [
         (Path("/repo"), "master"),
         (Path("/repo/agent"), "feature/a"),
         (Path("/repo/detached"), None),
+        (Path("/repo/bare-main"), None),
     ]
     assert parsed[1].locked == "agent owns this worktree"
+    assert parsed[3].bare is True
+    assert parsed[3].head is None
 
 
 def test_worktree_health_reports_independent_drift_signals() -> None:
@@ -101,6 +107,56 @@ def test_worktree_health_reports_independent_drift_signals() -> None:
         lock="current",
         locked=None,
     ) == ("ok",)
+    assert worktrees.worktree_health(
+        branch=None,
+        merged_to_master=None,
+        dirty_changes=None,
+        upstream="-",
+        venv=True,
+        lock="current",
+        locked=None,
+        bare=True,
+    ) == ("bare", "state-unknown")
+
+
+def test_primary_worktree_integrity_detects_bare_main(tmp_path: Path) -> None:
+    primary = tmp_path / "main"
+
+    def run(argv: Any, cwd: Path) -> dev.CommandResult:
+        assert tuple(argv) == (
+            "/usr/bin/git",
+            "worktree",
+            "list",
+            "--porcelain",
+        )
+        return dev.CommandResult(0, f"worktree {primary}\nbare\n")
+
+    ok, detail = worktrees.primary_worktree_integrity(
+        tmp_path,
+        git="/usr/bin/git",
+        run=run,
+    )
+    assert not ok
+    assert "registered bare" in detail
+    assert "config core.bare false" in detail
+
+
+def test_primary_worktree_integrity_accepts_normal_main(tmp_path: Path) -> None:
+    primary = tmp_path / "main"
+
+    def run(argv: Any, cwd: Path) -> dev.CommandResult:
+        return dev.CommandResult(
+            0,
+            (f"worktree {primary}\nHEAD {'a' * 40}\nbranch refs/heads/master\n"),
+        )
+
+    ok, detail = worktrees.primary_worktree_integrity(
+        tmp_path,
+        git="/usr/bin/git",
+        run=run,
+    )
+    assert ok
+    assert detail == str(primary)
 
 
 def _doctor_tree(tmp_path: Path) -> tuple[Path, Path]:
@@ -150,6 +206,16 @@ def test_doctor_catches_missing_configured_pre_push_hook(
             "--porcelain",
         ):
             return dev.CommandResult(0, "")
+        if command == (
+            "/usr/bin/git",
+            "worktree",
+            "list",
+            "--porcelain",
+        ):
+            return dev.CommandResult(
+                0,
+                f"worktree {tmp_path}\nHEAD {'a' * 40}\nbranch refs/heads/master\n",
+            )
         if command == (
             "/usr/bin/uv",
             "lock",
@@ -216,6 +282,16 @@ def test_doctor_treats_a_dirty_checkout_as_warning_not_failure(
             "--porcelain",
         ):
             return dev.CommandResult(0, "?? local-note\n")
+        if command == (
+            "/usr/bin/git",
+            "worktree",
+            "list",
+            "--porcelain",
+        ):
+            return dev.CommandResult(
+                0,
+                f"worktree {tmp_path}\nHEAD {'a' * 40}\nbranch refs/heads/master\n",
+            )
         if command == (
             "/usr/bin/uv",
             "lock",

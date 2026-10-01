@@ -16,8 +16,11 @@ network-dependent workflow. The design separates four concerns:
 
 ## Implemented changes
 
-- Updated the development Pi to uv 0.12.7 and made that version a project
-  requirement so local/pre-commit/CI resolution behaviour agrees.
+- Initially aligned local/pre-commit/CI resolution on uv 0.12.7. A later
+  development-infrastructure follow-up on the same date moved the exact
+  developer/CI toolchain pin to the direct `uv` dev dependency plus `uv.lock`
+  (currently 0.12.21), while `[tool.uv].required-version` became a reviewed
+  0.12.x compatibility range so Dependabot's bundled uv can operate.
 - Updated the lock only for the known vulnerable `urllib3` and `virtualenv`
   paths; the resulting lock audits clean.
 - Enabled pytest strict mode.
@@ -64,7 +67,8 @@ ignored paths to them.
 ## Measured local baseline
 
 Measurements are from the Pi 5 development host with four pytest workers and
-seed 12345:
+seed 12345. This table is a historical snapshot from the hardening round, not
+a source of truth for current test counts, timings, or dependency versions:
 
 | Gate | Result | Wall time |
 | --- | --- | ---: |
@@ -93,23 +97,22 @@ and pre-commit configuration hash.
   behaviour. Do not claim macOS compatibility merely because the static gates
   are portable. The forthcoming architecture refactor must establish explicit
   platform-neutral seams before a macOS CI test population is promoted.
-- `master` is not branch-protected today. The production deploy flow already
-  waits for CI and live smoke before pushing master/proof-of-concept. Branch
-  governance is a separate deployment-workflow decision.
+- `master` is now protected by the version-controlled `master deployment gate`
+  ruleset. It requires the repository CI checks, blocks deletion and
+  non-fast-forward updates, and deliberately preserves the CI-first direct
+  deployment model. See `docs/github-governance.md` for the current policy.
 
 ## Developer workflow
 
-Install the repository hooks once:
+`DEVELOPMENT.md` is the canonical current workflow. Bootstrap a fresh clone or
+worktree with:
 
 ```bash
-pre-commit install
+uv run scripts/dev.py bootstrap
 ```
 
-Normal work gets static checks at commit and the fast semantic gate at push.
-For an explicit release/baseline gate:
-
-```bash
-uv run pre-commit run --all-files
-uv run pre-commit run --hook-stage pre-push --all-files
-uv run tox -e coverage-policy -- --seed 12345
-```
+That command synchronizes the locked development environment, installs every
+configured Git-hook type, and runs the read-only development doctor. Current
+explicit gate commands and their ownership live in `DEVELOPMENT.md`,
+`docs/testing.md`, and `docs/quality-gates.md`; do not copy them back into this
+historical hardening record.

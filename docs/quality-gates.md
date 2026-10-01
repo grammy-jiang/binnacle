@@ -141,7 +141,8 @@ explicit developer action.
 
 Pre-push runs only the fixed-seed unit+contract two-lane suite. GitHub CI owns
 the full Python compatibility matrix, per-module coverage, full-history secret
-scan and the hash-constrained wheel artifact build. Vulnerability databases are
+scan and the hash-constrained distribution build plus clean-install smoke.
+Vulnerability databases are
 external mutable state, so `pip-audit` is deliberately not a commit gate. The
 daily `Security` workflow exports exact locked runtime and development
 dependency sets and audits them separately.
@@ -167,7 +168,7 @@ Beyond example-based unit tests, Binnacle uses or plans to use:
 - structured fuzz tests for MCP arguments, logs, config and parsers;
 - replay tests derived from real production incidents;
 - mutation testing for core modules as an on-demand semantic-strength check;
-- clean-wheel install and command smoke tests;
+- sdist/wheel reproducibility, clean-wheel install and safe command smoke tests;
 - performance/resource regression checks for bounded operations;
 - opt-in read-only Raspberry Pi live smoke tests.
 

@@ -24,6 +24,7 @@ class Host:
         self.opts: dict[str, Any] = {
             "branch": "master",
             "dirty": "",
+            "untracked": "",
             "ff": 0,
             "diff": "src/binnacle/tools/job_status.py\n",
             "ci": [[{"name": "CI", "status": "completed", "conclusion": "success"}]],
@@ -78,6 +79,8 @@ class Host:
             return 0, self.head + "\n"
         if op == "status":
             return 0, self.opts["dirty"]
+        if op == "ls-files":
+            return 0, self.opts["untracked"]
         if op == "merge-base":
             return self.opts["ff"], ""
         if op == "diff":
@@ -169,6 +172,39 @@ def test_a_change_outside_the_server_code_needs_no_reload(
     level, text = deploy(host, tmp_path)
     assert level == "ok" and "no server code change" in text and pushed(host)
     assert any(" diff --name-only --no-renames " in c for c in host.calls)
+
+
+def test_untracked_docs_do_not_block_deploy(
+    tmp_path: Path,
+    smokes: list[str],
+) -> None:
+    host = Host(
+        untracked=("docs/design-note.md\0docs/research/evidence.json\0"),
+    )
+    level, text = deploy(host, tmp_path)
+    assert level == "ok" and pushed(host)
+    assert "deployed" in text
+
+
+@pytest.mark.parametrize(
+    "untracked",
+    [
+        "notes.txt\0",
+        "src/binnacle/local_probe.py\0",
+        "scripts/local_probe.py\0",
+        "docs/safe.md\0src/binnacle/unsafe.py\0",
+    ],
+)
+def test_untracked_non_docs_still_block_deploy(
+    tmp_path: Path,
+    smokes: list[str],
+    untracked: str,
+) -> None:
+    host = Host(untracked=untracked)
+    level, text = deploy(host, tmp_path)
+    assert level == "alert"
+    assert "not a clean master" in text
+    assert not pushed(host)
 
 
 @pytest.mark.parametrize(
