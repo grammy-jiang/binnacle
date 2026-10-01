@@ -28,7 +28,7 @@ from scripts.dev_common import CommandResult, Runner, Which
 from scripts.dev_worktree_lifecycle import cleanup_worktree, create_worktree
 from scripts.dev_worktrees import (
     WorktreeStatus,
-    parse_worktree_porcelain,
+    primary_worktree_integrity,
     worktree_inventory,
 )
 
@@ -114,37 +114,6 @@ def _hook_path(git: str, hook: str, root: Path, run: Runner) -> Path | None:
     return path if path.is_absolute() else root / path
 
 
-def _primary_worktree_check(
-    git: str,
-    root: Path,
-    run: Runner,
-) -> Check:
-    """Detect shared Git config that accidentally disables the main checkout."""
-
-    listed = run((git, "worktree", "list", "--porcelain"), root)
-    if listed.returncode:
-        return Check(
-            "primary-worktree",
-            "fail",
-            listed.output.strip() or "git worktree list failed",
-        )
-
-    items = parse_worktree_porcelain(listed.output)
-    if not items:
-        return Check("primary-worktree", "fail", "no registered Git worktrees")
-
-    primary = items[0]
-    if primary.bare:
-        git_dir = primary.path / ".git"
-        return Check(
-            "primary-worktree",
-            "fail",
-            f"{primary.path} is registered bare; repair with: "
-            f"git --git-dir={git_dir} config core.bare false",
-        )
-    return Check("primary-worktree", "ok", str(primary.path))
-
-
 def doctor(
     root: Path = ROOT,
     *,
@@ -192,7 +161,18 @@ def doctor(
             else:
                 checks.append(Check("working-tree", "ok", "clean"))
 
-        checks.append(_primary_worktree_check(git, root, run))
+        primary_ok, primary_detail = primary_worktree_integrity(
+            root,
+            git=git,
+            run=run,
+        )
+        checks.append(
+            Check(
+                "primary-worktree",
+                "ok" if primary_ok else "fail",
+                primary_detail,
+            )
+        )
 
     uv = which("uv")
     required = locked_uv_version(root)

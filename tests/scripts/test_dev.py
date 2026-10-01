@@ -119,7 +119,7 @@ def test_worktree_health_reports_independent_drift_signals() -> None:
     ) == ("bare", "state-unknown")
 
 
-def test_primary_worktree_check_detects_bare_main(tmp_path: Path) -> None:
+def test_primary_worktree_integrity_detects_bare_main(tmp_path: Path) -> None:
     primary = tmp_path / "main"
 
     def run(argv: Any, cwd: Path) -> dev.CommandResult:
@@ -129,16 +129,34 @@ def test_primary_worktree_check_detects_bare_main(tmp_path: Path) -> None:
             "list",
             "--porcelain",
         )
+        return dev.CommandResult(0, f"worktree {primary}\nbare\n")
+
+    ok, detail = worktrees.primary_worktree_integrity(
+        tmp_path,
+        git="/usr/bin/git",
+        run=run,
+    )
+    assert not ok
+    assert "registered bare" in detail
+    assert "config core.bare false" in detail
+
+
+def test_primary_worktree_integrity_accepts_normal_main(tmp_path: Path) -> None:
+    primary = tmp_path / "main"
+
+    def run(argv: Any, cwd: Path) -> dev.CommandResult:
         return dev.CommandResult(
             0,
-            f"worktree {primary}\nbare\n",
+            (f"worktree {primary}\nHEAD {'a' * 40}\nbranch refs/heads/master\n"),
         )
 
-    check = dev._primary_worktree_check("/usr/bin/git", tmp_path, run)
-    assert check.name == "primary-worktree"
-    assert check.status == "fail"
-    assert "registered bare" in check.detail
-    assert "config core.bare false" in check.detail
+    ok, detail = worktrees.primary_worktree_integrity(
+        tmp_path,
+        git="/usr/bin/git",
+        run=run,
+    )
+    assert ok
+    assert detail == str(primary)
 
 
 def _doctor_tree(tmp_path: Path) -> tuple[Path, Path]:

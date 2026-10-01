@@ -78,6 +78,33 @@ def parse_worktree_porcelain(text: str) -> list[WorktreeBase]:
     return worktrees
 
 
+def primary_worktree_integrity(
+    root: Path,
+    *,
+    git: str,
+    run: Runner,
+) -> tuple[bool, str]:
+    """Check that Git still registers the repository's primary checkout normally."""
+
+    listed = run((git, "worktree", "list", "--porcelain"), root)
+    if listed.returncode:
+        return False, listed.output.strip() or "git worktree list failed"
+
+    items = parse_worktree_porcelain(listed.output)
+    if not items:
+        return False, "no registered Git worktrees"
+
+    primary = items[0]
+    if primary.bare:
+        git_dir = primary.path / ".git"
+        detail = (
+            f"{primary.path} is registered bare; repair after verification with: "
+            f"git --git-dir={git_dir} config core.bare false"
+        )
+        return False, detail
+    return True, str(primary.path)
+
+
 def worktree_health(
     *,
     branch: str | None,
