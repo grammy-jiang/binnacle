@@ -37,6 +37,11 @@ The provenance appears in:
 - the private job-manager `ping` response;
 - `binnacle doctor`, including the live jobs-service response.
 
+When the jobs service is running from a different checkout revision than the
+current Binnacle checkout, doctor reports a warning rather than restarting it.
+The durable job owner must only be restarted at a quiet moment with no running
+jobs.
+
 This lets an operator distinguish two deployments that both have package
 version `1.0.0` but run different commits.
 

@@ -36,6 +36,41 @@ def test_job_manager_active_socket_ok(tmp_path):
     assert "revision=abcdef123456" in checks[-1].detail
 
 
+def test_job_manager_revision_mismatch_warns(tmp_path):
+    checks, active = check_job_manager(
+        "jobs.service",
+        tmp_path / "jobs.sock",
+        run=fake_systemctl("active"),
+        ping=lambda path: {
+            "owner_instance_id": "abcdef1234567890",
+            "package_version": "1.0.0",
+            "revision": "oldrev123456",
+        },
+        expected_revision="newrev123456",
+    )
+    assert active == "jobs.service"
+    assert [c.status for c in checks] == ["ok", "ok", "warn"]
+    assert "revision=oldrev123456" in checks[-1].detail
+    assert "differs from checkout newrev123456" in checks[-1].hint
+    assert "only when no jobs are running" in checks[-1].hint
+
+
+def test_job_manager_matching_revision_is_ok(tmp_path):
+    checks, active = check_job_manager(
+        "jobs.service",
+        tmp_path / "jobs.sock",
+        run=fake_systemctl("active"),
+        ping=lambda path: {
+            "owner_instance_id": "abcdef1234567890",
+            "package_version": "1.0.0",
+            "revision": "same12345678",
+        },
+        expected_revision="same12345678",
+    )
+    assert active == "jobs.service"
+    assert [c.status for c in checks] == ["ok", "ok", "ok"]
+
+
 def test_job_manager_missing_runtime_provenance_warns(tmp_path):
     checks, active = check_job_manager(
         "jobs.service",
