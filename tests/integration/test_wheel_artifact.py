@@ -47,6 +47,7 @@ def test_wheel_contains_runtime_package_typing_marker_and_entry_points(tmp_path)
         names = set(archive.namelist())
         assert "binnacle/server.py" in names
         assert "binnacle/cli.py" in names
+        assert "binnacle/provenance.py" in names
         assert "binnacle/py.typed" in names
         assert "binnacle/tools/read_file.py" in names
         assert "binnacle/tools/run_command.py" in names

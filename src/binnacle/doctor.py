@@ -33,6 +33,7 @@ from binnacle.doctor_common import (
     warn,
 )
 from binnacle.doctor_connectivity import _tail_lines, check_endpoint, check_uplink
+from binnacle.doctor_provenance import check_provenance
 from binnacle.job_manager_doctor import check_job_manager
 
 __all__ = ["_job_state_safe", "_tail_lines", "server_busy_reasons"]
@@ -355,6 +356,7 @@ def run_all(dep: Deployment, since: str = "-1 hour", probe: bool = True) -> list
     """
     s = get_settings()
     checks: list[Check] = []
+    checks += check_provenance()
     checks += check_config()
     checks += check_token(dep.token_file)
     unit_checks, active = check_units(dep.server_unit)

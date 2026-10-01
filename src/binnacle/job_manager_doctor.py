@@ -60,5 +60,21 @@ def check_job_manager(
         )
     else:
         owner = str(response.get("owner_instance_id", "?"))[:12]
-        checks.append(ok("jobs-service", f"manager socket responds (owner={owner})"))
+        package = str(response.get("package_version", "?"))
+        revision = str(response.get("revision", "?"))
+        detail = (
+            "manager socket responds "
+            f"(owner={owner} package={package} revision={revision})"
+        )
+        unknown = {"", "?", "unknown"}
+        if package in unknown or revision in unknown:
+            checks.append(
+                warn(
+                    "jobs-service",
+                    detail,
+                    "restart the jobs service at a quiet moment after upgrading Binnacle",
+                )
+            )
+        else:
+            checks.append(ok("jobs-service", detail))
     return checks, unit

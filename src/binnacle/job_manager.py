@@ -6,7 +6,6 @@ systemd user service and owns the ``Popen`` wait/reaper lifecycle for commands.
 
 from __future__ import annotations
 
-import importlib.metadata
 import json
 import logging
 import os
@@ -22,6 +21,7 @@ from binnacle import job_cgroup, job_owner, jobs
 from binnacle.callctx import current_call
 from binnacle.config import get_settings
 from binnacle.job_client import PROTOCOL_VERSION
+from binnacle.provenance import runtime_provenance
 
 logging.basicConfig(
     level=logging.INFO,
@@ -43,13 +43,6 @@ def _notify_systemd_ready() -> None:
             notifier.sendall(b"READY=1\nSTATUS=Binnacle job manager ready")
     except OSError:
         log.exception("event=job_manager_notify_error")
-
-
-def _package_version() -> str:
-    try:
-        return importlib.metadata.version("binnacle-mcp")
-    except importlib.metadata.PackageNotFoundError:
-        return "?"
 
 
 def _boot_id() -> str:
@@ -115,6 +108,7 @@ class JobManager:
         self.socket_path = socket_path
         self.owner_instance_id = owner_instance_id or uuid.uuid4().hex
         self.boot_id = boot_id or _boot_id()
+        self.provenance = runtime_provenance()
         self.server: _ThreadingUnixServer | None = None
 
     def dispatch(self, request: dict[str, Any]) -> dict[str, Any]:
@@ -127,7 +121,8 @@ class JobManager:
                 "version": PROTOCOL_VERSION,
                 "owner_instance_id": self.owner_instance_id,
                 "boot_id": self.boot_id,
-                "package_version": _package_version(),
+                "package_version": self.provenance.package_version,
+                "revision": self.provenance.revision,
                 "pid": os.getpid(),
             }
         if op == "start":
@@ -242,13 +237,14 @@ class JobManager:
         _notify_systemd_ready()
         log.info(
             "event=job_manager_start pid=%d owner=%s boot=%s recovered=%d "
-            "protocol=%d package_version=%s socket=%s",
+            "protocol=%d package_version=%s revision=%s socket=%s",
             os.getpid(),
             self.owner_instance_id[:12],
             self.boot_id,
             recovered,
             PROTOCOL_VERSION,
-            _package_version(),
+            self.provenance.package_version,
+            self.provenance.revision,
             self.socket_path,
         )
         try:

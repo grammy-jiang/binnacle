@@ -103,7 +103,7 @@ scalar facts only), the values of `X-Openai-Session` (hashed) and
 | Background jobs and outcomes | `job_start`/`job_exit` by `job_id`, exit code only | `run_command_dispatch` records owner/wait/handoff decision; `job_start` and `job_exit` retain call/hash/owner correlation; `job_exit` records runtime, bytes and reason |
 | Automatic background policy | None | `run_command_auto_background` records config/behavior/rule identity plus match span; `run_command_dispatch` records requested/bounded/effective wait and final `handoff_reason`; optional private evidence preserves the full matched command outside the journal |
 | Client identity | `client=` on rich lines | `client=` on every plain line too; `oai_session=` (12-hex SHA-256 prefix of `X-Openai-Session`) groups calls of one ChatGPT session |
-| Restarts / effective limits | uvicorn's `Application startup complete` | `config pid=... version=...` plus startup-only `tool_config` records for read/list/search/run/jobs/edit behavior-changing limits; reviews can detect config variants in a window instead of assuming today's defaults |
+| Restarts / effective limits | uvicorn's `Application startup complete` | `config pid=... version=... revision=...` plus startup-only `tool_config` records for read/list/search/run/jobs/edit behavior-changing limits; reviews can detect config variants in a window instead of assuming today's defaults |
 
 Measured on the live headers (loopback capture, 2026-09-13 22:20): the tunnel
 forwards `X-Request-Id: wfr_<turn>/<call>`, `Mcp-Method`, `Mcp-Name`,

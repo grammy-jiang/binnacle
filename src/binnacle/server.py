@@ -5,7 +5,6 @@ helpers: paths.py (root guard), textio.py (decode/size). The design doc
 is docs/agent-toolset-design.md.
 """
 
-import importlib.metadata
 import logging
 import os
 
@@ -19,6 +18,7 @@ from binnacle.logging_middleware import (
     RequestLoggingMiddleware,
     ToolLoggingMiddleware,
 )
+from binnacle.provenance import runtime_provenance
 from binnacle.run_command_telemetry import (
     AUTO_BACKGROUND_SEMANTICS_VERSION,
     auto_background_behavior_hash,
@@ -41,13 +41,6 @@ logger = logging.getLogger("binnacle.server")
 TOKEN_FILE = get_settings().auth.token_file
 
 
-def _version() -> str:
-    try:
-        return importlib.metadata.version("binnacle-mcp")
-    except importlib.metadata.PackageNotFoundError:
-        return "?"
-
-
 def _log_tool_config(tool: str, **fields: object) -> None:
     rendered = " ".join(f"{key}={value}" for key, value in fields.items())
     logger.info("event=tool_config tool=%s %s", tool, rendered)
@@ -56,13 +49,15 @@ def _log_tool_config(tool: str, **fields: object) -> None:
 def log_effective_config() -> None:
     """One journal line per (re)start naming the settings that change behavior."""
     s = get_settings()
+    provenance = runtime_provenance()
     logger.info(
-        "event=config pid=%d version=%s roots=%s jobs_dir=%s keep_newest=%d "
+        "event=config pid=%d version=%s revision=%s roots=%s jobs_dir=%s keep_newest=%d "
         "client_tools=%s auto_background=%s rg_bin=%s "
         "tokenizer_enabled=%s tokenizer_encoding=%s "
         "tokenizer_clients=%s",
         os.getpid(),
-        _version(),
+        provenance.package_version,
+        provenance.revision,
         [str(r) for r in s.roots.allowed],
         s.jobs.dir,
         s.jobs.keep_newest,

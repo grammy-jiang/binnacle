@@ -212,9 +212,10 @@ live smoke, and only then pushes master and proof-of-concept. On a failed live
 smoke it rolls the checkout back and pushes nothing.
 
 Do not use an ordinary direct push to master or proof-of-concept as a
-substitute for that flow. Repository-side GitHub rules are intentionally a
-separate infrastructure phase because they must first be proven compatible
-with this deployment contract.
+substitute for that flow. The active `master deployment gate` ruleset is
+designed to reinforce this contract: it requires the reviewed CI checks and
+blocks deletion/non-fast-forward updates without forcing a PR-only deployment.
+See `docs/github-governance.md`.
 
 ## Sources of truth
 
@@ -227,8 +228,8 @@ Keep volatile operational facts in one place:
 | Test layout, semantics and commands | docs/testing.md |
 | Pre-commit/pre-push/CI/security gate policy | docs/quality-gates.md |
 | GitHub rulesets and dependency automation | docs/github-governance.md |
+| Package version and runtime revision provenance | docs/versioning.md |
 | Agent-specific operational instructions | CLAUDE.md |
-| GitHub ruleset and Dependabot governance | docs/github-governance.md |
 
 CLAUDE.md should link to these documents instead of copying test counts,
 coverage measurements, or other values that routinely change.

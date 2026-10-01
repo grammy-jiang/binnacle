@@ -34,8 +34,8 @@ uv run binnacle setup --dev "$PWD"
 uv run binnacle mode prod
 uv run binnacle mode dev
 
-# Verify configuration, auth, both managed units/processes, the private jobs
-# socket, durable job state, and connectivity.
+# Verify package/revision provenance, configuration, auth, both managed
+# units/processes, the private jobs socket, durable job state, and connectivity.
 uv run binnacle doctor
 
 # ChatGPT only: the OpenAI tunnel unit belongs to its own companion, never to

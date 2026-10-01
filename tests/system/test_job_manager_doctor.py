@@ -23,11 +23,33 @@ def test_job_manager_active_socket_ok(tmp_path):
         "jobs.service",
         tmp_path / "jobs.sock",
         run=fake_systemctl("active"),
-        ping=lambda path: {"owner_instance_id": "abcdef1234567890"},
+        ping=lambda path: {
+            "owner_instance_id": "abcdef1234567890",
+            "package_version": "1.0.0",
+            "revision": "abcdef123456",
+        },
     )
     assert active == "jobs.service"
     assert [c.status for c in checks] == ["ok", "ok", "ok"]
-    assert "abcdef123456" in checks[-1].detail
+    assert "owner=abcdef123456" in checks[-1].detail
+    assert "package=1.0.0" in checks[-1].detail
+    assert "revision=abcdef123456" in checks[-1].detail
+
+
+def test_job_manager_missing_runtime_provenance_warns(tmp_path):
+    checks, active = check_job_manager(
+        "jobs.service",
+        tmp_path / "jobs.sock",
+        run=fake_systemctl("active"),
+        ping=lambda path: {
+            "owner_instance_id": "abcdef1234567890",
+            "package_version": "1.0.0",
+        },
+    )
+    assert active == "jobs.service"
+    assert [c.status for c in checks] == ["ok", "ok", "warn"]
+    assert "revision=?" in checks[-1].detail
+    assert "quiet moment" in checks[-1].hint
 
 
 def test_job_manager_inactive_fails(tmp_path):
