@@ -14,6 +14,7 @@ import pytest
 
 from scripts import deploy_smoke
 from scripts.smoke_checks import CURSOR_FIXTURE_LINES, Env, measure, smoke
+from scripts.smoke_diagnostics import doctor_detail, missing_from
 
 CGROUP = "/user.slice/app.slice/binnacle-mcp.service"
 ALL_TOOLS = [
@@ -152,7 +153,8 @@ def make_env(
             return 0, f"{start:.6f}\n"
         for key in ("binnacle-tunnel", "binnacle-watchdog", "binnacle"):
             if argv[0].endswith(key):
-                return codes.get(key, 0), f"{key}: 30 ok, 0 warn, 0 fail\n"
+                output = kw.get("doctor_output") if key == "binnacle" else None
+                return codes.get(key, 0), output or f"{key}: 30 ok, 0 warn, 0 fail\n"
         return 1, "unexpected"
 
     def read(path: Path) -> str:
@@ -288,6 +290,27 @@ def test_a_wrong_result_is_an_alert(tmp_path: Path) -> None:
     assert levels(report)["job_status"] == "alert"
 
 
+def test_journal_expectation_uses_all_tokens_for_cursor_calls() -> None:
+    lines = [
+        (
+            "x INFO: event=tool_call call=aaaa tool=job_status "
+            'args={"cursor":"start","job_id":"outer"}'
+        ),
+        (
+            "x INFO: event=tool_call call=bbbb tool=job_status "
+            'args={"cursor":"start","job_id":"smoke-job"}'
+        ),
+        "x INFO: event=tool_result call=bbbb tool=job_status is_error=False",
+    ]
+    assert (
+        missing_from(
+            lines,
+            [("job_status", ("smoke-job", "start"))],
+        )
+        == []
+    )
+
+
 def test_a_call_missing_from_the_journal_is_an_alert(tmp_path: Path) -> None:
     client = FakeClient()
     env = make_env(tmp_path, client, journal=journal_for(client, drop="read_file"))
@@ -307,8 +330,27 @@ def test_a_traceback_in_the_journal_is_an_alert(tmp_path: Path) -> None:
 
 
 def test_a_failing_doctor_is_an_alert(tmp_path: Path) -> None:
-    report = smoke(make_env(tmp_path, FakeClient(), rc={"binnacle": 1}))
-    assert levels(report)["doctor"] == "alert"
+    env = make_env(
+        tmp_path,
+        FakeClient(),
+        rc={"binnacle": 1},
+        doctor_output=(
+            "binnacle doctor\n"
+            "  [FAIL] endpoint: localhost refused authenticated probe\n"
+            "28 ok, 2 warn, 1 fail\n"
+        ),
+    )
+    report = smoke(env)
+    doctor = next(check for check in report.checks if check.name == "doctor")
+    assert doctor.level == "alert"
+    assert "[FAIL] endpoint" in doctor.detail
+    assert "1 fail" in doctor.detail
+
+
+def test_doctor_detail_keeps_success_summary() -> None:
+    assert doctor_detail("binnacle doctor\n30 ok, 0 warn, 0 fail\n", False) == (
+        "30 ok, 0 warn, 0 fail"
+    )
 
 
 def test_full_adds_the_tunnel_and_watchdog_doctors(tmp_path: Path) -> None:

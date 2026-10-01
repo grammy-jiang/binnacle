@@ -60,6 +60,7 @@ The doctor verifies:
 
 - the checkout is the Git top level;
 - the working-tree state;
+- the primary Git checkout is still a normal worktree rather than `bare`;
 - the exact uv version;
 - uv.lock without changing it or accessing the network;
 - ripgrep;
@@ -67,7 +68,11 @@ The doctor verifies:
 - every Git hook type declared by the pre-commit configuration.
 
 A dirty working tree is a warning, not a failure. Missing tools, lock drift,
-the wrong interpreter, or missing/non-executable configured hooks are failures.
+the wrong interpreter, missing/non-executable configured hooks, or a primary
+checkout that Git reports as `bare` are failures. For the bare-checkout case,
+doctor prints the exact `git --git-dir=... config core.bare false` repair
+command; run it only after confirming that the path is the repository's intended
+primary checkout.
 
 This doctor is different from binnacle doctor. The development doctor validates
 the repository environment. binnacle doctor validates the configured/running
@@ -93,6 +98,9 @@ uv run scripts/dev.py worktrees --json
 
 The inventory reports independent flags rather than making cleanup decisions:
 
+- bare: Git is treating a registered checkout as a bare repository, so normal
+  worktree commands are unavailable;
+- state-unknown: the worktree status could not be read;
 - dirty: tracked or untracked files are present;
 - upstream-gone: the branch has upstream configuration but the upstream ref no
   longer resolves;
@@ -104,21 +112,44 @@ The inventory reports independent flags rather than making cleanup decisions:
 The merged flag describes committed HEAD history only. Dirty work is reported
 separately and must never be discarded merely because HEAD is merged.
 
-Create a normal parallel worktree with Git, then bootstrap it:
+Create and bootstrap a parallel worktree in one command:
 
 ~~~bash
-git worktree add -b feature/example ../binnacle-example master
-cd ../binnacle-example
-uv run scripts/dev.py bootstrap
+uv run scripts/dev.py worktree-create ../binnacle-example \
+  --branch feature/example --base master
 ~~~
 
-Do not copy .venv between worktrees. uv will create or synchronize the correct
+Creation is transactional. The helper validates the branch/base and target
+path, refuses nested worktrees and branch names that already exist locally or
+on `origin`, creates the worktree, then runs the canonical bootstrap against
+that checkout. If bootstrap fails while the new branch is still at the original
+base and the worktree has no source changes, the helper removes the
+half-created worktree and branch. If anything changed after creation, it
+preserves the worktree rather than discarding possible work.
+
+Do not copy `.venv` between worktrees. uv creates or synchronizes the correct
 environment for each checkout.
 
-Worktree deletion remains an explicit manual operation for now. Do not remove a
-dirty, unmerged, or locked worktree. A later infrastructure phase may add a
-guarded cleanup command, but the current command is deliberately diagnostic
-only.
+Cleanup is guarded and defaults to a dry-run plan:
+
+~~~bash
+uv run scripts/dev.py worktree-cleanup ../binnacle-example --delete-branch
+~~~
+
+The command refuses the current worktree, bare or locked worktrees,
+dirty/unknown working-tree state, any HEAD not already merged into `master`,
+and any worktree currently attached to protected local branches such as
+`master` or `proof-of-concept`.
+
+Only after the plan is safe should cleanup be applied explicitly:
+
+~~~bash
+uv run scripts/dev.py worktree-cleanup ../binnacle-example \
+  --delete-branch --apply
+~~~
+
+Branch deletion uses ordinary `git branch -d`, never a forced delete. Remote
+branches are never deleted by this helper.
 
 ## Normal development loop
 
@@ -180,10 +211,16 @@ fast-forwards the production checkout, loads the changed server code, runs the
 live smoke, and only then pushes master and proof-of-concept. On a failed live
 smoke it rolls the checkout back and pushes nothing.
 
+The deployment preflight requires a clean tracked tree. Untracked files are
+allowed only under `docs/`, because documentation cannot alter the running
+package or deployment scripts. Any untracked file elsewhere, including under
+`src/` or `scripts/`, still blocks deployment.
+
 Do not use an ordinary direct push to master or proof-of-concept as a
-substitute for that flow. Repository-side GitHub rules are intentionally a
-separate infrastructure phase because they must first be proven compatible
-with this deployment contract.
+substitute for that flow. The active `master deployment gate` ruleset is
+designed to reinforce this contract: it requires the reviewed CI checks and
+blocks deletion/non-fast-forward updates without forcing a PR-only deployment.
+See `docs/github-governance.md`.
 
 ## Sources of truth
 
@@ -196,8 +233,9 @@ Keep volatile operational facts in one place:
 | Test layout, semantics and commands | docs/testing.md |
 | Pre-commit/pre-push/CI/security gate policy | docs/quality-gates.md |
 | GitHub rulesets and dependency automation | docs/github-governance.md |
+| Package version and runtime revision provenance | docs/versioning.md |
 | Agent-specific operational instructions | CLAUDE.md |
-| GitHub ruleset and Dependabot governance | docs/github-governance.md |
+| Distribution/release-readiness boundary | docs/release-readiness.md |
 
 CLAUDE.md should link to these documents instead of copying test counts,
 coverage measurements, or other values that routinely change.

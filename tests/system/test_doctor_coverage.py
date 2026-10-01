@@ -113,6 +113,9 @@ def test_run_all_composes_every_active_probe_check(tmp_path, monkeypatch):
     def mark(name):
         return lambda *a, **k: [doctor.ok(name, "ok")]
 
+    expected = SimpleNamespace(package_version="1.0.0", revision="abc123def456")
+    monkeypatch.setattr(doctor, "runtime_provenance", lambda: expected)
+    monkeypatch.setattr(doctor, "check_provenance", mark("version"))
     monkeypatch.setattr(doctor, "check_config", mark("config"))
     monkeypatch.setattr(doctor, "check_token", mark("token"))
     monkeypatch.setattr(
@@ -132,6 +135,7 @@ def test_run_all_composes_every_active_probe_check(tmp_path, monkeypatch):
     checks = doctor.run_all(dep, since="-2 hours", probe=True)
 
     assert [c.group for c in checks] == [
+        "version",
         "config",
         "token",
         "units",
@@ -165,6 +169,9 @@ def test_run_all_skips_optional_checks_when_inactive_and_local_only(
             jobs=SimpleNamespace(dir=tmp_path / "jobs"),
         ),
     )
+    expected = SimpleNamespace(package_version="1.0.0", revision="abc123def456")
+    monkeypatch.setattr(doctor, "runtime_provenance", lambda: expected)
+    monkeypatch.setattr(doctor, "check_provenance", lambda value: [])
     monkeypatch.setattr(doctor, "check_config", list)
     monkeypatch.setattr(doctor, "check_token", lambda *a: [])
     monkeypatch.setattr(doctor, "check_units", lambda *a: ([], None))

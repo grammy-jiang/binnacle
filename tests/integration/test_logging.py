@@ -432,7 +432,7 @@ def test_effective_config_line(caplog):
     assert len(lines) == 1
     fields = _fields(lines[0])
     assert fields["pid"].isdigit()
-    assert fields["version"] not in ("", "?")
+    assert fields["version"] not in ("", "?") and fields["revision"]
     assert "keep_newest=" in lines[0] and "client_tools=" in lines[0]
     assert "auto_background=" in lines[0]
     # The indexed-context pilot's fields left the line on 2026-09-28.

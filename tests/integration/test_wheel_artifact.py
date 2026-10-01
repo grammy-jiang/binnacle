@@ -1,52 +1,110 @@
-"""Build the distributable wheel and inspect its release-critical contents."""
+"""Build, inspect, install, and smoke the publishable distributions."""
 
+from __future__ import annotations
+
+import os
 import shutil
 import subprocess
+import sys
+import tarfile
 import zipfile
 from pathlib import Path
 
 
-def test_wheel_contains_runtime_package_typing_marker_and_entry_points(tmp_path):
+def _run(
+    argv: list[str],
+    *,
+    cwd: Path,
+    env: dict[str, str] | None = None,
+    timeout: int = 60,
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        argv,
+        cwd=cwd,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=timeout,
+    )
+
+
+def _build_project(tmp_path: Path) -> tuple[Path, Path, Path, str]:
     repo = Path(__file__).resolve().parents[2]
     project = tmp_path / "project"
     project.mkdir()
-    shutil.copy2(repo / "pyproject.toml", project / "pyproject.toml")
-    shutil.copy2(repo / "build-constraints.txt", project / "build-constraints.txt")
+    for name in ("pyproject.toml", "uv.lock", "build-constraints.txt"):
+        shutil.copy2(repo / name, project / name)
     shutil.copytree(
         repo / "src",
         project / "src",
         ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "*.egg-info"),
     )
+
+    in_project = False
+    version: str | None = None
+    for line in (project / "pyproject.toml").read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if stripped == "[project]":
+            in_project = True
+            continue
+        if in_project and stripped.startswith("["):
+            break
+        if in_project and stripped.startswith("version = "):
+            version = stripped.partition("=")[2].strip().strip(chr(34))
+            break
+    assert version is not None, "project.version is required for distribution metadata"
     dist = project / "dist"
 
     uv = shutil.which("uv")
     assert uv is not None, "uv is required by the repository's build workflow"
-    proc = subprocess.run(
-        [
-            uv,
-            "build",
-            "--wheel",
-            "--out-dir",
-            str(dist),
-            "--build-constraint",
-            str(project / "build-constraints.txt"),
-            "--require-hashes",
-        ],
-        cwd=project,
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=60,
-    )
-    assert proc.returncode == 0, proc.stderr
+    common = [
+        uv,
+        "build",
+        "--no-sources",
+        "--out-dir",
+        str(dist),
+        "--build-constraint",
+        str(project / "build-constraints.txt"),
+        "--require-hashes",
+    ]
 
+    sdist_build = _run([*common, "--sdist", "--clear"], cwd=project)
+    assert sdist_build.returncode == 0, sdist_build.stderr
+    sdists = list(dist.glob("*.tar.gz"))
+    assert len(sdists) == 1
+
+    # Build the wheel from the source distribution, not from the original tree.
+    # This proves the sdist carries enough publishable source to reproduce it.
+    wheel_build = _run([*common, "--wheel", str(sdists[0])], cwd=project)
+    assert wheel_build.returncode == 0, wheel_build.stderr
     wheels = list(dist.glob("*.whl"))
     assert len(wheels) == 1
+    return project, sdists[0], wheels[0], version
 
-    with zipfile.ZipFile(wheels[0]) as archive:
+
+def _assert_sdist(sdist: Path, version: str) -> None:
+    with tarfile.open(sdist, "r:gz") as archive:
+        names = {member.name for member in archive.getmembers()}
+
+    roots = {name.split("/", 1)[0] for name in names if "/" in name}
+    assert len(roots) == 1
+    root = roots.pop()
+    assert version in root
+    assert f"{root}/pyproject.toml" in names
+    assert f"{root}/src/binnacle/server.py" in names
+    assert f"{root}/src/binnacle/cli.py" in names
+    assert f"{root}/src/binnacle/provenance.py" in names
+    assert f"{root}/src/binnacle/py.typed" in names
+    assert not any("/tests/" in name for name in names)
+
+
+def _assert_wheel(wheel: Path, version: str) -> None:
+    with zipfile.ZipFile(wheel) as archive:
         names = set(archive.namelist())
         assert "binnacle/server.py" in names
         assert "binnacle/cli.py" in names
+        assert "binnacle/provenance.py" in names
         assert "binnacle/py.typed" in names
         assert "binnacle/tools/read_file.py" in names
         assert "binnacle/tools/run_command.py" in names
@@ -57,6 +115,137 @@ def test_wheel_contains_runtime_package_typing_marker_and_entry_points(tmp_path)
             name for name in names if name.endswith(".dist-info/entry_points.txt")
         )
         entries = archive.read(entry_points).decode()
-        assert "binnacle = binnacle.cli:main" in entries
-        assert "binnacle-jobs = binnacle.job_manager:main" in entries
-        assert "binnacle-watchdog = binnacle.watchdog_cli:main" in entries
+        expected = {
+            "binnacle = binnacle.cli:main",
+            "binnacle-jobs = binnacle.job_manager:main",
+            "binnacle-watchdog = binnacle.watchdog_cli:main",
+            "binnacle-tunnel = binnacle.tunnel_cli:main",
+        }
+        assert all(entry in entries for entry in expected)
+
+        metadata = next(name for name in names if name.endswith(".dist-info/METADATA"))
+        metadata_text = archive.read(metadata).decode()
+        assert "Name: binnacle-mcp\n" in metadata_text
+        assert f"Version: {version}\n" in metadata_text
+
+
+def _install_and_smoke(
+    project: Path,
+    wheel: Path,
+    version: str,
+    tmp_path: Path,
+) -> None:
+    uv = shutil.which("uv")
+    assert uv is not None
+    runtime_requirements = tmp_path / "runtime-requirements.txt"
+    exported = _run(
+        [
+            uv,
+            "export",
+            "--locked",
+            "--no-dev",
+            "--no-emit-project",
+            "--no-sources",
+            "--output-file",
+            str(runtime_requirements),
+        ],
+        cwd=project,
+    )
+    assert exported.returncode == 0, exported.stderr
+
+    venv = tmp_path / "clean-venv"
+    created = _run(
+        [uv, "venv", "--python", sys.executable, str(venv)],
+        cwd=project,
+    )
+    assert created.returncode == 0, created.stderr
+    python = venv / "bin" / "python"
+
+    installed_runtime = _run(
+        [
+            uv,
+            "pip",
+            "install",
+            "--require-hashes",
+            "--python",
+            str(python),
+            "-r",
+            str(runtime_requirements),
+        ],
+        cwd=project,
+    )
+    assert installed_runtime.returncode == 0, installed_runtime.stderr
+
+    installed_wheel = _run(
+        [
+            uv,
+            "pip",
+            "install",
+            "--offline",
+            "--python",
+            str(python),
+            "--no-deps",
+            str(wheel),
+        ],
+        cwd=project,
+    )
+    assert installed_wheel.returncode == 0, installed_wheel.stderr
+
+    import_env = os.environ.copy()
+    import_env.pop("PYTHONPATH", None)
+    import_env.pop("VIRTUAL_ENV", None)
+    imported = _run(
+        [
+            str(python),
+            "-c",
+            (
+                "from importlib.metadata import version; "
+                "import binnacle, binnacle.job_manager; "
+                "print(version('binnacle-mcp')); "
+                "print(binnacle.__file__)"
+            ),
+        ],
+        cwd=tmp_path,
+        env=import_env,
+    )
+    assert imported.returncode == 0, imported.stderr
+    version_line, package_file = imported.stdout.strip().splitlines()
+    assert version_line == version
+    assert str(venv.resolve()) in str(Path(package_file).resolve())
+
+    isolated_home = tmp_path / "home"
+    isolated_home.mkdir()
+    env = os.environ.copy()
+    env.update(
+        {
+            "HOME": str(isolated_home),
+            "XDG_CONFIG_HOME": str(isolated_home / ".config"),
+            "XDG_STATE_HOME": str(isolated_home / ".local" / "state"),
+            "XDG_CACHE_HOME": str(isolated_home / ".cache"),
+        }
+    )
+    env.pop("VIRTUAL_ENV", None)
+    env.pop("PYTHONPATH", None)
+
+    # The jobs entry point intentionally starts a service and therefore must not
+    # be executed as a packaging smoke. Importing its module above validates it.
+    for command in ("binnacle", "binnacle-watchdog", "binnacle-tunnel"):
+        script = venv / "bin" / command
+        assert script.is_file()
+        result = _run(
+            [str(script), "--help"],
+            cwd=tmp_path,
+            env=env,
+        )
+        assert result.returncode == 0, result.stderr
+
+    assert (venv / "bin" / "binnacle-jobs").is_file()
+
+
+def test_distributions_are_publishable_installable_and_smokeable(
+    tmp_path: Path,
+) -> None:
+    project, sdist, wheel, version = _build_project(tmp_path)
+    _assert_sdist(sdist, version)
+    _assert_wheel(wheel, version)
+    _install_and_smoke(project, wheel, version, tmp_path)

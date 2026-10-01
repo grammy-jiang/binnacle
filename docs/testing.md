@@ -25,6 +25,14 @@ discovery with an empty synthetic observation by default. Hardware helpers are
 tested separately against synthetic sysfs trees; system tests must not acquire
 results from the development Pi's real USB inventory.
 
+Tests that invoke Git against a fixture or other foreign repository must clear
+the repository-local Git environment before spawning that command. Git hooks
+export values such as `GIT_DIR` and `GIT_WORK_TREE`; inheriting them can redirect
+an otherwise explicit `git -C ...` or `git init PATH` back to Binnacle's real
+repository metadata. Build the child environment by removing every name
+reported by `git rev-parse --local-env-vars`. The regression coverage is
+`test_git_root_clears_repository_local_git_environment`.
+
 ## Placement rules
 
 Put a test at the lowest level that proves the behaviour without lying about
@@ -145,8 +153,10 @@ Python 3.13 runs `coverage-policy`. Both paths use pytest-randomly seed `12345`
 for reproducibility; the weekly flake hunt, not ordinary CI, explores multiple
 seeds. CI does not hard-code a Pi worker count: the repository runner resolves
 its bounded worker count from the CI host. A separate Python 3.13 packaging job
-builds and inspects the wheel once, so the compatibility/coverage lanes continue
-to skip `test_wheel_artifact.py` instead of repeating the same build five times.
+builds the sdist, rebuilds the wheel from that sdist, and performs one clean
+locked installation/smoke, so the compatibility/coverage lanes continue
+to skip `test_wheel_artifact.py` instead of repeating distribution work five
+times.
 
 Before a baseline or merge commit, run:
 
@@ -163,10 +173,17 @@ discovery must never collect those copies.
 ## Packaging and dependency security
 
 `tests/integration/test_wheel_artifact.py` copies the publishable project into a
-temporary directory and builds a wheel using `build-constraints.txt`. The build
+temporary directory, builds a source distribution with `--no-sources`, then
+builds the wheel from that sdist using `build-constraints.txt`. The build
 backend is pinned to an exact setuptools artifact with reviewed SHA-256 hashes,
-and `uv build --require-hashes` refuses an unexpected artifact. This test runs
-once in the dedicated CI packaging job and remains runnable locally.
+and `uv build --require-hashes` refuses an unexpected artifact. The test then
+creates a fresh Python environment, installs the exact locked runtime
+dependencies with hash verification plus the local wheel, checks installed
+metadata/imports, and
+smokes only the command entry points whose help path is side-effect free. This
+test runs once in the dedicated CI packaging job and remains runnable locally.
+`docs/release-readiness.md` owns the complete distribution contract and the
+boundary between artifact validation and future publication.
 
 Dependency vulnerability intelligence is intentionally separate from
 deterministic code gates. `.github/workflows/security.yml` runs daily and on

@@ -11,10 +11,11 @@ from scripts.dev_common import Runner, Which
 @dataclasses.dataclass(frozen=True)
 class WorktreeBase:
     path: Path
-    head: str
+    head: str | None
     branch: str | None
     locked: str | None = None
     prunable: str | None = None
+    bare: bool = False
 
 
 @dataclasses.dataclass(frozen=True)
@@ -31,6 +32,7 @@ class WorktreeStatus:
     lock: str
     locked: str | None
     flags: tuple[str, ...]
+    bare: bool = False
 
 
 def parse_worktree_porcelain(text: str) -> list[WorktreeBase]:
@@ -44,7 +46,10 @@ def parse_worktree_porcelain(text: str) -> list[WorktreeBase]:
                 values[key] = value
             else:
                 flags.add(key)
-        if "worktree" not in values or "HEAD" not in values:
+        if "worktree" not in values:
+            continue
+        bare = "bare" in flags
+        if "HEAD" not in values and not bare:
             continue
 
         branch = values.get("branch")
@@ -63,13 +68,41 @@ def parse_worktree_porcelain(text: str) -> list[WorktreeBase]:
         worktrees.append(
             WorktreeBase(
                 path=Path(values["worktree"]),
-                head=values["HEAD"],
+                head=values.get("HEAD"),
                 branch=branch,
                 locked=locked,
                 prunable=prunable,
+                bare=bare,
             )
         )
     return worktrees
+
+
+def primary_worktree_integrity(
+    root: Path,
+    *,
+    git: str,
+    run: Runner,
+) -> tuple[bool, str]:
+    """Check that Git still registers the repository's primary checkout normally."""
+
+    listed = run((git, "worktree", "list", "--porcelain"), root)
+    if listed.returncode:
+        return False, listed.output.strip() or "git worktree list failed"
+
+    items = parse_worktree_porcelain(listed.output)
+    if not items:
+        return False, "no registered Git worktrees"
+
+    primary = items[0]
+    if primary.bare:
+        git_dir = primary.path / ".git"
+        detail = (
+            f"{primary.path} is registered bare; repair after verification with: "
+            f"git --git-dir={git_dir} config core.bare false"
+        )
+        return False, detail
+    return True, str(primary.path)
 
 
 def worktree_health(
@@ -81,11 +114,16 @@ def worktree_health(
     venv: bool,
     lock: str,
     locked: str | None,
+    bare: bool = False,
 ) -> tuple[str, ...]:
     flags: list[str] = []
+    if bare:
+        flags.append("bare")
     if locked:
         flags.append("locked")
-    if dirty_changes:
+    if dirty_changes is None:
+        flags.append("state-unknown")
+    elif dirty_changes:
         flags.append("dirty")
     if upstream == "gone":
         flags.append("upstream-gone")
@@ -105,7 +143,7 @@ def _upstream(
     git: str,
     run: Runner,
 ) -> tuple[str, int | None, int | None]:
-    if item.branch is None:
+    if item.bare or item.branch is None:
         return "-", None, None
 
     path = item.path
@@ -179,38 +217,43 @@ def inspect_worktree(
     run: Runner,
 ) -> WorktreeStatus:
     path = item.path
-    status = run((git, "-C", str(path), "status", "--porcelain"), root)
-    dirty_changes = (
-        len([line for line in status.output.splitlines() if line.strip()])
-        if status.returncode == 0
-        else None
-    )
-    upstream, ahead, behind = _upstream(
-        item,
-        root=root,
-        git=git,
-        run=run,
-    )
+    if item.bare:
+        dirty_changes = None
+        upstream, ahead, behind = "-", None, None
+        merged_to_master = None
+    else:
+        status = run((git, "-C", str(path), "status", "--porcelain"), root)
+        dirty_changes = (
+            len([line for line in status.output.splitlines() if line.strip()])
+            if status.returncode == 0
+            else None
+        )
+        upstream, ahead, behind = _upstream(
+            item,
+            root=root,
+            git=git,
+            run=run,
+        )
 
-    merged_result = run(
-        (
-            git,
-            "-C",
-            str(path),
-            "merge-base",
-            "--is-ancestor",
-            "HEAD",
-            "master",
-        ),
-        root,
-    )
-    merged_to_master = (
-        True
-        if merged_result.returncode == 0
-        else False
-        if merged_result.returncode == 1
-        else None
-    )
+        merged_result = run(
+            (
+                git,
+                "-C",
+                str(path),
+                "merge-base",
+                "--is-ancestor",
+                "HEAD",
+                "master",
+            ),
+            root,
+        )
+        merged_to_master = (
+            True
+            if merged_result.returncode == 0
+            else False
+            if merged_result.returncode == 1
+            else None
+        )
 
     lock = "unknown"
     if (
@@ -230,11 +273,12 @@ def inspect_worktree(
         venv=venv,
         lock=lock,
         locked=item.locked,
+        bare=item.bare,
     )
     return WorktreeStatus(
         path=str(path),
-        branch=item.branch or "(detached)",
-        head=item.head[:12],
+        branch="(bare)" if item.bare else item.branch or "(detached)",
+        head=item.head[:12] if item.head else "(none)",
         upstream=upstream,
         ahead=ahead,
         behind=behind,
@@ -244,6 +288,7 @@ def inspect_worktree(
         lock=lock,
         locked=item.locked,
         flags=flags,
+        bare=item.bare,
     )
 
 

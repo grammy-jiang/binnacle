@@ -33,7 +33,9 @@ from binnacle.doctor_common import (
     warn,
 )
 from binnacle.doctor_connectivity import _tail_lines, check_endpoint, check_uplink
+from binnacle.doctor_provenance import check_provenance
 from binnacle.job_manager_doctor import check_job_manager
+from binnacle.provenance import runtime_provenance
 
 __all__ = ["_job_state_safe", "_tail_lines", "server_busy_reasons"]
 
@@ -354,7 +356,9 @@ def run_all(dep: Deployment, since: str = "-1 hour", probe: bool = True) -> list
     for a quick local-only look.
     """
     s = get_settings()
+    provenance = runtime_provenance()
     checks: list[Check] = []
+    checks += check_provenance(provenance)
     checks += check_config()
     checks += check_token(dep.token_file)
     unit_checks, active = check_units(dep.server_unit)
@@ -378,7 +382,11 @@ def run_all(dep: Deployment, since: str = "-1 hour", probe: bool = True) -> list
 
     jobs_active: str | None = None
     if dep.jobs_unit is not None and dep.jobs_socket is not None:
-        manager_checks, jobs_active = check_job_manager(dep.jobs_unit, dep.jobs_socket)
+        manager_checks, jobs_active = check_job_manager(
+            dep.jobs_unit,
+            dep.jobs_socket,
+            expected_revision=provenance.revision,
+        )
         checks += manager_checks
         if dep.jobs_unit_path is not None and dep.render_jobs_unit is not None:
             checks += units.check_unit_drift(
