@@ -2,6 +2,10 @@
 requires = ["setuptools>=69"]
 build-backend = "setuptools.build_meta"
 
+[tool.uv]
+# Keep developer, pre-commit and CI resolution behaviour identical.
+required-version = "==0.12.7"
+
 [project]
 name = "binnacle-mcp"
 version = "1.0.0"
@@ -58,6 +62,10 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
+# Fail on unknown pytest configuration, markers, parametrization ids and
+# non-strict xfails. pytest itself is locked, so strict-mode evolution is
+# reviewed as part of dependency updates rather than changing underneath CI.
+strict = true
 # Constrain discovery to the managed suite; developer artifacts such as
 # mutation-testing copies must never be collected by default pytest.
 testpaths = ["tests"]
