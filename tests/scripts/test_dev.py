@@ -119,6 +119,28 @@ def test_worktree_health_reports_independent_drift_signals() -> None:
     ) == ("bare", "state-unknown")
 
 
+def test_primary_worktree_check_detects_bare_main(tmp_path: Path) -> None:
+    primary = tmp_path / "main"
+
+    def run(argv: Any, cwd: Path) -> dev.CommandResult:
+        assert tuple(argv) == (
+            "/usr/bin/git",
+            "worktree",
+            "list",
+            "--porcelain",
+        )
+        return dev.CommandResult(
+            0,
+            f"worktree {primary}\nbare\n",
+        )
+
+    check = dev._primary_worktree_check("/usr/bin/git", tmp_path, run)
+    assert check.name == "primary-worktree"
+    assert check.status == "fail"
+    assert "registered bare" in check.detail
+    assert "config core.bare false" in check.detail
+
+
 def _doctor_tree(tmp_path: Path) -> tuple[Path, Path]:
     _write_uv_lock(tmp_path)
     (tmp_path / ".python-version").write_text(
@@ -166,6 +188,16 @@ def test_doctor_catches_missing_configured_pre_push_hook(
             "--porcelain",
         ):
             return dev.CommandResult(0, "")
+        if command == (
+            "/usr/bin/git",
+            "worktree",
+            "list",
+            "--porcelain",
+        ):
+            return dev.CommandResult(
+                0,
+                f"worktree {tmp_path}\nHEAD {'a' * 40}\nbranch refs/heads/master\n",
+            )
         if command == (
             "/usr/bin/uv",
             "lock",
@@ -232,6 +264,16 @@ def test_doctor_treats_a_dirty_checkout_as_warning_not_failure(
             "--porcelain",
         ):
             return dev.CommandResult(0, "?? local-note\n")
+        if command == (
+            "/usr/bin/git",
+            "worktree",
+            "list",
+            "--porcelain",
+        ):
+            return dev.CommandResult(
+                0,
+                f"worktree {tmp_path}\nHEAD {'a' * 40}\nbranch refs/heads/master\n",
+            )
         if command == (
             "/usr/bin/uv",
             "lock",

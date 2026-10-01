@@ -60,6 +60,7 @@ The doctor verifies:
 
 - the checkout is the Git top level;
 - the working-tree state;
+- the primary Git checkout is still a normal worktree rather than `bare`;
 - the exact uv version;
 - uv.lock without changing it or accessing the network;
 - ripgrep;
@@ -67,7 +68,11 @@ The doctor verifies:
 - every Git hook type declared by the pre-commit configuration.
 
 A dirty working tree is a warning, not a failure. Missing tools, lock drift,
-the wrong interpreter, or missing/non-executable configured hooks are failures.
+the wrong interpreter, missing/non-executable configured hooks, or a primary
+checkout that Git reports as `bare` are failures. For the bare-checkout case,
+doctor prints the exact `git --git-dir=... config core.bare false` repair
+command; run it only after confirming that the path is the repository's intended
+primary checkout.
 
 This doctor is different from binnacle doctor. The development doctor validates
 the repository environment. binnacle doctor validates the configured/running
