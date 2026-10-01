@@ -146,6 +146,12 @@ external mutable state, so `pip-audit` is deliberately not a commit gate. The
 daily `Security` workflow exports exact locked runtime and development
 dependency sets and audits them separately.
 
+Dependency lifecycle automation is separate from commit determinism.
+`.github/dependabot.yml` checks `uv`, pre-commit hooks, and GitHub Actions on a
+weekly schedule, while Dependabot alerts/security updates cover known
+vulnerabilities. The desired `master` branch ruleset and repository-setting
+reconciliation procedure live in `docs/github-governance.md`.
+
 ## Test kinds
 
 The suite should use the lowest test layer that proves the behavior honestly.

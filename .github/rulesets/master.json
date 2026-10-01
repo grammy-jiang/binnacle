@@ -1,0 +1,58 @@
+{
+  "name": "master deployment gate",
+  "target": "branch",
+  "enforcement": "active",
+  "conditions": {
+    "ref_name": {
+      "include": [
+        "refs/heads/master"
+      ],
+      "exclude": []
+    }
+  },
+  "rules": [
+    {
+      "type": "deletion"
+    },
+    {
+      "type": "non_fast_forward"
+    },
+    {
+      "type": "required_status_checks",
+      "parameters": {
+        "do_not_enforce_on_create": false,
+        "strict_required_status_checks_policy": false,
+        "required_status_checks": [
+          {
+            "context": "Code quality",
+            "integration_id": 15368
+          },
+          {
+            "context": "Tests / Python 3.10",
+            "integration_id": 15368
+          },
+          {
+            "context": "Tests / Python 3.11",
+            "integration_id": 15368
+          },
+          {
+            "context": "Tests / Python 3.12",
+            "integration_id": 15368
+          },
+          {
+            "context": "Tests / Python 3.14",
+            "integration_id": 15368
+          },
+          {
+            "context": "Coverage policy / Python 3.13",
+            "integration_id": 15368
+          },
+          {
+            "context": "Packaging / Python 3.13",
+            "integration_id": 15368
+          }
+        ]
+      }
+    }
+  ]
+}

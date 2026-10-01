@@ -190,7 +190,9 @@ Keep volatile operational facts in one place:
 | Product quick start and user configuration | README.md |
 | Test layout, semantics and commands | docs/testing.md |
 | Pre-commit/pre-push/CI/security gate policy | docs/quality-gates.md |
+| GitHub rulesets and dependency automation | docs/github-governance.md |
 | Agent-specific operational instructions | CLAUDE.md |
+| GitHub ruleset and Dependabot governance | docs/github-governance.md |
 
 CLAUDE.md should link to these documents instead of copying test counts,
 coverage measurements, or other values that routinely change.
