@@ -26,7 +26,9 @@ def test_webmin_history_window_and_render(tmp_path: Path, monkeypatch):
     }
     for name, series in values.items():
         scale = 1024**3 if name in {"memused", "swapused"} else 1
-        write_metric(root, name, list(zip(timestamps, [x * scale for x in series])))
+        write_metric(
+            root, name, list(zip(timestamps, [x * scale for x in series], strict=True))
+        )
     for name in set(webminstats.METRICS) - set(values):
         write_metric(root, name, [])
 
@@ -99,7 +101,7 @@ def test_batch_reader_uses_one_sudo_on_permission_error(tmp_path: Path, monkeypa
 
     def fake_run(args, **kwargs):
         calls.append(args)
-        payload = {name: "1000 1\n" for name in webminstats.METRICS}
+        payload = dict.fromkeys(webminstats.METRICS, "1000 1\n")
         return __import__("subprocess").CompletedProcess(
             args, 0, __import__("json").dumps(payload), ""
         )
@@ -161,7 +163,7 @@ def test_time_validation_and_empty_window(monkeypatch):
     monkeypatch.setattr(
         webminstats,
         "_read_all_metric_texts",
-        lambda: {name: "" for name in webminstats.METRICS},
+        lambda: dict.fromkeys(webminstats.METRICS, ""),
     )
     monkeypatch.setattr(
         webminstats,

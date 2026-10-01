@@ -33,7 +33,9 @@ def matches_glob(
     try:
         return matcher(rel, pattern)
     except ValueError as exc:
-        raise CodedToolError("invalid_glob", f"Invalid glob pattern {glob!r}: {exc}")
+        raise CodedToolError(
+            "invalid_glob", f"Invalid glob pattern {glob!r}: {exc}"
+        ) from exc
 
 
 def collect(

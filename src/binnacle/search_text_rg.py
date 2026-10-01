@@ -33,17 +33,17 @@ def run_rg(
         proc = subprocess.run(
             cmd, capture_output=True, text=True, timeout=timeout_s, check=False
         )
-    except FileNotFoundError:
+    except FileNotFoundError as exc:
         raise CodedToolError(
             "rg_missing",
             "ripgrep (rg) is not available; use run_command (grep -rn) instead.",
-        )
-    except subprocess.TimeoutExpired:
+        ) from exc
+    except subprocess.TimeoutExpired as exc:
         raise CodedToolError(
             "rg_timeout",
             f"Search timed out after {timeout_s} s. Narrow the scope "
             "with a more specific path or a glob filter.",
-        )
+        ) from exc
     finally:
         if metrics is not None:
             metrics.rg_subprocess_ms += ExactSearchMetrics.elapsed_ms(started_ns)

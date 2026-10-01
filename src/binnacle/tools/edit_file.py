@@ -58,11 +58,11 @@ def _decode_for_edit(data: bytes, path) -> tuple[str, bytes, str]:
             )
     try:
         return data.decode(codec), bom, codec
-    except UnicodeDecodeError:
+    except UnicodeDecodeError as exc:
         raise ToolError(
             f"File {path} has bytes that do not decode as {codec}; editing "
             f"it here would corrupt them. Use run_command (sed) instead."
-        )
+        ) from exc
 
 
 def _line_of_offset(text: str, offset: int) -> int:
@@ -185,7 +185,7 @@ def edit_file_impl(
     try:
         resolved.write_bytes(data)
     except OSError as e:
-        raise ToolError(f"Could not write {resolved}: {e.strerror or e}.")
+        raise ToolError(f"Could not write {resolved}: {e.strerror or e}.") from e
 
     snippet, snippet_first_line = _snippet_around(new_text, first_change_line)
     payload = {

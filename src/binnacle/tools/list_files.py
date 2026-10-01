@@ -104,18 +104,18 @@ def _glob_mode(
             timeout=RG_TIMEOUT_S,
             check=False,
         )
-    except FileNotFoundError:
+    except FileNotFoundError as exc:
         raise CodedToolError(
             "rg_missing",
             "ripgrep (rg) is not available on this system; "
             "use run_command (find, ls) instead.",
-        )
-    except subprocess.TimeoutExpired:
+        ) from exc
+    except subprocess.TimeoutExpired as exc:
         raise CodedToolError(
             "rg_timeout",
             f"Glob search timed out after {RG_TIMEOUT_S} s in {root}. "
             f"Narrow the glob or point path at a subdirectory.",
-        )
+        ) from exc
     if proc.returncode not in (0, 1):
         stderr = proc.stderr.strip()[-300:]
         raise CodedToolError(
@@ -131,7 +131,9 @@ def _glob_mode(
             if line and full_match(line, pattern)
         ]
     except ValueError as e:
-        raise CodedToolError("invalid_glob", f"Invalid glob pattern {glob!r}: {e}")
+        raise CodedToolError(
+            "invalid_glob", f"Invalid glob pattern {glob!r}: {e}"
+        ) from e
     truncated = len(lines) > max_results
     entries = []
     for line in lines[:max_results]:

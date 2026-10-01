@@ -88,7 +88,9 @@ def _read_all_metric_texts() -> dict[str, str]:
         except json.JSONDecodeError as exc:
             raise RuntimeError("Webmin history reader returned invalid JSON") from exc
         if not isinstance(value, dict):
-            raise TypeError("Webmin history reader returned an invalid payload")
+            raise TypeError(
+                "Webmin history reader returned an invalid payload"
+            ) from None
         return {name: str(value.get(name, "")) for name in METRICS}
 
 

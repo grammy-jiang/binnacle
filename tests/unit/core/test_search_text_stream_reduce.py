@@ -82,7 +82,7 @@ def event_stream(draw):
     paths = ["a.py", "b.py", "c.txt"]
     size = draw(stg.integers(min_value=0, max_value=30))
     result = []
-    for index in range(size):
+    for _index in range(size):
         kind = draw(stg.sampled_from(["match", "context", "begin", "end"]))
         path = draw(stg.sampled_from(paths))
         line = draw(stg.integers(min_value=1, max_value=40))

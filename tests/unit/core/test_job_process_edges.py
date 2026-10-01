@@ -33,6 +33,7 @@ def test_descendants_skips_vanished_and_malformed_proc_entries(monkeypatch):
             return ["S"]  # no ppid field
         if pid == 12:
             return ["S", "1"]
+        return None
 
     monkeypatch.setattr(job_process, "_proc_stat_fields", fields)
 

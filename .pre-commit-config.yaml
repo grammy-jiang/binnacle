@@ -9,12 +9,26 @@ repos:
     rev: v6.0.0
     hooks:
       - id: trailing-whitespace
+        stages: [pre-commit]
       - id: end-of-file-fixer
+        stages: [pre-commit]
       - id: check-yaml
       - id: check-json
+      - id: check-toml
       - id: check-added-large-files
+        stages: [pre-commit]
       - id: check-merge-conflict
       - id: mixed-line-ending
+      - id: check-case-conflict
+      - id: check-symlinks
+        always_run: true
+      - id: destroyed-symlinks
+        stages: [pre-commit]
+      - id: check-executables-have-shebangs
+        stages: [pre-commit]
+      - id: check-shebang-scripts-are-executable
+        stages: [pre-commit]
+      - id: debug-statements
   # YAML linter -- config lives in the repo's .yamllint.yaml (copied by the skill).
   - repo: https://github.com/adrienverge/yamllint
     rev: v1.38.0
@@ -32,6 +46,13 @@ repos:
     rev: v8.30.1
     hooks:
       - id: gitleaks
+        stages: [pre-commit]
+      - id: gitleaks
+        alias: gitleaks-history
+        name: Detect secrets in Git history
+        entry: gitleaks git --redact --no-banner
+        pass_filenames: false
+        stages: [manual]
   # Ruff -- lint (with autofix) and format; official hook repo, rev kept in
   # step with the ruff version pinned in uv.lock.
   - repo: https://github.com/astral-sh/ruff-pre-commit
@@ -53,16 +74,20 @@ repos:
     rev: 0.12.7
     hooks:
       - id: uv-lock
+        args: [--check, --offline]
   # Codespell -- typo checker for code and prose; official hook repo.
   - repo: https://github.com/codespell-project/codespell
     rev: v2.4.3
     hooks:
       - id: codespell
         exclude: ^uv\.lock$
-  # Local hooks on purpose: an isolated hook env cannot see the project's
-  # dependencies, the uv environment can. pip-audit checks the locked
-  # dependency set against the OSV vulnerability database (network call), so
-  # it fires only when uv.lock changes, never on ordinary commits.
+  # Local hooks on purpose: project-aware tools must see the exact dependencies
+  # and configuration locked in this repository's uv environment.
+  # GitHub Actions semantic linter; also uses ShellCheck when available.
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.12
+    hooks:
+      - id: actionlint
   - repo: local
     hooks:
       - id: mypy
@@ -73,17 +98,23 @@ repos:
         pass_filenames: false
         # Skill scripts are standalone tools with their own runtime/imports.
         exclude: ^\.claude/skills/
-      - id: pip-audit
-        name: pip-audit
-        entry: uv run --no-sync pip-audit --progress-spinner off
-        language: system
-        files: ^uv\.lock$
-        pass_filenames: false
       - id: deptry
         name: deptry
         entry: uv run --no-sync deptry .
         language: system
         files: (\.py$|^pyproject\.toml$)
+        pass_filenames: false
+      - id: validate-pyproject
+        name: validate pyproject metadata and tool schemas
+        entry: uv run --no-sync validate-pyproject pyproject.toml
+        language: system
+        files: ^pyproject\.toml$
+        pass_filenames: false
+      - id: tox-config
+        name: validate tox configuration
+        entry: uv run --no-sync tox config
+        language: system
+        files: ^tox\.ini$
         pass_filenames: false
       - id: module-size
         name: module size ratchet
@@ -109,3 +140,7 @@ repos:
         language: system
         files: (^src/binnacle/.*\.py$|^pyproject\.toml$)
         pass_filenames: false
+  - repo: meta
+    hooks:
+      - id: check-hooks-apply
+      - id: check-useless-excludes

@@ -347,8 +347,8 @@ def test_bind_device_turns_a_permission_error_into_unavailable():
             raise PermissionError(1, "Operation not permitted")
 
     with pytest.raises(uplink.ProbeUnavailable):
-        uplink._bind_device(Sock(), "wlan1")  # type: ignore[arg-type]
-    uplink._bind_device(Sock(), None)  # type: ignore[arg-type]  # no device: no call
+        uplink._bind_device(Sock(), "wlan1")
+    uplink._bind_device(Sock(), None)  # no device: no call
 
 
 ROUTE = uplink.Route("wlan1", "192.168.50.1", "127.0.0.1", 100)

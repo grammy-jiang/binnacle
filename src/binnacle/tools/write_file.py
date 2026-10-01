@@ -39,7 +39,7 @@ def write_file_impl(path: str, content: str) -> ToolResult:
         resolved.parent.mkdir(parents=True, exist_ok=True)
         resolved.write_bytes(data)
     except OSError as e:
-        raise ToolError(f"Could not write {resolved}: {e.strerror or e}.")
+        raise ToolError(f"Could not write {resolved}: {e.strerror or e}.") from e
 
     if previous_bytes is None:
         payload = {"path": str(resolved), "bytes": len(data), "action": "created"}

@@ -101,7 +101,9 @@ def tunnel_turns(since: str, until: str | None) -> dict:
         return {}
     counts = sorted(len(v) for v in turns.values())
     gaps = sorted(
-        b - a for v in turns.values() for a, b in zip(sorted(v), sorted(v)[1:])
+        b - a
+        for v in turns.values()
+        for a, b in zip(sorted(v), sorted(v)[1:], strict=False)
     )
 
     def p90(xs: list) -> float:

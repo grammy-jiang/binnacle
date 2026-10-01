@@ -214,7 +214,7 @@ class Scenario(StrictModel):
                 raise ValueError(f"{node.id} cannot depend on itself")
 
         children: dict[str, list[str]] = {node_id: [] for node_id in ids}
-        indegree = {node_id: 0 for node_id in ids}
+        indegree = dict.fromkeys(ids, 0)
         for node in self.dag:
             for dep in node.depends_on:
                 children[dep].append(node.id)
