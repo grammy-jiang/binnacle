@@ -11,6 +11,7 @@ def test_wheel_contains_runtime_package_typing_marker_and_entry_points(tmp_path)
     project = tmp_path / "project"
     project.mkdir()
     shutil.copy2(repo / "pyproject.toml", project / "pyproject.toml")
+    shutil.copy2(repo / "build-constraints.txt", project / "build-constraints.txt")
     shutil.copytree(
         repo / "src",
         project / "src",
@@ -21,7 +22,16 @@ def test_wheel_contains_runtime_package_typing_marker_and_entry_points(tmp_path)
     uv = shutil.which("uv")
     assert uv is not None, "uv is required by the repository's build workflow"
     proc = subprocess.run(
-        [uv, "build", "--wheel", "--out-dir", str(dist)],
+        [
+            uv,
+            "build",
+            "--wheel",
+            "--out-dir",
+            str(dist),
+            "--build-constraint",
+            str(project / "build-constraints.txt"),
+            "--require-hashes",
+        ],
         cwd=project,
         capture_output=True,
         text=True,

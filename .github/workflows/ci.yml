@@ -20,6 +20,14 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Restore pre-commit environments
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ runner.os }}-py312-${{ hashFiles('.pre-commit-config.yaml') }}
 
       - name: Install uv and Python 3.12
         uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
@@ -33,7 +41,9 @@ jobs:
         run: uv sync --locked --group dev
 
       - name: Run code-quality gates
-        run: uv run pre-commit run --all-files
+        run: |
+          uv run pre-commit run --all-files
+          uv run pre-commit run gitleaks-history --hook-stage manual --all-files
 
   tests:
     name: Tests / Python ${{ matrix.python }}
@@ -81,7 +91,10 @@ jobs:
           printf '[roots]\ndefault_root = "%s"\nextra_roots = ["/tmp"]\n'             "$repo_parent" > "$HOME/.config/binnacle/config.toml"
 
       - name: Run test suite
-        run: uv run tox -e ${{ matrix.tox-env }} -- --ignore=tests/integration/test_wheel_artifact.py
+        run: >-
+          uv run tox -e ${{ matrix.tox-env }} --
+          --ignore=tests/integration/test_wheel_artifact.py
+          --seed 12345
 
   coverage:
     name: Coverage policy / Python 3.13
@@ -116,4 +129,31 @@ jobs:
           printf '[roots]\ndefault_root = "%s"\nextra_roots = ["/tmp"]\n'             "$repo_parent" > "$HOME/.config/binnacle/config.toml"
 
       - name: Enforce per-module branch coverage
-        run: uv run tox -e coverage-policy -- --ignore=tests/integration/test_wheel_artifact.py
+        run: >-
+          uv run tox -e coverage-policy --
+          --ignore=tests/integration/test_wheel_artifact.py
+          --seed 12345
+
+  packaging:
+    name: Packaging / Python 3.13
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install uv and Python 3.13
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          version: "0.12.7"
+          python-version: "3.13"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Sync test dependencies
+        run: uv sync --locked --no-default-groups --group test
+
+      - name: Build and inspect wheel artifact
+        run: >-
+          uv run --no-sync pytest -q tests/integration/test_wheel_artifact.py
+          --randomly-seed=12345

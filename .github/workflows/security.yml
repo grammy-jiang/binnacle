@@ -1,0 +1,47 @@
+name: Security
+
+on:
+  schedule:
+    - cron: "17 1 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dependency-audit:
+    name: Dependency vulnerability audit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install uv and Python 3.13
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          version: "0.12.7"
+          python-version: "3.13"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install security tooling only
+        run: uv sync --locked --no-default-groups --group security
+
+      - name: Audit runtime dependencies
+        run: |
+          uv export --quiet --locked --no-default-groups --no-emit-project \
+            --output-file /tmp/runtime-requirements.txt
+          uv run --no-sync pip-audit --requirement /tmp/runtime-requirements.txt \
+            --no-deps --disable-pip --progress-spinner off
+
+      - name: Audit development tooling
+        run: |
+          uv export --quiet --locked --only-group dev --no-emit-project \
+            --output-file /tmp/dev-requirements.txt
+          uv run --no-sync pip-audit --requirement /tmp/dev-requirements.txt \
+            --no-deps --disable-pip --progress-spinner off
