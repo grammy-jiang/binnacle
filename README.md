@@ -9,52 +9,45 @@ long-running jobs.
 
 ## Quick start
 
-Requirements: Linux with systemd user services, `bash`, `ripgrep` (`rg`), and
-[uv](https://docs.astral.sh/uv/). Python 3.10-3.14 is supported.
+Requirements: Linux with systemd user services, bash, ripgrep (rg), Git, and
+uv. Python 3.10-3.14 is supported by the current test matrix.
 
 ```bash
 git clone https://github.com/grammy-jiang/binnacle.git
 cd binnacle
 
-uv sync --locked --group dev
+# Create/sync the development environment, install every configured Git hook,
+# and verify the checkout.
+uv run scripts/dev.py bootstrap
 
 # Preview the machine changes first: every action, and the unit diff.
 uv run binnacle setup --dev "$PWD" --dry-run
 
 # Create the bearer token plus the MCP and durable-jobs systemd user units.
 # The MCP checkout auto-reloads in development; the jobs owner stays stable.
-# A hand-written unit is refused: review
-# the diff, then add --adopt to take it over (the old file is backed up).
+# A hand-written unit is refused: review the diff, then add --adopt to take it
+# over (the old file is backed up).
 uv run binnacle setup --dev "$PWD"
 
-# Later, switch the MCP unit to the installed package without reload, or
-# back. The durable jobs service is a sibling and is not restarted by mode.
+# Later, switch the MCP unit to the installed package without reload, or back.
+# The durable jobs service is a sibling and is not restarted by mode.
 uv run binnacle mode prod
 uv run binnacle mode dev
 
-# Verify configuration, auth, both managed units/processes, the private
-# jobs socket, durable job state, and connectivity.
+# Verify configuration, auth, both managed units/processes, the private jobs
+# socket, durable job state, and connectivity.
 uv run binnacle doctor
 
-# ChatGPT only: the OpenAI tunnel unit belongs to its own companion, never
-# to `binnacle setup`; other agents reach the server without it.
+# ChatGPT only: the OpenAI tunnel unit belongs to its own companion, never to
+# binnacle setup; other agents reach the server without it.
 uv run binnacle-tunnel setup --dry-run
 uv run binnacle-tunnel doctor
 ```
 
-The local MCP endpoint is:
+The local MCP endpoint is [http://127.0.0.1:8000/mcp](http://127.0.0.1:8000/mcp).
 
-```text
-http://127.0.0.1:8000/mcp
-```
-
-The bearer credential is created at:
-
-```text
-~/.config/binnacle/token
-```
-
-Do not commit or share that file.
+The bearer credential is created at ~/.config/binnacle/token. Do not commit or
+share that file.
 
 ## Configuration
 
@@ -94,13 +87,29 @@ An AI agent setting up Binnacle should follow this README, use
 `binnacle setup --dry-run` before changing the host, and finish with
 `binnacle doctor`.
 
-## Development checks
+## Development
+
+[DEVELOPMENT.md](DEVELOPMENT.md) is the canonical repository-development guide. The normal
+environment entry points are:
+
+```bash
+uv run scripts/dev.py doctor
+uv run scripts/dev.py worktrees
+```
+
+The explicit local quality gates are:
 
 ```bash
 uv run pre-commit run --all-files
-uv run tox -e coverage-policy
+uv run pre-commit run --hook-stage pre-push --all-files
+uv run tox -e coverage-policy -- --seed 12345
 uv run tox
 ```
 
-GitHub Actions runs tests and code-quality checks only. There is currently no
-release, packaging, or deployment pipeline.
+GitHub Actions separately enforces code quality, the supported Python
+compatibility matrix, the coverage policy, and wheel-artifact packaging. A
+scheduled Security workflow audits the locked runtime and development
+dependencies daily.
+
+There is currently no GitHub release/publishing pipeline. Production deployment
+uses the repository's gated local live-smoke flow described in DEVELOPMENT.md.

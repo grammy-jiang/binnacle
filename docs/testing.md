@@ -90,8 +90,9 @@ pre-commit run --hook-stage pre-push --all-files
 ```
 
 Do not replace this with a direct `pytest -n` command: the ordinary-process lane
-is part of the test contract. `pre-commit install` installs both the pre-commit
-and pre-push hook types from the repository configuration.
+is part of the test contract. Repository bootstrap is canonical in
+DEVELOPMENT.md; uv run scripts/dev.py bootstrap invokes pre-commit install,
+which installs both configured pre-commit and pre-push hook types.
 
 For direct single-process pytest feedback:
 

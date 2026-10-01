@@ -1,5 +1,5 @@
 # Managed with the manage-precommit skill -- https://pre-commit.com
-# Install the git hook:  pre-commit install
+# Bootstrap/sync hooks: uv run scripts/dev.py bootstrap
 # Run on all files:      pre-commit run --all-files
 minimum_pre_commit_version: "4.0.0"
 default_install_hook_types: [pre-commit, pre-push]

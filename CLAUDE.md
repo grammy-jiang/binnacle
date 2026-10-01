@@ -3,7 +3,7 @@
 FastMCP server exposed to ChatGPT (as connector "Raspberry Pi MCP") over an
 OpenAI tunnel. `server.py` is assembly only; each tool lives in
 `tools/<name>.py` (a `register(mcp)` per module), mirroring its spec at
-`docs/tools/<name>.md`, with shared helpers `paths.py` (root guard),
+`docs/tools/NAME.md`, with shared helpers `paths.py` (root guard),
 `textio.py` (decode/size), and `jobs.py` (disk-backed job store). Two user
 systemd services run it: `binnacle-mcp` (one unit whose content
 `binnacle setup` and `binnacle mode` render for the mode in use;
@@ -48,6 +48,8 @@ CLI agents below hold the token literally in their own configs, so a rotation
 also means updating those registrations.
 
 ## Dev loop
+
+Repository bootstrap, Git hooks and worktree hygiene are canonical in DEVELOPMENT.md. Run uv run scripts/dev.py doctor to validate a checkout and uv run scripts/dev.py worktrees before making worktree cleanup decisions.
 
 Saving `server.py` (any `.py` under `src/`) auto-reloads uvicorn (watchfiles,
 ~1-2s) — reloading is NOT a manual step. Saving a test, a script or a doc does
@@ -917,36 +919,25 @@ the new shapes.
 `scripts/mcp_client.py` usage (talks to the running server on :8000, no ChatGPT round
 trip): `scripts/mcp_client.py` (list) / `... ping` /
 `... read_file '{"path":"~/Projects/binnacle/server.py","end_line":20}'`.
-Per-tool unit tests live in `tests/unit/tools/test_<name>.py`; broader
-coverage is grouped by responsibility under `tests/{unit,integration,contracts,system,scripts}`.
-See `docs/testing.md` for placement rules and test levels. Run
-`.venv/bin/python -m pytest tests/ -q` (or just the changed tool's module)
-before the loop. Tool specs: `docs/agent-toolset-design.md` +
-`docs/tools/<name>.md`.
-Three cross-cutting modules sit beside them: `tests/unit/core/test_properties.py`
-(hypothesis invariants for the path guard, the glob matcher — differential
-against `PurePath.full_match` on 3.13+ — the output clipper and the text
-decoder), `tests/contracts/test_protocol.py` (the tool surface as a client sees it
-through fastmcp's in-memory `Client`: annotations, output schemas, end-to-end
-calls) and `tests/integration/test_auth_asgi.py` (bearer auth at the HTTP edge through
-httpx2's `ASGITransport`; the app lifespan must be open or the session
-manager is not initialized). Branch coverage is about 88.2% (2026-09-19, 613 tests); the gate is `fail_under = 86.9` in `[tool.coverage.report]` and
-`--cov-fail-under=86.9` in tox's test command (the exact floor was 86.99,
-so an integer 87 failed on rounding — ratchet it up, never down). A plain
-`pytest` stays uncovered and fast. mutmut is configured in `[tool.mutmut]`
-and runs on demand per module: `mutmut run '*textio*'`, then `mutmut
-results`; never as a hook. Two things it needs on this repo: `source_paths
-= ["src"]` (mutmut runs the suite from inside `./mutants` and puts
-`mutants/<source_path>` first on `sys.path`; with the package directory as
-the entry, `import binnacle` still hit the editable install and 24/24
-mutants "survived" untested on 2026-09-13), and `also_copy` for every
-repo path the suite imports or reads outside `src` and `tests`: the skill's
-references and scripts, `scripts/`, `benchmarks/chat-mode-scheduling-v2/`
-and `quality-policy.json` (found 2026-09-28 by running the whole suite in a
-copy of the `./mutants` layout: without `scripts/`, 20 test modules failed
-to import; without `benchmarks/`, 30 tests failed). Budget: the 25-statement `textio.py` took over 30
-minutes on the Pi; run one module at a time, in the background, never the
-whole tree. The weekly quality run rotates two core modules a week.
+Per-tool unit tests live under tests/unit/tools; broader coverage is grouped by
+responsibility under tests/{unit,integration,contracts,system,scripts}.
+docs/testing.md is authoritative for test placement and execution semantics,
+while docs/quality-gates.md owns the layered pre-commit, pre-push, CI and
+scheduled-security policy. Do not copy test counts or measured coverage values
+into this agent guide; they drift as the suite changes.
+
+Use uv run python scripts/run_test_suite.py for managed full-suite feedback, or
+run the changed module directly for the shortest honest feedback loop. The
+authoritative per-module coverage gate is uv run tox -e coverage-policy --
+--seed 12345; ordinary Python tox environments remain uncovered compatibility
+checks.
+
+Tool specs are docs/agent-toolset-design.md plus docs/tools/NAME.md. Property,
+contract and authenticated HTTP coverage still live in their documented test
+layers. mutmut remains an on-demand/weekly tool rather than a commit hook; its
+source_paths and also_copy configuration in pyproject.toml are part of the
+mutation-test contract. See docs/testing.md for the current mutation procedure
+and cost guidance.
 
 Pick the path by what changed:
 
