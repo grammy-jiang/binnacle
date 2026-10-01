@@ -16,17 +16,26 @@ lines through the root handler, never wrapped: ``INFO: event=...`` up to
 millisecond timestamp (docs/logging.md). Both shapes parse here.
 """
 
-import hashlib
-import json
 import re
 from collections import defaultdict, deque
-from pathlib import Path
-from typing import Any
 
 from binnacle.logstats_adaptive import analyze_adaptive_discovery
 from binnacle.logstats_io import fetch_journal
 from binnacle.logstats_jobs import analyze_job_telemetry
 from binnacle.logstats_models import Record, Stats
+from binnacle.logstats_parse import (
+    _base_turn as _parse_base_turn,
+)
+from binnacle.logstats_parse import (
+    _int as _parse_int,
+)
+from binnacle.logstats_parse import (
+    _json_args,
+    plain_fields,
+)
+from binnacle.logstats_parse import (
+    _path_hash as _parse_path_hash,
+)
 from binnacle.logstats_render import render
 from binnacle.logstats_run_command import analyze_run_command_workflow
 from binnacle.logstats_search_exact import analyze_exact_search
@@ -35,6 +44,12 @@ from binnacle.logstats_tools import (
     analyze_tool_config,
     analyze_tool_result,
 )
+
+# Compatibility re-exports: tests and analysis scripts historically access
+# these helpers through binnacle.logstats.
+_base_turn = _parse_base_turn
+_int = _parse_int
+_path_hash = _parse_path_hash
 
 _REC_START = re.compile(
     r"^\s*(?:\[(\d{2}/\d{2}/\d{2}) (\d{2}:\d{2}:\d{2})\] )?(?:INFO|ERROR|WARNING)\s+event=(\w+)"
@@ -47,10 +62,6 @@ _PLAIN_START = re.compile(
     r"(?:INFO|WARNING|ERROR): event=(\w+)(.*)$"
 )
 _PLAIN_TIMESTAMP = re.compile(r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?) ")
-_PLAIN_KV = re.compile(r"(\w+)=(\S+)")
-# Keys whose value is free text (spaces allowed); each is the last key on
-# its line, so the value runs to the end of the record.
-_PLAIN_TAIL_KEYS = (" args=", " error=")
 _LOGREF = re.compile(r"\s+logging\.py:\d+")
 _METHOD = re.compile(r"method=([\w/]+)")
 _DURATION = re.compile(r"duration_ms=([\d.]+)")
@@ -89,27 +100,6 @@ def _appended_fields(body: str) -> dict[str, str]:
         if m:
             fields[name] = m.group(1)
             pos = m.end()
-    return fields
-
-
-def plain_fields(body: str) -> dict[str, str]:
-    """key=value fields of a single-line binnacle record.
-
-    The free-text tail (``args=`` on tool_call, ``error=`` on tool_result)
-    is split off first at the earliest such key, so its content cannot
-    masquerade as further keys.
-    """
-    head, tail_key, tail = body, None, None
-    cut = min(
-        (i for i in (body.find(k) for k in _PLAIN_TAIL_KEYS) if i >= 0),
-        default=-1,
-    )
-    if cut >= 0:
-        key = next(k for k in _PLAIN_TAIL_KEYS if body.find(k) == cut)
-        head, tail_key, tail = body[:cut], key.strip()[:-1], body[cut + len(key) :]
-    fields = dict(_PLAIN_KV.findall(head))
-    if tail_key is not None and tail is not None:
-        fields[tail_key] = tail
     return fields
 
 
@@ -201,35 +191,6 @@ def _request_key(fields: dict[str, str]) -> str | None:
     if not rid or rid == "-":
         return None
     return f"{fields.get('session', '-')}:{rid}"
-
-
-def _json_args(body: str) -> dict[str, Any]:
-    raw = plain_fields(body).get("args")
-    if not raw or raw.endswith("..."):
-        return {}
-    try:
-        value = json.loads(raw)
-    except json.JSONDecodeError:
-        return {}
-    return value if isinstance(value, dict) else {}
-
-
-def _base_turn(value: str | None) -> str:
-    return (value or "-").split("/", 1)[0]
-
-
-def _path_hash(value: str) -> str:
-    path = Path(value).expanduser()
-    if not path.is_absolute():
-        path = Path.home() / "Projects" / path
-    return hashlib.sha256(str(path.resolve()).encode()).hexdigest()[:12]
-
-
-def _int(value: str | None) -> int:
-    try:
-        return int(value) if value is not None else 0
-    except (TypeError, ValueError):
-        return 0
 
 
 def analyze(records: list[Record], startups: int = 0) -> Stats:

@@ -103,3 +103,9 @@ repos:
         language: system
         files: (^src/binnacle/.*\.py$|^quality-policy\.json$)
         pass_filenames: false
+      - id: import-linter
+        name: import architecture contracts
+        entry: uv run --no-sync lint-imports --no-logo
+        language: system
+        files: (^src/binnacle/.*\.py$|^pyproject\.toml$)
+        pass_filenames: false

@@ -6,22 +6,17 @@ from pathlib import Path
 from typing import Any
 
 from binnacle.logstats_models import AdaptiveDiscoveryStats, Record
+from binnacle.logstats_parse import (
+    _base_turn,
+    _int,
+    _json_args,
+    _path_hash,
+    plain_fields,
+)
 
 
 def analyze_adaptive_discovery(records: list[Record]) -> AdaptiveDiscoveryStats:
-    """Join adaptive broad-search first hops to the next ten calls in the turn.
-
-    Imports shared journal helpers lazily so binnacle.logstats can import this
-    analyzer without creating a module-import cycle.
-    """
-    from binnacle.logstats import (
-        _base_turn,
-        _int,
-        _json_args,
-        _path_hash,
-        plain_fields,
-    )
-
+    """Join adaptive broad-search first hops to the next ten calls in the turn."""
     out = AdaptiveDiscoveryStats()
     calls: dict[str, dict[str, Any]] = {}
     results: dict[str, dict[str, str]] = {}

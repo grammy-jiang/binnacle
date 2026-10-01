@@ -146,3 +146,47 @@ DEP004 = ["pytest"]
 python_version = "3.10"
 # Teaches mypy pydantic's synthesized __init__ and Field() semantics.
 plugins = ["pydantic.mypy"]
+
+[tool.importlinter]
+root_package = "binnacle"
+
+[[tool.importlinter.contracts]]
+id = "tools-only-server"
+name = "MCP tools are imported only by the server composition root"
+type = "protected"
+protected_modules = ["binnacle.tools"]
+allowed_importers = ["binnacle.server"]
+
+[[tool.importlinter.contracts]]
+id = "watchdog-isolated"
+name = "Watchdog internals are isolated from Binnacle core"
+type = "protected"
+protected_modules = ["binnacle.ops.watchdog"]
+allowed_importers = ["binnacle.watchdog", "binnacle.watchdog_cli"]
+
+[[tool.importlinter.contracts]]
+id = "server-not-dependency"
+name = "Server composition root is not a dependency"
+type = "forbidden"
+source_modules = ["binnacle.**"]
+forbidden_modules = ["binnacle.server"]
+as_packages = false
+
+[[tool.importlinter.contracts]]
+id = "tool-modules-independent"
+name = "MCP tool modules are independent"
+type = "independence"
+modules = ["binnacle.tools.*"]
+
+[[tool.importlinter.contracts]]
+id = "watchdog-acyclic"
+name = "Watchdog internals remain acyclic"
+type = "acyclic_siblings"
+ancestors = ["binnacle.ops.watchdog"]
+
+[[tool.importlinter.contracts]]
+id = "top-level-acyclic"
+name = "Top-level Binnacle modules remain acyclic"
+type = "acyclic_siblings"
+ancestors = ["binnacle"]
+depth = 0
