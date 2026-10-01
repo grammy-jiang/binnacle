@@ -53,6 +53,31 @@ The long-term portability test is stronger than an import check: deleting the
 watchdog companion must not prevent Binnacle core from building, testing, or
 serving MCP.
 
+## Import architecture contracts
+
+Import Linter complements the Binnacle-specific AST architecture checker. It
+operates on the complete static import graph and blocks architectural drift
+before the Linux/macOS refactor changes module boundaries. The current
+contracts enforce that:
+
+- MCP tool modules are entered only through `binnacle.server`;
+- watchdog internals are entered only through the watchdog facade/CLI;
+- `binnacle.server` remains a composition root, never a lower-layer dependency;
+- MCP tool modules remain independent of one another;
+- watchdog internals remain acyclic; and
+- top-level `binnacle` modules remain acyclic.
+
+Run:
+
+```bash
+uv run lint-imports --no-logo
+```
+
+The contracts live in `pyproject.toml`. Do not weaken a contract to make a new
+import pass; move shared behaviour down to an appropriate lower-level module.
+The custom `scripts/check_architecture.py` gate remains because it also enforces
+Binnacle-specific companion rules and literal dynamic imports.
+
 ## Per-module branch coverage
 
 Coverage is enforced per production module, not by repository average.
@@ -104,6 +129,22 @@ is resolved by the repository runner rather than hard-coded in CI.
 
 `--strict` ignores any migration floor that may be introduced in the future.
 With the current policy it is equivalent to the normal check.
+
+## Repository and dependency gates
+
+Fast deterministic repository checks run at pre-commit: Ruff, mypy, Bandit,
+deptry, Import Linter, module-size/readability gates, TOML/YAML/JSON/Markdown
+validation, `validate-pyproject`, `tox config`, actionlint, secret scanning,
+case-conflict/symlink/shebang checks and lockfile consistency. `uv lock` is
+validation-only in the hook (`--check --offline`); dependency resolution is an
+explicit developer action.
+
+Pre-push runs only the fixed-seed unit+contract two-lane suite. GitHub CI owns
+the full Python compatibility matrix, per-module coverage, full-history secret
+scan and the hash-constrained wheel artifact build. Vulnerability databases are
+external mutable state, so `pip-audit` is deliberately not a commit gate. The
+daily `Security` workflow exports exact locked runtime and development
+dependency sets and audits them separately.
 
 ## Test kinds
 

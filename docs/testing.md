@@ -20,6 +20,10 @@ services, kernel modules, routes, or power state.
 `tests/conftest.py` is intentionally global. Its autouse safety fixture blocks
 host-mutating subprocess commands so an accidental test cannot change the
 machine's real network or services.
+`tests/system/conftest.py` additionally replaces watchdog cycle USB-bus
+discovery with an empty synthetic observation by default. Hardware helpers are
+tested separately against synthetic sysfs trees; system tests must not acquire
+results from the development Pi's real USB inventory.
 
 ## Placement rules
 
@@ -77,6 +81,18 @@ is needed:
 uv run python scripts/run_test_suite.py --workers 4 --seed 12345
 ```
 
+The same runner owns the pre-push population. `--suite fast` selects only unit
+and contract tests while preserving the same parallel-safe / `no_xdist` split:
+
+```bash
+uv run python scripts/run_test_suite.py --suite fast --seed 12345
+pre-commit run --hook-stage pre-push --all-files
+```
+
+Do not replace this with a direct `pytest -n` command: the ordinary-process lane
+is part of the test contract. `pre-commit install` installs both the pre-commit
+and pre-push hook types from the repository configuration.
+
 For direct single-process pytest feedback:
 
 ```bash
@@ -100,10 +116,11 @@ check the current Raspberry Pi deployment:
 BINNACLE_LIVE=1 uv run pytest tests/live -q
 ```
 
-Run the authoritative per-module branch-coverage gate:
+Run the authoritative per-module branch-coverage gate with the same fixed seed
+used by CI:
 
 ```bash
-uv run tox -e coverage-policy
+uv run tox -e coverage-policy -- --seed 12345
 ```
 
 Run the supported Python matrix on the four-core development Pi with
@@ -123,19 +140,44 @@ Compatibility tox environments run `scripts/run_test_suite.py` and do not
 collect coverage. The dedicated `coverage-policy` tox environment owns
 coverage instrumentation and the semantic 95/90 per-module gate. In GitHub
 Actions, Python 3.10, 3.11, 3.12, and 3.14 remain compatibility jobs while
-Python 3.13 runs `coverage-policy`. CI does not hard-code a Pi worker count:
-the repository runner resolves its bounded worker count from the CI host.
+Python 3.13 runs `coverage-policy`. Both paths use pytest-randomly seed `12345`
+for reproducibility; the weekly flake hunt, not ordinary CI, explores multiple
+seeds. CI does not hard-code a Pi worker count: the repository runner resolves
+its bounded worker count from the CI host. A separate Python 3.13 packaging job
+builds and inspects the wheel once, so the compatibility/coverage lanes continue
+to skip `test_wheel_artifact.py` instead of repeating the same build five times.
 
 Before a baseline or merge commit, run:
 
 ```bash
-uv run tox -e coverage-policy
 uv run pre-commit run --all-files
+uv run pre-commit run --hook-stage pre-push --all-files
+uv run tox -e coverage-policy -- --seed 12345
 ```
 
 `testpaths = ["tests"]` in `pyproject.toml`  is intentional. Developer tools
 such as `mutmut` create test-shaped files outside this tree; default pytest
 discovery must never collect those copies.
+
+## Packaging and dependency security
+
+`tests/integration/test_wheel_artifact.py` copies the publishable project into a
+temporary directory and builds a wheel using `build-constraints.txt`. The build
+backend is pinned to an exact setuptools artifact with reviewed SHA-256 hashes,
+and `uv build --require-hashes` refuses an unexpected artifact. This test runs
+once in the dedicated CI packaging job and remains runnable locally.
+
+Dependency vulnerability intelligence is intentionally separate from
+deterministic code gates. `.github/workflows/security.yml` runs daily and on
+manual dispatch. It installs only the `security` dependency group, exports the
+locked runtime set and the locked development-tool set separately, and audits
+each with `pip-audit --no-deps --disable-pip`. A new advisory can therefore
+make the security workflow red without redefining whether an unchanged commit
+was syntactically or semantically valid.
+
+The quality CI job still runs staged-secret protection through pre-commit and,
+with full Git history fetched, runs the manual `gitleaks-history` hook over the
+entire repository history.
 
 ## Deploy and live smoke
 
