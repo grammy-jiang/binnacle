@@ -85,6 +85,14 @@ them explicitly with:
 uv run --no-project scripts/github_governance.py enable-dependabot
 ```
 
+The `uv` updater needs to run its own current uv release. Therefore
+`[tool.uv].required-version` is a reviewed 0.12.x compatibility range rather
+than the repository exact tool pin. The exact developer/pre-commit/CI uv
+version is declared directly in the `dev` dependency group and recorded in `uv.lock`; `scripts/dev.py` validates the locked value and
+GitHub Actions reads it through setup-uv `version-file`. This separation
+prevents the updater from being rejected merely because its bundled uv is
+newer than the repository tool pin.
+
 The existing scheduled `Security` workflow remains authoritative independent
 verification of the exact locked runtime and development dependency sets.
 Dependabot does not replace `pip-audit`.

@@ -9,17 +9,23 @@ from typing import Any
 from scripts import dev
 from scripts import dev_worktrees as worktrees
 
+LOCKED_UV = "0.12.21"
 
-def test_project_contract_parsers(tmp_path: Path) -> None:
-    (tmp_path / "pyproject.toml").write_text(
-        '[tool.uv]\nrequired-version = "==0.12.7"\n',
+
+def _write_uv_lock(root: Path, version: str = LOCKED_UV) -> None:
+    (root / "uv.lock").write_text(
+        f'version = 1\n\n[[package]]\nname = "uv"\nversion = "{version}"\n',
         encoding="utf-8",
     )
+
+
+def test_project_contract_parsers(tmp_path: Path) -> None:
+    _write_uv_lock(tmp_path)
     (tmp_path / ".pre-commit-config.yaml").write_text(
         "default_install_hook_types: [pre-commit, pre-push]\n",
         encoding="utf-8",
     )
-    assert dev.required_uv_version(tmp_path) == "0.12.7"
+    assert dev.locked_uv_version(tmp_path) == LOCKED_UV
     assert dev.configured_hook_types(tmp_path) == (
         "pre-commit",
         "pre-push",
@@ -98,11 +104,7 @@ def test_worktree_health_reports_independent_drift_signals() -> None:
 
 
 def _doctor_tree(tmp_path: Path) -> tuple[Path, Path]:
-    (tmp_path / "pyproject.toml").write_text(
-        '[tool.uv]\nrequired-version = "==0.12.7"\n',
-        encoding="utf-8",
-    )
-    (tmp_path / "uv.lock").write_text("version = 1\n", encoding="utf-8")
+    _write_uv_lock(tmp_path)
     (tmp_path / ".python-version").write_text(
         "3.13\n",
         encoding="utf-8",
@@ -135,7 +137,7 @@ def test_doctor_catches_missing_configured_pre_push_hook(
     def run(argv: Any, cwd: Path) -> dev.CommandResult:
         command = tuple(argv)
         if command == ("/usr/bin/uv", "--version"):
-            return dev.CommandResult(0, "uv 0.12.7 (test)\n")
+            return dev.CommandResult(0, f"uv {LOCKED_UV} (test)\n")
         if command == (
             "/usr/bin/git",
             "rev-parse",
@@ -201,7 +203,7 @@ def test_doctor_treats_a_dirty_checkout_as_warning_not_failure(
     def run(argv: Any, cwd: Path) -> dev.CommandResult:
         command = tuple(argv)
         if command == ("/usr/bin/uv", "--version"):
-            return dev.CommandResult(0, "uv 0.12.7\n")
+            return dev.CommandResult(0, f"uv {LOCKED_UV}\n")
         if command == (
             "/usr/bin/git",
             "rev-parse",
@@ -247,3 +249,24 @@ def test_hook_executable_check_is_real(tmp_path: Path) -> None:
     hook.write_text("#!/bin/sh\n", encoding="utf-8")
     hook.chmod(0o644)
     assert not os.access(hook, os.X_OK)
+
+
+def test_repository_uv_toolchain_has_one_exact_lock_pin() -> None:
+    root = Path(__file__).resolve().parents[2]
+    locked = dev.locked_uv_version(root)
+    assert locked is not None
+
+    pyproject = (root / "pyproject.toml").read_text(encoding="utf-8")
+    assert 'required-version = ">=0.12.7,<0.13"' in pyproject
+    assert f'"uv=={locked}"' in pyproject
+
+    pre_commit = (root / ".pre-commit-config.yaml").read_text(encoding="utf-8")
+    assert f"rev: {locked}" in pre_commit
+
+    for relative in (
+        ".github/workflows/ci.yml",
+        ".github/workflows/security.yml",
+    ):
+        workflow = (root / relative).read_text(encoding="utf-8")
+        assert 'version-file: "uv.lock"' in workflow
+        assert f'version: "{locked}"' not in workflow

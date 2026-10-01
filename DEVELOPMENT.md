@@ -10,7 +10,7 @@ quality-gate policy remains in docs/quality-gates.md.
 Repository-level requirements are:
 
 - Git;
-- uv 0.12.7, enforced by pyproject.toml;
+- uv at the exact version pinned by `uv.lock`;
 - ripgrep (rg).
 
 The deployed Binnacle server still requires Linux and systemd. The development
@@ -28,11 +28,16 @@ uv can run the bootstrap helper before the project's .venv exists.
 
 Bootstrap is idempotent and performs four operations:
 
-1. verify that the installed uv exactly matches the repository requirement;
+1. verify that the installed uv exactly matches the `uv` package in `uv.lock`;
 2. run uv sync --locked --group dev;
 3. run pre-commit install, which installs every hook type declared by
    default_install_hook_types in .pre-commit-config.yaml;
 4. run the repository development doctor.
+
+If bootstrap reports a uv version mismatch, update the standalone uv binary
+to the version named in the error (for example, `uv self update VERSION`) and
+rerun bootstrap. `[tool.uv].required-version` is deliberately a compatible
+0.12.x range so GitHub Dependabot can operate with its bundled uv; the direct `uv==...` dev dependency plus `uv.lock` remain the exact local/CI tool pin.
 
 It does not install operating-system packages, configure systemd services,
 change Binnacle host configuration, or deploy the server.

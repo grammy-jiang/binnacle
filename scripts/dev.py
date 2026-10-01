@@ -37,7 +37,6 @@ from scripts.dev_common import CommandResult, Runner, Which
 from scripts.dev_worktrees import WorktreeStatus, worktree_inventory
 
 ROOT = Path(__file__).resolve().parents[1]
-UV_VERSION_RE = re.compile(r'(?m)^required-version\s*=\s*"==([^"]+)"\s*$')
 HOOK_TYPES_RE = re.compile(r"(?m)^default_install_hook_types\s*:\s*\[([^\]]*)\]\s*$")
 
 
@@ -67,9 +66,18 @@ def _run(argv: Sequence[str], cwd: Path) -> CommandResult:
     return CommandResult(proc.returncode, (proc.stdout or "") + (proc.stderr or ""))
 
 
-def required_uv_version(root: Path = ROOT) -> str | None:
-    match = UV_VERSION_RE.search((root / "pyproject.toml").read_text(encoding="utf-8"))
-    return match.group(1) if match else None
+def locked_uv_version(root: Path = ROOT) -> str | None:
+    """Return the exact uv tool version carried by the repository lock."""
+
+    for block in (root / "uv.lock").read_text(encoding="utf-8").split("[[package]]"):
+        fields: dict[str, str] = {}
+        for line in block.splitlines():
+            key, separator, value = line.partition("=")
+            if separator and key.strip() in {"name", "version"}:
+                fields[key.strip()] = value.strip().strip(chr(34))
+        if fields.get("name") == "uv":
+            return fields.get("version")
+    return None
 
 
 def configured_hook_types(root: Path = ROOT) -> tuple[str, ...]:
@@ -158,13 +166,17 @@ def doctor(
                 checks.append(Check("working-tree", "ok", "clean"))
 
     uv = which("uv")
-    required = required_uv_version(root)
+    required = locked_uv_version(root)
     if uv is None:
         checks.append(Check("uv", "fail", "uv is not on PATH"))
     else:
         actual = _uv_version(uv, root, run)
         if required is None:
-            checks.append(Check("uv", "fail", "cannot read [tool.uv] required-version"))
+            checks.append(
+                Check(
+                    "uv", "fail", "cannot read the locked uv tool version from uv.lock"
+                )
+            )
         elif actual != required:
             checks.append(
                 Check("uv", "fail", f"{actual or '?'} installed; {required} required")
@@ -313,12 +325,13 @@ def bootstrap(
         print("ERROR: uv is not on PATH", file=sys.stderr)
         return 1
 
-    required = required_uv_version(root)
+    required = locked_uv_version(root)
     actual = _uv_version(uv, root, run)
     if required is None or actual != required:
         print(
             f"ERROR: uv {actual or '?'} is installed; "
-            f"repository requires {required or '?'}",
+            f"repository lock requires {required or '?'}. "
+            f"Update uv with: uv self update {required}",
             file=sys.stderr,
         )
         return 1
