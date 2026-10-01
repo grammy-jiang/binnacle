@@ -38,7 +38,7 @@ repos:
       - id: yamllint
   # Markdown linter -- config lives in the repo's .markdownlint.yaml (copied by the skill).
   - repo: https://github.com/DavidAnson/markdownlint-cli2
-    rev: v0.23.2
+    rev: v0.23.3
     hooks:
       - id: markdownlint-cli2
         # Reference corpora preserve source formatting; project prose is linted.
@@ -58,7 +58,7 @@ repos:
   # Ruff -- lint (with autofix) and format; official hook repo, rev kept in
   # step with the ruff version pinned in uv.lock.
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.16.5
+    rev: v0.16.9
     hooks:
       - id: ruff-check
         args: [--fix]
@@ -73,7 +73,7 @@ repos:
   # uv -- keeps uv.lock in step with pyproject.toml (re-locks on drift);
   # official hook repo, rev kept in step with the uv version in uv.lock.
   - repo: https://github.com/astral-sh/uv-pre-commit
-    rev: 0.12.7
+    rev: 0.12.19
     hooks:
       - id: uv-lock
         args: [--check, --offline]
