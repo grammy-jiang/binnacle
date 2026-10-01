@@ -38,7 +38,7 @@ repos:
       - id: yamllint
   # Markdown linter -- config lives in the repo's .markdownlint.yaml (copied by the skill).
   - repo: https://github.com/DavidAnson/markdownlint-cli2
-    rev: v0.23.2
+    rev: v0.23.3
     hooks:
       - id: markdownlint-cli2
         # Reference corpora preserve source formatting; project prose is linted.
@@ -58,7 +58,7 @@ repos:
   # Ruff -- lint (with autofix) and format; official hook repo, rev kept in
   # step with the ruff version pinned in uv.lock.
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.16.5
+    rev: v0.16.9
     hooks:
       - id: ruff-check
         args: [--fix]
