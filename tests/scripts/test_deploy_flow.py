@@ -32,6 +32,7 @@ class Host:
             "busy": 0,
             "reloads": True,
             "push": 0,
+            "sync": [0],
             "target": NEW,
         }
         self.opts.update(opts)
@@ -40,6 +41,7 @@ class Host:
         self.t = 1_790_460_000.0
         self.config_at: float | None = None
         self.ci_seen = 0
+        self.sync_seen = 0
 
     def now(self) -> float:
         self.t += 0.01
@@ -59,6 +61,11 @@ class Host:
             return 0, json.dumps(runs)
         if argv[0].endswith("binnacle") and argv[1:] == ["mode", "status"]:
             return 0, f"binnacle-mcp.service: active; {self.opts['mode']}\n"
+        if argv[0].endswith("/uv") and argv[1:2] == ["sync"]:
+            results = self.opts["sync"]
+            rc = results[min(self.sync_seen, len(results) - 1)]
+            self.sync_seen += 1
+            return rc, "sync ok\n" if rc == 0 else "sync failed\n"
         if argv[:3] == ["systemctl", "--user", "restart"]:
             self.config_at = self.t
             return 0, ""
@@ -282,6 +289,61 @@ def test_code_that_does_not_load_rolls_back(tmp_path: Path, smokes: list[str]) -
     level, text = deploy(host, tmp_path, reload_timeout=5.0)
     assert level == "alert" and "the new code did not load" in text
     assert host.head == PREV and not pushed(host)
+
+
+def test_dev_dependency_change_syncs_and_restarts(
+    tmp_path: Path, smokes: list[str]
+) -> None:
+    host = Host(diff="pyproject.toml\nuv.lock\n", reloads=False)
+    level, text = deploy(host, tmp_path)
+
+    assert level == "ok" and host.head == NEW and pushed(host)
+    assert host.sync_seen == 1
+    assert any(
+        ".venv/bin/uv sync --project" in call and "--locked --group dev" in call
+        for call in host.calls
+    )
+    assert any(
+        "systemctl --user restart binnacle-mcp.service" in call for call in host.calls
+    )
+    assert "sync: sync ok" in text
+    assert "restarted after dev environment sync" in text
+
+
+def test_failed_dev_sync_rolls_back_and_restores_old_environment(
+    tmp_path: Path, smokes: list[str]
+) -> None:
+    host = Host(diff="uv.lock\n", reloads=False, sync=[1, 0])
+    level, text = deploy(host, tmp_path)
+
+    assert level == "alert" and "sync" in text
+    assert host.head == PREV and not pushed(host)
+    assert host.sync_seen == 2
+    assert "smoke OK" in text
+
+
+def test_failed_smoke_after_dev_sync_resyncs_rollback_environment(
+    tmp_path: Path, smokes: list[str]
+) -> None:
+    smokes.extend(["alert", "ok"])
+    host = Host(diff="pyproject.toml\n", reloads=False, sync=[0, 0])
+    level, text = deploy(host, tmp_path)
+
+    assert level == "alert"
+    assert host.head == PREV and not pushed(host)
+    assert host.sync_seen == 2
+    assert "rolled back" in text and "smoke OK" in text
+
+
+def test_prod_dependency_metadata_does_not_sync_checkout_venv(
+    tmp_path: Path, smokes: list[str]
+) -> None:
+    host = Host(mode="prod mode", diff="uv.lock\n", reloads=False)
+    level, text = deploy(host, tmp_path)
+
+    assert level == "ok" and pushed(host)
+    assert host.sync_seen == 0
+    assert "no server code change" in text
 
 
 def test_prod_mode_restarts_the_unit(tmp_path: Path, smokes: list[str]) -> None:

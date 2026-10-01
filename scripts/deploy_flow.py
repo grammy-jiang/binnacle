@@ -7,9 +7,10 @@ Each step either passes or stops the deploy before anything changes:
    are awaited up to ``--ci-timeout``);
 3. a quiet moment: no tool call in the last 30 s (awaited up to
    ``--quiet-timeout``), because a reload fails the calls in flight;
-4. fast-forward. When Python files under ``src/`` changed (the dev unit's
-   ``--reload-dir`` watches nothing else), the dev-mode reload is awaited (a
-   new ``event=config`` line), or in prod mode the unit is restarted;
+4. fast-forward. In dev mode, changes to ``pyproject.toml`` or ``uv.lock``
+   first sync the checkout environment and restart the MCP unit. Otherwise,
+   changed Python files under ``src/`` use the normal dev auto-reload; prod
+   mode keeps its installed-package restart contract;
 5. the live smoke (``scripts/smoke_checks.py``). On success ``master`` and
    ``proof-of-concept`` are pushed atomically to origin. A failed smoke or
    failed remote push resets ``master`` to the previous commit, reloads the
@@ -26,6 +27,7 @@ from scripts.smoke_checks import UNIT, Env, Report, last_line, smoke
 QUIET_WINDOW_S = 30.0
 QUIET_POLL_S = 20.0
 CI_POLL_S = 30.0
+DEV_ENV_INPUTS = {"pyproject.toml", "uv.lock"}
 
 
 def _git(env: Env, *args: str, timeout: float = 60.0) -> tuple[int, str]:
@@ -103,6 +105,31 @@ def _await_config(env: Env, since: float, timeout: float) -> bool:
         env.sleep(1)
 
 
+def _dev_env_changed(names: str) -> bool:
+    """Did the diff change inputs that define the checkout's dev environment?"""
+
+    return any(name.strip() in DEV_ENV_INPUTS for name in names.splitlines())
+
+
+def _sync_dev_env(env: Env, timeout: float) -> tuple[bool, str]:
+    """Synchronize the checkout venv to its current locked dev environment."""
+
+    uv = env.checkout / ".venv" / "bin" / "uv"
+    rc, out = env.run(
+        [
+            str(uv),
+            "sync",
+            "--project",
+            str(env.checkout),
+            "--locked",
+            "--group",
+            "dev",
+        ],
+        timeout,
+    )
+    return rc == 0, last_line(out)
+
+
 def _server_code_changed(names: str) -> bool:
     """Did the diff touch the code the server runs? Both modes run the
     package under ``src/``; the dev unit reloads on its ``*.py`` files only."""
@@ -113,12 +140,18 @@ def _server_code_changed(names: str) -> bool:
 
 
 def _make_live(
-    env: Env, since: float, code_changed: bool, prod: bool, timeout: float
+    env: Env,
+    since: float,
+    code_changed: bool,
+    prod: bool,
+    timeout: float,
+    *,
+    force_restart: bool = False,
 ) -> bool:
     """Load the checkout's current code into the server; True once it runs."""
-    if not code_changed:  # only *.py under src/ triggers the dev-mode reload
+    if not code_changed and not force_restart:
         return True
-    if prod:
+    if prod or force_restart:
         rc, _ = env.run(["systemctl", "--user", "restart", UNIT], timeout)
         if rc != 0:
             return False
@@ -174,6 +207,7 @@ def deploy(
     quiet_timeout: float = 1800.0,
     reload_timeout: float = 20.0,
     restart_timeout: float = 90.0,
+    sync_timeout: float = 300.0,
 ) -> tuple[str, str]:
     """Deploy ``target``; returns (level, report text for cron-report)."""
     report = Report()
@@ -197,6 +231,7 @@ def deploy(
     # still counts as a server change.
     rc, names = _git(env, "diff", "--name-only", "--no-renames", prev, sha)
     code_changed = rc != 0 or _server_code_changed(names)
+    env_changed = rc != 0 or _dev_env_changed(names)
     prod = _prod_mode(env)
     timeout = restart_timeout if prod else reload_timeout
     started = env.now()
@@ -204,12 +239,32 @@ def deploy(
     if rc != 0:
         report.add("fast-forward", "alert", last_line(out))
         return done("alert", f"fast-forward to {sha[:7]} failed; nothing deployed")
-    live = _make_live(env, started, code_changed, prod, timeout)
-    how = (
-        ("restarted" if prod else "reloaded")
-        if code_changed
-        else "no server code change"
+
+    sync_ok = True
+    force_restart = env_changed and not prod
+    if force_restart:
+        sync_ok, sync_detail = _sync_dev_env(env, sync_timeout)
+        report.add(
+            "sync",
+            "ok" if sync_ok else "alert",
+            sync_detail if sync_ok else f"dev environment sync failed: {sync_detail}",
+        )
+
+    live_since = env.now() if force_restart else started
+    live = sync_ok and _make_live(
+        env,
+        live_since,
+        code_changed,
+        prod,
+        timeout,
+        force_restart=force_restart,
     )
+    if force_restart:
+        how = "restarted after dev environment sync"
+    elif code_changed:
+        how = "restarted" if prod else "reloaded"
+    else:
+        how = "no server code change"
     report.add(
         "reload",
         "ok" if live else "alert",
@@ -235,14 +290,33 @@ def deploy(
     failing = ", ".join(c.name for c in report.failing())
     rolled_at = env.now()
     rc, _ = _git(env, "reset", "--keep", prev)
-    back = rc == 0 and _make_live(env, rolled_at, code_changed, prod, timeout)
+    rollback_sync_ok = True
+    if rc == 0 and force_restart:
+        rollback_sync_ok, _ = _sync_dev_env(env, sync_timeout)
+    rollback_live_since = env.now() if force_restart else rolled_at
+    back = (
+        rc == 0
+        and rollback_sync_ok
+        and _make_live(
+            env,
+            rollback_live_since,
+            code_changed,
+            prod,
+            timeout,
+            force_restart=force_restart,
+        )
+    )
     after = smoke(env) if back else None
     state = after.level.upper() if after else "NOT CONFIRMED"
     confirmed = after is not None and after.level != "alert"
     report.add(
         "rollback",
         "ok" if confirmed else "alert",
-        f"master reset to {prev[:7]}; smoke {state}",
+        (
+            f"master reset to {prev[:7]}; smoke {state}"
+            if rollback_sync_ok
+            else f"master reset to {prev[:7]}; old dev environment sync failed"
+        ),
     )
     return done(
         "alert",

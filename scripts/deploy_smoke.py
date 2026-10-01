@@ -110,6 +110,7 @@ def main(argv: Sequence[str] | None = None, env: Env | None = None) -> int:
     )
     dep.add_argument("--ci-timeout", type=float, default=900.0)
     dep.add_argument("--quiet-timeout", type=float, default=1800.0)
+    dep.add_argument("--sync-timeout", type=float, default=300.0)
     args = parser.parse_args(argv)
     env = env or default_env(args.checkout)
     if args.command == "deploy":
@@ -120,6 +121,7 @@ def main(argv: Sequence[str] | None = None, env: Env | None = None) -> int:
             args.target,
             ci_timeout=args.ci_timeout,
             quiet_timeout=args.quiet_timeout,
+            sync_timeout=args.sync_timeout,
         )
     else:
         report = smoke(env, full=args.full, rebaseline=args.rebaseline)
