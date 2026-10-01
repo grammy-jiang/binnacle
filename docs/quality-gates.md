@@ -147,6 +147,12 @@ external mutable state, so `pip-audit` is deliberately not a commit gate. The
 daily `Security` workflow exports exact locked runtime and development
 dependency sets and audits them separately.
 
+Ruff, Bandit, and the uv lock check are local pre-commit hooks on purpose: they
+run the exact project tools resolved by `uv.lock` instead of maintaining a
+second Python-tool version in a remote hook environment. Dependabot therefore
+updates those tools through the `uv` ecosystem; the `pre-commit` ecosystem owns
+only hook-native dependencies.
+
 Dependency lifecycle automation is separate from commit determinism.
 `.github/dependabot.yml` checks `uv`, pre-commit hooks, and GitHub Actions on a
 weekly schedule, while Dependabot alerts/security updates cover known

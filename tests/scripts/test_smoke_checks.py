@@ -418,6 +418,28 @@ def test_main_output_and_exit_code(
         assert out.split(":")[0] in ("OK", "ALERT")
 
 
+def test_deploy_subcommand_passes_sync_timeout(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    import scripts.deploy_flow as flow
+
+    seen: dict[str, Any] = {}
+
+    def fake_deploy(env: Env, target: str, **kwargs: Any) -> tuple[str, str]:
+        seen.update(target=target, **kwargs)
+        return "ok", "OK: fake"
+
+    monkeypatch.setattr(flow, "deploy", fake_deploy)
+    code = deploy_smoke.main(
+        ["deploy", "abc123", "--sync-timeout", "42"],
+        env=make_env(tmp_path, FakeClient()),
+    )
+
+    assert code == 0
+    assert seen["target"] == "abc123"
+    assert seen["sync_timeout"] == 42.0
+
+
 def test_main_deploy_delegates(tmp_path: Path, monkeypatch: Any, capsys: Any) -> None:
     import scripts.deploy_flow as flow
 

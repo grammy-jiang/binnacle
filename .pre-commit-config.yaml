@@ -38,7 +38,7 @@ repos:
       - id: yamllint
   # Markdown linter -- config lives in the repo's .markdownlint.yaml (copied by the skill).
   - repo: https://github.com/DavidAnson/markdownlint-cli2
-    rev: v0.23.2
+    rev: v0.23.3
     hooks:
       - id: markdownlint-cli2
         # Reference corpora preserve source formatting; project prose is linted.
@@ -55,28 +55,6 @@ repos:
         entry: gitleaks git --redact --no-banner
         pass_filenames: false
         stages: [manual]
-  # Ruff -- lint (with autofix) and format; official hook repo, rev kept in
-  # step with the ruff version pinned in uv.lock.
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.16.5
-    hooks:
-      - id: ruff-check
-        args: [--fix]
-      - id: ruff-format
-  # Bandit -- security lint; official hook repo, rev kept in step with uv.lock.
-  - repo: https://github.com/PyCQA/bandit
-    rev: 1.9.4
-    hooks:
-      - id: bandit
-        args: ["-c", "pyproject.toml"]
-        exclude: ^tests/
-  # uv -- keeps uv.lock in step with pyproject.toml (re-locks on drift);
-  # official hook repo, rev kept in step with the uv version in uv.lock.
-  - repo: https://github.com/astral-sh/uv-pre-commit
-    rev: 0.12.21
-    hooks:
-      - id: uv-lock
-        args: [--check, --offline]
   # Codespell -- typo checker for code and prose; official hook repo.
   - repo: https://github.com/codespell-project/codespell
     rev: v2.4.3
@@ -92,6 +70,30 @@ repos:
       - id: actionlint
   - repo: local
     hooks:
+      # Project Python tools intentionally run from the locked uv environment.
+      # This avoids duplicate versions in remote pre-commit hook repositories.
+      - id: ruff-check
+        name: ruff check
+        entry: uv run --no-sync ruff check --fix
+        language: system
+        types_or: [python, pyi]
+      - id: ruff-format
+        name: ruff format
+        entry: uv run --no-sync ruff format
+        language: system
+        types_or: [python, pyi]
+      - id: bandit
+        name: bandit
+        entry: uv run --no-sync bandit -c pyproject.toml
+        language: system
+        types: [python]
+        exclude: ^tests/
+      - id: uv-lock
+        name: uv-lock
+        entry: uv lock --check --offline
+        language: system
+        files: ^(pyproject\.toml|uv\.lock)$
+        pass_filenames: false
       - id: mypy
         name: mypy
         entry: uv run --no-sync mypy src/binnacle tests scripts

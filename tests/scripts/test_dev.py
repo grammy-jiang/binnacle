@@ -337,7 +337,8 @@ def test_repository_uv_toolchain_has_one_exact_lock_pin() -> None:
     assert f'"uv=={locked}"' in pyproject
 
     pre_commit = (root / ".pre-commit-config.yaml").read_text(encoding="utf-8")
-    assert f"rev: {locked}" in pre_commit
+    assert "astral-sh/uv-pre-commit" not in pre_commit
+    assert "entry: uv lock --check --offline" in pre_commit
 
     for relative in (
         ".github/workflows/ci.yml",
@@ -346,3 +347,17 @@ def test_repository_uv_toolchain_has_one_exact_lock_pin() -> None:
         workflow = (root / relative).read_text(encoding="utf-8")
         assert 'version-file: "uv.lock"' in workflow
         assert f'version: "{locked}"' not in workflow
+
+
+def test_precommit_python_tools_use_the_project_environment() -> None:
+    root = Path(__file__).resolve().parents[2]
+    pre_commit = (root / ".pre-commit-config.yaml").read_text(encoding="utf-8")
+    pyproject = (root / "pyproject.toml").read_text(encoding="utf-8")
+
+    assert "astral-sh/ruff-pre-commit" not in pre_commit
+    assert "github.com/PyCQA/bandit" not in pre_commit
+    assert "entry: uv run --no-sync ruff check --fix" in pre_commit
+    assert "entry: uv run --no-sync ruff format" in pre_commit
+    assert "entry: uv run --no-sync bandit -c pyproject.toml" in pre_commit
+    assert '"ruff>=0.16.5,<0.17"' in pyproject
+    assert 'required-version = ">=0.16.5,<0.17"' in pyproject

@@ -209,7 +209,12 @@ The production checkout is deployed through:
 That flow verifies GitHub CI, waits for a quiet production window,
 fast-forwards the production checkout, loads the changed server code, runs the
 live smoke, and only then pushes master and proof-of-concept. On a failed live
-smoke it rolls the checkout back and pushes nothing.
+smoke it rolls the checkout back and pushes nothing. In dev mode, a change to
+`pyproject.toml` or `uv.lock` first synchronizes the checkout `.venv` with
+`uv sync --locked --group dev`, then explicitly restarts the MCP service so
+the smoke exercises the new locked environment. Rollback performs the same
+sync against the old commit before reloading it. The stable jobs service is
+never restarted by this flow.
 
 The deployment preflight requires a clean tracked tree. Untracked files are
 allowed only under `docs/`, because documentation cannot alter the running
