@@ -13,8 +13,9 @@ updates:
       timezone: "Australia/Sydney"
     open-pull-requests-limit: 5
 
-  # Hook revisions are one repository-quality surface, so a single weekly PR is
-  # easier to review against the all-files pre-commit gate.
+  # Remote hook revisions are one repository-quality surface, so a single weekly
+  # PR is easier to review against the all-files pre-commit gate. Project Python
+  # tools (Ruff, Bandit, uv) are local hooks and are owned by the uv ecosystem.
   - package-ecosystem: "pre-commit"
     directory: "/"
     schedule:
