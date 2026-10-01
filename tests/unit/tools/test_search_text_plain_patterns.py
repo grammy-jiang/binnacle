@@ -10,6 +10,7 @@ after it, on the same fixture tree (docs/indexed-context-pilot.md).
 import hashlib
 import json
 import logging
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -51,10 +52,55 @@ def tree(tmp_path: Path) -> Path:
 # -- '@context' is an ordinary pattern ----------------------------------------
 
 
+def _foreign_git_env() -> dict[str, str]:
+    """Remove Git hook repository context before operating on a fixture repo."""
+
+    local_vars = subprocess.run(
+        ["git", "rev-parse", "--local-env-vars"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.splitlines()
+    env = os.environ.copy()
+    for name in local_vars:
+        env.pop(name, None)
+    return env
+
+
 def _git_root(tree: Path) -> Path:
     """The pilot's trigger: the path is a Git worktree root."""
-    subprocess.run(["git", "init", "-q", str(tree)], check=True)
+    subprocess.run(
+        ["git", "init", "-q", str(tree)],
+        check=True,
+        env=_foreign_git_env(),
+    )
     return tree
+
+
+def test_git_root_clears_repository_local_git_environment(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    outer = tmp_path / "outer"
+    foreign = tmp_path / "foreign"
+    subprocess.run(["git", "init", "-q", str(outer)], check=True)
+    subprocess.run(
+        ["git", "-C", str(outer), "config", "core.bare", "false"],
+        check=True,
+    )
+
+    monkeypatch.setenv("GIT_DIR", str(outer / ".git"))
+    monkeypatch.setenv("GIT_WORK_TREE", str(outer))
+
+    assert _git_root(foreign) == foreign
+    assert (foreign / ".git").is_dir()
+    bare = subprocess.run(
+        ["git", "--git-dir", str(outer / ".git"), "config", "core.bare"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    assert bare == "false"
 
 
 def lines_of(payload: dict) -> list[str]:

@@ -25,6 +25,14 @@ discovery with an empty synthetic observation by default. Hardware helpers are
 tested separately against synthetic sysfs trees; system tests must not acquire
 results from the development Pi's real USB inventory.
 
+Tests that invoke Git against a fixture or other foreign repository must clear
+the repository-local Git environment before spawning that command. Git hooks
+export values such as `GIT_DIR` and `GIT_WORK_TREE`; inheriting them can redirect
+an otherwise explicit `git -C ...` or `git init PATH` back to Binnacle's real
+repository metadata. Build the child environment by removing every name
+reported by `git rev-parse --local-env-vars`. The regression coverage is
+`test_git_root_clears_repository_local_git_environment`.
+
 ## Placement rules
 
 Put a test at the lowest level that proves the behaviour without lying about
