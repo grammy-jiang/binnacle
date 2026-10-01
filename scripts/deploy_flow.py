@@ -233,7 +233,8 @@ def deploy(
     code_changed = rc != 0 or _server_code_changed(names)
     env_changed = rc != 0 or _dev_env_changed(names)
     prod = _prod_mode(env)
-    timeout = restart_timeout if prod else reload_timeout
+    force_restart = env_changed and not prod
+    timeout = restart_timeout if prod or force_restart else reload_timeout
     started = env.now()
     rc, out = _git(env, "merge", "--ff-only", sha)
     if rc != 0:
@@ -241,7 +242,6 @@ def deploy(
         return done("alert", f"fast-forward to {sha[:7]} failed; nothing deployed")
 
     sync_ok = True
-    force_restart = env_changed and not prod
     if force_restart:
         sync_ok, sync_detail = _sync_dev_env(env, sync_timeout)
         report.add(

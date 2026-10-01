@@ -38,6 +38,7 @@ class Host:
         self.opts.update(opts)
         self.head = PREV
         self.calls: list[str] = []
+        self.timed_calls: list[tuple[str, float]] = []
         self.t = 1_790_460_000.0
         self.config_at: float | None = None
         self.ci_seen = 0
@@ -53,6 +54,7 @@ class Host:
     def run(self, argv: Sequence[str], timeout: float) -> tuple[int, str]:
         cmd = " ".join(argv)
         self.calls.append(cmd)
+        self.timed_calls.append((cmd, timeout))
         if argv[0] == "git":
             return self._git(argv[3:])
         if argv[:3] == ["gh", "run", "list"]:
@@ -308,6 +310,47 @@ def test_dev_dependency_change_syncs_and_restarts(
     )
     assert "sync: sync ok" in text
     assert "restarted after dev environment sync" in text
+
+
+def test_dev_dependency_restart_uses_restart_timeout(
+    tmp_path: Path, smokes: list[str]
+) -> None:
+    host = Host(diff="uv.lock\n", reloads=False)
+    level, _ = deploy(
+        host,
+        tmp_path,
+        reload_timeout=5.0,
+        restart_timeout=77.0,
+    )
+
+    assert level == "ok"
+    restart_timeouts = [
+        timeout
+        for command, timeout in host.timed_calls
+        if "systemctl --user restart binnacle-mcp.service" in command
+    ]
+    assert restart_timeouts == [77.0]
+
+
+def test_dev_dependency_rollback_restart_uses_restart_timeout(
+    tmp_path: Path, smokes: list[str]
+) -> None:
+    smokes.extend(["alert", "ok"])
+    host = Host(diff="uv.lock\n", reloads=False)
+    level, _ = deploy(
+        host,
+        tmp_path,
+        reload_timeout=5.0,
+        restart_timeout=77.0,
+    )
+
+    assert level == "alert"
+    restart_timeouts = [
+        timeout
+        for command, timeout in host.timed_calls
+        if "systemctl --user restart binnacle-mcp.service" in command
+    ]
+    assert restart_timeouts == [77.0, 77.0]
 
 
 def test_failed_dev_sync_rolls_back_and_restores_old_environment(
