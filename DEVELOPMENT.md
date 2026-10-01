@@ -93,6 +93,9 @@ uv run scripts/dev.py worktrees --json
 
 The inventory reports independent flags rather than making cleanup decisions:
 
+- bare: Git is treating a registered checkout as a bare repository, so normal
+  worktree commands are unavailable;
+- state-unknown: the worktree status could not be read;
 - dirty: tracked or untracked files are present;
 - upstream-gone: the branch has upstream configuration but the upstream ref no
   longer resolves;
@@ -104,21 +107,44 @@ The inventory reports independent flags rather than making cleanup decisions:
 The merged flag describes committed HEAD history only. Dirty work is reported
 separately and must never be discarded merely because HEAD is merged.
 
-Create a normal parallel worktree with Git, then bootstrap it:
+Create and bootstrap a parallel worktree in one command:
 
 ~~~bash
-git worktree add -b feature/example ../binnacle-example master
-cd ../binnacle-example
-uv run scripts/dev.py bootstrap
+uv run scripts/dev.py worktree-create ../binnacle-example \
+  --branch feature/example --base master
 ~~~
 
-Do not copy .venv between worktrees. uv will create or synchronize the correct
+Creation is transactional. The helper validates the branch/base and target
+path, refuses nested worktrees and branch names that already exist locally or
+on `origin`, creates the worktree, then runs the canonical bootstrap against
+that checkout. If bootstrap fails while the new branch is still at the original
+base and the worktree has no source changes, the helper removes the
+half-created worktree and branch. If anything changed after creation, it
+preserves the worktree rather than discarding possible work.
+
+Do not copy `.venv` between worktrees. uv creates or synchronizes the correct
 environment for each checkout.
 
-Worktree deletion remains an explicit manual operation for now. Do not remove a
-dirty, unmerged, or locked worktree. A later infrastructure phase may add a
-guarded cleanup command, but the current command is deliberately diagnostic
-only.
+Cleanup is guarded and defaults to a dry-run plan:
+
+~~~bash
+uv run scripts/dev.py worktree-cleanup ../binnacle-example --delete-branch
+~~~
+
+The command refuses the current worktree, bare or locked worktrees,
+dirty/unknown working-tree state, any HEAD not already merged into `master`,
+and any worktree currently attached to protected local branches such as
+`master` or `proof-of-concept`.
+
+Only after the plan is safe should cleanup be applied explicitly:
+
+~~~bash
+uv run scripts/dev.py worktree-cleanup ../binnacle-example \
+  --delete-branch --apply
+~~~
+
+Branch deletion uses ordinary `git branch -d`, never a forced delete. Remote
+branches are never deleted by this helper.
 
 ## Normal development loop
 

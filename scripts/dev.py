@@ -2,19 +2,10 @@
 # /// script
 # requires-python = ">=3.10"
 # ///
-"""Repository development bootstrap, doctor, and worktree inventory.
+"""Repository development bootstrap, doctor, and worktree lifecycle CLI.
 
-Run this through uv so it remains usable before the project virtual environment
-exists:
-
-    uv run scripts/dev.py bootstrap
-    uv run scripts/dev.py doctor
-    uv run scripts/dev.py worktrees
-
-The script intentionally uses only the standard library. The PEP 723 metadata
-makes the uv-run entry point independent of the project's .venv, which is
-important because creating and validating that environment is part of the
-bootstrap job itself.
+It is standard-library-only with PEP 723 metadata, so invoke it through uv
+even before the project virtual environment exists.
 """
 
 from __future__ import annotations
@@ -34,6 +25,7 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from scripts.dev_common import CommandResult, Runner, Which
+from scripts.dev_worktree_lifecycle import cleanup_worktree, create_worktree
 from scripts.dev_worktrees import WorktreeStatus, worktree_inventory
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -383,6 +375,25 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="emit machine-readable JSON",
     )
+
+    create_parser = sub.add_parser(
+        "worktree-create", help="create and bootstrap a parallel worktree"
+    )
+    create_parser.add_argument("path", type=Path)
+    create_parser.add_argument("--branch", required=True)
+    create_parser.add_argument("--base", default="master")
+
+    cleanup_parser = sub.add_parser(
+        "worktree-cleanup",
+        help="plan or perform guarded cleanup of one worktree",
+    )
+    cleanup_parser.add_argument("path", type=Path)
+    cleanup_parser.add_argument(
+        "--delete-branch", action="store_true", help="delete the merged local branch"
+    )
+    cleanup_parser.add_argument(
+        "--apply", action="store_true", help="perform cleanup instead of planning"
+    )
     return parser
 
 
@@ -402,6 +413,33 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 1
         _print_worktrees(items, as_json=args.json)
         return 0
+    if args.command == "worktree-create":
+        ok, detail = create_worktree(
+            ROOT,
+            path=args.path,
+            branch=args.branch,
+            base=args.base,
+            run=_run,
+            which=shutil.which,
+            bootstrap=lambda root: bootstrap(
+                root,
+                run=_run,
+                which=shutil.which,
+            ),
+        )
+        print(f"[{'OK' if ok else 'FAIL'}] {detail}")
+        return 0 if ok else 1
+    if args.command == "worktree-cleanup":
+        ok, detail = cleanup_worktree(
+            ROOT,
+            path=args.path,
+            delete_branch=args.delete_branch,
+            apply=args.apply,
+            run=_run,
+            which=shutil.which,
+        )
+        print(f"[{'OK' if ok else 'FAIL'}] {detail}")
+        return 0 if ok else 1
     raise AssertionError(args.command)
 
 

@@ -65,14 +65,20 @@ locked agent owns this worktree
 worktree /repo/detached
 HEAD cccccccccccccccccccccccccccccccccccccccc
 detached
+
+worktree /repo/bare-main
+bare
 """
     )
     assert [(item.path, item.branch) for item in parsed] == [
         (Path("/repo"), "master"),
         (Path("/repo/agent"), "feature/a"),
         (Path("/repo/detached"), None),
+        (Path("/repo/bare-main"), None),
     ]
     assert parsed[1].locked == "agent owns this worktree"
+    assert parsed[3].bare is True
+    assert parsed[3].head is None
 
 
 def test_worktree_health_reports_independent_drift_signals() -> None:
@@ -101,6 +107,16 @@ def test_worktree_health_reports_independent_drift_signals() -> None:
         lock="current",
         locked=None,
     ) == ("ok",)
+    assert worktrees.worktree_health(
+        branch=None,
+        merged_to_master=None,
+        dirty_changes=None,
+        upstream="-",
+        venv=True,
+        lock="current",
+        locked=None,
+        bare=True,
+    ) == ("bare", "state-unknown")
 
 
 def _doctor_tree(tmp_path: Path) -> tuple[Path, Path]:
