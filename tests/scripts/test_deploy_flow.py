@@ -150,6 +150,7 @@ def test_a_good_deploy_reloads_smokes_and_pushes(
     level, text = deploy(host, tmp_path)
     assert level == "ok" and text.startswith("OK: deployed bbbbbbb (was aaaaaaa)")
     assert host.head == NEW and pushed(host)
+    assert any(" push --atomic -q origin " in c for c in host.calls)
     assert any("HEAD:proof-of-concept" in c for c in host.calls)
 
 
@@ -253,10 +254,15 @@ def test_prod_mode_restarts_the_unit(tmp_path: Path, smokes: list[str]) -> None:
     assert any("systemctl --user restart binnacle-mcp.service" in c for c in host.calls)
 
 
-def test_a_failed_push_is_a_warning(tmp_path: Path, smokes: list[str]) -> None:
+def test_a_failed_atomic_push_rolls_back(tmp_path: Path, smokes: list[str]) -> None:
     host = Host(push=1)
     level, text = deploy(host, tmp_path)
-    assert level == "warn" and "the push failed" in text and host.head == NEW
+    assert level == "alert"
+    assert "deploy of bbbbbbb failed (push)" in text
+    assert "rolled back to aaaaaaa (smoke OK)" in text
+    assert host.head == PREV
+    assert any(" push --atomic -q origin " in c for c in host.calls)
+    assert any(" reset --keep " + PREV in c for c in host.calls)
 
 
 def test_ci_state_reads_gh_output(tmp_path: Path) -> None:

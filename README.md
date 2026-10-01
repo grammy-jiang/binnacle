@@ -109,7 +109,8 @@ uv run tox
 GitHub Actions separately enforces code quality, the supported Python
 compatibility matrix, the coverage policy, and wheel-artifact packaging. A
 scheduled Security workflow audits the locked runtime and development
-dependencies daily.
+dependencies daily. Dependabot version updates and repository-side governance
+are documented in `docs/github-governance.md`.
 
 There is currently no GitHub release/publishing pipeline. Production deployment
 uses the repository's gated local live-smoke flow described in DEVELOPMENT.md.

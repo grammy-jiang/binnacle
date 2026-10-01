@@ -11,9 +11,9 @@ Each step either passes or stops the deploy before anything changes:
    ``--reload-dir`` watches nothing else), the dev-mode reload is awaited (a
    new ``event=config`` line), or in prod mode the unit is restarted;
 5. the live smoke (``scripts/smoke_checks.py``). On success ``master`` and
-   ``proof-of-concept`` are pushed to origin. On failure ``master`` is reset
-   to the previous commit, the old code is reloaded, the smoke runs again to
-   confirm the rollback, and nothing is pushed.
+   ``proof-of-concept`` are pushed atomically to origin. A failed smoke or
+   failed remote push resets ``master`` to the previous commit, reloads the
+   old code, and reruns the smoke to confirm the rollback.
 """
 
 from __future__ import annotations
@@ -197,19 +197,17 @@ def deploy(
         rc, out = _git(
             env,
             "push",
+            "--atomic",
             "-q",
             "origin",
             "HEAD:master",
             "HEAD:proof-of-concept",
             timeout=120,
         )
-        if rc != 0:
-            report.add("push", "warn", last_line(out))
-            return done(
-                "warn", f"deployed {sha[:7]} (was {prev[:7]}), but the push failed"
-            )
-        report.add("push", "ok", "master and proof-of-concept")
-        return done(checked.level, f"deployed {sha[:7]} (was {prev[:7]})")
+        if rc == 0:
+            report.add("push", "ok", "master and proof-of-concept (atomic)")
+            return done(checked.level, f"deployed {sha[:7]} (was {prev[:7]})")
+        report.add("push", "alert", last_line(out) or "atomic push failed")
     failing = ", ".join(c.name for c in report.failing())
     rolled_at = env.now()
     rc, _ = _git(env, "reset", "--keep", prev)
