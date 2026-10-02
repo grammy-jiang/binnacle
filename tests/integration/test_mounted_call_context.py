@@ -9,7 +9,7 @@ from fastmcp.exceptions import ToolError
 from fastmcp.server.middleware import Middleware
 
 from binnacle import callctx, server
-from binnacle.tools import read_file
+from binnacle.tools import read_file, search_text
 from tests.integration.http_test_support import http_tool_call, with_session
 
 
@@ -47,7 +47,10 @@ class ChildCalls(Middleware):
 
 @pytest.mark.parametrize(
     ("domain", "adapter", "implementation", "tool", "argument"),
-    [("files", read_file, "read_file_impl", "read_file", "path")],
+    [
+        ("files", read_file, "read_file_impl", "read_file", "path"),
+        ("search", search_text, "search_text_impl", "search_text", "pattern"),
+    ],
 )
 def test_concurrent_http_context_logging_and_errors_across_child(
     domain, adapter, implementation, tool, argument, tmp_path, monkeypatch, caplog
@@ -55,6 +58,8 @@ def test_concurrent_http_context_logging_and_errors_across_child(
     path = tmp_path / "sample.txt"
     path.write_text("alpha\n")
     arguments = {"path": str(path)}
+    if domain == "search":
+        arguments["pattern"] = "alpha"
     original = getattr(adapter, implementation)
     observed, child_calls, restored = [], [], []
     rendezvous = threading.Barrier(2, timeout=15)

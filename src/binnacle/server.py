@@ -25,6 +25,7 @@ from binnacle.run_command_telemetry import (
     auto_background_behavior_hash,
     auto_background_policy_hash,
 )
+from binnacle.search_server import create_search_server
 from binnacle.tool_order import PublicToolOrder
 from binnacle.tools import register_all
 from binnacle.visibility import ClientToolVisibility
@@ -199,6 +200,7 @@ def create_server() -> FastMCP:
     root.add_transform(PublicToolOrder())
     register_all(root)
     root.mount(create_files_server())
+    root.mount(create_search_server())
     return root
 
 
