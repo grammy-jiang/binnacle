@@ -12,8 +12,13 @@ resolver; see that module for the per-era details.
 
 from collections.abc import Sequence
 
+from fastmcp import Context
 from fastmcp.exceptions import ToolError
+from fastmcp.server.dependencies import get_context
 from fastmcp.server.middleware import CallNext, Middleware, MiddlewareContext
+from fastmcp.server.transforms import GetToolNext, Transform, Visibility
+from fastmcp.tools.base import Tool
+from fastmcp.utilities.versions import VersionSpec
 
 from binnacle.identity import ClientIdentity
 
@@ -56,3 +61,44 @@ class ClientToolVisibility(Middleware):
         if enabled is not None and name not in enabled:
             raise ToolError(f"Tool {name!r} is not available to this client.")
         return await call_next(context)
+
+
+_ALLOWLIST_KEY = "binnacle.client_tool_allowlist"
+
+
+def _request_context() -> Context | None:
+    """Direct Python introspection has no protocol policy or session state."""
+    try:
+        ctx = get_context()
+    except RuntimeError as exc:
+        if str(exc) != "No active context found.":
+            raise
+        return None
+    return ctx if ctx.request_context is not None else None
+
+
+class ClientToolVisibilityTransform(Transform):
+    """Delegate request policy marking to native Visibility; keep no client state."""
+
+    async def _allowlist(self) -> frozenset[str] | None:
+        ctx = _request_context()
+        return await ctx.get_state(_ALLOWLIST_KEY) if ctx is not None else None
+
+    async def list_tools(self, tools: Sequence[Tool]) -> Sequence[Tool]:
+        allowed = await self._allowlist()
+        if allowed is None:
+            return tools
+        marked = await Visibility(False, components={"tool"}).list_tools(tools)
+        return await Visibility(
+            True, names=set(allowed), components={"tool"}
+        ).list_tools(marked)
+
+    async def get_tool(
+        self, name: str, call_next: GetToolNext, *, version: VersionSpec | None = None
+    ) -> Tool | None:
+        allowed = await self._allowlist()
+        if allowed is None:
+            return await call_next(name, version=version)
+        return await Visibility(name in allowed, components={"tool"}).get_tool(
+            name, call_next, version=version
+        )
