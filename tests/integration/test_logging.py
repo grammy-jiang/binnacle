@@ -362,9 +362,9 @@ def test_missing_turn_is_none_inside_sync_tool(monkeypatch):
     seen: list[str | None] = []
     original = lf.list_files_impl
 
-    def capture(path, glob, max_results, include_hidden):
+    def capture(*args, **kwargs):
         seen.append(current_turn.get())
-        return original(path, glob, max_results, include_hidden)
+        return original(*args, **kwargs)
 
     monkeypatch.setattr(lf, "list_files_impl", capture)
     assert current_turn.get() is None
@@ -378,9 +378,9 @@ def test_base_turn_reaches_sync_tool_and_resets_sequentially(monkeypatch):
     original = lf.list_files_impl
     headers = {"x-request-id": "turn-a/call-1"}
 
-    def capture(path, glob, max_results, include_hidden):
+    def capture(*args, **kwargs):
         seen.append(current_turn.get())
-        return original(path, glob, max_results, include_hidden)
+        return original(*args, **kwargs)
 
     monkeypatch.setattr(lf, "list_files_impl", capture)
     monkeypatch.setattr(logging_middleware, "get_http_headers", lambda: dict(headers))

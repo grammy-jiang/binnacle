@@ -14,15 +14,9 @@ from fastmcp import FastMCP
 from fastmcp.tools.base import ToolResult
 from pydantic import Field
 
-from binnacle.config import get_settings
+from binnacle.config import ListFilesSettings, RootsSettings, get_settings
 from binnacle.errors import CodedToolError
 from binnacle.paths import full_match, nearby_hint, resolve_path
-
-LIST_MAX_RESULTS_DEFAULT = get_settings().list_files.max_results_default
-LIST_MAX_RESULTS_CAP = get_settings().list_files.max_results_cap
-RG_TIMEOUT_S = get_settings().list_files.rg_timeout_s
-RG_BIN = get_settings().rg_bin
-
 
 OUTPUT_SCHEMA = {
     "type": "object",
@@ -86,13 +80,23 @@ def _list_mode(root: Path, max_results: int, include_hidden: bool) -> ToolResult
 
 
 def _glob_mode(
-    root: Path, glob: str, max_results: int, include_hidden: bool
+    root: Path,
+    glob: str,
+    max_results: int,
+    include_hidden: bool,
+    *,
+    rg_bin: str | None = None,
+    timeout_s: int | None = None,
 ) -> ToolResult:
+    if rg_bin is None or timeout_s is None:
+        defaults = get_settings()
+        rg_bin = defaults.rg_bin if rg_bin is None else rg_bin
+        timeout_s = defaults.list_files.rg_timeout_s if timeout_s is None else timeout_s
     # rg only walks (gitignore/hidden respected); the glob filter runs in
     # Python: rg's --glob "always overrides any other ignore logic", so a
     # positive --glob would whitelist gitignored files (found by the gate).
     pattern = glob if "/" in glob else f"**/{glob}"
-    cmd = [RG_BIN, "--files", "--sortr", "modified"]
+    cmd = [rg_bin, "--files", "--sortr", "modified"]
     if include_hidden:
         cmd += ["--hidden", "--glob", "!**/.git/**"]
     try:
@@ -101,7 +105,7 @@ def _glob_mode(
             cwd=root,
             capture_output=True,
             text=True,
-            timeout=RG_TIMEOUT_S,
+            timeout=timeout_s,
             check=False,
         )
     except FileNotFoundError as exc:
@@ -113,7 +117,7 @@ def _glob_mode(
     except subprocess.TimeoutExpired as exc:
         raise CodedToolError(
             "rg_timeout",
-            f"Glob search timed out after {RG_TIMEOUT_S} s in {root}. "
+            f"Glob search timed out after {timeout_s} s in {root}. "
             f"Narrow the glob or point path at a subdirectory.",
         ) from exc
     if proc.returncode not in (0, 1):
@@ -172,26 +176,57 @@ def _glob_mode(
 
 
 def list_files_impl(
-    path: str, glob: str | None, max_results: int, include_hidden: bool
+    path: str,
+    glob: str | None,
+    max_results: int,
+    include_hidden: bool,
+    *,
+    roots: RootsSettings | None = None,
+    settings: ListFilesSettings | None = None,
+    rg_bin: str | None = None,
 ) -> ToolResult:
-    resolved = resolve_path(path)
+    if settings is None or rg_bin is None:
+        defaults = get_settings()
+        settings = defaults.list_files if settings is None else settings
+        rg_bin = defaults.rg_bin if rg_bin is None else rg_bin
+    resolved = resolve_path(path, roots=roots)
     if not resolved.exists():
         raise CodedToolError(
             "directory_not_found",
-            f"Directory not found: {resolved}.{nearby_hint(resolved.parent)}",
+            f"Directory not found: {resolved}.{nearby_hint(resolved.parent, roots=roots)}",
         )
     if not resolved.is_dir():
         raise CodedToolError(
             "path_is_file",
             f"Path is a file, not a directory: {resolved}. Use read_file to read it.",
         )
-    max_results = max(1, min(max_results, LIST_MAX_RESULTS_CAP))
+    max_results = max(1, min(max_results, settings.max_results_cap))
     if glob:
-        return _glob_mode(resolved, glob, max_results, include_hidden)
+        return _glob_mode(
+            resolved,
+            glob,
+            max_results,
+            include_hidden,
+            rg_bin=rg_bin,
+            timeout_s=settings.rg_timeout_s,
+        )
     return _list_mode(resolved, max_results, include_hidden)
 
 
-def register(mcp: FastMCP) -> None:
+def register(
+    mcp: FastMCP,
+    *,
+    roots: RootsSettings | None = None,
+    settings: ListFilesSettings | None = None,
+    rg_bin: str | None = None,
+) -> None:
+    if roots is None or settings is None or rg_bin is None:
+        defaults = get_settings()
+        roots = defaults.roots if roots is None else roots
+        settings = defaults.list_files if settings is None else settings
+        rg_bin = defaults.rg_bin if rg_bin is None else rg_bin
+    roots, settings = roots.model_copy(deep=True), settings.model_copy(deep=True)
+
     @mcp.tool(
         annotations={"readOnlyHint": True, "openWorldHint": False},
         output_schema=OUTPUT_SCHEMA,
@@ -212,9 +247,11 @@ def register(mcp: FastMCP) -> None:
         max_results: Annotated[
             int,
             Field(
-                ge=1, le=LIST_MAX_RESULTS_CAP, description="Cap on returned entries."
+                ge=1,
+                le=settings.max_results_cap,
+                description="Cap on returned entries.",
             ),
-        ] = LIST_MAX_RESULTS_DEFAULT,
+        ] = settings.max_results_default,
         include_hidden: Annotated[
             bool, Field(description="Include dotfiles (.git always excluded).")
         ] = False,
@@ -223,4 +260,12 @@ def register(mcp: FastMCP) -> None:
         recursively by glob (e.g. **/*.py), newest first, gitignore
         respected. Names only; for contents use search_text or read_file.
         """
-        return list_files_impl(path, glob, max_results, include_hidden)
+        return list_files_impl(
+            path,
+            glob,
+            max_results,
+            include_hidden,
+            roots=roots,
+            settings=settings,
+            rg_bin=rg_bin,
+        )

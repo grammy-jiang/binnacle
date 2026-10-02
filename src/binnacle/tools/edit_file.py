@@ -14,10 +14,8 @@ from fastmcp.exceptions import ToolError
 from fastmcp.tools.base import ToolResult
 from pydantic import Field
 
-from binnacle.config import get_settings
+from binnacle.config import EditFileSettings, RootsSettings, get_settings
 from binnacle.paths import nearby_hint, resolve_path
-
-SNIPPET_CONTEXT_LINES = get_settings().edit_file.snippet_context_lines
 
 _BOM_CODECS = (
     (b"\xff\xfe\x00\x00", "utf-32-le"),
@@ -69,10 +67,17 @@ def _line_of_offset(text: str, offset: int) -> int:
     return text.count("\n", 0, offset) + 1
 
 
-def _snippet_around(text: str, first_change_line: int) -> tuple[str, int]:
+def _snippet_around(
+    text: str,
+    first_change_line: int,
+    *,
+    context_lines: int | None = None,
+) -> tuple[str, int]:
+    if context_lines is None:
+        context_lines = get_settings().edit_file.snippet_context_lines
     lines = text.splitlines(keepends=True)
-    start = max(0, first_change_line - 1 - SNIPPET_CONTEXT_LINES)
-    end = min(len(lines), first_change_line + SNIPPET_CONTEXT_LINES)
+    start = max(0, first_change_line - 1 - context_lines)
+    end = min(len(lines), first_change_line + context_lines)
     return "".join(lines[start:end]), start + 1
 
 
@@ -111,12 +116,19 @@ def _flexible_matches(text: str, old_string: str) -> list[tuple[int, int]]:
 
 
 def edit_file_impl(
-    path: str, old_string: str, new_string: str, replace_all: bool
+    path: str,
+    old_string: str,
+    new_string: str,
+    replace_all: bool,
+    *,
+    roots: RootsSettings | None = None,
+    settings: EditFileSettings | None = None,
 ) -> ToolResult:
-    resolved = resolve_path(path)
+    settings = get_settings().edit_file if settings is None else settings
+    resolved = resolve_path(path, roots=roots)
     if not resolved.exists():
         raise ToolError(
-            f"File not found: {resolved}.{nearby_hint(resolved.parent)} "
+            f"File not found: {resolved}.{nearby_hint(resolved.parent, roots=roots)} "
             f"To create a new file, use write_file."
         )
     if resolved.is_dir():
@@ -187,7 +199,9 @@ def edit_file_impl(
     except OSError as e:
         raise ToolError(f"Could not write {resolved}: {e.strerror or e}.") from e
 
-    snippet, snippet_first_line = _snippet_around(new_text, first_change_line)
+    snippet, snippet_first_line = _snippet_around(
+        new_text, first_change_line, context_lines=settings.snippet_context_lines
+    )
     payload = {
         "path": str(resolved),
         "replacements": replacements,
@@ -206,7 +220,18 @@ def edit_file_impl(
     return ToolResult(content=summary, structured_content=payload)
 
 
-def register(mcp: FastMCP) -> None:
+def register(
+    mcp: FastMCP,
+    *,
+    roots: RootsSettings | None = None,
+    settings: EditFileSettings | None = None,
+) -> None:
+    if roots is None or settings is None:
+        defaults = get_settings()
+        roots = defaults.roots if roots is None else roots
+        settings = defaults.edit_file if settings is None else settings
+    roots, settings = roots.model_copy(deep=True), settings.model_copy(deep=True)
+
     @mcp.tool(
         annotations={
             "readOnlyHint": False,
@@ -245,4 +270,6 @@ def register(mcp: FastMCP) -> None:
         attempted and reported. Returns a snippet of the changed region.
         Use write_file to create files.
         """
-        return edit_file_impl(path, old_string, new_string, replace_all)
+        return edit_file_impl(
+            path, old_string, new_string, replace_all, roots=roots, settings=settings
+        )

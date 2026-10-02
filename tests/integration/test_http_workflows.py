@@ -268,10 +268,10 @@ def test_http_concurrent_requests_keep_distinct_base_turns(monkeypatch, tmp_path
     seen: list[str | None] = []
     original = lf.list_files_impl
 
-    def capture(path, glob, max_results, include_hidden):
+    def capture(*args, **kwargs):
         seen.append(current_turn.get())
         barrier.wait(timeout=5)
-        return original(path, glob, max_results, include_hidden)
+        return original(*args, **kwargs)
 
     monkeypatch.setattr(lf, "list_files_impl", capture)
 

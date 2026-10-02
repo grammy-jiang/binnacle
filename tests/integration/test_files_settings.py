@@ -6,8 +6,13 @@ import pytest
 from fastmcp import Client
 
 from binnacle import files_server, paths
-from binnacle.config import ReadFileSettings, RootsSettings
-from binnacle.tools import read_file, write_file
+from binnacle.config import (
+    EditFileSettings,
+    ListFilesSettings,
+    ReadFileSettings,
+    RootsSettings,
+)
+from binnacle.tools import edit_file, list_files, read_file, write_file
 
 
 def fail_global():
@@ -103,3 +108,161 @@ def test_direct_explicit_read_limits(tmp_path, monkeypatch, field, value, expect
     monkeypatch.setattr(paths, "get_settings", fail_global)
     result = read_file.read_file_impl("file", 1, None, roots=roots, settings=settings)
     assert result.structured_content["content"] == expected
+
+
+def explicit_files(roots, **overrides):
+    inputs = {
+        "roots": roots,
+        "read_settings": ReadFileSettings(),
+        "list_settings": ListFilesSettings(),
+        "edit_settings": EditFileSettings(),
+        "rg_bin": "rg",
+    }
+    inputs.update(overrides)
+    return files_server.create_files_server(**inputs)
+
+
+def test_fully_supplied_files_never_load_settings_and_preserve_path_metadata(
+    tmp_path, monkeypatch
+):
+    roots = RootsSettings(default_root=tmp_path, extra_roots=())
+    for module in (files_server, paths, read_file, write_file, list_files, edit_file):
+        monkeypatch.setattr(module, "get_settings", fail_global)
+    child = explicit_files(roots)
+
+    async def go():
+        async with Client(child, cache=False) as client:
+            tools = {t.name: t for t in await client.list_tools()}
+            assert (
+                tools["list_files"].input_schema["properties"]["path"]["default"]
+                == "~/Projects"
+            )
+            for tool in tools.values():
+                assert "~/Projects" in str(tool.input_schema["properties"]["path"])
+            omitted = await client.call_tool("list_files", {}, raise_on_error=False)
+            assert (
+                omitted.is_error and "outside allowed roots" in omitted.content[0].text
+            )
+            for path in (".", str(tmp_path)):
+                assert not (
+                    await client.call_tool("list_files", {"path": path})
+                ).is_error
+
+    asyncio.run(go())
+
+
+def test_list_and_edit_snapshots_control_schema_cap_and_snippet(tmp_path, monkeypatch):
+    roots = RootsSettings(default_root=tmp_path, extra_roots=())
+    for i in range(4):
+        (tmp_path / f"{i}.txt").write_text("before\nneedle\nafter\n")
+    children = []
+    for cap, snippet in [(1, 0), (3, 1)]:
+        listing = ListFilesSettings(max_results_default=cap, max_results_cap=cap)
+        editing = EditFileSettings(snippet_context_lines=snippet)
+        children.append(
+            explicit_files(roots, list_settings=listing, edit_settings=editing)
+        )
+        listing.max_results_default = listing.max_results_cap = 99
+        editing.snippet_context_lines = 99
+    for module in (files_server, paths, list_files, edit_file):
+        monkeypatch.setattr(module, "get_settings", fail_global)
+
+    async def go():
+        for i, (child, cap, snippet) in enumerate(
+            zip(
+                children, [1, 3], ["changed\n", "before\nchanged\nafter\n"], strict=True
+            )
+        ):
+            async with Client(child) as client:
+                tools = {t.name: t for t in await client.list_tools()}
+                parameter = tools["list_files"].input_schema["properties"][
+                    "max_results"
+                ]
+                assert parameter["default"] == parameter["maximum"] == cap
+                listing = await client.call_tool("list_files", {"path": "."})
+                assert listing.structured_content["count"] == cap
+                assert listing.structured_content["truncated"]
+                result = await client.call_tool(
+                    "edit_file",
+                    {
+                        "path": f"{i}.txt",
+                        "old_string": "needle",
+                        "new_string": "changed",
+                    },
+                )
+                assert result.structured_content["snippet"] == snippet
+                excessive = await client.call_tool(
+                    "list_files",
+                    {"path": ".", "max_results": cap + 1},
+                    raise_on_error=False,
+                )
+                assert excessive.is_error
+        direct = list_files.list_files_impl(
+            ".",
+            None,
+            99,
+            False,
+            roots=roots,
+            settings=ListFilesSettings(max_results_cap=2),
+            rg_bin="rg",
+        )
+        assert direct.structured_content["count"] == 2
+
+    asyncio.run(go())
+
+
+@pytest.mark.parametrize(
+    ("tool", "arguments"),
+    [
+        ("list_files", {"path": "."}),
+        ("edit_file", {"path": ".", "old_string": "old", "new_string": "new"}),
+    ],
+)
+def test_remaining_files_error_hints_use_captured_roots(
+    tmp_path, monkeypatch, tool, arguments
+):
+    (tmp_path / "private-sibling").write_text("secret")
+    child = explicit_files(
+        RootsSettings(default_root=tmp_path / "missing", extra_roots=())
+    )
+    for module in (files_server, paths, list_files, edit_file):
+        monkeypatch.setattr(module, "get_settings", fail_global)
+
+    async def go():
+        async with Client(child) as client:
+            result = await client.call_tool(tool, arguments, raise_on_error=False)
+            assert result.is_error
+            assert "not found" in result.content[0].text
+            assert "private-sibling" not in result.content[0].text
+            assert "Files in" not in result.content[0].text
+
+    asyncio.run(go())
+
+
+def test_list_binary_and_timeout_are_captured(tmp_path, monkeypatch):
+    import subprocess
+
+    (tmp_path / "a.py").write_text("x")
+    child = explicit_files(
+        RootsSettings(default_root=tmp_path, extra_roots=()),
+        list_settings=ListFilesSettings(rg_timeout_s=7),
+        rg_bin="selected-rg",
+    )
+    seen = []
+
+    def run(command, **kwargs):
+        seen.append((command[0], kwargs["timeout"]))
+        raise subprocess.TimeoutExpired(command, kwargs["timeout"])
+
+    monkeypatch.setattr(list_files.subprocess, "run", run)
+    monkeypatch.setattr(list_files, "get_settings", fail_global)
+
+    async def go():
+        async with Client(child) as client:
+            result = await client.call_tool(
+                "list_files", {"path": ".", "glob": "*.py"}, raise_on_error=False
+            )
+            assert result.is_error and "timed out after 7 s" in result.content[0].text
+        assert seen == [("selected-rg", 7)]
+
+    asyncio.run(go())
