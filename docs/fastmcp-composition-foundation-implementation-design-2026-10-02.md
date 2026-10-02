@@ -1,6 +1,6 @@
 # Group 1 implementation design — Composition foundation — 2026-10-02
 
-Status: **validating locally; implementation complete; G1.8 convergence in progress**.
+Status: **done; deployed and live-verified on 2026-10-03**.
 
 Parent control document:
 `docs/fastmcp-native-refactor-implementation-master-2026-10-02.md`.
@@ -1053,6 +1053,13 @@ Python 3.10-3.14 matrix is green; and explicit wheel artifact smoke passed. The 
 four-profile wire JSON is byte-identical to the baseline (SHA-256
 `06f58fcc230f26095c2a17a4fd97dd10c50575d5be6b96b39b5e73dcf54f164a`).
 A fresh read-only ChatGPT implementation review returned APPROVE with no blocking
-findings. G1 remains `validating`: exact-SHA CI, deployment, live smoke, and the
-coordinating ChatGPT read-only call are still pending. No production change or G2
-work is authorized here.
+findings. Exact-SHA GitHub CI run `37028183978` then passed all seven required jobs.
+The canonical deploy gate moved production from `4608423` to
+`27254767a53a9d8b024b009a5e4c7981b479842f`, atomically updating `master` and
+`proof-of-concept`. The post-deploy live suite passed 3 tests; full smoke passed all
+20 checks with 0 doctor failures, 12/12 journal linkage, and 0 tracebacks; runtime
+versions remained FastMCP/FastMCP-slim `4.0.10` and MCP/MCP-types `2.1.1`. Finally,
+the coordinating ChatGPT session successfully called deployed Binnacle `list_files`.
+
+G1 is done. No G2 code has been implemented by this group; the next step is a new
+detailed G2 design against deployed `2725476`.

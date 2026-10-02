@@ -1,6 +1,6 @@
 # FastMCP-native refactor — implementation master plan — 2026-10-02
 
-Status: **Group 0 done; Group 1 validating locally; CI and deployment pending**.
+Status: **Groups 0 and 1 done; Group 2 queued for detailed design**.
 
 This is the control document for the implementation-design and implementation phases of
 the FastMCP-native, platform-neutral Binnacle refactor.
@@ -126,7 +126,7 @@ Status changes belong in this document.
 | Group | Scope | Depends on | Parallel potential | Status |
 | --- | --- | --- | --- | --- |
 | G0 | Stable FastMCP 4 baseline | current master | none; foundational | **done** |
-| G1 | Composition foundation | G0 | foundational; mostly sequential | **validating** |
+| G1 | Composition foundation | G0 | foundational; mostly sequential | **done** |
 | G2 | FastMCP-native alignment | G1 | may overlap G3/G4 after shared seams settle | queued |
 | G3 | Commands/domain/platform seams | G1; commands mount | process/resources lanes later | queued |
 | G4 | Deployment/platform services | G1 | logs/paths may parallelize | queued |
@@ -534,12 +534,12 @@ Gate A is not reached until all are true.
 ### FastMCP-native composition
 
 - [x] stable FastMCP 4 baseline;
-- [ ] explicit root construction;
-- [ ] Files mounted as focused child;
-- [ ] Search mounted as focused child;
-- [ ] Commands mounted as focused child;
-- [ ] hard-coded global tool registry removed;
-- [ ] no duplicate Binnacle Feature/Builder/DI/middleware/provider framework.
+- [x] explicit root construction;
+- [x] Files mounted as focused child;
+- [x] Search mounted as focused child;
+- [x] Commands mounted as focused child;
+- [x] hard-coded global tool registry removed;
+- [x] no duplicate Binnacle Feature/Builder/DI/middleware/provider framework.
 
 ### Platform isolation
 
@@ -560,21 +560,26 @@ Gate A is not reached until all are true.
 
 ### Convergence
 
-- [ ] full test suite;
-- [ ] supported Python matrix;
-- [ ] coverage policy;
-- [ ] packaging smoke;
-- [ ] architecture/import gates;
-- [ ] live deployment smoke;
-- [ ] current Linux deployment healthy.
+- [x] full test suite;
+- [x] supported Python matrix;
+- [x] coverage policy;
+- [x] packaging smoke;
+- [x] architecture/import gates;
+- [x] live deployment smoke;
+- [x] current Linux deployment healthy.
 
 Only after every item is satisfied should native macOS implementation begin.
 
 ## 18. Current next action
 
-G1 local convergence and the fresh read-only implementation review are complete.
-The next step is independent coordinating review, branch publication for exact-SHA CI,
-and canonical deployment after CI succeeds.
+G1 is done. Exact-SHA GitHub CI run `37028183978` passed all seven required jobs.
+The canonical deployment gate moved production from `4608423` to
+`27254767a53a9d8b024b009a5e4c7981b479842f`; local `master`,
+`origin/master`, and `origin/proof-of-concept` all reached that SHA. The live
+read-only suite passed 3 tests, full post-deploy smoke passed all 20 checks with
+0 doctor failures, and a real ChatGPT -> deployed Binnacle `list_files` call
+succeeded.
 
-G1 is not `done`; CI, deployment, live smoke, and the real ChatGPT read-only call
-remain pending. G2-G6 remain queued.
+The next action is to re-read the post-G1 repository and write the detailed G2
+implementation design against the deployed `2725476` baseline. G2-G6 remain queued
+until their detailed design/entry conditions are satisfied.
