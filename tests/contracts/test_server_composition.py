@@ -27,7 +27,7 @@ PROFILES = [
 ]
 
 # This is the actual checkpoint's root-local inventory, not a runtime stage flag.
-ROOT_LOCAL = ["run_command", "job_status", "stop_job"]
+ROOT_LOCAL: list[str] = []
 
 
 @pytest.mark.parametrize(

@@ -8,8 +8,8 @@ import pytest
 from fastmcp.exceptions import ToolError
 from fastmcp.server.middleware import Middleware
 
-from binnacle import callctx, server
-from binnacle.tools import read_file, search_text
+from binnacle import callctx, jobs, server
+from binnacle.tools import read_file, run_command, search_text
 from tests.integration.http_test_support import http_tool_call, with_session
 
 
@@ -50,6 +50,7 @@ class ChildCalls(Middleware):
     [
         ("files", read_file, "read_file_impl", "read_file", "path"),
         ("search", search_text, "search_text_impl", "search_text", "pattern"),
+        ("commands", run_command, "run_command_impl", "run_command", "command"),
     ],
 )
 def test_concurrent_http_context_logging_and_errors_across_child(
@@ -60,6 +61,10 @@ def test_concurrent_http_context_logging_and_errors_across_child(
     arguments = {"path": str(path)}
     if domain == "search":
         arguments["pattern"] = "alpha"
+    if domain == "commands":
+        monkeypatch.setattr(jobs, "JOBS_DIR", tmp_path / "jobs")
+        monkeypatch.setattr(jobs, "OWNER_MODE", "embedded")
+        arguments = {"command": "printf alpha", "workdir": str(tmp_path)}
     original = getattr(adapter, implementation)
     observed, child_calls, restored = [], [], []
     rendezvous = threading.Barrier(2, timeout=15)
