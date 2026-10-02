@@ -1,7 +1,7 @@
 """read_file — read a text file with 1-based line ranges.
 
 Full specification, survey, decision records, and test checklist:
-docs/tools/read_file.md. Limits are single-source constants below,
+docs/tools/read_file.md. Limits are captured construction settings,
 interpolated into messages so text can never drift from code.
 """
 
@@ -12,31 +12,27 @@ from fastmcp import FastMCP
 from fastmcp.tools.base import ToolResult
 from pydantic import Field
 
-from binnacle.config import get_settings
+from binnacle.config import ReadFileSettings, RootsSettings, get_settings
 from binnacle.errors import CodedToolError
 from binnacle.paths import nearby_hint, resolve_path
 from binnacle.textio import decode_text, human_size
 
-READ_MAX_LINES = get_settings().read_file.max_lines  # line ceiling per call
-READ_MAX_CHARS = get_settings().read_file.max_chars  # content chars per call
-READ_MAX_LINE_CHARS = get_settings().read_file.max_line_chars  # per-line clip
-READ_MAX_FILE_BYTES = get_settings().read_file.max_file_bytes  # stat guard
 LINE_CLIP_MARK = "… [line truncated]"
 
-# Shipped description; the limits are interpolated so the text cannot drift
-# from the constants. Rewritten 2026-09-06: the earlier "start narrow"
-# wording matched a measured habit of 26-line slices re-read hundreds of
-# times (docs/usage-analysis-2026-09-06.md §6).
-DESCRIPTION = (
-    "Read a text file, optionally a line range (1-based, inclusive). One call "
-    f"returns at most {READ_MAX_CHARS // 1000}k chars (about "
-    f"{READ_MAX_CHARS // 4000}k tokens, ~{READ_MAX_CHARS // 50} lines of prose); "
-    "a file within that comes back whole, so omit the range. For a larger file "
-    "do not page through it: search_text to locate, then read only that range. "
-    "Returns plain content without line numbers, plus total_lines and "
-    "next_start_line when truncated. Binary or media files return a note; "
-    "inspect those with run_command (file, xxd, pdftotext)."
-)
+
+def _description(settings: ReadFileSettings) -> str:
+    """Keep the advertised read window tied to its captured limits."""
+    return (
+        "Read a text file, optionally a line range (1-based, inclusive). One call "
+        f"returns at most {settings.max_chars // 1000}k chars (about "
+        f"{settings.max_chars // 4000}k tokens, ~{settings.max_chars // 50} lines of prose); "
+        "a file within that comes back whole, so omit the range. For a larger file "
+        "do not page through it: search_text to locate, then read only that range. "
+        "Returns plain content without line numbers, plus total_lines and "
+        "next_start_line when truncated. Binary or media files return a note; "
+        "inspect those with run_command (file, xxd, pdftotext)."
+    )
+
 
 OUTPUT_SCHEMA = {
     "type": "object",
@@ -60,12 +56,20 @@ OUTPUT_SCHEMA = {
 }
 
 
-def read_file_impl(path: str, start_line: int, end_line: int | None) -> ToolResult:
-    resolved = resolve_path(path)
+def read_file_impl(
+    path: str,
+    start_line: int,
+    end_line: int | None,
+    *,
+    roots: RootsSettings | None = None,
+    settings: ReadFileSettings | None = None,
+) -> ToolResult:
+    settings = get_settings().read_file if settings is None else settings
+    resolved = resolve_path(path, roots=roots)
     if not resolved.exists():
         raise CodedToolError(
             "file_not_found",
-            f"File not found: {resolved}.{nearby_hint(resolved.parent)}",
+            f"File not found: {resolved}.{nearby_hint(resolved.parent, roots=roots)}",
         )
     if resolved.is_dir():
         raise CodedToolError(
@@ -73,11 +77,11 @@ def read_file_impl(path: str, start_line: int, end_line: int | None) -> ToolResu
             f"Path is a directory, not a file: {resolved}. Use list_files to browse it.",
         )
     size = resolved.stat().st_size
-    if size > READ_MAX_FILE_BYTES:
+    if size > settings.max_file_bytes:
         raise CodedToolError(
             "file_too_large",
             f"File is {human_size(size)}; the limit is "
-            f"{READ_MAX_FILE_BYTES // (1024 * 1024)} MB. "
+            f"{settings.max_file_bytes // (1024 * 1024)} MB. "
             f"Use run_command (tail, sed -n, grep) to sample it.",
         )
     if end_line is not None and start_line > end_line:
@@ -131,7 +135,7 @@ def read_file_impl(path: str, start_line: int, end_line: int | None) -> ToolResu
     if end_line is not None and end_line > total_lines:
         notes.append(f"end_line clamped to {total_lines} (end of file).")
     requested_end = min(end_line, total_lines) if end_line is not None else total_lines
-    hard_end = min(requested_end, start_line + READ_MAX_LINES - 1)
+    hard_end = min(requested_end, start_line + settings.max_lines - 1)
 
     served: list[str] = []
     chars = 0
@@ -141,15 +145,15 @@ def read_file_impl(path: str, start_line: int, end_line: int | None) -> ToolResu
         line = lines[idx]
         body = line.rstrip("\r\n")
         ending = line[len(body) :]
-        if len(body) > READ_MAX_LINE_CHARS:
-            line = body[:READ_MAX_LINE_CHARS] + LINE_CLIP_MARK + ending
+        if len(body) > settings.max_line_chars:
+            line = body[: settings.max_line_chars] + LINE_CLIP_MARK + ending
             lines_clipped += 1
-        if served and chars + len(line) > READ_MAX_CHARS:
+        if served and chars + len(line) > settings.max_chars:
             break
         served.append(line)
         chars += len(line)
         served_end = idx + 1
-        if chars >= READ_MAX_CHARS:
+        if chars >= settings.max_chars:
             break
 
     truncated = served_end < requested_end
@@ -168,7 +172,7 @@ def read_file_impl(path: str, start_line: int, end_line: int | None) -> ToolResu
     if lines_clipped:
         payload["lines_clipped"] = lines_clipped
         notes.append(
-            f"{lines_clipped} line(s) exceeded {READ_MAX_LINE_CHARS} chars and were "
+            f"{lines_clipped} line(s) exceeded {settings.max_line_chars} chars and were "
             f"clipped ('{LINE_CLIP_MARK}'); clipped lines are not safe to use as "
             f"edit_file.old_string."
         )
@@ -184,8 +188,8 @@ def read_file_impl(path: str, start_line: int, end_line: int | None) -> ToolResu
     fits_whole = (
         not truncated
         and partial
-        and total_lines <= READ_MAX_LINES
-        and len(text) <= READ_MAX_CHARS
+        and total_lines <= settings.max_lines
+        and len(text) <= settings.max_chars
     )
     if fits_whole:
         payload["fits_in_one_call"] = True
@@ -212,9 +216,20 @@ def read_file_impl(path: str, start_line: int, end_line: int | None) -> ToolResu
     return ToolResult(content=summary, structured_content=payload)
 
 
-def register(mcp: FastMCP) -> None:
+def register(
+    mcp: FastMCP,
+    *,
+    roots: RootsSettings | None = None,
+    settings: ReadFileSettings | None = None,
+) -> None:
+    if roots is None or settings is None:
+        defaults = get_settings()
+        roots = defaults.roots if roots is None else roots
+        settings = defaults.read_file if settings is None else settings
+    roots, settings = roots.model_copy(deep=True), settings.model_copy(deep=True)
+
     @mcp.tool(
-        description=DESCRIPTION,
+        description=_description(settings),
         annotations={"readOnlyHint": True, "openWorldHint": False},
         output_schema=OUTPUT_SCHEMA,
     )
@@ -236,5 +251,7 @@ def register(mcp: FastMCP) -> None:
             ),
         ] = None,
     ) -> ToolResult:
-        """See DESCRIPTION (shipped text; interpolates the limits)."""
-        return read_file_impl(path, start_line, end_line)
+        """Read using the settings captured with the advertised description."""
+        return read_file_impl(
+            path, start_line, end_line, roots=roots, settings=settings
+        )

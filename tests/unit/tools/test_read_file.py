@@ -93,9 +93,9 @@ def big(tmp_path) -> Path:
 
 def test_line_ceiling_and_continuation(big):
     p = read(str(big))
-    assert p["end_line"] == rf.READ_MAX_LINES and p["truncated"]
-    assert p["next_start_line"] == rf.READ_MAX_LINES + 1
-    p = read(str(big), rf.READ_MAX_LINES + 1)
+    assert p["end_line"] == get_settings().read_file.max_lines and p["truncated"]
+    assert p["next_start_line"] == get_settings().read_file.max_lines + 1
+    p = read(str(big), get_settings().read_file.max_lines + 1)
     assert p["end_line"] == 2500 and not p["truncated"]
 
 
@@ -116,7 +116,7 @@ def test_char_cap_stops_early(tmp_path):
     p = read(str(f))
     assert p["truncated"] and p["end_line"] < 100
     assert p["next_start_line"] == p["end_line"] + 1
-    assert len(p["content"]) <= rf.READ_MAX_CHARS
+    assert len(p["content"]) <= get_settings().read_file.max_chars
 
 
 # -- path handling ---------------------------------------------------------
@@ -208,6 +208,10 @@ def test_partial_read_of_oversized_file_has_no_nudge(big):
 
 
 def test_description_states_the_window_in_chars():
-    assert f"{rf.READ_MAX_CHARS // 1000}k chars" in rf.DESCRIPTION
-    assert "lines of prose" in rf.DESCRIPTION and "2,000 lines" not in rf.DESCRIPTION
-    assert "start narrow" not in rf.DESCRIPTION
+    assert f"{get_settings().read_file.max_chars // 1000}k chars" in rf._description(
+        get_settings().read_file
+    )
+    assert "lines of prose" in rf._description(
+        get_settings().read_file
+    ) and "2,000 lines" not in rf._description(get_settings().read_file)
+    assert "start narrow" not in rf._description(get_settings().read_file)

@@ -82,9 +82,9 @@ def test_search_text_error_codes(tmp_path):
 def test_read_file_large_file_code(tmp_path, monkeypatch):
     path = tmp_path / "large.txt"
     path.write_text("xx")
-    monkeypatch.setattr(rf, "READ_MAX_FILE_BYTES", 1)
+    settings = rf.get_settings().read_file.model_copy(update={"max_file_bytes": 1})
     with pytest.raises(ToolError, match="limit") as exc:
-        rf.read_file_impl(str(path), 1, None)
+        rf.read_file_impl(str(path), 1, None, settings=settings)
     assert _code(exc) == "file_too_large"
 
 

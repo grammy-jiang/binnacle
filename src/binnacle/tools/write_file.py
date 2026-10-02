@@ -13,6 +13,7 @@ from fastmcp.exceptions import ToolError
 from fastmcp.tools.base import ToolResult
 from pydantic import Field
 
+from binnacle.config import RootsSettings, get_settings
 from binnacle.paths import resolve_path
 
 OUTPUT_SCHEMA = {
@@ -27,8 +28,13 @@ OUTPUT_SCHEMA = {
 }
 
 
-def write_file_impl(path: str, content: str) -> ToolResult:
-    resolved = resolve_path(path)
+def write_file_impl(
+    path: str,
+    content: str,
+    *,
+    roots: RootsSettings | None = None,
+) -> ToolResult:
+    resolved = resolve_path(path, roots=roots)
     if resolved.is_dir():
         raise ToolError(
             f"Path is a directory, not a file: {resolved}. Use list_files to browse it."
@@ -55,7 +61,9 @@ def write_file_impl(path: str, content: str) -> ToolResult:
     return ToolResult(content=summary, structured_content=payload)
 
 
-def register(mcp: FastMCP) -> None:
+def register(mcp: FastMCP, *, roots: RootsSettings | None = None) -> None:
+    roots = (get_settings().roots if roots is None else roots).model_copy(deep=True)
+
     @mcp.tool(
         annotations={
             "readOnlyHint": False,
@@ -81,4 +89,4 @@ def register(mcp: FastMCP) -> None:
         provide the COMPLETE file, never placeholders like '... rest
         unchanged'. Prefer edit_file for changing part of an existing file.
         """
-        return write_file_impl(path, content)
+        return write_file_impl(path, content, roots=roots)
