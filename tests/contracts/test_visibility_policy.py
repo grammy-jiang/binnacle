@@ -7,7 +7,7 @@ import pytest
 from fastmcp import Client, FastMCP
 from fastmcp.exceptions import ToolError
 
-from binnacle.visibility import ClientToolVisibility
+from binnacle.visibility import ClientToolVisibility, ClientToolVisibilityTransform
 
 
 def policy_root(policies):
@@ -16,6 +16,7 @@ def policy_root(policies):
         child.tool(lambda: "ok", name=name)
     root.mount(child)
     root.add_middleware(ClientToolVisibility(policies))
+    root.add_transform(ClientToolVisibilityTransform())
     return root
 
 

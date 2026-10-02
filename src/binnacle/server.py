@@ -28,7 +28,7 @@ from binnacle.run_command_telemetry import (
 )
 from binnacle.search_server import create_search_server
 from binnacle.tool_order import PublicToolOrder
-from binnacle.visibility import ClientToolVisibility
+from binnacle.visibility import ClientToolVisibility, ClientToolVisibilityTransform
 
 # binnacle's own lines (event=tool_call/tool_result/job_*/config) go through
 # the root handler as single lines with a millisecond local timestamp, so
@@ -199,6 +199,7 @@ def create_server() -> FastMCP:
     root.add_middleware(ToolLoggingMiddleware(identity))
     root.add_middleware(ClientToolVisibility(get_settings().client_tools, identity))
     root.add_transform(PublicToolOrder())
+    root.add_transform(ClientToolVisibilityTransform())
     root.mount(create_files_server())
     root.mount(create_search_server())
     root.mount(create_commands_server())

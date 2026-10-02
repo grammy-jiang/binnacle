@@ -1,4 +1,4 @@
-"""Per-client tool visibility (middleware).
+"""Per-client policy with native FastMCP component visibility.
 
 Serves each configured client exactly the tools enabled for it, while
 every other client gets the full surface. Which client sees what is data,
@@ -48,15 +48,19 @@ class ClientToolVisibility(Middleware):
         self._identity.resolve(context)
         return await call_next(context)
 
-    async def on_list_tools(self, context: MiddlewareContext, call_next: CallNext):
-        tools: Sequence = await call_next(context)
+    async def _publish(self, context: MiddlewareContext) -> frozenset[str] | None:
         enabled = self._enabled_for(self._identity.resolve(context))
-        if enabled is None:
-            return tools
-        return [t for t in tools if t.name in enabled]
+        ctx = context.fastmcp_context
+        if ctx is not None and ctx.request_context is not None:
+            await ctx.set_state(_ALLOWLIST_KEY, enabled, serializable=False)
+        return enabled
+
+    async def on_list_tools(self, context: MiddlewareContext, call_next: CallNext):
+        await self._publish(context)
+        return await call_next(context)
 
     async def on_call_tool(self, context: MiddlewareContext, call_next: CallNext):
-        enabled = self._enabled_for(self._identity.resolve(context))
+        enabled = await self._publish(context)
         name = getattr(context.message, "name", None)
         if enabled is not None and name not in enabled:
             raise ToolError(f"Tool {name!r} is not available to this client.")

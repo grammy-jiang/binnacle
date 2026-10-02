@@ -140,3 +140,53 @@ def test_native_get_denies_without_call_error_bridge_and_other_components_surviv
         assert len(await root.list_tools(run_middleware=False)) == 2
 
     asyncio.run(go())
+
+
+@pytest.mark.parametrize("method", ["on_list_tools", "on_call_tool"])
+@pytest.mark.parametrize("allowed", [None, frozenset(), frozenset({"visible"})])
+def test_middleware_publishes_request_policy_before_delegation(
+    monkeypatch, method, allowed
+):
+    ctx = SimpleNamespace(request_context=object(), set_state=AsyncMock())
+    context = SimpleNamespace(
+        fastmcp_context=ctx, message=SimpleNamespace(name="visible")
+    )
+    middleware = module.ClientToolVisibility({})
+    monkeypatch.setattr(middleware, "_enabled_for", lambda name: allowed)
+    monkeypatch.setattr(middleware._identity, "resolve", lambda context: "client")
+    objects = [Tool(name="visible", parameters={}), Tool(name="hidden", parameters={})]
+
+    async def next_step(received):
+        assert received is context
+        ctx.set_state.assert_awaited_once_with(
+            module._ALLOWLIST_KEY, allowed, serializable=False
+        )
+        return objects
+
+    async def go():
+        if method == "on_call_tool" and allowed == frozenset():
+            from fastmcp.exceptions import ToolError
+
+            with pytest.raises(ToolError, match="not available"):
+                await middleware.on_call_tool(context, next_step)
+            ctx.set_state.assert_awaited_once_with(
+                module._ALLOWLIST_KEY, allowed, serializable=False
+            )
+        else:
+            assert await getattr(middleware, method)(context, next_step) is objects
+
+    asyncio.run(go())
+
+
+def test_policy_publication_failure_propagates_before_denied_call():
+    context = SimpleNamespace(
+        fastmcp_context=SimpleNamespace(
+            request_context=object(),
+            set_state=AsyncMock(side_effect=RuntimeError("publish failure")),
+        ),
+        message=SimpleNamespace(name="hidden"),
+    )
+    middleware = module.ClientToolVisibility({"restricted": ()})
+    middleware._identity = SimpleNamespace(resolve=lambda context: "restricted")
+    with pytest.raises(RuntimeError, match="publish failure"):
+        asyncio.run(middleware.on_call_tool(context, AsyncMock()))
