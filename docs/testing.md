@@ -206,13 +206,18 @@ is a deploy. Deploy only through the gate (quality guard plan, step 2):
 .venv/bin/python scripts/deploy_smoke.py deploy <sha>
 ```
 
-It refuses a dirty checkout, a target that is not a fast-forward, and a commit
-whose CI did not succeed. It waits for a quiet moment (no tool call for 30 s),
-fast-forwards, and waits for the reload when Python files under `src/` changed
-(the dev unit's `--reload-dir` watches nothing else; in prod mode it restarts
-the unit). Then it runs the live smoke. On success it pushes
-`master` and `proof-of-concept`. On failure it resets `master` to the previous
-commit, reloads, confirms the rollback with a second smoke, and pushes nothing.
+It requires a clean tracked checkout, a fast-forward target, and successful
+CI for that exact commit. Untracked files are allowed only under `docs/`. It
+waits for a quiet moment (no tool call for 30 s), then fast-forwards. In dev
+mode, Python changes under `src/` use the normal auto-reload. A change to
+`pyproject.toml` or `uv.lock` instead synchronizes the checkout with
+`uv sync --locked --group dev` and explicitly restarts the MCP service so the
+smoke uses the new locked environment. The stable jobs service is never
+restarted by this flow. Then it runs the live smoke. On success it atomically
+pushes `master` and `proof-of-concept`. On failure it resets `master` to the
+previous commit, restores the old locked environment when necessary, reloads or
+restarts the MCP service, confirms the rollback with a second smoke, and pushes
+nothing.
 
 The live smoke (`scripts/deploy_smoke.py`, checks in `scripts/smoke_checks.py`)
 checks the running server as a client would:

@@ -5,12 +5,9 @@ description: Run the evidence-driven improvement loop for an MCP server used by 
 
 # MCP usage review loop
 
-One round is: **measure → decide → implement → verify → record**. The first
-round (2026-09-03) took the binnacle server from "ChatGPT polls job_status
-600 times" to three approved changes verified in a real chat, and it is the
-template for every later round. Reference project: `~/Projects/binnacle`;
-the loop mechanics (reload, refresh, browser test) come from the
-`chatgpt-mcp-dev` skill and are not repeated here.
+One round is: **measure → decide → implement → verify → record**. Reference
+project: `~/Projects/binnacle`; the loop mechanics (reload, refresh, browser
+test) come from the `chatgpt-mcp-dev` skill and are not repeated here.
 
 `mcp-usage-review` is on `PATH` as a symlink into this skill's `scripts/`;
 restore it with
@@ -59,8 +56,9 @@ way today), and what it cannot fix. Check the tool's current schema first:
 the first round nearly proposed a parameter (`context_lines`) that already
 existed — that finding turned the item into a description fix.
 
-Present the ranked list and stop. The user picks; git tools and edit-tool
-exposure have been deliberately deferred before, so do not fold them in.
+Present the ranked list and stop. The user picks. Do not expand a review into
+Git tools or ChatGPT `edit_file`/`write_file` exposure unless the current
+usage evidence supports that change and the user explicitly approves it.
 
 ## Step 3 — Implement
 
@@ -81,9 +79,11 @@ disabled when it hits a dead listener. Batch edits, or use the dev unit.
 
 ## Step 4 — Verify end to end
 
-A changed tool surface needs the **full loop**: `test_client.py` shows the
-new parameter → `chatgpt-refresh "Raspberry Pi MCP"` → a real message in
-a new test chat with `chatgpt-send`, deleted when the test ends. Listing tools is not a test.
+A changed tool surface needs the **full loop**: the local MCP client
+(`.venv/bin/python scripts/mcp_client.py`) shows the new surface →
+`chatgpt-refresh "Raspberry Pi MCP"` → a real message in a new test chat
+with `chatgpt-send`, deleted when the test ends. Listing tools alone is not
+an end-to-end test.
 The pass criterion is the nonce in three places: the chat reply, the
 journal's `arguments`, and the journal's `job_start`/`tool_result` line.
 

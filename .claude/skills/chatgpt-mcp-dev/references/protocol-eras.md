@@ -39,12 +39,13 @@ always produce a false negative — that mistake cost an hour here.
 | Stack | Legacy | Modern | Verdict |
 |-------|--------|--------|---------|
 | FastMCP 3.4.7 + mcp 1.29 (previous) | all four versions | ✗ `Bad Request: Missing session ID` | legacy only |
-| FastMCP 4.0.0b5 + mcp 2.0.0 (**now**) | all four versions | ✓ stateless `tools/list` and `tools/call` | **dual-era** |
+| FastMCP 4.0.0b5 + mcp 2.0.0 (measured 2026-08-30) | all four versions | ✓ stateless `tools/list` and `tools/call` | **dual-era** |
 
 `server.py` needed **no changes** — era support comes entirely from the SDK.
-The only code change anywhere was in `test_client.py`, where SDK v2 renamed
-`Tool.inputSchema` to `input_schema` (handled with a `getattr` fallback so the
-file still works on either SDK).
+The only application-side compatibility change in that upgrade was in the
+then-local `test_client.py` (now `scripts/mcp_client.py`), where SDK v2 renamed
+`Tool.inputSchema` to `input_schema`; the current client keeps the `getattr`
+fallback.
 
 FastMCP 4 is a beta; 3.4.7 is the latest stable and is pinned to `mcp<2.0`,
 which is what caps it at 2025-11-25. To roll back:
@@ -58,6 +59,8 @@ settles. The tunnel log says `mcp session initialized` and the server logs the
 `initialize` — retry after ~15s. Not an SDK incompatibility.
 
 ## Where the clients stand, 2026-08-30
+
+Current local CLI versions are intentionally not inferred from this dated table. As of the 2026-10-02 instruction audit, this host had Claude Code 2.1.286 and Codex CLI 0.160.0; re-run the conformance probes before asserting their current protocol choice.
 
 Measured against a **dual-era** server, so each client could pick freely. This
 distinction matters: against the old legacy-only binnacle every one of these
@@ -132,10 +135,11 @@ Everything below was run, not assumed:
 3. `mcp-era-check` against it — `dual-era`.
 4. Legacy clients still negotiate all four handshake versions.
 
-To adopt: install FastMCP 4 in the project venv and restart `binnacle-mcp`, then
-re-run `test_client.py`, `mcp-era-check`, and one ChatGPT round trip. To roll
-back, reinstall `fastmcp==3.4.7`. The decision is a beta-in-production
-judgement, not a technical obstacle.
+The FastMCP 4 adoption described above is already complete. After future MCP
+SDK/protocol changes, re-run `.venv/bin/python scripts/mcp_client.py`,
+`mcp-era-check`, `mcp-conformance`, and one real ChatGPT round trip before
+making a current compatibility claim. The 3.4.7 rollback recipe above is
+historical evidence, not the present deployment procedure.
 
 ## Codex's modern lane, from its own repo
 

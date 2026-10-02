@@ -10,7 +10,10 @@ change a tool, verify it locally, sync ChatGPT's cached tool list, verify in a
 chat, then remove the test chat.
 
 Reference implementation: `~/Projects/binnacle` (FastMCP over an OpenAI tunnel).
-Its `CLAUDE.md` holds the project-specific parts (auth, ports, unit names).
+Its thin `CLAUDE.md` is the Claude Code project entry point;
+`DEVELOPMENT.md` remains authoritative for repository bootstrap, quality
+gates, worktrees and deployment. This skill does not override those
+repository rules.
 
 ## Compatibility
 
@@ -20,11 +23,11 @@ already holds, so it needs the desktop session D-Bus, an unlocked GNOME
 keyring, and a browser logged in to chatgpt.com. Never use it from a remote or
 cloud agent.
 
-Since 2026-09-29 the ChatGPT side is the `chatgpt-web-operations` skill's
+The ChatGPT side belongs to the `chatgpt-web-operations` skill
 (`~/.claude/skills/chatgpt-web-operations`): the one ChatGPT client on this
 host, with its own `.venv`, setup and recovery guide (`references/setup.md`)
-and daily health check. This repository keeps no copy of it. What this skill
-used for each job:
+and daily health check. This repository keeps no copy of it. Use these
+commands for each job:
 
 | Job | Command |
 | --- | --- |
@@ -35,10 +38,14 @@ used for each job:
 | Find a chat's id | `list_chats.py`, `search_chats.py` |
 | Send a message (full pass) | `chatgpt-send` here, which runs the skill's `send_prompt.py` |
 
-Below, `W=~/.claude/skills/chatgpt-web-operations/scripts`. The tools on `PATH`, restored with:
+Below, `W=~/.claude/skills/chatgpt-web-operations/scripts`. The host-level
+commands on `PATH` intentionally use the **primary Binnacle checkout**, not
+whichever feature worktree happens to be current. This keeps normal command
+behavior stable while a worktree edits the skill. Restore the links with:
 
 ```bash
-S=~/Projects/binnacle/.claude/skills/chatgpt-mcp-dev/scripts
+PRIMARY=${BINNACLE_PRIMARY:-$HOME/Projects/binnacle}
+S=$PRIMARY/.claude/skills/chatgpt-mcp-dev/scripts
 ln -sf ~/.claude/skills/chatgpt-web-operations/scripts/refresh_connector.py ~/.local/bin/chatgpt-refresh
 ln -sf $S/mcp-probe ~/.local/bin/mcp-probe
 ln -sf $S/mcp-conformance ~/.local/bin/mcp-conformance
@@ -52,25 +59,17 @@ virtual display, never on the desktop (`--visible` shows it). `mcp-probe`
 just reads a systemd journal, and `mcp-conformance` / `mcp-conformance-server`
 drive local CLI clients — all three work for any host.
 
-## Status: incubating in this project
+## Status: project-scoped on this host
 
-This skill lives in `~/Projects/binnacle/.claude/` on purpose. It is being used
-here until it proves stable, then it moves to `~/.claude/skills/` so every
-project sees it. The commands already work from any directory, because they are
-symlinked onto `PATH`; only the skill's own discovery is project-scoped for now.
+The skill is intentionally discovered from the Binnacle project rather than
+from `~/.claude/skills/`. The host-level command symlinks still target the
+primary checkout, so they work from any directory while feature worktrees can
+edit/test their own copy without silently replacing the installed command.
 
-To promote it later, move the directory and repoint its symlinks
-(`chatgpt-refresh` points into the chatgpt-web-operations skill and stays):
-
-```bash
-mv ~/Projects/binnacle/.claude/skills/chatgpt-mcp-dev ~/.claude/skills/
-S=~/.claude/skills/chatgpt-mcp-dev/scripts
-for f in mcp-probe mcp-conformance mcp-conformance-server mcp-era-check chatgpt-send; do
-  ln -sf $S/$f ~/.local/bin/$f
-done
-```
-
-Then update the paths in the Compatibility section above, and drop this section.
+Promotion to user scope is a separate maintenance decision. Do not carry a
+hypothetical migration recipe in the active skill; when promotion is actually
+approved, update the installation and symlink instructions from the resulting
+real paths and verify them with `readlink -f`.
 
 ## Pick the loop by what changed
 
@@ -81,7 +80,8 @@ about 1 to 2 seconds. Reloading is not a manual step.
 description, and annotations did not:
 
 1. Edit and save.
-2. Run the project's local MCP client (binnacle: `.venv/bin/python test_client.py`).
+2. Run the project's local MCP client (Binnacle:
+   `.venv/bin/python scripts/mcp_client.py`).
 
 Stop there. ChatGPT's cached schema is still correct, and every `tools/call`
 already runs the live server code. Do not refresh. Do not open a browser.
@@ -111,9 +111,8 @@ chatgpt-refresh "Raspberry Pi MCP"     # exact name, or a unique substring
 The name match is case-insensitive: exact first, then unique substring, so
 `chatgpt-refresh raspberry` works. The command prints the tool list it synced;
 report that list. It discovers connectors itself — there is nothing to register.
-Since 2026-09-29 `chatgpt-refresh` is the chatgpt-web-operations skill's
-`refresh_connector.py` under its old name; `--dry-run` resolves the name
-without refreshing.
+`chatgpt-refresh` is the `chatgpt-web-operations` skill's
+`refresh_connector.py`; `--dry-run` resolves the name without refreshing.
 
 A brand new chat re-syncs on its own. The refresh is still needed for the chats
 that already exist, such as the owner's own. Tests use a new chat and delete it
@@ -177,8 +176,10 @@ journalctl --user -u binnacle-mcp --since "$T0" --no-pager -o cat \
 A pass is the nonce in three places: the journal's `arguments`, the
 `event=job_start` command, and the printed reply. Use a nonce every time;
 without one a cached or earlier reply is indistinguishable from a new one.
-Prefer an existing test chat (`--chat`); `--new` starts one and prints its
-URL, which you must then track with `python3 $W/clean_chats.py --track URL`.
+Use `--new` for disposable test chats. It prints the chat URL; immediately
+track it with `python3 $W/clean_chats.py --track URL` and delete it when the
+test ends. Use `--chat` only when the test intentionally targets an
+owner-named existing chat (for example, to verify schema refresh behavior).
 To test a Project's instructions, the chat must live inside that Project:
 `--project g-p-<id>` (id from `python3 $W/list_projects.py`) types on the
 project page, which starts a new chat there; track it the same way. The result's
@@ -227,9 +228,8 @@ python3 $W/clean_chats.py --tracked --delete --backup $B --apply   # back up eac
 ```
 
 `--track` accepts a bare id or a full URL. The ledger is
-`~/.local/share/chatgpt-chats/test-chats.json`, the same file `chatgpt-chats`
-kept until 2026-09-29. `--backup` writes a full JSON copy of each conversation
-first, and a chat whose copy fails is not deleted.
+`~/.local/share/chatgpt-chats/test-chats.json`. `--backup` writes a full JSON
+copy of each conversation first, and a chat whose copy fails is not deleted.
 
 Clean up test chats at the end of the work, and report which ones went.
 
@@ -356,8 +356,9 @@ mcp-probe --since "-30 min" --primitives    # defaults to unit binnacle-mcp
 It tells clients apart by `clientInfo.name` (ChatGPT is `openai-mcp`, a local
 FastMCP client is `mcp`), and separates `ui://` reads from data reads, so
 `resources=UI-ONLY` is distinguishable from real resource support. Always run
-`test_client.py` alongside as a control: if the control reaches a feature and
-the host does not, the gap is the host's, not the server's.
+`.venv/bin/python scripts/mcp_client.py` alongside as a control: if the
+control reaches a feature and the host does not, the gap is the host's, not
+the server's.
 
 Verified on 2026-08-30 against binnacle: a static resource plus a resource
 template were added, the connector refreshed, and a chat asked to read the

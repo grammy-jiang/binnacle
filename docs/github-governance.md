@@ -71,8 +71,16 @@ push now rolls the local deployment back and re-runs the smoke.
 
 - `uv`: weekly, individual dependency PRs because runtime dependency changes
   remain explicit engineering decisions;
-- `pre-commit`: weekly and grouped into one repository-hook PR;
+- `pre-commit`: weekly and grouped into one repository-hook PR, but only for
+  hook-native repositories;
 - `github-actions`: weekly and grouped into one workflow-action PR.
+
+Project-aware Python tools such as Ruff and Bandit, plus the uv lock check, are
+local pre-commit hooks that execute the versions resolved by `uv.lock`. They
+must not also carry a second version pin in a remote pre-commit hook
+environment. Dependabot therefore updates those tools through the `uv`
+ecosystem; the pre-commit ecosystem owns only hook-native dependencies. This
+keeps local hooks, CI and developer commands on one Python toolchain.
 
 All schedules use `Australia/Sydney` and are staggered by 15 minutes on
 Wednesday morning.

@@ -89,7 +89,10 @@ An AI agent setting up Binnacle should follow this README, use
 
 ## Development
 
-[DEVELOPMENT.md](DEVELOPMENT.md) is the canonical repository-development guide. The normal
+[DEVELOPMENT.md](DEVELOPMENT.md) is the canonical repository-development guide.
+Local AI development agents use thin project entry points: Claude Code reads
+`CLAUDE.md`, while Codex and other agents that honour the convention read
+`AGENTS.md`. Both defer to `DEVELOPMENT.md` for the shared workflow. The normal
 environment entry points are:
 
 ```bash

@@ -155,11 +155,12 @@ Three rules make the result deterministic:
    attributes every method to the `clientInfo.name` of the nearest preceding
    `initialize`, and separates `ui://` reads from data reads.
 
-2. **Always run a local control.** A FastMCP Python client
-   (`test_client.py`) hitting the same server proves the server really serves
-   the feature. It reports as `mcp` in the probe, the host under test reports as
-   its own name (ChatGPT is `openai-mcp`), so the two never blur. If the control
-   shows `YES` and the host shows `no`, the gap is the host's.
+2. **Always run a local control.** Binnacle's FastMCP Python client
+   (`.venv/bin/python scripts/mcp_client.py`) hitting the same server proves
+   the server really serves the feature. It reports as `mcp` in the probe, the
+   host under test reports as its own name (ChatGPT is `openai-mcp`), so the
+   two never blur. If the control shows `YES` and the host shows `no`, the gap
+   is the host's.
 
 3. **Use a fresh canary for anything the model could otherwise guess.** Put a
    newly generated hex code inside the resource or prompt under test and ask the

@@ -239,8 +239,10 @@ Keep volatile operational facts in one place:
 | Pre-commit/pre-push/CI/security gate policy | docs/quality-gates.md |
 | GitHub rulesets and dependency automation | docs/github-governance.md |
 | Package version and runtime revision provenance | docs/versioning.md |
-| Agent-specific operational instructions | CLAUDE.md |
+| Claude Code project entry point | CLAUDE.md |
+| Codex/local-agent repository entry point | AGENTS.md |
 | Distribution/release-readiness boundary | docs/release-readiness.md |
 
-CLAUDE.md should link to these documents instead of copying test counts,
-coverage measurements, or other values that routinely change.
+`CLAUDE.md` and `AGENTS.md` are thin agent entry points. They should route to
+these canonical documents instead of copying test counts, coverage
+measurements, dependency versions, or other values that routinely change.
