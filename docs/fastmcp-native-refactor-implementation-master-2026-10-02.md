@@ -1,7 +1,7 @@
 # FastMCP-native refactor — implementation master plan — 2026-10-02
 
-Status: **Group 0 implemented locally; local gates passed; awaiting independent
-review, CI, and production deployment**.
+Status: **Group 0 done; Group 1 implementation design ready; no Group 1
+production implementation started**.
 
 This is the control document for the implementation-design and implementation phases of
 the FastMCP-native, platform-neutral Binnacle refactor.
@@ -95,7 +95,8 @@ over a big-bang rewrite.
 
 ### 1.5 Design close to implementation
 
-Only Group 0 is fully designed now.
+Group 0 is complete. Group 1 is designed against the deployed stable baseline.
+Detailed designs for later groups remain deferred.
 
 Before designing a later group:
 
@@ -125,8 +126,8 @@ Status changes belong in this document.
 
 | Group | Scope | Depends on | Parallel potential | Status |
 | --- | --- | --- | --- | --- |
-| G0 | Stable FastMCP 4 baseline | current master | none; foundational | **validating** |
-| G1 | Composition foundation | G0 | foundational; mostly sequential | queued |
+| G0 | Stable FastMCP 4 baseline | current master | none; foundational | **done** |
+| G1 | Composition foundation | G0 | foundational; mostly sequential | **ready** |
 | G2 | FastMCP-native alignment | G1 | may overlap G3/G4 after shared seams settle | queued |
 | G3 | Commands/domain/platform seams | G1; commands mount | process/resources lanes later | queued |
 | G4 | Deployment/platform services | G1 | logs/paths may parallelize | queued |
@@ -207,6 +208,28 @@ The G0 design records the review. Independent review, GitHub CI, normal
 deployment, live smoke, and a real ChatGPT connector read-only call remain
 pending. G0 is not done; G1 remains queued.
 
+### Completion evidence — 2026-10-02
+
+G0 is **done** at `4608423a960bc0cba0e92e20cb8425084b76535c`, after the
+separate prerequisite glob fix `50916ef261d6fe02297e9e61de79db63fa4e27c4`.
+The coordinating user supplied the following final evidence:
+
+- independent review passed;
+- GitHub CI run `36997316142`: all seven required checks passed;
+- canonical `deploy_smoke.py` deployment succeeded;
+- production `master`, `origin/master`, and `origin/proof-of-concept` reached
+  `4608423`;
+- FastMCP and FastMCP-slim are `4.0.10`; MCP and MCP-types remain `2.1.1`;
+- live read-only pytest: 3 passed; full post-deploy smoke: 20/20 passed;
+- tunnel doctor: 9 ok/0 fail; watchdog doctor: 7 ok/0 fail;
+- real ChatGPT -> deployed Binnacle read-only `list_files` succeeded.
+
+The production document backup is retained at
+`/home/grammy-jiang/.local/state/binnacle/deployment-doc-backups/20261002T105058Z-4608423.8Tiprz`.
+The earlier attempt/continuation sections and the G0 design retain their
+point-in-time evidence. This completion entry supersedes their pending-gate
+status; the G1 design task does not repeat deployment.
+
 ## 5. Group 1 — Composition foundation
 
 High-level scope:
@@ -218,7 +241,20 @@ High-level scope:
 - Commands focused child server;
 - remove the obsolete `tools.register_all()` composition role.
 
-Detailed design is intentionally deferred until G0 is done.
+Detailed design:
+
+- `docs/fastmcp-composition-foundation-implementation-design-2026-10-02.md`
+
+Design baseline: deployed G0 commit `4608423`, FastMCP `4.0.10`.
+G1 is ready. The detailed design passed a fresh read-only ChatGPT review
+after two minor clarifications, with no remaining findings. Changed-document
+pre-commit checks passed. Implementation has not started. Independent review
+in the coordinating conversation remains the next action.
+
+The pinned default tool order interleaves Search between Files tools.
+Three simple mounts cannot preserve that order. The design characterizes
+the pinned SDK and specifies a narrow native listing Transform before the
+first mount. This does not migrate client visibility, which remains G2.
 
 Key invariant:
 
@@ -472,7 +508,7 @@ Gate A is not reached until all are true.
 
 ### FastMCP-native composition
 
-- [ ] stable FastMCP 4 baseline;
+- [x] stable FastMCP 4 baseline;
 - [ ] explicit root construction;
 - [ ] Files mounted as focused child;
 - [ ] Search mounted as focused child;
@@ -511,14 +547,9 @@ Only after every item is satisfied should native macOS implementation begin.
 
 ## 18. Current next action
 
-Review the local Group 0 implementation on the continuation branch based
-on prerequisite commit `50916ef`, then complete the CI and deployment gates
-according to:
+Obtain independent review of the completed Group 1 implementation design in
+the coordinating conversation. Then prepare the local Codex implementation
+prompt for G1 using that reviewed design.
 
-- `docs/fastmcp-stable-baseline-implementation-design-2026-10-02.md`
-
-After G0 is deployed and stable:
-
-1. mark G0 done here;
-2. re-read the current server/composition code;
-3. write Group 1 implementation design against that new baseline.
+Do not start production implementation, publish branches, or deploy as part
+of the design task. G2-G6 remain queued.
