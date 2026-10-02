@@ -83,8 +83,8 @@ def test_concurrent_http_context_logging_and_errors_across_child(
     factory = getattr(server, factory_name, None)
     assert callable(factory), "domain must be mounted at this checkpoint"
 
-    def traced_child():
-        child = factory()
+    def traced_child(**kwargs):
+        child = factory(**kwargs)
         child.add_middleware(ChildCalls(child_calls))
         return child
 

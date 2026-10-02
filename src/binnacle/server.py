@@ -172,6 +172,7 @@ def _load_token() -> str:
 
 def create_server() -> FastMCP:
     """Build a fresh root with the existing auth, middleware, and tool surface."""
+    settings = get_settings().model_copy(deep=True)
     root = FastMCP(
         "binnacle",
         on_duplicate="error",
@@ -196,13 +197,37 @@ def create_server() -> FastMCP:
             identity, include_payloads=True, max_payload_length=500
         )
     )
-    root.add_middleware(ToolLoggingMiddleware(identity))
-    root.add_middleware(ClientToolVisibility(get_settings().client_tools, identity))
+    root.add_middleware(
+        ToolLoggingMiddleware(identity, tokenizer=settings.telemetry.tokenizer)
+    )
+    root.add_middleware(ClientToolVisibility(settings.client_tools, identity))
     root.add_transform(PublicToolOrder())
     root.add_transform(ClientToolVisibilityTransform())
-    root.mount(create_files_server())
-    root.mount(create_search_server())
-    root.mount(create_commands_server())
+    root.mount(
+        create_files_server(
+            roots=settings.roots,
+            read_settings=settings.read_file,
+            list_settings=settings.list_files,
+            edit_settings=settings.edit_file,
+            rg_bin=settings.rg_bin,
+        )
+    )
+    root.mount(
+        create_search_server(
+            roots=settings.roots,
+            search_settings=settings.search_text,
+            rg_bin=settings.rg_bin,
+        )
+    )
+    root.mount(
+        create_commands_server(
+            roots=settings.roots,
+            run_settings=settings.run_command,
+            quiet_after_s=settings.jobs.quiet_after_s,
+            listing_history_limit=settings.jobs.listing_history_limit,
+            listing_command_preview_chars=settings.jobs.listing_command_preview_chars,
+        )
+    )
     return root
 
 

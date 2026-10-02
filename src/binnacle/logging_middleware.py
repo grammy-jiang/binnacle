@@ -40,7 +40,7 @@ from binnacle.callctx import (
     current_client,
     current_turn,
 )
-from binnacle.config import get_settings
+from binnacle.config import TokenizerTelemetrySettings, get_settings
 from binnacle.identity import ClientIdentity
 from binnacle.token_telemetry import TokenCounter
 
@@ -273,10 +273,17 @@ def _duration_ms(start: float) -> str:
 class ToolLoggingMiddleware(Middleware):
     """One ``tool_call`` and one ``tool_result`` line per tools/call."""
 
-    def __init__(self, identity: ClientIdentity) -> None:
+    def __init__(
+        self,
+        identity: ClientIdentity,
+        *,
+        tokenizer: TokenizerTelemetrySettings | None = None,
+    ) -> None:
         self._identity = identity
         self._logger = logging.getLogger("binnacle.results")
-        tokenizer = get_settings().telemetry.tokenizer
+        tokenizer = (
+            get_settings().telemetry.tokenizer if tokenizer is None else tokenizer
+        ).model_copy(deep=True)
         self._token_counter = TokenCounter(
             enabled=tokenizer.enabled,
             encoding=tokenizer.encoding,
