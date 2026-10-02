@@ -12,6 +12,7 @@ from fastmcp.server.middleware.dereference import DereferenceRefsMiddleware
 
 from binnacle import server
 from binnacle.files_server import create_files_server
+from binnacle.search_server import create_search_server
 from binnacle.tool_order import PublicToolOrder
 from tests.contracts.surface_support import digest, served, surface
 from tests.contracts.test_input_validation import text_of
@@ -30,7 +31,10 @@ ROOT_LOCAL = ["search_text", "run_command", "job_status", "stop_job"]
 
 @pytest.mark.parametrize(
     ("factory", "names"),
-    [(create_files_server, ["read_file", "list_files", "edit_file", "write_file"])],
+    [
+        (create_files_server, ["read_file", "list_files", "edit_file", "write_file"]),
+        (create_search_server, ["search_text"]),
+    ],
 )
 def test_focused_child_owns_only_its_domain_with_unchanged_metadata(factory, names):
     first, second = factory(), factory()

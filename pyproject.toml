@@ -181,7 +181,11 @@ id = "tools-only-server"
 name = "MCP tools are imported only by the server composition root"
 type = "protected"
 protected_modules = ["binnacle.tools"]
-allowed_importers = ["binnacle.server", "binnacle.files_server"]
+allowed_importers = [
+    "binnacle.server",
+    "binnacle.files_server",
+    "binnacle.search_server",
+]
 
 [[tool.importlinter.contracts]]
 id = "watchdog-isolated"
