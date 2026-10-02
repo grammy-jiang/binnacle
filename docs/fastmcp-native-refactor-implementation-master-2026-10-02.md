@@ -246,15 +246,21 @@ Detailed design:
 - `docs/fastmcp-composition-foundation-implementation-design-2026-10-02.md`
 
 Design baseline: deployed G0 commit `4608423`, FastMCP `4.0.10`.
-G1 is ready. The detailed design passed a fresh read-only ChatGPT review
-after two minor clarifications, with no remaining findings. Changed-document
-pre-commit checks passed. Implementation has not started. Independent review
-in the coordinating conversation remains the next action.
+G1 is ready. The revised design removes the runtime duplicate guard and passed
+a new read-only ChatGPT review with no findings. Changed-document pre-commit
+passed; final status/evidence edits use the same gate before commit. Implementation
+has not started. Independent review in the coordinating conversation remains the
+next action.
 
 The pinned default tool order interleaves Search between Files tools.
 Three simple mounts cannot preserve that order. The design characterizes
 the pinned SDK and specifies a narrow native listing Transform before the
 first mount. This does not migrate client visibility, which remains G2.
+Exactly three focused child servers remain the target. Files, Search, and Commands
+move one at a time, with exact root-local, raw aggregate, and wire-surface contracts
+at every checkpoint. Fixed factories and test-only duplicate checks replace the
+earlier proposed lifespan guard. G1 preserves native conflict defaults and the
+current middleware order, including implicit SDK dereferencing.
 
 Key invariant:
 

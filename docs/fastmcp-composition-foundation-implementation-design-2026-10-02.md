@@ -1,6 +1,6 @@
 # Group 1 implementation design — Composition foundation — 2026-10-02
 
-Status: **ready; fresh design review clean; production implementation has not started**.
+Status: **ready; revised design review clean; production implementation has not started**.
 
 Parent control document:
 `docs/fastmcp-native-refactor-implementation-master-2026-10-02.md`.
@@ -63,6 +63,8 @@ Do not introduce G2 native visibility, broad dependency injection, `Depends`,
 Tasks/extras, platform contracts, macOS, package relocation, external plugin
 discovery, operational routes, a Feature protocol, ServerBuilder, RuntimeContext,
 custom Provider router, or lifecycle dispatcher. Do not change middleware order.
+Do not add a runtime duplicate validator, a custom root/child lifespan, or a new
+`on_duplicate` setting for G1. Section 5.3 defines the test-only ownership gate.
 
 `pyproject.toml` may change only its Import Linter contracts for the new composition
 owners. `uv.lock`, runtime dependency expectations, and quality-policy floors stay
@@ -178,15 +180,33 @@ the deployed endpoint or production job manager. Results:
 | Synthetic call middleware | `parent:in, child:in, child:out, parent:out`; sibling call middleware absent |
 | Native lifespan | Root, child, sibling enter once; sibling, child, root exit once |
 | Child tool added after mounting | Appears and is callable through the parent |
-| Duplicate-name characterization | Internal list contains both; wire list contains one; first provider wins; proposed native-lifespan guard rejects startup |
+| Duplicate-name characterization | Internal list contains both; wire list contains one; first provider wins; the earlier guard prototype rejects startup |
 
-A second isolated `startup_guard_probe.py` confirmed the review clarification:
-duplicate startup is rejected through both native Client and ASGI lifespan,
-with zero child lifespan entries. `startup-guard-probe.json` retains that result.
+A second isolated `startup_guard_probe.py` confirmed that the earlier guard
+prototype rejects duplicates through both native Client and ASGI lifespan, with
+zero child lifespan entries. `startup-guard-probe.json` retains that historical
+feasibility result. It does not establish a need for a runtime guard. The current
+design excludes that guard and uses the ownership contracts in section 5.3.
+
+The steering revision was checked separately, with evidence retained at:
+
+```text
+/home/grammy-jiang/.local/state/binnacle/g1-design-revision-20261002T120218Z-dqt4_t16/
+```
+
+`no_guard_composition_probe.py` and `no-guard-composition-probe.json` use native
+FastMCP conflict defaults and no custom lifespan on the real-adapter roots or
+children. All 16 stage/profile comparisons and all eight representative calls
+passed again. Each stage also passed exact root-local inventory and raw aggregate
+multiplicity checks. Deliberately adding a second `edit_file` through root/child
+or child/child ownership left the eight-tool wire order and existing hashes
+unchanged, but produced nine internal tools and failed the ownership contract.
+Native startup still succeeded. This proves why wire hashes alone are insufficient
+and why the proposed test-only gate catches the concrete G1 collision risk.
 
 The first probe harness tried root `list_tools()` without a session and hit the
 existing identity middleware's session requirement. The probe was corrected to
-use `list_tools(run_middleware=False)` for startup/internal inspection. Production
+use `list_tools(run_middleware=False)` for internal inspection. Production
 identity code was not changed. Client-facing tests always use `Client` or HTTP.
 
 On unchanged `4608423`, the nine G0 compatibility modules passed again:
@@ -316,8 +336,8 @@ Add three small top-level modules without moving existing code:
 | `search_server.py::create_search_server()` | `search_text` |
 | `commands_server.py::create_commands_server()` | `run_command`, `job_status`, `stop_job` |
 
-Each no-argument function returns a fresh ordinary FastMCP with
-`on_duplicate="error"`. Use internal server names `binnacle-files`,
+Each no-argument function returns a fresh ordinary FastMCP with its existing
+native conflict defaults. Use internal server names `binnacle-files`,
 `binnacle-search`, and `binnacle-commands`. Add no child instructions, auth,
 Binnacle middleware, HTTP app, transport, or operational routes. Native default
 middleware/lifespan behavior remains. Root auth protects the externally served
@@ -327,44 +347,83 @@ The root imports factories directly and calls `root.mount(child)` without a
 namespace or `tool_names`. Do not store the return value. Do not add tags,
 versions, wrapper functions, changed defaults, or alternate domain implementations.
 
-### 5.3 Duplicate startup guard
+### 5.3 Duplicate ownership contracts; no runtime validator
 
-Before the first mount, add a small root lifespan function in `server.py`, using
-`contextlib.asynccontextmanager` and `FastMCP(..., lifespan=...)`. Before `yield`:
+G1 has a closed, eagerly registered set of eight unversioned built-in tools.
+The root calls fixed child factories directly. No configuration, plugin discovery,
+request handler, or startup resource changes that composition after construction.
+The concrete new collision risk is a migration mistake: retaining a moved root
+registration or registering the same name in two children. Both are deterministic
+source changes that exact composition contracts can detect before integration.
+No additional G1 failure mode was found that requires a runtime validator.
 
-1. Obtain `await root.list_tools(run_middleware=False)`.
-2. Count names in that full internal sequence, before wire deduplication.
-3. Raise `RuntimeError` naming sorted duplicate names if any occur.
-4. Otherwise yield without changing components or starting other services.
+Use test assertions, independent of the production order table, to require:
 
-Use an explicit conditional, not a Python `assert` that optimization can remove.
-Set root local duplicate handling to `on_duplicate="error"` in this step too.
-That catches same-provider mistakes at registration; the lifespan catches
-root/child and child/child collisions. G1's built-ins are unversioned; multiple
-versions under one public name are not an intended exception in this group.
+1. Each child has exactly its named tools in the section 5.2 order; child name
+   sets are pairwise disjoint.
+2. `await root.local_provider.list_tools()` has exactly the remaining root-local
+   sequence for the current checkpoint in section 6.
+3. `await root.list_tools(run_middleware=False)` contains exactly eight tools,
+   with each expected name appearing once. Compare a `Counter` with the expected
+   eight-name `Counter`, not a set or a dictionary indexed by name.
+4. Wire order, full metadata, existing hashes, visibility, and representative
+   calls still pass separately through native `Client` and authenticated HTTP.
 
-Do not use client-facing `Client.list_tools()` for collision detection: it has
-already deduplicated. Do not use FastMCP private provider/tool dictionaries.
-The root check bypasses root request middleware, which needs a request session.
-G1 children have only native middleware and no client filtering. Thus a hidden
-ChatGPT tool cannot conceal a collision.
+The raw aggregate assertion runs before wire deduplication and without root
+request middleware, which needs a session. G1 children have no visibility filter.
+Thus ChatGPT's hidden edit/write tools cannot conceal a duplicate from this test.
+Do not use private SDK provider/tool dictionaries. The ordering Transform must
+retain duplicates so it cannot defeat this contract.
 
-FastMCP enters the root user lifespan before child lifespans. This check is valid
-because G1 uses eagerly registered static components with no startup resources.
-It is not a general validator for future dynamic or startup-dependent Providers.
-It does not replace exact inventory/parity tests or change the SDK's provider-error
-strategy. Reassess the guard if later groups add conditional child visibility,
-versions, or startup-generated components. Do not expand that scope in G1.
+Prove that the test detects both root/child and child/child duplicate fixtures,
+including `edit_file`, even when the existing wire hashes remain unchanged.
+Do not turn these test assertions into an exported production helper or registry.
+Tests detect the G1 composition mistakes; they do not claim to prohibit arbitrary
+future runtime calls to FastMCP's mutation APIs.
+
+Keep the current native conflict behavior: no new `on_duplicate` setting,
+startup rejection, root/child lifespan callback, or provider-error policy.
+Same-provider warning/replacement is existing FastMCP behavior; G1 does not
+redefine it. Cross-provider precedence is characterized, but valid built-in
+composition never relies on that precedence because the ownership gate rejects
+collisions. Native lifespans remain responsible for framework lifecycle only.
+
+This resolves the platform-neutral design's section 6.3 for G1. Its requirement
+to fail startup or tests is met by exact tests. Its following request for startup
+validation is superseded for this group by the explicit review steering to keep
+composition minimal. The historical architecture input stays unchanged. Later
+dynamic providers, versions, or conditional registration would require a separate
+design decision; G1 does not prepare a general validation framework for them.
 
 ## 6. Compatibility bridges and removal order
 
 | Accepted checkpoint | Remaining root-local registrations | Mounted domains | Registry state |
 | --- | --- | --- | --- |
-| Factory, tests, order, guard | All eight, original order | None | Original `register_all` |
+| Factory, tests, order, ownership contracts | All eight, original order | None | Original `register_all` |
 | Files activated | Search, Commands | Files | Remove only Files imports/calls from `register_all` |
 | Search activated | Commands | Files, Search | Remove only Search import/call |
 | Commands activated | None | Files, Search, Commands | Root stops calling `register_all`; unused three-command function retained briefly |
 | Registry retired | None | Files, Search, Commands | Remove obsolete function/imports; keep `tools/__init__.py` as a package marker |
+
+The exact root-local sequence at each acceptance point is:
+
+```text
+Before mounts:  read_file, list_files, search_text, edit_file, write_file,
+               run_command, job_status, stop_job
+Files active:  search_text, run_command, job_status, stop_job
+Search active: run_command, job_status, stop_job
+Commands active and registry retired: empty
+```
+
+At each checkpoint, test the actual exported root and a fresh factory root against
+that sequence and the raw eight-name multiplicity contract. Then test the same
+pinned public sequence, hashes, metadata, and instructions for default, modern
+ChatGPT, legacy ChatGPT, and unrelated clients. The Transform restores public order
+while ownership moves one domain at a time. Retain each checkpoint's passing test
+evidence; a final-only parity check does not prove the intermediate migrations.
+Test-only stage fixtures may exercise the ordering bridge across all four layouts.
+They supplement tests of the actual current root, not replace them. Do not add
+production stage parameters, runtime switches, or a second composition registry.
 
 In the two partial stages, document the temporary function as registering the
 remaining local tools; do not add feature flags, domain registries, exclusion
@@ -474,33 +533,36 @@ not deploying it. Only the final authorized deployment changes the live server.
 - **Parallel-safe:** no root edits in parallel; isolated Transform tests may split.
 - **Done:** original pins remain and the known aggregation mismatch is corrected.
 
-### G1.3b — Reject composition collisions before serving
+### G1.3b — Pin composition ownership before switching domains
 
-- **Purpose/current/target:** replace warning/precedence for invalid built-in
-  composition with explicit local-registration errors and startup collision failure.
-- **Files:** `server.py`, factory/composition integration tests.
-- **Out of scope/API:** O; no dynamic plugin validator. Native `on_duplicate`,
-  `lifespan`, and public `list_tools(run_middleware=False)` only.
-- **Invariants:** valid surface unchanged; guard runs without request identity;
-  no job manager/service startup or teardown added.
-- **Tests before/after:** B+C+E; same-provider duplicate fails construction;
-  root/child and child/child duplicates fail Client and ASGI lifespan startup,
-  including a name hidden from ChatGPT. Clean startup/teardown remains valid.
-  Synthetic child lifespan counters must stay at zero when the guard rejects
-  a duplicate, proving failure occurs before any child lifespan enters.
-- **Rollback:** revert guard/strict-local setting without touching tool bodies.
-- **Parallel-safe:** no; shared root/lifespan ownership.
-- **Done:** errors name collisions; no false claim that mount or wire listing alone
-  enforces uniqueness; startup checks use no private FastMCP state.
+- **Purpose/current/target:** wire hashes can hide cross-provider duplicates;
+  add the raw inventory and ownership contracts from section 5.3 before migration.
+- **Files:** `tests/contracts/test_server_composition.py`; test-only helpers if
+  needed. No production files change in this step.
+- **Out of scope/API:** O; no runtime validation or conflict-policy change.
+  Public `local_provider.list_tools()`, `list_tools(run_middleware=False)`, and
+  native `Client` only.
+- **Invariants:** eight raw names each appear once; exact remaining root inventory;
+  existing surface and startup behavior unchanged.
+- **Tests before/after:** B+C; positive current-root contracts and negative
+  root/child plus child/child fixtures. A duplicate `edit_file` must fail the
+  raw contract even if Client listing still matches every pinned wire hash.
+  Extend child ownership assertions as each fixed factory is introduced.
+- **Rollback:** remove only the added tests; no server lifecycle change to undo.
+  Keep this contract gate while activating mounts.
+- **Parallel-safe:** tests may be developed independently after G1.2; one owner
+  integrates edits to shared test modules. No root/lifespan coordination needed.
+- **Done:** both collision fixtures are detected before wire deduplication;
+  ordinary composition passes, using no private SDK state or production validator.
 
 ### G1.4a — Introduce Files child without switching the root
 
 - **Purpose/current/target:** add an independently testable Files factory; exported
-  root remains wholly on the proven old path plus order/guard.
+  root remains wholly on the proven old path plus the order Transform.
 - **Files:** new `files_server.py`, composition tests, precise Import Linter
   allowance for this composition module in `pyproject.toml`.
 - **Out of scope/API:** O; do not edit four tool modules, paths/text I/O, or root
-  registration. Native `FastMCP(on_duplicate="error")`, existing `register()`.
+  registration. Native `FastMCP()` and existing `register()`.
 - **Invariants:** four child tools only, same child order and wire metadata as the
   corresponding default root tools. Creating two Files children is independent.
 - **Tests before/after:** F and B; after add C child inventory/metadata and real
@@ -655,7 +717,7 @@ Proposed locations:
   every profile's ordered surface, instruction hash, raw same-interpreter wire
   dumps, child inventory, duplicate multiplicity, and validation parity.
 - `tests/integration/test_server_factory.py`: exports, fresh identity/state,
-  token failures, config-log count, bootstrap and ASGI lifespan failure.
+  token failures, config-log count, bootstrap and ASGI lifespan compatibility.
 - `tests/integration/test_server_composition.py`: native child delegation,
   middleware/lifespan scope, mounted real workflows and ContextVar propagation.
 - `tests/unit/core/test_tool_order.py`: pure sequence transformation properties.
@@ -680,15 +742,19 @@ at registration, so patch before creating that child.
 
 Client entry/exit tests verify root/child lifespans run once per active server
 lifetime and clean up on failure. Do not claim once per operating-system process
-across unrelated Client lifetimes. A duplicate-name startup failure must leave
-all synthetic child lifespan entry counters at zero. Add no test-only child
-middleware to production factories. Do not rely on private SDK fields except
-existing project-owned middleware attributes in an identity-relationship assertion.
+across unrelated Client lifetimes. These are native lifecycle characterization
+tests with synthetic callbacks; G1 production factories add no custom lifespan.
+Add no test-only child middleware to production factories. Do not rely on private
+SDK fields except existing project-owned middleware attributes in an
+identity-relationship assertion.
 
 A public `root.local_provider.list_tools()` assertion distinguishes migrated from
 remaining tools. `root.list_tools(run_middleware=False)` checks duplicate counts
 before wire deduplication. `Client.list_tools()` checks what the client sees.
 All three prove different facts and must not be substituted for one another.
+Use section 6's exact stage expectations when switching each domain. Exercise the
+two negative duplicate fixtures in section 5.3 to prove that the raw contract fails
+even when client-visible pins pass. Do not expect native startup to reject them.
 
 ### F — Files
 
@@ -824,7 +890,8 @@ by this design document alone.
 - Plain mount ordering is incompatible; keep the Transform while any mixed or
   fully mounted composition is active.
 - Root construction must not reorder the SDK's implicit schema middleware.
-- A wire list can hide duplicate registrations; test raw inventory and startup.
+- A wire list can hide duplicate registrations; test raw multiplicity and fixed
+  ownership before each migration checkpoint. Add no runtime validation in G1.
 - Child registration can capture callables/config at construction; keep existing
   signatures and patch tests at the correct time rather than rewriting adapters.
 - Fresh MCP instances do not remove import-time global settings or durable job
@@ -848,7 +915,7 @@ belongs to G1.
 
 ## 12. Parallel work and implementation handoff
 
-Root factory, order, duplicate guard, root switches, registry removal, shared
+Root factory, order, shared ownership tests, root switches, registry removal, shared
 Import Linter configuration, and control status have one integration owner.
 Files/Search/Commands preparation can use independent branches after G1.3 if
 each stays within its factory and domain-specific tests. Integrate activations
@@ -879,17 +946,22 @@ review, isolated probe, 90-test baseline, architecture/import checks, and the
 changed-document pre-commit gate. No G1 implementation, deployment, service
 restart, or remote publication occurs in this task.
 
-The fresh [read-only ChatGPT review](https://chatgpt.com/c/6abf9795-ea90-83ec-8aec-fc18d1120b56)
-approved the design. Its two minor findings were addressed: the complete
-root-to-child middleware sequence is explicit, and duplicate-startup tests must
-prove zero child lifespan entries. Re-review returned **APPROVE, no remaining
-findings**, blocking or non-blocking. This was a static review of supplied
-design/source/probe evidence, not independent execution or deployment approval.
-Prompts, replies, and review metadata are retained in the external evidence
-directory in section 3.3.
+The earlier [read-only ChatGPT review](https://chatgpt.com/c/6abf9795-ea90-83ec-8aec-fc18d1120b56)
+approved the prior design after middleware and guard-test clarifications. Subsequent
+coordinating review required a narrower duplicate policy. This revision retains
+the explicit root-to-child middleware sequence and replaces the runtime guard
+with tested ownership contracts. The earlier guard probes and review remain
+historical evidence, not requirements for implementation.
 
-Changed-document pre-commit passed before and after the review clarifications.
-The final status/evidence-only update uses the same document gate before commit.
+The [new read-only ChatGPT review](https://chatgpt.com/c/6abf9f46-b350-83ec-83f1-40dabd6024c2)
+returned **APPROVE, no findings**. It accepted the three native children, order-only
+Transform, test-only duplicate policy, incremental migration, middleware ordering,
+and evidence boundaries. This was static inspection of supplied design/source/probe
+evidence, not independent execution or deployment approval. Prompts, replies, and
+metadata are retained in the revision evidence directory in section 3.3.
+
+Changed-document pre-commit passed for the reviewed revision. The final
+status/evidence-only edits use the same document gate before commit.
 No production Python, tests, dependencies, lock, or protected architecture inputs
 were changed by this design task.
 
