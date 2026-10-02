@@ -2,6 +2,7 @@
 
 import asyncio
 import hashlib
+from collections import Counter
 
 import mcp.types
 import pytest
@@ -20,6 +21,54 @@ PROFILES = [
     ("openai-mcp", "legacy", "chatgpt"),
     ("claude-code", None, "default"),
 ]
+
+# This is the actual checkpoint's root-local inventory, not a runtime stage flag.
+ROOT_LOCAL = list(SURFACE_SHA256["default"])
+
+
+def assert_raw_ownership(tools):
+    assert Counter(tool.name for tool in tools) == Counter(
+        SURFACE_SHA256["default"].keys()
+    ), "raw ownership"
+
+
+def test_current_root_has_exact_local_inventory_and_raw_multiplicity():
+    async def go(root):
+        local = await root.local_provider.list_tools()
+        assert [tool.name for tool in local] == ROOT_LOCAL
+        assert_raw_ownership(await root.list_tools(run_middleware=False))
+
+    for root in (server.mcp, server.create_server()):
+        asyncio.run(go(root))
+
+
+@pytest.mark.parametrize("collision", ["root-child", "child-child"])
+def test_wire_pins_can_hide_duplicates_that_raw_contract_rejects(collision):
+    async def build():
+        components = await server.create_server().list_tools(run_middleware=False)
+        root = FastMCP("collision probe", instructions=server.mcp.instructions)
+        root.add_transform(PublicToolOrder())
+        duplicate = next(tool for tool in components if tool.name == "edit_file")
+        for tool in components:
+            if tool.name != "edit_file" or collision == "root-child":
+                root.add_tool(tool)
+        for _ in range(1 if collision == "root-child" else 2):
+            child = FastMCP("duplicate child")
+            child.add_tool(duplicate)
+            root.mount(child)
+        raw = await root.list_tools(run_middleware=False)
+        assert Counter(tool.name for tool in raw)["edit_file"] == 2
+        with pytest.raises(AssertionError, match="raw ownership"):
+            assert_raw_ownership(raw)
+        return root
+
+    tools, instructions = served(mcp_server=asyncio.run(build()))
+    assert [tool.name for tool in tools] == list(SURFACE_SHA256["default"])
+    assert {tool.name: digest(surface(tool)) for tool in tools} == SURFACE_SHA256[
+        "default"
+    ]
+    assert instructions is not None
+    assert hashlib.sha256(instructions.encode()).hexdigest() == INSTRUCTIONS_SHA256
 
 
 @pytest.mark.parametrize(("name", "mode", "profile"), PROFILES)
