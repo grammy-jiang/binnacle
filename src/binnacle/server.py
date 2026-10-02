@@ -167,30 +167,38 @@ def _load_token() -> str:
     return token
 
 
-mcp = FastMCP(
-    "binnacle",
-    # A tool map only. Workflow rules live in the ChatGPT Project's
-    # instructions (the single client in use); tool contracts live in the
-    # tool descriptions. First 512 chars self-contained (OpenAI guidance).
-    instructions=(
-        "binnacle: a Raspberry Pi 5 development workstation. Paths live under "
-        "~/Projects and /tmp. list_files (browse or glob), search_text (regex "
-        "over contents), read_file, edit_file (exact-string replace), "
-        "write_file (whole file), run_command (shell; long commands become "
-        "jobs for job_status/stop_job). Pi hardware and health: run_command "
-        "(vcgencmd, pinctrl, i2cdetect, libcamera-still)."
-    ),
-    auth=StaticTokenVerifier(
-        tokens={_load_token(): {"client_id": "binnacle-tunnel"}},
-    ),
-)
-_identity = ClientIdentity()
-mcp.add_middleware(
-    RequestLoggingMiddleware(_identity, include_payloads=True, max_payload_length=500)
-)
-mcp.add_middleware(ToolLoggingMiddleware(_identity))
-mcp.add_middleware(ClientToolVisibility(get_settings().client_tools, _identity))
-register_all(mcp)
+def create_server() -> FastMCP:
+    """Build a fresh root with the existing auth, middleware, and tool surface."""
+    root = FastMCP(
+        "binnacle",
+        # A tool map only. Workflow rules live in the ChatGPT Project's
+        # instructions (the single client in use); tool contracts live in the
+        # tool descriptions. First 512 chars self-contained (OpenAI guidance).
+        instructions=(
+            "binnacle: a Raspberry Pi 5 development workstation. Paths live under "
+            "~/Projects and /tmp. list_files (browse or glob), search_text (regex "
+            "over contents), read_file, edit_file (exact-string replace), "
+            "write_file (whole file), run_command (shell; long commands become "
+            "jobs for job_status/stop_job). Pi hardware and health: run_command "
+            "(vcgencmd, pinctrl, i2cdetect, libcamera-still)."
+        ),
+        auth=StaticTokenVerifier(
+            tokens={_load_token(): {"client_id": "binnacle-tunnel"}},
+        ),
+    )
+    identity = ClientIdentity()
+    root.add_middleware(
+        RequestLoggingMiddleware(
+            identity, include_payloads=True, max_payload_length=500
+        )
+    )
+    root.add_middleware(ToolLoggingMiddleware(identity))
+    root.add_middleware(ClientToolVisibility(get_settings().client_tools, identity))
+    register_all(root)
+    return root
+
+
+mcp = create_server()
 log_effective_config()
 
 app = mcp.http_app()

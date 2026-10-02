@@ -1,7 +1,6 @@
 # FastMCP-native refactor — implementation master plan — 2026-10-02
 
-Status: **Group 0 done; Group 1 implementation design ready; no Group 1
-production implementation started**.
+Status: **Group 0 done; Group 1 implementing locally**.
 
 This is the control document for the implementation-design and implementation phases of
 the FastMCP-native, platform-neutral Binnacle refactor.
@@ -127,7 +126,7 @@ Status changes belong in this document.
 | Group | Scope | Depends on | Parallel potential | Status |
 | --- | --- | --- | --- | --- |
 | G0 | Stable FastMCP 4 baseline | current master | none; foundational | **done** |
-| G1 | Composition foundation | G0 | foundational; mostly sequential | **ready** |
+| G1 | Composition foundation | G0 | foundational; mostly sequential | **implementing** |
 | G2 | FastMCP-native alignment | G1 | may overlap G3/G4 after shared seams settle | queued |
 | G3 | Commands/domain/platform seams | G1; commands mount | process/resources lanes later | queued |
 | G4 | Deployment/platform services | G1 | logs/paths may parallelize | queued |
@@ -246,12 +245,23 @@ Detailed design:
 - `docs/fastmcp-composition-foundation-implementation-design-2026-10-02.md`
 
 Design baseline: deployed G0 commit `4608423`, FastMCP `4.0.10`.
-G1 is ready. The final duplicate-policy correction passed a fresh read-only
-ChatGPT review with no findings and changed-document pre-commit. Final status
-edits use the same document gate before commit. The design has no runtime
-duplicate guard or separate duplicate-protection production step. Ownership
-checks are part of composition tests and every mount checkpoint. Implementation
-has not started; independent review in the coordinating conversation is next.
+G1 implementation has resumed locally on
+`refactor/g1-composition-foundation-resume-codex`, based on prerequisite
+`39c806d653fe27598c9fa33cb1fc74c74530f7be`. The final design commits
+`0fcb33b`, `80d5023`, and `14eded1` are replayed before the accepted implementation
+checkpoints. The blocker-only `df98e4c` is not replayed. Original worktrees and
+historical evidence remain available; production stays at `4608423`.
+
+The new pre-change baseline passed 102 focused compatibility tests, architecture,
+Import Linter, and strict module-size checks. Runtime versions remain FastMCP
+and FastMCP-slim `4.0.10`, MCP and MCP-types `2.1.1`.
+
+The accepted implementation predates final design `14eded1`. Its native local
+registration strictness must be completed after replay: `on_duplicate="error"`
+on the root and each child, with local rejection tests and strict synthetic
+cross-provider collision fixtures. There is no custom runtime duplicate guard
+or lifespan. Cross-provider ownership remains a raw test contract. No remote or
+production action is authorized by this local implementation task.
 
 The pinned default tool order interleaves Search between Files tools.
 Three simple mounts cannot preserve that order. The design characterizes
