@@ -25,7 +25,7 @@ PROFILES = [
 ]
 
 # This is the actual checkpoint's root-local inventory, not a runtime stage flag.
-ROOT_LOCAL = list(SURFACE_SHA256["default"])
+ROOT_LOCAL = ["search_text", "run_command", "job_status", "stop_job"]
 
 
 @pytest.mark.parametrize(

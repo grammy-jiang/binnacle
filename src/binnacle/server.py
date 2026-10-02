@@ -13,6 +13,7 @@ from fastmcp.server.auth import StaticTokenVerifier
 
 from binnacle import jobs
 from binnacle.config import get_settings
+from binnacle.files_server import create_files_server
 from binnacle.identity import ClientIdentity
 from binnacle.logging_middleware import (
     RequestLoggingMiddleware,
@@ -197,6 +198,7 @@ def create_server() -> FastMCP:
     root.add_middleware(ClientToolVisibility(get_settings().client_tools, identity))
     root.add_transform(PublicToolOrder())
     register_all(root)
+    root.mount(create_files_server())
     return root
 
 
