@@ -12,9 +12,11 @@ def run(
     background: bool = False,
     stdin: str | None = None,
     tail_lines: int | None = None,
+    *,
+    settings=None,
 ) -> dict:
     payload = rc.run_command_impl(
-        command, workdir, wait_seconds, background, stdin, tail_lines
+        command, workdir, wait_seconds, background, stdin, tail_lines, settings=settings
     ).structured_content
     assert payload is not None
     return payload

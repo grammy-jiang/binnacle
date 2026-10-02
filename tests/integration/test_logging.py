@@ -24,7 +24,6 @@ from binnacle.callctx import (
 from binnacle.config import RunCommandSettings
 from binnacle.tools import job_status as js
 from binnacle.tools import list_files as lf
-from binnacle.tools import run_command as rc
 from binnacle.tools import stop_job as sj
 
 
@@ -74,11 +73,9 @@ def test_tool_call_start_context_is_reset_after_call(caplog):
     assert current_call_started.get() is None
 
 
-def test_auto_background_policy_uses_middleware_client(monkeypatch, caplog):
+def test_auto_background_policy_uses_middleware_client(monkeypatch, caplog, run_policy):
     info = mcp.types.Implementation(name="openai-mcp-test", version="1")
-    monkeypatch.setattr(
-        rc,
-        "RUN_SETTINGS",
+    run_policy(
         RunCommandSettings(auto_background_patterns={"openai-mcp": (r"\bsleep\b",)}),
     )
     monkeypatch.setattr(jobs, "WARMUP_S", 0.05)
@@ -110,11 +107,9 @@ def test_auto_background_policy_uses_middleware_client(monkeypatch, caplog):
     sj.stop_job_impl(payload["job_id"])
 
 
-def test_explicit_background_false_overrides_auto_policy(monkeypatch):
+def test_explicit_background_false_overrides_auto_policy(monkeypatch, run_policy):
     info = mcp.types.Implementation(name="openai-mcp-test", version="1")
-    monkeypatch.setattr(
-        rc,
-        "RUN_SETTINGS",
+    run_policy(
         RunCommandSettings(auto_background_patterns={"openai-mcp": (r"\bsleep\b",)}),
     )
     monkeypatch.setattr(jobs, "WARMUP_S", 0.05)

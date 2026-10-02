@@ -1,0 +1,113 @@
+"""Commands adapter policy is isolated; the job backend remains process-owned."""
+
+import asyncio
+
+import pytest
+from fastmcp import Client
+
+from binnacle import commands_server, jobs, paths
+from binnacle.config import RootsSettings, RunCommandSettings
+from binnacle.tools import run_command
+
+
+def fail_global():
+    raise AssertionError("explicit Commands policy must not read global settings")
+
+
+@pytest.fixture
+def backend(monkeypatch):
+    calls = []
+
+    def start(command, workdir, stdin, wait):
+        calls.append((command, workdir, stdin, wait))
+        return "synthetic-job"
+
+    monkeypatch.setattr(run_command.job_owner, "start_and_wait", start)
+    monkeypatch.setattr(jobs, "job_state", lambda job_id: None)
+    monkeypatch.setattr(jobs, "read_log", lambda job_id: b"")
+    return calls
+
+
+def test_run_policy_roots_wait_schema_and_caller_mutation(
+    tmp_path, monkeypatch, backend
+):
+    children = []
+    for cap in (2, 4):
+        roots = RootsSettings(default_root=tmp_path, extra_roots=())
+        settings = RunCommandSettings(
+            wait_default_s=cap, wait_max_s=cap, auto_background_patterns={}
+        )
+        children.append(
+            commands_server.create_commands_server(roots=roots, run_settings=settings)
+        )
+        settings.wait_default_s = settings.wait_max_s = 99
+        settings.auto_background_patterns["mcp"] = (".*",)
+        roots.default_root = tmp_path / "changed"
+    for module in (commands_server, run_command, paths):
+        monkeypatch.setattr(module, "get_settings", fail_global)
+
+    async def go():
+        for child, cap in zip(children, (2, 4), strict=True):
+            async with Client(child, cache=False) as client:
+                tools = {t.name: t for t in await client.list_tools()}
+                parameter = tools["run_command"].input_schema["properties"][
+                    "wait_seconds"
+                ]
+                assert parameter["default"] == parameter["maximum"] == cap
+                assert (
+                    tools["run_command"].input_schema["properties"]["workdir"][
+                        "default"
+                    ]
+                    == "~/Projects"
+                )
+                before = len(backend)
+                omitted = await client.call_tool(
+                    "run_command", {"command": "probe"}, raise_on_error=False
+                )
+                assert (
+                    omitted.is_error
+                    and "outside allowed roots" in omitted.content[0].text
+                )
+                assert len(backend) == before
+                for path in (".", str(tmp_path)):
+                    result = await client.call_tool(
+                        "run_command", {"command": "probe", "workdir": path}
+                    )
+                    assert not result.is_error
+                    assert backend[-1] == ("probe", tmp_path, None, cap)
+                excessive = await client.call_tool(
+                    "run_command",
+                    {"command": "probe", "workdir": ".", "wait_seconds": cap + 1},
+                    raise_on_error=False,
+                )
+                assert excessive.is_error
+        assert len(backend) == 4
+
+    asyncio.run(go())
+
+
+def test_explicit_run_policy_keeps_process_warmup_and_owner(
+    tmp_path, monkeypatch, backend
+):
+    from binnacle.callctx import current_client
+
+    roots = RootsSettings(default_root=tmp_path, extra_roots=())
+    settings = RunCommandSettings(
+        auto_background_patterns={"restricted": ("probe",)}, wait_max_s=3
+    )
+    monkeypatch.setattr(run_command, "get_settings", fail_global)
+    monkeypatch.setattr(paths, "get_settings", fail_global)
+    monkeypatch.setattr(jobs, "WARMUP_S", 0.125)
+    token = current_client.set("restricted")
+    try:
+        result = run_command.run_command_impl(
+            "probe", ".", 500, False, None, roots=roots, settings=settings
+        )
+        assert result.structured_content["background_job"]
+        assert backend[-1][-1] == 0.125
+    finally:
+        current_client.reset(token)
+    run_command.run_command_impl(
+        "probe", ".", 500, False, None, roots=roots, settings=settings
+    )
+    assert backend[-1][-1] == 3

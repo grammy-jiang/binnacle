@@ -12,7 +12,6 @@ from binnacle.run_command_telemetry import (
     auto_background_behavior_hash,
     auto_background_policy_hash,
 )
-from binnacle.tools import run_command as rc
 from binnacle.tools import stop_job as sj
 
 
@@ -30,7 +29,7 @@ def _run(name: str, args: dict, client_info):
 
 
 def test_auto_background_marker_hashes_policy_and_rule_without_pattern(
-    monkeypatch, caplog, tmp_path
+    monkeypatch, caplog, tmp_path, run_policy
 ):
     info = mcp.types.Implementation(name="openai-mcp-test", version="1")
     pattern = r"SECRET_RULE_SHOULD_NOT_BE_LOGGED"
@@ -40,7 +39,7 @@ def test_auto_background_marker_hashes_policy_and_rule_without_pattern(
         auto_background_evidence_retention_days=14,
         auto_background_evidence_dir=evidence_dir,
     )
-    monkeypatch.setattr(rc, "RUN_SETTINGS", settings)
+    run_policy(settings)
     monkeypatch.setattr(jobs, "WARMUP_S", 0.05)
 
     with caplog.at_level("INFO", logger="binnacle.run_command"):

@@ -14,15 +14,12 @@ from pydantic import Field
 
 from binnacle import job_output, job_owner, jobs
 from binnacle.callctx import current_argument_names, current_call, current_client
-from binnacle.config import get_settings
+from binnacle.config import RootsSettings, RunCommandSettings, get_settings
 from binnacle.errors import CodedToolError
 from binnacle.paths import resolve_path
 from binnacle.run_command_evidence import record_auto_match
 from binnacle.run_command_telemetry import DispatchPlan
 
-RUN_SETTINGS = get_settings().run_command
-RUN_WAIT_DEFAULT = RUN_SETTINGS.wait_default_s
-RUN_WAIT_MAX = RUN_SETTINGS.wait_max_s
 log = logging.getLogger("binnacle.run_command")
 
 OUTPUT_SCHEMA = {
@@ -89,8 +86,12 @@ def run_command_impl(
     background: bool,
     stdin: str | None,
     tail_lines: int | None = None,
+    *,
+    roots: RootsSettings | None = None,
+    settings: RunCommandSettings | None = None,
 ) -> ToolResult:
-    resolved = resolve_path(workdir)
+    settings = get_settings().run_command if settings is None else settings
+    resolved = resolve_path(workdir, roots=roots)
     if not resolved.is_dir():
         raise CodedToolError(
             "workdir_not_directory",
@@ -104,16 +105,16 @@ def run_command_impl(
         background=background,
         argument_names=argument_names,
         client=current_client.get(),
-        settings=RUN_SETTINGS,
+        settings=settings,
         warmup_s=jobs.WARMUP_S,
-        wait_max_s=RUN_WAIT_MAX,
+        wait_max_s=settings.wait_max_s,
         owner=jobs.OWNER_MODE,
     )
     call_id = current_call.get()
     plan.log_auto_background(call_id)
     if plan.auto_background and plan.auto_rule_hash is not None:
         record_auto_match(
-            retention_days=RUN_SETTINGS.auto_background_evidence_retention_days,
+            retention_days=settings.auto_background_evidence_retention_days,
             call_id=call_id,
             client=plan.client,
             command=command,
@@ -125,7 +126,7 @@ def run_command_impl(
             rule_hash=plan.auto_rule_hash,
             match_start=plan.auto_match_start,
             match_end=plan.auto_match_end,
-            root=RUN_SETTINGS.auto_background_evidence_dir,
+            root=settings.auto_background_evidence_dir,
         )
     owner_started = time.perf_counter()
     try:
@@ -215,7 +216,18 @@ def run_command_impl(
     return ToolResult(content=summary, structured_content=payload)
 
 
-def register(mcp: FastMCP) -> None:
+def register(
+    mcp: FastMCP,
+    *,
+    roots: RootsSettings | None = None,
+    settings: RunCommandSettings | None = None,
+) -> None:
+    if roots is None or settings is None:
+        defaults = get_settings()
+        roots = defaults.roots if roots is None else roots
+        settings = defaults.run_command if settings is None else settings
+    roots, settings = roots.model_copy(deep=True), settings.model_copy(deep=True)
+
     @mcp.tool(
         annotations={
             "readOnlyHint": False,
@@ -236,10 +248,10 @@ def register(mcp: FastMCP) -> None:
             int,
             Field(
                 ge=1,
-                le=RUN_WAIT_MAX,
+                le=settings.wait_max_s,
                 description="Seconds to wait for the command to finish before yielding a job_id (max 50); returns as soon as it finishes, so a long wait costs nothing.",
             ),
-        ] = RUN_WAIT_DEFAULT,
+        ] = settings.wait_default_s,
         background: Annotated[
             bool,
             Field(
@@ -267,5 +279,12 @@ def register(mcp: FastMCP) -> None:
         Output merges stdout and stderr.
         """
         return run_command_impl(
-            command, workdir, wait_seconds, background, stdin, tail_lines
+            command,
+            workdir,
+            wait_seconds,
+            background,
+            stdin,
+            tail_lines,
+            roots=roots,
+            settings=settings,
         )

@@ -475,9 +475,9 @@ def test_unwritable_spool_is_a_clean_tool_error(tmp_path, monkeypatch):
 
 
 def test_run_command_wait_seconds_is_clamped_to_max(monkeypatch):
-    monkeypatch.setattr(rc, "RUN_WAIT_MAX", 1)
+    settings = rc.RunCommandSettings(wait_max_s=1)
     t0 = time.time()
-    p = run("sleep 10", wait_seconds=500)
+    p = run("sleep 10", wait_seconds=500, settings=settings)
     assert time.time() - t0 < 4 and p["state"] == "running"
     stop(p["job_id"])
 
