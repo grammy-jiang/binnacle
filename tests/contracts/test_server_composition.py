@@ -8,8 +8,10 @@ import mcp.types
 import pytest
 from fastmcp import Client, FastMCP
 from fastmcp.exceptions import ToolError
+from fastmcp.server.middleware.dereference import DereferenceRefsMiddleware
 
 from binnacle import server
+from binnacle.files_server import create_files_server
 from binnacle.tool_order import PublicToolOrder
 from tests.contracts.surface_support import digest, served, surface
 from tests.contracts.test_input_validation import text_of
@@ -24,6 +26,29 @@ PROFILES = [
 
 # This is the actual checkpoint's root-local inventory, not a runtime stage flag.
 ROOT_LOCAL = list(SURFACE_SHA256["default"])
+
+
+@pytest.mark.parametrize(
+    ("factory", "names"),
+    [(create_files_server, ["read_file", "list_files", "edit_file", "write_file"])],
+)
+def test_focused_child_owns_only_its_domain_with_unchanged_metadata(factory, names):
+    first, second = factory(), factory()
+    assert first is not second
+    assert first.auth is None and first.instructions is None
+    assert [type(item) for item in first.middleware] == [DereferenceRefsMiddleware]
+    raw = asyncio.run(first.local_provider.list_tools())
+    assert [tool.name for tool in raw] == names
+    assert Counter(tool.name for tool in raw) == Counter(names)
+    tools, _ = served(mcp_server=first)
+    expected, _ = served()
+    assert [tool.model_dump(mode="json", by_alias=True) for tool in tools] == [
+        tool.model_dump(mode="json", by_alias=True)
+        for tool in expected
+        if tool.name in names
+    ]
+    first.tool(lambda: None, name="child_isolation_probe")
+    assert [tool.name for tool in asyncio.run(second.list_tools())] == names
 
 
 def assert_raw_ownership(tools):
