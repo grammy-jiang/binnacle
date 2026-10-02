@@ -178,3 +178,55 @@ def test_logging_constructor_copies_explicit_tokenizer_settings(monkeypatch):
     assert calls == [counter]
     assert counter.enabled and counter.encoding == "test"
     assert counter.applies("one-client") and not counter.applies("two-client")
+
+
+def test_fresh_processes_load_two_configs_without_import_order_dependency(tmp_path):
+    import subprocess
+    import sys
+
+    from tests.integration.test_packaging_smoke import clean_env
+
+    token = tmp_path / "token"
+    token.write_text("test-root-token")
+    for cap in (2, 3):
+        config = tmp_path / f"{cap}.toml"
+        config.write_text(
+            f'[auth]\ntoken_file = "{token}"\n'
+            f'[roots]\ndefault_root = "{tmp_path}"\nextra_roots = []\n'
+            f"[search_text]\nmax_results_default = {cap}\n"
+            f"[list_files]\nmax_results_default = {cap}\n"
+            f"[run_command]\nwait_default_s = {cap}\nwait_max_s = {cap}\n"
+        )
+        proc = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                """
+import asyncio
+import sys
+# Import adapters before construction. No reload or settings-cache reset.
+from binnacle.tools import search_text, read_file, job_status
+from binnacle import server
+from fastmcp import Client
+async def go():
+    for root in (server.mcp, server.create_server()):
+        async with Client(root) as client:
+            tools = {tool.name: tool for tool in await client.list_tools()}
+            for name in ("search_text", "list_files"):
+                assert tools[name].input_schema["properties"]["max_results"]["default"] == int(sys.argv[1])
+            for name in ("run_command", "job_status"):
+                assert tools[name].input_schema["properties"]["wait_seconds"]["maximum"] == int(sys.argv[1])
+asyncio.run(go())
+print("construction-ok")
+""",
+                str(cap),
+            ],
+            env=clean_env(config),
+            text=True,
+            capture_output=True,
+            timeout=30,
+            check=False,
+        )
+        assert proc.returncode == 0, proc.stderr
+        assert proc.stdout.strip() == "construction-ok"
+        assert proc.stderr.count("event=config pid=") == 1
