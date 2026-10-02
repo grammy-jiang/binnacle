@@ -475,13 +475,19 @@ def search_text_impl(
     return result
 
 
-def register(mcp: FastMCP) -> None:
+def register(
+    mcp: FastMCP,
+    *,
+    roots: RootsSettings,
+    settings: SearchTextSettings,
+    rg_bin: str,
+) -> None:
     from binnacle.search_text_register import register_search_text
 
-    settings = get_settings().search_text
+    roots, settings = roots.model_copy(deep=True), settings.model_copy(deep=True)
     register_search_text(
         mcp,
-        search_text_impl,
+        partial(search_text_impl, roots=roots, settings=settings, rg_bin=rg_bin),
         output_schema=OUTPUT_SCHEMA,
         max_results_default=settings.max_results_default,
         max_results_cap=settings.max_results_cap,
