@@ -129,3 +129,18 @@ def test_lossy_refused(tmp_path):
 def test_outside_roots():
     with pytest.raises(ToolError, match="outside allowed roots"):
         ef.edit_file_impl("/etc/passwd", "a", "b", False)
+
+
+def test_direct_snippet_helper_uses_lazy_settings(monkeypatch):
+    from types import SimpleNamespace
+
+    from binnacle.config import EditFileSettings
+
+    settings = EditFileSettings(snippet_context_lines=0)
+    monkeypatch.setattr(ef, "get_settings", lambda: SimpleNamespace(edit_file=settings))
+    assert ef._snippet_around("before\nchange\nafter\n", 2) == ("change\n", 2)
+    settings.snippet_context_lines = 1
+    assert ef._snippet_around("before\nchange\nafter\n", 2) == (
+        "before\nchange\nafter\n",
+        1,
+    )

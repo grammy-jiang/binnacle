@@ -266,3 +266,55 @@ def test_list_binary_and_timeout_are_captured(tmp_path, monkeypatch):
         assert seen == [("selected-rg", 7)]
 
     asyncio.run(go())
+
+
+@pytest.mark.parametrize("supplied", ["neither", "roots", "settings"])
+def test_edit_registration_fallback_keeps_supplied_policy(
+    tmp_path, monkeypatch, supplied
+):
+    from types import SimpleNamespace
+
+    from fastmcp import FastMCP
+
+    default_root, explicit_root = tmp_path / "default", tmp_path / "explicit"
+    for directory in (default_root, explicit_root):
+        directory.mkdir()
+        (directory / "file").write_text("before\ntarget\nafter\n")
+    defaults = SimpleNamespace(
+        roots=RootsSettings(default_root=default_root, extra_roots=()),
+        edit_file=EditFileSettings(snippet_context_lines=1),
+    )
+    roots = RootsSettings(default_root=explicit_root, extra_roots=())
+    settings = EditFileSettings(snippet_context_lines=0)
+    calls = []
+
+    def load():
+        calls.append(True)
+        return defaults
+
+    monkeypatch.setattr(edit_file, "get_settings", load)
+    child = FastMCP("edit-fallback")
+    kwargs = {"roots": roots} if supplied == "roots" else {}
+    if supplied == "settings":
+        kwargs["settings"] = settings
+    edit_file.register(child, **kwargs)
+    assert calls == [True]
+    defaults.roots.default_root = roots.default_root = tmp_path / "changed"
+    defaults.edit_file.snippet_context_lines = settings.snippet_context_lines = 99
+    monkeypatch.setattr(edit_file, "get_settings", fail_global)
+    expected_root = explicit_root if supplied == "roots" else default_root
+
+    async def go():
+        async with Client(child) as client:
+            result = await client.call_tool(
+                "edit_file",
+                {"path": "file", "old_string": "target", "new_string": "updated"},
+            )
+            payload = result.structured_content
+            assert payload["path"] == str(expected_root / "file")
+            assert payload["snippet"] == (
+                "updated\n" if supplied == "settings" else "before\nupdated\nafter\n"
+            )
+            assert (expected_root / "file").read_text() == "before\nupdated\nafter\n"
+
+    asyncio.run(go())
