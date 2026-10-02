@@ -24,6 +24,7 @@ from binnacle.run_command_telemetry import (
     auto_background_behavior_hash,
     auto_background_policy_hash,
 )
+from binnacle.tool_order import PublicToolOrder
 from binnacle.tools import register_all
 from binnacle.visibility import ClientToolVisibility
 
@@ -194,6 +195,7 @@ def create_server() -> FastMCP:
     )
     root.add_middleware(ToolLoggingMiddleware(identity))
     root.add_middleware(ClientToolVisibility(get_settings().client_tools, identity))
+    root.add_transform(PublicToolOrder())
     register_all(root)
     return root
 

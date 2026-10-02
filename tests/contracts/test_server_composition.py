@@ -5,10 +5,11 @@ import hashlib
 
 import mcp.types
 import pytest
-from fastmcp import Client
+from fastmcp import Client, FastMCP
 from fastmcp.exceptions import ToolError
 
 from binnacle import server
+from binnacle.tool_order import PublicToolOrder
 from tests.contracts.surface_support import digest, served, surface
 from tests.contracts.test_input_validation import text_of
 from tests.contracts.test_tool_surface import INSTRUCTIONS_SHA256, SURFACE_SHA256
@@ -102,3 +103,30 @@ def test_two_roots_and_clients_keep_visibility_isolated(mode, tmp_path):
             )
 
     asyncio.run(go())
+
+
+@pytest.mark.parametrize("migrated", [0, 1, 2, 3])
+def test_native_order_transform_covers_each_partial_mount_layout(migrated):
+    groups = [
+        ["read_file", "list_files", "edit_file", "write_file"],
+        ["search_text"],
+        ["run_command", "job_status", "stop_job"],
+    ]
+    root = FastMCP("synthetic root")
+    mounted_names = {name for group in groups[:migrated] for name in group}
+    for name in SURFACE_SHA256["default"]:
+        if name not in mounted_names:
+            root.tool(lambda: None, name=name)
+    for group in groups[:migrated]:
+        child = FastMCP("synthetic child")
+        for name in group:
+            child.tool(lambda: None, name=name)
+        root.mount(child)
+    before, _ = served(mcp_server=root)
+    expected = list(SURFACE_SHA256["default"])
+    if migrated:
+        assert [tool.name for tool in before] != expected
+    root.add_transform(PublicToolOrder())
+    after, _ = served(mcp_server=root)
+    assert [tool.name for tool in after] == expected
+    assert {tool.name: tool for tool in before} == {tool.name: tool for tool in after}
