@@ -246,11 +246,12 @@ Detailed design:
 - `docs/fastmcp-composition-foundation-implementation-design-2026-10-02.md`
 
 Design baseline: deployed G0 commit `4608423`, FastMCP `4.0.10`.
-G1 is ready. The revised design removes the runtime duplicate guard and passed
-a new read-only ChatGPT review with no findings. Changed-document pre-commit
-passed; final status/evidence edits use the same gate before commit. Implementation
-has not started. Independent review in the coordinating conversation remains the
-next action.
+G1 is ready. The final duplicate-policy correction passed a fresh read-only
+ChatGPT review with no findings and changed-document pre-commit. Final status
+edits use the same document gate before commit. The design has no runtime
+duplicate guard or separate duplicate-protection production step. Ownership
+checks are part of composition tests and every mount checkpoint. Implementation
+has not started; independent review in the coordinating conversation is next.
 
 The pinned default tool order interleaves Search between Files tools.
 Three simple mounts cannot preserve that order. The design characterizes
@@ -259,8 +260,10 @@ first mount. This does not migrate client visibility, which remains G2.
 Exactly three focused child servers remain the target. Files, Search, and Commands
 move one at a time, with exact root-local, raw aggregate, and wire-surface contracts
 at every checkpoint. Fixed factories and test-only duplicate checks replace the
-earlier proposed lifespan guard. G1 preserves native conflict defaults and the
-current middleware order, including implicit SDK dereferencing.
+earlier proposed lifespan guard. Native `on_duplicate="error"` only hardens
+registration within each root/child LocalProvider; it does not enforce global
+provider uniqueness. Cross-provider warning/precedence behavior remains native.
+G1 preserves the current middleware order, including implicit SDK dereferencing.
 
 Key invariant:
 

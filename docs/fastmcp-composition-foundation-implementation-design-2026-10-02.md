@@ -1,6 +1,6 @@
 # Group 1 implementation design — Composition foundation — 2026-10-02
 
-Status: **ready; revised design review clean; production implementation has not started**.
+Status: **ready; final duplicate-policy review clean; production implementation has not started**.
 
 Parent control document:
 `docs/fastmcp-native-refactor-implementation-master-2026-10-02.md`.
@@ -63,8 +63,9 @@ Do not introduce G2 native visibility, broad dependency injection, `Depends`,
 Tasks/extras, platform contracts, macOS, package relocation, external plugin
 discovery, operational routes, a Feature protocol, ServerBuilder, RuntimeContext,
 custom Provider router, or lifecycle dispatcher. Do not change middleware order.
-Do not add a runtime duplicate validator, a custom root/child lifespan, or a new
-`on_duplicate` setting for G1. Section 5.3 defines the test-only ownership gate.
+Do not add a runtime duplicate validator or custom root/child lifespan for G1.
+The native `on_duplicate="error"` constructor option only hardens local-provider
+registration. Section 5.3 defines the separate test-only ownership gate.
 
 `pyproject.toml` may change only its Import Linter contracts for the new composition
 owners. `uv.lock`, runtime dependency expectations, and quality-policy floors stay
@@ -204,6 +205,22 @@ unchanged, but produced nine internal tools and failed the ownership contract.
 Native startup still succeeded. This proves why wire hashes alone are insufficient
 and why the proposed test-only gate catches the concrete G1 collision risk.
 
+The final correction was verified with local strictness enabled and no runtime
+guard. Evidence is retained separately at:
+
+```text
+/home/grammy-jiang/.local/state/binnacle/g1-final-design-20261002T122256Z-zng1isq8/
+```
+
+`local_strict_no_guard_probe.py` and `local-strict-no-guard-probe.json` repeat
+all 16 stage/profile comparisons and eight representative calls successfully.
+Five local-registration cases (root before mounts, empty-local root after all
+mounts, Files, Search, Commands) raise native `ValueError` on duplicate local
+registration. With local strictness set on every collision participant, both
+root/child and child/child duplicates still allow native startup, preserve the
+wire hashes, and fail the raw ownership assertion. The final design uses this
+local-versus-cross-provider distinction; it requires no custom lifespan.
+
 The first probe harness tried root `list_tools()` without a session and hit the
 existing identity middleware's session requirement. The probe was corrected to
 use `list_tools(run_middleware=False)` for internal inspection. Production
@@ -271,6 +288,8 @@ Keep `create_server()` in `src/binnacle/server.py`, with no arguments. It constr
 a fresh FastMCP and a fresh ClientIdentity shared by the same three new middleware
 instances on each call. Reuse the current exact server name, instructions,
 StaticTokenVerifier mapping (`client_id="binnacle-tunnel"`), and `_load_token()`.
+Set native `on_duplicate="error"` for this root's LocalProvider. This rejects
+same-provider registration mistakes only; it is not cross-provider enforcement.
 
 Keep `logging.basicConfig`, `TOKEN_FILE`, `_load_token`, `log_effective_config`, and
 the current module bootstrap. In particular, retain:
@@ -336,9 +355,9 @@ Add three small top-level modules without moving existing code:
 | `search_server.py::create_search_server()` | `search_text` |
 | `commands_server.py::create_commands_server()` | `run_command`, `job_status`, `stop_job` |
 
-Each no-argument function returns a fresh ordinary FastMCP with its existing
-native conflict defaults. Use internal server names `binnacle-files`,
-`binnacle-search`, and `binnacle-commands`. Add no child instructions, auth,
+Each no-argument function returns a fresh ordinary FastMCP with native
+`on_duplicate="error"` for its own LocalProvider. Use internal server names
+`binnacle-files`, `binnacle-search`, and `binnacle-commands`. Add no child instructions, auth,
 Binnacle middleware, HTTP app, transport, or operational routes. Native default
 middleware/lifespan behavior remains. Root auth protects the externally served
 HTTP boundary; child in-process tests are not authentication tests.
@@ -381,12 +400,25 @@ Do not turn these test assertions into an exported production helper or registry
 Tests detect the G1 composition mistakes; they do not claim to prohibit arbitrary
 future runtime calls to FastMCP's mutation APIs.
 
-Keep the current native conflict behavior: no new `on_duplicate` setting,
-startup rejection, root/child lifespan callback, or provider-error policy.
-Same-provider warning/replacement is existing FastMCP behavior; G1 does not
-redefine it. Cross-provider precedence is characterized, but valid built-in
-composition never relies on that precedence because the ownership gate rejects
-collisions. Native lifespans remain responsible for framework lifecycle only.
+Use `FastMCP(..., on_duplicate="error")` inside the root and each child factory
+as local-provider registration hardening. The SDK raises `ValueError` when the
+same component identity is registered twice in that server's LocalProvider.
+This catches local mistakes that the default warning/replacement behavior can
+hide from a post-registration inventory. Test this native behavior on fresh
+factory instances, including the root after its local inventory becomes empty.
+Keep these construction assertions separate from clean composition fixtures.
+
+That option is not global provider collision enforcement. Even when it is set
+on every server, cross-provider duplicates still use FastMCP's warning, wire
+deduplication, and deterministic lookup rules. Do not claim that mounting or
+starting such a composition raises an error. The raw test assertions above
+detect those collisions at every migration checkpoint; exact surface tests,
+architecture review, full CI, and deployment gates remain mandatory.
+
+Add no custom duplicate validator, startup rejection, root/child lifespan callback,
+or provider-error policy. Native lifespans retain framework lifecycle ownership.
+Valid built-in composition never relies on cross-provider precedence because
+the test acceptance gate rejects collisions before integration.
 
 This resolves the platform-neutral design's section 6.3 for G1. Its requirement
 to fail startup or tests is met by exact tests. Its following request for startup
@@ -485,18 +517,21 @@ not deploying it. Only the final authorized deployment changes the live server.
 - **Purpose/current/target:** replace module-global assembly with the factory in
   section 5.1; the same `register_all(root)` still registers all tools.
 - **Files:** `server.py`; new `tests/integration/test_server_factory.py`.
-- **Out of scope/API:** O; no registry/child changes. Use `FastMCP`,
-  `StaticTokenVerifier`, `add_middleware`, and existing `http_app` export.
+- **Out of scope/API:** O; no registry/child changes. Use native
+  `FastMCP(on_duplicate="error")`, `StaticTokenVerifier`, `add_middleware`,
+  and existing `http_app` export.
 - **Invariants:** exact instructions/auth/full middleware order; fresh identity
   per root; no new config-log duplication; same import-time token errors.
 - **Tests before/after:** B and E; new factory tests cover two distinct roots,
   registration isolation, exports, middleware identity sharing, and bootstrap.
+  Registering the same synthetic local tool twice must raise native `ValueError`;
+  this test makes no claim about cross-provider collisions.
 - **Rollback:** revert the factory extraction and its new tests; old assembly
   still uses the same registrations. Do not touch services.
 - **Parallel-safe:** no; root construction is the shared foundation.
 - **Done:** explicit construction and existing exported app both pass parity.
 
-### G1.2 — Add composition characterization tests
+### G1.2 — Add composition characterization and ownership contracts
 
 - **Purpose/current/target:** existing tests focus on the exported singleton;
   add equivalent coverage for fresh factory roots before mounting real domains.
@@ -505,18 +540,27 @@ not deploying it. Only the final authorized deployment changes the live server.
   `tests/contracts/test_server_composition.py`,
   `tests/integration/test_server_composition.py`, and test-only helpers if needed.
 - **Out of scope/API:** O; production source unchanged. Native `Client(FastMCP)`,
-  middleware, and synthetic child lifespans only.
+  public `local_provider.list_tools()`, `list_tools(run_middleware=False)`,
+  middleware, and synthetic child lifespans only. No production validator.
 - **Invariants:** existing `served()` callers retain the singleton default.
   Use existing hash constants/normalization, not a second mutable golden set.
+  Require the exact current root-local sequence and eight raw names, each once,
+  using section 5.3's independent expected-name `Counter`.
 - **Tests before/after:** B; add C for roots, two synthetic mounted siblings,
   middleware/error traces, lifespan enter/exit, and disjoint client identities.
+  Include root/child and child/child duplicate fixtures with a hidden `edit_file`.
+  They must fail the raw ownership contract even when Client wire hashes pass
+  and native startup succeeds. Extend exact child inventories as factories appear.
 - **Rollback:** remove only additive tests/helper option; G1.1 remains functional.
+  Retain the ownership gate while activating mounts.
 - **Parallel-safe:** test authors may split contract/pipeline tests after agreeing
   fixture ownership; only one author edits shared helpers.
 - **Done:** tests characterize the migration boundary and fail when order,
   metadata, duplicate execution, or identity isolation is deliberately disturbed.
+  Both collision fixtures are detected before wire deduplication. The same
+  ownership acceptance criteria run at every later staged mount checkpoint.
 
-### G1.3a — Preserve order through a native Transform
+### G1.3 — Preserve order through a native Transform
 
 - **Purpose/current/target:** all tools remain local; install `PublicToolOrder`
   as a no-op on the current public order, ready for later mixed ownership.
@@ -533,28 +577,6 @@ not deploying it. Only the final authorized deployment changes the live server.
 - **Parallel-safe:** no root edits in parallel; isolated Transform tests may split.
 - **Done:** original pins remain and the known aggregation mismatch is corrected.
 
-### G1.3b — Pin composition ownership before switching domains
-
-- **Purpose/current/target:** wire hashes can hide cross-provider duplicates;
-  add the raw inventory and ownership contracts from section 5.3 before migration.
-- **Files:** `tests/contracts/test_server_composition.py`; test-only helpers if
-  needed. No production files change in this step.
-- **Out of scope/API:** O; no runtime validation or conflict-policy change.
-  Public `local_provider.list_tools()`, `list_tools(run_middleware=False)`, and
-  native `Client` only.
-- **Invariants:** eight raw names each appear once; exact remaining root inventory;
-  existing surface and startup behavior unchanged.
-- **Tests before/after:** B+C; positive current-root contracts and negative
-  root/child plus child/child fixtures. A duplicate `edit_file` must fail the
-  raw contract even if Client listing still matches every pinned wire hash.
-  Extend child ownership assertions as each fixed factory is introduced.
-- **Rollback:** remove only the added tests; no server lifecycle change to undo.
-  Keep this contract gate while activating mounts.
-- **Parallel-safe:** tests may be developed independently after G1.2; one owner
-  integrates edits to shared test modules. No root/lifespan coordination needed.
-- **Done:** both collision fixtures are detected before wire deduplication;
-  ordinary composition passes, using no private SDK state or production validator.
-
 ### G1.4a — Introduce Files child without switching the root
 
 - **Purpose/current/target:** add an independently testable Files factory; exported
@@ -562,11 +584,11 @@ not deploying it. Only the final authorized deployment changes the live server.
 - **Files:** new `files_server.py`, composition tests, precise Import Linter
   allowance for this composition module in `pyproject.toml`.
 - **Out of scope/API:** O; do not edit four tool modules, paths/text I/O, or root
-  registration. Native `FastMCP()` and existing `register()`.
+  registration. Native `FastMCP(on_duplicate="error")` and existing `register()`.
 - **Invariants:** four child tools only, same child order and wire metadata as the
   corresponding default root tools. Creating two Files children is independent.
 - **Tests before/after:** F and B; after add C child inventory/metadata and real
-  scratch file workflow, then A.
+  scratch file workflow, local duplicate registration rejection, then A.
 - **Rollback:** remove unused child/tests/allowance; root never depended on them.
 - **Parallel-safe:** child/test work can overlap other unactivated child work after
   G1.3; one integration owner handles `pyproject.toml` and shared tests.
@@ -755,6 +777,10 @@ All three prove different facts and must not be substituted for one another.
 Use section 6's exact stage expectations when switching each domain. Exercise the
 two negative duplicate fixtures in section 5.3 to prove that the raw contract fails
 even when client-visible pins pass. Do not expect native startup to reject them.
+Set native local strictness on the synthetic collision servers too, to prove that
+`on_duplicate="error"` does not enforce uniqueness across providers. Separately
+test duplicate local registration on each real factory: the root and all three
+children must raise native `ValueError`, without a custom Binnacle helper.
 
 ### F — Files
 
@@ -839,7 +865,10 @@ not only allowed-importer strings.
 Final static/diff review must also confirm: no root per-tool registration calls;
 no `register_all` callers; no private SDK registry access; no Feature/Builder/
 RuntimeContext; no new auth/middleware/Tasks/visibility/settings/platform logic;
-no dependency or schema pin change. These are bounded review checks, not a new
+no runtime duplicate validator or custom lifespan; and no dependency or schema
+pin change. Cross-provider uniqueness is a test/architecture acceptance criterion
+at every checkpoint, not a runtime policy implemented by Binnacle.
+These are bounded review checks, not a new
 generic architecture framework or a repository-wide FastMCP import migration.
 
 ## 10. Group convergence and integration gates
@@ -953,14 +982,20 @@ the explicit root-to-child middleware sequence and replaces the runtime guard
 with tested ownership contracts. The earlier guard probes and review remain
 historical evidence, not requirements for implementation.
 
-The [new read-only ChatGPT review](https://chatgpt.com/c/6abf9f46-b350-83ec-83f1-40dabd6024c2)
-returned **APPROVE, no findings**. It accepted the three native children, order-only
-Transform, test-only duplicate policy, incremental migration, middleware ordering,
-and evidence boundaries. This was static inspection of supplied design/source/probe
-evidence, not independent execution or deployment approval. Prompts, replies, and
-metadata are retained in the revision evidence directory in section 3.3.
+The [next read-only ChatGPT review](https://chatgpt.com/c/6abf9f46-b350-83ec-83f1-40dabd6024c2)
+returned **APPROVE, no findings** for the test-only cross-provider policy. The final
+correction folds ownership checks into G1.2, removes the separate duplicate step,
+and specifies native local registration hardening without global enforcement.
+These reviews are static inspection of supplied design/source/probe evidence,
+not independent execution or deployment approval.
 
-Changed-document pre-commit passed for the reviewed revision. The final
+The [fresh final ChatGPT review](https://chatgpt.com/c/6abfa3ee-0314-83ec-82fc-48961cecaf1f)
+returned **APPROVE — no findings**. It confirmed that the runtime guard is fully
+removed, local strictness is not global enforcement, and raw ownership acceptance
+remains separate from wire parity at each checkpoint. Prompts, replies, and probe
+evidence are retained in the final-correction directory in section 3.3.
+
+Changed-document pre-commit passed for the reviewed correction. Final
 status/evidence-only edits use the same document gate before commit.
 No production Python, tests, dependencies, lock, or protected architecture inputs
 were changed by this design task.
