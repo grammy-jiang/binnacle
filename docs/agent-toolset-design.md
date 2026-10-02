@@ -609,9 +609,13 @@ explicitly rather than left to defaults:
 
 **Results.** SDK-level obligations of this revision (required `resultType`,
 `ttlMs` + `cacheScope` on `ListToolsResult`, deterministic ordering, a
-`tools/list` that never varies per connection) ride on FastMCP 4.0.0b5 —
-verify with `mcp-era-check` + `scripts/mcp_client.py` at implementation; binnacle's
-list is static, so the stateless-listing MUST is satisfied by construction.
+`tools/list` that never varies per connection) ride on the pinned FastMCP
+4.0.10 baseline. Revalidated locally on 2026-10-02 through the focused MCP
+contract/integration tests and an in-process Client probe: list/call results
+carry `resultType`, list results carry `ttlMs` + `cacheScope`, and each client
+profile keeps the same tool order across repeated calls and new connections.
+This revalidation does not change the original 2026-08-30 conformance check
+date. Deployed-server and real ChatGPT connector verification remain pending.
 Content policy: `structuredContent` conforming to the declared
 `outputSchema`, plus a **one-line** `TextContent` summary ("exit 0 in
 2.1 s", "3 matches in 2 files"). The spec says a structured result "SHOULD
