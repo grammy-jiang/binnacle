@@ -23,7 +23,7 @@ import json
 from collections.abc import Iterator
 
 import mcp.types
-from fastmcp import Client
+from fastmcp import Client, FastMCP
 
 from binnacle import server
 
@@ -46,7 +46,10 @@ CONSTRAINTS = (
 
 
 def served(
-    client_name: str | None = None, mode: str | None = None
+    client_name: str | None = None,
+    mode: str | None = None,
+    *,
+    mcp_server: FastMCP | None = None,
 ) -> tuple[list[mcp.types.Tool], str | None]:
     """The tools and the server instructions a client of this name receives."""
 
@@ -58,7 +61,9 @@ def served(
             )
         if mode is not None:
             kwargs["mode"] = mode
-        async with Client(server.mcp, **kwargs) as client:
+        async with Client(
+            server.mcp if mcp_server is None else mcp_server, **kwargs
+        ) as client:
             return await client.list_tools(), client.instructions
 
     return asyncio.run(go())
