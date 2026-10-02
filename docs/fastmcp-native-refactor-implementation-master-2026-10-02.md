@@ -1,6 +1,6 @@
 # FastMCP-native refactor — implementation master plan — 2026-10-02
 
-Status: **Groups 0 and 1 done; Group 2 design ready**.
+Status: **Groups 0 and 1 done; Group 2 implementing**.
 
 This is the control document for the implementation-design and implementation phases of
 the FastMCP-native, platform-neutral Binnacle refactor.
@@ -127,7 +127,7 @@ Status changes belong in this document.
 | --- | --- | --- | --- | --- |
 | G0 | Stable FastMCP 4 baseline | current master | none; foundational | **done** |
 | G1 | Composition foundation | G0 | foundational; mostly sequential | **done** |
-| G2 | FastMCP-native alignment | G1 | domain settings lanes after shared seams settle | **ready** |
+| G2 | FastMCP-native alignment | G1 | domain settings lanes after shared seams settle | **implementing** |
 | G3 | Commands/domain/platform seams | G1; commands mount | process/resources lanes later | queued |
 | G4 | Deployment/platform services | G1 | logs/paths may parallelize | queued |
 | G5 | Diagnostics, operations, companions | relevant G3/G4 public seams | selected cleanup may start earlier | queued |
@@ -603,3 +603,15 @@ and fresh read-only review. The next action is independent coordinator review, t
 separate implementation prompt and isolated worktree with G2.0 drift/baseline checks.
 No G2 implementation or integration has occurred. G3-G6 remain queued; this design
 does not authorize their implementation.
+
+## 15. G2 implementation baseline
+
+G2 implementation starts from approved design `3f300461` over deployed
+`e86ff81`, in `binnacle-g2-native-alignment-impl` on
+`refactor/g2-fastmcp-native-alignment`. G2.0 passed: doctor 9/0/0,
+158 B+C tests, architecture, seven Import Linter contracts, strict module size,
+and offline lock validation. Runtime versions remain FastMCP/FastMCP-slim
+4.0.10 and MCP/MCP-types 2.1.1. The four-profile raw/wire archive and
+checkpoint logs are retained outside Git at
+`~/.local/state/binnacle/g2-implementation-20261002T221926Z-higemn3y/`.
+G0/G1 remain done. G2 has not reached convergence or deployment; G3 is queued.
