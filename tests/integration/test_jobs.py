@@ -130,11 +130,10 @@ def _listing_state(
 
 
 def test_status_single_job_previews_long_command(monkeypatch):
-    monkeypatch.setattr(js, "LISTING_COMMAND_PREVIEW_CHARS", 40)
     command = "printf ok; #" + "x" * 100 + "-TAIL"
     job_id = run(command)["job_id"]
 
-    row = status(job_id)
+    row = status(job_id, preview_chars=40)
     assert row["workdir"]
     assert row["command"].startswith("printf ok; #")
     assert row["command"].endswith("-TAIL")
@@ -142,7 +141,6 @@ def test_status_single_job_previews_long_command(monkeypatch):
 
 
 def test_status_listing_keeps_all_running_plus_recent_history(monkeypatch):
-    monkeypatch.setattr(js, "LISTING_HISTORY_LIMIT", 3)
     states = [
         _listing_state("newest"),
         _listing_state("run-new", state="running", exit_code=None),
@@ -154,7 +152,7 @@ def test_status_listing_keeps_all_running_plus_recent_history(monkeypatch):
     ]
     monkeypatch.setattr(jobstore, "list_jobs", lambda: states)
 
-    rows = status()["jobs"]
+    rows = status(history_limit=3)["jobs"]
     assert [r["job_id"] for r in rows] == [
         "newest",
         "run-new",
@@ -170,14 +168,13 @@ def test_status_listing_keeps_all_running_plus_recent_history(monkeypatch):
 
 
 def test_status_listing_preview_is_head_tail_and_adds_workdir(monkeypatch):
-    monkeypatch.setattr(js, "LISTING_COMMAND_PREVIEW_CHARS", 40)
     command = "HEAD-" + "x" * 100 + "-TAIL"
     state = _listing_state(
         "job", command=command, workdir="/tmp/project", started_at=42.0
     )
     monkeypatch.setattr(jobstore, "list_jobs", lambda: [state])
 
-    row = status()["jobs"][0]
+    row = status(preview_chars=40)["jobs"][0]
     assert row["workdir"] == "/tmp/project"
     assert row["command"].startswith("HEAD-")
     assert row["command"].endswith("-TAIL")
@@ -194,25 +191,26 @@ def test_status_listing_short_command_kept_and_newlines_are_one_line(monkeypatch
 
 
 def test_status_listing_unknown_counts_as_history(monkeypatch):
-    monkeypatch.setattr(js, "LISTING_HISTORY_LIMIT", 1)
     states = [
         _listing_state("unknown", state="unknown", exit_code=None),
         _listing_state("exited"),
         _listing_state("running", state="running", exit_code=None),
     ]
     monkeypatch.setattr(jobstore, "list_jobs", lambda: states)
-    assert [r["job_id"] for r in status()["jobs"]] == ["unknown", "running"]
+    assert [r["job_id"] for r in status(history_limit=1)["jobs"]] == [
+        "unknown",
+        "running",
+    ]
 
 
 def test_status_listing_summary_says_when_history_is_omitted(monkeypatch):
-    monkeypatch.setattr(js, "LISTING_HISTORY_LIMIT", 1)
     states = [
         _listing_state("run", state="running", exit_code=None),
         _listing_state("new"),
         _listing_state("old"),
     ]
     monkeypatch.setattr(jobstore, "list_jobs", lambda: states)
-    result = js.job_status_impl(None, 100, 0)
+    result = js.job_status_impl(None, 100, 0, history_limit=1)
     assert result.structured_content is not None
     assert len(result.structured_content["jobs"]) == 2
     assert "2 of 3 job(s) shown" in result.content[0].text
@@ -220,7 +218,6 @@ def test_status_listing_summary_says_when_history_is_omitted(monkeypatch):
 
 
 def test_status_listing_logs_correlated_counts(monkeypatch, caplog):
-    monkeypatch.setattr(js, "LISTING_HISTORY_LIMIT", 1)
     states = [
         _listing_state("run", state="running", exit_code=None),
         _listing_state("new"),
@@ -230,7 +227,7 @@ def test_status_listing_logs_correlated_counts(monkeypatch, caplog):
     token = current_call.set("listing-test-call")
     try:
         with caplog.at_level("INFO", logger="binnacle.job_status"):
-            status()
+            status(history_limit=1)
     finally:
         current_call.reset(token)
     assert "event=job_listing call=listing-test-call" in caplog.text
@@ -240,10 +237,9 @@ def test_status_listing_logs_correlated_counts(monkeypatch, caplog):
 
 
 def test_quiet_flag_on_sleeping_job(monkeypatch):
-    monkeypatch.setattr(js, "QUIET_AFTER_S", 0)  # any age counts as quiet
     p = run("sleep 5", background=True)
     time.sleep(0.3)
-    s = status(p["job_id"])
+    s = status(p["job_id"], quiet_after_s=0)
     assert s["state"] == "running" and s["quiet"] is True
     stop(p["job_id"])
 

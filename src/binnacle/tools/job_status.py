@@ -6,6 +6,7 @@ works across `uvicorn --reload` and ChatGPT's per-call sessions.
 
 import logging
 import time
+from collections.abc import Callable
 from typing import Annotated
 
 from fastmcp import FastMCP
@@ -22,10 +23,6 @@ from binnacle.callctx import (
 )
 from binnacle.config import get_settings
 
-QUIET_AFTER_S = get_settings().jobs.quiet_after_s
-LISTING_HISTORY_LIMIT = get_settings().jobs.listing_history_limit
-LISTING_COMMAND_PREVIEW_CHARS = get_settings().jobs.listing_command_preview_chars
-WAIT_MAX = get_settings().run_command.wait_max_s
 log = logging.getLogger("binnacle.job_status")
 _PERF_COUNTER = time.perf_counter
 
@@ -75,10 +72,8 @@ def _tail(text: str, n: int) -> str:
     return "\n".join(lines[-n:])
 
 
-def _command_preview(command: str, keep_chars: int | None = None) -> str:
+def _command_preview(command: str, keep_chars: int) -> str:
     """Compact one-line head+tail identity for a recent-jobs listing."""
-    if keep_chars is None:
-        keep_chars = LISTING_COMMAND_PREVIEW_CHARS
     display = command.replace("\n", "\\n")
     if len(display) <= keep_chars:
         return display
@@ -88,7 +83,9 @@ def _command_preview(command: str, keep_chars: int | None = None) -> str:
     return f"{display[:head]}…[{omitted} chars omitted]…{display[-tail:]}"
 
 
-def _listing_rows(states: list[dict]) -> tuple[list[dict], int]:
+def _listing_rows(
+    states: list[dict], history_limit: int, preview_chars: int
+) -> tuple[list[dict], int]:
     """All running jobs plus bounded recent non-running history, newest first."""
     rows: list[dict] = []
     history = 0
@@ -97,7 +94,7 @@ def _listing_rows(states: list[dict]) -> tuple[list[dict], int]:
         is_running = state["state"] == "running"
         if is_running:
             running += 1
-        elif history < LISTING_HISTORY_LIMIT:
+        elif history < history_limit:
             history += 1
         else:
             continue
@@ -109,7 +106,7 @@ def _listing_rows(states: list[dict]) -> tuple[list[dict], int]:
                 "runtime_s": state["runtime_s"],
                 "started_at": state["started_at"],
                 "workdir": state["workdir"],
-                "command": _command_preview(state["command"]),
+                "command": _command_preview(state["command"], preview_chars),
             }
         )
     return rows, running
@@ -223,9 +220,9 @@ def _log_wait_exception_timing(
     )
 
 
-def _listing_result() -> ToolResult:
+def _listing_result(history_limit: int, preview_chars: int) -> ToolResult:
     states = jobs.list_jobs()
-    rows, running = _listing_rows(states)
+    rows, running = _listing_rows(states, history_limit, preview_chars)
     if not states:
         summary = "No jobs recorded."
     elif len(rows) == len(states):
@@ -233,7 +230,7 @@ def _listing_result() -> ToolResult:
     else:
         summary = (
             f"{len(rows)} of {len(states)} job(s) shown, newest first: "
-            f"all {running} running plus up to {LISTING_HISTORY_LIMIT} recent "
+            f"all {running} running plus up to {history_limit} recent "
             "non-running jobs."
         )
     log.info(
@@ -243,8 +240,8 @@ def _listing_result() -> ToolResult:
         len(states),
         len(rows),
         running,
-        LISTING_HISTORY_LIMIT,
-        LISTING_COMMAND_PREVIEW_CHARS,
+        history_limit,
+        preview_chars,
     )
     return ToolResult(content=summary, structured_content={"jobs": rows})
 
@@ -255,17 +252,29 @@ def job_status_impl(
     wait_seconds: int = 0,
     *,
     cursor: str | None = None,
+    quiet_after_s: int | None = None,
+    history_limit: int | None = None,
+    preview_chars: int | None = None,
+    wait_max: int | None = None,
 ) -> ToolResult:
     impl_start = _PERF_COUNTER()
     call_start = current_call_started.get()
     dispatch_ms = (impl_start - call_start) * 1_000 if call_start is not None else None
+    if quiet_after_s is None:
+        quiet_after_s = get_settings().jobs.quiet_after_s
+    if history_limit is None:
+        history_limit = get_settings().jobs.listing_history_limit
+    if preview_chars is None:
+        preview_chars = get_settings().jobs.listing_command_preview_chars
+    if wait_max is None:
+        wait_max = get_settings().run_command.wait_max_s
     if cursor is not None and job_id is None:
         raise ToolError("cursor requires job_id")
     if job_id is None:
-        return _listing_result()
+        return _listing_result(history_limit, preview_chars)
 
     requested_wait_s = wait_seconds
-    bounded_wait_s = max(0, min(requested_wait_s, WAIT_MAX))
+    bounded_wait_s = max(0, min(requested_wait_s, wait_max))
     state_start = _PERF_COUNTER()
     state = jobs.job_state(job_id)
     if state is None:
@@ -328,7 +337,7 @@ def job_status_impl(
     quiet = (
         state["state"] == "running"
         and state["last_output_age_s"] is not None
-        and state["last_output_age_s"] >= QUIET_AFTER_S
+        and state["last_output_age_s"] >= quiet_after_s
     )
 
     process_start = _PERF_COUNTER()
@@ -351,7 +360,7 @@ def job_status_impl(
         {
             "log_bytes": state["log_bytes"],
             "log_path": state["log_path"],
-            "command": _command_preview(state["command"]),
+            "command": _command_preview(state["command"], preview_chars),
             "workdir": state["workdir"],
             "processes": processes,
         }
@@ -438,7 +447,7 @@ def job_status_impl(
     return ToolResult(content=summary, structured_content=payload)
 
 
-def register(mcp: FastMCP) -> None:
+def register(mcp: FastMCP, impl: Callable[..., ToolResult], *, wait_max: int) -> None:
     @mcp.tool(
         annotations={"readOnlyHint": True, "openWorldHint": False},
         output_schema=OUTPUT_SCHEMA,
@@ -455,7 +464,7 @@ def register(mcp: FastMCP) -> None:
             int,
             Field(
                 ge=0,
-                le=WAIT_MAX,
+                le=wait_max,
                 description="Block up to this long (max 50) for the job to exit; returns as soon as it exits, so a long wait costs nothing. 0 answers at once.",
             ),
         ] = 0,
@@ -477,4 +486,4 @@ def register(mcp: FastMCP) -> None:
         job_id/cursor. Keep cursor internal unless asked. Returns lifecycle
         fields, output, and live processes; quiet=true means no recent output.
         """
-        return job_status_impl(job_id, tail_lines, wait_seconds, cursor=cursor)
+        return impl(job_id, tail_lines, wait_seconds, cursor=cursor)

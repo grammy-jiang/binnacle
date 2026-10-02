@@ -22,8 +22,10 @@ def run(
     return payload
 
 
-def status(job_id=None, tail_lines: int = 100, wait_seconds: int = 0) -> dict:
-    payload = js.job_status_impl(job_id, tail_lines, wait_seconds).structured_content
+def status(job_id=None, tail_lines: int = 100, wait_seconds: int = 0, **policy) -> dict:
+    payload = js.job_status_impl(
+        job_id, tail_lines, wait_seconds, **policy
+    ).structured_content
     assert payload is not None
     return payload
 

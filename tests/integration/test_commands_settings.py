@@ -7,7 +7,7 @@ from fastmcp import Client
 
 from binnacle import commands_server, jobs, paths
 from binnacle.config import RootsSettings, RunCommandSettings
-from binnacle.tools import run_command
+from binnacle.tools import job_status, run_command
 
 
 def fail_global():
@@ -111,3 +111,82 @@ def test_explicit_run_policy_keeps_process_warmup_and_owner(
         "probe", ".", 500, False, None, roots=roots, settings=settings
     )
     assert backend[-1][-1] == 3
+
+
+def test_status_factories_own_presentation_and_share_run_wait_cap(
+    tmp_path, monkeypatch
+):
+    command = "HEAD-" + "x" * 80 + "-TAIL"
+    state = {
+        "job_id": "shared",
+        "state": "running",
+        "exit_code": None,
+        "signal": None,
+        "command": command,
+        "workdir": str(tmp_path),
+        "pid": 123,
+        "pgid": 123,
+        "started_at": 1.0,
+        "ended_at": None,
+        "runtime_s": 10.0,
+        "last_output_age_s": 1.0,
+        "log_bytes": 0,
+        "log_path": str(tmp_path / "fake-log"),
+    }
+    states = [state, {**state, "job_id": "finished", "state": "exited", "exit_code": 0}]
+    monkeypatch.setattr(jobs, "list_jobs", lambda: states)
+    monkeypatch.setattr(jobs, "job_state", lambda job_id: state)
+    monkeypatch.setattr(jobs, "read_log", lambda job_id: b"")
+    monkeypatch.setattr(jobs, "job_processes", lambda pgid: [])
+    for module in (commands_server, run_command, job_status, paths):
+        monkeypatch.setattr(module, "get_settings", fail_global)
+    children = []
+    for cap, quiet, history, preview in [(2, 0, 0, 8), (4, 100, 1, 16)]:
+        children.append(
+            commands_server.create_commands_server(
+                roots=RootsSettings(default_root=tmp_path, extra_roots=()),
+                run_settings=RunCommandSettings(wait_default_s=cap, wait_max_s=cap),
+                quiet_after_s=quiet,
+                listing_history_limit=history,
+                listing_command_preview_chars=preview,
+            )
+        )
+
+    async def go():
+        for index, (child, cap, preview) in enumerate(
+            zip(children, (2, 4), (8, 16), strict=True)
+        ):
+            async with Client(child, cache=False) as client:
+                tools = {tool.name: tool for tool in await client.list_tools()}
+                assert (
+                    tools["job_status"].input_schema["properties"]["wait_seconds"][
+                        "maximum"
+                    ]
+                    == cap
+                )
+                assert (
+                    tools["run_command"].input_schema["properties"]["wait_seconds"][
+                        "maximum"
+                    ]
+                    == cap
+                )
+                listing = (await client.call_tool("job_status", {})).structured_content[
+                    "jobs"
+                ]
+                assert len(listing) == index + 1
+                assert listing[0]["command"] == job_status._command_preview(
+                    command, preview
+                )
+                single = (
+                    await client.call_tool("job_status", {"job_id": "shared"})
+                ).structured_content
+                assert single["quiet"] is (index == 0)
+                assert single["command"] == listing[0]["command"]
+                invalid = await client.call_tool(
+                    "job_status",
+                    {"job_id": "shared", "wait_seconds": cap + 1},
+                    raise_on_error=False,
+                )
+                assert invalid.is_error
+
+    asyncio.run(go())

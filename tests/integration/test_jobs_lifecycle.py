@@ -140,10 +140,9 @@ def test_status_wait_expires_leaves_job_running():
 
 
 def test_status_wait_is_capped(monkeypatch):
-    monkeypatch.setattr(js, "WAIT_MAX", 0.25)
     p = run("sleep 30", background=True)
     t0 = time.time()
-    s = status(p["job_id"], wait_seconds=40)
+    s = status(p["job_id"], wait_seconds=40, wait_max=0.25)
     elapsed = time.time() - t0
     assert 0.15 < elapsed < 2 and s["state"] == "running"
     assert (s["wait_requested_s"], s["wait_effective_s"]) == (40, 0.25)
