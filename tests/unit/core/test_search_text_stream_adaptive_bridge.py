@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+from binnacle.config import get_settings
 from binnacle.search_text_adaptive import build_adaptive_result
 from binnacle.search_text_collect import matches_glob
 from binnacle.search_text_stream_reduce import ExactStreamReducer
@@ -35,7 +36,7 @@ def test_adaptive_bridge_preserves_payload(tmp_path):
         glob="*.py",
         fixed_strings=False,
         max_match_entries=100,
-        settings=st.SEARCH_SETTINGS,
+        settings=get_settings().search_text,
         matches_glob=matches_glob,
         result_max_bytes=65_536,
     )
@@ -44,7 +45,7 @@ def test_adaptive_bridge_preserves_payload(tmp_path):
         tmp_path,
         "*.py",
         100,
-        max_line_chars=st.SEARCH_MAX_LINE_CHARS,
+        max_line_chars=get_settings().search_text.max_line_chars,
         clip_mark=st.LINE_CLIP_MARK,
         matches_glob=matches_glob,
     )
@@ -58,7 +59,7 @@ def test_adaptive_bridge_preserves_payload(tmp_path):
         glob=None,
         fixed_strings=False,
         max_match_entries=100,
-        settings=st.SEARCH_SETTINGS,
+        settings=get_settings().search_text,
         matches_glob=matches_glob,
         result_max_bytes=65_536,
     )

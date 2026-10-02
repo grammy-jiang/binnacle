@@ -127,7 +127,7 @@ def test_search_text_runtime_error_codes(tmp_path, monkeypatch):
 
     monkeypatch.setattr(st.subprocess, "run", missing)
     with pytest.raises(ToolError, match="ripgrep") as exc:
-        st._run_rg(tmp_path, "foo", False, 0)
+        st._run_rg(tmp_path, "foo", False, 0, rg_bin="rg", timeout_s=20)
     assert _code(exc) == "rg_missing"
 
     def timeout(*args, **kwargs):
@@ -135,7 +135,7 @@ def test_search_text_runtime_error_codes(tmp_path, monkeypatch):
 
     monkeypatch.setattr(st.subprocess, "run", timeout)
     with pytest.raises(ToolError, match="timed out") as exc:
-        st._run_rg(tmp_path, "foo", False, 0)
+        st._run_rg(tmp_path, "foo", False, 0, rg_bin="rg", timeout_s=20)
     assert _code(exc) == "rg_timeout"
 
     monkeypatch.setattr(
@@ -156,7 +156,6 @@ def test_search_text_context_prefix_and_budget_codes(tmp_path, monkeypatch):
     assert result.structured_content is not None
     assert result.structured_content["count"] == 1
 
-    monkeypatch.setattr(st, "SEARCH_RESULT_MAX_BYTES", 8)
     payload = {
         "path": "/tmp",
         "pattern": "x",
@@ -165,7 +164,7 @@ def test_search_text_context_prefix_and_budget_codes(tmp_path, monkeypatch):
         "truncated": False,
     }
     with pytest.raises(ToolError, match="metadata exceeds") as exc:
-        st._enforce_result_budget(payload, names_only=False)
+        st._enforce_result_budget(payload, names_only=False, max_bytes=8)
     assert _code(exc) == "response_budget_exceeded"
 
 

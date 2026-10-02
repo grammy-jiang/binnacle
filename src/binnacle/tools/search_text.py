@@ -4,6 +4,7 @@ import hashlib
 import logging
 import subprocess as _subprocess
 import time
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -11,7 +12,7 @@ from fastmcp import FastMCP
 from fastmcp.tools.base import ToolResult
 
 from binnacle.callctx import current_call
-from binnacle.config import get_settings
+from binnacle.config import RootsSettings, SearchTextSettings, get_settings
 from binnacle.errors import CodedToolError
 from binnacle.paths import full_match, nearby_hint, resolve_path
 from binnacle.search_text_adaptive import (
@@ -47,18 +48,8 @@ from binnacle.search_text_telemetry import (
     timed_attach_context as _timed_attach_context_impl,
 )
 
-SEARCH_SETTINGS = get_settings().search_text
-SEARCH_MAX_RESULTS_DEFAULT = SEARCH_SETTINGS.max_results_default
-SEARCH_MAX_RESULTS_CAP = SEARCH_SETTINGS.max_results_cap
-SEARCH_TIMEOUT_S = SEARCH_SETTINGS.timeout_s
-EXACT_EXECUTION = SEARCH_SETTINGS.exact_execution
-SEARCH_MAX_LINE_CHARS = SEARCH_SETTINGS.max_line_chars
-SEARCH_RESULT_MAX_BYTES = SEARCH_SETTINGS.result_max_bytes
 LINE_CLIP_MARK = "… [line truncated]"
 log = logging.getLogger("binnacle.search_text")
-AUTO_CONTEXT_SINGLE = get_settings().search_text.auto_context_single
-AUTO_CONTEXT_FEW = get_settings().search_text.auto_context_few
-RG_BIN = get_settings().rg_bin
 subprocess = _subprocess  # compatibility seam for existing tests/extensions
 from binnacle.search_text_schema import OUTPUT_SCHEMA
 
@@ -67,20 +58,26 @@ _entry_count = _budget_entry_count
 
 
 def _enforce_result_budget_rich(
-    payload: dict[str, Any], *, names_only: bool, initial_bytes: int | None = None
+    payload: dict[str, Any],
+    *,
+    names_only: bool,
+    max_bytes: int,
+    initial_bytes: int | None = None,
 ):
     return _fit_result_budget(
         payload,
         names_only=names_only,
-        max_bytes=SEARCH_RESULT_MAX_BYTES,
+        max_bytes=max_bytes,
         initial_bytes=initial_bytes,
     )
 
 
 def _enforce_result_budget(
-    payload: dict[str, Any], *, names_only: bool
+    payload: dict[str, Any], *, names_only: bool, max_bytes: int
 ) -> tuple[dict[str, Any], bool]:
-    outcome = _enforce_result_budget_rich(payload, names_only=names_only)
+    outcome = _enforce_result_budget_rich(
+        payload, names_only=names_only, max_bytes=max_bytes
+    )
     return outcome.payload, outcome.hit
 
 
@@ -90,14 +87,17 @@ def _run_rg(
     fixed_strings: bool,
     context: int,
     metrics: ExactSearchMetrics | None = None,
+    *,
+    rg_bin: str,
+    timeout_s: int,
 ) -> tuple[list[dict], bool]:
     return _run_rg_impl(
         root,
         pattern,
         fixed_strings,
         context,
-        rg_bin=RG_BIN,
-        timeout_s=SEARCH_TIMEOUT_S,
+        rg_bin=rg_bin,
+        timeout_s=timeout_s,
         metrics=metrics,
     )
 
@@ -112,6 +112,8 @@ def _collect(
     glob: str | None,
     max_results: int,
     metrics: ExactSearchMetrics | None = None,
+    *,
+    max_line_chars: int,
 ) -> tuple[list[dict], dict[str, dict[int, str]], int, bool]:
     return _collect_impl(
         events,
@@ -119,7 +121,7 @@ def _collect(
         glob,
         max_results,
         metrics,
-        max_line_chars=SEARCH_MAX_LINE_CHARS,
+        max_line_chars=max_line_chars,
         clip_mark=LINE_CLIP_MARK,
     )
 
@@ -129,13 +131,15 @@ def _attach_context(
     line_map: dict[str, dict[int, str]],
     span: int,
     line_numbers: bool = False,
+    *,
+    max_line_chars: int,
 ) -> None:
     _attach_context_impl(
         matches,
         line_map,
         span,
         line_numbers,
-        max_line_chars=SEARCH_MAX_LINE_CHARS,
+        max_line_chars=max_line_chars,
         clip_mark=LINE_CLIP_MARK,
     )
 
@@ -148,9 +152,12 @@ def _scan_exact(
     context: int,
     max_results: int,
     metrics: ExactSearchMetrics,
+    *,
+    settings: SearchTextSettings,
+    rg_bin: str,
 ):
     return _scan_exact_impl(
-        EXACT_EXECUTION,
+        settings.exact_execution,
         resolved,
         pattern,
         glob,
@@ -158,12 +165,12 @@ def _scan_exact(
         context,
         max_results,
         metrics,
-        run_rg=_run_rg,
-        collect=_collect,
+        run_rg=partial(_run_rg, rg_bin=rg_bin, timeout_s=settings.timeout_s),
+        collect=partial(_collect, max_line_chars=settings.max_line_chars),
         matches_glob=_matches_glob,
-        rg_bin=RG_BIN,
-        timeout_s=SEARCH_TIMEOUT_S,
-        max_line_chars=SEARCH_MAX_LINE_CHARS,
+        rg_bin=rg_bin,
+        timeout_s=settings.timeout_s,
+        max_line_chars=settings.max_line_chars,
         clip_mark=LINE_CLIP_MARK,
     )
 
@@ -173,6 +180,7 @@ def _fit_budget_with_metrics(
     *,
     names_only: bool,
     metrics: ExactSearchMetrics,
+    max_bytes: int,
     pre_bytes: int | None = None,
 ):
     return _fit_budget_metrics(
@@ -180,7 +188,7 @@ def _fit_budget_with_metrics(
         names_only=names_only,
         metrics=metrics,
         structured_bytes=_structured_bytes,
-        enforce=_enforce_result_budget_rich,
+        enforce=partial(_enforce_result_budget_rich, max_bytes=max_bytes),
         pre_bytes=pre_bytes,
     )
 
@@ -195,11 +203,23 @@ def _search_exact_impl(
     max_results: int,
     line_numbers: bool,
     metrics: ExactSearchMetrics,
+    *,
+    settings: SearchTextSettings,
+    rg_bin: str,
 ) -> ToolResult:
+    attach_context = partial(_attach_context, max_line_chars=settings.max_line_chars)
     explicit_context = context_lines if context_lines is not None else 0
     metrics.effective_context = explicit_context
     scan = _scan_exact(
-        resolved, pattern, glob, fixed_strings, explicit_context, max_results, metrics
+        resolved,
+        pattern,
+        glob,
+        fixed_strings,
+        explicit_context,
+        max_results,
+        metrics,
+        settings=settings,
+        rg_bin=rg_bin,
     )
     matches, line_map, total, truncated = (
         scan.matches,
@@ -215,10 +235,22 @@ def _search_exact_impl(
         and not truncated
     ):
         metrics.auto_context = True
-        span = AUTO_CONTEXT_SINGLE if len(matches) == 1 else AUTO_CONTEXT_FEW
+        span = (
+            settings.auto_context_single
+            if len(matches) == 1
+            else settings.auto_context_few
+        )
         metrics.effective_context = span
         scan = _scan_exact(
-            resolved, pattern, glob, fixed_strings, span, max_results, metrics
+            resolved,
+            pattern,
+            glob,
+            fixed_strings,
+            span,
+            max_results,
+            metrics,
+            settings=settings,
+            rg_bin=rg_bin,
         )
         matches, line_map, total, truncated = (
             scan.matches,
@@ -227,11 +259,11 @@ def _search_exact_impl(
             scan.truncated,
         )
         _timed_attach_context_impl(
-            _attach_context, matches, line_map, span, line_numbers, metrics
+            attach_context, matches, line_map, span, line_numbers, metrics
         )
     elif explicit_context > 0:
         _timed_attach_context_impl(
-            _attach_context, matches, line_map, explicit_context, line_numbers, metrics
+            attach_context, matches, line_map, explicit_context, line_numbers, metrics
         )
 
     where = f"{resolved}" + (f" (glob {glob!r})" if glob else "")
@@ -254,7 +286,12 @@ def _search_exact_impl(
             if entries
             else f"No matches for {pattern!r} under {where}."
         )
-        outcome = _fit_budget_with_metrics(payload, names_only=True, metrics=metrics)
+        outcome = _fit_budget_with_metrics(
+            payload,
+            names_only=True,
+            metrics=metrics,
+            max_bytes=settings.result_max_bytes,
+        )
         payload = outcome.payload
         if outcome.hit:
             log.info(
@@ -262,7 +299,7 @@ def _search_exact_impl(
                 "returned_entries=%s total_matches=%s names_only=true",
                 current_call.get(),
                 outcome.result_bytes,
-                SEARCH_RESULT_MAX_BYTES,
+                settings.result_max_bytes,
                 _entry_count(payload),
                 total,
             )
@@ -301,8 +338,8 @@ def _search_exact_impl(
     pre_budget_bytes = _structured_bytes(payload)
     metrics.pre_budget_bytes = pre_budget_bytes
     if (
-        SEARCH_SETTINGS.adaptive_discovery_enabled
-        and pre_budget_bytes > SEARCH_RESULT_MAX_BYTES
+        settings.adaptive_discovery_enabled
+        and pre_budget_bytes > settings.result_max_bytes
     ):
         metrics.adaptive_attempted = True
         adaptive_work = AdaptiveWork()
@@ -315,9 +352,9 @@ def _search_exact_impl(
                 glob=scan.adaptive_glob,
                 fixed_strings=fixed_strings,
                 max_match_entries=max_results,
-                settings=SEARCH_SETTINGS,
+                settings=settings,
                 matches_glob=_matches_glob,
-                result_max_bytes=SEARCH_RESULT_MAX_BYTES,
+                result_max_bytes=settings.result_max_bytes,
                 work=adaptive_work,
             )
         finally:
@@ -336,7 +373,7 @@ def _search_exact_impl(
                 trigger_bytes=pre_budget_bytes,
                 total_matches=total,
                 result=adaptive,
-                result_budget_bytes=SEARCH_RESULT_MAX_BYTES,
+                result_budget_bytes=settings.result_max_bytes,
             )
             summary = (
                 f"Found {total} matches for {pattern!r} under {where}; "
@@ -350,6 +387,7 @@ def _search_exact_impl(
         names_only=False,
         metrics=metrics,
         pre_bytes=pre_budget_bytes,
+        max_bytes=settings.result_max_bytes,
     )
     payload = outcome.payload
     if outcome.hit:
@@ -358,7 +396,7 @@ def _search_exact_impl(
             "returned_entries=%s total_matches=%s names_only=false",
             current_call.get(),
             outcome.result_bytes,
-            SEARCH_RESULT_MAX_BYTES,
+            settings.result_max_bytes,
             _entry_count(payload),
             total,
         )
@@ -379,18 +417,27 @@ def search_text_impl(
     names_only: bool,
     max_results: int,
     line_numbers: bool = False,
+    *,
+    roots: RootsSettings | None = None,
+    settings: SearchTextSettings | None = None,
+    rg_bin: str | None = None,
 ) -> ToolResult:
+    if roots is None or settings is None or rg_bin is None:
+        defaults = get_settings()
+        roots = defaults.roots if roots is None else roots
+        settings = defaults.search_text if settings is None else settings
+        rg_bin = defaults.rg_bin if rg_bin is None else rg_bin
     if not pattern:
         raise CodedToolError(
             "empty_pattern", "The 'pattern' parameter must be non-empty."
         )
-    resolved = resolve_path(path)
+    resolved = resolve_path(path, roots=roots)
     if not resolved.exists():
         raise CodedToolError(
             "path_not_found",
-            f"Path not found: {resolved}.{nearby_hint(resolved.parent)}",
+            f"Path not found: {resolved}.{nearby_hint(resolved.parent, roots=roots)}",
         )
-    max_results = max(1, min(max_results, SEARCH_MAX_RESULTS_CAP))
+    max_results = max(1, min(max_results, settings.max_results_cap))
 
     # mode stays in the line for journal readers; since the removal of the
     # indexed-context pilot (2026-09-28) every search is exact.
@@ -418,6 +465,8 @@ def search_text_impl(
             max_results,
             line_numbers,
             metrics,
+            settings=settings,
+            rg_bin=rg_bin,
         )
     except Exception as exc:
         metrics.log_terminal(log, exc)
@@ -429,10 +478,11 @@ def search_text_impl(
 def register(mcp: FastMCP) -> None:
     from binnacle.search_text_register import register_search_text
 
+    settings = get_settings().search_text
     register_search_text(
         mcp,
         search_text_impl,
         output_schema=OUTPUT_SCHEMA,
-        max_results_default=SEARCH_MAX_RESULTS_DEFAULT,
-        max_results_cap=SEARCH_MAX_RESULTS_CAP,
+        max_results_default=settings.max_results_default,
+        max_results_cap=settings.max_results_cap,
     )

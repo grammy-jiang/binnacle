@@ -28,7 +28,7 @@ def test_collect_metrics_count_glob_work_without_changing_result(tmp_path):
     metrics = ExactSearchMetrics("call", "dir", "1")
 
     matches, line_map, total, truncated = st._collect(
-        events, tmp_path, "*.py", 10, metrics
+        events, tmp_path, "*.py", 10, metrics, max_line_chars=2000
     )
 
     assert total == 1 and truncated is False
@@ -48,7 +48,9 @@ def test_run_rg_orjson_metrics_match_rg_event_types(tmp_path):
     path.write_text("before\nhit\nafter\n")
     metrics = ExactSearchMetrics("call", "dir", "1")
 
-    events, no_match = st._run_rg(tmp_path, "hit", False, 1, metrics)
+    events, no_match = st._run_rg(
+        tmp_path, "hit", False, 1, metrics, rg_bin="rg", timeout_s=20
+    )
 
     assert no_match is False
     kinds = [event["type"] for event in events]

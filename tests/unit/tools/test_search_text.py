@@ -7,6 +7,7 @@ import pytest
 from fastmcp.exceptions import ToolError
 
 from binnacle.callctx import current_call
+from binnacle.config import get_settings
 from binnacle.tools import search_text as st
 
 
@@ -123,7 +124,9 @@ def test_long_match_line_clipped(tmp_path):
     (tmp_path / "wide.txt").write_text("needle " + "z" * 5000 + "\n")
     e = search("needle", str(tmp_path), context_lines=0)["entries"][0]
     assert st.LINE_CLIP_MARK in e["text"]
-    assert len(e["text"]) <= st.SEARCH_MAX_LINE_CHARS + len(st.LINE_CLIP_MARK)
+    assert len(e["text"]) <= get_settings().search_text.max_line_chars + len(
+        st.LINE_CLIP_MARK
+    )
 
 
 # -- files as path ---------------------------------------------------------
@@ -186,24 +189,31 @@ def compact_bytes(payload: dict) -> int:
     )
 
 
-def _disable_adaptive(monkeypatch) -> None:
+def _disable_adaptive(settings) -> None:
     # These tests exercise the ordinary response-budget path. Keep them isolated
     # from deployment-local adaptive-discovery configuration.
-    monkeypatch.setattr(st.SEARCH_SETTINGS, "adaptive_discovery_enabled", False)
+    settings.adaptive_discovery_enabled = False
 
 
 def test_result_budget_truncates_complete_entries_in_order(
     tmp_path, monkeypatch, caplog
 ):
+    settings = get_settings().search_text.model_copy(deep=True)
     lines = [f"hit {i:03d} " + ("x" * 120) for i in range(80)]
     (tmp_path / "many.txt").write_text("\n".join(lines) + "\n")
-    monkeypatch.setattr(st, "SEARCH_RESULT_MAX_BYTES", 4_096)
-    _disable_adaptive(monkeypatch)
+    settings.result_max_bytes = 4_096
+    _disable_adaptive(settings)
 
     token = current_call.set("budget-test-call")
     try:
         with caplog.at_level("INFO", logger="binnacle.search_text"):
-            p = search("hit", str(tmp_path), context_lines=1, line_numbers=True)
+            p = search(
+                "hit",
+                str(tmp_path),
+                context_lines=1,
+                line_numbers=True,
+                settings=settings,
+            )
     finally:
         current_call.reset(token)
 
@@ -220,10 +230,11 @@ def test_result_budget_truncates_complete_entries_in_order(
 
 
 def test_result_budget_counts_utf8_bytes_not_characters(tmp_path, monkeypatch):
+    settings = get_settings().search_text.model_copy(deep=True)
     (tmp_path / "unicode.txt").write_text(("hit 中文🙂" + "界" * 80 + "\n") * 40)
-    monkeypatch.setattr(st, "SEARCH_RESULT_MAX_BYTES", 4_096)
-    _disable_adaptive(monkeypatch)
-    p = search("hit", str(tmp_path), context_lines=0)
+    settings.result_max_bytes = 4_096
+    _disable_adaptive(settings)
+    p = search("hit", str(tmp_path), context_lines=0, settings=settings)
 
     assert p["count"] == 40
     assert p["truncated"] is True
@@ -233,12 +244,15 @@ def test_result_budget_counts_utf8_bytes_not_characters(tmp_path, monkeypatch):
 def test_result_budget_keeps_first_match_when_context_alone_is_too_large(
     tmp_path, monkeypatch
 ):
+    settings = get_settings().search_text.model_copy(deep=True)
     (tmp_path / "wide.txt").write_text(
         ("before " + "a" * 1_500 + "\n") + "needle\n" + ("after " + "c" * 1_500 + "\n")
     )
-    monkeypatch.setattr(st, "SEARCH_RESULT_MAX_BYTES", 1_024)
-    _disable_adaptive(monkeypatch)
-    p = search("needle", str(tmp_path), context_lines=1, line_numbers=True)
+    settings.result_max_bytes = 1_024
+    _disable_adaptive(settings)
+    p = search(
+        "needle", str(tmp_path), context_lines=1, line_numbers=True, settings=settings
+    )
 
     assert p["count"] == 1
     assert len(p["entries"]) == 1
@@ -252,9 +266,10 @@ def test_result_budget_keeps_first_match_when_context_alone_is_too_large(
 
 
 def test_result_budget_does_not_change_small_result(tmp_path, monkeypatch):
+    settings = get_settings().search_text.model_copy(deep=True)
     (tmp_path / "small.txt").write_text("alpha\nhit\nomega\n")
-    monkeypatch.setattr(st, "SEARCH_RESULT_MAX_BYTES", 65_536)
-    p = search("hit", str(tmp_path), context_lines=1)
+    settings.result_max_bytes = 65_536
+    p = search("hit", str(tmp_path), context_lines=1, settings=settings)
 
     assert p["count"] == 1
     assert p["truncated"] is False
@@ -263,10 +278,11 @@ def test_result_budget_does_not_change_small_result(tmp_path, monkeypatch):
 
 
 def test_result_budget_and_max_results_keep_true_total(tmp_path, monkeypatch):
+    settings = get_settings().search_text.model_copy(deep=True)
     (tmp_path / "many.txt").write_text(("hit " + "z" * 200 + "\n") * 100)
-    monkeypatch.setattr(st, "SEARCH_RESULT_MAX_BYTES", 2_048)
-    _disable_adaptive(monkeypatch)
-    p = search("hit", str(tmp_path), max_results=25, context_lines=0)
+    settings.result_max_bytes = 2_048
+    _disable_adaptive(settings)
+    p = search("hit", str(tmp_path), max_results=25, context_lines=0, settings=settings)
 
     assert p["count"] == 100
     assert 0 < len(p["entries"]) < 25
@@ -276,12 +292,15 @@ def test_result_budget_and_max_results_keep_true_total(tmp_path, monkeypatch):
 
 
 def test_names_only_result_budget_is_bounded(tmp_path, monkeypatch):
+    settings = get_settings().search_text.model_copy(deep=True)
     for i in range(80):
         d = tmp_path / (f"directory-{i:03d}-" + "x" * 30)
         d.mkdir()
         (d / ("file-" + "y" * 30 + ".txt")).write_text("hit\n")
-    monkeypatch.setattr(st, "SEARCH_RESULT_MAX_BYTES", 4_096)
-    p = search("hit", str(tmp_path), names_only=True, max_results=100)
+    settings.result_max_bytes = 4_096
+    p = search(
+        "hit", str(tmp_path), names_only=True, max_results=100, settings=settings
+    )
 
     assert p["count"] == 80
     assert 0 < len(p["entries"]) < 80
@@ -291,7 +310,8 @@ def test_names_only_result_budget_is_bounded(tmp_path, monkeypatch):
 
 
 def test_budget_errors_if_required_metadata_cannot_fit(monkeypatch):
-    monkeypatch.setattr(st, "SEARCH_RESULT_MAX_BYTES", 4_096)
+    settings = get_settings().search_text.model_copy(deep=True)
+    settings.result_max_bytes = 4_096
     payload = {
         "path": "/tmp/x",
         "pattern": "p" * 5_000,
@@ -300,13 +320,15 @@ def test_budget_errors_if_required_metadata_cannot_fit(monkeypatch):
         "truncated": True,
     }
     with pytest.raises(ToolError, match="metadata exceeds"):
-        st._enforce_result_budget(payload, names_only=False)
+        st._enforce_result_budget(
+            payload, names_only=False, max_bytes=settings.result_max_bytes
+        )
 
 
 # -- adaptive broad-result discovery (development pilot) -------------------
 
 
-def _enable_adaptive(monkeypatch, **overrides):
+def _enable_adaptive(settings, **overrides):
     values = {
         "adaptive_discovery_enabled": True,
         "adaptive_detailed_files": 30,
@@ -316,18 +338,19 @@ def _enable_adaptive(monkeypatch, **overrides):
     }
     values.update(overrides)
     for name, value in values.items():
-        monkeypatch.setattr(st.SEARCH_SETTINGS, name, value)
+        setattr(settings, name, value)
 
 
 def test_adaptive_enabled_does_not_change_small_payload(tmp_path, monkeypatch):
+    settings = get_settings().search_text.model_copy(deep=True)
     (tmp_path / "small.txt").write_text("alpha\nhit\nomega\n")
-    monkeypatch.setattr(st, "SEARCH_RESULT_MAX_BYTES", 65_536)
+    settings.result_max_bytes = 65_536
 
-    monkeypatch.setattr(st.SEARCH_SETTINGS, "adaptive_discovery_enabled", False)
-    before = search("hit", str(tmp_path), context_lines=1)
+    settings.adaptive_discovery_enabled = False
+    before = search("hit", str(tmp_path), context_lines=1, settings=settings)
 
-    _enable_adaptive(monkeypatch)
-    after = search("hit", str(tmp_path), context_lines=1)
+    _enable_adaptive(settings)
+    after = search("hit", str(tmp_path), context_lines=1, settings=settings)
 
     assert json.dumps(after, sort_keys=True) == json.dumps(before, sort_keys=True)
 
@@ -335,6 +358,7 @@ def test_adaptive_enabled_does_not_change_small_payload(tmp_path, monkeypatch):
 def test_adaptive_discovery_replaces_only_budget_bound_content_result(
     tmp_path, monkeypatch, caplog
 ):
+    settings = get_settings().search_text.model_copy(deep=True)
     for file_index in range(40):
         lines = [
             f"alpha beta file={file_index} line={line} " + "x" * 180
@@ -342,9 +366,9 @@ def test_adaptive_discovery_replaces_only_budget_bound_content_result(
         ]
         (tmp_path / f"f{file_index:02d}.txt").write_text("\n".join(lines) + "\n")
 
-    monkeypatch.setattr(st, "SEARCH_RESULT_MAX_BYTES", 8_192)
+    settings.result_max_bytes = 8_192
     _enable_adaptive(
-        monkeypatch,
+        settings,
         adaptive_detailed_files=5,
         adaptive_total_files=40,
         adaptive_representative_matches=2,
@@ -359,6 +383,7 @@ def test_adaptive_discovery_replaces_only_budget_bound_content_result(
                 str(tmp_path),
                 context_lines=1,
                 max_results=100,
+                settings=settings,
             )
     finally:
         current_call.reset(token)
@@ -384,6 +409,7 @@ def test_adaptive_discovery_replaces_only_budget_bound_content_result(
 def test_adaptive_discovery_keeps_max_results_as_detailed_match_cap(
     tmp_path, monkeypatch
 ):
+    settings = get_settings().search_text.model_copy(deep=True)
     for file_index in range(12):
         (tmp_path / f"f{file_index:02d}.txt").write_text(
             "\n".join(
@@ -393,9 +419,9 @@ def test_adaptive_discovery_keeps_max_results_as_detailed_match_cap(
             + "\n"
         )
 
-    monkeypatch.setattr(st, "SEARCH_RESULT_MAX_BYTES", 4_096)
+    settings.result_max_bytes = 4_096
     _enable_adaptive(
-        monkeypatch,
+        settings,
         adaptive_detailed_files=10,
         adaptive_total_files=12,
         adaptive_representative_matches=2,
@@ -407,6 +433,7 @@ def test_adaptive_discovery_keeps_max_results_as_detailed_match_cap(
         str(tmp_path),
         context_lines=3,
         max_results=3,
+        settings=settings,
     )
 
     detailed = [entry for entry in payload["entries"] if "line" in entry]

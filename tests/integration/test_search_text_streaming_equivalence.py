@@ -6,11 +6,14 @@ from pathlib import Path
 
 import pytest
 
+from binnacle.config import get_settings
 from binnacle.tools import search_text as st
 
 
 def run_mode(monkeypatch, mode: str, pattern: str, path: Path, **kwargs):
-    monkeypatch.setattr(st, "EXACT_EXECUTION", mode)
+    settings = kwargs.get("settings", get_settings().search_text).model_copy(
+        update={"exact_execution": mode}
+    )
     return st.search_text_impl(
         pattern,
         str(path),
@@ -20,6 +23,8 @@ def run_mode(monkeypatch, mode: str, pattern: str, path: Path, **kwargs):
         kwargs.get("names_only", False),
         kwargs.get("max_results", 100),
         kwargs.get("line_numbers", False),
+        settings=settings,
+        rg_bin=kwargs.get("rg_bin"),
     ).structured_content
 
 
@@ -96,13 +101,14 @@ def test_auto_context_second_rg_matches(tmp_path, monkeypatch):
 
 
 def test_adaptive_result_matches_with_preaccepted_events(tmp_path, monkeypatch):
+    settings = get_settings().search_text.model_copy(deep=True)
     for index in range(8):
         (tmp_path / f"file-{index:02d}.py").write_text(
             "\n".join(f"hit branch{index % 3} " + "x" * 160 for _ in range(20)) + "\n"
         )
         (tmp_path / f"skip-{index:02d}.txt").write_text("hit skip\n" * 20)
-    monkeypatch.setattr(st, "SEARCH_RESULT_MAX_BYTES", 4_096)
-    monkeypatch.setattr(st.SEARCH_SETTINGS, "adaptive_discovery_enabled", True)
+    settings.result_max_bytes = 4_096
+    settings.adaptive_discovery_enabled = True
 
     materialized = run_mode(
         monkeypatch,
@@ -112,6 +118,7 @@ def test_adaptive_result_matches_with_preaccepted_events(tmp_path, monkeypatch):
         glob="*.py",
         context_lines=1,
         max_results=100,
+        settings=settings,
     )
     streaming = run_mode(
         monkeypatch,
@@ -121,6 +128,7 @@ def test_adaptive_result_matches_with_preaccepted_events(tmp_path, monkeypatch):
         glob="*.py",
         context_lines=1,
         max_results=100,
+        settings=settings,
     )
 
     assert streaming == materialized
@@ -129,17 +137,21 @@ def test_adaptive_result_matches_with_preaccepted_events(tmp_path, monkeypatch):
 
 
 def test_streaming_invalid_regex_keeps_error_code(tmp_path, monkeypatch):
-    monkeypatch.setattr(st, "EXACT_EXECUTION", "streaming")
+    settings = get_settings().search_text.model_copy(deep=True)
+    settings.exact_execution = "streaming"
     with pytest.raises(st.CodedToolError, match="ripgrep rejected") as exc:
-        run_mode(monkeypatch, "streaming", "(", tmp_path, context_lines=0)
+        run_mode(
+            monkeypatch, "streaming", "(", tmp_path, context_lines=0, settings=settings
+        )
     assert exc.value.telemetry_code == "rg_rejected"
 
 
 def test_streaming_invalid_glob_keeps_error_code_and_reaps_rg(
     tmp_path, monkeypatch, caplog
 ):
+    settings = get_settings().search_text.model_copy(deep=True)
     (tmp_path / "a.py").write_text("hit\n")
-    monkeypatch.setattr(st, "EXACT_EXECUTION", "streaming")
+    settings.exact_execution = "streaming"
 
     def invalid(*args, **kwargs):
         raise ValueError("synthetic bad glob")
@@ -163,6 +175,7 @@ def test_streaming_invalid_glob_keeps_error_code_and_reaps_rg(
                 tmp_path,
                 glob="*.py",
                 context_lines=0,
+                settings=settings,
             )
     finally:
         current_call.reset(token)
@@ -178,14 +191,23 @@ def test_streaming_invalid_glob_keeps_error_code_and_reaps_rg(
 
 
 def test_streaming_timeout_keeps_error_code(tmp_path, monkeypatch):
+    settings = get_settings().search_text.model_copy(deep=True)
     fake = tmp_path / "fake-rg"
     fake.write_text("#!/usr/bin/env python3\nimport time\ntime.sleep(30)\n")
     fake.chmod(0o755)
-    monkeypatch.setattr(st, "EXACT_EXECUTION", "streaming")
-    monkeypatch.setattr(st, "RG_BIN", str(fake))
-    monkeypatch.setattr(st, "SEARCH_TIMEOUT_S", 0.1)
+    settings.exact_execution = "streaming"
+    rg_bin = str(fake)
+    settings.timeout_s = 0.1
     started = __import__("time").monotonic()
     with pytest.raises(st.CodedToolError, match="timed out") as exc:
-        run_mode(monkeypatch, "streaming", "hit", tmp_path, context_lines=0)
+        run_mode(
+            monkeypatch,
+            "streaming",
+            "hit",
+            tmp_path,
+            context_lines=0,
+            settings=settings,
+            rg_bin=rg_bin,
+        )
     assert __import__("time").monotonic() - started < 2
     assert exc.value.telemetry_code == "rg_timeout"

@@ -6,6 +6,7 @@ import pytest
 from fastmcp.exceptions import ToolError
 
 from binnacle.callctx import current_call
+from binnacle.config import get_settings
 from binnacle.tools import search_text as st
 
 
@@ -73,22 +74,25 @@ def test_auto_context_records_second_rg_and_cumulative_work(tmp_path, caplog):
     assert f["auto_context"] == "true"
     assert f["rg_calls"] == "2"
     assert f["context_requested"] == "omitted"
-    assert int(f["effective_context"]) == st.AUTO_CONTEXT_SINGLE
+    assert int(f["effective_context"]) == get_settings().search_text.auto_context_single
     assert int(f["rg_events"]) > int(f["rg_match_events"])
     if f.get("pipeline") == "streaming":
         assert int(f["adaptive_retained_match_events"]) == 1
 
 
 def test_names_only_and_budget_outcome_are_orthogonal(tmp_path, caplog, monkeypatch):
+    settings = get_settings().search_text.model_copy(deep=True)
     for index in range(20):
         directory = tmp_path / (f"dir-{index:02d}-" + "x" * 20)
         directory.mkdir()
         (directory / "a.txt").write_text("hit\n")
-    monkeypatch.setattr(st, "SEARCH_RESULT_MAX_BYTES", 1_024)
+    settings.result_max_bytes = 1_024
     token = current_call.set("exact-names")
     try:
         with caplog.at_level("INFO", logger="binnacle.search_text"):
-            result = run_exact(tmp_path, "hit", names_only=True, max_results=100)
+            result = run_exact(
+                tmp_path, "hit", names_only=True, max_results=100, settings=settings
+            )
     finally:
         current_call.reset(token)
 
@@ -100,13 +104,16 @@ def test_names_only_and_budget_outcome_are_orthogonal(tmp_path, caplog, monkeypa
 
 
 def test_adaptive_summary_includes_second_scan_work(tmp_path, caplog, monkeypatch):
+    settings = get_settings().search_text.model_copy(deep=True)
     (tmp_path / "a.py").write_text(("hit " + "x" * 200 + "\n") * 80)
-    monkeypatch.setattr(st.SEARCH_SETTINGS, "adaptive_discovery_enabled", True)
-    monkeypatch.setattr(st, "SEARCH_RESULT_MAX_BYTES", 2_048)
+    settings.adaptive_discovery_enabled = True
+    settings.result_max_bytes = 2_048
     token = current_call.set("exact-adaptive")
     try:
         with caplog.at_level("INFO", logger="binnacle.search_text"):
-            result = run_exact(tmp_path, "hit", context_lines=1, max_results=100)
+            result = run_exact(
+                tmp_path, "hit", context_lines=1, max_results=100, settings=settings
+            )
     finally:
         current_call.reset(token)
 
@@ -120,15 +127,16 @@ def test_adaptive_summary_includes_second_scan_work(tmp_path, caplog, monkeypatc
 
 
 def test_exact_error_still_emits_terminal_summary(tmp_path, caplog, monkeypatch):
+    settings = get_settings().search_text.model_copy(deep=True)
     (tmp_path / "a.py").write_text("alpha\n")
-    monkeypatch.setattr(st, "EXACT_EXECUTION", "materialized")
+    settings.exact_execution = "materialized"
     token = current_call.set("exact-error")
     try:
         with (
             caplog.at_level("INFO", logger="binnacle.search_text"),
             pytest.raises(ToolError, match="ripgrep rejected"),
         ):
-            run_exact(tmp_path, "(")
+            run_exact(tmp_path, "(", settings=settings)
     finally:
         current_call.reset(token)
 
@@ -169,19 +177,22 @@ def test_no_match_fixed_string_and_file_scope_are_summarized(tmp_path, caplog):
 def test_context_omission_is_a_machine_readable_budget_outcome(
     tmp_path, caplog, monkeypatch
 ):
+    settings = get_settings().search_text.model_copy(deep=True)
     (tmp_path / "wide.txt").write_text(
         "before " + "a" * 1500 + "\nneedle\nafter " + "b" * 1500 + "\n"
     )
-    monkeypatch.setattr(
-        st,
-        "SEARCH_SETTINGS",
-        st.SEARCH_SETTINGS.model_copy(update={"adaptive_discovery_enabled": False}),
-    )
-    monkeypatch.setattr(st, "SEARCH_RESULT_MAX_BYTES", 1024)
+    settings.adaptive_discovery_enabled = False
+    settings.result_max_bytes = 1024
     token = current_call.set("exact-context-budget")
     try:
         with caplog.at_level("INFO", logger="binnacle.search_text"):
-            result = run_exact(tmp_path, "needle", context_lines=1, line_numbers=True)
+            result = run_exact(
+                tmp_path,
+                "needle",
+                context_lines=1,
+                line_numbers=True,
+                settings=settings,
+            )
     finally:
         current_call.reset(token)
     assert "context" not in result.structured_content["entries"][0]
@@ -194,14 +205,17 @@ def test_context_omission_is_a_machine_readable_budget_outcome(
 def test_adaptive_attempt_can_fall_back_to_ordinary_budget(
     tmp_path, caplog, monkeypatch
 ):
+    settings = get_settings().search_text.model_copy(deep=True)
     (tmp_path / "many.txt").write_text(("hit " + "x" * 100 + "\n") * 80)
-    monkeypatch.setattr(st.SEARCH_SETTINGS, "adaptive_discovery_enabled", True)
-    monkeypatch.setattr(st, "SEARCH_RESULT_MAX_BYTES", 2048)
+    settings.adaptive_discovery_enabled = True
+    settings.result_max_bytes = 2048
     monkeypatch.setattr(st, "build_adaptive_result", lambda *a, **k: None)
     token = current_call.set("exact-adaptive-fallback")
     try:
         with caplog.at_level("INFO", logger="binnacle.search_text"):
-            result = run_exact(tmp_path, "hit", context_lines=0, max_results=80)
+            result = run_exact(
+                tmp_path, "hit", context_lines=0, max_results=80, settings=settings
+            )
     finally:
         current_call.reset(token)
     assert "response budget reached" in result.structured_content["note"]
@@ -216,8 +230,9 @@ def test_adaptive_attempt_can_fall_back_to_ordinary_budget(
 def test_coded_exact_failures_emit_one_correlated_terminal_summary(
     tmp_path, caplog, monkeypatch, code
 ):
+    settings = get_settings().search_text.model_copy(deep=True)
     (tmp_path / "a.txt").write_text("alpha\n")
-    monkeypatch.setattr(st, "EXACT_EXECUTION", "materialized")
+    settings.exact_execution = "materialized"
 
     if code in {"rg_missing", "rg_timeout"}:
 
@@ -238,7 +253,7 @@ def test_coded_exact_failures_emit_one_correlated_terminal_summary(
             caplog.at_level("INFO", logger="binnacle.search_text"),
             pytest.raises(ToolError),
         ):
-            run_exact(tmp_path, "alpha", context_lines=0)
+            run_exact(tmp_path, "alpha", context_lines=0, settings=settings)
     finally:
         current_call.reset(token)
     f = fields(exact_line(caplog))
@@ -248,20 +263,17 @@ def test_coded_exact_failures_emit_one_correlated_terminal_summary(
 
 
 def test_impossible_budget_is_reported_as_metadata_error(tmp_path, caplog, monkeypatch):
+    settings = get_settings().search_text.model_copy(deep=True)
     (tmp_path / "a.txt").write_text("alpha\n")
-    monkeypatch.setattr(
-        st,
-        "SEARCH_SETTINGS",
-        st.SEARCH_SETTINGS.model_copy(update={"adaptive_discovery_enabled": False}),
-    )
-    monkeypatch.setattr(st, "SEARCH_RESULT_MAX_BYTES", 8)
+    settings.adaptive_discovery_enabled = False
+    settings.result_max_bytes = 8
     token = current_call.set("exact-budget-error")
     try:
         with (
             caplog.at_level("INFO", logger="binnacle.search_text"),
             pytest.raises(ToolError, match="metadata exceeds"),
         ):
-            run_exact(tmp_path, "alpha", context_lines=0)
+            run_exact(tmp_path, "alpha", context_lines=0, settings=settings)
     finally:
         current_call.reset(token)
     f = fields(exact_line(caplog))
@@ -299,13 +311,16 @@ def test_terminal_summary_does_not_repeat_path_pattern_or_match_text(tmp_path, c
 def test_streaming_summary_uses_versioned_pipeline_fields(
     tmp_path, caplog, monkeypatch
 ):
+    settings = get_settings().search_text.model_copy(deep=True)
     (tmp_path / "keep.py").write_text("before\nhit\nafter\nhit2\n")
     (tmp_path / "skip.txt").write_text("hit\n")
-    monkeypatch.setattr(st, "EXACT_EXECUTION", "streaming")
+    settings.exact_execution = "streaming"
     token = current_call.set("exact-stream")
     try:
         with caplog.at_level("INFO", logger="binnacle.search_text"):
-            result = run_exact(tmp_path, "hit", glob="*.py", context_lines=1)
+            result = run_exact(
+                tmp_path, "hit", glob="*.py", context_lines=1, settings=settings
+            )
     finally:
         current_call.reset(token)
 
@@ -326,14 +341,15 @@ def test_streaming_summary_uses_versioned_pipeline_fields(
 def test_streaming_error_summary_keeps_pipeline_and_rg_attempt(
     tmp_path, caplog, monkeypatch
 ):
-    monkeypatch.setattr(st, "EXACT_EXECUTION", "streaming")
+    settings = get_settings().search_text.model_copy(deep=True)
+    settings.exact_execution = "streaming"
     token = current_call.set("exact-stream-error")
     try:
         with (
             caplog.at_level("INFO", logger="binnacle.search_text"),
             pytest.raises(ToolError, match="ripgrep rejected"),
         ):
-            run_exact(tmp_path, "(")
+            run_exact(tmp_path, "(", settings=settings)
     finally:
         current_call.reset(token)
     f = fields(exact_line(caplog))
