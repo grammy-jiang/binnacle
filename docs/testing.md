@@ -62,6 +62,24 @@ but dates are not a directory structure.
 
 ## Normal commands
 
+### FastMCP composition contracts
+
+`tests/contracts/test_server_composition.py` checks three distinct views:
+the root-local inventory, raw aggregate multiplicity before wire deduplication,
+and the ordered client-visible surface. Reuse the existing surface hashes;
+duplicate tools can pass those hashes while failing the raw ownership contract.
+Keep these assertions when changing a mount or focused child factory.
+
+The factory/bootstrap, native pipeline, standalone domain workflows, and mounted
+HTTP context tests live in separate integration modules. The integration pipeline
+file is `test_composition_pipeline.py`: test basenames must remain unique across
+these non-package test directories. `tests/unit/core/test_tool_order.py` checks the
+native listing Transform's stable, lossless ordering independently of its rank
+table. Production factories use native lifetimes and conflict defaults; duplicate
+ownership checks belong in tests.
+
+### Managed suite
+
 Use the supported two-lane runner for fast full-suite feedback:
 
 ```bash

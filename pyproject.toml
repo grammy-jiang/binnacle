@@ -178,11 +178,20 @@ root_package = "binnacle"
 
 [[tool.importlinter.contracts]]
 id = "tools-only-server"
-name = "MCP tools are imported only by the server composition root"
+name = "MCP tools are imported only by focused composition modules"
 type = "protected"
 protected_modules = ["binnacle.tools"]
 allowed_importers = [
-    "binnacle.server",
+    "binnacle.files_server",
+    "binnacle.search_server",
+    "binnacle.commands_server",
+]
+
+[[tool.importlinter.contracts]]
+id = "focused-servers-independent"
+name = "Focused MCP servers are independent"
+type = "independence"
+modules = [
     "binnacle.files_server",
     "binnacle.search_server",
     "binnacle.commands_server",

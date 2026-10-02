@@ -145,3 +145,25 @@ run.assert_called_once_with(
     )
     assert proc.returncode == 0, proc.stderr
     assert proc.stderr.count("event=config pid=") == 1
+
+
+def test_tool_package_has_no_eager_registry_and_keeps_adapter_paths(tmp_path):
+    proc = _bootstrap(
+        tmp_path,
+        """
+import importlib
+import sys
+import binnacle.tools
+assert not hasattr(binnacle.tools, "register_all")
+assert not any(name.startswith("binnacle.tools.") for name in sys.modules)
+for name in (
+    "read_file", "list_files", "search_text", "edit_file", "write_file",
+    "run_command", "job_status", "stop_job",
+):
+    module = importlib.import_module(f"binnacle.tools.{name}")
+    assert callable(module.register)
+assert "binnacle.server" not in sys.modules
+""",
+        "bootstrap-token",
+    )
+    assert proc.returncode == 0, proc.stderr

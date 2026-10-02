@@ -60,7 +60,9 @@ operates on the complete static import graph and blocks architectural drift
 before the Linux/macOS refactor changes module boundaries. The current
 contracts enforce that:
 
-- MCP tool modules are entered only through `binnacle.server`;
+- MCP tool modules are entered only through `binnacle.files_server`,
+  `binnacle.search_server`, and `binnacle.commands_server`;
+- the three focused server modules remain independent of one another;
 - watchdog internals are entered only through the watchdog facade/CLI;
 - `binnacle.server` remains a composition root, never a lower-layer dependency;
 - MCP tool modules remain independent of one another;
