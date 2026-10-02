@@ -137,11 +137,17 @@ def full_match(path: "PurePath | str", pattern: str) -> bool:
     except ValueError -> ToolError contract.
     """
     # Normalize the path as the stdlib does ("a/." is "a", "./a" is "a").
-    # An empty path (".") has no segments, so only a pattern made of `**`
-    # segments -- or an empty pattern -- can match it (2026-09-13).
     normalized = PurePosixPath(str(path))
     if not normalized.parts:
-        return all(part == "**" for part in PurePosixPath(pattern).parts)
+        # Only ** prefix segments can disappear with their slash. A final
+        # star-only segment with at least two stars can match nothing; the
+        # stdlib treats a single * as requiring a character.
+        parts = PurePosixPath(pattern).parts
+        return not parts or (
+            all(part == "**" for part in parts[:-1])
+            and len(parts[-1]) >= 2
+            and not parts[-1].strip("*")
+        )
     return _glob_regex(pattern).fullmatch(str(normalized)) is not None
 
 

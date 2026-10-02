@@ -85,6 +85,7 @@ STDLIB_FULL_MATCH = getattr(pathlib.PurePath, "full_match", None)
 @example("a\nb/c", "**")  # trailing ** is DOTALL `.*` in the stdlib
 @example("a", "[^]")  # Python 3.14 fnmatch wrapper ends in \z, not \Z
 @example("^", "[^]")  # ^ stays literal; only ! negates a glob class
+@example(".", "***")  # A trailing star run can match the normalized empty path
 def test_full_match_agrees_with_the_stdlib(path: str, pattern: str):
     """Our matcher exists only because 3.10-3.12 lack the stdlib one; on
     3.13+ both must answer alike, or a glob behaves differently per Python."""
@@ -98,6 +99,44 @@ def test_full_match_agrees_with_the_stdlib(path: str, pattern: str):
             paths.full_match(path, pattern)
         return
     assert paths.full_match(path, pattern) == expected, (path, pattern)
+
+
+@pytest.mark.parametrize("path", ["", ".", "././", PurePosixPath(".")])
+@pytest.mark.parametrize(
+    ("pattern", "expected"),
+    [
+        ("", True),
+        (".", True),
+        ("*", False),
+        ("**", True),
+        ("***", True),
+        ("****", True),
+        ("********", True),
+        ("**/*", False),
+        ("**/**", True),
+        ("**/***", True),
+        ("***/**", False),
+        ("***/***", False),
+        ("**/**/***", True),
+        ("**/*/**", False),
+        ("**/***/**", False),
+        ("./***", True),
+        ("**/./***", True),
+        ("**//***", True),
+        ("***/", True),
+        ("*?", False),
+        ("[*]", False),
+        ("***a", False),
+        ("a***", False),
+        ("/***", False),
+        ("../***", False),
+    ],
+)
+def test_full_match_empty_path_star_run_regressions(
+    path: str | PurePosixPath, pattern: str, expected: bool
+):
+    """Keep Python 3.13/3.14 empty-path semantics on every supported Python."""
+    assert paths.full_match(path, pattern) is expected
 
 
 def test_unwrap_fnmatch_translation_accepts_legacy_and_py314_anchors():
