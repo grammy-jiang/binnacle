@@ -82,6 +82,7 @@ STDLIB_FULL_MATCH = getattr(pathlib.PurePath, "full_match", None)
 )
 @example("/a/a", "**/a")  # ** spans the root: True in the stdlib (2026-09-13)
 @example("/a", "**/a")  # but ** cannot absorb the bare root: False
+@example("/a", "*/a")  # A whole single-star segment cannot consume the root
 @example("a\nb/c", "**")  # trailing ** is DOTALL `.*` in the stdlib
 @example("a", "[^]")  # Python 3.14 fnmatch wrapper ends in \z, not \Z
 @example("^", "[^]")  # ^ stays literal; only ! negates a glob class
@@ -136,6 +137,62 @@ def test_full_match_empty_path_star_run_regressions(
     path: str | PurePosixPath, pattern: str, expected: bool
 ):
     """Keep Python 3.13/3.14 empty-path semantics on every supported Python."""
+    assert paths.full_match(path, pattern) is expected
+
+
+@pytest.mark.parametrize(
+    ("path", "pattern", "expected"),
+    [
+        ("/a", "*", False),
+        ("/a", "*/a", False),
+        ("/a", "**/a", False),
+        ("/a", "***/a", True),
+        ("/a", "****/a", True),
+        ("/a", "*/*", False),
+        ("/a", "*/**", False),
+        ("/a", "/*", True),
+        ("/a", "/x/*", False),
+        ("/x/a", "*", False),
+        ("/x/a", "*/a", False),
+        ("/x/a", "**/a", True),
+        ("/x/a", "***/a", False),
+        ("/x/a", "*/**", False),
+        ("/x/a", "/*", False),
+        ("/x/a", "/x/*", True),
+        ("a", "*", True),
+        ("a", "*/a", False),
+        ("a", "**/a", True),
+        ("a", "***/a", False),
+        ("a", "/*", False),
+        ("a", "/x/*", False),
+        ("x/a", "*", False),
+        ("x/a", "*/a", True),
+        ("x/a", "**/a", True),
+        ("x/a", "***/a", True),
+        ("x/a", "****/a", True),
+        ("x/a", "/*", False),
+        ("x/a", "/x/*", False),
+        ("/", "/*", False),
+        ("/", "/***", True),
+        ("/", "*/*", False),
+        ("/", "*/**", False),
+        ("/", "***/*", False),
+        ("/x", "/x/*", False),
+        ("/./a", "*/a", False),
+        ("/a", "./*/a", False),
+        ("/a", "*//a", False),
+        ("/a", "*/./a", False),
+        ("a", "a*", True),
+        ("a", "*a", True),
+        ("a/a", "a*/a", True),
+        ("a/a", "*a/a", True),
+        ("a/a", "a**/a", True),
+    ],
+)
+def test_full_match_single_star_segment_regressions(
+    path: str, pattern: str, expected: bool
+):
+    """A whole * requires a character; embedded stars and star runs may be empty."""
     assert paths.full_match(path, pattern) is expected
 
 

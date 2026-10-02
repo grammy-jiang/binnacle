@@ -71,6 +71,10 @@ def _class_regex(inner: str) -> str:
 
 def _glob_segment_regex(seg: str) -> str:
     """One glob segment as a regex fragment; * and ? never cross a slash."""
+    # glob.translate requires a character for a whole single-star segment.
+    # Embedded stars and longer star runs may still match nothing.
+    if seg == "*":
+        return "[^/]+"
     res = []
     i = 0
     n = len(seg)
