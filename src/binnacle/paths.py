@@ -9,22 +9,20 @@ import re
 from functools import lru_cache
 from pathlib import Path, PurePath, PurePosixPath
 
-from binnacle.config import get_settings
+from binnacle.config import RootsSettings, get_settings
 from binnacle.errors import CodedToolError
 
-DEFAULT_ROOT = get_settings().roots.default_root
-ALLOWED_ROOTS = get_settings().roots.allowed
 
-
-def resolve_path(raw: str) -> Path:
-    """Sanitize a model-supplied path and resolve it inside ALLOWED_ROOTS."""
+def resolve_path(raw: str, *, roots: RootsSettings | None = None) -> Path:
+    """Sanitize a model-supplied path and resolve it inside the allowed roots."""
+    roots = get_settings().roots if roots is None else roots
     cleaned = raw.replace("\0", "").strip()
     # Models occasionally emit a hallucinated "@" reference prefix.
     cleaned = cleaned.removeprefix("@")
     try:
         candidate = Path(cleaned).expanduser()
         if not candidate.is_absolute():
-            candidate = DEFAULT_ROOT / candidate
+            candidate = roots.default_root / candidate
         resolved = candidate.resolve()
     except (RuntimeError, OSError) as e:
         # expanduser() raises RuntimeError for `~nosuchuser`; resolve() can
@@ -33,10 +31,10 @@ def resolve_path(raw: str) -> Path:
         raise CodedToolError(
             "path_resolve_failed", f"Cannot resolve path {raw!r}: {e}"
         ) from None
-    if not any(resolved.is_relative_to(root) for root in ALLOWED_ROOTS):
-        roots = ", ".join(str(r) for r in ALLOWED_ROOTS)
+    if not any(resolved.is_relative_to(root) for root in roots.allowed):
+        allowed = ", ".join(str(r) for r in roots.allowed)
         raise CodedToolError(
-            "path_outside_root", f"Path outside allowed roots ({roots}): {resolved}"
+            "path_outside_root", f"Path outside allowed roots ({allowed}): {resolved}"
         )
     return resolved
 
@@ -155,10 +153,11 @@ def full_match(path: "PurePath | str", pattern: str) -> bool:
     return _glob_regex(pattern).fullmatch(str(normalized)) is not None
 
 
-def nearby_hint(parent: Path) -> str:
+def nearby_hint(parent: Path, *, roots: RootsSettings | None = None) -> str:
     """Not-found helper: up to 10 sibling names, when the parent is browsable."""
+    roots = get_settings().roots if roots is None else roots
     try:
-        if not any(parent.is_relative_to(root) for root in ALLOWED_ROOTS):
+        if not any(parent.is_relative_to(root) for root in roots.allowed):
             return ""
         names = sorted(p.name + ("/" if p.is_dir() else "") for p in parent.iterdir())
     except OSError:

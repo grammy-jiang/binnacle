@@ -20,6 +20,7 @@ from hypothesis import assume, example, given, settings
 from hypothesis import strategies as st
 
 from binnacle import job_output, jobs, paths, textio
+from binnacle.config import RootsSettings, get_settings
 
 # -- paths.resolve_path: inside an allowed root, or ToolError, never anything else
 
@@ -35,7 +36,9 @@ def test_resolve_path_is_inside_a_root_or_raises_tool_error(raw: str):
     except ToolError:
         return
     assert resolved.is_absolute()
-    assert any(resolved.is_relative_to(root) for root in paths.ALLOWED_ROOTS), resolved
+    assert any(
+        resolved.is_relative_to(root) for root in get_settings().roots.allowed
+    ), resolved
 
 
 @settings(max_examples=300, deadline=None)
@@ -53,7 +56,9 @@ def test_resolve_path_traversal_shapes_never_escape(raw: str):
         resolved = paths.resolve_path(raw)
     except ToolError:
         return
-    assert any(resolved.is_relative_to(root) for root in paths.ALLOWED_ROOTS), resolved
+    assert any(
+        resolved.is_relative_to(root) for root in get_settings().roots.allowed
+    ), resolved
 
 
 def test_resolve_path_examples_that_must_escape_are_refused():
@@ -378,20 +383,20 @@ def test_nearby_hint_handles_outside_missing_empty_and_large_directory(
 ):
     root = tmp_path / "allowed"
     root.mkdir()
-    monkeypatch.setattr(paths, "ALLOWED_ROOTS", (root,))
+    roots = RootsSettings(default_root=root, extra_roots=())
 
-    assert paths.nearby_hint(tmp_path / "outside") == ""
-    assert paths.nearby_hint(root / "missing") == ""
+    assert paths.nearby_hint(tmp_path / "outside", roots=roots) == ""
+    assert paths.nearby_hint(root / "missing", roots=roots) == ""
 
     empty = root / "empty"
     empty.mkdir()
-    assert "is empty" in paths.nearby_hint(empty)
+    assert "is empty" in paths.nearby_hint(empty, roots=roots)
 
     crowded = root / "crowded"
     crowded.mkdir()
     for i in range(12):
         (crowded / f"f{i:02}.txt").write_text("x")
-    hint = paths.nearby_hint(crowded)
+    hint = paths.nearby_hint(crowded, roots=roots)
     assert "f00.txt" in hint
     assert "…" in hint
     assert "list_files" in hint
