@@ -1,6 +1,6 @@
 # FastMCP-native refactor — implementation master plan — 2026-10-02
 
-Status: **Groups 0 and 1 done; Group 2 queued for detailed design**.
+Status: **Groups 0 and 1 done; Group 2 design ready**.
 
 This is the control document for the implementation-design and implementation phases of
 the FastMCP-native, platform-neutral Binnacle refactor.
@@ -94,8 +94,8 @@ over a big-bang rewrite.
 
 ### 1.5 Design close to implementation
 
-Group 0 is complete. Group 1 is designed against the deployed stable baseline.
-Detailed designs for later groups remain deferred.
+Groups 0 and 1 are complete. Group 2 is designed against the deployed post-G1
+baseline. Detailed designs for Groups 3-6 remain deferred.
 
 Before designing a later group:
 
@@ -127,7 +127,7 @@ Status changes belong in this document.
 | --- | --- | --- | --- | --- |
 | G0 | Stable FastMCP 4 baseline | current master | none; foundational | **done** |
 | G1 | Composition foundation | G0 | foundational; mostly sequential | **done** |
-| G2 | FastMCP-native alignment | G1 | may overlap G3/G4 after shared seams settle | queued |
+| G2 | FastMCP-native alignment | G1 | domain settings lanes after shared seams settle | **ready** |
 | G3 | Commands/domain/platform seams | G1; commands mount | process/resources lanes later | queued |
 | G4 | Deployment/platform services | G1 | logs/paths may parallelize | queued |
 | G5 | Diagnostics, operations, companions | relevant G3/G4 public seams | selected cleanup may start earlier | queued |
@@ -309,8 +309,25 @@ High-level scope:
   their native scopes;
 - avoid custom framework replacements.
 
-Detailed design waits for G1 because mounted child-server ownership changes the natural
-place for settings, middleware, visibility and dependency construction.
+Detailed design:
+
+- `docs/fastmcp-native-alignment-implementation-design-2026-10-03.md`
+
+The design uses deployed G1 code `2725476` and documentation baseline `e86ff81`.
+The two commits have identical production code, tests, dependency pins, and lockfile.
+G2 design is locally complete; no G2 implementation has started. The 158-test
+focused baseline, architecture/import/strict-size checks, native SDK and HTTP
+characterization, and changed-document pre-commit passed. A fresh ChatGPT read-only
+review approved the revised design with no remaining findings; its evidence is linked
+in the design. Coordinator review and a separate implementation instruction remain
+entry conditions.
+
+The design delegates component visibility to native FastMCP Visibility while keeping
+client identity/policy and exact denied-call errors. It moves settings domain by domain
+through ordinary copied construction inputs. Explicit path policy also covers nearby
+file hints; existing path defaults/descriptions remain unchanged even for custom roots.
+No production Depends or lifespan is added without an appropriate resource. Durable-job
+ownership and platform extraction remain outside G2.
 
 ## 7. Group 3 — Commands architecture and platform seams
 
@@ -580,6 +597,9 @@ read-only suite passed 3 tests, full post-deploy smoke passed all 20 checks with
 0 doctor failures, and a real ChatGPT -> deployed Binnacle `list_files` call
 succeeded.
 
-The next action is to re-read the post-G1 repository and write the detailed G2
-implementation design against the deployed `2725476` baseline. G2-G6 remain queued
-until their detailed design/entry conditions are satisfied.
+Later documentation-only integration moved the deployment refs to `e86ff81` without
+changing that behavioral baseline. The linked G2 design is ready after local checks
+and fresh read-only review. The next action is independent coordinator review, then a
+separate implementation prompt and isolated worktree with G2.0 drift/baseline checks.
+No G2 implementation or integration has occurred. G3-G6 remain queued; this design
+does not authorize their implementation.
