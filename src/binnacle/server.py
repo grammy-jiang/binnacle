@@ -174,6 +174,7 @@ def create_server() -> FastMCP:
     """Build a fresh root with the existing auth, middleware, and tool surface."""
     root = FastMCP(
         "binnacle",
+        on_duplicate="error",
         # A tool map only. Workflow rules live in the ChatGPT Project's
         # instructions (the single client in use); tool contracts live in the
         # tool descriptions. First 512 chars self-contained (OpenAI guidance).

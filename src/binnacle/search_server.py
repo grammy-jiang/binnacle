@@ -7,6 +7,6 @@ from binnacle.tools import search_text
 
 def create_search_server() -> FastMCP:
     """Build an independent Search child for native FastMCP composition."""
-    search = FastMCP("Search")
+    search = FastMCP("binnacle-search", on_duplicate="error")
     search_text.register(search)
     return search

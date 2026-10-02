@@ -7,7 +7,7 @@ from binnacle.tools import edit_file, list_files, read_file, write_file
 
 def create_files_server() -> FastMCP:
     """Build an independent Files child for native FastMCP composition."""
-    files = FastMCP("Files")
+    files = FastMCP("binnacle-files", on_duplicate="error")
     read_file.register(files)
     list_files.register(files)
     edit_file.register(files)

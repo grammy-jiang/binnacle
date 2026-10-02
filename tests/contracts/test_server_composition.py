@@ -31,6 +31,22 @@ ROOT_LOCAL: list[str] = []
 
 
 @pytest.mark.parametrize(
+    "factory",
+    [
+        pytest.param(server.create_server, id="root"),
+        pytest.param(create_files_server, id="files"),
+        pytest.param(create_search_server, id="search"),
+        pytest.param(create_commands_server, id="commands"),
+    ],
+)
+def test_factories_reject_duplicate_local_registration(factory):
+    root = factory()
+    root.tool(lambda: None, name="local_duplicate_probe")
+    with pytest.raises(ValueError, match="Component already exists"):
+        root.tool(lambda: None, name="local_duplicate_probe")
+
+
+@pytest.mark.parametrize(
     ("factory", "names"),
     [
         (create_files_server, ["read_file", "list_files", "edit_file", "write_file"]),
@@ -77,14 +93,18 @@ def test_current_root_has_exact_local_inventory_and_raw_multiplicity():
 def test_wire_pins_can_hide_duplicates_that_raw_contract_rejects(collision):
     async def build():
         components = await server.create_server().list_tools(run_middleware=False)
-        root = FastMCP("collision probe", instructions=server.mcp.instructions)
+        root = FastMCP(
+            "collision probe",
+            instructions=server.mcp.instructions,
+            on_duplicate="error",
+        )
         root.add_transform(PublicToolOrder())
         duplicate = next(tool for tool in components if tool.name == "edit_file")
         for tool in components:
             if tool.name != "edit_file" or collision == "root-child":
                 root.add_tool(tool)
         for _ in range(1 if collision == "root-child" else 2):
-            child = FastMCP("duplicate child")
+            child = FastMCP("duplicate child", on_duplicate="error")
             child.add_tool(duplicate)
             root.mount(child)
         raw = await root.list_tools(run_middleware=False)
