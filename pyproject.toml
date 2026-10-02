@@ -185,6 +185,7 @@ allowed_importers = [
     "binnacle.server",
     "binnacle.files_server",
     "binnacle.search_server",
+    "binnacle.commands_server",
 ]
 
 [[tool.importlinter.contracts]]

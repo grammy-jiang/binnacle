@@ -11,6 +11,7 @@ from fastmcp.exceptions import ToolError
 from fastmcp.server.middleware.dereference import DereferenceRefsMiddleware
 
 from binnacle import server
+from binnacle.commands_server import create_commands_server
 from binnacle.files_server import create_files_server
 from binnacle.search_server import create_search_server
 from binnacle.tool_order import PublicToolOrder
@@ -34,6 +35,7 @@ ROOT_LOCAL = ["run_command", "job_status", "stop_job"]
     [
         (create_files_server, ["read_file", "list_files", "edit_file", "write_file"]),
         (create_search_server, ["search_text"]),
+        (create_commands_server, ["run_command", "job_status", "stop_job"]),
     ],
 )
 def test_focused_child_owns_only_its_domain_with_unchanged_metadata(factory, names):
