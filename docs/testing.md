@@ -75,8 +75,9 @@ HTTP context tests live in separate integration modules. The integration pipelin
 file is `test_composition_pipeline.py`: test basenames must remain unique across
 these non-package test directories. `tests/unit/core/test_tool_order.py` checks the
 native listing Transform's stable, lossless ordering independently of its rank
-table. Production factories use native lifetimes and conflict defaults; duplicate
-ownership checks belong in tests.
+table. Production factories use native lifetimes and explicit local
+`on_duplicate="error"`; cross-provider conflict behavior remains native and
+duplicate ownership checks belong in tests.
 
 ### Managed suite
 

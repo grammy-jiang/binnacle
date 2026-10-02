@@ -1,21 +1,26 @@
 # Group 1 implementation design — Composition foundation — 2026-10-02
 
-Status: **ready; final duplicate-policy review clean; production implementation has not started**.
+Status: **validating locally; implementation complete; G1.8 convergence in progress**.
 
 Parent control document:
 `docs/fastmcp-native-refactor-implementation-master-2026-10-02.md`.
 
-This document is the execution specification for G1 only. A future implementation
-must preserve a working server after every step. This design task changes documents
-only; its isolated probes do not implement G1 in the repository.
+This document is the execution specification for G1 only. Implementation must
+preserve a working server after every step. The original design phase changed
+documents only; section 14 records the later local implementation and its gates.
 
 ## 1. Baseline, authority, and scope
 
-Start from deployed commit `4608423a960bc0cba0e92e20cb8425084b76535c`:
+The original design starts from deployed commit
+`4608423a960bc0cba0e92e20cb8425084b76535c`:
 
 ```text
 77a04c0 -> 50916ef (separate glob fix) -> 4608423 (G0)
 ```
+
+The resumed local implementation starts from separately reviewed prerequisite
+`39c806d653fe27598c9fa33cb1fc74c74530f7be`, a child of `4608423`. This fixes the
+pre-existing whole-single-star glob defect without mixing it into G1. See section 14.
 
 G0 is done. The coordinating user supplied final CI, deployment, live-suite,
 smoke, doctor, and real ChatGPT `list_files` evidence. The master plan records
@@ -794,7 +799,7 @@ tests/unit/core/test_properties.py
 
 Add C's standalone and mounted Files metadata/call checks. Use `tmp_path`, not
 production project files. Existing path/property coverage includes prerequisite
-commit `50916ef`; do not alter it in G1.
+commits `50916ef` and `39c806d`; do not alter those fixes in G1.
 
 ### S — Search
 
@@ -962,7 +967,7 @@ A future Codex implementation prompt should point to this design and require:
 
 No G2-G6 work is authorized by that G1 scope.
 
-## 13. Design validation and exit state
+## 13. Design validation and exit state (historical)
 
 This design is prepared on a separate branch based on `4608423`. The originally
 suggested worktree received a draft from another session during investigation;
@@ -1000,7 +1005,54 @@ status/evidence-only edits use the same document gate before commit.
 No production Python, tests, dependencies, lock, or protected architecture inputs
 were changed by this design task.
 
-G1 is `ready` in the master plan, not `implementing` or `done`. The next action
-is independent review in the coordinating conversation, then preparation of
-the G1 local implementation prompt. G1 completion still requires the later
-implementation and integration gates in section 10.
+At final design commit `14eded1`, G1 was `ready` in the master plan. The next
+action at that point was independent review, then preparation of the local
+implementation prompt. Section 14 records the subsequent implementation state;
+G1 completion still requires the integration gates in section 10.
+
+## 14. Local implementation resume — 2026-10-03
+
+The coordinating review accepted prerequisite `39c806d` separately. The new worktree
+is `/home/grammy-jiang/Projects/binnacle-g1-composition-resume-codex`, branch
+`refactor/g1-composition-foundation-resume-codex`, directly based on that commit.
+The unsuffixed resume worktree was already active and was preserved. Production
+remains at `4608423`; original design, implementation, and prerequisite worktrees
+and their evidence were not used as writable workspaces.
+
+Design commits `0fcb33b`, `80d5023`, and `14eded1` were replayed first. The eleven
+accepted implementation commits from `cc6dbb1` through `7e52f0a` were replayed in
+the requested order. The blocker-only `df98e4c` was excluded. One master-plan
+status conflict was resolved to the current branch/base and final design policy;
+no source conflict occurred. Every non-document blob touched by a replay matched
+its accepted source commit, and each actual checkpoint passed focused parity.
+
+The historical separate ownership-test commit `f1c9607` implements the acceptance
+criteria now grouped under G1.2. It adds no production duplicate step. The replayed
+implementation predated `14eded1`'s native local strictness. Checkpoint `83b718e`
+adds only the four native constructor options and documented internal child names,
+plus local-registration tests and strict cross-provider collision fixtures.
+Four local rejection tests failed before that change; the strict cross-provider
+fixtures already passed. Afterward, 210 focused B/C/E tests passed, including real
+child workflows, HTTP/context/logging, auth, visibility, factory, and entrypoints.
+Architecture checked 104 modules with no forbidden edges; all seven Import Linter
+contracts passed; strict size checked 296 modules with no errors (16 existing
+warnings). No custom runtime duplicate validator or lifespan was introduced.
+
+Evidence and source-to-replay mappings are retained outside the repository:
+
+```text
+/home/grammy-jiang/.local/state/binnacle/g1-resume-20261002T141945Z-p_z2qe3o/
+```
+
+The baseline passed 102 B tests and the architecture gates. Four full wire profiles
+were captured under scratch config before replay. Local G1.8 convergence is complete:
+the managed suite passed 1,666 parallel-safe tests with 4 skips plus 2 ordinary-process
+tests; pre-commit and pre-push passed after one documentation-only markdownlint fix;
+coverage policy reports 100 production modules with 0 below target and 0 errors; the
+Python 3.10-3.14 matrix is green; and explicit wheel artifact smoke passed. The final
+four-profile wire JSON is byte-identical to the baseline (SHA-256
+`06f58fcc230f26095c2a17a4fd97dd10c50575d5be6b96b39b5e73dcf54f164a`).
+A fresh read-only ChatGPT implementation review returned APPROVE with no blocking
+findings. G1 remains `validating`: exact-SHA CI, deployment, live smoke, and the
+coordinating ChatGPT read-only call are still pending. No production change or G2
+work is authorized here.

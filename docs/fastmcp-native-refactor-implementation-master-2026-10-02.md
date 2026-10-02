@@ -1,6 +1,6 @@
 # FastMCP-native refactor — implementation master plan — 2026-10-02
 
-Status: **Group 0 done; Group 1 implementing locally**.
+Status: **Group 0 done; Group 1 validating locally; CI and deployment pending**.
 
 This is the control document for the implementation-design and implementation phases of
 the FastMCP-native, platform-neutral Binnacle refactor.
@@ -126,7 +126,7 @@ Status changes belong in this document.
 | Group | Scope | Depends on | Parallel potential | Status |
 | --- | --- | --- | --- | --- |
 | G0 | Stable FastMCP 4 baseline | current master | none; foundational | **done** |
-| G1 | Composition foundation | G0 | foundational; mostly sequential | **implementing** |
+| G1 | Composition foundation | G0 | foundational; mostly sequential | **validating** |
 | G2 | FastMCP-native alignment | G1 | may overlap G3/G4 after shared seams settle | queued |
 | G3 | Commands/domain/platform seams | G1; commands mount | process/resources lanes later | queued |
 | G4 | Deployment/platform services | G1 | logs/paths may parallelize | queued |
@@ -256,12 +256,18 @@ The new pre-change baseline passed 102 focused compatibility tests, architecture
 Import Linter, and strict module-size checks. Runtime versions remain FastMCP
 and FastMCP-slim `4.0.10`, MCP and MCP-types `2.1.1`.
 
-The accepted implementation predates final design `14eded1`. Its native local
-registration strictness must be completed after replay: `on_duplicate="error"`
-on the root and each child, with local rejection tests and strict synthetic
-cross-provider collision fixtures. There is no custom runtime duplicate guard
-or lifespan. Cross-provider ownership remains a raw test contract. No remote or
-production action is authorized by this local implementation task.
+The accepted implementation predates final design `14eded1`. Checkpoint
+`83b718e` completes its native local registration policy: `on_duplicate="error"`
+on the root and each child, the documented internal child names, local rejection
+tests, and strict synthetic cross-provider collision fixtures. There is no custom
+runtime duplicate guard or lifespan. Cross-provider ownership remains a raw test
+contract. All replay checkpoints and 210 focused parity/entrypoint tests passed.
+Local G1.8 convergence is complete: the managed full suite, coverage policy, full
+Python 3.10-3.14 matrix, wheel artifact smoke, pre-commit/pre-push, architecture,
+Import Linter, strict module-size checks, and byte-identical four-profile wire parity
+all passed. A fresh read-only ChatGPT implementation review returned APPROVE with no
+blocking findings. Detailed evidence is in the G1 design's section 14. No remote or
+production action has occurred yet.
 
 The pinned default tool order interleaves Search between Files tools.
 Three simple mounts cannot preserve that order. The design characterizes
@@ -566,9 +572,9 @@ Only after every item is satisfied should native macOS implementation begin.
 
 ## 18. Current next action
 
-Obtain independent review of the completed Group 1 implementation design in
-the coordinating conversation. Then prepare the local Codex implementation
-prompt for G1 using that reviewed design.
+G1 local convergence and the fresh read-only implementation review are complete.
+The next step is independent coordinating review, branch publication for exact-SHA CI,
+and canonical deployment after CI succeeds.
 
-Do not start production implementation, publish branches, or deploy as part
-of the design task. G2-G6 remain queued.
+G1 is not `done`; CI, deployment, live smoke, and the real ChatGPT read-only call
+remain pending. G2-G6 remain queued.
