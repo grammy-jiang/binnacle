@@ -130,6 +130,7 @@ def reload_scenario(root, manager_source, worker_source):
             {
                 "job_id": job_id,
                 "cursor": "start",
+                "wait_seconds": 0,
             },
         )
         assert status["state"] == "running" and status["log_delta"] == "ready"
