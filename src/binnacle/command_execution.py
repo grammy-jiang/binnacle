@@ -1,4 +1,4 @@
-"""Run orchestration over an explicit durable backend; no MCP or engine ownership."""
+"""Run and stop orchestration over an explicit durable backend."""
 
 import logging
 import time
@@ -175,4 +175,35 @@ def run_command(
         "when grounded in the task or observed progress. Use job_status for a "
         "later update, or stop_job to cancel."
     )
+    return CommandReply(summary=summary, payload=payload)
+
+
+def stop_job(job_id: str, *, backend: CommandBackend) -> CommandReply:
+    try:
+        result = backend.stop_job(job_id)
+    except RuntimeError as exc:
+        raise CommandFailure(
+            f"Could not stop the job: {exc}. Run `binnacle doctor`."
+        ) from exc
+    if result is None:
+        raise CommandFailure(
+            f"No job with id {job_id!r}. Call job_status without a job_id to list recent jobs."
+        )
+    payload = {
+        "job_id": job_id,
+        "state": result["state"],
+        "exit_code": result["exit_code"],
+        "signal": result["signal"],
+    }
+    if result["state"] == "exited":
+        if result["signal"] is not None:
+            summary = f"Job {job_id} stopped (signal {result['signal']})."
+        elif result["exit_code"] is not None:
+            summary = f"Job {job_id} already exited {result['exit_code']}."
+        elif result.get("termination_reason"):
+            summary = f"Job {job_id} was interrupted ({result['termination_reason']})."
+        else:
+            summary = f"Job {job_id} ended without a recorded exit status."
+    else:
+        summary = f"Job {job_id} is in state {result['state']}."
     return CommandReply(summary=summary, payload=payload)

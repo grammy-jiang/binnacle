@@ -56,5 +56,5 @@ def create_commands_server(
         preview_chars=listing_command_preview_chars,
         wait_max=run_settings.wait_max_s,
     )
-    stop_job.register(commands)
+    stop_job.register(commands, backend=backend)
     return commands

@@ -351,9 +351,9 @@ Potential later parallelism:
 ```
 
 Detailed design is reviewed against deployed `68e690d`, with the mounted
-Commands domain and G2 construction snapshots. G3 is ready for coordinator
-review of the design commit. Implementation starts in a separate task; this
-status change does not deploy or implement G3.
+Commands domain and G2 construction snapshots. G3.0-G3.2d are now locally
+complete under the approved design. Section 22 records the command-seam freeze
+for coordinator-owned parallel preparation; G3 is not yet complete or deployed.
 
 Detailed execution specification:
 `docs/commands-platform-seams-implementation-design-2026-10-03.md`.
@@ -609,7 +609,8 @@ changing that behavioral baseline. G2 implementation through `6e6992f` passed
 repeated full local convergence. The reviewed clean candidate `27211d1` then
 passed exact-SHA CI, canonical deployment, live verification, and the real
 ChatGPT read-only call. G2 is done; section 20 records the exit evidence.
-G3-G6 remain queued. No G3 work has started.
+G3 is implementing, with its command seam locally frozen through G3.2d.
+Section 22 records the handoff. G4-G6 remain queued.
 
 ## 19. G2 implementation evidence
 
@@ -810,3 +811,24 @@ retained at
 `~/.local/state/binnacle/g3-implementation-20261003T030542Z-m481gfu3/`.
 Section 15 of the detailed G3 design records the current implementation evidence.
 Production and remote deployment refs remain `68e690d`; G4-G6 remain queued.
+
+The serial worker has completed G3.0-G3.2d and stops at the clean freeze commit.
+Run, status, and stop now use one explicit stateless backend per Commands child.
+MCP adapters retain only conversion, policy/path inputs, and late-bound call
+lookup. The durable engine and both platform implementations remain unchanged.
+
+Acceptance includes 540 focused tests, full pre-commit/pre-push, the managed full
+suite (1,840 parallel-safe plus two ordinary-process tests), coverage policy
+(104 modules, zero errors), nine import contracts, strict size, exact wire and
+message parity, and both mixed-revision directions. Three final registration
+fallback tests close the measured coverage gap and pass in the repeated full
+coverage run. No golden, dependency, lock, persisted format, or protected G0-G2
+behavior changed.
+
+The detailed design section 15 and external ledger contain checkpoint evidence.
+External `process-prepare-G3.3.json` and `resource-prepare-G3.5a.json` bind both
+preparation lanes to the exact clean freeze SHA. Their shared files, including
+`job_platform.py`, remain integrator-owned. Neither lane was implemented here.
+There was no push, deployment, or production service operation. G3 stays
+implementing; G3.3/G3.5a dispatch and later serial activation belong to the
+coordinator. G4-G6 remain queued.

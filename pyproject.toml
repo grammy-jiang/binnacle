@@ -230,3 +230,46 @@ name = "Top-level Binnacle modules remain acyclic"
 type = "acyclic_siblings"
 ancestors = ["binnacle"]
 depth = 0
+
+[[tool.importlinter.contracts]]
+id = "commands-adapters-use-domain"
+name = "Commands adapters use the command domain instead of job internals"
+type = "forbidden"
+source_modules = [
+    "binnacle.tools.run_command",
+    "binnacle.tools.job_status",
+    "binnacle.tools.stop_job",
+]
+forbidden_modules = [
+    "binnacle.jobs",
+    "binnacle.job_owner",
+    "binnacle.job_client",
+    "binnacle.job_store",
+    "binnacle.job_output",
+    "binnacle.job_process",
+    "binnacle.job_cgroup",
+    "binnacle.job_resource_history",
+]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+id = "command-domain-explicit-backend"
+name = "Command use cases do not select or import a durable engine"
+type = "forbidden"
+source_modules = [
+    "binnacle.command_contracts",
+    "binnacle.command_execution",
+    "binnacle.command_status",
+]
+forbidden_modules = [
+    "binnacle.command_backend",
+    "binnacle.jobs",
+    "binnacle.job_owner",
+    "binnacle.job_client",
+    "binnacle.job_manager",
+    "binnacle.job_process",
+    "binnacle.job_cgroup",
+    "binnacle.job_resource_history",
+    "binnacle.tools",
+]
+allow_indirect_imports = true

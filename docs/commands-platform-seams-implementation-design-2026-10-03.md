@@ -1,6 +1,6 @@
 # Commands and platform seams — G3 implementation design — 2026-10-03
 
-Status: **implementing; G3.2c status extraction passed, stop and boundary next**.
+Status: **implementing; G3.0-G3.2d locally complete, frozen for coordinator handoff**.
 
 This is the execution design for Group 3 only. The control document is
 `docs/fastmcp-native-refactor-implementation-master-2026-10-02.md`.
@@ -1199,3 +1199,45 @@ all use-case string literals match the baseline. Initial stale patch-target
 failures and corrections are retained externally; no assertion or golden changed.
 Remaining local gates isolate the default test spool through an external pytest
 plugin, because several pre-existing telemetry tests omit their own spool fixture.
+
+G3.2d moves stop orchestration into `command_execution`. All three adapters
+share the factory backend and retain late-bound implementation lookup. The
+adapters have no direct engine/store/output/process/accounting imports. Two new
+Import Linter contracts and negative AST/import-blocker tests seal that boundary.
+A native fake-backed child runs all three tools with engine imports blocked;
+default construction still captures process-owned settings before requests.
+
+Freeze acceptance passed:
+
+- 540 focused B+C+V+domain/lifecycle/manager/store/process/resource/telemetry tests.
+- Full pre-commit and pre-push; architecture and all nine import contracts;
+  strict size with no exceptions or errors.
+- Managed full suite: 1,840 parallel-safe tests plus both ordinary-process tests,
+  with four opt-in skips, seed 12345.
+- Coverage policy: 104 production modules, zero below target and zero errors.
+  The first run found the run adapter at 89.19%. Three direct-registration cases
+  now pin fallback settings, supplied-input precedence, deep copies, and one-time
+  backend selection. Those cases passed separately and in the final full coverage
+  run. Production code and coverage policy did not change for this correction.
+- Byte-identical four-profile wire archive and exact three-tool message literals;
+  both archived-baseline/candidate manager-worker directions pass again.
+- Engine, owner, manager, store, process, accounting, output algorithms, G0-G2
+  protected files, both glob fixes, goldens, spool fixtures, dependencies, and lock
+  are unchanged. The only `pyproject.toml` edits add the two import contracts.
+
+The normal commit hooks also gate the final control update. The external ledger
+records each exact SHA, including the G3.2d freeze commit containing this record.
+The external Process G3.3 and Resource G3.5a manifests name that exact base and
+separate their allowed files. The integrator alone owns `job_platform.py` and
+shared activation/control files. This worker stops at the freeze; it implements
+neither preparation lane. G3 remains implementing overall. Full G3 convergence,
+review, CI, deployment, and manager activation remain coordinator work.
+
+| Checkpoint | Local commit before the final freeze | Acceptance |
+| --- | --- | --- |
+| G3.0 | `2736e10adf7f` | 386 focused tests and baseline probes |
+| G3.1 | `ac571feaeba8` | 486 broad tests, eight final lifecycle cases, mixed revisions and admission |
+| G3.2a | `47948a828bc7` | 423 focused tests, unused stateless backend |
+| G3.2b | `cf5229efd0e1` | 428 focused tests, run activation |
+| G3.2c | `066d2820eb74` | 514 focused tests, status activation |
+| G3.2d | Exact SHA in external ledger | Stop activation and freeze gates above |

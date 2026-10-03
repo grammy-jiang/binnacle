@@ -11,7 +11,9 @@ from fastmcp.exceptions import ToolError
 from fastmcp.tools.base import ToolResult
 from pydantic import Field
 
-from binnacle import job_owner
+from binnacle import command_execution
+from binnacle.command_backend import create_command_backend
+from binnacle.command_contracts import CommandBackend, CommandFailure
 
 OUTPUT_SCHEMA = {
     "type": "object",
@@ -25,38 +27,18 @@ OUTPUT_SCHEMA = {
 }
 
 
-def stop_job_impl(job_id: str) -> ToolResult:
+def stop_job_impl(job_id: str, *, backend: CommandBackend | None = None) -> ToolResult:
+    backend = create_command_backend() if backend is None else backend
     try:
-        result = job_owner.stop_job(job_id)
-    except RuntimeError as exc:
-        raise ToolError(
-            f"Could not stop the job: {exc}. Run `binnacle doctor`."
-        ) from exc
-    if result is None:
-        raise ToolError(
-            f"No job with id {job_id!r}. Call job_status without a job_id to list recent jobs."
-        )
-    payload = {
-        "job_id": job_id,
-        "state": result["state"],
-        "exit_code": result["exit_code"],
-        "signal": result["signal"],
-    }
-    if result["state"] == "exited":
-        if result["signal"] is not None:
-            summary = f"Job {job_id} stopped (signal {result['signal']})."
-        elif result["exit_code"] is not None:
-            summary = f"Job {job_id} already exited {result['exit_code']}."
-        elif result.get("termination_reason"):
-            summary = f"Job {job_id} was interrupted ({result['termination_reason']})."
-        else:
-            summary = f"Job {job_id} ended without a recorded exit status."
-    else:
-        summary = f"Job {job_id} is in state {result['state']}."
-    return ToolResult(content=summary, structured_content=payload)
+        reply = command_execution.stop_job(job_id, backend=backend)
+    except CommandFailure as exc:
+        raise ToolError(str(exc)) from exc.__cause__
+    return ToolResult(content=reply.summary, structured_content=reply.payload)
 
 
-def register(mcp: FastMCP) -> None:
+def register(mcp: FastMCP, *, backend: CommandBackend | None = None) -> None:
+    backend = create_command_backend() if backend is None else backend
+
     @mcp.tool(
         annotations={
             "readOnlyHint": False,
@@ -73,4 +55,4 @@ def register(mcp: FastMCP) -> None:
         process group. An already-finished job returns its final state
         without error.
         """
-        return stop_job_impl(job_id)
+        return stop_job_impl(job_id, backend=backend)
