@@ -1,7 +1,5 @@
 """Focused Commands server using the existing durable-job MCP adapters."""
 
-from functools import partial
-
 from fastmcp import FastMCP
 
 from binnacle.config import RootsSettings, RunCommandSettings, get_settings
@@ -48,13 +46,9 @@ def create_commands_server(
     run_command.register(commands, roots=roots, settings=run_settings)
     job_status.register(
         commands,
-        partial(
-            job_status.job_status_impl,
-            quiet_after_s=quiet_after_s,
-            history_limit=listing_history_limit,
-            preview_chars=listing_command_preview_chars,
-            wait_max=run_settings.wait_max_s,
-        ),
+        quiet_after_s=quiet_after_s,
+        history_limit=listing_history_limit,
+        preview_chars=listing_command_preview_chars,
         wait_max=run_settings.wait_max_s,
     )
     stop_job.register(commands)

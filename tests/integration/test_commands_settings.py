@@ -4,6 +4,7 @@ import asyncio
 
 import pytest
 from fastmcp import Client
+from fastmcp.tools.base import ToolResult
 
 from binnacle import commands_server, jobs, paths
 from binnacle.config import RootsSettings, RunCommandSettings
@@ -84,6 +85,55 @@ def test_run_policy_roots_wait_schema_and_caller_mutation(
         assert len(backend) == 4
 
     asyncio.run(go())
+
+
+def test_status_looks_up_implementation_after_construction(tmp_path, monkeypatch):
+    def old_impl(*args, **kwargs):
+        raise AssertionError("registration must not freeze the implementation")
+
+    monkeypatch.setattr(job_status, "job_status_impl", old_impl)
+    child = commands_server.create_commands_server(
+        roots=RootsSettings(default_root=tmp_path, extra_roots=()),
+        run_settings=RunCommandSettings(wait_default_s=2, wait_max_s=4),
+        quiet_after_s=7,
+        listing_history_limit=3,
+        listing_command_preview_chars=16,
+    )
+    calls = []
+
+    def replacement(*args, **kwargs):
+        calls.append((args, kwargs))
+        return ToolResult(content="replacement", structured_content={"jobs": []})
+
+    monkeypatch.setattr(job_status, "job_status_impl", replacement)
+    monkeypatch.setattr(job_status, "get_settings", fail_global)
+
+    async def go():
+        async with Client(child, cache=False) as client:
+            result = await client.call_tool(
+                "job_status",
+                {
+                    "job_id": "probe",
+                    "tail_lines": 12,
+                    "wait_seconds": 1,
+                    "cursor": "start",
+                },
+            )
+            assert result.content[0].text == "replacement"
+
+    asyncio.run(go())
+    assert calls == [
+        (
+            ("probe", 12, 1),
+            {
+                "cursor": "start",
+                "quiet_after_s": 7,
+                "history_limit": 3,
+                "preview_chars": 16,
+                "wait_max": 4,
+            },
+        )
+    ]
 
 
 def test_explicit_run_policy_keeps_process_warmup_and_owner(

@@ -1,12 +1,9 @@
-"""job_status — check a background job, or list recent jobs.
-
-Spec: docs/tools/run_command.md §4. Reads only disk (jobs.py), so it
-works across `uvicorn --reload` and ChatGPT's per-call sessions.
+"""job_status checks a job or lists recent jobs; docs/tools/run_command.md §4.
+Disk state survives `uvicorn --reload` and ChatGPT's per-call sessions.
 """
 
 import logging
 import time
-from collections.abc import Callable
 from typing import Annotated
 
 from fastmcp import FastMCP
@@ -113,12 +110,10 @@ def _listing_rows(
 
 
 def _wait_for_exit(job_id: str, wait_seconds: int) -> tuple[dict | None, float]:
-    """Block until the job is recorded exited, or the wait is up.
+    """Wait for recorded exit, up to the timeout, using jobs.await_exit.
 
-    Delegates to jobs.await_exit, which reads disk (the job may predate a
-    uvicorn --reload) and bridges the brief post-death window before the
-    reaper records the exit, so this never returns a false "unknown" for a
-    job that is really finishing.
+    Read disk across reloads and bridge the post-death reaper window, so a
+    finishing job never produces a false "unknown".
     """
     t0 = _PERF_COUNTER()
     state = jobs.await_exit(job_id, wait_seconds)
@@ -447,7 +442,14 @@ def job_status_impl(
     return ToolResult(content=summary, structured_content=payload)
 
 
-def register(mcp: FastMCP, impl: Callable[..., ToolResult], *, wait_max: int) -> None:
+def register(
+    mcp: FastMCP,
+    *,
+    quiet_after_s: int,
+    history_limit: int,
+    preview_chars: int,
+    wait_max: int,
+) -> None:
     @mcp.tool(
         annotations={"readOnlyHint": True, "openWorldHint": False},
         output_schema=OUTPUT_SCHEMA,
@@ -486,4 +488,13 @@ def register(mcp: FastMCP, impl: Callable[..., ToolResult], *, wait_max: int) ->
         job_id/cursor. Keep cursor internal unless asked. Returns lifecycle
         fields, output, and live processes; quiet=true means no recent output.
         """
-        return impl(job_id, tail_lines, wait_seconds, cursor=cursor)
+        return job_status_impl(
+            job_id,
+            tail_lines,
+            wait_seconds,
+            cursor=cursor,
+            quiet_after_s=quiet_after_s,
+            history_limit=history_limit,
+            preview_chars=preview_chars,
+            wait_max=wait_max,
+        )
