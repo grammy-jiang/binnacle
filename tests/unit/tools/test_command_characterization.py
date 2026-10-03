@@ -3,7 +3,7 @@
 import pytest
 from fastmcp.exceptions import ToolError
 
-from binnacle import job_owner, jobs
+from binnacle import command_status, job_owner, jobs
 from binnacle.callctx import current_call
 from binnacle.config import RootsSettings, RunCommandSettings
 from binnacle.tools import job_status, run_command, stop_job
@@ -158,7 +158,7 @@ def test_stop_catch_boundary_and_unknown_cause(monkeypatch):
 @pytest.mark.parametrize("failure", [RuntimeError("wait"), KeyboardInterrupt()])
 def test_wait_exception_keeps_exact_timing_and_identity(monkeypatch, caplog, failure):
     ticks = iter(range(10, 18))
-    monkeypatch.setattr(job_status, "_PERF_COUNTER", lambda: next(ticks))
+    monkeypatch.setattr(command_status, "perf_counter", lambda: next(ticks))
     monkeypatch.setattr(jobs, "job_state", lambda job: {"log_bytes": 7})
 
     def fail(job, timeout):

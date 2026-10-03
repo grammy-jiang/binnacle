@@ -14,6 +14,7 @@ from pathlib import Path
 import mcp.types
 from fastmcp import Client
 
+from binnacle import command_status as js
 from binnacle import jobs, logging_middleware, server
 from binnacle.callctx import (
     current_argument_names,
@@ -22,7 +23,6 @@ from binnacle.callctx import (
     current_turn,
 )
 from binnacle.config import RunCommandSettings
-from binnacle.tools import job_status as js
 from binnacle.tools import list_files as lf
 from binnacle.tools import stop_job as sj
 
@@ -259,8 +259,10 @@ def test_job_status_timing_receives_call_start_across_thread_hop(caplog, monkeyp
     }
     monkeypatch.setattr(jobs, "job_state", lambda job_id: state)
     monkeypatch.setattr(jobs, "read_log", lambda job_id: b"")
-    monkeypatch.setattr(jobs, "job_processes", lambda pgid: [])
-    monkeypatch.setattr(js, "_wait_for_exit", lambda job_id, wait_seconds: (state, 0.1))
+    monkeypatch.setattr(jobs, "job_processes", lambda pgid, max_cmd_chars=200: [])
+    monkeypatch.setattr(
+        js, "_wait_for_exit", lambda backend, job_id, wait_seconds: (state, 0.1)
+    )
 
     with caplog.at_level("INFO"):
         _run(

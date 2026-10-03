@@ -50,6 +50,7 @@ def create_commands_server(
     run_command.register(commands, roots=roots, settings=run_settings, backend=backend)
     job_status.register(
         commands,
+        backend=backend,
         quiet_after_s=quiet_after_s,
         history_limit=listing_history_limit,
         preview_chars=listing_command_preview_chars,

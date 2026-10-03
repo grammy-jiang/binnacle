@@ -1,6 +1,6 @@
 # Commands and platform seams — G3 implementation design — 2026-10-03
 
-Status: **implementing; G3.2b run extraction passed, status extraction next**.
+Status: **implementing; G3.2c status extraction passed, stop and boundary next**.
 
 This is the execution design for Group 3 only. The control document is
 `docs/fastmcp-native-refactor-implementation-master-2026-10-02.md`.
@@ -1187,3 +1187,15 @@ including false-valued fakes. Exact error causes and unexpected exceptions remai
 unchanged. Fake-backed native run calls prove isolation and argument ordering.
 The focused selection passed 428 tests; architecture, seven import contracts,
 strict size, and mypy passed. The full wire archive remains byte-identical.
+
+G3.2c moves list/status/wait/cursor/tail orchestration to `command_status`.
+The adapter supplies presentation scalars and the entry timestamp so telemetry
+still includes default conversion. `job_output` algorithms and `JobGone` identity
+remain unchanged. Existing private clock/wait patch targets moved to their new
+owner; process-summary fakes accept the backend's forwarded default argument.
+The repeated focused selection passed 514 tests, including visibility/logging;
+architecture, seven import contracts, strict size, and mypy passed. Full wire and
+all use-case string literals match the baseline. Initial stale patch-target
+failures and corrections are retained externally; no assertion or golden changed.
+Remaining local gates isolate the default test spool through an external pytest
+plugin, because several pre-existing telemetry tests omit their own spool fixture.

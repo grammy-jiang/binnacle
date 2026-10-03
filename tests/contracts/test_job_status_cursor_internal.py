@@ -13,7 +13,7 @@ from binnacle.tools import job_status as js
 @pytest.fixture()
 def cursor_store(tmp_path, monkeypatch):
     monkeypatch.setattr(jobs, "JOBS_DIR", tmp_path)
-    monkeypatch.setattr(jobs, "job_processes", lambda _pgid: [])
+    monkeypatch.setattr(jobs, "job_processes", lambda _pgid, max_cmd_chars=200: [])
     return tmp_path
 
 

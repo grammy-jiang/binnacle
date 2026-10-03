@@ -6,7 +6,7 @@ import pytest
 from fastmcp import Client
 from fastmcp.tools.base import ToolResult
 
-from binnacle import commands_server, job_owner, jobs, paths
+from binnacle import command_status, commands_server, job_owner, jobs, paths
 from binnacle.config import RootsSettings, RunCommandSettings
 from binnacle.tools import job_status, run_command
 
@@ -122,11 +122,13 @@ def test_status_looks_up_implementation_after_construction(tmp_path, monkeypatch
             assert result.content[0].text == "replacement"
 
     asyncio.run(go())
+    backend = calls[0][1]["backend"]
     assert calls == [
         (
             ("probe", 12, 1),
             {
                 "cursor": "start",
+                "backend": backend,
                 "quiet_after_s": 7,
                 "history_limit": 3,
                 "preview_chars": 16,
@@ -187,7 +189,7 @@ def test_status_factories_own_presentation_and_share_run_wait_cap(
     monkeypatch.setattr(jobs, "list_jobs", lambda: states)
     monkeypatch.setattr(jobs, "job_state", lambda job_id: state)
     monkeypatch.setattr(jobs, "read_log", lambda job_id: b"")
-    monkeypatch.setattr(jobs, "job_processes", lambda pgid: [])
+    monkeypatch.setattr(jobs, "job_processes", lambda pgid, max_cmd_chars=200: [])
     for module in (commands_server, run_command, job_status, paths):
         monkeypatch.setattr(module, "get_settings", fail_global)
     children = []
@@ -224,7 +226,7 @@ def test_status_factories_own_presentation_and_share_run_wait_cap(
                     "jobs"
                 ]
                 assert len(listing) == index + 1
-                assert listing[0]["command"] == job_status._command_preview(
+                assert listing[0]["command"] == command_status._command_preview(
                     command, preview
                 )
                 single = (

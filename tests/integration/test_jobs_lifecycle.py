@@ -10,8 +10,10 @@ from pathlib import Path
 import pytest
 from fastmcp.exceptions import ToolError
 
+from binnacle import command_status
 from binnacle import jobs as jobstore
 from binnacle.callctx import current_call, current_call_started
+from binnacle.command_backend import DurableCommandBackend
 from binnacle.tools import job_status as js
 from binnacle.tools import run_command as rc
 from tests.integration.job_test_support import run, status, stop
@@ -40,12 +42,12 @@ def fresh_store(tmp_path, monkeypatch):
 
 def test_waited_s_uses_monotonic_counter(monkeypatch):
     ticks = iter((100.0, 101.234))
-    monkeypatch.setattr(js, "_PERF_COUNTER", lambda: next(ticks))
+    monkeypatch.setattr(command_status, "perf_counter", lambda: next(ticks))
     monkeypatch.setattr(
         jobstore, "await_exit", lambda job_id, timeout: {"state": "running"}
     )
 
-    state, waited = js._wait_for_exit("job", 50)
+    state, waited = command_status._wait_for_exit(DurableCommandBackend(), "job", 50)
     assert state == {"state": "running"}
     assert waited == 1.234
 
@@ -72,12 +74,12 @@ def test_single_job_timing_logs_stage_breakdown(monkeypatch, caplog):
     monkeypatch.setattr(
         jobstore,
         "job_processes",
-        lambda pgid: [
+        lambda pgid, max_cmd_chars=200: [
             {"pid": 123, "state": "S", "etime_s": 10.0, "cpu_s": 0.0, "cmd": "sleep 30"}
         ],
     )
     call_token = current_call.set("timing-test-call")
-    start_token = current_call_started.set(js._PERF_COUNTER() - 0.020)
+    start_token = current_call_started.set(command_status.perf_counter() - 0.020)
     try:
         with caplog.at_level("INFO", logger="binnacle.job_status"):
             p = status("timing-job")

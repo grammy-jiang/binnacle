@@ -7,7 +7,7 @@ from fastmcp.tools.base import ToolResult
 
 from binnacle import commands_server
 from binnacle.config import RootsSettings, RunCommandSettings
-from binnacle.tools import run_command
+from binnacle.tools import job_status, run_command
 from tests.command_support import MemoryCommands
 
 
@@ -28,7 +28,7 @@ def test_fake_run_factories_are_isolated_and_do_not_choose_defaults(
     def forbidden(*args, **kwargs):
         raise AssertionError("default selection reached")
 
-    for module in (commands_server, run_command):
+    for module in (commands_server, run_command, job_status):
         monkeypatch.setattr(module, "get_settings", forbidden)
         monkeypatch.setattr(module, "create_command_backend", forbidden)
     backends = [MemoryCommands("first"), MemoryCommands("second")]
@@ -49,9 +49,16 @@ def test_fake_run_factories_are_isolated_and_do_not_choose_defaults(
                 )
                 assert result.structured_content["job_id"] == backend.job_id
                 assert backend.calls[0] == ("start", ("probe", tmp_path, None, cap))
+                status = await client.call_tool(
+                    "job_status", {"job_id": backend.job_id, "cursor": "end"}
+                )
+                assert (
+                    status.structured_content["next_cursor"] == f"v1:{backend.job_id}:6"
+                )
+                assert status.structured_content["log_delta"] == ""
 
     asyncio.run(go())
-    assert all(len(backend.calls) == 3 for backend in backends)
+    assert all(len(backend.calls) == 6 for backend in backends)
 
 
 def test_run_registration_resolves_implementation_at_call_time(tmp_path, monkeypatch):
