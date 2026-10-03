@@ -2,7 +2,18 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from binnacle import job_resource_history
+from binnacle.resource_contracts import NoResourceAccounting
+
+
+@pytest.fixture
+def accounting():
+    class Accounting(NoResourceAccounting):
+        pass
+
+    return Accounting()
 
 
 def test_history_is_daily_privacy_minimal_jsonl(tmp_path):
@@ -108,15 +119,15 @@ def test_merge_final_meta_removes_stale_pending_and_preserves_other_fields():
     assert "resource_history_path" not in got
 
 
-def test_finalize_async_waits_then_records_and_calls_back(tmp_path, monkeypatch):
+def test_finalize_async_waits_then_records_and_calls_back(
+    tmp_path, monkeypatch, accounting
+):
     job_id = "012345abcdef"
     cgroup = "/demo/job-012345abcdef"
     resources = {"memory_peak": 4096, "processes": 0}
-    monkeypatch.setattr(job_resource_history.job_cgroup, "wait_empty", lambda cg: True)
-    monkeypatch.setattr(
-        job_resource_history.job_cgroup, "snapshot", lambda cg: resources
-    )
-    monkeypatch.setattr(job_resource_history.job_cgroup, "cleanup", lambda cg: True)
+    monkeypatch.setattr(accounting, "wait_empty", lambda cg: True)
+    monkeypatch.setattr(accounting, "snapshot", lambda cg: resources)
+    monkeypatch.setattr(accounting, "cleanup", lambda cg: True)
     monkeypatch.setattr(
         job_resource_history,
         "append_best_effort",
@@ -138,6 +149,7 @@ def test_finalize_async_waits_then_records_and_calls_back(tmp_path, monkeypatch)
         job_id,
         cgroup,
         {"cgroup_cleanup_pending": True, "ended_at": 11.0},
+        accounting=accounting,
         history_root=tmp_path,
         on_finalized=callbacks.append,
     )
@@ -149,10 +161,12 @@ def test_finalize_async_waits_then_records_and_calls_back(tmp_path, monkeypatch)
     assert "cgroup_cleanup_pending" not in final
 
 
-def test_finalize_async_preserves_pending_when_cleanup_fails(tmp_path, monkeypatch):
-    monkeypatch.setattr(job_resource_history.job_cgroup, "wait_empty", lambda cg: True)
-    monkeypatch.setattr(job_resource_history.job_cgroup, "snapshot", lambda cg: {})
-    monkeypatch.setattr(job_resource_history.job_cgroup, "cleanup", lambda cg: False)
+def test_finalize_async_preserves_pending_when_cleanup_fails(
+    tmp_path, monkeypatch, accounting
+):
+    monkeypatch.setattr(accounting, "wait_empty", lambda cg: True)
+    monkeypatch.setattr(accounting, "snapshot", lambda cg: {})
+    monkeypatch.setattr(accounting, "cleanup", lambda cg: False)
     callbacks: list[dict] = []
 
     class ImmediateThread:
@@ -167,6 +181,7 @@ def test_finalize_async_preserves_pending_when_cleanup_fails(tmp_path, monkeypat
         "012345abcdef",
         "/demo/job-012345abcdef",
         {"cgroup_cleanup_pending": True},
+        accounting=accounting,
         history_root=tmp_path,
         on_finalized=callbacks.append,
     )
@@ -175,9 +190,9 @@ def test_finalize_async_preserves_pending_when_cleanup_fails(tmp_path, monkeypat
 
 
 def test_finalize_async_logs_when_event_wait_is_unavailable(
-    tmp_path, monkeypatch, caplog
+    tmp_path, monkeypatch, caplog, accounting
 ):
-    monkeypatch.setattr(job_resource_history.job_cgroup, "wait_empty", lambda cg: False)
+    monkeypatch.setattr(accounting, "wait_empty", lambda cg: False)
     callbacks: list[dict] = []
 
     class ImmediateThread:
@@ -193,6 +208,7 @@ def test_finalize_async_logs_when_event_wait_is_unavailable(
             "012345abcdef",
             "/demo/job-012345abcdef",
             {},
+            accounting=accounting,
             history_root=tmp_path,
             on_finalized=callbacks.append,
         )

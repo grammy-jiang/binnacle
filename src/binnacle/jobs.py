@@ -13,11 +13,11 @@ import threading
 import time
 from pathlib import Path
 
-from binnacle import job_cgroup, job_resource_history, job_store
+from binnacle import job_resource_history, job_store
 from binnacle.callctx import current_call
 from binnacle.config import get_settings
 from binnacle.job_output import clip_head_tail as job_output_clip_head_tail
-from binnacle.job_platform import create_process_backend
+from binnacle.job_platform import create_process_backend, create_resource_accounting
 from binnacle.process_contracts import ProcessHandle
 
 logger = logging.getLogger("binnacle.jobs")
@@ -44,6 +44,7 @@ def _resolve_owner_mode() -> str:
 
 OWNER_MODE = _resolve_owner_mode()
 _PROCESS_BACKEND = create_process_backend()
+_RESOURCE_ACCOUNTING = create_resource_accounting()
 
 # stop_job timings; module-level so tests can shrink the escalation wait.
 STOP_SIGTERM_GRACE_S = 5.0  # wait for a clean SIGTERM exit before SIGKILL
@@ -176,11 +177,13 @@ def record_exit(job_id: str, proc: ProcessHandle) -> None:
         meta["ended_at"] = time.time()
         meta["termination_reason"] = _termination_reason(meta, rc)
         cgroup = meta.get("cgroup")
-        resources = job_cgroup.snapshot(cgroup if isinstance(cgroup, str) else None)
+        resources = _RESOURCE_ACCOUNTING.snapshot(
+            cgroup if isinstance(cgroup, str) else None
+        )
         if resources:
             meta["resource_usage"] = resources
         cleanup_pending = False
-        if isinstance(cgroup, str) and not job_cgroup.cleanup(cgroup):
+        if isinstance(cgroup, str) and not _RESOURCE_ACCOUNTING.cleanup(cgroup):
             cleanup_pending = True
             meta["cgroup_cleanup_pending"] = True
         elif resources:
@@ -211,6 +214,7 @@ def record_exit(job_id: str, proc: ProcessHandle) -> None:
             job_id,
             cgroup,
             dict(meta),
+            accounting=_RESOURCE_ACCOUNTING,
             history_root=JOBS_DIR.parent / "resource-jobs",
             on_finalized=lambda final: _save_final_resource_meta(job_id, final),
         )
@@ -273,7 +277,11 @@ def start_job(
         log = d / "out.log"
         env = os.environ.copy()
         env.update(_ENV_OVERRIDES)
-        cgroup = job_cgroup.create(job_id) if owner_instance_id is not None else None
+        cgroup = (
+            _RESOURCE_ACCOUNTING.create(job_id)
+            if owner_instance_id is not None
+            else None
+        )
         env["BINNACLE_JOB_ID"] = job_id
         if cgroup:
             env["BINNACLE_JOB_CGROUP"] = cgroup
@@ -293,7 +301,7 @@ def start_job(
             else open(os.devnull, "rb") as inf,
         ):
             proc = _PROCESS_BACKEND.launch(
-                job_cgroup.launch_argv(command, cgroup),
+                _RESOURCE_ACCOUNTING.wrap_argv(["bash", "-c", command], cgroup),
                 workdir=workdir,
                 env=env,
                 stdin=inf,
@@ -378,7 +386,7 @@ def job_state(job_id: str) -> dict | None:
     cgroup = meta.get("cgroup")
     resources = meta.get("resource_usage")
     if state == "running" and isinstance(cgroup, str):
-        live_resources = job_cgroup.snapshot(cgroup)
+        live_resources = _RESOURCE_ACCOUNTING.snapshot(cgroup)
         if live_resources:
             resources = live_resources
     return {

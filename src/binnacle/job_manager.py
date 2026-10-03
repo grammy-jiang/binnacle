@@ -17,7 +17,7 @@ import uuid
 from pathlib import Path
 from typing import Any, cast
 
-from binnacle import job_cgroup, job_owner, jobs
+from binnacle import job_owner, jobs
 from binnacle.callctx import current_call
 from binnacle.config import get_settings
 from binnacle.job_client import PROTOCOL_VERSION
@@ -211,7 +211,7 @@ class JobManager:
     def prepare(self) -> int:
         # The systemd unit places this manager in a delegated subgroup so the
         # service root can enable cpu/memory/pids for sibling per-job cgroups.
-        job_cgroup.prepare(log_ready=True)
+        jobs._RESOURCE_ACCOUNTING.prepare(log_ready=True)
         parent = self.socket_path.parent
         parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         parent.chmod(0o700)

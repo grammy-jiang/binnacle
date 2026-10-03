@@ -3,19 +3,32 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from binnacle import jobs
+from binnacle.resource_contracts import NoResourceAccounting
+
+
+@pytest.fixture(autouse=True)
+def fake_accounting(monkeypatch):
+    class Accounting(NoResourceAccounting):
+        pass
+
+    monkeypatch.setattr(jobs, "_RESOURCE_ACCOUNTING", Accounting())
 
 
 def test_manager_start_records_cgroup_and_job_identity(tmp_path, monkeypatch):
     monkeypatch.setattr(jobs, "JOBS_DIR", tmp_path / "jobs")
-    seen: list[tuple[str, str | None]] = []
-    monkeypatch.setattr(jobs.job_cgroup, "create", lambda job_id: f"/demo/job-{job_id}")
+    seen: list[tuple[list[str], str | None]] = []
+    monkeypatch.setattr(
+        jobs._RESOURCE_ACCOUNTING, "create", lambda job_id: f"/demo/job-{job_id}"
+    )
 
-    def argv(command: str, cgroup: str | None):
+    def argv(command: list[str], cgroup: str | None):
         seen.append((command, cgroup))
-        return ["bash", "-c", command]
+        return command
 
-    monkeypatch.setattr(jobs.job_cgroup, "launch_argv", argv)
+    monkeypatch.setattr(jobs._RESOURCE_ACCOUNTING, "wrap_argv", argv)
     job_id, proc = jobs.start_job(
         'printf "%s:%s" "$BINNACLE_JOB_ID" "$BINNACLE_JOB_CGROUP"',
         Path("/tmp"),
@@ -27,25 +40,27 @@ def test_manager_start_records_cgroup_and_job_identity(tmp_path, monkeypatch):
     jobs.record_exit(job_id, proc)
     meta = json.loads((jobs.JOBS_DIR / job_id / "meta.json").read_text())
     out = (jobs.JOBS_DIR / job_id / "out.log").read_text()
-    assert seen == [(meta["command"], f"/demo/job-{job_id}")]
+    assert seen == [(["bash", "-c", meta["command"]], f"/demo/job-{job_id}")]
     assert meta["cgroup"] == f"/demo/job-{job_id}"
     assert out == f"{job_id}:/demo/job-{job_id}"
 
 
 def test_record_exit_persists_cgroup_counters(tmp_path, monkeypatch):
     monkeypatch.setattr(jobs, "JOBS_DIR", tmp_path / "jobs")
-    monkeypatch.setattr(jobs.job_cgroup, "create", lambda job_id: f"/demo/job-{job_id}")
     monkeypatch.setattr(
-        jobs.job_cgroup, "launch_argv", lambda command, cgroup: ["bash", "-c", command]
+        jobs._RESOURCE_ACCOUNTING, "create", lambda job_id: f"/demo/job-{job_id}"
     )
     monkeypatch.setattr(
-        jobs.job_cgroup,
+        jobs._RESOURCE_ACCOUNTING, "wrap_argv", lambda command, cgroup: command
+    )
+    monkeypatch.setattr(
+        jobs._RESOURCE_ACCOUNTING,
         "snapshot",
         lambda cgroup: {"cpu": {"usage_usec": 1234}, "processes": 0},
     )
     cleaned: list[str | None] = []
     monkeypatch.setattr(
-        jobs.job_cgroup,
+        jobs._RESOURCE_ACCOUNTING,
         "cleanup",
         lambda cgroup: cleaned.append(cgroup) is None or True,
     )
@@ -72,19 +87,22 @@ def test_record_exit_defers_history_when_descendant_keeps_cgroup_populated(
     tmp_path, monkeypatch
 ):
     monkeypatch.setattr(jobs, "JOBS_DIR", tmp_path / "jobs")
-    monkeypatch.setattr(jobs.job_cgroup, "create", lambda job_id: f"/demo/job-{job_id}")
     monkeypatch.setattr(
-        jobs.job_cgroup, "launch_argv", lambda command, cgroup: ["bash", "-c", command]
+        jobs._RESOURCE_ACCOUNTING, "create", lambda job_id: f"/demo/job-{job_id}"
     )
     monkeypatch.setattr(
-        jobs.job_cgroup,
+        jobs._RESOURCE_ACCOUNTING, "wrap_argv", lambda command, cgroup: command
+    )
+    monkeypatch.setattr(
+        jobs._RESOURCE_ACCOUNTING,
         "snapshot",
         lambda cgroup: {"memory_peak": 100, "processes": 1},
     )
-    monkeypatch.setattr(jobs.job_cgroup, "cleanup", lambda cgroup: False)
+    monkeypatch.setattr(jobs._RESOURCE_ACCOUNTING, "cleanup", lambda cgroup: False)
     finalizers: list[tuple[str, str, dict]] = []
 
-    def fake_finalize(job_id, cgroup, meta, *, history_root, on_finalized):
+    def fake_finalize(job_id, cgroup, meta, *, accounting, history_root, on_finalized):
+        assert accounting is jobs._RESOURCE_ACCOUNTING
         assert history_root == tmp_path / "resource-jobs"
         assert callable(on_finalized)
         finalizers.append((job_id, cgroup, meta))

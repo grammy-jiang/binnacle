@@ -94,3 +94,99 @@ def test_manager_boot_identity_uses_default_process_seam(monkeypatch):
         lambda: SimpleNamespace(boot_id=lambda: "opaque-boot"),
     )
     assert job_manager._boot_id() == "opaque-boot"
+
+
+def test_accounting_capture_survives_binding_change_before_finalizer(
+    tmp_path, monkeypatch
+):
+    from types import SimpleNamespace
+
+    from binnacle import job_resource_history, jobs
+
+    events = []
+    pending = []
+    counters = iter(({"processes": 1}, {"processes": 0, "memory_peak": 456}))
+    cleaned = iter((False, True))
+    identity = "opaque:identity"
+
+    def wrap(argv, scope):
+        assert argv == ["bash", "-c", "true"] and scope == identity
+        events.append("wrap")
+        return argv
+
+    accounting = SimpleNamespace(
+        create=lambda job: identity,
+        wrap_argv=wrap,
+        snapshot=lambda scope: next(counters),
+        cleanup=lambda scope: next(cleaned),
+        wait_empty=lambda scope: events.append(("wait", scope)) or True,
+    )
+
+    class DeferredThread:
+        def __init__(self, *, target, name, daemon):
+            pending.append(target)
+            assert daemon is True
+
+        def start(self):
+            pass
+
+    monkeypatch.setattr(jobs, "_RESOURCE_ACCOUNTING", accounting)
+    monkeypatch.setattr(jobs, "JOBS_DIR", tmp_path / "jobs")
+    monkeypatch.setattr(job_resource_history.threading, "Thread", DeferredThread)
+    job_id, handle = jobs.start_job("true", tmp_path, None, owner_instance_id="owner")
+    handle.wait(timeout=5)
+    jobs.record_exit(job_id, handle)
+    before = jobs._read_meta(job_id)
+    assert before["cgroup"] == identity
+    assert before["cgroup_cleanup_pending"] is True
+    assert before["exit_code"] == 0
+    monkeypatch.setattr(jobs, "_RESOURCE_ACCOUNTING", object())
+    assert len(pending) == 1
+    pending[0]()
+    after = jobs._read_meta(job_id)
+    assert "cgroup_cleanup_pending" not in after
+    assert after["ended_at"] == before["ended_at"] and after["exit_code"] == 0
+    assert after["resource_usage"] == {"processes": 0, "memory_peak": 456}
+    assert after["resource_history_path"]
+    assert events == ["wrap", ("wait", identity)]
+
+
+def test_manager_prepares_selected_accounting_before_recovery(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    from binnacle import job_manager, jobs
+
+    socket = tmp_path / "private" / "manager.sock"
+    events = []
+
+    def prepare(*, log_ready):
+        assert log_ready is True and not socket.parent.exists()
+        events.append("accounting")
+
+    def recover(owner, boot):
+        assert socket.parent.is_dir()
+        events.append((owner, boot))
+        return 3
+
+    monkeypatch.setattr(jobs, "_RESOURCE_ACCOUNTING", SimpleNamespace(prepare=prepare))
+    monkeypatch.setattr(job_manager.job_owner, "recover_previous_owner", recover)
+    manager = job_manager.JobManager(socket, owner_instance_id="owner", boot_id="boot")
+    assert manager.prepare() == 3
+    assert events == ["accounting", ("owner", "boot")]
+
+
+def test_manager_owned_command_runs_without_accounting(tmp_path, monkeypatch):
+    from binnacle import jobs
+    from binnacle.resource_contracts import NoResourceAccounting
+
+    monkeypatch.setattr(jobs, "_RESOURCE_ACCOUNTING", NoResourceAccounting())
+    monkeypatch.setattr(jobs, "JOBS_DIR", tmp_path / "jobs")
+    job_id, handle = jobs.start_job(
+        "printf missing-accounting", tmp_path, None, owner_instance_id="owner"
+    )
+    handle.wait(timeout=5)
+    jobs.record_exit(job_id, handle)
+    state = jobs.job_state(job_id)
+    assert state["exit_code"] == 0 and state["resource_usage"] is None
+    assert state["cgroup"] is None
+    assert jobs.read_log(job_id) == b"missing-accounting"

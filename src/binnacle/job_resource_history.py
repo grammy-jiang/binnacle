@@ -10,7 +10,7 @@ from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 
-from binnacle import job_cgroup
+from binnacle.resource_contracts import ResourceAccounting
 
 log = logging.getLogger("binnacle.jobs")
 
@@ -207,21 +207,22 @@ def finalize_async(
     cgroup: str,
     exit_meta: dict,
     *,
+    accounting: ResourceAccounting,
     history_root: Path,
     on_finalized: Callable[[dict], None],
 ) -> None:
     """Finalize counters after a detached descendant empties its cgroup."""
 
     def _watch() -> None:
-        if not job_cgroup.wait_empty(cgroup):
+        if not accounting.wait_empty(cgroup):
             log.warning(
                 "event=job_cgroup_finalizer_unavailable job_id=%s cgroup=%s",
                 job_id,
                 cgroup,
             )
             return
-        resources = job_cgroup.snapshot(cgroup)
-        cleaned = job_cgroup.cleanup(cgroup)
+        resources = accounting.snapshot(cgroup)
+        cleaned = accounting.cleanup(cgroup)
         final_meta = dict(exit_meta)
         final_meta.pop("cgroup_cleanup_pending", None)
         final_meta["resource_finalized_at"] = time.time()
