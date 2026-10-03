@@ -1,6 +1,6 @@
 # Commands and platform seams — G3 implementation design — 2026-10-03
 
-Status: **validating; G3.0-G3.7 locally complete, G3.8 convergence in progress**.
+Status: **validating; local convergence complete, integration and manager activation remain**.
 
 This is the execution design for Group 3 only. The control document is
 `docs/fastmcp-native-refactor-implementation-master-2026-10-02.md`.
@@ -1299,3 +1299,37 @@ local/CI/MCP deployment work, but must leave the manager running and G3 validati
 Manager activation requires this job to settle first and an operator outside
 that manager-owned job to establish the full exclusive admission/drain barrier.
 No user job may be stopped to satisfy this condition.
+
+## 17. Local convergence and admission blocker
+
+The complete managed Python 3.13 suite passed 2,043 parallel-safe tests with four
+skips and both ordinary-process tests. Pre-push passed. Coverage passed for all
+107 production modules with no module below its final target. All four command
+modules, both platform contracts, composition, process adapter, and store reached
+100 percent full-suite coverage. No coverage threshold or exclusion changed.
+
+The full local Python 3.10-3.14 matrix passed using the managed two-lane runner.
+The explicit wheel artifact test, both archived mixed-revision directions, and
+final byte-for-byte four-profile archive also passed. All local tests used the
+external private-spool isolation plugin; the tox override only forwards that
+plugin environment and does not change committed tox configuration.
+
+Coverage first exposed the isolated reload fixture's implicit status wait: its
+worker printed the correct payload but exceeded the 20-second child-process
+budget under instrumentation. Commit `e7f32e4` makes only that cursor inspection
+explicitly nonblocking. The 84 selected lifecycle/wait/cursor tests, both mixed
+revision directions, repeated coverage, and the matrix passed afterwards. The
+production wait defaults and dedicated timing assertions remain unchanged.
+
+A fresh ChatGPT source review at
+<https://chatgpt.com/c/6ac08d47-b018-83ec-9856-e4393730876a> approved cells 1-3 with
+no findings. Final gate evidence is submitted in the same fresh review for cell
+4 and exact-candidate implementation approval before publication. Production
+source is byte-identical to the source reviewed at `017c19c`; subsequent changes
+are the fixture correction and this evidence record.
+
+This is local convergence, not G3 completion. Exact-SHA CI, canonical MCP
+deployment, live evidence, and actual stable-manager activation are separate
+integration gates. The manager restart blocker in section 16 remains real:
+this worker must settle before an outside operator can establish the full
+exclusive admission barrier. No stable-manager restart is attempted here.

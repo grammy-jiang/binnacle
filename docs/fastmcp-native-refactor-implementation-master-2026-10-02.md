@@ -609,7 +609,8 @@ changing that behavioral baseline. G2 implementation through `6e6992f` passed
 repeated full local convergence. The reviewed clean candidate `27211d1` then
 passed exact-SHA CI, canonical deployment, live verification, and the real
 ChatGPT read-only call. G2 is done; section 20 records the exit evidence.
-G3 is implementing, with its command seam locally frozen through G3.2d.
+G3 is validating, with local Commands/platform convergence complete.
+Sections 23-24 record the integration work and stable-manager admission blocker.
 Section 22 records the handoff. G4-G6 remain queued.
 
 ## 19. G2 implementation evidence
@@ -852,3 +853,24 @@ that the current implementation worker itself runs as manager-owned durable job
 outside the manager-owned job must perform the approved exclusive admission/drain
 barrier and activation after this worker exits. Do not kill the job or claim G3
 done while the old manager remains active. G4-G6 remain queued.
+
+## 24. G3 local convergence
+
+Local convergence passed on the clean production source tree reviewed in
+`017c19c`. The managed Python 3.13 suite passed 2,043 parallel-safe tests and both
+ordinary-process tests. Pre-push passed. Coverage passed all 107 production
+modules with no module below target. The Python 3.10-3.14 managed matrix, explicit
+wheel artifact test, both archived mixed-revision directions, and exact
+four-profile wire comparison passed. The only convergence correction is
+`e7f32e4`: a cursor-only reload fixture explicitly requests zero wait to avoid
+spending its child-process budget on an unrelated default status wait under
+coverage. Its lifecycle/wait/cursor regressions passed unchanged.
+
+The fresh independent source review approved cells 1-3 without findings at
+<https://chatgpt.com/c/6ac08d47-b018-83ec-9856-e4393730876a>. Final gate evidence
+is submitted for cell 4 and exact-candidate implementation approval before CI
+publication. The detailed design section 17 records this checkpoint. CI,
+canonical deployment and live results remain separate evidence; the actual
+stable-manager restart is blocked until this manager-owned worker settles and
+an outside operator establishes the approved admission/drain barrier. G3 is
+not done, and G4-G6 remain queued.
