@@ -304,7 +304,8 @@ def test_stop_kills_the_whole_process_group():
     )
     child_pids = children()
     stop(p["job_id"])
-    assert _wait_until(lambda: all(not jobstore._pid_alive(pid) for pid in child_pids))
+    alive = jobstore._PROCESS_BACKEND.alive
+    assert _wait_until(lambda: all(not alive(pid) for pid in child_pids))
 
 
 def test_external_kill_via_run_command_is_recorded_and_visible():
@@ -425,7 +426,7 @@ def test_pid_reuse_is_not_reported_as_running(fresh_store):
 
 
 def test_pid_identity_match_reads_as_running(fresh_store):
-    mine = jobstore._proc_starttime(os.getpid())
+    mine = jobstore._PROCESS_BACKEND.starttime(os.getpid())
     _fake_job(
         "pidmatch00001",
         {

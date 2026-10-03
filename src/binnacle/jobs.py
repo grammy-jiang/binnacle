@@ -19,13 +19,8 @@ from binnacle import job_cgroup, job_resource_history, job_store
 from binnacle.callctx import current_call
 from binnacle.config import get_settings
 from binnacle.job_output import clip_head_tail as job_output_clip_head_tail
-from binnacle.job_process import (
-    _descendants,
-    _pid_alive,
-    _proc_starttime,
-    job_processes,
-    signal_group,
-)
+from binnacle.job_platform import create_process_backend
+from binnacle.job_process import signal_group
 
 logger = logging.getLogger("binnacle.jobs")
 
@@ -50,6 +45,7 @@ def _resolve_owner_mode() -> str:
 
 
 OWNER_MODE = _resolve_owner_mode()
+_PROCESS_BACKEND = create_process_backend()
 
 # stop_job timings; module-level so tests can shrink the escalation wait.
 STOP_SIGTERM_GRACE_S = 5.0  # wait for a clean SIGTERM exit before SIGKILL
@@ -315,7 +311,7 @@ def start_job(
             "workdir": str(workdir),
             "pid": proc.pid,
             "pgid": proc.pid,  # start_new_session ⇒ pgid == pid
-            "starttime": _proc_starttime(proc.pid),  # pid identity, see _pid_alive
+            "starttime": _PROCESS_BACKEND.starttime(proc.pid),  # opaque pid identity
             "started_at": time.time(),
             "call_id": call_id,
             "command_hash": command_hash,
@@ -379,7 +375,7 @@ def job_state(job_id: str) -> dict | None:
         last_output_age = None
     if "exit_code" in meta or "signal" in meta:
         state = "exited"
-    elif _pid_alive(meta["pid"], meta.get("starttime")):
+    elif _PROCESS_BACKEND.alive(meta["pid"], meta.get("starttime")):
         state = "running"
     else:
         state = "unknown"  # process gone but exit never recorded (server killed)
@@ -415,6 +411,10 @@ def job_state(job_id: str) -> dict | None:
         "log_bytes": log_bytes,
         "log_path": str(log_path),
     }
+
+
+def job_processes(pgid: int, max_cmd_chars: int = 200) -> list[dict]:
+    return _PROCESS_BACKEND.processes(pgid, max_cmd_chars)
 
 
 def list_jobs() -> list[dict]:
@@ -473,7 +473,7 @@ def stop_job_embedded(job_id: str) -> dict | None:
     # group and only findable through its parent's ppid link while the
     # parent lives. Group members are covered by killpg already.
     group = {p["pid"] for p in job_processes(pgid)}
-    strays = _descendants(state["pid"]) - group
+    strays = _PROCESS_BACKEND.descendants(state["pid"]) - group
     try:
         _signal_job(pgid, strays, signal.SIGTERM)
     except ProcessLookupError:

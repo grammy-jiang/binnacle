@@ -78,7 +78,9 @@ def test_stop_of_an_orphaned_job_returns_unknown_when_nobody_asked_to_stop_it(
     """Process gone, exit never recorded, no stop on record: there is nothing
     to wait for, so the transient "unknown" is what the caller gets."""
     _record("orphan000001", _job())
-    monkeypatch.setattr(jobstore, "_pid_alive", lambda pid, starttime=None: False)
+    monkeypatch.setattr(
+        jobstore._PROCESS_BACKEND, "alive", lambda pid, starttime=None: False
+    )
     monkeypatch.setattr(jobstore, "await_exit", lambda *a: pytest.fail("must not wait"))
     assert jobstore.stop_job_embedded("orphan000001")["state"] == "unknown"
 
@@ -89,7 +91,9 @@ def test_stop_of_an_orphaned_job_with_a_pending_stop_waits_for_the_record(
     """A stop was already requested and the process is gone: the reaper is
     about to write the exit, so bridge that window instead of saying unknown."""
     _record("orphan000002", _job(stop_requested=True))
-    monkeypatch.setattr(jobstore, "_pid_alive", lambda pid, starttime=None: False)
+    monkeypatch.setattr(
+        jobstore._PROCESS_BACKEND, "alive", lambda pid, starttime=None: False
+    )
     waits: list[float] = []
     settled = {"state": "exited", "signal": 15}
     monkeypatch.setattr(jobstore, "await_exit", _fake_await(waits, settled))
@@ -106,7 +110,9 @@ def test_stop_whose_group_vanished_before_sigterm_falls_through_to_the_record(
     """The lines that used to be covered only when two stops raced: the
     process group is gone between the "running" read and the killpg."""
     _record("racing000001", _job())
-    monkeypatch.setattr(jobstore, "_pid_alive", lambda pid, starttime=None: True)
+    monkeypatch.setattr(
+        jobstore._PROCESS_BACKEND, "alive", lambda pid, starttime=None: True
+    )
     signals: list[int] = []
 
     def gone(pgid: int, strays: set[int], sig: int) -> None:
@@ -126,7 +132,9 @@ def test_stop_escalates_to_sigkill_and_tolerates_a_group_that_died_meanwhile(
     store, monkeypatch, caplog
 ):
     _record("stubborn0001", _job())
-    monkeypatch.setattr(jobstore, "_pid_alive", lambda pid, starttime=None: True)
+    monkeypatch.setattr(
+        jobstore._PROCESS_BACKEND, "alive", lambda pid, starttime=None: True
+    )
     signals: list[int] = []
 
     def signal_job(pgid: int, strays: set[int], sig: int) -> None:
