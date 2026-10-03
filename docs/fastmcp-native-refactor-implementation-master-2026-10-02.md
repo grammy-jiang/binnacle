@@ -794,3 +794,19 @@ edits, push, deployment, or production service operation occurred.
 G3 is ready, not implementing or done. The coordinator independently reviews
 this design commit before starting a separate implementation task. G4-G6 remain
 queued.
+
+## 22. G3 serial command seam implementation
+
+G3 is implementing under the user's approved design at `78954f0`. The dedicated
+worker owns G3.0-G3.2d only, on `refactor/g3-commands-platform-seams` in
+`binnacle-g3-commands-impl`. The required handoff is a clean committed G3.2d
+freeze, with external manifests for separate G3.3 and G3.5a preparation lanes.
+No push, deploy, platform activation, or G4-G6 work is authorized in this worker.
+
+G3.0 passed 386 focused tests, architecture, seven import contracts, strict size,
+doctor, lock/runtime checks, and isolated lifecycle/accounting probes. Public
+wire, archived baseline source, spool fixtures, and the checkpoint ledger are
+retained at
+`~/.local/state/binnacle/g3-implementation-20261003T030542Z-m481gfu3/`.
+Section 15 of the detailed G3 design records the current implementation evidence.
+Production and remote deployment refs remain `68e690d`; G4-G6 remain queued.

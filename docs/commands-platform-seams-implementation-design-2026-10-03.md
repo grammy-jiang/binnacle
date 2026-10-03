@@ -1,6 +1,6 @@
 # Commands and platform seams — G3 implementation design — 2026-10-03
 
-Status: **ready; reviewed design, implementation has not started**.
+Status: **implementing; G3.0 baseline passed, G3.1 characterization next**.
 
 This is the execution design for Group 3 only. The control document is
 `docs/fastmcp-native-refactor-implementation-master-2026-10-02.md`.
@@ -1130,3 +1130,30 @@ claim that another writer's untracked files stayed byte-identical throughout.
 Only this document and the implementation master are committed. G3 is ready
 for coordinator review of this design commit, not implementing or done.
 Stop here; a separate task starts G3 implementation after that review.
+
+## 15. Serial implementation evidence
+
+The user authorized the dedicated implementation worker at design commit
+`78954f08b0024f151082bbdb59677c8ea0513fa2`, on
+`refactor/g3-commands-platform-seams` in `binnacle-g3-commands-impl`.
+This worker owns only G3.0 through G3.2d. It must stop at a clean committed
+G3.2d freeze for separate Process and Resource preparation lanes. It must not
+push, deploy, activate platform ports, or begin G4-G6.
+
+External evidence and the durable checkpoint ledger are at
+`/home/grammy-jiang/.local/state/binnacle/g3-implementation-20261003T030542Z-m481gfu3`.
+
+G3.0 passed: clean assigned HEAD, doctor 9/9, current offline lock, arm64 runtime,
+FastMCP/FastMCP-slim 4.0.10 and MCP/MCP-types 2.1.1. Production HEAD and remote
+deployment refs remain `68e690d`. The older local `proof-of-concept` ref was
+observed and left unchanged. Other worktrees and production documents were
+not changed. The usage guard returned its critical exit; no unattended manager
+was started.
+
+The B+C+L+M+D+P+R+T baseline passed 386 tests with seed 12345. Architecture,
+all seven import contracts, and strict size passed. The four-profile raw wire
+archive preserves all three Commands hashes. The archived baseline package,
+spool fixtures, isolated manager/embedded lifecycle and accounting probes are
+retained externally. The probes confirmed manager survival of MCP-worker exit,
+fresh-root cursor/stop behavior, PID token checks, and optional accounting.
+No production service operation occurred.
