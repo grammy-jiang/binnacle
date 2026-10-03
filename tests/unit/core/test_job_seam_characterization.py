@@ -63,9 +63,9 @@ def test_manager_record_routes_stop_with_embedded_default(monkeypatch):
     monkeypatch.setattr(jobs, "OWNER_MODE", "embedded")
     monkeypatch.setattr(jobs, "job_state", lambda job: next(states))
     monkeypatch.setattr(
-        jobs,
-        "_read_meta",
-        lambda job: {"schema_version": 2, "owner_instance_id": "old"},
+        job_store,
+        "read_meta",
+        lambda root, job: {"schema_version": 2, "owner_instance_id": "old"},
     )
     monkeypatch.setattr(
         job_client, "stop", lambda *args, **kwargs: calls.append((args, kwargs))
@@ -118,3 +118,87 @@ def test_each_atomic_write_uses_distinct_complete_temporary_file(tmp_path, monke
     assert observed[0][0] != observed[1][0]
     assert [text for _, text in observed] == ['{"value": 1}', '{"value": 2}']
     assert [path.name for path in (tmp_path / "fixed").iterdir()] == ["meta.json"]
+
+
+def test_owner_uses_public_store_and_shared_lock(tmp_path, monkeypatch):
+    from binnacle import job_owner, job_store
+
+    assert jobs._STORE_LOCK is job_store.STORE_LOCK
+    monkeypatch.setattr(jobs, "JOBS_DIR", tmp_path)
+    job_id = "public-store"
+    (tmp_path / job_id).mkdir()
+    record = {
+        "command": "true",
+        "workdir": "/tmp",
+        "pid": 12,
+        "started_at": 1,
+        "schema_version": 2,
+        "owner_instance_id": "old",
+        "boot_id": "boot",
+    }
+    job_store.write_meta(tmp_path, job_id, record)
+
+    def private(*args):
+        raise AssertionError("owner reached private jobs storage")
+
+    monkeypatch.setattr(jobs, "_read_meta", private)
+    monkeypatch.setattr(jobs, "_write_meta", private)
+    job_owner.mark_stop_requested(job_id)
+    assert job_store.read_meta(tmp_path, job_id)["stop_requested"] is True
+    assert job_owner.recover_previous_owner("new", "different-boot") == 1
+    final = job_store.read_meta(tmp_path, job_id)
+    assert final["termination_reason"] == "stop_requested"
+    assert final["exit_code"] is None and final["signal"] is None
+    state = {"state": "exited"}
+    monkeypatch.setattr(jobs, "job_state", lambda job: state)
+    assert job_owner.stop_job(job_id) is state
+
+
+def test_shared_store_lock_covers_prune_launch_and_publication(tmp_path, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from types import SimpleNamespace
+
+    from binnacle import job_store
+
+    assert jobs._STORE_LOCK is job_store.STORE_LOCK
+    monkeypatch.setattr(jobs, "JOBS_DIR", tmp_path / "jobs")
+    events = []
+
+    def unavailable_to_other_thread():
+        acquired = job_store.STORE_LOCK.acquire(blocking=False)
+        if acquired:
+            job_store.STORE_LOCK.release()
+        return not acquired
+
+    with ThreadPoolExecutor(max_workers=1) as pool:
+
+        def check(phase):
+            assert pool.submit(unavailable_to_other_thread).result(timeout=2)
+            events.append(phase)
+
+        real_prune = jobs._prune
+        real_write = job_store.write_meta
+
+        def prune(reserve=0):
+            check("prune")
+            real_prune(reserve)
+
+        def launch(*args, **kwargs):
+            check("launch")
+            return SimpleNamespace(pid=71, returncode=0)
+
+        def write(root, job, meta):
+            check("publish")
+            real_write(root, job, meta)
+
+        monkeypatch.setattr(jobs, "_prune", prune)
+        monkeypatch.setattr(
+            jobs,
+            "_PROCESS_BACKEND",
+            SimpleNamespace(launch=launch, starttime=lambda pid: 99),
+        )
+        monkeypatch.setattr(job_store, "write_meta", write)
+        job_id, _ = jobs.start_job("fake", tmp_path, None)
+        assert job_store.read_meta(jobs.JOBS_DIR, job_id)["starttime"] == 99
+        assert events == ["prune", "launch", "publish"]
+        assert not pool.submit(unavailable_to_other_thread).result(timeout=2)

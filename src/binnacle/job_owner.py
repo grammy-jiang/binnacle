@@ -43,15 +43,15 @@ def start_and_wait(
 
 
 def mark_stop_requested(job_id: str) -> None:
-    from binnacle import jobs
+    from binnacle import job_store, jobs
 
-    with jobs._STORE_LOCK:
-        meta = jobs._read_meta(job_id)
+    with job_store.STORE_LOCK:
+        meta = job_store.read_meta(jobs.JOBS_DIR, job_id)
         if meta is None or "exit_code" in meta or "signal" in meta:
             return
         meta["stop_requested"] = True
         meta["stop_call_id"] = current_call.get()
-        jobs._write_meta(job_id, meta)
+        job_store.write_meta(jobs.JOBS_DIR, job_id, meta)
     logger.info(
         "event=job_stop_requested job_id=%s call=%s origin_call=%s "
         "owner_instance=%s command_hash=%s",
@@ -66,13 +66,13 @@ def mark_stop_requested(job_id: str) -> None:
 def _record_interruption(
     job_id: str, meta: dict, reason: str, current_owner: str
 ) -> None:
-    from binnacle import jobs
+    from binnacle import job_store, jobs
 
     meta["exit_code"] = None
     meta["signal"] = None
     meta["ended_at"] = time.time()
     meta["termination_reason"] = reason
-    jobs._write_meta(job_id, meta)
+    job_store.write_meta(jobs.JOBS_DIR, job_id, meta)
     logger.warning(
         "event=job_interrupted job_id=%s reason=%s call=%s previous_owner=%s "
         "current_owner=%s command_hash=%s",
@@ -91,7 +91,7 @@ def recover_previous_owner(current_owner: str, current_boot: str) -> int:
 
     recovered = 0
     for job_id in job_store.list_job_ids(jobs.JOBS_DIR):
-        meta = jobs._read_meta(job_id)
+        meta = job_store.read_meta(jobs.JOBS_DIR, job_id)
         if meta is None or meta.get("schema_version") != 2:
             continue
         if "exit_code" in meta or "signal" in meta:
@@ -111,12 +111,12 @@ def recover_previous_owner(current_owner: str, current_boot: str) -> int:
 
 def stop_job(job_id: str) -> dict | None:
     """Stop a running manager-owned job; terminal jobs are locally idempotent."""
-    from binnacle import job_client, jobs
+    from binnacle import job_client, job_store, jobs
 
     state = jobs.job_state(job_id)
     if state is None:
         return None
-    meta = jobs._read_meta(job_id)
+    meta = job_store.read_meta(jobs.JOBS_DIR, job_id)
     if state["state"] == "unknown" and meta is not None and meta.get("stop_requested"):
         # Another concurrent stop may have killed the process just before its
         # reaper persisted the terminal state. Wait for that durable record

@@ -1,6 +1,6 @@
 """Selection of the durable owner in managed vs ad-hoc deployments."""
 
-from binnacle import jobs
+from binnacle import job_store, jobs
 
 
 def test_auto_owner_is_embedded_outside_managed_deployment(monkeypatch):
@@ -35,7 +35,9 @@ def test_concurrent_stop_waits_for_durable_exit_record(monkeypatch):
         "signal": 15,
     }
     monkeypatch.setattr(jobs, "job_state", lambda job_id: transient)
-    monkeypatch.setattr(jobs, "_read_meta", lambda job_id: {"stop_requested": True})
+    monkeypatch.setattr(
+        job_store, "read_meta", lambda root, job_id: {"stop_requested": True}
+    )
     monkeypatch.setattr(jobs, "await_exit", lambda job_id, timeout: settled)
 
     assert job_owner.stop_job("job") is settled

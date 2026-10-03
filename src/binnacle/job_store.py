@@ -6,8 +6,11 @@ store root so deployment/tests can repoint it without hidden global state.
 
 import json
 import os
+import threading
 import uuid
 from pathlib import Path
+
+STORE_LOCK = threading.RLock()  # Process-local; not an interprocess transaction.
 
 META_REQUIRED = ("command", "workdir", "pid", "started_at")
 

@@ -54,7 +54,7 @@ STOP_SIGKILL_GRACE_S = 2.0  # wait for the forced exit to be recorded
 # enter start_job concurrently through FastMCP's worker pool; without one store
 # lock they can prune the same slot and both create a new directory. RLock lets
 # start_job call _prune(), whose direct/test callers are protected too.
-_STORE_LOCK = threading.RLock()
+_STORE_LOCK = job_store.STORE_LOCK
 
 # stdout+stderr merge, interactivity neutered (Gemini's env hygiene set).
 _ENV_OVERRIDES = {
