@@ -3,8 +3,6 @@
 Spec: docs/tools/run_command.md. Shared job machinery: jobs.py.
 """
 
-import logging
-import time
 from typing import Annotated
 
 from fastmcp import FastMCP
@@ -12,15 +10,12 @@ from fastmcp.exceptions import ToolError
 from fastmcp.tools.base import ToolResult
 from pydantic import Field
 
-from binnacle import job_output, job_owner, jobs
-from binnacle.callctx import current_argument_names, current_call, current_client
+from binnacle import command_execution
+from binnacle.command_backend import create_command_backend
+from binnacle.command_contracts import CommandBackend, CommandFailure
 from binnacle.config import RootsSettings, RunCommandSettings, get_settings
 from binnacle.errors import CodedToolError
 from binnacle.paths import resolve_path
-from binnacle.run_command_evidence import record_auto_match
-from binnacle.run_command_telemetry import DispatchPlan
-
-log = logging.getLogger("binnacle.run_command")
 
 OUTPUT_SCHEMA = {
     "type": "object",
@@ -42,43 +37,6 @@ OUTPUT_SCHEMA = {
 }
 
 
-def _shaped_output(
-    job_id: str, tail_lines: int | None
-) -> job_output.RunCommandOutputShape:
-    log_text = jobs.read_log(job_id).decode("utf-8", errors="replace")
-    return job_output.shape_run_command_output(
-        log_text, jobs.RUN_MAX_OUTPUT_CHARS, tail_lines
-    )
-
-
-def _log_output_shaping(
-    call_id: str,
-    job_id: str,
-    state: str,
-    shape: job_output.RunCommandOutputShape,
-    tail_lines: int | None,
-    log_bytes: int,
-) -> None:
-    if not shape.truncated:
-        return
-    log.info(
-        "event=run_command_output_shaping call=%s job_id=%s state=%s reason=%s "
-        "tail_lines=%s dropped_lines=%d char_clipped=%s selected_chars=%d "
-        "returned_chars=%d omitted_chars=%d log_bytes=%d",
-        call_id,
-        job_id,
-        state,
-        shape.reason,
-        tail_lines if tail_lines is not None else "-",
-        shape.dropped_lines,
-        str(shape.char_clipped).lower(),
-        shape.selected_chars,
-        shape.returned_chars,
-        shape.omitted_chars,
-        log_bytes,
-    )
-
-
 def run_command_impl(
     command: str,
     workdir: str,
@@ -89,6 +47,7 @@ def run_command_impl(
     *,
     roots: RootsSettings | None = None,
     settings: RunCommandSettings | None = None,
+    backend: CommandBackend | None = None,
 ) -> ToolResult:
     settings = get_settings().run_command if settings is None else settings
     resolved = resolve_path(workdir, roots=roots)
@@ -98,122 +57,21 @@ def run_command_impl(
             f"workdir is not a directory: {resolved}. "
             f"Use a directory inside ~/Projects or /tmp.",
         )
-    argument_names = current_argument_names.get()
-    plan = DispatchPlan.build(
-        command=command,
-        wait_seconds=wait_seconds,
-        background=background,
-        argument_names=argument_names,
-        client=current_client.get(),
-        settings=settings,
-        warmup_s=jobs.WARMUP_S,
-        wait_max_s=settings.wait_max_s,
-        owner=jobs.OWNER_MODE,
-    )
-    call_id = current_call.get()
-    plan.log_auto_background(call_id)
-    if plan.auto_background and plan.auto_rule_hash is not None:
-        record_auto_match(
-            retention_days=settings.auto_background_evidence_retention_days,
-            call_id=call_id,
-            client=plan.client,
-            command=command,
-            command_hash=plan.command_hash,
-            policy_hash=plan.auto_policy_hash,
-            behavior_hash=plan.auto_behavior_hash,
-            semantics_version=plan.auto_semantics_version,
-            auto_warmup_s=plan.auto_warmup_s,
-            rule_hash=plan.auto_rule_hash,
-            match_start=plan.auto_match_start,
-            match_end=plan.auto_match_end,
-            root=settings.auto_background_evidence_dir,
-        )
-    owner_started = time.perf_counter()
+    backend = create_command_backend() if backend is None else backend
     try:
-        job_id = job_owner.start_and_wait(
-            command, resolved, stdin, plan.effective_wait_s
+        reply = command_execution.run_command(
+            command,
+            resolved,
+            wait_seconds,
+            background,
+            stdin,
+            tail_lines,
+            backend=backend,
+            settings=settings,
         )
-    except (OSError, RuntimeError) as exc:
-        plan.log_error(call_id, (time.perf_counter() - owner_started) * 1000, exc)
-        raise ToolError(
-            f"Could not start the job: {exc}. Run `binnacle doctor`."
-        ) from exc
-
-    owner_roundtrip_ms = (time.perf_counter() - owner_started) * 1000
-    state = jobs.job_state(job_id)
-    returned_state = state["state"] if state else "unknown"
-    owner_instance = str((state or {}).get("owner_instance_id") or "-")[:12]
-    plan.log_success(
-        call_id, job_id, returned_state, owner_roundtrip_ms, owner_instance
-    )
-    shape = _shaped_output(job_id, tail_lines)
-    output, truncated = shape.output, shape.truncated
-    _log_output_shaping(
-        call_id,
-        job_id,
-        returned_state,
-        shape,
-        tail_lines,
-        int((state or {}).get("log_bytes") or 0),
-    )
-
-    if state and state["state"] == "exited":
-        payload = {
-            "job_id": job_id,
-            "state": "exited",
-            "exit_code": state["exit_code"],
-            "output": output,
-            "truncated": truncated,
-            "output_bytes": state["log_bytes"],
-            "duration_s": state["runtime_s"],
-            "log_path": state["log_path"],
-            "workdir": str(resolved),
-            "background_job": False,
-        }
-        if state["signal"] is not None:
-            payload["signal"] = state["signal"]
-        rc = state["exit_code"]
-        if state["signal"] is not None:
-            summary = f"Command killed by signal {state['signal']} after {state['runtime_s']} s."
-        elif rc == 0:
-            summary = f"Command exited 0 in {state['runtime_s']} s."
-        else:
-            summary = f"Command exited {rc} in {state['runtime_s']} s."
-        # The command finished inline; there is no lingering job. Say so, because
-        # models otherwise poll job_status to check (measured: 50 such no-arg
-        # calls in a week, docs/usage-analysis-2026-09-06.md).
-        summary += " It finished synchronously; no background job was created, so no job_status or stop_job is needed."
-        return ToolResult(content=summary, structured_content=payload)
-
-    # still running → hand back the job_id
-    payload = {
-        "job_id": job_id,
-        "state": "running",
-        "output": output,
-        "truncated": truncated,
-        "output_bytes": state["log_bytes"] if state else 0,
-        "runtime_s": state["runtime_s"] if state else 0,
-        "log_path": state["log_path"] if state else "",
-        "workdir": str(resolved),
-        "background_job": True,
-    }
-    reason = (
-        "started in background by local policy"
-        if plan.auto_background
-        else "started in background"
-        if plan.background_requested
-        else f"still running after {plan.bounded_wait_s} s"
-    )
-    summary = (
-        f"Command {reason}; job_id={job_id}. "
-        "This durable job keeps running without this ChatGPT turn. Unless the "
-        "user explicitly asked you to wait for completion, report the job_id "
-        "and current progress and return control instead of polling repeatedly; "
-        "the user can ask for status later. Suggest a check-back interval only "
-        "when grounded in the task or observed progress. Use job_status for a "
-        "later update, or stop_job to cancel."
-    )
-    return ToolResult(content=summary, structured_content=payload)
+    except CommandFailure as exc:
+        raise ToolError(str(exc)) from exc.__cause__
+    return ToolResult(content=reply.summary, structured_content=reply.payload)
 
 
 def register(
@@ -221,12 +79,15 @@ def register(
     *,
     roots: RootsSettings | None = None,
     settings: RunCommandSettings | None = None,
+    backend: CommandBackend | None = None,
 ) -> None:
     if roots is None or settings is None:
         defaults = get_settings()
         roots = defaults.roots if roots is None else roots
         settings = defaults.run_command if settings is None else settings
     roots, settings = roots.model_copy(deep=True), settings.model_copy(deep=True)
+
+    backend = create_command_backend() if backend is None else backend
 
     @mcp.tool(
         annotations={
@@ -287,4 +148,5 @@ def register(
             tail_lines,
             roots=roots,
             settings=settings,
+            backend=backend,
         )

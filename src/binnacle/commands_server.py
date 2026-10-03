@@ -2,12 +2,15 @@
 
 from fastmcp import FastMCP
 
+from binnacle.command_backend import create_command_backend
+from binnacle.command_contracts import CommandBackend
 from binnacle.config import RootsSettings, RunCommandSettings, get_settings
 from binnacle.tools import job_status, run_command, stop_job
 
 
 def create_commands_server(
     *,
+    backend: CommandBackend | None = None,
     roots: RootsSettings | None = None,
     run_settings: RunCommandSettings | None = None,
     quiet_after_s: int | None = None,
@@ -42,8 +45,9 @@ def create_commands_server(
         roots.model_copy(deep=True),
         run_settings.model_copy(deep=True),
     )
+    backend = create_command_backend() if backend is None else backend
     commands = FastMCP("binnacle-commands", on_duplicate="error")
-    run_command.register(commands, roots=roots, settings=run_settings)
+    run_command.register(commands, roots=roots, settings=run_settings, backend=backend)
     job_status.register(
         commands,
         quiet_after_s=quiet_after_s,

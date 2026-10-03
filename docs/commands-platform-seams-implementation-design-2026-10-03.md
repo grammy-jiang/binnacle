@@ -1,6 +1,6 @@
 # Commands and platform seams — G3 implementation design — 2026-10-03
 
-Status: **implementing; G3.2a unused command port passed, run extraction next**.
+Status: **implementing; G3.2b run extraction passed, status extraction next**.
 
 This is the execution design for Group 3 only. The control document is
 `docs/fastmcp-native-refactor-implementation-master-2026-10-02.md`.
@@ -1179,3 +1179,11 @@ All values, unknown dictionary keys, and exception identities pass through.
 The focused selection passed 423 tests; architecture, seven import contracts,
 strict size, and mypy passed. The complete wire archive is byte-identical to G3.0.
 A capture-script filename collision was corrected in external evidence only.
+
+G3.2b moves run dispatch/output/telemetry to `command_execution` over the explicit
+backend. The adapter retains path validation, copied settings, MCP conversion,
+and call-time implementation lookup. Factory injection preserves backend identity,
+including false-valued fakes. Exact error causes and unexpected exceptions remain
+unchanged. Fake-backed native run calls prove isolation and argument ordering.
+The focused selection passed 428 tests; architecture, seven import contracts,
+strict size, and mypy passed. The full wire archive remains byte-identical.

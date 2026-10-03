@@ -6,7 +6,7 @@ import pytest
 from fastmcp import Client
 from fastmcp.tools.base import ToolResult
 
-from binnacle import commands_server, jobs, paths
+from binnacle import commands_server, job_owner, jobs, paths
 from binnacle.config import RootsSettings, RunCommandSettings
 from binnacle.tools import job_status, run_command
 
@@ -23,7 +23,7 @@ def backend(monkeypatch):
         calls.append((command, workdir, stdin, wait))
         return "synthetic-job"
 
-    monkeypatch.setattr(run_command.job_owner, "start_and_wait", start)
+    monkeypatch.setattr(job_owner, "start_and_wait", start)
     monkeypatch.setattr(jobs, "job_state", lambda job_id: None)
     monkeypatch.setattr(jobs, "read_log", lambda job_id: b"")
     return calls
