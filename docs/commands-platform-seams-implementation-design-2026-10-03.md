@@ -1,6 +1,6 @@
 # Commands and platform seams — G3 implementation design — 2026-10-03
 
-Status: **implementing; G3.0 baseline passed, G3.1 characterization next**.
+Status: **implementing; G3.1 characterization passed, command port next**.
 
 This is the execution design for Group 3 only. The control document is
 `docs/fastmcp-native-refactor-implementation-master-2026-10-02.md`.
@@ -1157,3 +1157,16 @@ spool fixtures, isolated manager/embedded lifecycle and accounting probes are
 retained externally. The probes confirmed manager survival of MCP-worker exit,
 fresh-root cursor/stop behavior, PID token checks, and optional accounting.
 No production service operation occurred.
+
+G3.1 added exact run/stop replies, exception causes and catch boundaries,
+wait-error timing, scripted post-death/reaper waits, owner routing, resource-only
+merge keys, prune-safe finalizer callbacks, distinct atomic temporary files,
+process-summary parsing, and separate MCP-worker reload characterization.
+The broad B+C+V+L+M+D+P+R+T selection passed 486 tests; the final eight-case
+lifecycle characterization selection also passed after two additional wait cases.
+Architecture, seven import contracts, and strict size passed. An intentional
+resource-merge fault failed the exact-field test, without changing source files.
+Both archived-baseline/candidate revision directions passed start/cursor/stop/
+repeated-stop probes. The isolated HTTP admission probe passed, including a
+late-arrival job and the exact `cgroup_cleanup_pending` barrier. Production
+source, persisted fixtures, schemas, dependencies, and services are unchanged.
