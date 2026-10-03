@@ -51,7 +51,7 @@ def test_keep_newest_config_requires_at_least_one_slot():
 
 
 def test_start_job_lock_releases_after_popen_failure(fresh_store, monkeypatch):
-    real_popen = jobstore.subprocess.Popen
+    real_popen = jobstore._PROCESS_BACKEND.launch
     failed = False
 
     def fail_once(*args, **kwargs):
@@ -61,7 +61,7 @@ def test_start_job_lock_releases_after_popen_failure(fresh_store, monkeypatch):
             raise OSError("synthetic popen failure")
         return real_popen(*args, **kwargs)
 
-    monkeypatch.setattr(jobstore.subprocess, "Popen", fail_once)
+    monkeypatch.setattr(jobstore._PROCESS_BACKEND, "launch", fail_once)
     with pytest.raises(OSError, match="synthetic popen failure"):
         jobstore.start_job("true", Path("/tmp"), None)
 

@@ -9,8 +9,6 @@ from process memory (ChatGPT re-initializes per call — no session state).
 import hashlib
 import logging
 import os
-import signal
-import subprocess
 import threading
 import time
 from pathlib import Path
@@ -20,7 +18,7 @@ from binnacle.callctx import current_call
 from binnacle.config import get_settings
 from binnacle.job_output import clip_head_tail as job_output_clip_head_tail
 from binnacle.job_platform import create_process_backend
-from binnacle.job_process import signal_group
+from binnacle.process_contracts import ProcessHandle
 
 logger = logging.getLogger("binnacle.jobs")
 
@@ -156,7 +154,7 @@ def _save_final_resource_meta(job_id: str, final_meta: dict) -> None:
             pass
 
 
-def record_exit(job_id: str, proc: subprocess.Popen) -> None:
+def record_exit(job_id: str, proc: ProcessHandle) -> None:
     """Write an already-exited process's status to meta.json.
 
     The exit is read from the in-memory Popen object (``proc.returncode``),
@@ -239,7 +237,7 @@ def record_exit(job_id: str, proc: subprocess.Popen) -> None:
     )
 
 
-def reap_in_background(job_id: str, proc: subprocess.Popen) -> None:
+def reap_in_background(job_id: str, proc: ProcessHandle) -> None:
     """Watch a still-running job from a daemon thread and record its exit.
 
     Used only when a command outlives its wait window and becomes a real
@@ -262,7 +260,7 @@ def start_job(
     *,
     owner_instance_id: str | None = None,
     boot_id: str | None = None,
-) -> tuple[str, subprocess.Popen]:
+) -> tuple[str, ProcessHandle]:
     # The whole reservation -> process launch -> complete meta sequence is one
     # store transaction. A second concurrent start must see the first new job
     # before deciding which old slot to prune.
@@ -294,14 +292,12 @@ def start_job(
             if stdin is not None
             else open(os.devnull, "rb") as inf,
         ):
-            proc = subprocess.Popen(
+            proc = _PROCESS_BACKEND.launch(
                 job_cgroup.launch_argv(command, cgroup),
-                cwd=str(workdir),
+                workdir=workdir,
                 env=env,
                 stdin=inf,
-                stdout=logf,
-                stderr=subprocess.STDOUT,
-                start_new_session=True,  # own process group; survives across turns
+                output=logf,
             )
         call_id = current_call.get()
         command_hash = hashlib.sha256(command.encode()).hexdigest()[:12]
@@ -424,16 +420,6 @@ def list_jobs() -> list[dict]:
     return states
 
 
-def _signal_job(pgid: int, strays: set[int], sig: int) -> None:
-    """Signal the job's process group, then any descendant outside it."""
-    signal_group(pgid, sig)
-    for pid in strays:
-        try:
-            os.kill(pid, sig)
-        except ProcessLookupError:
-            pass
-
-
 def await_exit(job_id: str, timeout: float) -> dict | None:
     """Return the job's state, waiting up to ``timeout`` for it to be recorded.
 
@@ -475,7 +461,7 @@ def stop_job_embedded(job_id: str) -> dict | None:
     group = {p["pid"] for p in job_processes(pgid)}
     strays = _PROCESS_BACKEND.descendants(state["pid"]) - group
     try:
-        _signal_job(pgid, strays, signal.SIGTERM)
+        _PROCESS_BACKEND.signal_job(pgid, strays, "terminate")
     except ProcessLookupError:
         return await_exit(job_id, STOP_SIGKILL_GRACE_S)
     # Wait for the recorded exit, not just for the pid to disappear: the
@@ -491,7 +477,7 @@ def stop_job_embedded(job_id: str) -> dict | None:
         STOP_SIGTERM_GRACE_S,
     )
     try:
-        _signal_job(pgid, strays, signal.SIGKILL)
+        _PROCESS_BACKEND.signal_job(pgid, strays, "kill")
     except ProcessLookupError:
         pass
     return await_exit(job_id, STOP_SIGKILL_GRACE_S)

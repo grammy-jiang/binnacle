@@ -18,6 +18,7 @@ import signal
 
 import pytest
 
+from binnacle import job_process
 from binnacle import jobs as jobstore
 
 #: A pid no live process should have; nothing here signals it for real.
@@ -67,7 +68,9 @@ def test_stop_of_an_unknown_job_id_returns_none(store):
 def test_stop_of_an_exited_job_returns_its_record_without_signaling(store, monkeypatch):
     _record("exited000001", _job(exit_code=0, ended_at=2.0))
     monkeypatch.setattr(
-        jobstore, "_signal_job", lambda *a: pytest.fail("must not signal")
+        jobstore._PROCESS_BACKEND,
+        "signal_job",
+        lambda *a: pytest.fail("must not signal"),
     )
     assert jobstore.stop_job_embedded("exited000001")["state"] == "exited"
 
@@ -113,18 +116,18 @@ def test_stop_whose_group_vanished_before_sigterm_falls_through_to_the_record(
     monkeypatch.setattr(
         jobstore._PROCESS_BACKEND, "alive", lambda pid, starttime=None: True
     )
-    signals: list[int] = []
+    signals: list[str] = []
 
-    def gone(pgid: int, strays: set[int], sig: int) -> None:
+    def gone(pgid: int, strays: set[int], sig: str) -> None:
         signals.append(sig)
         raise ProcessLookupError
 
-    monkeypatch.setattr(jobstore, "_signal_job", gone)
+    monkeypatch.setattr(jobstore._PROCESS_BACKEND, "signal_job", gone)
     waits: list[float] = []
     settled = {"state": "exited", "signal": 15}
     monkeypatch.setattr(jobstore, "await_exit", _fake_await(waits, settled))
     assert jobstore.stop_job_embedded("racing000001") is settled
-    assert signals == [signal.SIGTERM]
+    assert signals == ["terminate"]
     assert waits == [jobstore.STOP_SIGKILL_GRACE_S]
 
 
@@ -135,14 +138,14 @@ def test_stop_escalates_to_sigkill_and_tolerates_a_group_that_died_meanwhile(
     monkeypatch.setattr(
         jobstore._PROCESS_BACKEND, "alive", lambda pid, starttime=None: True
     )
-    signals: list[int] = []
+    signals: list[str] = []
 
-    def signal_job(pgid: int, strays: set[int], sig: int) -> None:
+    def signal_job(pgid: int, strays: set[int], sig: str) -> None:
         signals.append(sig)
-        if sig == signal.SIGKILL:
+        if sig == "kill":
             raise ProcessLookupError  # died between the SIGTERM grace and now
 
-    monkeypatch.setattr(jobstore, "_signal_job", signal_job)
+    monkeypatch.setattr(jobstore._PROCESS_BACKEND, "signal_job", signal_job)
     waits: list[float] = []
     settled = {"state": "exited", "signal": 9}
     answers = iter(({"state": "running"}, settled))
@@ -154,26 +157,26 @@ def test_stop_escalates_to_sigkill_and_tolerates_a_group_that_died_meanwhile(
     monkeypatch.setattr(jobstore, "await_exit", await_exit)
     with caplog.at_level(logging.WARNING, logger="binnacle.jobs"):
         assert jobstore.stop_job_embedded("stubborn0001") is settled
-    assert signals == [signal.SIGTERM, signal.SIGKILL]
+    assert signals == ["terminate", "kill"]
     assert waits == [jobstore.STOP_SIGTERM_GRACE_S, jobstore.STOP_SIGKILL_GRACE_S]
     assert any("event=job_stop_escalate" in r.getMessage() for r in caplog.records)
 
 
 def test_a_stray_descendant_that_exited_first_is_skipped(monkeypatch):
-    """_signal_job: the setsid()'d child collected before the signal may be
+    """signal_job: the setsid()'d child collected before the signal may be
     gone by the time its turn comes; that is not an error."""
     groups: list[tuple[int, int]] = []
     monkeypatch.setattr(
-        jobstore, "signal_group", lambda pgid, sig: groups.append((pgid, sig))
+        job_process, "signal_group", lambda pgid, sig: groups.append((pgid, sig))
     )
     killed: list[int] = []
 
-    def kill(pid: int, sig: int) -> None:
+    def kill(pid: int, sig: str) -> None:
         killed.append(pid)
         raise ProcessLookupError
 
     monkeypatch.setattr(os, "kill", kill)
-    jobstore._signal_job(FAKE_PID, {FAKE_PID + 1}, signal.SIGTERM)
+    jobstore._PROCESS_BACKEND.signal_job(FAKE_PID, {FAKE_PID + 1}, "terminate")
     assert groups == [(FAKE_PID, signal.SIGTERM)] and killed == [FAKE_PID + 1]
 
 

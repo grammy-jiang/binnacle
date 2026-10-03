@@ -21,6 +21,7 @@ from binnacle import job_cgroup, job_owner, jobs
 from binnacle.callctx import current_call
 from binnacle.config import get_settings
 from binnacle.job_client import PROTOCOL_VERSION
+from binnacle.job_platform import create_process_backend
 from binnacle.provenance import runtime_provenance
 
 logging.basicConfig(
@@ -46,10 +47,7 @@ def _notify_systemd_ready() -> None:
 
 
 def _boot_id() -> str:
-    try:
-        return Path("/proc/sys/kernel/random/boot_id").read_text().strip()
-    except OSError:
-        return "unknown"
+    return create_process_backend().boot_id()
 
 
 class _ThreadingUnixServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
