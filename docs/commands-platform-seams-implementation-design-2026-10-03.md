@@ -1,6 +1,6 @@
 # Commands and platform seams — G3 implementation design — 2026-10-03
 
-Status: **implementing; G3.1 characterization passed, command port next**.
+Status: **implementing; G3.2a unused command port passed, run extraction next**.
 
 This is the execution design for Group 3 only. The control document is
 `docs/fastmcp-native-refactor-implementation-master-2026-10-02.md`.
@@ -1170,3 +1170,12 @@ Both archived-baseline/candidate revision directions passed start/cursor/stop/
 repeated-stop probes. The isolated HTTP admission probe passed, including a
 late-arrival job and the exact `cgroup_cleanup_pending` barrier. Production
 source, persisted fixtures, schemas, dependencies, and services are unchanged.
+
+G3.2a adds only the frozen reply/failure/backend contracts and the stateless
+`DurableCommandBackend`, with delegate and subprocess construction tests.
+Exported tools do not use it yet. Construction imports no engine/settings;
+explicit default selection captures the existing engine settings before requests.
+All values, unknown dictionary keys, and exception identities pass through.
+The focused selection passed 423 tests; architecture, seven import contracts,
+strict size, and mypy passed. The complete wire archive is byte-identical to G3.0.
+A capture-script filename collision was corrected in external evidence only.
