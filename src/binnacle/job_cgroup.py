@@ -148,6 +148,21 @@ def launch_argv(
     return ["bash", "-c", bootstrap, "binnacle-cgroup", str(procs), command]
 
 
+def wrap_argv(
+    argv: list[str], cgroup: str | None, *, cgroup_fs: Path = CGROUP_FS
+) -> list[str]:
+    """Attach before exec without choosing or changing the supplied command argv.
+
+    A failed attach still reaches exec, preserving the wrapper PID and normal
+    execution when accounting is unavailable. The caller's list is not mutated.
+    """
+    if not cgroup:
+        return argv
+    procs = _fs_path(cgroup, cgroup_fs=cgroup_fs) / "cgroup.procs"
+    bootstrap = 'printf "%s\\n" "$$" > "$1" 2>/dev/null || true; shift; exec "$@"'
+    return ["bash", "-c", bootstrap, "binnacle-cgroup", str(procs), *argv]
+
+
 def _kv(path: Path) -> dict[str, int]:
     out: dict[str, int] = {}
     try:
@@ -293,3 +308,27 @@ def move_pid(pid: int, cgroup: str, *, cgroup_fs: Path = CGROUP_FS) -> bool:
         return True
     except OSError:
         return False
+
+
+class CgroupResourceAccounting:
+    """Unused accounting port over the existing best-effort Linux helpers."""
+
+    __slots__ = ()
+
+    def prepare(self, *, log_ready: bool = False) -> str | None:
+        return prepare(log_ready=log_ready)
+
+    def create(self, job_id: str) -> str | None:
+        return create(job_id)
+
+    def wrap_argv(self, argv: list[str], identity: str | None) -> list[str]:
+        return wrap_argv(argv, identity)
+
+    def snapshot(self, identity: str | None) -> dict[str, object]:
+        return snapshot(identity)
+
+    def wait_empty(self, identity: str) -> bool:
+        return wait_empty(identity)
+
+    def cleanup(self, identity: str | None) -> bool:
+        return cleanup(identity)
