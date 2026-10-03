@@ -1,6 +1,6 @@
 # FastMCP-native refactor — implementation master plan — 2026-10-02
 
-Status: **Groups 0 and 1 done; Group 2 implementing**.
+Status: **Groups 0 and 1 done; Group 2 validating**.
 
 This is the control document for the implementation-design and implementation phases of
 the FastMCP-native, platform-neutral Binnacle refactor.
@@ -127,7 +127,7 @@ Status changes belong in this document.
 | --- | --- | --- | --- | --- |
 | G0 | Stable FastMCP 4 baseline | current master | none; foundational | **done** |
 | G1 | Composition foundation | G0 | foundational; mostly sequential | **done** |
-| G2 | FastMCP-native alignment | G1 | domain settings lanes after shared seams settle | **implementing** |
+| G2 | FastMCP-native alignment | G1 | domain settings lanes after shared seams settle | **validating** |
 | G3 | Commands/domain/platform seams | G1; commands mount | process/resources lanes later | queued |
 | G4 | Deployment/platform services | G1 | logs/paths may parallelize | queued |
 | G5 | Diagnostics, operations, companions | relevant G3/G4 public seams | selected cleanup may start earlier | queued |
@@ -315,12 +315,11 @@ Detailed design:
 
 The design uses deployed G1 code `2725476` and documentation baseline `e86ff81`.
 The two commits have identical production code, tests, dependency pins, and lockfile.
-G2 design is locally complete; no G2 implementation has started. The 158-test
-focused baseline, architecture/import/strict-size checks, native SDK and HTTP
-characterization, and changed-document pre-commit passed. A fresh ChatGPT read-only
-review approved the revised design with no remaining findings; its evidence is linked
-in the design. Coordinator review and a separate implementation instruction remain
-entry conditions.
+The approved design `3f300461` passed coordinator review and a fresh ChatGPT
+read-only review. Authorized implementation now has green G2.1-G2.8 checkpoints
+on `refactor/g2-fastmcp-native-alignment`. G2 is validating; full convergence,
+implementation review, exact-SHA CI, canonical deployment, and live verification
+remain exit conditions. Section 19 records the baseline and checkpoint evidence.
 
 The design delegates component visibility to native FastMCP Visibility while keeping
 client identity/policy and exact denied-call errors. It moves settings domain by domain
@@ -598,13 +597,16 @@ read-only suite passed 3 tests, full post-deploy smoke passed all 20 checks with
 succeeded.
 
 Later documentation-only integration moved the deployment refs to `e86ff81` without
-changing that behavioral baseline. The linked G2 design is ready after local checks
-and fresh read-only review. The next action is independent coordinator review, then a
-separate implementation prompt and isolated worktree with G2.0 drift/baseline checks.
-No G2 implementation or integration has occurred. G3-G6 remain queued; this design
-does not authorize their implementation.
+changing that behavioral baseline. G2 implementation checkpoints are complete
+locally through `6e6992f`. The first review requested a scalar-registration
+correction. Its focused tests and repeated full local convergence passed;
+the second review passed implementation, construction, and public-scope checks.
+Clean-candidate provenance confirmation is the remaining local review gate.
+The user authorized candidate publication, exact-SHA CI, canonical deployment,
+and live verification after local gates and review pass. G2 is not done yet.
+G3-G6 remain queued.
 
-## 15. G2 implementation baseline
+## 19. G2 implementation evidence
 
 G2 implementation starts from approved design `3f300461` over deployed
 `e86ff81`, in `binnacle-g2-native-alignment-impl` on
@@ -614,4 +616,79 @@ and offline lock validation. Runtime versions remain FastMCP/FastMCP-slim
 4.0.10 and MCP/MCP-types 2.1.1. The four-profile raw/wire archive and
 checkpoint logs are retained outside Git at
 `~/.local/state/binnacle/g2-implementation-20261002T221926Z-higemn3y/`.
-G0/G1 remain done. G2 has not reached convergence or deployment; G3 is queued.
+G0/G1 remain done. G2 is validating and has not deployed; G3 is queued.
+
+Accepted local checkpoints (seed 12345; each also passed architecture, seven
+Import Linter contracts, strict module size, and normal commit hooks):
+
+| Checkpoint | Commit | Focused result |
+| --- | --- | --- |
+| G2.1 characterization | `772312a` | 171 passed |
+| G2.2a unused native adapter | `6cd1ba9` | 185 passed |
+| G2.2b visibility activation | `6aebc05` | 255 passed |
+| G2.3 explicit roots | `266e6f8` | 408 passed |
+| G2.4a Files read/write | `e83d7d2` | 412 passed |
+| G2.4b Files list/edit | `add694d` | 417 passed |
+| G2.5a Search arguments | `f2723e8` | 535 passed |
+| G2.5b Search binding | `51a09cb` | 452 passed |
+| G2.6a run-command policy | `0180ea1` | 468 passed |
+| G2.6b job-status policy | `eafa1a4` | 469 passed |
+| G2.7 root snapshots | `5bdee94` | 274 passed |
+| G2.8 construction acceptance | `034d07f` | 305 passed |
+| G2.9 edit fallback coverage | `031306f` | 421 passed |
+| Review correction: status lookup | `6e6992f` | 620 passed |
+
+All archived activation checkpoints preserve the 100,922-byte four-profile
+raw/wire JSON, including instructions, order, schemas, and 8/6/6/8 tool counts.
+Its SHA256 is
+`308b91ffdc1fef8bafd0139b9e97b3aee11d1d5b53b95231d86c73291ec4e3c4`.
+Modern authenticated HTTP characterization distinguishes per-request wire metadata
+from the bare middleware listing messages after FastMCP consumes that metadata.
+The shared ClientIdentity semantics remain unchanged.
+
+The first implementation review found that the G2.6b callable binding froze
+`job_status_impl` at construction, contrary to the approved scalar registration
+contract. The correction passes four scalar keywords directly from Commands to
+`job_status.register`; its decorated closure looks up `job_status_impl` at each
+call. A deterministic post-construction replacement test failed before this fix
+and passes afterward. Backend ownership and all tool metadata stay unchanged.
+Only internal docstrings were shortened to keep the adapter within 500 lines;
+no wait or job algorithm was changed. All local convergence gates were repeated
+and passed after `6e6992f`; the original review and evidence are retained.
+
+Remaining global settings are deliberate: token/bootstrap/config logging and
+process-owned durable-job policy, spool, socket, warmup, output ceiling, and owner
+remain shared. Optional direct-call and child-factory fallbacks still load cached
+settings lazily. No production Depends, lifespan, duplicate validator, custom
+Provider, package relocation, or dependency change is introduced.
+
+### G2.9 local convergence
+
+After review correction `6e6992f`, the final managed suite passed 1,763
+parallel-safe tests with 4 skipped, plus 2 ordinary-process tests, seed 12345.
+Offline lock check, full pre-commit and pre-push, Python 3.10-3.14 tox, and explicit clean wheel-install smoke all passed.
+The wheel test passed 1 test. Coverage policy checked 100 production modules with
+0 below final target and 0 errors. Architecture checked 104 modules; all seven
+Import Linter contracts held; strict size checked 306 Python modules with no errors.
+
+The first coverage attempt found `edit_file.py` at 88.69% against its 90% target.
+Commit `031306f` added meaningful lazy-fallback, supplied-input precedence, and
+snapshot tests. Production code and coverage policy did not change. The repeated
+full convergence passed, with edit coverage at 92.26%; initial evidence is retained.
+
+Final in-process and authenticated, uncached HTTP four-profile archives are
+byte-identical to G2.0, with the SHA256 above. Repeated HTTP listing, modern/legacy
+identity, exact errors, and concurrent profile tests pass without persistent
+visibility rules or list-change notifications. The scope proof confirms exactly
+14 planned production files, unchanged dependencies/lock/config/identity/job backend,
+unchanged G1 ownership and surface contracts, and AST-identical glob fixes.
+
+Local gate logs, exact diff against both `3f300461` and deployed `e86ff81`, runtime
+versions, and complete checkpoint history are in the external evidence directory.
+The second fresh ChatGPT review passed the implementation, construction, and
+public/scope cells. It requested a clean committed candidate because the two
+control drafts caused `+dirty` provenance in the otherwise matching wire logs.
+This documentation checkpoint leaves production and tests unchanged from
+`6e6992f`; clean-candidate evidence and read-only confirmation follow it.
+Exact-SHA CI, canonical deployment, and live verification remain pending. No G3
+work has started.
