@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from binnacle import job_cgroup
 
 
@@ -291,3 +293,53 @@ def test_wait_empty_rejects_unreadable_or_unrecognised_events(tmp_path, monkeypa
         job_cgroup.os, "read", lambda *args: (_ for _ in ()).throw(OSError("read"))
     )
     assert not job_cgroup.wait_empty("/demo", cgroup_fs=tmp_path)
+
+
+def test_cleanup_permission_failure_retains_the_scope(tmp_path, monkeypatch):
+    root = tmp_path / "demo"
+    root.mkdir()
+
+    def denied(self):
+        assert self == root
+        raise PermissionError("synthetic cleanup denial")
+
+    monkeypatch.setattr(type(root), "rmdir", denied)
+    assert job_cgroup.cleanup("/demo", cgroup_fs=tmp_path) is False
+    assert root.is_dir()
+
+
+@pytest.mark.parametrize("read_failure", [False, True])
+def test_wait_empty_closes_fd_when_event_wait_fails(
+    tmp_path, monkeypatch, read_failure
+):
+    root = tmp_path / "demo"
+    root.mkdir()
+    (root / "cgroup.events").write_text("populated 1\n")
+    closed = []
+    real_close = job_cgroup.os.close
+
+    def close(fd):
+        closed.append(fd)
+        real_close(fd)
+
+    class FailedPoll:
+        def register(self, fd, mask):
+            pass
+
+        def poll(self):
+            if read_failure:
+                monkeypatch.setattr(job_cgroup.os, "read", fail_read)
+                return []
+            raise OSError("synthetic poll failure")
+
+    def fail_read(*args):
+        raise OSError("synthetic event read failure")
+
+    monkeypatch.setattr(job_cgroup.os, "close", close)
+    monkeypatch.setattr(job_cgroup.select, "poll", FailedPoll)
+    if read_failure:
+        assert job_cgroup.wait_empty("/demo", cgroup_fs=tmp_path) is False
+    else:
+        with pytest.raises(OSError, match="synthetic poll failure"):
+            job_cgroup.wait_empty("/demo", cgroup_fs=tmp_path)
+    assert len(closed) == 1
