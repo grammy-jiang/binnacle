@@ -33,9 +33,10 @@ jobs.JOBS_DIR = spool
 jobs.MANAGER_SOCKET = socket
 jobs.OWNER_MODE = "manager"
 jobs.WARMUP_S = 0.05
+arguments = json.loads(sys.stdin.read())
 async def main():
     async with Client(create_commands_server(), cache=False) as client:
-        reply = await client.call_tool(sys.argv[4], json.loads(sys.argv[5]))
+        reply = await client.call_tool(sys.argv[4], arguments)
         print(json.dumps({"source": jobs.__file__, "payload": reply.structured_content}), flush=True)
 asyncio.run(main())
 """
@@ -90,9 +91,9 @@ def worker(source, spool, socket, tool, arguments):
             str(spool),
             str(socket),
             tool,
-            json.dumps(arguments),
         ],
         env=source_env(source),
+        input=json.dumps(arguments),
         capture_output=True,
         text=True,
         timeout=20,
