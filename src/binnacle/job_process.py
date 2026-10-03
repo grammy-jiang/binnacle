@@ -1,7 +1,13 @@
-"""Linux process inspection used by the durable job lifecycle."""
+"""Linux process mechanics and compatibility helpers for durable jobs."""
 
 import os
+import signal
+import subprocess
+from collections.abc import Mapping, Sequence
 from pathlib import Path
+from typing import BinaryIO, Literal
+
+from binnacle.process_contracts import ProcessHandle
 
 _CLK_TCK = os.sysconf("SC_CLK_TCK")
 
@@ -113,3 +119,55 @@ def job_processes(pgid: int, max_cmd_chars: int = 200) -> list[dict]:
 
 def signal_group(pgid: int, sig: int) -> None:
     os.killpg(pgid, sig)
+
+
+class LinuxProcessBackend:
+    """Process mechanics only; callers retain files, policy, and wait ownership."""
+
+    def launch(
+        self,
+        argv: Sequence[str],
+        *,
+        workdir: Path,
+        env: Mapping[str, str],
+        stdin: BinaryIO,
+        output: BinaryIO,
+    ) -> ProcessHandle:
+        return subprocess.Popen(
+            argv,
+            cwd=str(workdir),
+            env=env,
+            stdin=stdin,
+            stdout=output,
+            stderr=subprocess.STDOUT,
+            start_new_session=True,
+        )
+
+    def starttime(self, pid: int) -> int | None:
+        return _proc_starttime(pid)
+
+    def alive(self, pid: int, starttime: int | None = None) -> bool:
+        return _pid_alive(pid, starttime)
+
+    def processes(self, pgid: int, max_cmd_chars: int = 200) -> list[dict]:
+        return job_processes(pgid, max_cmd_chars)
+
+    def descendants(self, pid: int) -> set[int]:
+        return _descendants(pid)
+
+    def signal_job(
+        self, pgid: int, strays: set[int], intent: Literal["terminate", "kill"]
+    ) -> None:
+        sig = {"terminate": signal.SIGTERM, "kill": signal.SIGKILL}[intent]
+        signal_group(pgid, sig)
+        for pid in strays:
+            try:
+                os.kill(pid, sig)
+            except ProcessLookupError:
+                pass
+
+    def boot_id(self) -> str:
+        try:
+            return Path("/proc/sys/kernel/random/boot_id").read_text().strip()
+        except OSError:
+            return "unknown"
