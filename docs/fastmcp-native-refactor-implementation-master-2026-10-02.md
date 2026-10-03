@@ -1,6 +1,6 @@
 # FastMCP-native refactor — implementation master plan — 2026-10-02
 
-Status: **Groups 0, 1, and 2 done; Groups 3-6 queued**.
+Status: **Groups 0, 1, and 2 done; Group 3 ready; Groups 4-6 queued**.
 
 This is the control document for the implementation-design and implementation phases of
 the FastMCP-native, platform-neutral Binnacle refactor.
@@ -94,8 +94,8 @@ over a big-bang rewrite.
 
 ### 1.5 Design close to implementation
 
-Groups 0, 1, and 2 are complete. Detailed designs for Groups 3-6 remain deferred
-and must use the deployed post-G2 baseline.
+Groups 0, 1, and 2 are complete. Group 3 has a reviewed detailed design against
+the deployed post-G2 baseline. Detailed designs for Groups 4-6 remain deferred.
 
 Before designing a later group:
 
@@ -128,7 +128,7 @@ Status changes belong in this document.
 | G0 | Stable FastMCP 4 baseline | current master | none; foundational | **done** |
 | G1 | Composition foundation | G0 | foundational; mostly sequential | **done** |
 | G2 | FastMCP-native alignment | G1 | domain settings lanes after shared seams settle | **done** |
-| G3 | Commands/domain/platform seams | G1; commands mount | process/resources lanes later | queued |
+| G3 | Commands/domain/platform seams | G2 deployed baseline | process/resources lanes later | **ready** |
 | G4 | Deployment/platform services | G1 | logs/paths may parallelize | queued |
 | G5 | Diagnostics, operations, companions | relevant G3/G4 public seams | selected cleanup may start earlier | queued |
 | G6 | Package convergence + Gate A | G2-G5 | convergence only | queued |
@@ -350,7 +350,15 @@ Potential later parallelism:
              lane          lane
 ```
 
-Detailed design waits for the mounted Commands domain from G1.
+Detailed design is reviewed against deployed `68e690d`, with the mounted
+Commands domain and G2 construction snapshots. G3 is ready for coordinator
+review of the design commit. Implementation starts in a separate task; this
+status change does not deploy or implement G3.
+
+Detailed execution specification:
+`docs/commands-platform-seams-implementation-design-2026-10-03.md`.
+Current design evidence is in section 21; earlier queued statements remain
+historical checkpoint records.
 
 ## 8. Group 4 — Deployment/platform services
 
@@ -734,3 +742,55 @@ clean-candidate proof, CI records, deployment/live/smoke logs, runtime versions,
 the real-call trace, and worktree/untracked-file inventories. This completion
 record follows the same exact-SHA CI and canonical documentation deployment flow.
 G3 remains queued and requires a separate design task.
+
+## 21. G3 design ready — 2026-10-03
+
+G3 is ready, designed against deployed documentation/code baseline
+`68e690d3fd53cc8f83463a2505fe6d3829e62ea2`, after completed G2.
+The isolated worktree is `binnacle-g3-commands-design`, branch
+`design/g3-commands-platform-seams-2026-10-03`. This task leaves production and
+older worktrees untouched. It changes only the detailed G3 design and this control
+document; it does not implement or deploy G3.
+
+The design specifies two small command use-case modules sharing a stateless
+durable-backend port, independent process and optional accounting contracts,
+domain-owned resource history, and the existing owner/manager/store lifecycle.
+Compatibility facades keep each activation reversible. Process and resource
+preparation can parallelize only after the command seam is stable; shared
+activation is sequential. No Tasks, package moves, G4/G5 operational extraction,
+macOS backend, schema/RPC redesign, or public MCP rebaseline is included.
+
+External evidence:
+`/home/grammy-jiang/.local/state/binnacle/g3-design-20261003T013558Z-a2ai0zhz`.
+The clean baseline passed doctor 9/9, lock/runtime checks, 314 focused tests,
+architecture, seven Import Linter contracts, and strict size with zero errors.
+Four-profile raw surface JSON and three-tool hashes were archived. Isolated
+temporary-spool/socket probes confirmed manager survival of MCP-worker exit,
+shared wait/cursor/stop behavior, PID token checks, and successful execution
+without accounting. Existing focused tests cover recovery, stop/prune races,
+and deferred resource finalization. These are design observations, not completed
+G3 implementation gates.
+
+The design explicitly records that canonical MCP deployment does not restart
+the stable job manager. Future G3 completion requires mixed-revision parity and
+separately authorized quiet manager activation, including pending accounting
+finalizers in the safety check. No service operation occurred during design.
+
+The [fresh read-only ChatGPT review](https://chatgpt.com/c/6ac065bc-7ce8-83ec-9d06-83720da0f36b)
+returned APPROVE: all four cells PASS, no remaining findings, and all 139 bundled
+payload hashes verified. The first review's accounting-argv ownership, exact
+pending-key, and manager-admission findings were corrected and re-reviewed.
+Additional isolated probes verified argv-decoration parity and admission closure
+with a late-arrival job deferring temporary-manager restart. Changed-doc
+pre-commit passed after revisions; final status/evidence text is gated again
+before commit. The external directory retains both reviews and probe/gate logs.
+
+Production/remote deployment HEADs remain `68e690d`, with clean tracked state.
+Concurrent untracked document additions and updates under
+`docs/chatgpt-mcp-development/` were left alone and are recorded separately in
+before/after preservation evidence. No source/test/dependency
+edits, push, deployment, or production service operation occurred.
+
+G3 is ready, not implementing or done. The coordinator independently reviews
+this design commit before starting a separate implementation task. G4-G6 remain
+queued.
