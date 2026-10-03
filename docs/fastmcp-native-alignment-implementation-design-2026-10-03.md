@@ -1,9 +1,10 @@
 # FastMCP-native alignment — G2 implementation design — 2026-10-03
 
-Status: **validating; local gates green; clean-candidate review confirmation pending**.
+Status: **done; reviewed, deployed, and live-verified**.
 
 The approved design below remains the execution specification. Current checkpoint
-evidence is in implementation master section 19. Implementation uses the isolated
+and deployment evidence is in implementation master sections 19 and 20.
+Implementation uses the isolated
 `binnacle-g2-native-alignment-impl` worktree; the design worktree remains unchanged.
 Design-phase environment statements below describe the completed design task.
 Implementation and integration follow the subsequent explicit user authorization.

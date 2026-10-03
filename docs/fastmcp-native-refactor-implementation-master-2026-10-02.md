@@ -1,6 +1,6 @@
 # FastMCP-native refactor — implementation master plan — 2026-10-02
 
-Status: **Groups 0 and 1 done; Group 2 validating**.
+Status: **Groups 0, 1, and 2 done; Groups 3-6 queued**.
 
 This is the control document for the implementation-design and implementation phases of
 the FastMCP-native, platform-neutral Binnacle refactor.
@@ -94,8 +94,8 @@ over a big-bang rewrite.
 
 ### 1.5 Design close to implementation
 
-Groups 0 and 1 are complete. Group 2 is designed against the deployed post-G1
-baseline. Detailed designs for Groups 3-6 remain deferred.
+Groups 0, 1, and 2 are complete. Detailed designs for Groups 3-6 remain deferred
+and must use the deployed post-G2 baseline.
 
 Before designing a later group:
 
@@ -127,7 +127,7 @@ Status changes belong in this document.
 | --- | --- | --- | --- | --- |
 | G0 | Stable FastMCP 4 baseline | current master | none; foundational | **done** |
 | G1 | Composition foundation | G0 | foundational; mostly sequential | **done** |
-| G2 | FastMCP-native alignment | G1 | domain settings lanes after shared seams settle | **validating** |
+| G2 | FastMCP-native alignment | G1 | domain settings lanes after shared seams settle | **done** |
 | G3 | Commands/domain/platform seams | G1; commands mount | process/resources lanes later | queued |
 | G4 | Deployment/platform services | G1 | logs/paths may parallelize | queued |
 | G5 | Diagnostics, operations, companions | relevant G3/G4 public seams | selected cleanup may start earlier | queued |
@@ -316,10 +316,10 @@ Detailed design:
 The design uses deployed G1 code `2725476` and documentation baseline `e86ff81`.
 The two commits have identical production code, tests, dependency pins, and lockfile.
 The approved design `3f300461` passed coordinator review and a fresh ChatGPT
-read-only review. Authorized implementation now has green G2.1-G2.8 checkpoints
-on `refactor/g2-fastmcp-native-alignment`. G2 is validating; full convergence,
-implementation review, exact-SHA CI, canonical deployment, and live verification
-remain exit conditions. Section 19 records the baseline and checkpoint evidence.
+read-only review. Implementation on `refactor/g2-fastmcp-native-alignment` passed
+all local gates and final implementation review. Exact-SHA CI, canonical
+deployment, live verification, and a real ChatGPT read-only call also passed.
+G2 is done. Sections 19 and 20 record checkpoint and deployment evidence.
 
 The design delegates component visibility to native FastMCP Visibility while keeping
 client identity/policy and exact denied-call errors. It moves settings domain by domain
@@ -597,14 +597,11 @@ read-only suite passed 3 tests, full post-deploy smoke passed all 20 checks with
 succeeded.
 
 Later documentation-only integration moved the deployment refs to `e86ff81` without
-changing that behavioral baseline. G2 implementation checkpoints are complete
-locally through `6e6992f`. The first review requested a scalar-registration
-correction. Its focused tests and repeated full local convergence passed;
-the second review passed implementation, construction, and public-scope checks.
-Clean-candidate provenance confirmation is the remaining local review gate.
-The user authorized candidate publication, exact-SHA CI, canonical deployment,
-and live verification after local gates and review pass. G2 is not done yet.
-G3-G6 remain queued.
+changing that behavioral baseline. G2 implementation through `6e6992f` passed
+repeated full local convergence. The reviewed clean candidate `27211d1` then
+passed exact-SHA CI, canonical deployment, live verification, and the real
+ChatGPT read-only call. G2 is done; section 20 records the exit evidence.
+G3-G6 remain queued. No G3 work has started.
 
 ## 19. G2 implementation evidence
 
@@ -616,7 +613,8 @@ and offline lock validation. Runtime versions remain FastMCP/FastMCP-slim
 4.0.10 and MCP/MCP-types 2.1.1. The four-profile raw/wire archive and
 checkpoint logs are retained outside Git at
 `~/.local/state/binnacle/g2-implementation-20261002T221926Z-higemn3y/`.
-G0/G1 remain done. G2 is validating and has not deployed; G3 is queued.
+G0/G1 remain done. The completed G2 deployment is recorded in section 20;
+G3 remains queued.
 
 Accepted local checkpoints (seed 12345; each also passed architecture, seven
 Import Linter contracts, strict module size, and normal commit hooks):
@@ -688,7 +686,51 @@ versions, and complete checkpoint history are in the external evidence directory
 The second fresh ChatGPT review passed the implementation, construction, and
 public/scope cells. It requested a clean committed candidate because the two
 control drafts caused `+dirty` provenance in the otherwise matching wire logs.
-This documentation checkpoint leaves production and tests unchanged from
-`6e6992f`; clean-candidate evidence and read-only confirmation follow it.
-Exact-SHA CI, canonical deployment, and live verification remain pending. No G3
-work has started.
+Commit `27211d1` recorded only those two control drafts. Its clean-worktree proof
+and Git object IDs confirm unchanged production, tests, build inputs, dependencies,
+and policies from the fully tested `6e6992f`. Regenerated wire logs identify the
+clean candidate and retain exact baseline JSON parity. The
+[fresh ChatGPT review](https://chatgpt.com/c/6ac04bdd-a0dc-83ec-a15b-1a6a46005b7d)
+then returned **APPROVE**, with no findings, for
+`27211d1614ff77adfbb5200a8ea7cd74ca987e7b`.
+
+## 20. G2 deployment completion — 2026-10-03
+
+G2 is done. Reviewed candidate `27211d1614ff77adfbb5200a8ea7cd74ca987e7b`
+passed all seven required checks in
+[CI run 37083673343](https://github.com/grammy-jiang/binnacle/actions/runs/37083673343).
+The canonical `scripts/deploy_smoke.py deploy` gate deployed that exact SHA from
+`e86ff81`, reloaded the MCP service, passed smoke, and atomically updated
+`master` and `proof-of-concept`. Local production HEAD and both remote deployment
+refs were verified at `27211d1`. Subsequent CI runs `37084077221` on `master`
+and `37084075593` on `proof-of-concept` also passed all seven checks.
+
+Production verification passed:
+
+- `BINNACLE_LIVE=1 uv run pytest -q tests/live`: 3 passed.
+- Full post-deploy smoke: 20/20 checks passed; 12/12 calls logged; no tracebacks
+  during smoke.
+- Binnacle doctor: 29 ok, 2 warn, 0 fail; tunnel doctor: 9 ok, 0 warn, 0 fail;
+  watchdog doctor: 7 ok, 6 warn, 0 fail.
+- Runtime: FastMCP/FastMCP-slim 4.0.10; MCP/MCP-types 2.1.1.
+- The durable-jobs service retained its PID, invocation ID, and start timestamp.
+- All 192 unrelated production untracked files retained their sizes/checksums;
+  all 14 older evidence/design worktrees retained their HEADs and file state.
+
+The doctor warnings were inspected. Three recent request-error lines predate the
+new code's configuration event at `2026-10-03T00:55:04Z`. The unchanged jobs
+service reports an older provenance marker; it was deliberately not restarted.
+Wireless/driver warnings are outside G2. No host-policy change was made.
+
+A [real ChatGPT call](https://chatgpt.com/c/6ac0534f-0f54-83ec-8cec-ddfbb761448e)
+used the connected Raspberry Pi MCP app to call `list_files` once for
+`src/binnacle/visibility.py`. The actual ChatGPT tool-call record and the deployed
+server journal share request ID `993286bd-49ed-4e3c-b36d-945998e6b65e`;
+server call `38a74680a61c` recorded `client=openai-mcp`, `is_error=False`, and
+one result. The returned path was the deployed `visibility.py` file.
+
+The external evidence directory in section 19 retains review transcripts,
+clean-candidate proof, CI records, deployment/live/smoke logs, runtime versions,
+the real-call trace, and worktree/untracked-file inventories. This completion
+record follows the same exact-SHA CI and canonical documentation deployment flow.
+G3 remains queued and requires a separate design task.
