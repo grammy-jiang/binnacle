@@ -128,7 +128,7 @@ Status changes belong in this document.
 | G0 | Stable FastMCP 4 baseline | current master | none; foundational | **done** |
 | G1 | Composition foundation | G0 | foundational; mostly sequential | **done** |
 | G2 | FastMCP-native alignment | G1 | domain settings lanes after shared seams settle | **done** |
-| G3 | Commands/domain/platform seams | G2 deployed baseline | process/resources lanes later | **ready** |
+| G3 | Commands/domain/platform seams | G2 deployed baseline | serialized integration | **validating** |
 | G4 | Deployment/platform services | G1 | logs/paths may parallelize | queued |
 | G5 | Diagnostics, operations, companions | relevant G3/G4 public seams | selected cleanup may start earlier | queued |
 | G6 | Package convergence + Gate A | G2-G5 | convergence only | queued |
@@ -351,9 +351,9 @@ Potential later parallelism:
 ```
 
 Detailed design is reviewed against deployed `68e690d`, with the mounted
-Commands domain and G2 construction snapshots. G3.0-G3.2d are now locally
-complete under the approved design. Section 22 records the command-seam freeze
-for coordinator-owned parallel preparation; G3 is not yet complete or deployed.
+Commands domain and G2 construction snapshots. G3.0-G3.7 are locally complete
+under the approved design. Section 23 records serialized platform activation
+and the remaining G3.8 completion boundary; G3 is not yet complete.
 
 Detailed execution specification:
 `docs/commands-platform-seams-implementation-design-2026-10-03.md`.
@@ -832,3 +832,23 @@ preparation lanes to the exact clean freeze SHA. Their shared files, including
 There was no push, deployment, or production service operation. G3 stays
 implementing; G3.3/G3.5a dispatch and later serial activation belong to the
 coordinator. G4-G6 remain queued.
+
+## 23. G3 platform integration and activation
+
+The user authorized continuation from `ad2a9c4` after independent review of both
+prepare lanes with no material findings. The single integrator preserved
+`767366f` and `d96d440`, composed their unused providers in `a66d135`, and committed
+G3.4a `63e8d97`, G3.4b `0d218d8`, G3.5b `1558afc`, and G3.6 `5a2d42b` serially.
+G3.7 adds narrow static boundaries and retained-facade documentation. Its focused
+suite passed 743 tests, all 15 import contracts passed, and the exact public wire
+archive remains unchanged. The detailed design section 16 contains gate counts,
+ordinary failure resolutions, scope evidence, and the external ledger location.
+
+G3 remains validating. G3.8 still requires complete convergence, fresh final
+implementation review, exact-SHA CI, canonical deployment, actual stable-manager
+revision verification, and live/ChatGPT verification. Production ancestry shows
+that the current implementation worker itself runs as manager-owned durable job
+`cc667870d56e`. Restarting that manager before this job settles is unsafe. A worker
+outside the manager-owned job must perform the approved exclusive admission/drain
+barrier and activation after this worker exits. Do not kill the job or claim G3
+done while the old manager remains active. G4-G6 remain queued.

@@ -267,9 +267,64 @@ forbidden_modules = [
     "binnacle.job_owner",
     "binnacle.job_client",
     "binnacle.job_manager",
+    "binnacle.job_platform",
     "binnacle.job_process",
     "binnacle.job_cgroup",
     "binnacle.job_resource_history",
     "binnacle.tools",
 ]
 allow_indirect_imports = true
+
+
+[[tool.importlinter.contracts]]
+id = "platform-contracts-independent"
+name = "Platform contracts do not select engines or concrete adapters"
+type = "forbidden"
+source_modules = ["binnacle.process_contracts", "binnacle.resource_contracts"]
+forbidden_modules = [
+    "binnacle.jobs", "binnacle.job_owner", "binnacle.job_manager",
+    "binnacle.job_store", "binnacle.job_platform", "binnacle.job_process",
+    "binnacle.job_cgroup", "binnacle.job_resource_history", "binnacle.config",
+]
+
+[[tool.importlinter.contracts]]
+id = "platform-adapters-independent"
+name = "Linux process and accounting adapters remain independent"
+type = "independence"
+modules = ["binnacle.job_process", "binnacle.job_cgroup"]
+
+[[tool.importlinter.contracts]]
+id = "platform-adapters-no-policy"
+name = "Linux adapters do not own job lifecycle or storage"
+type = "forbidden"
+source_modules = ["binnacle.job_process", "binnacle.job_cgroup"]
+forbidden_modules = [
+    "binnacle.jobs", "binnacle.job_owner", "binnacle.job_manager", "binnacle.job_client",
+    "binnacle.job_store", "binnacle.job_resource_history", "binnacle.config",
+]
+
+[[tool.importlinter.contracts]]
+id = "job-orchestration-uses-platform-ports"
+name = "Job orchestration does not directly import Linux adapters"
+type = "forbidden"
+source_modules = ["binnacle.jobs", "binnacle.job_owner", "binnacle.job_manager", "binnacle.job_resource_history"]
+forbidden_modules = ["binnacle.job_process", "binnacle.job_cgroup"]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+id = "platform-composition-entrypoints"
+name = "Only job engine and manager select platform defaults"
+type = "protected"
+protected_modules = ["binnacle.job_platform"]
+allowed_importers = ["binnacle.jobs", "binnacle.job_manager"]
+
+[[tool.importlinter.contracts]]
+id = "store-does-not-own-lifecycle"
+name = "Job storage does not import process or accounting lifecycle"
+type = "forbidden"
+source_modules = ["binnacle.job_store"]
+forbidden_modules = [
+    "binnacle.jobs", "binnacle.job_owner", "binnacle.job_manager", "binnacle.job_client",
+    "binnacle.process_contracts", "binnacle.resource_contracts", "binnacle.job_process",
+    "binnacle.job_cgroup", "binnacle.job_platform", "binnacle.job_resource_history",
+]

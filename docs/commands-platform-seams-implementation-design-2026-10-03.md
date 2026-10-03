@@ -1,6 +1,6 @@
 # Commands and platform seams — G3 implementation design — 2026-10-03
 
-Status: **implementing; G3.0-G3.2d locally complete, frozen for coordinator handoff**.
+Status: **validating; G3.0-G3.7 locally complete, G3.8 convergence in progress**.
 
 This is the execution design for Group 3 only. The control document is
 `docs/fastmcp-native-refactor-implementation-master-2026-10-02.md`.
@@ -1241,3 +1241,61 @@ review, CI, deployment, and manager activation remain coordinator work.
 | G3.2b | `cf5229efd0e1` | 428 focused tests, run activation |
 | G3.2c | `066d2820eb74` | 514 focused tests, status activation |
 | G3.2d | Exact SHA in external ledger | Stop activation and freeze gates above |
+
+## 16. Serialized platform activation evidence
+
+The user authorized integration, serialized activation, convergence, reviewed
+publication, canonical deployment, and live verification on 2026-10-03. The
+integrator remains `binnacle-g3-commands-impl` on
+`refactor/g3-commands-platform-seams`. G4-G6 remain excluded.
+
+External evidence is retained at:
+
+```text
+/home/grammy-jiang/.local/state/binnacle/g3-activation-20261003-67opm7tn
+```
+
+The integrator verified clean `ad2a9c4`, the nine doctor checks, and all worktrees.
+Reviewed sibling commits `767366f` (Process) and `d96d440` (Resource) both have
+that exact parent. Integration preserved both commit objects and their eight
+files byte for byte. Commit `a66d135` adds only the two lazy constructors and
+their construction test to the combined prepare tree. The combined focused
+suite passed 528 tests, with architecture, imports, strict size, type/pre-commit,
+and the exact four-profile wire archive unchanged.
+
+| Checkpoint | Commit | Focused evidence |
+| --- | --- | --- |
+| G3.4a inspection | `63e8d97` | 529 passed; explicit backend identity/summary/descendant calls |
+| G3.4b launch/signals/boot | `0d218d8` | 531 passed; fake handle and owned files; both archived mixed-revision directions |
+| G3.5b accounting/history | `1558afc` | 534 passed; captured finalizer instance, preparation ordering, no-accounting launch |
+| G3.6 public store/lock | `5a2d42b` | 536 passed; alias identity, full prune/launch/publication lock span, public owner storage |
+| G3.7 static boundaries | this checkpoint | 743 passed including visibility; 15 import contracts; negative import/call/path fixtures |
+
+Every checkpoint retains exact commands, results, diffs, type/architecture/size
+checks, commit-hook output, and wire evidence. The archive remains 141833 bytes
+with SHA256 `acbc4e794ee45c1bd9dbd3a51dafa9634f101e06ed18a0b0cea36d2f32fcb61f`.
+The isolated HTTP admission probe passed again after activation. All its
+processes, socket paths, and spools were private; it touched no production unit.
+
+The scope audit verifies 65 protected files byte for byte, unchanged dependency
+and non-import-linter configuration, and unchanged manager RPC/lifecycle methods
+except the explicitly authorized preparation call. The jobs settings and default
+ports remain process-owned. Retained bridges are the three direct MCP impl
+wrappers, stateless durable backend, public jobs functions, storage/lock aliases,
+Linux helper functions, `JobGone`, and protocol 1. No package move, framework
+lifecycle, Tasks, dependency update, RPC, schema, or public golden change occurred.
+
+Retained normal failures include formatter expansion of the 499-line lifecycle
+test past the size limit (fixed with a local callable binding), a read-only fake
+that needed a launch handle after G3.4b, and old private-store patch targets after
+G3.6. Assertions and policy thresholds were preserved. Local gates use the same
+external private-spool isolation plugin as the final command-seam gates.
+
+A read-only production inventory found running job `cc667870d56e`. Process
+ancestry proves it owns this implementation worker: Codex PID 1510239 is a child
+of stable manager PID 1133774. A stable-manager restart while this worker runs
+would kill the worker and violate section 13.1. The worker may complete safe
+local/CI/MCP deployment work, but must leave the manager running and G3 validating.
+Manager activation requires this job to settle first and an operator outside
+that manager-owned job to establish the full exclusive admission/drain barrier.
+No user job may be stopped to satisfy this condition.

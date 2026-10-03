@@ -42,6 +42,7 @@ def _resolve_owner_mode() -> str:
     )
 
 
+# Settings and platform defaults belong to this process, not an MCP child.
 OWNER_MODE = _resolve_owner_mode()
 _PROCESS_BACKEND = create_process_backend()
 _RESOURCE_ACCOUNTING = create_resource_accounting()

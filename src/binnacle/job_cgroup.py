@@ -311,7 +311,7 @@ def move_pid(pid: int, cgroup: str, *, cgroup_fs: Path = CGROUP_FS) -> bool:
 
 
 class CgroupResourceAccounting:
-    """Unused accounting port over the existing best-effort Linux helpers."""
+    """Accounting port over the existing best-effort Linux helpers."""
 
     __slots__ = ()
 

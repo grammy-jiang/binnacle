@@ -146,6 +146,7 @@ class Block(importlib.abc.MetaPathFinder):
             raise AssertionError("engine imported: " + fullname)
 sys.meta_path.insert(0, Block())
 from binnacle import command_contracts, command_execution, command_status, config
+from binnacle import process_contracts, resource_contracts
 from binnacle.commands_server import create_commands_server
 from tests.command_support import MemoryCommands
 from fastmcp import Client

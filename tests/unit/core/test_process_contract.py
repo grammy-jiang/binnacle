@@ -1,4 +1,4 @@
-"""The unused process port preserves native handles and caller-owned launch inputs."""
+"""The process port preserves native handles and caller-owned launch inputs."""
 
 from __future__ import annotations
 
