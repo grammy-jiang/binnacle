@@ -1,6 +1,6 @@
 # Commands and platform seams — G3 implementation design — 2026-10-03
 
-Status: **validating; local convergence complete, integration and manager activation remain**.
+Status: **done; implementation, deployment, manager activation, and live verification complete**.
 
 This is the execution design for Group 3 only. The control document is
 `docs/fastmcp-native-refactor-implementation-master-2026-10-02.md`.
@@ -1333,3 +1333,47 @@ deployment, live evidence, and actual stable-manager activation are separate
 integration gates. The manager restart blocker in section 16 remains real:
 this worker must settle before an outside operator can establish the full
 exclusive admission barrier. No stable-manager restart is attempted here.
+
+## 18. Production activation and completion — 2026-10-05
+
+G3 implementation `01523d406732dddf1421eabd93269ad09c25e5ea` passed all seven required checks in
+[CI run 37103424140](https://github.com/grammy-jiang/binnacle/actions/runs/37103424140)
+and was deployed through the canonical gate. The
+[final implementation review](https://chatgpt.com/c/6ac08d47-b018-83ec-9856-e4393730876a)
+approved all four cells without findings. Earlier blocker entries above are
+historical evidence, not the current activation state.
+
+An operator outside the durable-job service applied section 13.1 after the
+user's final GO. The evidence records the quiet inventory, complete admitted-call
+drain, closed HTTP admission, second empty job/accounting/RPC check, and clean
+service shutdown. No user job was killed by this activation. The manager now
+reports PID `3051275`, owner instance `cf8e6dd699c445fa8d772a610ce6785e`,
+protocol 1, and loaded code revision `01523d406732`. MCP admission was
+restored after that identity was verified. A controlled temporary job proved
+new-owner routing, completion, output, and the recorded accounting/history path.
+
+The opt-in live pytest suite, full smoke, server doctor, tunnel doctor, and
+watchdog doctor passed their repository exit gates. The external logs preserve
+all warnings rather than hiding them. Runtime remains FastMCP/FastMCP-slim
+4.0.10 and MCP/MCP-types 2.1.1. Four-profile wire JSON is byte-identical to the
+141833-byte baseline, SHA256
+`acbc4e794ee45c1bd9dbd3a51dafa9634f101e06ed18a0b0cea36d2f32fcb61f`.
+A [real ChatGPT read-only call](https://chatgpt.com/c/6ac42810-eae8-83ec-8ff7-212bb26273ce) returned
+`src/binnacle/job_platform.py`. Its actual connector request and successful
+production journal result share the same request identifier.
+
+External, timestamped evidence and failure/recovery records are retained at:
+
+```text
+/home/grammy-jiang/.local/state/binnacle/g3-closure-20261005T130745Z-o9x1d56k/unattended/runs/20261005T224110Z-lrfpti90
+```
+
+The unrelated production `pyproject.toml` edit was checksum-backed up and
+temporarily held for the clean activation/deployment boundary. The wrapper
+restores its exact original bytes on exit and never includes it in this commit.
+Untracked documents are inventoried and left in place. The final external
+report verifies restoration and deployment refs. This two-document completion
+record follows new exact-SHA CI and the canonical documentation deployment;
+it changes no production source, dependency, job protocol, or durable schema.
+The manager keeps its verified code revision across the later documentation
+commit; that commit has identical runtime source. G4-G6 remain queued.
