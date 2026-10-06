@@ -19,26 +19,31 @@ from collections.abc import Callable, Iterable, Mapping
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from binnacle import doctor_common as _doctor_common
 from binnacle import doctor_jobs as _doctor_jobs
 from binnacle import logstats, units
 from binnacle.config import CONFIG_FILE_ENV, DEFAULT_CONFIG_FILE, get_settings
-from binnacle.doctor_common import (
-    Check,
-    Systemctl,
-    fail,
-    ok,
-    systemctl,
-    unit_property,
-    unit_state,
-    warn,
-)
+from binnacle.deployment_platform import create_service_inspector
+from binnacle.doctor_common import Check, fail, ok, warn
 from binnacle.doctor_connectivity import _tail_lines, check_endpoint, check_uplink
 from binnacle.doctor_provenance import check_provenance
 from binnacle.job_manager_doctor import check_job_manager
 from binnacle.provenance import runtime_provenance
+from binnacle.service_lifecycle_contracts import ManagedServiceInspector
 from binnacle.service_log_contracts import ServiceLogError
 
-__all__ = ["_job_state_safe", "_tail_lines", "server_busy_reasons"]
+Systemctl = _doctor_common.Systemctl
+systemctl = _doctor_common.systemctl
+unit_state = _doctor_common.unit_state
+
+__all__ = [
+    "Systemctl",
+    "_job_state_safe",
+    "_tail_lines",
+    "server_busy_reasons",
+    "systemctl",
+    "unit_state",
+]
 
 
 def _job_state_safe(job_id: str) -> dict | None:
@@ -84,19 +89,6 @@ def linger_enabled() -> bool | None:
     if proc.returncode != 0:
         return None
     return proc.stdout.strip() == "yes"
-
-
-def process_environ(pid: int) -> dict[str, str] | None:
-    try:
-        raw = Path(f"/proc/{pid}/environ").read_bytes()
-    except OSError:
-        return None
-    env: dict[str, str] = {}
-    for item in raw.split(b"\0"):
-        if b"=" in item:
-            k, _, v = item.partition(b"=")
-            env[k.decode(errors="replace")] = v.decode(errors="replace")
-    return env
 
 
 # -- checks ------------------------------------------------------------------
@@ -154,11 +146,14 @@ def check_token(token_file: Path) -> list[Check]:
 
 def check_units(
     unit: str,
-    run: Systemctl = systemctl,
+    inspector: ManagedServiceInspector | None = None,
+    waits_for_ready: Callable[[str], bool] = units.unit_waits_for_ready,
     linger: Callable[[], bool | None] = linger_enabled,
 ) -> tuple[list[Check], str | None]:
     """Returns the checks and the server unit's name when it is active."""
-    state = unit_state(unit, run)
+    services = inspector or create_service_inspector()
+    status = services.status(unit)
+    state = status.state
     out: list[Check] = []
     if state != "active":
         out.append(
@@ -170,8 +165,8 @@ def check_units(
         )
         return out, None
     out.append(ok("units", f"{unit} active"))
-    restarts = unit_property(unit, "NRestarts", run)
-    if restarts.isdigit() and int(restarts) > 0:
+    restarts = status.restart_count
+    if restarts is not None and restarts > 0:
         out.append(
             warn(
                 "units",
@@ -181,7 +176,7 @@ def check_units(
         )
     else:
         out.append(ok("units", f"{unit} has not crash-restarted"))
-    if unit_property(unit, "ExecStartPost", run):
+    if waits_for_ready(unit):
         out.append(ok("units", f"{unit} waits for its port before reporting started"))
     else:
         out.append(
@@ -204,16 +199,16 @@ def check_service_env(
     unit: str,
     rg_bin: str,
     user_bin: Path,
-    run: Systemctl = systemctl,
-    environ: Callable[[int], dict[str, str] | None] = process_environ,
+    inspector: ManagedServiceInspector | None = None,
 ) -> list[Check]:
-    pid_text = unit_property(unit, "MainPID", run)
-    if not pid_text.isdigit() or int(pid_text) == 0:
+    services = inspector or create_service_inspector()
+    status = services.status(unit)
+    pid = status.main_pid
+    if pid is None:
         return [warn("service-env", f"{unit} has no main PID to inspect")]
-    env = environ(int(pid_text))
-    if env is None:
-        return [warn("service-env", f"cannot read /proc/{pid_text}/environ")]
-    path = env.get("PATH", "")
+    path = services.main_process_path(unit)
+    if path is None:
+        return [warn("service-env", f"cannot read /proc/{pid}/environ")]
     out: list[Check] = []
     if str(user_bin) in path.split(os.pathsep):
         out.append(ok("service-env", f"{user_bin} is on the service PATH"))
@@ -358,11 +353,12 @@ def run_all(dep: Deployment, since: str = "-1 hour", probe: bool = True) -> list
     """
     s = get_settings()
     provenance = runtime_provenance()
+    services = create_service_inspector()
     checks: list[Check] = []
     checks += check_provenance(provenance)
     checks += check_config()
     checks += check_token(dep.token_file)
-    unit_checks, active = check_units(dep.server_unit)
+    unit_checks, active = check_units(dep.server_unit, inspector=services)
     checks += unit_checks
     if dep.unit_path is not None and dep.render_unit is not None:
         checks += units.check_unit_drift(
@@ -379,13 +375,14 @@ def run_all(dep: Deployment, since: str = "-1 hour", probe: bool = True) -> list
             "binnacle setup [--dev <repo>]",
             "binnacle mode dev|prod (restarts at a quiet moment)",
         )
-        checks += check_service_env(active, s.rg_bin, dep.user_bin)
+        checks += check_service_env(active, s.rg_bin, dep.user_bin, inspector=services)
 
     jobs_active: str | None = None
     if dep.jobs_unit is not None and dep.jobs_socket is not None:
         manager_checks, jobs_active = check_job_manager(
             dep.jobs_unit,
             dep.jobs_socket,
+            inspector=services,
             expected_revision=provenance.revision,
         )
         checks += manager_checks
@@ -404,7 +401,9 @@ def run_all(dep: Deployment, since: str = "-1 hour", probe: bool = True) -> list
                 "binnacle setup",
                 "restart binnacle-jobs.service only when no jobs are running",
             )
-            checks += check_service_env(jobs_active, s.rg_bin, dep.user_bin)
+            checks += check_service_env(
+                jobs_active, s.rg_bin, dep.user_bin, inspector=services
+            )
     checks += check_endpoint(dep.server_url, dep.token_file)
     # The uplink is the one check here that sees past localhost; the
     # tunnel's poller, the other one, is `binnacle-tunnel doctor`'s.

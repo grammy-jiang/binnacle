@@ -72,8 +72,9 @@ def _systemctl(*args: str, check: bool = True) -> subprocess.CompletedProcess:
 
 
 def _unit_state(unit: str) -> str:
-    proc = _systemctl("is-active", unit, check=False)
-    return proc.stdout.strip() or "unknown"
+    from binnacle.deployment_platform import create_service_inspector
+
+    return create_service_inspector().status(unit).state
 
 
 @app.command
@@ -301,9 +302,13 @@ def mode(
         from binnacle import doctor as checks
 
         job_settings = get_settings().jobs
+        from binnacle.deployment_platform import create_service_inspector
+
         include_jobs = (
             job_settings.owner == "embedded"
-            or not doctor_jobs.server_uses_manager(SERVER_UNIT)
+            or not doctor_jobs.server_uses_manager(
+                SERVER_UNIT, inspector=create_service_inspector()
+            )
         )
         busy = checks.server_busy_reasons(
             SERVER_UNIT, job_settings.dir, include_jobs=include_jobs

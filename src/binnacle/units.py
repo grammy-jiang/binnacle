@@ -204,6 +204,15 @@ def proc_cmdline(pid: int) -> list[str]:
     return [a.decode(errors="replace") for a in raw.split(b"\0") if a]
 
 
+def unit_waits_for_ready(
+    unit: str,
+    run: Systemctl = systemctl,
+) -> bool:
+    """Whether the Linux systemd unit waits for readiness after ExecStart."""
+
+    return bool(unit_property(unit, "ExecStartPost", run))
+
+
 def check_unit_process(
     unit: str,
     group: str,

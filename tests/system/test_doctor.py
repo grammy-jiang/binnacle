@@ -14,29 +14,15 @@ import pytest
 
 from binnacle import doctor
 from binnacle import jobs as jobstore
+from binnacle.service_lifecycle_contracts import ManagedServiceStatus
 from binnacle.service_log_contracts import ServiceLogError
+from tests.service_fakes import FakeServiceInspector
 
 BEARER = "Bearer secret-token\n"
 
 
 def statuses(checks: list[doctor.Check]) -> list[str]:
     return [c.status for c in checks]
-
-
-def fake_systemctl(states: dict[str, str], props: dict[str, str] | None = None):
-    """A systemctl stand-in: is-active from `states`, show -p from `props`."""
-    props = props or {}
-
-    def run(*args: str) -> subprocess.CompletedProcess:
-        if args[0] == "is-active":
-            out = states.get(args[1], "inactive")
-        elif args[0] == "show":
-            out = props.get(f"{args[1]}.{args[3]}", "")
-        else:
-            out = ""
-        return subprocess.CompletedProcess(list(args), 0, stdout=out + "\n", stderr="")
-
-    return run
 
 
 # -- token -------------------------------------------------------------------
@@ -80,48 +66,78 @@ def test_token_empty_fails(tmp_path):
 # -- units -------------------------------------------------------------------
 
 
+def service_inspector(
+    unit: str,
+    state: str = "active",
+    *,
+    pid: int | None = 42,
+    restarts: int | None = 0,
+    path: str | None = None,
+) -> FakeServiceInspector:
+    return FakeServiceInspector(
+        statuses={
+            unit: ManagedServiceStatus(
+                state,
+                main_pid=pid,
+                restart_count=restarts,
+            )
+        },
+        paths={unit: path},
+    )
+
+
 def test_units_inactive_fails():
     checks, active = doctor.check_units(
-        "prod", run=fake_systemctl({}), linger=lambda: True
+        "prod",
+        inspector=service_inspector("prod", "inactive", pid=None),
+        waits_for_ready=lambda unit: True,
+        linger=lambda: True,
     )
     assert active is None
     assert statuses(checks) == ["fail"]
     assert "systemctl --user start prod" in checks[0].hint
 
 
-READY = {"NRestarts": "0", "ExecStartPost": "{ path=/bin/bash ; argv[]=... }"}
-
-
-def _props(unit: str, **over: str) -> dict[str, str]:
-    return {f"{unit}.{k}": v for k, v in {**READY, **over}.items()}
-
-
 def test_units_active_ok():
-    run = fake_systemctl({"prod": "active"}, _props("prod"))
-    checks, active = doctor.check_units("prod", run=run, linger=lambda: True)
+    checks, active = doctor.check_units(
+        "prod",
+        inspector=service_inspector("prod"),
+        waits_for_ready=lambda unit: True,
+        linger=lambda: True,
+    )
     assert active == "prod"
     assert statuses(checks) == ["ok", "ok", "ok", "ok"]
 
 
 def test_units_without_readiness_gate_warns():
-    # The restart noise of 2026-09-03: tunnel probed a port uvicorn had not
-    # opened yet, because Type=simple counts the fork as "started".
-    run = fake_systemctl({"prod": "active"}, _props("prod", ExecStartPost=""))
-    checks, _ = doctor.check_units("prod", run=run, linger=lambda: True)
+    checks, _ = doctor.check_units(
+        "prod",
+        inspector=service_inspector("prod"),
+        waits_for_ready=lambda unit: False,
+        linger=lambda: True,
+    )
     assert checks[2].status == "warn" and "ExecStartPost" in checks[2].hint
 
 
 def test_units_restarts_and_no_linger_warn():
-    run = fake_systemctl({"dev": "active"}, _props("dev", NRestarts="3"))
-    checks, active = doctor.check_units("dev", run=run, linger=lambda: False)
+    checks, active = doctor.check_units(
+        "dev",
+        inspector=service_inspector("dev", restarts=3),
+        waits_for_ready=lambda unit: True,
+        linger=lambda: False,
+    )
     assert active == "dev"
     assert statuses(checks) == ["ok", "warn", "ok", "warn"]
     assert "3 time(s)" in checks[1].detail
 
 
 def test_units_linger_unknown_is_silent():
-    run = fake_systemctl({"prod": "active"}, _props("prod"))
-    checks, _ = doctor.check_units("prod", run=run, linger=lambda: None)
+    checks, _ = doctor.check_units(
+        "prod",
+        inspector=service_inspector("prod"),
+        waits_for_ready=lambda unit: True,
+        linger=lambda: None,
+    )
     assert len(checks) == 3
 
 
@@ -168,60 +184,61 @@ def test_server_busy_reasons_quiet_and_unreadable_journal(tmp_path):
 # -- service environment -----------------------------------------------------
 
 
-def _env_with(path: str):
-    return lambda pid: {"PATH": path}
-
-
 def test_service_env_good(tmp_path):
     user_bin = tmp_path / "bin"
     user_bin.mkdir()
     for name in ("bash", "rg"):
-        p = user_bin / name
-        p.write_text("#!/bin/sh\n")
-        p.chmod(0o755)
-    run = fake_systemctl({}, {"u.MainPID": "42"})
+        executable = user_bin / name
+        executable.write_text("#!/bin/sh\n")
+        executable.chmod(0o755)
     checks = doctor.check_service_env(
-        "u", "rg", user_bin, run=run, environ=_env_with(str(user_bin))
+        "u",
+        "rg",
+        user_bin,
+        inspector=service_inspector("u", path=str(user_bin)),
     )
     assert statuses(checks) == ["ok", "ok", "ok"]
 
 
 def test_service_env_missing_user_bin_fails(tmp_path):
-    # The 2026-09-02 incident: boot-time PATH without ~/.local/bin.
-    run = fake_systemctl({}, {"u.MainPID": "42"})
     checks = doctor.check_service_env(
-        "u", "rg", tmp_path / "bin", run=run, environ=_env_with("/usr/bin:/bin")
+        "u",
+        "rg",
+        tmp_path / "bin",
+        inspector=service_inspector("u", path="/usr/bin:/bin"),
     )
     assert checks[0].status == "fail" and "environment.d" in checks[0].hint
-    assert checks[1].status == "ok"  # bash is on /usr/bin or /bin
+    assert checks[1].status == "ok"
 
 
 def test_service_env_missing_rg_fails(tmp_path):
-    run = fake_systemctl({}, {"u.MainPID": "42"})
     checks = doctor.check_service_env(
-        "u", "definitely-not-rg", tmp_path, run=run, environ=_env_with(str(tmp_path))
+        "u",
+        "definitely-not-rg",
+        tmp_path,
+        inspector=service_inspector("u", path=str(tmp_path)),
     )
     assert checks[2].status == "fail" and "search_text" in checks[2].detail
 
 
 def test_service_env_no_pid_warns(tmp_path):
-    run = fake_systemctl({}, {"u.MainPID": "0"})
-    (c,) = doctor.check_service_env("u", "rg", tmp_path, run=run)
-    assert c.status == "warn"
+    (check,) = doctor.check_service_env(
+        "u",
+        "rg",
+        tmp_path,
+        inspector=service_inspector("u", pid=None),
+    )
+    assert check.status == "warn"
 
 
 def test_service_env_unreadable_proc_warns(tmp_path):
-    run = fake_systemctl({}, {"u.MainPID": "42"})
-    (c,) = doctor.check_service_env(
-        "u", "rg", tmp_path, run=run, environ=lambda pid: None
+    (check,) = doctor.check_service_env(
+        "u",
+        "rg",
+        tmp_path,
+        inspector=service_inspector("u", path=None),
     )
-    assert c.status == "warn"
-
-
-@pytest.mark.no_xdist
-def test_process_environ_reads_own_process():
-    env = doctor.process_environ(os.getpid())
-    assert env is not None and "PATH" in env
+    assert check.status == "warn" and "/proc/42/environ" in check.detail
 
 
 # -- endpoint ----------------------------------------------------------------

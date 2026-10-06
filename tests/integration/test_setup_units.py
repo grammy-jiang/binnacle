@@ -167,7 +167,9 @@ def test_setup_reports_an_executable_it_cannot_resolve(host, capsys, monkeypatch
 
 
 def quiet(monkeypatch, reasons: list[str] | None = None) -> None:
-    monkeypatch.setattr(cli.doctor_jobs, "server_uses_manager", lambda unit: True)
+    monkeypatch.setattr(
+        cli.doctor_jobs, "server_uses_manager", lambda *args, **kwargs: True
+    )
     monkeypatch.setattr(
         doctor, "server_busy_reasons", lambda *args, **kwargs: reasons or []
     )
@@ -223,7 +225,9 @@ def test_mode_switch_rewrites_reloads_and_restarts_at_a_quiet_moment(
 def test_mode_first_upgrade_still_protects_embedded_jobs(host, capsys, monkeypatch):
     cli.setup(dev=host.repo, port=8000)
     capsys.readouterr()
-    monkeypatch.setattr(cli.doctor_jobs, "server_uses_manager", lambda unit: False)
+    monkeypatch.setattr(
+        cli.doctor_jobs, "server_uses_manager", lambda *args, **kwargs: False
+    )
     seen = {}
 
     def busy(*args, **kwargs):

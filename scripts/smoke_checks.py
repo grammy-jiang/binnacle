@@ -20,6 +20,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from binnacle.service_lifecycle_contracts import ManagedServiceInspector
 from binnacle.service_log_contracts import ServiceLogError
 from scripts.smoke_diagnostics import JournalExpectation, doctor_detail, missing_from
 
@@ -86,6 +87,7 @@ class Env:
     sleep: Callable[[float], None]
     client: Callable[[], Any]
     read: Callable[[Path], str]
+    services: ManagedServiceInspector
     checkout: Path
     state_dir: Path
     tmp_root: Path
@@ -368,38 +370,12 @@ def check_journal(
     )
 
 
-def _epoch(env: Env, stamp: str) -> float | None:
-    rc, out = env.run(["date", "-d", stamp, "+%s.%N"], 10)
-    try:
-        return float(out.strip()) if rc == 0 else None
-    except ValueError:
-        return None
-
-
 def _rss_kb(env: Env) -> float | None:
-    show = ["systemctl", "--user", "show", UNIT, "-p", "ControlGroup", "--value"]
-    rc, cgroup = env.run(show, 10)
-    if rc or not cgroup.strip():
-        return None
-    total = 0
-    try:
-        procs = Path("/sys/fs/cgroup") / cgroup.strip().lstrip("/") / "cgroup.procs"
-        for pid in env.read(procs).split():
-            status = env.read(Path("/proc") / pid / "status")
-            m = re.search(r"^VmRSS:\s+(\d+)\s+kB", status, re.MULTILINE)
-            total += int(m.group(1)) if m else 0
-    except OSError:
-        return None
-    return float(total) or None
+    return env.services.rss_kb(UNIT)
 
 
 def _startup_s(env: Env) -> float | None:
-    # From the main process's start to the server's configured line. Not from
-    # ActiveEnterTimestamp: the unit's ExecStartPost port wait makes the unit
-    # active only after the server is already up.
-    show = ["systemctl", "--user", "show", UNIT, "-p", "ExecMainStartTimestamp"]
-    rc, active = env.run([*show, "--value", "--timestamp=us"], 10)
-    started = _epoch(env, active.strip()) if rc == 0 and active.strip() else None
+    started = env.services.started_at_epoch(UNIT)
     if started is None:
         return None
     for ln in env.journal(started - 1, started + 120):

@@ -13,6 +13,7 @@ import pytest
 import scripts.deploy_flow as flow
 from binnacle.service_log_contracts import ServiceLogError
 from scripts.smoke_checks import Env, Report
+from tests.service_fakes import FakeServiceInspector
 
 PREV = "a" * 40
 NEW = "b" * 40
@@ -132,6 +133,7 @@ def env_for(host: Host, tmp_path: Path) -> Env:
         sleep=host.sleep,
         client=lambda: None,
         read=lambda p: p.read_text(encoding="utf-8"),
+        services=FakeServiceInspector(),
         checkout=tmp_path,
         state_dir=tmp_path / "state",
         tmp_root=tmp_path,

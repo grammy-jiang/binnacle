@@ -7,7 +7,8 @@ from collections.abc import Callable
 from pathlib import Path
 
 from binnacle import jobs, logstats
-from binnacle.doctor_common import Systemctl, systemctl, unit_property, unit_state
+from binnacle.deployment_platform import create_service_inspector
+from binnacle.service_lifecycle_contracts import ManagedServiceInspector
 from binnacle.service_log_contracts import ServiceLogError
 
 
@@ -18,38 +19,26 @@ def _job_state_safe(job_id: str) -> dict | None:
         return None
 
 
-def _read_process_environ(pid: int) -> bytes | None:
-    try:
-        return Path(f"/proc/{pid}/environ").read_bytes()
-    except OSError:
-        return None
-
-
 def server_uses_manager(
     unit: str,
-    run: Systemctl = systemctl,
-    environ: Callable[[int], bytes | None] = _read_process_environ,
+    inspector: ManagedServiceInspector | None = None,
 ) -> bool:
     """Whether the currently running MCP process has durable manager ownership.
 
     The unit file may already have been rewritten during an upgrade while the old
-    embedded-owner process is still running, so inspect the live process environment.
-    An inactive unit has no embedded jobs left to protect.
+    embedded-owner process is still running, so inspect the live process
+    environment through the platform seam. A non-active unit has no embedded
+    jobs left to protect.
     """
-    if unit_state(unit, run) != "active":
+
+    services = inspector or create_service_inspector()
+    status = services.status(unit)
+    if status.state != "active":
         return True
-    pid_text = unit_property(unit, "MainPID", run)
-    try:
-        pid = int(pid_text)
-    except ValueError:
-        return False
-    if pid <= 0:
-        return False
-    raw = environ(pid)
-    if raw is None:
-        return False
-    marker = b"BINNACLE_MANAGED_DEPLOYMENT=1"
-    return marker in raw.split(b"\0")
+    managed = services.main_process_has_environment(
+        unit, "BINNACLE_MANAGED_DEPLOYMENT", "1"
+    )
+    return managed is True
 
 
 def server_busy_reasons(

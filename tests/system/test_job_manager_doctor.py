@@ -1,28 +1,30 @@
 """Diagnostics for the durable command-owner service."""
 
-import subprocess
 from pathlib import Path
 
 from binnacle import job_client
 from binnacle.job_manager_doctor import check_job_manager
+from binnacle.service_lifecycle_contracts import ManagedServiceStatus
+from tests.service_fakes import FakeServiceInspector
 
 
-def fake_systemctl(state: str, restarts: str = "0"):
-    def run(*args: str, **kwargs):
-        if args[:1] == ("is-active",):
-            return subprocess.CompletedProcess(args, 0, state + "\n", "")
-        if args[:2] == ("show", "jobs.service") and "NRestarts" in args:
-            return subprocess.CompletedProcess(args, 0, restarts + "\n", "")
-        return subprocess.CompletedProcess(args, 0, "", "")
-
-    return run
+def inspector(state: str, restarts: int | None = 0) -> FakeServiceInspector:
+    return FakeServiceInspector(
+        statuses={
+            "jobs.service": ManagedServiceStatus(
+                state,
+                main_pid=42 if state == "active" else None,
+                restart_count=restarts,
+            )
+        }
+    )
 
 
 def test_job_manager_active_socket_ok(tmp_path):
     checks, active = check_job_manager(
         "jobs.service",
         tmp_path / "jobs.sock",
-        run=fake_systemctl("active"),
+        inspector=inspector("active"),
         ping=lambda path: {
             "owner_instance_id": "abcdef1234567890",
             "package_version": "1.0.0",
@@ -40,7 +42,7 @@ def test_job_manager_revision_mismatch_warns(tmp_path):
     checks, active = check_job_manager(
         "jobs.service",
         tmp_path / "jobs.sock",
-        run=fake_systemctl("active"),
+        inspector=inspector("active"),
         ping=lambda path: {
             "owner_instance_id": "abcdef1234567890",
             "package_version": "1.0.0",
@@ -59,7 +61,7 @@ def test_job_manager_matching_revision_is_ok(tmp_path):
     checks, active = check_job_manager(
         "jobs.service",
         tmp_path / "jobs.sock",
-        run=fake_systemctl("active"),
+        inspector=inspector("active"),
         ping=lambda path: {
             "owner_instance_id": "abcdef1234567890",
             "package_version": "1.0.0",
@@ -75,7 +77,7 @@ def test_job_manager_missing_runtime_provenance_warns(tmp_path):
     checks, active = check_job_manager(
         "jobs.service",
         tmp_path / "jobs.sock",
-        run=fake_systemctl("active"),
+        inspector=inspector("active"),
         ping=lambda path: {
             "owner_instance_id": "abcdef1234567890",
             "package_version": "1.0.0",
@@ -91,7 +93,7 @@ def test_job_manager_inactive_fails(tmp_path):
     checks, active = check_job_manager(
         "jobs.service",
         tmp_path / "jobs.sock",
-        run=fake_systemctl("inactive"),
+        inspector=inspector("inactive"),
     )
     assert active is None and checks[0].status == "fail"
 
@@ -103,7 +105,7 @@ def test_job_manager_restarts_warn_and_dead_socket_fails(tmp_path):
     checks, active = check_job_manager(
         "jobs.service",
         tmp_path / "jobs.sock",
-        run=fake_systemctl("active", "2"),
+        inspector=inspector("active", 2),
         ping=dead,
     )
     assert active == "jobs.service"

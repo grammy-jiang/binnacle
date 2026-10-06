@@ -5,6 +5,7 @@ than constructing Linux paths or adapters directly.
 """
 
 from binnacle.runtime_path_contracts import RuntimePaths
+from binnacle.service_lifecycle_contracts import ManagedServiceInspector
 from binnacle.service_log_contracts import ServiceLogSource
 
 
@@ -20,3 +21,9 @@ def create_service_log_source(
     from binnacle.service_journal import JournalServiceLogSource
 
     return JournalServiceLogSource(command_timeout_s=command_timeout_s)
+
+
+def create_service_inspector() -> ManagedServiceInspector:
+    from binnacle.service_systemd import SystemdUserServices
+
+    return SystemdUserServices()

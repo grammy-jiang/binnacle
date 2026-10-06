@@ -29,16 +29,6 @@ def test_linger_enabled_handles_yes_no_and_command_failure(monkeypatch):
     assert doctor.linger_enabled() is None
 
 
-def test_process_environ_returns_none_when_proc_entry_cannot_be_read(monkeypatch):
-    monkeypatch.setattr(
-        doctor.Path,
-        "read_bytes",
-        lambda self: (_ for _ in ()).throw(OSError("gone")),
-    )
-
-    assert doctor.process_environ(12345) is None
-
-
 def test_check_config_reports_defaults_missing_root_and_load_failure(
     tmp_path, monkeypatch
 ):
@@ -49,6 +39,7 @@ def test_check_config_reports_defaults_missing_root_and_load_failure(
     missing = tmp_path / "missing"
     settings = SimpleNamespace(roots=SimpleNamespace(allowed=(existing, missing)))
     monkeypatch.setattr(doctor, "get_settings", lambda: settings)
+    monkeypatch.setattr(doctor, "create_service_inspector", lambda: object())
     monkeypatch.setenv(doctor.CONFIG_FILE_ENV, str(tmp_path / "absent.toml"))
 
     checks = doctor.check_config()
@@ -121,7 +112,7 @@ def test_run_all_composes_every_active_probe_check(tmp_path, monkeypatch):
     monkeypatch.setattr(
         doctor,
         "check_units",
-        lambda *a: ([doctor.ok("units", "ok")], "prod"),
+        lambda *a, **k: ([doctor.ok("units", "ok")], "prod"),
     )
     monkeypatch.setattr(doctor.units, "check_unit_drift", mark("units"))
     monkeypatch.setattr(doctor.units, "check_unit_process", mark("units"))
@@ -169,12 +160,13 @@ def test_run_all_skips_optional_checks_when_inactive_and_local_only(
             jobs=SimpleNamespace(dir=tmp_path / "jobs"),
         ),
     )
+    monkeypatch.setattr(doctor, "create_service_inspector", lambda: object())
     expected = SimpleNamespace(package_version="1.0.0", revision="abc123def456")
     monkeypatch.setattr(doctor, "runtime_provenance", lambda: expected)
     monkeypatch.setattr(doctor, "check_provenance", lambda value: [])
     monkeypatch.setattr(doctor, "check_config", list)
     monkeypatch.setattr(doctor, "check_token", lambda *a: [])
-    monkeypatch.setattr(doctor, "check_units", lambda *a: ([], None))
+    monkeypatch.setattr(doctor, "check_units", lambda *a, **k: ([], None))
     monkeypatch.setattr(doctor, "check_endpoint", lambda *a: [])
     monkeypatch.setattr(doctor, "check_boot", list)
     monkeypatch.setattr(doctor, "check_jobs", lambda *a: [])

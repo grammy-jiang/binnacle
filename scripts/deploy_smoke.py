@@ -38,7 +38,10 @@ from typing import Any
 if __package__ in (None, ""):  # run as a script: make `scripts` importable
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from binnacle.deployment_platform import create_service_log_source
+from binnacle.deployment_platform import (
+    create_service_inspector,
+    create_service_log_source,
+)
 from scripts.smoke_checks import UNIT, Env, smoke
 
 DEFAULT_CHECKOUT = Path.home() / "Projects" / "binnacle"
@@ -81,6 +84,7 @@ def default_env(checkout: Path = DEFAULT_CHECKOUT) -> Env:
         sleep=time.sleep,
         client=mcp_client,
         read=lambda p: p.read_text(encoding="utf-8"),
+        services=create_service_inspector(),
         checkout=checkout,
         state_dir=STATE_DIR,
         tmp_root=Path("/tmp"),

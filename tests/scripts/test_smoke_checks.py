@@ -12,11 +12,12 @@ from typing import Any
 
 import pytest
 
+from binnacle.service_lifecycle_contracts import ManagedServiceStatus
 from scripts import deploy_smoke
 from scripts.smoke_checks import CURSOR_FIXTURE_LINES, Env, measure, smoke
 from scripts.smoke_diagnostics import doctor_detail, missing_from
+from tests.service_fakes import FakeServiceInspector
 
-CGROUP = "/user.slice/app.slice/binnacle-mcp.service"
 ALL_TOOLS = [
     "read_file",
     "list_files",
@@ -143,14 +144,6 @@ def make_env(
     clock = Clock()
 
     def run(argv: Sequence[str], timeout: float) -> tuple[int, str]:
-        cmd = " ".join(argv)
-        if "ControlGroup" in cmd:
-            return 0, CGROUP + "\n"
-        if "ExecMainStartTimestamp" in cmd:
-            return 0, "Sun 2026-09-27 07:53:02.715341 AEST\n"
-        if argv[0] == "date":  # the journal's naive stamps are local time, like `date`
-            start = datetime.fromisoformat("2026-09-27T07:53:02.715341").timestamp()
-            return 0, f"{start:.6f}\n"
         for key in ("binnacle-tunnel", "binnacle-watchdog", "binnacle"):
             if argv[0].endswith(key):
                 output = kw.get("doctor_output") if key == "binnacle" else None
@@ -158,12 +151,18 @@ def make_env(
         return 1, "unexpected"
 
     def read(path: Path) -> str:
-        text = str(path)
-        if text.endswith("cgroup.procs"):
-            return "101\n102\n"
-        if re.fullmatch(r"/proc/\d+/status", text):
-            return f"Name: x\nVmRSS:\t {rss // 2} kB\n"
         return path.read_text(encoding="utf-8")
+
+    started = datetime.fromisoformat("2026-09-27T07:53:02.715341").timestamp()
+    services = kw.get("services") or FakeServiceInspector(
+        statuses={
+            "binnacle-mcp.service": ManagedServiceStatus(
+                "active", main_pid=42, restart_count=0
+            )
+        },
+        rss={"binnacle-mcp.service": float(rss)},
+        started={"binnacle-mcp.service": started},
+    )
 
     return Env(
         run=run,
@@ -172,6 +171,7 @@ def make_env(
         sleep=clock.sleep,
         client=kw.get("factory") or (lambda: client),
         read=read,
+        services=services,
         checkout=tmp_path / "checkout",
         state_dir=tmp_path / "state",
         tmp_root=tmp_path,
@@ -389,8 +389,7 @@ def test_edit_tools_are_skipped_when_the_client_is_not_served_them(
 
 
 def test_measure_survives_missing_data(tmp_path: Path) -> None:
-    env = make_env(tmp_path, FakeClient())
-    env.run = lambda argv, timeout: (1, "")
+    env = make_env(tmp_path, FakeClient(), services=FakeServiceInspector())
     assert measure(env) == {}
 
 

@@ -4,27 +4,22 @@ from collections.abc import Callable
 from pathlib import Path
 
 from binnacle import job_client
-from binnacle.doctor_common import (
-    Check,
-    Systemctl,
-    fail,
-    ok,
-    systemctl,
-    unit_property,
-    unit_state,
-    warn,
-)
+from binnacle.deployment_platform import create_service_inspector
+from binnacle.doctor_common import Check, fail, ok, warn
+from binnacle.service_lifecycle_contracts import ManagedServiceInspector
 
 
 def check_job_manager(
     unit: str,
     socket_path: Path,
-    run: Systemctl = systemctl,
+    inspector: ManagedServiceInspector | None = None,
     ping: Callable[[Path], dict] = job_client.ping,
     *,
     expected_revision: str | None = None,
 ) -> tuple[list[Check], str | None]:
-    state = unit_state(unit, run)
+    services = inspector or create_service_inspector()
+    status = services.status(unit)
+    state = status.state
     if state != "active":
         return (
             [
@@ -38,8 +33,8 @@ def check_job_manager(
         )
 
     checks = [ok("jobs-service", f"{unit} active")]
-    restarts = unit_property(unit, "NRestarts", run)
-    if restarts.isdigit() and int(restarts) > 0:
+    restarts = status.restart_count
+    if restarts is not None and restarts > 0:
         checks.append(
             warn(
                 "jobs-service",
