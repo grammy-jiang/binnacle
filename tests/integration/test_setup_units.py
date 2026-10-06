@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from binnacle import cli, doctor, units
+from binnacle.service_provisioning_linux import LinuxServiceProvisioner
 
 
 @pytest.fixture
@@ -17,18 +18,26 @@ def host(tmp_path, monkeypatch):
     monkeypatch.setattr(cli, "TOKEN_FILE", token)
     monkeypatch.setattr(cli, "BACKUP_DIR", tmp_path / "backups")
     calls: list[tuple[str, ...]] = []
+
+    def platform_run(argv, **kw):
+        recorded = tuple(argv)
+        if recorded[:2] == ("systemctl", "--user"):
+            calls.append(recorded[2:])
+        else:
+            calls.append(recorded)
+        return subprocess.CompletedProcess(list(argv), 0, "", "")
+
+    provisioner = LinuxServiceProvisioner(
+        unit_dir=unit_dir,
+        backup_dir=tmp_path / "backups",
+        run=platform_run,
+    )
+    monkeypatch.setattr(cli, "create_linux_provisioner", lambda **kwargs: provisioner)
     monkeypatch.setattr(
         cli,
         "_systemctl",
         lambda *args, **kw: (
             calls.append(args) or subprocess.CompletedProcess(list(args), 0, "", "")
-        ),
-    )
-    monkeypatch.setattr(
-        cli.subprocess,
-        "run",
-        lambda argv, **kw: (
-            calls.append(tuple(argv)) or subprocess.CompletedProcess(argv, 0, "", "")
         ),
     )
     monkeypatch.setattr(cli, "_unit_state", lambda unit: "active")

@@ -21,18 +21,13 @@ import cyclopts
 
 from binnacle import doctor_jobs, units
 from binnacle.config import get_settings
-from binnacle.job_manager_unit import (
-    JOBS_UNIT,
-    job_manager_params,
-    job_manager_unit_spec,
-    render_job_manager_unit,
+from binnacle.deployment_platform import (
+    create_linux_provisioner,
+    create_service_inspector,
 )
-from binnacle.server_unit import (
-    SERVER_UNIT,
-    render_server_unit,
-    server_params,
-    server_unit_spec,
-)
+from binnacle.job_manager_unit import JOBS_UNIT, render_job_manager_unit
+from binnacle.server_unit import SERVER_UNIT, render_server_unit
+from binnacle.service_provisioning_linux import LinuxServiceProvisioner, PlannedUnit
 
 app = cyclopts.App(
     name="binnacle",
@@ -62,18 +57,15 @@ def _write_token(path: Path | None = None) -> None:
     path.chmod(0o600)
 
 
+def _provisioner() -> LinuxServiceProvisioner:
+    return create_linux_provisioner(unit_dir=UNIT_DIR, backup_dir=BACKUP_DIR)
+
+
 def _systemctl(*args: str, check: bool = True) -> subprocess.CompletedProcess:
-    return subprocess.run(
-        ["systemctl", "--user", *args],
-        capture_output=True,
-        text=True,
-        check=check,
-    )
+    return _provisioner().systemctl(*args, check=check)
 
 
 def _unit_state(unit: str) -> str:
-    from binnacle.deployment_platform import create_service_inspector
-
     return create_service_inspector().status(unit).state
 
 
@@ -100,24 +92,28 @@ def serve(
 
 
 def _setup_unit_plans(
-    mode: str, dev: Path | None, port: int, adopt: bool
-) -> tuple[list[tuple[Path, units.UnitSpec]], dict[str, units.WritePlan]]:
+    mode: str,
+    dev: Path | None,
+    port: int,
+    adopt: bool,
+    provisioner: LinuxServiceProvisioner,
+) -> tuple[list[PlannedUnit], dict[str, units.WritePlan]]:
     try:
-        server_spec = server_unit_spec(
-            server_params(mode, dev, get_settings().serve.host, port)
+        unit_plans = provisioner.plan_server_jobs(
+            mode,
+            dev,
+            get_settings().serve.host,
+            port,
+            adopt=adopt,
         )
-        jobs_spec = job_manager_unit_spec(job_manager_params(mode, dev))
     except units.UnitError as exc:
         print(exc)
         raise SystemExit(1) from None
-    unit_plans = [
-        (UNIT_DIR / JOBS_UNIT, jobs_spec),
-        (UNIT_DIR / SERVER_UNIT, server_spec),
-    ]
+
     planned: dict[str, units.WritePlan] = {}
-    for unit_path, spec in unit_plans:
-        plan = units.plan_write(unit_path, spec, adopt=adopt)
-        planned[spec.name] = plan
+    for item in unit_plans:
+        plan = item.write
+        planned[item.name] = plan
         if plan.diff:
             print(plan.diff + "\n")
         if plan.action == "refuse":
@@ -127,25 +123,26 @@ def _setup_unit_plans(
 
 
 def _apply_setup_units(
-    unit_plans: list[tuple[Path, units.UnitSpec]],
+    unit_plans: list[PlannedUnit],
     planned: dict[str, units.WritePlan],
     mode: str,
+    provisioner: LinuxServiceProvisioner,
     act: Callable[[str, Callable[[], object]], None],
     actions: list[str],
 ) -> None:
-    for unit_path, spec in unit_plans:
-        plan = planned[spec.name]
+    for item in unit_plans:
+        plan = planned[item.name]
         if plan.action == "unchanged":
-            actions.append(f"keep {unit_path} (already what setup writes, {mode} mode)")
+            actions.append(f"keep {item.path} (already what setup writes, {mode} mode)")
             continue
         verb = "write" if plan.action == "create" else "rewrite"
-        description = f"{verb} {unit_path} ({mode} mode)"
+        description = f"{verb} {item.path} ({mode} mode)"
         if plan.action == "rewrite":
             description = (
-                f"{verb} {unit_path} ({mode} mode; a copy of the old file goes to "
-                f"{BACKUP_DIR})"
+                f"{verb} {item.path} ({mode} mode; a copy of the old file goes to "
+                f"{provisioner.backup_dir})"
             )
-        act(description, partial(units.write_unit, unit_path, plan, BACKUP_DIR))
+        act(description, partial(provisioner.write_unit, item))
 
 
 def _print_setup_restart_hints(planned: dict[str, units.WritePlan], mode: str) -> None:
@@ -200,21 +197,22 @@ def setup(
         actions.append(f"keep existing token at {TOKEN_FILE}")
 
     mode = "dev" if dev is not None else "prod"
-    unit_plans, planned = _setup_unit_plans(mode, dev, port, adopt)
-    _apply_setup_units(unit_plans, planned, mode, act, actions)
+    provisioner = _provisioner()
+    unit_plans, planned = _setup_unit_plans(mode, dev, port, adopt, provisioner)
+    _apply_setup_units(unit_plans, planned, mode, provisioner, act, actions)
 
-    act("systemctl --user daemon-reload", lambda: _systemctl("daemon-reload"))
+    act("systemctl --user daemon-reload", provisioner.reload_definitions)
     act(
         f"systemctl --user enable --now {JOBS_UNIT}",
-        lambda: _systemctl("enable", "--now", JOBS_UNIT),
+        lambda: provisioner.enable_now(JOBS_UNIT),
     )
     act(
         f"systemctl --user enable --now {SERVER_UNIT}",
-        lambda: _systemctl("enable", "--now", SERVER_UNIT),
+        lambda: provisioner.enable_now(SERVER_UNIT),
     )
     act(
         "loginctl enable-linger (services survive logout and reboot)",
-        lambda: subprocess.run(["loginctl", "enable-linger"], check=True),
+        provisioner.enable_persistence,
     )
 
     prefix = "would " if dry_run else ""
@@ -228,11 +226,10 @@ def setup(
     _print_setup_restart_hints(planned, mode)
 
 
-def _current_marker() -> units.Marker | None:
-    unit_path = UNIT_DIR / SERVER_UNIT
-    if not unit_path.exists():
-        return None
-    return units.read_marker(unit_path.read_text(encoding="utf-8"))
+def _current_marker(
+    provisioner: LinuxServiceProvisioner | None = None,
+) -> units.Marker | None:
+    return (provisioner or _provisioner()).current_marker(SERVER_UNIT)
 
 
 @app.command
@@ -253,7 +250,8 @@ def mode(
     rollback setting explicitly selects the embedded owner, running jobs
     remain blockers because they share the MCP cgroup. `--force` overrides.
     """
-    marker = _current_marker()
+    provisioner = _provisioner()
+    marker = _current_marker(provisioner)
     if target == "status":
         state = _unit_state(SERVER_UNIT)
         if marker is None:
@@ -285,16 +283,16 @@ def mode(
         raise SystemExit(1)
     try:
         port = int(known.get("port") or get_settings().serve.port)
-        spec = server_unit_spec(
-            server_params(
-                target, checkout, known.get("host") or get_settings().serve.host, port
-            )
+        item = provisioner.plan_server(
+            target,
+            checkout,
+            known.get("host") or get_settings().serve.host,
+            port,
         )
     except units.UnitError as e:
         print(e)
         raise SystemExit(1) from None
-    unit_path = UNIT_DIR / SERVER_UNIT
-    plan = units.plan_write(unit_path, spec)
+    plan = item.write
     if plan.action == "refuse":
         print(plan.reason)
         raise SystemExit(1)
@@ -302,8 +300,6 @@ def mode(
         from binnacle import doctor as checks
 
         job_settings = get_settings().jobs
-        from binnacle.deployment_platform import create_service_inspector
-
         include_jobs = (
             job_settings.owner == "embedded"
             or not doctor_jobs.server_uses_manager(
@@ -322,8 +318,8 @@ def mode(
     if plan.action == "rewrite":
         if plan.diff:
             print(plan.diff + "\n")
-        units.write_unit(unit_path, plan, BACKUP_DIR)
-        _systemctl("daemon-reload")
+        provisioner.write_unit(item)
+        provisioner.reload_definitions()
     proc = _systemctl("restart", SERVER_UNIT, check=False)
     if proc.returncode != 0:
         print(f"failed to restart {SERVER_UNIT}: {proc.stderr.strip()}")
@@ -360,12 +356,13 @@ def doctor(
     from binnacle import doctor as checks
 
     serve_cfg = get_settings().serve
+    provisioner = _provisioner()
     dep = checks.Deployment(
         server_unit=SERVER_UNIT,
-        unit_path=UNIT_DIR / SERVER_UNIT,
+        unit_path=provisioner.unit_path(SERVER_UNIT),
         render_unit=render_server_unit,
         jobs_unit=JOBS_UNIT,
-        jobs_unit_path=UNIT_DIR / JOBS_UNIT,
+        jobs_unit_path=provisioner.unit_path(JOBS_UNIT),
         render_jobs_unit=render_job_manager_unit,
         jobs_socket=get_settings().jobs.socket_path,
         token_file=TOKEN_FILE,
