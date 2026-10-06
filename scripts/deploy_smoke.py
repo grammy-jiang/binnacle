@@ -39,6 +39,7 @@ if __package__ in (None, ""):  # run as a script: make `scripts` importable
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from binnacle.deployment_platform import (
+    create_service_controller,
     create_service_inspector,
     create_service_log_source,
 )
@@ -85,6 +86,7 @@ def default_env(checkout: Path = DEFAULT_CHECKOUT) -> Env:
         client=mcp_client,
         read=lambda p: p.read_text(encoding="utf-8"),
         services=create_service_inspector(),
+        service_controller=create_service_controller(),
         checkout=checkout,
         state_dir=STATE_DIR,
         tmp_root=Path("/tmp"),

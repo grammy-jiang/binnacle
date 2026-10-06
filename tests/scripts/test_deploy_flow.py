@@ -11,12 +11,24 @@ from typing import Any
 import pytest
 
 import scripts.deploy_flow as flow
+from binnacle.service_lifecycle_contracts import ServiceAction
 from binnacle.service_log_contracts import ServiceLogError
 from scripts.smoke_checks import Env, Report
 from tests.service_fakes import FakeServiceInspector
 
 PREV = "a" * 40
 NEW = "b" * 40
+
+
+class HostController:
+    def __init__(self, host) -> None:
+        self.host = host
+        self.calls: list[tuple[str, float | None]] = []
+
+    def restart(self, service: str, *, timeout: float | None = None) -> ServiceAction:
+        self.calls.append((service, timeout))
+        self.host.config_at = self.host.t
+        return ServiceAction(0)
 
 
 class Host:
@@ -47,6 +59,7 @@ class Host:
         self.ci_seen = 0
         self.sync_seen = 0
         self.journal_seen = 0
+        self.controller = HostController(self)
 
     def now(self) -> float:
         self.t += 0.01
@@ -134,6 +147,7 @@ def env_for(host: Host, tmp_path: Path) -> Env:
         client=lambda: None,
         read=lambda p: p.read_text(encoding="utf-8"),
         services=FakeServiceInspector(),
+        service_controller=host.controller,
         checkout=tmp_path,
         state_dir=tmp_path / "state",
         tmp_root=tmp_path,
@@ -314,9 +328,7 @@ def test_dev_dependency_change_syncs_and_restarts(
         ".venv/bin/uv sync --project" in call and "--locked --group dev" in call
         for call in host.calls
     )
-    assert any(
-        "systemctl --user restart binnacle-mcp.service" in call for call in host.calls
-    )
+    assert host.controller.calls == [(flow.UNIT, 90.0)]
     assert "sync: sync ok" in text
     assert "restarted after dev environment sync" in text
 
@@ -333,12 +345,7 @@ def test_dev_dependency_restart_uses_restart_timeout(
     )
 
     assert level == "ok"
-    restart_timeouts = [
-        timeout
-        for command, timeout in host.timed_calls
-        if "systemctl --user restart binnacle-mcp.service" in command
-    ]
-    assert restart_timeouts == [77.0]
+    assert host.controller.calls == [(flow.UNIT, 77.0)]
 
 
 def test_dev_dependency_rollback_restart_uses_restart_timeout(
@@ -354,12 +361,7 @@ def test_dev_dependency_rollback_restart_uses_restart_timeout(
     )
 
     assert level == "alert"
-    restart_timeouts = [
-        timeout
-        for command, timeout in host.timed_calls
-        if "systemctl --user restart binnacle-mcp.service" in command
-    ]
-    assert restart_timeouts == [77.0, 77.0]
+    assert host.controller.calls == [(flow.UNIT, 77.0), (flow.UNIT, 77.0)]
 
 
 def test_failed_dev_sync_rolls_back_and_restores_old_environment(
@@ -401,7 +403,7 @@ def test_prod_dependency_metadata_does_not_sync_checkout_venv(
 def test_prod_mode_restarts_the_unit(tmp_path: Path, smokes: list[str]) -> None:
     host = Host(mode="prod mode")
     assert deploy(host, tmp_path)[0] == "ok"
-    assert any("systemctl --user restart binnacle-mcp.service" in c for c in host.calls)
+    assert host.controller.calls == [(flow.UNIT, 90.0)]
 
 
 def test_a_failed_atomic_push_rolls_back(tmp_path: Path, smokes: list[str]) -> None:

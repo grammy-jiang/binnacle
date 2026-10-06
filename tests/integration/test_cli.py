@@ -9,6 +9,8 @@ and token rotation without changing the development Raspberry Pi.
 import subprocess
 
 from binnacle import cli, doctor
+from binnacle.service_lifecycle_contracts import ServiceAction
+from tests.service_fakes import FakeServiceController
 
 
 def test_write_token_format_and_mode(tmp_path):
@@ -51,23 +53,79 @@ def test_rotate_writes_prefixed_token_and_restarts_active_units(
     f = tmp_path / "token"
     f.write_text("old\n")
     monkeypatch.setattr(cli, "TOKEN_FILE", f)
-    calls: list[tuple[str, ...]] = []
     states = {cli.SERVER_UNIT: "active", cli.TUNNEL_UNIT: "active"}
-
-    def fake_systemctl(*args: str, check: bool = True) -> subprocess.CompletedProcess:
-        calls.append(args)
-        return subprocess.CompletedProcess(list(args), 0, "", "")
-
-    monkeypatch.setattr(cli, "_systemctl", fake_systemctl)
-    monkeypatch.setattr(cli, "_unit_state", lambda u: states[u])
+    controller = FakeServiceController()
+    monkeypatch.setattr(cli, "create_service_controller", lambda: controller)
+    monkeypatch.setattr(cli, "_unit_state", lambda unit: states[unit])
 
     cli.rotate()
 
     assert f.read_text().startswith("Bearer ")
     assert f.read_text() != "old\n"
-    assert calls == [("restart", cli.SERVER_UNIT), ("restart", cli.TUNNEL_UNIT)]
+    assert controller.calls == [
+        (cli.SERVER_UNIT, None),
+        (cli.TUNNEL_UNIT, None),
+    ]
     out = capsys.readouterr().out
     assert "wrote new token" in out
+    assert f"restarted {cli.SERVER_UNIT}" in out
+    assert f"restarted {cli.TUNNEL_UNIT}" in out
+
+
+def test_rotate_attempts_all_active_units_and_fails_truthfully(
+    tmp_path, monkeypatch, capsys
+):
+    f = tmp_path / "token"
+    f.write_text("old\n")
+    monkeypatch.setattr(cli, "TOKEN_FILE", f)
+    states = {cli.SERVER_UNIT: "active", cli.TUNNEL_UNIT: "active"}
+    controller = FakeServiceController(
+        results={
+            cli.SERVER_UNIT: ServiceAction(1, stderr="server boom"),
+            cli.TUNNEL_UNIT: ServiceAction(0),
+        }
+    )
+    monkeypatch.setattr(cli, "create_service_controller", lambda: controller)
+    monkeypatch.setattr(cli, "_unit_state", lambda unit: states[unit])
+
+    with pytest.raises(SystemExit) as exc:
+        cli.rotate()
+
+    assert exc.value.code == 1
+    assert controller.calls == [
+        (cli.SERVER_UNIT, None),
+        (cli.TUNNEL_UNIT, None),
+    ]
+    out = capsys.readouterr().out
+    assert f"failed to restart {cli.SERVER_UNIT}: server boom" in out
+    assert f"restarted {cli.TUNNEL_UNIT}" in out
+    assert f"restarted {cli.SERVER_UNIT}" not in out
+
+
+def test_rotate_tunnel_failure_is_nonzero_after_server_success(
+    tmp_path, monkeypatch, capsys
+):
+    f = tmp_path / "token"
+    f.write_text("old\n")
+    monkeypatch.setattr(cli, "TOKEN_FILE", f)
+    states = {cli.SERVER_UNIT: "active", cli.TUNNEL_UNIT: "active"}
+    controller = FakeServiceController(
+        results={cli.TUNNEL_UNIT: ServiceAction(1, stderr="tunnel boom")}
+    )
+    monkeypatch.setattr(cli, "create_service_controller", lambda: controller)
+    monkeypatch.setattr(cli, "_unit_state", lambda unit: states[unit])
+
+    with pytest.raises(SystemExit) as exc:
+        cli.rotate()
+
+    assert exc.value.code == 1
+    assert controller.calls == [
+        (cli.SERVER_UNIT, None),
+        (cli.TUNNEL_UNIT, None),
+    ]
+    out = capsys.readouterr().out
+    assert f"restarted {cli.SERVER_UNIT}" in out
+    assert f"failed to restart {cli.TUNNEL_UNIT}: tunnel boom" in out
 
 
 # -- tunnel readiness wait (token rotate) -----------------------------------

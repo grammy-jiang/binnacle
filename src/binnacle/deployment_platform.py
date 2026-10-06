@@ -5,7 +5,10 @@ than constructing Linux paths or adapters directly.
 """
 
 from binnacle.runtime_path_contracts import RuntimePaths
-from binnacle.service_lifecycle_contracts import ManagedServiceInspector
+from binnacle.service_lifecycle_contracts import (
+    ManagedServiceController,
+    ManagedServiceInspector,
+)
 from binnacle.service_log_contracts import ServiceLogSource
 
 
@@ -44,3 +47,9 @@ def create_linux_provisioner(
         unit_dir=UNIT_DIR if unit_dir is None else unit_dir,
         backup_dir=DEFAULT_BACKUP_DIR if backup_dir is None else backup_dir,
     )
+
+
+def create_service_controller() -> ManagedServiceController:
+    from binnacle.service_systemd import SystemdUserServices
+
+    return SystemdUserServices()

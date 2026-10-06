@@ -7,7 +7,9 @@ from types import SimpleNamespace
 import pytest
 
 from binnacle import cli, doctor, units
+from binnacle.service_lifecycle_contracts import ServiceAction
 from binnacle.service_provisioning_linux import LinuxServiceProvisioner
+from tests.service_fakes import FakeServiceController
 
 
 @pytest.fixture
@@ -41,6 +43,8 @@ def host(tmp_path, monkeypatch):
         ),
     )
     monkeypatch.setattr(cli, "_unit_state", lambda unit: "active")
+    controller = FakeServiceController()
+    monkeypatch.setattr(cli, "create_service_controller", lambda: controller)
     exe = tmp_path / "venv" / "bin" / "binnacle"
     exe.parent.mkdir(parents=True)
     exe.write_text("#!/bin/sh\n")
@@ -55,6 +59,7 @@ def host(tmp_path, monkeypatch):
         exe=exe,
         repo=tmp_path / "repo",
         tmp=tmp_path,
+        controller=controller,
     )
 
 
@@ -218,17 +223,20 @@ def test_mode_switch_rewrites_reloads_and_restarts_at_a_quiet_moment(
     assert marker is not None and marker.params["mode"] == "prod"
     assert marker.params["repo"] == str(host.repo.resolve())
     assert f"{host.exe} serve --host 127.0.0.1 --port 8000" in text
-    assert host.calls == [("daemon-reload",), ("restart", cli.SERVER_UNIT)]
+    assert host.calls == [("daemon-reload",)]
+    assert host.controller.calls == [(cli.SERVER_UNIT, None)]
     out = capsys.readouterr().out
     assert "-ExecStart=" in out and "+ExecStart=" in out
     assert f"prod mode: {cli.SERVER_UNIT} restarted and active." in out
 
     host.calls.clear()
+    host.controller.calls.clear()
     cli.mode("dev")  # the marker remembered the checkout: no --repo needed
 
     marker = units.read_marker(host.unit.read_text())
     assert marker is not None and marker.params["mode"] == "dev"
-    assert host.calls == [("daemon-reload",), ("restart", cli.SERVER_UNIT)]
+    assert host.calls == [("daemon-reload",)]
+    assert host.controller.calls == [(cli.SERVER_UNIT, None)]
 
 
 def test_mode_first_upgrade_still_protects_embedded_jobs(host, capsys, monkeypatch):
@@ -298,7 +306,7 @@ def test_mode_refuses_a_busy_moment_unless_forced(host, capsys, monkeypatch):
     assert marker is not None and marker.params["mode"] == "dev"
 
     cli.mode("prod", force=True)
-    assert ("restart", cli.SERVER_UNIT) in host.calls
+    assert host.controller.calls == [(cli.SERVER_UNIT, None)]
 
 
 def test_mode_needs_a_managed_unit_and_a_repo_for_dev(host, capsys, monkeypatch):
@@ -323,11 +331,7 @@ def test_mode_reports_a_failed_restart(host, capsys, monkeypatch):
     capsys.readouterr()
     quiet(monkeypatch)
 
-    def failing(*args, check=True):
-        code = 1 if args[0] == "restart" else 0
-        return subprocess.CompletedProcess(list(args), code, "", "boom")
-
-    monkeypatch.setattr(cli, "_systemctl", failing)
+    host.controller.results[cli.SERVER_UNIT] = ServiceAction(1, stderr="boom")
 
     with pytest.raises(SystemExit) as exc:
         cli.mode("dev")

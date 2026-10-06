@@ -160,9 +160,14 @@ def _make_live(
     if not code_changed and not force_restart:
         return True, ""
     if prod or force_restart:
-        rc, _ = env.run(["systemctl", "--user", "restart", UNIT], timeout)
-        if rc != 0:
-            return False, ""
+        action = env.service_controller.restart(UNIT, timeout=timeout)
+        if action.returncode != 0:
+            detail = (
+                action.stderr.strip()
+                or action.launch_error
+                or f"exit {action.returncode}"
+            )
+            return False, f"restart failed: {detail}"
     return _await_config(env, since, timeout)
 
 

@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 
-from binnacle.service_lifecycle_contracts import ManagedServiceStatus
+from binnacle.service_lifecycle_contracts import ManagedServiceStatus, ServiceAction
 
 
 @dataclass
@@ -31,3 +31,13 @@ class FakeServiceInspector:
 
     def started_at_epoch(self, service: str) -> float | None:
         return self.started.get(service)
+
+
+@dataclass
+class FakeServiceController:
+    results: dict[str, ServiceAction] = field(default_factory=dict)
+    calls: list[tuple[str, float | None]] = field(default_factory=list)
+
+    def restart(self, service: str, *, timeout: float | None = None) -> ServiceAction:
+        self.calls.append((service, timeout))
+        return self.results.get(service, ServiceAction(0))

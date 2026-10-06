@@ -20,7 +20,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from binnacle.service_lifecycle_contracts import ManagedServiceInspector
+from binnacle.service_lifecycle_contracts import (
+    ManagedServiceController,
+    ManagedServiceInspector,
+)
 from binnacle.service_log_contracts import ServiceLogError
 from scripts.smoke_diagnostics import JournalExpectation, doctor_detail, missing_from
 
@@ -88,6 +91,7 @@ class Env:
     client: Callable[[], Any]
     read: Callable[[Path], str]
     services: ManagedServiceInspector
+    service_controller: ManagedServiceController
     checkout: Path
     state_dir: Path
     tmp_root: Path

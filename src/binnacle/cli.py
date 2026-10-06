@@ -23,6 +23,7 @@ from binnacle import doctor_jobs, units
 from binnacle.config import get_settings
 from binnacle.deployment_platform import (
     create_linux_provisioner,
+    create_service_controller,
     create_service_inspector,
 )
 from binnacle.job_manager_unit import JOBS_UNIT, render_job_manager_unit
@@ -320,9 +321,12 @@ def mode(
             print(plan.diff + "\n")
         provisioner.write_unit(item)
         provisioner.reload_definitions()
-    proc = _systemctl("restart", SERVER_UNIT, check=False)
-    if proc.returncode != 0:
-        print(f"failed to restart {SERVER_UNIT}: {proc.stderr.strip()}")
+    action = create_service_controller().restart(SERVER_UNIT, timeout=None)
+    if action.returncode != 0:
+        detail = (
+            action.stderr.strip() or action.launch_error or f"exit {action.returncode}"
+        )
+        print(f"failed to restart {SERVER_UNIT}: {detail}")
         raise SystemExit(1)
     print(f"{target} mode: {SERVER_UNIT} restarted and {_unit_state(SERVER_UNIT)}.")
 
@@ -438,10 +442,22 @@ def rotate() -> None:
     """
     _write_token()
     print(f"wrote new token to {TOKEN_FILE}")
+    controller = create_service_controller()
+    failed = False
     for unit in (SERVER_UNIT, TUNNEL_UNIT):
-        if _unit_state(unit) == "active":
-            _systemctl("restart", unit, check=False)
+        if _unit_state(unit) != "active":
+            continue
+        action = controller.restart(unit, timeout=None)
+        if action.returncode == 0:
             print(f"restarted {unit}")
+            continue
+        failed = True
+        detail = (
+            action.stderr.strip() or action.launch_error or f"exit {action.returncode}"
+        )
+        print(f"failed to restart {unit}: {detail}")
+    if failed:
+        raise SystemExit(1)
 
 
 def main() -> None:

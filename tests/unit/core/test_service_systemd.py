@@ -3,7 +3,7 @@ import subprocess
 import pytest
 
 from binnacle import service_systemd
-from binnacle.service_lifecycle_contracts import ManagedServiceStatus
+from binnacle.service_lifecycle_contracts import ManagedServiceStatus, ServiceAction
 from binnacle.service_systemd import SystemdUserServices
 
 
@@ -162,3 +162,53 @@ def test_started_at_epoch_keeps_systemd_timestamp_and_date_conversion(monkeypatc
             },
         )
     ]
+
+
+def test_restart_without_timeout_preserves_completed_action(monkeypatch):
+    seen = []
+
+    def run(argv, **kwargs):
+        seen.append((argv, kwargs))
+        return subprocess.CompletedProcess(argv, 1, stdout="out", stderr="boom")
+
+    monkeypatch.setattr(service_systemd.subprocess, "run", run)
+
+    action = SystemdUserServices().restart("demo.service", timeout=None)
+
+    assert action == ServiceAction(1, stdout="out", stderr="boom")
+    assert seen == [
+        (
+            ["systemctl", "--user", "restart", "demo.service"],
+            {"capture_output": True, "text": True, "check": False},
+        )
+    ]
+
+
+def test_restart_with_timeout_maps_timeout_to_action(monkeypatch):
+    def run(argv, **kwargs):
+        raise subprocess.TimeoutExpired(argv, 77, output="partial", stderr="late")
+
+    monkeypatch.setattr(service_systemd.subprocess, "run", run)
+
+    action = SystemdUserServices().restart("demo.service", timeout=77.0)
+
+    assert action == ServiceAction(
+        124,
+        stdout="partial",
+        stderr="late",
+        timed_out=True,
+    )
+
+
+def test_restart_launch_error_maps_to_action(monkeypatch):
+    monkeypatch.setattr(
+        service_systemd.subprocess,
+        "run",
+        lambda *args, **kwargs: (_ for _ in ()).throw(FileNotFoundError("missing")),
+    )
+
+    action = SystemdUserServices().restart("demo.service", timeout=None)
+
+    assert action.returncode == 127
+    assert action.launch_error == "missing"
+    assert action.stderr == "missing"

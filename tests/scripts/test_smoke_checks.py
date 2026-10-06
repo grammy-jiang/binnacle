@@ -16,7 +16,7 @@ from binnacle.service_lifecycle_contracts import ManagedServiceStatus
 from scripts import deploy_smoke
 from scripts.smoke_checks import CURSOR_FIXTURE_LINES, Env, measure, smoke
 from scripts.smoke_diagnostics import doctor_detail, missing_from
-from tests.service_fakes import FakeServiceInspector
+from tests.service_fakes import FakeServiceController, FakeServiceInspector
 
 ALL_TOOLS = [
     "read_file",
@@ -172,6 +172,7 @@ def make_env(
         client=kw.get("factory") or (lambda: client),
         read=read,
         services=services,
+        service_controller=kw.get("service_controller") or FakeServiceController(),
         checkout=tmp_path / "checkout",
         state_dir=tmp_path / "state",
         tmp_root=tmp_path,

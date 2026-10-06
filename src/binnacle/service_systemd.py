@@ -6,7 +6,7 @@ import re
 import subprocess
 from pathlib import Path
 
-from binnacle.service_lifecycle_contracts import ManagedServiceStatus
+from binnacle.service_lifecycle_contracts import ManagedServiceStatus, ServiceAction
 
 _SMOKE_INSPECTION_TIMEOUT_S = 10.0
 _CGROUP_FS = Path("/sys/fs/cgroup")
@@ -58,6 +58,45 @@ class SystemdUserServices:
             state=state,
             main_pid=pid if pid is not None and pid > 0 else None,
             restart_count=restarts,
+        )
+
+    def restart(self, service: str, *, timeout: float | None = None) -> ServiceAction:
+        argv = ["systemctl", "--user", "restart", service]
+        try:
+            if timeout is None:
+                proc = subprocess.run(
+                    argv,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+            else:
+                proc = subprocess.run(
+                    argv,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=timeout,
+                )
+        except subprocess.TimeoutExpired as exc:
+            stdout = exc.stdout if isinstance(exc.stdout, str) else ""
+            stderr = exc.stderr if isinstance(exc.stderr, str) else ""
+            return ServiceAction(
+                124,
+                stdout=stdout,
+                stderr=stderr,
+                timed_out=True,
+            )
+        except OSError as exc:
+            return ServiceAction(
+                127,
+                stderr=str(exc),
+                launch_error=str(exc),
+            )
+        return ServiceAction(
+            proc.returncode,
+            stdout=proc.stdout or "",
+            stderr=proc.stderr or "",
         )
 
     def _main_environ(self, service: str) -> tuple[int | None, bytes | None]:
