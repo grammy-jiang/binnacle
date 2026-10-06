@@ -1,6 +1,6 @@
 # FastMCP-native refactor — implementation master plan — 2026-10-02
 
-Status: **Groups 0-3 done; Groups 4-6 queued**.
+Status: **Groups 0-3 done; G4 design ready; Groups 5-6 queued**.
 
 This is the control document for the implementation-design and implementation phases of
 the FastMCP-native, platform-neutral Binnacle refactor.
@@ -128,7 +128,7 @@ Status changes belong in this document.
 | G1 | Composition foundation | G0 | foundational; mostly sequential | **done** |
 | G2 | FastMCP-native alignment | G1 | domain settings lanes after shared seams settle | **done** |
 | G3 | Commands/domain/platform seams | G2 deployed baseline | serialized integration | **done** |
-| G4 | Deployment/platform services | G1 | logs/paths may parallelize | queued |
+| G4 | Deployment/platform services | G1 | logs/paths may parallelize | **design ready** |
 | G5 | Diagnostics, operations, companions | relevant G3/G4 public seams | selected cleanup may start earlier | queued |
 | G6 | Package convergence + Gate A | G2-G5 | convergence only | queued |
 
@@ -371,6 +371,24 @@ High-level scope:
 The first implementation remains Linux/systemd/journal compatible.
 
 No launchd/macOS implementation belongs in this group.
+
+Detailed implementation design:
+
+- `docs/deployment-platform-services-implementation-design-2026-10-06.md`.
+
+Design baseline is deployed G3 completion `f21f860`, whose runtime source is
+identical to G3 implementation `01523d4`. ChatGPT Chat Mode completed the
+current-code, UX, dependency/platform-leakage and contract design work. The
+pre-design focused baseline passed 120 service-log/unit/setup/CLI/doctor/
+deploy/smoke tests, the architecture checker reported zero forbidden reverse
+dependencies, and the strict module-size gate had zero errors. Independent
+ChatGPT design review required seven correction rounds; R8 approved the final
+design with all prior findings closed. The UX decision is preservation-first:
+no new public commands or required flags, no setup/mode/doctor/stats workflow
+change, and no MCP surface change except the two explicitly reviewed safety
+corrections. G4.1 runtime paths and G4.2 service logs are the only planned
+parallel implementation lanes; lifecycle inspection, Linux provisioning and
+restart/control migration remain serialized.
 
 ## 9. Group 5 — Diagnostics, operations and companions
 
