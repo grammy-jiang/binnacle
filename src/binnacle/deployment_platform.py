@@ -36,6 +36,7 @@ def create_linux_provisioner(
     *,
     unit_dir=None,
     backup_dir=None,
+    run=None,
 ):
     from binnacle.service_provisioning_linux import (
         DEFAULT_BACKUP_DIR,
@@ -46,6 +47,7 @@ def create_linux_provisioner(
     return LinuxServiceProvisioner(
         unit_dir=UNIT_DIR if unit_dir is None else unit_dir,
         backup_dir=DEFAULT_BACKUP_DIR if backup_dir is None else backup_dir,
+        run=run,
     )
 
 

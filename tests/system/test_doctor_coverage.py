@@ -1,31 +1,23 @@
 """Coverage of doctor aggregation and low-level failure branches."""
 
-import subprocess
-
 from binnacle import doctor
 from binnacle import jobs as jobstore
 
 
 def test_linger_enabled_handles_yes_no_and_command_failure(monkeypatch):
-    monkeypatch.setattr(
-        doctor.subprocess,
-        "run",
-        lambda *a, **k: subprocess.CompletedProcess(a, 0, stdout="yes\n", stderr=""),
-    )
+    class Provisioner:
+        enabled: bool | None = True
+
+        def inspect_persistence(self):
+            return type("Inspection", (), {"enabled": self.enabled})()
+
+    provisioner = Provisioner()
+    monkeypatch.setattr(doctor, "create_linux_provisioner", lambda: provisioner)
+
     assert doctor.linger_enabled() is True
-
-    monkeypatch.setattr(
-        doctor.subprocess,
-        "run",
-        lambda *a, **k: subprocess.CompletedProcess(a, 0, stdout="no\n", stderr=""),
-    )
+    provisioner.enabled = False
     assert doctor.linger_enabled() is False
-
-    monkeypatch.setattr(
-        doctor.subprocess,
-        "run",
-        lambda *a, **k: subprocess.CompletedProcess(a, 1, stdout="", stderr="boom"),
-    )
+    provisioner.enabled = None
     assert doctor.linger_enabled() is None
 
 

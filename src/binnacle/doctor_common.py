@@ -2,40 +2,30 @@
 
 import subprocess
 from collections.abc import Callable
-from dataclasses import dataclass
-from typing import Literal
 
-Status = Literal["ok", "warn", "fail"]
+from binnacle import doctor_contracts as _contracts
+
+Check = _contracts.Check
+Status = _contracts.Status
+ok = _contracts.ok
+warn = _contracts.warn
+fail = _contracts.fail
+
+
 Systemctl = Callable[..., "subprocess.CompletedProcess[str]"]
 
 
-@dataclass(slots=True)
-class Check:
-    group: str
-    status: Status
-    detail: str
-    hint: str = ""
-
-
-def ok(group: str, detail: str) -> Check:
-    return Check(group, "ok", detail)
-
-
-def warn(group: str, detail: str, hint: str = "") -> Check:
-    return Check(group, "warn", detail, hint)
-
-
-def fail(group: str, detail: str, hint: str = "") -> Check:
-    return Check(group, "fail", detail, hint)
-
-
 def systemctl(*args: str) -> "subprocess.CompletedProcess[str]":
-    return subprocess.run(
-        ["systemctl", "--user", *args], capture_output=True, text=True, check=False
-    )
+    from binnacle.deployment_platform import create_linux_provisioner
+
+    return create_linux_provisioner().systemctl(*args, check=False)
 
 
-def unit_state(unit: str, run: Systemctl = systemctl) -> str:
+def unit_state(unit: str, run: Systemctl | None = None) -> str:
+    if run is None:
+        from binnacle.deployment_platform import create_service_inspector
+
+        return create_service_inspector().status(unit).state
     return run("is-active", unit).stdout.strip() or "unknown"
 
 

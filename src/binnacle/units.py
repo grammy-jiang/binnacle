@@ -28,15 +28,10 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from binnacle.doctor_common import (
-    Check,
-    Systemctl,
-    fail,
-    ok,
-    systemctl,
-    unit_property,
-    warn,
-)
+from binnacle.doctor_contracts import Check, fail, ok, warn
+from binnacle.service_systemd import SystemdUserServices
+
+Systemctl = Callable[..., object]
 
 UNIT_DIR = Path.home() / ".config" / "systemd" / "user"
 MARKER_PREFIX = "# Managed by binnacle"
@@ -204,9 +199,21 @@ def proc_cmdline(pid: int) -> list[str]:
     return [a.decode(errors="replace") for a in raw.split(b"\0") if a]
 
 
+def unit_property(
+    unit: str,
+    prop: str,
+    run: Systemctl | None = None,
+) -> str:
+    """Read one Linux unit-definition property for compatibility diagnostics."""
+    if run is None:
+        return SystemdUserServices()._show_value(unit, prop)
+    result = run("show", unit, "-p", prop, "--value")
+    return getattr(result, "stdout", "").strip()
+
+
 def unit_waits_for_ready(
     unit: str,
-    run: Systemctl = systemctl,
+    run: Systemctl | None = None,
 ) -> bool:
     """Whether the Linux systemd unit waits for readiness after ExecStart."""
 
@@ -218,7 +225,7 @@ def check_unit_process(
     group: str,
     setup_hint: str,
     restart_hint: str,
-    run: Systemctl = systemctl,
+    run: Systemctl | None = None,
     cmdline: Callable[[int], list[str]] = proc_cmdline,
 ) -> list[Check]:
     """Does the unit's ExecStart name an executable that exists, and is the

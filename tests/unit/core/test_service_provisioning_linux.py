@@ -19,7 +19,7 @@ def test_persistence_enabled_without_timeout_uses_current_user(monkeypatch):
     monkeypatch.setenv("USER", "grammy")
     provisioner = LinuxServiceProvisioner(run=run)
 
-    assert provisioner.persistence_enabled() is True
+    assert provisioner.inspect_persistence().enabled is True
     assert seen == [
         (
             ["loginctl", "show-user", "grammy", "-p", "Linger", "--value"],
@@ -37,7 +37,7 @@ def test_persistence_enabled_with_timeout_and_explicit_user():
 
     provisioner = LinuxServiceProvisioner(run=run)
 
-    assert provisioner.persistence_enabled(user="pi", timeout=3.5) is False
+    assert provisioner.inspect_persistence(user="pi", timeout=3.5).enabled is False
     assert seen[0][1]["timeout"] == 3.5
 
 
@@ -57,7 +57,7 @@ def test_persistence_enabled_failure_is_unknown(result):
 
     provisioner = LinuxServiceProvisioner(run=run)
 
-    assert provisioner.persistence_enabled(user="pi", timeout=1.0) is None
+    assert provisioner.inspect_persistence(user="pi", timeout=1.0).enabled is None
 
 
 def test_enable_persistence_invokes_loginctl():

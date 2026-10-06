@@ -22,6 +22,12 @@ Run = Callable[..., "subprocess.CompletedProcess[str]"]
 
 
 @dataclass(frozen=True, slots=True)
+class PersistenceInspection:
+    enabled: bool | None
+    error: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class PlannedUnit:
     """One Linux unit-file plan with its path and rendered provenance."""
 
@@ -112,12 +118,12 @@ class LinuxServiceProvisioner:
     def enable_persistence(self) -> subprocess.CompletedProcess[str]:
         return self._run(["loginctl", "enable-linger"], check=True)
 
-    def persistence_enabled(
+    def inspect_persistence(
         self,
         *,
         user: str | None = None,
         timeout: float | None = None,
-    ) -> bool | None:
+    ) -> PersistenceInspection:
         who = user or os.environ.get("USER", "")
         kwargs: dict[str, object] = {
             "capture_output": True,
@@ -131,8 +137,8 @@ class LinuxServiceProvisioner:
                 ["loginctl", "show-user", who, "-p", "Linger", "--value"],
                 **kwargs,
             )
-        except (OSError, subprocess.TimeoutExpired):
-            return None
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            return PersistenceInspection(None, error=str(exc))
         if proc.returncode != 0:
-            return None
-        return proc.stdout.strip() == "yes"
+            return PersistenceInspection(None)
+        return PersistenceInspection(proc.stdout.strip().split("=", 1)[-1] == "yes")

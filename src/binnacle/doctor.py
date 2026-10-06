@@ -14,7 +14,6 @@ import json
 import os
 import re
 import shutil
-import subprocess
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -23,7 +22,10 @@ from binnacle import doctor_common as _doctor_common
 from binnacle import doctor_jobs as _doctor_jobs
 from binnacle import logstats, units
 from binnacle.config import CONFIG_FILE_ENV, DEFAULT_CONFIG_FILE, get_settings
-from binnacle.deployment_platform import create_service_inspector
+from binnacle.deployment_platform import (
+    create_linux_provisioner,
+    create_service_inspector,
+)
 from binnacle.doctor_common import Check, fail, ok, warn
 from binnacle.doctor_connectivity import _tail_lines, check_endpoint, check_uplink
 from binnacle.doctor_provenance import check_provenance
@@ -73,22 +75,7 @@ def server_busy_reasons(
 
 def linger_enabled() -> bool | None:
     """True/False from loginctl; None when loginctl is unavailable."""
-    proc = subprocess.run(
-        [
-            "loginctl",
-            "show-user",
-            os.environ.get("USER", ""),
-            "-p",
-            "Linger",
-            "--value",
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if proc.returncode != 0:
-        return None
-    return proc.stdout.strip() == "yes"
+    return create_linux_provisioner().inspect_persistence().enabled
 
 
 # -- checks ------------------------------------------------------------------
@@ -238,23 +225,18 @@ def check_service_env(
 
 
 def check_boot(
-    run: Callable[..., "subprocess.CompletedProcess[str]"] | None = None,
+    run: Callable[..., object] | None = None,
     user: str | None = None,
 ) -> list[Check]:
     """User services only start at boot without a login when lingering is
     on; without it every binnacle unit waits for someone to log in."""
-    runner = run or (
-        lambda *a, **k: subprocess.run(
-            a, capture_output=True, text=True, check=False, timeout=15
-        )
-    )
     who = user or os.environ.get("USER") or ""
-    try:
-        proc = runner("loginctl", "show-user", who, "-p", "Linger")
-    except (OSError, subprocess.TimeoutExpired) as e:
-        return [warn("boot", f"loginctl could not run: {e}")]
-    value = proc.stdout.strip().split("=", 1)[-1] if proc.returncode == 0 else ""
-    if value == "yes":
+    inspection = create_linux_provisioner(run=run).inspect_persistence(
+        user=who, timeout=15
+    )
+    if inspection.error is not None:
+        return [warn("boot", f"loginctl could not run: {inspection.error}")]
+    if inspection.enabled:
         return [ok("boot", f"lingering is on for {who}: the units start at boot")]
     return [
         fail(
