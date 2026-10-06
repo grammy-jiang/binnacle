@@ -7,6 +7,9 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import pytest
+
+from binnacle.service_log_contracts import ServiceLogError
 from scripts import deploy_smoke
 
 
@@ -27,22 +30,46 @@ def test_run_command_reports_a_timeout() -> None:
     assert rc == 124 and "timed out" in out
 
 
-def test_read_journal_bounds_the_window(monkeypatch: Any) -> None:
-    seen: list[list[str]] = []
+def test_read_journal_uses_semantic_source_and_60_second_bound(
+    monkeypatch: Any,
+) -> None:
+    seen: dict[str, object] = {}
 
-    def fake(argv: list[str], timeout: float) -> tuple[int, str]:
-        seen.append(list(argv))
-        return 0, "a\nb\n"
+    class Source:
+        def read_window(self, services, since_epoch, until_epoch=None):
+            seen["services"] = tuple(services)
+            seen["since"] = since_epoch
+            seen["until"] = until_epoch
+            return "a\nb\n"
 
-    monkeypatch.setattr(deploy_smoke, "run_command", fake)
+    def factory(*, command_timeout_s):
+        seen["timeout"] = command_timeout_s
+        return Source()
+
+    monkeypatch.setattr(deploy_smoke, "create_service_log_source", factory)
+
     assert deploy_smoke.read_journal(100.7, 200.2) == ["a", "b"]
-    assert "--since" in seen[0] and "@100" in seen[0] and "@201" in seen[0]
-    assert deploy_smoke.read_journal(100.0) == ["a", "b"] and "--until" not in seen[1]
+    assert seen == {
+        "timeout": 60.0,
+        "services": (deploy_smoke.UNIT,),
+        "since": 100.7,
+        "until": 200.2,
+    }
 
 
-def test_read_journal_is_empty_when_journalctl_fails(monkeypatch: Any) -> None:
-    monkeypatch.setattr(deploy_smoke, "run_command", lambda argv, timeout: (1, "boom"))
-    assert deploy_smoke.read_journal(1.0) == []
+def test_read_journal_propagates_typed_acquisition_failure(monkeypatch: Any) -> None:
+    class BrokenSource:
+        def read_window(self, services, since_epoch, until_epoch=None):
+            raise ServiceLogError("boom")
+
+    monkeypatch.setattr(
+        deploy_smoke,
+        "create_service_log_source",
+        lambda *, command_timeout_s: BrokenSource(),
+    )
+
+    with pytest.raises(ServiceLogError, match="boom"):
+        deploy_smoke.read_journal(1.0)
 
 
 def test_mcp_client_reads_the_bearer_token_file(
