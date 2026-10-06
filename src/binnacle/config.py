@@ -37,6 +37,8 @@ from pydantic_settings import (
     TomlConfigSettingsSource,
 )
 
+from binnacle.deployment_platform import create_runtime_paths
+
 CONFIG_FILE_ENV = "BINNACLE_CONFIG_FILE"
 DEFAULT_CONFIG_FILE = Path.home() / ".config" / "binnacle" / "config.toml"
 
@@ -272,9 +274,7 @@ class RunCommandSettings(BaseModel):
 
 
 def _default_jobs_socket() -> Path:
-    runtime = os.environ.get("XDG_RUNTIME_DIR")
-    base = Path(runtime) if runtime else Path(f"/run/user/{os.getuid()}")
-    return base / "binnacle" / "jobs.sock"
+    return create_runtime_paths().jobs_socket
 
 
 class JobsSettings(BaseModel):
