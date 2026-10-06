@@ -419,3 +419,26 @@ def test_boot_check_wants_lingering():
     assert c.status == "ok" and "start at boot" in c.detail
     (c,) = doctor.check_boot(off, user="pi")
     assert c.status == "fail" and c.hint == "loginctl enable-linger pi"
+
+
+@pytest.mark.no_xdist
+def test_service_inspector_reads_own_process_environment(monkeypatch):
+    """Keep one real procfs environment check in the ordinary-process lane."""
+
+    from binnacle.service_lifecycle_contracts import ManagedServiceStatus
+    from binnacle.service_systemd import SystemdUserServices
+
+    services = SystemdUserServices()
+    monkeypatch.setattr(
+        services,
+        "status",
+        lambda unit: ManagedServiceStatus(
+            "active",
+            main_pid=os.getpid(),
+            restart_count=0,
+        ),
+    )
+
+    path = services.main_process_path("self.service")
+
+    assert path is not None and path
