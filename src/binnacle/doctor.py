@@ -36,6 +36,7 @@ from binnacle.doctor_connectivity import _tail_lines, check_endpoint, check_upli
 from binnacle.doctor_provenance import check_provenance
 from binnacle.job_manager_doctor import check_job_manager
 from binnacle.provenance import runtime_provenance
+from binnacle.service_log_contracts import ServiceLogError
 
 __all__ = ["_job_state_safe", "_tail_lines", "server_busy_reasons"]
 
@@ -313,7 +314,7 @@ def check_journal(
 ) -> list[Check]:
     try:
         text = fetch(unit, since)
-    except SystemExit as e:
+    except ServiceLogError as e:
         return [warn("journal", f"journal unavailable: {e}")]
     errors = sum(1 for line in text.splitlines() if _JOURNAL_ERROR.match(line))
     tracebacks = sum(1 for line in text.splitlines() if line.startswith("Traceback"))

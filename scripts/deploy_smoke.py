@@ -38,6 +38,7 @@ from typing import Any
 if __package__ in (None, ""):  # run as a script: make `scripts` importable
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from binnacle.deployment_platform import create_service_log_source
 from scripts.smoke_checks import UNIT, Env, smoke
 
 DEFAULT_CHECKOUT = Path.home() / "Projects" / "binnacle"
@@ -59,11 +60,8 @@ def run_command(argv: Sequence[str], timeout: float) -> tuple[int, str]:
 
 
 def read_journal(since_epoch: float, until_epoch: float | None = None) -> list[str]:
-    argv = ["journalctl", "--user", "-u", UNIT, "--since", f"@{int(since_epoch)}"]
-    if until_epoch is not None:  # a bounded window: the unit may run for weeks
-        argv += ["--until", f"@{int(until_epoch) + 1}"]
-    rc, out = run_command([*argv, "--no-pager", "-o", "cat"], 60)
-    return out.splitlines() if rc == 0 else []
+    source = create_service_log_source(command_timeout_s=60.0)
+    return source.read_window((UNIT,), since_epoch, until_epoch).splitlines()
 
 
 def mcp_client() -> Any:

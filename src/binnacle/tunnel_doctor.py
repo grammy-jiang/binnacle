@@ -28,6 +28,7 @@ from binnacle.doctor_common import (
 )
 from binnacle.doctor_connectivity import _tail_lines
 from binnacle.server_unit import SERVER_UNIT
+from binnacle.service_log_contracts import ServiceLogError
 from binnacle.tunnel_unit import (
     OWNER,
     PROFILE,
@@ -100,7 +101,7 @@ def tunnel_busy_reasons(
                 )
     try:
         calls = fetch(server_unit, f"-{int(window_s)}s").count("event=tool_call")
-    except (OSError, subprocess.SubprocessError) as e:
+    except (ServiceLogError, OSError, subprocess.SubprocessError) as e:
         reasons.append(
             f"server journal unreadable ({e}); cannot tell whether calls are in flight"
         )

@@ -11,6 +11,7 @@ from typing import Any
 import pytest
 
 import scripts.deploy_flow as flow
+from binnacle.service_log_contracts import ServiceLogError
 from scripts.smoke_checks import Env, Report
 
 PREV = "a" * 40
@@ -34,6 +35,7 @@ class Host:
             "push": 0,
             "sync": [0],
             "target": NEW,
+            "journal_errors": {},
         }
         self.opts.update(opts)
         self.head = PREV
@@ -43,6 +45,7 @@ class Host:
         self.config_at: float | None = None
         self.ci_seen = 0
         self.sync_seen = 0
+        self.journal_seen = 0
 
     def now(self) -> float:
         self.t += 0.01
@@ -109,6 +112,10 @@ class Host:
         return 1, "unknown git op"
 
     def journal(self, since: float, until: float | None) -> list[str]:
+        self.journal_seen += 1
+        error = self.opts["journal_errors"].get(self.journal_seen)
+        if error:
+            raise ServiceLogError(error)
         lines = []
         if self.opts["busy"] and self.t < 1_790_460_000.0 + self.opts["busy"]:
             lines.append("x INFO: event=tool_call call=1 tool=read_file")
@@ -413,3 +420,47 @@ def test_ci_state_reads_gh_output(tmp_path: Path) -> None:
     state, detail = flow.ci_state(env_for(host, tmp_path), NEW)
     assert state == "success" and "2 run(s)" in detail
     assert any("--repo grammy-jiang/binnacle" in c for c in host.calls)
+
+
+@pytest.mark.parametrize("detail", ["read failed", "journalctl timed out after 60 s"])
+def test_journal_failure_at_quiet_gate_alerts_before_mutation(
+    tmp_path: Path, smokes: list[str], detail: str
+) -> None:
+    host = Host(journal_errors={1: detail})
+
+    level, text = deploy(host, tmp_path)
+
+    assert level == "alert"
+    assert "cannot prove a quiet moment; nothing deployed" in text
+    assert detail in text
+    assert host.head == PREV and not pushed(host)
+    assert not any(" merge " in call for call in host.calls)
+
+
+@pytest.mark.parametrize("detail", ["read failed", "journalctl timed out after 60 s"])
+def test_forward_config_journal_failure_rolls_back_without_push(
+    tmp_path: Path, smokes: list[str], detail: str
+) -> None:
+    host = Host(journal_errors={2: detail})
+
+    level, text = deploy(host, tmp_path)
+
+    assert level == "alert"
+    assert detail in text
+    assert host.head == PREV and not pushed(host)
+    assert any(" reset --keep " + PREV in call for call in host.calls)
+    assert "smoke OK" in text
+
+
+@pytest.mark.parametrize("detail", ["read failed", "journalctl timed out after 60 s"])
+def test_rollback_config_journal_failure_is_not_confirmed(
+    tmp_path: Path, smokes: list[str], detail: str
+) -> None:
+    host = Host(journal_errors={2: "forward journal failed", 3: detail})
+
+    level, text = deploy(host, tmp_path)
+
+    assert level == "alert"
+    assert host.head == PREV and not pushed(host)
+    assert detail in text
+    assert "smoke NOT CONFIRMED" in text

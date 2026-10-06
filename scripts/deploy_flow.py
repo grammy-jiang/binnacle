@@ -22,6 +22,7 @@ from __future__ import annotations
 import json
 import re
 
+from binnacle.service_log_contracts import ServiceLogError
 from scripts.smoke_checks import UNIT, Env, Report, last_line, smoke
 
 QUIET_WINDOW_S = 30.0
@@ -79,14 +80,17 @@ def _wait_ci(env: Env, sha: str, timeout: float) -> tuple[bool, str]:
         env.sleep(CI_POLL_S)
 
 
-def _wait_quiet(env: Env, timeout: float) -> bool:
+def _wait_quiet(env: Env, timeout: float) -> tuple[bool, str]:
     deadline = env.now() + timeout
     while True:
-        lines = env.journal(env.now() - QUIET_WINDOW_S, None)
+        try:
+            lines = env.journal(env.now() - QUIET_WINDOW_S, None)
+        except ServiceLogError as exc:
+            return False, f"journal unavailable: {exc}"
         if not any("event=tool_call" in ln for ln in lines):
-            return True
+            return True, ""
         if env.now() >= deadline:
-            return False
+            return False, f"tool calls did not stop for {timeout:g} s"
         env.sleep(QUIET_POLL_S)
 
 
@@ -95,13 +99,17 @@ def _prod_mode(env: Env) -> bool:
     return rc == 0 and "prod mode" in out
 
 
-def _await_config(env: Env, since: float, timeout: float) -> bool:
+def _await_config(env: Env, since: float, timeout: float) -> tuple[bool, str]:
     deadline = env.now() + timeout
     while True:
-        if any("INFO: event=config" in ln for ln in env.journal(since, None)):
-            return True
+        try:
+            lines = env.journal(since, None)
+        except ServiceLogError as exc:
+            return False, f"journal unavailable: {exc}"
+        if any("INFO: event=config" in ln for ln in lines):
+            return True, ""
         if env.now() >= deadline:
-            return False
+            return False, ""
         env.sleep(1)
 
 
@@ -147,14 +155,14 @@ def _make_live(
     timeout: float,
     *,
     force_restart: bool = False,
-) -> bool:
-    """Load the checkout's current code into the server; True once it runs."""
+) -> tuple[bool, str]:
+    """Load the checkout's current code; return success and failure detail."""
     if not code_changed and not force_restart:
-        return True
+        return True, ""
     if prod or force_restart:
         rc, _ = env.run(["systemctl", "--user", "restart", UNIT], timeout)
         if rc != 0:
-            return False
+            return False, ""
     return _await_config(env, since, timeout)
 
 
@@ -224,9 +232,15 @@ def deploy(
     report.add("ci", "ok" if ok else "alert", detail)
     if not ok:
         return done("alert", f"CI for {sha[:7]} did not pass; nothing deployed")
-    if not _wait_quiet(env, quiet_timeout):
-        report.add("quiet", "alert", f"tool calls did not stop for {quiet_timeout:g} s")
-        return done("alert", "no quiet moment; nothing deployed")
+    quiet, quiet_detail = _wait_quiet(env, quiet_timeout)
+    if not quiet:
+        report.add("quiet", "alert", quiet_detail)
+        headline = (
+            "cannot prove a quiet moment; nothing deployed"
+            if quiet_detail.startswith("journal unavailable:")
+            else "no quiet moment; nothing deployed"
+        )
+        return done("alert", headline)
     # --no-renames lists both sides of a move, so a module moved out of src/
     # still counts as a server change.
     rc, names = _git(env, "diff", "--name-only", "--no-renames", prev, sha)
@@ -251,14 +265,18 @@ def deploy(
         )
 
     live_since = env.now() if force_restart else started
-    live = sync_ok and _make_live(
-        env,
-        live_since,
-        code_changed,
-        prod,
-        timeout,
-        force_restart=force_restart,
-    )
+    live_detail = ""
+    if sync_ok:
+        live, live_detail = _make_live(
+            env,
+            live_since,
+            code_changed,
+            prod,
+            timeout,
+            force_restart=force_restart,
+        )
+    else:
+        live = False
     if force_restart:
         how = "restarted after dev environment sync"
     elif code_changed:
@@ -268,7 +286,7 @@ def deploy(
     report.add(
         "reload",
         "ok" if live else "alert",
-        how if live else "the new code did not load",
+        how if live else (live_detail or "the new code did not load"),
     )
     checked = smoke(env) if live else Report()
     report.checks.extend(checked.checks)
@@ -294,10 +312,9 @@ def deploy(
     if rc == 0 and force_restart:
         rollback_sync_ok, _ = _sync_dev_env(env, sync_timeout)
     rollback_live_since = env.now() if force_restart else rolled_at
-    back = (
-        rc == 0
-        and rollback_sync_ok
-        and _make_live(
+    rollback_live_detail = ""
+    if rc == 0 and rollback_sync_ok:
+        back, rollback_live_detail = _make_live(
             env,
             rollback_live_since,
             code_changed,
@@ -305,7 +322,8 @@ def deploy(
             timeout,
             force_restart=force_restart,
         )
-    )
+    else:
+        back = False
     after = smoke(env) if back else None
     state = after.level.upper() if after else "NOT CONFIRMED"
     confirmed = after is not None and after.level != "alert"
@@ -313,7 +331,10 @@ def deploy(
         "rollback",
         "ok" if confirmed else "alert",
         (
-            f"master reset to {prev[:7]}; smoke {state}"
+            (
+                f"master reset to {prev[:7]}; smoke {state}"
+                + (f"; {rollback_live_detail}" if rollback_live_detail else "")
+            )
             if rollback_sync_ok
             else f"master reset to {prev[:7]}; old dev environment sync failed"
         ),

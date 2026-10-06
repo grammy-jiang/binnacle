@@ -8,6 +8,7 @@ from pathlib import Path
 
 from binnacle import jobs, logstats
 from binnacle.doctor_common import Systemctl, systemctl, unit_property, unit_state
+from binnacle.service_log_contracts import ServiceLogError
 
 
 def _job_state_safe(job_id: str) -> dict | None:
@@ -78,7 +79,7 @@ def server_busy_reasons(
             )
     try:
         calls = fetch(unit, window).count("event=tool_call")
-    except (OSError, subprocess.SubprocessError) as exc:
+    except (ServiceLogError, OSError, subprocess.SubprocessError) as exc:
         reasons.append(
             f"journal unreadable ({exc}); cannot tell whether calls are in flight"
         )

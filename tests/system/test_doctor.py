@@ -14,6 +14,7 @@ import pytest
 
 from binnacle import doctor
 from binnacle import jobs as jobstore
+from binnacle.service_log_contracts import ServiceLogError
 
 BEARER = "Bearer secret-token\n"
 
@@ -155,6 +156,12 @@ def test_server_busy_reasons_quiet_and_unreadable_journal(tmp_path):
         raise OSError("no journal")
 
     reasons = doctor.server_busy_reasons("prod", tmp_path / "missing", fetch=boom)
+    assert len(reasons) == 1 and "journal unreadable" in reasons[0]
+
+    def typed_boom(unit: str, since: str) -> str:
+        raise ServiceLogError("journalctl timed out after 60 s")
+
+    reasons = doctor.server_busy_reasons("prod", tmp_path / "missing", fetch=typed_boom)
     assert len(reasons) == 1 and "journal unreadable" in reasons[0]
 
 
@@ -328,7 +335,7 @@ def test_journal_structured_root_error_warns():
 
 def test_journal_unavailable_warns():
     def boom(u, s):
-        raise SystemExit("journalctl failed")
+        raise ServiceLogError("journalctl failed")
 
     (c,) = doctor.check_journal("u", "-1 hour", fetch=boom)
     assert c.status == "warn"

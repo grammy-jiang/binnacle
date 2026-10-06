@@ -20,6 +20,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from binnacle.service_log_contracts import ServiceLogError
 from scripts.smoke_diagnostics import JournalExpectation, doctor_detail, missing_from
 
 UNIT = "binnacle-mcp.service"
@@ -342,7 +343,13 @@ def check_journal(
 ) -> None:
     deadline = env.now() + 10  # the journal can lag the call by a moment
     while True:
-        lines = env.journal(since, None)
+        try:
+            lines = env.journal(since, None)
+        except ServiceLogError as exc:
+            detail = f"journal unavailable: {exc}"
+            report.add("journal", "alert", detail)
+            report.add("tracebacks", "alert", f"not checked; {detail}")
+            return
         missing = missing_from(lines, logged)
         if not missing or env.now() >= deadline:
             break
@@ -417,7 +424,11 @@ def measure(env: Env) -> dict[str, float]:
 
 
 def check_budgets(env: Env, report: Report, rebaseline: bool) -> None:
-    now = measure(env)
+    try:
+        now = measure(env)
+    except ServiceLogError as exc:
+        report.add("startup_s", "alert", f"journal unavailable: {exc}")
+        return
     path = env.state_dir / "baseline.json"
     try:
         base = json.loads(env.read(path))

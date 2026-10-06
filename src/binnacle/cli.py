@@ -401,9 +401,13 @@ def stats(
     journal_units: str | tuple[str, str] = unit
     if unit in {"binnacle-mcp", SERVER_UNIT}:
         journal_units = (unit, JOBS_UNIT)
-    records, startups = logstats.parse(
-        logstats.fetch_journal(journal_units, since, until)
-    )
+    from binnacle.service_log_contracts import ServiceLogError
+
+    try:
+        raw_journal = logstats.fetch_journal(journal_units, since, until)
+    except ServiceLogError as exc:
+        raise SystemExit(str(exc)) from None
+    records, startups = logstats.parse(raw_journal)
     shown_units = ",".join(journal_units) if isinstance(journal_units, tuple) else unit
     print(
         f"binnacle stats -- unit {shown_units}, since {since}"

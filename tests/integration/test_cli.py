@@ -182,6 +182,22 @@ def test_stats_default_merges_mcp_and_jobs_journals(monkeypatch, capsys):
     assert "binnacle-mcp,binnacle-jobs.service" in capsys.readouterr().out
 
 
+def test_stats_log_failure_remains_command_failure(monkeypatch):
+    import pytest
+
+    from binnacle import logstats
+    from binnacle.service_log_contracts import ServiceLogError
+
+    monkeypatch.setattr(
+        logstats,
+        "fetch_journal",
+        lambda *args: (_ for _ in ()).throw(ServiceLogError("journalctl failed")),
+    )
+
+    with pytest.raises(SystemExit, match="journalctl failed"):
+        cli.stats()
+
+
 def test_systemctl_wrapper_and_unit_state(monkeypatch):
     seen = []
 
