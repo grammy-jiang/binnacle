@@ -42,3 +42,30 @@ def test_default_platform_factory_selects_linux_runtime_paths(monkeypatch):
     )
 
     assert deployment_platform.create_runtime_paths() == expected
+
+
+def test_default_platform_factories_construct_linux_adapters(tmp_path):
+    from binnacle.deployment_platform import (
+        create_linux_provisioner,
+        create_service_controller,
+        create_service_inspector,
+        create_service_log_source,
+    )
+    from binnacle.service_journal import JournalServiceLogSource
+    from binnacle.service_provisioning_linux import LinuxServiceProvisioner
+    from binnacle.service_systemd import SystemdUserServices
+
+    log_source = create_service_log_source(command_timeout_s=12.5)
+    assert isinstance(log_source, JournalServiceLogSource)
+    assert log_source.command_timeout_s == 12.5
+
+    assert isinstance(create_service_inspector(), SystemdUserServices)
+    assert isinstance(create_service_controller(), SystemdUserServices)
+
+    provisioner = create_linux_provisioner(
+        unit_dir=tmp_path / "units",
+        backup_dir=tmp_path / "backups",
+    )
+    assert isinstance(provisioner, LinuxServiceProvisioner)
+    assert provisioner.unit_dir == tmp_path / "units"
+    assert provisioner.backup_dir == tmp_path / "backups"

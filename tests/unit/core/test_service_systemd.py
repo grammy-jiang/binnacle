@@ -212,3 +212,112 @@ def test_restart_launch_error_maps_to_action(monkeypatch):
     assert action.returncode == 127
     assert action.launch_error == "missing"
     assert action.stderr == "missing"
+
+
+def test_active_service_without_pid_has_no_environment(monkeypatch):
+    services = SystemdUserServices()
+    monkeypatch.setattr(
+        services,
+        "status",
+        lambda unit: ManagedServiceStatus("active", main_pid=None, restart_count=0),
+    )
+
+    assert services.main_process_path("demo.service") is None
+
+
+def test_main_process_path_without_path_returns_empty(tmp_path, monkeypatch):
+    proc = tmp_path / "proc"
+    env = proc / "42" / "environ"
+    env.parent.mkdir(parents=True)
+    env.write_bytes(b"A=1\0B=2\0")
+    monkeypatch.setattr(service_systemd, "_PROC_ROOT", proc)
+    services = SystemdUserServices()
+    monkeypatch.setattr(
+        services,
+        "status",
+        lambda unit: ManagedServiceStatus("active", main_pid=42, restart_count=0),
+    )
+
+    assert services.main_process_path("demo.service") == ""
+
+
+@pytest.mark.parametrize(
+    ("timestamp_us", "result", "expected"),
+    [
+        (False, completed([], "value\n", 0), "value"),
+        (True, completed([], "", 1), ""),
+    ],
+)
+def test_show_value_success_and_nonzero(monkeypatch, timestamp_us, result, expected):
+    seen = []
+
+    def run(argv, **kwargs):
+        seen.append(argv)
+        return result
+
+    monkeypatch.setattr(service_systemd.subprocess, "run", run)
+    services = SystemdUserServices()
+
+    assert (
+        services._show_value("demo.service", "Prop", timestamp_us=timestamp_us)
+        == expected
+    )
+    if timestamp_us:
+        assert "--timestamp=us" in seen[0]
+    else:
+        assert "--timestamp=us" not in seen[0]
+
+
+@pytest.mark.parametrize(
+    "exc",
+    [OSError("missing"), subprocess.TimeoutExpired(["systemctl"], 10)],
+)
+def test_show_value_operational_failure_is_empty(monkeypatch, exc):
+    monkeypatch.setattr(
+        service_systemd.subprocess,
+        "run",
+        lambda *args, **kwargs: (_ for _ in ()).throw(exc),
+    )
+
+    assert SystemdUserServices()._show_value("demo.service", "Prop") == ""
+
+
+def test_rss_missing_cgroup_or_procfs_returns_none(tmp_path, monkeypatch):
+    services = SystemdUserServices()
+    monkeypatch.setattr(services, "_show_value", lambda *a, **k: "")
+    assert services.rss_kb("demo.service") is None
+
+    monkeypatch.setattr(
+        services, "_show_value", lambda *a, **k: "/user.slice/demo.service"
+    )
+    monkeypatch.setattr(service_systemd, "_CGROUP_FS", tmp_path / "missing")
+    assert services.rss_kb("demo.service") is None
+
+
+def test_started_at_epoch_handles_missing_nonzero_invalid_and_oserror(monkeypatch):
+    services = SystemdUserServices()
+
+    monkeypatch.setattr(services, "_show_value", lambda *a, **k: "")
+    assert services.started_at_epoch("demo.service") is None
+
+    monkeypatch.setattr(services, "_show_value", lambda *a, **k: "stamp")
+    monkeypatch.setattr(
+        service_systemd.subprocess,
+        "run",
+        lambda *a, **k: completed([], "", 1),
+    )
+    assert services.started_at_epoch("demo.service") is None
+
+    monkeypatch.setattr(
+        service_systemd.subprocess,
+        "run",
+        lambda *a, **k: completed([], "not-a-number\n", 0),
+    )
+    assert services.started_at_epoch("demo.service") is None
+
+    monkeypatch.setattr(
+        service_systemd.subprocess,
+        "run",
+        lambda *a, **k: (_ for _ in ()).throw(OSError("missing")),
+    )
+    assert services.started_at_epoch("demo.service") is None
