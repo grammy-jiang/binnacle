@@ -33,6 +33,12 @@ FORBIDDEN_PATH_PARTS = (
 )
 
 
+def _is_forbidden_path_text(text: str) -> bool:
+    return text in {"/proc", "/sys/fs/cgroup"} or text.startswith(
+        ("/proc/", "/sys/fs/cgroup/", "/run/user/")
+    )
+
+
 def _dotted(node: ast.AST) -> str:
     if isinstance(node, ast.Name):
         return node.id
@@ -74,12 +80,25 @@ def _executable_platform_violations(path: Path) -> list[str]:
                     violations.append(
                         f"{path.name}:{node.lineno}: executable platform token {text}"
                     )
-                if fn in {"Path", "pathlib.Path"} and any(
-                    part in text for part in FORBIDDEN_PATH_PARTS
-                ):
+                if fn in {"Path", "pathlib.Path"} and _is_forbidden_path_text(text):
                     violations.append(
                         f"{path.name}:{node.lineno}: executable Linux path {text}"
                     )
+
+            for arg in (*node.args, *(kw.value for kw in node.keywords)):
+                if isinstance(arg, (ast.List, ast.Tuple)):
+                    argv_texts = _literal_text(arg)
+                    command_like = bool(argv_texts) and (
+                        argv_texts[0] in FORBIDDEN_COMMANDS or argv_texts[0] == "date"
+                    )
+                    if command_like and argv_texts[0] in FORBIDDEN_COMMANDS:
+                        violations.append(
+                            f"{path.name}:{node.lineno}: direct platform argv {argv_texts}"
+                        )
+                    if command_like and "date" in argv_texts and "-d" in argv_texts:
+                        violations.append(
+                            f"{path.name}:{node.lineno}: direct date -d conversion"
+                        )
 
             if fn in {"units.systemctl", "_doctor_common.systemctl"}:
                 violations.append(
@@ -113,7 +132,7 @@ def _executable_platform_violations(path: Path) -> list[str]:
                             violations.append(
                                 f"{path.name}:{node.lineno}: executable platform token {text}"
                             )
-                        if any(part in text for part in FORBIDDEN_PATH_PARTS):
+                        if _is_forbidden_path_text(text):
                             violations.append(
                                 f"{path.name}:{node.lineno}: executable Linux path {text}"
                             )
@@ -179,3 +198,45 @@ def test_platform_detector_catches_indirect_prebuilt_systemctl_commands(
 
     assert any("platform argv construction" in item for item in violations)
     assert any(property_name in item for item in violations)
+
+
+@pytest.mark.parametrize(
+    ("source", "needle"),
+    [
+        (
+            """def probe(env, UNIT, timeout):
+    return env.run(['systemctl', '--user', 'restart', UNIT], timeout)
+""",
+            "direct platform argv",
+        ),
+        (
+            """def probe(run_command, UNIT):
+    return run_command(['journalctl', '--user', '-u', UNIT, '--since', '@1'], 60)
+""",
+            "direct platform argv",
+        ),
+        (
+            """from pathlib import Path
+def probe(pid):
+    return Path('/proc') / str(pid) / 'status'
+""",
+            "executable Linux path /proc",
+        ),
+        (
+            """from pathlib import Path
+def probe(pid):
+    return Path('/proc') / str(pid) / 'environ'
+""",
+            "executable Linux path /proc",
+        ),
+    ],
+)
+def test_platform_detector_catches_former_direct_linux_mechanisms(
+    tmp_path: Path, source: str, needle: str
+) -> None:
+    path = tmp_path / "generic.py"
+    path.write_text(source, encoding="utf-8")
+
+    violations = _executable_platform_violations(path)
+
+    assert any(needle in item for item in violations)
