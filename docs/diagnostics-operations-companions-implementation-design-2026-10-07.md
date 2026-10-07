@@ -96,6 +96,34 @@ stored beside the captures. The current user-visible facts are:
 This existing coverage is the starting characterization. Add a new test only when a
 G5 design decision creates a behavior that is not already pinned.
 
+### 2.4 Exact cross-boundary import inventory
+
+A fresh AST inventory on the G4 candidate shows the remaining companion-facing edges
+that G5 must either remove or explicitly bless as public contracts.
+
+Core/diagnostic edges that are not acceptable at Gate A:
+
+- `doctor_connectivity.py -> uplink.py`;
+- `cli.py -> webminstats.py`;
+- `watchdog_doctor.py -> doctor.py` (companion importing the aggregate core doctor);
+- `tunnel_doctor.py -> doctor_connectivity.py` (only for the shared tail helper);
+- `watchdog_cli.py -> cli.py`;
+- `tunnel_cli.py -> cli.py`.
+
+Companion-to-companion edges that require an explicit ownership decision:
+
+- `ops/watchdog/services.py -> tunnel_doctor.py` for tunnel-log scanning;
+- `watchdog_cli.py -> tunnel_unit.py` for the tunnel unit identity/specification.
+
+Companion imports of stable public contracts/configuration such as diagnostic result
+types, service-log errors and service-unit names may remain only when the target module
+is deliberately documented as a public contract. Importing another application's CLI
+or doctor aggregate is not such a contract.
+
+This inventory is intentionally stricter than the current Import Linter configuration,
+which protects `binnacle.ops.watchdog` but does not yet encode all top-level companion
+facades. G5.5 must turn the accepted final direction into mechanical rules.
+
 ## 3. Goals
 
 G5 must:
@@ -297,10 +325,25 @@ but `server.py` has one integration owner.
 
 ### G5.5 — companion dependency cleanup
 
-- replace watchdog/tunnel imports of core aggregate implementation with stable public
-  contracts/helpers;
-- classify and remove accidental companion-to-companion implementation imports;
-- strengthen Import Linter/AST rules.
+- replace `watchdog_doctor -> doctor` with imports from minimal diagnostic contracts
+  and companion-owned checks;
+- move the neutral log-tail helper out of `doctor_connectivity` so
+  `tunnel_doctor -> doctor_connectivity` disappears;
+- remove `watchdog_cli -> cli` and `tunnel_cli -> cli`; shared exit/rendering helpers,
+  if any, must live in a neutral CLI/diagnostic utility rather than the aggregate core
+  application;
+- give tunnel-log scanning a stable tunnel-owned public helper or move the scan to the
+  watchdog companion so `ops/watchdog/services -> tunnel_doctor` is not an
+  implementation-level cross-companion dependency;
+- classify `watchdog_cli -> tunnel_unit` explicitly: retain it only if the tunnel unit
+  identity/specification is declared a narrow public companion contract; otherwise
+  replace it with such a contract;
+- strengthen Import Linter/AST rules to make the final decisions mechanical.
+
+The required end state is not "zero imports from companions into core". Companions are
+allowed to consume stable public server/domain contracts. The prohibited direction is
+core/features/platform/diagnostics aggregates consuming companion implementation, plus
+companions depending on another application's aggregate CLI/doctor implementation.
 
 ### G5.6 — convergence
 
