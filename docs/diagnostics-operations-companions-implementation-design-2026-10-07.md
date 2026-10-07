@@ -299,3 +299,36 @@ G5 is done only when:
 - server and public MCP surface work with watchdog unavailable;
 - full local and production convergence is green;
 - independent review approves the exact final SHA.
+
+## 11. Test execution cadence
+
+User steering on 2026-10-07 changes the execution cadence for the remaining
+refactor. Correctness gates remain required, but broad gates are not the normal
+edit/test loop.
+
+During implementation:
+
+- run the smallest focused tests for the files/contracts just changed;
+- run only directly relevant static architecture/import checks when a boundary changes;
+- when a test fails, rerun the exact failing node first;
+- after a fix, rerun that node and then only the nearest affected file/subsystem;
+- do not respond to one focused failure by rerunning the full suite, coverage,
+  complete Python matrix, packaging convergence, or the entire machine farm.
+
+Broad convergence is reserved for the end of the group/final candidate:
+
+- managed full suite including the ordinary-process lane;
+- coverage policy;
+- supported Python matrix;
+- wheel/package smoke;
+- all-files quality convergence;
+- exact public MCP wire parity.
+
+Run that broad convergence once per final exact candidate SHA. If review or CI
+requires a code change after convergence, repair with focused tests and then run
+one fresh full convergence on the new final SHA. Do not repeatedly rerun already
+green broad gates on an unchanged SHA.
+
+Intermediate commits should use focused tests and changed-file pre-commit where
+appropriate. Pre-push/exact-SHA CI are for coherent review/final candidates rather
+than every small checkpoint.

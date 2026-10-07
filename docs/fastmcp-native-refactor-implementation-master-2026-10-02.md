@@ -504,6 +504,16 @@ Every detailed implementation-design document should define:
 
 ## 13. Per-step acceptance rule
 
+### Test cadence steering — 2026-10-07
+
+For G5, G6 and Gate A preparation, broad test gates are end-of-group convergence
+gates, not routine checkpoint tests. Normal implementation uses the smallest
+focused tests and boundary checks relevant to the change. A failure is repaired by
+rerunning the exact failing node and nearest affected subsystem, not by restarting
+the whole matrix/farm. Full suite, coverage, complete Python matrix, packaging and
+all-files convergence run once on a final exact candidate SHA; if that SHA changes
+after review/CI, focused repair comes first and one new final convergence follows.
+
 An implementation step is not complete because its code compiles.
 
 It is complete when:
