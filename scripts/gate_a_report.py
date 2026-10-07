@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import ast
 import json
+import subprocess
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -46,6 +47,28 @@ def any_import(paths: list[Path], prefixes: tuple[str, ...]) -> list[str]:
             if name.startswith(prefixes):
                 hits.append(f"{path.relative_to(ROOT)} -> {name}")
     return hits
+
+
+def current_sha() -> str | None:
+    proc = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    value = proc.stdout.strip()
+    return value if proc.returncode == 0 and len(value) == 40 else None
+
+
+def defines_function(path: Path, name: str) -> bool:
+    if not path.exists():
+        return False
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    return any(
+        isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name
+        for node in tree.body
+    )
 
 
 def python_files() -> list[Path]:
@@ -85,6 +108,68 @@ def has_custom_route() -> bool:
 
 def report() -> list[Cell]:
     cells: list[Cell] = []
+
+    pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    stable_fastmcp = "fastmcp==4.0.10" in pyproject
+    cells.append(
+        Cell(
+            "composition.stable_fastmcp_4",
+            "PASS" if stable_fastmcp else "FAIL",
+            "fastmcp==4.0.10 pinned"
+            if stable_fastmcp
+            else "FastMCP 4.0.10 pin missing",
+        )
+    )
+
+    root_factory = defines_function(SRC / "server.py", "create_server")
+    cells.append(
+        Cell(
+            "composition.explicit_root_construction",
+            "PASS" if root_factory else "FAIL",
+            "server.create_server exists"
+            if root_factory
+            else "server.create_server missing",
+        )
+    )
+
+    child_factories = {
+        "files": (SRC / "files_server.py", "create_files_server"),
+        "search": (SRC / "search_server.py", "create_search_server"),
+        "commands": (SRC / "commands_server.py", "create_commands_server"),
+    }
+    for domain, (path, factory) in child_factories.items():
+        present = defines_function(path, factory)
+        cells.append(
+            Cell(
+                f"composition.{domain}_focused_child",
+                "PASS" if present else "FAIL",
+                f"{path.relative_to(ROOT)}::{factory} {'exists' if present else 'missing'}",
+            )
+        )
+
+    registry_text = (SRC / "tools" / "__init__.py").read_text(encoding="utf-8")
+    server_text = (SRC / "server.py").read_text(encoding="utf-8")
+    registry_removed = (
+        "register_all" not in registry_text and "register_all" not in server_text
+    )
+    cells.append(
+        Cell(
+            "composition.hardcoded_registry_removed",
+            "PASS" if registry_removed else "FAIL",
+            "no tools.register_all composition path"
+            if registry_removed
+            else "tools.register_all still referenced",
+        )
+    )
+
+    cells.append(
+        Cell(
+            "composition.no_duplicate_framework",
+            "PENDING",
+            "final architecture review must confirm no generic Feature/Builder/DI/provider framework",
+            evidence="review",
+        )
+    )
 
     required_contracts = {
         "platform.process_contract": SRC / "process_contracts.py",
@@ -229,7 +314,7 @@ def main() -> int:
     cells = report()
     payload = {
         "kind": "gate-a-preparation-report",
-        "candidate": None,
+        "candidate": current_sha(),
         "cells": [asdict(cell) for cell in cells],
         "summary": {
             "pass": sum(cell.status == "PASS" for cell in cells),

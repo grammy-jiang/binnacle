@@ -4,6 +4,14 @@ import scripts.gate_a_report as gate_a
 def test_current_report_names_known_pre_g5_gaps():
     cells = {cell.id: cell for cell in gate_a.report()}
 
+    assert cells["composition.stable_fastmcp_4"].status == "PASS"
+    assert cells["composition.explicit_root_construction"].status == "PASS"
+    assert cells["composition.files_focused_child"].status == "PASS"
+    assert cells["composition.search_focused_child"].status == "PASS"
+    assert cells["composition.commands_focused_child"].status == "PASS"
+    assert cells["composition.hardcoded_registry_removed"].status == "PASS"
+    assert cells["composition.no_duplicate_framework"].status == "PENDING"
+
     assert cells["platform.process_contract"].status == "PASS"
     assert cells["platform.resource_contract"].status == "PASS"
     assert cells["platform.service_log_contract"].status == "PASS"
@@ -22,3 +30,8 @@ def test_runtime_and_deploy_cells_remain_pending_in_static_report():
     assert cells["companion.server_works_without_watchdog"].status == "PENDING"
     assert cells["convergence.live_deploy"].status == "PENDING"
     assert cells["convergence.real_chatgpt_call"].status == "PENDING"
+
+
+def test_report_binds_to_current_exact_sha():
+    sha = gate_a.current_sha()
+    assert sha is not None and len(sha) == 40
