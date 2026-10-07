@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from binnacle import doctor, uplink, watchdog_connectivity
+from binnacle import doctor, doctor_connectivity, uplink, watchdog_connectivity
 
 BEARER = "Bearer secret-token\n"
 
@@ -102,11 +102,44 @@ def test_endpoint_nothing_answers_fails(token_file):
     assert c.status == "fail" and "nothing answers" in c.detail
 
 
+def test_endpoint_warns_on_unexpected_http_status(monkeypatch, token_file):
+    replies = iter((418, 418))
+    monkeypatch.setattr(
+        doctor_connectivity,
+        "_post_initialize",
+        lambda _url, _authorization, _timeout: next(replies),
+    )
+
+    checks = doctor_connectivity.check_endpoint("http://127.0.0.1/mcp", token_file)
+
+    assert statuses(checks) == ["warn", "warn"]
+    assert "HTTP 418" in checks[0].detail
+    assert "HTTP 418" in checks[1].detail
+
+
+def test_endpoint_missing_token_file_keeps_anon_result(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        doctor_connectivity,
+        "_post_initialize",
+        lambda _url, _authorization, _timeout: 401,
+    )
+
+    checks = doctor_connectivity.check_endpoint(
+        "http://127.0.0.1/mcp", tmp_path / "missing-token"
+    )
+
+    assert statuses(checks) == ["ok"]
+
+
 def test_tail_lines_reads_only_the_end(tmp_path):
     f = tmp_path / "big.log"
     f.write_text("".join(f"line{i}\n" for i in range(50_000)))
     lines = doctor._tail_lines(f, max_bytes=1024)
     assert len(lines) < 200 and lines[-1] == "line49999"
+
+
+def test_tail_lines_missing_file_is_empty(tmp_path):
+    assert doctor._tail_lines(tmp_path / "missing.log") == []
 
 
 def fake_probe_routes(monkeypatch, routes, results):
@@ -179,3 +212,44 @@ def test_uplink_warns_without_any_default_route(monkeypatch):
     fake_probe_routes(monkeypatch, [], {})
     (c,) = watchdog_connectivity.check_uplink()
     assert c.status == "warn" and "no default route" in c.detail
+
+
+@pytest.mark.parametrize("authenticated_status", [503, None])
+def test_endpoint_reports_unexpected_responses_as_warnings(
+    monkeypatch, token_file, authenticated_status
+):
+    replies = iter([502, authenticated_status])
+    monkeypatch.setattr(
+        doctor_connectivity, "_post_initialize", lambda *a: next(replies)
+    )
+    checks = doctor_connectivity.check_endpoint("http://localhost/mcp", token_file)
+    assert statuses(checks) == ["warn", "warn"]
+    assert checks[0].detail == "unauthenticated initialize returned HTTP 502"
+    assert (
+        checks[1].detail
+        == f"authenticated initialize returned HTTP {authenticated_status}"
+    )
+
+
+def test_endpoint_with_missing_token_keeps_unauthenticated_evidence(
+    tmp_path, monkeypatch
+):
+    calls = []
+    monkeypatch.setattr(
+        doctor_connectivity, "_post_initialize", lambda *a: calls.append(a) or 401
+    )
+    checks = doctor_connectivity.check_endpoint(
+        "http://localhost/mcp", tmp_path / "absent"
+    )
+    assert statuses(checks) == ["ok"]
+    assert len(calls) == 1 and calls[0][1] is None
+
+
+def test_log_tail_tolerates_a_removed_file(tmp_path):
+    from binnacle.doctor_io import _tail_lines
+
+    log = tmp_path / "rotated.log"
+    log.write_bytes(b"valid\ninvalid \xff\n")
+    assert _tail_lines(log) == ["valid", "invalid \ufffd"]
+    log.unlink()
+    assert _tail_lines(log) == []
