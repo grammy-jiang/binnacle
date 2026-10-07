@@ -4,11 +4,11 @@ from collections.abc import Callable
 from pathlib import Path
 
 from binnacle import job_client
-from binnacle.deployment_platform import create_service_inspector
 from binnacle.doctor_common import Check, fail, ok, warn
 from binnacle.platform.contracts.service_lifecycle_contracts import (
     ManagedServiceInspector,
 )
+from binnacle.platform.deployment_platform import create_service_inspector
 
 
 def check_job_manager(

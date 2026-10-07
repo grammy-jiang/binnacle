@@ -21,7 +21,7 @@ from binnacle import job_owner, jobs
 from binnacle.callctx import current_call
 from binnacle.config import get_settings
 from binnacle.job_client import PROTOCOL_VERSION
-from binnacle.job_platform import create_process_backend
+from binnacle.platform.job_platform import create_process_backend
 from binnacle.provenance import runtime_provenance
 
 logging.basicConfig(

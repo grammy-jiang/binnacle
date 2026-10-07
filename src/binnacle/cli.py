@@ -21,12 +21,12 @@ import cyclopts
 
 from binnacle import doctor_jobs, units
 from binnacle.config import get_settings
-from binnacle.deployment_platform import (
+from binnacle.job_manager_unit import JOBS_UNIT, render_job_manager_unit
+from binnacle.platform.deployment_platform import (
     create_linux_provisioner,
     create_service_controller,
     create_service_inspector,
 )
-from binnacle.job_manager_unit import JOBS_UNIT, render_job_manager_unit
 from binnacle.platform.linux.service_provisioning_linux import (
     LinuxServiceProvisioner,
     PlannedUnit,

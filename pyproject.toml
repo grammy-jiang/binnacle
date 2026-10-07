@@ -268,7 +268,7 @@ forbidden_modules = [
     "binnacle.job_owner",
     "binnacle.job_client",
     "binnacle.job_manager",
-    "binnacle.job_platform",
+    "binnacle.platform.job_platform",
     "binnacle.platform.linux.job_process",
     "binnacle.platform.linux.job_cgroup",
     "binnacle.job_resource_history",
@@ -284,7 +284,7 @@ type = "forbidden"
 source_modules = ["binnacle.platform.contracts.process_contracts", "binnacle.platform.contracts.resource_contracts"]
 forbidden_modules = [
     "binnacle.jobs", "binnacle.job_owner", "binnacle.job_manager",
-    "binnacle.job_store", "binnacle.job_platform", "binnacle.platform.linux.job_process",
+    "binnacle.job_store", "binnacle.platform.job_platform", "binnacle.platform.linux.job_process",
     "binnacle.platform.linux.job_cgroup", "binnacle.job_resource_history", "binnacle.config",
 ]
 
@@ -316,7 +316,7 @@ allow_indirect_imports = true
 id = "platform-composition-entrypoints"
 name = "Only job engine and manager select platform defaults"
 type = "protected"
-protected_modules = ["binnacle.job_platform"]
+protected_modules = ["binnacle.platform.job_platform"]
 allowed_importers = ["binnacle.jobs", "binnacle.job_manager"]
 
 [[tool.importlinter.contracts]]
@@ -327,7 +327,7 @@ source_modules = ["binnacle.job_store"]
 forbidden_modules = [
     "binnacle.jobs", "binnacle.job_owner", "binnacle.job_manager", "binnacle.job_client",
     "binnacle.platform.contracts.process_contracts", "binnacle.platform.contracts.resource_contracts", "binnacle.platform.linux.job_process",
-    "binnacle.platform.linux.job_cgroup", "binnacle.job_platform", "binnacle.job_resource_history",
+    "binnacle.platform.linux.job_cgroup", "binnacle.platform.job_platform", "binnacle.job_resource_history",
 ]
 
 [[tool.importlinter.contracts]]

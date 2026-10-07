@@ -1,6 +1,7 @@
 import subprocess
 
-from binnacle import deployment_platform, doctor_common
+from binnacle import doctor_common
+from binnacle.platform import deployment_platform
 from binnacle.platform.contracts.service_lifecycle_contracts import ManagedServiceStatus
 
 

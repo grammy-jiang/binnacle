@@ -38,7 +38,7 @@ from typing import Any
 if __package__ in (None, ""):  # run as a script: make `scripts` importable
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from binnacle.deployment_platform import (
+from binnacle.platform.deployment_platform import (
     create_service_controller,
     create_service_inspector,
     create_service_log_source,

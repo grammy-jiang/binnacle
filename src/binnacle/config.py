@@ -37,7 +37,7 @@ from pydantic_settings import (
     TomlConfigSettingsSource,
 )
 
-from binnacle.deployment_platform import create_runtime_paths
+from binnacle.platform.deployment_platform import create_runtime_paths
 
 CONFIG_FILE_ENV = "BINNACLE_CONFIG_FILE"
 DEFAULT_CONFIG_FILE = Path.home() / ".config" / "binnacle" / "config.toml"

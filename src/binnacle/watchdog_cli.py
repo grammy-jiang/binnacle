@@ -13,8 +13,8 @@ import cyclopts
 
 from binnacle import units
 from binnacle.config import get_settings
-from binnacle.deployment_platform import create_linux_provisioner
 from binnacle.ops.watchdog.config import Policy, UsbLinkPolicy
+from binnacle.platform.deployment_platform import create_linux_provisioner
 from binnacle.server_unit import SERVER_UNIT
 from binnacle.tunnel_unit import TUNNEL_UNIT
 from binnacle.watchdog_config import WatchdogSettings, get_watchdog_settings

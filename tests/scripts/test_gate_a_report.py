@@ -62,11 +62,11 @@ def test_g6_manifest_classifies_every_current_module_once():
 def test_platform_default_composition_is_not_a_command_feature():
     groups = manifest.manifest_groups()
     assert groups["platform_composition"] == {
-        "deployment_platform.py",
-        "job_platform.py",
+        "platform/deployment_platform.py",
+        "platform/job_platform.py",
     }
-    assert "job_platform.py" not in groups["commands"]
-    assert "deployment_platform.py" not in groups["deployment"]
+    assert "platform/job_platform.py" not in groups["commands"]
+    assert "platform/deployment_platform.py" not in groups["deployment"]
 
 
 def test_g5_additions_have_expected_g6_owners():

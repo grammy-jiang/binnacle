@@ -17,8 +17,11 @@ from binnacle import job_resource_history, job_store
 from binnacle.callctx import current_call
 from binnacle.config import get_settings
 from binnacle.job_output import clip_head_tail as job_output_clip_head_tail
-from binnacle.job_platform import create_process_backend, create_resource_accounting
 from binnacle.platform.contracts.process_contracts import ProcessHandle
+from binnacle.platform.job_platform import (
+    create_process_backend,
+    create_resource_accounting,
+)
 
 logger = logging.getLogger("binnacle.jobs")
 

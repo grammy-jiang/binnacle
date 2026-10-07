@@ -21,10 +21,6 @@ from binnacle import doctor_common as _doctor_common
 from binnacle import doctor_jobs as _doctor_jobs
 from binnacle import logstats, units
 from binnacle.config import CONFIG_FILE_ENV, DEFAULT_CONFIG_FILE, get_settings
-from binnacle.deployment_platform import (
-    create_linux_provisioner,
-    create_service_inspector,
-)
 from binnacle.doctor_common import Check, fail, ok, warn
 from binnacle.doctor_connectivity import _tail_lines, check_endpoint
 from binnacle.doctor_provenance import check_provenance
@@ -34,6 +30,10 @@ from binnacle.platform.contracts.service_lifecycle_contracts import (
     ManagedServiceInspector,
 )
 from binnacle.platform.contracts.service_log_contracts import ServiceLogError
+from binnacle.platform.deployment_platform import (
+    create_linux_provisioner,
+    create_service_inspector,
+)
 from binnacle.provenance import runtime_provenance
 
 Systemctl = _doctor_common.Systemctl

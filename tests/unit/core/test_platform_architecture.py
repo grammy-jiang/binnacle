@@ -11,6 +11,7 @@ MODULE_PATHS = {
     "resource_contracts": "platform/contracts/resource_contracts.py",
     "job_process": "platform/linux/job_process.py",
     "job_cgroup": "platform/linux/job_cgroup.py",
+    "job_platform": "platform/job_platform.py",
 }
 EDGES = {
     "process_contracts": set(),
@@ -46,17 +47,12 @@ EDGES = {
     },
 }
 
-OWNER_PATHS = {
-    "process_contracts": SOURCE / "platform/contracts/process_contracts.py",
-    "resource_contracts": SOURCE / "platform/contracts/resource_contracts.py",
-    "job_process": SOURCE / "platform/linux/job_process.py",
-    "job_cgroup": SOURCE / "platform/linux/job_cgroup.py",
-}
 MODULE_OWNERS = {
     "binnacle.platform.contracts.process_contracts": "process_contracts",
     "binnacle.platform.contracts.resource_contracts": "resource_contracts",
     "binnacle.platform.linux.job_process": "job_process",
     "binnacle.platform.linux.job_cgroup": "job_cgroup",
+    "binnacle.platform.job_platform": "job_platform",
 }
 
 
@@ -115,19 +111,9 @@ def violations(source, owner):
             root = name.split(".")[0]
             if root in {"fastmcp", "mcp", "importlib"}:
                 found.append(name)
-            if root == "binnacle":
-                parts = name.split(".")[1:]
-                if (
-                    parts[:2] == ["platform", "contracts"]
-                    and len(parts) >= 3
-                    or parts[:2] == ["platform", "linux"]
-                    and len(parts) >= 3
-                ):
-                    dependency = parts[2]
-                else:
-                    dependency = parts[0]
-                if dependency not in EDGES[owner]:
-                    found.append(name)
+            dependency = imported_owner(name)
+            if dependency is not None and dependency not in EDGES[owner]:
+                found.append(name)
             if owner in {"process_contracts", "resource_contracts"} and root not in {
                 "typing",
                 "pathlib",
@@ -220,7 +206,7 @@ def test_orchestration_rejects_linux_mechanics(owner, source):
     [
         "from binnacle.platform.linux import job_process",
         "from binnacle.platform.linux import job_cgroup",
-        "from binnacle import job_platform",
+        "from binnacle.platform import job_platform",
         "from binnacle import jobs",
         "from binnacle.config import get_settings",
     ],
@@ -239,7 +225,7 @@ def test_owner_rejects_private_storage(member):
 
 
 def test_platform_contains_only_two_explicit_lazy_constructors():
-    tree = ast.parse((SOURCE / "job_platform.py").read_text())
+    tree = ast.parse((SOURCE / MODULE_PATHS["job_platform"]).read_text())
     functions = [node for node in tree.body if isinstance(node, ast.FunctionDef)]
     assert [node.name for node in functions] == [
         "create_process_backend",
@@ -269,12 +255,13 @@ def test_only_job_engine_and_manager_select_platform():
         tree = ast.parse(path.read_text())
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom):
-                assert node.module != "binnacle.job_platform", path
+                assert node.module != "binnacle.platform.job_platform", path
                 if node.module == "binnacle":
                     assert all(alias.name != "job_platform" for alias in node.names), (
                         path
                     )
             elif isinstance(node, ast.Import):
                 assert all(
-                    alias.name != "binnacle.job_platform" for alias in node.names
+                    alias.name != "binnacle.platform.job_platform"
+                    for alias in node.names
                 ), path

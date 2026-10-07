@@ -16,14 +16,14 @@ Systemctl = Callable[..., "subprocess.CompletedProcess[str]"]
 
 
 def systemctl(*args: str) -> "subprocess.CompletedProcess[str]":
-    from binnacle.deployment_platform import create_linux_provisioner
+    from binnacle.platform.deployment_platform import create_linux_provisioner
 
     return create_linux_provisioner().systemctl(*args, check=False)
 
 
 def unit_state(unit: str, run: Systemctl | None = None) -> str:
     if run is None:
-        from binnacle.deployment_platform import create_service_inspector
+        from binnacle.platform.deployment_platform import create_service_inspector
 
         return create_service_inspector().status(unit).state
     return run("is-active", unit).stdout.strip() or "unknown"

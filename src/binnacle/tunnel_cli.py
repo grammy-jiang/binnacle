@@ -19,7 +19,7 @@ import cyclopts
 
 from binnacle import units
 from binnacle.config import get_settings
-from binnacle.deployment_platform import (
+from binnacle.platform.deployment_platform import (
     create_linux_provisioner,
     create_service_controller,
     create_service_inspector,

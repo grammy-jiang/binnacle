@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from binnacle import deployment_platform
+from binnacle.platform import deployment_platform
 from binnacle.platform.contracts.runtime_path_contracts import RuntimePaths
 from binnacle.platform.linux.runtime_paths_linux import resolve_runtime_paths
 
@@ -45,7 +45,7 @@ def test_default_platform_factory_selects_linux_runtime_paths(monkeypatch):
 
 
 def test_default_platform_factories_construct_linux_adapters(tmp_path):
-    from binnacle.deployment_platform import (
+    from binnacle.platform.deployment_platform import (
         create_linux_provisioner,
         create_service_controller,
         create_service_inspector,

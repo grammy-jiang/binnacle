@@ -70,7 +70,10 @@ def manifest_groups() -> dict[str, set[str]]:
             "platform/contracts/service_lifecycle_contracts.py",
             "platform/contracts/runtime_path_contracts.py",
         },
-        "platform_composition": {"deployment_platform.py", "job_platform.py"},
+        "platform_composition": {
+            "platform/deployment_platform.py",
+            "platform/job_platform.py",
+        },
         "platform_linux": {
             "platform/linux/__init__.py",
             "platform/linux/job_process.py",
