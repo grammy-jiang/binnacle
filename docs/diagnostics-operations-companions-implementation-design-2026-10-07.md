@@ -155,6 +155,21 @@ The deployed G4 public MCP wire baseline remains byte-identical at 141833 bytes 
 preserve that wire surface. G4's completion-only documentation commit does not require
 any G5 implementation redesign.
 
+### 2.6 Post-deploy characterization refresh
+
+After rebasing to the deployed G4 completion, the read-only characterization was
+refreshed under `~/.local/state/binnacle/g5-design-review-d607100/characterization/`.
+Core doctor, watchdog doctor and tunnel doctor representative runs all exited 0; the
+core/watchdog no-probe captures and all four CLI help surfaces were hashed. A live
+`binnacle stats --since="-1 hour" --until=now --system-resources` capture exited 0,
+confirming that the opt-in Webmin path remains usable on the deployed host. The focused
+server-composition/wire contract file passed **26 tests**. No source or service mutation
+was performed by this characterization.
+
+The G4 completion evidence remains the authoritative live four-profile wire archive;
+G5.0 does not regenerate a different public baseline when deployed runtime bytes are
+unchanged.
+
 ## 3. Goals
 
 G5 must:
@@ -554,6 +569,65 @@ once G5.1 contracts settle by handing their integration patches to those owners.
 - independent implementation review;
 - exact-SHA CI;
 - canonical deploy + live smoke/doctors + real ChatGPT read-only call.
+
+### G5.7 — production activation and rollback boundary
+
+The canonical server deploy remains `scripts/deploy_smoke.py deploy <exact-sha>` and
+retains its existing pre-push rollback. G5 adds one companion activation step because
+`binnacle-watchdog.service` is a long-running Python process and does not auto-reload
+when the checkout fast-forwards. Activation order is fixed:
+
+1. deploy the exact reviewed/CI-green G5 candidate through the canonical server gate;
+2. verify `/healthz`, MCP wire parity, live pytest and core/tunnel/watchdog doctors while
+   the already-running watchdog still uses its pre-G5 `/mcp` liveness policy;
+3. run `binnacle-watchdog deploy-check`; only at a quiet verdict restart
+   `binnacle-watchdog.service` so it loads the G5 companion bytes and `/healthz` URL;
+4. verify the watchdog unit identity, fresh start timestamp, doctor output, one healthy
+   observation cycle, and that no unexpected repair/restart action fired;
+5. do not restart the durable jobs manager, and do not restart the tunnel merely for
+   CLI/doctor/helper ownership changes.
+
+Only a failure **inside step 1, before the canonical gate successfully atomically
+pushes the deployment refs**, uses that gate's existing checkout/environment rollback.
+Steps 2-4 run after the deployment transaction has committed; their failure cannot
+trigger an already-finished gate's rollback. Preserve the evidence and running service
+state, then prepare a focused forward fix or revert commit, obtain its required CI,
+and deploy through the same canonical gate. Do **not** reset production or directly
+move deployment refs. If companion activation has occurred, restore the watchdog
+consumer at its quiet gate before removing the server route, as specified below. The current `http_alive()` contract
+counts any HTTP response as liveness, so a missing `/healthz` returning an HTTP error
+during a forward rollback does not become a false "server dead" signal; nevertheless
+rollback correctness must be proven by the restored watchdog doctor/observation cycle,
+not by relying on that incidental HTTP status alone.
+
+Each atomic G5 implementation commit must remain independently revertible until the
+final candidate. G6 relocation/facade deletion is not part of this rollback boundary.
+
+### G5 checkpoint rollback rules
+
+Each row is one green, independently revertible checkpoint. Keep compatibility aliases
+until replacement consumers pass their focused tests; do not delete facades as part of
+an unrelated cleanup. Revert dependent checkpoints in reverse order, with the following
+explicit boundaries:
+
+| Checkpoint | Retained bridge and rollback |
+| --- | --- |
+| G5.1 diagnostic helpers | Keep `doctor.render`, `doctor.render_json` and the existing tail-helper aliases while consumers move to neutral helpers. Revert the consumers and helper extraction together; original rendering, exit codes and imports remain recoverable. |
+| G5.2 uplink ownership | Move the uplink check, switch watchdog composition, remove core composition, and update core help/tests in one commit. Revert all four together. Both probe flag spellings remain accepted before and after; the low-level probe algorithm is unchanged. |
+| G5.3 resource history | Keep the existing Webmin implementation intact behind the new contract. Revert the CLI binding and new seam together to restore the original direct opt-in call; no stored history changes. |
+| G5.4 health route | Deploy the root route before activating the watchdog consumer. For rollback after activation, first forward-deploy a revert of only the watchdog URL to `/mcp`, quiet-gate its restart, and verify its loaded policy and healthy observation; only then forward-deploy route removal. Before activation, route and unused consumer-source changes can revert together. |
+| G5.5 companion imports | Keep the old aggregate entrypoints and deliberate compatibility re-exports until direct-helper consumers and static gates pass. Revert each consumer migration with its extraction and matching static rule; never leave an import pointing at a removed helper. |
+
+Local reversions use normal revert commits on the implementation branch. Once a
+candidate has been deployed, every fix/revert follows exact-SHA CI and canonical
+fast-forward deployment; post-deploy failures are not claimed as automatic rollback.
+A quiet-gate timeout is a recorded incomplete activation, not permission to restart a
+busy watchdog. Bound that wait and continue only when its normal gate succeeds.
+The stable jobs manager and tunnel remain running throughout G5 activation/recovery.
+
+No G5 checkpoint changes job/resource lifecycle ownership, durable schema, dependencies,
+FastMCP Tasks, or package layout. No data migration or data rollback is required.
+G6 package relocation and facade removal wait for completed G5 evidence.
 
 ## 8. Parallel-safe work
 
