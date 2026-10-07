@@ -21,6 +21,14 @@ def _integer(value: str) -> int | None:
         return None
 
 
+def _captured_text(value: str | bytes | None) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        return value.decode(errors="replace")
+    return value
+
+
 class SystemdUserServices:
     """Semantic inspection backed by systemd, procfs and cgroup v2."""
 
@@ -79,12 +87,10 @@ class SystemdUserServices:
                     timeout=timeout,
                 )
         except subprocess.TimeoutExpired as exc:
-            stdout = exc.stdout if isinstance(exc.stdout, str) else ""
-            stderr = exc.stderr if isinstance(exc.stderr, str) else ""
             return ServiceAction(
                 124,
-                stdout=stdout,
-                stderr=stderr,
+                stdout=_captured_text(exc.stdout),
+                stderr=_captured_text(exc.stderr),
                 timed_out=True,
             )
         except OSError as exc:
@@ -156,11 +162,6 @@ class SystemdUserServices:
         except (OSError, subprocess.TimeoutExpired):
             return ""
         return proc.stdout.strip() if proc.returncode == 0 else ""
-
-    def unit_property(self, service: str, prop: str) -> str:
-        """Read a unit-definition property with the baseline unbounded wait."""
-
-        return self._show_value(service, prop, command_timeout_s=None)
 
     def rss_kb(self, service: str) -> float | None:
         cgroup = self._show_value(service, "ControlGroup")

@@ -109,6 +109,12 @@ class LinuxServiceProvisioner:
             check=check,
         )
 
+    def unit_property(self, service: str, prop: str) -> str:
+        """Read one Linux unit-definition property for compatibility diagnostics."""
+
+        proc = self.systemctl("show", service, "-p", prop, "--value", check=False)
+        return proc.stdout.strip() if proc.returncode == 0 else ""
+
     def reload_definitions(self) -> subprocess.CompletedProcess[str]:
         return self.systemctl("daemon-reload")
 

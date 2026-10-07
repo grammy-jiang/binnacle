@@ -29,7 +29,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from binnacle.doctor_contracts import Check, fail, ok, warn
-from binnacle.service_systemd import SystemdUserServices
 
 Systemctl = Callable[..., object]
 
@@ -206,7 +205,9 @@ def unit_property(
 ) -> str:
     """Read one Linux unit-definition property for compatibility diagnostics."""
     if run is None:
-        return SystemdUserServices().unit_property(unit, prop)
+        from binnacle.service_unit_linux import unit_property as linux_unit_property
+
+        return linux_unit_property(unit, prop)
     result = run("show", unit, "-p", prop, "--value")
     return getattr(result, "stdout", "").strip()
 

@@ -200,6 +200,27 @@ def test_restart_with_timeout_maps_timeout_to_action(monkeypatch):
     )
 
 
+def test_restart_timeout_preserves_captured_bytes(monkeypatch):
+    def run(argv, **kwargs):
+        raise subprocess.TimeoutExpired(
+            argv,
+            77,
+            output=bytes([112, 97, 114, 116, 105, 97, 108, 255]),
+            stderr=bytes([108, 97, 116, 101, 255]),
+        )
+
+    monkeypatch.setattr(service_systemd.subprocess, "run", run)
+
+    action = SystemdUserServices().restart("demo.service", timeout=77.0)
+
+    assert action == ServiceAction(
+        124,
+        stdout="partial�",
+        stderr="late�",
+        timed_out=True,
+    )
+
+
 def test_restart_launch_error_maps_to_action(monkeypatch):
     monkeypatch.setattr(
         service_systemd.subprocess,
@@ -323,27 +344,5 @@ def test_started_at_epoch_handles_missing_nonzero_invalid_and_oserror(monkeypatc
     assert services.started_at_epoch("demo.service") is None
 
 
-def test_unit_property_preserves_baseline_unbounded_systemctl_wait(monkeypatch):
-    seen = []
-
-    def run(argv, **kwargs):
-        seen.append((argv, kwargs))
-        return completed(argv, "value\n")
-
-    monkeypatch.setattr(service_systemd.subprocess, "run", run)
-
-    assert SystemdUserServices().unit_property("demo.service", "After") == "value"
-    assert seen == [
-        (
-            [
-                "systemctl",
-                "--user",
-                "show",
-                "demo.service",
-                "-p",
-                "After",
-                "--value",
-            ],
-            {"capture_output": True, "text": True, "check": False},
-        )
-    ]
+def test_semantic_service_adapter_has_no_arbitrary_unit_property():
+    assert not hasattr(SystemdUserServices, "unit_property")

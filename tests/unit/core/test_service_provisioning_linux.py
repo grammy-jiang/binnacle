@@ -72,3 +72,37 @@ def test_enable_persistence_invokes_loginctl():
     provisioner.enable_persistence()
 
     assert seen == [(["loginctl", "enable-linger"], {"check": True})]
+
+
+def test_unit_property_preserves_baseline_unbounded_systemctl_wait():
+    seen = []
+
+    def run(argv, **kwargs):
+        seen.append((argv, kwargs))
+        return completed(argv, out="value\n")
+
+    provisioner = LinuxServiceProvisioner(run=run)
+
+    assert provisioner.unit_property("demo.service", "After") == "value"
+    assert seen == [
+        (
+            [
+                "systemctl",
+                "--user",
+                "show",
+                "demo.service",
+                "-p",
+                "After",
+                "--value",
+            ],
+            {"capture_output": True, "text": True, "check": False},
+        )
+    ]
+
+
+def test_unit_property_nonzero_is_empty():
+    provisioner = LinuxServiceProvisioner(
+        run=lambda argv, **kwargs: completed(argv, rc=1, out="ignored\n")
+    )
+
+    assert provisioner.unit_property("demo.service", "After") == ""
