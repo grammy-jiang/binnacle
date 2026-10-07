@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from binnacle import jobs
-from binnacle.resource_contracts import NoResourceAccounting
+from binnacle.platform.contracts.resource_contracts import NoResourceAccounting
 
 
 @pytest.fixture(autouse=True)

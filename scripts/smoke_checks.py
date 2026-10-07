@@ -20,11 +20,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from binnacle.service_lifecycle_contracts import (
+from binnacle.platform.contracts.service_lifecycle_contracts import (
     ManagedServiceController,
     ManagedServiceInspector,
 )
-from binnacle.service_log_contracts import ServiceLogError
+from binnacle.platform.contracts.service_log_contracts import ServiceLogError
 from scripts.smoke_diagnostics import JournalExpectation, doctor_detail, missing_from
 
 UNIT = "binnacle-mcp.service"

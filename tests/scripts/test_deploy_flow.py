@@ -11,8 +11,8 @@ from typing import Any
 import pytest
 
 import scripts.deploy_flow as flow
-from binnacle.service_lifecycle_contracts import ServiceAction
-from binnacle.service_log_contracts import ServiceLogError
+from binnacle.platform.contracts.service_lifecycle_contracts import ServiceAction
+from binnacle.platform.contracts.service_log_contracts import ServiceLogError
 from scripts.smoke_checks import Env, Report
 from tests.service_fakes import FakeServiceInspector
 

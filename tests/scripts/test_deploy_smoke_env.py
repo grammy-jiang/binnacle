@@ -9,7 +9,7 @@ from typing import Any
 
 import pytest
 
-from binnacle.service_log_contracts import ServiceLogError
+from binnacle.platform.contracts.service_log_contracts import ServiceLogError
 from scripts import deploy_smoke
 
 

@@ -62,11 +62,13 @@ def manifest_groups() -> dict[str, set[str]]:
             "run_command_evidence.py",
         },
         "platform_contracts": {
-            "process_contracts.py",
-            "resource_contracts.py",
-            "service_log_contracts.py",
-            "service_lifecycle_contracts.py",
-            "runtime_path_contracts.py",
+            "platform/__init__.py",
+            "platform/contracts/__init__.py",
+            "platform/contracts/process_contracts.py",
+            "platform/contracts/resource_contracts.py",
+            "platform/contracts/service_log_contracts.py",
+            "platform/contracts/service_lifecycle_contracts.py",
+            "platform/contracts/runtime_path_contracts.py",
         },
         "platform_composition": {"deployment_platform.py", "job_platform.py"},
         "platform_linux": {

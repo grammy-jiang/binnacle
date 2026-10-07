@@ -3,7 +3,7 @@ import subprocess
 import pytest
 
 from binnacle import logstats_io, service_journal
-from binnacle.service_log_contracts import ServiceLogError
+from binnacle.platform.contracts.service_log_contracts import ServiceLogError
 
 
 def test_fetch_journal_is_linux_string_compatibility_facade(monkeypatch):

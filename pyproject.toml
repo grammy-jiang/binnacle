@@ -281,7 +281,7 @@ allow_indirect_imports = true
 id = "platform-contracts-independent"
 name = "Platform contracts do not select engines or concrete adapters"
 type = "forbidden"
-source_modules = ["binnacle.process_contracts", "binnacle.resource_contracts"]
+source_modules = ["binnacle.platform.contracts.process_contracts", "binnacle.platform.contracts.resource_contracts"]
 forbidden_modules = [
     "binnacle.jobs", "binnacle.job_owner", "binnacle.job_manager",
     "binnacle.job_store", "binnacle.job_platform", "binnacle.job_process",
@@ -326,7 +326,7 @@ type = "forbidden"
 source_modules = ["binnacle.job_store"]
 forbidden_modules = [
     "binnacle.jobs", "binnacle.job_owner", "binnacle.job_manager", "binnacle.job_client",
-    "binnacle.process_contracts", "binnacle.resource_contracts", "binnacle.job_process",
+    "binnacle.platform.contracts.process_contracts", "binnacle.platform.contracts.resource_contracts", "binnacle.job_process",
     "binnacle.job_cgroup", "binnacle.job_platform", "binnacle.job_resource_history",
 ]
 

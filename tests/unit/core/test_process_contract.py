@@ -14,7 +14,10 @@ import pytest
 from binnacle import job_process
 
 if TYPE_CHECKING:
-    from binnacle.process_contracts import ProcessBackend, ProcessHandle
+    from binnacle.platform.contracts.process_contracts import (
+        ProcessBackend,
+        ProcessHandle,
+    )
 
 
 @pytest.fixture
@@ -145,10 +148,10 @@ def test_contract_import_does_not_load_engine_settings_or_linux():
 import importlib.abc, sys
 class Block(importlib.abc.MetaPathFinder):
     def find_spec(self, fullname, path=None, target=None):
-        if fullname.startswith('binnacle.') and fullname != 'binnacle.process_contracts':
+        if fullname.startswith('binnacle.') and fullname not in {'binnacle.platform', 'binnacle.platform.contracts', 'binnacle.platform.contracts.process_contracts'}:
             raise AssertionError('unexpected dependency: ' + fullname)
 sys.meta_path.insert(0, Block())
-from binnacle.process_contracts import ProcessBackend, ProcessHandle
+from binnacle.platform.contracts.process_contracts import ProcessBackend, ProcessHandle
 assert ProcessBackend and ProcessHandle
 """
     result = subprocess.run(

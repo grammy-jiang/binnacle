@@ -3,7 +3,10 @@ import subprocess
 import pytest
 
 from binnacle import service_systemd
-from binnacle.service_lifecycle_contracts import ManagedServiceStatus, ServiceAction
+from binnacle.platform.contracts.service_lifecycle_contracts import (
+    ManagedServiceStatus,
+    ServiceAction,
+)
 from binnacle.service_systemd import SystemdUserServices
 
 

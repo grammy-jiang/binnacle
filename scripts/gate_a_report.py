@@ -33,6 +33,7 @@ from scripts.gate_a_source import (
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src" / "binnacle"
+CONTRACTS = SRC / "platform" / "contracts"
 
 
 @dataclass(frozen=True)
@@ -283,11 +284,12 @@ def report() -> list[Cell]:
     )
 
     required_contracts = {
-        "platform.process_contract": SRC / "process_contracts.py",
-        "platform.resource_contract": SRC / "resource_contracts.py",
-        "platform.service_log_contract": SRC / "service_log_contracts.py",
-        "platform.managed_service_contract": SRC / "service_lifecycle_contracts.py",
-        "platform.runtime_path_contract": SRC / "runtime_path_contracts.py",
+        "platform.process_contract": CONTRACTS / "process_contracts.py",
+        "platform.resource_contract": CONTRACTS / "resource_contracts.py",
+        "platform.service_log_contract": CONTRACTS / "service_log_contracts.py",
+        "platform.managed_service_contract": CONTRACTS
+        / "service_lifecycle_contracts.py",
+        "platform.runtime_path_contract": CONTRACTS / "runtime_path_contracts.py",
     }
     for ident, path in required_contracts.items():
         cells.append(

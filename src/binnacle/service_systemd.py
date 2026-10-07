@@ -6,7 +6,10 @@ import re
 import subprocess
 from pathlib import Path
 
-from binnacle.service_lifecycle_contracts import ManagedServiceStatus, ServiceAction
+from binnacle.platform.contracts.service_lifecycle_contracts import (
+    ManagedServiceStatus,
+    ServiceAction,
+)
 
 _SMOKE_INSPECTION_TIMEOUT_S = 10.0
 _CGROUP_FS = Path("/sys/fs/cgroup")

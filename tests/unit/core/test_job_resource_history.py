@@ -5,7 +5,7 @@ import json
 import pytest
 
 from binnacle import job_resource_history
-from binnacle.resource_contracts import NoResourceAccounting
+from binnacle.platform.contracts.resource_contracts import NoResourceAccounting
 
 
 @pytest.fixture

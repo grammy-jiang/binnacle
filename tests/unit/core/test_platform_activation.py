@@ -177,7 +177,7 @@ def test_manager_prepares_selected_accounting_before_recovery(tmp_path, monkeypa
 
 def test_manager_owned_command_runs_without_accounting(tmp_path, monkeypatch):
     from binnacle import jobs
-    from binnacle.resource_contracts import NoResourceAccounting
+    from binnacle.platform.contracts.resource_contracts import NoResourceAccounting
 
     monkeypatch.setattr(jobs, "_RESOURCE_ACCOUNTING", NoResourceAccounting())
     monkeypatch.setattr(jobs, "JOBS_DIR", tmp_path / "jobs")

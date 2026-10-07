@@ -13,7 +13,10 @@ from functools import partial
 import pytest
 
 from binnacle import job_cgroup
-from binnacle.resource_contracts import NoResourceAccounting, ResourceAccounting
+from binnacle.platform.contracts.resource_contracts import (
+    NoResourceAccounting,
+    ResourceAccounting,
+)
 
 
 @pytest.fixture

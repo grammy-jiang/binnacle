@@ -6,7 +6,7 @@ import os
 from collections.abc import Mapping
 from pathlib import Path
 
-from binnacle.runtime_path_contracts import RuntimePaths
+from binnacle.platform.contracts.runtime_path_contracts import RuntimePaths
 
 
 def resolve_runtime_paths(

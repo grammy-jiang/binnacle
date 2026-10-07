@@ -30,9 +30,11 @@ from binnacle.doctor_connectivity import _tail_lines, check_endpoint
 from binnacle.doctor_provenance import check_provenance
 from binnacle.doctor_render import render, render_json
 from binnacle.job_manager_doctor import check_job_manager
+from binnacle.platform.contracts.service_lifecycle_contracts import (
+    ManagedServiceInspector,
+)
+from binnacle.platform.contracts.service_log_contracts import ServiceLogError
 from binnacle.provenance import runtime_provenance
-from binnacle.service_lifecycle_contracts import ManagedServiceInspector
-from binnacle.service_log_contracts import ServiceLogError
 
 Systemctl = _doctor_common.Systemctl
 systemctl = _doctor_common.systemctl

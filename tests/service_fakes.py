@@ -2,7 +2,10 @@
 
 from dataclasses import dataclass, field
 
-from binnacle.service_lifecycle_contracts import ManagedServiceStatus, ServiceAction
+from binnacle.platform.contracts.service_lifecycle_contracts import (
+    ManagedServiceStatus,
+    ServiceAction,
+)
 
 
 @dataclass

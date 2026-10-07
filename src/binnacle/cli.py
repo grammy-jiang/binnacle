@@ -407,7 +407,7 @@ def stats(
     journal_units: str | tuple[str, str] = unit
     if unit in {"binnacle-mcp", SERVER_UNIT}:
         journal_units = (unit, JOBS_UNIT)
-    from binnacle.service_log_contracts import ServiceLogError
+    from binnacle.platform.contracts.service_log_contracts import ServiceLogError
 
     try:
         raw_journal = logstats.fetch_journal(journal_units, since, until)

@@ -3,7 +3,7 @@ import subprocess
 import pytest
 
 from binnacle import service_journal
-from binnacle.service_log_contracts import ServiceLogError
+from binnacle.platform.contracts.service_log_contracts import ServiceLogError
 
 
 def completed(argv, rc=0, out="journal\n", err=""):

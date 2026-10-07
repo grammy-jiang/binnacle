@@ -4,7 +4,7 @@ from pathlib import Path
 
 from binnacle import job_client
 from binnacle.job_manager_doctor import check_job_manager
-from binnacle.service_lifecycle_contracts import ManagedServiceStatus
+from binnacle.platform.contracts.service_lifecycle_contracts import ManagedServiceStatus
 from tests.service_fakes import FakeServiceInspector
 
 

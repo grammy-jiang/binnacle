@@ -1,7 +1,7 @@
 """Lifecycle-boundary checks used by the MCP mode restart gate."""
 
 from binnacle import doctor_jobs
-from binnacle.service_lifecycle_contracts import ManagedServiceStatus
+from binnacle.platform.contracts.service_lifecycle_contracts import ManagedServiceStatus
 from tests.service_fakes import FakeServiceInspector
 
 

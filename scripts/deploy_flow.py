@@ -22,7 +22,7 @@ from __future__ import annotations
 import json
 import re
 
-from binnacle.service_log_contracts import ServiceLogError
+from binnacle.platform.contracts.service_log_contracts import ServiceLogError
 from scripts.smoke_checks import UNIT, Env, Report, last_line, smoke
 
 QUIET_WINDOW_S = 30.0

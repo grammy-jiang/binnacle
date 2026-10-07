@@ -25,8 +25,8 @@ from binnacle.doctor_common import (
     unit_state,
     warn,
 )
+from binnacle.platform.contracts.service_log_contracts import ServiceLogError
 from binnacle.server_unit import SERVER_UNIT
-from binnacle.service_log_contracts import ServiceLogError
 from binnacle.tunnel_log import TunnelLogStatus, scan_tunnel_log
 from binnacle.tunnel_unit import (
     OWNER,

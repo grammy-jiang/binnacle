@@ -14,8 +14,8 @@ import pytest
 
 from binnacle import doctor
 from binnacle import jobs as jobstore
-from binnacle.service_lifecycle_contracts import ManagedServiceStatus
-from binnacle.service_log_contracts import ServiceLogError
+from binnacle.platform.contracts.service_lifecycle_contracts import ManagedServiceStatus
+from binnacle.platform.contracts.service_log_contracts import ServiceLogError
 from tests.service_fakes import FakeServiceInspector
 
 BEARER = "Bearer secret-token\n"
@@ -434,7 +434,9 @@ def test_boot_check_wants_lingering():
 def test_service_inspector_reads_own_process_environment(monkeypatch):
     """Keep one real procfs environment check in the ordinary-process lane."""
 
-    from binnacle.service_lifecycle_contracts import ManagedServiceStatus
+    from binnacle.platform.contracts.service_lifecycle_contracts import (
+        ManagedServiceStatus,
+    )
     from binnacle.service_systemd import SystemdUserServices
 
     services = SystemdUserServices()

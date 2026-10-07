@@ -1,7 +1,7 @@
 import subprocess
 
 from binnacle import deployment_platform, doctor_common
-from binnacle.service_lifecycle_contracts import ManagedServiceStatus
+from binnacle.platform.contracts.service_lifecycle_contracts import ManagedServiceStatus
 
 
 def completed(argv, stdout="", rc=0):

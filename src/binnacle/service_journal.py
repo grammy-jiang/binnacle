@@ -6,7 +6,7 @@ import subprocess
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from binnacle.service_log_contracts import ServiceLogError
+from binnacle.platform.contracts.service_log_contracts import ServiceLogError
 
 
 def _services(value: str | Sequence[str]) -> tuple[str, ...]:

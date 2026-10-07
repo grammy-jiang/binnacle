@@ -8,8 +8,10 @@ from pathlib import Path
 
 from binnacle import jobs, logstats
 from binnacle.deployment_platform import create_service_inspector
-from binnacle.service_lifecycle_contracts import ManagedServiceInspector
-from binnacle.service_log_contracts import ServiceLogError
+from binnacle.platform.contracts.service_lifecycle_contracts import (
+    ManagedServiceInspector,
+)
+from binnacle.platform.contracts.service_log_contracts import ServiceLogError
 
 
 def _job_state_safe(job_id: str) -> dict | None:

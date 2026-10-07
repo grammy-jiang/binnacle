@@ -7,7 +7,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import BinaryIO, Literal
 
-from binnacle.process_contracts import ProcessHandle
+from binnacle.platform.contracts.process_contracts import ProcessHandle
 
 _CLK_TCK = os.sysconf("SC_CLK_TCK")
 

@@ -10,7 +10,7 @@ from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 
-from binnacle.resource_contracts import ResourceAccounting
+from binnacle.platform.contracts.resource_contracts import ResourceAccounting
 
 log = logging.getLogger("binnacle.jobs")
 

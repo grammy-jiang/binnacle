@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from binnacle import deployment_platform
-from binnacle.runtime_path_contracts import RuntimePaths
+from binnacle.platform.contracts.runtime_path_contracts import RuntimePaths
 from binnacle.runtime_paths_linux import resolve_runtime_paths
 
 

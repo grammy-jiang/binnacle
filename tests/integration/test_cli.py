@@ -9,7 +9,7 @@ and token rotation without changing the development Raspberry Pi.
 import subprocess
 
 from binnacle import cli, doctor
-from binnacle.service_lifecycle_contracts import ServiceAction
+from binnacle.platform.contracts.service_lifecycle_contracts import ServiceAction
 from tests.service_fakes import FakeServiceController
 
 
@@ -244,7 +244,7 @@ def test_stats_log_failure_remains_command_failure(monkeypatch):
     import pytest
 
     from binnacle import logstats
-    from binnacle.service_log_contracts import ServiceLogError
+    from binnacle.platform.contracts.service_log_contracts import ServiceLogError
 
     monkeypatch.setattr(
         logstats,

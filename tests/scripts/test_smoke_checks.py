@@ -12,7 +12,7 @@ from typing import Any
 
 import pytest
 
-from binnacle.service_lifecycle_contracts import ManagedServiceStatus
+from binnacle.platform.contracts.service_lifecycle_contracts import ManagedServiceStatus
 from scripts import deploy_smoke
 from scripts.smoke_checks import CURSOR_FIXTURE_LINES, Env, measure, smoke
 from scripts.smoke_diagnostics import doctor_detail, missing_from

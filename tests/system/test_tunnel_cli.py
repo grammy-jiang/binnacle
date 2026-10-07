@@ -84,7 +84,7 @@ def host(tmp_path, monkeypatch):
     monkeypatch.setattr(units, "resolve_executable", lambda name, **kw: exe)
     monkeypatch.setattr(cli.Path, "home", classmethod(lambda c: tmp_path))
     calls: list[tuple[str, ...]] = []
-    from binnacle.service_lifecycle_contracts import ServiceAction
+    from binnacle.platform.contracts.service_lifecycle_contracts import ServiceAction
     from binnacle.service_provisioning_linux import LinuxServiceProvisioner
 
     def run(argv, **kwargs):

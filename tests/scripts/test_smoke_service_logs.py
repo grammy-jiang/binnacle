@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from binnacle.service_log_contracts import ServiceLogError
+from binnacle.platform.contracts.service_log_contracts import ServiceLogError
 from scripts import deploy_smoke
 from scripts.smoke_checks import smoke
 from tests.scripts.test_smoke_checks import FakeClient, journal_for, levels, make_env

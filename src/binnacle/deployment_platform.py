@@ -4,12 +4,12 @@ G4 remains Linux-first. Generic callers select host conventions here rather
 than constructing Linux paths or adapters directly.
 """
 
-from binnacle.runtime_path_contracts import RuntimePaths
-from binnacle.service_lifecycle_contracts import (
+from binnacle.platform.contracts.runtime_path_contracts import RuntimePaths
+from binnacle.platform.contracts.service_lifecycle_contracts import (
     ManagedServiceController,
     ManagedServiceInspector,
 )
-from binnacle.service_log_contracts import ServiceLogSource
+from binnacle.platform.contracts.service_log_contracts import ServiceLogSource
 
 
 def create_runtime_paths() -> RuntimePaths:
