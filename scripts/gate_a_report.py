@@ -55,6 +55,23 @@ def any_import(paths: list[Path], prefixes: tuple[str, ...]) -> list[str]:
     return hits
 
 
+def imported_names_from(path: Path, module: str) -> tuple[set[str], bool]:
+    """Return names imported from one module and whether the module is imported directly."""
+    if not path.exists():
+        return set(), False
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    names: set[str] = set()
+    direct_module_import = False
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module == module:
+            names.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.Import) and any(
+            alias.name == module for alias in node.names
+        ):
+            direct_module_import = True
+    return names, direct_module_import
+
+
 def current_sha() -> str | None:
     proc = subprocess.run(
         ["git", "rev-parse", "HEAD"],
@@ -336,20 +353,30 @@ def report() -> list[Cell]:
             )
         )
 
-    watchdog_tunnel_contract_hits = any_import(
-        [SRC / "watchdog_cli.py"], ("binnacle.tunnel_unit",)
+    tunnel_names, tunnel_module_import = imported_names_from(
+        SRC / "watchdog_cli.py", "binnacle.tunnel_unit"
     )
+    narrow_tunnel_contract = (
+        tunnel_names in (set(), {"TUNNEL_UNIT"}) and not tunnel_module_import
+    )
+    if not tunnel_names and not tunnel_module_import:
+        tunnel_detail = "no watchdog CLI dependency on tunnel unit internals"
+    elif narrow_tunnel_contract:
+        tunnel_detail = (
+            "watchdog CLI imports only the approved public service identity "
+            "binnacle.tunnel_unit.TUNNEL_UNIT"
+        )
+    else:
+        shown = ",".join(sorted(tunnel_names)) or "<module>"
+        tunnel_detail = (
+            "watchdog CLI widens the approved tunnel-unit contract: "
+            f"names={shown}, direct_module_import={tunnel_module_import}"
+        )
     cells.append(
         Cell(
             "companion.watchdog_tunnel_unit_contract",
-            "PENDING" if watchdog_tunnel_contract_hits else "PASS",
-            (
-                "; ".join(watchdog_tunnel_contract_hits)
-                + "; G5 must classify this as a narrow public companion contract or remove it"
-            )
-            if watchdog_tunnel_contract_hits
-            else "no watchdog CLI dependency on tunnel unit internals",
-            evidence="review" if watchdog_tunnel_contract_hits else "static",
+            "PASS" if narrow_tunnel_contract else "FAIL",
+            tunnel_detail,
         )
     )
 

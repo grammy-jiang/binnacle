@@ -33,7 +33,7 @@ def test_current_report_names_known_pre_g5_gaps():
     assert cells["companion.watchdog_cli_no_core_cli"].status == "FAIL"
     assert cells["companion.tunnel_cli_no_core_cli"].status == "FAIL"
     assert cells["companion.watchdog_services_no_tunnel_doctor_impl"].status == "FAIL"
-    assert cells["companion.watchdog_tunnel_unit_contract"].status == "PENDING"
+    assert cells["companion.watchdog_tunnel_unit_contract"].status == "PASS"
 
 
 def test_runtime_and_deploy_cells_remain_pending_in_static_report():
@@ -55,3 +55,26 @@ def test_g6_manifest_classifies_every_current_module_once():
     assert sum(len(paths) for paths in manifest.manifest_groups().values()) == len(
         manifest.python_files()
     )
+
+
+def test_watchdog_tunnel_contract_allows_only_tunnel_unit_name(tmp_path):
+    path = tmp_path / "watchdog_cli.py"
+    path.write_text(
+        "from binnacle.tunnel_unit import TUNNEL_UNIT\n",
+        encoding="utf-8",
+    )
+    assert gate_a.imported_names_from(path, "binnacle.tunnel_unit") == (
+        {"TUNNEL_UNIT"},
+        False,
+    )
+
+    path.write_text(
+        "from binnacle.tunnel_unit import TUNNEL_UNIT, render_tunnel_unit\n",
+        encoding="utf-8",
+    )
+    names, direct = gate_a.imported_names_from(path, "binnacle.tunnel_unit")
+    assert names == {"TUNNEL_UNIT", "render_tunnel_unit"}
+    assert direct is False
+
+    path.write_text("import binnacle.tunnel_unit\n", encoding="utf-8")
+    assert gate_a.imported_names_from(path, "binnacle.tunnel_unit") == (set(), True)
