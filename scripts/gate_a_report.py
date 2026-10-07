@@ -171,6 +171,32 @@ def report() -> list[Cell]:
         )
     )
 
+    fastmcp_importers = []
+    for path in python_files():
+        if any(
+            name == "fastmcp" or name.startswith("fastmcp.")
+            for name in imports_for(path)
+        ):
+            fastmcp_importers.append(str(path.relative_to(ROOT)))
+    cells.append(
+        Cell(
+            "architecture.fastmcp_boundary",
+            "PENDING",
+            "final G6 package layout must confine FastMCP imports to MCP-facing modules; "
+            f"current importers={','.join(fastmcp_importers)}",
+            evidence="review",
+        )
+    )
+
+    cells.append(
+        Cell(
+            "architecture.package_convergence",
+            "PENDING",
+            "G6 relocation and compatibility-facade removal have not started",
+            evidence="review",
+        )
+    )
+
     required_contracts = {
         "platform.process_contract": SRC / "process_contracts.py",
         "platform.resource_contract": SRC / "resource_contracts.py",

@@ -11,6 +11,8 @@ def test_current_report_names_known_pre_g5_gaps():
     assert cells["composition.commands_focused_child"].status == "PASS"
     assert cells["composition.hardcoded_registry_removed"].status == "PASS"
     assert cells["composition.no_duplicate_framework"].status == "PENDING"
+    assert cells["architecture.fastmcp_boundary"].status == "PENDING"
+    assert cells["architecture.package_convergence"].status == "PENDING"
 
     assert cells["platform.process_contract"].status == "PASS"
     assert cells["platform.resource_contract"].status == "PASS"
