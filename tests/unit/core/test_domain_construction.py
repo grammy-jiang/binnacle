@@ -13,14 +13,15 @@ MIGRATED = (
     "features/files/tools/edit_file.py",
     "features/files/tools/write_file.py",
     "features/search/tools/search_text.py",
-    "tools/run_command.py",
-    "tools/job_status.py",
+    "features/commands/tools/run_command.py",
+    "features/commands/tools/job_status.py",
+    "features/commands/tools/stop_job.py",
 )
 COMPOSITION = (
     "server.py",
     "features/files/files_server.py",
     "features/search/search_server.py",
-    "commands_server.py",
+    "features/commands/commands_server.py",
     "visibility.py",
     "logging_middleware.py",
 )

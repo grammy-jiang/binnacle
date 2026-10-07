@@ -14,8 +14,8 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from binnacle import jobs
-from binnacle.commands_server import create_commands_server
 from binnacle.config import get_settings
+from binnacle.features.commands.commands_server import create_commands_server
 from binnacle.features.files.files_server import create_files_server
 from binnacle.features.search.search_server import create_search_server
 from binnacle.identity import ClientIdentity

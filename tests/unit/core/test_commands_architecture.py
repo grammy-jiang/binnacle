@@ -8,7 +8,11 @@ from pathlib import Path
 import pytest
 
 SOURCE = Path(__file__).resolve().parents[3] / "src" / "binnacle"
-ADAPTERS = ("tools/run_command.py", "tools/job_status.py", "tools/stop_job.py")
+ADAPTERS = (
+    "features/commands/tools/run_command.py",
+    "features/commands/tools/job_status.py",
+    "features/commands/tools/stop_job.py",
+)
 DOMAIN = ("command_execution.py", "command_status.py", "command_contracts.py")
 STANDARD = {"dataclasses", "pathlib", "typing", "logging", "time"}
 DOMAIN_IMPORTS = {
@@ -29,7 +33,7 @@ ADAPTER_IMPORTS = {
     "binnacle.features.commands.command_backend",
     "binnacle.config",
     "binnacle.errors",
-    "binnacle.paths",
+    "binnacle.features.files.paths",
 }
 
 
@@ -234,3 +238,31 @@ def test_legacy_command_domain_symbols_preserve_identity():
     assert legacy_execution.run_command is command_execution.run_command
     assert legacy_execution.stop_job is command_execution.stop_job
     assert legacy_status.job_status is command_status.job_status
+
+
+def test_legacy_commands_factory_is_same_as_feature_owned_factory():
+    from binnacle.commands_server import create_commands_server as legacy
+    from binnacle.features.commands.commands_server import (
+        create_commands_server as owned,
+    )
+
+    assert legacy is owned
+
+
+@pytest.mark.parametrize("name", ["run_command", "job_status", "stop_job"])
+def test_legacy_commands_adapter_modules_are_the_owned_modules(name):
+    import importlib
+
+    legacy = importlib.import_module(f"binnacle.tools.{name}")
+    owned = importlib.import_module(f"binnacle.features.commands.tools.{name}")
+
+    assert legacy is owned
+    assert legacy.register is owned.register
+
+
+def test_legacy_commands_server_module_is_owned_module():
+    import importlib
+
+    assert importlib.import_module(
+        "binnacle.commands_server"
+    ) is importlib.import_module("binnacle.features.commands.commands_server")

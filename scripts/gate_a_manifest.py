@@ -51,9 +51,14 @@ def manifest_groups() -> dict[str, set[str]]:
         },
         "commands": {
             "commands_server.py",
+            "features/commands/commands_server.py",
             "tools/run_command.py",
             "tools/job_status.py",
             "tools/stop_job.py",
+            "features/commands/tools/__init__.py",
+            "features/commands/tools/run_command.py",
+            "features/commands/tools/job_status.py",
+            "features/commands/tools/stop_job.py",
             "command_contracts.py",
             "features/commands/__init__.py",
             "features/commands/command_contracts.py",
@@ -181,6 +186,10 @@ def compatibility_facades() -> set[str]:
         "command_backend.py",
         "command_execution.py",
         "command_status.py",
+        "commands_server.py",
+        "tools/run_command.py",
+        "tools/job_status.py",
+        "tools/stop_job.py",
     }
 
 

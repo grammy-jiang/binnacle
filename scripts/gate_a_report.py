@@ -174,7 +174,10 @@ def report() -> list[Cell]:
     child_factories = {
         "files": (SRC / "features/files/files_server.py", "create_files_server"),
         "search": (SRC / "features/search/search_server.py", "create_search_server"),
-        "commands": (SRC / "commands_server.py", "create_commands_server"),
+        "commands": (
+            SRC / "features/commands/commands_server.py",
+            "create_commands_server",
+        ),
     }
     for domain, (path, factory) in child_factories.items():
         present = defines_function(path, factory)

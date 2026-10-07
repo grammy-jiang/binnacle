@@ -179,11 +179,23 @@ root_package = "binnacle"
 
 [[tool.importlinter.contracts]]
 id = "tools-only-server"
-name = "MCP tools are imported only by focused composition modules"
+name = "Legacy MCP modules are not imported by product domains"
 type = "protected"
 protected_modules = ["binnacle.tools"]
 allowed_importers = [
-    "binnacle.commands_server",
+    "binnacle.features.commands.commands_server",
+]
+
+[[tool.importlinter.contracts]]
+id = "commands-tools-only-commands-server"
+name = "Commands MCP tools are owned by their focused server and legacy aliases"
+type = "protected"
+protected_modules = ["binnacle.features.commands.tools"]
+allowed_importers = [
+    "binnacle.features.commands.commands_server",
+    "binnacle.tools.run_command",
+    "binnacle.tools.job_status",
+    "binnacle.tools.stop_job",
 ]
 
 [[tool.importlinter.contracts]]
@@ -213,7 +225,7 @@ type = "independence"
 modules = [
     "binnacle.features.files.files_server",
     "binnacle.features.search.search_server",
-    "binnacle.commands_server",
+    "binnacle.features.commands.commands_server",
 ]
 
 [[tool.importlinter.contracts]]
@@ -238,6 +250,12 @@ type = "independence"
 modules = ["binnacle.tools.*"]
 
 [[tool.importlinter.contracts]]
+id = "commands-feature-tool-modules-independent"
+name = "Commands MCP adapters remain independent"
+type = "independence"
+modules = ["binnacle.features.commands.tools.*"]
+
+[[tool.importlinter.contracts]]
 id = "watchdog-acyclic"
 name = "Watchdog internals remain acyclic"
 type = "acyclic_siblings"
@@ -255,9 +273,9 @@ id = "commands-adapters-use-domain"
 name = "Commands adapters use the command domain instead of job internals"
 type = "forbidden"
 source_modules = [
-    "binnacle.tools.run_command",
-    "binnacle.tools.job_status",
-    "binnacle.tools.stop_job",
+    "binnacle.features.commands.tools.run_command",
+    "binnacle.features.commands.tools.job_status",
+    "binnacle.features.commands.tools.stop_job",
 ]
 forbidden_modules = [
     "binnacle.jobs",
