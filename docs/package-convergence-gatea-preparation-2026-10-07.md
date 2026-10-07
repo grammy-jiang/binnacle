@@ -285,6 +285,13 @@ Every Gate A cell should ultimately record:
 - timestamp;
 - optional review reference.
 
+The preparation harness now binds every emitted cell to the same exact Git SHA and
+UTC observation timestamp, in addition to the report-level binding. This prevents a
+future collector from accidentally combining static results from one source snapshot
+with runtime evidence from another. Command/artifact identifiers and review references
+remain deliberately absent until the corresponding execution/review collectors exist;
+preparation must not fabricate them.
+
 The final acceptance report is generated only after G6 convergence and the production
 deployment/live/client gates all bind to the same reviewed SHA.
 

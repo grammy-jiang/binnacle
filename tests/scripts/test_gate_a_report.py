@@ -1,3 +1,4 @@
+import scripts.gate_a_evidence as evidence
 import scripts.gate_a_manifest as manifest
 import scripts.gate_a_report as gate_a
 
@@ -87,3 +88,25 @@ def test_watchdog_tunnel_contract_allows_only_tunnel_unit_name(tmp_path):
 
     path.write_text("import binnacle.tunnel_unit\n", encoding="utf-8")
     assert gate_a.imported_names_from(path, "binnacle.tunnel_unit") == (set(), True)
+
+
+def test_payload_binds_every_cell_to_one_exact_snapshot():
+    cells = [
+        gate_a.Cell("static", "PASS", "ok"),
+        gate_a.Cell("live", "PENDING", "later", evidence="external"),
+    ]
+    payload = evidence.build_payload(
+        cells,
+        candidate="a" * 40,
+        observed_at="2026-10-07T10:00:00+00:00",
+    )
+
+    assert payload["schema_version"] == 1
+    assert payload["candidate"] == "a" * 40
+    assert payload["observed_at"] == "2026-10-07T10:00:00+00:00"
+    assert payload["summary"] == {"pass": 1, "fail": 0, "pending": 1}
+    assert {cell["candidate"] for cell in payload["cells"]} == {"a" * 40}
+    assert {cell["observed_at"] for cell in payload["cells"]} == {
+        "2026-10-07T10:00:00+00:00"
+    }
+    assert payload["cells"][1]["evidence"] == "external"

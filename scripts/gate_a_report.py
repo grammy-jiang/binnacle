@@ -12,12 +12,13 @@ import ast
 import json
 import subprocess
 import sys
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from pathlib import Path
 
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from scripts.gate_a_evidence import build_payload
 from scripts.gate_a_manifest import compatibility_facade_coverage, manifest_coverage
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -477,16 +478,7 @@ def main() -> int:
     args = parser.parse_args()
 
     cells = report()
-    payload = {
-        "kind": "gate-a-preparation-report",
-        "candidate": current_sha(),
-        "cells": [asdict(cell) for cell in cells],
-        "summary": {
-            "pass": sum(cell.status == "PASS" for cell in cells),
-            "fail": sum(cell.status == "FAIL" for cell in cells),
-            "pending": sum(cell.status == "PENDING" for cell in cells),
-        },
-    }
+    payload = build_payload(cells, candidate=current_sha())
     print(json.dumps(payload, indent=2))
     if args.strict and any(cell.status != "PASS" for cell in cells):
         return 1
