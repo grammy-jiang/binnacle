@@ -246,3 +246,20 @@ Every Gate A cell should ultimately record:
 
 The final acceptance report is generated only after G6 convergence and the production
 deployment/live/client gates all bind to the same reviewed SHA.
+
+## 9. Test execution cadence
+
+G6/Gate A must preserve all final quality gates while avoiding repeated broad
+runs during package movement.
+
+For each relocation or facade-removal step, run only focused import/module tests
+and the smallest relevant architecture checks. If a test fails, rerun the exact
+failure and nearest affected subsystem after repair.
+
+The machine farm, full managed suite, coverage policy, complete Python matrix,
+packaging smoke and all-files convergence are reserved for the final exact G6
+candidate. Run them once. If independent review or CI changes production code,
+repair with focused tests and then perform one fresh final convergence for the new
+SHA before Gate A.
+
+An unchanged SHA does not justify repeating an already-green broad gate.
