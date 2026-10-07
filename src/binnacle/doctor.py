@@ -1,7 +1,7 @@
 """Deployment health checks behind ``binnacle doctor``.
 
 Checks follow the request path: configuration/roots, token, managed services and
-their live processes/environments, local MCP authentication, uplink, boot/linger,
+their live processes/environments, local MCP authentication, boot/linger,
 durable jobs, and recent journal failures. The ChatGPT tunnel and uplink watchdog
 keep their own companion doctors. Each check returns a plain ``Check`` record so
 the CLI only renders and tests can fake systemctl, procfs, HTTP, and journal IO.
@@ -26,7 +26,7 @@ from binnacle.deployment_platform import (
     create_service_inspector,
 )
 from binnacle.doctor_common import Check, fail, ok, warn
-from binnacle.doctor_connectivity import _tail_lines, check_endpoint, check_uplink
+from binnacle.doctor_connectivity import _tail_lines, check_endpoint
 from binnacle.doctor_provenance import check_provenance
 from binnacle.doctor_render import render, render_json
 from binnacle.job_manager_doctor import check_job_manager
@@ -335,8 +335,8 @@ class Deployment:
 def run_all(dep: Deployment, since: str = "-1 hour", probe: bool = True) -> list[Check]:
     """Every check, in the order a request travels.
 
-    `probe=False` skips the checks that touch the network, for tests and
-    for a quick local-only look.
+    `probe` is a compatibility selector with no effect on core checks.
+    Layered uplink probes belong to `binnacle-watchdog doctor`.
     """
     s = get_settings()
     provenance = runtime_provenance()
@@ -392,10 +392,6 @@ def run_all(dep: Deployment, since: str = "-1 hour", probe: bool = True) -> list
                 jobs_active, s.rg_bin, dep.user_bin, inspector=services
             )
     checks += check_endpoint(dep.server_url, dep.token_file)
-    # The uplink is the one check here that sees past localhost; the
-    # tunnel's poller, the other one, is `binnacle-tunnel doctor`'s.
-    if probe:
-        checks += check_uplink()
     checks += check_boot()
     checks += check_jobs(s.jobs.dir)
     if active:

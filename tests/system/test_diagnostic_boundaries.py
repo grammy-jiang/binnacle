@@ -36,3 +36,19 @@ def test_neutral_rendering_keeps_public_exit_and_json_contract():
         "         hint: retry\n  [FAIL] unit: down\n1 ok, 1 warn, 1 fail"
     )
     assert doctor_render.render_json(checks) == doctor.render_json(checks)
+
+
+@pytest.mark.parametrize("flag", ["--probe", "--no-probe"])
+def test_core_probe_flags_remain_accepted_without_uplink(flag, monkeypatch, capsys):
+    from binnacle import cli, doctor
+
+    calls = []
+    monkeypatch.setattr(
+        doctor, "run_all", lambda *a, **kw: calls.append(kw["probe"]) or []
+    )
+    with pytest.raises(SystemExit) as exc:
+        cli.app(["doctor", flag])
+    assert exc.value.code == 0
+    assert calls == [flag == "--probe"]
+    assert "0 ok, 0 warn, 0 fail" in capsys.readouterr().out
+    assert not hasattr(doctor, "check_uplink")

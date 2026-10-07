@@ -19,7 +19,9 @@
         "binnacle.watchdog_config",
         "binnacle.watchdog_doctor",
         "binnacle.watchdog_unit",
-        "binnacle.watchlog"
+        "binnacle.watchlog",
+        "binnacle.uplink",
+        "binnacle.watchdog_connectivity"
       ],
       "tunnel": [
         "binnacle.tunnel_cli",

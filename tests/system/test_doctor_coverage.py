@@ -1,5 +1,7 @@
 """Coverage of doctor aggregation and low-level failure branches."""
 
+import pytest
+
 from binnacle import doctor
 from binnacle import jobs as jobstore
 
@@ -76,7 +78,8 @@ def test_job_state_safe_hides_store_read_errors(monkeypatch):
     assert doctor._job_state_safe("gone") is None
 
 
-def test_run_all_composes_every_active_probe_check(tmp_path, monkeypatch):
+@pytest.mark.parametrize("probe", [False, True])
+def test_run_all_composes_every_active_core_check(tmp_path, monkeypatch, probe):
     from types import SimpleNamespace
 
     dep = doctor.Deployment(
@@ -110,12 +113,11 @@ def test_run_all_composes_every_active_probe_check(tmp_path, monkeypatch):
     monkeypatch.setattr(doctor.units, "check_unit_process", mark("units"))
     monkeypatch.setattr(doctor, "check_service_env", mark("service-env"))
     monkeypatch.setattr(doctor, "check_endpoint", mark("endpoint"))
-    monkeypatch.setattr(doctor, "check_uplink", mark("uplink"))
     monkeypatch.setattr(doctor, "check_boot", mark("boot"))
     monkeypatch.setattr(doctor, "check_jobs", mark("jobs"))
     monkeypatch.setattr(doctor, "check_journal", mark("journal"))
 
-    checks = doctor.run_all(dep, since="-2 hours", probe=True)
+    checks = doctor.run_all(dep, since="-2 hours", probe=probe)
 
     assert [c.group for c in checks] == [
         "version",
@@ -126,7 +128,6 @@ def test_run_all_composes_every_active_probe_check(tmp_path, monkeypatch):
         "units",
         "service-env",
         "endpoint",
-        "uplink",
         "boot",
         "jobs",
         "journal",
@@ -162,11 +163,6 @@ def test_run_all_skips_optional_checks_when_inactive_and_local_only(
     monkeypatch.setattr(doctor, "check_endpoint", lambda *a: [])
     monkeypatch.setattr(doctor, "check_boot", list)
     monkeypatch.setattr(doctor, "check_jobs", lambda *a: [])
-    monkeypatch.setattr(
-        doctor,
-        "check_uplink",
-        lambda: (_ for _ in ()).throw(AssertionError("uplink called")),
-    )
     monkeypatch.setattr(
         doctor,
         "check_journal",

@@ -291,7 +291,7 @@ def check_tunnel_poller(log_file: Path, min_failures: int = 3) -> list[Check]:
                 "poller",
                 f"tunnel poll to OpenAI failing: {trailing} consecutive failures "
                 f"since {first_failure or 'unknown'}; ChatGPT sees the connector offline",
-                "check the uplink (binnacle doctor reports it above); "
+                "check the uplink (binnacle-watchdog doctor reports it); "
                 "check the uplink and tunnel path; move traffic to a working route "
                 "before restarting the tunnel",
             )

@@ -342,8 +342,7 @@ def doctor(
     Checks: config and roots, token file, the systemd unit (active, the
     file `setup` writes, the process it started, no crash restarts,
     linger), the running server's PATH (~/.local/bin, ripgrep, bash),
-    /mcp auth with and without the token, the uplink each default route
-    provides, the job spool, and recent journal errors. The ChatGPT tunnel
+    /mcp auth with and without the token, the job spool, and recent journal errors. The ChatGPT tunnel
     and its poller are `binnacle-tunnel doctor`'s, the uplink watchdog is
     `binnacle-watchdog doctor`'s. WARN lines are degraded but working and
     do not change the exit code.
@@ -355,7 +354,8 @@ def doctor(
     as_json
         Emit the checks as JSON instead of the text report.
     probe
-        Run the network probes (--no-probe for a local-only report).
+        Compatibility selector; --probe and --no-probe have no effect on core
+        checks. Use binnacle-watchdog doctor for layered uplink probes.
     """
     from binnacle import doctor as checks
 

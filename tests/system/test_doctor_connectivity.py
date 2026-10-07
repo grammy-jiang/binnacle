@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from binnacle import doctor, doctor_connectivity, uplink
+from binnacle import doctor, uplink, watchdog_connectivity
 
 BEARER = "Bearer secret-token\n"
 
@@ -111,10 +111,10 @@ def test_tail_lines_reads_only_the_end(tmp_path):
 
 def fake_probe_routes(monkeypatch, routes, results):
     monkeypatch.setattr(
-        doctor_connectivity.uplink, "default_routes", lambda run: routes
+        watchdog_connectivity.uplink, "default_routes", lambda run: routes
     )
     monkeypatch.setattr(
-        doctor_connectivity.uplink, "probe_all", lambda r, **kw: results
+        watchdog_connectivity.uplink, "probe_all", lambda r, **kw: results
     )
 
 
@@ -133,7 +133,7 @@ def test_uplink_ok_when_both_routes_carry_traffic(monkeypatch):
             "wlan0": probe_result("wlan0", True, True, True),
         },
     )
-    checks = doctor.check_uplink()
+    checks = watchdog_connectivity.check_uplink()
     assert statuses(checks) == ["ok", "ok"]
     assert "active" in checks[0].detail
 
@@ -148,7 +148,7 @@ def test_uplink_fails_when_the_active_route_carries_nothing(monkeypatch):
             "wlan0": probe_result("wlan0", True, True, True),
         },
     )
-    checks = doctor.check_uplink()
+    checks = watchdog_connectivity.check_uplink()
     assert statuses(checks) == ["fail", "ok"]
     assert "carries nothing" in checks[0].detail
 
@@ -162,7 +162,7 @@ def test_uplink_only_warns_when_a_standby_is_wedged(monkeypatch):
             "wlan0": probe_result("wlan0", False, False, False),
         },
     )
-    assert statuses(doctor.check_uplink()) == ["ok", "warn"]
+    assert statuses(watchdog_connectivity.check_uplink()) == ["ok", "warn"]
 
 
 def test_uplink_warns_on_partial_reachability(monkeypatch):
@@ -171,11 +171,11 @@ def test_uplink_warns_on_partial_reachability(monkeypatch):
         [WLAN1],
         {"wlan1": probe_result("wlan1", True, False, False)},
     )
-    (c,) = doctor.check_uplink()
+    (c,) = watchdog_connectivity.check_uplink()
     assert c.status == "warn" and "deepest layer reached: gateway" in c.detail
 
 
 def test_uplink_warns_without_any_default_route(monkeypatch):
     fake_probe_routes(monkeypatch, [], {})
-    (c,) = doctor.check_uplink()
+    (c,) = watchdog_connectivity.check_uplink()
     assert c.status == "warn" and "no default route" in c.detail

@@ -15,10 +15,10 @@ from pathlib import Path
 
 from binnacle import units
 from binnacle.doctor_common import Systemctl, systemctl, unit_state
-from binnacle.doctor_connectivity import check_uplink
 from binnacle.doctor_contracts import Check, fail, ok, warn
 from binnacle.doctor_io import _tail_lines
 from binnacle.watchdog_config import get_watchdog_settings
+from binnacle.watchdog_connectivity import check_uplink
 from binnacle.watchdog_unit import OWNER, WATCHDOG_UNIT, render_watchdog_unit
 from binnacle.watchlog import fetch_journal
 
