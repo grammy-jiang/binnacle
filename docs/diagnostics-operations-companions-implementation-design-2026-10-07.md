@@ -2,7 +2,11 @@
 
 Status: **parallel investigation/design draft only; not yet approved for implementation**.
 
-Baseline: G4 final candidate `fd05b279e324235d0cf6eeddea86935de60ec1c1`.
+Baseline: G4 source baseline `fd05b279e324235d0cf6eeddea86935de60ec1c1`.
+The later G4 candidates through `c954701ed6691f4749274ea8d7ffc0ce3ec9eb08`
+change only G4 validation tests, not production/source/script/lockfile bytes relevant to
+this design. After G4 deploy, G5.0 still rebases/drift-checks against the exact deployed
+completion SHA before implementation.
 This worktree is intentionally isolated from the G4 closeout. No G5 production-source
 change is allowed to merge until G4 is deployed, the final G4 SHA is known, and this
 design is drift-checked against that deployed baseline.
@@ -213,12 +217,21 @@ additional custom routes are appended separately at the Starlette routing layer.
 Application-level authentication middleware can populate request auth context, but the
 custom route is not automatically wrapped by the MCP endpoint's required-auth wrapper.
 Because the proposed payload is deliberately non-sensitive liveness state, the design
-should either make unauthenticated local liveness explicit or add handler-level auth;
-it must not assume MCP endpoint authentication applies automatically.
+must not assume MCP endpoint authentication applies automatically.
 
-The path, authentication choice and exact JSON remain subject to independent G5 design
-review. This section narrows the problem; it does not authorize implementation before
-G4 closes.
+**Design decision for independent review:** `GET /healthz` is intentionally
+unauthenticated. Its purpose is transport/process liveness, not authentication or MCP
+readiness, and requiring the bearer token would couple the watchdog's most basic
+liveness check to token-file readability and auth state. The response is therefore
+fixed to exactly `{"status":"ok"}`, carries no dynamic server/host/config data, and
+has no mutation semantics. The watchdog continues to apply its existing failure-count
+and restart-rate policy; only the URL changes from `/mcp` to `/healthz`. A test must
+prove an unauthenticated request receives exactly this payload while the authenticated
+MCP endpoint behavior and public MCP wire surface remain unchanged.
+
+The path, authentication decision and exact JSON are frozen for the G5 design-review
+packet; implementation remains unauthorized until G4 closes and the design is
+independently approved.
 
 ## 6. Proposed responsibility boundaries
 
@@ -257,20 +270,36 @@ layer semantics or failure classifications.
 Do not make `doctor.py` itself a shared API. Compatibility aliases used by companions
 must be eliminated or redirected before G5 exits.
 
-### 6.4 Stats / system resource history decision gate
+### 6.4 Stats / system resource history decision
 
-The current `binnacle stats --system-resources` UX must be characterized before an
-implementation choice.
+Characterization shows that `--system-resources` is opt-in, uses the exact same
+`since`/`until` window as journal stats, and has focused tests pinning lazy access,
+rendered output, permission fallback and error behavior. Removing or relocating the
+flag would create user-visible churn for no architectural benefit.
 
-Two acceptable design directions remain open for independent review:
+**Design decision for independent review:** preserve
+`binnacle stats --system-resources` exactly, but remove the direct
+`cli.py -> webminstats.py` implementation dependency.
 
-- **preserve the flag** behind an ordinary system-resource-history contract with an
-  optional concrete contribution selected outside core CLI logic; or
-- **move the host-specific report to the watchdog companion**, retaining an explicit
-  compatibility/deprecation path if required.
+G5 introduces one narrow, non-generic observability contract, for example:
 
-Do not keep `cli.py -> webminstats.py` merely to preserve implementation history, and
-do not invent a generic plugin framework only for this flag.
+```python
+class SystemResourceHistory(Protocol):
+    def render_window(self, since: str, until: str | None) -> str: ...
+```
+
+The CLI consumes only that contract. One explicit observability composition seam binds
+the current Webmin implementation when the flag is requested; no registry, entry-point
+system, generic diagnostics plugin framework or runtime discovery is introduced.
+The Webmin reader remains lazy: constructing or reading the concrete provider is
+forbidden when `--system-resources` is false.
+
+Ownership is therefore **observability/platform adapter**, not watchdog policy. G6 may
+later relocate the concrete Webmin implementation under the final observability/Linux
+package once G5 proves this seam. Existing `tests/system/test_webminstats.py` behavior
+is the compatibility baseline; G5 adds focused CLI tests proving the core CLI imports
+only the contract/composition seam and that the concrete provider is invoked only for
+the opt-in flag.
 
 ## 7. Atomic implementation plan
 
@@ -304,10 +333,13 @@ No production change.
 
 ### G5.3 — system-resource ownership correction
 
-- resolve the section 6.4 decision;
-- remove `cli.py -> webminstats`;
-- preserve or deliberately migrate user-visible behavior with focused CLI tests;
-- add static gate forbidding core CLI/stats -> watchdog Webmin internals.
+- preserve the existing `binnacle stats --system-resources` flag and output;
+- add the narrow `SystemResourceHistory` contract and one explicit observability
+  composition binding;
+- remove direct `cli.py -> webminstats`;
+- keep provider construction/read lazy when the flag is false;
+- retain current Webmin parsing/rendering/permission behavior behind the adapter;
+- add static gate forbidding core CLI/stats from importing the Webmin implementation.
 
 G5.2 and G5.3 may run in parallel after G5.1 contracts settle because they own
 different behavior.
@@ -329,21 +361,43 @@ but `server.py` has one integration owner.
   and companion-owned checks;
 - move the neutral log-tail helper out of `doctor_connectivity` so
   `tunnel_doctor -> doctor_connectivity` disappears;
-- remove `watchdog_cli -> cli` and `tunnel_cli -> cli`; shared exit/rendering helpers,
-  if any, must live in a neutral CLI/diagnostic utility rather than the aggregate core
-  application;
-- give tunnel-log scanning a stable tunnel-owned public helper or move the scan to the
-  watchdog companion so `ops/watchdog/services -> tunnel_doctor` is not an
-  implementation-level cross-companion dependency;
-- classify `watchdog_cli -> tunnel_unit` explicitly: retain it only if the tunnel unit
-  identity/specification is declared a narrow public companion contract; otherwise
-  replace it with such a contract;
-- strengthen Import Linter/AST rules to make the final decisions mechanical.
+- remove `watchdog_cli -> cli` and `tunnel_cli -> cli`: companion setup/reload uses
+  the G4 Linux provisioner composition seam, service state uses the G4 service inspector,
+  and server identity comes from `server_unit`; companions must not import private core
+  CLI helpers/constants;
+- extract tunnel-log parsing/scanning from `tunnel_doctor` into a tunnel-owned public
+  helper with no doctor/rendering dependency, so `ops/watchdog/services` can consume
+  that narrow helper without importing another application's doctor aggregate;
+- **retain** the watchdog's dependency on the tunnel service identity, but freeze the
+  only permitted edge as `watchdog_cli -> tunnel_unit.TUNNEL_UNIT`. The unit name is a
+  deliberate public companion contract because watchdog policy must monitor/restart the
+  tunnel service. Importing `tunnel_unit` rendering/specification helpers remains
+  forbidden;
+- strengthen Import Linter/AST rules to make these exact decisions mechanical, including
+  an allowlist for only `TUNNEL_UNIT` on the watchdog-to-tunnel edge.
 
 The required end state is not "zero imports from companions into core". Companions are
 allowed to consume stable public server/domain contracts. The prohibited direction is
 core/features/platform/diagnostics aggregates consuming companion implementation, plus
 companions depending on another application's aggregate CLI/doctor implementation.
+
+### G5.5.1 Focused mechanical edge plan
+
+The final static gates are edge-specific rather than package-wide guesses:
+
+- forbid `watchdog_doctor -> binnacle.doctor`;
+- forbid `tunnel_doctor -> binnacle.doctor_connectivity`;
+- forbid `watchdog_cli -> binnacle.cli`;
+- forbid `tunnel_cli -> binnacle.cli`;
+- forbid `ops/watchdog/services -> binnacle.tunnel_doctor`;
+- allow `watchdog_cli -> binnacle.tunnel_unit.TUNNEL_UNIT` only; fail if that import
+  widens to any other name from `tunnel_unit`;
+- forbid `doctor_connectivity -> binnacle.uplink`;
+- forbid `cli -> binnacle.webminstats`;
+- require the Webmin implementation to sit behind the system-resource-history contract.
+
+Each rule gets a tiny synthetic/AST regression proving the prohibited former import
+shape is caught; do not rely only on scanning the current tree.
 
 ### G5.6 — convergence
 
