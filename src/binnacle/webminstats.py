@@ -253,3 +253,10 @@ def render(stats: WebminResourceStats) -> str:
             )
             out.append(f"    {label:12s} {text}")
     return "\n".join(out)
+
+
+class WebminSystemResourceHistory:
+    """Present the existing Webmin history without changing its storage format."""
+
+    def render_window(self, since: str, until: str | None) -> str:
+        return render(load(since, until))

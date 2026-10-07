@@ -422,9 +422,9 @@ def stats(
     analysis = logstats.analyze(records, startups)
     print(logstats.render(analysis))
     if system_resources:
-        from binnacle import webminstats
+        from binnacle.system_resource_history import create_system_resource_history
 
-        print("\n" + webminstats.render(webminstats.load(since, until)))
+        print("\n" + create_system_resource_history().render_window(since, until))
 
 
 token_app = cyclopts.App(name="token", help="Bearer token operations.")
