@@ -95,7 +95,13 @@ def evaluate(
                 return name
         return None
 
+    public = cfg.get("companion_public_imports", {})
     for source, targets in sorted(imports.items()):
+        for forbidden in cfg.get("forbidden_direct_imports", {}).get(source, []):
+            if any(t == forbidden or t.startswith(forbidden + ".") for t in targets):
+                errors.append(
+                    f"{source} -> {forbidden}: forbidden aggregate dependency"
+                )
         source_group = group_of(source)
         for target in sorted(targets):
             target_group = group_of(target)
@@ -111,6 +117,52 @@ def evaluate(
                     f"{source} -> {target}: the {source_group} companion must "
                     f"not depend on the {target_group} companion"
                 )
+            elif "companion_public_imports" in cfg:
+                exports = {
+                    f"{module}.{symbol}"
+                    for module, symbols in public.get(source, {}).items()
+                    for symbol in symbols
+                }
+                if not any(
+                    target == export
+                    or (export in targets and export.startswith(target + "."))
+                    for export in exports
+                ):
+                    errors.append(
+                        f"{source} -> {target}: not a public companion contract"
+                    )
+    return errors
+
+
+def public_import_errors(path: Path, source: str, policy: dict[str, Any]) -> list[str]:
+    """Require the declared symbol imports, rejecting whole-module access too."""
+    contracts = (
+        policy["architecture"].get("companion_public_imports", {}).get(source, {})
+    )
+    if not contracts:
+        return []
+    seen: set[str] = set()
+    errors = []
+    for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+        if isinstance(node, ast.Import):
+            if any(alias.name in contracts for alias in node.names):
+                errors.append(f"{source}: whole-module companion import is forbidden")
+        elif isinstance(node, ast.ImportFrom):
+            targets = _from_targets(node, source)
+            for module, symbols in contracts.items():
+                if module not in targets:
+                    continue
+                expected = {f"{module}.{name}" for name in symbols}
+                if not all(
+                    f"{module}.{alias.name}" in expected for alias in node.names
+                ):
+                    errors.append(f"{source}: companion import widens {module}")
+                seen.update(targets & expected)
+    missing = {
+        f"{module}.{name}" for module, names in contracts.items() for name in names
+    } - seen
+    if missing:
+        errors.append(f"{source}: missing public companion imports {sorted(missing)}")
     return errors
 
 
@@ -123,14 +175,16 @@ def main(argv: list[str] | None = None) -> int:
     src_root = ROOT / policy["architecture"].get("src_root", "src")
     package_root = src_root / "binnacle"
     imports: dict[str, set[str]] = {}
+    symbol_errors: list[str] = []
 
     for path in sorted(package_root.rglob("*.py")):
         if "__pycache__" in path.parts:
             continue
         source = module_name(path, src_root)
         imports[source] = imports_of(path, source)
+        symbol_errors.extend(public_import_errors(path, source, policy))
 
-    errors = evaluate(imports, policy)
+    errors = evaluate(imports, policy) + symbol_errors
     for line in errors:
         print(f"ERROR: {line}", file=sys.stderr)
     print(

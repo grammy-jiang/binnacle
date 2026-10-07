@@ -329,3 +329,18 @@ forbidden_modules = [
     "binnacle.process_contracts", "binnacle.resource_contracts", "binnacle.job_process",
     "binnacle.job_cgroup", "binnacle.job_platform", "binnacle.job_resource_history",
 ]
+
+[[tool.importlinter.contracts]]
+id = "companions-no-aggregate-shells"
+name = "Companions consume neutral diagnostics instead of aggregate shells"
+type = "forbidden"
+source_modules = ["binnacle.watchdog_doctor", "binnacle.watchdog_cli", "binnacle.tunnel_cli", "binnacle.tunnel_doctor", "binnacle.ops.watchdog.services"]
+forbidden_modules = ["binnacle.doctor", "binnacle.cli", "binnacle.doctor_connectivity"]
+as_packages = false
+
+[[tool.importlinter.contracts]]
+id = "webmin-through-observability"
+name = "Only the resource history composition selects Webmin"
+type = "protected"
+protected_modules = ["binnacle.webminstats"]
+allowed_importers = ["binnacle.system_resource_history"]

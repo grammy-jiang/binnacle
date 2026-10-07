@@ -157,10 +157,7 @@ def test_setup_writes_the_resolved_absolute_path(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(units.shutil, "which", lambda name: None)
     monkeypatch.setattr(units.sys, "argv", ["venv/bin/binnacle-watchdog", "setup"])
-    monkeypatch.setattr(cli, "UNIT_DIR", tmp_path / "units")
-    monkeypatch.setattr(cli, "BACKUP_DIR", tmp_path / "backups")
-    monkeypatch.setattr(cli, "_systemctl", lambda *a, **k: None)
-    monkeypatch.setattr(cli.subprocess, "run", lambda argv, **kw: None)
+    patch_provisioner(monkeypatch, tmp_path)
 
     cli.setup()
 
@@ -177,7 +174,7 @@ def test_setup_refuses_a_command_it_cannot_resolve(tmp_path, monkeypatch, capsys
     monkeypatch.setattr(
         units.sys, "argv", [str(tmp_path / "no-such-binnacle-watchdog"), "setup"]
     )
-    monkeypatch.setattr(cli, "UNIT_DIR", tmp_path / "units")
+    patch_provisioner(monkeypatch, tmp_path)
 
     with pytest.raises(SystemExit) as exc:
         cli.setup(dry_run=True)
@@ -196,10 +193,7 @@ def test_setup_adopts_a_hand_written_unit_and_rewrites_a_legacy_one(
     unit_dir.mkdir()
     unit = unit_dir / cli.WATCHDOG_UNIT
     unit.write_text("[Unit]\nDescription=hand written\n")
-    monkeypatch.setattr(cli, "UNIT_DIR", unit_dir)
-    monkeypatch.setattr(cli, "BACKUP_DIR", tmp_path / "backups")
-    monkeypatch.setattr(cli, "_systemctl", lambda *a, **k: None)
-    monkeypatch.setattr(cli.subprocess, "run", lambda argv, **kw: None)
+    patch_provisioner(monkeypatch, tmp_path)
 
     with pytest.raises(SystemExit):
         cli.setup(dry_run=True)
@@ -240,3 +234,17 @@ def test_watchdog_unit_renders_from_the_marker_parameters_and_needs_its_binary()
     assert watchdog_unit.render_watchdog_unit(marker.params) == text
     with pytest.raises(units.UnitError, match="needs the `watchdog` parameter"):
         watchdog_unit.watchdog_unit_spec({})
+
+
+def patch_provisioner(monkeypatch, tmp_path):
+    from binnacle.service_provisioning_linux import LinuxServiceProvisioner
+
+    monkeypatch.setattr(
+        cli,
+        "create_linux_provisioner",
+        lambda **kw: LinuxServiceProvisioner(
+            unit_dir=tmp_path / "units",
+            backup_dir=tmp_path / "backups",
+            run=lambda argv, **kwargs: subprocess.CompletedProcess(argv, 0, "", ""),
+        ),
+    )

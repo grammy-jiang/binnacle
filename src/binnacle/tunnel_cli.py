@@ -18,7 +18,12 @@ from typing import Annotated
 import cyclopts
 
 from binnacle import units
-from binnacle.cli import BACKUP_DIR, _systemctl, _unit_state
+from binnacle.config import get_settings
+from binnacle.deployment_platform import (
+    create_linux_provisioner,
+    create_service_controller,
+    create_service_inspector,
+)
 from binnacle.server_unit import SERVER_UNIT
 from binnacle.tunnel_unit import (
     PROFILE,
@@ -95,8 +100,11 @@ def setup(dry_run: bool = False, adopt: bool = False, profile: str = PROFILE) ->
     except units.UnitError as e:
         print(e)
         raise SystemExit(1) from None
-    unit_path = units.UNIT_DIR / TUNNEL_UNIT
-    plan = units.plan_write(unit_path, spec, adopt=adopt)
+    provisioner = create_linux_provisioner(
+        backup_dir=get_settings().jobs.dir.parent / "unit-backups"
+    )
+    item = provisioner.plan_unit(spec, adopt=adopt)
+    unit_path, plan = item.path, item.write
     if plan.diff:
         print(plan.diff + "\n")
     if plan.action == "refuse":
@@ -115,12 +123,12 @@ def setup(dry_run: bool = False, adopt: bool = False, profile: str = PROFILE) ->
     else:
         act(
             f"{'write' if plan.action == 'create' else 'rewrite'} {unit_path}",
-            lambda: units.write_unit(unit_path, plan, BACKUP_DIR),
+            lambda: provisioner.write_unit(item),
         )
-    act("systemctl --user daemon-reload", lambda: _systemctl("daemon-reload"))
+    act("systemctl --user daemon-reload", provisioner.reload_definitions)
     act(
         f"systemctl --user enable --now {TUNNEL_UNIT}",
-        lambda: _systemctl("enable", "--now", TUNNEL_UNIT),
+        lambda: provisioner.enable_now(TUNNEL_UNIT),
     )
     prefix = "would " if dry_run else ""
     for description in actions:
@@ -129,7 +137,10 @@ def setup(dry_run: bool = False, adopt: bool = False, profile: str = PROFILE) ->
         print("\ndry run: nothing was changed.")
         return
     print("\ntunnel unit is configured.")
-    if plan.action == "rewrite" and _unit_state(TUNNEL_UNIT) == "active":
+    if (
+        plan.action == "rewrite"
+        and create_service_inspector().status(TUNNEL_UNIT).state == "active"
+    ):
         print(
             f"{TUNNEL_UNIT} is running on the previous unit file; restart it at a "
             "quiet moment: `binnacle-tunnel restart`"
@@ -157,12 +168,14 @@ def restart(force: bool = False, window_s: float = 30.0) -> None:
             print("retry later, or pass --force")
             raise SystemExit(1)
     started = time.monotonic()
-    proc = _systemctl("restart", TUNNEL_UNIT, check=False)
+    proc = create_service_controller().restart(TUNNEL_UNIT, timeout=None)
     if proc.returncode != 0:
         print(f"failed to restart {TUNNEL_UNIT}: {proc.stderr.strip()}")
         raise SystemExit(1)
     elapsed = time.monotonic() - started
-    print(f"{TUNNEL_UNIT} restarted in {elapsed:.1f} s and {_unit_state(TUNNEL_UNIT)}")
+    print(
+        f"{TUNNEL_UNIT} restarted in {elapsed:.1f} s and {create_service_inspector().status(TUNNEL_UNIT).state}"
+    )
 
 
 @app.command

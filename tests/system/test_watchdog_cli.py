@@ -1,5 +1,6 @@
 """Tests for the host-specific watchdog companion CLI."""
 
+import subprocess
 import time
 from pathlib import Path
 from types import SimpleNamespace
@@ -8,6 +9,7 @@ import pytest
 
 from binnacle import units
 from binnacle import watchdog_cli as cli
+from binnacle.service_provisioning_linux import LinuxServiceProvisioner
 
 
 def companion(tmp_path: Path) -> Path:
@@ -17,6 +19,23 @@ def companion(tmp_path: Path) -> Path:
     exe.write_text("#!/bin/sh\n")
     exe.chmod(0o755)
     return exe
+
+
+def patch_provisioner(monkeypatch, tmp_path, systemctl=None, loginctl=None):
+    def run(argv, **kwargs):
+        if argv[0] == "systemctl" and systemctl is not None:
+            systemctl.append(tuple(argv[2:]))
+        elif argv[0] == "loginctl" and loginctl is not None:
+            loginctl.append(argv)
+        return subprocess.CompletedProcess(argv, 0, "", "")
+
+    monkeypatch.setattr(
+        cli,
+        "create_linux_provisioner",
+        lambda **kw: LinuxServiceProvisioner(
+            unit_dir=tmp_path / "units", backup_dir=tmp_path / "backups", run=run
+        ),
+    )
 
 
 def test_pause_and_resume_manage_only_pause_file(tmp_path, monkeypatch, capsys):
@@ -81,7 +100,7 @@ def test_status_without_default_route_exits_before_probing(monkeypatch, capsys):
 
 
 def test_setup_dry_run_owns_only_watchdog_unit(tmp_path, monkeypatch, capsys):
-    monkeypatch.setattr(cli, "UNIT_DIR", tmp_path / "units")
+    patch_provisioner(monkeypatch, tmp_path)
     monkeypatch.setattr(
         units, "resolve_executable", lambda name, **kw: companion(tmp_path)
     )
@@ -102,7 +121,7 @@ def test_setup_refuses_foreign_watchdog_unit(tmp_path, monkeypatch, capsys):
     unit_dir.mkdir()
     unit = unit_dir / cli.WATCHDOG_UNIT
     unit.write_text("[Service]\nExecStart=/something/else\n")
-    monkeypatch.setattr(cli, "UNIT_DIR", unit_dir)
+    patch_provisioner(monkeypatch, tmp_path)
     monkeypatch.setattr(
         units, "resolve_executable", lambda name, **kw: companion(tmp_path)
     )
@@ -135,23 +154,12 @@ def test_doctor_uses_companion_checks_and_core_renderer(monkeypatch, capsys):
 
 
 def test_setup_real_path_writes_only_watchdog_unit(tmp_path, monkeypatch, capsys):
-    monkeypatch.setattr(cli, "UNIT_DIR", tmp_path / "units")
-    monkeypatch.setattr(cli, "BACKUP_DIR", tmp_path / "backups")
+    patch_provisioner(monkeypatch, tmp_path)
     monkeypatch.setattr(
         units, "resolve_executable", lambda name, **kw: companion(tmp_path)
     )
-    systemctl = []
-    monkeypatch.setattr(
-        cli,
-        "_systemctl",
-        lambda *args, **kwargs: systemctl.append(args),
-    )
-    loginctl = []
-    monkeypatch.setattr(
-        cli.subprocess,
-        "run",
-        lambda argv, **kwargs: loginctl.append(argv),
-    )
+    systemctl, loginctl = [], []
+    patch_provisioner(monkeypatch, tmp_path, systemctl, loginctl)
 
     cli.setup(dry_run=False)
 

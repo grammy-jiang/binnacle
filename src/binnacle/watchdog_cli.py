@@ -5,7 +5,6 @@ still a POC. It may depend on Binnacle core modules; Binnacle core must not
 import or otherwise depend on this companion.
 """
 
-import subprocess
 import sys
 from pathlib import Path
 from typing import Annotated
@@ -13,9 +12,10 @@ from typing import Annotated
 import cyclopts
 
 from binnacle import units
-from binnacle.cli import BACKUP_DIR, SERVER_UNIT, UNIT_DIR, _systemctl
 from binnacle.config import get_settings
+from binnacle.deployment_platform import create_linux_provisioner
 from binnacle.ops.watchdog.config import Policy, UsbLinkPolicy
+from binnacle.server_unit import SERVER_UNIT
 from binnacle.tunnel_unit import TUNNEL_UNIT
 from binnacle.watchdog_config import WatchdogSettings, get_watchdog_settings
 from binnacle.watchdog_unit import OWNER, WATCHDOG_UNIT, watchdog_unit_spec
@@ -122,8 +122,11 @@ def setup(dry_run: bool = False, adopt: bool = False) -> None:
         print(e)
         raise SystemExit(1) from None
     spec = watchdog_unit_spec({"watchdog": str(binary)})
-    unit_path = UNIT_DIR / WATCHDOG_UNIT
-    plan = units.plan_write(unit_path, spec, adopt=adopt)
+    provisioner = create_linux_provisioner(
+        backup_dir=get_settings().jobs.dir.parent / "unit-backups"
+    )
+    item = provisioner.plan_unit(spec, adopt=adopt)
+    unit_path, plan = item.path, item.write
     if plan.diff:
         print(plan.diff + "\n")
     if plan.action == "refuse":
@@ -142,16 +145,16 @@ def setup(dry_run: bool = False, adopt: bool = False) -> None:
     else:
         act(
             f"{'write' if plan.action == 'create' else 'rewrite'} {unit_path}",
-            lambda: units.write_unit(unit_path, plan, BACKUP_DIR),
+            lambda: provisioner.write_unit(item),
         )
-    act("systemctl --user daemon-reload", lambda: _systemctl("daemon-reload"))
+    act("systemctl --user daemon-reload", provisioner.reload_definitions)
     act(
         f"systemctl --user enable --now {WATCHDOG_UNIT}",
-        lambda: _systemctl("enable", "--now", WATCHDOG_UNIT),
+        lambda: provisioner.enable_now(WATCHDOG_UNIT),
     )
     act(
         "loginctl enable-linger (service survives logout and reboot)",
-        lambda: subprocess.run(["loginctl", "enable-linger"], check=True),
+        provisioner.enable_persistence,
     )
 
     prefix = "would " if dry_run else ""

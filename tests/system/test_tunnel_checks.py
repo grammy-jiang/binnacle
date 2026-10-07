@@ -279,7 +279,9 @@ def test_scan_tunnel_log_reports_the_last_forwarded_command(tmp_path):
         '{"time":"t2","msg":"poll timed out; backing off"}\n'
         '{"time":"t3","msg":"poll failed; backing off"}\n'
     )
-    status = tunnel_doctor.scan_tunnel_log(log)
+    from binnacle.tunnel_log import scan_tunnel_log
+
+    status = scan_tunnel_log(log)
     assert (
         status.trailing,
         status.first_failure,

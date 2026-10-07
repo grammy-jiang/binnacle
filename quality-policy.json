@@ -26,7 +26,8 @@
       "tunnel": [
         "binnacle.tunnel_cli",
         "binnacle.tunnel_doctor",
-        "binnacle.tunnel_unit"
+        "binnacle.tunnel_unit",
+        "binnacle.tunnel_log"
       ]
     },
     "companion_dependencies": {
@@ -34,6 +35,41 @@
         "tunnel"
       ],
       "tunnel": []
+    },
+    "forbidden_direct_imports": {
+      "binnacle.watchdog_doctor": [
+        "binnacle.doctor",
+        "binnacle.cli"
+      ],
+      "binnacle.watchdog_cli": [
+        "binnacle.doctor",
+        "binnacle.cli"
+      ],
+      "binnacle.tunnel_cli": [
+        "binnacle.doctor",
+        "binnacle.cli"
+      ],
+      "binnacle.tunnel_doctor": [
+        "binnacle.doctor_connectivity"
+      ],
+      "binnacle.ops.watchdog.services": [
+        "binnacle.tunnel_doctor"
+      ],
+      "binnacle.cli": [
+        "binnacle.webminstats"
+      ]
+    },
+    "companion_public_imports": {
+      "binnacle.watchdog_cli": {
+        "binnacle.tunnel_unit": [
+          "TUNNEL_UNIT"
+        ]
+      },
+      "binnacle.ops.watchdog.services": {
+        "binnacle.tunnel_log": [
+          "scan_tunnel_log"
+        ]
+      }
     }
   },
   "coverage": {

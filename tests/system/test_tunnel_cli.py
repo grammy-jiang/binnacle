@@ -80,19 +80,38 @@ def host(tmp_path, monkeypatch):
     exe.write_text("#!/bin/sh\n")
     exe.chmod(0o755)
     monkeypatch.setattr(units, "UNIT_DIR", unit_dir)
-    monkeypatch.setattr(cli, "BACKUP_DIR", tmp_path / "backups")
     monkeypatch.setattr(tunnel_unit, "profile_dir", lambda: pdir)
     monkeypatch.setattr(units, "resolve_executable", lambda name, **kw: exe)
     monkeypatch.setattr(cli.Path, "home", classmethod(lambda c: tmp_path))
     calls: list[tuple[str, ...]] = []
+    from binnacle.service_lifecycle_contracts import ServiceAction
+    from binnacle.service_provisioning_linux import LinuxServiceProvisioner
+
+    def run(argv, **kwargs):
+        calls.append(tuple(argv[2:]))
+        return subprocess.CompletedProcess(argv, 0, "", "")
+
     monkeypatch.setattr(
         cli,
-        "_systemctl",
-        lambda *a, **k: (
-            calls.append(a) or subprocess.CompletedProcess(list(a), 0, "", "")
+        "create_linux_provisioner",
+        lambda **kw: LinuxServiceProvisioner(
+            unit_dir=unit_dir, backup_dir=tmp_path / "backups", run=run
         ),
     )
-    monkeypatch.setattr(cli, "_unit_state", lambda unit: "active")
+    monkeypatch.setattr(
+        cli,
+        "create_service_inspector",
+        lambda: SimpleNamespace(status=lambda unit: SimpleNamespace(state="active")),
+    )
+    monkeypatch.setattr(
+        cli,
+        "create_service_controller",
+        lambda: SimpleNamespace(
+            restart=lambda unit, **kw: (
+                calls.append(("restart", unit)) or ServiceAction(0)
+            )
+        ),
+    )
     return SimpleNamespace(
         unit=unit_dir / cli.TUNNEL_UNIT,
         pdir=pdir,
@@ -218,8 +237,10 @@ def test_restart_waits_for_a_quiet_moment_unless_forced(host, capsys, monkeypatc
 def test_restart_reports_a_failed_restart(host, capsys, monkeypatch):
     monkeypatch.setattr(
         cli,
-        "_systemctl",
-        lambda *a, **k: subprocess.CompletedProcess(list(a), 1, "", "boom"),
+        "create_service_controller",
+        lambda: SimpleNamespace(
+            restart=lambda *a, **k: SimpleNamespace(returncode=1, stderr="boom")
+        ),
     )
     with pytest.raises(SystemExit) as exc:
         cli.restart(force=True)

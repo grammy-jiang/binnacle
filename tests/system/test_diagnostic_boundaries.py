@@ -52,3 +52,20 @@ def test_core_probe_flags_remain_accepted_without_uplink(flag, monkeypatch, caps
     assert calls == [flag == "--probe"]
     assert "0 ok, 0 warn, 0 fail" in capsys.readouterr().out
     assert not hasattr(doctor, "check_uplink")
+
+
+@pytest.mark.parametrize("module", ["watchdog_cli", "tunnel_cli"])
+def test_companions_do_not_import_core_cli(module):
+    tree = ast.parse((SRC / f"{module}.py").read_text())
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            assert node.module != "binnacle.cli"
+
+
+def test_watchdog_uses_public_tunnel_log_facts():
+    source = SRC / "ops/watchdog/services.py"
+    tree = ast.parse(source.read_text())
+    assert not any(
+        isinstance(n, ast.ImportFrom) and n.module == "binnacle.tunnel_doctor"
+        for n in ast.walk(tree)
+    )
