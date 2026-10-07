@@ -277,8 +277,8 @@ name = "Command use cases do not select or import a durable engine"
 type = "forbidden"
 source_modules = [
     "binnacle.features.commands.command_contracts",
-    "binnacle.command_execution",
-    "binnacle.command_status",
+    "binnacle.features.commands.command_execution",
+    "binnacle.features.commands.command_status",
 ]
 forbidden_modules = [
     "binnacle.command_backend",

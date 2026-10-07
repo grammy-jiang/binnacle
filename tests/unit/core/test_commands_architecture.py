@@ -23,8 +23,8 @@ ADAPTER_IMPORTS = {
     "fastmcp.exceptions",
     "fastmcp.tools.base",
     "pydantic",
-    "binnacle.command_execution",
-    "binnacle.command_status",
+    "binnacle.features.commands.command_execution",
+    "binnacle.features.commands.command_status",
     "binnacle.features.commands.command_contracts",
     "binnacle.features.commands.command_backend",
     "binnacle.config",
@@ -59,6 +59,8 @@ def violations(source, owner):
                 module = (
                     f"binnacle.{alias.name}"
                     if node.module == "binnacle"
+                    else f"{node.module}.{alias.name}"
+                    if node.module == "binnacle.features.commands"
                     else node.module
                 )
                 if (
@@ -96,7 +98,13 @@ def violations(source, owner):
 def test_commands_imports_respect_frozen_boundary(owner):
     path = (
         f"features/commands/{owner}"
-        if owner in {"command_contracts.py", "command_backend.py"}
+        if owner
+        in {
+            "command_contracts.py",
+            "command_backend.py",
+            "command_execution.py",
+            "command_status.py",
+        }
         else owner
     )
     assert violations((SOURCE / path).read_text(), owner) == []
@@ -216,3 +224,13 @@ def test_legacy_command_backend_symbols_preserve_identity():
 
     assert legacy.DurableCommandBackend is owned.DurableCommandBackend
     assert legacy.create_command_backend is owned.create_command_backend
+
+
+def test_legacy_command_domain_symbols_preserve_identity():
+    from binnacle import command_execution as legacy_execution
+    from binnacle import command_status as legacy_status
+    from binnacle.features.commands import command_execution, command_status
+
+    assert legacy_execution.run_command is command_execution.run_command
+    assert legacy_execution.stop_job is command_execution.stop_job
+    assert legacy_status.job_status is command_status.job_status

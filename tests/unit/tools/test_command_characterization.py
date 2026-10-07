@@ -3,9 +3,10 @@
 import pytest
 from fastmcp.exceptions import ToolError
 
-from binnacle import command_status, job_owner, jobs
+from binnacle import job_owner, jobs
 from binnacle.callctx import current_call
 from binnacle.config import RootsSettings, RunCommandSettings
+from binnacle.features.commands import command_status
 from binnacle.tools import job_status, run_command, stop_job
 
 

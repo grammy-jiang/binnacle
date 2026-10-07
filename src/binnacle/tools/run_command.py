@@ -10,9 +10,9 @@ from fastmcp.exceptions import ToolError
 from fastmcp.tools.base import ToolResult
 from pydantic import Field
 
-from binnacle import command_execution
 from binnacle.config import RootsSettings, RunCommandSettings, get_settings
 from binnacle.errors import CodedToolError
+from binnacle.features.commands import command_execution
 from binnacle.features.commands.command_backend import create_command_backend
 from binnacle.features.commands.command_contracts import CommandBackend, CommandFailure
 from binnacle.paths import resolve_path

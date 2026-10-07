@@ -6,8 +6,10 @@ import pytest
 from fastmcp import Client
 from fastmcp.tools.base import ToolResult
 
-from binnacle import command_status, commands_server, job_owner, jobs, paths
+from binnacle import commands_server, job_owner, jobs
 from binnacle.config import RootsSettings, RunCommandSettings
+from binnacle.features.commands import command_status
+from binnacle.features.files import paths
 from binnacle.tools import job_status, run_command
 
 
