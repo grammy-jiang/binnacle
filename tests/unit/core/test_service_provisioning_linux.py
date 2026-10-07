@@ -2,7 +2,7 @@ import subprocess
 
 import pytest
 
-from binnacle.service_provisioning_linux import LinuxServiceProvisioner
+from binnacle.platform.linux.service_provisioning_linux import LinuxServiceProvisioner
 
 
 def completed(argv, rc=0, out="", err=""):

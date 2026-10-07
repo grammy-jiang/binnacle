@@ -237,7 +237,9 @@ def test_watchdog_unit_renders_from_the_marker_parameters_and_needs_its_binary()
 
 
 def patch_provisioner(monkeypatch, tmp_path):
-    from binnacle.service_provisioning_linux import LinuxServiceProvisioner
+    from binnacle.platform.linux.service_provisioning_linux import (
+        LinuxServiceProvisioner,
+    )
 
     monkeypatch.setattr(
         cli,

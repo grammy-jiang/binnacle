@@ -2,7 +2,8 @@
 
 
 def test_constructors_are_lazy_and_return_current_adapters(monkeypatch):
-    from binnacle import job_cgroup, job_platform, job_process
+    from binnacle import job_platform
+    from binnacle.platform.linux import job_cgroup, job_process
 
     process = object()
     accounting = object()

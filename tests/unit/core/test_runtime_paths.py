@@ -2,7 +2,7 @@ from pathlib import Path
 
 from binnacle import deployment_platform
 from binnacle.platform.contracts.runtime_path_contracts import RuntimePaths
-from binnacle.runtime_paths_linux import resolve_runtime_paths
+from binnacle.platform.linux.runtime_paths_linux import resolve_runtime_paths
 
 
 def test_linux_runtime_paths_prefer_xdg_runtime_dir():
@@ -37,7 +37,7 @@ def test_default_platform_factory_selects_linux_runtime_paths(monkeypatch):
         Path("/tmp/runtime/binnacle"), Path("/tmp/runtime/binnacle/jobs.sock")
     )
     monkeypatch.setattr(
-        "binnacle.runtime_paths_linux.resolve_runtime_paths",
+        "binnacle.platform.linux.runtime_paths_linux.resolve_runtime_paths",
         lambda: expected,
     )
 
@@ -51,9 +51,11 @@ def test_default_platform_factories_construct_linux_adapters(tmp_path):
         create_service_inspector,
         create_service_log_source,
     )
-    from binnacle.service_journal import JournalServiceLogSource
-    from binnacle.service_provisioning_linux import LinuxServiceProvisioner
-    from binnacle.service_systemd import SystemdUserServices
+    from binnacle.platform.linux.service_journal import JournalServiceLogSource
+    from binnacle.platform.linux.service_provisioning_linux import (
+        LinuxServiceProvisioner,
+    )
+    from binnacle.platform.linux.service_systemd import SystemdUserServices
 
     log_source = create_service_log_source(command_timeout_s=12.5)
     assert isinstance(log_source, JournalServiceLogSource)

@@ -173,8 +173,12 @@ def test_command_store_linux_dependency_is_visible(tmp_path, monkeypatch):
         "manifest_groups",
         lambda: {"files": set(), "search": set(), "commands": {"job_store.py"}},
     )
-    (tmp_path / "job_store.py").write_text("from .job_cgroup import snapshot\n")
-    assert gate_a.any_import(gate_a.product_domain_files(), ("binnacle.job_cgroup",))
+    (tmp_path / "job_store.py").write_text(
+        "from binnacle.platform.linux.job_cgroup import snapshot\n"
+    )
+    assert gate_a.any_import(
+        gate_a.product_domain_files(), ("binnacle.platform.linux.job_cgroup",)
+    )
 
 
 def test_doctor_prefix_does_not_forbid_neutral_render_helper(tmp_path, monkeypatch):

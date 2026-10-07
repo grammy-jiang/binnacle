@@ -2,12 +2,12 @@ import subprocess
 
 import pytest
 
-from binnacle import service_systemd
 from binnacle.platform.contracts.service_lifecycle_contracts import (
     ManagedServiceStatus,
     ServiceAction,
 )
-from binnacle.service_systemd import SystemdUserServices
+from binnacle.platform.linux import service_systemd
+from binnacle.platform.linux.service_systemd import SystemdUserServices
 
 
 def completed(argv, stdout="", rc=0):

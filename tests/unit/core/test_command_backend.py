@@ -79,7 +79,7 @@ from binnacle.command_backend import DurableCommandBackend
 from binnacle.command_contracts import CommandReply
 DurableCommandBackend()
 assert not {"binnacle.config", "binnacle.jobs", "binnacle.job_owner",
-            "binnacle.job_process", "binnacle.job_cgroup", "fastmcp", "mcp"} & sys.modules.keys()
+            "binnacle.platform.linux.job_process", "binnacle.platform.linux.job_cgroup", "fastmcp", "mcp"} & sys.modules.keys()
 """
     subprocess.run([sys.executable, "-c", code], check=True, timeout=15)
 

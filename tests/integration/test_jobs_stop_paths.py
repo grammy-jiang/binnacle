@@ -18,8 +18,8 @@ import signal
 
 import pytest
 
-from binnacle import job_process
 from binnacle import jobs as jobstore
+from binnacle.platform.linux import job_process
 
 #: A pid no live process should have; nothing here signals it for real.
 FAKE_PID = 4_190_001

@@ -437,7 +437,7 @@ def test_service_inspector_reads_own_process_environment(monkeypatch):
     from binnacle.platform.contracts.service_lifecycle_contracts import (
         ManagedServiceStatus,
     )
-    from binnacle.service_systemd import SystemdUserServices
+    from binnacle.platform.linux.service_systemd import SystemdUserServices
 
     services = SystemdUserServices()
     monkeypatch.setattr(

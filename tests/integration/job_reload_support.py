@@ -11,7 +11,8 @@ from pathlib import Path
 MANAGER = """
 import json, sys
 from pathlib import Path
-from binnacle import jobs, job_cgroup, job_manager
+from binnacle import jobs, job_manager
+from binnacle.platform.linux import job_cgroup
 source, spool, socket = map(Path, sys.argv[1:])
 assert Path(jobs.__file__).resolve().is_relative_to(source.resolve())
 jobs.JOBS_DIR = spool

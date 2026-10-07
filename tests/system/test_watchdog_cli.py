@@ -9,7 +9,7 @@ import pytest
 
 from binnacle import units
 from binnacle import watchdog_cli as cli
-from binnacle.service_provisioning_linux import LinuxServiceProvisioner
+from binnacle.platform.linux.service_provisioning_linux import LinuxServiceProvisioner
 
 
 def companion(tmp_path: Path) -> Path:

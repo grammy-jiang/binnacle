@@ -27,8 +27,11 @@ from binnacle.deployment_platform import (
     create_service_inspector,
 )
 from binnacle.job_manager_unit import JOBS_UNIT, render_job_manager_unit
+from binnacle.platform.linux.service_provisioning_linux import (
+    LinuxServiceProvisioner,
+    PlannedUnit,
+)
 from binnacle.server_unit import SERVER_UNIT, render_server_unit
-from binnacle.service_provisioning_linux import LinuxServiceProvisioner, PlannedUnit
 
 app = cyclopts.App(
     name="binnacle",

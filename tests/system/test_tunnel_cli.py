@@ -85,7 +85,9 @@ def host(tmp_path, monkeypatch):
     monkeypatch.setattr(cli.Path, "home", classmethod(lambda c: tmp_path))
     calls: list[tuple[str, ...]] = []
     from binnacle.platform.contracts.service_lifecycle_contracts import ServiceAction
-    from binnacle.service_provisioning_linux import LinuxServiceProvisioner
+    from binnacle.platform.linux.service_provisioning_linux import (
+        LinuxServiceProvisioner,
+    )
 
     def run(argv, **kwargs):
         calls.append(tuple(argv[2:]))

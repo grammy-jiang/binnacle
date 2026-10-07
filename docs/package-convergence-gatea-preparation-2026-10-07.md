@@ -105,10 +105,15 @@ Target `platform/linux/`:
 - `service_journal.py`;
 - `service_systemd.py`;
 - `service_provisioning_linux.py`;
-- `service_unit_linux.py`;
+- `service_unit_linux.py` (move together with the deployment/unit caller migration);
 - `runtime_paths_linux.py`.
 
-The Linux adapter package contains mechanics, not default-selection policy.
+`service_unit_linux.py` is intentionally the one transitional exception during the
+earlier Linux-adapter checkpoint: moving it before `units.py` creates a real
+`units -> platform -> service_provisioning_linux -> units` package cycle. Keep its
+top-level compatibility implementation until the deployment/unit ownership checkpoint,
+then move it atomically with that caller. The Linux adapter package contains mechanics,
+not default-selection policy.
 
 ### 2.7.1 Platform default composition
 

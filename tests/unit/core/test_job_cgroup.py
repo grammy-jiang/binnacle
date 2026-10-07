@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from binnacle import job_cgroup
+from binnacle.platform.linux import job_cgroup
 
 
 def test_process_cgroup_reads_unified_entry(tmp_path):

@@ -13,7 +13,7 @@ from binnacle.platform.contracts.service_log_contracts import ServiceLogSource
 
 
 def create_runtime_paths() -> RuntimePaths:
-    from binnacle.runtime_paths_linux import resolve_runtime_paths
+    from binnacle.platform.linux.runtime_paths_linux import resolve_runtime_paths
 
     return resolve_runtime_paths()
 
@@ -21,13 +21,13 @@ def create_runtime_paths() -> RuntimePaths:
 def create_service_log_source(
     *, command_timeout_s: float | None = None
 ) -> ServiceLogSource:
-    from binnacle.service_journal import JournalServiceLogSource
+    from binnacle.platform.linux.service_journal import JournalServiceLogSource
 
     return JournalServiceLogSource(command_timeout_s=command_timeout_s)
 
 
 def create_service_inspector() -> ManagedServiceInspector:
-    from binnacle.service_systemd import SystemdUserServices
+    from binnacle.platform.linux.service_systemd import SystemdUserServices
 
     return SystemdUserServices()
 
@@ -38,7 +38,7 @@ def create_linux_provisioner(
     backup_dir=None,
     run=None,
 ):
-    from binnacle.service_provisioning_linux import (
+    from binnacle.platform.linux.service_provisioning_linux import (
         DEFAULT_BACKUP_DIR,
         UNIT_DIR,
         LinuxServiceProvisioner,
@@ -52,6 +52,6 @@ def create_linux_provisioner(
 
 
 def create_service_controller() -> ManagedServiceController:
-    from binnacle.service_systemd import SystemdUserServices
+    from binnacle.platform.linux.service_systemd import SystemdUserServices
 
     return SystemdUserServices()

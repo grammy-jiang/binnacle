@@ -111,7 +111,7 @@ def test_commands_imports_respect_frozen_boundary(owner):
         "import importlib as il; il.import_module('binnacle.jobs')",
         "from importlib import import_module as load; load('binnacle.jobs')",
         "loader = __import__; loader('binnacle.jobs')",
-        "__import__('binnacle.job_cgroup')",
+        "__import__('binnacle.platform.linux.job_cgroup')",
         "import importlib; getattr(importlib, 'import_module')('binnacle.jobs')",
     ],
 )
@@ -131,8 +131,12 @@ def test_contract_and_bridge_negative_edges():
     assert violations(
         "from binnacle.config import RunCommandSettings", "command_contracts.py"
     )
-    assert violations("from binnacle import job_cgroup", "command_backend.py")
-    assert violations("import_module('binnacle.job_process')", "command_backend.py")
+    assert violations(
+        "from binnacle.platform.linux import job_cgroup", "command_backend.py"
+    )
+    assert violations(
+        "import_module('binnacle.platform.linux.job_process')", "command_backend.py"
+    )
 
 
 def test_pure_domain_and_fake_native_child_with_engine_imports_blocked():
@@ -142,11 +146,11 @@ from pathlib import Path
 class Block(importlib.abc.MetaPathFinder):
     def find_spec(self, fullname, path=None, target=None):
         if fullname in {"binnacle.jobs", "binnacle.job_owner", "binnacle.job_client",
-                        "binnacle.job_process", "binnacle.job_cgroup", "binnacle.job_manager"}:
+                        "binnacle.platform.linux.job_process", "binnacle.platform.linux.job_cgroup", "binnacle.job_manager"}:
             raise AssertionError("engine imported: " + fullname)
 sys.meta_path.insert(0, Block())
 from binnacle import command_contracts, command_execution, command_status, config
-from binnacle import process_contracts, resource_contracts
+from binnacle.platform.contracts import process_contracts, resource_contracts
 from binnacle.commands_server import create_commands_server
 from tests.command_support import MemoryCommands
 from fastmcp import Client

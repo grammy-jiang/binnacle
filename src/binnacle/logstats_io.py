@@ -2,7 +2,7 @@
 
 from collections.abc import Sequence
 
-from binnacle.service_journal import JournalServiceLogSource
+from binnacle.platform.linux.service_journal import JournalServiceLogSource
 
 
 def fetch_journal(

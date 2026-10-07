@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from binnacle import job_process
+from binnacle.platform.linux import job_process
 
 if TYPE_CHECKING:
     from binnacle.platform.contracts.process_contracts import (

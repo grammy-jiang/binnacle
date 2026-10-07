@@ -247,8 +247,8 @@ forbidden_modules = [
     "binnacle.job_client",
     "binnacle.job_store",
     "binnacle.job_output",
-    "binnacle.job_process",
-    "binnacle.job_cgroup",
+    "binnacle.platform.linux.job_process",
+    "binnacle.platform.linux.job_cgroup",
     "binnacle.job_resource_history",
 ]
 allow_indirect_imports = true
@@ -269,8 +269,8 @@ forbidden_modules = [
     "binnacle.job_client",
     "binnacle.job_manager",
     "binnacle.job_platform",
-    "binnacle.job_process",
-    "binnacle.job_cgroup",
+    "binnacle.platform.linux.job_process",
+    "binnacle.platform.linux.job_cgroup",
     "binnacle.job_resource_history",
     "binnacle.tools",
 ]
@@ -284,21 +284,21 @@ type = "forbidden"
 source_modules = ["binnacle.platform.contracts.process_contracts", "binnacle.platform.contracts.resource_contracts"]
 forbidden_modules = [
     "binnacle.jobs", "binnacle.job_owner", "binnacle.job_manager",
-    "binnacle.job_store", "binnacle.job_platform", "binnacle.job_process",
-    "binnacle.job_cgroup", "binnacle.job_resource_history", "binnacle.config",
+    "binnacle.job_store", "binnacle.job_platform", "binnacle.platform.linux.job_process",
+    "binnacle.platform.linux.job_cgroup", "binnacle.job_resource_history", "binnacle.config",
 ]
 
 [[tool.importlinter.contracts]]
 id = "platform-adapters-independent"
 name = "Linux process and accounting adapters remain independent"
 type = "independence"
-modules = ["binnacle.job_process", "binnacle.job_cgroup"]
+modules = ["binnacle.platform.linux.job_process", "binnacle.platform.linux.job_cgroup"]
 
 [[tool.importlinter.contracts]]
 id = "platform-adapters-no-policy"
 name = "Linux adapters do not own job lifecycle or storage"
 type = "forbidden"
-source_modules = ["binnacle.job_process", "binnacle.job_cgroup"]
+source_modules = ["binnacle.platform.linux.job_process", "binnacle.platform.linux.job_cgroup"]
 forbidden_modules = [
     "binnacle.jobs", "binnacle.job_owner", "binnacle.job_manager", "binnacle.job_client",
     "binnacle.job_store", "binnacle.job_resource_history", "binnacle.config",
@@ -309,7 +309,7 @@ id = "job-orchestration-uses-platform-ports"
 name = "Job orchestration does not directly import Linux adapters"
 type = "forbidden"
 source_modules = ["binnacle.jobs", "binnacle.job_owner", "binnacle.job_manager", "binnacle.job_resource_history"]
-forbidden_modules = ["binnacle.job_process", "binnacle.job_cgroup"]
+forbidden_modules = ["binnacle.platform.linux.job_process", "binnacle.platform.linux.job_cgroup"]
 allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
@@ -326,8 +326,8 @@ type = "forbidden"
 source_modules = ["binnacle.job_store"]
 forbidden_modules = [
     "binnacle.jobs", "binnacle.job_owner", "binnacle.job_manager", "binnacle.job_client",
-    "binnacle.platform.contracts.process_contracts", "binnacle.platform.contracts.resource_contracts", "binnacle.job_process",
-    "binnacle.job_cgroup", "binnacle.job_platform", "binnacle.job_resource_history",
+    "binnacle.platform.contracts.process_contracts", "binnacle.platform.contracts.resource_contracts", "binnacle.platform.linux.job_process",
+    "binnacle.platform.linux.job_cgroup", "binnacle.job_platform", "binnacle.job_resource_history",
 ]
 
 [[tool.importlinter.contracts]]

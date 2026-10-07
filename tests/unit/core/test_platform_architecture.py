@@ -6,6 +6,12 @@ from pathlib import Path
 import pytest
 
 SOURCE = Path(__file__).resolve().parents[3] / "src" / "binnacle"
+MODULE_PATHS = {
+    "process_contracts": "platform/contracts/process_contracts.py",
+    "resource_contracts": "platform/contracts/resource_contracts.py",
+    "job_process": "platform/linux/job_process.py",
+    "job_cgroup": "platform/linux/job_cgroup.py",
+}
 EDGES = {
     "process_contracts": set(),
     "resource_contracts": set(),
@@ -39,6 +45,30 @@ EDGES = {
         "provenance",
     },
 }
+
+OWNER_PATHS = {
+    "process_contracts": SOURCE / "platform/contracts/process_contracts.py",
+    "resource_contracts": SOURCE / "platform/contracts/resource_contracts.py",
+    "job_process": SOURCE / "platform/linux/job_process.py",
+    "job_cgroup": SOURCE / "platform/linux/job_cgroup.py",
+}
+MODULE_OWNERS = {
+    "binnacle.platform.contracts.process_contracts": "process_contracts",
+    "binnacle.platform.contracts.resource_contracts": "resource_contracts",
+    "binnacle.platform.linux.job_process": "job_process",
+    "binnacle.platform.linux.job_cgroup": "job_cgroup",
+}
+
+
+def imported_owner(name: str) -> str | None:
+    for module, owner in MODULE_OWNERS.items():
+        if name == module or name.startswith(module + "."):
+            return owner
+    if name.startswith("binnacle."):
+        return name.split(".")[1]
+    return None
+
+
 ORCHESTRATION = {
     "jobs",
     "job_owner",
@@ -85,8 +115,19 @@ def violations(source, owner):
             root = name.split(".")[0]
             if root in {"fastmcp", "mcp", "importlib"}:
                 found.append(name)
-            if root == "binnacle" and name.split(".")[1] not in EDGES[owner]:
-                found.append(name)
+            if root == "binnacle":
+                parts = name.split(".")[1:]
+                if (
+                    parts[:2] == ["platform", "contracts"]
+                    and len(parts) >= 3
+                    or parts[:2] == ["platform", "linux"]
+                    and len(parts) >= 3
+                ):
+                    dependency = parts[2]
+                else:
+                    dependency = parts[0]
+                if dependency not in EDGES[owner]:
+                    found.append(name)
             if owner in {"process_contracts", "resource_contracts"} and root not in {
                 "typing",
                 "pathlib",
@@ -137,7 +178,8 @@ def violations(source, owner):
 
 @pytest.mark.parametrize("owner", EDGES)
 def test_platform_dependencies(owner):
-    assert violations((SOURCE / f"{owner}.py").read_text(), owner) == []
+    path = SOURCE / MODULE_PATHS.get(owner, f"{owner}.py")
+    assert violations(path.read_text(), owner) == []
 
 
 @pytest.mark.parametrize("owner", EDGES)
@@ -148,8 +190,8 @@ def test_platform_dependencies(owner):
         "from mcp import types",
         "from binnacle import server",
         "import importlib as il; il.import_module('binnacle.jobs')",
-        "from importlib import import_module as load; load('binnacle.job_cgroup')",
-        "loader = __import__; loader('binnacle.job_process')",
+        "from importlib import import_module as load; load('binnacle.platform.linux.job_cgroup')",
+        "loader = __import__; loader('binnacle.platform.linux.job_process')",
     ],
 )
 def test_import_rule_rejects_forbidden_and_dynamic_edges(owner, source):
@@ -176,8 +218,8 @@ def test_orchestration_rejects_linux_mechanics(owner, source):
 @pytest.mark.parametrize(
     "source",
     [
-        "from binnacle import job_process",
-        "from binnacle import job_cgroup",
+        "from binnacle.platform.linux import job_process",
+        "from binnacle.platform.linux import job_cgroup",
         "from binnacle import job_platform",
         "from binnacle import jobs",
         "from binnacle.config import get_settings",

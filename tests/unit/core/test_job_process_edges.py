@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from binnacle import job_process
+from binnacle.platform.linux import job_process
 
 
 @pytest.fixture(params=["helpers", "backend"])

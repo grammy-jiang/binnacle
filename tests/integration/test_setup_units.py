@@ -9,7 +9,7 @@ import pytest
 from binnacle import cli, doctor, units
 from binnacle.platform.contracts.service_lifecycle_contracts import ServiceAction
 from binnacle.platform.contracts.service_log_contracts import ServiceLogError
-from binnacle.service_provisioning_linux import LinuxServiceProvisioner
+from binnacle.platform.linux.service_provisioning_linux import LinuxServiceProvisioner
 from tests.service_fakes import FakeServiceController
 
 
