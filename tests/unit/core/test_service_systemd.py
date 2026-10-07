@@ -321,3 +321,29 @@ def test_started_at_epoch_handles_missing_nonzero_invalid_and_oserror(monkeypatc
         lambda *a, **k: (_ for _ in ()).throw(OSError("missing")),
     )
     assert services.started_at_epoch("demo.service") is None
+
+
+def test_unit_property_preserves_baseline_unbounded_systemctl_wait(monkeypatch):
+    seen = []
+
+    def run(argv, **kwargs):
+        seen.append((argv, kwargs))
+        return completed(argv, "value\n")
+
+    monkeypatch.setattr(service_systemd.subprocess, "run", run)
+
+    assert SystemdUserServices().unit_property("demo.service", "After") == "value"
+    assert seen == [
+        (
+            [
+                "systemctl",
+                "--user",
+                "show",
+                "demo.service",
+                "-p",
+                "After",
+                "--value",
+            ],
+            {"capture_output": True, "text": True, "check": False},
+        )
+    ]

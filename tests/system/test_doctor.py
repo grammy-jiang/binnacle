@@ -405,7 +405,10 @@ def test_render_json():
 
 
 def test_boot_check_wants_lingering():
+    seen = []
+
     def on(*args, **kw):
+        seen.append((args, kw))
         return subprocess.CompletedProcess(
             list(args), 0, stdout="Linger=yes\n", stderr=""
         )
@@ -417,6 +420,12 @@ def test_boot_check_wants_lingering():
 
     (c,) = doctor.check_boot(on, user="pi")
     assert c.status == "ok" and "start at boot" in c.detail
+    assert seen == [
+        (
+            ("loginctl", "show-user", "pi", "-p", "Linger", "--value"),
+            {"capture_output": True, "text": True, "check": False, "timeout": 15},
+        )
+    ]
     (c,) = doctor.check_boot(off, user="pi")
     assert c.status == "fail" and c.hint == "loginctl enable-linger pi"
 

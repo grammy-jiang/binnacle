@@ -206,7 +206,7 @@ def unit_property(
 ) -> str:
     """Read one Linux unit-definition property for compatibility diagnostics."""
     if run is None:
-        return SystemdUserServices()._show_value(unit, prop)
+        return SystemdUserServices().unit_property(unit, prop)
     result = run("show", unit, "-p", prop, "--value")
     return getattr(result, "stdout", "").strip()
 

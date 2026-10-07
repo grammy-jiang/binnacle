@@ -136,22 +136,31 @@ class SystemdUserServices:
         prop: str,
         *,
         timestamp_us: bool = False,
+        command_timeout_s: float | None = _SMOKE_INSPECTION_TIMEOUT_S,
     ) -> str:
         argv = ["systemctl", "--user", "show", service, "-p", prop]
         argv += ["--value"]
         if timestamp_us:
             argv += ["--timestamp=us"]
         try:
-            proc = subprocess.run(
-                argv,
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=_SMOKE_INSPECTION_TIMEOUT_S,
-            )
+            if command_timeout_s is None:
+                proc = subprocess.run(argv, capture_output=True, text=True, check=False)
+            else:
+                proc = subprocess.run(
+                    argv,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=command_timeout_s,
+                )
         except (OSError, subprocess.TimeoutExpired):
             return ""
         return proc.stdout.strip() if proc.returncode == 0 else ""
+
+    def unit_property(self, service: str, prop: str) -> str:
+        """Read a unit-definition property with the baseline unbounded wait."""
+
+        return self._show_value(service, prop, command_timeout_s=None)
 
     def rss_kb(self, service: str) -> float | None:
         cgroup = self._show_value(service, "ControlGroup")

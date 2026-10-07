@@ -231,7 +231,10 @@ def check_boot(
     """User services only start at boot without a login when lingering is
     on; without it every binnacle unit waits for someone to log in."""
     who = user or os.environ.get("USER") or ""
-    inspection = create_linux_provisioner(run=run).inspect_persistence(
+    runner = None
+    if run is not None:
+        runner = lambda argv, **kwargs: run(*argv, **kwargs)
+    inspection = create_linux_provisioner(run=runner).inspect_persistence(
         user=who, timeout=15
     )
     if inspection.error is not None:
