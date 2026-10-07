@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 from fastmcp.exceptions import ToolError
 
-from binnacle.search_text_stream import RgJsonStream, managed_rg_stream
+from binnacle.features.search.search_text_stream import RgJsonStream, managed_rg_stream
 
 
 def executable(tmp_path: Path, body: str) -> Path:

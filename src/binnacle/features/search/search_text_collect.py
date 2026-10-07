@@ -4,8 +4,8 @@ import time
 from pathlib import Path, PurePath
 
 from binnacle.errors import CodedToolError
-from binnacle.paths import full_match
-from binnacle.search_text_telemetry import ExactSearchMetrics
+from binnacle.features.files.paths import full_match
+from binnacle.features.search.search_text_telemetry import ExactSearchMetrics
 
 
 def clip(text: str, max_chars: int, mark: str) -> str:

@@ -14,7 +14,7 @@ from typing import Any
 import orjson
 
 from binnacle.config import SearchTextSettings
-from binnacle.search_text_telemetry import AdaptiveWork
+from binnacle.features.search.search_text_telemetry import AdaptiveWork
 
 MatchGlob = Callable[[str, Path, str | None], bool]
 

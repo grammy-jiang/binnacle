@@ -183,7 +183,6 @@ name = "MCP tools are imported only by focused composition modules"
 type = "protected"
 protected_modules = ["binnacle.tools"]
 allowed_importers = [
-    "binnacle.search_server",
     "binnacle.commands_server",
 ]
 
@@ -201,12 +200,19 @@ type = "independence"
 modules = ["binnacle.features.files.tools.*"]
 
 [[tool.importlinter.contracts]]
+id = "search-tools-only-search-server"
+name = "Search MCP tools are imported only by the Search server"
+type = "protected"
+protected_modules = ["binnacle.features.search.tools"]
+allowed_importers = ["binnacle.features.search.search_server", "binnacle.tools.search_text"]
+
+[[tool.importlinter.contracts]]
 id = "focused-servers-independent"
 name = "Focused MCP servers are independent"
 type = "independence"
 modules = [
     "binnacle.features.files.files_server",
-    "binnacle.search_server",
+    "binnacle.features.search.search_server",
     "binnacle.commands_server",
 ]
 

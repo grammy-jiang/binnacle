@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from binnacle.config import SearchTextSettings
-from binnacle.search_text_adaptive import build_adaptive_result
+from binnacle.features.search.search_text_adaptive import build_adaptive_result
 
 
 def event(path: str, line: int, text: str) -> dict[str, Any]:
@@ -185,7 +185,7 @@ def test_unportable_branch_regex_falls_back_without_failure(tmp_path: Path):
 
 
 def test_alternative_parser_handles_escapes_classes_and_groups():
-    from binnacle import search_text_adaptive as adaptive
+    from binnacle.features.search import search_text_adaptive as adaptive
 
     assert adaptive._split_top_level_alternatives(r"alpha\|beta|[a|b]|(x|y)|gamma") == [
         r"alpha\|beta",
@@ -196,7 +196,7 @@ def test_alternative_parser_handles_escapes_classes_and_groups():
 
 
 def test_collect_files_ignores_nonmatches_bad_paths_and_bad_lines(tmp_path: Path):
-    from binnacle import search_text_adaptive as adaptive
+    from binnacle.features.search import search_text_adaptive as adaptive
 
     events = [
         {"type": "context", "data": {}},
@@ -246,7 +246,7 @@ def test_empty_events_cannot_build_adaptive_result(tmp_path: Path):
 
 
 def test_impossibly_small_adaptive_budget_returns_none():
-    from binnacle import search_text_adaptive as adaptive
+    from binnacle.features.search import search_text_adaptive as adaptive
 
     payload = {
         "path": "/tmp/x",
@@ -261,7 +261,7 @@ def test_impossibly_small_adaptive_budget_returns_none():
 
 
 def test_representative_matches_empty_input():
-    from binnacle import search_text_adaptive as adaptive
+    from binnacle.features.search import search_text_adaptive as adaptive
 
     assert (
         adaptive._representative_matches(
@@ -275,7 +275,7 @@ def test_representative_matches_empty_input():
 
 
 def test_fixed_string_pipe_is_one_ranking_branch():
-    from binnacle import search_text_adaptive as adaptive
+    from binnacle.features.search import search_text_adaptive as adaptive
 
     branches = adaptive._compile_branches("alpha|beta", True)
 

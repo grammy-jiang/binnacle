@@ -5,9 +5,12 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
-from binnacle.search_text_stream import RgJsonStream, managed_rg_stream
-from binnacle.search_text_stream_reduce import ExactScanResult, ExactStreamReducer
-from binnacle.search_text_telemetry import ExactSearchMetrics
+from binnacle.features.search.search_text_stream import RgJsonStream, managed_rg_stream
+from binnacle.features.search.search_text_stream_reduce import (
+    ExactScanResult,
+    ExactStreamReducer,
+)
+from binnacle.features.search.search_text_telemetry import ExactSearchMetrics
 
 RunRg = Callable[
     [Path, str, bool, int, ExactSearchMetrics | None], tuple[list[dict], bool]

@@ -42,9 +42,12 @@ def manifest_groups() -> dict[str, set[str]]:
             "paths.py",
         },
         "search": {
-            "search_server.py",
+            "features/search/__init__.py",
+            "features/search/search_server.py",
+            "features/search/tools/__init__.py",
+            "features/search/tools/search_text.py",
             "tools/search_text.py",
-            *(rel(path) for path in SRC.glob("search_text_*.py")),
+            *(rel(path) for path in SRC.glob("features/search/search_text_*.py")),
         },
         "commands": {
             "commands_server.py",

@@ -6,9 +6,9 @@ import pytest
 from fastmcp import Client
 from fastmcp.exceptions import ToolError
 
-from binnacle import search_server
 from binnacle.config import RootsSettings, SearchTextSettings
 from binnacle.features.files import paths
+from binnacle.features.search import search_server
 from binnacle.tools import search_text
 
 

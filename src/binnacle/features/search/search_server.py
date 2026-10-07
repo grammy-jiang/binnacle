@@ -3,7 +3,7 @@
 from fastmcp import FastMCP
 
 from binnacle.config import RootsSettings, SearchTextSettings, get_settings
-from binnacle.tools import search_text
+from binnacle.features.search.tools import search_text
 
 
 def create_search_server(

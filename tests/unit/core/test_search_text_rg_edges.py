@@ -2,8 +2,8 @@
 
 import subprocess
 
-from binnacle import search_text_rg
-from binnacle.search_text_telemetry import ExactSearchMetrics
+from binnacle.features.search import search_text_rg
+from binnacle.features.search.search_text_telemetry import ExactSearchMetrics
 
 
 def _result(stdout: str):

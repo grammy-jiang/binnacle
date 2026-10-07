@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from binnacle.search_text_telemetry import ExactSearchMetrics
+from binnacle.features.search.search_text_telemetry import ExactSearchMetrics
 from binnacle.tools import search_text as st
 
 

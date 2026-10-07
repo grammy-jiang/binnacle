@@ -156,7 +156,9 @@ def test_streaming_invalid_glob_keeps_error_code_and_reaps_rg(
     def invalid(*args, **kwargs):
         raise ValueError("synthetic bad glob")
 
-    monkeypatch.setattr("binnacle.search_text_collect.full_match", invalid)
+    monkeypatch.setattr(
+        "binnacle.features.search.search_text_collect.full_match", invalid
+    )
     # search_text's compatibility matcher captures its own full_match reference;
     # patch that seam too so the streaming reducer exercises consumer cleanup.
     monkeypatch.setattr(st, "full_match", invalid)

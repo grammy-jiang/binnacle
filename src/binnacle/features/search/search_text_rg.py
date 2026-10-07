@@ -7,7 +7,7 @@ from pathlib import Path
 import orjson
 
 from binnacle.errors import CodedToolError
-from binnacle.search_text_telemetry import ExactSearchMetrics
+from binnacle.features.search.search_text_telemetry import ExactSearchMetrics
 
 
 def run_rg(

@@ -7,19 +7,19 @@ import pytest
 
 SOURCE = Path(__file__).resolve().parents[3] / "src" / "binnacle"
 MIGRATED = (
-    "paths.py",
-    "tools/read_file.py",
-    "tools/list_files.py",
-    "tools/edit_file.py",
-    "tools/write_file.py",
-    "tools/search_text.py",
+    "features/files/paths.py",
+    "features/files/tools/read_file.py",
+    "features/files/tools/list_files.py",
+    "features/files/tools/edit_file.py",
+    "features/files/tools/write_file.py",
+    "features/search/tools/search_text.py",
     "tools/run_command.py",
     "tools/job_status.py",
 )
 COMPOSITION = (
     "server.py",
-    "files_server.py",
-    "search_server.py",
+    "features/files/files_server.py",
+    "features/search/search_server.py",
     "commands_server.py",
     "visibility.py",
     "logging_middleware.py",

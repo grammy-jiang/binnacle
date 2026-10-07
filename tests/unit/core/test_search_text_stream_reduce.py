@@ -5,8 +5,8 @@ from pathlib import Path
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as stg
 
-from binnacle.search_text_collect import collect, matches_glob
-from binnacle.search_text_stream_reduce import ExactStreamReducer
+from binnacle.features.search.search_text_collect import collect, matches_glob
+from binnacle.features.search.search_text_stream_reduce import ExactStreamReducer
 
 MAX_LINE = 80
 MARK = "… [line truncated]"

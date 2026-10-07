@@ -6,7 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from binnacle.search_text_collect import clip
+from binnacle.features.search.search_text_collect import clip
 
 MatchGlob = Callable[[str, Path, str | None], bool]
 

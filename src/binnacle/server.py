@@ -17,6 +17,7 @@ from binnacle import jobs
 from binnacle.commands_server import create_commands_server
 from binnacle.config import get_settings
 from binnacle.features.files.files_server import create_files_server
+from binnacle.features.search.search_server import create_search_server
 from binnacle.identity import ClientIdentity
 from binnacle.logging_middleware import (
     RequestLoggingMiddleware,
@@ -28,7 +29,6 @@ from binnacle.run_command_telemetry import (
     auto_background_behavior_hash,
     auto_background_policy_hash,
 )
-from binnacle.search_server import create_search_server
 from binnacle.tool_order import PublicToolOrder
 from binnacle.visibility import ClientToolVisibility, ClientToolVisibilityTransform
 

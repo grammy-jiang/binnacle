@@ -9,7 +9,7 @@ from fastmcp import Client
 from binnacle import jobs, server
 from binnacle.commands_server import create_commands_server
 from binnacle.features.files.files_server import create_files_server
-from binnacle.search_server import create_search_server
+from binnacle.features.search.search_server import create_search_server
 from tests.integration.job_test_support import stop
 
 

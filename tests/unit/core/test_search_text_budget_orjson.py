@@ -4,7 +4,7 @@ import json
 
 import orjson
 
-from binnacle import search_text_adaptive, search_text_budget
+from binnacle.features.search import search_text_adaptive, search_text_budget
 
 
 def compact_stdlib(payload: dict) -> bytes:

@@ -9,7 +9,6 @@ from binnacle import (
     commands_server,
     jobs,
     logging_middleware,
-    search_server,
     server,
 )
 from binnacle.config import TokenizerTelemetrySettings, get_settings
@@ -53,7 +52,6 @@ def test_two_roots_capture_one_snapshot_each_without_hidden_reads(
     monkeypatch.setattr(server, "get_settings", settings_for_root)
     for module in (
         files_server,
-        search_server,
         commands_server,
         logging_middleware,
         paths,

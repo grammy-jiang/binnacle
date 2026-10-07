@@ -3,9 +3,9 @@
 from pathlib import Path
 
 from binnacle.config import get_settings
-from binnacle.search_text_adaptive import build_adaptive_result
-from binnacle.search_text_collect import matches_glob
-from binnacle.search_text_stream_reduce import ExactStreamReducer
+from binnacle.features.search.search_text_adaptive import build_adaptive_result
+from binnacle.features.search.search_text_collect import matches_glob
+from binnacle.features.search.search_text_stream_reduce import ExactStreamReducer
 from binnacle.tools import search_text as st
 
 
