@@ -26,7 +26,7 @@ ADAPTER_IMPORTS = {
     "binnacle.command_execution",
     "binnacle.command_status",
     "binnacle.features.commands.command_contracts",
-    "binnacle.command_backend",
+    "binnacle.features.commands.command_backend",
     "binnacle.config",
     "binnacle.errors",
     "binnacle.paths",
@@ -95,8 +95,8 @@ def violations(source, owner):
 @pytest.mark.parametrize("owner", (*ADAPTERS, *DOMAIN, "command_backend.py"))
 def test_commands_imports_respect_frozen_boundary(owner):
     path = (
-        "features/commands/command_contracts.py"
-        if owner == "command_contracts.py"
+        f"features/commands/{owner}"
+        if owner in {"command_contracts.py", "command_backend.py"}
         else owner
     )
     assert violations((SOURCE / path).read_text(), owner) == []
@@ -208,3 +208,11 @@ def test_legacy_command_contract_symbols_preserve_identity():
     assert legacy.CommandBackend is owned.CommandBackend
     assert legacy.CommandFailure is owned.CommandFailure
     assert legacy.CommandReply is owned.CommandReply
+
+
+def test_legacy_command_backend_symbols_preserve_identity():
+    from binnacle import command_backend as legacy
+    from binnacle.features.commands import command_backend as owned
+
+    assert legacy.DurableCommandBackend is owned.DurableCommandBackend
+    assert legacy.create_command_backend is owned.create_command_backend

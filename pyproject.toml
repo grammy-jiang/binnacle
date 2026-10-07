@@ -282,6 +282,7 @@ source_modules = [
 ]
 forbidden_modules = [
     "binnacle.command_backend",
+    "binnacle.features.commands.command_backend",
     "binnacle.jobs",
     "binnacle.job_owner",
     "binnacle.job_client",

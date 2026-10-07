@@ -2,8 +2,8 @@
 
 from fastmcp import FastMCP
 
-from binnacle.command_backend import create_command_backend
 from binnacle.config import RootsSettings, RunCommandSettings, get_settings
+from binnacle.features.commands.command_backend import create_command_backend
 from binnacle.features.commands.command_contracts import CommandBackend
 from binnacle.tools import job_status, run_command, stop_job
 

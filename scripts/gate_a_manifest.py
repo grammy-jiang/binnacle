@@ -60,6 +60,7 @@ def manifest_groups() -> dict[str, set[str]]:
             "command_execution.py",
             "command_status.py",
             "command_backend.py",
+            "features/commands/command_backend.py",
             "jobs.py",
             "job_client.py",
             "job_manager.py",
@@ -175,6 +176,7 @@ def compatibility_facades() -> set[str]:
         "units.py",
         "tools/search_text.py",
         "command_contracts.py",
+        "command_backend.py",
     }
 
 
