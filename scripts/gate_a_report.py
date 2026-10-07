@@ -11,8 +11,12 @@ import argparse
 import ast
 import json
 import subprocess
+import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
+
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from scripts.gate_a_manifest import manifest_coverage
 
