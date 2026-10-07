@@ -17,6 +17,7 @@ GENERIC_PATHS = (
     ROOT / "src/binnacle/job_manager_doctor.py",
     ROOT / "src/binnacle/logstats_io.py",
     ROOT / "scripts/deploy_flow.py",
+    ROOT / "scripts/deploy_smoke.py",
     ROOT / "scripts/smoke_checks.py",
 )
 FORBIDDEN_COMMANDS = {"systemctl", "journalctl", "loginctl"}
@@ -96,20 +97,27 @@ def _executable_platform_violations(path: Path) -> list[str]:
                     )
 
         elif isinstance(node, (ast.Assign, ast.AnnAssign)):
-            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
-            target_names = {
-                target.id for target in targets if isinstance(target, ast.Name)
-            }
             value = node.value
-            if target_names & {"argv", "args", "cmd", "command"} and isinstance(
-                value, (ast.List, ast.Tuple)
-            ):
+            if isinstance(value, (ast.List, ast.Tuple)):
                 texts = _literal_text(value)
-                if any(text in FORBIDDEN_COMMANDS for text in texts):
+                command_like = bool(texts) and (
+                    texts[0] in FORBIDDEN_COMMANDS or texts[0] == "date"
+                )
+                if command_like and texts[0] in FORBIDDEN_COMMANDS:
                     violations.append(
                         f"{path.name}:{node.lineno}: platform argv construction {texts}"
                     )
-                if "date" in texts and "-d" in texts:
+                if command_like:
+                    for text in texts:
+                        if text in FORBIDDEN_EXACT:
+                            violations.append(
+                                f"{path.name}:{node.lineno}: executable platform token {text}"
+                            )
+                        if any(part in text for part in FORBIDDEN_PATH_PARTS):
+                            violations.append(
+                                f"{path.name}:{node.lineno}: executable Linux path {text}"
+                            )
+                if command_like and "date" in texts and "-d" in texts:
                     violations.append(
                         f"{path.name}:{node.lineno}: direct date -d construction"
                     )
@@ -143,5 +151,31 @@ def test_smoke_measurement_uses_only_semantic_service_inspection() -> None:
         if isinstance(node, ast.Call):
             for arg in (*node.args, *(kw.value for kw in node.keywords)):
                 executable.extend(_literal_text(arg))
+        elif isinstance(node, (ast.Assign, ast.AnnAssign)) and isinstance(
+            node.value, (ast.List, ast.Tuple)
+        ):
+            executable.extend(_literal_text(node.value))
     assert all(token not in text for text in executable for token in banned)
     assert _executable_platform_violations(path) == []
+
+
+@pytest.mark.parametrize(
+    "property_name",
+    ["ControlGroup", "ExecMainStartTimestamp"],
+)
+def test_platform_detector_catches_indirect_prebuilt_systemctl_commands(
+    tmp_path: Path, property_name: str
+) -> None:
+    path = tmp_path / "smoke_checks.py"
+    path.write_text(
+        "def probe(env):\n"
+        f"    show = ['systemctl', '--user', 'show', 'svc', '-p', "
+        f"'{property_name}', '--value']\n"
+        "    return env.run(show)\n",
+        encoding="utf-8",
+    )
+
+    violations = _executable_platform_violations(path)
+
+    assert any("platform argv construction" in item for item in violations)
+    assert any(property_name in item for item in violations)

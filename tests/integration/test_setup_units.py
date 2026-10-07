@@ -8,6 +8,7 @@ import pytest
 
 from binnacle import cli, doctor, units
 from binnacle.service_lifecycle_contracts import ServiceAction
+from binnacle.service_log_contracts import ServiceLogError
 from binnacle.service_provisioning_linux import LinuxServiceProvisioner
 from tests.service_fakes import FakeServiceController
 
@@ -307,6 +308,35 @@ def test_mode_refuses_a_busy_moment_unless_forced(host, capsys, monkeypatch):
 
     cli.mode("prod", force=True)
     assert host.controller.calls == [(cli.SERVER_UNIT, None)]
+
+
+def test_mode_unreadable_journal_blocks_before_write_reload_or_restart(
+    host, capsys, monkeypatch
+):
+    cli.setup(dev=host.repo, port=8000)
+    host.calls.clear()
+    host.controller.calls.clear()
+    capsys.readouterr()
+    monkeypatch.setattr(
+        cli.doctor_jobs, "server_uses_manager", lambda *args, **kwargs: True
+    )
+
+    def unreadable(*args, **kwargs):
+        raise ServiceLogError("journalctl failed: permission denied")
+
+    monkeypatch.setattr(doctor.logstats, "fetch_journal", unreadable)
+
+    before = host.unit.read_text()
+    with pytest.raises(SystemExit) as exc:
+        cli.mode("prod")
+
+    assert exc.value.code == 1
+    out = capsys.readouterr().out
+    assert "journal unreadable" in out
+    assert "permission denied" in out
+    assert host.unit.read_text() == before
+    assert host.calls == []
+    assert host.controller.calls == []
 
 
 def test_mode_needs_a_managed_unit_and_a_repo_for_dev(host, capsys, monkeypatch):

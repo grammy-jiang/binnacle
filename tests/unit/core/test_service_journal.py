@@ -112,6 +112,59 @@ def test_operational_failures_become_service_log_error(monkeypatch, failure, mes
         source.read_window(("svc",), 1)
 
 
+def test_read_window_boundary_events_preserve_truncation_and_inclusive_until(
+    monkeypatch,
+):
+    events = [
+        (99.999, "before"),
+        (100.0, "since-boundary"),
+        (100.999, "fractional-since"),
+        (200.999, "fractional-until"),
+        (201.0, "inclusive-until-plus-one"),
+        (201.001, "after"),
+    ]
+
+    def run(argv, **kwargs):
+        since = int(argv[argv.index("--since") + 1].removeprefix("@"))
+        until = int(argv[argv.index("--until") + 1].removeprefix("@"))
+        selected = [text for ts, text in events if since <= ts <= until]
+        return completed(argv, out="\n".join(selected) + "\n")
+
+    monkeypatch.setattr(service_journal.subprocess, "run", run)
+    source = service_journal.JournalServiceLogSource(command_timeout_s=60.0)
+
+    assert source.read_window(("svc",), 100.9, 200.1).splitlines() == [
+        "since-boundary",
+        "fractional-since",
+        "fractional-until",
+        "inclusive-until-plus-one",
+    ]
+
+
+@pytest.mark.parametrize("kind", ["completion", "launch"])
+def test_operational_failure_detail_is_clipped_to_200_characters(monkeypatch, kind):
+    detail = "x" * 240
+
+    def run(argv, **kwargs):
+        if kind == "completion":
+            return completed(argv, rc=1, err=detail)
+        raise OSError(detail)
+
+    monkeypatch.setattr(service_journal.subprocess, "run", run)
+    source = service_journal.JournalServiceLogSource(command_timeout_s=60.0)
+
+    with pytest.raises(ServiceLogError) as exc:
+        source.read_window(("svc",), 1)
+
+    message = str(exc.value)
+    prefix = (
+        "journalctl failed: "
+        if kind == "completion"
+        else "journalctl failed to start: "
+    )
+    assert message == prefix + ("x" * 200)
+
+
 def test_nonzero_completion_becomes_service_log_error(monkeypatch):
     monkeypatch.setattr(
         service_journal.subprocess,
