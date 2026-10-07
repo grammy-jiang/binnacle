@@ -19,7 +19,16 @@ if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from scripts.gate_a_evidence import build_payload
-from scripts.gate_a_manifest import compatibility_facade_coverage, manifest_coverage
+from scripts.gate_a_manifest import (
+    compatibility_facade_coverage,
+    manifest_coverage,
+    manifest_groups,
+)
+from scripts.gate_a_source import (
+    has_root_health_route,
+    imported_names_from,
+    imports_for,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src" / "binnacle"
@@ -33,44 +42,17 @@ class Cell:
     evidence: str = "static"
 
 
-def imports_for(path: Path) -> set[str]:
-    tree = ast.parse(path.read_text(encoding="utf-8"))
-    out: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            out.update(alias.name for alias in node.names)
-        elif isinstance(node, ast.ImportFrom) and node.module:
-            out.add(node.module)
-            out.update(f"{node.module}.{alias.name}" for alias in node.names)
-    return out
-
-
 def any_import(paths: list[Path], prefixes: tuple[str, ...]) -> list[str]:
     hits: list[str] = []
     for path in paths:
         if not path.exists():
             continue
         for name in sorted(imports_for(path)):
-            if name.startswith(prefixes):
+            if any(
+                name == prefix or name.startswith(prefix + ".") for prefix in prefixes
+            ):
                 hits.append(f"{path.relative_to(ROOT)} -> {name}")
     return hits
-
-
-def imported_names_from(path: Path, module: str) -> tuple[set[str], bool]:
-    """Return names imported from one module and whether the module is imported directly."""
-    if not path.exists():
-        return set(), False
-    tree = ast.parse(path.read_text(encoding="utf-8"))
-    names: set[str] = set()
-    direct_module_import = False
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom) and node.module == module:
-            names.update(alias.name for alias in node.names)
-        elif isinstance(node, ast.Import) and any(
-            alias.name == module for alias in node.names
-        ):
-            direct_module_import = True
-    return names, direct_module_import
 
 
 def current_sha() -> str | None:
@@ -99,35 +81,55 @@ def python_files() -> list[Path]:
     return sorted(SRC.rglob("*.py"))
 
 
+def group_paths(*groups: str) -> list[Path]:
+    owners = manifest_groups()
+    return sorted({SRC / rel for group in groups for rel in owners[group]})
+
+
 def product_domain_files() -> list[Path]:
-    files: list[Path] = []
-    for rel in [
-        "files_server.py",
-        "search_server.py",
-        "commands_server.py",
-        "command_contracts.py",
-        "command_execution.py",
-        "command_status.py",
-    ]:
-        files.append(SRC / rel)
-    files.extend(sorted((SRC / "tools").glob("*.py")))
-    files.extend(sorted(SRC.glob("search_text_*.py")))
-    return files
+    return group_paths("files", "search", "commands")
+
+
+def companion_modules() -> tuple[str, ...]:
+    return tuple(
+        "binnacle." + p.relative_to(SRC).with_suffix("").as_posix().replace("/", ".")
+        for p in group_paths("watchdog", "tunnel")
+        if p.name != "__init__.py"
+    )
 
 
 def has_custom_route() -> bool:
-    for path in python_files():
-        try:
-            tree = ast.parse(path.read_text(encoding="utf-8"))
-        except SyntaxError:
-            continue
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.Call):
-                continue
-            fn = node.func
-            if isinstance(fn, ast.Attribute) and fn.attr == "custom_route":
-                return True
-    return False
+    return has_root_health_route(SRC / "server.py")
+
+
+def clean_snapshot() -> str | None:
+    sha = current_sha()
+    proc = subprocess.run(
+        ["git", "status", "--porcelain", "--untracked-files=all"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return sha if proc.returncode == 0 and not proc.stdout else None
+
+
+def collect_report() -> dict:
+    before = clean_snapshot()
+    cells = report()
+    after = clean_snapshot()
+    bound = before is not None and before == after
+    cells.insert(
+        0,
+        Cell(
+            "evidence.source_snapshot_bound",
+            "PASS" if bound else "FAIL",
+            "clean unchanged HEAD"
+            if bound
+            else "source snapshot is dirty, unavailable, or changed",
+        ),
+    )
+    return build_payload(cells, candidate=before if bound else None)
 
 
 def report() -> list[Cell]:
@@ -305,8 +307,8 @@ def report() -> list[Cell]:
     )
 
     doctor_hits = any_import(
-        [SRC / "doctor.py", SRC / "doctor_connectivity.py"],
-        ("binnacle.uplink", "binnacle.ops.watchdog", "binnacle.watchdog"),
+        group_paths("diagnostics"),
+        companion_modules(),
     )
     cells.append(
         Cell(
@@ -332,9 +334,9 @@ def report() -> list[Cell]:
         Cell(
             "companion.operational_http_surface",
             "PASS" if has_custom_route() else "FAIL",
-            "FastMCP custom_route registered"
+            "root literal GET /healthz registered with include_in_schema=False; payload/auth require tests"
             if has_custom_route()
-            else "no custom_route registered",
+            else "required root health route registration missing",
         )
     )
 
@@ -384,10 +386,10 @@ def report() -> list[Cell]:
         SRC / "watchdog_cli.py", "binnacle.tunnel_unit"
     )
     narrow_tunnel_contract = (
-        tunnel_names in (set(), {"TUNNEL_UNIT"}) and not tunnel_module_import
+        tunnel_names == {"TUNNEL_UNIT"} and not tunnel_module_import
     )
     if not tunnel_names and not tunnel_module_import:
-        tunnel_detail = "no watchdog CLI dependency on tunnel unit internals"
+        tunnel_detail = "required TUNNEL_UNIT identity import missing"
     elif narrow_tunnel_contract:
         tunnel_detail = (
             "watchdog CLI imports only the approved public service identity "
@@ -407,29 +409,9 @@ def report() -> list[Cell]:
         )
     )
 
-    core_paths = [
-        p
-        for p in python_files()
-        if "ops/watchdog" not in p.as_posix()
-        and p.name
-        not in {
-            "watchdog.py",
-            "watchdog_cli.py",
-            "watchdog_doctor.py",
-            "watchdog_config.py",
-            "watchdog_unit.py",
-            "watchlog.py",
-            "uplink.py",
-            "webminstats.py",
-            "tunnel_cli.py",
-            "tunnel_doctor.py",
-            "tunnel_unit.py",
-        }
-    ]
-    watchdog_hits = any_import(
-        core_paths,
-        ("binnacle.ops.watchdog", "binnacle.watchdog"),
-    )
+    companion_paths = set(group_paths("watchdog", "tunnel"))
+    core_paths = [p for p in python_files() if p not in companion_paths]
+    watchdog_hits = any_import(core_paths, companion_modules())
     cells.append(
         Cell(
             "companion.server_core_platform_no_watchdog_impl",
@@ -445,6 +427,10 @@ def report() -> list[Cell]:
         (
             "companion.server_works_without_watchdog",
             "requires runtime construction/import test with watchdog unavailable",
+        ),
+        (
+            "companion.healthz_http_behavior",
+            "requires exact unauthenticated health payload and unchanged MCP auth/wire tests",
         ),
         ("convergence.full_suite", "requires exact-final-SHA managed full suite"),
         (
@@ -477,10 +463,9 @@ def main() -> int:
     parser.add_argument("--strict", action="store_true")
     args = parser.parse_args()
 
-    cells = report()
-    payload = build_payload(cells, candidate=current_sha())
+    payload = collect_report()
     print(json.dumps(payload, indent=2))
-    if args.strict and any(cell.status != "PASS" for cell in cells):
+    if args.strict and any(cell["status"] != "PASS" for cell in payload["cells"]):
         return 1
     return 0
 

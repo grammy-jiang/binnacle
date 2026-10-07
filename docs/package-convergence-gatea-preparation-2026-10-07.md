@@ -183,6 +183,9 @@ classified with their package and are never counted as independent architecture 
 
 ## 3. Known compatibility facades to revisit in G6
 
+`doctor_common.py` is also a current G4-backed compatibility facade. After G5,
+refresh this list for any retained `doctor.py` or tunnel-helper aliases.
+
 Do not delete these during preparation:
 
 - `jobs.py` storage/lifecycle compatibility helpers;
@@ -285,7 +288,10 @@ Every Gate A cell should ultimately record:
 - timestamp;
 - optional review reference.
 
-The preparation harness now binds every emitted cell to the same exact Git SHA and
+The preparation harness verifies a clean index/worktree, including untracked files,
+and the same HEAD before and after collection. Otherwise its source-binding cell
+fails and the candidate field is null; `--strict` cannot pass. A clean collection
+binds every emitted cell to the same exact Git SHA and
 UTC observation timestamp, in addition to the report-level binding. This prevents a
 future collector from accidentally combining static results from one source snapshot
 with runtime evidence from another. Command/artifact identifiers and review references

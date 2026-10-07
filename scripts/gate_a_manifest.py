@@ -139,6 +139,7 @@ def manifest_coverage() -> tuple[list[str], dict[str, list[str]]]:
 def compatibility_facades() -> set[str]:
     """Current compatibility facades that G6 must review before removal."""
     return {
+        "doctor_common.py",
         "jobs.py",
         "watchdog.py",
         "logstats.py",
