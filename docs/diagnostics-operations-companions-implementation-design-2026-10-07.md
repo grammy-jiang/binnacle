@@ -1,6 +1,6 @@
-# G5 diagnostics, operations and companions — implementation design draft — 2026-10-07
+# G5 diagnostics, operations and companions — implementation design — 2026-10-07
 
-Status: **implementing; fresh R2 design review APPROVE, all four cells PASS**.
+Status: **done; implementation, independent final review, exact-SHA CI, canonical deployment, companion activation, and live verification complete on 2026-10-08**.
 
 Baseline: deployed G4 completion `b07406806ac622df00e583b0079e4b70cad76340`.
 Its runtime/source bytes are identical to the reviewed G4 implementation candidate
@@ -726,3 +726,57 @@ green broad gates on an unchanged SHA.
 Intermediate commits should use focused tests and changed-file pre-commit where
 appropriate. Pre-push/exact-SHA CI are for coherent review/final candidates rather
 than every small checkpoint.
+
+## 12. Production completion — 2026-10-08
+
+G5 runtime candidate `dd10ef0c77e87f1c8807c652e2d07188d9add6d3` completed the approved
+diagnostics/operations/companion ownership work from deployed G4 completion
+`b07406806ac622df00e583b0079e4b70cad76340`. The final source keeps public MCP wire
+compatibility while moving diagnostic rendering/file I/O to neutral helpers, giving
+the watchdog ownership of uplink diagnostics, placing optional system-resource history
+behind its narrow seam, adding the fixed unauthenticated root `GET /healthz` liveness
+route, and removing the reviewed companion aggregate dependencies.
+
+The fresh final implementation-review follow-up R3 returned **APPROVE**, both remaining
+operational/rollback cells PASS, with zero findings. Exact-SHA CI run `37673788380`
+completed **7/7** required jobs successfully on `dd10ef0`: code quality, Python
+3.10/3.11/3.12/3.14 tests, Python 3.13 coverage policy, and Python 3.13 packaging.
+The already-green final local source convergence was not repeated after the
+evidence-wrapper-only correction because the candidate source bytes did not change.
+
+The canonical deployment gate completed successfully and advanced production `master`,
+`origin/master`, `origin/proof-of-concept`, and the G5 implementation branch to
+`dd10ef0`. The tracked user `pyproject.toml` edit was restored byte-for-byte and the
+untracked-file inventory was preserved. The durable jobs service and tunnel service
+were not restarted during the canonical transaction.
+
+Post-deployment verification recorded:
+
+- opt-in live pytest: **3 passed**;
+- full deploy smoke: **exit 0**;
+- core, tunnel, and watchdog doctors: **exit 0**;
+- root `GET /healthz`: HTTP **200**, `application/json`, exact body
+  `{"status":"ok"}`;
+- four-profile public MCP wire: **141833 bytes**, unchanged SHA256
+  `acbc4e794ee45c1bd9dbd3a51dafa9634f101e06ed18a0b0cea36d2f32fcb61f`;
+- a real ChatGPT/Raspberry-Pi MCP `list_files` call returned the expected
+  `deployment_platform.py` path.
+
+The long-running watchdog was then activated once so it loaded the G5 companion bytes.
+Its systemd invocation identity and start timestamp changed, its loaded policy changed
+only the MCP liveness URL from `/mcp` to `http://127.0.0.1:8000/healthz`, the healthy
+in-service uplinks remained healthy, no unexpected repair/failure event occurred during
+activation, and both jobs and tunnel service identities remained unchanged. One
+pre-existing ignored-adapter condition was explicitly excluded from the activation gate
+by operator authorization; that exception is recorded as deployment evidence and does
+not change product policy or source.
+
+Completion evidence is retained under:
+
+```text
+/home/grammy-jiang/Projects/.binnacle-g5-r3/
+```
+
+G5 is complete. G6 production relocation/facade work may now begin from this deployed
+runtime baseline, subject to its already-approved preparation constraints and final
+Gate A evidence.

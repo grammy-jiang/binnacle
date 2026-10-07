@@ -1056,3 +1056,37 @@ reviewed design. G5.0 has 191 passing focused tests, clean architecture/import/s
 gates and identical four-profile wire bytes. Implementation may proceed in green
 G5.1-G5.5 checkpoints. G6 runs preparation checks in parallel; package relocation
 and facade deletion remain deferred until G5 is deployed and verified.
+
+## 27. G5 production completion — 2026-10-08
+
+G5 runtime candidate `dd10ef0c77e87f1c8807c652e2d07188d9add6d3` completed the
+diagnostics/operations/companion ownership group from deployed G4 completion
+`b07406806ac622df00e583b0079e4b70cad76340`. The final implementation preserves the
+public MCP wire while introducing the narrow root `/healthz` liveness route, neutral
+diagnostic helpers, watchdog-owned uplink diagnostics, the optional
+system-resource-history seam, and the approved companion dependency boundaries.
+
+The fresh final R3 implementation-review follow-up returned **APPROVE**, both remaining
+operational/rollback cells PASS, with zero findings. Exact-SHA CI run `37673788380`
+passed all seven required jobs on `dd10ef0`. The source candidate did not change after
+its final local convergence, so already-green broad local gates were not repeated.
+
+Canonical deployment completed successfully. Production `master`, `origin/master`,
+`origin/proof-of-concept`, and the G5 implementation branch all advanced to `dd10ef0`;
+the user-owned tracked TOML edit and untracked files were preserved. Post-deploy live
+pytest passed **3 tests**, full smoke exited 0, all three doctors exited 0, `/healthz`
+returned the exact fixed JSON contract, the four-profile wire remained **141833 bytes**
+with SHA256 `acbc4e794ee45c1bd9dbd3a51dafa9634f101e06ed18a0b0cea36d2f32fcb61f`,
+and a real ChatGPT/Raspberry-Pi MCP read-only call succeeded.
+
+The watchdog companion was activated after deployment and loaded
+`http://127.0.0.1:8000/healthz`; its invocation/start identity changed as required,
+non-ignored active uplinks remained healthy, no unexpected repair/failure event fired,
+and jobs/tunnel identities remained unchanged. A pre-existing ignored-adapter condition
+was explicitly excluded by operator authorization for this one activation and retained
+in the external evidence rather than converted into a product-policy change.
+
+The completion evidence is retained at
+`/home/grammy-jiang/Projects/.binnacle-g5-r3/`. G5 is done. The G6 implementation may
+now begin; package relocation and compatibility-facade removal remain governed by the
+approved G6 preparation and final Gate A.
