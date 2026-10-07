@@ -63,9 +63,9 @@ they do not yet prohibit the two historical top-level reverse dependencies below
 - `tunnel_doctor.py` imports the generic log-tail helper from
   `doctor_connectivity.py`; that helper needs neutral ownership or a companion-local
   home.
-- `ops/watchdog/services.py` imports `tunnel_doctor`; G5 must decide whether this
-  is an intentional companion-to-companion public contract or an implementation
-  dependency to remove.
+- `ops/watchdog/services.py` imports `tunnel_doctor`; this is classified as an
+  implementation dependency to remove by extracting the tunnel-log scan into a
+  tunnel-owned public helper with no doctor/rendering dependency.
 - no Binnacle FastMCP `custom_route()` is currently registered. The server only
   exposes the MCP HTTP application.
 
@@ -114,10 +114,13 @@ Core/diagnostic edges that are not acceptable at Gate A:
 - `watchdog_cli.py -> cli.py`;
 - `tunnel_cli.py -> cli.py`.
 
-Companion-to-companion edges that require an explicit ownership decision:
+Companion-to-companion classification:
 
-- `ops/watchdog/services.py -> tunnel_doctor.py` for tunnel-log scanning;
-- `watchdog_cli.py -> tunnel_unit.py` for the tunnel unit identity/specification.
+- `ops/watchdog/services.py -> tunnel_doctor.py` is prohibited; tunnel-log scanning
+  moves behind a tunnel-owned public helper;
+- `watchdog_cli.py -> tunnel_unit.TUNNEL_UNIT` is explicitly allowed as the one
+  narrow cross-companion service-identity contract. No tunnel rendering/specification
+  helper is part of that allowance.
 
 Companion imports of stable public contracts/configuration such as diagnostic result
 types, service-log errors and service-unit names may remain only when the target module
@@ -256,8 +259,10 @@ Watchdog diagnostics own:
 - default-route inventory and layered uplink probes;
 - network failover/recovery policy state;
 - hardware/radio/USB recovery diagnostics;
-- watchdog service state;
-- Webmin resource-history diagnostics if retained.
+- watchdog service state.
+
+Webmin resource history is not watchdog policy. It remains an observability/Linux
+adapter behind the section 6.4 contract and is not pulled into watchdog diagnostics.
 
 The existing `check_uplink` behavior must be moved/owned here without changing its
 layer semantics or failure classifications.
