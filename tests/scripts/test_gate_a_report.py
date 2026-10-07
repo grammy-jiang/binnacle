@@ -23,6 +23,7 @@ def test_current_report_confirms_g5_boundary_closure():
     assert cells["platform.service_log_contract"].status == "PASS"
     assert cells["platform.managed_service_contract"].status == "PASS"
     assert cells["platform.runtime_path_contract"].status == "PASS"
+    assert cells["platform.product_domains_no_linux_imports"].status == "PASS"
 
     # G5 is deployed: these ownership boundaries are now the G6 baseline.
     assert cells["companion.core_doctor_no_watchdog_uplink"].status == "PASS"
@@ -56,6 +57,16 @@ def test_g6_manifest_classifies_every_current_module_once():
     assert sum(len(paths) for paths in manifest.manifest_groups().values()) == len(
         manifest.python_files()
     )
+
+
+def test_platform_default_composition_is_not_a_command_feature():
+    groups = manifest.manifest_groups()
+    assert groups["platform_composition"] == {
+        "deployment_platform.py",
+        "job_platform.py",
+    }
+    assert "job_platform.py" not in groups["commands"]
+    assert "deployment_platform.py" not in groups["deployment"]
 
 
 def test_g5_additions_have_expected_g6_owners():

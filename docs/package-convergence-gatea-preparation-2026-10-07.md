@@ -78,12 +78,13 @@ Target `features/commands/`:
 - `command_execution.py`;
 - `command_status.py`;
 - `command_backend.py`;
-- durable-job modules `jobs.py`, `job_*.py`;
+- durable-job modules `jobs.py`, `job_client.py`, `job_manager.py`, `job_output.py`,
+  `job_owner.py`, `job_resource_history.py`, and `job_store.py`;
 - `run_command_telemetry.py`;
 - `run_command_evidence.py`.
 
-The exact home of Linux process/cgroup adapters is excluded from this feature and
-belongs under platform.
+Linux process/cgroup adapters and the explicit default-platform composition point are
+excluded from this feature and belong under platform.
 
 ### 2.6 Platform contracts
 
@@ -107,8 +108,19 @@ Target `platform/linux/`:
 - `service_unit_linux.py`;
 - `runtime_paths_linux.py`.
 
-Composition modules such as `deployment_platform.py` remain separately classified by
-the now-deployed G5 ownership boundary.
+The Linux adapter package contains mechanics, not default-selection policy.
+
+### 2.7.1 Platform default composition
+
+Target `platform/` (outside `platform/linux/`):
+
+- `job_platform.py`;
+- `deployment_platform.py`.
+
+These are the two narrow explicit Linux-default composition points established by G3/G4.
+They may construct Linux adapters lazily but are not Commands or deployment feature
+implementation. Domain modules may consume these explicit factories while remaining
+decoupled from concrete Linux adapter modules.
 
 ### 2.8 Diagnostics / observability / deployment
 
@@ -125,8 +137,7 @@ Candidate target ownership:
   current `webminstats.py` moves behind the deployed neutral observability contract
   rather than under watchdog policy;
 - deployment:
-  `deployment_platform.py`, `units.py`, `server_unit.py`,
-  `job_manager_unit.py`.
+  `units.py`, `server_unit.py`, `job_manager_unit.py`.
 
 G5 has settled the diagnostics helper split. The G6 package-ownership re-review is the
 remaining pre-relocation boundary for these modules.
@@ -234,15 +245,16 @@ Relocation should be serialized by dependency direction:
 
 1. platform contracts;
 2. Linux platform adapters;
-3. Files feature;
-4. Search feature;
-5. Commands feature;
-6. MCP middleware/identity glue;
-7. diagnostics / observability / deployment;
-8. tunnel companion;
-9. watchdog companion;
-10. compatibility-facade removal;
-11. final import normalization and architecture rule tightening.
+3. platform default-composition points;
+4. Files feature;
+5. Search feature;
+6. Commands feature;
+7. MCP middleware/identity glue;
+8. diagnostics / observability / deployment;
+9. tunnel companion;
+10. watchdog companion;
+11. compatibility-facade removal;
+12. final import normalization and architecture rule tightening.
 
 Each move must preserve an import-compatible transitional path until its callers are
 updated and focused tests are green. Do not combine several ownership moves into one
@@ -254,7 +266,8 @@ Final G6 gates should mechanically enforce:
 
 - application/domain services do not import FastMCP;
 - platform adapters do not import FastMCP;
-- features depend on platform contracts, not Linux adapters;
+- features depend on platform contracts or the two explicit default-composition points,
+  never concrete Linux adapters;
 - server/features/platform/diagnostics-core do not import companions;
 - watchdog/tunnel may consume explicit public server contracts;
 - Files/Search/Commands remain independent except deliberate shared contracts;

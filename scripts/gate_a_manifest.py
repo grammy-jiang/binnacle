@@ -56,7 +56,6 @@ def manifest_groups() -> dict[str, set[str]]:
             "job_manager.py",
             "job_output.py",
             "job_owner.py",
-            "job_platform.py",
             "job_resource_history.py",
             "job_store.py",
             "run_command_telemetry.py",
@@ -69,6 +68,7 @@ def manifest_groups() -> dict[str, set[str]]:
             "service_lifecycle_contracts.py",
             "runtime_path_contracts.py",
         },
+        "platform_composition": {"deployment_platform.py", "job_platform.py"},
         "platform_linux": {
             "job_process.py",
             "job_cgroup.py",
@@ -97,7 +97,6 @@ def manifest_groups() -> dict[str, set[str]]:
         },
         "observability_linux": {"webminstats.py"},
         "deployment": {
-            "deployment_platform.py",
             "units.py",
             "server_unit.py",
             "job_manager_unit.py",
