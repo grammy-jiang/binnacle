@@ -11,8 +11,8 @@ from pydantic import Field
 
 from binnacle import command_status
 from binnacle.command_backend import create_command_backend
-from binnacle.command_contracts import CommandBackend, CommandFailure
 from binnacle.config import get_settings
+from binnacle.features.commands.command_contracts import CommandBackend, CommandFailure
 
 OUTPUT_SCHEMA = {
     "type": "object",

@@ -3,7 +3,7 @@
 from importlib import import_module
 from pathlib import Path
 
-from binnacle.command_contracts import CommandBackend
+from binnacle.features.commands.command_contracts import CommandBackend
 
 
 class DurableCommandBackend:

@@ -12,9 +12,9 @@ from pydantic import Field
 
 from binnacle import command_execution
 from binnacle.command_backend import create_command_backend
-from binnacle.command_contracts import CommandBackend, CommandFailure
 from binnacle.config import RootsSettings, RunCommandSettings, get_settings
 from binnacle.errors import CodedToolError
+from binnacle.features.commands.command_contracts import CommandBackend, CommandFailure
 from binnacle.paths import resolve_path
 
 OUTPUT_SCHEMA = {

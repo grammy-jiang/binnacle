@@ -12,7 +12,7 @@ ADAPTERS = ("tools/run_command.py", "tools/job_status.py", "tools/stop_job.py")
 DOMAIN = ("command_execution.py", "command_status.py", "command_contracts.py")
 STANDARD = {"dataclasses", "pathlib", "typing", "logging", "time"}
 DOMAIN_IMPORTS = {
-    "binnacle.command_contracts",
+    "binnacle.features.commands.command_contracts",
     "binnacle.job_output",
     "binnacle.callctx",
     "binnacle.run_command_evidence",
@@ -25,7 +25,7 @@ ADAPTER_IMPORTS = {
     "pydantic",
     "binnacle.command_execution",
     "binnacle.command_status",
-    "binnacle.command_contracts",
+    "binnacle.features.commands.command_contracts",
     "binnacle.command_backend",
     "binnacle.config",
     "binnacle.errors",
@@ -41,7 +41,7 @@ def violations(source, owner):
     elif owner == "command_backend.py":
         allowed |= {
             "importlib",
-            "binnacle.command_contracts",
+            "binnacle.features.commands.command_contracts",
             "binnacle.jobs",
             "binnacle.job_owner",
         }
@@ -94,7 +94,12 @@ def violations(source, owner):
 
 @pytest.mark.parametrize("owner", (*ADAPTERS, *DOMAIN, "command_backend.py"))
 def test_commands_imports_respect_frozen_boundary(owner):
-    assert violations((SOURCE / owner).read_text(), owner) == []
+    path = (
+        "features/commands/command_contracts.py"
+        if owner == "command_contracts.py"
+        else owner
+    )
+    assert violations((SOURCE / path).read_text(), owner) == []
 
 
 @pytest.mark.parametrize(
@@ -194,3 +199,12 @@ assert jobs.OWNER_MODE == 'embedded' and jobs.WARMUP_S == 0.125
     subprocess.run(
         [sys.executable, "-c", code], check=True, capture_output=True, timeout=20
     )
+
+
+def test_legacy_command_contract_symbols_preserve_identity():
+    from binnacle import command_contracts as legacy
+    from binnacle.features.commands import command_contracts as owned
+
+    assert legacy.CommandBackend is owned.CommandBackend
+    assert legacy.CommandFailure is owned.CommandFailure
+    assert legacy.CommandReply is owned.CommandReply

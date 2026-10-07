@@ -10,7 +10,11 @@ from binnacle.callctx import (
     current_client,
     current_turn,
 )
-from binnacle.command_contracts import CommandBackend, CommandFailure, CommandReply
+from binnacle.features.commands.command_contracts import (
+    CommandBackend,
+    CommandFailure,
+    CommandReply,
+)
 from binnacle.job_store import JobGone
 
 log = logging.getLogger("binnacle.job_status")

@@ -276,7 +276,7 @@ id = "command-domain-explicit-backend"
 name = "Command use cases do not select or import a durable engine"
 type = "forbidden"
 source_modules = [
-    "binnacle.command_contracts",
+    "binnacle.features.commands.command_contracts",
     "binnacle.command_execution",
     "binnacle.command_status",
 ]
