@@ -5,7 +5,7 @@ import os
 import pytest
 from fastmcp.exceptions import ToolError
 
-from binnacle.tools import write_file as wf
+from binnacle.features.files.tools import write_file as wf
 
 
 def write(path: str, content: str) -> dict:

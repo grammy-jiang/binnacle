@@ -172,7 +172,7 @@ def report() -> list[Cell]:
     )
 
     child_factories = {
-        "files": (SRC / "files_server.py", "create_files_server"),
+        "files": (SRC / "features/files/files_server.py", "create_files_server"),
         "search": (SRC / "search_server.py", "create_search_server"),
         "commands": (SRC / "commands_server.py", "create_commands_server"),
     }

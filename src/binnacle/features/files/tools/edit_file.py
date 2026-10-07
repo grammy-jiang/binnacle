@@ -15,7 +15,7 @@ from fastmcp.tools.base import ToolResult
 from pydantic import Field
 
 from binnacle.config import EditFileSettings, RootsSettings, get_settings
-from binnacle.paths import nearby_hint, resolve_path
+from binnacle.features.files.paths import nearby_hint, resolve_path
 
 _BOM_CODECS = (
     (b"\xff\xfe\x00\x00", "utf-32-le"),

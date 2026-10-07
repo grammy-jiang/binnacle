@@ -3,8 +3,8 @@
 import pytest
 from fastmcp.exceptions import ToolError
 
-from binnacle.tools import edit_file as ef
-from binnacle.tools import read_file as rf
+from binnacle.features.files.tools import edit_file as ef
+from binnacle.features.files.tools import read_file as rf
 
 
 def edit(path: str, old: str, new: str, replace_all: bool = False) -> dict:

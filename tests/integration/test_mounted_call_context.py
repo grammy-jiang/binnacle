@@ -9,7 +9,8 @@ from fastmcp.exceptions import ToolError
 from fastmcp.server.middleware import Middleware
 
 from binnacle import callctx, jobs, server
-from binnacle.tools import read_file, run_command, search_text
+from binnacle.features.files.tools import read_file
+from binnacle.tools import run_command, search_text
 from tests.integration.http_test_support import http_tool_call, with_session
 
 

@@ -14,8 +14,8 @@ from pydantic import Field
 
 from binnacle.config import ReadFileSettings, RootsSettings, get_settings
 from binnacle.errors import CodedToolError
-from binnacle.paths import nearby_hint, resolve_path
-from binnacle.textio import decode_text, human_size
+from binnacle.features.files.paths import nearby_hint, resolve_path
+from binnacle.features.files.textio import decode_text, human_size
 
 LINE_CLIP_MARK = "… [line truncated]"
 

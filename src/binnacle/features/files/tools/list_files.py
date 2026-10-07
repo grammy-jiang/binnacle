@@ -16,7 +16,7 @@ from pydantic import Field
 
 from binnacle.config import ListFilesSettings, RootsSettings, get_settings
 from binnacle.errors import CodedToolError
-from binnacle.paths import full_match, nearby_hint, resolve_path
+from binnacle.features.files.paths import full_match, nearby_hint, resolve_path
 
 OUTPUT_SCHEMA = {
     "type": "object",

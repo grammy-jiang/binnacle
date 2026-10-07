@@ -9,7 +9,7 @@ import pytest
 
 from binnacle import jobs as jobstore
 from binnacle.callctx import current_turn
-from binnacle.tools import list_files as lf
+from binnacle.features.files.tools import list_files as lf
 from tests.integration.http_test_support import (
     http_tool_call,
     sse_json,

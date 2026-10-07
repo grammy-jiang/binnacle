@@ -14,7 +14,7 @@ from fastmcp.tools.base import ToolResult
 from pydantic import Field
 
 from binnacle.config import RootsSettings, get_settings
-from binnacle.paths import resolve_path
+from binnacle.features.files.paths import resolve_path
 
 OUTPUT_SCHEMA = {
     "type": "object",

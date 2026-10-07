@@ -24,7 +24,7 @@ CORE = [
     "src/binnacle/callctx.py",
     "src/binnacle/config.py",
     "src/binnacle/identity.py",
-    "src/binnacle/textio.py",
+    "src/binnacle/features/files/textio.py",
 ]
 RESULTS = """\
     binnacle.callctx.x_get__mutmut_1: killed
@@ -61,7 +61,10 @@ def clone(tmp_path: Path) -> Path:
 
 
 def test_mutant_prefix() -> None:
-    assert mutant_prefix("src/binnacle/textio.py") == "binnacle.textio."
+    assert (
+        mutant_prefix("src/binnacle/features/files/textio.py")
+        == "binnacle.features.files.textio."
+    )
     assert (
         mutant_prefix("src/binnacle/ops/watchdog/model.py")
         == "binnacle.ops.watchdog.model."
@@ -113,9 +116,9 @@ def test_parse_and_count_results_per_module() -> None:
 def test_module_check_levels(
     counts: dict, outcome: Outcome, level: str, text: str
 ) -> None:
-    check = module_check("src/binnacle/textio.py", counts, outcome)
+    check = module_check("src/binnacle/features/files/textio.py", counts, outcome)
     assert (check.name, check.level, check.detail) == (
-        "mutation binnacle.textio",
+        "mutation binnacle.features.files.textio",
         level,
         text,
     )

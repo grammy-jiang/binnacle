@@ -183,17 +183,29 @@ name = "MCP tools are imported only by focused composition modules"
 type = "protected"
 protected_modules = ["binnacle.tools"]
 allowed_importers = [
-    "binnacle.files_server",
     "binnacle.search_server",
     "binnacle.commands_server",
 ]
+
+[[tool.importlinter.contracts]]
+id = "files-tools-only-files-server"
+name = "Files MCP tools are imported only by the Files server"
+type = "protected"
+protected_modules = ["binnacle.features.files.tools"]
+allowed_importers = ["binnacle.features.files.files_server"]
+
+[[tool.importlinter.contracts]]
+id = "files-tool-modules-independent"
+name = "Files MCP tool modules are independent"
+type = "independence"
+modules = ["binnacle.features.files.tools.*"]
 
 [[tool.importlinter.contracts]]
 id = "focused-servers-independent"
 name = "Focused MCP servers are independent"
 type = "independence"
 modules = [
-    "binnacle.files_server",
+    "binnacle.features.files.files_server",
     "binnacle.search_server",
     "binnacle.commands_server",
 ]

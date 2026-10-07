@@ -70,7 +70,7 @@ def advance(state_file: Path, modules: list[str], count: int, run_id: str) -> No
 
 
 def mutant_prefix(module: str) -> str:
-    """src/binnacle/textio.py -> binnacle.textio. (mutmut's mutant names)"""
+    """src/binnacle/features/files/textio.py -> binnacle.features.files.textio. (mutmut's mutant names)"""
     rel = Path(module).relative_to("src").with_suffix("")
     return ".".join(rel.parts) + "."
 

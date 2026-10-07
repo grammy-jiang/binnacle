@@ -10,7 +10,7 @@ boundaries passed. Each test names the mutants it kills.
 
 from pathlib import Path
 
-from binnacle import textio
+from binnacle.features.files import textio
 
 NO_EXT = Path("/tmp/no-extension")
 

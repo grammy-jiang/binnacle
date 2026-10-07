@@ -5,14 +5,14 @@ import asyncio
 import pytest
 from fastmcp import Client
 
-from binnacle import files_server, paths
 from binnacle.config import (
     EditFileSettings,
     ListFilesSettings,
     ReadFileSettings,
     RootsSettings,
 )
-from binnacle.tools import edit_file, list_files, read_file, write_file
+from binnacle.features.files import files_server, paths
+from binnacle.features.files.tools import edit_file, list_files, read_file, write_file
 
 
 def fail_global():

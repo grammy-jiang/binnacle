@@ -58,6 +58,12 @@ Target `features/files/`:
 - `paths.py`;
 - `textio.py`.
 
+`paths.py` is the deliberate shared path-guard contract used by Files, Search, and
+Commands. During the ordered relocation its implementation moves with Files while a
+thin top-level `binnacle.paths` compatibility facade remains until the Search and
+Commands waves migrate their callers. The final facade-removal step may delete that
+alias only after those callers and architecture rules point at the owned contract.
+
 ### 2.4 Search feature
 
 Target `features/search/`:
@@ -234,6 +240,7 @@ Do not delete these during preparation:
 - `service_journal.py::read_spec` compatibility path;
 - `service_unit_linux.py` compatibility diagnostics;
 - `units.py` compatibility diagnostics;
+- `paths.py` temporary shared path-guard alias during Files/Search/Commands relocation;
 - `tools/search_text.py` subprocess compatibility seam.
 
 G6 should remove only facades proven obsolete after all internal callers are migrated.

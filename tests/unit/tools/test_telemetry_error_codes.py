@@ -6,8 +6,8 @@ import pytest
 from fastmcp.exceptions import ToolError
 
 from binnacle.errors import CodedToolError
-from binnacle.tools import list_files as lf
-from binnacle.tools import read_file as rf
+from binnacle.features.files.tools import list_files as lf
+from binnacle.features.files.tools import read_file as rf
 from binnacle.tools import run_command as rc
 from binnacle.tools import search_text as st
 

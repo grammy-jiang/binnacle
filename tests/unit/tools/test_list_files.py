@@ -5,7 +5,7 @@ import os
 import pytest
 from fastmcp.exceptions import ToolError
 
-from binnacle.tools import list_files as lf
+from binnacle.features.files.tools import list_files as lf
 
 
 def ls(

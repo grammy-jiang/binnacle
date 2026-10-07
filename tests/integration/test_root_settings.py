@@ -7,24 +7,16 @@ from mcp.types import Implementation
 
 from binnacle import (
     commands_server,
-    files_server,
     jobs,
     logging_middleware,
-    paths,
     search_server,
     server,
 )
 from binnacle.config import TokenizerTelemetrySettings, get_settings
+from binnacle.features.files import files_server, paths
+from binnacle.features.files.tools import edit_file, list_files, read_file, write_file
 from binnacle.identity import ClientIdentity
-from binnacle.tools import (
-    edit_file,
-    job_status,
-    list_files,
-    read_file,
-    run_command,
-    search_text,
-    write_file,
-)
+from binnacle.tools import job_status, run_command, search_text
 
 
 def fail_global():
@@ -205,7 +197,8 @@ def test_fresh_processes_load_two_configs_without_import_order_dependency(tmp_pa
 import asyncio
 import sys
 # Import adapters before construction. No reload or settings-cache reset.
-from binnacle.tools import search_text, read_file, job_status
+from binnacle.features.files.tools import read_file
+from binnacle.tools import job_status, search_text
 from binnacle import server
 from fastmcp import Client
 async def go():

@@ -23,7 +23,7 @@ from binnacle.callctx import (
     current_turn,
 )
 from binnacle.config import RunCommandSettings
-from binnacle.tools import list_files as lf
+from binnacle.features.files.tools import list_files as lf
 from binnacle.tools import stop_job as sj
 
 

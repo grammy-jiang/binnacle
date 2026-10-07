@@ -4,9 +4,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from binnacle import paths
 from binnacle.config import RootsSettings
 from binnacle.errors import CodedToolError
+from binnacle.features.files import paths
 
 
 def no_global_settings():

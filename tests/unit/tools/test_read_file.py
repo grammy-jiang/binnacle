@@ -6,7 +6,7 @@ import pytest
 from fastmcp.exceptions import ToolError
 
 from binnacle.config import get_settings
-from binnacle.tools import read_file as rf
+from binnacle.features.files.tools import read_file as rf
 
 
 def read(path: str, start: int = 1, end: int | None = None) -> dict:
