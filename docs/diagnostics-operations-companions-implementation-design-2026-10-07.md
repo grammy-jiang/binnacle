@@ -65,6 +65,37 @@ they do not yet prohibit the two historical top-level reverse dependencies below
 - no Binnacle FastMCP `custom_route()` is currently registered. The server only
   exposes the MCP HTTP application.
 
+### 2.3 Existing characterization already available
+
+Do not add duplicate characterization tests where the current suite already pins the
+behavior G5 needs to preserve or deliberately migrate:
+
+- `tests/system/test_doctor_coverage.py` proves core doctor calls the uplink check
+  when `probe=True` and omits it for `probe=False`;
+- `tests/system/test_doctor_connectivity.py` pins active/standby/wedged/partial
+  uplink result classification;
+- `tests/system/test_watchdog_doctor.py` pins the watchdog doctor's uplink probe
+  delegation and no-probe behavior;
+- `tests/system/test_webminstats.py` and `tests/integration/test_cli.py` pin
+  `stats --system-resources`, including the same `since/until` window and the
+  default no-Webmin path;
+- `ops/watchdog/services.py` currently treats any HTTP response from
+  `Policy.mcp_url` as proof the MCP process is alive and restarts the active MCP
+  unit only after the configured consecutive-failure threshold.
+
+The candidate's CLI help was captured without modifying source under
+`~/.local/state/binnacle/g5-prep-fd05-characterization/`. SHA-256 records are
+stored beside the captures. The current user-visible facts are:
+
+- core doctor documents the uplink probe as part of its default report and exposes
+  `--probe/--no-probe`;
+- core stats exposes `--system-resources/--no-system-resources` and explicitly
+  describes Webmin system-status history;
+- watchdog and tunnel keep separate `doctor` commands.
+
+This existing coverage is the starting characterization. Add a new test only when a
+G5 design decision creates a behavior that is not already pinned.
+
 ## 3. Goals
 
 G5 must:
@@ -125,8 +156,41 @@ version/revision, server generation, active-call/restart-safe state, command-man
 health, and enabled capabilities. The final G5 design must narrow this list before
 implementation.
 
-Authentication, caching, response schema, failure semantics, and route path remain
-explicit design-review decisions.
+### 5.2 Minimal operational route draft
+
+Current watchdog repair does not need an administrative API. Its MCP-service decision is
+only: the unit is active, but does the local server HTTP process answer at all?
+
+The narrow draft is therefore one root-owned liveness endpoint:
+
+```text
+GET /healthz
+200 application/json
+{"status":"ok"}
+```
+
+Implementation constraints for review:
+
+- register it with FastMCP `custom_route()` on the root server, not a child;
+- `include_in_schema=False`;
+- do not expose token/config/tool payloads, active command text, paths, or host details;
+- do not add version/revision/generation fields without a concrete consumer;
+- keep the response independent of watchdog, tunnel, systemd and Linux adapters;
+- let the watchdog probe this endpoint instead of abusing the MCP endpoint merely to
+  observe that some HTTP status was returned;
+- preserve the existing consecutive-failure and rate-limit restart policy exactly.
+
+FastMCP 4.0.10 builds the MCP endpoint itself behind `RequireAuthMiddleware`, while
+additional custom routes are appended separately at the Starlette routing layer.
+Application-level authentication middleware can populate request auth context, but the
+custom route is not automatically wrapped by the MCP endpoint's required-auth wrapper.
+Because the proposed payload is deliberately non-sensitive liveness state, the design
+should either make unauthenticated local liveness explicit or add handler-level auth;
+it must not assume MCP endpoint authentication applies automatically.
+
+The path, authentication choice and exact JSON remain subject to independent G5 design
+review. This section narrows the problem; it does not authorize implementation before
+G4 closes.
 
 ## 6. Proposed responsibility boundaries
 
