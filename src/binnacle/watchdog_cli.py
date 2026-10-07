@@ -62,7 +62,7 @@ def _policy_from(cfg: WatchdogSettings, dry_run: bool) -> Policy:
         tunnel_log=cfg.tunnel_log,
         mcp_units=(SERVER_UNIT,),
         tunnel_unit=TUNNEL_UNIT,
-        mcp_url=f"http://{get_settings().serve.host}:{get_settings().serve.port}/mcp",
+        mcp_url=f"http://{get_settings().serve.host}:{get_settings().serve.port}/healthz",
         reconcile_interval_s=cfg.reconcile_interval_s,
         snapshot_interval_s=cfg.snapshot_interval_s,
         pause_file=cfg.state_file.with_suffix(".pause"),

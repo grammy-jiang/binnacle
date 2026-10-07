@@ -10,6 +10,8 @@ import os
 
 from fastmcp import FastMCP
 from fastmcp.server.auth import StaticTokenVerifier
+from starlette.requests import Request
+from starlette.responses import JSONResponse
 
 from binnacle import jobs
 from binnacle.commands_server import create_commands_server
@@ -228,6 +230,12 @@ def create_server() -> FastMCP:
             listing_command_preview_chars=settings.jobs.listing_command_preview_chars,
         )
     )
+
+    @root.custom_route("/healthz", methods=["GET"], include_in_schema=False)
+    async def healthz(request: Request) -> JSONResponse:
+        """Process liveness only; no auth, readiness, or host-state disclosure."""
+        return JSONResponse({"status": "ok"})
+
     return root
 
 

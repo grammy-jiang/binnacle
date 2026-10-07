@@ -274,10 +274,14 @@ def test_http_alive_treats_any_http_status_as_alive():
     server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     try:
-        assert wd.http_alive(f"http://127.0.0.1:{server.server_port}/mcp", timeout=3.0)
+        assert wd.http_alive(
+            f"http://127.0.0.1:{server.server_port}/healthz", timeout=3.0
+        )
     finally:
         server.shutdown()
-    assert not wd.http_alive(f"http://127.0.0.1:{server.server_port}/mcp", timeout=1.0)
+    assert not wd.http_alive(
+        f"http://127.0.0.1:{server.server_port}/healthz", timeout=1.0
+    )
 
 
 def test_stranded_metric_is_reported_when_no_demotion_covers_it():

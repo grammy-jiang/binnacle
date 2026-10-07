@@ -29,6 +29,7 @@ RUNTIME_DEPENDENCIES = {
     "orjson>=3.11.3": "search_text parses ripgrep's JSON stream and sizes results with it",
     "pydantic>=2.13.5": "the settings models and the tool parameter validation",
     "pydantic-settings>=2.15.0": "loads config.toml and the BINNACLE_ environment variables",
+    "starlette>=1.6.0": "request/response types for native FastMCP custom HTTP routes",
     "tiktoken>=0.14.0": "the tokenizer telemetry (telemetry.tokenizer)",
     "uvicorn[standard]>=0.52.4": "the ASGI server of binnacle serve and of the dev unit",
 }

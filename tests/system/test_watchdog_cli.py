@@ -208,7 +208,7 @@ def test_run_maps_watchdog_configuration_and_once_to_lifecycle(tmp_path, monkeyp
     assert seen["max_cycles"] == 1
     policy = seen["policy"]
     assert policy.dry_run is True
-    assert policy.mcp_url == "http://127.0.0.2:8123/mcp"
+    assert policy.mcp_url == "http://127.0.0.2:8123/healthz"
     assert policy.mcp_units == (cli.SERVER_UNIT,)
     assert policy.pause_file == cfg.state_file.with_suffix(".pause")
 

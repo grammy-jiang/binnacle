@@ -213,6 +213,19 @@ FastMCP.custom_route(
 
 The handler is an async Starlette request handler returning a Starlette response.
 
+Implementation characterization found that `deptry` correctly rejects those direct
+Starlette imports while Starlette is only a transitive FastMCP dependency. G5.4 must
+promote the **already locked and installed Starlette 1.6.0** to an explicit runtime
+requirement (`starlette>=1.6.0`), with its reason in the dependency contract. Keep the
+existing lock as the base, resolve offline without upgrade flags, and verify that every
+package/version/source/artifact entry is unchanged; only Binnacle's root dependency
+and requires-dist metadata may change. Do not suppress DEP003 or import Starlette
+indirectly through an undocumented SDK re-export. This is the native FastMCP handler
+contract, not a second HTTP server/framework. Rollback of G5.4 reverts this declaration
+with the handler and consumer changes; no installed package-version rollback is needed.
+Fresh amendment review: APPROVE, no findings,
+<https://chatgpt.com/c/6ac63c80-9924-83ec-beb5-abf598192562>.
+
 G5 must keep generic operational routes root-owned. Child custom routes are not the
 default because mounted child routes share the root path namespace.
 
@@ -627,8 +640,8 @@ A quiet-gate timeout is a recorded incomplete activation, not permission to rest
 busy watchdog. Bound that wait and continue only when its normal gate succeeds.
 The stable jobs manager and tunnel remain running throughout G5 activation/recovery.
 
-No G5 checkpoint changes job/resource lifecycle ownership, durable schema, dependencies,
-FastMCP Tasks, or package layout. No data migration or data rollback is required.
+No G5 checkpoint changes job/resource lifecycle ownership, durable schema, installed
+dependency versions, FastMCP Tasks, or package layout. No data migration or data rollback is required.
 G6 package relocation and facade removal wait for completed G5 evidence.
 
 ## 8. Parallel-safe work
