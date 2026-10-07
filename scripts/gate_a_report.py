@@ -14,6 +14,8 @@ import subprocess
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from scripts.gate_a_manifest import manifest_coverage
+
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src" / "binnacle"
 
@@ -194,6 +196,27 @@ def report() -> list[Cell]:
             "PENDING",
             "G6 relocation and compatibility-facade removal have not started",
             evidence="review",
+        )
+    )
+
+    unclassified, duplicate = manifest_coverage()
+    manifest_ok = not unclassified and not duplicate
+    detail_parts = [f"{len(python_files())} production modules singly classified"]
+    if unclassified:
+        detail_parts.append("unclassified=" + ",".join(unclassified))
+    if duplicate:
+        detail_parts.append(
+            "duplicate/stale="
+            + ";".join(
+                f"{path}:{','.join(groups)}"
+                for path, groups in sorted(duplicate.items())
+            )
+        )
+    cells.append(
+        Cell(
+            "architecture.g6_manifest_coverage",
+            "PASS" if manifest_ok else "FAIL",
+            "; ".join(detail_parts),
         )
     )
 

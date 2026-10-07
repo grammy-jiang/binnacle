@@ -1,3 +1,4 @@
+import scripts.gate_a_manifest as manifest
 import scripts.gate_a_report as gate_a
 
 
@@ -13,6 +14,7 @@ def test_current_report_names_known_pre_g5_gaps():
     assert cells["composition.no_duplicate_framework"].status == "PENDING"
     assert cells["architecture.fastmcp_boundary"].status == "PENDING"
     assert cells["architecture.package_convergence"].status == "PENDING"
+    assert cells["architecture.g6_manifest_coverage"].status == "PASS"
 
     assert cells["platform.process_contract"].status == "PASS"
     assert cells["platform.resource_contract"].status == "PASS"
@@ -44,3 +46,12 @@ def test_runtime_and_deploy_cells_remain_pending_in_static_report():
 def test_report_binds_to_current_exact_sha():
     sha = gate_a.current_sha()
     assert sha is not None and len(sha) == 40
+
+
+def test_g6_manifest_classifies_every_current_module_once():
+    unclassified, duplicate = gate_a.manifest_coverage()
+    assert unclassified == []
+    assert duplicate == {}
+    assert sum(len(paths) for paths in manifest.manifest_groups().values()) == len(
+        manifest.python_files()
+    )

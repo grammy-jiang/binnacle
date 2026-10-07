@@ -2,7 +2,10 @@
 
 Status: **preparation only; no package relocation is authorized yet**.
 
-Baseline: G4 final candidate `fd05b279e324235d0cf6eeddea86935de60ec1c1`.
+Baseline: G4 source baseline `fd05b279e324235d0cf6eeddea86935de60ec1c1`.
+Later G4 candidates through `c954701ed6691f4749274ea8d7ffc0ce3ec9eb08`
+change validation tests only, so this ownership inventory remains source-current pending
+the mandatory post-deploy drift check.
 This branch exists to shorten future calendar time by preparing ownership maps, static
 gate targets and a Gate A report harness. It must not move production modules until G5
 has proven the final ownership boundaries.
@@ -115,13 +118,18 @@ Candidate target ownership:
   `doctor_connectivity.py`, `doctor_jobs.py`, `doctor_provenance.py`,
   `job_manager_doctor.py`;
 - observability:
-  `logstats.py`, all `logstats_*.py`, `token_telemetry.py`;
+  `logstats.py`, all `logstats_*.py`, `token_telemetry.py`, plus the
+  G5 system-resource-history contract/composition seam;
+- Linux observability adapter:
+  current `webminstats.py`, if G5's preserved-`--system-resources` decision is
+  approved, moves behind the neutral observability contract rather than under watchdog
+  policy;
 - deployment:
   `deployment_platform.py`, `units.py`, `server_unit.py`,
   `job_manager_unit.py`.
 
-G5 may change the exact diagnostic/observability classification. Do not move these
-before that drift is resolved.
+G5 may still refine the exact diagnostics helper split. Do not move these before the
+deployed-G4 drift check and approved G5 design settle the boundaries.
 
 ### 2.9 Tunnel companion
 
@@ -142,8 +150,36 @@ Target `companions/watchdog/`:
 - `watchdog_unit.py`;
 - `watchlog.py`;
 - `ops/watchdog/*`;
-- `uplink.py`;
-- `webminstats.py` if G5 confirms Webmin remains companion-owned.
+- `uplink.py`.
+
+The current G5 design direction no longer treats `webminstats.py` as watchdog policy;
+it is tracked as a Linux observability adapter pending independent G5 approval.
+
+### 2.11 Application shell / cross-cutting modules
+
+Stay top-level until the final import graph proves a better home:
+
+- `__init__.py`;
+- `cli.py`;
+- `config.py`;
+- `errors.py`;
+- `provenance.py`.
+
+These are not an excuse for reverse dependencies. G6 may split narrow public contracts
+out of them, but must not create an umbrella `common` package.
+
+### 2.12 Manifest coverage rule
+
+Before the first relocation, every `src/binnacle/**/*.py` file must be in exactly one
+of three states:
+
+1. assigned to one target ownership group above;
+2. explicitly retained as a temporary compatibility facade in section 3; or
+3. explicitly deferred because G5 still owns the classification decision.
+
+The preparation harness should report unclassified and multiply-classified modules.
+A move is blocked while either set is non-empty. Package `__init__.py` files are
+classified with their package and are never counted as independent architecture layers.
 
 ## 3. Known compatibility facades to revisit in G6
 
