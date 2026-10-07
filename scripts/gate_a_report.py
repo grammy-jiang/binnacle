@@ -267,6 +267,65 @@ def report() -> list[Cell]:
         )
     )
 
+    companion_edge_specs = [
+        (
+            "companion.watchdog_doctor_no_core_aggregate",
+            SRC / "watchdog_doctor.py",
+            ("binnacle.doctor",),
+            "watchdog doctor no longer imports the core doctor aggregate",
+        ),
+        (
+            "companion.tunnel_doctor_no_core_connectivity_impl",
+            SRC / "tunnel_doctor.py",
+            ("binnacle.doctor_connectivity",),
+            "tunnel doctor no longer imports core connectivity implementation",
+        ),
+        (
+            "companion.watchdog_cli_no_core_cli",
+            SRC / "watchdog_cli.py",
+            ("binnacle.cli",),
+            "watchdog CLI no longer imports the core CLI aggregate",
+        ),
+        (
+            "companion.tunnel_cli_no_core_cli",
+            SRC / "tunnel_cli.py",
+            ("binnacle.cli",),
+            "tunnel CLI no longer imports the core CLI aggregate",
+        ),
+        (
+            "companion.watchdog_services_no_tunnel_doctor_impl",
+            SRC / "ops" / "watchdog" / "services.py",
+            ("binnacle.tunnel_doctor",),
+            "watchdog services no longer import tunnel doctor implementation",
+        ),
+    ]
+    for ident, path, prefixes, clean_detail in companion_edge_specs:
+        hits = any_import([path], prefixes)
+        cells.append(
+            Cell(
+                ident,
+                "FAIL" if hits else "PASS",
+                "; ".join(hits) if hits else clean_detail,
+            )
+        )
+
+    watchdog_tunnel_contract_hits = any_import(
+        [SRC / "watchdog_cli.py"], ("binnacle.tunnel_unit",)
+    )
+    cells.append(
+        Cell(
+            "companion.watchdog_tunnel_unit_contract",
+            "PENDING" if watchdog_tunnel_contract_hits else "PASS",
+            (
+                "; ".join(watchdog_tunnel_contract_hits)
+                + "; G5 must classify this as a narrow public companion contract or remove it"
+            )
+            if watchdog_tunnel_contract_hits
+            else "no watchdog CLI dependency on tunnel unit internals",
+            evidence="review" if watchdog_tunnel_contract_hits else "static",
+        )
+    )
+
     core_paths = [
         p
         for p in python_files()

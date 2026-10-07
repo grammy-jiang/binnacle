@@ -26,6 +26,13 @@ def test_current_report_names_known_pre_g5_gaps():
     assert cells["companion.core_cli_no_watchdog_webmin"].status == "FAIL"
     assert cells["companion.operational_http_surface"].status == "FAIL"
 
+    assert cells["companion.watchdog_doctor_no_core_aggregate"].status == "FAIL"
+    assert cells["companion.tunnel_doctor_no_core_connectivity_impl"].status == "FAIL"
+    assert cells["companion.watchdog_cli_no_core_cli"].status == "FAIL"
+    assert cells["companion.tunnel_cli_no_core_cli"].status == "FAIL"
+    assert cells["companion.watchdog_services_no_tunnel_doctor_impl"].status == "FAIL"
+    assert cells["companion.watchdog_tunnel_unit_contract"].status == "PENDING"
+
 
 def test_runtime_and_deploy_cells_remain_pending_in_static_report():
     cells = {cell.id: cell for cell in gate_a.report()}
