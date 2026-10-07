@@ -131,6 +131,31 @@ Candidate target ownership:
 G5 may still refine the exact diagnostics helper split. Do not move these before the
 deployed-G4 drift check and approved G5 design settle the boundaries.
 
+### 2.8.1 G5 candidate delta (pre-deployment; not G6 relocation authority)
+
+The G5 implementation candidate `dd10ef0c77e87f1c8807c652e2d07188d9add6d3`
+adds six production modules relative to deployed G4 `b074068`. The preparation
+manifest above deliberately still describes the G4 source snapshot until G5 is
+independently approved, deployed and live-verified. On G6 base transition,
+classify these new modules **exactly once** before invoking strict Gate A:
+
+| G5 addition | Intended G6 owner | Constraint |
+| --- | --- | --- |
+| `doctor_io.py` | diagnostics | Neutral bounded file-tail reader; no companion imports |
+| `doctor_render.py` | diagnostics | Shared `Check` rendering, not a core aggregate import |
+| `system_resource_contracts.py` | observability | `SystemResourceHistory` protocol; no Linux adapter import |
+| `system_resource_history.py` | observability | Lazy optional adapter composition, preserving CLI UX |
+| `tunnel_log.py` | tunnel | Narrow public tunnel-log facts used by watchdog |
+| `watchdog_connectivity.py` | watchdog | Uplink reliability diagnostics owned by watchdog |
+
+Expected module count on that unchanged G5 source snapshot is **127**. Do not
+hard-code 127 as an acceptance target: enumerate actual files and fail on every
+unclassified, duplicate or stale manifest entry. Before relocating production,
+drift-check the exact deployed G5 SHA, update manifest and compatibility-facade
+inventory, rerun only Gate A manifest/source focused tests and re-review package
+ownership. The optional resource-history seam is an observability boundary,
+not permission to move Webmin beneath watchdog.
+
 ### 2.9 Tunnel companion
 
 Target `companions/tunnel/`:
