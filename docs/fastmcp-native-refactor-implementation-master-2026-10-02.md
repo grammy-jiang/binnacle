@@ -467,6 +467,22 @@ safe.
 
 Any such relaxation must be recorded here before parallel implementation starts.
 
+### G4/G5/G6 parallel-preparation relaxation — 2026-10-07
+
+The G4 final candidate `fd05b279e324235d0cf6eeddea86935de60ec1c1` has stable
+G4 public seams and green local/CI convergence. To reduce calendar time while G4 final
+review/deployment closes, the following **preparation-only** work is allowed in isolated
+worktrees based on that exact candidate:
+
+- G5 current-code inventory, characterization, detailed design and test planning;
+- G6 ownership/relocation manifest and architecture-gate planning;
+- Gate A report/harness preparation that does not change product behavior.
+
+This relaxation does **not** authorize G5 production-source edits to G4-owned shared
+modules before G4 completion, and it does **not** authorize any G6 package relocation
+before G5 ownership boundaries are proven. Every prepared artifact must be drift-checked
+against the exact deployed G4 completion SHA before it becomes implementation authority.
+
 ## 12. Per-group design template
 
 Every detailed implementation-design document should define:
