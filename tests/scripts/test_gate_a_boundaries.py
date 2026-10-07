@@ -82,7 +82,9 @@ def test_unrelated_child_route_is_not_root_health(tmp_path, monkeypatch):
 
 @pytest.mark.parametrize("dirty", ["tracked", "untracked", None])
 def test_source_snapshot_requires_clean_tree(tmp_path, monkeypatch, dirty):
-    for name in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"):
+    for name in subprocess.check_output(
+        ["git", "rev-parse", "--local-env-vars"], text=True
+    ).splitlines():
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setattr(gate_a, "ROOT", tmp_path)
 
@@ -180,3 +182,11 @@ def test_doctor_prefix_does_not_forbid_neutral_render_helper(tmp_path, monkeypat
     source = tmp_path / "watchdog_cli.py"
     source.write_text("from binnacle.doctor_render import render\n")
     assert gate_a.any_import([source], ("binnacle.doctor",)) == []
+
+
+def test_snapshot_ignores_inherited_repository_identity(tmp_path, monkeypatch):
+    monkeypatch.setenv("GIT_DIR", str(tmp_path / "nonexistent.git"))
+    monkeypatch.setenv("GIT_WORK_TREE", str(tmp_path))
+    assert gate_a.current_sha() is not None
+    assert "GIT_DIR" not in gate_a.git_environment()
+    assert "GIT_WORK_TREE" not in gate_a.git_environment()

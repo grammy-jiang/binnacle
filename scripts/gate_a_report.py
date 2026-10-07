@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import ast
 import json
+import os
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -55,10 +56,20 @@ def any_import(paths: list[Path], prefixes: tuple[str, ...]) -> list[str]:
     return hits
 
 
+def git_environment() -> dict[str, str]:
+    names = subprocess.check_output(
+        ["git", "rev-parse", "--local-env-vars"],
+        cwd=ROOT,
+        text=True,
+    ).splitlines()
+    return {key: value for key, value in os.environ.items() if key not in names}
+
+
 def current_sha() -> str | None:
     proc = subprocess.run(
         ["git", "rev-parse", "HEAD"],
         cwd=ROOT,
+        env=git_environment(),
         capture_output=True,
         text=True,
         check=False,
@@ -107,6 +118,7 @@ def clean_snapshot() -> str | None:
     proc = subprocess.run(
         ["git", "status", "--porcelain", "--untracked-files=all"],
         cwd=ROOT,
+        env=git_environment(),
         capture_output=True,
         text=True,
         check=False,
