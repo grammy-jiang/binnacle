@@ -1,6 +1,6 @@
 # FastMCP-native refactor — implementation master plan — 2026-10-02
 
-Status: **Groups 0-3 done; G4 design ready; Groups 5-6 queued**.
+Status: **Groups 0-4 done; Groups 5-6 queued**.
 
 This is the control document for the implementation-design and implementation phases of
 the FastMCP-native, platform-neutral Binnacle refactor.
@@ -94,7 +94,7 @@ over a big-bang rewrite.
 
 ### 1.5 Design close to implementation
 
-Groups 0-3 are complete. Detailed designs for Groups 4-6 remain deferred.
+Groups 0-4 are complete. Groups 5-6 remain separate planned work.
 
 Before designing a later group:
 
@@ -128,7 +128,7 @@ Status changes belong in this document.
 | G1 | Composition foundation | G0 | foundational; mostly sequential | **done** |
 | G2 | FastMCP-native alignment | G1 | domain settings lanes after shared seams settle | **done** |
 | G3 | Commands/domain/platform seams | G2 deployed baseline | serialized integration | **done** |
-| G4 | Deployment/platform services | G1 | logs/paths may parallelize | **design ready** |
+| G4 | Deployment/platform services | G1 | logs/paths may parallelize | **done** |
 | G5 | Diagnostics, operations, companions | relevant G3/G4 public seams | selected cleanup may start earlier | queued |
 | G6 | Package convergence + Gate A | G2-G5 | convergence only | queued |
 
@@ -389,6 +389,11 @@ change, and no MCP surface change except the two explicitly reviewed safety
 corrections. G4.1 runtime paths and G4.2 service logs are the only planned
 parallel implementation lanes; lifecycle inspection, Linux provisioning and
 restart/control migration remain serialized.
+
+G4 implementation and production verification are complete. Section 26 records
+the final candidate, independent review, exact-SHA CI, live checks, and preserved
+working-tree evidence. The design narrative above remains the historical entry
+plan.
 
 ## 9. Group 5 — Diagnostics, operations and companions
 
@@ -935,3 +940,82 @@ record follows new exact-SHA CI and the canonical documentation deployment;
 it changes no production source, dependency, job protocol, or durable schema.
 The manager keeps its verified code revision across the later documentation
 commit; that commit has identical runtime source. G4-G6 remain queued.
+
+## 26. G4 production completion — 2026-10-07
+
+Implementation candidate `c954701ed6691f4749274ea8d7ffc0ce3ec9eb08`
+completed the G4 extraction from deployed G3 completion `f21f860`.
+Service logs, managed-service inspection/control, Linux provisioning, and
+runtime-path conventions now use the approved narrow boundaries. Existing
+compatibility facades remain where the design requires them. There is no
+MCP surface, dependency/lock, durable-job protocol, or on-disk schema change.
+G5/G6 implementation is not part of this completion.
+
+The [fresh independent implementation review](https://chatgpt.com/c/6ac6293e-798c-83ec-b4cd-0c9afefd9586)
+returned **APPROVE**, all four cells PASS, and no findings. It reviewed the
+complete 43-file diff and closed the previous architecture-detector findings.
+Its isolated negative probes caught generic-runner command argv and procfs-root
+construction. The reviewer did not claim to run the repository test suite.
+
+[CI run 37613814638](https://github.com/grammy-jiang/binnacle/actions/runs/37613814638)
+passed all seven required checks on that exact candidate: code quality,
+Python 3.10/3.11/3.12/3.14 tests, Python 3.13 coverage policy, and Python 3.13
+packaging. These jobs use the managed test lanes and repository gates. The
+recovery run also passed 41 focused review-regression tests, changed-file
+pre-commit, and the normal pre-push hook. Prior full local convergence on
+`fd05b27` is retained as predecessor evidence; `fd05b27..c954701` changes only
+three test files. No fresh local full matrix was claimed or repeated during
+this closeout. Current-candidate matrix/coverage/packaging evidence is the
+exact-SHA CI run above.
+
+An additional read-only operator check extracted both `f21f860` and `c954701`
+from Git. All 15 setup/mode/doctor/stats/token scenarios had byte-identical
+stdout/stderr and equal exit codes, including help, invalid arguments, setup
+dry-run, mode status, local doctor, and a fixed historical stats window.
+Mutating token rotation was not run on production. Its reviewed failure
+semantics remain covered by the focused regression tests.
+
+The canonical `scripts/deploy_smoke.py deploy c954701...` gate completed on
+2026-10-07. It loaded the candidate, passed its live smoke, and atomically
+advanced production `master` and `origin/master` plus `origin/proof-of-concept`
+to the implementation candidate. The implementation branch also pointed there.
+The stable jobs service was not restarted: PID `3051275` and its systemd
+invocation identity remained unchanged.
+
+Post-deployment evidence:
+
+- Opt-in live pytest: **3 passed**.
+- Full smoke: **20 checks passed**, with no alert or traceback.
+- Core doctor: **31 ok, 1 warn, 0 fail**. The warning records the intentionally
+  retained manager revision `01523d406732`; it is not a manager restart request.
+- Tunnel doctor: **9 ok, 0 warn, 0 fail**.
+- Watchdog doctor in full smoke: **7 ok, 6 warn, 0 fail**. The retained warnings
+  concern existing wireless preferences/demotion, tunnel log silence, and an
+  old driver stability sample. Network probes separately passed. No watchdog
+  or network repair was folded into G4.
+- Runtime versions: FastMCP/FastMCP-slim **4.0.10**, MCP/MCP-types **2.1.1**.
+- Four-profile live MCP JSON: **141833 bytes**, byte-identical to the frozen
+  baseline, with **8/6/6/8** tools. SHA256:
+  `acbc4e794ee45c1bd9dbd3a51dafa9634f101e06ed18a0b0cea36d2f32fcb61f`.
+- A [real ChatGPT read-only call](https://chatgpt.com/c/6ac62f40-8c1c-83ec-8a19-a2fadb0c23c2)
+  returned `src/binnacle/deployment_platform.py`. The actual connector call,
+  successful result, and production journal share request ID
+  `36e55f8d-95fb-49c2-9e38-8027882b8346`.
+
+The external evidence directory contains the exact review materials, checksums,
+CI response, deployment log, CLI outputs, live wire archive, and correlated
+ChatGPT proof:
+
+```text
+/home/grammy-jiang/.local/state/binnacle/g4-unblock-20261007T111035Z-bdvlz9sp
+```
+
+The unrelated production `pyproject.toml` edit was backed up, verified,
+temporarily held for the clean deployment gate, then restored byte-for-byte
+with its original mode. Its SHA256 remains
+`c11949785cc1cac2d4994e6e7bc9bba5c9392a1095b873d41ec6612013a40d9d`.
+All **440** untracked files retained the same path, bytes, mode, and type.
+The completion commit contains only this design document and the master
+control document. Its publication requires its own exact-SHA CI and canonical
+documentation deployment; the external ledger records those later transaction
+results without claiming a new runtime change or restarting the jobs manager.

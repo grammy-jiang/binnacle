@@ -1,6 +1,6 @@
 # G4 deployment/platform services — implementation design — 2026-10-06
 
-Status: **ready for implementation; independent ChatGPT design review R8 approved on 2026-10-06**.
+Status: **done; implementation, independent review, CI, deployment, and live verification complete on 2026-10-07**.
 
 Baseline: production/deployed documentation commit
 `f21f86055ebea4ae5fc14c4aa6aed6e19c3f3d1e`, whose runtime source is
@@ -1695,3 +1695,27 @@ changed by this clarification.
 With R8 approval, all G4 design entry criteria are satisfied. Implementation may
 proceed from the frozen deployed G3 baseline subject to the atomic G4.0-G4.7
 plan and the validation/rollback gates in this document.
+
+## 30. Implementation and production completion — 2026-10-07
+
+G4 is complete at implementation candidate
+`c954701ed6691f4749274ea8d7ffc0ce3ec9eb08`. The
+[fresh implementation review](https://chatgpt.com/c/6ac6293e-798c-83ec-b4cd-0c9afefd9586)
+approved all four cells with no findings. Exact-candidate
+[CI run 37613814638](https://github.com/grammy-jiang/binnacle/actions/runs/37613814638)
+passed all seven required checks. The canonical deployment succeeded and
+advanced production and both remote deployment refs to that candidate.
+
+Live pytest passed 3 tests; full smoke passed all 20 checks. Core/tunnel/watchdog
+doctors reported no failures. The preserved manager-revision warning and
+existing watchdog warnings remain visible in the evidence; no manager restart
+or unrelated host repair occurred. All 15 read-only CLI comparison scenarios
+matched the G3 baseline. Four-profile MCP JSON was byte-identical, including
+8/6/6/8 tool visibility, instructions, order, and schemas. A real ChatGPT
+read-only `list_files` call succeeded and was correlated with the server journal.
+
+Section 26 of the implementation master plan records exact SHAs, checksums,
+review/CI/ChatGPT links, validation limits, and the external evidence path.
+The original production configuration edit and 440 untracked files were
+preserved. Earlier R1-R8 sections remain historical design evidence. G5/G6
+remain separate work; this completion changes no production source.
