@@ -436,6 +436,18 @@ prove the aggregate-import edges are gone.
   resulting core-doctor output/help change is deliberate G5 behavior and must be pinned
   in the design-review packet, not smuggled in as refactor drift.
 
+**CLI compatibility decision for independent review:** keep accepting the existing
+`binnacle doctor --probe/--no-probe` switch throughout G5 so scripts do not start
+failing argument parsing merely because uplink ownership moves. After G5 the core
+doctor has no non-local uplink probe, so this switch becomes a compatibility-only
+selector with no effect on the core check set; the help text must say that explicitly
+rather than pretending the core doctor still owns network probing. `binnacle-watchdog
+doctor` is the authoritative layered uplink diagnostic. A focused CLI regression must
+prove both legacy spellings remain accepted, produce the same core-doctor checks, and
+do not import or invoke watchdog/uplink implementation. Removing the legacy switch
+entirely is deferred to G6 compatibility-facade review and requires its own public-UX
+decision.
+
 The compatibility baseline is
 tests/system/test_doctor_connectivity.py (active route fail, standby warn, partial
 reachability, no-route cases) and
