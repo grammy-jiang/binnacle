@@ -1,15 +1,13 @@
 # G5 diagnostics, operations and companions — implementation design draft — 2026-10-07
 
-Status: **parallel investigation/design draft only; not yet approved for implementation**.
+Status: **deployed-G4 drift check complete; ready for fresh independent design review; implementation not yet authorized**.
 
-Baseline: G4 source baseline `fd05b279e324235d0cf6eeddea86935de60ec1c1`.
-The later G4 candidates through `c954701ed6691f4749274ea8d7ffc0ce3ec9eb08`
-change only G4 validation tests, not production/source/script/lockfile bytes relevant to
-this design. After G4 deploy, G5.0 still rebases/drift-checks against the exact deployed
-completion SHA before implementation.
-This worktree is intentionally isolated from the G4 closeout. No G5 production-source
-change is allowed to merge until G4 is deployed, the final G4 SHA is known, and this
-design is drift-checked against that deployed baseline.
+Baseline: deployed G4 completion `b07406806ac622df00e583b0079e4b70cad76340`.
+Its runtime/source bytes are identical to the reviewed G4 implementation candidate
+`c954701ed6691f4749274ea8d7ffc0ce3ec9eb08`; the completion commit changes only the
+G4 design/master documentation. This G5 design branch was rebased onto the exact
+deployed completion before review. No G5 production-source change is authorized until
+this design receives fresh independent approval.
 
 ## 1. Purpose
 
@@ -110,6 +108,8 @@ Core/diagnostic edges that are not acceptable at Gate A:
 - `doctor_connectivity.py -> uplink.py`;
 - `cli.py -> webminstats.py`;
 - `watchdog_doctor.py -> doctor.py` (companion importing the aggregate core doctor);
+- `watchdog_cli.py -> doctor.py` and `tunnel_cli.py -> doctor.py` (lazy CLI imports
+  used only for `render()` / `render_json()`; both must move to the neutral renderer);
 - `tunnel_doctor.py -> doctor_connectivity.py` (only for the shared tail helper);
 - `watchdog_cli.py -> cli.py`;
 - `tunnel_cli.py -> cli.py`.
@@ -130,6 +130,30 @@ or doctor aggregate is not such a contract.
 This inventory is intentionally stricter than the current Import Linter configuration,
 which protects `binnacle.ops.watchdog` but does not yet encode all top-level companion
 facades. G5.5 must turn the accepted final direction into mechanical rules.
+
+### 2.5 Deployed-G4 drift check — 2026-10-07
+
+G5.0 was performed after G4 production completion. The design branch was rebased from
+the preparation baseline onto exact deployed completion
+`b07406806ac622df00e583b0079e4b70cad76340`. A source/script/dependency diff from the
+rebased G5 design HEAD back to both deployed completion and reviewed runtime candidate
+`c954701ed6691f4749274ea8d7ffc0ce3ec9eb08` is empty for `src/`, `scripts/`,
+`pyproject.toml`, and `uv.lock`.
+
+The current import inventory was re-read after the rebase with `from binnacle import X`
+expanded to the effective `binnacle.X` edge. It still contains the exact ownership
+edges this design targets: `doctor_connectivity -> uplink`, lazy
+`cli.stats -> webminstats`, `watchdog_doctor -> doctor`, lazy
+`watchdog_cli/tunnel_cli -> doctor` rendering imports,
+`tunnel_doctor -> doctor_connectivity`, `watchdog_cli/tunnel_cli -> cli`, and
+`ops/watchdog/services -> tunnel_doctor`. No new production dependency invalidates the
+planned file ownership.
+
+The deployed G4 public MCP wire baseline remains byte-identical at 141833 bytes with
+8/6/6/8 tool visibility and SHA-256
+`acbc4e794ee45c1bd9dbd3a51dafa9634f101e06ed18a0b0cea36d2f32fcb61f`. G5 must
+preserve that wire surface. G4's completion-only documentation commit does not require
+any G5 implementation redesign.
 
 ## 3. Goals
 
@@ -364,6 +388,8 @@ but `server.py` has one integration owner.
 
 - replace `watchdog_doctor -> doctor` with imports from minimal diagnostic contracts
   and companion-owned checks;
+- replace the lazy `watchdog_cli/tunnel_cli -> doctor` rendering imports with direct
+  imports from the neutral `doctor_render` module;
 - move the neutral log-tail helper out of `doctor_connectivity` so
   `tunnel_doctor -> doctor_connectivity` disappears;
 - remove `watchdog_cli -> cli` and `tunnel_cli -> cli`: companion setup/reload uses
@@ -391,6 +417,8 @@ companions depending on another application's aggregate CLI/doctor implementatio
 The final static gates are edge-specific rather than package-wide guesses:
 
 - forbid `watchdog_doctor -> binnacle.doctor`;
+- forbid `watchdog_cli -> binnacle.doctor`;
+- forbid `tunnel_cli -> binnacle.doctor`;
 - forbid `tunnel_doctor -> binnacle.doctor_connectivity`;
 - forbid `watchdog_cli -> binnacle.cli`;
 - forbid `tunnel_cli -> binnacle.cli`;
@@ -418,7 +446,12 @@ competing edits after the deployed-G4 drift check.
 - move _tail_lines() out of doctor_connectivity.py into a neutral file-I/O helper
   (planned doctor_io.py) consumed by core/tunnel/watchdog diagnostics;
 - migrate companion imports directly to doctor_contracts, doctor_render and
-  doctor_io; companion code must not import the doctor.py aggregate.
+  doctor_io; both companion doctor modules and the `doctor` subcommands in
+  `watchdog_cli.py` / `tunnel_cli.py` must not import the doctor.py aggregate;
+- for the existing `Systemctl` / `systemctl` / `unit_state` compatibility needed by
+  companion diagnostic tests, importing the narrow G4-backed primitives from
+  `doctor_common.py` is permitted during G5; do not route those names back through
+  `doctor.py`. Broad relocation/removal of that compatibility facade remains G6 work.
 
 Characterization to preserve: tests/system/test_doctor.py render/JSON exit-code
 behavior plus the current watchdog/tunnel doctor output tests. New static tests must
