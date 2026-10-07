@@ -404,6 +404,100 @@ The final static gates are edge-specific rather than package-wide guesses:
 Each rule gets a tiny synthetic/AST regression proving the prohibited former import
 shape is caught; do not rely only on scanning the current tree.
 
+### G5.5.2 Exact file/test ownership plan
+
+The implementation is intentionally file-bounded so G5 can be split without
+competing edits after the deployed-G4 drift check.
+
+#### Shared diagnostic contracts / rendering
+
+- keep doctor_contracts.py as the dependency-free Check/status record API;
+- move doctor.py::render() and render_json() into a neutral rendering module
+  (planned doctor_render.py) and leave compatibility imports in doctor.py only
+  for the duration of G5;
+- move _tail_lines() out of doctor_connectivity.py into a neutral file-I/O helper
+  (planned doctor_io.py) consumed by core/tunnel/watchdog diagnostics;
+- migrate companion imports directly to doctor_contracts, doctor_render and
+  doctor_io; companion code must not import the doctor.py aggregate.
+
+Characterization to preserve: tests/system/test_doctor.py render/JSON exit-code
+behavior plus the current watchdog/tunnel doctor output tests. New static tests must
+prove the aggregate-import edges are gone.
+
+#### Reliability/uplink ownership
+
+- move check_uplink() out of doctor_connectivity.py into a watchdog/reliability
+  diagnostic module colocated with the existing uplink.py probe model;
+- keep low-level uplink.py route/probe semantics intact; G5 changes ownership and
+  composition, not probe algorithms;
+- watchdog_doctor.run_all() becomes the only owner of the full layered uplink
+  diagnostic;
+- core doctor.run_all() stops composing the watchdog/reliability uplink check. Any
+  resulting core-doctor output/help change is deliberate G5 behavior and must be pinned
+  in the design-review packet, not smuggled in as refactor drift.
+
+The compatibility baseline is
+tests/system/test_doctor_connectivity.py (active route fail, standby warn, partial
+reachability, no-route cases) and
+tests/system/test_watchdog_doctor.py (probe delegation and probe=False).
+Move/retarget those tests with the implementation rather than duplicating them.
+
+#### System-resource history seam
+
+- add system_resource_contracts.py with only the
+  SystemResourceHistory.render_window(since, until) protocol;
+- add one explicit observability composition module
+  (planned system_resource_history.py) that lazily constructs the Linux/Webmin
+  adapter;
+- retain webminstats.py as the concrete Linux observability implementation during G5;
+- change cli.stats() to import only the contract/composition seam and construct/read
+  the provider only inside the system_resources branch.
+
+The current behavioral baseline is tests/system/test_webminstats.py and
+tests/integration/test_cli.py::test_stats_only_loads_webmin_history_when_requested.
+Add only seam-specific tests: no provider construction when the flag is false, exact
+since/until forwarding when true, and an AST/import regression forbidding
+cli.py -> webminstats.py.
+
+#### Operational HTTP
+
+- the only G5 server-route edit is in server.py::create_server(): register one root
+  FastMCP custom_route('/healthz', ['GET'], include_in_schema=False);
+- the handler is independent of auth/systemd/watchdog state and returns exactly
+  200 application/json {"status":"ok"};
+- change watchdog policy construction in watchdog_cli.py from the current /mcp
+  liveness URL to /healthz; do not alter failure thresholds, restart rate limits or
+  repair ordering;
+- keep ops/watchdog/services.py::http_alive() semantics that any HTTP response proves
+  transport/process liveness. The route change makes the normal case a clean 200 rather
+  than relying on MCP authentication failure as a liveness signal.
+
+Add focused in-process/HTTP tests for unauthenticated /healthz, exact payload,
+include_in_schema=False, unchanged authenticated /mcp behavior, and unchanged MCP
+wire snapshots. Retarget the existing HTTP-alive test from /mcp to /healthz.
+
+#### Companion CLI and tunnel-log cleanup
+
+- watchdog_cli.py and tunnel_cli.py replace private binnacle.cli imports with the
+  G4 service provisioner/inspector composition plus server_unit.SERVER_UNIT;
+- move scan_tunnel_log() and its result record from tunnel_doctor.py into a
+  tunnel-owned non-rendering helper (planned tunnel_log.py);
+- tunnel_doctor.py and ops/watchdog/services.py both consume that helper;
+- watchdog_cli.py -> tunnel_unit.TUNNEL_UNIT remains the sole allowed
+  watchdog-to-tunnel identity import.
+
+The corresponding static regression must reject every former aggregate edge and reject
+any widening of the tunnel_unit import beyond TUNNEL_UNIT. The current
+tests/system/test_tunnel_checks.py::test_scan_tunnel_log_reports_the_last_forwarded_command
+moves with the helper and remains the behavioral baseline.
+
+#### Integration ownership
+
+server.py, cli.py, watchdog_cli.py and tunnel_cli.py each have one integration
+owner during implementation. Parallel workers may prepare contracts/adapters/tests, but
+must not concurrently edit those four files. G5.2/G5.3/G5.4 can still run in parallel
+once G5.1 contracts settle by handing their integration patches to those owners.
+
 ### G5.6 — convergence
 
 - server construction with watchdog imports blocked;
