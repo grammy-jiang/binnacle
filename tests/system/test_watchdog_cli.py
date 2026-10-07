@@ -115,7 +115,7 @@ def test_setup_refuses_foreign_watchdog_unit(tmp_path, monkeypatch, capsys):
 
 
 def test_doctor_uses_companion_checks_and_core_renderer(monkeypatch, capsys):
-    from binnacle import doctor as core_doctor
+    from binnacle import doctor_render as core_doctor
     from binnacle import watchdog_doctor
 
     seen = []
@@ -165,7 +165,7 @@ def test_setup_real_path_writes_only_watchdog_unit(tmp_path, monkeypatch, capsys
 
 
 def test_doctor_json_uses_json_renderer(monkeypatch, capsys):
-    from binnacle import doctor as core_doctor
+    from binnacle import doctor_render as core_doctor
     from binnacle import watchdog_doctor
 
     monkeypatch.setattr(watchdog_doctor, "run_all", lambda probe=True: ["check"])

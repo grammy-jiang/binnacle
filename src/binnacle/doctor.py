@@ -10,12 +10,11 @@ the CLI only renders and tests can fake systemctl, procfs, HTTP, and journal IO.
 ``ok`` carries the measured value.
 """
 
-import json
 import os
 import re
 import shutil
-from collections.abc import Callable, Iterable, Mapping
-from dataclasses import asdict, dataclass
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from pathlib import Path
 
 from binnacle import doctor_common as _doctor_common
@@ -29,6 +28,7 @@ from binnacle.deployment_platform import (
 from binnacle.doctor_common import Check, fail, ok, warn
 from binnacle.doctor_connectivity import _tail_lines, check_endpoint, check_uplink
 from binnacle.doctor_provenance import check_provenance
+from binnacle.doctor_render import render, render_json
 from binnacle.job_manager_doctor import check_job_manager
 from binnacle.provenance import runtime_provenance
 from binnacle.service_lifecycle_contracts import ManagedServiceInspector
@@ -42,6 +42,8 @@ __all__ = [
     "Systemctl",
     "_job_state_safe",
     "_tail_lines",
+    "render",
+    "render_json",
     "server_busy_reasons",
     "systemctl",
     "unit_state",
@@ -401,23 +403,3 @@ def run_all(dep: Deployment, since: str = "-1 hour", probe: bool = True) -> list
     if jobs_active:
         checks += check_journal(jobs_active, since)
     return checks
-
-
-def render(checks: Iterable[Check]) -> tuple[str, int]:
-    """Human-readable report and the process exit code (1 on any fail)."""
-    label = {"ok": "ok  ", "warn": "WARN", "fail": "FAIL"}
-    lines = ["binnacle doctor"]
-    counts = {"ok": 0, "warn": 0, "fail": 0}
-    for c in checks:
-        counts[c.status] += 1
-        lines.append(f"  [{label[c.status]}] {c.group}: {c.detail}")
-        if c.hint and c.status != "ok":
-            lines.append(f"         hint: {c.hint}")
-    lines.append(f"{counts['ok']} ok, {counts['warn']} warn, {counts['fail']} fail")
-    return "\n".join(lines), 1 if counts["fail"] else 0
-
-
-def render_json(checks: Iterable[Check]) -> tuple[str, int]:
-    items = [asdict(c) for c in checks]
-    code = 1 if any(c["status"] == "fail" for c in items) else 0
-    return json.dumps({"checks": items, "exit_code": code}, indent=2), code

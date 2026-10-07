@@ -2,7 +2,6 @@
 with the companions."""
 
 import json
-import os
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -14,6 +13,9 @@ from binnacle.doctor_common import (
     ok,
     warn,
 )
+from binnacle.doctor_io import _tail_lines
+
+__all__ = ["_tail_lines", "check_endpoint", "check_uplink"]
 
 _INIT = json.dumps(
     {
@@ -89,26 +91,6 @@ def check_endpoint(url: str, token_file: Path, timeout: float = 5.0) -> list[Che
     else:
         out.append(warn("endpoint", f"authenticated initialize returned HTTP {auth}"))
     return out
-
-
-def _tail_lines(path: Path, max_bytes: int = 512 * 1024) -> list[str]:
-    """Last lines of a file, without reading all of it.
-
-    The tunnel log runs to megabytes within a day; only the tail says
-    anything about the poller's current state.
-    """
-    try:
-        with path.open("rb") as fh:
-            fh.seek(0, os.SEEK_END)
-            size = fh.tell()
-            fh.seek(max(0, size - max_bytes))
-            raw = fh.read()
-    except OSError:
-        return []
-    text = raw.decode("utf-8", errors="replace")
-    lines = text.splitlines()
-    # A partial first line is likely when we seek into the middle.
-    return lines[1:] if size > max_bytes and lines else lines
 
 
 def check_uplink(

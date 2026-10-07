@@ -1,13 +1,15 @@
 # G5 diagnostics, operations and companions — implementation design draft — 2026-10-07
 
-Status: **deployed-G4 drift check complete; ready for fresh independent design review; implementation not yet authorized**.
+Status: **implementing; fresh R2 design review APPROVE, all four cells PASS**.
 
 Baseline: deployed G4 completion `b07406806ac622df00e583b0079e4b70cad76340`.
 Its runtime/source bytes are identical to the reviewed G4 implementation candidate
 `c954701ed6691f4749274ea8d7ffc0ce3ec9eb08`; the completion commit changes only the
 G4 design/master documentation. This G5 design branch was rebased onto the exact
-deployed completion before review. No G5 production-source change is authorized until
-this design receives fresh independent approval.
+deployed completion before review. Fresh independent approval is recorded at
+<https://chatgpt.com/c/6ac6383c-dd54-83ec-be77-3b688670053c>.
+G5.0 baseline: 191 focused tests pass, architecture/import/strict-size gates pass,
+and the 141833-byte four-profile wire archive matches the deployed SHA256 below.
 
 ## 1. Purpose
 

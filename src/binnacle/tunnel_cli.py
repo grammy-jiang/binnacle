@@ -169,11 +169,13 @@ def restart(force: bool = False, window_s: float = 30.0) -> None:
 def doctor(as_json: Annotated[bool, cyclopts.Parameter(name="--json")] = False) -> None:
     """Check the tunnel side: the unit file against what setup writes, the
     process it started, the profile config, the health port and the poller."""
-    from binnacle import doctor as core_doctor
+    from binnacle import doctor_render
     from binnacle import tunnel_doctor as checks
 
     results = checks.run_all()
-    text, code = (core_doctor.render_json if as_json else core_doctor.render)(results)
+    text, code = (doctor_render.render_json if as_json else doctor_render.render)(
+        results
+    )
     print(text)
     raise SystemExit(code)
 

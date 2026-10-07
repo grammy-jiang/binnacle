@@ -228,7 +228,7 @@ def test_restart_reports_a_failed_restart(host, capsys, monkeypatch):
 
 
 def test_doctor_uses_companion_checks_and_core_renderers(monkeypatch, capsys):
-    from binnacle import doctor as core_doctor
+    from binnacle import doctor_render as core_doctor
 
     monkeypatch.setattr(tunnel_doctor, "run_all", lambda: ["check"])
     monkeypatch.setattr(core_doctor, "render", lambda checks: ("tunnel healthy", 0))

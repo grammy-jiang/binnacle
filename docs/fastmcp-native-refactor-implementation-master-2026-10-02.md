@@ -129,7 +129,7 @@ Status changes belong in this document.
 | G2 | FastMCP-native alignment | G1 | domain settings lanes after shared seams settle | **done** |
 | G3 | Commands/domain/platform seams | G2 deployed baseline | serialized integration | **done** |
 | G4 | Deployment/platform services | G1 | logs/paths may parallelize | **done** |
-| G5 | Diagnostics, operations, companions | relevant G3/G4 public seams | selected cleanup may start earlier | queued |
+| G5 | Diagnostics, operations, companions | relevant G3/G4 public seams | selected cleanup may start earlier | implementing |
 | G6 | Package convergence + Gate A | G2-G5 | convergence only | queued |
 
 ## 4. Group 0 — Stable FastMCP 4 baseline
@@ -1045,3 +1045,14 @@ The completion commit contains only this design document and the master
 control document. Its publication requires its own exact-SHA CI and canonical
 documentation deployment; the external ledger records those later transaction
 results without claiming a new runtime change or restarting the jobs manager.
+
+## G5 implementation entry — 2026-10-07
+
+The deployed G4 completion is `b074068`. G5 design revision 2 passed all four
+independent review cells with no findings:
+<https://chatgpt.com/c/6ac6383c-dd54-83ec-be77-3b688670053c>.
+The isolated implementation branch starts from the deployed baseline plus the
+reviewed design. G5.0 has 191 passing focused tests, clean architecture/import/size
+gates and identical four-profile wire bytes. Implementation may proceed in green
+G5.1-G5.5 checkpoints. G6 runs preparation checks in parallel; package relocation
+and facade deletion remain deferred until G5 is deployed and verified.

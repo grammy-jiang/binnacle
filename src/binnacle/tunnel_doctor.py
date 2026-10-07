@@ -26,7 +26,7 @@ from binnacle.doctor_common import (
     unit_state,
     warn,
 )
-from binnacle.doctor_connectivity import _tail_lines
+from binnacle.doctor_io import _tail_lines
 from binnacle.server_unit import SERVER_UNIT
 from binnacle.service_log_contracts import ServiceLogError
 from binnacle.tunnel_unit import (
