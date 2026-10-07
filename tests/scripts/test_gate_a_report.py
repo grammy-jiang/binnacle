@@ -3,7 +3,7 @@ import scripts.gate_a_manifest as manifest
 import scripts.gate_a_report as gate_a
 
 
-def test_current_report_names_known_pre_g5_gaps():
+def test_current_report_confirms_g5_boundary_closure():
     cells = {cell.id: cell for cell in gate_a.report()}
 
     assert cells["composition.stable_fastmcp_4"].status == "PASS"
@@ -24,17 +24,16 @@ def test_current_report_names_known_pre_g5_gaps():
     assert cells["platform.managed_service_contract"].status == "PASS"
     assert cells["platform.runtime_path_contract"].status == "PASS"
 
-    # Preparation baseline only: these are exactly the G5 gaps this branch is
-    # meant to make visible. Update this test when G5 closes them.
-    assert cells["companion.core_doctor_no_watchdog_uplink"].status == "FAIL"
-    assert cells["companion.core_cli_no_watchdog_webmin"].status == "FAIL"
-    assert cells["companion.operational_http_surface"].status == "FAIL"
+    # G5 is deployed: these ownership boundaries are now the G6 baseline.
+    assert cells["companion.core_doctor_no_watchdog_uplink"].status == "PASS"
+    assert cells["companion.core_cli_no_watchdog_webmin"].status == "PASS"
+    assert cells["companion.operational_http_surface"].status == "PASS"
 
-    assert cells["companion.watchdog_doctor_no_core_aggregate"].status == "FAIL"
-    assert cells["companion.tunnel_doctor_no_core_connectivity_impl"].status == "FAIL"
-    assert cells["companion.watchdog_cli_no_core_cli"].status == "FAIL"
-    assert cells["companion.tunnel_cli_no_core_cli"].status == "FAIL"
-    assert cells["companion.watchdog_services_no_tunnel_doctor_impl"].status == "FAIL"
+    assert cells["companion.watchdog_doctor_no_core_aggregate"].status == "PASS"
+    assert cells["companion.tunnel_doctor_no_core_connectivity_impl"].status == "PASS"
+    assert cells["companion.watchdog_cli_no_core_cli"].status == "PASS"
+    assert cells["companion.tunnel_cli_no_core_cli"].status == "PASS"
+    assert cells["companion.watchdog_services_no_tunnel_doctor_impl"].status == "PASS"
     assert cells["companion.watchdog_tunnel_unit_contract"].status == "PASS"
 
 
@@ -57,6 +56,21 @@ def test_g6_manifest_classifies_every_current_module_once():
     assert sum(len(paths) for paths in manifest.manifest_groups().values()) == len(
         manifest.python_files()
     )
+
+
+def test_g5_additions_have_expected_g6_owners():
+    groups = manifest.manifest_groups()
+    expected = {
+        "doctor_io.py": "diagnostics",
+        "doctor_render.py": "diagnostics",
+        "system_resource_contracts.py": "observability",
+        "system_resource_history.py": "observability",
+        "tunnel_log.py": "tunnel",
+        "watchdog_connectivity.py": "watchdog",
+    }
+    for path, owner in expected.items():
+        assert path in groups[owner]
+        assert [group for group, paths in groups.items() if path in paths] == [owner]
 
 
 def test_g6_compatibility_facades_are_present_and_singly_classified():

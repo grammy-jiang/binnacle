@@ -1,27 +1,28 @@
 # G6 package convergence + Gate A preparation — 2026-10-07
 
-Status: **preparation only; no package relocation is authorized yet**.
+Status: **G5 drift-check complete; G6 package-ownership re-review pending before relocation**.
 
-Baseline: G4 source baseline `fd05b279e324235d0cf6eeddea86935de60ec1c1`.
-Later G4 candidates through `c954701ed6691f4749274ea8d7ffc0ce3ec9eb08`
-change validation tests only, so this ownership inventory remains source-current pending
-the mandatory post-deploy drift check.
-This branch exists to shorten future calendar time by preparing ownership maps, static
-gate targets and a Gate A report harness. It must not move production modules until G5
-has proven the final ownership boundaries.
+Baseline: deployed G5 completion `8218567f3af8c2157530ac5aa4af3bd4e99cc61b`.
+Its production-source bytes are identical to reviewed/runtime candidate
+`dd10ef0c77e87f1c8807c652e2d07188d9add6d3`; the completion commit changes only
+the G5 design/master documentation. This branch was rebased onto that exact deployed
+completion before the G6 drift check. The ownership manifest now includes every G5
+addition exactly once. Production relocation remains blocked only until the required
+fresh package-ownership review confirms this post-G5 manifest.
 
 ## 1. Current baseline
 
-Current G4-candidate evidence used by this preparation:
+Current deployed-G5 evidence used by this preparation:
 
-- 121 production modules;
-- architecture checker: 0 forbidden reverse dependencies;
-- Import Linter: 15 contracts kept;
-- composition/server focused baseline: 40 passed;
+- 127 production modules, all singly classified by the G6 manifest;
+- the G5 exact candidate already passed its final architecture/import convergence;
+- all eight previously exposed G5 companion/ownership gaps now report PASS;
 - public product domains remain Files, Search and Commands;
-- G3/G4 platform contracts already exist at top level.
+- G3/G4 platform contracts remain the platform boundary baseline;
+- G5 runtime/deploy/client evidence remains external evidence, not a static inference.
 
-This preparation does not claim Gate A. Companion isolation is still incomplete.
+This preparation does not claim Gate A. Package convergence and the final external
+acceptance cells remain pending G6 implementation.
 
 ## 2. Target ownership manifest
 
@@ -106,8 +107,8 @@ Target `platform/linux/`:
 - `service_unit_linux.py`;
 - `runtime_paths_linux.py`.
 
-Composition modules such as `deployment_platform.py` are classified separately until
-G5 confirms their final ownership.
+Composition modules such as `deployment_platform.py` remain separately classified by
+the now-deployed G5 ownership boundary.
 
 ### 2.8 Diagnostics / observability / deployment
 
@@ -121,23 +122,20 @@ Candidate target ownership:
   `logstats.py`, all `logstats_*.py`, `token_telemetry.py`, plus the
   G5 system-resource-history contract/composition seam;
 - Linux observability adapter:
-  current `webminstats.py`, if G5's preserved-`--system-resources` decision is
-  approved, moves behind the neutral observability contract rather than under watchdog
-  policy;
+  current `webminstats.py` moves behind the deployed neutral observability contract
+  rather than under watchdog policy;
 - deployment:
   `deployment_platform.py`, `units.py`, `server_unit.py`,
   `job_manager_unit.py`.
 
-G5 may still refine the exact diagnostics helper split. Do not move these before the
-deployed-G4 drift check and approved G5 design settle the boundaries.
+G5 has settled the diagnostics helper split. The G6 package-ownership re-review is the
+remaining pre-relocation boundary for these modules.
 
-### 2.8.1 G5 candidate delta (pre-deployment; not G6 relocation authority)
+### 2.8.1 G5 deployed additions
 
-The G5 implementation candidate `dd10ef0c77e87f1c8807c652e2d07188d9add6d3`
-adds six production modules relative to deployed G4 `b074068`. The preparation
-manifest above deliberately still describes the G4 source snapshot until G5 is
-independently approved, deployed and live-verified. On G6 base transition,
-classify these new modules **exactly once** before invoking strict Gate A:
+The deployed G5 runtime candidate `dd10ef0c77e87f1c8807c652e2d07188d9add6d3`
+adds six production modules relative to G4 `b074068`. The post-deploy G6 drift check
+classifies these modules **exactly once** before any package relocation:
 
 | G5 addition | Intended G6 owner | Constraint |
 | --- | --- | --- |
@@ -148,13 +146,13 @@ classify these new modules **exactly once** before invoking strict Gate A:
 | `tunnel_log.py` | tunnel | Narrow public tunnel-log facts used by watchdog |
 | `watchdog_connectivity.py` | watchdog | Uplink reliability diagnostics owned by watchdog |
 
-Expected module count on that unchanged G5 source snapshot is **127**. Do not
-hard-code 127 as an acceptance target: enumerate actual files and fail on every
-unclassified, duplicate or stale manifest entry. Before relocating production,
-drift-check the exact deployed G5 SHA, update manifest and compatibility-facade
-inventory, rerun only Gate A manifest/source focused tests and re-review package
-ownership. The optional resource-history seam is an observability boundary,
-not permission to move Webmin beneath watchdog.
+The deployed source snapshot contains **127** production modules. The harness does not
+hard-code 127 as an acceptance target: it enumerates actual files and fails on every
+unclassified, duplicate or stale manifest entry. The exact deployed G5 SHA is now the
+branch base, the six additions are classified, the compatibility-facade inventory is
+intact, and the focused manifest/source tests are the re-review evidence. The optional
+resource-history seam is an observability boundary, not permission to move Webmin
+beneath watchdog.
 
 ### 2.9 Tunnel companion
 
