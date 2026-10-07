@@ -18,7 +18,7 @@ from pathlib import Path
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from scripts.gate_a_manifest import manifest_coverage
+from scripts.gate_a_manifest import compatibility_facade_coverage, manifest_coverage
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src" / "binnacle"
@@ -238,6 +238,32 @@ def report() -> list[Cell]:
             "architecture.g6_manifest_coverage",
             "PASS" if manifest_ok else "FAIL",
             "; ".join(detail_parts),
+        )
+    )
+
+    missing_facades, facade_owners = compatibility_facade_coverage()
+    facade_bad = {
+        path: groups for path, groups in facade_owners.items() if len(groups) != 1
+    }
+    facade_ok = not missing_facades and not facade_bad
+    facade_detail = [
+        f"{len(facade_owners)} compatibility facades tracked before G6 removal review"
+    ]
+    if missing_facades:
+        facade_detail.append("missing=" + ",".join(missing_facades))
+    if facade_bad:
+        facade_detail.append(
+            "ownership="
+            + ";".join(
+                f"{path}:{','.join(groups) or '<none>'}"
+                for path, groups in sorted(facade_bad.items())
+            )
+        )
+    cells.append(
+        Cell(
+            "architecture.g6_compatibility_facade_inventory",
+            "PASS" if facade_ok else "FAIL",
+            "; ".join(facade_detail),
         )
     )
 

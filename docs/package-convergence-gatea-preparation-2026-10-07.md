@@ -197,6 +197,11 @@ Do not delete these during preparation:
 G6 should remove only facades proven obsolete after all internal callers are migrated.
 Public CLI/MCP compatibility must not be casually broken by directory cleanup.
 
+The preparation harness pins this exact facade inventory and requires every listed
+facade to exist and belong to exactly one ownership group before relocation starts.
+This is a preparation PASS only; it does not mean any facade is removable. Actual
+removal still requires caller migration plus focused compatibility evidence in G6.
+
 ## 4. Proposed relocation order after G5
 
 Relocation should be serialized by dependency direction:

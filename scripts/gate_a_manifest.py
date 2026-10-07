@@ -134,3 +134,30 @@ def manifest_coverage() -> tuple[list[str], dict[str, list[str]]]:
     for path in sorted(set(owners) - actual):
         duplicate[path] = ["stale-manifest-entry", *owners[path]]
     return unclassified, duplicate
+
+
+def compatibility_facades() -> set[str]:
+    """Current compatibility facades that G6 must review before removal."""
+    return {
+        "jobs.py",
+        "watchdog.py",
+        "logstats.py",
+        "logstats_io.py",
+        "service_journal.py",
+        "service_unit_linux.py",
+        "units.py",
+        "tools/search_text.py",
+    }
+
+
+def compatibility_facade_coverage() -> tuple[list[str], dict[str, list[str]]]:
+    """Return missing facades and their current ownership groups."""
+    actual = {path.relative_to(SRC).as_posix() for path in python_files()}
+    missing = sorted(compatibility_facades() - actual)
+    groups = manifest_groups()
+    owners: dict[str, list[str]] = {}
+    for facade in sorted(compatibility_facades() & actual):
+        owners[facade] = sorted(
+            group for group, paths in groups.items() if facade in paths
+        )
+    return missing, owners

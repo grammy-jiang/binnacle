@@ -15,6 +15,7 @@ def test_current_report_names_known_pre_g5_gaps():
     assert cells["architecture.fastmcp_boundary"].status == "PENDING"
     assert cells["architecture.package_convergence"].status == "PENDING"
     assert cells["architecture.g6_manifest_coverage"].status == "PASS"
+    assert cells["architecture.g6_compatibility_facade_inventory"].status == "PASS"
 
     assert cells["platform.process_contract"].status == "PASS"
     assert cells["platform.resource_contract"].status == "PASS"
@@ -55,6 +56,14 @@ def test_g6_manifest_classifies_every_current_module_once():
     assert sum(len(paths) for paths in manifest.manifest_groups().values()) == len(
         manifest.python_files()
     )
+
+
+def test_g6_compatibility_facades_are_present_and_singly_classified():
+    missing, owners = manifest.compatibility_facade_coverage()
+
+    assert missing == []
+    assert set(owners) == manifest.compatibility_facades()
+    assert all(len(groups) == 1 for groups in owners.values())
 
 
 def test_watchdog_tunnel_contract_allows_only_tunnel_unit_name(tmp_path):
