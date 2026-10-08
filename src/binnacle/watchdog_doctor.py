@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from binnacle import units
+from binnacle.deployment import units
 from binnacle.diagnostics.doctor_contracts import Check, fail, ok, warn
 from binnacle.diagnostics.doctor_io import _tail_lines
 from binnacle.doctor_common import Systemctl, systemctl, unit_state

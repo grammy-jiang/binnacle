@@ -10,7 +10,7 @@ depend on Binnacle core; core must not import it.
 from collections.abc import Mapping
 from pathlib import Path
 
-from binnacle import units
+from binnacle.deployment import units
 
 TUNNEL_UNIT = "binnacle-tunnel.service"
 OWNER = "binnacle-tunnel"

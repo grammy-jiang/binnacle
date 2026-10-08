@@ -13,8 +13,9 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 
-from binnacle import units
 from binnacle.config import get_settings
+from binnacle.deployment import units
+from binnacle.deployment.server_unit import SERVER_UNIT
 from binnacle.doctor_common import (
     Check,
     Systemctl,
@@ -27,7 +28,6 @@ from binnacle.doctor_common import (
 )
 from binnacle.observability import logstats
 from binnacle.platform.contracts.service_log_contracts import ServiceLogError
-from binnacle.server_unit import SERVER_UNIT
 from binnacle.tunnel_log import TunnelLogStatus, scan_tunnel_log
 from binnacle.tunnel_unit import (
     OWNER,

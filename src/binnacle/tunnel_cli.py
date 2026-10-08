@@ -17,14 +17,14 @@ from typing import Annotated
 
 import cyclopts
 
-from binnacle import units
 from binnacle.config import get_settings
+from binnacle.deployment import units
+from binnacle.deployment.server_unit import SERVER_UNIT
 from binnacle.platform.deployment_platform import (
     create_linux_provisioner,
     create_service_controller,
     create_service_inspector,
 )
-from binnacle.server_unit import SERVER_UNIT
 from binnacle.tunnel_unit import (
     PROFILE,
     TUNNEL_UNIT,

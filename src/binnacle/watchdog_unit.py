@@ -7,7 +7,7 @@ core must not import it.
 
 from collections.abc import Mapping
 
-from binnacle import units
+from binnacle.deployment import units
 
 WATCHDOG_UNIT = "binnacle-watchdog.service"
 OWNER = "binnacle-watchdog"

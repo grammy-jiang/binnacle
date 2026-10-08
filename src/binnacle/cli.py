@@ -21,7 +21,8 @@ import cyclopts
 
 from binnacle import doctor_jobs, units
 from binnacle.config import get_settings
-from binnacle.job_manager_unit import JOBS_UNIT, render_job_manager_unit
+from binnacle.deployment.job_manager_unit import JOBS_UNIT, render_job_manager_unit
+from binnacle.deployment.server_unit import SERVER_UNIT, render_server_unit
 from binnacle.platform.deployment_platform import (
     create_linux_provisioner,
     create_service_controller,
@@ -31,7 +32,6 @@ from binnacle.platform.linux.service_provisioning_linux import (
     LinuxServiceProvisioner,
     PlannedUnit,
 )
-from binnacle.server_unit import SERVER_UNIT, render_server_unit
 
 app = cyclopts.App(
     name="binnacle",

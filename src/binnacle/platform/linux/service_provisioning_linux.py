@@ -9,12 +9,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
-from binnacle import units
-from binnacle.job_manager_unit import (
+from binnacle.deployment import units
+from binnacle.deployment.job_manager_unit import (
     job_manager_params,
     job_manager_unit_spec,
 )
-from binnacle.server_unit import server_params, server_unit_spec
+from binnacle.deployment.server_unit import server_params, server_unit_spec
 
 UNIT_DIR = units.UNIT_DIR
 DEFAULT_BACKUP_DIR = Path.home() / ".local" / "state" / "binnacle" / "unit-backups"

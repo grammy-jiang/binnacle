@@ -11,11 +11,11 @@ from typing import Annotated
 
 import cyclopts
 
-from binnacle import units
 from binnacle.config import get_settings
+from binnacle.deployment import units
+from binnacle.deployment.server_unit import SERVER_UNIT
 from binnacle.ops.watchdog.config import Policy, UsbLinkPolicy
 from binnacle.platform.deployment_platform import create_linux_provisioner
-from binnacle.server_unit import SERVER_UNIT
 from binnacle.tunnel_unit import TUNNEL_UNIT
 from binnacle.watchdog_config import WatchdogSettings, get_watchdog_settings
 from binnacle.watchdog_unit import OWNER, WATCHDOG_UNIT, watchdog_unit_spec
