@@ -379,3 +379,11 @@ A newly staged cross-package monkeypatch-propagation assertion was not part of
 the deployed contract; focused behavioral and injected-runner regression tests
 replace that assertion. No Import Linter exemption or lifecycle change is made.
 Integration, Gate A convergence, independent final review and deployment remain pending.
+
+Implementation checkpoint: `07d423a6e93b03b90b794a01cd9bda91abd732d9`.
+Focused Gate A boundary, service-unit, provisioning and doctor tests passed;
+22 Import Linter contracts kept, 0 broken. Changed-file commit hooks passed.
+Original staged service-unit wave remains unmodified and unmerged; its earlier
+mypy failure was tied to the older `f5a7044` baseline and does not recur on
+integration after the already-committed Webmin fix. No full convergence,
+final-review, CI, live MCP or deployment evidence is claimed at this checkpoint.
