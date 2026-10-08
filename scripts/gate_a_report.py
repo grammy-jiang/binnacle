@@ -103,7 +103,7 @@ def product_domain_files() -> list[Path]:
 
 
 def companion_modules() -> tuple[str, ...]:
-    return tuple(
+    return ("binnacle.companions.watchdog", "binnacle.companions.tunnel") + tuple(
         "binnacle." + p.relative_to(SRC).with_suffix("").as_posix().replace("/", ".")
         for p in group_paths("watchdog", "tunnel")
         if p.name != "__init__.py"
@@ -305,6 +305,7 @@ def report() -> list[Cell]:
         )
 
     linux_impls = (
+        "binnacle.platform.linux",
         "binnacle.platform.linux.job_process",
         "binnacle.platform.linux.job_cgroup",
         "binnacle.platform.linux.service_systemd",

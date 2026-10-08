@@ -13,6 +13,7 @@
     "src_root": "src",
     "companions": {
       "watchdog": [
+        "binnacle.companions.watchdog",
         "binnacle.companions.watchdog.uplink",
         "binnacle.companions.watchdog.ops",
         "binnacle.companions.watchdog.watchdog",
@@ -33,6 +34,7 @@
         "binnacle.watchdog_connectivity"
       ],
       "tunnel": [
+        "binnacle.companions.tunnel",
         "binnacle.companions.tunnel.tunnel_cli",
         "binnacle.companions.tunnel.tunnel_doctor",
         "binnacle.companions.tunnel.tunnel_unit",
