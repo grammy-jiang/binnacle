@@ -453,3 +453,21 @@ def test_service_inspector_reads_own_process_environment(monkeypatch):
     path = services.main_process_path("self.service")
 
     assert path is not None and path
+
+
+def test_legacy_doctor_module_alias_and_deployment_pickle(tmp_path):
+    import importlib
+    import pickle
+
+    from binnacle.diagnostics import doctor as owned
+
+    assert doctor is owned
+    assert importlib.import_module("binnacle.doctor") is owned
+    assert importlib.import_module("binnacle.diagnostics.doctor") is owned
+    assert doctor.Deployment is owned.Deployment
+    assert doctor.Deployment.__module__ == "binnacle.diagnostics.doctor"
+    dep = doctor.Deployment(
+        "demo.service", tmp_path / "token", "http://localhost", tmp_path
+    )
+    assert pickle.loads(pickle.dumps(dep)) == dep
+    assert "run_all" not in doctor.__all__
