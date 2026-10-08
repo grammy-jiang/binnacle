@@ -495,3 +495,26 @@ call-context module as owner `callctx`, rejecting other MCP glue imports.
 changed-file mypy/Ruff/hooks, with no product-source change or linter exemption.
 The corrected candidate needs new exact-SHA convergence; do not reuse the
 failed pre-push result or mark any external Gate A cell green.
+
+### Exact-candidate full-suite finding — 2026-10-08
+
+Candidate `2b90465` passed the fixed-seed pre-push fast unit/contract gate
+(job `ac0620b84929`) and entered managed full-suite validation.
+Full suite job `ff7fc293b18e` produced **2241 passed, 3 skipped and 1 failed**
+in its parallel-safe lane, with its ordinary-process lane **2 passed**.
+The lone failure was the packaging smoke's pre-G6 expectation that the
+removed private `binnacle/tools/read_file.py` path remained in the wheel.
+The approved Files implementation is canonical at
+`binnacle/features/files/tools/read_file.py`; reintroducing an obsolete
+Files-tool importer would conflict with the existing protected import
+architecture. No public MCP tool-wire behavior changed.
+
+The test was tightened in `e0995e3` to assert **all four** canonical Files-tool
+modules, their focused server, and the canonical Commands tool inside the built
+wheel while retaining the existing Commands compatibility-entry assertions.
+It also rejects the obsolete private Files adapter path. The exact failing
+wheel-from-sdist, clean-install and CLI smoke test passed in isolation (job
+`37a881822dec`); changed-file hooks passed. This repairs packaging
+expectations, not product runtime, dependency or protected import rules.
+A new final exact SHA must still pass the full convergence gates and independent
+final implementation review before deployment or Gate A acceptance.
