@@ -387,3 +387,7 @@ Original staged service-unit wave remains unmodified and unmerged; its earlier
 mypy failure was tied to the older `f5a7044` baseline and does not recur on
 integration after the already-committed Webmin fix. No full convergence,
 final-review, CI, live MCP or deployment evidence is claimed at this checkpoint.
+
+### 2026-10-08 diagnostics/provenance checkpoint
+
+Integration commit `e0c27c9` relocates `doctor_provenance` to diagnostics with a module-identity compatibility alias. Originating diagnostics-wave evidence was read, not modified. Focused provenance/system-doctor/Gate A tests: 58 passed. Changed-source Ruff/mypy and commit hooks passed; Import Linter 22 kept, 0 broken. No full convergence, CI, deployment or final Gate A evidence claimed.
