@@ -471,3 +471,16 @@ def test_legacy_doctor_module_alias_and_deployment_pickle(tmp_path):
     )
     assert pickle.loads(pickle.dumps(dep)) == dep
     assert "run_all" not in doctor.__all__
+
+
+def test_deployment_legacy_pickle_qualified_path(tmp_path):
+    import pickle
+
+    obj = doctor.Deployment(
+        "demo.service", tmp_path / "token", "http://localhost", tmp_path
+    )
+    payload = pickle.dumps(obj, protocol=2)
+    new_qualname = b"cbinnacle.diagnostics.doctor\nDeployment\n"
+    old_qualname = b"cbinnacle.doctor\nDeployment\n"
+    assert new_qualname in payload
+    assert pickle.loads(payload.replace(new_qualname, old_qualname)) == obj

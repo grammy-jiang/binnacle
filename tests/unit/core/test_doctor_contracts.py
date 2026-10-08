@@ -52,11 +52,15 @@ def test_neutral_contract_has_no_platform_or_diagnostics_imports():
         importlib.import_module("binnacle.doctor_contracts").__file__
     ).read_text()
     tree = ast.parse(source)
-    imported = [
-        node.module or "" for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)
-    ]
+    imported = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            imported.append(node.module or "")
+        elif isinstance(node, ast.Import):
+            imported.extend(alias.name for alias in node.names)
     assert not any(
-        m.startswith(("binnacle.diagnostics", "binnacle.platform")) for m in imported
+        name.startswith(("binnacle.diagnostics", "binnacle.platform"))
+        for name in imported
     )
     units = Path(
         importlib.import_module("binnacle.deployment.units").__file__
