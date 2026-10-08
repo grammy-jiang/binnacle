@@ -444,3 +444,37 @@ These are focused checkpoint proofs, not the final exact-SHA full suite, coverag
 Python matrix, independent final implementation review, CI, canonical deployment,
 live test/smoke/doctors, ChatGPT MCP call or final Gate A PASS. Production refs
 and other wave evidence worktrees were not changed.
+
+### G6 candidate freeze preparation — package/import ownership audit
+
+Following C0–D4, the coordinator committed the additional narrow source and
+verification checkpoints:
+
+- `179dd2a`: register all newly retained Diagnostics aliases in the compatibility
+  manifest; focused report/boundary tests and changed-file hooks passed.
+- `bfe5031`: CLI/Watchdog CLI consumers select canonical diagnostic implementations
+  rather than old compatibility aliases; 41 focused tests and all 22 Import Linter
+  contracts passed.
+- `93e9c5d`: verify old `binnacle.doctor.Deployment` pickle path resolution and
+  neutral-contract AST import boundary; focused tests and hooks passed.
+- `d5597d8`: correct the obsolete Gate A report wording while deliberately leaving
+  final architecture/review/deployment cells **PENDING**.
+- `fc6138d`: Diagnostics job-state/manager imports use the Commands-owned canonical
+  implementations; 13 focused tests, 22 Import Linter contracts and hooks passed.
+
+The latest source audit found **235** production Python modules each assigned exactly
+once, **88** retained compatibility facades with no missing/multiply-owned entries,
+and only two remaining direct legacy-facade imports among nested package modules:
+`companions/watchdog/ops/services.py` uses the public tunnel-log fact interface,
+and `companions/watchdog/watchdog_cli.py` consumes the approved tunnel unit name
+constant. Both are deliberately retained as narrow companion-facing compatibility
+boundaries rather than promoting new cross-companion implementation coupling.
+They are not authorization to remove the public aliases. No other legacy facade
+removal was proved safe under the public compatibility requirement.
+
+All relocation groups in the approved manifest have their target canonical package
+implementations. This is a **candidate freeze proposal**, not an independent final
+implementation review or final Gate A pass. Final source and acceptance SHA must be
+bound after committing this record. The exact-final-SHA full-suite, coverage, Python
+matrix, distribution, architecture, CI, canonical deploy and real client gates still
+require their respective independently recorded evidence.
