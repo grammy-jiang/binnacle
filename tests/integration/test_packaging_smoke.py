@@ -20,7 +20,7 @@ def test_distribution_exposes_runtime_console_entry_points():
     }
 
     assert scripts["binnacle"] == "binnacle.cli:main"
-    assert scripts["binnacle-jobs"] == "binnacle.job_manager:main"
+    assert scripts["binnacle-jobs"] == "binnacle.features.commands.job_manager:main"
     assert scripts["binnacle-watchdog"] == "binnacle.watchdog_cli:main"
 
 

@@ -26,7 +26,7 @@ dependencies = [
 
 [project.scripts]
 binnacle = "binnacle.cli:main"
-binnacle-jobs = "binnacle.job_manager:main"
+binnacle-jobs = "binnacle.features.commands.job_manager:main"
 binnacle-watchdog = "binnacle.watchdog_cli:main"
 binnacle-tunnel = "binnacle.tunnel_cli:main"
 
@@ -278,14 +278,14 @@ source_modules = [
     "binnacle.features.commands.tools.stop_job",
 ]
 forbidden_modules = [
-    "binnacle.jobs",
-    "binnacle.job_owner",
-    "binnacle.job_client",
-    "binnacle.job_store",
-    "binnacle.job_output",
+    "binnacle.jobs", "binnacle.features.commands.jobs",
+    "binnacle.job_owner", "binnacle.features.commands.job_owner",
+    "binnacle.job_client", "binnacle.features.commands.job_client",
+    "binnacle.job_store", "binnacle.features.commands.job_store",
+    "binnacle.job_output", "binnacle.features.commands.job_output",
     "binnacle.platform.linux.job_process",
     "binnacle.platform.linux.job_cgroup",
-    "binnacle.job_resource_history",
+    "binnacle.job_resource_history", "binnacle.features.commands.job_resource_history",
 ]
 allow_indirect_imports = true
 
@@ -301,14 +301,14 @@ source_modules = [
 forbidden_modules = [
     "binnacle.command_backend",
     "binnacle.features.commands.command_backend",
-    "binnacle.jobs",
-    "binnacle.job_owner",
-    "binnacle.job_client",
-    "binnacle.job_manager",
+    "binnacle.jobs", "binnacle.features.commands.jobs",
+    "binnacle.job_owner", "binnacle.features.commands.job_owner",
+    "binnacle.job_client", "binnacle.features.commands.job_client",
+    "binnacle.job_manager", "binnacle.features.commands.job_manager",
     "binnacle.platform.job_platform",
     "binnacle.platform.linux.job_process",
     "binnacle.platform.linux.job_cgroup",
-    "binnacle.job_resource_history",
+    "binnacle.job_resource_history", "binnacle.features.commands.job_resource_history",
     "binnacle.tools",
 ]
 allow_indirect_imports = true
@@ -320,9 +320,9 @@ name = "Platform contracts do not select engines or concrete adapters"
 type = "forbidden"
 source_modules = ["binnacle.platform.contracts.process_contracts", "binnacle.platform.contracts.resource_contracts"]
 forbidden_modules = [
-    "binnacle.jobs", "binnacle.job_owner", "binnacle.job_manager",
-    "binnacle.job_store", "binnacle.platform.job_platform", "binnacle.platform.linux.job_process",
-    "binnacle.platform.linux.job_cgroup", "binnacle.job_resource_history", "binnacle.config",
+    "binnacle.jobs", "binnacle.features.commands.jobs", "binnacle.job_owner", "binnacle.features.commands.job_owner", "binnacle.job_manager", "binnacle.features.commands.job_manager",
+    "binnacle.job_store", "binnacle.features.commands.job_store", "binnacle.platform.job_platform", "binnacle.platform.linux.job_process",
+    "binnacle.platform.linux.job_cgroup", "binnacle.job_resource_history", "binnacle.features.commands.job_resource_history", "binnacle.config",
 ]
 
 [[tool.importlinter.contracts]]
@@ -337,15 +337,15 @@ name = "Linux adapters do not own job lifecycle or storage"
 type = "forbidden"
 source_modules = ["binnacle.platform.linux.job_process", "binnacle.platform.linux.job_cgroup"]
 forbidden_modules = [
-    "binnacle.jobs", "binnacle.job_owner", "binnacle.job_manager", "binnacle.job_client",
-    "binnacle.job_store", "binnacle.job_resource_history", "binnacle.config",
+    "binnacle.jobs", "binnacle.features.commands.jobs", "binnacle.job_owner", "binnacle.features.commands.job_owner", "binnacle.job_manager", "binnacle.features.commands.job_manager", "binnacle.job_client", "binnacle.features.commands.job_client",
+    "binnacle.job_store", "binnacle.features.commands.job_store", "binnacle.job_resource_history", "binnacle.features.commands.job_resource_history", "binnacle.config",
 ]
 
 [[tool.importlinter.contracts]]
 id = "job-orchestration-uses-platform-ports"
 name = "Job orchestration does not directly import Linux adapters"
 type = "forbidden"
-source_modules = ["binnacle.jobs", "binnacle.job_owner", "binnacle.job_manager", "binnacle.job_resource_history"]
+source_modules = ["binnacle.jobs", "binnacle.features.commands.jobs", "binnacle.job_owner", "binnacle.features.commands.job_owner", "binnacle.job_manager", "binnacle.features.commands.job_manager", "binnacle.job_resource_history", "binnacle.features.commands.job_resource_history"]
 forbidden_modules = ["binnacle.platform.linux.job_process", "binnacle.platform.linux.job_cgroup"]
 allow_indirect_imports = true
 
@@ -354,17 +354,17 @@ id = "platform-composition-entrypoints"
 name = "Only job engine and manager select platform defaults"
 type = "protected"
 protected_modules = ["binnacle.platform.job_platform"]
-allowed_importers = ["binnacle.jobs", "binnacle.job_manager"]
+allowed_importers = ["binnacle.jobs", "binnacle.features.commands.jobs", "binnacle.job_manager", "binnacle.features.commands.job_manager"]
 
 [[tool.importlinter.contracts]]
 id = "store-does-not-own-lifecycle"
 name = "Job storage does not import process or accounting lifecycle"
 type = "forbidden"
-source_modules = ["binnacle.job_store"]
+source_modules = ["binnacle.job_store", "binnacle.features.commands.job_store"]
 forbidden_modules = [
-    "binnacle.jobs", "binnacle.job_owner", "binnacle.job_manager", "binnacle.job_client",
+    "binnacle.jobs", "binnacle.features.commands.jobs", "binnacle.job_owner", "binnacle.features.commands.job_owner", "binnacle.job_manager", "binnacle.features.commands.job_manager", "binnacle.job_client", "binnacle.features.commands.job_client",
     "binnacle.platform.contracts.process_contracts", "binnacle.platform.contracts.resource_contracts", "binnacle.platform.linux.job_process",
-    "binnacle.platform.linux.job_cgroup", "binnacle.platform.job_platform", "binnacle.job_resource_history",
+    "binnacle.platform.linux.job_cgroup", "binnacle.platform.job_platform", "binnacle.job_resource_history", "binnacle.features.commands.job_resource_history",
 ]
 
 [[tool.importlinter.contracts]]

@@ -4,9 +4,9 @@ import logging
 import time
 from pathlib import Path
 
-from binnacle import job_output
 from binnacle.callctx import current_argument_names, current_call, current_client
 from binnacle.config import RunCommandSettings
+from binnacle.features.commands import job_output
 from binnacle.features.commands.command_contracts import (
     CommandBackend,
     CommandFailure,

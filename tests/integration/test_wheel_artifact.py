@@ -117,7 +117,7 @@ def _assert_wheel(wheel: Path, version: str) -> None:
         entries = archive.read(entry_points).decode()
         expected = {
             "binnacle = binnacle.cli:main",
-            "binnacle-jobs = binnacle.job_manager:main",
+            "binnacle-jobs = binnacle.features.commands.job_manager:main",
             "binnacle-watchdog = binnacle.watchdog_cli:main",
             "binnacle-tunnel = binnacle.tunnel_cli:main",
         }

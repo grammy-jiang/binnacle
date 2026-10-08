@@ -3,19 +3,19 @@
 import logging
 from time import perf_counter
 
-from binnacle import job_output
 from binnacle.callctx import (
     current_call,
     current_call_started,
     current_client,
     current_turn,
 )
+from binnacle.features.commands import job_output
 from binnacle.features.commands.command_contracts import (
     CommandBackend,
     CommandFailure,
     CommandReply,
 )
-from binnacle.job_store import JobGone
+from binnacle.features.commands.job_store import JobGone
 
 log = logging.getLogger("binnacle.job_status")
 

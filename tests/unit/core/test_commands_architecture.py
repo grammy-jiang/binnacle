@@ -17,7 +17,7 @@ DOMAIN = ("command_execution.py", "command_status.py", "command_contracts.py")
 STANDARD = {"dataclasses", "pathlib", "typing", "logging", "time"}
 DOMAIN_IMPORTS = {
     "binnacle.features.commands.command_contracts",
-    "binnacle.job_output",
+    "binnacle.features.commands.job_output",
     "binnacle.callctx",
     "binnacle.features.commands.run_command_evidence",
     "binnacle.features.commands.run_command_telemetry",
@@ -46,8 +46,8 @@ def violations(source, owner):
         allowed |= {
             "importlib",
             "binnacle.features.commands.command_contracts",
-            "binnacle.jobs",
-            "binnacle.job_owner",
+            "binnacle.features.commands.jobs",
+            "binnacle.features.commands.job_owner",
         }
     elif owner != "command_contracts.py":
         allowed |= DOMAIN_IMPORTS
@@ -69,7 +69,7 @@ def violations(source, owner):
                 )
                 if (
                     owner == "command_status.py"
-                    and module == "binnacle.job_store"
+                    and module == "binnacle.features.commands.job_store"
                     and alias.name == "JobGone"
                 ):
                     continue
@@ -91,7 +91,11 @@ def violations(source, owner):
             and (
                 len(node.args) != 1
                 or not isinstance(node.args[0], ast.Constant)
-                or node.args[0].value not in {"binnacle.jobs", "binnacle.job_owner"}
+                or node.args[0].value
+                not in {
+                    "binnacle.features.commands.jobs",
+                    "binnacle.features.commands.job_owner",
+                }
             )
         ):
             found.append("unexpected backend selection")
@@ -137,7 +141,7 @@ def test_boundary_rejects_forbidden_and_dynamic_imports(source):
 
 
 def test_job_gone_exception_is_the_only_store_import_exception():
-    source = "from binnacle.job_store import JobGone"
+    source = "from binnacle.features.commands.job_store import JobGone"
     assert violations(source, "command_status.py") == []
     for owner in (*ADAPTERS, "command_execution.py", "command_contracts.py"):
         assert violations(source, owner)
@@ -162,8 +166,8 @@ import asyncio, importlib.abc, sys
 from pathlib import Path
 class Block(importlib.abc.MetaPathFinder):
     def find_spec(self, fullname, path=None, target=None):
-        if fullname in {"binnacle.jobs", "binnacle.job_owner", "binnacle.job_client",
-                        "binnacle.platform.linux.job_process", "binnacle.platform.linux.job_cgroup", "binnacle.job_manager"}:
+        if fullname in {"binnacle.features.commands.jobs", "binnacle.features.commands.job_owner", "binnacle.features.commands.job_client",
+                        "binnacle.platform.linux.job_process", "binnacle.platform.linux.job_cgroup", "binnacle.features.commands.job_manager"}:
             raise AssertionError("engine imported: " + fullname)
 sys.meta_path.insert(0, Block())
 from binnacle import command_contracts, command_execution, command_status, config
@@ -185,7 +189,7 @@ async def main():
         await client.call_tool('job_status', {'job_id':'fixed','cursor':'start'})
         await client.call_tool('stop_job', {'job_id':'fixed'})
 asyncio.run(main())
-assert 'binnacle.jobs' not in sys.modules
+assert 'binnacle.features.commands.jobs' not in sys.modules
 """
     subprocess.run(
         [sys.executable, "-c", code], check=True, capture_output=True, timeout=20
@@ -197,7 +201,7 @@ def test_default_child_selects_engine_at_construction_before_requests():
 import sys
 from binnacle import config
 from binnacle.commands_server import create_commands_server
-assert 'binnacle.jobs' not in sys.modules
+assert 'binnacle.features.commands.jobs' not in sys.modules
 settings = config.get_settings().model_copy(deep=True)
 settings.jobs.owner = 'embedded'
 settings.jobs.warmup_s = 0.125
@@ -266,3 +270,23 @@ def test_legacy_commands_server_module_is_owned_module():
     assert importlib.import_module(
         "binnacle.commands_server"
     ) is importlib.import_module("binnacle.features.commands.commands_server")
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "jobs",
+        "job_client",
+        "job_manager",
+        "job_output",
+        "job_owner",
+        "job_resource_history",
+        "job_store",
+    ],
+)
+def test_legacy_durable_modules_are_owned_modules(name):
+    import importlib
+
+    legacy = importlib.import_module(f"binnacle.{name}")
+    owned = importlib.import_module(f"binnacle.features.commands.{name}")
+    assert legacy is owned

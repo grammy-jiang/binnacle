@@ -12,6 +12,11 @@ MODULE_PATHS = {
     "job_process": "platform/linux/job_process.py",
     "job_cgroup": "platform/linux/job_cgroup.py",
     "job_platform": "platform/job_platform.py",
+    "job_resource_history": "features/commands/job_resource_history.py",
+    "job_store": "features/commands/job_store.py",
+    "jobs": "features/commands/jobs.py",
+    "job_owner": "features/commands/job_owner.py",
+    "job_manager": "features/commands/job_manager.py",
 }
 EDGES = {
     "process_contracts": set(),
@@ -53,6 +58,13 @@ MODULE_OWNERS = {
     "binnacle.platform.linux.job_process": "job_process",
     "binnacle.platform.linux.job_cgroup": "job_cgroup",
     "binnacle.platform.job_platform": "job_platform",
+    "binnacle.features.commands.job_resource_history": "job_resource_history",
+    "binnacle.features.commands.job_store": "job_store",
+    "binnacle.features.commands.jobs": "jobs",
+    "binnacle.features.commands.job_owner": "job_owner",
+    "binnacle.features.commands.job_manager": "job_manager",
+    "binnacle.features.commands.job_client": "job_client",
+    "binnacle.features.commands.job_output": "job_output",
 }
 
 

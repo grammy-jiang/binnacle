@@ -98,6 +98,6 @@ settings.jobs.warmup_s = 0.5
 assert backend.owner_mode == "embedded"
 assert backend.warmup_s == 0.125
 import sys
-assert "binnacle.job_owner" in sys.modules
+assert "binnacle.features.commands.job_owner" in sys.modules
 """
     subprocess.run([sys.executable, "-c", code], check=True, timeout=15)
