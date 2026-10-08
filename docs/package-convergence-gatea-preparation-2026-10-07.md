@@ -395,3 +395,7 @@ Integration commit `e0c27c9` relocates `doctor_provenance` to diagnostics with a
 ### 2026-10-08 diagnostics/connectivity checkpoint
 
 Integration 1638d51: endpoint doctor relocation with identity-compatible alias. The diagnostics wave remains untouched. Focused tests 83 passed; Ruff, mypy, Import Linter 22/22 and commit hooks passed. Final Gate A and deployment remain pending.
+
+### 2026-10-08 doctor_common ownership conflict
+
+On clean parent db4c9e3, a proposed diagnostics/doctor_common relocation passed 91 focused tests but broke top-level acyclicity (Import Linter 21/22). Exact loop: diagnostics.doctor_common to platform.deployment_platform to platform.linux.service_provisioning_linux to deployment.units to diagnostics.doctor_contracts. All trial changes were restored; the integration tree and 22/22 architecture contracts are clean again. The preexisting diagnostics-wave file was not modified. Smallest reviewable choices: defer doctor_common to the existing application shell with an explicit ownership exception, or approve a separate one-way Check/UnitSpec dependency boundary refactor. Neither is currently approved. G6 cannot claim final package convergence or Gate A while this target discrepancy remains.
