@@ -12,7 +12,11 @@ MANAGER = """
 import json, sys
 from pathlib import Path
 from binnacle import jobs, job_manager
-from binnacle.platform.linux import job_cgroup
+from importlib.util import find_spec
+if find_spec("binnacle.job_cgroup") is not None:
+    from binnacle import job_cgroup
+else:
+    from binnacle.platform.linux import job_cgroup
 source, spool, socket = map(Path, sys.argv[1:])
 assert Path(jobs.__file__).resolve().is_relative_to(source.resolve())
 jobs.JOBS_DIR = spool
