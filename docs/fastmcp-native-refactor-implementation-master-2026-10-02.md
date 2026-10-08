@@ -1,6 +1,6 @@
 # FastMCP-native refactor — implementation master plan — 2026-10-02
 
-Status: **Groups 0-4 done; Groups 5-6 queued**.
+Status: **Groups 0-6 done; Gate A passed on deployed `e8f1241`**.
 
 This is the control document for the implementation-design and implementation phases of
 the FastMCP-native, platform-neutral Binnacle refactor.
@@ -94,7 +94,8 @@ over a big-bang rewrite.
 
 ### 1.5 Design close to implementation
 
-Groups 0-4 are complete. Groups 5-6 remain separate planned work.
+Groups 0-6 are complete. Section 28 records the final Linux acceptance evidence.
+No later platform implementation has started.
 
 Before designing a later group:
 
@@ -129,8 +130,8 @@ Status changes belong in this document.
 | G2 | FastMCP-native alignment | G1 | domain settings lanes after shared seams settle | **done** |
 | G3 | Commands/domain/platform seams | G2 deployed baseline | serialized integration | **done** |
 | G4 | Deployment/platform services | G1 | logs/paths may parallelize | **done** |
-| G5 | Diagnostics, operations, companions | relevant G3/G4 public seams | selected cleanup may start earlier | implementing |
-| G6 | Package convergence + Gate A | G2-G5 | convergence only | queued |
+| G5 | Diagnostics, operations, companions | relevant G3/G4 public seams | selected cleanup may start earlier | **done** |
+| G6 | Package convergence + Gate A | G2-G5 | convergence only | **done** |
 
 ## 4. Group 0 — Stable FastMCP 4 baseline
 
@@ -615,20 +616,20 @@ Gate A is not reached until all are true.
 
 ### Platform isolation
 
-- [ ] process contract;
-- [ ] optional resource-accounting contract;
-- [ ] service-log contract;
-- [ ] managed-service contract;
-- [ ] runtime-path contract;
-- [ ] product domains do not import Linux implementations.
+- [x] process contract;
+- [x] optional resource-accounting contract;
+- [x] service-log contract;
+- [x] managed-service contract;
+- [x] runtime-path contract;
+- [x] product domains do not import Linux implementations.
 
 ### Companion isolation
 
-- [ ] core doctor does not depend on watchdog uplink internals;
-- [ ] core CLI/stats does not depend on watchdog Webmin internals;
-- [ ] operational public surface exists where required;
-- [ ] server/core/features/platform do not import watchdog implementation;
-- [ ] server remains fully functional without watchdog.
+- [x] core doctor does not depend on watchdog uplink internals;
+- [x] core CLI/stats does not depend on watchdog Webmin internals;
+- [x] operational public surface exists where required;
+- [x] server/core/features/platform do not import watchdog implementation;
+- [x] server remains fully functional without watchdog.
 
 ### Convergence
 
@@ -638,11 +639,22 @@ Gate A is not reached until all are true.
 - [x] packaging smoke;
 - [x] architecture/import gates;
 - [x] live deployment smoke;
-- [x] current Linux deployment healthy.
+- [x] current Linux deployment healthy;
+- [x] real ChatGPT read-only call to the deployed server.
 
 Only after every item is satisfied should native macOS implementation begin.
 
 ## 18. Current next action
+
+G0-G6 and Gate A are complete on deployed runtime candidate
+`e8f12415855cd2945c15ff17ad35b03eea05aafd`. Section 28 binds final source,
+review, CI, canonical deployment, live checks and the real ChatGPT call.
+This completion record changes no runtime code; its integration also requires
+exact-SHA CI and canonical deployment, with receipts retained externally.
+Do not begin another architecture group or a macOS implementation as part of
+this closeout.
+
+### Historical G1-G3 handoff (superseded by sections 25-28)
 
 G1 is done. Exact-SHA GitHub CI run `37028183978` passed all seven required jobs.
 The canonical deployment gate moved production from `4608423` to
@@ -1090,3 +1102,76 @@ The completion evidence is retained at
 `/home/grammy-jiang/Projects/.binnacle-g5-r3/`. G5 is done. The G6 implementation may
 now begin; package relocation and compatibility-facade removal remain governed by the
 approved G6 preparation and final Gate A.
+
+## 28. G6 production completion and Gate A — 2026-10-09
+
+G6 runtime candidate `665acb06a1efb8247d9c6228b5ada95541ae6b98` completed the
+reviewed package relocation and architecture guards over deployed G5 `8218567`.
+The final independent [G6 review](https://chatgpt.com/c/6ac798ec-3c70-83ec-a40f-f546bd88e9d6)
+returned **APPROVE**, four cells PASS, with no remaining implementation blockers.
+Its required remote/live acceptance conditions have now been satisfied.
+
+A separate seven-file deployment-check correction produced
+`e8f12415855cd2945c15ff17ad35b03eea05aafd`. The old gate incorrectly rejected
+the optional Copilot review failure (348 changed files exceeded its 300-file
+limit) and could accept unrelated successful workflows without the required
+checks. The correction verifies the existing seven required checks, exact SHA,
+trusted GitHub Actions issuer, rerun attempts and complete stable pagination.
+It changes no runtime source, dependencies, lock, workflow or ruleset. Its fresh
+[implementation review](https://chatgpt.com/c/6ac7b186-8394-83ec-bfce-9aca508f7b8f)
+returned **APPROVE**, four cells PASS and zero blockers. Failed review/CI records
+remain retained; no gate or safety check was bypassed.
+
+Final evidence for `e8f1241`:
+
+| Gate | Result |
+| --- | --- |
+| CI correction focused tests | 145 passed |
+| Managed full suite, seed 12345 | 2393 passed / 3 skipped; ordinary-process 2 passed |
+| All-files pre-commit and pre-push | passed |
+| [Exact-SHA CI run 37798918128](https://github.com/grammy-jiang/binnacle/actions/runs/37798918128) | all seven required checks passed |
+| Python compatibility | 3.10, 3.11, 3.12, 3.14 CI; 3.13 coverage CI and local managed suite passed |
+| Coverage policy | 212 production modules; 0 below target; 0 errors |
+| Clean wheel/install smoke | 1 passed |
+| Architecture / imports / strict size | 235 modules, 0 forbidden edges; 22/22 contracts; 0 size errors |
+| Companion absence and authenticated health route | 2 focused tests passed on `e8f1241` |
+| Canonical production deployment | exit 0; local master and both deployment refs reached `e8f1241` |
+| Post-deploy live pytest / full smoke | 3 passed / 20 checks passed |
+| Runtime versions | FastMCP/FastMCP-slim 4.0.10; MCP/MCP-types 2.1.1 |
+| Four-profile public wire | byte-identical to G5; 8/6/6/8 tools; 141833 bytes |
+| Real ChatGPT client | one successful `read_file`; hidden nonce and server journal matched |
+| Gate A evidence reconciliation | 38 PASS; 0 FAIL; 0 PENDING |
+
+The full local Python 3.10-3.14 farm, coverage and wheel lanes also passed on
+`665acb0`. These remain separately identified historical receipts; final
+`e8f1241` CI and local checks establish the correction's acceptance. The source
+and architecture inputs are identical between those two candidates.
+
+Wire SHA256 is
+`acbc4e794ee45c1bd9dbd3a51dafa9634f101e06ed18a0b0cea36d2f32fcb61f`.
+The [new ChatGPT client session](https://chatgpt.com/c/6ac7b683-3aec-83ec-bb87-a6c1164959d4)
+read a scratch fixture whose random nonce was absent from its prompt. Production
+logged successful call `fbf6170012ea`. No client-side deployment or write tool
+was used for that proof.
+
+The canonical flow preserved the user's four extra `known_first_party` entries
+and all **509** unrelated untracked documentation files. Jobs, tunnel and watchdog
+service identities stayed unchanged; the stable manager was not restarted.
+Core doctor reported 28 ok / 2 warnings / 0 failures, tunnel 9/0/0, and watchdog
+7/5/0. Wi-Fi selection, an ignored adapter and an old driver-stability sample
+remain host warnings, not hidden test failures or authorization for network work.
+
+Evidence is retained under
+`~/.local/state/binnacle/g6-deploy-ci-policy-_6f5338v/revision-2/`, especially
+`gate-a-final-e8f1241.json`, `deploy-e8f1241-un5xhhvk/`, `postdeploy/` and
+`client-proof/`. Every acceptance cell binds its candidate, timestamp, command
+or review, and artifact checksums. The report-only `gate_a_report.py` still
+leaves external cells PENDING by design; the final evidence reconciliation
+resolves them from actual test, review, CI, deployment and client receipts.
+It does not fabricate a successful `--strict` preparation report.
+
+G6 retains **90 reviewed compatibility facades** for public imports, module
+identity, CLI and durable-manager compatibility. No new framework, dependency,
+FastMCP Tasks substitution or macOS implementation was added. G0-G6 are done;
+the document-only completion integration must use its own CI and canonical
+deployment, without repeating the unchanged runtime convergence.

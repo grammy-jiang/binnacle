@@ -1,18 +1,22 @@
 # G6 package convergence + Gate A preparation — 2026-10-07
 
-Status: **G5 drift-check complete; G6 package-ownership re-review pending before relocation**.
+Status: **G6 done; Gate A passed on deployed `e8f1241`**.
+
+Section 10 records final acceptance. The preparation baseline, proposed sequence
+and dated checkpoint findings below remain historical evidence; their pending
+statements do not describe the current deployment.
 
 Baseline: deployed G5 completion `8218567f3af8c2157530ac5aa4af3bd4e99cc61b`.
 Its production-source bytes are identical to reviewed/runtime candidate
 `dd10ef0c77e87f1c8807c652e2d07188d9add6d3`; the completion commit changes only
 the G5 design/master documentation. This branch was rebased onto that exact deployed
 completion before the G6 drift check. The ownership manifest now includes every G5
-addition exactly once. Production relocation remains blocked only until the required
-fresh package-ownership review confirms this post-G5 manifest.
+addition exactly once. At this preparation checkpoint, production relocation was
+blocked until fresh package-ownership review confirmed the post-G5 manifest.
 
-## 1. Current baseline
+## 1. Preparation baseline
 
-Current deployed-G5 evidence used by this preparation:
+Deployed-G5 evidence used by this preparation:
 
 - 127 production modules, all singly classified by the G6 manifest;
 - the G5 exact candidate already passed its final architecture/import convergence;
@@ -21,8 +25,8 @@ Current deployed-G5 evidence used by this preparation:
 - G3/G4 platform contracts remain the platform boundary baseline;
 - G5 runtime/deploy/client evidence remains external evidence, not a static inference.
 
-This preparation does not claim Gate A. Package convergence and the final external
-acceptance cells remain pending G6 implementation.
+This preparation alone did not claim Gate A. Package convergence and final external
+acceptance were pending G6 implementation; section 10 records their completion.
 
 ## 2. Target ownership manifest
 
@@ -599,3 +603,79 @@ MCP tool schemas were changed by this correction. Changed-file format/quality
 checks and a fresh independent follow-up review remain required for the
 corrected commit. **All broad convergence and remote/live Gate A evidence must
 be tied to the newly frozen exact SHA; the prior 8/8 does not transfer.**
+
+## 10. Final implementation and production acceptance — 2026-10-09
+
+The reviewed runtime tree is `665acb06a1efb8247d9c6228b5ada95541ae6b98`.
+The final [G6 implementation review](https://chatgpt.com/c/6ac798ec-3c70-83ec-a40f-f546bd88e9d6)
+returned **APPROVE**, all four review cells PASS, with no remaining implementation
+blockers. Native FastMCP composition, shared contracts, platform implementations,
+diagnostics, deployment and companions now have the approved package owners.
+The manifest classifies 235 modules. Ninety compatibility facades remain
+intentionally retained for public imports, CLI/module identity and durable-manager
+compatibility; this acceptance does not authorize their blanket removal.
+
+A separate, reviewed deployment-check correction was required before integration.
+The old gate both rejected an optional Copilot failure and could accept unrelated
+workflow success without the required checks. Copilot had refused the 348-file
+change because its limit was 300 files. Commit
+`e8f12415855cd2945c15ff17ad35b03eea05aafd` corrects the gate to enforce the
+existing required-check policy, including exact SHA, trusted issuer, rerun attempts
+and complete stable pagination. Its [fresh review](https://chatgpt.com/c/6ac7b186-8394-83ec-bfce-9aca508f7b8f)
+returned **APPROVE**, all four cells PASS. Runtime source, dependencies, lock,
+workflow, ruleset and G6 architecture inputs are unchanged from `665acb0`.
+The correction was deployed through the unchanged production canonical gate;
+no failed workflow record was deleted and no safety check was bypassed.
+
+Acceptance is bound to deployed **`e8f1241`**, not an unreviewed working tree:
+
+- final local managed suite: **2393 passed / 3 skipped**, ordinary-process **2 passed**;
+- correction-focused tests: **145 passed**; all-files pre-commit and pre-push passed;
+- exact-SHA [CI run 37798918128](https://github.com/grammy-jiang/binnacle/actions/runs/37798918128):
+  all seven required checks passed, covering Python 3.10-3.14, coverage and packaging;
+- coverage: **212 production modules**, **0 below target**, **0 errors**;
+- explicit clean wheel/install CI job: **1 passed**;
+- architecture: **235 modules / 0 forbidden edges**, **22/22** Import Linter contracts,
+  strict module-size **0 errors**; architecture inputs match the fully gated G6 tree;
+- exact-candidate companion-absence and authenticated health-route tests: **2 passed**;
+- canonical deployment: **exit 0**, local master and both remote deployment refs
+  reached `e8f1241`;
+- post-deploy live pytest: **3 passed**; full smoke: **20 checks passed**;
+- core, tunnel and watchdog doctors: **exit 0**, with host warnings retained below;
+- public wire: **141833 identical bytes**, default/modern/legacy/unrelated profiles
+  **8/6/6/8**, unchanged instructions, ordering, schemas, metadata and hashes;
+- real [ChatGPT client read](https://chatgpt.com/c/6ac7b683-3aec-83ec-bb87-a6c1164959d4):
+  one successful `read_file`, random nonce absent from prompt and present in reply,
+  correlated production journal call `fbf6170012ea`;
+- final Gate A evidence reconciliation: **38 PASS / 0 FAIL / 0 PENDING**.
+
+The four-profile SHA256 is
+`acbc4e794ee45c1bd9dbd3a51dafa9634f101e06ed18a0b0cea36d2f32fcb61f`.
+FastMCP/FastMCP-slim remain 4.0.10; MCP/MCP-types remain 2.1.1. The local
+3.10-3.14 farm, coverage and packaging on `665acb0` are retained as separate
+receipts; the final correction has its own exact-SHA CI and local managed suite.
+
+The guarded deployment backed up and restored the user's four extra
+`known_first_party` entries without changing their meaning. All **509** unrelated
+untracked documentation files remained byte/mode-identical. Jobs, tunnel and
+watchdog service identities remained unchanged. No stable-manager restart occurred.
+Core doctor reported **28 ok / 2 warnings / 0 failures**, tunnel **9/0/0**, and
+watchdog **7/5/0**. Wi-Fi selection, an ignored adapter and an old driver-stability
+sample remain host warnings; no unrelated network repair or smoke rebaseline was
+performed to obtain acceptance.
+
+Final evidence root:
+`~/.local/state/binnacle/g6-deploy-ci-policy-_6f5338v/revision-2/`.
+`gate-a-final-e8f1241.json` records all 38 cells with exact candidate, timestamps,
+commands/review references and artifact SHA256/byte inventories. Its inputs include
+`gate-a-static-e8f1241.json`, `implementation-r2/`, `ci-jobs-37798918128.json`,
+`deploy-e8f1241-un5xhhvk/`, `postdeploy/` and `client-proof/`. Failed intermediate
+checks and review findings remain available as historical evidence.
+
+The preparation script still reports **25 static PASS / 13 external PENDING**.
+That is its designed scope, not a claim that it executed the external gates.
+The final evidence reconciliation resolves those 13 cells using the actual
+review/test/CI/deploy/live/client records; no hard-coded external PASS or production
+code change was added to the harness. Documentation-only completion integration
+requires its own exact-SHA CI and canonical deployment and retains those receipts
+externally. G6 and Gate A are complete; no later group or macOS work starts here.
