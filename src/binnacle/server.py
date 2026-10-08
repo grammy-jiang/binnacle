@@ -16,6 +16,11 @@ from starlette.responses import JSONResponse
 from binnacle import jobs
 from binnacle.config import get_settings
 from binnacle.features.commands.commands_server import create_commands_server
+from binnacle.features.commands.run_command_telemetry import (
+    AUTO_BACKGROUND_SEMANTICS_VERSION,
+    auto_background_behavior_hash,
+    auto_background_policy_hash,
+)
 from binnacle.features.files.files_server import create_files_server
 from binnacle.features.search.search_server import create_search_server
 from binnacle.identity import ClientIdentity
@@ -24,11 +29,6 @@ from binnacle.logging_middleware import (
     ToolLoggingMiddleware,
 )
 from binnacle.provenance import runtime_provenance
-from binnacle.run_command_telemetry import (
-    AUTO_BACKGROUND_SEMANTICS_VERSION,
-    auto_background_behavior_hash,
-    auto_background_policy_hash,
-)
 from binnacle.tool_order import PublicToolOrder
 from binnacle.visibility import ClientToolVisibility, ClientToolVisibilityTransform
 

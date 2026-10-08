@@ -19,8 +19,8 @@ DOMAIN_IMPORTS = {
     "binnacle.features.commands.command_contracts",
     "binnacle.job_output",
     "binnacle.callctx",
-    "binnacle.run_command_evidence",
-    "binnacle.run_command_telemetry",
+    "binnacle.features.commands.run_command_evidence",
+    "binnacle.features.commands.run_command_telemetry",
 }
 ADAPTER_IMPORTS = {
     "fastmcp",

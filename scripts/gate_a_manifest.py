@@ -55,6 +55,8 @@ def manifest_groups() -> dict[str, set[str]]:
             "tools/run_command.py",
             "tools/job_status.py",
             "tools/stop_job.py",
+            "run_command_telemetry.py",
+            "run_command_evidence.py",
             "features/commands/tools/__init__.py",
             "features/commands/tools/run_command.py",
             "features/commands/tools/job_status.py",
@@ -68,6 +70,8 @@ def manifest_groups() -> dict[str, set[str]]:
             "features/commands/command_status.py",
             "command_backend.py",
             "features/commands/command_backend.py",
+            "features/commands/run_command_telemetry.py",
+            "features/commands/run_command_evidence.py",
             "jobs.py",
             "job_client.py",
             "job_manager.py",
@@ -75,8 +79,6 @@ def manifest_groups() -> dict[str, set[str]]:
             "job_owner.py",
             "job_resource_history.py",
             "job_store.py",
-            "run_command_telemetry.py",
-            "run_command_evidence.py",
         },
         "platform_contracts": {
             "platform/__init__.py",
@@ -190,6 +192,8 @@ def compatibility_facades() -> set[str]:
         "tools/run_command.py",
         "tools/job_status.py",
         "tools/stop_job.py",
+        "run_command_telemetry.py",
+        "run_command_evidence.py",
     }
 
 

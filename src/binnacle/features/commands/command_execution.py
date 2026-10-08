@@ -12,8 +12,8 @@ from binnacle.features.commands.command_contracts import (
     CommandFailure,
     CommandReply,
 )
-from binnacle.run_command_evidence import record_auto_match
-from binnacle.run_command_telemetry import DispatchPlan
+from binnacle.features.commands.run_command_evidence import record_auto_match
+from binnacle.features.commands.run_command_telemetry import DispatchPlan
 
 log = logging.getLogger("binnacle.run_command")
 
