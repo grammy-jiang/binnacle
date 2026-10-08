@@ -1,7 +1,7 @@
 """Layered uplink diagnostics owned by the reliability companion."""
 
 from binnacle import uplink
-from binnacle.doctor_contracts import Check, fail, ok, warn
+from binnacle.diagnostics.doctor_contracts import Check, fail, ok, warn
 
 
 def check_uplink(

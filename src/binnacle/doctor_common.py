@@ -3,7 +3,7 @@
 import subprocess
 from collections.abc import Callable
 
-from binnacle import doctor_contracts as _contracts
+from binnacle.diagnostics import doctor_contracts as _contracts
 
 Check = _contracts.Check
 Status = _contracts.Status

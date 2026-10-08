@@ -4,7 +4,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from binnacle.doctor_io import _tail_lines
+from binnacle.diagnostics.doctor_io import _tail_lines
 
 _POLL_DOWN = ("poll failed; backing off", "poll timed out; backing off")
 _POLL_UP = ("poller recovered; polling operational", "🟢 tunnel-client started")

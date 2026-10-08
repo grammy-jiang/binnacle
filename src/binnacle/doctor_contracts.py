@@ -1,26 +1,12 @@
-"""Shared health-check result records without platform dependencies."""
+"""Compatibility alias for diagnostics-owned doctor_contracts."""
 
-from dataclasses import dataclass
-from typing import Literal
+from typing import TYPE_CHECKING
 
-Status = Literal["ok", "warn", "fail"]
+if TYPE_CHECKING:
+    from binnacle.diagnostics.doctor_contracts import *
+else:
+    import sys
 
+    from binnacle.diagnostics import doctor_contracts as _impl
 
-@dataclass(slots=True)
-class Check:
-    group: str
-    status: Status
-    detail: str
-    hint: str = ""
-
-
-def ok(group: str, detail: str) -> Check:
-    return Check(group, "ok", detail)
-
-
-def warn(group: str, detail: str, hint: str = "") -> Check:
-    return Check(group, "warn", detail, hint)
-
-
-def fail(group: str, detail: str, hint: str = "") -> Check:
-    return Check(group, "fail", detail, hint)
+    sys.modules[__name__] = _impl

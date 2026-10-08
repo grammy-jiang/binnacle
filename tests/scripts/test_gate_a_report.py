@@ -72,8 +72,8 @@ def test_platform_default_composition_is_not_a_command_feature():
 def test_g5_additions_have_expected_g6_owners():
     groups = manifest.manifest_groups()
     expected = {
-        "doctor_io.py": "diagnostics",
-        "doctor_render.py": "diagnostics",
+        "diagnostics/doctor_io.py": "diagnostics",
+        "diagnostics/doctor_render.py": "diagnostics",
         "system_resource_contracts.py": "observability",
         "system_resource_history.py": "observability",
         "tunnel_log.py": "tunnel",
