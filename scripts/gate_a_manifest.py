@@ -127,7 +127,6 @@ def manifest_groups() -> dict[str, set[str]]:
             "diagnostics/doctor_connectivity.py",
             "doctor.py",
             "doctor_common.py",
-            "doctor_contracts.py",
             "doctor_connectivity.py",
             "doctor_jobs.py",
             "doctor_provenance.py",
@@ -204,6 +203,7 @@ def manifest_groups() -> dict[str, set[str]]:
             "config.py",
             "errors.py",
             "provenance.py",
+            "doctor_contracts.py",
         },
     }
 
@@ -228,7 +228,7 @@ def compatibility_facades() -> set[str]:
     """Current compatibility facades that G6 must review before removal."""
     return {
         "doctor_common.py",
-        "doctor_contracts.py",
+        "diagnostics/doctor_contracts.py",
         "doctor_io.py",
         "doctor_render.py",
         "identity.py",

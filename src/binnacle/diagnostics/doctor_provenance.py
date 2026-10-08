@@ -1,6 +1,6 @@
 """Runtime provenance check for binnacle doctor."""
 
-from binnacle.diagnostics.doctor_contracts import Check, ok
+from binnacle.doctor_contracts import Check, ok
 from binnacle.provenance import Provenance, runtime_provenance
 
 

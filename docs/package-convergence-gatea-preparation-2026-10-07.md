@@ -399,3 +399,18 @@ Integration 1638d51: endpoint doctor relocation with identity-compatible alias. 
 ### 2026-10-08 doctor_common ownership conflict
 
 On clean parent db4c9e3, a proposed diagnostics/doctor_common relocation passed 91 focused tests but broke top-level acyclicity (Import Linter 21/22). Exact loop: diagnostics.doctor_common to platform.deployment_platform to platform.linux.service_provisioning_linux to deployment.units to diagnostics.doctor_contracts. All trial changes were restored; the integration tree and 22/22 architecture contracts are clean again. The preexisting diagnostics-wave file was not modified. Smallest reviewable choices: defer doctor_common to the existing application shell with an explicit ownership exception, or approve a separate one-way Check/UnitSpec dependency boundary refactor. Neither is currently approved. G6 cannot claim final package convergence or Gate A while this target discrepancy remains.
+
+### G6 diagnostics shared-contract boundary amendment — 2026-10-08
+
+Independent reviewer APPROVE_SHARED_CONTRACT, evidence
+`~/.local/state/binnacle/g6-diagnostics-boundary-review-oayxj4ii/`.
+The deployed G5 pure `Check`/`Status`/`ok`/`warn`/`fail` contract remains
+canonical at `binnacle.doctor_contracts`, classified once in the existing
+`application_shell` manifest group as a **neutral root shared contract**, not
+an application orchestrator. `diagnostics.doctor_contracts` becomes a compatible
+same-module alias and is classified as a diagnostics facade. Deployment,
+platform consumers and internal diagnostics import the neutral canonical
+contract to avoid the actual `deployment -> diagnostics -> platform -> deployment`
+cycle when the four remaining diagnostic modules converge. This amendment
+neither creates a new package/framework nor weakens existing import contracts.
+C0 must pass independently before D1–D4; all final Gate A external cells remain pending.

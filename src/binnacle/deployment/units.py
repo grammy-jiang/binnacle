@@ -29,7 +29,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from binnacle.diagnostics.doctor_contracts import Check, fail, ok, warn
+from binnacle.doctor_contracts import Check, fail, ok, warn
 
 Systemctl = Callable[..., object]
 

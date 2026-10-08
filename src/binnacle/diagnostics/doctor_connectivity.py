@@ -5,13 +5,13 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from binnacle.diagnostics.doctor_contracts import (
+from binnacle.diagnostics.doctor_io import _tail_lines
+from binnacle.doctor_contracts import (
     Check,
     fail,
     ok,
     warn,
 )
-from binnacle.diagnostics.doctor_io import _tail_lines
 
 __all__ = ["_tail_lines", "check_endpoint"]
 

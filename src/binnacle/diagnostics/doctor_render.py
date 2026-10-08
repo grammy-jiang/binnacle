@@ -4,7 +4,7 @@ import json
 from collections.abc import Iterable
 from dataclasses import asdict
 
-from binnacle.diagnostics.doctor_contracts import Check
+from binnacle.doctor_contracts import Check
 
 
 def render(checks: Iterable[Check]) -> tuple[str, int]:
