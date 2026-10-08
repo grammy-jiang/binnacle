@@ -366,7 +366,7 @@ def report() -> list[Cell]:
         ),
         (
             "companion.tunnel_doctor_no_core_connectivity_impl",
-            SRC / "tunnel_doctor.py",
+            SRC / "companions/tunnel/tunnel_doctor.py",
             ("binnacle.doctor_connectivity",),
             "tunnel doctor no longer imports core connectivity implementation",
         ),
@@ -378,7 +378,7 @@ def report() -> list[Cell]:
         ),
         (
             "companion.tunnel_cli_no_core_cli",
-            SRC / "tunnel_cli.py",
+            SRC / "companions/tunnel/tunnel_cli.py",
             ("binnacle.cli",),
             "tunnel CLI no longer imports the core CLI aggregate",
         ),

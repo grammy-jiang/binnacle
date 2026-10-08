@@ -28,7 +28,7 @@ dependencies = [
 binnacle = "binnacle.cli:main"
 binnacle-jobs = "binnacle.features.commands.job_manager:main"
 binnacle-watchdog = "binnacle.watchdog_cli:main"
-binnacle-tunnel = "binnacle.tunnel_cli:main"
+binnacle-tunnel = "binnacle.companions.tunnel.tunnel_cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -371,7 +371,7 @@ forbidden_modules = [
 id = "companions-no-aggregate-shells"
 name = "Companions consume neutral diagnostics instead of aggregate shells"
 type = "forbidden"
-source_modules = ["binnacle.watchdog_doctor", "binnacle.watchdog_cli", "binnacle.tunnel_cli", "binnacle.tunnel_doctor", "binnacle.ops.watchdog.services"]
+source_modules = ["binnacle.watchdog_doctor", "binnacle.watchdog_cli", "binnacle.companions.tunnel.tunnel_cli", "binnacle.companions.tunnel.tunnel_doctor", "binnacle.ops.watchdog.services"]
 forbidden_modules = ["binnacle.doctor", "binnacle.cli", "binnacle.doctor_connectivity"]
 as_packages = false
 

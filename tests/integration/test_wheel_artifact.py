@@ -119,7 +119,7 @@ def _assert_wheel(wheel: Path, version: str) -> None:
             "binnacle = binnacle.cli:main",
             "binnacle-jobs = binnacle.features.commands.job_manager:main",
             "binnacle-watchdog = binnacle.watchdog_cli:main",
-            "binnacle-tunnel = binnacle.tunnel_cli:main",
+            "binnacle-tunnel = binnacle.companions.tunnel.tunnel_cli:main",
         }
         assert all(entry in entries for entry in expected)
 
