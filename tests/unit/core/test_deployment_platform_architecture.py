@@ -15,7 +15,7 @@ GENERIC_PATHS = (
     ROOT / "src/binnacle/doctor_common.py",
     ROOT / "src/binnacle/doctor_jobs.py",
     ROOT / "src/binnacle/job_manager_doctor.py",
-    ROOT / "src/binnacle/logstats_io.py",
+    ROOT / "src/binnacle/observability/logstats_io.py",
     ROOT / "scripts/deploy_flow.py",
     ROOT / "scripts/deploy_smoke.py",
     ROOT / "scripts/smoke_checks.py",

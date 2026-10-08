@@ -1,0 +1,220 @@
+"""Formatting and report summaries for usage statistics."""
+
+from collections.abc import Sequence
+from typing import Any
+
+from binnacle.observability.logstats_jobs import (
+    render_job_telemetry,
+)
+from binnacle.observability.logstats_models import AdaptiveDiscoveryStats, Stats
+from binnacle.observability.logstats_run_command_render import (
+    render_run_command_workflow,
+)
+from binnacle.observability.logstats_search_exact import render_exact_search
+
+
+def _pct(values: Sequence[int | float], q: float) -> float:
+    ordered = sorted(values)
+    return ordered[min(len(ordered) - 1, int(q * len(ordered)))]
+
+
+def _distribution(values: list[float]) -> dict[str, float]:
+    if not values:
+        return {"mean": 0.0, "p50": 0.0, "p90": 0.0, "max": 0.0}
+    return {
+        "mean": sum(values) / len(values),
+        "p50": _pct(values, 0.5),
+        "p90": _pct(values, 0.9),
+        "max": max(values),
+    }
+
+
+def adaptive_discovery_report(adaptive: AdaptiveDiscoveryStats) -> dict[str, Any]:
+    """JSON-friendly adaptive-discovery pilot summary."""
+    return {
+        "adaptive_calls": adaptive.calls,
+        "budget_trimmed": adaptive.budget_trimmed,
+        "candidate_open_conversion": (
+            adaptive.candidate_opened / adaptive.calls if adaptive.calls else 0.0
+        ),
+        "detailed_open_conversion": (
+            adaptive.detailed_opened / adaptive.calls if adaptive.calls else 0.0
+        ),
+        "candidate_reads": adaptive.candidate_reads,
+        "candidate_file_searches": adaptive.candidate_file_searches,
+        "detailed_reads": adaptive.detailed_reads,
+        "detailed_file_searches": adaptive.detailed_file_searches,
+        "trigger_bytes": _distribution([float(x) for x in adaptive.trigger_bytes]),
+        "result_bytes": _distribution([float(x) for x in adaptive.result_bytes]),
+        "result_tokens": _distribution([float(x) for x in adaptive.result_tokens]),
+        "total_matches": _distribution([float(x) for x in adaptive.total_matches]),
+        "matching_files": _distribution([float(x) for x in adaptive.matching_files]),
+        "detailed_files": _distribution([float(x) for x in adaptive.detailed_files]),
+        "candidate_files": _distribution([float(x) for x in adaptive.candidate_files]),
+        "representative_entries": _distribution(
+            [float(x) for x in adaptive.representative_entries]
+        ),
+        "tail_entries": _distribution([float(x) for x in adaptive.tail_entries]),
+        "followup_calls": _distribution([float(x) for x in adaptive.followup_calls]),
+        "followup_exact_searches": _distribution(
+            [float(x) for x in adaptive.followup_exact_searches]
+        ),
+        "followup_reads": _distribution([float(x) for x in adaptive.followup_reads]),
+        "followup_result_tokens": _distribution(
+            [float(x) for x in adaptive.followup_result_tokens]
+        ),
+        "investigation_result_tokens": _distribution(
+            [float(x) for x in adaptive.investigation_result_tokens]
+        ),
+        "rows": adaptive.rows,
+    }
+
+
+def render(st: Stats) -> str:
+    out: list[str] = []
+    starts = st.events.get("request_start", 0)
+    errors = st.events.get("request_error", 0)
+    if starts:
+        out.append(
+            f"requests: {starts}   errors: {errors} ({100 * errors / starts:.2f}%)"
+        )
+    else:
+        out.append("requests: 0")
+    out.append(f"server startups in window: {st.startups}")
+    out.append("\ntools/call by tool:")
+    for name, n in st.tools.most_common():
+        out.append(f"  {name:24s} {n}")
+
+    out.append("\nrequests by method:")
+    for name, n in st.methods.most_common():
+        out.append(f"  {name:28s} {n}")
+
+    out.append("\nduration_ms (n / p50 / p90 / max):")
+    for name, values in sorted(st.durations.items(), key=lambda kv: -len(kv[1])):
+        if len(values) >= 3:
+            out.append(
+                f"  {name:24s} n={len(values):5d}  p50={_pct(values, 0.5):9.1f}"
+                f"  p90={_pct(values, 0.9):9.1f}  max={max(values):10.1f}"
+            )
+
+    out.append("\nclients (per-request clientInfo where present):")
+    for name, n in st.clients.most_common():
+        out.append(f"  {name:32s} {n}")
+
+    if st.commands:
+        out.append("\nrun_command first words (top 15):")
+        for name, n in st.commands.most_common(15):
+            out.append(f"  {name:24s} {n}")
+
+    if st.areas:
+        out.append("\nfile-tool target areas (top 12):")
+        for name, n in st.areas.most_common(12):
+            out.append(f"  {name:48s} {n}")
+
+    out.append("\nrequests per day:")
+    for day in sorted(st.per_day):
+        out.append(f"  {day}  {st.per_day[day]}")
+
+    out.append("\nbusiest hours (top 8):")
+    for hour, n in st.per_hour.most_common(8):
+        out.append(f"  {hour}  {n}")
+
+    if st.errors:
+        out.append("\nrequest_error details:")
+        out.extend(f"  {e}" for e in st.errors)
+
+    if st.results:
+        out.append(
+            "\nresult size by tool, est_tokens = chars/4 (n / p50 / p90 / max / total):"
+        )
+        for name, values in sorted(
+            st.result_tokens.items(), key=lambda kv: -sum(kv[1])
+        ):
+            out.append(
+                f"  {name:24s} n={len(values):5d}  p50={_pct(values, 0.5):7.0f}"
+                f"  p90={_pct(values, 0.9):7.0f}  max={max(values):8.0f}"
+                f"  total={sum(values):9d}"
+            )
+        out.append("\ntruncated results by tool (truncated / sized results):")
+        for name, n in st.results.most_common():
+            out.append(f"  {name:24s} {st.truncated.get(name, 0)} / {n}")
+    if st.tool_errors:
+        out.append("\ntool errors by class:")
+        for name, n in st.tool_errors.most_common():
+            out.append(f"  {name:40s} {n}")
+    if st.error_codes:
+        out.append("\ntool errors by stable code:")
+        for name, n in st.error_codes.most_common():
+            out.append(f"  {name:48s} {n}")
+    if st.read_file_requests:
+        req = ", ".join(
+            f"{key}={value}" for key, value in st.read_file_requests.most_common()
+        )
+        outcomes = ", ".join(
+            f"{key}={value}" for key, value in st.read_file_outcomes.most_common()
+        )
+        out.append(f"\nread_file behavior: requests {req}")
+        if outcomes:
+            out.append(
+                f"  outcomes: {outcomes}; lines_clipped={st.read_file_lines_clipped}"
+            )
+    if st.list_files_requests:
+        req = ", ".join(
+            f"{key}={value}" for key, value in st.list_files_requests.most_common()
+        )
+        out.append(f"\nlist_files behavior: requests {req}")
+    if st.tool_config_latest:
+        out.append("\neffective tool config (latest record in window):")
+        for tool in sorted(st.tool_config_latest):
+            variants = len(st.tool_config_variants[tool])
+            out.append(f"  {tool}: variants={variants} {st.tool_config_latest[tool]}")
+    if st.job_exits:
+        exits = ", ".join(f"{k}: {v}" for k, v in st.job_exits.most_common())
+        out.append(f"\njob exits by code (job_exit lines): {exits}")
+    if st.results:
+        out.append(
+            f"run_command results that became background jobs: {st.background_jobs}"
+        )
+    out.extend(render_job_telemetry(st.jobs))
+    out.extend(render_run_command_workflow(st.run_command))
+    out.extend(render_exact_search(st.exact_search))
+    if st.turn_calls:
+        per_turn = sorted(st.turn_calls.values())
+        out.append(
+            f"\nChatGPT turns (tunnel X-Request-Id): {len(per_turn)} turns, "
+            f"{sum(per_turn)} tool calls; calls per turn median="
+            f"{per_turn[len(per_turn) // 2]} max={per_turn[-1]}"
+        )
+    if st.adaptive.calls:
+        adaptive = st.adaptive
+        out.append("\nadaptive search discovery pilot:")
+        out.append(
+            f"  calls={adaptive.calls} budget_trimmed={adaptive.budget_trimmed} "
+            f"candidate_opened={adaptive.candidate_opened} "
+            f"detailed_opened={adaptive.detailed_opened}"
+        )
+        out.append(
+            f"  candidate evidence: reads={adaptive.candidate_reads} "
+            f"file_searches={adaptive.candidate_file_searches}; "
+            f"detailed reads={adaptive.detailed_reads} "
+            f"file_searches={adaptive.detailed_file_searches}"
+        )
+        for label, values in (
+            ("trigger bytes", adaptive.trigger_bytes),
+            ("result bytes", adaptive.result_bytes),
+            ("result tokens", adaptive.result_tokens),
+            ("matching files", adaptive.matching_files),
+            ("candidate files", adaptive.candidate_files),
+            ("follow-up calls", adaptive.followup_calls),
+            ("follow-up exact", adaptive.followup_exact_searches),
+            ("follow-up reads", adaptive.followup_reads),
+            ("follow-up tokens", adaptive.followup_result_tokens),
+            ("investigation tokens", adaptive.investigation_result_tokens),
+        ):
+            if values:
+                out.append(
+                    f"  {label:20s} n={len(values):4d} p50={_pct(values, 0.5):8.1f} "
+                    f"p90={_pct(values, 0.9):8.1f} max={max(values):9.1f}"
+                )
+
+    return "\n".join(out)

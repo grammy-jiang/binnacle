@@ -405,7 +405,7 @@ def stats(
     system_resources
         Also read Webmin system-status history for the same time window.
     """
-    from binnacle import logstats
+    from binnacle.observability import logstats
 
     journal_units: str | tuple[str, str] = unit
     if unit in {"binnacle-mcp", SERVER_UNIT}:

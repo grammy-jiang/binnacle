@@ -1,13 +1,12 @@
-"""Linux compatibility IO for usage statistics."""
+"""Compatibility alias for observability-owned logstats_io."""
 
-from collections.abc import Sequence
+from typing import TYPE_CHECKING
 
-from binnacle.platform.linux.service_journal import JournalServiceLogSource
+if TYPE_CHECKING:
+    from binnacle.observability.logstats_io import *
+else:
+    import sys
 
+    from binnacle.observability import logstats_io as _impl
 
-def fetch_journal(
-    unit: str | Sequence[str], since: str, until: str | None = None
-) -> str:
-    """Preserve the existing journalctl-style CLI time grammar on Linux."""
-
-    return JournalServiceLogSource(command_timeout_s=None).read_spec(unit, since, until)
+    sys.modules[__name__] = _impl

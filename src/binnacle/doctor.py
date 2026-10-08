@@ -19,13 +19,14 @@ from pathlib import Path
 
 from binnacle import doctor_common as _doctor_common
 from binnacle import doctor_jobs as _doctor_jobs
-from binnacle import logstats, units
+from binnacle import units
 from binnacle.config import CONFIG_FILE_ENV, DEFAULT_CONFIG_FILE, get_settings
 from binnacle.diagnostics.doctor_render import render, render_json
 from binnacle.doctor_common import Check, fail, ok, warn
 from binnacle.doctor_connectivity import _tail_lines, check_endpoint
 from binnacle.doctor_provenance import check_provenance
 from binnacle.job_manager_doctor import check_job_manager
+from binnacle.observability import logstats
 from binnacle.platform.contracts.service_lifecycle_contracts import (
     ManagedServiceInspector,
 )

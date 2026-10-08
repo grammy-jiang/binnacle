@@ -79,7 +79,7 @@
       "src/binnacle/mcp/callctx.py",
       "src/binnacle/config.py",
       "src/binnacle/mcp/identity.py",
-      "src/binnacle/logstats.py",
+      "src/binnacle/observability/logstats.py",
       "src/binnacle/paths.py",
       "src/binnacle/server_unit.py",
       "src/binnacle/textio.py",
