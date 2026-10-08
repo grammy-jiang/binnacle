@@ -30,6 +30,23 @@ requires the target to be a fast-forward descendant of the production
 checkout, while the GitHub ruleset requires that exact target commit to have
 the required CI results.
 
+The local deployment gate reads the checked-in active master policy and verifies
+all of these checks for the exact candidate SHA. Every run of the canonical
+`.github/workflows/ci.yml` must succeed. Required jobs use explicit GitHub Actions
+attempt numbers, including partial reruns, and their check runs must match the
+configured issuer, SHA, name, and workflow suite. Complete paginated inventories
+and stable rereads are required; missing, ambiguous, or unreadable evidence cannot
+grant eligibility. A workflow query reaching GitHub's 1,000-result limit is
+rejected because completeness cannot be established.
+
+This intentionally replaces the former all-workflow predicate. An unrelated
+successful workflow cannot substitute for required CI; an optional review in a
+separate workflow cannot veto complete required CI. Optional failures remain
+visible on GitHub. No workflow-specific exemption or override is provided.
+The checked-in policy is not proof that remote rules have not changed: the
+protected atomic deployment push still enforces GitHub's active rules. Quiet
+window, live smoke, rollback, and the clean production tree remain separate gates.
+
 Read-only check:
 
 ```bash

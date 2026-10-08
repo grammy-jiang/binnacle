@@ -3,8 +3,8 @@
 Each step either passes or stops the deploy before anything changes:
 
 1. the checkout is a clean ``master``, and the target is a fast-forward of it;
-2. every CI run for the target commit completed successfully (running runs
-   are awaited up to ``--ci-timeout``);
+2. every canonical CI run and each required check for the exact target
+   succeeded (running runs are awaited up to ``--ci-timeout``);
 3. a quiet moment: no tool call in the last 30 s (awaited up to
    ``--quiet-timeout``), because a reload fails the calls in flight;
 4. fast-forward. In dev mode, changes to ``pyproject.toml`` or ``uv.lock``
@@ -19,10 +19,10 @@ Each step either passes or stops the deploy before anything changes:
 
 from __future__ import annotations
 
-import json
 import re
 
 from binnacle.platform.contracts.service_log_contracts import ServiceLogError
+from scripts.deploy_ci import required_ci_state
 from scripts.smoke_checks import UNIT, Env, Report, last_line, smoke
 
 QUIET_WINDOW_S = 30.0
@@ -43,30 +43,7 @@ def _repo_slug(env: Env) -> str | None:
 
 def ci_state(env: Env, sha: str) -> tuple[str, str]:
     """('success' | 'pending' | 'failed' | 'none', detail) for a commit."""
-    argv = ["gh", "run", "list", "--commit", sha, "--json", "name,status,conclusion"]
-    slug = _repo_slug(env)
-    if slug:
-        argv += ["--repo", slug]
-    rc, out = env.run(argv, 60)
-    if rc != 0:
-        return "failed", f"gh run list failed: {last_line(out)}"
-    try:
-        runs = json.loads(out or "[]")
-    except ValueError:
-        return "failed", "unreadable gh output"
-    if not runs:
-        return "none", "no CI run yet"
-    pending = [str(r.get("name")) for r in runs if r.get("status") != "completed"]
-    if pending:
-        return "pending", f"running: {', '.join(pending)}"
-    bad = [
-        f"{r.get('name')}={r.get('conclusion')}"
-        for r in runs
-        if r.get("conclusion") != "success"
-    ]
-    if bad:
-        return "failed", "; ".join(bad)
-    return "success", f"{len(runs)} run(s) succeeded"
+    return required_ci_state(env, sha, _repo_slug(env))
 
 
 def _wait_ci(env: Env, sha: str, timeout: float) -> tuple[bool, str]:

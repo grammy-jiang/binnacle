@@ -218,6 +218,13 @@ entire repository history.
 
 ## Deploy and live smoke
 
+`tests/scripts/test_deploy_ci.py` checks exact-candidate required CI eligibility,
+including partial reruns, trusted check identity, complete pagination, and changes
+during observation. `test_deploy_flow.py` exercises that evaluator through the
+existing deploy flow with fake GitHub responses and retains quiet-window,
+environment-sync, rollback, and atomic-push assertions. These tests never mutate
+production services or remote refs.
+
 Production runs from the `~/Projects/binnacle` checkout, so a new `master` there
 is a deploy. Deploy only through the gate (quality guard plan, step 2):
 

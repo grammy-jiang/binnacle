@@ -14,6 +14,7 @@ import scripts.deploy_flow as flow
 from binnacle.platform.contracts.service_lifecycle_contracts import ServiceAction
 from binnacle.platform.contracts.service_log_contracts import ServiceLogError
 from scripts.smoke_checks import Env, Report
+from tests.deploy_ci_fakes import RUNS_PATH, GitHub, workflow
 from tests.service_fakes import FakeServiceInspector
 
 PREV = "a" * 40
@@ -41,7 +42,7 @@ class Host:
             "untracked": "",
             "ff": 0,
             "diff": "src/binnacle/tools/job_status.py\n",
-            "ci": [[{"name": "CI", "status": "completed", "conclusion": "success"}]],
+            "ci": [[workflow()]],
             "mode": "dev mode",
             "busy": 0,
             "reloads": True,
@@ -51,6 +52,11 @@ class Host:
             "journal_errors": {},
         }
         self.opts.update(opts)
+        self.github = GitHub()
+        for snapshot in self.opts["ci"]:
+            for run in snapshot:
+                if run["id"] not in self.github.jobs:
+                    self.github.add_jobs(run)
         self.head = PREV
         self.calls: list[str] = []
         self.timed_calls: list[tuple[str, float]] = []
@@ -74,10 +80,13 @@ class Host:
         self.timed_calls.append((cmd, timeout))
         if argv[0] == "git":
             return self._git(argv[3:])
-        if argv[:3] == ["gh", "run", "list"]:
-            runs = self.opts["ci"][min(self.ci_seen, len(self.opts["ci"]) - 1)]
-            self.ci_seen += 1
-            return 0, json.dumps(runs)
+        if argv[:2] == ["gh", "api"]:
+            if argv[-1] == RUNS_PATH:
+                self.github.runs = self.opts["ci"][
+                    min(self.ci_seen, len(self.opts["ci"]) - 1)
+                ]
+                self.ci_seen += 1
+            return self.github.run(argv, timeout)
         if argv[0].endswith("binnacle") and argv[1:] == ["mode", "status"]:
             return 0, f"binnacle-mcp.service: active; {self.opts['mode']}\n"
         if argv[0].endswith("/uv") and argv[1:2] == ["sync"]:
@@ -145,7 +154,11 @@ def env_for(host: Host, tmp_path: Path) -> Env:
         now=host.now,
         sleep=host.sleep,
         client=lambda: None,
-        read=lambda p: p.read_text(encoding="utf-8"),
+        read=lambda p: (
+            json.dumps(host.github.policy)
+            if p.name == "master.json"
+            else p.read_text(encoding="utf-8")
+        ),
         services=FakeServiceInspector(),
         service_controller=host.controller,
         checkout=tmp_path,
@@ -263,16 +276,19 @@ def test_already_live_is_a_no_op(tmp_path: Path, smokes: list[str]) -> None:
 
 
 def test_a_failed_ci_stops_the_deploy(tmp_path: Path, smokes: list[str]) -> None:
-    host = Host(ci=[[{"name": "CI", "status": "completed", "conclusion": "failure"}]])
+    host = Host(ci=[[{**workflow(), "conclusion": "failure"}]])
     level, text = deploy(host, tmp_path)
-    assert level == "alert" and "CI=failure" in text and host.head == PREV
+    assert level == "alert" and "CI run 101=completed/failure" in text
+    assert host.head == PREV and not pushed(host) and not host.controller.calls
+    assert not any(" merge " in call for call in host.calls)
 
 
 def test_a_running_ci_is_awaited(tmp_path: Path, smokes: list[str]) -> None:
-    running = [{"name": "CI", "status": "in_progress", "conclusion": ""}]
-    done = [{"name": "CI", "status": "completed", "conclusion": "success"}]
+    running = [{**workflow(), "status": "in_progress", "conclusion": None}]
+    done = [workflow()]
     host = Host(ci=[running, running, done])
-    assert deploy(host, tmp_path)[0] == "ok" and host.ci_seen == 3
+    assert deploy(host, tmp_path)[0] == "ok" and host.ci_seen == 4
+    assert host.t >= 1_790_460_060  # Two bounded CI waits, then a stable final read.
 
 
 def test_ci_that_never_appears_times_out(tmp_path: Path, smokes: list[str]) -> None:
@@ -418,12 +434,10 @@ def test_a_failed_atomic_push_rolls_back(tmp_path: Path, smokes: list[str]) -> N
 
 
 def test_ci_state_reads_gh_output(tmp_path: Path) -> None:
-    host = Host(
-        ci=[[{"name": "CI", "status": "completed", "conclusion": "success"}] * 2]
-    )
+    host = Host(ci=[[workflow(), workflow(102)]])
     state, detail = flow.ci_state(env_for(host, tmp_path), NEW)
-    assert state == "success" and "2 run(s)" in detail
-    assert any("--repo grammy-jiang/binnacle" in c for c in host.calls)
+    assert state == "success" and "2 CI run(s)" in detail
+    assert any(RUNS_PATH in call for call in host.calls)
 
 
 @pytest.mark.parametrize("detail", ["read failed", "journalctl timed out after 60 s"])
