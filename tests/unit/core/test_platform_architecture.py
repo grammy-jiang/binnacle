@@ -53,6 +53,7 @@ EDGES = {
 }
 
 MODULE_OWNERS = {
+    "binnacle.mcp.callctx": "callctx",
     "binnacle.platform.contracts.process_contracts": "process_contracts",
     "binnacle.platform.contracts.resource_contracts": "resource_contracts",
     "binnacle.platform.linux.job_process": "job_process",
@@ -277,3 +278,11 @@ def test_only_job_engine_and_manager_select_platform():
                     alias.name != "binnacle.platform.job_platform"
                     for alias in node.names
                 ), path
+
+
+def test_g6_callctx_owner_exception_does_not_admit_mcp_glue():
+    assert imported_owner("binnacle.mcp.callctx.current_call") == "callctx"
+    assert imported_owner("binnacle.mcp.visibility") == "mcp"
+    assert violations(
+        "from binnacle.mcp.visibility import ClientToolVisibility", "jobs"
+    )

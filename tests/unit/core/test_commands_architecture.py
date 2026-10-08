@@ -18,7 +18,7 @@ STANDARD = {"dataclasses", "pathlib", "typing", "logging", "time"}
 DOMAIN_IMPORTS = {
     "binnacle.features.commands.command_contracts",
     "binnacle.features.commands.job_output",
-    "binnacle.callctx",
+    "binnacle.mcp.callctx",
     "binnacle.features.commands.run_command_evidence",
     "binnacle.features.commands.run_command_telemetry",
 }
@@ -121,6 +121,7 @@ def test_commands_imports_respect_frozen_boundary(owner):
 @pytest.mark.parametrize(
     "source",
     [
+        "from binnacle.mcp.visibility import ClientToolVisibility",
         "from binnacle import jobs as store",
         "import binnacle.job_owner as owner",
         "from binnacle.job_store import read_meta",
