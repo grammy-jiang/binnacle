@@ -564,3 +564,14 @@ not committed. Preserve the failing Gate A coverage cell until the precise
 wrapper/coverage attribution issue is resolved with a reviewable, non-weakened
 check. Neither source candidate nor deployed refs were altered in this
 follow-up; source integration was clean before this ledger update.
+
+### G6 focused coverage attribution fix (2026-10-08)
+
+The isolated four-worker test previously passed 24 tests but attributed 0%
+coverage to the watchdog CLI compatibility alias. The stubbed runpy dispatch
+test assumed a different test had already imported the real module in its
+worker. The test now imports the canonical CLI and checks the legacy alias
+before substituting a stub for main. The focused four-worker run passed all
+24 tests, with 100% coverage for both CLI compatibility wrappers. No runtime
+code, exclusions or coverage thresholds changed. The full exact-candidate
+coverage policy and final Gate A cells remain pending.

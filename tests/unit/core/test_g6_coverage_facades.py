@@ -82,6 +82,14 @@ def test_legacy_cli_main_guard_dispatches_only_to_stub(
     from pathlib import Path
     from types import ModuleType
 
+    # Import the real package and alias before replacing the CLI entry point:
+    # this test must exercise both module identity and script dispatch in
+    # isolation, regardless of which pytest worker executes it.
+    implementation = importlib.import_module(canonical)
+    assert (
+        importlib.import_module(f"binnacle.{legacy_path.removesuffix('.py')}")
+        is implementation
+    )
     calls = []
     stub = ModuleType(canonical)
     stub.__dict__["main"] = lambda: calls.append("stub-only")
