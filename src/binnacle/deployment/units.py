@@ -22,6 +22,7 @@ import os
 import re
 import shlex
 import shutil
+import subprocess
 import sys
 import time
 from collections.abc import Callable, Mapping
@@ -205,9 +206,16 @@ def unit_property(
 ) -> str:
     """Read one Linux unit-definition property for compatibility diagnostics."""
     if run is None:
-        from binnacle.service_unit_linux import unit_property as linux_unit_property
-
-        return linux_unit_property(unit, prop)
+        try:
+            proc = subprocess.run(
+                ["systemctl", "--user", "show", unit, "-p", prop, "--value"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        except OSError:
+            return ""
+        return proc.stdout.strip() if proc.returncode == 0 else ""
     result = run("show", unit, "-p", prop, "--value")
     return getattr(result, "stdout", "").strip()
 

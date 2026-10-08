@@ -1,25 +1,12 @@
-"""Linux systemd unit-definition diagnostics for compatibility callers."""
+"""Compatibility module alias for Linux-owned unit-definition diagnostics.
 
-from __future__ import annotations
+Retain the public `binnacle.service_unit_linux` import path while the
+implementation resides at `binnacle.platform.linux.service_unit_linux`.
+Both imports intentionally return the same module so monkeypatches work.
+"""
 
-import subprocess
-from collections.abc import Callable
-from typing import cast
+import sys
 
-Run = Callable[..., subprocess.CompletedProcess[str]]
+from binnacle.platform.linux import service_unit_linux as _impl
 
-
-def unit_property(service: str, prop: str, *, run: Run | None = None) -> str:
-    """Read one systemd unit-definition property with the baseline unbounded wait."""
-
-    runner = cast(Run, run or subprocess.run)
-    try:
-        proc = runner(
-            ["systemctl", "--user", "show", service, "-p", prop, "--value"],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-    except OSError:
-        return ""
-    return proc.stdout.strip() if proc.returncode == 0 else ""
+sys.modules[__name__] = _impl

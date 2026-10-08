@@ -409,3 +409,67 @@ def test_server_params_remember_the_checkout_and_resolve_the_executable(
         "binnacle": str(exe),
     }
     assert "repo" not in server_unit.server_params("prod", None, "127.0.0.1", 8000)
+
+
+def test_unit_property_default_query_exact_contract(monkeypatch):
+    import subprocess
+
+    seen = []
+
+    def fake_run(argv, **kwargs):
+        seen.append((argv, kwargs))
+        return subprocess.CompletedProcess(argv, 0, stdout="  result \n", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    assert units.unit_property("x.service", "After") == "result"
+    assert seen == [
+        (
+            ["systemctl", "--user", "show", "x.service", "-p", "After", "--value"],
+            {"capture_output": True, "text": True, "check": False},
+        )
+    ]
+
+
+def test_unit_property_default_query_failure_and_empty(monkeypatch):
+    import subprocess
+
+    for stdout, returncode, expected in [
+        ("value", 1, ""),
+        ("", 0, ""),
+        ("   \n", 0, ""),
+    ]:
+        monkeypatch.setattr(
+            subprocess,
+            "run",
+            lambda argv, returncode=returncode, stdout=stdout, **kwargs: (
+                subprocess.CompletedProcess(argv, returncode, stdout=stdout)
+            ),
+        )
+        assert units.unit_property("x.service", "After") == expected
+
+    def raises(argv, **kwargs):
+        raise OSError("systemctl unavailable")
+
+    monkeypatch.setattr(subprocess, "run", raises)
+    assert units.unit_property("x.service", "After") == ""
+
+
+def test_unit_property_injected_runner_preserves_contract():
+    import subprocess
+
+    seen = []
+
+    def fake(*args, **kwargs):
+        seen.append((args, kwargs))
+        return subprocess.CompletedProcess(args, 1, stdout="  nonzero \n")
+
+    assert units.unit_property("x.service", "After", run=fake) == "nonzero"
+    assert seen == [(("show", "x.service", "-p", "After", "--value"), {})]
+
+    def raises(*args, **kwargs):
+        raise OSError("injected")
+
+    import pytest
+
+    with pytest.raises(OSError, match="injected"):
+        units.unit_property("x.service", "After", run=raises)

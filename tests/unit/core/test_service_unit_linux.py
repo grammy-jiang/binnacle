@@ -24,3 +24,16 @@ def test_unit_property_operational_failure_is_empty():
         raise OSError("missing")
 
     assert service_unit_linux.unit_property("demo.service", "After", run=run) == ""
+
+
+def test_legacy_module_is_same_as_linux_owned_module():
+    from binnacle.platform.linux import service_unit_linux as linux_adapter
+
+    assert service_unit_linux is linux_adapter
+
+
+def test_legacy_units_module_is_deployment_owned():
+    from binnacle import units
+    from binnacle.deployment import units as implementation
+
+    assert units is implementation

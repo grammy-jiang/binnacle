@@ -116,6 +116,7 @@ def manifest_groups() -> dict[str, set[str]]:
             "platform/linux/runtime_paths_linux.py",
             "service_journal.py",
             "service_unit_linux.py",
+            "platform/linux/service_unit_linux.py",
         },
         "diagnostics": {
             "diagnostics/__init__.py",

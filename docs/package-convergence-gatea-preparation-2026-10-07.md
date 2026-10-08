@@ -365,3 +365,17 @@ repair with focused tests and then perform one fresh final convergence for the n
 SHA before Gate A.
 
 An unchanged SHA does not justify repeating an already-green broad gate.
+
+### 2026-10-08 service-unit compatibility decision (G6 checkpoint)
+
+Independent review APPROVE_OPTION_A, reviewed evidence under
+`~/.local/state/binnacle/g6-service-unit-review-n9cibbcd/` (reply and inventory).
+`deployment.units.unit_property` retains the deployed default Linux systemctl query
+locally rather than importing `platform.linux.service_unit_linux`. This avoids the
+`deployment` ↔ `platform.linux.service_provisioning_linux` package cycle.
+The Linux adapter remains at the approved owner and the legacy
+`binnacle.service_unit_linux` module identity alias remains intact.
+A newly staged cross-package monkeypatch-propagation assertion was not part of
+the deployed contract; focused behavioral and injected-runner regression tests
+replace that assertion. No Import Linter exemption or lifecycle change is made.
+Integration, Gate A convergence, independent final review and deployment remain pending.
