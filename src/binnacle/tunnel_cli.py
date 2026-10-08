@@ -4,6 +4,10 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from binnacle.companions.tunnel.tunnel_cli import *
+elif __name__ == "__main__":
+    from binnacle.companions.tunnel.tunnel_cli import main
+
+    main()
 else:
     import sys
 

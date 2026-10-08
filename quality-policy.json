@@ -33,6 +33,10 @@
         "binnacle.watchdog_connectivity"
       ],
       "tunnel": [
+        "binnacle.companions.tunnel.tunnel_cli",
+        "binnacle.companions.tunnel.tunnel_doctor",
+        "binnacle.companions.tunnel.tunnel_unit",
+        "binnacle.companions.tunnel.tunnel_log",
         "binnacle.tunnel_cli",
         "binnacle.tunnel_doctor",
         "binnacle.tunnel_unit",

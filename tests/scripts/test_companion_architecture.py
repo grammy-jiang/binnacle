@@ -85,3 +85,20 @@ def test_only_services_can_use_public_tunnel_log(tmp_path):
     )
     path.write_text("from binnacle.tunnel_log import _tail_lines")
     assert architecture.public_import_errors(path, source, POLICY)
+
+
+def test_canonical_tunnel_cannot_be_imported_by_core():
+    assert architecture.evaluate(
+        {"binnacle.server": {"binnacle.companions.tunnel.tunnel_doctor"}}, POLICY
+    )
+
+
+def test_watchdog_canonical_tunnel_implementation_denied():
+    assert architecture.evaluate(
+        {
+            "binnacle.companions.watchdog.ops.services": {
+                "binnacle.companions.tunnel.tunnel_doctor"
+            }
+        },
+        POLICY,
+    )
