@@ -100,9 +100,9 @@
       "src/binnacle/config.py",
       "src/binnacle/mcp/identity.py",
       "src/binnacle/observability/logstats.py",
-      "src/binnacle/paths.py",
+      "src/binnacle/features/files/paths.py",
       "src/binnacle/deployment/server_unit.py",
-      "src/binnacle/textio.py",
+      "src/binnacle/features/files/textio.py",
       "src/binnacle/deployment/units.py"
     ],
     "temporary_floors": {

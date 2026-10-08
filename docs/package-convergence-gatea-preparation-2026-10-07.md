@@ -518,3 +518,26 @@ wheel-from-sdist, clean-install and CLI smoke test passed in isolation (job
 expectations, not product runtime, dependency or protected import rules.
 A new final exact SHA must still pass the full convergence gates and independent
 final implementation review before deployment or Gate A acceptance.
+
+### G6 coverage policy boundary correction — 2026-10-08
+
+Exact candidate `1581de3` completed all four coverage test execution lanes
+(986+1 unit tests and 1256+1 non-unit tests passed, 3 skipped), but the
+per-module coverage **policy checker failed with 23 findings** (durable job
+`20d5b8bb5e58`). The failures concern old compatibility module files
+with unexecuted import/CLI branches plus two stale core-source filenames;
+canonical G6 feature/companion implementations already have measured high
+coverage. No percentage threshold or temporary floor was changed.
+
+The small repair updates the **existing 95% core policy paths** from removed or
+facade files `src/binnacle/paths.py` and `src/binnacle/textio.py` to their
+canonical `src/binnacle/features/files/{paths,textio}.py` implementations,
+with unchanged core/other thresholds. A targeted unit module exercises the
+legacy identity aliases and filesystem facade. The two `__main__` dispatch
+branches are tested with pre-injected **stub-only canonical modules**; tests
+never start or restart the actual job-manager or watchdog services.
+Focused coverage showed 100% for the sampled legacy facades, including
+`job_manager.py`, `watchdog_cli.py`, Diagnostics contract alias, Logstats,
+Watchdog ops and `paths.py`; all 24 focused tests passed. This is targeted
+regression evidence and **not** a claim that full coverage now passes.
+The full policy gate must be rerun against the next committed exact candidate.
