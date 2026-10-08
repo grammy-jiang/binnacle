@@ -338,7 +338,12 @@ def report() -> list[Cell]:
 
     cli_hits = any_import(
         [SRC / "cli.py"],
-        ("binnacle.webminstats", "binnacle.watchdog", "binnacle.ops.watchdog"),
+        (
+            "binnacle.webminstats",
+            "binnacle.observability.linux.webminstats",
+            "binnacle.watchdog",
+            "binnacle.ops.watchdog",
+        ),
     )
     cells.append(
         Cell(
@@ -362,13 +367,16 @@ def report() -> list[Cell]:
         (
             "companion.watchdog_doctor_no_core_aggregate",
             SRC / "companions/watchdog/watchdog_doctor.py",
-            ("binnacle.doctor",),
+            ("binnacle.doctor", "binnacle.diagnostics.doctor"),
             "watchdog doctor no longer imports the core doctor aggregate",
         ),
         (
             "companion.tunnel_doctor_no_core_connectivity_impl",
             SRC / "companions/tunnel/tunnel_doctor.py",
-            ("binnacle.doctor_connectivity",),
+            (
+                "binnacle.doctor_connectivity",
+                "binnacle.diagnostics.doctor_connectivity",
+            ),
             "tunnel doctor no longer imports core connectivity implementation",
         ),
         (

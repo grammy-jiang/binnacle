@@ -575,3 +575,27 @@ before substituting a stub for main. The focused four-worker run passed all
 24 tests, with 100% coverage for both CLI compatibility wrappers. No runtime
 code, exclusions or coverage thresholds changed. The full exact-candidate
 coverage policy and final Gate A cells remain pending.
+
+### G6 final implementation review — canonical policy guardrail correction
+
+The exact-source candidate `0c5d2a9e16b0ba2b8b86712e174e413adf0ff2d3`
+passed all eight final test-farm lanes (full suite, Python 3.10–3.14, coverage
+policy and wheel). A fresh independent **read-only** implementation review
+returned **REVISE**, not acceptance: the architectural tests and Import Linter
+still allowed new canonical diagnostics and Webmin import spellings which bypassed
+pre-relocation, legacy-path-only guards. The reviewer also identified two
+omitted retained aliases (`doctor_connectivity.py`, `doctor_provenance.py`) in
+the compatibility inventory. These are prevention/verification defects, not
+evidence of a runtime regression.
+
+The smallest follow-up adds canonical modules to the existing Import Linter
+contracts, architecture policy and Gate A static edge checks; it classifies the
+two public compatibility aliases without removing or changing them. Negative
+regression cases demonstrate rejection of the three reported canonical imports.
+Focused architecture/Gate A tests passed **36/36**, architecture scan reported
+**235 modules / 0 forbidden edges**, and Import Linter kept **22/22** contracts.
+No production runtime behavior, durable job handling, live services, or public
+MCP tool schemas were changed by this correction. Changed-file format/quality
+checks and a fresh independent follow-up review remain required for the
+corrected commit. **All broad convergence and remote/live Gate A evidence must
+be tied to the newly frozen exact SHA; the prior 8/8 does not transfer.**

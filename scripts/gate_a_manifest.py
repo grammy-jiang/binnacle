@@ -234,6 +234,8 @@ def compatibility_facades() -> set[str]:
         "doctor.py",
         "doctor_common.py",
         "doctor_jobs.py",
+        "doctor_connectivity.py",
+        "doctor_provenance.py",
         "job_manager_doctor.py",
         "diagnostics/doctor_contracts.py",
         "doctor_io.py",

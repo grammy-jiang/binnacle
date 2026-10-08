@@ -19,6 +19,14 @@ POLICY = architecture.load_policy()
         ("binnacle.companions.watchdog.ops.services", "binnacle.tunnel_doctor"),
         ("binnacle.doctor_connectivity", "binnacle.uplink"),
         ("binnacle.cli", "binnacle.webminstats"),
+        ("binnacle.companions.watchdog.watchdog_doctor", "binnacle.diagnostics.doctor"),
+        ("binnacle.companions.watchdog.watchdog_cli", "binnacle.diagnostics.doctor"),
+        (
+            "binnacle.companions.tunnel.tunnel_doctor",
+            "binnacle.diagnostics.doctor_connectivity",
+        ),
+        ("binnacle.tunnel_doctor", "binnacle.diagnostics.doctor_connectivity"),
+        ("binnacle.cli", "binnacle.observability.linux.webminstats"),
     ],
 )
 def test_former_reverse_edges_fail_for_import_spellings(tmp_path, source, forbidden):

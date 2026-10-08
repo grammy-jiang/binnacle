@@ -90,6 +90,7 @@ def test_g6_compatibility_facades_are_present_and_singly_classified():
     assert missing == []
     assert set(owners) == manifest.compatibility_facades()
     assert all(len(groups) == 1 for groups in owners.values())
+    assert {"doctor_connectivity.py", "doctor_provenance.py"} <= set(owners)
 
 
 def test_watchdog_tunnel_contract_allows_only_tunnel_unit_name(tmp_path):
@@ -143,3 +144,36 @@ def test_package_convergence_remains_pending_until_final_evidence():
     assert pending.status == "PENDING"
     assert "relocation checkpoints integrated" in pending.detail
     assert "final package review" in pending.detail
+
+
+def test_gate_a_detects_canonical_boundary_bypasses(monkeypatch):
+    cases = [
+        (
+            "companions/watchdog/watchdog_doctor.py",
+            "binnacle.diagnostics.doctor",
+            "companion.watchdog_doctor_no_core_aggregate",
+        ),
+        (
+            "companions/tunnel/tunnel_doctor.py",
+            "binnacle.diagnostics.doctor_connectivity",
+            "companion.tunnel_doctor_no_core_connectivity_impl",
+        ),
+        (
+            "cli.py",
+            "binnacle.observability.linux.webminstats",
+            "companion.core_cli_no_watchdog_webmin",
+        ),
+    ]
+    original = gate_a.imports_for
+    for relative_path, illegal_import, gate_cell in cases:
+        path = gate_a.SRC / relative_path
+
+        def imports_with_bypass(actual_path, forbidden=illegal_import, target=path):
+            current = original(actual_path)
+            return current | {forbidden} if actual_path == target else current
+
+        with monkeypatch.context() as patched:
+            patched.setattr(gate_a, "imports_for", imports_with_bypass)
+            cell = {item.id: item for item in gate_a.report()}[gate_cell]
+        assert cell.status == "FAIL", (relative_path, illegal_import)
+        assert illegal_import in cell.detail

@@ -52,35 +52,45 @@
     "forbidden_direct_imports": {
       "binnacle.companions.watchdog.watchdog_doctor": [
         "binnacle.doctor",
-        "binnacle.cli"
+        "binnacle.cli",
+        "binnacle.diagnostics.doctor"
       ],
       "binnacle.watchdog_doctor": [
         "binnacle.doctor",
-        "binnacle.cli"
+        "binnacle.cli",
+        "binnacle.diagnostics.doctor"
       ],
       "binnacle.companions.watchdog.watchdog_cli": [
         "binnacle.doctor",
-        "binnacle.cli"
+        "binnacle.cli",
+        "binnacle.diagnostics.doctor"
       ],
       "binnacle.watchdog_cli": [
         "binnacle.doctor",
-        "binnacle.cli"
+        "binnacle.cli",
+        "binnacle.diagnostics.doctor"
       ],
       "binnacle.tunnel_cli": [
         "binnacle.doctor",
         "binnacle.cli"
       ],
       "binnacle.tunnel_doctor": [
-        "binnacle.doctor_connectivity"
+        "binnacle.doctor_connectivity",
+        "binnacle.diagnostics.doctor_connectivity"
       ],
       "binnacle.ops.watchdog.services": [
         "binnacle.tunnel_doctor"
       ],
       "binnacle.cli": [
-        "binnacle.webminstats"
+        "binnacle.webminstats",
+        "binnacle.observability.linux.webminstats"
       ],
       "binnacle.companions.watchdog.ops.services": [
         "binnacle.tunnel_doctor"
+      ],
+      "binnacle.companions.tunnel.tunnel_doctor": [
+        "binnacle.doctor_connectivity",
+        "binnacle.diagnostics.doctor_connectivity"
       ]
     },
     "companion_public_imports": {

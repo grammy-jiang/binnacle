@@ -372,12 +372,16 @@ id = "companions-no-aggregate-shells"
 name = "Companions consume neutral diagnostics instead of aggregate shells"
 type = "forbidden"
 source_modules = ["binnacle.companions.watchdog.watchdog_doctor", "binnacle.companions.watchdog.watchdog_cli", "binnacle.companions.tunnel.tunnel_cli", "binnacle.companions.tunnel.tunnel_doctor", "binnacle.companions.watchdog.ops.services"]
-forbidden_modules = ["binnacle.doctor", "binnacle.cli", "binnacle.doctor_connectivity"]
+forbidden_modules = [
+    "binnacle.doctor", "binnacle.diagnostics.doctor",
+    "binnacle.cli",
+    "binnacle.doctor_connectivity", "binnacle.diagnostics.doctor_connectivity",
+]
 as_packages = false
 
 [[tool.importlinter.contracts]]
 id = "webmin-through-observability"
 name = "Only the resource history composition selects Webmin"
 type = "protected"
-protected_modules = ["binnacle.webminstats"]
-allowed_importers = ["binnacle.observability.system_resource_history"]
+protected_modules = ["binnacle.webminstats", "binnacle.observability.linux.webminstats"]
+allowed_importers = ["binnacle.observability.system_resource_history", "binnacle.webminstats"]
