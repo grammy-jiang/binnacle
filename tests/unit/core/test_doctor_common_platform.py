@@ -48,3 +48,14 @@ def test_injected_runner_preserves_compatibility_state_and_property_behavior():
 
     assert doctor_common.unit_state("demo.service", run) == "active"
     assert doctor_common.unit_property("demo.service", "After", run) == "value"
+
+
+def test_legacy_doctor_common_module_alias_identity():
+    import importlib
+
+    from binnacle.diagnostics import doctor_common as owned
+
+    assert doctor_common is owned
+    assert importlib.import_module("binnacle.doctor_common") is owned
+    assert importlib.import_module("binnacle.diagnostics.doctor_common") is owned
+    assert doctor_common.unit_property.__defaults__ == (doctor_common.systemctl,)

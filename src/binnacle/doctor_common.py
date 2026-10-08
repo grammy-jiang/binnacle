@@ -1,33 +1,12 @@
-"""Shared health-check records and systemd primitives."""
+"""Compatibility alias for diagnostics-owned doctor_common."""
 
-import subprocess
-from collections.abc import Callable
+from typing import TYPE_CHECKING
 
-from binnacle import doctor_contracts as _contracts
+if TYPE_CHECKING:
+    from binnacle.diagnostics.doctor_common import *
+else:
+    import sys
 
-Check = _contracts.Check
-Status = _contracts.Status
-ok = _contracts.ok
-warn = _contracts.warn
-fail = _contracts.fail
+    from binnacle.diagnostics import doctor_common as _impl
 
-
-Systemctl = Callable[..., "subprocess.CompletedProcess[str]"]
-
-
-def systemctl(*args: str) -> "subprocess.CompletedProcess[str]":
-    from binnacle.platform.deployment_platform import create_linux_provisioner
-
-    return create_linux_provisioner().systemctl(*args, check=False)
-
-
-def unit_state(unit: str, run: Systemctl | None = None) -> str:
-    if run is None:
-        from binnacle.platform.deployment_platform import create_service_inspector
-
-        return create_service_inspector().status(unit).state
-    return run("is-active", unit).stdout.strip() or "unknown"
-
-
-def unit_property(unit: str, prop: str, run: Systemctl = systemctl) -> str:
-    return run("show", unit, "-p", prop, "--value").stdout.strip()
+    sys.modules[__name__] = _impl

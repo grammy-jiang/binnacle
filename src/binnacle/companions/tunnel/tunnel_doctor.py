@@ -24,7 +24,7 @@ from binnacle.companions.tunnel.tunnel_unit import (
 from binnacle.config import get_settings
 from binnacle.deployment import units
 from binnacle.deployment.server_unit import SERVER_UNIT
-from binnacle.doctor_common import (
+from binnacle.diagnostics.doctor_common import (
     Check,
     Systemctl,
     fail,

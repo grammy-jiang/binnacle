@@ -22,8 +22,8 @@ from binnacle.companions.watchdog.watchdog_unit import (
 )
 from binnacle.companions.watchdog.watchlog import fetch_journal
 from binnacle.deployment import units
+from binnacle.diagnostics.doctor_common import Systemctl, systemctl, unit_state
 from binnacle.diagnostics.doctor_io import _tail_lines
-from binnacle.doctor_common import Systemctl, systemctl, unit_state
 from binnacle.doctor_contracts import Check, fail, ok, warn
 
 
