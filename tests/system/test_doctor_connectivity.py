@@ -253,3 +253,9 @@ def test_log_tail_tolerates_a_removed_file(tmp_path):
     assert _tail_lines(log) == ["valid", "invalid \ufffd"]
     log.unlink()
     assert _tail_lines(log) == []
+
+
+def test_legacy_doctor_connectivity_alias_preserves_identity() -> None:
+    from binnacle.diagnostics import doctor_connectivity as canonical
+
+    assert doctor_connectivity is canonical
