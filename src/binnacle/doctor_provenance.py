@@ -1,14 +1,12 @@
-"""Runtime provenance check for binnacle doctor."""
+"""Compatibility module alias for diagnostics-owned doctor_provenance."""
 
-from binnacle.doctor_common import Check, ok
-from binnacle.provenance import Provenance, runtime_provenance
+from typing import TYPE_CHECKING
 
+if TYPE_CHECKING:
+    from binnacle.diagnostics.doctor_provenance import *
+else:
+    import sys
 
-def check_provenance(value: Provenance | None = None) -> list[Check]:
-    value = runtime_provenance() if value is None else value
-    return [
-        ok(
-            "version",
-            f"package={value.package_version} revision={value.revision}",
-        )
-    ]
+    from binnacle.diagnostics import doctor_provenance as _impl
+
+    sys.modules[__name__] = _impl

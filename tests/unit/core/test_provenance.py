@@ -180,3 +180,9 @@ def test_source_revision_reports_unknown_on_git_timeout(
 
     monkeypatch.setattr(provenance.subprocess, "run", timeout)
     assert provenance.source_revision(tmp_path) == "unknown"
+
+
+def test_doctor_provenance_legacy_alias_preserves_module_identity() -> None:
+    from binnacle.diagnostics import doctor_provenance as implementation
+
+    assert doctor_provenance is implementation
