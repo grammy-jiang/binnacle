@@ -110,3 +110,12 @@ def test_job_manager_restarts_warn_and_dead_socket_fails(tmp_path):
     )
     assert active == "jobs.service"
     assert [c.status for c in checks] == ["ok", "warn", "fail"]
+
+
+def test_legacy_module_identity_and_ping_default():
+    import importlib
+
+    from binnacle.diagnostics import job_manager_doctor as owned
+
+    assert importlib.import_module("binnacle.job_manager_doctor") is owned
+    assert owned.check_job_manager.__defaults__[1] is job_client.ping

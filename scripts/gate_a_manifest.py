@@ -135,6 +135,7 @@ def manifest_groups() -> dict[str, set[str]]:
             "doctor_io.py",
             "doctor_render.py",
             "job_manager_doctor.py",
+            "diagnostics/job_manager_doctor.py",
         },
         "observability": {
             "observability/__init__.py",

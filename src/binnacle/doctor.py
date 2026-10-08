@@ -23,9 +23,9 @@ from binnacle.diagnostics import doctor_common as _doctor_common
 from binnacle.diagnostics import doctor_jobs as _doctor_jobs
 from binnacle.diagnostics.doctor_common import Check, fail, ok, warn
 from binnacle.diagnostics.doctor_render import render, render_json
+from binnacle.diagnostics.job_manager_doctor import check_job_manager
 from binnacle.doctor_connectivity import _tail_lines, check_endpoint
 from binnacle.doctor_provenance import check_provenance
-from binnacle.job_manager_doctor import check_job_manager
 from binnacle.observability import logstats
 from binnacle.platform.contracts.service_lifecycle_contracts import (
     ManagedServiceInspector,
