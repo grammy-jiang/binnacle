@@ -135,3 +135,11 @@ def test_payload_binds_every_cell_to_one_exact_snapshot():
         "2026-10-07T10:00:00+00:00"
     }
     assert payload["cells"][1]["evidence"] == "external"
+
+
+def test_package_convergence_remains_pending_until_final_evidence():
+    cells = {cell.id: cell for cell in gate_a.report()}
+    pending = cells["architecture.package_convergence"]
+    assert pending.status == "PENDING"
+    assert "relocation checkpoints integrated" in pending.detail
+    assert "final package review" in pending.detail

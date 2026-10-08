@@ -234,7 +234,8 @@ def report() -> list[Cell]:
         Cell(
             "architecture.package_convergence",
             "PENDING",
-            "G6 relocation and compatibility-facade removal have not started",
+            "G6 relocation checkpoints integrated; final package review, selective "
+            "compatibility-facade retention/removal and exact-SHA convergence pending",
             evidence="review",
         )
     )
