@@ -108,7 +108,7 @@ def _assert_wheel(wheel: Path, version: str) -> None:
         assert "binnacle/py.typed" in names
         assert "binnacle/tools/read_file.py" in names
         assert "binnacle/tools/run_command.py" in names
-        assert "binnacle/ops/watchdog/policy.py" in names
+        assert "binnacle/companions/watchdog/ops/policy.py" in names
         assert not any(name.startswith("tests/") for name in names)
 
         entry_points = next(
@@ -118,7 +118,7 @@ def _assert_wheel(wheel: Path, version: str) -> None:
         expected = {
             "binnacle = binnacle.cli:main",
             "binnacle-jobs = binnacle.features.commands.job_manager:main",
-            "binnacle-watchdog = binnacle.watchdog_cli:main",
+            "binnacle-watchdog = binnacle.companions.watchdog.watchdog_cli:main",
             "binnacle-tunnel = binnacle.companions.tunnel.tunnel_cli:main",
         }
         assert all(entry in entries for entry in expected)

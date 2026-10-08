@@ -1,5 +1,12 @@
-"""Shared synchronization for watchdog decide-and-act sections."""
+"""Compatibility alias for binnacle.companions.watchdog.ops.lock."""
 
-import threading
+from typing import TYPE_CHECKING
 
-ACT_LOCK = threading.Lock()
+if TYPE_CHECKING:
+    from binnacle.companions.watchdog.ops.lock import *
+else:
+    import sys
+
+    from binnacle.companions.watchdog.ops import lock as _impl
+
+    sys.modules[__name__] = _impl

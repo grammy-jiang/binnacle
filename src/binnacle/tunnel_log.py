@@ -1,12 +1,12 @@
-"""Compatibility alias for tunnel-companion-owned tunnel_log."""
+"""Runtime compatibility alias for tunnel-companion-owned tunnel_log.
 
-from typing import TYPE_CHECKING
+The public G5 watchdog contract remains binnacle.tunnel_log.scan_tunnel_log.
+Runtime aliasing preserves module identity without a static reverse package edge;
+static compatibility is supplied by the .pyi.
+"""
 
-if TYPE_CHECKING:
-    from binnacle.companions.tunnel.tunnel_log import *
-else:
-    import sys
+import importlib
+import sys
 
-    from binnacle.companions.tunnel import tunnel_log as _impl
-
-    sys.modules[__name__] = _impl
+_impl = importlib.import_module("binnacle.companions.tunnel.tunnel_log")
+sys.modules[__name__] = _impl

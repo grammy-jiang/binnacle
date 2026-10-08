@@ -63,7 +63,7 @@ def test_companions_do_not_import_core_cli(module):
 
 
 def test_watchdog_uses_public_tunnel_log_facts():
-    source = SRC / "ops/watchdog/services.py"
+    source = SRC / "companions/watchdog/ops/services.py"
     tree = ast.parse(source.read_text())
     assert not any(
         isinstance(n, ast.ImportFrom) and n.module == "binnacle.tunnel_doctor"

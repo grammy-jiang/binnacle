@@ -27,7 +27,7 @@ dependencies = [
 [project.scripts]
 binnacle = "binnacle.cli:main"
 binnacle-jobs = "binnacle.features.commands.job_manager:main"
-binnacle-watchdog = "binnacle.watchdog_cli:main"
+binnacle-watchdog = "binnacle.companions.watchdog.watchdog_cli:main"
 binnacle-tunnel = "binnacle.companions.tunnel.tunnel_cli:main"
 
 [tool.setuptools.packages.find]
@@ -232,8 +232,8 @@ modules = [
 id = "watchdog-isolated"
 name = "Watchdog internals are isolated from Binnacle core"
 type = "protected"
-protected_modules = ["binnacle.ops.watchdog"]
-allowed_importers = ["binnacle.watchdog", "binnacle.watchdog_cli"]
+protected_modules = ["binnacle.companions.watchdog.ops"]
+allowed_importers = ["binnacle.companions.watchdog.watchdog", "binnacle.companions.watchdog.watchdog_cli", "binnacle.ops.watchdog"]
 
 [[tool.importlinter.contracts]]
 id = "server-not-dependency"
@@ -259,7 +259,7 @@ modules = ["binnacle.features.commands.tools.*"]
 id = "watchdog-acyclic"
 name = "Watchdog internals remain acyclic"
 type = "acyclic_siblings"
-ancestors = ["binnacle.ops.watchdog"]
+ancestors = ["binnacle.companions.watchdog.ops"]
 
 [[tool.importlinter.contracts]]
 id = "top-level-acyclic"
@@ -371,7 +371,7 @@ forbidden_modules = [
 id = "companions-no-aggregate-shells"
 name = "Companions consume neutral diagnostics instead of aggregate shells"
 type = "forbidden"
-source_modules = ["binnacle.watchdog_doctor", "binnacle.watchdog_cli", "binnacle.companions.tunnel.tunnel_cli", "binnacle.companions.tunnel.tunnel_doctor", "binnacle.ops.watchdog.services"]
+source_modules = ["binnacle.companions.watchdog.watchdog_doctor", "binnacle.companions.watchdog.watchdog_cli", "binnacle.companions.tunnel.tunnel_cli", "binnacle.companions.tunnel.tunnel_doctor", "binnacle.companions.watchdog.ops.services"]
 forbidden_modules = ["binnacle.doctor", "binnacle.cli", "binnacle.doctor_connectivity"]
 as_packages = false
 

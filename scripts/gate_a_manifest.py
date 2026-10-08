@@ -166,6 +166,20 @@ def manifest_groups() -> dict[str, set[str]]:
             "tunnel_unit.py",
         },
         "watchdog": {
+            "companions/watchdog/__init__.py",
+            "companions/watchdog/watchdog.py",
+            "companions/watchdog/watchdog_cli.py",
+            "companions/watchdog/watchdog_doctor.py",
+            "companions/watchdog/watchdog_config.py",
+            "companions/watchdog/watchdog_connectivity.py",
+            "companions/watchdog/watchdog_unit.py",
+            "companions/watchdog/watchlog.py",
+            "companions/watchdog/uplink.py",
+            "companions/watchdog/ops/__init__.py",
+            *(
+                rel(path)
+                for path in (SRC / "companions" / "watchdog" / "ops").glob("*.py")
+            ),
             "watchdog.py",
             "watchdog_cli.py",
             "watchdog_doctor.py",
@@ -228,6 +242,17 @@ def compatibility_facades() -> set[str]:
         "tunnel_log.py",
         "tunnel_unit.py",
         "watchdog.py",
+        "watchdog_cli.py",
+        "watchdog_doctor.py",
+        "watchdog_config.py",
+        "watchdog_connectivity.py",
+        "watchdog_unit.py",
+        "watchlog.py",
+        "uplink.py",
+        *(
+            path.relative_to(SRC).as_posix()
+            for path in (SRC / "ops" / "watchdog").glob("*.py")
+        ),
         "logstats.py",
         "logstats_adaptive.py",
         "logstats_io.py",

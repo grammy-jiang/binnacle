@@ -13,6 +13,15 @@
     "src_root": "src",
     "companions": {
       "watchdog": [
+        "binnacle.companions.watchdog.uplink",
+        "binnacle.companions.watchdog.ops",
+        "binnacle.companions.watchdog.watchdog",
+        "binnacle.companions.watchdog.watchdog_cli",
+        "binnacle.companions.watchdog.watchdog_config",
+        "binnacle.companions.watchdog.watchdog_doctor",
+        "binnacle.companions.watchdog.watchdog_connectivity",
+        "binnacle.companions.watchdog.watchdog_unit",
+        "binnacle.companions.watchdog.watchlog",
         "binnacle.ops.watchdog",
         "binnacle.watchdog",
         "binnacle.watchdog_cli",
@@ -37,7 +46,15 @@
       "tunnel": []
     },
     "forbidden_direct_imports": {
+      "binnacle.companions.watchdog.watchdog_doctor": [
+        "binnacle.doctor",
+        "binnacle.cli"
+      ],
       "binnacle.watchdog_doctor": [
+        "binnacle.doctor",
+        "binnacle.cli"
+      ],
+      "binnacle.companions.watchdog.watchdog_cli": [
         "binnacle.doctor",
         "binnacle.cli"
       ],
@@ -57,15 +74,18 @@
       ],
       "binnacle.cli": [
         "binnacle.webminstats"
+      ],
+      "binnacle.companions.watchdog.ops.services": [
+        "binnacle.tunnel_doctor"
       ]
     },
     "companion_public_imports": {
-      "binnacle.watchdog_cli": {
+      "binnacle.companions.watchdog.watchdog_cli": {
         "binnacle.tunnel_unit": [
           "TUNNEL_UNIT"
         ]
       },
-      "binnacle.ops.watchdog.services": {
+      "binnacle.companions.watchdog.ops.services": {
         "binnacle.tunnel_log": [
           "scan_tunnel_log"
         ]

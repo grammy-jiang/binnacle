@@ -360,7 +360,7 @@ def report() -> list[Cell]:
     companion_edge_specs = [
         (
             "companion.watchdog_doctor_no_core_aggregate",
-            SRC / "watchdog_doctor.py",
+            SRC / "companions/watchdog/watchdog_doctor.py",
             ("binnacle.doctor",),
             "watchdog doctor no longer imports the core doctor aggregate",
         ),
@@ -372,7 +372,7 @@ def report() -> list[Cell]:
         ),
         (
             "companion.watchdog_cli_no_core_cli",
-            SRC / "watchdog_cli.py",
+            SRC / "companions/watchdog/watchdog_cli.py",
             ("binnacle.cli",),
             "watchdog CLI no longer imports the core CLI aggregate",
         ),
@@ -384,7 +384,7 @@ def report() -> list[Cell]:
         ),
         (
             "companion.watchdog_services_no_tunnel_doctor_impl",
-            SRC / "ops" / "watchdog" / "services.py",
+            SRC / "companions" / "watchdog" / "ops" / "services.py",
             ("binnacle.tunnel_doctor",),
             "watchdog services no longer import tunnel doctor implementation",
         ),
@@ -400,7 +400,7 @@ def report() -> list[Cell]:
         )
 
     tunnel_names, tunnel_module_import = imported_names_from(
-        SRC / "watchdog_cli.py", "binnacle.tunnel_unit"
+        SRC / "companions/watchdog/watchdog_cli.py", "binnacle.tunnel_unit"
     )
     narrow_tunnel_contract = (
         tunnel_names == {"TUNNEL_UNIT"} and not tunnel_module_import

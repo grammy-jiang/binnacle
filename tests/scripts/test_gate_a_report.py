@@ -77,7 +77,7 @@ def test_g5_additions_have_expected_g6_owners():
         "observability/system_resource_contracts.py": "observability",
         "observability/system_resource_history.py": "observability",
         "companions/tunnel/tunnel_log.py": "tunnel",
-        "watchdog_connectivity.py": "watchdog",
+        "companions/watchdog/watchdog_connectivity.py": "watchdog",
     }
     for path, owner in expected.items():
         assert path in groups[owner]
