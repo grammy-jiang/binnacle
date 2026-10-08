@@ -425,7 +425,9 @@ def stats(
     analysis = logstats.analyze(records, startups)
     print(logstats.render(analysis))
     if system_resources:
-        from binnacle.system_resource_history import create_system_resource_history
+        from binnacle.observability.system_resource_history import (
+            create_system_resource_history,
+        )
 
         print("\n" + create_system_resource_history().render_window(since, until))
 

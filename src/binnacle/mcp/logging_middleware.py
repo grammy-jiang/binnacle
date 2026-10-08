@@ -42,7 +42,7 @@ from binnacle.mcp.callctx import (
     current_turn,
 )
 from binnacle.mcp.identity import ClientIdentity
-from binnacle.token_telemetry import TokenCounter
+from binnacle.observability.token_telemetry import TokenCounter
 
 # Proposed settings (module constants until config.py is free to edit).
 ARGS_MAX_CHARS = 500  # same clip as the request_start payload

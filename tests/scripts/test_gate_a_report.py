@@ -74,8 +74,8 @@ def test_g5_additions_have_expected_g6_owners():
     expected = {
         "diagnostics/doctor_io.py": "diagnostics",
         "diagnostics/doctor_render.py": "diagnostics",
-        "system_resource_contracts.py": "observability",
-        "system_resource_history.py": "observability",
+        "observability/system_resource_contracts.py": "observability",
+        "observability/system_resource_history.py": "observability",
         "tunnel_log.py": "tunnel",
         "watchdog_connectivity.py": "watchdog",
     }

@@ -380,4 +380,4 @@ id = "webmin-through-observability"
 name = "Only the resource history composition selects Webmin"
 type = "protected"
 protected_modules = ["binnacle.webminstats"]
-allowed_importers = ["binnacle.system_resource_history"]
+allowed_importers = ["binnacle.observability.system_resource_history"]

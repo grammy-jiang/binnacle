@@ -1,9 +1,12 @@
-"""Explicit, lazy composition of the optional system resource history reader."""
+"""Compatibility alias for observability-owned system_resource_history."""
 
-from binnacle.system_resource_contracts import SystemResourceHistory
+from typing import TYPE_CHECKING
 
+if TYPE_CHECKING:
+    from binnacle.observability.system_resource_history import *
+else:
+    import sys
 
-def create_system_resource_history() -> SystemResourceHistory:
-    from binnacle.webminstats import WebminSystemResourceHistory
+    from binnacle.observability import system_resource_history as _impl
 
-    return WebminSystemResourceHistory()
+    sys.modules[__name__] = _impl
