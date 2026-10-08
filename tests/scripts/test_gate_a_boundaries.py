@@ -213,6 +213,8 @@ def test_g6_diagnostics_legacy_aliases_are_classified():
     assert "doctor_contracts.py" not in facades
 
 
-@pytest.mark.parametrize("root", ["binnacle.companions.watchdog", "binnacle.companions.tunnel"])
+@pytest.mark.parametrize(
+    "root", ["binnacle.companions.watchdog", "binnacle.companions.tunnel"]
+)
 def test_companion_namespace_roots_are_guarded(root):
     assert root in gate_a.companion_modules()

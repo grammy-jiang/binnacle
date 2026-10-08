@@ -112,6 +112,8 @@ def test_watchdog_canonical_tunnel_implementation_denied():
     )
 
 
-@pytest.mark.parametrize("namespace", ["binnacle.companions.watchdog", "binnacle.companions.tunnel"])
+@pytest.mark.parametrize(
+    "namespace", ["binnacle.companions.watchdog", "binnacle.companions.tunnel"]
+)
 def test_core_cannot_import_companion_package_root(namespace):
     assert architecture.evaluate({"binnacle.server": {namespace}}, POLICY)

@@ -168,9 +168,21 @@ def test_gate_a_detects_canonical_boundary_bypasses(monkeypatch):
             "binnacle.platform.linux.service_unit_linux",
             "platform.product_domains_no_linux_imports",
         ),
-        ("features/files/paths.py", "binnacle.platform.linux", "platform.product_domains_no_linux_imports"),
-        ("server.py", "binnacle.companions.watchdog", "companion.server_core_platform_no_watchdog_impl"),
-        ("server.py", "binnacle.companions.tunnel", "companion.server_core_platform_no_watchdog_impl"),
+        (
+            "features/files/paths.py",
+            "binnacle.platform.linux",
+            "platform.product_domains_no_linux_imports",
+        ),
+        (
+            "server.py",
+            "binnacle.companions.watchdog",
+            "companion.server_core_platform_no_watchdog_impl",
+        ),
+        (
+            "server.py",
+            "binnacle.companions.tunnel",
+            "companion.server_core_platform_no_watchdog_impl",
+        ),
     ]
     original = gate_a.imports_for
     for relative_path, illegal_import, gate_cell in cases:

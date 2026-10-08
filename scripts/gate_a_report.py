@@ -304,17 +304,7 @@ def report() -> list[Cell]:
             )
         )
 
-    linux_impls = (
-        "binnacle.platform.linux",
-        "binnacle.platform.linux.job_process",
-        "binnacle.platform.linux.job_cgroup",
-        "binnacle.platform.linux.service_systemd",
-        "binnacle.platform.linux.service_journal",
-        "binnacle.platform.linux.service_provisioning_linux",
-        "binnacle.service_unit_linux",
-        "binnacle.platform.linux.service_unit_linux",
-        "binnacle.platform.linux.runtime_paths_linux",
-    )
+    linux_impls = ("binnacle.platform.linux", "binnacle.service_unit_linux")
     product_hits = any_import(product_domain_files(), linux_impls)
     cells.append(
         Cell(
