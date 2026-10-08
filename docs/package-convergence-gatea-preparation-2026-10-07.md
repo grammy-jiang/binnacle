@@ -478,3 +478,20 @@ implementation review or final Gate A pass. Final source and acceptance SHA must
 bound after committing this record. The exact-final-SHA full-suite, coverage, Python
 matrix, distribution, architecture, CI, canonical deploy and real client gates still
 require their respective independently recorded evidence.
+
+### Exact-candidate first convergence finding — 2026-10-08
+
+The first frozen source candidate `d433d9c` passed full `pre-commit --all-files`
+(34 applicable/registered checks; job `37bff4003c5b`). Its pre-push fast suite
+failed **5 of 1108 parallel-safe tests** (1103 passed) because two frozen G3
+architecture test modules still matched the pre-G6 root alias
+`binnacle.callctx`, while canonical G6 imports use `binnacle.mcp.callctx`.
+The ordinary-process lane passed 1 selected test. Evidence: durable job
+`9bf6d70c046d`. This was an actual FAIL, not a Gate A PASS.
+
+The narrowly repaired tests now identify **only** the approved pure MCP
+call-context module as owner `callctx`, rejecting other MCP glue imports.
+`afe8f93` passed all focused platform and Commands architecture nodes,
+changed-file mypy/Ruff/hooks, with no product-source change or linter exemption.
+The corrected candidate needs new exact-SHA convergence; do not reuse the
+failed pre-push result or mark any external Gate A cell green.
