@@ -302,7 +302,7 @@ def mode(
         print(plan.reason)
         raise SystemExit(1)
     if not force:
-        from binnacle import doctor as checks
+        from binnacle.diagnostics import doctor as checks
 
         job_settings = get_settings().jobs
         include_jobs = (
@@ -361,7 +361,7 @@ def doctor(
         Compatibility selector; --probe and --no-probe have no effect on core
         checks. Use binnacle-watchdog doctor for layered uplink probes.
     """
-    from binnacle import doctor as checks
+    from binnacle.diagnostics import doctor as checks
 
     serve_cfg = get_settings().serve
     provisioner = _provisioner()

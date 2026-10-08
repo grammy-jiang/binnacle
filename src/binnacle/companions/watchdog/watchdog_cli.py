@@ -179,8 +179,8 @@ def doctor(
     as_json: Annotated[bool, cyclopts.Parameter(name="--json")] = False,
 ) -> None:
     """Check the host-specific watchdog and uplink support."""
-    from binnacle import doctor_render
     from binnacle.companions.watchdog import watchdog_doctor as checks
+    from binnacle.diagnostics import doctor_render
 
     results = checks.run_all(probe=probe)
     text, code = (doctor_render.render_json if as_json else doctor_render.render)(
