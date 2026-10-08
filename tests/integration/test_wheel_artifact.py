@@ -106,8 +106,14 @@ def _assert_wheel(wheel: Path, version: str) -> None:
         assert "binnacle/cli.py" in names
         assert "binnacle/provenance.py" in names
         assert "binnacle/py.typed" in names
-        assert "binnacle/tools/read_file.py" in names
+        # G6 Files tools are package-owned MCP adapters, not root-level aliases.
+        assert "binnacle/features/files/files_server.py" in names
+        for tool in ("read_file", "list_files", "edit_file", "write_file"):
+            assert f"binnacle/features/files/tools/{tool}.py" in names
+        assert "binnacle/tools/read_file.py" not in names
+        # Existing Commands adapter compatibility remains separately packaged.
         assert "binnacle/tools/run_command.py" in names
+        assert "binnacle/features/commands/tools/run_command.py" in names
         assert "binnacle/companions/watchdog/ops/policy.py" in names
         assert not any(name.startswith("tests/") for name in names)
 
