@@ -541,3 +541,26 @@ Focused coverage showed 100% for the sampled legacy facades, including
 Watchdog ops and `paths.py`; all 24 focused tests passed. This is targeted
 regression evidence and **not** a claim that full coverage now passes.
 The full policy gate must be rerun against the next committed exact candidate.
+
+### Coverage convergence follow-up — 2026-10-08
+
+Candidate `1cfbc527b5559c156b2f5f4a6e1b2110a798c85d` ran the full
+coverage-policy gate (durable job `ef30e0be5891`). All test execution lanes
+passed (1010 parallel-safe unit tests, 1 ordinary-process unit test, 1256
+parallel-safe non-unit tests, 1 ordinary-process non-unit test, 3 skipped).
+The checker reduced the prior **23 errors to one**:
+`src/binnacle/watchdog_cli.py`: **66.67% full branch coverage**, below the
+unchanged 90% minimum. The 211 other covered source modules satisfied their
+policy; no temporary floors were introduced. This single legacy facade has a
+`TYPE_CHECKING` branch and a `__main__` CLI dispatch branch, while the real
+implementation lives at `companions/watchdog/watchdog_cli.py` and exceeds the
+full-module coverage target. The latter result does not excuse the former.
+
+A safe focused test exercises module identity and stub-only dispatch without
+starting production watchdog or jobs. Its standalone coverage differs from
+the aggregated xdist result; an attempted additional direct module-execution
+probe did not produce stable attribution in coverage instrumentation and was
+not committed. Preserve the failing Gate A coverage cell until the precise
+wrapper/coverage attribution issue is resolved with a reviewable, non-weakened
+check. Neither source candidate nor deployed refs were altered in this
+follow-up; source integration was clean before this ledger update.
