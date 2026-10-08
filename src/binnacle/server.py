@@ -23,14 +23,14 @@ from binnacle.features.commands.run_command_telemetry import (
 )
 from binnacle.features.files.files_server import create_files_server
 from binnacle.features.search.search_server import create_search_server
-from binnacle.identity import ClientIdentity
-from binnacle.logging_middleware import (
+from binnacle.mcp.identity import ClientIdentity
+from binnacle.mcp.logging_middleware import (
     RequestLoggingMiddleware,
     ToolLoggingMiddleware,
 )
+from binnacle.mcp.tool_order import PublicToolOrder
+from binnacle.mcp.visibility import ClientToolVisibility, ClientToolVisibilityTransform
 from binnacle.provenance import runtime_provenance
-from binnacle.tool_order import PublicToolOrder
-from binnacle.visibility import ClientToolVisibility, ClientToolVisibilityTransform
 
 # binnacle's own lines (event=tool_call/tool_result/job_*/config) go through
 # the root handler as single lines with a millisecond local timestamp, so

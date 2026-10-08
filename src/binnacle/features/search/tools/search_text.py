@@ -11,7 +11,6 @@ from typing import Any
 from fastmcp import FastMCP
 from fastmcp.tools.base import ToolResult
 
-from binnacle.callctx import current_call
 from binnacle.config import RootsSettings, SearchTextSettings, get_settings
 from binnacle.errors import CodedToolError
 from binnacle.features.files.paths import full_match, nearby_hint, resolve_path
@@ -49,6 +48,7 @@ from binnacle.features.search.search_text_telemetry import (
 from binnacle.features.search.search_text_telemetry import (
     timed_attach_context as _timed_attach_context_impl,
 )
+from binnacle.mcp.callctx import current_call
 
 LINE_CLIP_MARK = "… [line truncated]"
 log = logging.getLogger("binnacle.search_text")

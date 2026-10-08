@@ -22,8 +22,8 @@ COMPOSITION = (
     "features/files/files_server.py",
     "features/search/search_server.py",
     "features/commands/commands_server.py",
-    "visibility.py",
-    "logging_middleware.py",
+    "mcp/visibility.py",
+    "mcp/logging_middleware.py",
 )
 
 

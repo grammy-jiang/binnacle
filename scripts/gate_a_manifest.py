@@ -22,6 +22,12 @@ def manifest_groups() -> dict[str, set[str]]:
         "root": {"server.py"},
         "feature_namespace": {"features/__init__.py"},
         "mcp": {
+            "mcp/__init__.py",
+            "mcp/identity.py",
+            "mcp/logging_middleware.py",
+            "mcp/visibility.py",
+            "mcp/callctx.py",
+            "mcp/tool_order.py",
             "identity.py",
             "logging_middleware.py",
             "visibility.py",
@@ -182,6 +188,11 @@ def compatibility_facades() -> set[str]:
     """Current compatibility facades that G6 must review before removal."""
     return {
         "doctor_common.py",
+        "identity.py",
+        "logging_middleware.py",
+        "visibility.py",
+        "callctx.py",
+        "tool_order.py",
         "paths.py",
         "jobs.py",
         "job_client.py",

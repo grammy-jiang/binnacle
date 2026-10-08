@@ -4,7 +4,6 @@ import logging
 import time
 from pathlib import Path
 
-from binnacle.callctx import current_argument_names, current_call, current_client
 from binnacle.config import RunCommandSettings
 from binnacle.features.commands import job_output
 from binnacle.features.commands.command_contracts import (
@@ -14,6 +13,7 @@ from binnacle.features.commands.command_contracts import (
 )
 from binnacle.features.commands.run_command_evidence import record_auto_match
 from binnacle.features.commands.run_command_telemetry import DispatchPlan
+from binnacle.mcp.callctx import current_argument_names, current_call, current_client
 
 log = logging.getLogger("binnacle.run_command")
 

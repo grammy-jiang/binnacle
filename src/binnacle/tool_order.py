@@ -1,29 +1,12 @@
-"""Preserve Binnacle's public listing order across native mounted providers."""
+"""Compatibility alias for MCP-owned tool_order."""
 
-from collections.abc import Sequence
+from typing import TYPE_CHECKING
 
-from fastmcp.server.transforms import Transform
-from fastmcp.tools.base import Tool
+if TYPE_CHECKING:
+    from binnacle.mcp.tool_order import *
+else:
+    import sys
 
-_RANK = {
-    name: index
-    for index, name in enumerate(
-        (
-            "read_file",
-            "list_files",
-            "search_text",
-            "edit_file",
-            "write_file",
-            "run_command",
-            "job_status",
-            "stop_job",
-        )
-    )
-}
+    from binnacle.mcp import tool_order as _impl
 
-
-class PublicToolOrder(Transform):
-    """Order known names; retain every object and unknown names' relative order."""
-
-    async def list_tools(self, tools: Sequence[Tool]) -> Sequence[Tool]:
-        return sorted(tools, key=lambda tool: _RANK.get(tool.name, len(_RANK)))
+    sys.modules[__name__] = _impl

@@ -12,7 +12,7 @@ import subprocess
 import time
 from pathlib import Path
 
-from binnacle.callctx import current_call
+from binnacle.mcp.callctx import current_call
 
 logger = logging.getLogger("binnacle.jobs")
 

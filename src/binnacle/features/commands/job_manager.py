@@ -17,10 +17,10 @@ import uuid
 from pathlib import Path
 from typing import Any, cast
 
-from binnacle.callctx import current_call
 from binnacle.config import get_settings
 from binnacle.features.commands import job_owner, jobs
 from binnacle.features.commands.job_client import PROTOCOL_VERSION
+from binnacle.mcp.callctx import current_call
 from binnacle.platform.job_platform import create_process_backend
 from binnacle.provenance import runtime_provenance
 

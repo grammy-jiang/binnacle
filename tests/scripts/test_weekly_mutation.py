@@ -21,17 +21,17 @@ from scripts.weekly_scope import Limits, Outcome, Runner
 from tests.scripts.weekly_fakes import T0, FakeHost, inner
 
 CORE = [
-    "src/binnacle/callctx.py",
+    "src/binnacle/mcp/callctx.py",
     "src/binnacle/config.py",
-    "src/binnacle/identity.py",
+    "src/binnacle/mcp/identity.py",
     "src/binnacle/features/files/textio.py",
 ]
 RESULTS = """\
-    binnacle.callctx.x_get__mutmut_1: killed
-    binnacle.callctx.x_get__mutmut_2: survived
-    binnacle.callctx.x_get__mutmut_3: timeout
-    binnacle.callctx.x_get__mutmut_4: killed
-    binnacle.callctx.x_get__mutmut_5: killed
+    binnacle.mcp.callctx.x_get__mutmut_1: killed
+    binnacle.mcp.callctx.x_get__mutmut_2: survived
+    binnacle.mcp.callctx.x_get__mutmut_3: timeout
+    binnacle.mcp.callctx.x_get__mutmut_4: killed
+    binnacle.mcp.callctx.x_get__mutmut_5: killed
     binnacle.config.x_load__mutmut_1: killed
     binnacle.config.x_load__mutmut_2: not checked
     binnacle.configx.x_other__mutmut_1: survived"""
@@ -74,7 +74,7 @@ def test_mutant_prefix() -> None:
 def test_parse_and_count_results_per_module() -> None:
     results = parse_results(RESULTS + "\nnoise line\n")
     assert len(results) == 8
-    assert module_counts(results, "binnacle.callctx.") == {
+    assert module_counts(results, "binnacle.mcp.callctx.") == {
         "detected": 4,
         "undetected": 1,
         "pending": 0,
@@ -152,12 +152,12 @@ def test_a_complete_run_reports_each_module_and_advances(
         "run",
         "--max-children",
         "1",
-        "binnacle.callctx.*",
+        "binnacle.mcp.callctx.*",
         "binnacle.config.*",
     ]
     assert not (clone / "mutants").exists()  # every week starts clean
     assert [c.name for c in checks] == [
-        "mutation binnacle.callctx",
+        "mutation binnacle.mcp.callctx",
         "mutation binnacle.config",
     ]
     assert checks[0].level == "ok" and checks[0].detail.startswith("80% killed (4/5)")

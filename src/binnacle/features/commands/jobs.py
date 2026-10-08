@@ -13,12 +13,12 @@ import threading
 import time
 from pathlib import Path
 
-from binnacle.callctx import current_call
 from binnacle.config import get_settings
 from binnacle.features.commands import job_resource_history, job_store
 from binnacle.features.commands.job_output import (
     clip_head_tail as job_output_clip_head_tail,
 )
+from binnacle.mcp.callctx import current_call
 from binnacle.platform.contracts.process_contracts import ProcessHandle
 from binnacle.platform.job_platform import (
     create_process_backend,
