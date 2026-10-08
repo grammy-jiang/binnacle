@@ -15,6 +15,10 @@ GENERIC_PATHS = (
     ROOT / "src/binnacle/doctor_common.py",
     ROOT / "src/binnacle/doctor_jobs.py",
     ROOT / "src/binnacle/job_manager_doctor.py",
+    ROOT / "src/binnacle/diagnostics/doctor.py",
+    ROOT / "src/binnacle/diagnostics/doctor_common.py",
+    ROOT / "src/binnacle/diagnostics/doctor_jobs.py",
+    ROOT / "src/binnacle/diagnostics/job_manager_doctor.py",
     ROOT / "src/binnacle/observability/logstats_io.py",
     ROOT / "scripts/deploy_flow.py",
     ROOT / "scripts/deploy_smoke.py",
@@ -144,9 +148,19 @@ def _executable_platform_violations(path: Path) -> list[str]:
     return violations
 
 
-@pytest.mark.parametrize("path", GENERIC_PATHS, ids=lambda path: path.name)
+@pytest.mark.parametrize(
+    "path", GENERIC_PATHS, ids=lambda path: path.relative_to(ROOT).as_posix()
+)
 def test_g4_generic_paths_do_not_own_linux_execution_mechanisms(path: Path) -> None:
     assert _executable_platform_violations(path) == []
+
+
+def test_g6_canonical_diagnostic_implementations_are_guarded() -> None:
+    expected = {
+        ROOT / f"src/binnacle/diagnostics/{name}.py"
+        for name in ("doctor", "doctor_common", "doctor_jobs", "job_manager_doctor")
+    }
+    assert expected <= set(GENERIC_PATHS)
 
 
 def test_smoke_measurement_uses_only_semantic_service_inspection() -> None:

@@ -169,6 +169,9 @@ def violations(source, owner):
                 "binnacle.jobs._STORE_LOCK",
                 "binnacle.jobs._read_meta",
                 "binnacle.jobs._write_meta",
+                "binnacle.features.commands.jobs._STORE_LOCK",
+                "binnacle.features.commands.jobs._read_meta",
+                "binnacle.features.commands.jobs._write_meta",
             }
         ):
             found.append("private jobs storage")
@@ -233,8 +236,16 @@ def test_contract_history_and_store_reject_concrete_dependencies(owner, source):
 
 
 @pytest.mark.parametrize("member", ["_STORE_LOCK", "_read_meta", "_write_meta"])
-def test_owner_rejects_private_storage(member):
-    assert violations(f"from binnacle import jobs as j; j.{member}", "job_owner")
+@pytest.mark.parametrize(
+    "import_statement",
+    [
+        "from binnacle import jobs as j",
+        "from binnacle.features.commands import jobs as j",
+        "import binnacle.features.commands.jobs as j",
+    ],
+)
+def test_owner_rejects_private_storage(member, import_statement):
+    assert violations(f"{import_statement}; j.{member}", "job_owner")
 
 
 def test_platform_contains_only_two_explicit_lazy_constructors():

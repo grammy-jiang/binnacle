@@ -163,6 +163,11 @@ def test_gate_a_detects_canonical_boundary_bypasses(monkeypatch):
             "binnacle.observability.linux.webminstats",
             "companion.core_cli_no_watchdog_webmin",
         ),
+        (
+            "features/files/paths.py",
+            "binnacle.platform.linux.service_unit_linux",
+            "platform.product_domains_no_linux_imports",
+        ),
     ]
     original = gate_a.imports_for
     for relative_path, illegal_import, gate_cell in cases:
