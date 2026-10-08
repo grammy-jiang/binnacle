@@ -194,3 +194,20 @@ def test_snapshot_ignores_inherited_repository_identity(tmp_path, monkeypatch):
     assert gate_a.current_sha() is not None
     assert "GIT_DIR" not in gate_a.git_environment()
     assert "GIT_WORK_TREE" not in gate_a.git_environment()
+
+
+def test_g6_diagnostics_legacy_aliases_are_classified():
+    expected = {
+        "doctor.py",
+        "doctor_common.py",
+        "doctor_jobs.py",
+        "job_manager_doctor.py",
+        "diagnostics/doctor_contracts.py",
+    }
+    facades = manifest.compatibility_facades()
+    groups = manifest.manifest_groups()
+    assert expected <= facades
+    for name in expected:
+        assert name in groups["diagnostics"]
+    assert "doctor_contracts.py" in groups["application_shell"]
+    assert "doctor_contracts.py" not in facades
