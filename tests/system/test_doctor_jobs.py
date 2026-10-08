@@ -53,3 +53,17 @@ def test_busy_reasons_with_no_jobs_and_no_calls_is_empty(tmp_path):
         )
         == []
     )
+
+
+def test_legacy_doctor_jobs_alias_preserves_default_reader_identity():
+    import importlib
+
+    from binnacle.diagnostics import doctor_jobs as owned
+
+    assert doctor_jobs is owned
+    assert importlib.import_module("binnacle.doctor_jobs") is owned
+    assert importlib.import_module("binnacle.diagnostics.doctor_jobs") is owned
+    assert (
+        doctor_jobs.server_busy_reasons.__kwdefaults__["state_reader"]
+        is doctor_jobs._job_state_safe
+    )
