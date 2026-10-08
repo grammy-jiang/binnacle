@@ -414,3 +414,33 @@ contract to avoid the actual `deployment -> diagnostics -> platform -> deploymen
 cycle when the four remaining diagnostic modules converge. This amendment
 neither creates a new package/framework nor weakens existing import contracts.
 C0 must pass independently before D1–D4; all final Gate A external cells remain pending.
+
+### G6 diagnostics C0–D4 implementation checkpoints (2026-10-08)
+
+Independent review approved the shared-contract boundary in
+`~/.local/state/binnacle/g6-diagnostics-boundary-review-oayxj4ii/`.
+Committed in dependency order on the sole integration branch:
+
+- C0 `dca93c7`: G5-stable neutral `binnacle.doctor_contracts` canonical owner,
+  diagnostics compatibility alias, direct importer canonicalization and manifest.
+  Focused contract/doctor/Gate A tests passed; Import Linter 22/22; mypy and
+  changed-file hooks passed.
+- D1 `829738c`: `diagnostics.doctor_common`; legacy module identity and
+  definition-time `systemctl` binding retained. Focused tests 34 passed,
+  Import Linter 22/22, mypy and changed-file hooks passed.
+- D2 `d1f151e`: `diagnostics.doctor_jobs`; legacy identity, default state reader
+  and restart-safety semantics retained. Focused tests 40 passed, Import Linter
+  22/22, mypy and changed-file hooks passed.
+- D3 `7b9b152`: `diagnostics.job_manager_doctor`; legacy identity and default
+  `job_client.ping` binding retained. Focused tests 54 passed, Import Linter
+  22/22, mypy and changed-file hooks passed.
+- D4 `6e56997`: `diagnostics.doctor` aggregate relocated last; public module
+  identity, `Deployment` pickle round-trip, CLI behavior and existing `__all__`
+  preserved. Focused tests 94 passed, Import Linter 22/22, mypy and
+  changed-file hooks passed. TYPE_CHECKING compatibility exports retain mypy
+  access to the public symbols without changing runtime module alias.
+
+These are focused checkpoint proofs, not the final exact-SHA full suite, coverage,
+Python matrix, independent final implementation review, CI, canonical deployment,
+live test/smoke/doctors, ChatGPT MCP call or final Gate A PASS. Production refs
+and other wave evidence worktrees were not changed.
