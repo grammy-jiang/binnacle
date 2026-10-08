@@ -143,7 +143,11 @@ def manifest_groups() -> dict[str, set[str]]:
             "system_resource_history.py",
             "token_telemetry.py",
         },
-        "observability_linux": {"webminstats.py"},
+        "observability_linux": {
+            "webminstats.py",
+            "observability/linux/__init__.py",
+            "observability/linux/webminstats.py",
+        },
         "deployment": {
             "deployment/__init__.py",
             "deployment/units.py",
@@ -253,6 +257,7 @@ def compatibility_facades() -> set[str]:
             path.relative_to(SRC).as_posix()
             for path in (SRC / "ops" / "watchdog").glob("*.py")
         ),
+        "webminstats.py",
         "logstats.py",
         "logstats_adaptive.py",
         "logstats_io.py",
