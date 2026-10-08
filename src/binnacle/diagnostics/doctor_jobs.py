@@ -6,7 +6,7 @@ import subprocess
 from collections.abc import Callable
 from pathlib import Path
 
-from binnacle import jobs
+from binnacle.features.commands import jobs
 from binnacle.observability import logstats
 from binnacle.platform.contracts.service_lifecycle_contracts import (
     ManagedServiceInspector,

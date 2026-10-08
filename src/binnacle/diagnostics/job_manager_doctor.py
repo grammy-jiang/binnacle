@@ -3,8 +3,8 @@
 from collections.abc import Callable
 from pathlib import Path
 
-from binnacle import job_client
 from binnacle.diagnostics.doctor_common import Check, fail, ok, warn
+from binnacle.features.commands import job_client
 from binnacle.platform.contracts.service_lifecycle_contracts import (
     ManagedServiceInspector,
 )
