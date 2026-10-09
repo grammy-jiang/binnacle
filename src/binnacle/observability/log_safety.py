@@ -16,6 +16,9 @@ from pathlib import Path
 from typing import Any
 
 REDACTED = "[redacted]"
+SMOKE_CORRELATION_FIELD = "binnacle/smoke-correlation"
+# A 128-bit generated marker is diagnostic-only, never an authorization claim.
+_SMOKE_PROOF = re.compile(r"^[0-9a-f]{32}$")
 PUBLIC_TOOLS = frozenset(
     {
         "read_file",
@@ -82,6 +85,14 @@ _JOB_ID = re.compile(r"^[0-9a-f]{12}$")
 _TURN = re.compile(
     r"^(?:wfr_[A-Za-z0-9_-]{1,70}|turn-[A-Za-z0-9_-]{1,50})/[A-Za-z0-9_.-]{1,60}$"
 )
+
+
+def safe_smoke_proof(meta: object) -> str | None:
+    """Only validated opaque probe IDs may enter the journal from request meta."""
+    if not isinstance(meta, Mapping):
+        return None
+    value = meta.get(SMOKE_CORRELATION_FIELD)
+    return value if isinstance(value, str) and _SMOKE_PROOF.fullmatch(value) else None
 
 
 def safe_tool_name(name: object) -> str:

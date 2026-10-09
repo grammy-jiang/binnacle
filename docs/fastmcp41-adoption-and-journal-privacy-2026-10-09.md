@@ -110,3 +110,20 @@ pre-upgrade SHA on any behavior change.
   fail-closed serializer tests passed at their latest run.
 - Targeted Ruff and mypy: pass. Final full gates and release status must be
   separately recorded after the candidate is frozen.
+
+## Live Smoke compatibility addendum
+
+The release gate historically looked for literal fixture nonces in
+`tool_call.args`. Those values must not be restored just to satisfy a gate.
+The updated smoke sends a separate, unique 128-bit proof per tool call via
+FastMCP's public `Client.call_tool(meta=...)` API. Root request metadata is
+validated and logged only as `smoke=<32hex>`. The unchanged journal matcher
+still requires the correct tool and the matching `tool_result.call`.
+This includes cursor-polling calls. Modern, legacy, and authenticated HTTP
+hand-off tests prove the property; negative tests prove that an unrelated
+successful call or incorrect result call-id never suffices.
+
+The opaque proof is diagnostic only and is not an authentication principal.
+The raw fixture nonce is never intentionally logged. New redacted journal
+records also reduce the accuracy of older command-text-based measurement
+reports; this is disclosed separately from execution correctness.

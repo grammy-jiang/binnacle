@@ -11,6 +11,7 @@ import asyncio
 import json
 import os
 import re
+import secrets
 import shlex
 import shutil
 import time
@@ -20,6 +21,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from binnacle.observability.log_safety import SMOKE_CORRELATION_FIELD
 from binnacle.platform.contracts.service_lifecycle_contracts import (
     ManagedServiceController,
     ManagedServiceInspector,
@@ -28,7 +30,7 @@ from binnacle.platform.contracts.service_log_contracts import ServiceLogError
 from scripts.smoke_diagnostics import JournalExpectation, doctor_detail, missing_from
 
 UNIT = "binnacle-mcp.service"
-NONCE_PREFIX = "e2e-smoke-"  # usage statistics treat "e2e-" as test traffic
+NONCE_PREFIX = "e2e-smoke-"  # fixture identifier, never emitted to the MCP journal
 EXPECTED_TOOLS = (
     "read_file",
     "list_files",
@@ -107,8 +109,7 @@ def _expect(condition: bool, message: str) -> str:
 
 
 class _Caller:
-    """Calls one tool and records the check, and remembers what the journal
-    must hold: (tool, a token that appears in that call's logged arguments)."""
+    """Call tools with an opaque proof to correlate their journal records."""
 
     def __init__(self, client: Any, report: Report) -> None:
         self.client = client
@@ -119,15 +120,17 @@ class _Caller:
         self,
         name: str,
         args: dict[str, Any],
-        token: str,
         check: Callable[[dict[str, Any]], str],
     ) -> dict[str, Any] | None:
+        proof = secrets.token_hex(16)
         try:
-            result = await self.client.call_tool(name, args)
+            result = await self.client.call_tool(
+                name, args, meta={SMOKE_CORRELATION_FIELD: proof}
+            )
         except Exception as exc:  # noqa: BLE001 - any failure is the finding
             self.report.add(name, "alert", f"call failed: {exc}"[:200])
             return None
-        self.logged.append((name, (token,)))
+        self.logged.append((name, (f"smoke={proof}",)))
         content = getattr(result, "structured_content", None)
         content = content if isinstance(content, dict) else {}
         if getattr(result, "is_error", False):
@@ -144,13 +147,11 @@ async def _file_tools(
     await call(
         "read_file",
         {"path": str(fixture / "a.txt")},
-        nonce,
         lambda c: _expect(nonce in str(c.get("content", "")), "nonce not in content"),
     )
     await call(
         "list_files",
         {"path": str(fixture)},
-        nonce,
         lambda c: _expect(
             any(str(e.get("path", "")).endswith("a.txt") for e in c.get("entries", [])),
             "a.txt not listed",
@@ -159,7 +160,6 @@ async def _file_tools(
     await call(
         "search_text",
         {"pattern": nonce, "path": str(fixture), "fixed_strings": True},
-        nonce,
         lambda c: _expect(int(c.get("count", 0)) >= 1, "nonce not found"),
     )
     if {"write_file", "edit_file"} <= names:  # served to this client
@@ -167,7 +167,6 @@ async def _file_tools(
         await call(
             "write_file",
             {"path": path, "content": f"x {nonce}\n"},
-            nonce,
             lambda c: _expect(
                 c.get("action") in ("created", "overwritten"), "not written"
             ),
@@ -175,7 +174,6 @@ async def _file_tools(
         await call(
             "edit_file",
             {"path": path, "old_string": "x ", "new_string": "y "},
-            nonce,
             lambda c: _expect(c.get("replacements") == 1, "not replaced once"),
         )
 
@@ -218,7 +216,6 @@ async def _cursor_job(call: _Caller, nonce: str, fixture: Path, checkout: Path) 
     started = await call(
         "run_command",
         {"command": command, "workdir": str(fixture), "wait_seconds": 1},
-        cursor_nonce,
         _job_started,
     )
     if not started:
@@ -230,12 +227,15 @@ async def _cursor_job(call: _Caller, nonce: str, fixture: Path, checkout: Path) 
     chunks: list[str] = []
     for _ in range(100):
         args = {"job_id": job, "cursor": cursor, "wait_seconds": 10}
+        proof = secrets.token_hex(16)
         try:
-            result = await call.client.call_tool("job_status", args)
+            result = await call.client.call_tool(
+                "job_status", args, meta={SMOKE_CORRELATION_FIELD: proof}
+            )
         except Exception as exc:  # noqa: BLE001 - any failure is the finding
             call.report.add("job_status cursor", "alert", f"call failed: {exc}"[:200])
             return
-        call.logged.append(("job_status", (job, cursor)))
+        call.logged.append(("job_status", (f"smoke={proof}",)))
         content = getattr(result, "structured_content", None)
         content = content if isinstance(content, dict) else {}
         if getattr(result, "is_error", False):
@@ -267,7 +267,6 @@ async def _job_tools(
     await call(
         "run_command",
         {"command": f"echo {nonce}-fast", "workdir": wd, "wait_seconds": 10},
-        f"{nonce}-fast",
         lambda c: _expect(
             c.get("state") == "exited"
             and c.get("exit_code") == 0
@@ -278,7 +277,6 @@ async def _job_tools(
     started = await call(
         "run_command",
         {"command": f"sleep 3; echo {nonce}-job", "workdir": wd, "wait_seconds": 1},
-        f"{nonce}-job",
         _job_started,
     )
     if started:
@@ -286,7 +284,6 @@ async def _job_tools(
         await call(
             "job_status",
             {"job_id": job, "wait_seconds": 10},
-            job,
             lambda c: _expect(
                 c.get("state") == "exited"
                 and c.get("exit_code") == 0
@@ -298,7 +295,6 @@ async def _job_tools(
     long_job = await call(
         "run_command",
         {"command": f"sleep 60; echo {nonce}-stop", "workdir": wd, "wait_seconds": 1},
-        f"{nonce}-stop",
         _job_started,
     )
     if not long_job:
@@ -307,7 +303,6 @@ async def _job_tools(
     stopped = await call(
         "stop_job",
         {"job_id": job},
-        job,
         lambda c: _expect(
             c.get("state") in ("exited", "stopped", "killed"),
             f"not stopped {str(c)[:120]}",

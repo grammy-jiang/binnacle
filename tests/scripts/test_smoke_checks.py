@@ -12,6 +12,7 @@ from typing import Any
 
 import pytest
 
+from binnacle.observability.log_safety import SMOKE_CORRELATION_FIELD, safe_arguments
 from binnacle.platform.contracts.service_lifecycle_contracts import ManagedServiceStatus
 from scripts import deploy_smoke
 from scripts.smoke_checks import CURSOR_FIXTURE_LINES, Env, measure, smoke
@@ -51,6 +52,7 @@ class FakeClient:
         self.tools = ALL_TOOLS if tools is None else tools
         self.fail = fail or {}  # tool -> "error" | "raise"
         self.calls: list[tuple[str, dict[str, Any]]] = []
+        self.proofs: list[str | None] = []
         self.jobs: dict[str, str] = {}
         self.cursor_reads: dict[str, int] = {}
 
@@ -63,8 +65,11 @@ class FakeClient:
     async def list_tools(self) -> list[Any]:
         return [SimpleNamespace(name=n) for n in self.tools]
 
-    async def call_tool(self, name: str, args: dict[str, Any]) -> Any:
+    async def call_tool(
+        self, name: str, args: dict[str, Any], *, meta: dict[str, Any] | None = None
+    ) -> Any:
         self.calls.append((name, args))
+        self.proofs.append(meta.get(SMOKE_CORRELATION_FIELD) if meta else None)
         mode = self.fail.get(name)
         if mode == "raise":
             raise RuntimeError(f"{name} broke")
@@ -121,8 +126,11 @@ def journal_for(client: FakeClient, drop: str = "", extra: tuple[str, ...] = ())
             return ["2026-09-27T07:53:03.215 INFO: event=config pid=1"]
         lines = list(extra)
         for i, (name, args) in enumerate(client.calls):
+            proof = client.proofs[i]
+            marker = f" smoke={proof}" if proof else ""
             lines.append(
-                f"x INFO: event=tool_call call=c{i:04x} tool={name} args={json.dumps(args)}"
+                f"x INFO: event=tool_call call=c{i:04x} tool={name}{marker} "
+                f"args={json.dumps(safe_arguments(args))}"
             )
             if name != drop:
                 lines.append(

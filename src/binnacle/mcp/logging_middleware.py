@@ -46,6 +46,7 @@ from binnacle.observability.log_safety import (
     REDACTED,
     safe_arguments,
     safe_client_name,
+    safe_smoke_proof,
     safe_tool_name,
     safe_turn_id,
 )
@@ -361,6 +362,11 @@ class ToolLoggingMiddleware(Middleware):
         raw_client = self._identity.resolve(context)
         who = self._who(context, call_id)
         who.update(_header_fields())
+        active = context.fastmcp_context
+        req = active.request_context if active is not None else None
+        proof = safe_smoke_proof(getattr(req, "meta", None))
+        if proof is not None:
+            who["smoke"] = proof
         arguments = getattr(context.message, "arguments", None) or {}
         args_chars, args_text = _args_json(arguments)
         self._log(

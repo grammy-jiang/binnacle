@@ -523,3 +523,22 @@ results and public schemas are unchanged.
 
 See `docs/fastmcp41-adoption-and-journal-privacy-2026-10-09.md` for
 architecture decisions, testing and rollout criteria.
+
+### Live-smoke correlation without raw fixture arguments
+
+Live smoke now sends a distinct random 128-bit lowercase hexadecimal proof in
+`tools/call` request metadata, under the `binnacle/smoke-correlation` key.
+FastMCP exposes this to the root middleware as request-context metadata in
+both modern and legacy protocol flows. The journal logs the validated
+`smoke=<32hex>` field alongside the generated `call=` correlation field.
+The smoke verifier checks **both** the exact proof and the matching tool
+result; another successful invocation of the same tool cannot satisfy it.
+Invalid proofs are omitted. The proof is diagnostic metadata and is *not*
+authorization or a claim about the authenticated client.
+
+Fixture paths, commands, search expressions, file content and their original
+`e2e-smoke-...` strings remain redacted from MCP Journal events. The
+legacy usage-breakdown parser's command-text exclusion no longer recognizes
+these probes automatically; future usage-analysis changes should use a
+verified smoke marker rather than raw command strings. This is a measurement
+limitation, not a relaxation of Live Smoke validation.

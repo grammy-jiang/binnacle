@@ -8,7 +8,7 @@ JournalExpectation = tuple[str, tuple[str, ...]]
 
 
 def missing_from(lines: list[str], logged: list[JournalExpectation]) -> list[str]:
-    """Return expectations with no completed matching journal call."""
+    """Match an opaque per-request proof to a completed tool-call/result pair."""
 
     missing: list[str] = []
     for tool, tokens in logged:

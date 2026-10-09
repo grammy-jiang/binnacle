@@ -147,3 +147,24 @@ def test_unresolvable_path_is_redacted_without_breaking_tools(monkeypatch):
 
     monkeypatch.setattr(Path, "resolve", fail_resolve)
     assert safe_path("/tmp/not-resolvable") == REDACTED
+
+
+def test_probe_marker_is_instrumentation_only_and_validated():
+    from binnacle.observability.log_safety import (
+        SMOKE_CORRELATION_FIELD,
+        safe_smoke_proof,
+    )
+
+    valid = "a" * 32
+    assert safe_smoke_proof({SMOKE_CORRELATION_FIELD: valid}) == valid
+    for metadata in (
+        None,
+        {},
+        [],
+        "not-a-mapping",
+        {SMOKE_CORRELATION_FIELD: "untrusted-secret"},
+        {SMOKE_CORRELATION_FIELD: "B" * 32},
+        {SMOKE_CORRELATION_FIELD: 123},
+        {SMOKE_CORRELATION_FIELD: valid + "\ncredential=bad"},
+    ):
+        assert safe_smoke_proof(metadata) is None

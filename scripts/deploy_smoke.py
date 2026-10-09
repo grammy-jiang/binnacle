@@ -7,8 +7,8 @@
 The smoke proves that the deployed server works for a real client:
 
 - the doctor passes, and ``tools/list`` answers with authentication;
-- every tool answers one call, each carrying an ``e2e-smoke-`` nonce, which
-  the usage statistics treat as test traffic;
+- every tool answers one call using a distinct, opaque request-metadata
+  smoke proof; the original fixture nonce is excluded from MCP journal logs;
 - the journal holds a tool_call and a tool_result line for each call, and no
   traceback;
 - memory and start-up time stay within 1.25 times the recorded baseline.
