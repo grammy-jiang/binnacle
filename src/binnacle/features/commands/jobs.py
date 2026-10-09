@@ -487,13 +487,12 @@ def stop_job_embedded(job_id: str) -> dict | None:
             stop_sigkill_grace_s=STOP_SIGKILL_GRACE_S,
             current_call_id=current_call.get,
             logger=logger,
-            on_partial=lambda exc: job_store.mark_signal_delivery_partial(
-                JOBS_DIR, job_id
+            on_partial=lambda exc: job_stop.persist_partial_or_raise(
+                lambda: job_store.mark_signal_delivery_partial(JOBS_DIR, job_id)
             ),
         )
     except JobSignalDeliveryError:
-        try:
-            job_store.mark_signal_delivery_partial(JOBS_DIR, job_id)
-        except OSError as exc:
-            raise JobSignalDeliveryError("partial stop not persisted") from exc
+        job_stop.persist_partial_or_raise(
+            lambda: job_store.mark_signal_delivery_partial(JOBS_DIR, job_id)
+        )
         raise

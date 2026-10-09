@@ -18,6 +18,16 @@ PARTIAL_SIGNAL_FIELD = "stop_signal_partial"
 PARTIAL_SIGNAL_MESSAGE = "previous verified process signal delivery was incomplete"
 
 
+def persist_partial_or_raise(write_marker: Callable[[], bool]) -> None:
+    """Do not acknowledge a partial stop unless its durable marker was written."""
+    try:
+        if write_marker():
+            return
+    except OSError as exc:
+        raise JobSignalDeliveryError("partial stop not persisted") from exc
+    raise JobSignalDeliveryError("partial stop not persisted")
+
+
 def raise_if_partial_signal(meta: dict | None) -> None:
     """A finished leader is not proof that every owned descendant was stopped."""
     if meta is not None and meta.get(PARTIAL_SIGNAL_FIELD) is True:

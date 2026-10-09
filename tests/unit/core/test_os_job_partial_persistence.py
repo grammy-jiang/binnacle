@@ -162,3 +162,121 @@ def test_partial_marker_is_persisted_before_wait_or_concurrent_retry(
     with pytest.raises(JobSignalDeliveryError, match="unsignalable child"):
         jobs.stop_job_embedded(JOB_ID)
     assert job_store.read_meta(spool, JOB_ID)["stop_signal_partial"] is True
+
+
+@pytest.mark.parametrize("failure_mode", ["oserror", "missing_record"])
+def test_native_partial_callback_write_failure_stays_a_controlled_error(
+    spool, monkeypatch, failure_mode
+):
+    """The callback itself must not leak an OSError or ignore a False write."""
+    delivered = []
+
+    def partial_signal(intent):
+        delivered.append(intent)
+        raise JobSignalDeliveryError("verified descendant was not signaled")
+
+    lease = SimpleNamespace(
+        signal=partial_signal, close=lambda: delivered.append("close")
+    )
+    backend = SimpleNamespace(
+        identity_from_record=lambda meta: object(),
+        open_job_signals=lambda identity: lease,
+        alive=lambda pid, starttime=None: True,
+    )
+    monkeypatch.setattr(jobs, "_PROCESS_BACKEND", backend)
+    monkeypatch.setattr(
+        jobs,
+        "await_exit",
+        lambda *args: pytest.fail("callback error must be resolved before wait"),
+    )
+    if failure_mode == "oserror":
+        monkeypatch.setattr(
+            job_store,
+            "write_meta",
+            lambda *args: (_ for _ in ()).throw(OSError("spool read-only")),
+        )
+    else:
+        monkeypatch.setattr(
+            job_store, "mark_signal_delivery_partial", lambda *args: False
+        )
+    with pytest.raises(JobSignalDeliveryError, match="partial stop not persisted"):
+        jobs.stop_job_embedded(JOB_ID)
+    assert delivered == ["terminate", "close"]
+    assert "stop_signal_partial" not in job_store.read_meta(spool, JOB_ID)
+
+
+def test_native_partial_callback_write_recovers_on_outer_retry(spool, monkeypatch):
+    """Transient disk failure gets a second chance before the error returns."""
+    attempts = []
+    original_write = job_store.write_meta
+
+    def write_once_bad(root, job_id, meta):
+        attempts.append(meta.get("stop_signal_partial"))
+        if len(attempts) == 1:
+            raise OSError("temporary read-only spool")
+        return original_write(root, job_id, meta)
+
+    monkeypatch.setattr(job_store, "write_meta", write_once_bad)
+    signals = []
+
+    def partial_signal(intent):
+        signals.append(intent)
+        raise JobSignalDeliveryError("unsignalable verified descendant")
+
+    lease = SimpleNamespace(
+        signal=partial_signal, close=lambda: signals.append("close")
+    )
+    monkeypatch.setattr(
+        jobs,
+        "_PROCESS_BACKEND",
+        SimpleNamespace(
+            identity_from_record=lambda meta: object(),
+            open_job_signals=lambda identity: lease,
+            alive=lambda pid, starttime=None: True,
+        ),
+    )
+    monkeypatch.setattr(
+        jobs,
+        "await_exit",
+        lambda *args: pytest.fail("do not return success before the marker"),
+    )
+    with pytest.raises(JobSignalDeliveryError, match="partial stop not persisted"):
+        jobs.stop_job_embedded(JOB_ID)
+    assert attempts == [True, True]
+    assert signals == ["terminate", "close"]
+    # A later reaper write cannot erase the previously durable partial marker.
+    jobs.record_exit(JOB_ID, SimpleNamespace(returncode=-15))
+    assert job_store.read_meta(spool, JOB_ID)["stop_signal_partial"] is True
+    with pytest.raises(JobSignalDeliveryError, match="previous verified"):
+        job_owner.stop_job(JOB_ID)
+
+
+def test_manager_rpc_reports_callback_storage_outage_as_partial_stop(
+    spool, monkeypatch
+):
+    """Manager RPC returns a controlled partial error rather than a raw OSError."""
+    lease = SimpleNamespace(
+        signal=lambda intent: (_ for _ in ()).throw(
+            JobSignalDeliveryError("EPERM for verified descendant")
+        ),
+        close=lambda: None,
+    )
+    monkeypatch.setattr(
+        jobs,
+        "_PROCESS_BACKEND",
+        SimpleNamespace(
+            alive=lambda pid, starttime=None: True,
+            identity_from_record=lambda meta: object(),
+            open_job_signals=lambda identity: lease,
+        ),
+    )
+    monkeypatch.setattr(job_owner, "mark_stop_requested", lambda job_id: None)
+    monkeypatch.setattr(
+        job_store,
+        "write_meta",
+        lambda *args: (_ for _ in ()).throw(OSError("disk full")),
+    )
+    manager = JobManager(spool.parent / "partial-io.sock", owner_instance_id="owner")
+    response = manager._stop({"job_id": JOB_ID, "call_id": "io-outage"})
+    assert response["ok"] is False
+    assert response["error"] == "job stop partially failed: partial stop not persisted"
