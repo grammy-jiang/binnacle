@@ -2,8 +2,8 @@
   "active_jobs": [],
   "baseline_sha": "02f4bab9bc7562668ffc41d622c4274449933768",
   "branch": "refactor/os-independent-stage1-implementation-20261009",
-  "candidate_sha": "OS7_G6_MANIFEST_REPAIRED_UNCOMMITTED",
-  "ci_status": "NOT_SUBMITTED; candidate must be committed then pushed to run exact SHA CI",
+  "candidate_sha": "02879e8e34215515500209f80ba24aaa7438aadc",
+  "ci_status": "NOT_SUBMITTED: candidate branch push and exact SHA CI required",
   "completed": [
     "Plan read in full, 517 lines; repository instructions read",
     "Independent canonical worktree bootstrapped with locked uv 0.12.24",
@@ -49,9 +49,14 @@
     "OS7 first official full two-lane run: parallel 2530 passed, 3 skipped, 2 fail (G6 outdated module list); ordinary lane 2 passed",
     "G6 legacy ownership manifest expanded with nine newly split source modules and their native-domain groups; no lowering of coverage assertions",
     "Gate A root health check upgraded to verify actual pure factory route and delegated Linux bootstrap, with negative tests",
-    "Focused old G6/GateA/OS6 manifest tests repaired: 17 passed"
+    "Focused old G6/GateA/OS6 manifest tests repaired: 17 passed",
+    "OS7 full managed suite converged: 2536 passed, 3 skipped; both lanes green",
+    "OS7 coverage-policy passed (131 production and 48 scripts tracked, 0 hard errors; three existing future-target script debts disclosed)",
+    "OS7 pre-commit --all-files and pre-push --all-files hooks passed",
+    "OS7 full tox py310/py311/py312/py313/py314 Python matrix 5/5 passed",
+    "OS7 wheel-from-sdist, locked hashes and clean install smoke passed (1 explicit package acceptance test)"
   ],
-  "deployment_status": "NOT_STARTED; production checkout and stable Job Manager untouched",
+  "deployment_status": "NOT_STARTED: production/master v1.0.1 unchanged and manager not restarted",
   "evidence": [
     "docs/os-independent-stage1-evidence/os0-source-inventory.json",
     "docs/os-independent-stage1-evidence/os0-manifest.sha256",
@@ -136,14 +141,14 @@
     "OS4": "UNIT_PROVISIONING_AND_READINESS_FOCUSED_PASS_UNREVIEWED",
     "OS5": "PATH_ALIAS_LOG_DIAGNOSTIC_FOCUSED_PASS; CANONICAL_ANCESTOR_TOCTOU_DOCUMENTED",
     "OS6": "152_MODULE_49_SCRIPT_OWNERSHIP_COMPLETE; STATIC_40_TESTS_PASS; REVIEW_PENDING",
-    "OS7": "FIRST_TWO_LANE_2532_PASS_3_SKIP_2_G6_MANIFEST_FAILURES_FIXED_TARGETED_17_PASS"
+    "OS7": "LOCAL_GATES_GREEN_6_EVIDENCE_BLOCKS_EXTERNAL_PENDING"
   },
   "known_baseline_defects": [
     "Symlink allowed-root canonicalization falsely rejects canonical target",
     "Linux import-blocking cannot currently import pure server/jobs/logstats"
   ],
   "last_committed_sha": "c6620b51805b4259f9f9dc577a0a436b4a089589",
-  "next_action": "Commit G6/GateA compatibility repair and rerun complete two-lane suite on changed source; then coverage and tox matrix. No security/review gates waived.",
+  "next_action": "Commit exact local report and SHA-bound review packet with normal hooks; push branch with pre-push hook to GitHub; get independent reviews and exact CI; guarded deploy only if all prerequisites satisfied.",
   "owner": "single ChatGPT implementation integrator",
   "plan_sha": "19a3cf1e43755ed4aee3837c25ea63188058a26e",
   "remaining_dependencies": [
@@ -152,11 +157,12 @@
     "OS7 trusted GitHub CI checks for exact SHA, source-bound implementation/security independent review",
     "OS7 production guarded quiet-window deployment, rollback and live Raspberry Pi doctors (only after gates)"
   ],
-  "review_status": "REVIEW_PENDING: no independent OS1, OS3, OS4 or full OS7 sign-off. No self-approval.",
+  "review_status": "OS1/OS3/OS4/OS7 INDEPENDENT REVIEWS NOT RECEIVED; no invented approval.",
   "reviews": [],
-  "stage": "OS7 full-suite first failure repaired; source convergence check",
-  "status": "RUNNING",
+  "stage": "OS7 local acceptance completed, mandatory external reviews/CI/deploy pending",
+  "status": "EXTERNAL_PENDING",
   "task_id": "BINNACLE-OS-STAGE1-IMPLEMENT-20261009",
+  "tested_source_sha": "02879e8e34215515500209f80ba24aaa7438aadc",
   "tests": [
     {
       "command": "uv run pytest [six baseline platform/server/doctor test files] -q --randomly-seed=12345",
@@ -313,9 +319,63 @@
       "log_path": "docs/os-independent-stage1-evidence/os7-managed-first-failure.txt",
       "result": "first run: 2532 passed, 3 skipped, 2 failed; fixes applied",
       "stage": "OS7"
+    },
+    {
+      "command": "managed_full",
+      "exit_code": 0,
+      "log_path": "docs/os-independent-stage1-evidence/os7-managed-full.log",
+      "result": "2536 passed, 3 skipped; no failures",
+      "sha256": "5c275c3afda88535cb7011bc8c80ecee45f482351870f81e110db5f19f8ce487",
+      "source_sha": "02879e8e34215515500209f80ba24aaa7438aadc",
+      "stage": "OS7"
+    },
+    {
+      "command": "coverage_policy",
+      "exit_code": 0,
+      "log_path": "docs/os-independent-stage1-evidence/os7-coverage-policy.log",
+      "result": "131 production and 48 script coverage modules; 0 hard errors",
+      "sha256": "abbb9b3130caeb7a39235aa4332378763e4ef0339913ea81646be08f188672c0",
+      "source_sha": "02879e8e34215515500209f80ba24aaa7438aadc",
+      "stage": "OS7"
+    },
+    {
+      "command": "pre_commit_all",
+      "exit_code": 0,
+      "log_path": "docs/os-independent-stage1-evidence/os7-pre-commit-all.log",
+      "result": "35 pre-commit checks passed",
+      "sha256": "bc0e444f1a2beb87d5a8ab318be5aa7da3bd7f99b27807a0741574a6b7002fe3",
+      "source_sha": "02879e8e34215515500209f80ba24aaa7438aadc",
+      "stage": "OS7"
+    },
+    {
+      "command": "pre_push",
+      "exit_code": 0,
+      "log_path": "docs/os-independent-stage1-evidence/os7-pre-push-all.log",
+      "result": "fast unit + contract test gate passed",
+      "sha256": "37a3870a992283a9118e1cf753c85bacb014466bfd69186ac26d8639ee79779a",
+      "source_sha": "02879e8e34215515500209f80ba24aaa7438aadc",
+      "stage": "OS7"
+    },
+    {
+      "command": "python_matrix",
+      "exit_code": 0,
+      "log_path": "docs/os-independent-stage1-evidence/os7-python-matrix.log",
+      "result": "py310 py311 py312 py313 py314: 5 of 5 passed",
+      "sha256": "05a8894c3f497aac5fe55039d907624de4b6123b3ea06a3cd124ddeaa26054c3",
+      "source_sha": "02879e8e34215515500209f80ba24aaa7438aadc",
+      "stage": "OS7"
+    },
+    {
+      "command": "packaging",
+      "exit_code": 0,
+      "log_path": "docs/os-independent-stage1-evidence/os7-package-clean-install.log",
+      "result": "sdist -> wheel -> hashed locked clean installation/smoke; 1 passed",
+      "sha256": "473b225733d5a1f4aca58fc5163f3e1949e12487a2063ea5599850f01efcae83",
+      "source_sha": "02879e8e34215515500209f80ba24aaa7438aadc",
+      "stage": "OS7"
     }
   ],
-  "updated_utc": "2026-10-09T16:25:25.007439+00:00",
+  "updated_utc": "2026-10-09T16:40:58.348521+00:00",
   "worktree_dirty": true,
   "worktree_path": "/home/grammy-jiang/Projects/binnacle-os-independent-stage1-impl"
 }
