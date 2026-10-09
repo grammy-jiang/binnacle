@@ -19,7 +19,7 @@ def manifest_groups() -> dict[str, set[str]]:
         return path.relative_to(SRC).as_posix()
 
     return {
-        "root": {"server.py"},
+        "root": {"server.py", "application.py"},
         "feature_namespace": {"features/__init__.py"},
         "mcp": {
             "mcp/__init__.py",
@@ -61,6 +61,7 @@ def manifest_groups() -> dict[str, set[str]]:
             "features/commands/run_command_telemetry.py",
             "features/commands/run_command_evidence.py",
             "features/commands/jobs.py",
+            "features/commands/job_stop.py",
             "features/commands/job_client.py",
             "features/commands/job_manager.py",
             "features/commands/job_output.py",
@@ -80,10 +81,13 @@ def manifest_groups() -> dict[str, set[str]]:
         "platform_composition": {
             "platform/deployment_platform.py",
             "platform/job_platform.py",
+            "platform/composition.py",
         },
         "platform_linux": {
             "platform/linux/__init__.py",
             "platform/linux/job_process.py",
+            "platform/linux/job_identity.py",
+            "platform/linux/notify_systemd.py",
             "platform/linux/job_cgroup.py",
             "platform/linux/service_journal.py",
             "platform/linux/service_systemd.py",
@@ -100,6 +104,11 @@ def manifest_groups() -> dict[str, set[str]]:
             "diagnostics/doctor_common.py",
             "diagnostics/doctor_jobs.py",
             "diagnostics/job_manager_doctor.py",
+        },
+        "diagnostics_linux": {"diagnostics/linux_checks.py"},
+        "deployment_linux": {
+            "deployment/linux/__init__.py",
+            "deployment/linux/unit_inspection.py",
         },
         "observability": {
             "observability/__init__.py",
@@ -118,6 +127,7 @@ def manifest_groups() -> dict[str, set[str]]:
             "deployment/units.py",
             "deployment/server_unit.py",
             "deployment/job_manager_unit.py",
+            "deployment/provisioning_contracts.py",
         },
         "tunnel": {
             "companions/__init__.py",

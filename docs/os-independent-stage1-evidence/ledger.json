@@ -2,7 +2,7 @@
   "active_jobs": [],
   "baseline_sha": "02f4bab9bc7562668ffc41d622c4274449933768",
   "branch": "refactor/os-independent-stage1-implementation-20261009",
-  "candidate_sha": "1aac5dd297c2d80f5a6c982e3d399785feb3285a",
+  "candidate_sha": "OS7_G6_MANIFEST_REPAIRED_UNCOMMITTED",
   "ci_status": "NOT_SUBMITTED; candidate must be committed then pushed to run exact SHA CI",
   "completed": [
     "Plan read in full, 517 lines; repository instructions read",
@@ -45,7 +45,11 @@
     "OS6 current 152 production modules + 49 Python scripts with KEEP/BOUNDARY/LINUX decisions, all module imports/hashes; original 143 modules retained and 11 approved split modules added",
     "OS6 all 21 Import Linter contracts pass; AST scanner and direct/alias/dynamic negative test cases pass; no shadow MCP registry; three native child mounts",
     "OS6 updated README, AGENTS.md, CLAUDE.md, DEVELOPMENT.md, docs/testing.md, docs/quality-gates.md and separate architecture/Darwin backlog",
-    "OS6 four bound source/contract/native tests and prior negative/parity/path suite 40 passed"
+    "OS6 four bound source/contract/native tests and prior negative/parity/path suite 40 passed",
+    "OS7 first official full two-lane run: parallel 2530 passed, 3 skipped, 2 fail (G6 outdated module list); ordinary lane 2 passed",
+    "G6 legacy ownership manifest expanded with nine newly split source modules and their native-domain groups; no lowering of coverage assertions",
+    "Gate A root health check upgraded to verify actual pure factory route and delegated Linux bootstrap, with negative tests",
+    "Focused old G6/GateA/OS6 manifest tests repaired: 17 passed"
   ],
   "deployment_status": "NOT_STARTED; production checkout and stable Job Manager untouched",
   "evidence": [
@@ -114,6 +118,14 @@
       "failure": "Git archive included a parent 'src/' directory record which fixture validation rejected",
       "resolution": "Validated and skipped only the parent directory record; immutable archived source and 2-way RPC test passed.",
       "stage": "OS3 cross-version"
+    },
+    {
+      "failure": "tests/scripts/test_gate_a_report.py: module registry omitted all nine new Stage1 production Python files; companion.operational_http_surface used obsolete same-file FastMCP create_server AST assumption",
+      "hook_note": "Normal trailing-whitespace hook removed purely blank trailing spaces in saved text evidence; original unmodified full log remains as os7-managed-full.log in owned workspace.",
+      "log_path": "docs/os-independent-stage1-evidence/os7-managed-first-failure.txt",
+      "resolution": "Update actual G6 manifest owners for all nine (root, commands, platform, diagnostics, deployment); verify native create_application root route and server->application delegation with positive/negative AST tests; targeted 17 passed",
+      "sha256": "57df2f0552c745c6697288c825a22a3fd82e6b53df8bd144f21335a5973f2bbf",
+      "stage": "OS7 first managed full suite"
     }
   ],
   "gates": {
@@ -124,14 +136,14 @@
     "OS4": "UNIT_PROVISIONING_AND_READINESS_FOCUSED_PASS_UNREVIEWED",
     "OS5": "PATH_ALIAS_LOG_DIAGNOSTIC_FOCUSED_PASS; CANONICAL_ANCESTOR_TOCTOU_DOCUMENTED",
     "OS6": "152_MODULE_49_SCRIPT_OWNERSHIP_COMPLETE; STATIC_40_TESTS_PASS; REVIEW_PENDING",
-    "OS7": "FINAL_TESTS_NOT_STARTED"
+    "OS7": "FIRST_TWO_LANE_2532_PASS_3_SKIP_2_G6_MANIFEST_FAILURES_FIXED_TARGETED_17_PASS"
   },
   "known_baseline_defects": [
     "Symlink allowed-root canonicalization falsely rejects canonical target",
     "Linux import-blocking cannot currently import pure server/jobs/logstats"
   ],
-  "last_committed_sha": "14650b5a4226e453cc4e94c313bd0c26bcb24ac6",
-  "next_action": "Commit OS5+OS6 source/documentation with normal hooks; run OS7 local managed suite and coverage once; submit exact SHA to CI; obtain genuine independent reviewer before guarded deployment.",
+  "last_committed_sha": "c6620b51805b4259f9f9dc577a0a436b4a089589",
+  "next_action": "Commit G6/GateA compatibility repair and rerun complete two-lane suite on changed source; then coverage and tox matrix. No security/review gates waived.",
   "owner": "single ChatGPT implementation integrator",
   "plan_sha": "19a3cf1e43755ed4aee3837c25ea63188058a26e",
   "remaining_dependencies": [
@@ -142,8 +154,8 @@
   ],
   "review_status": "REVIEW_PENDING: no independent OS1, OS3, OS4 or full OS7 sign-off. No self-approval.",
   "reviews": [],
-  "stage": "OS6 source sweep and architecture/documentation alignment",
-  "status": "REVIEW_PENDING",
+  "stage": "OS7 full-suite first failure repaired; source convergence check",
+  "status": "RUNNING",
   "task_id": "BINNACLE-OS-STAGE1-IMPLEMENT-20261009",
   "tests": [
     {
@@ -294,9 +306,16 @@
       "exit_code": 0,
       "result": "152 production, 49 scripts, 11 additions, 0 deleted, 0 architecture violations",
       "stage": "OS6"
+    },
+    {
+      "command": "uv run python scripts/run_test_suite.py --seed 12345",
+      "exit_code": 1,
+      "log_path": "docs/os-independent-stage1-evidence/os7-managed-first-failure.txt",
+      "result": "first run: 2532 passed, 3 skipped, 2 failed; fixes applied",
+      "stage": "OS7"
     }
   ],
-  "updated_utc": "2026-10-09T16:20:44.417667+00:00",
+  "updated_utc": "2026-10-09T16:25:25.007439+00:00",
   "worktree_dirty": true,
   "worktree_path": "/home/grammy-jiang/Projects/binnacle-os-independent-stage1-impl"
 }

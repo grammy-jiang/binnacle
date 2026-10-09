@@ -21,7 +21,7 @@
     "LINUX": 62
   },
   "coverage_complete": true,
-  "implementation_commit": "1aac5dd297c2d80f5a6c982e3d399785feb3285a",
+  "implementation_commit": "c6620b51805b4259f9f9dc577a0a436b4a089589",
   "production_module_count": 152,
   "rows": [
     {
@@ -713,7 +713,7 @@
       "owner": "KEEP",
       "path": "scripts/gate_a_manifest.py",
       "rationale": "External repository management/testing; subprocess for Git, uv or ripgrep is portable, not a host adapter",
-      "sha256": "9d53490cf12000947aee9d73f23405f6a4a6faf801276dd41262b7b0bbcf80ed",
+      "sha256": "b4a2b3d9d9c7e5b32e360360ded9c25a36ce5ffa7542b25ddfc578eef42d2521",
       "stage": "OS6",
       "was_in_baseline": true
     },
@@ -739,6 +739,7 @@
         "scripts.gate_a_manifest.manifest_coverage",
         "scripts.gate_a_manifest.manifest_groups",
         "scripts.gate_a_source",
+        "scripts.gate_a_source.has_delegated_root_health_route",
         "scripts.gate_a_source.has_root_health_route",
         "scripts.gate_a_source.imported_names_from",
         "scripts.gate_a_source.imports_for",
@@ -751,7 +752,7 @@
       "owner": "KEEP",
       "path": "scripts/gate_a_report.py",
       "rationale": "External repository management/testing; subprocess for Git, uv or ripgrep is portable, not a host adapter",
-      "sha256": "3edac158b492451855a82257e9559244f849ac033d22b5c2492d5791b86e29ec",
+      "sha256": "af4f6b5767e0c3eaee6d2c65f4d8a15845e51a8bc14c33984968160d0921822f",
       "stage": "OS6",
       "was_in_baseline": true
     },
@@ -773,7 +774,7 @@
       "owner": "KEEP",
       "path": "scripts/gate_a_source.py",
       "rationale": "External repository management/testing; subprocess for Git, uv or ripgrep is portable, not a host adapter",
-      "sha256": "44003d66b8f78069e66ccabfc8930220507ea995f804d6533a3b5eeea9761cec",
+      "sha256": "1b27b4a519395636bb0dc1b8b9a3ae074a750962ea820ca0225f5f83cc35e36a",
       "stage": "OS6",
       "was_in_baseline": true
     },

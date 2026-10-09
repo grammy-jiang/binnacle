@@ -54,13 +54,13 @@ def imported_names_from(path: Path, module: str) -> tuple[set[str], bool]:
     return names, direct
 
 
-def has_root_health_route(path: Path) -> bool:
+def has_root_health_route(path: Path, *, factory_name: str = "create_server") -> bool:
     """Prove literal root registration only; response/auth need runtime evidence."""
     if not path.exists():
         return False
     tree = ast.parse(path.read_text(encoding="utf-8"))
     for factory in tree.body:
-        if not isinstance(factory, ast.FunctionDef) or factory.name != "create_server":
+        if not isinstance(factory, ast.FunctionDef) or factory.name != factory_name:
             continue
         roots = {
             n.targets[0].id
@@ -110,3 +110,42 @@ def has_root_health_route(path: Path) -> bool:
                 ):
                     return True
     return False
+
+
+def has_delegated_root_health_route(server_path: Path, app_path: Path) -> bool:
+    """Pure FastMCP factory owns healthz; public Linux bootstrap delegates to it.
+
+    This still requires a literal root registration and an exact return from
+    the public factory, not merely finding the string "/healthz" somewhere.
+    """
+    if not server_path.exists() or not app_path.exists():
+        return False
+    tree = ast.parse(server_path.read_text(encoding="utf-8"))
+    factory = next(
+        (
+            node
+            for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == "create_server"
+        ),
+        None,
+    )
+    if factory is None:
+        return False
+    owns_import = any(
+        isinstance(node, ast.ImportFrom)
+        and node.module == "binnacle.application"
+        and any(alias.name == "create_application" for alias in node.names)
+        for node in factory.body
+    )
+    returns_app = any(
+        isinstance(node, ast.Return)
+        and isinstance(node.value, ast.Call)
+        and isinstance(node.value.func, ast.Name)
+        and node.value.func.id == "create_application"
+        for node in factory.body
+    )
+    return (
+        owns_import
+        and returns_app
+        and has_root_health_route(app_path, factory_name="create_application")
+    )
