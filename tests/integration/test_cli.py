@@ -8,7 +8,8 @@ and token rotation without changing the development Raspberry Pi.
 
 import subprocess
 
-from binnacle import cli, doctor
+from binnacle import cli
+from binnacle.diagnostics import doctor
 from binnacle.platform.contracts.service_lifecycle_contracts import ServiceAction
 from tests.service_fakes import FakeServiceController
 

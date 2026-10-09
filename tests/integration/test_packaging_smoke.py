@@ -107,7 +107,7 @@ sys.meta_path.insert(0, BlockWatchdog())
 
 import binnacle.config
 import binnacle.cli
-import binnacle.doctor
+import binnacle.diagnostics.doctor
 import binnacle.features.commands.jobs
 import binnacle.server
 

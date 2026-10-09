@@ -2,7 +2,7 @@
 
 import pytest
 
-from binnacle import doctor
+from binnacle.diagnostics import doctor
 from binnacle.features.commands import jobs as jobstore
 
 

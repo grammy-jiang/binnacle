@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from binnacle import doctor
+from binnacle.diagnostics import doctor
 from binnacle.features.commands import jobs as jobstore
 from binnacle.platform.contracts.service_lifecycle_contracts import ManagedServiceStatus
 from binnacle.platform.contracts.service_log_contracts import ServiceLogError
@@ -455,14 +455,13 @@ def test_service_inspector_reads_own_process_environment(monkeypatch):
     assert path is not None and path
 
 
-def test_legacy_doctor_module_alias_and_deployment_pickle(tmp_path):
+def test_canonical_doctor_deployment_pickle_roundtrip(tmp_path):
     import importlib
     import pickle
 
     from binnacle.diagnostics import doctor as owned
 
     assert doctor is owned
-    assert importlib.import_module("binnacle.doctor") is owned
     assert importlib.import_module("binnacle.diagnostics.doctor") is owned
     assert doctor.Deployment is owned.Deployment
     assert doctor.Deployment.__module__ == "binnacle.diagnostics.doctor"
@@ -473,7 +472,7 @@ def test_legacy_doctor_module_alias_and_deployment_pickle(tmp_path):
     assert "run_all" not in doctor.__all__
 
 
-def test_deployment_legacy_pickle_qualified_path(tmp_path):
+def test_removed_legacy_doctor_pickle_path_is_not_supported(tmp_path):
     import pickle
 
     obj = doctor.Deployment(
@@ -483,4 +482,5 @@ def test_deployment_legacy_pickle_qualified_path(tmp_path):
     new_qualname = b"cbinnacle.diagnostics.doctor\nDeployment\n"
     old_qualname = b"cbinnacle.doctor\nDeployment\n"
     assert new_qualname in payload
-    assert pickle.loads(payload.replace(new_qualname, old_qualname)) == obj
+    with pytest.raises(ModuleNotFoundError):
+        pickle.loads(payload.replace(new_qualname, old_qualname))

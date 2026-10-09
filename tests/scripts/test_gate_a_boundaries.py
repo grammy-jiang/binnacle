@@ -213,7 +213,7 @@ def test_g6_diagnostics_legacy_aliases_are_classified():
     facades = manifest.compatibility_facades()
     groups = manifest.manifest_groups()
     assert removed.isdisjoint(facades)
-    assert "doctor.py" in facades
+    assert "doctor.py" not in facades
     assert "diagnostics/doctor_common.py" in groups["diagnostics"]
     assert "diagnostics/doctor_jobs.py" in groups["diagnostics"]
     assert "diagnostics/job_manager_doctor.py" in groups["diagnostics"]

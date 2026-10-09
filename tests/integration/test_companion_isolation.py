@@ -17,10 +17,11 @@ def test_core_server_and_doctor_without_companion_implementations(tmp_path):
 import asyncio, importlib.abc, sys
 class NoCompanions(importlib.abc.MetaPathFinder):
     def find_spec(self, fullname, path=None, target=None):
-        if fullname.startswith(('binnacle.watchdog', 'binnacle.ops', 'binnacle.uplink', 'binnacle.tunnel', 'binnacle.webminstats')):
+        if fullname.startswith(('binnacle.companions', 'binnacle.observability.linux.webminstats')):
             raise AssertionError('core tried to import companion: ' + fullname)
 sys.meta_path.insert(0, NoCompanions())
-from binnacle import cli, doctor, server
+from binnacle import cli, server
+from binnacle.diagnostics import doctor
 from fastmcp import Client
 root = server.create_server()
 assert not hasattr(doctor, 'check_uplink')

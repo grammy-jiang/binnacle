@@ -5,8 +5,8 @@ import subprocess
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from binnacle import doctor
 from binnacle.companions.watchdog import watchdog_doctor
+from binnacle.diagnostics import doctor
 
 
 def statuses(checks: list[doctor.Check]) -> list[str]:

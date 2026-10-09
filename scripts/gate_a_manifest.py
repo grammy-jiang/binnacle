@@ -97,7 +97,6 @@ def manifest_groups() -> dict[str, set[str]]:
             "diagnostics/doctor_render.py",
             "diagnostics/doctor_provenance.py",
             "diagnostics/doctor_connectivity.py",
-            "doctor.py",
             "diagnostics/doctor.py",
             "diagnostics/doctor_common.py",
             "diagnostics/doctor_jobs.py",
@@ -174,14 +173,8 @@ def manifest_coverage() -> tuple[list[str], dict[str, list[str]]]:
 
 
 def compatibility_facades() -> set[str]:
-    """Current compatibility facades that G6 must review before removal."""
-    return {
-        "doctor.py",
-        *(
-            path.relative_to(SRC).as_posix()
-            for path in (SRC / "ops" / "watchdog").glob("*.py")
-        ),
-    }
+    """After G7, runtime compatibility facades must remain absent."""
+    return set()
 
 
 def compatibility_facade_coverage() -> tuple[list[str], dict[str, list[str]]]:

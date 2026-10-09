@@ -22,8 +22,7 @@ def test_companions_do_not_import_core_doctor_aggregate(module):
 
 
 def test_neutral_rendering_keeps_public_exit_and_json_contract():
-    from binnacle import doctor
-    from binnacle.diagnostics import doctor_render
+    from binnacle.diagnostics import doctor, doctor_render
     from binnacle.doctor_contracts import fail, ok, warn
 
     checks = [
@@ -44,7 +43,8 @@ def test_neutral_rendering_keeps_public_exit_and_json_contract():
 
 @pytest.mark.parametrize("flag", ["--probe", "--no-probe"])
 def test_core_probe_flags_remain_accepted_without_uplink(flag, monkeypatch, capsys):
-    from binnacle import cli, doctor
+    from binnacle import cli
+    from binnacle.diagnostics import doctor
 
     calls = []
     monkeypatch.setattr(

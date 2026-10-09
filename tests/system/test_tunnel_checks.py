@@ -10,8 +10,8 @@ from pathlib import Path
 
 import pytest
 
-from binnacle import doctor
 from binnacle.companions.tunnel import tunnel_doctor
+from binnacle.diagnostics import doctor
 
 BEARER = "Bearer secret-token\n"
 

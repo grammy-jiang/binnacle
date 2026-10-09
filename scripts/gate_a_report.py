@@ -189,10 +189,10 @@ def report() -> list[Cell]:
             )
         )
 
-    registry_text = (SRC / "tools" / "__init__.py").read_text(encoding="utf-8")
+    legacy_registry = SRC / "tools" / "__init__.py"
     server_text = (SRC / "server.py").read_text(encoding="utf-8")
     registry_removed = (
-        "register_all" not in registry_text and "register_all" not in server_text
+        not legacy_registry.exists() and "register_all" not in server_text
     )
     cells.append(
         Cell(

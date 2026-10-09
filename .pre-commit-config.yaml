@@ -144,6 +144,12 @@ repos:
         language: system
         files: (^src/binnacle/.*\.py$|^pyproject\.toml$)
         pass_filenames: false
+      - id: g7-legacy-gate
+        name: prevent restoration of retired legacy modules and imports
+        entry: uv run --no-sync python scripts/g7_legacy_gate.py
+        language: system
+        files: (^src/binnacle/.*\.py$|^scripts/g7_legacy_gate\.py$)
+        pass_filenames: false
       - id: fast-tests
         name: fast unit and contract tests
         entry: uv run --no-sync python scripts/run_test_suite.py --suite fast --seed 12345
