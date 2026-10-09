@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from binnacle.features.search.search_text_telemetry import ExactSearchMetrics
-from binnacle.tools import search_text as st
+from binnacle.features.search.tools import search_text as st
 
 
 def _event(kind: str, path: Path, line: int, text: str) -> dict:

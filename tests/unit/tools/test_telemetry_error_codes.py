@@ -8,8 +8,8 @@ from fastmcp.exceptions import ToolError
 from binnacle.errors import CodedToolError
 from binnacle.features.files.tools import list_files as lf
 from binnacle.features.files.tools import read_file as rf
+from binnacle.features.search.tools import search_text as st
 from binnacle.tools import run_command as rc
-from binnacle.tools import search_text as st
 
 
 def _code(exc: pytest.ExceptionInfo[ToolError]) -> str:

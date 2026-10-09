@@ -5,9 +5,9 @@ import re
 import pytest
 from fastmcp.exceptions import ToolError
 
-from binnacle.callctx import current_call
 from binnacle.config import get_settings
-from binnacle.tools import search_text as st
+from binnacle.features.search.tools import search_text as st
+from binnacle.mcp.callctx import current_call
 
 
 def fields(message: str) -> dict[str, str]:

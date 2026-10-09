@@ -5,17 +5,14 @@ import asyncio
 from fastmcp import Client
 from mcp.types import Implementation
 
-from binnacle import (
-    commands_server,
-    jobs,
-    logging_middleware,
-    server,
-)
+from binnacle import commands_server, jobs, server
 from binnacle.config import TokenizerTelemetrySettings, get_settings
 from binnacle.features.files import files_server, paths
 from binnacle.features.files.tools import edit_file, list_files, read_file, write_file
-from binnacle.identity import ClientIdentity
-from binnacle.tools import job_status, run_command, search_text
+from binnacle.features.search.tools import search_text
+from binnacle.mcp import logging_middleware
+from binnacle.mcp.identity import ClientIdentity
+from binnacle.tools import job_status, run_command
 
 
 def fail_global():
@@ -196,7 +193,8 @@ import asyncio
 import sys
 # Import adapters before construction. No reload or settings-cache reset.
 from binnacle.features.files.tools import read_file
-from binnacle.tools import job_status, search_text
+from binnacle.tools import job_status
+from binnacle.features.search.tools import search_text
 from binnacle import server
 from fastmcp import Client
 async def go():

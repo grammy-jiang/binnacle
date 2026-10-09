@@ -6,7 +6,7 @@ import pytest
 from fastmcp.exceptions import ToolError
 
 from binnacle import jobs as jobstore
-from binnacle.callctx import current_call
+from binnacle.mcp.callctx import current_call
 from binnacle.tools import job_status as js
 from binnacle.tools import run_command as rc
 from tests.integration.job_test_support import run, status, stop

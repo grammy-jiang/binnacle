@@ -58,13 +58,13 @@ def test_migrated_facade_is_same_module(legacy: str, canonical: str):
     assert importlib.import_module(legacy) is owned
 
 
-def test_files_path_guard_facade_retains_public_functions():
-    from binnacle import paths
-    from binnacle.features.files import paths as owned
+def test_files_path_guard_canonical_exports():
+    from binnacle.features.files import paths
 
-    assert paths.__all__ == ["full_match", "nearby_hint", "resolve_path"]
-    for name in paths.__all__:
-        assert getattr(paths, name) is getattr(owned, name)
+    assert all(
+        callable(getattr(paths, name))
+        for name in ("full_match", "nearby_hint", "resolve_path")
+    )
 
 
 @pytest.mark.parametrize(

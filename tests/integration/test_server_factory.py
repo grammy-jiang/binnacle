@@ -10,8 +10,11 @@ from fastmcp import Client, FastMCP
 from fastmcp.server.middleware.dereference import DereferenceRefsMiddleware
 
 from binnacle import server
-from binnacle.logging_middleware import RequestLoggingMiddleware, ToolLoggingMiddleware
-from binnacle.visibility import ClientToolVisibility
+from binnacle.mcp.logging_middleware import (
+    RequestLoggingMiddleware,
+    ToolLoggingMiddleware,
+)
+from binnacle.mcp.visibility import ClientToolVisibility
 from tests.integration.http_test_support import HEADERS, INITIALIZE, sse_json
 from tests.integration.test_packaging_smoke import clean_env
 
@@ -162,7 +165,9 @@ assert not any(name.startswith("binnacle.features.files.tools.") for name in sys
 for name in ("read_file", "list_files", "edit_file", "write_file"):
     module = importlib.import_module(f"binnacle.features.files.tools.{name}")
     assert callable(module.register)
-for name in ("search_text", "run_command", "job_status", "stop_job"):
+search = importlib.import_module("binnacle.features.search.tools.search_text")
+assert callable(search.register)
+for name in ("run_command", "job_status", "stop_job"):
     module = importlib.import_module(f"binnacle.tools.{name}")
     assert callable(module.register)
 assert "binnacle.server" not in sys.modules

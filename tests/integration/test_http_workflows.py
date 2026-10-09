@@ -8,8 +8,8 @@ import threading
 import pytest
 
 from binnacle import jobs as jobstore
-from binnacle.callctx import current_turn
 from binnacle.features.files.tools import list_files as lf
+from binnacle.mcp.callctx import current_turn
 from tests.integration.http_test_support import (
     http_tool_call,
     sse_json,

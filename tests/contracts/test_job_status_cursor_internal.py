@@ -6,7 +6,7 @@ import pytest
 from fastmcp.exceptions import ToolError
 
 from binnacle import jobs
-from binnacle.callctx import current_call
+from binnacle.mcp.callctx import current_call
 from binnacle.tools import job_status as js
 
 

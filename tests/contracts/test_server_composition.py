@@ -14,7 +14,7 @@ from binnacle import server
 from binnacle.commands_server import create_commands_server
 from binnacle.features.files.files_server import create_files_server
 from binnacle.features.search.search_server import create_search_server
-from binnacle.tool_order import PublicToolOrder
+from binnacle.mcp.tool_order import PublicToolOrder
 from tests.contracts.surface_support import digest, served, surface
 from tests.contracts.test_input_validation import text_of
 from tests.contracts.test_tool_surface import INSTRUCTIONS_SHA256, SURFACE_SHA256

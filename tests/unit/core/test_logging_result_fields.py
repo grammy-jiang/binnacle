@@ -4,7 +4,7 @@ import json
 
 from fastmcp.tools.base import ToolResult
 
-from binnacle import logging_middleware
+from binnacle.mcp import logging_middleware
 
 
 def test_result_fields_lift_low_cardinality_tool_facts_only():

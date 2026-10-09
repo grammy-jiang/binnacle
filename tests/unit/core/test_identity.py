@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from binnacle.identity import ClientIdentity
+from binnacle.mcp.identity import ClientIdentity
 
 
 def _context(*, session_id=None, session=None, meta=None, client_params=None):
@@ -60,7 +60,7 @@ def test_missing_or_malformed_identity_returns_none():
 
 
 def test_remembered_sessions_are_lru_bounded(monkeypatch):
-    import binnacle.identity as identity_module
+    import binnacle.mcp.identity as identity_module
 
     monkeypatch.setattr(identity_module, "_REMEMBERED_SESSIONS", 2)
     identity = ClientIdentity()

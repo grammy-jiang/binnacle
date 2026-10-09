@@ -9,7 +9,7 @@ from hypothesis import example, given, settings
 from hypothesis import strategies as st
 from mcp.types import ToolAnnotations
 
-from binnacle.tool_order import PublicToolOrder
+from binnacle.mcp.tool_order import PublicToolOrder
 
 # Independent of the production rank table; changing one must fail this contract.
 ORDER = [

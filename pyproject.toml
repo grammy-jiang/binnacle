@@ -216,7 +216,7 @@ id = "search-tools-only-search-server"
 name = "Search MCP tools are imported only by the Search server"
 type = "protected"
 protected_modules = ["binnacle.features.search.tools"]
-allowed_importers = ["binnacle.features.search.search_server", "binnacle.tools.search_text"]
+allowed_importers = ["binnacle.features.search.search_server"]
 
 [[tool.importlinter.contracts]]
 id = "focused-servers-independent"

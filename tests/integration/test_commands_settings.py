@@ -143,7 +143,7 @@ def test_status_looks_up_implementation_after_construction(tmp_path, monkeypatch
 def test_explicit_run_policy_keeps_process_warmup_and_owner(
     tmp_path, monkeypatch, backend
 ):
-    from binnacle.callctx import current_client
+    from binnacle.mcp.callctx import current_client
 
     roots = RootsSettings(default_root=tmp_path, extra_roots=())
     settings = RunCommandSettings(

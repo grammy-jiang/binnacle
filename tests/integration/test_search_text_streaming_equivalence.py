@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from binnacle.config import get_settings
-from binnacle.tools import search_text as st
+from binnacle.features.search.tools import search_text as st
 
 
 def run_mode(monkeypatch, mode: str, pattern: str, path: Path, **kwargs):
@@ -162,7 +162,7 @@ def test_streaming_invalid_glob_keeps_error_code_and_reaps_rg(
     # search_text's compatibility matcher captures its own full_match reference;
     # patch that seam too so the streaming reducer exercises consumer cleanup.
     monkeypatch.setattr(st, "full_match", invalid)
-    from binnacle.callctx import current_call
+    from binnacle.mcp.callctx import current_call
 
     token = current_call.set("stream-invalid-glob")
     try:

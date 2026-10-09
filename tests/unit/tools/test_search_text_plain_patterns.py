@@ -19,7 +19,7 @@ from typing import Any
 import pytest
 from fastmcp.exceptions import ToolError
 
-from binnacle.tools import search_text as st
+from binnacle.features.search.tools import search_text as st
 
 
 def run(pattern: str, path: Path, **kw: Any):

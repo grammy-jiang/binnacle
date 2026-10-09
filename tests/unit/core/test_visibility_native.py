@@ -11,8 +11,8 @@ from fastmcp.server.transforms import Visibility
 from fastmcp.tools.base import Tool
 from fastmcp.utilities.versions import VersionSpec
 
-import binnacle.visibility as module
-from binnacle.visibility import ClientToolVisibilityTransform
+import binnacle.mcp.visibility as module
+from binnacle.mcp.visibility import ClientToolVisibilityTransform
 
 
 def request_policy(monkeypatch, allowed):

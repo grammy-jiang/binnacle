@@ -8,8 +8,8 @@ from fastmcp import Client
 from fastmcp.exceptions import ToolError
 
 from binnacle import server
-from binnacle.identity import ClientIdentity
-from binnacle.visibility import ClientToolVisibility
+from binnacle.mcp.identity import ClientIdentity
+from binnacle.mcp.visibility import ClientToolVisibility
 
 FULL = {
     "read_file",

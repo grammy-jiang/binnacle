@@ -15,15 +15,16 @@ import mcp.types
 from fastmcp import Client
 
 from binnacle import command_status as js
-from binnacle import jobs, logging_middleware, server
-from binnacle.callctx import (
+from binnacle import jobs, server
+from binnacle.config import RunCommandSettings
+from binnacle.features.files.tools import list_files as lf
+from binnacle.mcp import logging_middleware
+from binnacle.mcp.callctx import (
     current_argument_names,
     current_call_started,
     current_client,
     current_turn,
 )
-from binnacle.config import RunCommandSettings
-from binnacle.features.files.tools import list_files as lf
 from binnacle.tools import stop_job as sj
 
 
