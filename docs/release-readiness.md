@@ -1,12 +1,13 @@
 # Release readiness
 
-Binnacle is not currently published as a versioned GitHub or PyPI release.
+Binnacle supports explicitly approved manual GitHub releases, but has no automated
+GitHub or PyPI publishing pipeline. It does not publish to PyPI.
 `project.version` in `pyproject.toml` is package metadata used by installed
 artifacts and runtime diagnostics; the current value does not by itself mean
 that a corresponding public release exists.
 
-This document defines the artifact-readiness boundary that can be enforced
-before a future release process is designed.
+This document defines the separate distribution-readiness and manual
+publication boundaries; passing packaging CI is not itself a release.
 
 ## Distribution gate
 
@@ -62,10 +63,13 @@ workflow that:
 Those actions remain explicit future design decisions. They should not be added
 implicitly to ordinary CI or to the production deployment flow.
 
-Before publication is introduced, define a version/tag policy, release notes or
-changelog ownership, artifact provenance expectations, rollback/yank policy,
-and the authorization boundary for publishing. Only then should a release
-workflow be allowed to perform external publication.
+Manual GitHub release policy: after explicit user authorization and a single
+exact-SHA CI success, first deploy with the existing guarded live smoke.
+Create an annotated version tag only on the verified deployed SHA, never move
+or reuse a release tag, and publish release notes and verified distribution
+artifacts separately. Roll back the deployment without moving the public tag;
+ship corrections under a new version. Automated release workflows and PyPI
+publication require a separate design and approval.
 
 ## Relationship to deployment
 

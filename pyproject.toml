@@ -142,7 +142,15 @@ ignore-words-list = "aci"
 
 [tool.deptry]
 # The dist name is binnacle-mcp; the import package is binnacle.
-known_first_party = ["binnacle", "scripts"]
+known_first_party = [
+    "binnacle",
+    "scripts",
+    # Standalone sibling imports in docs/chatgpt-mcp-development/maintainer/.
+    "build_candidate_archive",
+    "c1h_precondition_rule",
+    "export_references",
+    "validate_candidate_archive",
+]
 # Agent tooling with its own conventions and imports, not server code.
 extend_exclude = ["\\.claude", "\\.tox", "build", "dist"]
 

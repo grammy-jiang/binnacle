@@ -14,7 +14,8 @@ version = "1.0.0"
 
 This is package metadata, not a claim that every deployed commit is a new
 formal release. Binnacle is still deployed directly from a reviewed Git
-checkout and does not currently publish GitHub Releases or PyPI releases.
+checkout. GitHub releases require an explicit, manual publish operation;
+no GitHub release is created automatically and PyPI is not published.
 
 The version remains static until there is an intentional package release. Do
 not bump it merely because `master` advances.
@@ -55,7 +56,8 @@ dynamic package version today. The repository has many archive tags and no
 formal release cadence; the deploy SHA already supplies the finer-grained
 runtime identity.
 
-If a formal release process is introduced later:
+For the explicitly approved first manual GitHub release (v1.0.0) and any
+subsequent release:
 
 1. choose and commit the new static package version;
 2. require the normal code-quality, compatibility, coverage, packaging and
@@ -65,4 +67,6 @@ If a formal release process is introduced later:
    separately reviewed release action;
 5. never reuse or move a release tag.
 
-Until then, deployment and release remain separate operations.
+Deployment and release remain separate operations; the release tag can only
+point at the already-verified deployed source SHA. The first release uses the
+existing package version 1.0.0 and does not change its static metadata.
