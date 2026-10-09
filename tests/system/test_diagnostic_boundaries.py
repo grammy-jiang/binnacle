@@ -10,7 +10,10 @@ SRC = Path(__file__).resolve().parents[2] / "src" / "binnacle"
 
 @pytest.mark.parametrize("module", ["watchdog_doctor", "watchdog_cli", "tunnel_cli"])
 def test_companions_do_not_import_core_doctor_aggregate(module):
-    tree = ast.parse((SRC / f"{module}.py").read_text())
+    folder = (
+        "companions/watchdog" if module.startswith("watchdog") else "companions/tunnel"
+    )
+    tree = ast.parse((SRC / folder / f"{module}.py").read_text())
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom):
             assert node.module != "binnacle.doctor"
@@ -57,7 +60,10 @@ def test_core_probe_flags_remain_accepted_without_uplink(flag, monkeypatch, caps
 
 @pytest.mark.parametrize("module", ["watchdog_cli", "tunnel_cli"])
 def test_companions_do_not_import_core_cli(module):
-    tree = ast.parse((SRC / f"{module}.py").read_text())
+    folder = (
+        "companions/watchdog" if module.startswith("watchdog") else "companions/tunnel"
+    )
+    tree = ast.parse((SRC / folder / f"{module}.py").read_text())
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom):
             assert node.module != "binnacle.cli"

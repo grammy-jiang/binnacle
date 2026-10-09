@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from binnacle import watchdog_cli as cli
+from binnacle.companions.watchdog import watchdog_cli as cli
 from binnacle.deployment import units
 from binnacle.platform.linux.service_provisioning_linux import LinuxServiceProvisioner
 
@@ -65,7 +65,7 @@ def test_resume_when_not_paused_is_idempotent(tmp_path, monkeypatch, capsys):
 
 
 def test_reload_driver_plan_never_calls_mutating_reload(monkeypatch, capsys):
-    from binnacle import watchdog as wd
+    from binnacle.companions.watchdog import watchdog as wd
 
     monkeypatch.setattr(wd, "driver_of", lambda dev: ("mmc1:0001:1", "brcmfmac"))
     monkeypatch.setattr(wd, "driver_module_of", lambda dev: ("brcmfmac", ["brcmutil"]))
@@ -83,7 +83,7 @@ def test_reload_driver_plan_never_calls_mutating_reload(monkeypatch, capsys):
 
 
 def test_status_without_default_route_exits_before_probing(monkeypatch, capsys):
-    from binnacle import uplink as up
+    from binnacle.companions.watchdog import uplink as up
 
     monkeypatch.setattr(up, "default_routes", list)
     monkeypatch.setattr(
@@ -134,7 +134,7 @@ def test_setup_refuses_foreign_watchdog_unit(tmp_path, monkeypatch, capsys):
 
 
 def test_doctor_uses_companion_checks_and_core_renderer(monkeypatch, capsys):
-    from binnacle import watchdog_doctor
+    from binnacle.companions.watchdog import watchdog_doctor
     from binnacle.diagnostics import doctor_render as core_doctor
 
     seen = []
@@ -173,7 +173,7 @@ def test_setup_real_path_writes_only_watchdog_unit(tmp_path, monkeypatch, capsys
 
 
 def test_doctor_json_uses_json_renderer(monkeypatch, capsys):
-    from binnacle import watchdog_doctor
+    from binnacle.companions.watchdog import watchdog_doctor
     from binnacle.diagnostics import doctor_render as core_doctor
 
     monkeypatch.setattr(watchdog_doctor, "run_all", lambda probe=True: ["check"])
@@ -189,8 +189,8 @@ def test_doctor_json_uses_json_renderer(monkeypatch, capsys):
 def test_run_maps_watchdog_configuration_and_once_to_lifecycle(tmp_path, monkeypatch):
     from types import SimpleNamespace
 
-    from binnacle import watchdog as wd
-    from binnacle.watchdog_config import WatchdogSettings
+    from binnacle.companions.watchdog import watchdog as wd
+    from binnacle.companions.watchdog.watchdog_config import WatchdogSettings
 
     cfg = WatchdogSettings(state_file=tmp_path / "state.json", interval_s=17.0)
     monkeypatch.setattr(cli, "get_watchdog_settings", lambda: cfg)
@@ -224,8 +224,8 @@ def test_run_maps_watchdog_configuration_and_once_to_lifecycle(tmp_path, monkeyp
 def test_run_uses_configured_interval_cycles_and_state_file(tmp_path, monkeypatch):
     from types import SimpleNamespace
 
-    from binnacle import watchdog as wd
-    from binnacle.watchdog_config import WatchdogSettings
+    from binnacle.companions.watchdog import watchdog as wd
+    from binnacle.companions.watchdog.watchdog_config import WatchdogSettings
 
     cfg = WatchdogSettings(state_file=tmp_path / "state.json", interval_s=19.0)
     monkeypatch.setattr(cli, "get_watchdog_settings", lambda: cfg)
@@ -251,7 +251,7 @@ def test_run_uses_configured_interval_cycles_and_state_file(tmp_path, monkeypatc
 def test_usb_reset_plan_and_apply_paths(tmp_path, monkeypatch, capsys):
     from types import SimpleNamespace
 
-    from binnacle import watchdog as wd
+    from binnacle.companions.watchdog import watchdog as wd
 
     cfg = SimpleNamespace(
         usb_reset_ids=("abcd:1234",),
@@ -286,7 +286,7 @@ def test_usb_reset_plan_and_apply_paths(tmp_path, monkeypatch, capsys):
 def test_usb_reset_apply_failure_exits_one(tmp_path, monkeypatch):
     from types import SimpleNamespace
 
-    from binnacle import watchdog as wd
+    from binnacle.companions.watchdog import watchdog as wd
 
     cfg = SimpleNamespace(
         usb_reset_ids=(),
@@ -308,7 +308,7 @@ def test_usb_reset_apply_failure_exits_one(tmp_path, monkeypatch):
 def test_history_uses_tunnel_poll_window_when_log_exists(tmp_path, monkeypatch, capsys):
     from types import SimpleNamespace
 
-    from binnacle import watchlog
+    from binnacle.companions.watchdog import watchlog
 
     tunnel_log = tmp_path / "tunnel.log"
     tunnel_log.write_text("log")
@@ -339,7 +339,7 @@ def test_history_uses_tunnel_poll_window_when_log_exists(tmp_path, monkeypatch, 
 def test_history_skips_poll_matching_without_window(tmp_path, monkeypatch, capsys):
     from types import SimpleNamespace
 
-    from binnacle import watchlog
+    from binnacle.companions.watchdog import watchlog
 
     monkeypatch.setattr(
         cli,
@@ -357,7 +357,7 @@ def test_history_skips_poll_matching_without_window(tmp_path, monkeypatch, capsy
 
 
 def test_reload_driver_apply_success_and_failure(monkeypatch):
-    from binnacle import watchdog as wd
+    from binnacle.companions.watchdog import watchdog as wd
 
     monkeypatch.setattr(wd, "driver_of", lambda dev: ("node", "driver"))
     monkeypatch.setattr(wd, "driver_module_of", lambda dev: ("module", []))
@@ -378,8 +378,8 @@ def test_status_renders_routes_devices_preferences_and_issues(
 ):
     from types import SimpleNamespace
 
-    from binnacle import uplink as up
-    from binnacle import watchdog as wd
+    from binnacle.companions.watchdog import uplink as up
+    from binnacle.companions.watchdog import watchdog as wd
 
     routes = [
         up.Route("wlan1", "gw", "10.0.0.2", 100),

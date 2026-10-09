@@ -1,6 +1,6 @@
 """The journal reader: what the richer watchdog logging is for."""
 
-from binnacle import watchlog
+from binnacle.companions.watchdog import watchlog
 
 LINES = """\
 2026-09-13T23:00:00+10:00 pi binnacle[1]: INFO: event=watchdog_start interval_s=30.0 host=api.openai.com state_file=/x cycle=10 demoted=[] counters=usb{}/prefer{}/level{}/reload{} versions={"kernel": "6.18"} policy={"a": 1}

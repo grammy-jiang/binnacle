@@ -22,26 +22,14 @@
         "binnacle.companions.watchdog.watchdog_doctor",
         "binnacle.companions.watchdog.watchdog_connectivity",
         "binnacle.companions.watchdog.watchdog_unit",
-        "binnacle.companions.watchdog.watchlog",
-        "binnacle.watchdog",
-        "binnacle.watchdog_cli",
-        "binnacle.watchdog_config",
-        "binnacle.watchdog_doctor",
-        "binnacle.watchdog_unit",
-        "binnacle.watchlog",
-        "binnacle.uplink",
-        "binnacle.watchdog_connectivity"
+        "binnacle.companions.watchdog.watchlog"
       ],
       "tunnel": [
         "binnacle.companions.tunnel",
         "binnacle.companions.tunnel.tunnel_cli",
         "binnacle.companions.tunnel.tunnel_doctor",
         "binnacle.companions.tunnel.tunnel_unit",
-        "binnacle.companions.tunnel.tunnel_log",
-        "binnacle.tunnel_cli",
-        "binnacle.tunnel_doctor",
-        "binnacle.tunnel_unit",
-        "binnacle.tunnel_log"
+        "binnacle.companions.tunnel.tunnel_log"
       ]
     },
     "companion_dependencies": {
@@ -56,28 +44,10 @@
         "binnacle.cli",
         "binnacle.diagnostics.doctor"
       ],
-      "binnacle.watchdog_doctor": [
-        "binnacle.doctor",
-        "binnacle.cli",
-        "binnacle.diagnostics.doctor"
-      ],
       "binnacle.companions.watchdog.watchdog_cli": [
         "binnacle.doctor",
         "binnacle.cli",
         "binnacle.diagnostics.doctor"
-      ],
-      "binnacle.watchdog_cli": [
-        "binnacle.doctor",
-        "binnacle.cli",
-        "binnacle.diagnostics.doctor"
-      ],
-      "binnacle.tunnel_cli": [
-        "binnacle.doctor",
-        "binnacle.cli"
-      ],
-      "binnacle.tunnel_doctor": [
-        "binnacle.doctor_connectivity",
-        "binnacle.diagnostics.doctor_connectivity"
       ],
       "binnacle.cli": [
         "binnacle.webminstats",
@@ -89,16 +59,24 @@
       "binnacle.companions.tunnel.tunnel_doctor": [
         "binnacle.doctor_connectivity",
         "binnacle.diagnostics.doctor_connectivity"
+      ],
+      "binnacle.companions.tunnel.tunnel_cli": [
+        "binnacle.doctor",
+        "binnacle.cli",
+        "binnacle.diagnostics.doctor"
+      ],
+      "binnacle.diagnostics.doctor_connectivity": [
+        "binnacle.companions.watchdog"
       ]
     },
     "companion_public_imports": {
       "binnacle.companions.watchdog.watchdog_cli": {
-        "binnacle.tunnel_unit": [
+        "binnacle.companions.tunnel.tunnel_unit": [
           "TUNNEL_UNIT"
         ]
       },
       "binnacle.companions.watchdog.ops.services": {
-        "binnacle.tunnel_log": [
+        "binnacle.companions.tunnel.tunnel_log": [
           "scan_tunnel_log"
         ]
       }

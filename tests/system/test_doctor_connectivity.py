@@ -7,7 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from binnacle import doctor, uplink, watchdog_connectivity
+from binnacle import doctor
+from binnacle.companions.watchdog import uplink, watchdog_connectivity
 from binnacle.diagnostics import doctor_connectivity
 
 BEARER = "Bearer secret-token\n"

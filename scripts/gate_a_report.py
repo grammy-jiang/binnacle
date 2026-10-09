@@ -333,7 +333,6 @@ def report() -> list[Cell]:
         (
             "binnacle.webminstats",
             "binnacle.observability.linux.webminstats",
-            "binnacle.watchdog",
             "binnacle.ops.watchdog",
         ),
     )
@@ -401,7 +400,8 @@ def report() -> list[Cell]:
         )
 
     tunnel_names, tunnel_module_import = imported_names_from(
-        SRC / "companions/watchdog/watchdog_cli.py", "binnacle.tunnel_unit"
+        SRC / "companions/watchdog/watchdog_cli.py",
+        "binnacle.companions.tunnel.tunnel_unit",
     )
     narrow_tunnel_contract = (
         tunnel_names == {"TUNNEL_UNIT"} and not tunnel_module_import
@@ -411,7 +411,7 @@ def report() -> list[Cell]:
     elif narrow_tunnel_contract:
         tunnel_detail = (
             "watchdog CLI imports only the approved public service identity "
-            "binnacle.tunnel_unit.TUNNEL_UNIT"
+            "binnacle.companions.tunnel.tunnel_unit.TUNNEL_UNIT"
         )
     else:
         shown = ",".join(sorted(tunnel_names)) or "<module>"

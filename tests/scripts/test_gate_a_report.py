@@ -96,24 +96,30 @@ def test_g6_compatibility_facades_are_present_and_singly_classified():
 def test_watchdog_tunnel_contract_allows_only_tunnel_unit_name(tmp_path):
     path = tmp_path / "watchdog_cli.py"
     path.write_text(
-        "from binnacle.tunnel_unit import TUNNEL_UNIT\n",
+        "from binnacle.companions.tunnel.tunnel_unit import TUNNEL_UNIT\n",
         encoding="utf-8",
     )
-    assert gate_a.imported_names_from(path, "binnacle.tunnel_unit") == (
+    assert gate_a.imported_names_from(
+        path, "binnacle.companions.tunnel.tunnel_unit"
+    ) == (
         {"TUNNEL_UNIT"},
         False,
     )
 
     path.write_text(
-        "from binnacle.tunnel_unit import TUNNEL_UNIT, render_tunnel_unit\n",
+        "from binnacle.companions.tunnel.tunnel_unit import TUNNEL_UNIT, render_tunnel_unit\n",
         encoding="utf-8",
     )
-    names, direct = gate_a.imported_names_from(path, "binnacle.tunnel_unit")
+    names, direct = gate_a.imported_names_from(
+        path, "binnacle.companions.tunnel.tunnel_unit"
+    )
     assert names == {"TUNNEL_UNIT", "render_tunnel_unit"}
     assert direct is False
 
-    path.write_text("import binnacle.tunnel_unit\n", encoding="utf-8")
-    assert gate_a.imported_names_from(path, "binnacle.tunnel_unit") == (set(), True)
+    path.write_text("import binnacle.companions.tunnel.tunnel_unit\n", encoding="utf-8")
+    assert gate_a.imported_names_from(
+        path, "binnacle.companions.tunnel.tunnel_unit"
+    ) == (set(), True)
 
 
 def test_payload_binds_every_cell_to_one_exact_snapshot():

@@ -7,7 +7,7 @@ import pytest
 from pydantic import ValidationError
 
 from binnacle import config
-from binnacle.watchdog_config import WatchdogRootSettings
+from binnacle.companions.watchdog.watchdog_config import WatchdogRootSettings
 
 
 def clear_binnacle_env(monkeypatch) -> None:

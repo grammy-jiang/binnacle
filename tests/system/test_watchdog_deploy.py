@@ -11,8 +11,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from binnacle import watchdog_cli as cli
-from binnacle import watchdog_doctor as wdoc
+from binnacle.companions.watchdog import watchdog_cli as cli
+from binnacle.companions.watchdog import watchdog_doctor as wdoc
 from binnacle.deployment import units
 
 UNIT = wdoc.WATCHDOG_UNIT
@@ -218,7 +218,7 @@ def test_setup_adopts_a_hand_written_unit_and_rewrites_a_legacy_one(
 
 
 def test_watchdog_unit_renders_from_the_marker_parameters_and_needs_its_binary():
-    from binnacle import watchdog_unit
+    from binnacle.companions.watchdog import watchdog_unit
 
     spec = watchdog_unit.watchdog_unit_spec({"watchdog": "/v/bin/binnacle-watchdog"})
     assert (

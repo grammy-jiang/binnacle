@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 from unittest import mock
 
-from binnacle import watchdog as wd
+from binnacle.companions.watchdog import watchdog as wd
 from binnacle.companions.watchdog.ops import actions as wd_actions
 from binnacle.companions.watchdog.ops import cycle as wd_cycle
 from binnacle.companions.watchdog.ops import hardware as wd_hardware
@@ -17,7 +17,7 @@ from binnacle.companions.watchdog.ops import maintenance as wd_maintenance
 from binnacle.companions.watchdog.ops import network as wd_network
 from binnacle.companions.watchdog.ops import services as wd_services
 from binnacle.companions.watchdog.ops import tunnel as wd_tunnel
-from binnacle.uplink import ProbeResult, Route
+from binnacle.companions.watchdog.uplink import ProbeResult, Route
 
 __all__ = [
     "CONNECTIONS",

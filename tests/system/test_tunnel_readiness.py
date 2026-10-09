@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from binnacle import tunnel_unit
+from binnacle.companions.tunnel import tunnel_unit
 
 
 class _Health(BaseHTTPRequestHandler):

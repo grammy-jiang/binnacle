@@ -20,15 +20,21 @@ def test_relative_companion_import_is_visible(tmp_path, statement):
 @pytest.mark.parametrize(
     ("statement", "expected"),
     [
-        ("from .tunnel_unit import TUNNEL_UNIT", ({"TUNNEL_UNIT"}, False)),
-        ("from binnacle import tunnel_unit", (set(), True)),
-        ("from . import tunnel_unit", (set(), True)),
+        (
+            "from binnacle.companions.tunnel.tunnel_unit import TUNNEL_UNIT",
+            ({"TUNNEL_UNIT"}, False),
+        ),
+        ("from binnacle.companions.tunnel import tunnel_unit", (set(), True)),
+        ("import binnacle.companions.tunnel.tunnel_unit", (set(), True)),
     ],
 )
 def test_tunnel_identity_import_spellings(tmp_path, statement, expected):
     source = tmp_path / "watchdog_cli.py"
     source.write_text(statement)
-    assert gate_a.imported_names_from(source, "binnacle.tunnel_unit") == expected
+    assert (
+        gate_a.imported_names_from(source, "binnacle.companions.tunnel.tunnel_unit")
+        == expected
+    )
 
 
 def test_domain_scan_covers_manifest():

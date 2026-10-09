@@ -7,8 +7,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from binnacle import tunnel_cli as cli
-from binnacle import tunnel_doctor, tunnel_unit
+from binnacle.companions.tunnel import tunnel_cli as cli
+from binnacle.companions.tunnel import tunnel_doctor, tunnel_unit
 from binnacle.deployment import units
 
 PARAMS = {

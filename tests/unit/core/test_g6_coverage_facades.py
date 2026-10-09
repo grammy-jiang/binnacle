@@ -12,8 +12,6 @@ import pytest
     ("legacy", "canonical"),
     [
         ("binnacle.job_manager", "binnacle.features.commands.job_manager"),
-        ("binnacle.watchdog_cli", "binnacle.companions.watchdog.watchdog_cli"),
-        ("binnacle.tunnel_cli", "binnacle.companions.tunnel.tunnel_cli"),
     ],
 )
 def test_migrated_facade_is_same_module(legacy: str, canonical: str):
@@ -36,8 +34,6 @@ def test_files_path_guard_canonical_exports():
     ("legacy_path", "canonical"),
     [
         ("job_manager.py", "binnacle.features.commands.job_manager"),
-        ("watchdog_cli.py", "binnacle.companions.watchdog.watchdog_cli"),
-        ("tunnel_cli.py", "binnacle.companions.tunnel.tunnel_cli"),
     ],
 )
 def test_legacy_cli_main_guard_dispatches_only_to_stub(

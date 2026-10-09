@@ -16,7 +16,7 @@ from binnacle.companions.watchdog.ops.services import (
     ServiceObservation,
     SystemObservation,
 )
-from binnacle.uplink import ProbeResult, Route
+from binnacle.companions.watchdog.uplink import ProbeResult, Route
 
 
 def test_command_boundary_preserves_requested_argv_when_sudo_is_wrapped(monkeypatch):

@@ -10,7 +10,8 @@ from pathlib import Path
 
 import pytest
 
-from binnacle import doctor, tunnel_doctor
+from binnacle import doctor
+from binnacle.companions.tunnel import tunnel_doctor
 
 BEARER = "Bearer secret-token\n"
 
@@ -279,7 +280,7 @@ def test_scan_tunnel_log_reports_the_last_forwarded_command(tmp_path):
         '{"time":"t2","msg":"poll timed out; backing off"}\n'
         '{"time":"t3","msg":"poll failed; backing off"}\n'
     )
-    from binnacle.tunnel_log import scan_tunnel_log
+    from binnacle.companions.tunnel.tunnel_log import scan_tunnel_log
 
     status = scan_tunnel_log(log)
     assert (

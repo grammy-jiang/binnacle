@@ -11,6 +11,7 @@ from typing import Annotated
 
 import cyclopts
 
+from binnacle.companions.tunnel.tunnel_unit import TUNNEL_UNIT
 from binnacle.companions.watchdog.ops.config import Policy, UsbLinkPolicy
 from binnacle.companions.watchdog.watchdog_config import (
     WatchdogSettings,
@@ -25,7 +26,6 @@ from binnacle.config import get_settings
 from binnacle.deployment import units
 from binnacle.deployment.server_unit import SERVER_UNIT
 from binnacle.platform.deployment_platform import create_linux_provisioner
-from binnacle.tunnel_unit import TUNNEL_UNIT
 
 app = cyclopts.App(
     name="binnacle-watchdog",

@@ -5,7 +5,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
-from binnacle import doctor, tunnel_doctor
+from binnacle import doctor
+from binnacle.companions.tunnel import tunnel_doctor
 from binnacle.deployment import units
 
 

@@ -271,9 +271,9 @@ def test_the_reset_action_still_counts_and_paces_link_level_attempts():
 
 
 def test_link_policies_come_from_the_toml(tmp_path, monkeypatch):
-    from binnacle import watchdog_cli as cli
+    from binnacle.companions.watchdog import watchdog_cli as cli
+    from binnacle.companions.watchdog.watchdog_config import WatchdogRootSettings
     from binnacle.config import CONFIG_FILE_ENV
-    from binnacle.watchdog_config import WatchdogRootSettings
 
     toml = tmp_path / "config.toml"
     toml.write_text(

@@ -9,7 +9,7 @@ still carries nothing.
 import json
 import subprocess
 
-from binnacle import uplink
+from binnacle.companions.watchdog import uplink
 
 ROUTE_JSON = json.dumps(
     [
