@@ -29,7 +29,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "src"))
-from binnacle import logstats
+from binnacle.observability import logstats
 from scripts import usage_steps
 
 TUNNEL_LOG = Path.home() / ".local/state/tunnel-client/logs/binnacle.log"

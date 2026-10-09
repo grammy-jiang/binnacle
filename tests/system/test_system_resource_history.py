@@ -2,11 +2,12 @@
 
 import pytest
 
-from binnacle import cli, logstats
+from binnacle import cli
+from binnacle.observability import logstats
 
 
 def test_cli_constructs_resource_provider_only_for_opt_in(monkeypatch, capsys):
-    from binnacle import system_resource_history
+    from binnacle.observability import system_resource_history
 
     calls = []
 
@@ -35,7 +36,8 @@ def test_cli_constructs_resource_provider_only_for_opt_in(monkeypatch, capsys):
 
 
 def test_webmin_adapter_preserves_errors_and_window(monkeypatch):
-    from binnacle import system_resource_history, webminstats
+    from binnacle.observability import system_resource_history
+    from binnacle.observability.linux import webminstats
 
     def no_read(*args):
         pytest.fail("provider construction read history")

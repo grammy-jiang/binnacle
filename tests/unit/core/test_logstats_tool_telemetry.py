@@ -1,6 +1,6 @@
 """Shared tool/config/error telemetry aggregation."""
 
-from binnacle import logstats
+from binnacle.observability import logstats
 
 SAMPLE = """
 2026-09-22T17:00:00.000 INFO: event=tool_config tool=read_file max_lines=2000 max_chars=24000 max_line_chars=2000 max_file_bytes=20971520

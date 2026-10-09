@@ -1,7 +1,7 @@
 """Unit coverage for optional tokenizer-backed telemetry."""
 
-from binnacle import token_telemetry
-from binnacle.token_telemetry import TokenCounter
+from binnacle.observability import token_telemetry
+from binnacle.observability.token_telemetry import TokenCounter
 
 
 class _FakeEncoder:

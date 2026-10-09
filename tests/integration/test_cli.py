@@ -196,7 +196,8 @@ def test_doctor_passes_deployment_and_exit_code(tmp_path, monkeypatch, capsys):
 
 
 def test_stats_only_loads_webmin_history_when_requested(monkeypatch, capsys):
-    from binnacle import logstats, webminstats
+    from binnacle.observability import logstats
+    from binnacle.observability.linux import webminstats
 
     monkeypatch.setattr(logstats, "fetch_journal", lambda unit, since, until: "journal")
     monkeypatch.setattr(logstats, "parse", lambda raw: (["record"], ["startup"]))
@@ -223,7 +224,7 @@ def test_stats_only_loads_webmin_history_when_requested(monkeypatch, capsys):
 
 
 def test_stats_default_merges_mcp_and_jobs_journals(monkeypatch, capsys):
-    from binnacle import logstats
+    from binnacle.observability import logstats
 
     seen = []
     monkeypatch.setattr(
@@ -243,7 +244,7 @@ def test_stats_default_merges_mcp_and_jobs_journals(monkeypatch, capsys):
 def test_stats_log_failure_remains_command_failure(monkeypatch):
     import pytest
 
-    from binnacle import logstats
+    from binnacle.observability import logstats
     from binnacle.platform.contracts.service_log_contracts import ServiceLogError
 
     monkeypatch.setattr(

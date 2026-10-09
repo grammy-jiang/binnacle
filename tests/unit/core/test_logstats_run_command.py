@@ -1,7 +1,7 @@
 """Cross-event run_command workflow telemetry analysis."""
 
-from binnacle import logstats
-from binnacle.logstats_run_command import (
+from binnacle.observability import logstats
+from binnacle.observability.logstats_run_command import (
     analyze_run_command_workflow,
     build_run_command_index,
     dispatch_outcome,

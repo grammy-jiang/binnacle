@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from binnacle import cli, logstats, webminstats
+from binnacle import cli
+from binnacle.observability import logstats
+from binnacle.observability.linux import webminstats
 
 
 def write_metric(root: Path, name: str, values: list[tuple[int, float]]) -> None:

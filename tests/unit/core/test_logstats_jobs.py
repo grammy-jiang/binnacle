@@ -2,7 +2,7 @@
 
 import pytest
 
-from binnacle import logstats
+from binnacle.observability import logstats
 
 JOB_TELEMETRY_SAMPLE = """
 2026-09-22T16:00:00.000 INFO: event=job_manager_start pid=10 owner=owner12345678 boot=boot recovered=2 protocol=1 package_version=1.0.0 socket=/run/jobs.sock

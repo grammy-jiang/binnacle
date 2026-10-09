@@ -3,8 +3,8 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
-from binnacle import logstats
-from binnacle.logstats_render import adaptive_discovery_report
+from binnacle.observability import logstats
+from binnacle.observability.logstats_render import adaptive_discovery_report
 
 
 def path_hash(value: str) -> str:

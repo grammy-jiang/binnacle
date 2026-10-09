@@ -28,7 +28,7 @@ from datetime import datetime
 from itertools import pairwise
 from typing import Any
 
-from binnacle import logstats
+from binnacle.observability import logstats
 
 STEP_GAP_S = 2.0
 POLL_CYCLE_S = 61

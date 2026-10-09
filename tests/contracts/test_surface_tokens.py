@@ -22,7 +22,7 @@ cannot move without a recorded reason.
 import json
 
 from binnacle.config import TokenizerTelemetrySettings
-from binnacle.token_telemetry import _load_encoding
+from binnacle.observability.token_telemetry import _load_encoding
 from tests.contracts.surface_support import PROFILES, served
 
 ENCODING = "o200k_base"

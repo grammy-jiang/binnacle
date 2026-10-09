@@ -2,7 +2,7 @@ import subprocess
 
 import pytest
 
-from binnacle import logstats_io
+from binnacle.observability import logstats_io
 from binnacle.platform.contracts.service_log_contracts import ServiceLogError
 from binnacle.platform.linux import service_journal
 

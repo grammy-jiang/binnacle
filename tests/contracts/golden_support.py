@@ -32,7 +32,7 @@ from pathlib import Path
 
 import pytest
 
-from binnacle.token_telemetry import _load_encoding
+from binnacle.observability.token_telemetry import _load_encoding
 
 SNAPSHOT_DIR = Path(__file__).parent / "snapshots"
 UPDATE_ENV = "BINNACLE_UPDATE_SNAPSHOTS"

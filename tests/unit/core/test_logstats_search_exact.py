@@ -1,6 +1,6 @@
 """Exact-search Phase B journal aggregation and mixed-version coverage."""
 
-from binnacle import logstats
+from binnacle.observability import logstats
 
 SAMPLE = """
 2026-09-22T18:00:00.000 INFO: event=search_dispatch call=old mode=exact path_hash=a pattern_chars=3

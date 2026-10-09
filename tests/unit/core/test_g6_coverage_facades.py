@@ -14,19 +14,6 @@ import pytest
         ("binnacle.diagnostics.doctor_contracts", "binnacle.doctor_contracts"),
         ("binnacle.job_manager", "binnacle.features.commands.job_manager"),
         *(
-            (f"binnacle.{name}", f"binnacle.observability.{name}")
-            for name in (
-                "logstats_adaptive",
-                "logstats_jobs",
-                "logstats_models",
-                "logstats_parse",
-                "logstats_run_command_groups",
-                "logstats_run_command_render",
-                "logstats_search_exact",
-                "logstats_tools",
-            )
-        ),
-        *(
             (
                 f"binnacle.ops.watchdog.{name}",
                 f"binnacle.companions.watchdog.ops.{name}",
@@ -42,10 +29,6 @@ import pytest
                 "policy_usb",
                 "reporting",
             )
-        ),
-        (
-            "binnacle.system_resource_contracts",
-            "binnacle.observability.system_resource_contracts",
         ),
         ("binnacle.watchdog_cli", "binnacle.companions.watchdog.watchdog_cli"),
         ("binnacle.tunnel_cli", "binnacle.companions.tunnel.tunnel_cli"),

@@ -11,7 +11,7 @@ import importlib.util
 from datetime import datetime
 from pathlib import Path
 
-from binnacle import logstats
+from binnacle.observability import logstats
 
 _SPEC = importlib.util.spec_from_file_location(
     "usage_breakdown",

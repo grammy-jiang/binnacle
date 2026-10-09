@@ -5,7 +5,7 @@ same-second record that starts *indented* with no timestamp, payload lines
 wrapped mid-token, a request_error, and a startup line.
 """
 
-from binnacle import logstats
+from binnacle.observability import logstats
 
 SAMPLE = """\
 [09/01/26 10:00:00] INFO     event=request_start                  logging.py:122
