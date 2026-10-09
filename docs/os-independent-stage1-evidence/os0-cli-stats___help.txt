@@ -1,0 +1,15 @@
+Usage: binnacle stats [ARGS]
+
+Usage statistics from the server journal.
+
+╭─ Parameters ─────────────────────────────────────────────────────────────────╮
+│ SINCE --since            journalctl time spec. A value starting with a dash  │
+│                          needs the equals form (--since="-2 days"); "2 days  │
+│                          ago" needs no dash. [default: -24 hours]            │
+│ UNTIL --until            Optional end of the window, same syntax.            │
+│ UNIT --unit              Systemd user unit whose journal to analyze.         │
+│                          [default: binnacle-mcp]                             │
+│ SYSTEM-RESOURCES         Also read Webmin system-status history for the same │
+│   --system-resources     time window. [default: False]                       │
+│   --no-system-resources                                                      │
+╰──────────────────────────────────────────────────────────────────────────────╯

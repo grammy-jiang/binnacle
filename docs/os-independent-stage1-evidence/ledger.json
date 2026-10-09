@@ -1,0 +1,162 @@
+{
+  "active_jobs": [],
+  "baseline_sha": "02f4bab9bc7562668ffc41d622c4274449933768",
+  "branch": "refactor/os-independent-stage1-implementation-20261009",
+  "candidate_sha": "19a3cf1e43755ed4aee3837c25ea63188058a26e",
+  "ci_status": "NOT_SUBMITTED",
+  "completed": [
+    "Plan read in full, 517 lines; repository instructions read",
+    "Independent canonical worktree bootstrapped with locked uv 0.12.24",
+    "Full tracked-source SHA-256 and per-module ownership/import inventory",
+    "OS0 accepted: 143 production modules and 47 scripts classified; 596 SHA-256 manifest entries",
+    "OS0 exact raw four-profile MCP wire: 8/6/6/8, root-local empty, raw provider multiplicity each one",
+    "OS0 original Linux systemd unit template bytes/managed-unit previews and CLI help frozen",
+    "OS0 two persisted spool fixtures + RPC version 1 captured; Linux import blocker probes confirmed",
+    "OS0 symlink alias denial characterized as expected pre-existing defect for OS5",
+    "OS0 static gates passed and focused tests passed: 229 and durable 130",
+    "OS1 static negative OI01-OI02 tests: 23 passed (1 initial synthetic unsupported getattr import resolved by using supported literal importlib alias); source tree architecture check 0 violations",
+    "OS2 centralized single Linux host resolver rejects unknown OS before adapters; 36 factory and platform tests passed",
+    "OS2 pure FastMCP tree resides at binnacle.application to satisfy top-level acyclic imports; synthetic blocked-Linux end-to-end fake four-domain tests passed",
+    "OS2 lazy generic Settings socket path, Linux effective default composed via get_settings; 58 config/manager/factory tests passed",
+    "OS5 canonical alias path security: 8 path/alias tests passed",
+    "OS5 journal acquisition deferred; pure parser import without Linux; 35 regression tests passed and 1 new fixture mismatch repaired"
+  ],
+  "deployment_status": "NOT_STARTED_PRODUCTION_UNCHANGED",
+  "evidence": [
+    "docs/os-independent-stage1-evidence/os0-source-inventory.json",
+    "docs/os-independent-stage1-evidence/os0-manifest.sha256",
+    "docs/os-independent-stage1-evidence/os0-risk-register.md",
+    "docs/os-independent-stage1-evidence/os0-raw-mcp-surface.json",
+    "docs/os-independent-stage1-evidence/os0-host-baseline.json",
+    "docs/os-independent-stage1-evidence/os0-focused-tests.log",
+    "docs/os-independent-stage1-evidence/os0-durable-tests.log"
+  ],
+  "failures_and_repairs": [
+    {
+      "failure": "pre-commit hook B101 assert_used + ruff PIE810 + autoformat/trailing whitespace",
+      "resolution": "Changed evidence script to explicit fail-closed RuntimeError; merged startswith; accepted hook autoformat only in evidence scripts",
+      "retest": "normal git commit with hooks",
+      "stage": "OS0"
+    },
+    {
+      "failure": "Normal git add+commit command received platform tool safety refusal: This tool call was blocked by OpenAI because we couldn't determine the safety status of the request.",
+      "next_action": "Do not bypass safety review. Preserve staged OS0 evidence and progress with independent OS5 file policy work.",
+      "stage": "OS0 commit",
+      "status": "BLOCKED_POLICY_FOR_COMMIT"
+    },
+    {
+      "failure": "Import Linter top-level acyclic broken by placing application module under binnacle.mcp",
+      "resolution": "Moved pure FastMCP application factory to binnacle.application, verified all 20 linter contracts",
+      "stage": "OS2"
+    },
+    {
+      "failure": "check_architecture.py imported scripts package incorrectly when run as direct file",
+      "resolution": "Conditional relative/top-level import with both modes covered",
+      "stage": "OS1"
+    },
+    {
+      "failure": "New fake logstats fixture asserted nonexistent Stats.job_starts property",
+      "resolution": "Use existing Stats.job_exits property; focused rerun passed",
+      "stage": "OS5"
+    },
+    {
+      "failure": "markdownlint MD060 found unspaced table separator; gitleaks 7 false positives on repetitive filename-keyed SHA-256 JSON mapping",
+      "resolution": "Corrected table separator, removed redundant file\u2192hash JSON dictionary; exact all-file SHA-256 preserved in dedicated os0-manifest.sha256, inventory array retains its hashes, source captured unchanged",
+      "stage": "OS0 commit"
+    }
+  ],
+  "gates": {
+    "OS0": "ACCEPTED",
+    "OS1": "STATIC_GATES_PASS_DESIGN_REVIEW_PENDING",
+    "OS2": "FOCUSED_PASS_REVIEW_PENDING",
+    "OS3": "NOT_STARTED",
+    "OS4": "NOT_STARTED",
+    "OS5": "PATH_AND_LOG_PARTIAL",
+    "OS6": "NOT_STARTED",
+    "OS7": "NOT_STARTED"
+  },
+  "known_baseline_defects": [
+    "Symlink allowed-root canonicalization falsely rejects canonical target",
+    "Linux import-blocking cannot currently import pure server/jobs/logstats"
+  ],
+  "next_action": "Re-run normal pre-commit after re-staging corrected OS0 evidence; then continue independent OS4 design.",
+  "owner": "single ChatGPT implementation integrator",
+  "plan_sha": "19a3cf1e43755ed4aee3837c25ea63188058a26e",
+  "review_status": "PENDING: no genuinely independent supported reviewer yet invoked; no self-approval",
+  "reviews": [],
+  "stage": "OS1 Architecture / OS2 Composition / OS5 Independent",
+  "status": "REVIEW_PENDING",
+  "task_id": "BINNACLE-OS-STAGE1-IMPLEMENT-20261009",
+  "tests": [
+    {
+      "command": "uv run pytest [six baseline platform/server/doctor test files] -q --randomly-seed=12345",
+      "exit_code": 0,
+      "log_path": "docs/os-independent-stage1-evidence/os0-focused-tests.log",
+      "result": "229 passed",
+      "stage": "OS0"
+    },
+    {
+      "command": "uv run pytest [eight baseline job/resource/contract test files] -q --randomly-seed=12345",
+      "exit_code": 0,
+      "log_path": "docs/os-independent-stage1-evidence/os0-durable-tests.log",
+      "result": "130 passed",
+      "stage": "OS0"
+    },
+    {
+      "command": ".venv/bin/python scripts/check_architecture.py",
+      "exit_code": 0,
+      "log_path": "docs/os-independent-stage1-evidence/os0-architecture.txt",
+      "stage": "OS0"
+    },
+    {
+      "command": ".venv/bin/lint-imports --no-logo",
+      "exit_code": 0,
+      "log_path": "docs/os-independent-stage1-evidence/os0-import-linter.txt",
+      "stage": "OS0"
+    },
+    {
+      "command": "uv run pytest tests/scripts/test_os_architecture.py -q --randomly-seed=12345",
+      "exit_code": 0,
+      "result": "23 passed",
+      "stage": "OS1"
+    },
+    {
+      "command": "uv run python scripts/check_architecture.py && uv run lint-imports --no-logo",
+      "exit_code": 0,
+      "result": "0 architecture violations, 20 Import Linter contracts kept",
+      "stage": "OS1"
+    },
+    {
+      "command": "uv run pytest tests/unit/core/test_platform_activation.py tests/unit/core/test_runtime_paths.py tests/unit/core/test_deployment_platform_architecture.py tests/unit/core/test_os_host_composition.py -q",
+      "exit_code": 0,
+      "result": "36 passed",
+      "stage": "OS2"
+    },
+    {
+      "command": "uv run pytest tests/integration/test_root_settings.py tests/integration/test_command_domain.py tests/integration/test_commands_settings.py -q",
+      "exit_code": 0,
+      "result": "15 passed",
+      "stage": "OS2"
+    },
+    {
+      "command": "uv run pytest tests/integration/test_os_pure_application.py tests/unit/core/test_config_loading.py tests/unit/core/test_runtime_paths.py tests/integration/test_job_manager.py -q",
+      "exit_code": 0,
+      "result": "58 passed",
+      "stage": "OS2"
+    },
+    {
+      "command": "uv run pytest tests/unit/core/test_paths_settings.py tests/unit/core/test_os_independence_paths.py -q",
+      "exit_code": 0,
+      "result": "8 passed",
+      "stage": "OS5"
+    },
+    {
+      "command": "uv run pytest tests/unit/core/test_os_log_import_isolation.py -q",
+      "exit_code": 0,
+      "result": "1 passed (after fixing new fixture assertion)",
+      "stage": "OS5"
+    }
+  ],
+  "updated_utc": "2026-10-09T13:24:34.086430+00:00",
+  "worktree_path": "/home/grammy-jiang/Projects/binnacle-os-independent-stage1-impl"
+}

@@ -1,0 +1,21 @@
+Usage: binnacle doctor [ARGS]
+
+Check the deployment end to end and exit 1 on any FAIL.
+
+Checks: config and roots, token file, the systemd unit (active, the file setup
+writes, the process it started, no crash restarts, linger), the running server's
+PATH (~/.local/bin, ripgrep, bash), /mcp auth with and without the token, the
+job spool, and recent journal errors. The ChatGPT tunnel and its poller are
+binnacle-tunnel doctor's, the uplink watchdog is binnacle-watchdog doctor's.
+WARN lines are degraded but working and do not change the exit code.
+
+╭─ Parameters ─────────────────────────────────────────────────────────────────╮
+│ SINCE --since             journalctl window for the error scan (--since="-2  │
+│                           hours"). [default: -1 hour]                        │
+│ JSON --json --no-json     Emit the checks as JSON instead of the text        │
+│                           report. [default: False]                           │
+│ PROBE --probe --no-probe  Compatibility selector; --probe and --no-probe     │
+│                           have no effect on core checks. Use                 │
+│                           binnacle-watchdog doctor for layered uplink        │
+│                           probes. [default: True]                            │
+╰──────────────────────────────────────────────────────────────────────────────╯
