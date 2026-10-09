@@ -14,9 +14,11 @@ from pathlib import Path
 import mcp.types
 from fastmcp import Client
 
-from binnacle import command_status as js
-from binnacle import jobs, server
+from binnacle import server
 from binnacle.config import RunCommandSettings
+from binnacle.features.commands import command_status as js
+from binnacle.features.commands import jobs
+from binnacle.features.commands.tools import stop_job as sj
 from binnacle.features.files.tools import list_files as lf
 from binnacle.mcp import logging_middleware
 from binnacle.mcp.callctx import (
@@ -25,7 +27,6 @@ from binnacle.mcp.callctx import (
     current_client,
     current_turn,
 )
-from binnacle.tools import stop_job as sj
 
 
 def _messages(caplog, event: str) -> list[str]:

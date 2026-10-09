@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from binnacle import job_client, jobs
-from binnacle.job_manager import JobManager
+from binnacle.features.commands import job_client, jobs
+from binnacle.features.commands.job_manager import JobManager
 
 
 @pytest.fixture()

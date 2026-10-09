@@ -5,8 +5,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from binnacle import job_manager
-from binnacle.job_client import PROTOCOL_VERSION
+from binnacle.features.commands import job_manager
+from binnacle.features.commands.job_client import PROTOCOL_VERSION
 
 
 def _runtime(tmp_path: Path) -> job_manager.JobManager:

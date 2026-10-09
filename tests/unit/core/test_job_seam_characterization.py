@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from binnacle import job_owner, job_resource_history, job_store, jobs
+from binnacle.features.commands import job_owner, job_resource_history, job_store, jobs
 
 
 def test_positive_wait_bridges_process_death_until_recorded_exit(monkeypatch):
@@ -55,7 +55,7 @@ def test_embedded_wait_only_hands_off_after_timeout(monkeypatch, timeout):
 
 
 def test_manager_record_routes_stop_with_embedded_default(monkeypatch):
-    from binnacle import job_client
+    from binnacle.features.commands import job_client
 
     terminal = {"state": "exited", "exit_code": None, "signal": 15}
     states = iter([{"state": "running"}, terminal, terminal])
@@ -121,7 +121,7 @@ def test_each_atomic_write_uses_distinct_complete_temporary_file(tmp_path, monke
 
 
 def test_owner_uses_public_store_and_shared_lock(tmp_path, monkeypatch):
-    from binnacle import job_owner, job_store
+    from binnacle.features.commands import job_owner, job_store
 
     assert jobs._STORE_LOCK is job_store.STORE_LOCK
     monkeypatch.setattr(jobs, "JOBS_DIR", tmp_path)
@@ -158,7 +158,7 @@ def test_shared_store_lock_covers_prune_launch_and_publication(tmp_path, monkeyp
     from concurrent.futures import ThreadPoolExecutor
     from types import SimpleNamespace
 
-    from binnacle import job_store
+    from binnacle.features.commands import job_store
 
     assert jobs._STORE_LOCK is job_store.STORE_LOCK
     monkeypatch.setattr(jobs, "JOBS_DIR", tmp_path / "jobs")

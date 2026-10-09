@@ -26,7 +26,8 @@ from pathlib import Path
 import pytest
 from fastmcp import Client
 
-from binnacle import jobs, server
+from binnacle import server
+from binnacle.features.commands import jobs
 from binnacle.platform.linux.job_process import _proc_starttime
 
 FIXTURE = Path(__file__).parent / "fixtures" / "job_spool" / "2026-09-28"

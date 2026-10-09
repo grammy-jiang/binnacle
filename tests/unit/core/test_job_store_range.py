@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from binnacle import jobs
+from binnacle.features.commands import jobs
 
 
 def _job(tmp_path: Path, job_id: str = "rangejob0001", data: bytes = b"0123456789"):

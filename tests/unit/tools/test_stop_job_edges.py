@@ -3,8 +3,8 @@
 import pytest
 from fastmcp.exceptions import ToolError
 
-from binnacle import job_owner
-from binnacle.tools import stop_job
+from binnacle.features.commands import job_owner
+from binnacle.features.commands.tools import stop_job
 
 
 def test_stop_job_wraps_owner_failure(monkeypatch):

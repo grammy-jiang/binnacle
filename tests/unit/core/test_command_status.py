@@ -2,9 +2,9 @@
 
 import pytest
 
-from binnacle import command_status, jobs
-from binnacle.command_contracts import CommandFailure
-from binnacle.job_store import JobGone
+from binnacle.features.commands import command_status, jobs
+from binnacle.features.commands.command_contracts import CommandFailure
+from binnacle.features.commands.job_store import JobGone
 from tests.command_support import MemoryCommands
 
 

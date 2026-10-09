@@ -5,9 +5,9 @@ import json
 import pytest
 from fastmcp.exceptions import ToolError
 
-from binnacle import jobs
+from binnacle.features.commands import jobs
+from binnacle.features.commands.tools import job_status as js
 from binnacle.mcp.callctx import current_call
-from binnacle.tools import job_status as js
 
 
 @pytest.fixture()

@@ -7,7 +7,7 @@ import threading
 
 import pytest
 
-from binnacle import jobs as jobstore
+from binnacle.features.commands import jobs as jobstore
 from binnacle.features.files.tools import list_files as lf
 from binnacle.mcp.callctx import current_turn
 from tests.integration.http_test_support import (
@@ -137,7 +137,7 @@ def test_authenticated_http_background_job_status_and_stop(tmp_path):
         with_session(go, client_name="scenario-audit")
     finally:
         if job_id:
-            from binnacle import job_owner, jobs
+            from binnacle.features.commands import job_owner, jobs
 
             try:
                 state = jobs.job_state(job_id)
@@ -341,7 +341,7 @@ def test_http_job_status_receives_base_turn_and_client(monkeypatch, tmp_path, ca
             with_session(go, client_name="phase2-http")
     finally:
         if job_id is not None:
-            from binnacle import job_owner
+            from binnacle.features.commands import job_owner
 
             state = jobstore.job_state(job_id)
             if state is not None and state["state"] == "running":

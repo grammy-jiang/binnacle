@@ -122,19 +122,19 @@ def test_commands_imports_respect_frozen_boundary(owner):
     "source",
     [
         "from binnacle.mcp.visibility import ClientToolVisibility",
-        "from binnacle import jobs as store",
-        "import binnacle.job_owner as owner",
-        "from binnacle.job_store import read_meta",
-        "from binnacle.command_backend import create_command_backend",
+        "from binnacle.features.commands import jobs as store",
+        "import binnacle.features.commands.job_owner as owner",
+        "from binnacle.features.commands.job_store import read_meta",
+        "from binnacle.features.commands.command_backend import create_command_backend",
         "from binnacle.config import get_settings as load",
         "from fastmcp.tools.base import ToolResult",
         "from os import kill as signal; signal(1, 15)",
         "from subprocess import Popen; Popen(['probe'])",
-        "import importlib as il; il.import_module('binnacle.jobs')",
-        "from importlib import import_module as load; load('binnacle.jobs')",
-        "loader = __import__; loader('binnacle.jobs')",
+        "import importlib as il; il.import_module('binnacle.features.commands.jobs')",
+        "from importlib import import_module as load; load('binnacle.features.commands.jobs')",
+        "loader = __import__; loader('binnacle.features.commands.jobs')",
         "__import__('binnacle.platform.linux.job_cgroup')",
-        "import importlib; getattr(importlib, 'import_module')('binnacle.jobs')",
+        "import importlib; getattr(importlib, 'import_module')('binnacle.features.commands.jobs')",
     ],
 )
 def test_boundary_rejects_forbidden_and_dynamic_imports(source):
@@ -171,9 +171,10 @@ class Block(importlib.abc.MetaPathFinder):
                         "binnacle.platform.linux.job_process", "binnacle.platform.linux.job_cgroup", "binnacle.features.commands.job_manager"}:
             raise AssertionError("engine imported: " + fullname)
 sys.meta_path.insert(0, Block())
-from binnacle import command_contracts, command_execution, command_status, config
+from binnacle.features.commands import command_contracts, command_execution, command_status
+from binnacle import config
 from binnacle.platform.contracts import process_contracts, resource_contracts
-from binnacle.commands_server import create_commands_server
+from binnacle.features.commands.commands_server import create_commands_server
 from tests.command_support import MemoryCommands
 from fastmcp import Client
 def forbidden(): raise AssertionError("global settings read")
@@ -201,14 +202,14 @@ def test_default_child_selects_engine_at_construction_before_requests():
     code = """
 import sys
 from binnacle import config
-from binnacle.commands_server import create_commands_server
+from binnacle.features.commands.commands_server import create_commands_server
 assert 'binnacle.features.commands.jobs' not in sys.modules
 settings = config.get_settings().model_copy(deep=True)
 settings.jobs.owner = 'embedded'
 settings.jobs.warmup_s = 0.125
 config.get_settings = lambda: settings
 create_commands_server()
-from binnacle import jobs
+from binnacle.features.commands import jobs
 settings.jobs.owner = 'manager'
 settings.jobs.warmup_s = 0.5
 assert jobs.OWNER_MODE == 'embedded' and jobs.WARMUP_S == 0.125
@@ -218,64 +219,15 @@ assert jobs.OWNER_MODE == 'embedded' and jobs.WARMUP_S == 0.125
     )
 
 
-def test_legacy_command_contract_symbols_preserve_identity():
-    from binnacle import command_contracts as legacy
-    from binnacle.features.commands import command_contracts as owned
-
-    assert legacy.CommandBackend is owned.CommandBackend
-    assert legacy.CommandFailure is owned.CommandFailure
-    assert legacy.CommandReply is owned.CommandReply
-
-
-def test_legacy_command_backend_symbols_preserve_identity():
-    from binnacle import command_backend as legacy
-    from binnacle.features.commands import command_backend as owned
-
-    assert legacy.DurableCommandBackend is owned.DurableCommandBackend
-    assert legacy.create_command_backend is owned.create_command_backend
-
-
-def test_legacy_command_domain_symbols_preserve_identity():
-    from binnacle import command_execution as legacy_execution
-    from binnacle import command_status as legacy_status
-    from binnacle.features.commands import command_execution, command_status
-
-    assert legacy_execution.run_command is command_execution.run_command
-    assert legacy_execution.stop_job is command_execution.stop_job
-    assert legacy_status.job_status is command_status.job_status
-
-
-def test_legacy_commands_factory_is_same_as_feature_owned_factory():
-    from binnacle.commands_server import create_commands_server as legacy
-    from binnacle.features.commands.commands_server import (
-        create_commands_server as owned,
-    )
-
-    assert legacy is owned
-
-
-@pytest.mark.parametrize("name", ["run_command", "job_status", "stop_job"])
-def test_legacy_commands_adapter_modules_are_the_owned_modules(name):
+def test_canonical_commands_public_modules_are_owned():
     import importlib
 
-    legacy = importlib.import_module(f"binnacle.tools.{name}")
-    owned = importlib.import_module(f"binnacle.features.commands.tools.{name}")
-
-    assert legacy is owned
-    assert legacy.register is owned.register
-
-
-def test_legacy_commands_server_module_is_owned_module():
-    import importlib
-
-    assert importlib.import_module(
-        "binnacle.commands_server"
-    ) is importlib.import_module("binnacle.features.commands.commands_server")
-
-
-@pytest.mark.parametrize(
-    "name",
-    [
+    expected = (
+        "command_contracts",
+        "command_backend",
+        "command_execution",
+        "command_status",
+        "commands_server",
         "jobs",
         "job_client",
         "job_manager",
@@ -283,11 +235,18 @@ def test_legacy_commands_server_module_is_owned_module():
         "job_owner",
         "job_resource_history",
         "job_store",
-    ],
-)
-def test_legacy_durable_modules_are_owned_modules(name):
+        "run_command_evidence",
+        "run_command_telemetry",
+    )
+    for name in expected:
+        canonical = f"binnacle.features.commands.{name}"
+        module = importlib.import_module(canonical)
+        assert module.__name__ == canonical
+
+
+@pytest.mark.parametrize("name", ["run_command", "job_status", "stop_job"])
+def test_canonical_commands_mcp_adapters_are_owned(name):
     import importlib
 
-    legacy = importlib.import_module(f"binnacle.{name}")
-    owned = importlib.import_module(f"binnacle.features.commands.{name}")
-    assert legacy is owned
+    module = importlib.import_module(f"binnacle.features.commands.tools.{name}")
+    assert callable(module.register)

@@ -3,7 +3,7 @@
 import pytest
 
 from binnacle import doctor
-from binnacle import jobs as jobstore
+from binnacle.features.commands import jobs as jobstore
 
 
 def test_linger_enabled_handles_yes_no_and_command_failure(monkeypatch):

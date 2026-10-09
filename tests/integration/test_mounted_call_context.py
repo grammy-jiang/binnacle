@@ -8,11 +8,12 @@ import pytest
 from fastmcp.exceptions import ToolError
 from fastmcp.server.middleware import Middleware
 
-from binnacle import jobs, server
+from binnacle import server
+from binnacle.features.commands import jobs
+from binnacle.features.commands.tools import run_command
 from binnacle.features.files.tools import read_file
 from binnacle.features.search.tools import search_text
 from binnacle.mcp import callctx
-from binnacle.tools import run_command
 from tests.integration.http_test_support import http_tool_call, with_session
 
 

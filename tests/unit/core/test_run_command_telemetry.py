@@ -1,4 +1,4 @@
-from binnacle.run_command_telemetry import (
+from binnacle.features.commands.run_command_telemetry import (
     AUTO_BACKGROUND_SEMANTICS_VERSION,
     auto_background_behavior_hash,
     auto_background_policy_hash,

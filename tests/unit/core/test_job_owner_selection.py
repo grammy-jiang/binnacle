@@ -1,6 +1,6 @@
 """Selection of the durable owner in managed vs ad-hoc deployments."""
 
-from binnacle import job_store, jobs
+from binnacle.features.commands import job_store, jobs
 
 
 def test_auto_owner_is_embedded_outside_managed_deployment(monkeypatch):
@@ -22,7 +22,7 @@ def test_explicit_owner_overrides_managed_marker(monkeypatch):
 
 
 def test_concurrent_stop_waits_for_durable_exit_record(monkeypatch):
-    from binnacle import job_owner
+    from binnacle.features.commands import job_owner
 
     transient = {
         "state": "unknown",

@@ -28,7 +28,6 @@ def manifest_groups() -> dict[str, set[str]]:
             "mcp/visibility.py",
             "mcp/callctx.py",
             "mcp/tool_order.py",
-            "tools/__init__.py",
         },
         "files": {
             "features/files/__init__.py",
@@ -49,25 +48,15 @@ def manifest_groups() -> dict[str, set[str]]:
             *(rel(path) for path in SRC.glob("features/search/search_text_*.py")),
         },
         "commands": {
-            "commands_server.py",
             "features/commands/commands_server.py",
-            "tools/run_command.py",
-            "tools/job_status.py",
-            "tools/stop_job.py",
-            "run_command_telemetry.py",
-            "run_command_evidence.py",
             "features/commands/tools/__init__.py",
             "features/commands/tools/run_command.py",
             "features/commands/tools/job_status.py",
             "features/commands/tools/stop_job.py",
-            "command_contracts.py",
             "features/commands/__init__.py",
             "features/commands/command_contracts.py",
-            "command_execution.py",
             "features/commands/command_execution.py",
-            "command_status.py",
             "features/commands/command_status.py",
-            "command_backend.py",
             "features/commands/command_backend.py",
             "features/commands/run_command_telemetry.py",
             "features/commands/run_command_evidence.py",
@@ -78,13 +67,6 @@ def manifest_groups() -> dict[str, set[str]]:
             "features/commands/job_owner.py",
             "features/commands/job_resource_history.py",
             "features/commands/job_store.py",
-            "jobs.py",
-            "job_client.py",
-            "job_manager.py",
-            "job_output.py",
-            "job_owner.py",
-            "job_resource_history.py",
-            "job_store.py",
         },
         "platform_contracts": {
             "platform/__init__.py",
@@ -195,27 +177,10 @@ def compatibility_facades() -> set[str]:
     """Current compatibility facades that G6 must review before removal."""
     return {
         "doctor.py",
-        "jobs.py",
-        "job_client.py",
-        "job_manager.py",
-        "job_output.py",
-        "job_owner.py",
-        "job_resource_history.py",
-        "job_store.py",
         *(
             path.relative_to(SRC).as_posix()
             for path in (SRC / "ops" / "watchdog").glob("*.py")
         ),
-        "command_contracts.py",
-        "command_backend.py",
-        "command_execution.py",
-        "command_status.py",
-        "commands_server.py",
-        "tools/run_command.py",
-        "tools/job_status.py",
-        "tools/stop_job.py",
-        "run_command_telemetry.py",
-        "run_command_evidence.py",
     }
 
 

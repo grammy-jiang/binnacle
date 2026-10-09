@@ -2,7 +2,7 @@
 
 import pytest
 
-from binnacle import jobs as jobstore
+from binnacle.features.commands import jobs as jobstore
 from tests.integration.job_test_support import run, stop
 
 pytestmark = pytest.mark.usefixtures("_short_job_warmup")

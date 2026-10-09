@@ -111,9 +111,10 @@ def _assert_wheel(wheel: Path, version: str) -> None:
         for tool in ("read_file", "list_files", "edit_file", "write_file"):
             assert f"binnacle/features/files/tools/{tool}.py" in names
         assert "binnacle/tools/read_file.py" not in names
-        # Existing Commands adapter compatibility remains separately packaged.
-        assert "binnacle/tools/run_command.py" in names
-        assert "binnacle/features/commands/tools/run_command.py" in names
+        # G7 removal must not leave any packaged root-level legacy MCP adapters.
+        assert not any(name.startswith("binnacle/tools/") for name in names)
+        for tool in ("run_command", "job_status", "stop_job"):
+            assert f"binnacle/features/commands/tools/{tool}.py" in names
         assert "binnacle/companions/watchdog/ops/policy.py" in names
         assert not any(name.startswith("tests/") for name in names)
 
@@ -206,7 +207,7 @@ def _install_and_smoke(
             "-c",
             (
                 "from importlib.metadata import version; "
-                "import binnacle, binnacle.job_manager; "
+                "import binnacle, binnacle.features.commands.job_manager; "
                 "print(version('binnacle-mcp')); "
                 "print(binnacle.__file__)"
             ),

@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from binnacle import doctor
-from binnacle import jobs as jobstore
+from binnacle.features.commands import jobs as jobstore
 from binnacle.platform.contracts.service_lifecycle_contracts import ManagedServiceStatus
 from binnacle.platform.contracts.service_log_contracts import ServiceLogError
 from tests.service_fakes import FakeServiceInspector

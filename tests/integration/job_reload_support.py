@@ -31,7 +31,7 @@ import asyncio, json, sys
 from pathlib import Path
 from fastmcp import Client
 from binnacle import jobs
-from binnacle.commands_server import create_commands_server
+from binnacle.features.commands.commands_server import create_commands_server
 source, spool, socket = map(Path, sys.argv[1:4])
 assert Path(jobs.__file__).resolve().is_relative_to(source.resolve())
 jobs.JOBS_DIR = spool
@@ -74,7 +74,7 @@ def private_manager(root, source):
             yield spool, socket, proc
         finally:
             # Stop only unfinished jobs in this fixture's spool before the owner.
-            from binnacle import job_client, job_store
+            from binnacle.features.commands import job_client, job_store
 
             if proc.poll() is None:
                 for job_id in job_store.list_job_ids(spool):

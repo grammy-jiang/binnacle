@@ -4,15 +4,16 @@ import re
 import mcp.types
 from fastmcp import Client
 
-from binnacle import jobs, server
+from binnacle import server
 from binnacle.config import RunCommandSettings
-from binnacle.run_command_evidence import load_evidence
-from binnacle.run_command_telemetry import (
+from binnacle.features.commands import jobs
+from binnacle.features.commands.run_command_evidence import load_evidence
+from binnacle.features.commands.run_command_telemetry import (
     AUTO_BACKGROUND_SEMANTICS_VERSION,
     auto_background_behavior_hash,
     auto_background_policy_hash,
 )
-from binnacle.tools import stop_job as sj
+from binnacle.features.commands.tools import stop_job as sj
 
 
 def _fields(line: str) -> dict[str, str]:

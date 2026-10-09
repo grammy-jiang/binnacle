@@ -10,12 +10,12 @@ from pathlib import Path
 import pytest
 from fastmcp.exceptions import ToolError
 
-from binnacle import jobs as jobstore
-from binnacle.command_backend import DurableCommandBackend
 from binnacle.features.commands import command_status
+from binnacle.features.commands import jobs as jobstore
+from binnacle.features.commands.command_backend import DurableCommandBackend
+from binnacle.features.commands.tools import job_status as js
+from binnacle.features.commands.tools import run_command as rc
 from binnacle.mcp.callctx import current_call, current_call_started
-from binnacle.tools import job_status as js
-from binnacle.tools import run_command as rc
 from tests.integration.job_test_support import run, status, stop
 
 

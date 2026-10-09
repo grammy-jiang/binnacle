@@ -13,8 +13,8 @@ from fastmcp.server.auth import StaticTokenVerifier
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-from binnacle import jobs
 from binnacle.config import get_settings
+from binnacle.features.commands import jobs
 from binnacle.features.commands.commands_server import create_commands_server
 from binnacle.features.commands.run_command_telemetry import (
     AUTO_BACKGROUND_SEMANTICS_VERSION,

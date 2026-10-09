@@ -5,14 +5,15 @@ import asyncio
 from fastmcp import Client
 from mcp.types import Implementation
 
-from binnacle import commands_server, jobs, server
+from binnacle import server
 from binnacle.config import TokenizerTelemetrySettings, get_settings
+from binnacle.features.commands import commands_server, jobs
+from binnacle.features.commands.tools import job_status, run_command
 from binnacle.features.files import files_server, paths
 from binnacle.features.files.tools import edit_file, list_files, read_file, write_file
 from binnacle.features.search.tools import search_text
 from binnacle.mcp import logging_middleware
 from binnacle.mcp.identity import ClientIdentity
-from binnacle.tools import job_status, run_command
 
 
 def fail_global():

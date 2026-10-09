@@ -50,7 +50,7 @@ def test_main_cli_help_is_executable_without_host_mutation(tmp_path):
 def test_watchdog_cli_help_is_executable_without_host_mutation(tmp_path):
     config_file = tmp_path / "missing.toml"
     proc = subprocess.run(
-        [sys.executable, "-m", "binnacle.watchdog_cli", "--help"],
+        [sys.executable, "-m", "binnacle.companions.watchdog.watchdog_cli", "--help"],
         capture_output=True,
         text=True,
         check=False,
@@ -108,7 +108,7 @@ sys.meta_path.insert(0, BlockWatchdog())
 import binnacle.config
 import binnacle.cli
 import binnacle.doctor
-import binnacle.jobs
+import binnacle.features.commands.jobs
 import binnacle.server
 
 print("core-import-ok")

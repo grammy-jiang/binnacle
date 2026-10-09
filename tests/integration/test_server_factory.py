@@ -156,11 +156,11 @@ def test_tool_package_has_no_eager_registry_and_keeps_adapter_paths(tmp_path):
         """
 import importlib
 import sys
-import binnacle.tools
+import binnacle.features.commands.tools
 import binnacle.features.files.tools
-assert not hasattr(binnacle.tools, "register_all")
+assert not hasattr(binnacle.features.commands.tools, "register_all")
 assert not hasattr(binnacle.features.files.tools, "register_all")
-assert not any(name.startswith("binnacle.tools.") for name in sys.modules)
+assert not any(name.startswith("binnacle.features.commands.tools.") for name in sys.modules)
 assert not any(name.startswith("binnacle.features.files.tools.") for name in sys.modules)
 for name in ("read_file", "list_files", "edit_file", "write_file"):
     module = importlib.import_module(f"binnacle.features.files.tools.{name}")
@@ -168,7 +168,7 @@ for name in ("read_file", "list_files", "edit_file", "write_file"):
 search = importlib.import_module("binnacle.features.search.tools.search_text")
 assert callable(search.register)
 for name in ("run_command", "job_status", "stop_job"):
-    module = importlib.import_module(f"binnacle.tools.{name}")
+    module = importlib.import_module(f"binnacle.features.commands.tools.{name}")
     assert callable(module.register)
 assert "binnacle.server" not in sys.modules
 """,

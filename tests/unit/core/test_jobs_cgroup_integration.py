@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from binnacle import jobs
+from binnacle.features.commands import jobs
 from binnacle.platform.contracts.resource_contracts import NoResourceAccounting
 
 

@@ -2,7 +2,7 @@
 
 import pytest
 
-from binnacle import jobs as jobstore
+from binnacle.features.commands import jobs as jobstore
 
 
 @pytest.fixture()

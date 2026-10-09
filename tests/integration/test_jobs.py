@@ -5,10 +5,10 @@ import time
 import pytest
 from fastmcp.exceptions import ToolError
 
-from binnacle import jobs as jobstore
+from binnacle.features.commands import jobs as jobstore
+from binnacle.features.commands.tools import job_status as js
+from binnacle.features.commands.tools import run_command as rc
 from binnacle.mcp.callctx import current_call
-from binnacle.tools import job_status as js
-from binnacle.tools import run_command as rc
 from tests.integration.job_test_support import run, status, stop
 
 pytestmark = pytest.mark.usefixtures("_short_job_warmup")

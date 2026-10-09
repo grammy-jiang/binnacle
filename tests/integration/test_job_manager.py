@@ -12,8 +12,8 @@ from pathlib import Path
 import pytest
 from fastmcp.exceptions import ToolError
 
-from binnacle import job_client, jobs
-from binnacle.job_manager import JobManager
+from binnacle.features.commands import job_client, jobs
+from binnacle.features.commands.job_manager import JobManager
 from tests.integration.job_test_support import run, status, stop
 
 
@@ -321,8 +321,8 @@ def test_two_manager_stop_requests_agree(manager):
 
 
 def test_interrupted_job_has_useful_public_summary(tmp_path, monkeypatch):
-    from binnacle.tools import job_status as status_tool
-    from binnacle.tools import stop_job as stop_tool
+    from binnacle.features.commands.tools import job_status as status_tool
+    from binnacle.features.commands.tools import stop_job as stop_tool
 
     store = tmp_path / "jobs"
     monkeypatch.setattr(jobs, "JOBS_DIR", store)
@@ -341,7 +341,7 @@ def test_interrupted_job_has_useful_public_summary(tmp_path, monkeypatch):
 
 
 def test_systemd_notify_ready_uses_notify_socket(tmp_path, monkeypatch):
-    from binnacle import job_manager as manager_module
+    from binnacle.features.commands import job_manager as manager_module
 
     path = tmp_path / "notify.sock"
     listener = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)

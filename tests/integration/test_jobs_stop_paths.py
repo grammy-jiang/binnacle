@@ -18,7 +18,7 @@ import signal
 
 import pytest
 
-from binnacle import jobs as jobstore
+from binnacle.features.commands import jobs as jobstore
 from binnacle.platform.linux import job_process
 
 #: A pid no live process should have; nothing here signals it for real.

@@ -23,7 +23,8 @@ import signal
 import pytest
 from fastmcp import Client
 
-from binnacle import jobs, server
+from binnacle import server
+from binnacle.features.commands import jobs
 from tests.contracts.golden_support import SNAPSHOT_DIR, Masker, check
 
 CASES = (

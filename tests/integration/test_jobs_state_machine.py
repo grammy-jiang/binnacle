@@ -7,7 +7,7 @@ from fastmcp.exceptions import ToolError
 from hypothesis import settings
 from hypothesis.stateful import RuleBasedStateMachine, invariant, precondition, rule
 
-from binnacle import jobs as jobstore
+from binnacle.features.commands import jobs as jobstore
 from tests.integration.job_test_support import run, status, stop
 
 

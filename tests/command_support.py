@@ -1,6 +1,6 @@
 """An explicit in-memory command backend for use-case and native adapter tests."""
 
-from binnacle.job_store import JobGone
+from binnacle.features.commands.job_store import JobGone
 
 
 class MemoryCommands:

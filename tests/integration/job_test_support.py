@@ -1,8 +1,8 @@
 """Shared call helpers for job integration tests."""
 
-from binnacle.tools import job_status as js
-from binnacle.tools import run_command as rc
-from binnacle.tools import stop_job as sj
+from binnacle.features.commands.tools import job_status as js
+from binnacle.features.commands.tools import run_command as rc
+from binnacle.features.commands.tools import stop_job as sj
 
 
 def run(

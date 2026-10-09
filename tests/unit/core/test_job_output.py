@@ -1,4 +1,4 @@
-from binnacle import job_output
+from binnacle.features.commands import job_output
 
 
 def test_shape_noop_and_tail_noop():

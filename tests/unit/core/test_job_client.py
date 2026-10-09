@@ -4,7 +4,7 @@ from io import BytesIO
 
 import pytest
 
-from binnacle import job_client
+from binnacle.features.commands import job_client
 
 
 class _FakeSocket:

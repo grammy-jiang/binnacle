@@ -2,7 +2,10 @@ import json
 import stat
 from datetime import datetime, timezone
 
-from binnacle.run_command_evidence import load_evidence, record_auto_match
+from binnacle.features.commands.run_command_evidence import (
+    load_evidence,
+    record_auto_match,
+)
 
 
 def _record(root, *, retention_days=14, day=25, now=None):
@@ -80,7 +83,9 @@ def test_evidence_io_failure_is_best_effort(tmp_path, monkeypatch, caplog):
     def fail_open(*args, **kwargs):
         raise OSError("disk unavailable")
 
-    monkeypatch.setattr("binnacle.run_command_evidence.os.open", fail_open)
+    monkeypatch.setattr(
+        "binnacle.features.commands.run_command_evidence.os.open", fail_open
+    )
     with caplog.at_level("WARNING", logger="binnacle.run_command_evidence"):
         path = _record(root)
 

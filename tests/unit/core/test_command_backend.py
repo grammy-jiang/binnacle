@@ -7,10 +7,10 @@ from pathlib import Path
 
 import pytest
 
-from binnacle import job_owner, jobs
-from binnacle.command_backend import DurableCommandBackend
-from binnacle.command_contracts import CommandReply
-from binnacle.job_store import JobGone
+from binnacle.features.commands import job_owner, jobs
+from binnacle.features.commands.command_backend import DurableCommandBackend
+from binnacle.features.commands.command_contracts import CommandReply
+from binnacle.features.commands.job_store import JobGone
 
 
 @pytest.mark.parametrize(
@@ -75,10 +75,10 @@ def test_reply_is_frozen_without_copying_or_normalizing_payload():
 def test_constructing_backend_imports_no_engine_or_settings():
     code = """
 import sys
-from binnacle.command_backend import DurableCommandBackend
-from binnacle.command_contracts import CommandReply
+from binnacle.features.commands.command_backend import DurableCommandBackend
+from binnacle.features.commands.command_contracts import CommandReply
 DurableCommandBackend()
-assert not {"binnacle.config", "binnacle.jobs", "binnacle.job_owner",
+assert not {"binnacle.config", "binnacle.features.commands.jobs", "binnacle.features.commands.job_owner",
             "binnacle.platform.linux.job_process", "binnacle.platform.linux.job_cgroup", "fastmcp", "mcp"} & sys.modules.keys()
 """
     subprocess.run([sys.executable, "-c", code], check=True, timeout=15)
@@ -87,7 +87,7 @@ assert not {"binnacle.config", "binnacle.jobs", "binnacle.job_owner",
 def test_default_selection_captures_engine_settings_before_first_operation():
     code = """
 from binnacle import config
-from binnacle.command_backend import create_command_backend
+from binnacle.features.commands.command_backend import create_command_backend
 settings = config.get_settings().model_copy(deep=True)
 settings.jobs.owner = "embedded"
 settings.jobs.warmup_s = 0.125

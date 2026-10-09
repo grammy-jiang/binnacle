@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from binnacle import command_execution, job_owner, jobs
-from binnacle.command_contracts import CommandFailure
 from binnacle.config import RunCommandSettings
+from binnacle.features.commands import command_execution, job_owner, jobs
+from binnacle.features.commands.command_contracts import CommandFailure
 from tests.command_support import MemoryCommands
 
 

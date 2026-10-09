@@ -13,7 +13,7 @@ import subprocess
 import time
 from pathlib import Path
 
-from binnacle import job_resource_history
+from binnacle.features.commands import job_resource_history
 
 START_RE = re.compile(
     r"event=job_start job_id=(?P<job>[0-9a-f]{12}).*? call=(?P<call>\S+) owner="

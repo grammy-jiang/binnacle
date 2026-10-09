@@ -19,8 +19,8 @@ from fastmcp.exceptions import ToolError
 from hypothesis import assume, example, given, settings
 from hypothesis import strategies as st
 
-from binnacle import job_output, jobs
 from binnacle.config import RootsSettings, get_settings
+from binnacle.features.commands import job_output, jobs
 from binnacle.features.files import paths, textio
 
 # -- paths.resolve_path: inside an allowed root, or ToolError, never anything else

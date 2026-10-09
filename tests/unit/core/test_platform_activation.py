@@ -16,7 +16,7 @@ def test_constructors_are_lazy_and_return_current_adapters(monkeypatch):
 def test_jobs_read_identity_and_inspection_through_one_binding(tmp_path, monkeypatch):
     from types import SimpleNamespace
 
-    from binnacle import jobs
+    from binnacle.features.commands import jobs
 
     calls = []
     summaries = [{"pid": 17}]
@@ -57,7 +57,7 @@ def test_jobs_read_identity_and_inspection_through_one_binding(tmp_path, monkeyp
 def test_jobs_launch_passes_owned_files_and_preserves_handle(tmp_path, monkeypatch):
     from types import SimpleNamespace
 
-    from binnacle import jobs
+    from binnacle.features.commands import jobs
 
     handle = SimpleNamespace(pid=771, returncode=-9)
     seen = []
@@ -87,7 +87,7 @@ def test_jobs_launch_passes_owned_files_and_preserves_handle(tmp_path, monkeypat
 def test_manager_boot_identity_uses_default_process_seam(monkeypatch):
     from types import SimpleNamespace
 
-    from binnacle import job_manager
+    from binnacle.features.commands import job_manager
 
     monkeypatch.setattr(
         job_manager,
@@ -102,7 +102,7 @@ def test_accounting_capture_survives_binding_change_before_finalizer(
 ):
     from types import SimpleNamespace
 
-    from binnacle import job_resource_history, jobs
+    from binnacle.features.commands import job_resource_history, jobs
 
     events = []
     pending = []
@@ -155,7 +155,7 @@ def test_accounting_capture_survives_binding_change_before_finalizer(
 def test_manager_prepares_selected_accounting_before_recovery(tmp_path, monkeypatch):
     from types import SimpleNamespace
 
-    from binnacle import job_manager, jobs
+    from binnacle.features.commands import job_manager, jobs
 
     socket = tmp_path / "private" / "manager.sock"
     events = []
@@ -177,7 +177,7 @@ def test_manager_prepares_selected_accounting_before_recovery(tmp_path, monkeypa
 
 
 def test_manager_owned_command_runs_without_accounting(tmp_path, monkeypatch):
-    from binnacle import jobs
+    from binnacle.features.commands import jobs
     from binnacle.platform.contracts.resource_contracts import NoResourceAccounting
 
     monkeypatch.setattr(jobs, "_RESOURCE_ACCOUNTING", NoResourceAccounting())
