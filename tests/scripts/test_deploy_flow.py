@@ -172,12 +172,12 @@ def smokes(monkeypatch: Any) -> list[str]:
     """Results the fake smoke returns, in order; the default passes."""
     results: list[str] = []
 
-    def fake_smoke(env: Env, full: bool = False, rebaseline: bool = False) -> Report:
+    def fake_smoke(env: Env) -> Report:
         report = Report()
         report.add("tools", results.pop(0) if results else "ok", "fake smoke")
         return report
 
-    monkeypatch.setattr(flow, "smoke", fake_smoke)
+    monkeypatch.setattr(flow, "_fresh_smoke", fake_smoke)
     return results
 
 

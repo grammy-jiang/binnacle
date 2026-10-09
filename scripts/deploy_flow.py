@@ -23,12 +23,62 @@ import re
 
 from binnacle.platform.contracts.service_log_contracts import ServiceLogError
 from scripts.deploy_ci import required_ci_state
-from scripts.smoke_checks import UNIT, Env, Report, last_line, smoke
+from scripts.smoke_checks import UNIT, Env, Report, last_line
 
 QUIET_WINDOW_S = 30.0
 QUIET_POLL_S = 20.0
 CI_POLL_S = 30.0
 DEV_ENV_INPUTS = {"pyproject.toml", "uv.lock"}
+
+# Spawn the post-checkout smoke from the deployed source tree. The deployment
+# controller was imported from the PREVIOUS checkout before git fast-forward,
+# so calling its cached smoke() function would apply obsolete journal/schema
+# expectations to the new server and incorrectly force a rollback.
+_FRESH_SMOKE_TIMEOUT_S = 240.0
+_SMOKE_CHECK_RE = re.compile(r"^\s+\[(ok|warn|alert)\s*\]\s+([^:]+):\s*(.*)$")
+
+
+def _fresh_smoke(env: Env) -> Report:
+    """Run the current checkout's real CLI smoke in a fresh Python interpreter.
+
+    This is the SAME smoke and the SAME mandatory checks as the pre-existing
+    in-process runner. The only change is loading it from the exact code that
+    was just fast-forwarded (or rolled back). Missing or inconsistent evidence
+    fails closed rather than silently treating process exit 0 as proof.
+    """
+    argv = [
+        str(env.checkout / ".venv/bin/python"),
+        str(env.checkout / "scripts/deploy_smoke.py"),
+        "--checkout",
+        str(env.checkout),
+    ]
+    rc, output = env.run(argv, _FRESH_SMOKE_TIMEOUT_S)
+    report = Report()
+    headings: list[str] = []
+    for line in output.splitlines():
+        for status in ("OK", "WARN", "ALERT"):
+            if line.startswith(f"{status}: "):
+                headings.append(status)
+        match = _SMOKE_CHECK_RE.fullmatch(line)
+        if match:
+            level, name, detail = match.groups()
+            report.add(name, level, detail)
+
+    acceptable = (
+        len(headings) == 1
+        and bool(report.checks)
+        and (
+            (rc == 0 and headings[0] == report.level.upper() != "ALERT")
+            or (rc == 1 and headings[0] == report.level.upper() == "ALERT")
+        )
+    )
+    if not acceptable:
+        report.add(
+            "fresh_smoke",
+            "alert",
+            f"runner exit={rc} headers={headings!r}; {last_line(output)}"[:200],
+        )
+    return report
 
 
 def _git(env: Env, *args: str, timeout: float = 60.0) -> tuple[int, str]:
@@ -270,7 +320,7 @@ def deploy(
         "ok" if live else "alert",
         how if live else (live_detail or "the new code did not load"),
     )
-    checked = smoke(env) if live else Report()
+    checked = _fresh_smoke(env) if live else Report()
     report.checks.extend(checked.checks)
     if live and checked.level != "alert":
         rc, out = _git(
@@ -306,7 +356,7 @@ def deploy(
         )
     else:
         back = False
-    after = smoke(env) if back else None
+    after = _fresh_smoke(env) if back else None
     state = after.level.upper() if after else "NOT CONFIRMED"
     confirmed = after is not None and after.level != "alert"
     report.add(
