@@ -151,6 +151,8 @@ def _assert_wheel(wheel: Path, version: str) -> None:
         )
         assert "Binnacle is a small MCP server" in metadata_text
         assert "Requires-Dist: fastmcp==4.1.0\n" in metadata_text
+        assert "Requires-Dist: mcp==2.1.1\n" in metadata_text
+        assert "Requires-Dist: mcp-types==2.1.1\n" in metadata_text
         assert any(name.endswith("/licenses/LICENSE") for name in names)
 
 

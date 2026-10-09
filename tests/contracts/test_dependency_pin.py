@@ -26,6 +26,8 @@ PYPROJECT = Path(__file__).resolve().parents[2] / "pyproject.toml"
 RUNTIME_DEPENDENCIES = {
     "cyclopts>=4.23.3": "the CLI framework of binnacle, binnacle-tunnel and binnacle-watchdog",
     "fastmcp==4.1.0": "the MCP server framework; reviewed stable FastMCP 4.1 baseline",
+    "mcp==2.1.1": "exact tested MCP protocol SDK version for the public API",
+    "mcp-types==2.1.1": "exact tested modern MCP protocol types and schemas",
     "orjson>=3.11.3": "search_text parses ripgrep's JSON stream and sizes results with it",
     "pydantic>=2.13.5": "the settings models and the tool parameter validation",
     "pydantic-settings>=2.15.0": "loads config.toml and the BINNACLE_ environment variables",
@@ -42,3 +44,11 @@ def test_runtime_dependencies_are_pinned():
 
 def test_every_runtime_dependency_has_a_reason():
     assert all(reason.strip() for reason in RUNTIME_DEPENDENCIES.values())
+
+
+def test_transitive_protocol_pins_are_explicit_and_narrow():
+    config = tomllib.loads(PYPROJECT.read_text())
+    assert config["tool"]["deptry"]["per_rule_ignores"]["DEP002"] == [
+        "mcp",
+        "mcp-types",
+    ]

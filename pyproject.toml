@@ -35,6 +35,8 @@ classifiers = [
 dependencies = [
     "cyclopts>=4.23.3", # the CLI framework fastmcp's own CLI uses
     "fastmcp==4.1.0", # reviewed FastMCP 4.1 baseline
+    "mcp==2.1.1", # exact tested MCP protocol SDK baseline for PyPI installs
+    "mcp-types==2.1.1", # exact tested MCP wire types and schemas
     "orjson>=3.11.3",
     "pydantic>=2.13.5",
     "pydantic-settings>=2.15.0",
@@ -181,6 +183,11 @@ known_first_party = [
 extend_exclude = ["\\.claude", "\\.tox", "build", "dist"]
 
 [tool.deptry.per_rule_ignores]
+# These two intentionally constrain the transitive FastMCP protocol SDK to
+# the exact wire/schema baseline verified by CI and production. They are not
+# separately imported by Binnacle, but PyPI distribution must not silently
+# install an untested SDK version.
+DEP002 = ["mcp", "mcp-types"]
 # tests/ legitimately imports the test dependency group.
 DEP004 = ["pytest"]
 
