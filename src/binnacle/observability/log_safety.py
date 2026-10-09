@@ -114,30 +114,30 @@ def safe_turn_id(value: str) -> str:
     return "turn-" + hashlib.sha256(value.encode("utf-8")).hexdigest()[:12]
 
 
-def path_digest(value: str) -> str:
+def path_digest(value: str, *, root: Path | None = None) -> str:
     """Match the existing Binnacle analytics' normalized-path hash semantics."""
     marker = _HASHED_PATH.fullmatch(value)
     if marker:
         return marker.group(1)
     path = Path(value).expanduser()
     if not path.is_absolute():
-        path = Path.home() / "Projects" / path
+        path = (Path.home() / "Projects" if root is None else root) / path
     return hashlib.sha256(str(path.resolve()).encode("utf-8")).hexdigest()[:12]
 
 
-def safe_path(value: object) -> str:
+def safe_path(value: object, *, root: Path | None = None) -> str:
     if not isinstance(value, str):
         return REDACTED
     try:
         # Preserve a boolean file-vs-directory signal for the adaptive reader,
         # but never retain an actual path component or file extension.
         kind = ".file" if Path(value).suffix else ""
-        return "pathhash:" + path_digest(value) + kind
+        return "pathhash:" + path_digest(value, root=root) + kind
     except (OSError, ValueError, RuntimeError):
         return REDACTED
 
 
-def safe_arguments(arguments: object) -> dict[str, Any]:
+def safe_arguments(arguments: object, *, root: Path | None = None) -> dict[str, Any]:
     """Log a closed whitelist of benign scalars, pseudonymous paths and IDs."""
     if not isinstance(arguments, Mapping):
         return {}
@@ -151,7 +151,7 @@ def safe_arguments(arguments: object) -> dict[str, Any]:
         ):
             result[key] = value
         elif key in {"path", "workdir"}:
-            result[key] = safe_path(value)
+            result[key] = safe_path(value, root=root)
         elif (
             key == "job_id" and isinstance(value, str) and _JOB_ID.fullmatch(value)
         ) or (key == "cursor" and value in ("start", "end")):
@@ -165,7 +165,7 @@ def safe_arguments(arguments: object) -> dict[str, Any]:
     return result
 
 
-def safe_request_payload(message: Any) -> str:
+def safe_request_payload(message: Any, *, root: Path | None = None) -> str:
     """Fail-closed serializer for FastMCP LoggingMiddleware.
 
     FastMCP's base serializer FALLS BACK TO RAW SERIALIZATION when this
@@ -181,7 +181,7 @@ def safe_request_payload(message: Any) -> str:
         if name is not None:
             value: dict[str, Any] = {
                 "name": safe_tool_name(name),
-                "arguments": safe_arguments(args),
+                "arguments": safe_arguments(args, root=root),
             }
         else:
             # No arbitrary protocol metadata or other client-authored data.

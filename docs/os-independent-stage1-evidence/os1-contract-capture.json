@@ -1,0 +1,89 @@
+{
+  "baseline_signal_surface": {
+    "acceptance": "OI-06 REVIEW_PENDING; native owned identity and unsafe-signal fail-closed design required",
+    "calls": [
+      "signal_group",
+      "os.kill"
+    ],
+    "limitation": "Caller checks pid/starttime earlier, but signal_job only accepts pgid and strays; check-to-signal race remains.",
+    "parameters": [
+      "self",
+      "pgid",
+      "strays",
+      "intent"
+    ],
+    "sha256": "837692e3673eb702097040ab96b49ad350c1d4a64fbb414aab80f7a87ce47e86"
+  },
+  "process_contracts.py": {
+    "classes": {
+      "ProcessBackend": [
+        "launch",
+        "starttime",
+        "alive",
+        "processes",
+        "descendants",
+        "signal_job",
+        "boot_id"
+      ],
+      "ProcessHandle": [
+        "pid",
+        "returncode",
+        "wait"
+      ]
+    },
+    "sha256": "4598b43bcb2d96e51ff97740f02fe7c7282eebdf14555e3d02ac92ea69a7c859"
+  },
+  "resource_contracts.py": {
+    "classes": {
+      "NoResourceAccounting": [
+        "prepare",
+        "create",
+        "wrap_argv",
+        "snapshot",
+        "wait_empty",
+        "cleanup"
+      ],
+      "ResourceAccounting": [
+        "prepare",
+        "create",
+        "wrap_argv",
+        "snapshot",
+        "wait_empty",
+        "cleanup"
+      ]
+    },
+    "sha256": "39b7d1e6d1438dc126fd7ced3dadd893e91a0e098e67b5d6dd487479bdc0247e"
+  },
+  "runtime_path_contracts.py": {
+    "classes": {
+      "RuntimePaths": []
+    },
+    "sha256": "28993da79853d150aa578ed0cc663ef0e395b462107449994895d88b61fb9c71"
+  },
+  "service_lifecycle_contracts.py": {
+    "classes": {
+      "ManagedServiceController": [
+        "restart"
+      ],
+      "ManagedServiceInspector": [
+        "status",
+        "started_at_epoch",
+        "rss_kb",
+        "main_process_has_environment",
+        "main_process_path"
+      ],
+      "ManagedServiceStatus": [],
+      "ServiceAction": []
+    },
+    "sha256": "004e202f5977ab7b7827d55b3c140b9e502dd1b31a9077110aaa24694ad58c66"
+  },
+  "service_log_contracts.py": {
+    "classes": {
+      "ServiceLogError": [],
+      "ServiceLogSource": [
+        "read_window"
+      ]
+    },
+    "sha256": "f5a9e9ad309ab3ede64b8d8fee830f5593b6f9c3d3cbdfbde8761bb2d8da1c98"
+  }
+}

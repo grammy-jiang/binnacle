@@ -12,6 +12,7 @@ import os
 import threading
 import time
 from pathlib import Path
+from typing import cast
 
 from binnacle.config import get_settings
 from binnacle.features.commands import job_resource_history, job_store
@@ -32,7 +33,9 @@ KEEP_NEWEST = get_settings().jobs.keep_newest
 RUN_MAX_OUTPUT_CHARS = get_settings().jobs.max_output_chars
 WARMUP_S = get_settings().jobs.warmup_s
 _OWNER_SETTING = get_settings().jobs.owner
-MANAGER_SOCKET = get_settings().jobs.socket_path
+MANAGER_SOCKET = cast(Path, get_settings().jobs.socket_path)
+if MANAGER_SOCKET is None:
+    raise RuntimeError("host composition did not resolve the jobs socket")
 
 JobGone = job_store.JobGone
 
@@ -62,7 +65,6 @@ STOP_SIGKILL_GRACE_S = 2.0  # wait for the forced exit to be recorded
 # start_job call _prune(), whose direct/test callers are protected too.
 _STORE_LOCK = job_store.STORE_LOCK
 
-# stdout+stderr merge, interactivity neutered (Gemini's env hygiene set).
 _ENV_OVERRIDES = {
     "PAGER": "cat",
     "GIT_PAGER": "cat",

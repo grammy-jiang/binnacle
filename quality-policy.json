@@ -124,5 +124,25 @@
     "roots": [
       "src/binnacle"
     ]
+  },
+  "os_independence": {
+    "native_adapter_boundary_modules": [
+      "binnacle.platform.composition",
+      "binnacle.observability.logstats_io",
+      "binnacle.observability.system_resource_history",
+      "binnacle.cli"
+    ],
+    "pure_module_prefixes": [
+      "binnacle.config",
+      "binnacle.mcp",
+      "binnacle.features.files",
+      "binnacle.features.search",
+      "binnacle.features.commands.command_contracts",
+      "binnacle.features.commands.command_execution",
+      "binnacle.features.commands.command_status",
+      "binnacle.observability.logstats",
+      "binnacle.platform.contracts"
+    ],
+    "rollout_note": "cli direct Linux type imports are OS4 transitional; remove this exception after CLI service provisioning becomes semantic."
   }
 }

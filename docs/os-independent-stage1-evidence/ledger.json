@@ -2,7 +2,7 @@
   "active_jobs": [],
   "baseline_sha": "02f4bab9bc7562668ffc41d622c4274449933768",
   "branch": "refactor/os-independent-stage1-implementation-20261009",
-  "candidate_sha": "19a3cf1e43755ed4aee3837c25ea63188058a26e",
+  "candidate_sha": "c79afdadbe9dee983b405fb79e2ed5a1b6683258",
   "ci_status": "NOT_SUBMITTED",
   "completed": [
     "Plan read in full, 517 lines; repository instructions read",
@@ -19,9 +19,17 @@
     "OS2 pure FastMCP tree resides at binnacle.application to satisfy top-level acyclic imports; synthetic blocked-Linux end-to-end fake four-domain tests passed",
     "OS2 lazy generic Settings socket path, Linux effective default composed via get_settings; 58 config/manager/factory tests passed",
     "OS5 canonical alias path security: 8 path/alias tests passed",
-    "OS5 journal acquisition deferred; pure parser import without Linux; 35 regression tests passed and 1 new fixture mismatch repaired"
+    "OS5 journal acquisition deferred; pure parser import without Linux; 35 regression tests passed and 1 new fixture mismatch repaired",
+    "OS0 reference submitted to source commit c79afdadbe9dee983b405fb79e2ed5a1b6683258; normal hooks all passed",
+    "OS1 capture all five untouched Protocol signatures/hashes, existing Linux PGID signal limitation",
+    "OS1 negative import tests: 23 passed, AST architecture 145 modules 0 failures, Import Linter 21 kept/0 broken",
+    "OS2 static/fake app and Linux default selection tests passed, root imports not cyclical",
+    "OS5 canonical paths, deferred journald, configured root telemetry hashes and no privacy changes",
+    "Exact OS0-v1.0.1 four-profile raw MCP wire comparison: two tests passed; extra privacy+logging tests 40 passed",
+    "Mypy check: no issues in 145 source files",
+    "Module-size ratchet: initial jobs.py 501 line error repaired to 500; 401 modules 0 errors"
   ],
-  "deployment_status": "NOT_STARTED_PRODUCTION_UNCHANGED",
+  "deployment_status": "NOT_STARTED; production v1.0.1 unchanged; active manager must never be restarted",
   "evidence": [
     "docs/os-independent-stage1-evidence/os0-source-inventory.json",
     "docs/os-independent-stage1-evidence/os0-manifest.sha256",
@@ -61,17 +69,32 @@
     },
     {
       "failure": "markdownlint MD060 found unspaced table separator; gitleaks 7 false positives on repetitive filename-keyed SHA-256 JSON mapping",
-      "resolution": "Corrected table separator, removed redundant file\u2192hash JSON dictionary; exact all-file SHA-256 preserved in dedicated os0-manifest.sha256, inventory array retains its hashes, source captured unchanged",
+      "resolution": "Corrected table separator, removed redundant file→hash JSON dictionary; exact all-file SHA-256 preserved in dedicated os0-manifest.sha256, inventory array retains its hashes, source captured unchanged",
       "stage": "OS0 commit"
+    },
+    {
+      "failure": "mypy passed but source module-size cap failed at 501 lines jobs.py",
+      "resolution": "Simplified conditional check preserving the same runtime guard; recheck now 500 lines and 0 errors",
+      "stage": "OS1"
+    },
+    {
+      "failure": "direct uv run markdownlint-cli2 executable unavailable",
+      "resolution": "Use pre-commit's pinned markdownlint-cli2 hook, no arbitrary download or version change",
+      "stage": "OS1"
+    },
+    {
+      "failure": "mypy errors in job_owner.py: MANAGER_SOCKET typed Path|None; mypy+deptry could not resolve direct scripts/os_independence import",
+      "resolution": "Runtime-checked manager socket now explicitly typed Path; check_architecture imports its local package through known repository root; source mypy/deptry and static checks pass",
+      "stage": "OS1/OS2 code commit"
     }
   ],
   "gates": {
-    "OS0": "ACCEPTED",
-    "OS1": "STATIC_GATES_PASS_DESIGN_REVIEW_PENDING",
-    "OS2": "FOCUSED_PASS_REVIEW_PENDING",
-    "OS3": "NOT_STARTED",
-    "OS4": "NOT_STARTED",
-    "OS5": "PATH_AND_LOG_PARTIAL",
+    "OS0": "ACCEPTED_COMMITTED_c79afda",
+    "OS1": "STATIC_PASS_21_CONTRACTS_REVIEW_PENDING",
+    "OS2": "MOCK_AND_RAW_WIRE_FOCUSED_PASS_REVIEW_PENDING",
+    "OS3": "WAITING_ON_OS1_INDEPENDENT_DESIGN_REVIEW",
+    "OS4": "WAITING_ON_OS1_INDEPENDENT_DESIGN_REVIEW",
+    "OS5": "PATH_LOG_TELEMETRY_PASS_DIAGNOSTICS_PENDING",
     "OS6": "NOT_STARTED",
     "OS7": "NOT_STARTED"
   },
@@ -79,12 +102,21 @@
     "Symlink allowed-root canonicalization falsely rejects canonical target",
     "Linux import-blocking cannot currently import pure server/jobs/logstats"
   ],
-  "next_action": "Re-run normal pre-commit after re-staging corrected OS0 evidence; then continue independent OS4 design.",
+  "last_committed_sha": "c79afdadbe9dee983b405fb79e2ed5a1b6683258",
+  "next_action": "Complete isolated OS4 and OS5 host separation and OS3 race probes. OS1 independent review is mandatory before accepted migration; final OS7 deployment not authorized until review+CI verified.",
   "owner": "single ChatGPT implementation integrator",
   "plan_sha": "19a3cf1e43755ed4aee3837c25ea63188058a26e",
-  "review_status": "PENDING: no genuinely independent supported reviewer yet invoked; no self-approval",
+  "remaining_dependencies": [
+    "OS1 independent contract/signal safety review of exact commit",
+    "OS3 semantic process identity, pid reuse and orphan-target safety migration and full durable parity",
+    "OS4 generic deployment vs systemd split with exact Linux unit bytes",
+    "OS5 generic diagnostics fake mode, comprehensive path swap/procfs blockers",
+    "OS6 all-module policy sweep and Linux-only tooling/companion classification",
+    "OS7 full two-lane test/coverage/python 3.10-3.14/wheels/CI/independent reviews and guarded live deploy"
+  ],
+  "review_status": "OS1 REVIEW_PENDING; independent review packet is available, not an approval.",
   "reviews": [],
-  "stage": "OS1 Architecture / OS2 Composition / OS5 Independent",
+  "stage": "OS1/OS2/OS5 preparatory implementation committed candidate pending review",
   "status": "REVIEW_PENDING",
   "task_id": "BINNACLE-OS-STAGE1-IMPLEMENT-20261009",
   "tests": [
@@ -155,8 +187,48 @@
       "exit_code": 0,
       "result": "1 passed (after fixing new fixture assertion)",
       "stage": "OS5"
+    },
+    {
+      "command": "uv run pytest tests/unit/core/test_os_log_path_root.py tests/unit/core/test_log_safety.py tests/integration/test_logging.py tests/integration/test_log_privacy.py tests/contracts/test_os_stage1_wire_parity.py -q --randomly-seed=12345",
+      "exit_code": 0,
+      "result": "40 passed",
+      "stage": "OS5/FM08"
+    },
+    {
+      "command": "uv run mypy src/binnacle",
+      "exit_code": 0,
+      "log_path": "docs/os-independent-stage1-evidence/os1-mypy-candidate.log",
+      "result": "no issues found in 145 source files",
+      "stage": "OS1/OS2"
+    },
+    {
+      "command": "uv run python scripts/check_module_size.py",
+      "exit_code": 0,
+      "log_path": "docs/os-independent-stage1-evidence/os1-module-size.log",
+      "result": "second run 401 modules 0 errors, 22 warnings (old modules)",
+      "stage": "OS1/OS2"
+    },
+    {
+      "command": "uv run lint-imports --no-logo",
+      "exit_code": 0,
+      "result": "21 contracts kept, 0 broken",
+      "stage": "OS1/OS2"
+    },
+    {
+      "command": "uv run python scripts/check_architecture.py",
+      "exit_code": 0,
+      "result": "145 modules checked, 0 violations",
+      "stage": "OS1/OS2"
+    },
+    {
+      "command": "uv run pytest -q --randomly-seed=12345 tests/contracts/test_os_stage1_wire_parity.py tests/integration/test_os_pure_application.py tests/unit/core/test_os_* tests/scripts/test_os_architecture.py tests/integration/test_job_manager.py tests/contracts/test_server_composition.py",
+      "exit_code": 0,
+      "log_path": "docs/os-independent-stage1-evidence/os1-os2-os5-focused-validation.log",
+      "sha256": "7f953f4db0fe3c5901d233b78ef6e7a0d25efceec8eb7039e114423dafa7d48b",
+      "stage": "OS1/OS2/OS5"
     }
   ],
-  "updated_utc": "2026-10-09T13:24:34.086430+00:00",
+  "updated_utc": "2026-10-09T13:39:03.785159+00:00",
+  "worktree_dirty": true,
   "worktree_path": "/home/grammy-jiang/Projects/binnacle-os-independent-stage1-impl"
 }

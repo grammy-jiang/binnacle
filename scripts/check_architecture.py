@@ -260,7 +260,13 @@ def main(argv: list[str] | None = None) -> int:
         imports[source] = imports_of(path, source)
         symbol_errors.extend(public_import_errors(path, source, policy))
 
+    # Running as a script starts with scripts/ on sys.path, not the repo root.
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))
+    from scripts.os_independence import inspect_source_tree
+
     errors = evaluate(imports, policy) + symbol_errors
+    errors.extend(inspect_source_tree(package_root, policy=policy, imports=imports))
     for line in errors:
         print(f"ERROR: {line}", file=sys.stderr)
     print(

@@ -259,6 +259,8 @@ class JobManager:
 
 def main() -> None:
     settings = get_settings()
+    if settings.jobs.socket_path is None:
+        raise RuntimeError("host composition did not resolve the jobs socket")
     JobManager(settings.jobs.socket_path).serve_forever()
 
 
