@@ -135,3 +135,16 @@ Job Manager must not be restarted to satisfy the deployment milestone.
    MCP, job records, RPC, and service behavior in parallel.
 8. Add macOS CI, installation and deployment qualification with independent
    review; do not advertise macOS support based on Stage 1.
+
+## Partial native signal failures
+
+A verified process may still refuse a delivered signal, for example a
+descendant whose privileges changed after launch. The Linux pidfd lease
+attempts every pinned owned target even when some deny delivery, including
+the original leader deliberately signaled last. It then raises a typed
+partial-delivery error; Binnacle Core waits for the durable outcome and
+surfaces an explicit failure rather than claiming a complete stop of every
+descendant. The stable manager translates this to a controlled unsuccessful
+RPC response. This fix does not grant permission to signal unrelated
+processes or bypass independent stop-safety review. See the source-bound
+P1 response in `docs/os-independent-stage1-evidence/`.

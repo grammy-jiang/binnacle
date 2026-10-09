@@ -21,6 +21,7 @@ from binnacle.config import get_settings
 from binnacle.features.commands import job_owner, jobs
 from binnacle.features.commands.job_client import PROTOCOL_VERSION
 from binnacle.mcp.callctx import current_call
+from binnacle.platform.contracts.process_contracts import JobSignalDeliveryError
 from binnacle.platform.job_platform import create_process_backend
 from binnacle.provenance import runtime_provenance
 
@@ -185,7 +186,17 @@ class JobManager:
         token = current_call.set(call_id)
         try:
             job_owner.mark_stop_requested(job_id)
-            state = jobs.stop_job_embedded(job_id)
+            try:
+                state = jobs.stop_job_embedded(job_id)
+            except JobSignalDeliveryError as exc:
+                # Controlled RPC error, not an opaque manager-internal failure.
+                # We cannot promise successful termination of every descendant.
+                log.warning(
+                    "event=job_manager_stop_partial job_id=%s call=%s",
+                    job_id,
+                    call_id,
+                )
+                return {"ok": False, "error": f"job stop partially failed: {exc}"}
         finally:
             current_call.reset(token)
         if state is None:

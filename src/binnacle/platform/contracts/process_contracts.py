@@ -10,6 +10,10 @@ class UnverifiedJobProcess(RuntimeError):
     """The platform cannot prove signal ownership; no target may be signaled."""
 
 
+class JobSignalDeliveryError(RuntimeError):
+    """One or more verified native process targets could not be signaled."""
+
+
 @dataclass(frozen=True, slots=True)
 class JobProcessIdentity:
     """An opaque native identity. Core must not inspect its host-specific value."""

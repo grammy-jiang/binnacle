@@ -9,6 +9,7 @@ import logging
 from collections.abc import Callable
 
 from binnacle.platform.contracts.process_contracts import (
+    JobSignalDeliveryError,
     ProcessBackend,
     UnverifiedJobProcess,
 )
@@ -55,26 +56,44 @@ def stop_embedded(
         )
         return job_state(job_id)
 
+    partial_failures: list[JobSignalDeliveryError] = []
     try:
         try:
             lease.signal("terminate")
         except ProcessLookupError:
             return await_exit(job_id, stop_sigkill_grace_s)
+        except JobSignalDeliveryError as exc:
+            partial_failures.append(exc)
 
-        # Wait for the reaper's durable status, not merely for PID disappearance.
+        # The job leader may exit while an unprivileged descendant remains.
+        # A partial native delivery is never reported as a successful stop.
+        # We still wait for durable owner state and, if needed, escalate using
+        # the same pinned pidfds rather than sending to a fresh numeric PID.
         settled = await_exit(job_id, stop_sigterm_grace_s)
-        if settled is None or settled["state"] == "exited":
-            return settled
-        logger.warning(
-            "event=job_stop_escalate job_id=%s call=%s signal=SIGKILL grace_s=%s",
-            job_id,
-            current_call_id(),
-            stop_sigterm_grace_s,
-        )
-        try:
-            lease.signal("kill")
-        except ProcessLookupError:
-            pass
-        return await_exit(job_id, stop_sigkill_grace_s)
+        if settled is not None and settled["state"] != "exited":
+            logger.warning(
+                "event=job_stop_escalate job_id=%s call=%s signal=SIGKILL grace_s=%s",
+                job_id,
+                current_call_id(),
+                stop_sigterm_grace_s,
+            )
+            try:
+                lease.signal("kill")
+            except ProcessLookupError:
+                pass
+            except JobSignalDeliveryError as exc:
+                partial_failures.append(exc)
+            settled = await_exit(job_id, stop_sigkill_grace_s)
+        if partial_failures:
+            logger.error(
+                "event=job_stop_signal_partial job_id=%s call=%s phases=%d",
+                job_id,
+                current_call_id(),
+                len(partial_failures),
+            )
+            raise JobSignalDeliveryError(
+                "; ".join(str(failure) for failure in partial_failures)
+            )
+        return settled
     finally:
         lease.close()

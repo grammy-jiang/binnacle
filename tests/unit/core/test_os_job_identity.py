@@ -192,3 +192,51 @@ def test_lease_handles_process_exit_after_pin_without_new_numeric_lookup(
     lease.close()
     assert {fd for fd, _ in signed} == {11001, 11002}
     assert len(closed) == 3
+
+
+def test_unsignalable_descendant_does_not_prevent_signaling_job_leader(
+    native_table, monkeypatch
+):
+    """P1 independent review: setuid child EPERM must not strand job leader."""
+    _, opened, signed, closed = native_table
+
+    def deliver(fd, sig):
+        if fd == 11003:
+            raise PermissionError(1, "operation not permitted")
+        signed.append((fd, sig))
+
+    monkeypatch.setattr(native.signal, "pidfd_send_signal", deliver)
+    lease = native.open_job_signals(
+        native.identity_from_record(record()), boot_id=lambda: "test-boot"
+    )
+    with pytest.raises(
+        native.JobSignalDeliveryError, match="1 verified process"
+    ) as err:
+        lease.signal("terminate")
+    assert "terminate" in str(err.value)
+    assert signed == [(11002, signal.SIGTERM), (11001, signal.SIGTERM)]
+    assert opened == [1001, 1003, 1002]
+    lease.close()
+    assert set(closed) == {11001, 11002, 11003}
+
+
+def test_multiple_native_permission_errors_report_after_all_pinned_attempts(
+    native_table, monkeypatch
+):
+    """A failed member cannot suppress later attempts or a structured failure."""
+    _, _, signed, closed = native_table
+
+    def deliver(fd, sig):
+        if fd in {11003, 11002}:
+            raise OSError(13, "verified target rejected signal")
+        signed.append((fd, sig))
+
+    monkeypatch.setattr(native.signal, "pidfd_send_signal", deliver)
+    lease = native.open_job_signals(
+        native.identity_from_record(record()), boot_id=lambda: "test-boot"
+    )
+    with pytest.raises(native.JobSignalDeliveryError, match="2 verified process"):
+        lease.signal("kill")
+    assert signed == [(11001, signal.SIGKILL)]
+    lease.close()
+    assert len(closed) == 3

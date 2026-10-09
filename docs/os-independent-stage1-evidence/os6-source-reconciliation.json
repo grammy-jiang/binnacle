@@ -21,7 +21,7 @@
     "LINUX": 62
   },
   "coverage_complete": true,
-  "implementation_commit": "c6620b51805b4259f9f9dc577a0a436b4a089589",
+  "implementation_commit": "a1a11f9201b2dab87b029b205a90b4f9fcdb406d",
   "production_module_count": 152,
   "rows": [
     {
@@ -3502,6 +3502,8 @@
         "binnacle.mcp.callctx.current_call",
         "binnacle.platform.composition",
         "binnacle.platform.composition.notify_job_manager_ready",
+        "binnacle.platform.contracts.process_contracts",
+        "binnacle.platform.contracts.process_contracts.JobSignalDeliveryError",
         "binnacle.platform.job_platform",
         "binnacle.platform.job_platform.create_process_backend",
         "binnacle.provenance",
@@ -3526,7 +3528,7 @@
       "owner": "BOUNDARY",
       "path": "src/binnacle/features/commands/job_manager.py",
       "rationale": "Explicit composition or compatibility seam; implementation-specific actions are delegated",
-      "sha256": "44193867643afd67fedf49260ca3145e68a72f9fb1cb29d3c150108f295f80bb",
+      "sha256": "d1a7513e213316799b134c17e3247642afd1907bbde232d76e7bdaf6213148cf",
       "stage": "OS3",
       "was_in_baseline": true
     },
@@ -3602,6 +3604,7 @@
     {
       "imports": [
         "binnacle.platform.contracts.process_contracts",
+        "binnacle.platform.contracts.process_contracts.JobSignalDeliveryError",
         "binnacle.platform.contracts.process_contracts.ProcessBackend",
         "binnacle.platform.contracts.process_contracts.UnverifiedJobProcess",
         "collections.abc",
@@ -3614,7 +3617,7 @@
       "owner": "BOUNDARY",
       "path": "src/binnacle/features/commands/job_stop.py",
       "rationale": "Explicit composition or compatibility seam; implementation-specific actions are delegated",
-      "sha256": "c79583c9d2b93d1dd9f8904615f0cb44324d7a5bf3dee64f51c251e21c5fedfe",
+      "sha256": "46c4fd056212a37346ed6d40180a150b198054956df83c22326485fb34e4c705",
       "stage": "OS3",
       "was_in_baseline": false
     },
@@ -5053,7 +5056,7 @@
       "owner": "KEEP",
       "path": "src/binnacle/platform/contracts/process_contracts.py",
       "rationale": "Narrow value types and Protocol contracts contain no platform implementation",
-      "sha256": "55c3ee051f50f73008f493b30b19365fd2f65adfd6a7f52e635b17f2b8e833b0",
+      "sha256": "f6c18f6ce2bc3a10a08867a0d1b4114fbedd423d4564a8072ba1a9aca9ec1414",
       "stage": "OS6",
       "was_in_baseline": true
     },
@@ -5199,6 +5202,7 @@
         "__future__.annotations",
         "binnacle.platform.contracts.process_contracts",
         "binnacle.platform.contracts.process_contracts.JobProcessIdentity",
+        "binnacle.platform.contracts.process_contracts.JobSignalDeliveryError",
         "binnacle.platform.contracts.process_contracts.UnverifiedJobProcess",
         "collections.abc",
         "collections.abc.Callable",
@@ -5221,7 +5225,7 @@
       "owner": "LINUX",
       "path": "src/binnacle/platform/linux/job_identity.py",
       "rationale": "Linux-specific host, service or companion implementation; core must never import it directly",
-      "sha256": "8e42afe04a1e5e87d341ce2e5b3a49216c444cf45a53a57dbcc82e52094264da",
+      "sha256": "9b92d7c61b706c24849f7add5f919b30139b99daaaa03ec1c10857a7ce0b50d6",
       "stage": "OS3",
       "was_in_baseline": false
     },

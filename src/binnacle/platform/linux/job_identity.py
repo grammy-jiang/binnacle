@@ -21,6 +21,7 @@ from typing import Literal
 
 from binnacle.platform.contracts.process_contracts import (
     JobProcessIdentity,
+    JobSignalDeliveryError,
     UnverifiedJobProcess,
 )
 
@@ -103,12 +104,23 @@ class LinuxJobSignalLease:
 
     def signal(self, intent: Literal["terminate", "kill"]) -> None:
         sig = {"terminate": signal.SIGTERM, "kill": signal.SIGKILL}[intent]
+        failed = 0
         for _, fd in self._targets:
             try:
                 signal.pidfd_send_signal(fd, sig)
             except ProcessLookupError:
                 # A pinned process exited; do not redirect to its reused PID.
                 continue
+            except OSError:
+                # Never let one setuid or otherwise unsignalable descendant
+                # prevent delivery to other verified members, especially the
+                # original job leader which is deliberately signaled last.
+                failed += 1
+        if failed:
+            raise JobSignalDeliveryError(
+                f"{failed} verified process target(s) could not receive "
+                f"{intent}; other owned targets were still signaled"
+            )
 
     def close(self) -> None:
         targets, self._targets = self._targets, []
