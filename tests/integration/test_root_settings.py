@@ -194,7 +194,7 @@ import asyncio
 import sys
 # Import adapters before construction. No reload or settings-cache reset.
 from binnacle.features.files.tools import read_file
-from binnacle.tools import job_status
+from binnacle.features.commands.tools import job_status
 from binnacle.features.search.tools import search_text
 from binnacle import server
 from fastmcp import Client

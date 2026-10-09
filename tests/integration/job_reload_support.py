@@ -11,7 +11,7 @@ from pathlib import Path
 MANAGER = """
 import json, sys
 from pathlib import Path
-from binnacle import jobs, job_manager
+from binnacle.features.commands import jobs, job_manager
 from importlib.util import find_spec
 if find_spec("binnacle.job_cgroup") is not None:
     from binnacle import job_cgroup
@@ -30,7 +30,7 @@ WORKER = """
 import asyncio, json, sys
 from pathlib import Path
 from fastmcp import Client
-from binnacle import jobs
+from binnacle.features.commands import jobs
 from binnacle.features.commands.commands_server import create_commands_server
 source, spool, socket = map(Path, sys.argv[1:4])
 assert Path(jobs.__file__).resolve().is_relative_to(source.resolve())

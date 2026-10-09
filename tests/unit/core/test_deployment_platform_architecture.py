@@ -11,10 +11,6 @@ ROOT = Path(__file__).resolve().parents[3]
 GENERIC_PATHS = (
     ROOT / "src/binnacle/cli.py",
     ROOT / "src/binnacle/config.py",
-    ROOT / "src/binnacle/doctor.py",
-    ROOT / "src/binnacle/doctor_common.py",
-    ROOT / "src/binnacle/doctor_jobs.py",
-    ROOT / "src/binnacle/job_manager_doctor.py",
     ROOT / "src/binnacle/diagnostics/doctor.py",
     ROOT / "src/binnacle/diagnostics/doctor_common.py",
     ROOT / "src/binnacle/diagnostics/doctor_jobs.py",

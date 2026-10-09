@@ -20,8 +20,13 @@ def test_manager_fixture_supports_both_cgroup_layouts(tmp_path, legacy):
     pkg = tmp_path / "binnacle"
     pkg.mkdir()
     (pkg / "__init__.py").write_text("")
-    (pkg / "jobs.py").write_text("JOBS_DIR = None\n")
-    (pkg / "job_manager.py").write_text(
+    (pkg / "features").mkdir()
+    (pkg / "features" / "__init__.py").write_text("")
+    commands = pkg / "features" / "commands"
+    commands.mkdir()
+    (commands / "__init__.py").write_text("")
+    (commands / "jobs.py").write_text("JOBS_DIR = None\n")
+    (commands / "job_manager.py").write_text(
         "def _notify_systemd_ready(): pass\n"
         "class JobManager:\n"
         "    def __init__(self, *args, **kwargs): pass\n"
@@ -51,4 +56,4 @@ def test_manager_fixture_supports_both_cgroup_layouts(tmp_path, legacy):
         check=False,
     )
     assert result.returncode == 0, result.stderr
-    assert json.loads(result.stdout.strip())["source"] == str(pkg / "jobs.py")
+    assert json.loads(result.stdout.strip())["source"] == str(commands / "jobs.py")

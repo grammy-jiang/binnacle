@@ -1,15 +1,12 @@
-"""G6 Webmin adapter location and backwards-compatible import identity."""
+"""Canonical Linux Webmin adapter ownership without a legacy module alias."""
 
-import sys
 from importlib import import_module
 
 
-def test_public_webmin_facade_is_owned_adapter():
-    facade = import_module("binnacle.webminstats")
+def test_canonical_webmin_adapter_import_identity():
     owned = import_module("binnacle.observability.linux.webminstats")
-
-    assert facade is owned
-    assert sys.modules["binnacle.webminstats"] is owned
+    assert owned.__name__ == "binnacle.observability.linux.webminstats"
+    assert hasattr(owned, "WebminSystemResourceHistory")
 
 
 def test_resource_history_factory_uses_observability_adapter():
@@ -21,10 +18,12 @@ def test_resource_history_factory_uses_observability_adapter():
     assert isinstance(create_system_resource_history(), WebminSystemResourceHistory)
 
 
-def test_compatibility_monkeypatch_reaches_owned_module(monkeypatch):
-    facade = import_module("binnacle.webminstats")
+def test_canonical_webmin_monkeypatch_reaches_factory_module(monkeypatch):
     owned = import_module("binnacle.observability.linux.webminstats")
     sentinel = object()
 
-    monkeypatch.setattr(facade, "HISTORY_DIR", sentinel)
-    assert owned.HISTORY_DIR is sentinel
+    monkeypatch.setattr(owned, "HISTORY_DIR", sentinel)
+    assert (
+        import_module("binnacle.observability.linux.webminstats").HISTORY_DIR
+        is sentinel
+    )
