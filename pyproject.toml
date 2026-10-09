@@ -145,11 +145,12 @@ ignore-words-list = "aci"
 known_first_party = [
     "binnacle",
     "scripts",
-    # Standalone sibling imports in docs/chatgpt-mcp-development/maintainer/.
+    # Standard-library-only maintainer modules under docs/chatgpt-mcp-development.
     "build_candidate_archive",
+    "validate_candidate_archive",
     "c1h_precondition_rule",
     "export_references",
-    "validate_candidate_archive",
+    "test_h13_observation_policy",
 ]
 # Agent tooling with its own conventions and imports, not server code.
 extend_exclude = ["\\.claude", "\\.tox", "build", "dist"]
