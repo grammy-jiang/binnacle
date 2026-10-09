@@ -15,7 +15,7 @@ description = "MCP server that lets AI agents work on a Raspberry Pi."
 requires-python = ">=3.10"
 dependencies = [
     "cyclopts>=4.23.3", # the CLI framework fastmcp's own CLI uses
-    "fastmcp==4.0.10", # deliberate stable FastMCP 4 baseline
+    "fastmcp==4.1.0", # reviewed FastMCP 4.1 baseline
     "orjson>=3.11.3",
     "pydantic>=2.13.5",
     "pydantic-settings>=2.15.0",
