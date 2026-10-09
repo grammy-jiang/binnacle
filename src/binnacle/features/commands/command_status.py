@@ -293,9 +293,7 @@ def job_status(
     )
 
     process_start = perf_counter()
-    processes = (
-        backend.job_processes(state["pgid"]) if state["state"] == "running" else []
-    )
+    processes = backend.job_processes(job_id) if state["state"] == "running" else []
     process_scan_ms = _elapsed_ms(process_start)
     payload = {
         "job_id": job_id,

@@ -73,8 +73,8 @@ def test_single_job_timing_logs_stage_breakdown(monkeypatch, caplog):
     monkeypatch.setattr(jobstore, "read_log", lambda job_id: b"")
     monkeypatch.setattr(
         jobstore,
-        "job_processes",
-        lambda pgid, max_cmd_chars=200: [
+        "processes_for_job",
+        lambda job_id, max_cmd_chars=200: [
             {"pid": 123, "state": "S", "etime_s": 10.0, "cpu_s": 0.0, "cmd": "sleep 30"}
         ],
     )

@@ -27,7 +27,7 @@ def manager(tmp_path, monkeypatch):
     runtime = JobManager(
         socket_path,
         owner_instance_id="owner-new",
-        boot_id="boot-current",
+        boot_id=jobs._PROCESS_BACKEND.boot_id(),
     )
     thread = threading.Thread(target=runtime.serve_forever, daemon=True)
     thread.start()
@@ -57,7 +57,7 @@ def test_ping_reports_protocol_and_owner(manager):
     response = job_client.ping(socket_path)
     assert response["version"] == 1
     assert response["owner_instance_id"] == "owner-new"
-    assert response["boot_id"] == "boot-current"
+    assert response["boot_id"] == jobs._PROCESS_BACKEND.boot_id()
     assert response["package_version"] == version("binnacle-mcp")
     assert response["revision"]
 

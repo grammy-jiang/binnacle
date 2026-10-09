@@ -50,10 +50,10 @@ class DurableCommandBackend:
 
         return jobs.read_log_range(job_id, start, max_bytes)
 
-    def job_processes(self, pgid: int, max_cmd_chars: int = 200) -> list[dict]:
+    def job_processes(self, job_id: str, max_cmd_chars: int = 200) -> list[dict]:
         from binnacle.features.commands import jobs
 
-        return jobs.job_processes(pgid, max_cmd_chars)
+        return jobs.processes_for_job(job_id, max_cmd_chars)
 
     @property
     def owner_mode(self) -> str:

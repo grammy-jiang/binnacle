@@ -23,7 +23,7 @@ from binnacle.features.commands.job_store import JobGone
         (jobs, "await_exit", ("fixed", 0.5), None),
         (jobs, "read_log", ("fixed",), b"\xff"),
         (jobs, "read_log_range", ("fixed", 2, 8), (b"abc", 20)),
-        (jobs, "job_processes", (42, 5), [{"pid": 42}]),
+        (jobs, "processes_for_job", ("fixed", 5), [{"pid": 42}]),
     ],
 )
 def test_delegate_keeps_arguments_identity_and_exceptions(
@@ -37,7 +37,10 @@ def test_delegate_keeps_arguments_identity_and_exceptions(
 
     monkeypatch.setattr(module, name, delegate)
     backend = DurableCommandBackend()
-    assert getattr(backend, name)(*args) is value
+    method = (
+        backend.job_processes if name == "processes_for_job" else getattr(backend, name)
+    )
+    assert method(*args) is value
     assert calls == [args]
     failure = JobGone("fixed")
 
@@ -46,7 +49,7 @@ def test_delegate_keeps_arguments_identity_and_exceptions(
 
     monkeypatch.setattr(module, name, fail)
     with pytest.raises(JobGone) as caught:
-        getattr(backend, name)(*args)
+        method(*args)
     assert caught.value is failure
 
 

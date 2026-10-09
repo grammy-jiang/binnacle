@@ -7,7 +7,12 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import BinaryIO, Literal
 
-from binnacle.platform.contracts.process_contracts import ProcessHandle
+from binnacle.platform.contracts.process_contracts import (
+    JobProcessIdentity,
+    JobSignalLease,
+    ProcessHandle,
+)
+from binnacle.platform.linux import job_identity
 
 _CLK_TCK = os.sysconf("SC_CLK_TCK")
 
@@ -165,6 +170,28 @@ class LinuxProcessBackend:
                 os.kill(pid, sig)
             except ProcessLookupError:
                 pass
+
+    def identity_from_record(
+        self, metadata: Mapping[str, object]
+    ) -> JobProcessIdentity | None:
+        return job_identity.identity_from_record(metadata)
+
+    def open_job_signals(self, identity: JobProcessIdentity) -> JobSignalLease:
+        return job_identity.open_job_signals(identity, boot_id=self.boot_id)
+
+    def inspect_job(
+        self, identity: JobProcessIdentity, max_cmd_chars: int = 200
+    ) -> list[dict]:
+        record = identity.native
+        if not isinstance(record, job_identity.LinuxJobRecord):
+            return []
+        try:
+            job_identity.verify_boot(record, boot_id=self.boot_id)
+        except job_identity.UnverifiedJobProcess:
+            return []
+        if not self.alive(record.leader, record.starttime):
+            return []
+        return job_processes(record.group, max_cmd_chars)
 
     def boot_id(self) -> str:
         try:

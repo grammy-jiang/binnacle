@@ -2,7 +2,7 @@
   "active_jobs": [],
   "baseline_sha": "02f4bab9bc7562668ffc41d622c4274449933768",
   "branch": "refactor/os-independent-stage1-implementation-20261009",
-  "candidate_sha": "ec4ef5c7ed91673892b189a18a0698b471d506f2",
+  "candidate_sha": "UNCOMMITTED_OS3_DIFFERENCE",
   "ci_status": "NOT_SUBMITTED",
   "completed": [
     "Plan read in full, 517 lines; repository instructions read",
@@ -33,9 +33,15 @@
     "OS4 systemd readiness socket notification moved from generic durable manager into platform.linux.notify_systemd",
     "OS4 exact baseline unit rendering verified, including original insertion order in systemd provenance marker",
     "OS5 Linux-specific service/boot/journal check functions moved from generic doctor.py into diagnostics.linux_checks; existing wrappers and text contract preserved",
-    "OS5 pure import test covers doctor/results/log parser with every Linux package blocked"
+    "OS5 pure import test covers doctor/results/log parser with every Linux package blocked",
+    "OS3 Core no longer sends Linux PGID directly: command_status -> CommandBackend.job_processes(job_id) -> native identity / verified adapter",
+    "OS3 OS-neutral job_stop.stop_embedded verifies one opaque owner identity and uses pinned Linux pidfd signal lease for TERM and KILL",
+    "OS3 Linux pidfd pinning tests cover boot/PID reuse, disappeared descendants, reparenting, wrong process ownership, lease close and no unrelated signal",
+    "OS3 initial 6 failures diagnosed; fixture fake boot tokens and legacy PGID assertions repaired without modifying dated spool fixtures",
+    "OS3 full focused matrix on 18 modules: 339 passed, 0 failed, seed 12345",
+    "OS3 old manager + new client and new manager + old client both passed against git archived v1.0.1 source; old on-disk record and cursor retained"
   ],
-  "deployment_status": "NOT_STARTED; production v1.0.1 unchanged; active manager must never be restarted",
+  "deployment_status": "NOT_STARTED; production v1.0.1 remains unchanged, no durable job manager restart",
   "evidence": [
     "docs/os-independent-stage1-evidence/os0-source-inventory.json",
     "docs/os-independent-stage1-evidence/os0-manifest.sha256",
@@ -92,13 +98,23 @@
       "failure": "mypy errors in job_owner.py: MANAGER_SOCKET typed Path|None; mypy+deptry could not resolve direct scripts/os_independence import",
       "resolution": "Runtime-checked manager socket now explicitly typed Path; check_architecture imports its local package through known repository root; source mypy/deptry and static checks pass",
       "stage": "OS1/OS2 code commit"
+    },
+    {
+      "failure": "Six early OS3 test failures: unreviewed synthetic boot ids rejected by validated Linux process-generation check and mock backends asserted legacy signal_job call",
+      "resolution": "Use actual boot_id in live manager fixtures and update isolated test-only fake lease; kept old spool data unchanged; 339 matrix passed.",
+      "stage": "OS3"
+    },
+    {
+      "failure": "Git archive included a parent 'src/' directory record which fixture validation rejected",
+      "resolution": "Validated and skipped only the parent directory record; immutable archived source and 2-way RPC test passed.",
+      "stage": "OS3 cross-version"
     }
   ],
   "gates": {
     "OS0": "ACCEPTED_COMMITTED_c79afda",
     "OS1": "STATIC_PASS_21_CONTRACTS_REVIEW_PENDING",
     "OS2": "MOCK_AND_RAW_WIRE_FOCUSED_PASS_REVIEW_PENDING",
-    "OS3": "WAITING_ON_OS1_INDEPENDENT_DESIGN_REVIEW",
+    "OS3": "339_FOCUSED_PASS_2_CROSS_VERSION_PASS_INDEPENDENT_REVIEW_PENDING",
     "OS4": "UNIT_PROVISIONING_AND_READINESS_FOCUSED_PASS_UNREVIEWED",
     "OS5": "LINUX_DIAGNOSTICS_ISOLATION_FOCUSED_PASS_PATH_SWAP_PENDING",
     "OS6": "NOT_STARTED",
@@ -108,8 +124,8 @@
     "Symlink allowed-root canonicalization falsely rejects canonical target",
     "Linux import-blocking cannot currently import pure server/jobs/logstats"
   ],
-  "last_committed_sha": "c79afdadbe9dee983b405fb79e2ed5a1b6683258",
-  "next_action": "Commit focused OS4/OS5 candidate with normal hooks; then implement OS3 safe process identity and OI negative race tests; no production deployment.",
+  "last_committed_sha": "14650b5a4226e453cc4e94c313bd0c26bcb24ac6",
+  "next_action": "Run pre-commit Git hooks on exact candidate; commit OS3 if green; proceed to OS5 adversarial paths and OS6 full source sweep, hold OS7 deployment until independent review/CI.",
   "owner": "single ChatGPT implementation integrator",
   "plan_sha": "19a3cf1e43755ed4aee3837c25ea63188058a26e",
   "remaining_dependencies": [
@@ -120,9 +136,9 @@
     "OS6 all-source alignment, infra/tests/docs",
     "OS7 final full checks/reviewer/CI/guarded deployment"
   ],
-  "review_status": "OS1 REVIEW_PENDING; independent review packet is available, not an approval.",
+  "review_status": "OS1 contract review and OS3 process-safety independent review NOT RECEIVED; author tests are not approvals.",
   "reviews": [],
-  "stage": "OS4 / OS5 independent work (OS1 review pending)",
+  "stage": "OS3 process-identity and RPC compatibility candidate / OS1 independent review pending",
   "status": "REVIEW_PENDING",
   "task_id": "BINNACLE-OS-STAGE1-IMPLEMENT-20261009",
   "tests": [
@@ -240,9 +256,25 @@
       "log_sha256": "105f0e805f28d985455edc0ec318935e4d7b0f5d09afdc4fd126895da845f688",
       "result": "173 passed in 5.20s",
       "stage": "OS4/OS5"
+    },
+    {
+      "command": "uv run pytest -q --randomly-seed=12345 [18 OS3 job/process/backend/spool/architecture contract test files]",
+      "exit_code": 0,
+      "log_path": "docs/os-independent-stage1-evidence/os3-combined-focused-repair.txt",
+      "result": "339 passed in 22.69s",
+      "sha256": "05c18c07b389020e64f51d531fc43c113168e0dd3fc677248d7047c16ab9192b",
+      "stage": "OS3"
+    },
+    {
+      "command": "uv run pytest -q --randomly-seed=12345 tests/integration/test_os_job_rpc_cross_version.py",
+      "exit_code": 0,
+      "log_path": "docs/os-independent-stage1-evidence/os3-cross-version-rpc.txt",
+      "result": "2 passed in 15.81s; old owner/new client and new owner/old client",
+      "sha256": "153b07d9a129c65f22b307f28d939ac20d423267737b29e835b3ed4f22cf4f6d",
+      "stage": "OS3"
     }
   ],
-  "updated_utc": "2026-10-09T13:58:05.174762+00:00",
+  "updated_utc": "2026-10-09T16:07:42.374430+00:00",
   "worktree_dirty": true,
   "worktree_path": "/home/grammy-jiang/Projects/binnacle-os-independent-stage1-impl"
 }

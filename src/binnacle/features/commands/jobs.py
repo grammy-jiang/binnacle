@@ -15,12 +15,14 @@ from pathlib import Path
 from typing import cast
 
 from binnacle.config import get_settings
-from binnacle.features.commands import job_resource_history, job_store
+from binnacle.features.commands import job_resource_history, job_stop, job_store
 from binnacle.features.commands.job_output import (
     clip_head_tail as job_output_clip_head_tail,
 )
 from binnacle.mcp.callctx import current_call
-from binnacle.platform.contracts.process_contracts import ProcessHandle
+from binnacle.platform.contracts.process_contracts import (
+    ProcessHandle,
+)
 from binnacle.platform.job_platform import (
     create_process_backend,
     create_resource_accounting,
@@ -427,7 +429,17 @@ def job_state(job_id: str) -> dict | None:
 
 
 def job_processes(pgid: int, max_cmd_chars: int = 200) -> list[dict]:
+    """Historical Linux diagnostic helper; do not call from generic Commands."""
     return _PROCESS_BACKEND.processes(pgid, max_cmd_chars)
+
+
+def processes_for_job(job_id: str, max_cmd_chars: int = 200) -> list[dict]:
+    """Inspect only a job bound to validated native process identity."""
+    record = _read_meta(job_id)
+    identity = _PROCESS_BACKEND.identity_from_record(record or {})
+    if identity is None:
+        return []
+    return _PROCESS_BACKEND.inspect_job(identity, max_cmd_chars)
 
 
 def list_jobs() -> list[dict]:
@@ -461,40 +473,15 @@ def await_exit(job_id: str, timeout: float) -> dict | None:
 
 
 def stop_job_embedded(job_id: str) -> dict | None:
-    """Original signal/process-tree stop path, used by the stable owner process."""
-    state = job_state(job_id)
-    if state is None:
-        return None
-    if state["state"] != "running":
-        if state["state"] == "unknown":
-            meta = _read_meta(job_id)
-            if meta is not None and meta.get("stop_requested"):
-                return await_exit(job_id, STOP_SIGKILL_GRACE_S)
-        return state
-    pgid = state["pgid"]
-    # Collect descendants BEFORE signaling: a setsid()'d child is outside the
-    # group and only findable through its parent's ppid link while the
-    # parent lives. Group members are covered by killpg already.
-    group = {p["pid"] for p in job_processes(pgid)}
-    strays = _PROCESS_BACKEND.descendants(state["pid"]) - group
-    try:
-        _PROCESS_BACKEND.signal_job(pgid, strays, "terminate")
-    except ProcessLookupError:
-        return await_exit(job_id, STOP_SIGKILL_GRACE_S)
-    # Wait for the recorded exit, not just for the pid to disappear: the
-    # reaper writes the exit (signal 15) a moment after the process dies, and
-    # returning before that would report a false "unknown".
-    st = await_exit(job_id, STOP_SIGTERM_GRACE_S)
-    if st is None or st["state"] == "exited":
-        return st
-    logger.warning(
-        "event=job_stop_escalate job_id=%s call=%s signal=SIGKILL grace_s=%s",
+    """Existing public owner operation delegates to the OS-neutral stop policy."""
+    return job_stop.stop_embedded(
         job_id,
-        current_call.get(),
-        STOP_SIGTERM_GRACE_S,
+        process_backend=_PROCESS_BACKEND,
+        job_state=job_state,
+        read_meta=_read_meta,
+        await_exit=await_exit,
+        stop_sigterm_grace_s=STOP_SIGTERM_GRACE_S,
+        stop_sigkill_grace_s=STOP_SIGKILL_GRACE_S,
+        current_call_id=current_call.get,
+        logger=logger,
     )
-    try:
-        _PROCESS_BACKEND.signal_job(pgid, strays, "kill")
-    except ProcessLookupError:
-        pass
-    return await_exit(job_id, STOP_SIGKILL_GRACE_S)

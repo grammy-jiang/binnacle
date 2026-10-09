@@ -21,6 +21,13 @@ def test_jobs_read_identity_and_inspection_through_one_binding(tmp_path, monkeyp
     calls = []
     summaries = [{"pid": 17}]
     handle = SimpleNamespace(pid=771, returncode=0, wait=lambda timeout: 0)
+    signals = []
+    closed = []
+    identity = object()
+    lease = SimpleNamespace(
+        signal=lambda intent: signals.append(intent),
+        close=lambda: closed.append(True),
+    )
     backend = SimpleNamespace(
         launch=lambda *args, **kwargs: handle,
         starttime=lambda pid: calls.append(("starttime", pid)) or 912,
@@ -28,8 +35,10 @@ def test_jobs_read_identity_and_inspection_through_one_binding(tmp_path, monkeyp
         processes=lambda pgid, max_cmd_chars=200: (
             calls.append(("processes", pgid, max_cmd_chars)) or summaries
         ),
-        descendants=lambda pid: calls.append(("descendants", pid)) or {17, 19},
-        signal_job=lambda *args: None,
+        identity_from_record=lambda meta: (
+            calls.append(("identity", meta["pid"], meta["starttime"])) or identity
+        ),
+        open_job_signals=lambda ident: calls.append(("open_lease", ident)) or lease,
     )
     monkeypatch.setattr(jobs, "_PROCESS_BACKEND", backend)
     monkeypatch.setattr(jobs, "JOBS_DIR", tmp_path / "jobs")
@@ -38,18 +47,17 @@ def test_jobs_read_identity_and_inspection_through_one_binding(tmp_path, monkeyp
     assert jobs._read_meta(job_id)["starttime"] == 912
     assert jobs.job_state(job_id)["state"] == "running"
     assert jobs.job_processes(proc.pid, 33) is summaries
-    signals = []
-    monkeypatch.setattr(backend, "signal_job", lambda *args: signals.append(args))
     monkeypatch.setattr(jobs, "await_exit", lambda *args: {"state": "exited"})
     assert jobs.stop_job_embedded(job_id) == {"state": "exited"}
-    assert signals[0][:2] == (proc.pid, {19})
+    assert signals == ["terminate"]
+    assert closed == [True]
     assert calls == [
         ("starttime", proc.pid),
         ("alive", proc.pid, 912),
         ("processes", proc.pid, 33),
         ("alive", proc.pid, 912),
-        ("processes", proc.pid, 200),
-        ("descendants", proc.pid),
+        ("identity", proc.pid, 912),
+        ("open_lease", identity),
     ]
     jobs.record_exit(job_id, proc)
 

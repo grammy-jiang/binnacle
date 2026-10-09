@@ -60,9 +60,17 @@ class MemoryCommands:
             raise JobGone(job_id)
         return self.output[start : start + max_bytes], len(self.output)
 
-    def job_processes(self, pgid, max_cmd_chars=200):
-        self.calls.append(("processes", pgid, max_cmd_chars))
-        return [{"pid": pgid, "state": "S", "etime_s": 3, "cpu_s": 0, "cmd": "probe"}]
+    def job_processes(self, job_id, max_cmd_chars=200):
+        self.calls.append(("processes", job_id, max_cmd_chars))
+        return [
+            {
+                "pid": self.state["pgid"],
+                "state": "S",
+                "etime_s": 3,
+                "cpu_s": 0,
+                "cmd": "probe",
+            }
+        ]
 
     def stop_job(self, job_id):
         self.calls.append(("stop", job_id))
