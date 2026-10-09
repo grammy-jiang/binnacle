@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import re
-from pathlib import Path
 from typing import Any
+
+from binnacle.observability.log_safety import path_digest
 
 _PLAIN_KV = re.compile(r"(\w+)=(\S+)")
 # Keys whose value is free text (spaces allowed); each is the last key on
@@ -51,10 +51,7 @@ def _base_turn(value: str | None) -> str:
 
 
 def _path_hash(value: str) -> str:
-    path = Path(value).expanduser()
-    if not path.is_absolute():
-        path = Path.home() / "Projects" / path
-    return hashlib.sha256(str(path.resolve()).encode()).hexdigest()[:12]
+    return path_digest(value)
 
 
 def _int(value: str | None) -> int:

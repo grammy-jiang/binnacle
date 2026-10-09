@@ -153,7 +153,12 @@ def test_tool_call_and_result_share_a_call_id_and_carry_sizes(caplog):
     assert calls[0].index(" server_gen=") < calls[0].index(" args=")
     # arguments: full length, then the compact JSON with scalars first
     assert call["args_chars"] == str(len('{"max_results":1,"path":"/tmp"}'))
-    assert calls[0].endswith(' args={"max_results":1,"path":"/tmp"}')
+    from binnacle.observability.log_safety import safe_path
+
+    assert calls[0].endswith(
+        ' args={"max_results":1,"path":"' + safe_path("/tmp") + '"}'
+    )
+    assert '"/tmp"' not in calls[0]
     # result: outcome, latency, and the size the client receives
     assert result["is_error"] == "False"
     assert float(result["duration_ms"]) > 0
@@ -207,12 +212,8 @@ def test_tool_error_is_a_result_line_with_its_class(caplog):
     line = results[0]
     assert result["server_gen"] == logging_middleware.SERVER_GEN
     assert line.index(" server_gen=") < line.index(" error=")
-    assert (
-        results[0].endswith(
-            "error=Path outside allowed roots (/home/grammy-jiang/Projects, /tmp): /etc/passwd"
-        )
-        or " error=Path outside allowed roots" in results[0]
-    )
+    assert results[0].endswith(" error=[redacted]")
+    assert "/etc/passwd" not in results[0]
     assert "content_chars" not in result
     level = next(
         r.levelname for r in caplog.records if "event=tool_result" in r.getMessage()
@@ -235,10 +236,10 @@ def test_args_are_clipped_and_never_multi_line(caplog, tmp_path):
     line = _messages(caplog, "tool_call")[0]
     assert "\n" not in line
     args = line.split(" args=", 1)[1]
-    assert len(args) == logging_middleware.ARGS_MAX_CHARS + len("...")
-    assert args.endswith("...")
-    # the short value (path) comes before the long one and survives the clip
-    assert args.index('"path"') < args.index('"content"')
+    assert len(args) < logging_middleware.ARGS_MAX_CHARS
+    assert not args.endswith("...")
+    assert json.loads(args)["content"] == "[redacted]"
+    assert content not in line
     assert int(_fields(line)["args_chars"]) > 2000
 
 

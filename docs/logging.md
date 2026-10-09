@@ -1,6 +1,6 @@
 # Logging: what the journal records, and how to review the server from it
 
-Status 2026-09-22. Code: `src/binnacle/logging_middleware.py` (request and
+Historical note (2026-09-22). Code at that time: `src/binnacle/logging_middleware.py` (request and
 tool records), `src/binnacle/jobs.py` (job records), `src/binnacle/server.py`
 (startup record, root handler format), `src/binnacle/callctx.py` (the call
 id shared by the middleware and the job store). Readers:
@@ -483,3 +483,43 @@ keeps loading. The table is ignored, and one startup WARNING names it:
 ```text
 event=config_warning section=run_command.shadow_prediction reason=removed action=ignored
 ```
+
+## 2026-10-09 — FastMCP 4.1 and journal input privacy
+
+The historical sections above describe the original 2026-09-22 journal
+contract. The canonical implementations now live under
+`src/binnacle/mcp/logging_middleware.py`,
+`src/binnacle/observability/log_safety.py`, and
+`src/binnacle/features/commands/jobs.py`; readers live under
+`src/binnacle/observability/`.
+
+Current `request_start.payload` and `tool_call.args` are scrubbed before
+logging. The safe serializer preserves only known tool names, counts, numeric
+and boolean tool settings, validated job IDs, and anonymized paths
+(`pathhash:<12hex>[.file]`). It redacts raw command, stdin, file
+content, regex/search strings, unknown argument names/values, and arbitrary
+error messages. `job_start.command` is now always `'[redacted]'`.
+`request_error.error` and `tool_result.error` are also redacted; diagnostic
+error class/code, duration and size remain available.
+
+`args_chars` continues to measure the entire original JSON input, whereas
+`args` contains a compact, possibly clipped representation of scrubbed
+values. Sanitization is intentionally fail-closed because FastMCP's logging
+serializer otherwise falls back to raw values when a custom serializer
+raises. Known client labels and validated tunnel turn IDs remain visible;
+unknown labels and malformed turn IDs become stable short hashes.
+
+The anonymized path digest remains compatible with the adaptive discovery
+join logic. However, new journal data cannot accurately reconstruct raw
+shell-command categories or exclude synthetic test traffic by inspecting
+command substrings. Historical logs remain readable, and new analysis must
+not treat redacted categories as evidence of zero usage.
+
+Journal scrubbing does **not** rewrite older logs or erase raw data needed for
+execution: durable job metadata, stdin spools, subprocess output, and separate
+tunnel logs remain outside the journal transformation. The private Jobs
+directory and its parent were mode 0700 during this review. Actual MCP tool
+results and public schemas are unchanged.
+
+See `docs/fastmcp41-adoption-and-journal-privacy-2026-10-09.md` for
+architecture decisions, testing and rollout criteria.

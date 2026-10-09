@@ -42,6 +42,13 @@ from binnacle.mcp.callctx import (
     current_turn,
 )
 from binnacle.mcp.identity import ClientIdentity
+from binnacle.observability.log_safety import (
+    REDACTED,
+    safe_arguments,
+    safe_client_name,
+    safe_tool_name,
+    safe_turn_id,
+)
 from binnacle.observability.token_telemetry import TokenCounter
 
 # Proposed settings (module constants until config.py is free to edit).
@@ -127,11 +134,11 @@ class RequestLoggingMiddleware(LoggingMiddleware):
         fields = {
             "request_id": _request_id(context),
             "session": _session_marker(context),
-            "client": self._identity.resolve(context) or "-",
+            "client": safe_client_name(self._identity.resolve(context)),
         }
         tool = getattr(context.message, "name", None)
         if context.method == "tools/call" and tool:
-            fields["tool"] = str(tool)
+            fields["tool"] = safe_tool_name(tool)
         return fields
 
     def _create_before_message(
@@ -152,6 +159,7 @@ class RequestLoggingMiddleware(LoggingMiddleware):
         self, context: MiddlewareContext[Any], start_time: float, error: Exception
     ) -> dict[str, str | int | float]:
         message = super()._create_error_message(context, start_time, error)
+        message["error"] = REDACTED
         message.update(self._extra_fields(context))
         return message
 
@@ -169,14 +177,43 @@ def _text(value: Any, limit: int) -> str:
     return " ".join(str(value).split())[:limit]
 
 
-def _scalar(value: Any) -> str:
+_SAFE_RESULT_LABELS = {
+    "state": {"running", "exited", "unknown"},
+    "kind": {"text", "binary", "empty"},
+    "mode": {"list", "glob", "exact", "adaptive"},
+    "match": {"exact", "whitespace_normalized"},
+    "action": {"created", "overwritten", "updated", "unchanged"},
+    "mime_guess": {
+        "text/plain",
+        "application/json",
+        "application/octet-stream",
+        "image/png",
+        "image/jpeg",
+        "text/x-python",
+        "text/markdown",
+        "application/pdf",
+        "text/csv",
+    },
+}
+
+
+def _scalar(value: Any, field: str) -> str:
     if value is None:
         return "null"
     if isinstance(value, bool):
         return "true" if value else "false"
     if isinstance(value, (int, float)):
         return str(value)
-    return _token(value, 40)
+    if isinstance(value, str):
+        if (
+            field == "job_id"
+            and len(value) == 12
+            and all(char in "0123456789abcdef" for char in value)
+        ):
+            return value
+        if value in _SAFE_RESULT_LABELS.get(field, ()):
+            return value
+    return REDACTED
 
 
 def _compact_json(value: Any) -> str:
@@ -191,7 +228,10 @@ def _args_json(arguments: Any) -> tuple[int, str]:
     when one long command or content value runs past the clip; JSON
     escaping keeps it on one line.
     """
-    items = list(dict(arguments or {}).items())
+    original = dict(arguments or {})
+    # Preserve historical full payload-size accounting, not the raw values.
+    full = len(_compact_json(original))
+    items = list(safe_arguments(original).items())
     items.sort(
         key=lambda kv: (
             isinstance(kv[1], str),
@@ -199,8 +239,7 @@ def _args_json(arguments: Any) -> tuple[int, str]:
         )
     )
     text = _compact_json(dict(items))
-    full = len(text)
-    if full > ARGS_MAX_CHARS:
+    if len(text) > ARGS_MAX_CHARS:
         text = text[:ARGS_MAX_CHARS] + "..."
     return full, text
 
@@ -215,7 +254,7 @@ def _header_fields() -> dict[str, str]:
     for name, key in CORRELATION_HEADERS.items():
         value = headers.get(name)
         if value:
-            fields[key] = _token(value, HEADER_MAX_CHARS)
+            fields[key] = safe_turn_id(value)
     for name, key in HASHED_HEADERS.items():
         value = headers.get(name)
         if value:
@@ -258,7 +297,7 @@ def _result_fields(
     if isinstance(structured, dict):
         for key in RESULT_KEYS:
             if key in structured:
-                fields[key] = _scalar(structured[key])
+                fields[key] = _scalar(structured[key], key)
         for key in RESULT_LIST_KEYS:
             value = structured.get(key)
             if isinstance(value, list):
@@ -308,8 +347,8 @@ class ToolLoggingMiddleware(Middleware):
     def _who(self, context: MiddlewareContext[Any], call_id: str) -> dict[str, str]:
         return {
             "call": call_id,
-            "tool": _token(getattr(context.message, "name", "?"), 64),
-            "client": _token(self._identity.resolve(context) or "-", 64),
+            "tool": safe_tool_name(getattr(context.message, "name", None)),
+            "client": safe_client_name(self._identity.resolve(context)),
             "session": _session_marker(context),
             "request_id": _token(_request_id(context), 40),
             "server_gen": SERVER_GEN,
@@ -319,6 +358,7 @@ class ToolLoggingMiddleware(Middleware):
         self, context: MiddlewareContext[Any], call_next: CallNext[Any, Any]
     ) -> Any:
         call_id = uuid.uuid4().hex[:12]
+        raw_client = self._identity.resolve(context)
         who = self._who(context, call_id)
         who.update(_header_fields())
         arguments = getattr(context.message, "arguments", None) or {}
@@ -330,9 +370,9 @@ class ToolLoggingMiddleware(Middleware):
             {"args_chars": str(args_chars), "args": args_text},
         )
         token = current_call.set(call_id)
-        client_token = current_client.set(
-            None if who["client"] == "-" else who["client"]
-        )
+        # The execution policy requires the original client identity, while
+        # the journal receives only an explicitly safe label.
+        client_token = current_client.set(raw_client)
         turn_token = current_turn.set(_base_turn(who.get("turn")))
         argument_names_token = current_argument_names.set(frozenset(arguments))
         start = time.perf_counter()
@@ -354,7 +394,7 @@ class ToolLoggingMiddleware(Middleware):
             if isinstance(error_code, str) and error_code:
                 error_fields["error_code"] = _token(error_code, 64)
             # error= remains the final free-text field for historical parsers.
-            error_fields["error"] = _text(e, ERROR_MAX_CHARS)
+            error_fields["error"] = REDACTED
             self._log("tool_result", logging.WARNING, who, error_fields)
             raise
         finally:
@@ -366,16 +406,14 @@ class ToolLoggingMiddleware(Middleware):
         is_error = bool(getattr(result, "is_error", False))
         fields = {"duration_ms": _duration_ms(start), "is_error": str(is_error)}
         token_counter = (
-            self._token_counter if self._token_counter.applies(who["client"]) else None
+            self._token_counter
+            if self._token_counter.applies(raw_client or "-")
+            else None
         )
         fields.update(_result_fields(result, token_counter))
         if is_error:
-            text = "".join(
-                getattr(block, "text", "") or ""
-                for block in (getattr(result, "content", None) or [])
-            )
             fields["error_class"] = "ToolResult"
-            fields["error"] = _text(text, ERROR_MAX_CHARS)
+            fields["error"] = REDACTED
         self._log(
             "tool_result", logging.WARNING if is_error else logging.INFO, who, fields
         )

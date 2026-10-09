@@ -30,6 +30,7 @@ from binnacle.mcp.logging_middleware import (
 )
 from binnacle.mcp.tool_order import PublicToolOrder
 from binnacle.mcp.visibility import ClientToolVisibility, ClientToolVisibilityTransform
+from binnacle.observability.log_safety import safe_request_payload
 from binnacle.provenance import runtime_provenance
 
 # binnacle's own lines (event=tool_call/tool_result/job_*/config) go through
@@ -196,7 +197,10 @@ def create_server() -> FastMCP:
     identity = ClientIdentity()
     root.add_middleware(
         RequestLoggingMiddleware(
-            identity, include_payloads=True, max_payload_length=500
+            identity,
+            include_payloads=True,
+            max_payload_length=500,
+            payload_serializer=safe_request_payload,
         )
     )
     root.add_middleware(
