@@ -233,7 +233,7 @@ id = "watchdog-isolated"
 name = "Watchdog internals are isolated from Binnacle core"
 type = "protected"
 protected_modules = ["binnacle.companions.watchdog.ops"]
-allowed_importers = ["binnacle.companions.watchdog.watchdog", "binnacle.companions.watchdog.watchdog_cli", "binnacle.ops.watchdog"]
+allowed_importers = ["binnacle.companions.watchdog.watchdog", "binnacle.companions.watchdog.watchdog_cli"]
 
 [[tool.importlinter.contracts]]
 id = "server-not-dependency"

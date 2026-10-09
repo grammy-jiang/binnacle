@@ -174,7 +174,6 @@ def manifest_groups() -> dict[str, set[str]]:
             "watchdog_unit.py",
             "watchlog.py",
             "uplink.py",
-            "ops/__init__.py",
             *(rel(path) for path in (SRC / "ops" / "watchdog").rglob("*.py")),
         },
         "application_shell": {

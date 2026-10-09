@@ -12,23 +12,6 @@ import pytest
     ("legacy", "canonical"),
     [
         ("binnacle.job_manager", "binnacle.features.commands.job_manager"),
-        *(
-            (
-                f"binnacle.ops.watchdog.{name}",
-                f"binnacle.companions.watchdog.ops.{name}",
-            )
-            for name in (
-                "context",
-                "device_identity",
-                "fast",
-                "lock",
-                "policy",
-                "policy_recovery",
-                "policy_routes",
-                "policy_usb",
-                "reporting",
-            )
-        ),
         ("binnacle.watchdog_cli", "binnacle.companions.watchdog.watchdog_cli"),
         ("binnacle.tunnel_cli", "binnacle.companions.tunnel.tunnel_cli"),
     ],

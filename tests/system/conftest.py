@@ -2,7 +2,7 @@
 
 import pytest
 
-from binnacle.ops.watchdog import cycle as watchdog_cycle
+from binnacle.companions.watchdog.ops import cycle as watchdog_cycle
 
 
 @pytest.fixture(autouse=True)

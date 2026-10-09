@@ -3,10 +3,19 @@
 import signal
 import subprocess
 
-from binnacle.ops.watchdog import command, diagnostics, lifecycle, maintenance, schedule
-from binnacle.ops.watchdog.config import Policy
-from binnacle.ops.watchdog.model import DeviceInfo, Preference, State
-from binnacle.ops.watchdog.services import ServiceObservation, SystemObservation
+from binnacle.companions.watchdog.ops import (
+    command,
+    diagnostics,
+    lifecycle,
+    maintenance,
+    schedule,
+)
+from binnacle.companions.watchdog.ops.config import Policy
+from binnacle.companions.watchdog.ops.model import DeviceInfo, Preference, State
+from binnacle.companions.watchdog.ops.services import (
+    ServiceObservation,
+    SystemObservation,
+)
 from binnacle.uplink import ProbeResult, Route
 
 

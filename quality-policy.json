@@ -23,7 +23,6 @@
         "binnacle.companions.watchdog.watchdog_connectivity",
         "binnacle.companions.watchdog.watchdog_unit",
         "binnacle.companions.watchdog.watchlog",
-        "binnacle.ops.watchdog",
         "binnacle.watchdog",
         "binnacle.watchdog_cli",
         "binnacle.watchdog_config",
@@ -79,9 +78,6 @@
       "binnacle.tunnel_doctor": [
         "binnacle.doctor_connectivity",
         "binnacle.diagnostics.doctor_connectivity"
-      ],
-      "binnacle.ops.watchdog.services": [
-        "binnacle.tunnel_doctor"
       ],
       "binnacle.cli": [
         "binnacle.webminstats",

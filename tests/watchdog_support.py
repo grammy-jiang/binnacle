@@ -9,14 +9,14 @@ from typing import Any
 from unittest import mock
 
 from binnacle import watchdog as wd
-from binnacle.ops.watchdog import actions as wd_actions
-from binnacle.ops.watchdog import cycle as wd_cycle
-from binnacle.ops.watchdog import hardware as wd_hardware
-from binnacle.ops.watchdog import inventory as wd_inventory
-from binnacle.ops.watchdog import maintenance as wd_maintenance
-from binnacle.ops.watchdog import network as wd_network
-from binnacle.ops.watchdog import services as wd_services
-from binnacle.ops.watchdog import tunnel as wd_tunnel
+from binnacle.companions.watchdog.ops import actions as wd_actions
+from binnacle.companions.watchdog.ops import cycle as wd_cycle
+from binnacle.companions.watchdog.ops import hardware as wd_hardware
+from binnacle.companions.watchdog.ops import inventory as wd_inventory
+from binnacle.companions.watchdog.ops import maintenance as wd_maintenance
+from binnacle.companions.watchdog.ops import network as wd_network
+from binnacle.companions.watchdog.ops import services as wd_services
+from binnacle.companions.watchdog.ops import tunnel as wd_tunnel
 from binnacle.uplink import ProbeResult, Route
 
 __all__ = [
