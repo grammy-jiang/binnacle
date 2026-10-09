@@ -14,7 +14,7 @@ name = "binnacle-mcp"
 version = "1.0.1"
 description = "Linux and Raspberry Pi MCP server for files, search and durable commands."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.10,<3.15"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "Binnacle contributors" }]
@@ -35,8 +35,8 @@ classifiers = [
 dependencies = [
     "cyclopts>=4.23.3", # the CLI framework fastmcp's own CLI uses
     "fastmcp==4.1.0", # reviewed FastMCP 4.1 baseline
-    "mcp==2.1.1", # exact tested MCP protocol SDK baseline for PyPI installs
-    "mcp-types==2.1.1", # exact tested MCP wire types and schemas
+    "mcp==2.3.0", # latest MCP protocol SDK; exact released/tested pairing
+    "mcp-types==2.3.0", # latest MCP wire types and schemas; exact paired release
     "orjson>=3.11.3",
     "pydantic>=2.13.5",
     "pydantic-settings>=2.15.0",
@@ -95,7 +95,7 @@ dev = [
     "pre-commit>=4.0.0",
     "tox>=4.61.1",
     "tox-uv>=1.36.0",
-    "uv==0.12.21", # exact developer/CI toolchain pin; Dependabot updates it
+    "uv==0.12.24", # latest tested developer/CI toolchain release
 ]
 
 [tool.pytest.ini_options]

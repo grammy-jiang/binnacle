@@ -26,8 +26,8 @@ PYPROJECT = Path(__file__).resolve().parents[2] / "pyproject.toml"
 RUNTIME_DEPENDENCIES = {
     "cyclopts>=4.23.3": "the CLI framework of binnacle, binnacle-tunnel and binnacle-watchdog",
     "fastmcp==4.1.0": "the MCP server framework; reviewed stable FastMCP 4.1 baseline",
-    "mcp==2.1.1": "exact tested MCP protocol SDK version for the public API",
-    "mcp-types==2.1.1": "exact tested modern MCP protocol types and schemas",
+    "mcp==2.3.0": "exact validated latest MCP protocol SDK for the public API",
+    "mcp-types==2.3.0": "exact validated latest modern MCP protocol types and schemas",
     "orjson>=3.11.3": "search_text parses ripgrep's JSON stream and sizes results with it",
     "pydantic>=2.13.5": "the settings models and the tool parameter validation",
     "pydantic-settings>=2.15.0": "loads config.toml and the BINNACLE_ environment variables",
