@@ -284,3 +284,171 @@ def test_package_initializer_public_contract_uses_correct_relative_base(
         }
     }
     assert (architecture.public_import_errors(path, source, policy) == []) == allowed
+
+
+def test_coverage_source_inventory_includes_every_current_noninitializer(tmp_path):
+    root = tmp_path / "binnacle"
+    nested = root / "feature"
+    nested.mkdir(parents=True)
+    (root / "__init__.py").write_text("")
+    (root / "entry.py").write_text("x = 1\\n")
+    (nested / "__init__.py").write_text("")
+    (nested / "implementation.py").write_text("x = 2\\n")
+    assert coverage_policy.expected_source_modules(root) == {
+        "src/binnacle/entry.py",
+        "src/binnacle/feature/implementation.py",
+    }
+    assert coverage_policy.expected_source_modules(root / "missing") == set()
+
+
+@pytest.mark.parametrize(
+    ("expected", "reported", "message"),
+    [
+        (
+            {"src/binnacle/core.py", "src/binnacle/extra.py"},
+            {"src/binnacle/core.py": 100.0},
+            "src/binnacle/extra.py: missing from full coverage report",
+        ),
+        (
+            {"src/binnacle/core.py"},
+            {"src/binnacle/core.py": 100.0, "src/binnacle/obsolete.py": 100.0},
+            "src/binnacle/obsolete.py: coverage report has no corresponding source file",
+        ),
+        (
+            set(),
+            {"src/binnacle/core.py": 100.0},
+            "production Python inventory is empty or unreadable",
+        ),
+    ],
+)
+def test_coverage_inventory_disagrees_fail_closed(expected, reported, message):
+    policy = {
+        "coverage": {
+            "core_unit_target": 95,
+            "other_full_target": 90,
+            "core_modules": [],
+        }
+    }
+    full = _coverage_report(reported)
+    errors, _ = coverage_policy.evaluate(full, full, policy, expected_modules=expected)
+    assert message in errors
+
+
+def test_complete_inventory_preserves_per_module_thresholds():
+    policy = {
+        "coverage": {
+            "core_unit_target": 95,
+            "other_full_target": 90,
+            "core_modules": ["src/binnacle/core.py"],
+        }
+    }
+    full = _coverage_report(
+        {"src/binnacle/core.py": 95.0, "src/binnacle/other.py": 90.0}
+    )
+    errors, debts = coverage_policy.evaluate(
+        full, full, policy, expected_modules=set(full["files"])
+    )
+    assert errors == []
+    assert debts == []
+
+
+def test_repository_script_inventory_is_complete(tmp_path):
+    script_dir = tmp_path / "scripts"
+    script_dir.mkdir()
+    (script_dir / "__init__.py").write_text("")
+    (script_dir / "guard.py").write_text("x = 1\\n")
+    assert coverage_policy.expected_script_modules(script_dir) == {"scripts/guard.py"}
+    assert coverage_policy.expected_script_modules(script_dir / "not-present") == set()
+
+
+@pytest.mark.parametrize(
+    ("reported", "inventory", "floors", "expected"),
+    [
+        (
+            {"scripts/guard.py": 100.0},
+            {"scripts/guard.py", "scripts/other.py"},
+            {"scripts/guard.py": 90},
+            "scripts/other.py: missing from script coverage report",
+        ),
+        (
+            {"scripts/guard.py": 100.0, "scripts/deleted.py": 100.0},
+            {"scripts/guard.py"},
+            {"scripts/guard.py": 90},
+            "scripts/deleted.py: script coverage has no corresponding source file",
+        ),
+        (
+            {"scripts/guard.py": 79.0},
+            {"scripts/guard.py"},
+            {"scripts/guard.py": 80},
+            "scripts/guard.py: script branch coverage 79.00% is below reviewed floor 80.00%",
+        ),
+        (
+            {"scripts/guard.py": 100.0},
+            {"scripts/guard.py"},
+            {"scripts/removed.py": 80},
+            "scripts/removed.py: critical coverage floor references absent source",
+        ),
+        (
+            {"scripts/guard.py": 100.0},
+            set(),
+            {"scripts/guard.py": 90},
+            "repository script inventory is empty or unreadable",
+        ),
+    ],
+)
+def test_infrastructure_coverage_is_fail_closed(reported, inventory, floors, expected):
+    policy = {
+        "infrastructure_coverage": {
+            "eventual_target": 90,
+            "critical_minimums": floors,
+        }
+    }
+    errors, _ = coverage_policy.evaluate_script_coverage(
+        _coverage_report(reported), policy, expected_modules=inventory
+    )
+    assert expected in errors
+
+
+def test_critical_script_floor_and_eventual_target_are_separate():
+    policy = {
+        "infrastructure_coverage": {
+            "eventual_target": 90,
+            "critical_minimums": {"scripts/guard.py": 70},
+        }
+    }
+    errors, debt = coverage_policy.evaluate_script_coverage(
+        _coverage_report({"scripts/guard.py": 85}),
+        policy,
+        expected_modules={"scripts/guard.py"},
+    )
+    assert not errors
+    assert len(debt) == 1
+    assert "85.00% below eventual target 90.00%" in debt[0]
+
+
+@pytest.mark.parametrize("invalid", [float("nan"), float("inf"), -1.0, 101.0])
+def test_invalid_coverage_percentages_are_not_accepted(invalid):
+    product = _coverage_report({"src/binnacle/core.py": invalid})
+    policy = {
+        "coverage": {
+            "core_unit_target": 95,
+            "other_full_target": 90,
+            "core_modules": ["src/binnacle/core.py"],
+        }
+    }
+    errors, _ = coverage_policy.evaluate(
+        product, product, policy, expected_modules={"src/binnacle/core.py"}
+    )
+    assert errors == ["src/binnacle/core.py: invalid unit coverage percentage"]
+
+    infra = _coverage_report({"scripts/guard.py": invalid})
+    infra_policy = {
+        "infrastructure_coverage": {
+            "critical_minimums": {"scripts/guard.py": 70},
+            "eventual_target": 90,
+        }
+    }
+    errors, _ = coverage_policy.evaluate_script_coverage(
+        infra, infra_policy, expected_modules={"scripts/guard.py"}
+    )
+    assert errors == ["scripts/guard.py: invalid script coverage percentage"]

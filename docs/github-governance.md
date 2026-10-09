@@ -43,6 +43,12 @@ This intentionally replaces the former all-workflow predicate. An unrelated
 successful workflow cannot substitute for required CI; an optional review in a
 separate workflow cannot veto complete required CI. Optional failures remain
 visible on GitHub. No workflow-specific exemption or override is provided.
+CodeQL default setup is a separate advisory code-scanning surface (Python and
+GitHub Actions), not an eighth required job. Adding it to required checks
+would first require coordinated updates to the active GitHub ruleset and
+`scripts/deploy_ci.py`; a CodeQL result must never be treated as one of the
+seven required named checks. Coverage/test JUnit XML files are uploaded only
+on CI failure, retained seven days, and do not alter required check identity.
 The checked-in policy is not proof that remote rules have not changed: the
 protected atomic deployment push still enforces GitHub's active rules. Quiet
 window, live smoke, rollback, and the clean production tree remain separate gates.
@@ -91,6 +97,12 @@ push now rolls the local deployment back and re-runs the smoke.
 - `pre-commit`: weekly and grouped into one repository-hook PR, but only for
   hook-native repositories;
 - `github-actions`: weekly and grouped into one workflow-action PR.
+
+Dependabot routine version-update PRs have a seven-day release cooldown
+for all three ecosystems. This **does not apply** to security updates, which
+can still open immediately. All checkout steps explicitly disable persisted
+GitHub tokens (`persist-credentials: false`). The pinned `zizmor` security
+audit executes offline in pre-commit/Code quality, complementing actionlint.
 
 Project-aware Python tools such as Ruff and Bandit, plus the uv lock check, are
 local pre-commit hooks that execute the versions resolved by `uv.lock`. They

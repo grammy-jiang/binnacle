@@ -175,7 +175,10 @@ its bounded worker count from the CI host. A separate Python 3.13 packaging job
 builds the sdist, rebuilds the wheel from that sdist, and performs one clean
 locked installation/smoke, so the compatibility/coverage lanes continue
 to skip `test_wheel_artifact.py` instead of repeating distribution work five
-times.
+times. CI writes separate JUnit XML reports for each parallel-safe and
+`no_xdist` lane, includes bounded slow-test durations, and uploads those
+reports only when a test or coverage job fails. Each artifact is retained
+for seven days. Passing runs retain no extra artifacts.
 
 Before a baseline or merge commit, run:
 
@@ -308,7 +311,9 @@ every commit, once a week, under the owner's isolation rules of 2026-09-28
    rotation, `mutmut run --max-children 1` in the weekly clone, starting
    from an empty `mutants/`. WARN below 80 % killed. A module stopped by its
    timeout or by production calls is "incomplete", with its partial
-   numbers.
+   numbers and a WARN (never a green pass). Incomplete, empty or partially
+   checked module results do not advance the mutation rotation; the same
+   modules remain due on the next quiet-window attempt.
 
 Isolation:
 
@@ -426,7 +431,17 @@ The executable policy and module classification live in `quality-policy.json`;
 `docs/quality-gates.md` documents the full workflow. There are currently no
 temporary coverage floors: every core module satisfies the 95% unit-branch
 target and every other production module satisfies the 90% full-suite branch
-target.
+target. This hardening also compares the full coverage JSON with the actual
+non-`__init__` Python sources, rejecting omitted or deleted module records.
+The same full coverage pipeline records `scripts/` branch coverage. It
+requires all 46 current top-level script modules to appear, even if unexecuted;
+12 release/security/quality scripts have reviewed minimum floors in
+`quality-policy.json`, with 90% as the eventual target. The first measured
+baseline used `tests/scripts` with seed 12345: 46 scripts were inventoried
+and the only three below 90% among the twelve were
+`check_architecture.py` (83.15%), `check_coverage_policy.py` (73.79%) and
+`github_governance.py` (52.31%). Floors preserve existing behaviour while
+further failure-path tests pay down debt; no missing source can pass silently.
 
 The hardening round finished with 190 unit tests and 726 tests in the full
 suite. Those counts are a dated baseline, not a permanent target; run the gate

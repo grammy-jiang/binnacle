@@ -161,3 +161,29 @@ def test_main_reports_commands_lane_results_total_and_workers(monkeypatch, capsy
     assert output.count("elapsed:") >= 3
     assert "total elapsed:" in output
     assert "resolved workers: 2" in output
+
+
+def test_junit_output_is_isolated_per_lane(tmp_path):
+    parallel, ordinary = runner.build_lane_commands(
+        workers=4, seed=12345, shared_args=["--durations=15"], junit_dir=tmp_path
+    )
+    assert f"--junitxml={tmp_path / 'parallel-safe.xml'}" in parallel
+    assert f"--junitxml={tmp_path / 'ordinary-process.xml'}" in ordinary
+    assert f"--junitxml={tmp_path / 'ordinary-process.xml'}" not in parallel
+    assert f"--junitxml={tmp_path / 'parallel-safe.xml'}" not in ordinary
+    assert "--durations=15" in parallel and "--durations=15" in ordinary
+
+
+def test_junit_directory_is_created_and_failure_still_fails(tmp_path, monkeypatch):
+    target = tmp_path / "reports"
+    commands = _mock_subprocess(monkeypatch, [13, 0])
+    assert (
+        runner.main(
+            ["--workers", "1", "--seed", "12345", "--junit-dir", str(target)],
+            environ={},
+        )
+        == 1
+    )
+    assert target.is_dir()
+    assert f"--junitxml={target / 'parallel-safe.xml'}" in commands[0]
+    assert f"--junitxml={target / 'ordinary-process.xml'}" in commands[1]

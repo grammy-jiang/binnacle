@@ -11,6 +11,9 @@ updates:
       day: "wednesday"
       time: "09:00"
       timezone: "Australia/Sydney"
+    # Version updates only: security fixes remain immediate.
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
 
   # Remote hook revisions are one repository-quality surface, so a single weekly
@@ -23,6 +26,8 @@ updates:
       day: "wednesday"
       time: "09:15"
       timezone: "Australia/Sydney"
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 2
     groups:
       repository-hooks:
@@ -38,6 +43,8 @@ updates:
       day: "wednesday"
       time: "09:30"
       timezone: "Australia/Sydney"
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 2
     groups:
       workflow-actions:

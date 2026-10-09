@@ -100,6 +100,23 @@
       "full": {}
     }
   },
+  "infrastructure_coverage": {
+    "eventual_target": 90.0,
+    "critical_minimums": {
+      "scripts/check_architecture.py": 80.0,
+      "scripts/check_coverage_policy.py": 70.0,
+      "scripts/deploy_ci.py": 94.0,
+      "scripts/deploy_flow.py": 93.0,
+      "scripts/g7_legacy_gate.py": 88.0,
+      "scripts/github_governance.py": 50.0,
+      "scripts/run_coverage_policy.py": 87.0,
+      "scripts/run_test_suite.py": 93.0,
+      "scripts/smoke_checks.py": 89.0,
+      "scripts/weekly_mutation.py": 93.0,
+      "scripts/weekly_quality.py": 93.0,
+      "scripts/weekly_scope.py": 95.0
+    }
+  },
   "ai_readability": {
     "warning_lines": 100,
     "strong_warning_lines": 120,

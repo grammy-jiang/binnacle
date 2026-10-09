@@ -23,42 +23,47 @@ def build_pipeline_commands(
     unit_json: Path,
     full_json: Path,
     shared_args: Sequence[str],
+    junit_dir: Path | None = None,
 ) -> list[tuple[str, list[str]]]:
     """Build the ordered coverage-data pipeline."""
     coverage_base = [
         "--cov=binnacle",
+        "--cov=scripts",
         "--cov-branch",
         "--cov-fail-under=0",
         "--cov-report=",
     ]
     coverage_append = [*coverage_base, "--cov-append"]
 
+    def junit_args(lane: str) -> list[str]:
+        return [f"--junitxml={junit_dir / (lane + '.xml')}"] if junit_dir else []
+
     unit_main = suite_runner.build_pytest_lane_command(
         test_args=["tests/unit"],
         workers=workers,
         seed=seed,
-        shared_args=[*coverage_base, *shared_args],
+        shared_args=[*coverage_base, *shared_args, *junit_args("unit-parallel")],
         no_xdist=False,
     )
     unit_ordinary = suite_runner.build_pytest_lane_command(
         test_args=["tests/unit"],
         workers=workers,
         seed=seed,
-        shared_args=[*coverage_append, *shared_args],
+        shared_args=[*coverage_append, *shared_args, *junit_args("unit-ordinary")],
         no_xdist=True,
     )
     nonunit_main = suite_runner.build_pytest_lane_command(
         test_args=["tests", "--ignore=tests/unit"],
         workers=workers,
         seed=seed,
-        shared_args=[*coverage_append, *shared_args],
+        shared_args=[*coverage_append, *shared_args, *junit_args("nonunit-parallel")],
         no_xdist=False,
     )
     nonunit_ordinary = suite_runner.build_pytest_lane_command(
         test_args=["tests", "--ignore=tests/unit"],
         workers=workers,
         seed=seed,
-        shared_args=[*coverage_append, *shared_args],
+        shared_args=[*coverage_append, *shared_args, *junit_args("nonunit-ordinary")],
         no_xdist=True,
     )
 
@@ -111,6 +116,11 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--workers", type=suite_runner._positive_int)
     parser.add_argument("--seed", type=int)
+    parser.add_argument(
+        "--junit-dir",
+        type=Path,
+        help="separate unit/non-unit JUnit reports for CI failure diagnostics",
+    )
     parser.add_argument("--unit-json", type=Path, required=True)
     parser.add_argument("--full-json", type=Path, required=True)
     return parser
@@ -129,12 +139,15 @@ def main(
     except ValueError as exc:
         parser.error(str(exc))
 
+    if args.junit_dir is not None:
+        args.junit_dir.mkdir(parents=True, exist_ok=True)
     commands = build_pipeline_commands(
         workers=workers,
         seed=args.seed,
         unit_json=args.unit_json,
         full_json=args.full_json,
         shared_args=shared_args,
+        junit_dir=args.junit_dir,
     )
 
     print(f"resolved workers: {workers}", flush=True)

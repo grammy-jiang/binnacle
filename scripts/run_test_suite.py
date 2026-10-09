@@ -9,6 +9,7 @@ import subprocess
 import sys
 import time
 from collections.abc import Mapping, Sequence
+from pathlib import Path
 
 WORKER_ENV = "BINNACLE_TEST_WORKERS"
 MAX_DEFAULT_WORKERS = 4
@@ -84,6 +85,7 @@ def build_lane_commands(
     seed: int | None,
     shared_args: Sequence[str],
     suite: str = "full",
+    junit_dir: Path | None = None,
 ) -> tuple[list[str], list[str]]:
     """Build the parallel-safe and ordinary-process pytest commands."""
     test_args = list(SUITES[suite])
@@ -91,14 +93,24 @@ def build_lane_commands(
         test_args=test_args,
         workers=workers,
         seed=seed,
-        shared_args=shared_args,
+        shared_args=[
+            *shared_args,
+            *([f"--junitxml={junit_dir / 'parallel-safe.xml'}"] if junit_dir else []),
+        ],
         no_xdist=False,
     )
     ordinary = build_pytest_lane_command(
         test_args=test_args,
         workers=workers,
         seed=seed,
-        shared_args=shared_args,
+        shared_args=[
+            *shared_args,
+            *(
+                [f"--junitxml={junit_dir / 'ordinary-process.xml'}"]
+                if junit_dir
+                else []
+            ),
+        ],
         no_xdist=True,
     )
     return main, ordinary
@@ -121,6 +133,11 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--workers", type=_positive_int)
     parser.add_argument("--seed", type=int)
     parser.add_argument(
+        "--junit-dir",
+        type=Path,
+        help="write separate JUnit XML per lane for CI failure diagnostics",
+    )
+    parser.add_argument(
         "--suite",
         choices=tuple(SUITES),
         default="full",
@@ -142,11 +159,14 @@ def main(
     except ValueError as exc:
         parser.error(str(exc))
 
+    if args.junit_dir is not None:
+        args.junit_dir.mkdir(parents=True, exist_ok=True)
     main_command, ordinary_command = build_lane_commands(
         workers=workers,
         seed=args.seed,
         shared_args=shared_args,
         suite=args.suite,
+        junit_dir=args.junit_dir,
     )
 
     total_started = time.perf_counter()

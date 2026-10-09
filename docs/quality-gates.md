@@ -60,10 +60,13 @@ operates on the complete static import graph and blocks architectural drift
 before the Linux/macOS refactor changes module boundaries. The current
 contracts enforce that:
 
-- MCP tool modules are entered only through `binnacle.files_server`,
-  `binnacle.search_server`, and `binnacle.commands_server`;
+- MCP tool modules are entered only through
+  `binnacle.features.files.files_server`,
+  `binnacle.features.search.search_server`, and
+  `binnacle.features.commands.commands_server`;
 - the three focused server modules remain independent of one another;
-- watchdog internals are entered only through the watchdog facade/CLI;
+- Watchdog operations are reached through the canonical
+  `binnacle.companions.watchdog` composition and CLI;
 - `binnacle.server` remains a composition root, never a lower-layer dependency;
 - MCP tool modules remain independent of one another;
 - watchdog internals remain acyclic; and
@@ -108,6 +111,19 @@ non-unit `no_xdist` coverage before writing the full JSON. Only the two
 parallel-safe lanes may use xdist; the `no_xdist` tests stay in ordinary
 pytest processes and remain part of the coverage population.
 
+The checker is fail-closed on inventory completeness: each current
+`src/binnacle` production module must appear in full coverage; stale or
+deleted paths cannot be passed off as current evidence. The same test run
+instruments `scripts/` with no duplicate pytest pass. All 46 current
+repository scripts must appear in that report, and twelve critical quality,
+security and deployment scripts have initial branch coverage minimums
+measured from the isolated `tests/scripts` baseline on 2026-10-09. Those
+floors are explicit reviewed migration gates under
+`infrastructure_coverage.critical_minimums` in `quality-policy.json`.
+They do **not** relax production's already-final 95/90 rule. The script
+eventual target is 90%; low-coverage critical scripts are reported as debt
+until their tests improve.
+
 To reproduce the report generation directly, for example when comparing JSON
 reports module by module, run:
 
@@ -137,7 +153,9 @@ With the current policy it is equivalent to the normal check.
 Fast deterministic repository checks run at pre-commit: Ruff, mypy, Bandit,
 deptry, Import Linter, module-size/readability gates, TOML/YAML/JSON/Markdown
 validation, `validate-pyproject`, `tox config`, actionlint, secret scanning,
-case-conflict/symlink/shebang checks and lockfile consistency. `uv lock` is
+case-conflict/symlink/shebang checks and lockfile consistency. The pinned,
+offline `zizmor` audit is complementary to actionlint and rejects medium+
+GitHub Actions/Dependabot security findings. `uv lock` is
 validation-only in the hook (`--check --offline`); dependency resolution is an
 explicit developer action.
 

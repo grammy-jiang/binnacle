@@ -102,14 +102,14 @@ def test_parse_and_count_results_per_module() -> None:
         (
             {"detected": 3, "undetected": 1, "pending": 6, "survived": 1},
             Outcome("timeout", 124, 1.0),
-            "ok",
+            "warn",
             "incomplete (timeout): 4 of 10 checked, 75% killed (3/4), 1 survived so far",
         ),
         (
             {"detected": 0, "undetected": 0, "pending": 0, "survived": 0},
             Outcome("ok", 0, 1.0),
-            "ok",
-            "no mutants (ok)",
+            "warn",
+            "no mutation results (ok); unverified",
         ),
     ],
 )
@@ -146,6 +146,11 @@ def test_a_complete_run_reports_each_module_and_advances(
     host = FakeHost(
         plans=[(600.0, 0, None)], run_results={"results --all true": (0, RESULTS)}
     )
+    complete_results = RESULTS.replace(
+        "binnacle.config.x_load__mutmut_2: not checked",
+        "binnacle.config.x_load__mutmut_2: killed",
+    )
+    host.run_results["results --all true"] = (0, complete_results)
     checks = mutation_rotation(runner(host, tmp_path), clone, tmp_path, 2)
     argv = inner(host.spawned[0])
     assert argv[1:] == [
@@ -161,7 +166,7 @@ def test_a_complete_run_reports_each_module_and_advances(
         "mutation binnacle.config",
     ]
     assert checks[0].level == "ok" and checks[0].detail.startswith("80% killed (4/5)")
-    assert checks[1].detail.startswith("incomplete (ok): 1 of 2 checked")
+    assert checks[1].level == "ok"
     assert pick(tmp_path / "mutation-rotation.json", CORE, 2) == CORE[2:]
 
 
@@ -195,9 +200,9 @@ def test_a_timeout_reports_partial_numbers_and_moves_on(
         plans=[(3600.0, 124, None)], run_results={"results --all true": (0, RESULTS)}
     )
     checks = mutation_rotation(runner(host, tmp_path), clone, tmp_path, 2)
-    assert all(c.level == "ok" for c in checks)
+    assert all(c.level == "warn" for c in checks)
     assert checks[0].detail.startswith("incomplete (timeout)")
-    assert pick(tmp_path / "mutation-rotation.json", CORE, 2) == CORE[2:]
+    assert pick(tmp_path / "mutation-rotation.json", CORE, 2) == CORE[:2]
 
 
 def test_generation_is_limited_to_the_weeks_modules(
@@ -224,3 +229,39 @@ def test_an_only_mutate_of_the_repo_is_not_overwritten(
     checks = mutation_rotation(runner(host, tmp_path), clone, tmp_path, 2)
     assert checks[0].level == "warn" and "sets only_mutate already" in checks[0].detail
     assert host.spawned == []
+
+
+def test_module_check_never_marks_pending_or_empty_results_green() -> None:
+    cases = [
+        (
+            {"detected": 0, "undetected": 0, "pending": 10, "survived": 0},
+            Outcome("ok", 0, 1.0),
+        ),
+        (
+            {"detected": 8, "undetected": 0, "pending": 2, "survived": 0},
+            Outcome("ok", 0, 1.0),
+        ),
+        (
+            {"detected": 8, "undetected": 0, "pending": 0, "survived": 0},
+            Outcome("timeout", 124, 1.0),
+        ),
+        (
+            {"detected": 0, "undetected": 0, "pending": 0, "survived": 0},
+            Outcome("failed", 3, 1.0),
+        ),
+    ]
+    for counts, outcome in cases:
+        check = module_check(CORE[0], counts, outcome)
+        assert check.level == "warn"
+
+
+def test_success_with_partial_results_keeps_mutation_rotation(
+    tmp_path: Path, clone: Path
+) -> None:
+    host = FakeHost(
+        plans=[(600.0, 0, None)], run_results={"results --all true": (0, RESULTS)}
+    )
+    checks = mutation_rotation(runner(host, tmp_path), clone, tmp_path, 2)
+    assert checks[1].level == "warn"
+    assert "incomplete (ok)" in checks[1].detail
+    assert pick(tmp_path / "mutation-rotation.json", CORE, 2) == CORE[:2]

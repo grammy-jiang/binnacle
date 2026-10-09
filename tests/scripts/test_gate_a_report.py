@@ -1,3 +1,5 @@
+from functools import lru_cache
+
 import scripts.gate_a_evidence as evidence
 import scripts.gate_a_manifest as manifest
 import scripts.gate_a_report as gate_a
@@ -196,7 +198,10 @@ def test_gate_a_detects_canonical_boundary_bypasses(monkeypatch):
             "companion.server_core_platform_no_watchdog_impl",
         ),
     ]
-    original = gate_a.imports_for
+    # The G7 retirement scanner is tested independently; this test only
+    # varies companion/import boundaries across seven negative cases.
+    monkeypatch.setattr(gate_a, "g7_failures", list)
+    original = lru_cache(maxsize=None)(gate_a.imports_for)
     for relative_path, illegal_import, gate_cell in cases:
         path = gate_a.SRC / relative_path
 

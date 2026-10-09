@@ -22,6 +22,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Restore pre-commit environments
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -65,6 +66,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Install uv and Python ${{ matrix.python }}
         uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
@@ -95,6 +98,17 @@ jobs:
           uv run tox -e ${{ matrix.tox-env }} --
           --ignore=tests/integration/test_wheel_artifact.py
           --seed 12345
+          --junit-dir .quality-artifacts/pytest-${{ matrix.python }}
+          --durations=15
+
+      - name: Save failing test reports
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pytest-python-${{ matrix.python }}-${{ github.run_id }}-attempt-${{ github.run_attempt }}
+          path: .quality-artifacts/pytest-${{ matrix.python }}/*.xml
+          if-no-files-found: warn
+          retention-days: 7
 
   coverage:
     name: Coverage policy / Python 3.13
@@ -103,6 +117,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Install uv and Python 3.13
         uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
@@ -133,6 +149,17 @@ jobs:
           uv run tox -e coverage-policy --
           --ignore=tests/integration/test_wheel_artifact.py
           --seed 12345
+          --junit-dir .quality-artifacts/coverage
+          --durations=15
+
+      - name: Save failing coverage reports
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage-python-3.13-${{ github.run_id }}-attempt-${{ github.run_attempt }}
+          path: .quality-artifacts/coverage/*.xml
+          if-no-files-found: warn
+          retention-days: 7
 
   packaging:
     name: Packaging / Python 3.13
@@ -141,6 +168,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Install uv and Python 3.13
         uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0

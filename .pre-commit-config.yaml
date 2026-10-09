@@ -114,6 +114,12 @@ repos:
         language: system
         files: ^pyproject\.toml$
         pass_filenames: false
+      - id: zizmor
+        name: offline GitHub Actions and Dependabot security audit
+        entry: uv run --no-sync zizmor --offline --no-progress --color never --min-severity medium .github/workflows .github/dependabot.yml .pre-commit-config.yaml
+        language: system
+        files: ^(\.github/(workflows/.*\.ya?ml|dependabot\.yml)|\.pre-commit-config\.yaml)$
+        pass_filenames: false
       - id: tox-config
         name: validate tox configuration
         entry: uv run --no-sync tox config

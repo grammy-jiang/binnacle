@@ -104,7 +104,9 @@ def module_check(module: str, counts: dict[str, int], outcome: Outcome) -> Check
     checked = counts["detected"] + counts["undetected"]
     total = checked + counts["pending"]
     if not total:
-        return Check(name, "ok", f"no mutants ({outcome.status})")
+        return Check(
+            name, "warn", f"no mutation results ({outcome.status}); unverified"
+        )
     rate = counts["detected"] / checked if checked else 0.0
     numbers = (
         f"{rate:.0%} killed ({counts['detected']}/{checked}), "
@@ -114,7 +116,7 @@ def module_check(module: str, counts: dict[str, int], outcome: Outcome) -> Check
         why = outcome.detail or outcome.status
         return Check(
             name,
-            "ok",
+            "warn",
             f"incomplete ({why}): {checked} of {total} checked, {numbers} so far",
         )
     level = "ok" if rate >= KILL_TARGET else "warn"
@@ -192,7 +194,12 @@ def mutation_rotation(
         module_check(m, module_counts(results, mutant_prefix(m)), outcome)
         for m in chosen
     ]
-    if outcome.status in ("ok", "timeout"):
+    # An unfinished audit must not silently pass or rotate away the untested
+    # mutants. The same modules remain due in the next weekly attempt.
+    if outcome.status == "ok" and all(
+        counts["detected"] + counts["undetected"] > 0 and counts["pending"] == 0
+        for counts in (module_counts(results, mutant_prefix(m)) for m in chosen)
+    ):
         advance(state_file, modules, len(chosen), runner.run_id)
     if outcome.status == "failed":
         checks.append(

@@ -81,6 +81,7 @@ def test_pipeline_order_preserves_unit_report_boundary_and_append_semantics():
     pytest_commands = commands[1:3] + commands[4:6]
     for command in pytest_commands:
         assert "--cov=binnacle" in command
+        assert "--cov=scripts" in command
         assert "--cov-branch" in command
         assert "--cov-fail-under=0" in command
         assert "--cov-report=" in command
@@ -150,3 +151,46 @@ def test_main_runs_all_seven_pipeline_commands(monkeypatch):
     )
 
     assert len(commands) == 7
+
+
+def test_coverage_junit_reports_are_unique_for_all_four_lanes(tmp_path):
+    named = runner.build_pipeline_commands(
+        workers=2,
+        seed=12345,
+        unit_json=tmp_path / "unit.json",
+        full_json=tmp_path / "full.json",
+        shared_args=["--durations=15"],
+        junit_dir=tmp_path,
+    )
+    names = ("unit-parallel", "unit-ordinary", "nonunit-parallel", "nonunit-ordinary")
+    commands = [named[i][1] for i in (1, 2, 4, 5)]
+    for name, command in zip(names, commands, strict=True):
+        assert f"--junitxml={tmp_path / (name + '.xml')}" in command
+        assert "--durations=15" in command
+        for other in names:
+            if other != name:
+                assert f"--junitxml={tmp_path / (other + '.xml')}" not in command
+    assert all("--junitxml=" not in " ".join(named[i][1]) for i in (0, 3, 6))
+
+
+def test_coverage_junit_dir_is_created_before_failing_pipeline(tmp_path, monkeypatch):
+    target = tmp_path / "coverage-junit"
+    commands = _mock_subprocess(monkeypatch, [8])
+    assert (
+        runner.main(
+            [
+                "--workers",
+                "1",
+                "--unit-json",
+                str(tmp_path / "unit.json"),
+                "--full-json",
+                str(tmp_path / "full.json"),
+                "--junit-dir",
+                str(target),
+            ],
+            environ={},
+        )
+        == 8
+    )
+    assert len(commands) == 1
+    assert target.is_dir()
