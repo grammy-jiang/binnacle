@@ -48,6 +48,7 @@ EDGES = {
         "config",
         "job_client",
         "job_platform",
+        "process_contracts",
         "composition",
         "provenance",
     },
