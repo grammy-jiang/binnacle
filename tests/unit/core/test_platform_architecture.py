@@ -40,9 +40,10 @@ EDGES = {
         "job_platform",
         "process_contracts",
     },
-    "job_owner": {"callctx", "job_client", "jobs", "job_store"},
+    "job_owner": {"callctx", "job_client", "jobs", "job_store", "job_stop"},
     "job_manager": {
         "job_owner",
+        "job_stop",
         "jobs",
         "callctx",
         "config",
