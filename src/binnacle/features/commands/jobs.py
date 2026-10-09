@@ -19,7 +19,6 @@ from binnacle.features.commands.job_output import (
     clip_head_tail as job_output_clip_head_tail,
 )
 from binnacle.mcp.callctx import current_call
-from binnacle.observability.log_safety import REDACTED, safe_path
 from binnacle.platform.contracts.process_contracts import ProcessHandle
 from binnacle.platform.job_platform import (
     create_process_backend,
@@ -344,8 +343,9 @@ def start_job(
             "owner=%s owner_instance=%s command_hash=%s command_chars=%d",
             job_id,
             proc.pid,
-            REDACTED,
-            safe_path(str(workdir)),
+            "[redacted]",
+            "pathhash:"
+            + hashlib.sha256(str(workdir.resolve()).encode("utf-8")).hexdigest()[:12],
             call_id,
             owner,
             owner_instance_id[:12] if owner_instance_id else "-",

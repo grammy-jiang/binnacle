@@ -6,6 +6,7 @@ import logging
 from fastmcp import Client
 
 from binnacle.features.commands import jobs
+from binnacle.observability.log_safety import path_digest
 from binnacle.server import mcp
 
 
@@ -41,6 +42,7 @@ def test_journal_does_not_include_user_supplied_secrets(caplog, monkeypatch, tmp
     logged = "\\n".join(record.getMessage() for record in caplog.records)
     assert secret not in logged
     assert "event=job_start" in logged
+    assert f"workdir=pathhash:{path_digest(str(tmp_path))}" in logged
     assert "command='[redacted]'" in logged
     assert "event=tool_call" in logged and "event=request_start" in logged
     assert "error=[redacted]" in logged
