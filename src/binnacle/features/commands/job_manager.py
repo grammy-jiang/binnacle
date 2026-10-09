@@ -185,8 +185,12 @@ class JobManager:
             raise TypeError("job_id must be a string")
         token = current_call.set(call_id)
         try:
-            job_owner.mark_stop_requested(job_id)
             try:
+                from binnacle.features.commands.job_stop import raise_if_partial_signal
+
+                # Direct owner RPC also needs the persisted failure gate.
+                raise_if_partial_signal(jobs._read_meta(job_id))
+                job_owner.mark_stop_requested(job_id)
                 state = jobs.stop_job_embedded(job_id)
             except JobSignalDeliveryError as exc:
                 # Controlled RPC error, not an opaque manager-internal failure.

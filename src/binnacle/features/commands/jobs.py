@@ -21,6 +21,7 @@ from binnacle.features.commands.job_output import (
 )
 from binnacle.mcp.callctx import current_call
 from binnacle.platform.contracts.process_contracts import (
+    JobSignalDeliveryError,
     ProcessHandle,
 )
 from binnacle.platform.job_platform import (
@@ -473,15 +474,26 @@ def await_exit(job_id: str, timeout: float) -> dict | None:
 
 
 def stop_job_embedded(job_id: str) -> dict | None:
-    """Existing public owner operation delegates to the OS-neutral stop policy."""
-    return job_stop.stop_embedded(
-        job_id,
-        process_backend=_PROCESS_BACKEND,
-        job_state=job_state,
-        read_meta=_read_meta,
-        await_exit=await_exit,
-        stop_sigterm_grace_s=STOP_SIGTERM_GRACE_S,
-        stop_sigkill_grace_s=STOP_SIGKILL_GRACE_S,
-        current_call_id=current_call.get,
-        logger=logger,
-    )
+    """Persist partial native delivery before it can be mistaken for success."""
+    job_stop.raise_if_partial_signal(_read_meta(job_id))
+    try:
+        return job_stop.stop_embedded(
+            job_id,
+            process_backend=_PROCESS_BACKEND,
+            job_state=job_state,
+            read_meta=_read_meta,
+            await_exit=await_exit,
+            stop_sigterm_grace_s=STOP_SIGTERM_GRACE_S,
+            stop_sigkill_grace_s=STOP_SIGKILL_GRACE_S,
+            current_call_id=current_call.get,
+            logger=logger,
+            on_partial=lambda exc: job_store.mark_signal_delivery_partial(
+                JOBS_DIR, job_id
+            ),
+        )
+    except JobSignalDeliveryError:
+        try:
+            job_store.mark_signal_delivery_partial(JOBS_DIR, job_id)
+        except OSError as exc:
+            raise JobSignalDeliveryError("partial stop not persisted") from exc
+        raise

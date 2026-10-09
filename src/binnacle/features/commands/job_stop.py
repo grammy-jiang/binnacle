@@ -14,6 +14,15 @@ from binnacle.platform.contracts.process_contracts import (
     UnverifiedJobProcess,
 )
 
+PARTIAL_SIGNAL_FIELD = "stop_signal_partial"
+PARTIAL_SIGNAL_MESSAGE = "previous verified process signal delivery was incomplete"
+
+
+def raise_if_partial_signal(meta: dict | None) -> None:
+    """A finished leader is not proof that every owned descendant was stopped."""
+    if meta is not None and meta.get(PARTIAL_SIGNAL_FIELD) is True:
+        raise JobSignalDeliveryError(PARTIAL_SIGNAL_MESSAGE)
+
 
 def stop_embedded(
     job_id: str,
@@ -26,6 +35,7 @@ def stop_embedded(
     stop_sigkill_grace_s: float,
     current_call_id: Callable[[], str],
     logger: logging.Logger,
+    on_partial: Callable[[JobSignalDeliveryError], object] | None = None,
 ) -> dict | None:
     """Never issue a signal without an owner-verified native process identity."""
     state = job_state(job_id)
@@ -64,6 +74,8 @@ def stop_embedded(
             return await_exit(job_id, stop_sigkill_grace_s)
         except JobSignalDeliveryError as exc:
             partial_failures.append(exc)
+            if on_partial is not None:
+                on_partial(exc)
 
         # The job leader may exit while an unprivileged descendant remains.
         # A partial native delivery is never reported as a successful stop.
@@ -83,6 +95,8 @@ def stop_embedded(
                 pass
             except JobSignalDeliveryError as exc:
                 partial_failures.append(exc)
+                if on_partial is not None:
+                    on_partial(exc)
             settled = await_exit(job_id, stop_sigkill_grace_s)
         if partial_failures:
             logger.error(

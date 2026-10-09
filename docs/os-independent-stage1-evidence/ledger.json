@@ -2,8 +2,8 @@
   "active_jobs": [],
   "baseline_sha": "02f4bab9bc7562668ffc41d622c4274449933768",
   "branch": "refactor/os-independent-stage1-implementation-20261009",
-  "candidate_sha": "02879e8e34215515500209f80ba24aaa7438aadc",
-  "ci_status": "NOT_SUBMITTED: candidate branch push and exact SHA CI required",
+  "candidate_sha": "UNCOMMITTED_P2_FIX_FROM_ae1232bb2ccb",
+  "ci_status": "PASS_AT_PRIOR_SHA_ae1232bb2ccb_P2_FIX_NEW_SHA_NOT_SUBMITTED",
   "completed": [
     "Plan read in full, 517 lines; repository instructions read",
     "Independent canonical worktree bootstrapped with locked uv 0.12.24",
@@ -54,9 +54,14 @@
     "OS7 coverage-policy passed (131 production and 48 scripts tracked, 0 hard errors; three existing future-target script debts disclosed)",
     "OS7 pre-commit --all-files and pre-push --all-files hooks passed",
     "OS7 full tox py310/py311/py312/py313/py314 Python matrix 5/5 passed",
-    "OS7 wheel-from-sdist, locked hashes and clean install smoke passed (1 explicit package acceptance test)"
+    "OS7 wheel-from-sdist, locked hashes and clean install smoke passed (1 explicit package acceptance test)",
+    "Previous ae1232bb GitHub PR #18: 17 CI checks passed, code quality, Python matrix, coverage, packaging and CodeQL",
+    "Independent Codex P2 on ae1232bb: repeat stop could conceal partial EPERM descendant signal delivery",
+    "P2 repair: optional durable stop_signal_partial marker under existing spool lock; native callback writes marker before await_exit",
+    "P2 new manager and embedded paths reject retries and old metadata remains readable",
+    "P2 134 focused tests passed initially and 14 final affected tests passed; source mypy/architecture/import/size green"
   ],
-  "deployment_status": "NOT_STARTED: production/master v1.0.1 unchanged and manager not restarted",
+  "deployment_status": "NOT_STARTED: production/master v1.0.1 unchanged; active durable manager must not restart",
   "evidence": [
     "docs/os-independent-stage1-evidence/os0-source-inventory.json",
     "docs/os-independent-stage1-evidence/os0-manifest.sha256",
@@ -131,6 +136,21 @@
       "resolution": "Update actual G6 manifest owners for all nine (root, commands, platform, diagnostics, deployment); verify native create_application root route and server->application delegation with positive/negative AST tests; targeted 17 passed",
       "sha256": "57df2f0552c745c6697288c825a22a3fd82e6b53df8bd144f21335a5973f2bbf",
       "stage": "OS7 first managed full suite"
+    },
+    {
+      "failure": "Independent Codex review 5473022114 comment 4232561690: partial EPERM signal was not persisted for retries",
+      "resolution": "Atomically write optional marker immediately on native error; enforce failure in both owner and manager RPC paths",
+      "stage": "OS7 P2"
+    },
+    {
+      "failure": "First P2 candidate callback mypy mismatch and module-size 501 lines",
+      "resolution": "Use object-returning callback and concise controlled persistence error; mypy/size pass",
+      "stage": "OS7 P2"
+    },
+    {
+      "failure": "Synthetic concurrency fake missing alive method",
+      "resolution": "Supply explicit fake alive semantics; targeted test passes",
+      "stage": "OS7 P2"
     }
   ],
   "gates": {
@@ -141,26 +161,28 @@
     "OS4": "UNIT_PROVISIONING_AND_READINESS_FOCUSED_PASS_UNREVIEWED",
     "OS5": "PATH_ALIAS_LOG_DIAGNOSTIC_FOCUSED_PASS; CANONICAL_ANCESTOR_TOCTOU_DOCUMENTED",
     "OS6": "152_MODULE_49_SCRIPT_OWNERSHIP_COMPLETE; STATIC_40_TESTS_PASS; REVIEW_PENDING",
-    "OS7": "LOCAL_GATES_GREEN_6_EVIDENCE_BLOCKS_EXTERNAL_PENDING"
+    "OS7": "PREVIOUS_SHA_ALL_17_CI_CHECKS_PASS_P2_FIX_CI_PENDING"
   },
   "known_baseline_defects": [
     "Symlink allowed-root canonicalization falsely rejects canonical target",
     "Linux import-blocking cannot currently import pure server/jobs/logstats"
   ],
-  "last_committed_sha": "c6620b51805b4259f9f9dc577a0a436b4a089589",
-  "next_action": "Commit exact local report and SHA-bound review packet with normal hooks; push branch with pre-push hook to GitHub; get independent reviews and exact CI; guarded deploy only if all prerequisites satisfied.",
+  "last_committed_sha": "ae1232bb2ccb66f8ccdadaa945a58e8492f479bc",
+  "next_action": "Commit P2 correction with normal hooks; run full tests and push exact candidate to CI; re-request independent review; production remains unchanged until all gates pass.",
   "owner": "single ChatGPT implementation integrator",
   "plan_sha": "19a3cf1e43755ed4aee3837c25ea63188058a26e",
   "remaining_dependencies": [
-    "OS1/OS3/OS4 mandatory independent reviewer approval bound to exact candidate SHA",
-    "OS7 full two-lane test and pre-push, Python 3.10-3.14, module coverage and packaging/clean install",
-    "OS7 trusted GitHub CI checks for exact SHA, source-bound implementation/security independent review",
-    "OS7 production guarded quiet-window deployment, rollback and live Raspberry Pi doctors (only after gates)"
+    "Full official managed two-lane suite and coverage policy after P2",
+    "Final pre-commit/pre-push, Python 3.10-3.14 matrix, packaging",
+    "Commit and push through normal hooks; exact SHA CI",
+    "Source-bound independent re-review of P2 plus OS1/OS3/OS4/OS7",
+    "Required human disposition of protected security/deployment gates",
+    "Only after review and CI green, guarded Linux deployment with quiet-window and active-job checks"
   ],
-  "review_status": "OS1/OS3/OS4/OS7 INDEPENDENT REVIEWS NOT RECEIVED; no invented approval.",
+  "review_status": "Independent Codex P2 comment 4232561690 corrected locally, independently re-review PENDING, human disposition still PENDING",
   "reviews": [],
-  "stage": "OS7 local acceptance completed, mandatory external reviews/CI/deploy pending",
-  "status": "EXTERNAL_PENDING",
+  "stage": "OS7 P2 correction; candidate review/CI/deployment pending",
+  "status": "REVIEW_PENDING",
   "task_id": "BINNACLE-OS-STAGE1-IMPLEMENT-20261009",
   "tested_source_sha": "02879e8e34215515500209f80ba24aaa7438aadc",
   "tests": [
@@ -373,9 +395,21 @@
       "sha256": "473b225733d5a1f4aca58fc5163f3e1949e12487a2063ea5599850f01efcae83",
       "source_sha": "02879e8e34215515500209f80ba24aaa7438aadc",
       "stage": "OS7"
+    },
+    {
+      "command": "uv run pytest [13 relevant job-manager, old-spool and MCP-wire test files] --randomly-seed=12345",
+      "exit_code": 0,
+      "result": "134 passed, 1 optional PySocks warning",
+      "stage": "OS7 P2"
+    },
+    {
+      "command": "uv run pytest -q --randomly-seed=12345 tests/unit/core/test_os_job_partial_persistence.py tests/unit/core/test_os_job_stop_policy.py tests/integration/test_job_manager.py::test_durable_partial_stop_rejected_via_real_unix_rpc_after_leader_exit",
+      "exit_code": 0,
+      "result": "14 passed",
+      "stage": "OS7 P2"
     }
   ],
-  "updated_utc": "2026-10-09T16:40:58.348521+00:00",
+  "updated_utc": "2026-10-09T21:52:14.957760+00:00",
   "worktree_dirty": true,
   "worktree_path": "/home/grammy-jiang/Projects/binnacle-os-independent-stage1-impl"
 }
