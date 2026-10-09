@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from binnacle import job_manager_unit, units
+from binnacle.deployment import job_manager_unit, units
 
 
 def executable(tmp_path: Path, name: str) -> Path:

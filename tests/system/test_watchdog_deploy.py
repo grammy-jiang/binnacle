@@ -11,9 +11,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from binnacle import units
 from binnacle import watchdog_cli as cli
 from binnacle import watchdog_doctor as wdoc
+from binnacle.deployment import units
 
 UNIT = wdoc.WATCHDOG_UNIT
 

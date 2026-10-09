@@ -6,7 +6,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from binnacle import cli, doctor, units
+from binnacle import cli, doctor
+from binnacle.deployment import units
 from binnacle.platform.contracts.service_lifecycle_contracts import ServiceAction
 from binnacle.platform.contracts.service_log_contracts import ServiceLogError
 from binnacle.platform.linux.service_provisioning_linux import LinuxServiceProvisioner

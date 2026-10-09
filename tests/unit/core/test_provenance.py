@@ -6,7 +6,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from binnacle import doctor_provenance, provenance
+from binnacle import provenance
+from binnacle.diagnostics import doctor_provenance
 
 
 def _repo(path: Path) -> str:

@@ -8,7 +8,8 @@ from types import SimpleNamespace
 import pytest
 
 from binnacle import tunnel_cli as cli
-from binnacle import tunnel_doctor, tunnel_unit, units
+from binnacle import tunnel_doctor, tunnel_unit
+from binnacle.deployment import units
 
 PARAMS = {
     "tunnel": "/opt/bin/tunnel-client",
@@ -251,7 +252,7 @@ def test_restart_reports_a_failed_restart(host, capsys, monkeypatch):
 
 
 def test_doctor_uses_companion_checks_and_core_renderers(monkeypatch, capsys):
-    from binnacle import doctor_render as core_doctor
+    from binnacle.diagnostics import doctor_render as core_doctor
 
     monkeypatch.setattr(tunnel_doctor, "run_all", lambda: ["check"])
     monkeypatch.setattr(core_doctor, "render", lambda checks: ("tunnel healthy", 0))

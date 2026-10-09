@@ -177,6 +177,6 @@ def test_nonzero_completion_becomes_service_log_error(monkeypatch):
 
 
 def test_top_level_service_journal_facade_reexports_implementation():
-    from binnacle import service_journal as facade
+    from binnacle.platform.linux import service_journal as facade
 
     assert facade.JournalServiceLogSource is service_journal.JournalServiceLogSource

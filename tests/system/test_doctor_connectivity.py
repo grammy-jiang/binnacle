@@ -7,7 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from binnacle import doctor, doctor_connectivity, uplink, watchdog_connectivity
+from binnacle import doctor, uplink, watchdog_connectivity
+from binnacle.diagnostics import doctor_connectivity
 
 BEARER = "Bearer secret-token\n"
 
@@ -246,7 +247,7 @@ def test_endpoint_with_missing_token_keeps_unauthenticated_evidence(
 
 
 def test_log_tail_tolerates_a_removed_file(tmp_path):
-    from binnacle.doctor_io import _tail_lines
+    from binnacle.diagnostics.doctor_io import _tail_lines
 
     log = tmp_path / "rotated.log"
     log.write_bytes(b"valid\ninvalid \xff\n")

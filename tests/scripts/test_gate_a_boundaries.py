@@ -39,8 +39,9 @@ def test_domain_scan_covers_manifest():
     } == expected
 
 
-def test_doctor_common_is_explicit_compatibility_facade():
-    assert "doctor_common.py" in manifest.compatibility_facades()
+def test_doctor_common_is_canonically_owned():
+    assert "doctor_common.py" not in manifest.compatibility_facades()
+    assert "diagnostics/doctor_common.py" in manifest.manifest_groups()["diagnostics"]
 
 
 @pytest.mark.parametrize(
@@ -197,8 +198,7 @@ def test_snapshot_ignores_inherited_repository_identity(tmp_path, monkeypatch):
 
 
 def test_g6_diagnostics_legacy_aliases_are_classified():
-    expected = {
-        "doctor.py",
+    removed = {
         "doctor_common.py",
         "doctor_jobs.py",
         "job_manager_doctor.py",
@@ -206,9 +206,11 @@ def test_g6_diagnostics_legacy_aliases_are_classified():
     }
     facades = manifest.compatibility_facades()
     groups = manifest.manifest_groups()
-    assert expected <= facades
-    for name in expected:
-        assert name in groups["diagnostics"]
+    assert removed.isdisjoint(facades)
+    assert "doctor.py" in facades
+    assert "diagnostics/doctor_common.py" in groups["diagnostics"]
+    assert "diagnostics/doctor_jobs.py" in groups["diagnostics"]
+    assert "diagnostics/job_manager_doctor.py" in groups["diagnostics"]
     assert "doctor_contracts.py" in groups["application_shell"]
     assert "doctor_contracts.py" not in facades
 

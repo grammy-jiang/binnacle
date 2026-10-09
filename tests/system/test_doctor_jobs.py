@@ -1,6 +1,6 @@
 """Lifecycle-boundary checks used by the MCP mode restart gate."""
 
-from binnacle import doctor_jobs
+from binnacle.diagnostics import doctor_jobs
 from binnacle.platform.contracts.service_lifecycle_contracts import ManagedServiceStatus
 from tests.service_fakes import FakeServiceInspector
 
@@ -61,7 +61,7 @@ def test_legacy_doctor_jobs_alias_preserves_default_reader_identity():
     from binnacle.diagnostics import doctor_jobs as owned
 
     assert doctor_jobs is owned
-    assert importlib.import_module("binnacle.doctor_jobs") is owned
+    assert importlib.import_module("binnacle.diagnostics.doctor_jobs") is owned
     assert importlib.import_module("binnacle.diagnostics.doctor_jobs") is owned
     assert (
         doctor_jobs.server_busy_reasons.__kwdefaults__["state_reader"]

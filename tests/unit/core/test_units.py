@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from binnacle import server_unit, units
+from binnacle.deployment import server_unit, units
 
 SPEC = units.UnitSpec(
     "x.service",

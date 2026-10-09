@@ -19,8 +19,8 @@ from typing import Annotated, Literal
 
 import cyclopts
 
-from binnacle import units
 from binnacle.config import get_settings
+from binnacle.deployment import units
 from binnacle.deployment.job_manager_unit import JOBS_UNIT, render_job_manager_unit
 from binnacle.deployment.server_unit import SERVER_UNIT, render_server_unit
 from binnacle.diagnostics import doctor_jobs

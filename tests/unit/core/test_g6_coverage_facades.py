@@ -11,7 +11,6 @@ import pytest
 @pytest.mark.parametrize(
     ("legacy", "canonical"),
     [
-        ("binnacle.diagnostics.doctor_contracts", "binnacle.doctor_contracts"),
         ("binnacle.job_manager", "binnacle.features.commands.job_manager"),
         *(
             (

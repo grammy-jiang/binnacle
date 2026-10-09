@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from binnacle import job_client
-from binnacle.job_manager_doctor import check_job_manager
+from binnacle.diagnostics.job_manager_doctor import check_job_manager
 from binnacle.platform.contracts.service_lifecycle_contracts import ManagedServiceStatus
 from tests.service_fakes import FakeServiceInspector
 
@@ -117,5 +117,5 @@ def test_legacy_module_identity_and_ping_default():
 
     from binnacle.diagnostics import job_manager_doctor as owned
 
-    assert importlib.import_module("binnacle.job_manager_doctor") is owned
+    assert importlib.import_module("binnacle.diagnostics.job_manager_doctor") is owned
     assert owned.check_job_manager.__defaults__[1] is job_client.ping

@@ -19,7 +19,8 @@ def test_companions_do_not_import_core_doctor_aggregate(module):
 
 
 def test_neutral_rendering_keeps_public_exit_and_json_contract():
-    from binnacle import doctor, doctor_render
+    from binnacle import doctor
+    from binnacle.diagnostics import doctor_render
     from binnacle.doctor_contracts import fail, ok, warn
 
     checks = [

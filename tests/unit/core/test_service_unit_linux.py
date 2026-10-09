@@ -1,6 +1,6 @@
 import subprocess
 
-from binnacle import service_unit_linux
+from binnacle.platform.linux import service_unit_linux
 
 
 def test_unit_property_uses_linux_systemctl_without_timeout():
@@ -33,7 +33,7 @@ def test_legacy_module_is_same_as_linux_owned_module():
 
 
 def test_legacy_units_module_is_deployment_owned():
-    from binnacle import units
+    from binnacle.deployment import units
     from binnacle.deployment import units as implementation
 
     assert units is implementation

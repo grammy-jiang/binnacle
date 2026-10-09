@@ -90,7 +90,7 @@ def test_g6_compatibility_facades_are_present_and_singly_classified():
     assert missing == []
     assert set(owners) == manifest.compatibility_facades()
     assert all(len(groups) == 1 for groups in owners.values())
-    assert {"doctor_connectivity.py", "doctor_provenance.py"} <= set(owners)
+    assert {"doctor_connectivity.py", "doctor_provenance.py"}.isdisjoint(owners)
 
 
 def test_watchdog_tunnel_contract_allows_only_tunnel_unit_name(tmp_path):

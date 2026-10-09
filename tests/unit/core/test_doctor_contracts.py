@@ -22,26 +22,16 @@ def test_neutral_check_contract_roundtrip():
     assert list(dataclasses.asdict(checks[0])) == ["group", "status", "detail", "hint"]
 
 
-def test_alias_identity_both_import_orders():
-    code = """import importlib, sys
-for name in NAMES:
-    importlib.import_module(name)
-a = importlib.import_module('binnacle.doctor_contracts')
-b = importlib.import_module('binnacle.diagnostics.doctor_contracts')
+def test_neutral_contract_keeps_canonical_pickle_identity():
+    code = """import importlib, pickle, sys
 from binnacle import doctor_contracts
-from binnacle.diagnostics import doctor_contracts as diagnostics_contracts
-assert a is b is doctor_contracts is diagnostics_contracts
+a = importlib.import_module('binnacle.doctor_contracts')
+assert a is doctor_contracts
 assert sys.modules['binnacle.doctor_contracts'] is a
-assert sys.modules['binnacle.diagnostics.doctor_contracts'] is a
 assert a.Check.__module__ == 'binnacle.doctor_contracts'
+assert pickle.loads(pickle.dumps(a.ok('group', 'good'))) == a.ok('group', 'good')
 """
-    for names in (
-        ("binnacle.doctor_contracts", "binnacle.diagnostics.doctor_contracts"),
-        ("binnacle.diagnostics.doctor_contracts", "binnacle.doctor_contracts"),
-    ):
-        subprocess.run(
-            [sys.executable, "-c", "NAMES=" + repr(names) + "\n" + code], check=True
-        )
+    subprocess.run([sys.executable, "-c", code], check=True)
 
 
 def test_neutral_contract_has_no_platform_or_diagnostics_imports():

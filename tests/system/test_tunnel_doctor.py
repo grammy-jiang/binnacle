@@ -5,7 +5,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
-from binnacle import doctor, tunnel_doctor, units
+from binnacle import doctor, tunnel_doctor
+from binnacle.deployment import units
 
 
 def log_with(path: Path, stamps: list[str]) -> Path:
