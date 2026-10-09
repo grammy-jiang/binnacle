@@ -78,6 +78,7 @@ def test_g5_additions_have_expected_g6_owners():
         "diagnostics/doctor_render.py": "diagnostics",
         "observability/system_resource_contracts.py": "observability",
         "observability/system_resource_history.py": "observability",
+        "observability/log_safety.py": "observability",
         "companions/tunnel/tunnel_log.py": "tunnel",
         "companions/watchdog/watchdog_connectivity.py": "watchdog",
     }

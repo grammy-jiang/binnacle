@@ -107,6 +107,7 @@ def manifest_groups() -> dict[str, set[str]]:
             "observability/system_resource_contracts.py",
             "observability/system_resource_history.py",
             "observability/token_telemetry.py",
+            "observability/log_safety.py",
         },
         "observability_linux": {
             "observability/linux/__init__.py",
