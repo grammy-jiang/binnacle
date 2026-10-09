@@ -53,9 +53,27 @@ class RootsSettings(BaseModel):
         description="Additional allowed roots beside default_root.",
     )
 
+    _canonical_source: tuple[Path, ...] | None = PrivateAttr(default=None)
+    _canonical_snapshot: tuple[Path, ...] | None = PrivateAttr(default=None)
+
     @property
     def allowed(self) -> tuple[Path, ...]:
         return (self.default_root, *self.extra_roots)
+
+    @property
+    def canonical_allowed(self) -> tuple[Path, ...]:
+        """Bind root aliases on first use; symlink retargeting is not new authority.
+
+        A model field mutation intentionally defines new root configuration and
+        invalidates the snapshot. Changing a symlink without changing the
+        configured path does not. Factory settings are copied independently.
+        """
+        configured = self.allowed
+        if self._canonical_snapshot is None or configured != self._canonical_source:
+            resolved = tuple(root.expanduser().resolve() for root in configured)
+            self._canonical_snapshot = resolved
+            self._canonical_source = configured
+        return self._canonical_snapshot
 
 
 class AuthSettings(BaseModel):

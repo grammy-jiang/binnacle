@@ -2,8 +2,8 @@
   "active_jobs": [],
   "baseline_sha": "02f4bab9bc7562668ffc41d622c4274449933768",
   "branch": "refactor/os-independent-stage1-implementation-20261009",
-  "candidate_sha": "UNCOMMITTED_OS3_DIFFERENCE",
-  "ci_status": "NOT_SUBMITTED",
+  "candidate_sha": "1aac5dd297c2d80f5a6c982e3d399785feb3285a",
+  "ci_status": "NOT_SUBMITTED; candidate must be committed then pushed to run exact SHA CI",
   "completed": [
     "Plan read in full, 517 lines; repository instructions read",
     "Independent canonical worktree bootstrapped with locked uv 0.12.24",
@@ -39,9 +39,15 @@
     "OS3 Linux pidfd pinning tests cover boot/PID reuse, disappeared descendants, reparenting, wrong process ownership, lease close and no unrelated signal",
     "OS3 initial 6 failures diagnosed; fixture fake boot tokens and legacy PGID assertions repaired without modifying dated spool fixtures",
     "OS3 full focused matrix on 18 modules: 339 passed, 0 failed, seed 12345",
-    "OS3 old manager + new client and new manager + old client both passed against git archived v1.0.1 source; old on-disk record and cursor retained"
+    "OS3 old manager + new client and new manager + old client both passed against git archived v1.0.1 source; old on-disk record and cursor retained",
+    "OS5 configured canonical root authority now frozen per FastMCP application generation; symlink alias target retarget is refused, explicit config field mutation rebinds roots",
+    "OS5 alias retarget, nested symlink, permission and case-sensitive tests plus existing path/config/Files tests: 58 passed",
+    "OS6 current 152 production modules + 49 Python scripts with KEEP/BOUNDARY/LINUX decisions, all module imports/hashes; original 143 modules retained and 11 approved split modules added",
+    "OS6 all 21 Import Linter contracts pass; AST scanner and direct/alias/dynamic negative test cases pass; no shadow MCP registry; three native child mounts",
+    "OS6 updated README, AGENTS.md, CLAUDE.md, DEVELOPMENT.md, docs/testing.md, docs/quality-gates.md and separate architecture/Darwin backlog",
+    "OS6 four bound source/contract/native tests and prior negative/parity/path suite 40 passed"
   ],
-  "deployment_status": "NOT_STARTED; production v1.0.1 remains unchanged, no durable job manager restart",
+  "deployment_status": "NOT_STARTED; production checkout and stable Job Manager untouched",
   "evidence": [
     "docs/os-independent-stage1-evidence/os0-source-inventory.json",
     "docs/os-independent-stage1-evidence/os0-manifest.sha256",
@@ -116,29 +122,27 @@
     "OS2": "MOCK_AND_RAW_WIRE_FOCUSED_PASS_REVIEW_PENDING",
     "OS3": "339_FOCUSED_PASS_2_CROSS_VERSION_PASS_INDEPENDENT_REVIEW_PENDING",
     "OS4": "UNIT_PROVISIONING_AND_READINESS_FOCUSED_PASS_UNREVIEWED",
-    "OS5": "LINUX_DIAGNOSTICS_ISOLATION_FOCUSED_PASS_PATH_SWAP_PENDING",
-    "OS6": "NOT_STARTED",
-    "OS7": "NOT_STARTED"
+    "OS5": "PATH_ALIAS_LOG_DIAGNOSTIC_FOCUSED_PASS; CANONICAL_ANCESTOR_TOCTOU_DOCUMENTED",
+    "OS6": "152_MODULE_49_SCRIPT_OWNERSHIP_COMPLETE; STATIC_40_TESTS_PASS; REVIEW_PENDING",
+    "OS7": "FINAL_TESTS_NOT_STARTED"
   },
   "known_baseline_defects": [
     "Symlink allowed-root canonicalization falsely rejects canonical target",
     "Linux import-blocking cannot currently import pure server/jobs/logstats"
   ],
   "last_committed_sha": "14650b5a4226e453cc4e94c313bd0c26bcb24ac6",
-  "next_action": "Run pre-commit Git hooks on exact candidate; commit OS3 if green; proceed to OS5 adversarial paths and OS6 full source sweep, hold OS7 deployment until independent review/CI.",
+  "next_action": "Commit OS5+OS6 source/documentation with normal hooks; run OS7 local managed suite and coverage once; submit exact SHA to CI; obtain genuine independent reviewer before guarded deployment.",
   "owner": "single ChatGPT implementation integrator",
   "plan_sha": "19a3cf1e43755ed4aee3837c25ea63188058a26e",
   "remaining_dependencies": [
-    "OS1 independent design review of candidate process identity/stop safety required",
-    "OS3 process metadata, stop race, cgroup and RPC migration remains",
-    "OS4 remaining CLI/deployment generic orchestration sweep",
-    "OS5 path swap and diagnostics fake-platform integration",
-    "OS6 all-source alignment, infra/tests/docs",
-    "OS7 final full checks/reviewer/CI/guarded deployment"
+    "OS1/OS3/OS4 mandatory independent reviewer approval bound to exact candidate SHA",
+    "OS7 full two-lane test and pre-push, Python 3.10-3.14, module coverage and packaging/clean install",
+    "OS7 trusted GitHub CI checks for exact SHA, source-bound implementation/security independent review",
+    "OS7 production guarded quiet-window deployment, rollback and live Raspberry Pi doctors (only after gates)"
   ],
-  "review_status": "OS1 contract review and OS3 process-safety independent review NOT RECEIVED; author tests are not approvals.",
+  "review_status": "REVIEW_PENDING: no independent OS1, OS3, OS4 or full OS7 sign-off. No self-approval.",
   "reviews": [],
-  "stage": "OS3 process-identity and RPC compatibility candidate / OS1 independent review pending",
+  "stage": "OS6 source sweep and architecture/documentation alignment",
   "status": "REVIEW_PENDING",
   "task_id": "BINNACLE-OS-STAGE1-IMPLEMENT-20261009",
   "tests": [
@@ -272,9 +276,27 @@
       "result": "2 passed in 15.81s; old owner/new client and new owner/old client",
       "sha256": "153b07d9a129c65f22b307f28d939ac20d423267737b29e835b3ed4f22cf4f6d",
       "stage": "OS3"
+    },
+    {
+      "command": "uv run pytest -q --randomly-seed=12345 tests/unit/core/test_os_independence_paths.py tests/unit/core/test_paths_settings.py tests/integration/test_root_settings.py tests/integration/test_files_settings.py tests/unit/core/test_config_loading.py",
+      "exit_code": 0,
+      "result": "58 passed",
+      "stage": "OS5"
+    },
+    {
+      "command": "uv run pytest -q --randomly-seed=12345 tests/scripts/test_os_stage1_native_boundaries.py tests/scripts/test_os_stage1_inventory.py tests/scripts/test_os_architecture.py tests/contracts/test_os_stage1_wire_parity.py tests/unit/core/test_os_independence_paths.py",
+      "exit_code": 0,
+      "result": "40 passed",
+      "stage": "OS6"
+    },
+    {
+      "command": "uv run python -m scripts.os_stage1_inventory --check",
+      "exit_code": 0,
+      "result": "152 production, 49 scripts, 11 additions, 0 deleted, 0 architecture violations",
+      "stage": "OS6"
     }
   ],
-  "updated_utc": "2026-10-09T16:07:42.374430+00:00",
+  "updated_utc": "2026-10-09T16:20:44.417667+00:00",
   "worktree_dirty": true,
   "worktree_path": "/home/grammy-jiang/Projects/binnacle-os-independent-stage1-impl"
 }

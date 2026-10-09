@@ -15,7 +15,7 @@ from binnacle.errors import CodedToolError
 
 def _canonical_roots(roots: RootsSettings) -> tuple[Path, ...]:
     """Resolve configured aliases exactly as candidate paths are resolved."""
-    return tuple(root.expanduser().resolve() for root in roots.allowed)
+    return roots.canonical_allowed
 
 
 def resolve_path(raw: str, *, roots: RootsSettings | None = None) -> Path:

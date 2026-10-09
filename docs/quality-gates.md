@@ -26,6 +26,30 @@ Splits must follow responsibility boundaries. Shortening a file by compressing
 formatting, deleting useful documentation, or creating arbitrary line-number
 fragments does not satisfy the intent of the rule.
 
+## OS-independent architecture gates
+
+The [OS-independent Stage 1 design](os-independent-stage1-architecture.md)
+retains FastMCP's own Provider, Transform, Middleware, auth and lifecycle.
+The ordinary Binnacle application domain cannot import concrete Linux
+process, cgroup, journald or systemd implementations; platform and
+compatibility boundaries are explicitly enumerated in policy.
+
+The AST static gate checks direct, aliased and literal dynamic
+imports plus executable native mechanisms where forbidden. The
+Import Linter enforces the full source dependency graph; runtime
+fake-server tests reject eager Linux imports. Run:
+
+```bash
+uv run python scripts/check_architecture.py
+uv run lint-imports --no-logo
+uv run python -m scripts.os_stage1_inventory --check
+```
+
+This gate cannot prove native process stop safety, race-free filesystem
+access, service rollback, or production readiness. Those require
+real focused tests, immutable Linux references, complete CI, genuine
+independent review and the separately guarded deployment workflow.
+
 ## Watchdog dependency boundary
 
 The Raspberry Pi watchdog is an operational POC kept in this repository only to

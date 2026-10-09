@@ -40,6 +40,9 @@ def create_application(
 ) -> FastMCP:
     """Build a pure native FastMCP tree from supplied application dependencies."""
     settings = settings.model_copy(deep=True)
+    # Root authorization is fixed for this app generation. A mutable symlink
+    # alias cannot silently grant new directories to an already running server.
+    _ = settings.roots.canonical_allowed
     root = FastMCP(
         "binnacle",
         on_duplicate="error",
