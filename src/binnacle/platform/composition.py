@@ -88,3 +88,11 @@ def create_linux_provisioner(*, unit_dir=None, backup_dir=None, run=None):
         backup_dir=DEFAULT_BACKUP_DIR if backup_dir is None else backup_dir,
         run=run,
     )
+
+
+def notify_job_manager_ready(on_error):
+    """Linux unit readiness hook; durable RPC remains Core-owned."""
+    host_os_family()
+    from binnacle.platform.linux.notify_systemd import notify_ready
+
+    notify_ready(on_error)

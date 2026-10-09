@@ -33,17 +33,10 @@ log = logging.getLogger("binnacle.job_manager")
 
 
 def _notify_systemd_ready() -> None:
-    """Tell a Type=notify user unit that recovery and socket bind completed."""
-    target = os.environ.get("NOTIFY_SOCKET")
-    if not target:
-        return
-    address = "\0" + target[1:] if target.startswith("@") else target
-    try:
-        with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as notifier:
-            notifier.connect(address)
-            notifier.sendall(b"READY=1\nSTATUS=Binnacle job manager ready")
-    except OSError:
-        log.exception("event=job_manager_notify_error")
+    """Compatibility entry point; Linux owns the unit notification socket."""
+    from binnacle.platform.composition import notify_job_manager_ready
+
+    notify_job_manager_ready(lambda: log.exception("event=job_manager_notify_error"))
 
 
 def _boot_id() -> str:

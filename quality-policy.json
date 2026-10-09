@@ -130,7 +130,7 @@
       "binnacle.platform.composition",
       "binnacle.observability.logstats_io",
       "binnacle.observability.system_resource_history",
-      "binnacle.cli"
+      "binnacle.deployment.units"
     ],
     "pure_module_prefixes": [
       "binnacle.config",
@@ -143,6 +143,6 @@
       "binnacle.observability.logstats",
       "binnacle.platform.contracts"
     ],
-    "rollout_note": "cli direct Linux type imports are OS4 transitional; remove this exception after CLI service provisioning becomes semantic."
+    "rollout_note": "Linux deployment.unit compatibility methods explicitly own platform-specific mechanics while generic planning remains mockable. Direct Linux imports from CLI are prohibited."
   }
 }

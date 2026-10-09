@@ -2,7 +2,7 @@
   "active_jobs": [],
   "baseline_sha": "02f4bab9bc7562668ffc41d622c4274449933768",
   "branch": "refactor/os-independent-stage1-implementation-20261009",
-  "candidate_sha": "c79afdadbe9dee983b405fb79e2ed5a1b6683258",
+  "candidate_sha": "ec4ef5c7ed91673892b189a18a0698b471d506f2",
   "ci_status": "NOT_SUBMITTED",
   "completed": [
     "Plan read in full, 517 lines; repository instructions read",
@@ -27,7 +27,13 @@
     "OS5 canonical paths, deferred journald, configured root telemetry hashes and no privacy changes",
     "Exact OS0-v1.0.1 four-profile raw MCP wire comparison: two tests passed; extra privacy+logging tests 40 passed",
     "Mypy check: no issues in 145 source files",
-    "Module-size ratchet: initial jobs.py 501 line error repaired to 500; 401 modules 0 errors"
+    "Module-size ratchet: initial jobs.py 501 line error repaired to 500; 401 modules 0 errors",
+    "OS4 Linux unit ExecStart/procfs/systemctl interpretation isolated into deployment.linux adapter; generic plan_write/markers remain importable with all Linux modules blocked",
+    "OS4 product-level PlannedUnit and UnitProvisioner protocol replaces CLI concrete Linux type import; existing Linux class remains compatible",
+    "OS4 systemd readiness socket notification moved from generic durable manager into platform.linux.notify_systemd",
+    "OS4 exact baseline unit rendering verified, including original insertion order in systemd provenance marker",
+    "OS5 Linux-specific service/boot/journal check functions moved from generic doctor.py into diagnostics.linux_checks; existing wrappers and text contract preserved",
+    "OS5 pure import test covers doctor/results/log parser with every Linux package blocked"
   ],
   "deployment_status": "NOT_STARTED; production v1.0.1 unchanged; active manager must never be restarted",
   "evidence": [
@@ -93,8 +99,8 @@
     "OS1": "STATIC_PASS_21_CONTRACTS_REVIEW_PENDING",
     "OS2": "MOCK_AND_RAW_WIRE_FOCUSED_PASS_REVIEW_PENDING",
     "OS3": "WAITING_ON_OS1_INDEPENDENT_DESIGN_REVIEW",
-    "OS4": "WAITING_ON_OS1_INDEPENDENT_DESIGN_REVIEW",
-    "OS5": "PATH_LOG_TELEMETRY_PASS_DIAGNOSTICS_PENDING",
+    "OS4": "UNIT_PROVISIONING_AND_READINESS_FOCUSED_PASS_UNREVIEWED",
+    "OS5": "LINUX_DIAGNOSTICS_ISOLATION_FOCUSED_PASS_PATH_SWAP_PENDING",
     "OS6": "NOT_STARTED",
     "OS7": "NOT_STARTED"
   },
@@ -103,20 +109,20 @@
     "Linux import-blocking cannot currently import pure server/jobs/logstats"
   ],
   "last_committed_sha": "c79afdadbe9dee983b405fb79e2ed5a1b6683258",
-  "next_action": "Complete isolated OS4 and OS5 host separation and OS3 race probes. OS1 independent review is mandatory before accepted migration; final OS7 deployment not authorized until review+CI verified.",
+  "next_action": "Commit focused OS4/OS5 candidate with normal hooks; then implement OS3 safe process identity and OI negative race tests; no production deployment.",
   "owner": "single ChatGPT implementation integrator",
   "plan_sha": "19a3cf1e43755ed4aee3837c25ea63188058a26e",
   "remaining_dependencies": [
-    "OS1 independent contract/signal safety review of exact commit",
-    "OS3 semantic process identity, pid reuse and orphan-target safety migration and full durable parity",
-    "OS4 generic deployment vs systemd split with exact Linux unit bytes",
-    "OS5 generic diagnostics fake mode, comprehensive path swap/procfs blockers",
-    "OS6 all-module policy sweep and Linux-only tooling/companion classification",
-    "OS7 full two-lane test/coverage/python 3.10-3.14/wheels/CI/independent reviews and guarded live deploy"
+    "OS1 independent design review of candidate process identity/stop safety required",
+    "OS3 process metadata, stop race, cgroup and RPC migration remains",
+    "OS4 remaining CLI/deployment generic orchestration sweep",
+    "OS5 path swap and diagnostics fake-platform integration",
+    "OS6 all-source alignment, infra/tests/docs",
+    "OS7 final full checks/reviewer/CI/guarded deployment"
   ],
   "review_status": "OS1 REVIEW_PENDING; independent review packet is available, not an approval.",
   "reviews": [],
-  "stage": "OS1/OS2/OS5 preparatory implementation committed candidate pending review",
+  "stage": "OS4 / OS5 independent work (OS1 review pending)",
   "status": "REVIEW_PENDING",
   "task_id": "BINNACLE-OS-STAGE1-IMPLEMENT-20261009",
   "tests": [
@@ -226,9 +232,17 @@
       "log_path": "docs/os-independent-stage1-evidence/os1-os2-os5-focused-validation.log",
       "sha256": "7f953f4db0fe3c5901d233b78ef6e7a0d25efceec8eb7039e114423dafa7d48b",
       "stage": "OS1/OS2/OS5"
+    },
+    {
+      "command": "uv run pytest -q --randomly-seed=12345 [eleven named OS4/OS5/manager/CLI/system/architecture test files]",
+      "exit_code": 0,
+      "log_path": "docs/os-independent-stage1-evidence/os4-os5-focused-validation.log",
+      "log_sha256": "105f0e805f28d985455edc0ec318935e4d7b0f5d09afdc4fd126895da845f688",
+      "result": "173 passed in 5.20s",
+      "stage": "OS4/OS5"
     }
   ],
-  "updated_utc": "2026-10-09T13:39:03.785159+00:00",
+  "updated_utc": "2026-10-09T13:58:05.174762+00:00",
   "worktree_dirty": true,
   "worktree_path": "/home/grammy-jiang/Projects/binnacle-os-independent-stage1-impl"
 }

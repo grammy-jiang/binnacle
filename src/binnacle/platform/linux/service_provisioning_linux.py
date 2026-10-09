@@ -14,6 +14,7 @@ from binnacle.deployment.job_manager_unit import (
     job_manager_params,
     job_manager_unit_spec,
 )
+from binnacle.deployment.provisioning_contracts import PlannedUnit
 from binnacle.deployment.server_unit import server_params, server_unit_spec
 
 UNIT_DIR = units.UNIT_DIR
@@ -25,19 +26,6 @@ Run = Callable[..., "subprocess.CompletedProcess[str]"]
 class PersistenceInspection:
     enabled: bool | None
     error: str | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class PlannedUnit:
-    """One Linux unit-file plan with its path and rendered provenance."""
-
-    path: Path
-    spec: units.UnitSpec
-    write: units.WritePlan
-
-    @property
-    def name(self) -> str:
-        return self.spec.name
 
 
 class LinuxServiceProvisioner:

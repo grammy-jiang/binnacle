@@ -15,6 +15,7 @@ from typing import Any
 NATIVE_PREFIXES = (
     "binnacle.platform.linux",
     "binnacle.observability.linux",
+    "binnacle.deployment.linux",
 )
 BANNED_COMMANDS = {"systemctl", "journalctl", "loginctl"}
 HOST_PATHS = ("/proc", "/sys/fs/cgroup", "/run/user/")

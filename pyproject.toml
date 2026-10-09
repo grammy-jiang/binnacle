@@ -441,11 +441,11 @@ type = "protected"
 protected_modules = [
     "binnacle.platform.linux",
     "binnacle.observability.linux",
+    "binnacle.deployment.linux",
 ]
 allowed_importers = [
     "binnacle.platform.composition",
     "binnacle.observability.logstats_io",
     "binnacle.observability.system_resource_history",
-    # Transitional direct type import; OS4 removes this exception.
-    "binnacle.cli",
+    "binnacle.deployment.units",
 ]

@@ -22,16 +22,13 @@ import cyclopts
 from binnacle.config import get_settings
 from binnacle.deployment import units
 from binnacle.deployment.job_manager_unit import JOBS_UNIT, render_job_manager_unit
+from binnacle.deployment.provisioning_contracts import PlannedUnit, UnitProvisioner
 from binnacle.deployment.server_unit import SERVER_UNIT, render_server_unit
 from binnacle.diagnostics import doctor_jobs
 from binnacle.platform.deployment_platform import (
     create_linux_provisioner,
     create_service_controller,
     create_service_inspector,
-)
-from binnacle.platform.linux.service_provisioning_linux import (
-    LinuxServiceProvisioner,
-    PlannedUnit,
 )
 
 app = cyclopts.App(
@@ -62,7 +59,7 @@ def _write_token(path: Path | None = None) -> None:
     path.chmod(0o600)
 
 
-def _provisioner() -> LinuxServiceProvisioner:
+def _provisioner() -> UnitProvisioner:
     return create_linux_provisioner(unit_dir=UNIT_DIR, backup_dir=BACKUP_DIR)
 
 
@@ -101,7 +98,7 @@ def _setup_unit_plans(
     dev: Path | None,
     port: int,
     adopt: bool,
-    provisioner: LinuxServiceProvisioner,
+    provisioner: UnitProvisioner,
 ) -> tuple[list[PlannedUnit], dict[str, units.WritePlan]]:
     try:
         unit_plans = provisioner.plan_server_jobs(
@@ -131,7 +128,7 @@ def _apply_setup_units(
     unit_plans: list[PlannedUnit],
     planned: dict[str, units.WritePlan],
     mode: str,
-    provisioner: LinuxServiceProvisioner,
+    provisioner: UnitProvisioner,
     act: Callable[[str, Callable[[], object]], None],
     actions: list[str],
 ) -> None:
@@ -232,7 +229,7 @@ def setup(
 
 
 def _current_marker(
-    provisioner: LinuxServiceProvisioner | None = None,
+    provisioner: UnitProvisioner | None = None,
 ) -> units.Marker | None:
     return (provisioner or _provisioner()).current_marker(SERVER_UNIT)
 
