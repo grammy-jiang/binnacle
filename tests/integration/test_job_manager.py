@@ -7,6 +7,7 @@ import os
 import socket
 import threading
 import time
+from importlib.metadata import version
 from pathlib import Path
 
 import pytest
@@ -57,7 +58,7 @@ def test_ping_reports_protocol_and_owner(manager):
     assert response["version"] == 1
     assert response["owner_instance_id"] == "owner-new"
     assert response["boot_id"] == "boot-current"
-    assert response["package_version"] == "1.0.0"
+    assert response["package_version"] == version("binnacle-mcp")
     assert response["revision"]
 
 
