@@ -45,8 +45,8 @@ from binnacle.observability.logstats_tools import (
     analyze_tool_result,
 )
 
-# Compatibility re-exports: tests and analysis scripts historically access
-# these helpers through binnacle.logstats.
+# Helper-level aliases remain for this canonical parser's tests and consumers.
+# The retired binnacle.logstats module path is intentionally not restored.
 _base_turn = _parse_base_turn
 _int = _parse_int
 _path_hash = _parse_path_hash

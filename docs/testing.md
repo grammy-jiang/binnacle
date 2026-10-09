@@ -577,8 +577,9 @@ the automated pytest suite.
 ## Watchdog scenario suites
 
 The original 4,000-line watchdog scenario module was split only after the
-watchdog POC gained stable production boundaries under
-`binnacle.ops.watchdog`. The system tests now follow those responsibilities:
+watchdog POC gained stable production boundaries, now owned by
+`binnacle.companions.watchdog.ops` (the old `binnacle.ops.watchdog` import
+was retired in G7). The system tests follow those responsibilities:
 policy, USB recovery, NetworkManager preference, device observation, service
 repair, fast-path failover, tunnel affinity, concurrency, and audit
 regressions.

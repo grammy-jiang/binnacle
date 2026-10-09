@@ -6,13 +6,21 @@ import ast
 from importlib.util import resolve_name
 from pathlib import Path
 
+from scripts.check_architecture import imports_of
+
+
+def _package_of(path: Path) -> str:
+    """Resolve the nearest source package, not a same-named Git checkout."""
+    parts = path.parent.parts
+    if "binnacle" not in parts:
+        return "binnacle"
+    index = len(parts) - 1 - parts[::-1].index("binnacle")
+    return ".".join(parts[index:])
+
 
 def imported_symbols(path: Path):
     """Yield canonical (module, symbol), with None denoting a module import."""
-    parts = path.parent.parts
-    package = "binnacle"
-    if "binnacle" in parts:
-        package = ".".join(parts[parts.index("binnacle") :])
+    package = _package_of(path)
     for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
         if isinstance(node, ast.Import):
             yield from ((alias.name, None) for alias in node.names)
@@ -25,12 +33,10 @@ def imported_symbols(path: Path):
 
 
 def imports_for(path: Path) -> set[str]:
-    out = set()
-    for module, symbol in imported_symbols(path):
-        out.add(module)
-        if symbol:
-            out.add(f"{module}.{symbol}")
-    return out
+    """Use the same static scanner as the architecture and retirement gates."""
+    package = _package_of(path)
+    source = package if path.name == "__init__.py" else f"{package}.{path.stem}"
+    return imports_of(path, source)
 
 
 def imported_names_from(path: Path, module: str) -> tuple[set[str], bool]:

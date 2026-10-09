@@ -19,12 +19,15 @@ from pathlib import Path
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from scripts.gate_a_evidence import build_payload
-from scripts.gate_a_manifest import (
-    compatibility_facade_coverage,
-    manifest_coverage,
-    manifest_groups,
+from scripts.g7_legacy_gate import (
+    RETIRED_FILES,
+    RETIRED_MODULES,
 )
+from scripts.g7_legacy_gate import (
+    failures as g7_failures,
+)
+from scripts.gate_a_evidence import build_payload
+from scripts.gate_a_manifest import manifest_coverage, manifest_groups
 from scripts.gate_a_source import (
     has_root_health_route,
     imported_names_from,
@@ -261,29 +264,16 @@ def report() -> list[Cell]:
         )
     )
 
-    missing_facades, facade_owners = compatibility_facade_coverage()
-    facade_bad = {
-        path: groups for path, groups in facade_owners.items() if len(groups) != 1
-    }
-    facade_ok = not missing_facades and not facade_bad
-    facade_detail = [
-        f"{len(facade_owners)} compatibility facades tracked before G6 removal review"
-    ]
-    if missing_facades:
-        facade_detail.append("missing=" + ",".join(missing_facades))
-    if facade_bad:
-        facade_detail.append(
-            "ownership="
-            + ";".join(
-                f"{path}:{','.join(groups) or '<none>'}"
-                for path, groups in sorted(facade_bad.items())
-            )
-        )
+    retired_errors = g7_failures()
     cells.append(
         Cell(
-            "architecture.g6_compatibility_facade_inventory",
-            "PASS" if facade_ok else "FAIL",
-            "; ".join(facade_detail),
+            "architecture.g7_legacy_retirement",
+            "FAIL" if retired_errors else "PASS",
+            (
+                f"{len(RETIRED_FILES)} retired source paths / "
+                f"{len(RETIRED_MODULES)} module names checked"
+                + ("; " + "; ".join(retired_errors) if retired_errors else "")
+            ),
         )
     )
 
@@ -304,7 +294,7 @@ def report() -> list[Cell]:
             )
         )
 
-    linux_impls = ("binnacle.platform.linux", "binnacle.service_unit_linux")
+    linux_impls = ("binnacle.platform.linux",)
     product_hits = any_import(product_domain_files(), linux_impls)
     cells.append(
         Cell(

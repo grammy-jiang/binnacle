@@ -102,6 +102,32 @@ def _is_import_loader(
     return False
 
 
+def _literal_loader_target(node: ast.Call) -> str | None:
+    """Resolve a literal dynamic import, including importlib relative packages."""
+    name = (
+        node.args[0]
+        if node.args
+        else next((kw.value for kw in node.keywords if kw.arg == "name"), None)
+    )
+    if not isinstance(name, ast.Constant) or not isinstance(name.value, str):
+        return None
+    target = name.value
+    if not target.startswith("."):
+        return target
+
+    package = (
+        node.args[1]
+        if len(node.args) > 1
+        else next((kw.value for kw in node.keywords if kw.arg == "package"), None)
+    )
+    if not isinstance(package, ast.Constant) or not isinstance(package.value, str):
+        return None
+    try:
+        return importlib.util.resolve_name(target, package.value)
+    except (ImportError, ValueError):
+        return None
+
+
 def imports_of(path: Path, source: str) -> set[str]:
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     targets: set[str] = set()
@@ -113,14 +139,12 @@ def imports_of(path: Path, source: str) -> set[str]:
             targets.update(alias.name for alias in node.names)
         elif isinstance(node, ast.ImportFrom):
             targets.update(_from_targets(node, source, is_package=is_package))
-        elif (
-            isinstance(node, ast.Call)
-            and _is_import_loader(node.func, importlib_names, loader_names)
-            and node.args
+        elif isinstance(node, ast.Call) and _is_import_loader(
+            node.func, importlib_names, loader_names
         ):
-            arg = node.args[0]
-            if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
-                targets.add(arg.value)
+            target = _literal_loader_target(node)
+            if target is not None:
+                targets.add(target)
     return targets
 
 

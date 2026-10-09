@@ -6,13 +6,11 @@ import pytest
 
 from scripts import check_architecture
 from scripts import g7_legacy_gate as gate
-from scripts.gate_a_manifest import compatibility_facades
 
 
 def test_historical_retirement_manifest_is_complete_and_immutable_in_scope():
     assert len(gate.RETIRED_FILES) == 94
     assert len(gate.RETIRED_MODULES) >= 90
-    assert compatibility_facades() == set()
 
 
 def test_no_retired_runtime_files_or_direct_dynamic_imports():
@@ -63,6 +61,9 @@ def test_canonical_module_imports_remain_allowed(tmp_path):
         'import importlib as il\nil.import_module("binnacle.doctor")\n',
         'import importlib as il\ngetattr(il, "import_module")("binnacle.jobs")\n',
         'from builtins import __import__ as load\nload("binnacle.jobs")\n',
+        'import importlib\nimportlib.import_module(".jobs", package="binnacle")\n',
+        'from importlib import import_module as load\nload(".doctor", "binnacle")\n',
+        'import importlib\nimportlib.import_module(name=".jobs", package="binnacle")\n',
     ],
 )
 def test_import_aliases_cannot_restore_retired_modules(tmp_path, source):
@@ -81,6 +82,10 @@ def test_import_aliases_cannot_restore_retired_modules(tmp_path, source):
         "import sys\nsys.modules.setdefault(__name__, object())\n",
         "from sys import modules as m\nm.update({__name__: object()})\n",
         "import sys\nregistry = sys.modules\nregistry[__name__] = object()\n",
+        "import sys\nregistry = sys.modules\nregistry |= {__name__: object()}\n",
+        "import sys\ndel sys.modules[__name__]\n",
+        'import sys\nsys.modules.pop("binnacle.jobs", None)\n',
+        "from sys import modules as registry\nregistry.clear()\n",
         "from binnacle.features.commands.jobs import *\n",
         "def __getattr__(name):\n    return name\n",
     ],
@@ -102,6 +107,7 @@ def test_readonly_module_introspection_is_not_an_identity_facade(tmp_path):
         "alias = sys.modules\n"
         'also_present = alias.get("unrelated")\n'
         'current = load("binnacle.features.commands.jobs")\n'
+        'canonical = load(".features.commands.jobs", "binnacle")\n'
     )
     assert gate.failures(root) == []
 

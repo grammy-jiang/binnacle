@@ -89,7 +89,6 @@ def manifest_groups() -> dict[str, set[str]]:
             "platform/linux/service_systemd.py",
             "platform/linux/service_provisioning_linux.py",
             "platform/linux/runtime_paths_linux.py",
-            "platform/linux/service_unit_linux.py",
         },
         "diagnostics": {
             "diagnostics/__init__.py",
@@ -104,7 +103,6 @@ def manifest_groups() -> dict[str, set[str]]:
         },
         "observability": {
             "observability/__init__.py",
-            *(rel(path) for path in SRC.glob("logstats*.py")),
             *(rel(path) for path in (SRC / "observability").glob("logstats*.py")),
             "observability/system_resource_contracts.py",
             "observability/system_resource_history.py",
@@ -143,7 +141,6 @@ def manifest_groups() -> dict[str, set[str]]:
                 rel(path)
                 for path in (SRC / "companions" / "watchdog" / "ops").glob("*.py")
             ),
-            *(rel(path) for path in (SRC / "ops" / "watchdog").rglob("*.py")),
         },
         "application_shell": {
             "__init__.py",
@@ -170,21 +167,3 @@ def manifest_coverage() -> tuple[list[str], dict[str, list[str]]]:
     for path in sorted(set(owners) - actual):
         duplicate[path] = ["stale-manifest-entry", *owners[path]]
     return unclassified, duplicate
-
-
-def compatibility_facades() -> set[str]:
-    """After G7, runtime compatibility facades must remain absent."""
-    return set()
-
-
-def compatibility_facade_coverage() -> tuple[list[str], dict[str, list[str]]]:
-    """Return missing facades and their current ownership groups."""
-    actual = {path.relative_to(SRC).as_posix() for path in python_files()}
-    missing = sorted(compatibility_facades() - actual)
-    groups = manifest_groups()
-    owners: dict[str, list[str]] = {}
-    for facade in sorted(compatibility_facades() & actual):
-        owners[facade] = sorted(
-            group for group, paths in groups.items() if facade in paths
-        )
-    return missing, owners

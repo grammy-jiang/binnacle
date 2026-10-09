@@ -16,7 +16,7 @@ def test_current_report_confirms_g5_boundary_closure():
     assert cells["architecture.fastmcp_boundary"].status == "PENDING"
     assert cells["architecture.package_convergence"].status == "PENDING"
     assert cells["architecture.g6_manifest_coverage"].status == "PASS"
-    assert cells["architecture.g6_compatibility_facade_inventory"].status == "PASS"
+    assert cells["architecture.g7_legacy_retirement"].status == "PASS"
 
     assert cells["platform.process_contract"].status == "PASS"
     assert cells["platform.resource_contract"].status == "PASS"
@@ -84,13 +84,19 @@ def test_g5_additions_have_expected_g6_owners():
         assert [group for group, paths in groups.items() if path in paths] == [owner]
 
 
-def test_g6_compatibility_facades_are_present_and_singly_classified():
-    missing, owners = manifest.compatibility_facade_coverage()
+def test_g7_retirement_cell_reports_actual_source_violations(tmp_path, monkeypatch):
+    from scripts import g7_legacy_gate as g7
 
-    assert missing == []
-    assert set(owners) == manifest.compatibility_facades()
-    assert all(len(groups) == 1 for groups in owners.values())
-    assert {"doctor_connectivity.py", "doctor_provenance.py"}.isdisjoint(owners)
+    # A reintroduced retired module must cause the report to fail,
+    # not silently pass on an empty compatibility inventory.
+    source_root = tmp_path / "binnacle"
+    source_root.mkdir()
+    (source_root / "jobs.py").write_text("x = 1\n")
+    monkeypatch.setattr(gate_a, "g7_failures", lambda: g7.failures(source_root))
+    cells = {cell.id: cell for cell in gate_a.report()}
+    cell = cells["architecture.g7_legacy_retirement"]
+    assert cell.status == "FAIL"
+    assert "legacy file remains: jobs.py" in cell.detail
 
 
 def test_watchdog_tunnel_contract_allows_only_tunnel_unit_name(tmp_path):
@@ -171,7 +177,7 @@ def test_gate_a_detects_canonical_boundary_bypasses(monkeypatch):
         ),
         (
             "features/files/paths.py",
-            "binnacle.platform.linux.service_unit_linux",
+            "binnacle.platform.linux.service_provisioning_linux",
             "platform.product_domains_no_linux_imports",
         ),
         (

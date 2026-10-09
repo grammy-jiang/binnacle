@@ -119,7 +119,7 @@ automatically appends an `indexed context pilot` section. Windows without indexe
 data keep the old stats output unchanged.
 
 For per-call rows or machine-readable review, use the detailed front end (it shares
-the same `binnacle.logstats` analysis implementation; it is not a second stats
+the same `binnacle.observability.logstats` analysis implementation; it is not a second stats
 engine):
 
 ```bash

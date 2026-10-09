@@ -194,16 +194,23 @@ def _module_identity_writes(tree: ast.AST) -> list[int]:
             )
     writes: list[int] = []
     for node in ast.walk(tree):
-        if isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
-            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+        if isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign, ast.Delete)):
+            targets = (
+                node.targets
+                if isinstance(node, (ast.Assign, ast.Delete))
+                else [node.target]
+            )
             for target in targets:
-                # Assigning a local variable to sys.modules is a read; writing
-                # through its registry mapping (or replacing sys.modules) is not.
+                # Ordinary "registry = sys.modules" only reads the registry.
+                # But augmented assignment updates the dict in place, and
+                # deleting or assigning an entry mutates module identity.
                 registry = (
                     target.value
                     if isinstance(target, ast.Subscript)
                     else target
                     if isinstance(target, ast.Attribute)
+                    else target
+                    if isinstance(node, ast.AugAssign)
                     else None
                 )
                 if registry is not None and _module_registry(
@@ -213,7 +220,16 @@ def _module_identity_writes(tree: ast.AST) -> list[int]:
         elif (
             isinstance(node, ast.Call)
             and isinstance(node.func, ast.Attribute)
-            and node.func.attr in {"setdefault", "update", "__setitem__"}
+            and node.func.attr
+            in {
+                "setdefault",
+                "update",
+                "__setitem__",
+                "pop",
+                "popitem",
+                "clear",
+                "__delitem__",
+            }
             and _module_registry(node.func.value, sys_names, registry_names)
         ):
             writes.append(node.lineno)

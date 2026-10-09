@@ -6,6 +6,7 @@ import pytest
 
 import scripts.gate_a_manifest as manifest
 import scripts.gate_a_report as gate_a
+from scripts.g7_legacy_gate import RETIRED_FILES
 
 
 @pytest.mark.parametrize(
@@ -46,7 +47,7 @@ def test_domain_scan_covers_manifest():
 
 
 def test_doctor_common_is_canonically_owned():
-    assert "doctor_common.py" not in manifest.compatibility_facades()
+    assert "doctor_common.py" in RETIRED_FILES
     assert "diagnostics/doctor_common.py" in manifest.manifest_groups()["diagnostics"]
 
 
@@ -210,15 +211,14 @@ def test_g6_diagnostics_legacy_aliases_are_classified():
         "job_manager_doctor.py",
         "diagnostics/doctor_contracts.py",
     }
-    facades = manifest.compatibility_facades()
     groups = manifest.manifest_groups()
-    assert removed.isdisjoint(facades)
-    assert "doctor.py" not in facades
+    assert removed.issubset(RETIRED_FILES)
+    assert "doctor.py" in RETIRED_FILES
     assert "diagnostics/doctor_common.py" in groups["diagnostics"]
     assert "diagnostics/doctor_jobs.py" in groups["diagnostics"]
     assert "diagnostics/job_manager_doctor.py" in groups["diagnostics"]
     assert "doctor_contracts.py" in groups["application_shell"]
-    assert "doctor_contracts.py" not in facades
+    assert "doctor_contracts.py" not in RETIRED_FILES
 
 
 @pytest.mark.parametrize(
@@ -226,3 +226,25 @@ def test_g6_diagnostics_legacy_aliases_are_classified():
 )
 def test_companion_namespace_roots_are_guarded(root):
     assert root in gate_a.companion_modules()
+
+
+def test_source_import_reader_prefers_package_root_over_git_checkout_name(tmp_path):
+    # The production repository itself is named binnacle, as is its src
+    # package. Only the latter belongs in a Python module name.
+    package = tmp_path / "binnacle" / "src" / "binnacle" / "diagnostics"
+    package.mkdir(parents=True)
+    source = package / "__init__.py"
+    source.write_text("from ..companions import watchdog\n")
+    assert "binnacle.companions.watchdog" in gate_a.imports_for(source)
+    assert gate_a.imported_names_from(source, "binnacle.companions.watchdog") == (
+        set(),
+        True,
+    )
+
+
+def test_gate_a_imports_for_detects_canonical_static_dynamic_imports(tmp_path):
+    source = tmp_path / "candidate.py"
+    source.write_text(
+        'import importlib\nimportlib.import_module(".jobs", package="binnacle")\n'
+    )
+    assert "binnacle.jobs" in gate_a.imports_for(source)
