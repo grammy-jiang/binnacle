@@ -2,8 +2,8 @@
   "active_jobs": [],
   "baseline_sha": "02f4bab9bc7562668ffc41d622c4274449933768",
   "branch": "refactor/os-independent-stage1-implementation-20261009",
-  "candidate_sha": "UNCOMMITTED_P2_FIX_FROM_ae1232bb2ccb",
-  "ci_status": "PASS_AT_PRIOR_SHA_ae1232bb2ccb_P2_FIX_NEW_SHA_NOT_SUBMITTED",
+  "candidate_sha": "3797ffc2e044d88e3fc8768e93775a23029ff6ad",
+  "ci_status": "Final documentation-only commit/push pending; 17 earlier PR checks green on ae1232bb, no assertion of 3797ffc final-head CI",
   "completed": [
     "Plan read in full, 517 lines; repository instructions read",
     "Independent canonical worktree bootstrapped with locked uv 0.12.24",
@@ -59,7 +59,14 @@
     "Independent Codex P2 on ae1232bb: repeat stop could conceal partial EPERM descendant signal delivery",
     "P2 repair: optional durable stop_signal_partial marker under existing spool lock; native callback writes marker before await_exit",
     "P2 new manager and embedded paths reject retries and old metadata remains readable",
-    "P2 134 focused tests passed initially and 14 final affected tests passed; source mypy/architecture/import/size green"
+    "P2 134 focused tests passed initially and 14 final affected tests passed; source mypy/architecture/import/size green",
+    "P2 follow-up architecture test is corrected: 158 tests pass; source committed 3797ffc with normal Git hooks",
+    "Latest candidate managed two-lane full suite: 2548 passed, 3 skipped, no failures, 69.13s",
+    "Latest candidate coverage-policy: 131 production modules, 48 script modules, 0 hard errors; 3 previously documented script-level debts",
+    "Exact 3797ffc Python 3.10, 3.11, 3.12, 3.13, 3.14 full compatibility matrix: all five pass",
+    "Exact 3797ffc clean artifact (sdist -> wheel -> hashed locked install -> smoke): 1 passed",
+    "Exact 3797ffc full repository pre-commit: 35 hooks pass; pre-push fast unit/contract test gate passes",
+    "Final source-bound local acceptance checksum index, reviewer handoff and nonimplemented Darwin backlog prepared"
   ],
   "deployment_status": "NOT_STARTED: production/master v1.0.1 unchanged; active durable manager must not restart",
   "evidence": [
@@ -69,7 +76,10 @@
     "docs/os-independent-stage1-evidence/os0-raw-mcp-surface.json",
     "docs/os-independent-stage1-evidence/os0-host-baseline.json",
     "docs/os-independent-stage1-evidence/os0-focused-tests.log",
-    "docs/os-independent-stage1-evidence/os0-durable-tests.log"
+    "docs/os-independent-stage1-evidence/os0-durable-tests.log",
+    "docs/os-independent-stage1-evidence/os7-final-local-acceptance-20261010.json",
+    "docs/os-independent-stage1-evidence/os7-local-final-review-handoff-20261010.md",
+    "docs/os-independent-stage1-evidence/os7-darwin-stage2-backlog-20261010.md"
   ],
   "failures_and_repairs": [
     {
@@ -151,6 +161,20 @@
       "failure": "Synthetic concurrency fake missing alive method",
       "resolution": "Supply explicit fake alive semantics; targeted test passes",
       "stage": "OS7 P2"
+    },
+    {
+      "command": "uv run scripts/run_test_suite.py --suite full --seed 12345",
+      "failure": "tests/unit/core/test_platform_architecture.py::test_platform_dependencies[job_owner] and [job_manager] reject new allowed Core job_stop.raise_if_partial_signal imports, though 21 Import Linter contracts and earlier architecture scanner pass",
+      "result": "2544 passed, 3 skipped, 2 failed, total 66.23s",
+      "stage": "OS7 P2 full managed suite",
+      "status": "FOCUSED_REPAIR_PENDING",
+      "test_sha": "14ea285d0b4778bbed3455205df52efe70118504"
+    },
+    {
+      "failure": "A tool call to update the static test dependencies was rejected: This tool call was blocked by OpenAI because we couldn't determine the safety status of the request.",
+      "resolution": "After explicit renewed user permission, narrow core-neutral job_stop import ownership update applied with a real patch; AST suite 158 passed, normal Git hooks passed (3797ffc). No forbidden Linux boundary was relaxed.",
+      "stage": "OS7 P2 focused repair",
+      "status": "BLOCKED_POLICY"
     }
   ],
   "gates": {
@@ -161,30 +185,29 @@
     "OS4": "UNIT_PROVISIONING_AND_READINESS_FOCUSED_PASS_UNREVIEWED",
     "OS5": "PATH_ALIAS_LOG_DIAGNOSTIC_FOCUSED_PASS; CANONICAL_ANCESTOR_TOCTOU_DOCUMENTED",
     "OS6": "152_MODULE_49_SCRIPT_OWNERSHIP_COMPLETE; STATIC_40_TESTS_PASS; REVIEW_PENDING",
-    "OS7": "PREVIOUS_SHA_ALL_17_CI_CHECKS_PASS_P2_FIX_CI_PENDING"
+    "OS7": "LOCAL_QUALIFIED_AT_3797ffc_FULL_2548_PASS_COVERAGE_0_ERRORS_PYTHON_5OF5_PACKAGE_AND_HOOKS_GREEN; EXACT_PR_CI_INDEPENDENT_REVIEW_AND_LIVE_DEPLOY_PENDING"
   },
   "known_baseline_defects": [
     "Symlink allowed-root canonicalization falsely rejects canonical target",
     "Linux import-blocking cannot currently import pure server/jobs/logstats"
   ],
-  "last_committed_sha": "ae1232bb2ccb66f8ccdadaa945a58e8492f479bc",
-  "next_action": "Commit P2 correction with normal hooks; run full tests and push exact candidate to CI; re-request independent review; production remains unchanged until all gates pass.",
+  "last_committed_sha": "3797ffc2e044d88e3fc8768e93775a23029ff6ad",
+  "next_action": "Commit local gate checksum inventory, review handoff and Darwin backlog with normal hooks; push PR #18; confirm CI checks on exact new head; request source-bound independent review; do not deploy before required approval and live quiet check.",
   "owner": "single ChatGPT implementation integrator",
   "plan_sha": "19a3cf1e43755ed4aee3837c25ea63188058a26e",
   "remaining_dependencies": [
-    "Full official managed two-lane suite and coverage policy after P2",
-    "Final pre-commit/pre-push, Python 3.10-3.14 matrix, packaging",
-    "Commit and push through normal hooks; exact SHA CI",
-    "Source-bound independent re-review of P2 plus OS1/OS3/OS4/OS7",
-    "Required human disposition of protected security/deployment gates",
-    "Only after review and CI green, guarded Linux deployment with quiet-window and active-job checks"
+    "Commit evidence-only documentation and push PR #18, then confirm every required check on exact final PR HEAD",
+    "Obtain genuinely independent exact-HEAD source review of OS1, OS3, OS4, OS6/OS7, including P1/P2 process safety",
+    "Satisfy required protected security/deployment human disposition; do not self-approve or waive safety",
+    "Use existing guarded production deployment during verified quiet window with live manager job and rollback checks",
+    "Confirm live MCP parity, production doctors and rollback readiness; then reconcile ledger to final accepted source SHA"
   ],
-  "review_status": "Independent Codex P2 comment 4232561690 corrected locally, independently re-review PENDING, human disposition still PENDING",
+  "review_status": "Independent source-bound P1/P2, OS1, OS3, OS4, OS7 disposition not received; current implementation-owner packet prepared",
   "reviews": [],
-  "stage": "OS7 P2 correction; candidate review/CI/deployment pending",
+  "stage": "OS7 all local source-bound acceptance gates pass; final-head CI, independent review and guarded deployment remain",
   "status": "REVIEW_PENDING",
   "task_id": "BINNACLE-OS-STAGE1-IMPLEMENT-20261009",
-  "tested_source_sha": "02879e8e34215515500209f80ba24aaa7438aadc",
+  "tested_source_sha": "3797ffc2e044d88e3fc8768e93775a23029ff6ad",
   "tests": [
     {
       "command": "uv run pytest [six baseline platform/server/doctor test files] -q --randomly-seed=12345",
@@ -407,9 +430,68 @@
       "exit_code": 0,
       "result": "14 passed",
       "stage": "OS7 P2"
+    },
+    {
+      "stage": "OS7 P2 verified repair",
+      "command": "uv run pytest -q --randomly-seed=12345 tests/unit/core/test_platform_architecture.py",
+      "exit_code": 0,
+      "result": "158 passed",
+      "source_sha": "3797ffc2e044d88e3fc8768e93775a23029ff6ad"
+    },
+    {
+      "stage": "OS7 final",
+      "command": "uv run python scripts/run_test_suite.py --suite full --seed 12345",
+      "exit_code": 0,
+      "log_path": "docs/os-independent-stage1-evidence/os7-final-P2-fixed-managed-full.log",
+      "result": "parallel-safe 2546 passed, 3 skipped; ordinary-process 2 passed; combined 2548 passed, 3 skipped; 69.13s",
+      "source_sha": "3797ffc2e044d88e3fc8768e93775a23029ff6ad"
+    },
+    {
+      "stage": "OS7 final",
+      "command": "uv run tox -e coverage-policy -- --seed 12345",
+      "exit_code": 0,
+      "log_path": "docs/os-independent-stage1-evidence/os7-final-P2-fixed-coverage.log",
+      "result": "131 production modules, 48 scripts, 0 hard errors, three existing script debts",
+      "source_sha": "3797ffc2e044d88e3fc8768e93775a23029ff6ad"
+    },
+    {
+      "stage": "OS7 final",
+      "command": "env BINNACLE_TEST_WORKERS=4 uv run tox run",
+      "exit_code": 0,
+      "result": "py310: OK; py311: OK; py312: OK; py313: OK; py314: OK; congratulations :)",
+      "source_sha": "3797ffc2e044d88e3fc8768e93775a23029ff6ad",
+      "sha256": "d39a1ae6b52f8e6f80c8810906b531744ed8628cf80c3eaabeb8845d27ebe28a",
+      "log_path": "docs/os-independent-stage1-evidence/os7-final-P2-fixed-python-matrix.log"
+    },
+    {
+      "stage": "OS7 final",
+      "command": "uv run pytest -q --randomly-seed=12345 tests/integration/test_wheel_artifact.py",
+      "exit_code": 0,
+      "result": "1 passed in 5.69s",
+      "source_sha": "3797ffc2e044d88e3fc8768e93775a23029ff6ad",
+      "sha256": "9773bff50db8c7e20ce38d8622be736ece24b8bcd75b924ee4a2c8fbad0ec9be",
+      "log_path": "docs/os-independent-stage1-evidence/os7-final-P2-fixed-package.log"
+    },
+    {
+      "stage": "OS7 final",
+      "command": "uv run pre-commit run --all-files",
+      "exit_code": 0,
+      "result": "architecture boundaries; import architecture contracts; Passed",
+      "source_sha": "3797ffc2e044d88e3fc8768e93775a23029ff6ad",
+      "sha256": "bc0e444f1a2beb87d5a8ab318be5aa7da3bd7f99b27807a0741574a6b7002fe3",
+      "log_path": "docs/os-independent-stage1-evidence/os7-final-P2-fixed-precommit.log"
+    },
+    {
+      "stage": "OS7 final",
+      "command": "uv run pre-commit run --hook-stage pre-push --all-files",
+      "exit_code": 0,
+      "result": "fast unit and contract tests; Passed",
+      "source_sha": "3797ffc2e044d88e3fc8768e93775a23029ff6ad",
+      "sha256": "37a3870a992283a9118e1cf753c85bacb014466bfd69186ac26d8639ee79779a",
+      "log_path": "docs/os-independent-stage1-evidence/os7-final-P2-fixed-prepush.log"
     }
   ],
-  "updated_utc": "2026-10-09T21:52:14.957760+00:00",
-  "worktree_dirty": true,
+  "updated_utc": "2026-10-09T22:12:07.525047+00:00",
+  "worktree_dirty": false,
   "worktree_path": "/home/grammy-jiang/Projects/binnacle-os-independent-stage1-impl"
 }
