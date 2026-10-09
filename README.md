@@ -4,8 +4,37 @@ Binnacle is a small MCP server that lets an AI agent work on a Linux/Raspberry P
 through deterministic tools: read/search files, run commands, and manage
 long-running jobs.
 
-> **Status:** proof of concept. This repository is not packaged or deployed as a
-> release yet.
+> **Status:** developer-oriented Linux proof of concept. Distribution
+> releases are versioned and verified independently of Raspberry Pi
+> deployments. Check the package index for PyPI availability.
+
+**Security:** Binnacle allows AI clients to read/write files and run shell
+commands within configured roots. The bearer token is sensitive; client
+identifiers used for tool visibility are not a strong authorization boundary.
+Use it only on a trusted machine/network, keep the endpoint bound to localhost,
+and put an authenticated gateway in front of any tunnel. **Do not expose the
+MCP endpoint to the public Internet without appropriate security controls.**
+
+## Install from PyPI
+
+Binnacle targets Linux with Python 3.10–3.14. Its managed services use
+systemd --user and additionally require bash and ripgrep (rg).
+
+```bash
+python -m pip install binnacle-mcp==1.0.1
+binnacle --help
+binnacle doctor
+```
+
+Review any host changes before running setup:
+
+```bash
+binnacle setup --dry-run
+```
+
+For managed services, configuration, bearer token provisioning and the optional
+tunnel companion, follow the Quick start and configuration guidance below.
+Installation does **not** automatically start or expose an MCP server.
 
 ## Quick start
 
@@ -115,7 +144,8 @@ scheduled Security workflow audits the locked runtime and development
 dependencies daily. Dependabot version updates and repository-side governance
 are documented in `docs/github-governance.md`.
 
-There is currently no GitHub release/publishing pipeline. The existing
-distribution-readiness gate is documented in
-`docs/release-readiness.md`; production deployment uses the repository's gated
-local live-smoke flow described in DEVELOPMENT.md.
+GitHub release artifacts are published separately from Raspberry Pi
+deployments. PyPI releases use a dedicated GitHub Actions Trusted Publisher
+workflow with manual environment approval and no stored PyPI API token.
+See docs/release-readiness.md for release controls; production deployment
+uses the existing guarded live-smoke flow described in DEVELOPMENT.md.

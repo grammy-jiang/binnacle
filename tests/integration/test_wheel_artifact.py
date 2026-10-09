@@ -33,7 +33,13 @@ def _build_project(tmp_path: Path) -> tuple[Path, Path, Path, str]:
     repo = Path(__file__).resolve().parents[2]
     project = tmp_path / "project"
     project.mkdir()
-    for name in ("pyproject.toml", "uv.lock", "build-constraints.txt"):
+    for name in (
+        "pyproject.toml",
+        "uv.lock",
+        "build-constraints.txt",
+        "README.md",
+        "LICENSE",
+    ):
         shutil.copy2(repo / name, project / name)
     shutil.copytree(
         repo / "src",
@@ -92,6 +98,8 @@ def _assert_sdist(sdist: Path, version: str) -> None:
     root = roots.pop()
     assert version in root
     assert f"{root}/pyproject.toml" in names
+    assert f"{root}/README.md" in names
+    assert f"{root}/LICENSE" in names
     assert f"{root}/src/binnacle/server.py" in names
     assert f"{root}/src/binnacle/cli.py" in names
     assert f"{root}/src/binnacle/provenance.py" in names
@@ -134,6 +142,16 @@ def _assert_wheel(wheel: Path, version: str) -> None:
         metadata_text = archive.read(metadata).decode()
         assert "Name: binnacle-mcp\n" in metadata_text
         assert f"Version: {version}\n" in metadata_text
+        assert "License-Expression: MIT\n" in metadata_text
+        assert "License-File: LICENSE\n" in metadata_text
+        assert "Description-Content-Type: text/markdown\n" in metadata_text
+        assert (
+            "Project-URL: Repository, https://github.com/grammy-jiang/binnacle\n"
+            in metadata_text
+        )
+        assert "Binnacle is a small MCP server" in metadata_text
+        assert "Requires-Dist: fastmcp==4.1.0\n" in metadata_text
+        assert any(name.endswith("/licenses/LICENSE") for name in names)
 
 
 def _install_and_smoke(

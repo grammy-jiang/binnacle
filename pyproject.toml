@@ -1,5 +1,6 @@
 [build-system]
-requires = ["setuptools>=69"]
+# PEP 639 SPDX license-expression and license-file support starts at 77.0.3.
+requires = ["setuptools>=77.0.3"]
 build-backend = "setuptools.build_meta"
 
 [tool.uv]
@@ -10,9 +11,27 @@ required-version = ">=0.12.7,<0.13"
 
 [project]
 name = "binnacle-mcp"
-version = "1.0.0"
-description = "MCP server that lets AI agents work on a Raspberry Pi."
+version = "1.0.1"
+description = "Linux and Raspberry Pi MCP server for files, search and durable commands."
+readme = "README.md"
 requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Binnacle contributors" }]
+keywords = ["mcp", "fastmcp", "raspberry-pi", "linux", "ai-agents", "developer-tools"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Typing :: Typed",
+]
+
 dependencies = [
     "cyclopts>=4.23.3", # the CLI framework fastmcp's own CLI uses
     "fastmcp==4.1.0", # reviewed FastMCP 4.1 baseline
@@ -23,6 +42,12 @@ dependencies = [
     "tiktoken>=0.14.0",
     "uvicorn[standard]>=0.52.4",
 ]
+
+[project.urls]
+Homepage = "https://github.com/grammy-jiang/binnacle"
+Repository = "https://github.com/grammy-jiang/binnacle"
+Issues = "https://github.com/grammy-jiang/binnacle/issues"
+Releases = "https://github.com/grammy-jiang/binnacle/releases"
 
 [project.scripts]
 binnacle = "binnacle.cli:main"

@@ -1,7 +1,9 @@
 # Release readiness
 
-Binnacle supports explicitly approved manual GitHub releases, but has no automated
-GitHub or PyPI publishing pipeline. It does not publish to PyPI.
+Binnacle has an explicitly approved manual GitHub release process and a
+separate PyPI Trusted Publisher workflow. PyPI distribution is only attempted
+after a non-draft, non-prerelease GitHub release is published, and the protected
+pypi environment permits its OIDC identity. No permanent API token is stored.
 `project.version` in `pyproject.toml` is package metadata used by installed
 artifacts and runtime diagnostics; the current value does not by itself mean
 that a corresponding public release exists.
@@ -57,7 +59,7 @@ workflow that:
 - chooses or increments a release version;
 - creates a release tag;
 - creates a GitHub Release;
-- uploads artifacts to PyPI or another package index;
+- automatically publishes new releases to PyPI upon a GitHub release;
 - manages publishing credentials or trusted-publishing policy.
 
 Those actions remain explicit future design decisions. They should not be added
@@ -68,8 +70,9 @@ exact-SHA CI success, first deploy with the existing guarded live smoke.
 Create an annotated version tag only on the verified deployed SHA, never move
 or reuse a release tag, and publish release notes and verified distribution
 artifacts separately. Roll back the deployment without moving the public tag;
-ship corrections under a new version. Automated release workflows and PyPI
-publication require a separate design and approval.
+ship corrections under a new version. PyPI publishing is now defined in the dedicated publish-pypi.yml workflow,
+which is subject to GitHub pypi environment approval and PyPI account-side
+Trusted Publisher registration. It cannot publish without that trust.
 
 ## Relationship to deployment
 
@@ -83,3 +86,23 @@ does not create or publish a package release.
 The Packaging CI job proves that the same source snapshot is distributable. A
 future release workflow may consume that evidence, but it must not bypass the
 repository's existing quality, coverage, security, and deployment controls.
+
+## PyPI Trusted Publishing
+
+The standalone workflow in .github/workflows/publish-pypi.yml runs only
+when a normal GitHub Release is published. Its no-OIDC validation job checks:
+annotated version tag, matching project version, exact deployed master and
+proof-of-concept SHA, all seven required CI checks, isolated build from sdist,
+and strict PyPI metadata. Only the second job has id-token: write and requires
+the protected GitHub pypi environment. It retrieves the validated distribution
+artifact and uses a commit-pinned PyPA action with digital attestations.
+No workflow_dispatch trigger, direct master push trigger, secret token, or
+skip-existing bypass exists.
+
+The pypi environment permits only v1.* tags and requires owner review. A
+matching pending/active publisher on PyPI itself is also required. These are
+two independent authorization boundaries.
+
+See docs/pypi-publishing.md for the exact PyPI registration fields, initial
+publishing sequence, failure handling, immutable version constraints and
+verification. PyPI publication is not part of Raspberry Pi deployment.

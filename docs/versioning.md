@@ -9,13 +9,15 @@ identity**.
 
 ```toml
 [project]
-version = "1.0.0"
+version = "1.0.1"
 ```
 
 This is package metadata, not a claim that every deployed commit is a new
 formal release. Binnacle is still deployed directly from a reviewed Git
 checkout. GitHub releases require an explicit, manual publish operation;
-no GitHub release is created automatically and PyPI is not published.
+GitHub releases are created manually after an exact-SHA deployment gate.
+The PyPI Trusted Publisher workflow runs only after a normal GitHub release
+is published, then waits for approval in the protected pypi environment.
 
 The version remains static until there is an intentional package release. Do
 not bump it merely because `master` advances.
@@ -68,5 +70,5 @@ subsequent release:
 5. never reuse or move a release tag.
 
 Deployment and release remain separate operations; the release tag can only
-point at the already-verified deployed source SHA. The first release uses the
-existing package version 1.0.0 and does not change its static metadata.
+point at the already-verified deployed source SHA. The initial GitHub release used 1.0.0; the first PyPI-ready package
+uses 1.0.1 with full MIT licensing and public distribution metadata.
