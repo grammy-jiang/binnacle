@@ -9,6 +9,8 @@
 **Explicitly excluded:** macOS adapter implementation, Fedora/RHEL-specific compatibility, unrelated feature development and dependency upgrades
 
 > This document is the implementation proposal for discussion and approval. A committed plan is not permission to modify production, deploy, restart the stable job manager, weaken tests or bypass established review/CI gates.
+>
+> **Execution policy:** Once Stage 1 implementation is separately authorized, execute OS0–OS7 as one continuous, resumable development workflow. Routine findings, test failures, refactor conflicts and repairable tooling issues must be investigated and resolved without returning to the user for step-by-step permission. A gate remains mandatory; the responsible executor must fix or complete it, not ask the user whether to continue.
 
 ## 1. Goals and design invariants
 
@@ -51,6 +53,15 @@ Preserve:
 - Root path security and denial of escaping allowed directories.
 
 A necessary defect fix (e.g. alias root normalization) must be isolated and tested; it must not become a pretext for arbitrary public contract change.
+
+### 1.4 Continuous autonomous execution contract
+
+- **One authorization covers routine Stage 1 development.** After kickoff, do not insert a user-approval checkpoint between OS0, OS1, OS2, OS3, OS4, OS5, OS6 and OS7 for ordinary design refinements, local code edits, focused tests, isolated probes, locally owned branches or normal commits.
+- **Each gate is work to complete, not a reason to wait.** Fix the candidate, repair tests or tooling, obtain any required review through an available independent review channel, and advance automatically when evidence passes.
+- **Never conceal a failure.** A red mandatory gate cannot be called green. If the gate depends on an external system or truly independent reviewer that is unavailable, preserve the affected candidate, continue all safe independent work, and record the precise unmet requirement rather than manufacturing an approval.
+- **Do not confuse progress with production authorization.** Autonomous local implementation does not expand privileges to bypass repository security controls, force pushes, overwrite another owner, mutate real host services in ordinary tests, or restart a stable manager while it owns active work.
+- **Resume from evidence, not conversational memory.** Every substantial completed or failed operation updates a durable worktree-local execution ledger. On resumed execution, reconcile the actual Git/CI/test state and continue with the next actionable task rather than re-running prior success by default.
+- **No background-work fiction.** A ChatGPT conversation does not itself guarantee a continuously running worker. A future executor may use an authorized persistent job runner and checkpoints; if execution is interrupted, the durable ledger must make resumption possible without asking repetitive questions.
 
 ## 2. Baseline and evidence
 
@@ -203,6 +214,10 @@ Tasks:
 6. Identify historical compatibility facades and pre-existing user-owned untracked documents; do not take ownership of them.
 7. Produce a risk register and dependency graph for OS1–OS7.
 
+**Autonomous OS0 recovery:** If a characterization script, fixture or evidence export fails, inspect its real stderr/exit status, repair the local tooling or use another existing read-only capture path, then repeat only that capture. Record already-known defects as baseline failures with a reproduction and expected remediation; do not hold the inventory hostage until their OS3/OS5 fixes. If one source is temporarily inaccessible, mark that single evidence item pending and complete the remaining inventory independently. Do not silently fabricate or rebaseline reference data.
+
+**Automatic handoff:** Once inventory and required baseline evidence are complete, start OS1 without seeking another acknowledgement.
+
 Exit: each module is classified; every P0/P1 seam has an owner, observable invariant and test; source baseline and public wire are immutable.
 
 ### OS1 — Contract design and architecture gates
@@ -213,7 +228,11 @@ Exit: each module is classified; every P0/P1 seam has an owner, observable invar
 4. Define lifecycle, runtime path, service log and diagnostic unavailable/error semantics.
 5. Specify typed factory entrypoints, compatibility fields and exact ordering of construction.
 6. Add Import Linter contracts and AST scanner rules with positive/negative tests for direct, alias and literal dynamic imports, subprocess utilities and Linux path literals.
-7. Have an independent design review before broad module migration.
+7. Request a genuine independent design review through an available supported review workflow, inspect the findings, correct actionable issues and resubmit without a user-facing handoff. Preserve reviewer identity and evidence; the author must not claim an independent review of their own changes.
+
+**Autonomous OS1 recovery:** When a proposed contract causes circular imports, unrepresentable Linux behavior, typing failures or architecture violations, shrink or revise that interface, add a regression case and rerun only its dependent contract tests. Reopen and re-review a frozen interface if later evidence requires it; do not lock in an unsafe abstraction. If independent review infrastructure is unavailable, finish test harnesses, unchanged contracts and OS5 path work in parallel, keep the unreviewed interface marked REVIEW_PENDING, and continue retrying approved review channels with meaningful new evidence rather than polling or asking the user.
+
+**Automatic handoff:** Start OS2 as soon as the affected interface review gate is genuinely satisfied; unaffected preparatory work may proceed meanwhile.
 
 Exit: frozen narrow contracts, enforceable dependency direction and a reviewed migration compatibility strategy.
 
@@ -226,6 +245,10 @@ Exit: frozen narrow contracts, enforceable dependency direction and a reviewed m
 5. Preserve existing server public entrypoints and default Linux initialization, including authentication and FastMCP mounts.
 6. Ensure unknown OS fails transparently without selecting Linux.
 7. Ensure a fake-platform core factory builds a FastMCP app with the current tool inventory, without importing platform.linux.
+
+**Autonomous OS2 recovery:** For import cycles or premature platform activation, move the construction boundary and inject the smallest dependencies required; preserve the legacy production export through an explicit bootstrap. If fake-platform construction passes but real Linux startup differs, compare against the captured bootstrap/HTTP/tool baseline, fix wiring, and repeat just the affected tests. Never treat an unknown OS as Linux or relax FM gates to obtain a passing import.
+
+**Automatic handoff:** Publish the agreed factory signatures and tested fake implementations; launch independent OS3 and OS4 implementation work and the separable OS5 path tests without another user prompt.
 
 Exit: default Linux behavior unchanged; pure factory + generic configuration can be tested without Linux implementation imports.
 
@@ -241,6 +264,10 @@ Exit: default Linux behavior unchanged; pure factory + generic configuration can
 8. Run bidirectional existing/new manager-RPC compatibility checks, schema-1/schema-2/legacy persisted record checks, restart/recovery and concurrency tests.
 9. Test no accounting, failed cgroup attachment, disconnected client, dead owner, orphaned child and resource-finalizer behavior using isolated temporary roots and processes.
 
+**Autonomous OS3 recovery:** A failing stop, recovery, cursor, RPC or resource test triggers focused diagnosis and a targeted patch in the isolated implementation worktree. Preserve the old Linux adapter and durable record-reader as the compatibility fallback while proving the new semantic boundary. Use disposable processes, sockets and spools for fault injection. For a signal-identity case that cannot be made provably safe, fail closed for the uncertain target, retain the exact unsupported scenario and continue independent OS4/OS5 work; do not signal an unrelated process or restart the production manager to make tests pass.
+
+**Automatic handoff:** After OS3 contracts and focused parity pass, deliver the exact SHA, RPC/storage compatibility evidence and any isolated unresolved security case to the single integrator; proceed to remaining work rather than waiting for permission.
+
 Exit: core commands execute with fake process backend; Linux job lifecycle, persistence, stop and resource accounting match the v1.0.1 contract. No production manager restart.
 
 ### OS4 — Deployment, managed services and Linux-specific CLI (high risk)
@@ -252,6 +279,10 @@ Exit: core commands execute with fake process backend; Linux job lifecycle, pers
 5. Preserve systemd unit template content and rendered markers, path and enable/reload order under current Linux contract.
 6. Move or isolate Linux-only compatibility facades with controlled import rules; keep existing public CLI names and options.
 7. Use fakes/synthetic unit trees in tests; no host service mutation from ordinary tests.
+
+**Autonomous OS4 recovery:** If a template, CLI output, provisioner mock or safe-restart gate differs, compare the candidate against the immutable v1.0.1 unit/doctor/setup evidence; correct the mapping and repeat the specific Linux service fixture test. Keep Linux-specific compatibility facades where required; do not rewrite goldens to justify drift. If live service access is unavailable, complete synthetic unit tests and guarded read-only probes, mark the specific live check pending and continue other safe tasks; never invoke systemctl mutations as a shortcut.
+
+**Automatic handoff:** Supply reviewed semantic service/log interfaces to OS5 diagnostics immediately after the affected OS4 contract checks pass.
 
 Exit: CLI/deploy generic workflow has no direct systemd/procfs calls; Linux service behavior and unit bytes/semantics are preserved.
 
@@ -266,6 +297,10 @@ Exit: CLI/deploy generic workflow has no direct systemd/procfs calls; Linux serv
 7. Align telemetry path hashing with configured root conventions without revealing private paths or modifying retained telemetry semantics without tests.
 8. Re-run Linux module import blocking and fake-platform tests after each split.
 
+**Autonomous OS5 recovery:** A symlink/path error requires a minimal reproducer followed by root/candidate canonicalization and adversarial path tests; do not disable safety checks. For journal import failures, separate acquisition from parsing and retain the Linux compatibility API in the correct adapter. For regressions in search results, reproduce with a small isolated fixture and preserve the original ripgrep semantics rather than adding an OS wrapper. A demonstrated unresolved TOCTOU or authorization risk stays a recorded security gate, while non-dependent cleanup continues.
+
+**Automatic handoff:** Feed newly discovered leakage cases and associated negative tests into OS6 automatically.
+
 Exit: core Files/Search/diagnostics/statistics execute against mocks without importing platform.linux; Linux public outputs retain compatibility except explicitly characterized defect fixes.
 
 ### OS6 — Completeness sweep, companions and infrastructure alignment
@@ -279,6 +314,10 @@ Exit: core Files/Search/diagnostics/statistics execute against mocks without imp
 7. Eliminate stale compatibility facades only when no supported consumers remain, with negative tests for forbidden return paths.
 8. Verify no duplicate FastMCP child servers, Providers or tools were introduced.
 
+**Autonomous OS6 recovery:** Treat each newly found import, CLI, script or companion leak as a concrete owner-assigned task; make the smallest safe move and run the relevant architecture/negative tests. For stale fixtures asserting exact old file placement, replace only layout assertions while preserving their behavioral intent. If a helper is truly Linux-only, classify it with evidence instead of manufacturing a general-purpose adapter or widening a static-check exception.
+
+**Automatic handoff:** Reconcile every OS0 inventory item with the actual candidate tree and transfer a clean evidence map, unresolved risk list and exact SHA to OS7.
+
 Exit: complete inventory reconciled; no unexplained platform leak or obsolete module remains.
 
 ### OS7 — Integrated acceptance and Linux deployment qualification
@@ -288,11 +327,15 @@ Exit: complete inventory reconciled; no unexplained platform leak or obsolete mo
 3. Verify exact client-visible MCP surface in all four profiles and raw local/provider ownership; no golden rebasing to hide drift.
 4. Execute cross-version durable RPC/metadata, restart, stop, cgroup and Linux service tests.
 5. Run pre-commit, pre-push, coverage-policy, supported Python 3.10–3.14 tox matrix, wheel-from-sdist and clean-install tests.
-6. Complete independent architecture and implementation review, with no framework overlap, undocumented contract change or weakened gate.
+6. Arrange genuine independent architecture and implementation reviews using the available review workflow, address concrete findings without waiting for user prompts, and retain review evidence; never self-certify an independent review.
 7. Only after exact-candidate CI is green, use the existing guarded production deployment process. Never replace it with a direct push or unmanaged service restart.
 8. If job-manager code is affected, treat manager restart/upgrade as a separately gated operation after confirming no active work; verify rollback and old records.
 9. Confirm Raspberry Pi live smoke and production doctors. Preserve rollback evidence and a clean accepted candidate.
 10. Publish a stage-completion evidence report and a bounded list of Darwin adapter work remaining.
+
+**Autonomous OS7 recovery:** If a local gate fails, classify by test name and source SHA, repair its root cause, rerun the narrow affected scope, then rerun the complete final gate set once the candidate has converged. If exact-SHA CI is red, inspect trusted checks and actual run attempts and fix the candidate; do not skip a check or substitute a different SHA. Transient infrastructure failures may be retried after a documented environmental change, not blindly looped. Unavailable reviews, blocked CI, an unsafe live-deployment window or active production manager jobs do not authorize bypass: leave production unchanged, complete remaining local qualification, and retain an exact resume action for the blocked gate. Do not mark OS7 complete until the original requirements really pass.
+
+**Automatic handoff:** Produce the final evidence report and Darwin backlog automatically when every required acceptance item passes; otherwise report the exact residual external/safety gate, without repeatedly asking the user whether to keep working.
 
 Exit: accepted Linux production parity **and** verifiably Linux-independent core, with reviewed artifacts and no uncontrolled host changes.
 
@@ -335,10 +378,10 @@ Do not equate on_duplicate="error" with checking cross-provider duplication; ret
 ### 6.3 Test frequency
 
 - For each small change: targeted unit/contract/static tests only.
-- On failure: inspect captured traceback/output; fix cause; rerun only relevant scope; do not repeat identical calls without new evidence.
+- On failure: capture command, SHA, stderr/traceback and targeted test ID; fix cause and rerun only relevant scope. Never repeat identical calls without new evidence, but do not abandon an otherwise repairable stage.
 - End of each work package: focused package tests + affected OI/FM gates.
 - OS3/OS4 integration: isolated real Linux process/service-adapter regression tests.
-- OS7 only: full managed two-lane test suite, coverage-policy, tox matrix, packaging, exact-candidate CI and guarded production smoke.
+- OS7 only: run the full managed two-lane test suite, coverage-policy, tox matrix, packaging and exact-candidate CI on the converged candidate; run guarded production smoke only when the separate deployment authorization/policy and safety gates are satisfied.
 - Never bypass the test runner's no_xdist lane. Ordinary tests must not mutate host services, network, system configuration or production jobs.
 
 ## 7. Coordination, autonomy and safe failure handling
@@ -359,8 +402,9 @@ For routine code/test failures, proceed without stopping for minor questions:
 4. Run minimal related tests.
 5. Expand verification to dependent contracts.
 6. Record the fix and resume downstream work.
+7. Confirm the stage exit condition from actual evidence and automatically initiate the next eligible task.
 
-Failures in import graph, fixture setup, mock implementations, lint/type checks, code moves, and safe build tooling fall under normal autonomous repair.
+Failures in import graph, fixture setup, mock implementations, lint/type checks, code moves, source moves, packaging and safe local tooling fall under normal autonomous repair. A failure of a gate is an assignment to debug and remediate, not an instruction to request user confirmation.
 
 Do **not** silently weaken tests or architecture restrictions, modify frozen goldens to manufacture parity, bypass hooks/CI/deployment, restart an active stable job manager, overwrite another agent's edits or change published job-data semantics. If such boundaries are reached, continue independent safe work and retain an explicit evidence-backed blocker.
 
@@ -371,6 +415,55 @@ Do **not** silently weaken tests or architecture restrictions, modify frozen gol
 - OS3, OS4: targeted review for process safety and service-deployment compatibility.
 - OS6: full source-boundary audit.
 - OS7: independent end-to-end architecture/security/behavior review before production.
+
+Reviews are **work items owned by the execution workflow**. The coordinator prepares checksum-bound inputs, invokes a genuinely independent supported reviewer when available, applies actionable corrections and obtains a new review result. Do not ask the user to mediate routine findings. Review unavailability must be recorded honestly; it never authorizes self-approval or waiver of a mandatory independent gate, but unrelated safe work can proceed.
+
+### 7.4 Durable execution ledger and restart behavior
+
+At kickoff create a ledger in the owned implementation worktree or an explicitly owned evidence directory; keep it separate from baseline/golden artifacts. Write it atomically after every meaningful stage transition, completed test/review, failure diagnosis and commit. Minimum fields:
+
+- `baseline_sha`, `candidate_sha`, `branch`, `worktree_path`, stage ID and task ID.
+- `status`: NOT_STARTED, RUNNING, REPAIRING, REVIEW_PENDING, EXTERNAL_PENDING, ACCEPTED or BLOCKED_POLICY.
+- Actual test/check command, seed, expected outcome, exit code, log path, timestamp and evidence checksum.
+- Failure fingerprint and root-cause hypothesis; last changed input; remediation tried and exact next action.
+- Ownership of branch/artifacts, dependencies, active jobs and whether the operation is safe to repeat.
+- Completed gates, outstanding gates, review identity/results and deployment/rollback constraints.
+
+On any resumed run, read the ledger **and** reconcile Git HEAD/status, tests, CI and active work before acting. The ledger is a hint until verified against reality. Do not re-run a successful expensive test without a changed dependency, changed SHA or documented invalidation. Avoid parallel writers to the same worktree or ledger; one integrator owns convergence.
+
+A RUNNING flag alone does not prove an active worker. Verify the process/job status; if absent, recover using the last durable output and resume safely. Never promise continuous background execution without an actual supported persistent runner.
+
+### 7.5 Failure classification and default action
+
+| Event | Automatic action | Can another task continue? |
+| --- | --- | --- |
+| Broken import, typing, lint, docs formatting or normal unit test | Diagnose exact error, patch minimal source/fixture, run affected tests | Yes, dependent tasks resume after focused pass |
+| Known baseline defect | Record as EXPECTED_BASELINE_ISSUE with reproduction, assign fixing stage | Yes; baseline capture does not demand defect-free code |
+| CI job/test failure at candidate SHA | Fetch concrete failing job/check evidence, repair, revalidate and submit normal CI | Yes; deployment waits for exact-SHA green |
+| Temporary network/package/tool/reviewer outage | Verify environment, use an existing supported equivalent path or a bounded retry after changing the cause | Yes, all independent tasks |
+| Unexpected concurrent worktree change | Stop writes **to that worktree**, determine owner/ref and use another owned workspace if safe | Yes, on isolated branches |
+| Persisted format or RPC incompatibility | Keep compatible old reader/adapter, construct cross-version regression, repair without data rewrite | Yes, unaffected tasks |
+| Unknown process ownership / potential wrong-target signal | Refuse unsafe signal, retain reproducer, repair identity handling | Yes, but affected stop safety gate remains red |
+| Mandatory review not yet available | Prepare checksum-bound review packet, try supported independent review path, retain REVIEW_PENDING | Yes, outside review-dependent operations |
+| Live deployment, unsafe quiet window or stable manager still owns jobs | Do not deploy/restart; finish all local verification and retain exact resume preflight | Yes; not a completed production gate |
+| Policy refusal or action lacking authority | Do not bypass; preserve exact refusal and continue safe authorized work | Yes, where independent |
+
+Retries are evidence-driven rather than unbounded. A second identical failure without changed inputs must trigger deeper diagnosis, a different supported strategy or a precise EXTERNAL_PENDING/BLOCKED_POLICY record—not a passive wait and not a false pass.
+
+### 7.6 Per-stage continuous handoff conditions
+
+| Completed stage | Next eligible work without user interaction | Required durable evidence |
+| --- | --- | --- |
+| OS0 | OS1 plus independent non-mutating research | Inventory, baseline, known failure fingerprints |
+| OS1 | OS2; OS5 path characterization may already proceed | Reviewed contract revision, architecture negative tests |
+| OS2 | Parallel OS3, OS4 and separable OS5-Paths in independently owned worktrees | Tested interfaces, fake-platform factory and SHA |
+| OS3 | OS6 inventory convergence and OS7 preparation; OS4/OS5 remain independent | Job parity/RPC/stop evidence and reviewer disposition |
+| OS4 | OS5 diagnostics integration; OS3 unaffected | Linux units/CLI/log source equivalence |
+| OS5 | OS6 sweep and targeted replay of discovered leaks | Alias security, search parity, Linux-import isolation |
+| OS6 | OS7 integration after dependencies have passed | Whole-repo reconciliation, architecture gate output |
+| OS7 | Stage completion and Darwin handoff only after all mandatory gates genuinely pass | Final SHA, full CI/reviews, exact wire, Linux smoke/rollback evidence |
+
+No stage shall terminate merely to obtain a routine 'go ahead'. If one branch is blocked by a genuine safety/external dependency, the orchestrator automatically works on its next safe, non-dependent task. Maintain blockers as explicit evidence and never remove mandatory verification from the Definition of Done.
 
 ## 8. Risks and mitigations
 
@@ -405,6 +498,8 @@ The stage is complete only when **all** hold:
 - [ ] OI-01..OI-12 and FM-01..FM-08 pass.
 - [ ] Existing Linux focused/full, CI, packaging, doctor and live smoke acceptance pass.
 - [ ] Final candidate and source/decision evidence are independently reviewed and auditable.
+- [ ] Every OS0–OS7 stage has a completed repair-and-handoff record, with no unresolved routine failure incorrectly treated as an approval request.
+- [ ] The durable execution ledger reconciles to the exact accepted source SHA; every mandatory gate has real, independently inspectable evidence.
 - [ ] No macOS adapter or Fedora/RHEL-specific development was introduced prematurely.
 
 Expected final artifacts:
