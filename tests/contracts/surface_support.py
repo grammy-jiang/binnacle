@@ -1,7 +1,7 @@
 """What a client is served, read through the real server.
 
 A *profile* is the surface one kind of client sees. The server builds it in
-``ClientToolVisibility`` (src/binnacle/visibility.py): the client name comes
+``ClientToolVisibility`` (src/binnacle/mcp/visibility.py): the client name comes
 from the session (the initialize handshake on a legacy session, ``_meta`` on
 modern discovery) and ``Settings.client_tools`` maps a name prefix to the
 tools that client is served; a name that matches no prefix gets every tool.

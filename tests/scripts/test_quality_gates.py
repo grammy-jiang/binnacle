@@ -5,6 +5,8 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
+import pytest
+
 
 def _load(name: str):
     path = Path(__file__).resolve().parents[2] / "scripts" / f"{name}.py"
@@ -212,3 +214,73 @@ def test_module_size_file_discovery_ignores_deleted_tracked_paths(
     monkeypatch.setattr(module_size.subprocess, "run", lambda *a, **k: Proc())
 
     assert module_size.tracked_python_files(root, ("src",)) == [existing]
+
+
+@pytest.mark.parametrize(
+    ("relative", "expected"),
+    [
+        ("from . import watchdog_cli", "binnacle.companions.watchdog.watchdog_cli"),
+        ("from ..tunnel import tunnel_log", "binnacle.companions.tunnel.tunnel_log"),
+        ("from .ops import policy", "binnacle.companions.watchdog.ops.policy"),
+    ],
+)
+def test_architecture_resolves_imports_in_package_initializers(
+    tmp_path, relative, expected
+):
+    from scripts import check_architecture as architecture
+
+    pkg = tmp_path / "binnacle" / "companions" / "watchdog"
+    pkg.mkdir(parents=True)
+    source_file = pkg / "__init__.py"
+    source_file.write_text(relative + "\n")
+    resolved = architecture.imports_of(source_file, "binnacle.companions.watchdog")
+    assert expected in resolved
+
+
+def test_architecture_detects_core_package_relative_companion_import(tmp_path):
+    from scripts import check_architecture as architecture
+
+    path = tmp_path / "binnacle" / "diagnostics" / "__init__.py"
+    path.parent.mkdir(parents=True)
+    path.write_text("from ..companions import watchdog\n")
+    source = "binnacle.diagnostics"
+    imports = architecture.imports_of(path, source)
+    assert "binnacle.companions.watchdog" in imports
+    assert architecture.evaluate({source: imports}, architecture.load_policy())
+
+
+def test_architecture_root_package_relative_import(tmp_path):
+    from scripts import check_architecture as architecture
+
+    source_file = tmp_path / "binnacle" / "__init__.py"
+    source_file.parent.mkdir()
+    source_file.write_text("from . import server\n")
+    assert "binnacle.server" in architecture.imports_of(source_file, "binnacle")
+
+
+@pytest.mark.parametrize(
+    ("import_statement", "allowed"),
+    [
+        ("from ..tunnel.tunnel_unit import TUNNEL_UNIT", True),
+        ("from ..tunnel import tunnel_unit", False),
+        ("from ..tunnel.tunnel_unit import render_tunnel_unit", False),
+    ],
+)
+def test_package_initializer_public_contract_uses_correct_relative_base(
+    tmp_path, import_statement, allowed
+):
+    from scripts import check_architecture as architecture
+
+    source = "binnacle.companions.watchdog"
+    pkg = tmp_path / "binnacle" / "companions" / "watchdog"
+    pkg.mkdir(parents=True)
+    path = pkg / "__init__.py"
+    path.write_text(import_statement + "\n")
+    policy = {
+        "architecture": {
+            "companion_public_imports": {
+                source: {"binnacle.companions.tunnel.tunnel_unit": ["TUNNEL_UNIT"]}
+            }
+        }
+    }
+    assert (architecture.public_import_errors(path, source, policy) == []) == allowed

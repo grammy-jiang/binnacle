@@ -7,6 +7,7 @@ This prevents reintroducing a retired compatibility alias unnoticed.
 
 from __future__ import annotations
 
+import ast
 import sys
 from pathlib import Path
 
@@ -150,10 +151,105 @@ def legacy_imports(root: Path = SRC) -> list[str]:
     return results
 
 
+def _module_registry(node: ast.expr, sys_names: set[str], aliases: set[str]) -> bool:
+    return (isinstance(node, ast.Name) and node.id in aliases) or (
+        isinstance(node, ast.Attribute)
+        and node.attr == "modules"
+        and isinstance(node.value, ast.Name)
+        and node.value.id in sys_names
+    )
+
+
+def _module_identity_writes(tree: ast.AST) -> list[int]:
+    """Find prohibited sys.modules mutations, including explicit import aliases.
+
+    Reading sys.modules is allowed. Assigning into the module registry is
+    forbidden: it could turn any new canonical-looking file into a facade.
+    """
+    sys_names = {"sys"}
+    registry_names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name == "sys":
+                    sys_names.add(alias.asname or "sys")
+        elif (
+            isinstance(node, ast.ImportFrom)
+            and node.level == 0
+            and node.module == "sys"
+        ):
+            registry_names.update(
+                alias.asname or alias.name
+                for alias in node.names
+                if alias.name == "modules"
+            )
+    # Also catch simple rebinding: registry = sys.modules; registry[__name__] = impl.
+    # This is deliberately static; do not execute any import or expression.
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign) and _module_registry(
+            node.value, sys_names, registry_names
+        ):
+            registry_names.update(
+                target.id for target in node.targets if isinstance(target, ast.Name)
+            )
+    writes: list[int] = []
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            for target in targets:
+                # Assigning a local variable to sys.modules is a read; writing
+                # through its registry mapping (or replacing sys.modules) is not.
+                registry = (
+                    target.value
+                    if isinstance(target, ast.Subscript)
+                    else target
+                    if isinstance(target, ast.Attribute)
+                    else None
+                )
+                if registry is not None and _module_registry(
+                    registry, sys_names, registry_names
+                ):
+                    writes.append(node.lineno)
+        elif (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr in {"setdefault", "update", "__setitem__"}
+            and _module_registry(node.func.value, sys_names, registry_names)
+        ):
+            writes.append(node.lineno)
+    return sorted(set(writes))
+
+
+def facade_forwarders(root: Path = SRC) -> list[str]:
+    """Guard against reintroducing identity/lazy/star forwarding under any name."""
+    violations: list[str] = []
+    for path in sorted(root.rglob("*.py")):
+        rel = path.relative_to(root).as_posix()
+        if rel in RETIRED_FILES:
+            # The missing-file gate already rejects these paths, even if a
+            # newly reintroduced module contains syntactically invalid code.
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for lineno in _module_identity_writes(tree):
+            violations.append(f"{rel}:{lineno}: sys.modules mutation")
+        for node in tree.body:
+            if isinstance(node, ast.ImportFrom) and any(
+                alias.name == "*" for alias in node.names
+            ):
+                violations.append(f"{rel}:{node.lineno}: star re-export")
+            elif (
+                isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                and node.name == "__getattr__"
+            ):
+                violations.append(f"{rel}:{node.lineno}: module-level __getattr__")
+    return violations
+
+
 def failures(root: Path = SRC) -> list[str]:
     files = [f"legacy file remains: {name}" for name in existing_retired_files(root)]
     imports = [f"legacy import remains: {line}" for line in legacy_imports(root)]
-    return files + imports
+    facades = [f"identity facade remains: {line}" for line in facade_forwarders(root)]
+    return files + imports + facades
 
 
 def main() -> int:

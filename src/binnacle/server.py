@@ -1,8 +1,8 @@
 """MCP server for the binnacle project — assembly only.
 
-One tool per module under tools/, mirroring docs/tools/<name>.md. Shared
-helpers: paths.py (root guard), textio.py (decode/size). The design doc
-is docs/agent-toolset-design.md.
+The FastMCP root composes focused Files, Search and Commands servers.
+Their adapters and shared helpers live in binnacle.features.
+Tool contracts are documented in docs/tools/ and docs/agent-toolset-design.md.
 """
 
 import logging
@@ -35,7 +35,7 @@ from binnacle.provenance import runtime_provenance
 # binnacle's own lines (event=tool_call/tool_result/job_*/config) go through
 # the root handler as single lines with a millisecond local timestamp, so
 # `journalctl -o cat` output stays self-describing; fastmcp's request lines
-# keep their rich handler. Format read back by binnacle.logstats.
+# keep their rich handler. Preserve journal names for existing log consumers.
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s.%(msecs)03d %(levelname)s: %(message)s",

@@ -1,8 +1,8 @@
 """Ownership routing and manager recovery for durable command jobs.
 
-This module is deliberately thin around :mod:`binnacle.jobs`: the latter keeps the
-legacy process/store primitives while this layer decides whether MCP calls use the
-embedded rollback owner or the stable manager service.
+This module delegates to the Commands-owned durable job engine,
+binnacle.features.commands.jobs. It selects the embedded owner or
+the stable manager service without owning storage internals.
 """
 
 from __future__ import annotations

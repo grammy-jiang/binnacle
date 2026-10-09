@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from scripts import check_architecture
 from scripts import g7_legacy_gate as gate
 from scripts.gate_a_manifest import compatibility_facades
@@ -52,3 +54,57 @@ def test_canonical_module_imports_remain_allowed(tmp_path):
     assert gate.failures(root) == []
     imported = check_architecture.imports_of(source, "binnacle.example")
     assert "binnacle.features.commands.jobs" in imported
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        'from importlib import import_module as load\nload("binnacle.jobs")\n',
+        'import importlib as il\nil.import_module("binnacle.doctor")\n',
+        'import importlib as il\ngetattr(il, "import_module")("binnacle.jobs")\n',
+        'from builtins import __import__ as load\nload("binnacle.jobs")\n',
+    ],
+)
+def test_import_aliases_cannot_restore_retired_modules(tmp_path, source):
+    root = tmp_path / "binnacle"
+    root.mkdir()
+    (root / "candidate.py").write_text(source)
+    assert any("legacy import remains:" in failure for failure in gate.failures(root))
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "import sys\nsys.modules[__name__] = object()\n",
+        'import sys as runtime\nruntime.modules["binnacle.old"] = object()\n',
+        "from sys import modules as registry\nregistry[__name__] = object()\n",
+        "import sys\nsys.modules.setdefault(__name__, object())\n",
+        "from sys import modules as m\nm.update({__name__: object()})\n",
+        "import sys\nregistry = sys.modules\nregistry[__name__] = object()\n",
+        "from binnacle.features.commands.jobs import *\n",
+        "def __getattr__(name):\n    return name\n",
+    ],
+)
+def test_new_identity_facades_are_rejected_even_with_new_names(tmp_path, source):
+    root = tmp_path / "binnacle"
+    root.mkdir()
+    (root / "unexpected_alias.py").write_text(source)
+    assert any("identity facade remains:" in failure for failure in gate.failures(root))
+
+
+def test_readonly_module_introspection_is_not_an_identity_facade(tmp_path):
+    root = tmp_path / "binnacle"
+    root.mkdir()
+    (root / "legitimate.py").write_text(
+        "import sys\n"
+        "from importlib import import_module as load\n"
+        'present = sys.modules.get("unrelated")\n'
+        "alias = sys.modules\n"
+        'also_present = alias.get("unrelated")\n'
+        'current = load("binnacle.features.commands.jobs")\n'
+    )
+    assert gate.failures(root) == []
+
+
+def test_no_new_module_identity_facades_in_current_source():
+    assert gate.facade_forwarders() == []

@@ -1,4 +1,4 @@
-"""Host-specific uplink watchdog compatibility facade.
+"""Canonical host-specific uplink watchdog coordinator.
 
 The watchdog is an operational POC, not a Binnacle product feature. Its
 implementation lives under binnacle.companions.watchdog.ops and may depend on

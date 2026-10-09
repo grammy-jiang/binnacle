@@ -27,8 +27,12 @@ def module_name(path: Path, src_root: Path) -> str:
     return ".".join(parts)
 
 
-def _from_targets(node: ast.ImportFrom, source: str) -> set[str]:
-    source_package = source.rpartition(".")[0]
+def _from_targets(
+    node: ast.ImportFrom, source: str, *, is_package: bool = False
+) -> set[str]:
+    # In __init__.py the source is already the containing package.  For
+    # ordinary modules, the containing package is its dotted parent.
+    source_package = source if is_package else source.rpartition(".")[0]
     if node.level:
         relative = "." * node.level + (node.module or "")
         try:
@@ -51,24 +55,72 @@ def _from_targets(node: ast.ImportFrom, source: str) -> set[str]:
     return targets
 
 
+def _import_loader_aliases(tree: ast.AST) -> tuple[set[str], set[str]]:
+    """Recognize explicit importlib/builtins bindings without executing code."""
+    importlib_names: set[str] = {"importlib"}
+    loader_names: set[str] = {"__import__"}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name == "importlib":
+                    importlib_names.add(alias.asname or "importlib")
+        elif isinstance(node, ast.ImportFrom) and node.level == 0:
+            if node.module == "importlib":
+                loader_names.update(
+                    alias.asname or alias.name
+                    for alias in node.names
+                    if alias.name == "import_module"
+                )
+            elif node.module == "builtins":
+                loader_names.update(
+                    alias.asname or alias.name
+                    for alias in node.names
+                    if alias.name == "__import__"
+                )
+    return importlib_names, loader_names
+
+
+def _is_import_loader(
+    func: ast.expr, importlib_names: set[str], loader_names: set[str]
+) -> bool:
+    if isinstance(func, ast.Name):
+        return func.id in loader_names
+    if isinstance(func, ast.Attribute):
+        # Keep the existing conservative detection of literal .import_module
+        # calls even when the importlib binding is indirect.
+        return func.attr == "import_module"
+    if (
+        isinstance(func, ast.Call)
+        and isinstance(func.func, ast.Name)
+        and func.func.id == "getattr"
+        and len(func.args) == 2
+        and isinstance(func.args[0], ast.Name)
+        and func.args[0].id in importlib_names
+        and isinstance(func.args[1], ast.Constant)
+    ):
+        return func.args[1].value == "import_module"
+    return False
+
+
 def imports_of(path: Path, source: str) -> set[str]:
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     targets: set[str] = set()
+    importlib_names, loader_names = _import_loader_aliases(tree)
+    is_package = path.name == "__init__.py"
 
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             targets.update(alias.name for alias in node.names)
         elif isinstance(node, ast.ImportFrom):
-            targets.update(_from_targets(node, source))
-        elif isinstance(node, ast.Call):
-            fn = node.func
-            dynamic = (isinstance(fn, ast.Name) and fn.id == "__import__") or (
-                isinstance(fn, ast.Attribute) and fn.attr == "import_module"
-            )
-            if dynamic and node.args:
-                arg = node.args[0]
-                if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
-                    targets.add(arg.value)
+            targets.update(_from_targets(node, source, is_package=is_package))
+        elif (
+            isinstance(node, ast.Call)
+            and _is_import_loader(node.func, importlib_names, loader_names)
+            and node.args
+        ):
+            arg = node.args[0]
+            if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                targets.add(arg.value)
     return targets
 
 
@@ -148,7 +200,7 @@ def public_import_errors(path: Path, source: str, policy: dict[str, Any]) -> lis
             if any(alias.name in contracts for alias in node.names):
                 errors.append(f"{source}: whole-module companion import is forbidden")
         elif isinstance(node, ast.ImportFrom):
-            targets = _from_targets(node, source)
+            targets = _from_targets(node, source, is_package=path.name == "__init__.py")
             for module, symbols in contracts.items():
                 if module not in targets:
                     continue

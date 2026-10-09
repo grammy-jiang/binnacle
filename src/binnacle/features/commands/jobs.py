@@ -75,22 +75,22 @@ _ENV_OVERRIDES = {
 
 
 def _job_dir(job_id: str) -> Path:
-    """Compatibility facade for the current job-store tests/callers."""
+    """Stable engine-level path helper delegated to the canonical job store."""
     return job_store.job_dir(JOBS_DIR, job_id)
 
 
 def _read_meta(job_id: str) -> dict | None:
-    """Compatibility facade over the storage-only module."""
+    """Keep the engine-level storage seam explicit."""
     return job_store.read_meta(JOBS_DIR, job_id)
 
 
 def _write_meta(job_id: str, meta: dict) -> None:
-    """Compatibility facade preserving the existing atomic-write contract."""
+    """Delegate atomic metadata writing to the canonical storage module."""
     job_store.write_meta(JOBS_DIR, job_id, meta)
 
 
 def _remove_job_dir(stale: Path) -> bool:
-    """Compatibility facade for best-effort durable-store cleanup."""
+    """Delegate best-effort cleanup to the canonical storage module."""
     return job_store.remove_job_dir(stale)
 
 

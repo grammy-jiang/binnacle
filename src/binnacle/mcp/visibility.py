@@ -6,7 +6,7 @@ not code: ``Settings.client_tools`` maps a client-name *prefix* to the
 tool names that client is served (an allowlist -- a new tool must be
 added to a client's list before that client sees it).
 
-Client identity comes from the shared :class:`binnacle.identity.ClientIdentity`
+Client identity comes from the shared :class:`binnacle.mcp.identity.ClientIdentity`
 resolver; see that module for the per-era details.
 """
 
