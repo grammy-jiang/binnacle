@@ -1,5 +1,7 @@
 # Manager/supervisor final synthesis template
 
+> This is the historical, unexecuted R1 supervisor reporting **template**. Actual R1 findings, validated artifacts and remaining gaps are in [R1-INVESTIGATION-RESULTS.md](R1-INVESTIGATION-RESULTS.md). Do not replace the completed results with placeholder NOT_RUN rows.
+
 Status: **empty reporting template, not a finding**.
 
 The supervisor has one role: collect each worker's immutable evidence, verify source/fixture binding and completeness, synthesize the results for the user. It is not a programmer, ChatGPT Desktop operator, test runner or deployment approver.

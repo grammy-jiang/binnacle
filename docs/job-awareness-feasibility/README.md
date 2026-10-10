@@ -1,5 +1,7 @@
 # Job Awareness feasibility: parallel verification programme
 
+**R1 execution outcome (10 October 2026):** the local W1–W4 experiments have completed and the independent evidence has been verified; actual ChatGPT Chat W5 was not run. Read the [R1 final investigation results](R1-INVESTIGATION-RESULTS.md) for measured findings, negative conclusions, original evidence hashes and the R2 handoff. The remaining plan/checklist text below is the originally frozen R1 *pre-execution* contract; retain it for historical reproducibility. Do not read its PLAN ONLY labels as current worker statuses.
+
 Status: **PLAN ONLY — not started**. Prepared 2026-10-10 (Australia/Sydney).
 Source baseline for this document branch: GitHub master at d61761356ee0fce8ea6d73b0c3043b4881c5645e (merged PR #18 and PR #19).
 Actual worker kickoff must revalidate and freeze a current exact source SHA; these documents do not claim any Job Awareness implementation or test has run.
