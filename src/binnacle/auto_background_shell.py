@@ -94,12 +94,25 @@ def _delimiter(line: str, start: int) -> tuple[str | None, int]:
     return "".join(chars), i
 
 
+def _comment_word_boundary(line: str, i: int) -> bool:
+    """Check the prior Bash-visible token character after escaped newlines."""
+    before = i - 1
+    while before >= 1 and line[before] == "\n":
+        if line[before - 1] == "\\":
+            before -= 2
+        elif before >= 2 and line[before - 1] == "\r" and line[before - 2] == "\\":
+            before -= 3
+        else:
+            break
+    return before < 0 or line[before] in " \t\r\n;|&(){}"
+
+
 def _code_line(
     line: str, arithmetic_depth: int = 0
-) -> tuple[str, list[tuple[str, bool]], int]:
+) -> tuple[str, list[tuple[str, bool, bool]], int]:
     """Find here-doc declarations outside quotes/comments/arithmetic."""
     visible = list(line)
-    here_docs: list[tuple[str, bool]] = []
+    here_docs: list[tuple[str, bool, bool]] = []
     quote: str | None = None
     i = 0
     while i < len(line):
@@ -137,7 +150,7 @@ def _code_line(
             arithmetic_depth = 2
             i += width
             continue
-        if ch == "#" and (i == 0 or line[i - 1] in " \t;|&(){}"):
+        if ch == "#" and _comment_word_boundary(line, i):
             visible[i:] = _blank(line[i:])
             break
         if line[i : i + 3] == "<<<":
@@ -187,7 +200,9 @@ def _code_line(
         if delimiter is None:
             i += 2
             continue
-        here_docs.append((delimiter, strip_tabs))
+        literal_word = line[j:end].replace("\\\r\n", "").replace("\\\n", "")
+        unquoted = not any(ch in literal_word for ch in ("'", '"', "\\"))
+        here_docs.append((delimiter, strip_tabs, unquoted))
         visible[i:end] = list(_blank(line[i:end]))
         i = end
     return "".join(visible), here_docs, arithmetic_depth
@@ -230,7 +245,7 @@ def shell_policy_code(script: str) -> str:
     even if they contain the names of long-running tools such as pytest.
     A truly executed test command *after* a here-doc remains matchable.
     """
-    pending: deque[tuple[str, bool]] = deque()
+    pending: deque[tuple[str, bool, bool]] = deque()
     result: list[str] = []
     arithmetic_depth = 0
     operator_continued = False
@@ -240,11 +255,26 @@ def shell_policy_code(script: str) -> str:
         line = lines[index]
         index += 1
         if pending and not (arithmetic_depth or operator_continued):
-            delimiter, strip_tabs = pending[0]
-            content = line.rstrip("\r\n")
+            delimiter, strip_tabs, unquoted = pending[0]
+            source_lines = [line]
+            if unquoted:
+                # Bash removes backslash-newline in *unquoted* here-doc
+                # bodies before comparing with the delimiter. Keep every
+                # original line for byte-offset-preserving masking.
+                while index < len(lines):
+                    tail = source_lines[-1].rstrip("\r\n")
+                    slashes = len(tail) - len(tail.rstrip("\\"))
+                    if not (source_lines[-1].endswith("\n") and slashes % 2 == 1):
+                        break
+                    source_lines.append(lines[index])
+                    index += 1
+            content = source_lines[0]
+            for continued_line in source_lines[1:]:
+                content = content.rstrip("\r\n")[:-1] + continued_line
+            content = content.rstrip("\r\n")
             if (content.lstrip("\t") if strip_tabs else content) == delimiter:
                 pending.popleft()
-            result.append(_blank(line))
+            result.append(_blank("".join(source_lines)))
             operator_continued = False
             continue
 
@@ -267,6 +297,10 @@ def shell_policy_code(script: str) -> str:
         # trailing `|`, `|&`, `&&`, or `||`, without needing a backslash.
         # `>|` is a redirection, *not* a pipeline continuation.
         trimmed = visible.rstrip(" \t\r\n")
+        if not trimmed and operator_continued:
+            # A pipeline can skip comments and empty lines before its next
+            # executable command; here-doc bodies must not start yet.
+            continue
         operator_continued = trimmed.endswith(("|&", "&&", "||")) or (
             trimmed.endswith("|") and not trimmed.endswith(">|")
         )

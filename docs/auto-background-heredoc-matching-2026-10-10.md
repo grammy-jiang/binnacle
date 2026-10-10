@@ -183,3 +183,23 @@ Regression tests cover escaped pipe, escaped AND/OR markers, and a genuine
 unescaped pipeline following an escaped literal backslash. Bash -n accepts
 these fixtures. The command passed to Bash and on-disk job result contracts
 remain unchanged.
+
+## Additional Bash comment / pending-heredoc correctness corrections
+
+The independent review of 0c0b702 identified three separate P2 cases
+(4235869613, 4235869618, 4235869623):
+
+- When Bash joins a backslash-newline, the shell-visible preceding character,
+  not the raw newline, determines whether a following hash begins a comment.
+  Both true comment and embedded-word hash cases have regressions.
+- A trailing pipeline or AND/OR operator continues waiting for a command
+  across comments and blank lines. The pending-heredoc state is preserved
+  until a real executable command is parsed.
+- Bash removes escaped physical newlines in unquoted heredoc body text before
+  matching the terminator. Quoted delimiter words disable this behavior.
+  The scanner records quote mode per pending delimiter and joins unquoted
+  body lines only for delimiter comparison, while masking the original bytes
+  at unchanged offsets.
+
+These changes were tested using valid Bash syntax and harmless Bash execution
+fixtures, as well as preserving the existing MCP policy and log contracts.
