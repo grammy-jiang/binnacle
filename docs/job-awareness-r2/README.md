@@ -1,6 +1,8 @@
 # Binnacle Job Awareness — R2 targeted feasibility investigation
 
-Status: **R2 PLAN — not yet executed.** Prepared 2026-10-10 Australia/Sydney.
+Status of this document's **originally frozen test specification**: planned on 2026-10-10. The sealed operational R2 run uses the exact original docs SHA cc386613a20f14cd466f19d0fbd3e38ec6ce9927; these later explanatory/report changes do **not** alter worker input packets, fixtures, or the required models/efforts.
+
+The [R1 completed investigation report](https://github.com/grammy-jiang/binnacle/blob/50cca28695dce8b2f11810b92aa792179b0e9eb4/docs/job-awareness-feasibility/R1-INVESTIGATION-RESULTS.md) is now the authoritative previous-round outcome. See the [R1 → R2 evidence handoff](R1-EVIDENCE-HANDOFF.md) and the [current R2 result ledger](R2-RESULTS.md) for observed progress; do not mistake this static planning baseline for current process status.
 
 ## What R2 is, and what it is not
 

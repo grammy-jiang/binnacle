@@ -2,6 +2,8 @@
 
 ## Core requirement
 
+The original R2 run is pinned to docs SHA cc386613a20f14cd466f19d0fbd3e38ec6ce9927. The [R1 evidence handoff](R1-EVIDENCE-HANDOFF.md) was appended as retrospective explanatory material; no worker may switch to a newer plan SHA without a new sealed run. Current worker statuses are maintained separately in [R2-RESULTS.md](R2-RESULTS.md).
+
 The user authorized local Codex to take over coding/programmatic investigation when Claude Code is not available. Assign only the frozen model and reasoning effort for each lane, and pass those values explicitly to each agent. Do not rely on ~/.codex/config.toml defaults or hidden profile. Runtime proof from the agent's native turn context is mandatory. Launch flags alone do not prove a selector was effective.
 
 | Lane | Difficulty | Explicit Codex model | Effort | Why |

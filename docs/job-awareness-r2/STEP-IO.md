@@ -2,6 +2,8 @@
 
 Status: SPECIFICATION; all R2 result states initially NOT_RUN. Every file path below is relative to a new R2_RUN_ROOT created by R2-0. R1 references are read-only.
 
+Current run provenance is recorded in [R1-EVIDENCE-HANDOFF.md](R1-EVIDENCE-HANDOFF.md). The exact original plan schema and worker packets are pinned to cc386613a20f14cd466f19d0fbd3e38ec6ce9927; status/progress reporting in [R2-RESULTS.md](R2-RESULTS.md) is a non-normative addendum and cannot retroactively change the sealed input/output contract.
+
 ## Immutable common worker input packet (JSON)
 
 All A–D and E0 receive one distinct packet at inputs/LANE.input.json using the input format schema in schemas/r2-worker-input.schema.json. Mandatory fields:
