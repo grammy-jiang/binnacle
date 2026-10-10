@@ -36,7 +36,12 @@ def _delimiter(line: str, start: int) -> tuple[str | None, int]:
                 ansi_quote = False
             elif ch == "\\" and i + 1 < len(line):
                 i += 1
-                chars.append(line[i])
+                # Bash removes escaped physical newlines before parsing
+                # here-document delimiter words such as <<EO\\\nF.
+                if line[i] not in "\r\n":
+                    chars.append(line[i])
+                elif line[i] == "\r" and i + 1 < len(line) and line[i + 1] == "\n":
+                    i += 1
             else:
                 chars.append(ch)
         elif ch == quote:
@@ -173,7 +178,7 @@ def _code_line(
             i += 2
             continue
         here_docs.append((delimiter, strip_tabs))
-        visible[i:end] = " " * (end - i)
+        visible[i:end] = list(_blank(line[i:end]))
         i = end
     return "".join(visible), here_docs, arithmetic_depth
 
@@ -187,24 +192,35 @@ def shell_policy_code(script: str) -> str:
     """
     pending: deque[tuple[str, bool]] = deque()
     result: list[str] = []
-    continued = False
     arithmetic_depth = 0
-    for line in script.splitlines(keepends=True):
-        if pending and not continued:
+    lines = script.splitlines(keepends=True)
+    index = 0
+    while index < len(lines):
+        line = lines[index]
+        index += 1
+        if pending and not arithmetic_depth:
             delimiter, strip_tabs = pending[0]
             content = line.rstrip("\r\n")
             if (content.lstrip("\t") if strip_tabs else content) == delimiter:
                 pending.popleft()
             result.append(_blank(line))
-        else:
-            visible, declarations, arithmetic_depth = _code_line(line, arithmetic_depth)
-            result.append(visible)
-            pending.extend(declarations)
-            # Bash joins an unquoted, escaped physical newline before it
-            # starts reading pending here-doc bodies. Honor continued lines.
-            tail = visible.rstrip("\r\n")
-            slash_count = len(tail) - len(tail.rstrip("\\"))
-            continued = bool(
-                arithmetic_depth or (line.endswith("\n") and slash_count % 2 == 1)
-            )
+            continue
+
+        # A backslash-newline joins two physical lines into one logical shell
+        # command *before* heredoc words and bodies are interpreted. Preserve
+        # every original character, so regex evidence offsets remain stable.
+        logical_line = line
+        while index < len(lines):
+            tail = line.rstrip("\r\n")
+            slashes = len(tail) - len(tail.rstrip("\\"))
+            if not (line.endswith("\n") and slashes % 2 == 1):
+                break
+            line = lines[index]
+            logical_line += line
+            index += 1
+        visible, declarations, arithmetic_depth = _code_line(
+            logical_line, arithmetic_depth
+        )
+        result.append(visible)
+        pending.extend(declarations)
     return "".join(result)

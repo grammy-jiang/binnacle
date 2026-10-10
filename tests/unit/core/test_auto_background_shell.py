@@ -260,3 +260,20 @@ def test_copilot_p2_arithmetic_shifts_never_consume_later_commands(script):
 
 def test_arithmetic_variable_named_pytest_is_not_a_command_trigger():
     assert match("echo $((pytest << 2))\nprintf done\n") is None
+
+
+def test_codex_p2_continued_heredoc_word_joins_before_body():
+    script = "cat <<EO\\\nF\nimport pytest\nEOF\nprintf done\n"
+    assert match(script) is None
+    script += "uv run pytest -q\n"
+    found = match(script)
+    assert found is not None and found.match_start == script.rindex("pytest")
+    assert len(shell_policy_code(script)) == len(script)
+    assert shell_policy_code(script).count("\n") == script.count("\n")
+
+
+def test_codex_p2_continued_heredoc_word_preserves_pipeline():
+    script = "cat <<EO\\\nF | pytest -q\ninput text\nEOF\nprintf done\n"
+    found = match(script)
+    assert found is not None and found.match_start == script.index("pytest")
+    assert len(shell_policy_code(script)) == len(script)

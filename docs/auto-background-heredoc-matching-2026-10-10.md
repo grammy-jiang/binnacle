@@ -134,3 +134,14 @@ Regression cases include one-line arithmetic, nested arithmetic, multiline
 shifts, and mixed real heredoc/arithmetic before executable `pytest`.
 The snippets are checked as valid using `bash -n`; the production command
 remains byte-identical and the original evidence offsets remain stable.
+
+## Escaped-newline delimiter word review follow-up
+
+Codex `4235614013` identified a valid Bash here-document delimiter assembled
+across `<<EO\\` + physical newline + `F`. Policy lexing now assembles these
+escaped physical newline command fragments before parsing a here-doc word,
+removes the escaped newline from the delimiter value, and preserves its
+original source offsets/line count. A continuation pipeline is still parsed
+as executable code, not consumed as here-doc data. Dedicated cases verify
+both forms with `bash -n` and check that later executable `pytest` is not
+hidden. The executed command itself remains byte-identical.
