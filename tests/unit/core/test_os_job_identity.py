@@ -60,15 +60,51 @@ def native_table(monkeypatch):
         opened.append(pid)
         return pid + 10_000
 
-    monkeypatch.setattr(native.os, "pidfd_open", fake_open)
+    monkeypatch.setattr(native.os, "pidfd_open", fake_open, raising=False)
     monkeypatch.setattr(
-        native.signal, "pidfd_send_signal", lambda fd, sig: signed.append((fd, sig))
+        native.signal,
+        "pidfd_send_signal",
+        lambda fd, sig: signed.append((fd, sig)),
+        raising=False,
     )
+
+    def forbid_numeric_signal(*args):
+        pytest.fail("numeric-PID signals must never replace verified pidfds")
+
+    monkeypatch.setattr(native.os, "kill", forbid_numeric_signal)
+    monkeypatch.setattr(native.os, "killpg", forbid_numeric_signal)
     monkeypatch.setattr(native, "_proc", lambda pid: current.get(pid))
     monkeypatch.setattr(native, "_scan", lambda: dict(original))
     with monkeypatch.context() as local:
         local.setattr(native.os, "close", closed.append)
         yield current, opened, signed, closed
+
+
+@pytest.mark.parametrize("capability", ["pidfd_open", "pidfd_send_signal"])
+def test_missing_pidfd_capability_rejects_acquisition(
+    monkeypatch, native_table, capability
+):
+    _, opened, signed, closed = native_table
+    module = native.os if capability == "pidfd_open" else native.signal
+    monkeypatch.delattr(module, capability)
+    with pytest.raises(UnverifiedJobProcess, match="pidfd support is required"):
+        native.open_job_signals(
+            native.identity_from_record(record()), boot_id=lambda: "test-boot"
+        )
+    assert opened == signed == closed == []
+
+
+def test_missing_pidfd_sender_after_acquisition_fails_closed(monkeypatch, native_table):
+    _, _, signed, closed = native_table
+    lease = native.open_job_signals(
+        native.identity_from_record(record()), boot_id=lambda: "test-boot"
+    )
+    monkeypatch.delattr(native.signal, "pidfd_send_signal")
+    with pytest.raises(native.JobSignalDeliveryError, match="pidfd support"):
+        lease.signal("terminate")
+    assert signed == []
+    lease.close()
+    assert set(closed) == {11001, 11002, 11003}
 
 
 def test_pidfd_signals_only_pinned_owned_group_and_setsid_child(native_table):

@@ -121,22 +121,47 @@ git diff --stat
 git status --short
 ~~~
 
-Use normal pre-commit hooks wherever they pass. In the 2026-10-11 experiment,
-the Mac full Python pre-commit hook failed `mypy` on the **existing**
-Linux-only `os.pidfd_send_signal` and `socket.SO_BINDTODEVICE` stubs.
-These were unrelated to the tiny test. The following scoped check passed
-without modifying those files:
+Run normal pre-commit on the changed files during iteration. Its visible
+`mypy-linux` and `mypy-darwin` hooks both check `src/binnacle tests scripts`
+using the existing locked uv/mypy environment on either host. Each retains
+the Python-file trigger and full source scope of the original hook. A
+changed-files run therefore still checks the whole source set for both targets.
+For standalone reproduction:
 
 ~~~bash
-./.venv/bin/uv run --no-sync mypy --platform linux src/binnacle tests scripts
+export PATH="$PWD/.venv/bin:$HOME/.local/bin:/opt/homebrew/bin:$PATH"
+./.venv/bin/uv run --no-sync mypy --platform linux --cache-dir .mypy_cache/linux src/binnacle tests scripts
+./.venv/bin/uv run --no-sync mypy --platform darwin --cache-dir .mypy_cache/darwin src/binnacle tests scripts
 ~~~
 
+The 2026-10-11 microtask's original Mac hook failed with two `attr-defined`
+errors: `signal.pidfd_send_signal` in `platform/linux/job_identity.py` and
+`socket.SO_BINDTODEVICE` in `companions/watchdog/uplink.py`. Linux-targeted
+mypy passed. The bounded infrastructure fix replaces these direct attribute
+accesses with typed capability lookups. Missing pidfd support still refuses
+safe-signal acquisition; losing the sender at delivery raises
+`JobSignalDeliveryError`. Verified descriptor ownership, descendant ordering
+and per-target signal errors are preserved, with no numeric-PID fallback.
+Missing socket device binding raises `ProbeUnavailable`, so the watchdog
+reports unknown rather than a failed route. Synthetic tests cover missing
+capabilities and positive Linux behavior without using real pidfds or device
+socket options on the Mac.
+
+Both targets are required; neither target grants runtime macOS support.
+The hooks use separate `.mypy_cache/linux` and `.mypy_cache/darwin` directories
+to avoid repeatedly invalidating a shared cache when switching targets. This
+adds a second complete type-check invocation, including its cold-cache cost.
+On the Mac-native fix worktree (2026-10-11, Python 3.13, 421 source files),
+standalone mypy took 2.92 s for Linux and 2.84 s for Darwin with fresh target
+caches; immediate warm repeats took 0.16 s each. These are local observations,
+not Pi or CI performance guarantees, and exclude pre-commit startup overhead.
+
 **Do not skip/disable or weaken the canonical hook to get a green commit.**
-Until the repository has an independently reviewed dual-platform type-check
-policy, hand over the **byte-verified patch** to the Pi integration checkout
-and enforce the unchanged Linux hooks there. A Mac-only test pass does not
-establish Linux code quality, just as a Pi Linux pass does not establish native
-macOS behavior.
+Hand over the **byte-verified patch** for independent source-bound review and
+the Pi's final gates before integration. A Mac-only test pass does not establish
+Linux runtime correctness, just as a Pi Linux pass does not establish native
+macOS behavior. Full-suite, coverage, compatibility and deployment gates remain
+unchanged; avoid repeating full pytest/tox during bounded source iteration.
 
 ### 5. Transfer the Mac-authored patch and integrate on Pi
 
@@ -202,8 +227,9 @@ Mac launchd installation without later separately authorized gates.
   development doctor **9/9**, prior baseline **1 passed**, Codex focused
   pytest **6 passed**, Mac Linux-targeted mypy **421 files / 0 issues**.
 - Mac standard mypy hook: **failed** on two Linux-only API attributes under
-  Darwin typeshed. This is a **documented macOS local hook compatibility
-  gap**, not a new test regression and not a release exception.
+  Darwin typeshed. This was the **observed local hook compatibility gap**
+  addressed by the dual-platform policy above, not a new test regression or
+  release exception. The original failure remains part of the microtask record.
 - Pi received the Mac-authored patch via SSH/rsync. Both SHA-256 values were
   `5ee28387f393c5c439902fd6532e6f890369b1d6b6bdfe34aed2c08ce0b2fa8b`;
   independent Pi clone confirmed **byte-for-byte equality**.
