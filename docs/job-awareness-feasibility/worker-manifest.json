@@ -1,0 +1,226 @@
+{
+  "schema": "binnacle-job-awareness-parallel-test-manifest-v1",
+  "status": "PLAN_ONLY_NOT_STARTED",
+  "prepared_date": "2026-10-10",
+  "prepared_timezone": "Australia/Sydney",
+  "source_baseline_for_docs": "d61761356ee0fce8ea6d73b0c3043b4881c5645e",
+  "kickoff_source_sha": null,
+  "run_id": null,
+  "fixture_sha256": null,
+  "output_root_template": "~/Projects/binnacle-job-awareness-results/{RUN_ID}",
+  "independent_worker_result_files": [
+    "results.json",
+    "findings.md",
+    "evidence-index.json"
+  ],
+  "supplied_documentation": [
+    "README.md",
+    "PARALLEL-EXECUTION.md",
+    "FIXTURE-CONTRACT.md",
+    "MODEL-AND-EFFORT.md",
+    "WORKER-BRIEFS.md",
+    "DESKTOP-OPERATOR.md",
+    "EVIDENCE-AND-GATES.md",
+    "MANAGER-SUMMARY-TEMPLATE.md",
+    "prompts/S0.md",
+    "prompts/W1.md",
+    "prompts/W2.md",
+    "prompts/W3.md",
+    "prompts/W4.md",
+    "prompts/W5.md"
+  ],
+  "supervisor": {
+    "executor": "ChatGPT conversation",
+    "responsibility": "read-only dispatch, reconcile SHA evidence, summarize; no worker coding/tests/UI",
+    "may_edit_worker_files": false,
+    "may_operate_desktop": false,
+    "may_deploy": false
+  },
+  "s0": {
+    "executor": "codex-cli",
+    "model": "gpt-6-sol",
+    "reasoning_effort": "medium",
+    "source_mutation": "disposable harness/manifest only",
+    "prerequisites": [
+      "worktree inventory",
+      "production isolation",
+      "explicit provider model access"
+    ],
+    "outcome": "immutable source/fixture manifests and worker input packets",
+    "starts_before": [
+      "W1",
+      "W2",
+      "W3",
+      "W4",
+      "W5"
+    ],
+    "go_no_go_if_desktop_blocked": "W1-W4 still proceed"
+  },
+  "parallelism": {
+    "target_worker_count": 5,
+    "concurrent_cli_workers": 4,
+    "concurrent_desktop_gui_operators": 1,
+    "gui_chat_subject_count": 3,
+    "max_all_workers_after_s0": 5,
+    "shared_editable_worktrees": 0,
+    "allow_worker_cross_dependency": false,
+    "w5_has_real_chat_mode_gate": true,
+    "w5_can_start_canary_without_w1": true,
+    "performance_lane_concurrent_with_others": true,
+    "performance_requires_measured_host_load": true
+  },
+  "required_decision_gates": [
+    "G0",
+    "G1",
+    "G2",
+    "G3",
+    "G4",
+    "G5",
+    "G6",
+    "G7"
+  ],
+  "worker_lanes": [
+    {
+      "id": "W1",
+      "executor": "codex-cli",
+      "model": "gpt-6-astra",
+      "reasoning_effort": "high",
+      "title": "native FastMCP carriers and wire compatibility",
+      "input_hypotheses": [
+        "H1"
+      ],
+      "scenarios": [
+        "RAW-BASE",
+        "M-META",
+        "M-TEXT",
+        "M-STRUCT",
+        "M-ERROR",
+        "M-SURFACES",
+        "M-RELOAD",
+        "M-COMPAT"
+      ],
+      "starts_after": [
+        "S0"
+      ],
+      "depends_on_worker_results": [],
+      "desktop_ui_permission": false,
+      "output_dir": "W1"
+    },
+    {
+      "id": "W2",
+      "executor": "claude-code-cli",
+      "model": "opus",
+      "reasoning_effort": "high",
+      "title": "trusted ChatGPT session identity and adversarial isolation",
+      "input_hypotheses": [
+        "H3"
+      ],
+      "scenarios": [
+        "I-ERAS",
+        "I-HEADERS",
+        "I-TURN",
+        "I-SPOOF",
+        "I-RECONNECT",
+        "I-AUTH",
+        "I-LEAK",
+        "I-REAL"
+      ],
+      "starts_after": [
+        "S0"
+      ],
+      "depends_on_worker_results": [],
+      "desktop_ui_permission": false,
+      "output_dir": "W2"
+    },
+    {
+      "id": "W3",
+      "executor": "codex-cli",
+      "model": "gpt-6-astra",
+      "reasoning_effort": "xhigh",
+      "title": "result receipt, lost replies and cursor replay",
+      "input_hypotheses": [
+        "H4"
+      ],
+      "scenarios": [
+        "R-STATE",
+        "R-UNFETCHED",
+        "R-CURSOR",
+        "R-REPLAY",
+        "R-LOSS",
+        "R-ACK",
+        "R-ISOLATION",
+        "R-RETENTION"
+      ],
+      "starts_after": [
+        "S0"
+      ],
+      "depends_on_worker_results": [],
+      "desktop_ui_permission": false,
+      "output_dir": "W3"
+    },
+    {
+      "id": "W4",
+      "executor": "claude-code-cli",
+      "model": "sonnet",
+      "reasoning_effort": "medium",
+      "title": "overhead, token cost and compatibility benchmarks",
+      "input_hypotheses": [
+        "H5"
+      ],
+      "scenarios": [
+        "P-BASE",
+        "P-CARRIERS",
+        "P-SIZE",
+        "P-TOKENS",
+        "P-LATENCY",
+        "P-SCHEMA",
+        "P-LOAD"
+      ],
+      "starts_after": [
+        "S0"
+      ],
+      "depends_on_worker_results": [],
+      "desktop_ui_permission": false,
+      "output_dir": "W4"
+    },
+    {
+      "id": "W5",
+      "executor": "chatgpt-desktop",
+      "operator_model_request": "gpt-6-astra",
+      "operator_effort_request": "high",
+      "subject_surface": "ChatGPT Chat (not Work or Codex)",
+      "subject_model_request": "GPT-6",
+      "subject_effort_request": "Medium",
+      "operator_model_verified": false,
+      "subject_model_verified": false,
+      "title": "real ChatGPT model visibility, continued work and three-chat isolation",
+      "input_hypotheses": [
+        "H2",
+        "H3",
+        "H4",
+        "H6"
+      ],
+      "scenarios": [
+        "U-CANARY",
+        "U-VISIBLE",
+        "U-RUNNING",
+        "U-FINISHED",
+        "U-ISOLATION",
+        "U-RECEIPT",
+        "U-PAIR",
+        "U-TURN-END"
+      ],
+      "starts_after": [
+        "S0"
+      ],
+      "depends_on_worker_results": [],
+      "desktop_ui_permission": true,
+      "output_dir": "W5",
+      "blocked_when": [
+        "no supported ChatGPT Chat surface",
+        "no approved Desktop interaction or test app connection",
+        "model/effort cannot be pinned"
+      ]
+    }
+  ]
+}
