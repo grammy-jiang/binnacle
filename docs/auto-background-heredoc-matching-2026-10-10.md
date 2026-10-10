@@ -170,3 +170,16 @@ words, including CRLF text; later real test commands must not be hidden
 behind a permanently unmatched delimiter. Both cases now have Bash-validated
 regression fixtures and branch-coverage tests, retaining original command
 bytes and character positions.
+
+## Escaped pipeline tokens in shell arguments (Codex P2)
+
+Exact-head independent review of 3bdcf92 reported P2 4235832042:
+a literal backslash-escaped pipe at the end of a heredoc declaration line was
+being mistaken for a real pipeline continuation, so the following heredoc
+body stayed searchable and caused false automatic background selection.
+The shell syntax walker now masks escaped pipe/ampersand operator characters
+at their original offsets before classifying trailing operator tokens.
+Regression tests cover escaped pipe, escaped AND/OR markers, and a genuine
+unescaped pipeline following an escaped literal backslash. Bash -n accepts
+these fixtures. The command passed to Bash and on-disk job result contracts
+remain unchanged.

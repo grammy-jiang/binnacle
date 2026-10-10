@@ -116,6 +116,10 @@ def _code_line(
             i += 1
             continue
         if ch == "\\" and quote != "'":
+            # An escaped pipe/ampersand is a literal shell argument, never a
+            # pipeline or AND-OR continuation token. Keep source offsets.
+            if quote is None and i + 1 < len(line) and line[i + 1] in "|&":
+                visible[i + 1] = " "
             i += 2
             continue
         if quote is not None:

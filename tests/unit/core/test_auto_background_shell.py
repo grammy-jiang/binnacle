@@ -418,3 +418,30 @@ def test_escaped_hash_is_data_not_a_shell_comment():
     assert not _physical_line_continues(inactive)
     quoted = f"printf '{slash}'\n"
     assert not _physical_line_continues(quoted)
+
+
+@pytest.mark.parametrize("suffix", ["\\|", "\\&\\&", "\\|\\|"])
+def test_codex_p2_escaped_operator_is_literal_heredoc_command_argument(suffix):
+    import subprocess
+
+    script = f"printf done <<EOF {suffix}\npytest -q\nEOF\n"
+    syntax = subprocess.run(
+        ["bash", "-n"], input=script, text=True, capture_output=True, check=False
+    )
+    assert syntax.returncode == 0, syntax.stderr
+    assert match(script) is None
+    script += "uv run pytest -q\n"
+    found = match(script)
+    assert found is not None and found.match_start == script.rindex("pytest")
+
+
+def test_double_backslash_followed_by_real_pipe_continues_pipeline():
+    import subprocess
+
+    script = "cat <<EOF \\\\ |\npytest -q\ninput\nEOF\nprintf done\n"
+    syntax = subprocess.run(
+        ["bash", "-n"], input=script, text=True, capture_output=True, check=False
+    )
+    assert syntax.returncode == 0, syntax.stderr
+    found = match(script)
+    assert found is not None and found.match_start == script.index("pytest")
