@@ -11,7 +11,7 @@ from typing import Any
 
 log = logging.getLogger("binnacle.run_command")
 
-AUTO_BACKGROUND_SEMANTICS_VERSION = 1
+AUTO_BACKGROUND_SEMANTICS_VERSION = 2
 
 
 def _short_hash(value: object) -> str:
