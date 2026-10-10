@@ -167,3 +167,70 @@ def test_unusual_shell_fragments_do_not_crash_or_change_offsets(script):
     assert len(code) == len(script)
     assert code.count("\n") == script.count("\n")
     assert shell_policy_code(code) == code
+
+
+@pytest.mark.parametrize("quoted", ["''", '""'])
+def test_codex_p2_empty_quoted_heredoc_terminates_on_blank_line(quoted):
+    script = f"cat <<{quoted}\npytest -q\n\nprintf done\n"
+    assert match(script) is None
+    script += "uv run pytest -q\n"
+    found = match(script)
+    assert found is not None
+    assert found.match_start == script.rindex("pytest")
+
+
+@pytest.mark.parametrize("quoted", ["$'EOF'", '$"EOF"'])
+def test_codex_p2_dollar_quoted_heredoc_removes_quote_prefix(quoted):
+    script = f"cat <<{quoted}\npytest -q\nEOF\nprintf done\n"
+    assert match(script) is None
+    script += "uv run pytest -q\n"
+    found = match(script)
+    assert found is not None
+    assert found.match_start == script.rindex("pytest")
+
+
+def test_codex_p2_continued_logical_line_still_contains_command():
+    script = "cat <<'EOF' \\\n| pytest -q\nexample input data\nEOF\nprintf done\n"
+    found = match(script)
+    assert found is not None
+    assert found.match_start == script.index("pytest")
+    masked = shell_policy_code(script)
+    assert masked[script.index("example input data") :].startswith(" " * 18)
+
+
+@pytest.mark.parametrize("redirect", [">|", ">&", "<&", "&>", "&>>"])
+def test_codex_p2_compound_redirection_operands_are_data(redirect):
+    script = f"printf done {redirect} /tmp/pytest.log\n"
+    assert match(script) is None
+    script += "uv run pytest -q\n"
+    found = match(script)
+    assert found is not None
+    assert found.match_start == script.rindex("pytest")
+
+
+@pytest.mark.parametrize(
+    ("escaped", "decoded"),
+    [
+        (r"E\tF", "E\tF"),
+        (r"E\nF", "E\nF"),
+        (r"E\'F", "E'F"),
+        (r"E\"F", 'E"F'),
+        (r"E\\F", "E\\F"),
+        (r"E\eF", "E\x1bF"),
+        (r"E\aF", "E\aF"),
+    ],
+)
+def test_ansi_c_heredoc_delimiter_common_backslash_escapes(escaped, decoded):
+    from binnacle.auto_background_shell import _delimiter
+
+    quoted = "$'" + escaped + "'"
+    parsed, stop = _delimiter(quoted, 0)
+    assert parsed == decoded
+    assert stop == len(quoted)
+
+
+def test_unsupported_ansi_c_escape_is_not_masked_as_an_invented_delimiter():
+    from binnacle.auto_background_shell import _delimiter
+
+    parsed, _ = _delimiter(r"$'E\x46'", 0)
+    assert parsed is None

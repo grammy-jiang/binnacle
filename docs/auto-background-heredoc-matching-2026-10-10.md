@@ -97,3 +97,28 @@ to the previous tagged implementation/config if necessary.
   zero hard errors. The three preexisting script coverage debts remain.
 - Production deployment and live ChatGPT behavior validation are deliberately
   separate gates, not implied by local source qualification.
+
+## Review findings on original source `f1c509d` (2026-10-10)
+
+Independent Codex review reported four valid P2 edge cases; all four were
+reproduced with source-level regressions, and the test Bash fragments were
+also accepted by `bash -n`:
+
+1. `<<''` and `<<""` are valid, empty quoted delimiters; blank input lines
+   terminate those heredocs. Distinguish an absent word from a quoted empty
+   word, then preserve subsequent executable commands.
+2. `<<$'EOF'` and `<<$"EOF"` remove the dollar-quote prefix. Support the
+   common Bash ANSI-C backslash escapes in `$'...'`; for unfamiliar escapes
+   retain a conservative unmasked source rather than invent a terminator.
+3. Escaped physical newlines extend the logical command line before heredoc
+   data starts. Keep pending delimiters while parsing that command's next
+   physical line; the actual pipeline/command remains matchable.
+4. Correctly consume file operands of compound Bash redirections, including
+   `>|`, `>&`, `<&`, `&>` and `&>>`, instead of treating operator suffixes as
+   part of a filename.
+
+These modifications preserve the original dispatched script and maintain
+original character offsets for evidence and behavior-fingerprint version 2.
+The resulting focused shell-matching tests reached **100% branch-inclusive
+coverage** after the review repairs. As before, this remains a conservative
+filter rather than an exhaustive Bash parser.
