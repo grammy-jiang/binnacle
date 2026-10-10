@@ -75,7 +75,13 @@ def _delimiter(line: str, start: int) -> tuple[str | None, int]:
             # In a double-quoted word the backslash is special for these
             # characters, but otherwise remains part of the delimiter.
             following = line[i + 1]
-            if following in '\\"$`':
+            if following in "\r\n":
+                # Backslash-newline disappears inside double-quoted words,
+                # including heredoc delimiter words and CRLF input.
+                i += 1
+                if following == "\r" and i + 1 < len(line) and line[i + 1] == "\n":
+                    i += 1
+            elif following in '\\"$`':
                 i += 1
                 chars.append(following)
             else:
@@ -183,6 +189,36 @@ def _code_line(
     return "".join(visible), here_docs, arithmetic_depth
 
 
+def _physical_line_continues(line: str) -> bool:
+    """Detect shell-active backslash-newline, not comment or single-quote data.
+
+    Run this only for a physical line ending with a backslash. Bash first
+    recognizes quotes and comments; a backslash within either a comment or
+    single quotes does not join the following line.
+    """
+    if not line.endswith("\n"):
+        return False
+    source = line.rstrip("\r\n")
+    if (len(source) - len(source.rstrip("\\"))) % 2 != 1:
+        return False
+    quote: str | None = None
+    i = 0
+    while i < len(source) - 1:
+        ch = source[i]
+        if ch == "\\" and quote != "'":
+            i += 2
+            continue
+        if quote is not None:
+            if ch == quote:
+                quote = None
+        elif ch in "\"'":
+            quote = ch
+        elif ch == "#" and (i == 0 or source[i - 1] in " \t;|&(){}"):
+            return False
+        i += 1
+    return quote != "'"
+
+
 def shell_policy_code(script: str) -> str:
     """Hide here-document bodies, delimiters and comments from regex rules.
 
@@ -213,9 +249,7 @@ def shell_policy_code(script: str) -> str:
         # every original character, so regex evidence offsets remain stable.
         logical_line = line
         while index < len(lines):
-            tail = line.rstrip("\r\n")
-            slashes = len(tail) - len(tail.rstrip("\\"))
-            if not (line.endswith("\n") and slashes % 2 == 1):
+            if not _physical_line_continues(line):
                 break
             line = lines[index]
             logical_line += line

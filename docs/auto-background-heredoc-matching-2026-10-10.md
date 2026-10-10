@@ -156,3 +156,17 @@ redirection from a pipe. Regression tests exercise all four operators,
 multiple continued lines and the redirection counterexample, using `bash -n`
 for shell syntax validity. As in the other cases, the actual Bash command and
 its character offsets are unchanged.
+
+## Final Codex P2 correction: comments and double-quoted delimiters
+
+Reviews 4235675544 and 4235675547 on commit aa9a307 identified two more
+valid Bash forms requiring exact lexical treatment. First, a backslash at
+the end of a shell comment is not a physical-line continuation; a subsequent
+real pytest command must remain visible. The continuation check now
+distinguishes shell comments, escaped hash literals and quoted hash text,
+and rejects single-quoted literal backslashes. Second, a backslash followed
+by a physical newline is removed in double-quoted here-document delimiter
+words, including CRLF text; later real test commands must not be hidden
+behind a permanently unmatched delimiter. Both cases now have Bash-validated
+regression fixtures and branch-coverage tests, retaining original command
+bytes and character positions.

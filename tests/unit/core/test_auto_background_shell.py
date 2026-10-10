@@ -303,3 +303,118 @@ def test_two_operator_continuations_while_heredoc_is_pending():
     script = "cat <<'EOF' |\ncat &&\npytest -q\ninput\nEOF\nprintf done\n"
     found = match(script)
     assert found is not None and found.match_start == script.index("pytest")
+
+
+@pytest.mark.parametrize(
+    "comment_prefix",
+    [
+        "# note ",
+        "  # note ",
+        "echo done # note ",
+        "echo 'not # a comment' # note ",
+    ],
+)
+def test_codex_p2_comment_backslash_does_not_join_next_executable_line(
+    comment_prefix,
+):
+    import subprocess
+
+    slash = chr(92)
+    script = f"{comment_prefix}{slash}\nuv run pytest -q\n"
+    syntax = subprocess.run(
+        ["bash", "-n"], input=script, text=True, capture_output=True, check=False
+    )
+    assert syntax.returncode == 0, syntax.stderr
+    found = match(script)
+    assert found is not None
+    assert found.match_start == script.rindex("pytest")
+    assert len(shell_policy_code(script)) == len(script)
+
+
+@pytest.mark.parametrize("quote", ['"', "'"])
+def test_quoted_hash_not_a_comment_at_backslash_continuation(quote):
+    slash = chr(92)
+    script = f"echo {quote}not # a comment{quote} {slash}\nuv run pytest -q\n"
+    found = match(script)
+    assert found is not None and found.match_start == script.rindex("pytest")
+
+
+def test_codex_p2_double_quoted_heredoc_word_continuation():
+    import subprocess
+
+    slash = chr(92)
+    script = f'cat <<"EO{slash}\nF"\nimport pytest\nEOF\nuv run pytest -q\n'
+    syntax = subprocess.run(
+        ["bash", "-n"], input=script, text=True, capture_output=True, check=False
+    )
+    assert syntax.returncode == 0, syntax.stderr
+    found = match(script)
+    assert found is not None and found.match_start == script.rindex("pytest")
+    masked = shell_policy_code(script)
+    assert len(masked) == len(script)
+    assert masked.count("\n") == script.count("\n")
+    assert (
+        masked[
+            script.index("import pytest") : script.index("import pytest") + 13
+        ].strip()
+        == ""
+    )
+
+
+def test_double_quoted_crlf_heredoc_delimiter_continuation():
+    from binnacle.auto_background_shell import _delimiter
+
+    slash = chr(92)
+    value = f'"EO{slash}\r\nF"'
+    delimiter, end = _delimiter(value, 0)
+    assert delimiter == "EOF"
+    assert end == len(value)
+
+
+@pytest.mark.parametrize(
+    "prefix",
+    [
+        "printf done # escaped ",
+        "printf '# quoted' # escaped ",
+        "printf done; # escaped ",
+        "# escaped ",
+    ],
+)
+def test_escaped_comment_cannot_swallow_executable_test_command(prefix):
+    from binnacle.auto_background_shell import shell_policy_code
+
+    slash = chr(92)
+    script = f"{prefix}{slash}\nuv run pytest -q\n"
+    visible = shell_policy_code(script)
+    assert len(visible) == len(script)
+    assert visible.count("\n") == script.count("\n")
+    assert visible.rfind("pytest") == script.rfind("pytest")
+    found = match(script)
+    assert found is not None and found.match_start == script.rfind("pytest")
+
+
+def test_double_quote_delimiter_continuation_keeps_only_real_pytest():
+    import subprocess
+
+    slash = chr(92)
+    script = f'cat <<"EO{slash}\nF"\nprint("pytest")\nEOF\nprintf safe\n'
+    assert match(script) is None
+    script += "uv run pytest -q\n"
+    parsed = subprocess.run(
+        ["bash", "-n"], input=script, text=True, capture_output=True, check=False
+    )
+    assert parsed.returncode == 0
+    found = match(script)
+    assert found is not None and found.match_start == script.rfind("pytest")
+
+
+def test_escaped_hash_is_data_not_a_shell_comment():
+    from binnacle.auto_background_shell import _physical_line_continues
+
+    slash = chr(92)
+    active = f"printf {slash}#literal {slash}\n"
+    assert _physical_line_continues(active)
+    inactive = f"printf done # comment {slash}\n"
+    assert not _physical_line_continues(inactive)
+    quoted = f"printf '{slash}'\n"
+    assert not _physical_line_continues(quoted)
