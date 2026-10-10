@@ -3,11 +3,17 @@
 import json
 import socket
 import subprocess
+import sys
 import threading
 
 import pytest
 
 from binnacle.companions.watchdog import uplink
+
+linux_integration = pytest.mark.skipif(
+    sys.platform != "linux",
+    reason="requires Linux SO_BINDTODEVICE semantics or iproute2 integration",
+)
 
 ROUTE_JSON = json.dumps(
     [
@@ -212,6 +218,7 @@ def test_probe_all_keys_by_device(monkeypatch):
 # made wlan0 look dead too and the watchdog refused to fail over.
 
 
+@linux_integration
 def test_probe_dns_binds_the_device(dns_server):
     port, _ = dns_server
     okay, err, address = uplink.probe_dns(
@@ -220,6 +227,7 @@ def test_probe_dns_binds_the_device(dns_server):
     assert okay and address == "93.184.216.34", err
 
 
+@linux_integration
 def test_probe_dns_reports_an_unknown_device(dns_server):
     port, _ = dns_server
     okay, err, _ = uplink.probe_dns(
@@ -228,6 +236,7 @@ def test_probe_dns_reports_an_unknown_device(dns_server):
     assert not okay and "nope0" in err
 
 
+@linux_integration
 def test_probe_tcp_binds_the_device_and_uses_the_address(tcp_server):
     okay, err = uplink.probe_tcp(
         "127.0.0.1",
@@ -286,6 +295,7 @@ def test_probe_without_any_address_fails_tcp_explicitly(monkeypatch):
     assert res.layers["tcp"] is False and "none cached" in res.errors["tcp"]
 
 
+@linux_integration
 def test_source_binding_alone_would_not_select_the_device():
     """Documents the kernel behaviour that forced device binding: with two
     interfaces on one subnet, the route is chosen by metric, not by source."""
