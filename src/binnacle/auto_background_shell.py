@@ -193,17 +193,19 @@ def shell_policy_code(script: str) -> str:
     pending: deque[tuple[str, bool]] = deque()
     result: list[str] = []
     arithmetic_depth = 0
+    operator_continued = False
     lines = script.splitlines(keepends=True)
     index = 0
     while index < len(lines):
         line = lines[index]
         index += 1
-        if pending and not arithmetic_depth:
+        if pending and not (arithmetic_depth or operator_continued):
             delimiter, strip_tabs = pending[0]
             content = line.rstrip("\r\n")
             if (content.lstrip("\t") if strip_tabs else content) == delimiter:
                 pending.popleft()
             result.append(_blank(line))
+            operator_continued = False
             continue
 
         # A backslash-newline joins two physical lines into one logical shell
@@ -223,4 +225,11 @@ def shell_policy_code(script: str) -> str:
         )
         result.append(visible)
         pending.extend(declarations)
+        # Bash also continues a logical pipeline / AND-OR list after
+        # trailing `|`, `|&`, `&&`, or `||`, without needing a backslash.
+        # `>|` is a redirection, *not* a pipeline continuation.
+        trimmed = visible.rstrip(" \t\r\n")
+        operator_continued = trimmed.endswith(("|&", "&&", "||")) or (
+            trimmed.endswith("|") and not trimmed.endswith(">|")
+        )
     return "".join(result)

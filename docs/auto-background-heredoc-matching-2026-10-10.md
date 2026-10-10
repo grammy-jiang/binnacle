@@ -145,3 +145,14 @@ original source offsets/line count. A continuation pipeline is still parsed
 as executable code, not consumed as here-doc data. Dedicated cases verify
 both forms with `bash -n` and check that later executable `pytest` is not
 hidden. The executed command itself remains byte-identical.
+
+## Operator continuation follow-up
+
+Codex `4235637851` identified valid Bash pipelines and AND-OR lists ending
+with `|`, `|&`, `&&`, or `||` where the next physical line is executable code
+before the heredoc body. The masker now preserves pending heredocs across
+these operator continuations, while distinguishing the `>|` clobber
+redirection from a pipe. Regression tests exercise all four operators,
+multiple continued lines and the redirection counterexample, using `bash -n`
+for shell syntax validity. As in the other cases, the actual Bash command and
+its character offsets are unchanged.

@@ -277,3 +277,29 @@ def test_codex_p2_continued_heredoc_word_preserves_pipeline():
     found = match(script)
     assert found is not None and found.match_start == script.index("pytest")
     assert len(shell_policy_code(script)) == len(script)
+
+
+@pytest.mark.parametrize("operator", ["|", "||", "&&", "|&"])
+def test_codex_p2_operator_continues_heredoc_command(operator):
+    import subprocess
+
+    script = f"cat <<'EOF' {operator}\npytest -q\ninput\nEOF\nprintf done\n"
+    check = subprocess.run(
+        ["bash", "-n"], input=script, text=True, capture_output=True, check=False
+    )
+    assert check.returncode == 0, check.stderr
+    found = match(script)
+    assert found is not None and found.match_start == script.index("pytest")
+    assert shell_policy_code(script)[script.index("input") :].startswith(" " * 5)
+
+
+def test_operator_continuation_cannot_confuse_redirect_clobber():
+    script = "cat <<'EOF' >| /tmp/pytest.log\npytest -q\nEOF\nuv run pytest -q\n"
+    found = match(script)
+    assert found is not None and found.match_start == script.rindex("pytest")
+
+
+def test_two_operator_continuations_while_heredoc_is_pending():
+    script = "cat <<'EOF' |\ncat &&\npytest -q\ninput\nEOF\nprintf done\n"
+    found = match(script)
+    assert found is not None and found.match_start == script.index("pytest")
