@@ -27,7 +27,7 @@ def manager(tmp_path, monkeypatch):
     runtime = JobManager(
         socket_path,
         owner_instance_id="owner-new",
-        boot_id="boot-current",
+        boot_id=jobs._PROCESS_BACKEND.boot_id(),
     )
     thread = threading.Thread(target=runtime.serve_forever, daemon=True)
     thread.start()
@@ -52,12 +52,51 @@ def manager(tmp_path, monkeypatch):
     assert not thread.is_alive()
 
 
+def test_durable_partial_stop_rejected_via_real_unix_rpc_after_leader_exit(
+    manager,
+):
+    """The v1 RPC retry must not mask an unsuccessfully signaled child."""
+    from binnacle.features.commands import job_store
+
+    _, socket_path, store = manager
+    job_id = "9a1b2c3d4e5f"
+    directory = store / job_id
+    directory.mkdir(parents=True)
+    (directory / "out.log").write_bytes(b"")
+    job_store.write_meta(
+        store,
+        job_id,
+        {
+            "command": "synthetic partial",
+            "workdir": "/tmp",
+            "pid": 999997,
+            "pgid": 999997,
+            "starttime": 123,
+            "started_at": 1.0,
+            "schema_version": 2,
+            "owner_instance_id": "owner-new",
+            "stop_signal_partial": True,
+            "stop_requested": True,
+            "exit_code": None,
+            "signal": 15,
+            "ended_at": 2.0,
+        },
+    )
+    for _ in range(2):
+        with pytest.raises(
+            job_client.JobManagerError,
+            match="job stop partially failed: previous verified",
+        ):
+            job_client.stop(socket_path, job_id)
+    assert job_store.read_meta(store, job_id)["stop_signal_partial"] is True
+
+
 def test_ping_reports_protocol_and_owner(manager):
     _, socket_path, _ = manager
     response = job_client.ping(socket_path)
     assert response["version"] == 1
     assert response["owner_instance_id"] == "owner-new"
-    assert response["boot_id"] == "boot-current"
+    assert response["boot_id"] == jobs._PROCESS_BACKEND.boot_id()
     assert response["package_version"] == version("binnacle-mcp")
     assert response["revision"]
 

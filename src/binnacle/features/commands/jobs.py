@@ -12,14 +12,18 @@ import os
 import threading
 import time
 from pathlib import Path
+from typing import cast
 
 from binnacle.config import get_settings
-from binnacle.features.commands import job_resource_history, job_store
+from binnacle.features.commands import job_resource_history, job_stop, job_store
 from binnacle.features.commands.job_output import (
     clip_head_tail as job_output_clip_head_tail,
 )
 from binnacle.mcp.callctx import current_call
-from binnacle.platform.contracts.process_contracts import ProcessHandle
+from binnacle.platform.contracts.process_contracts import (
+    JobSignalDeliveryError,
+    ProcessHandle,
+)
 from binnacle.platform.job_platform import (
     create_process_backend,
     create_resource_accounting,
@@ -32,7 +36,9 @@ KEEP_NEWEST = get_settings().jobs.keep_newest
 RUN_MAX_OUTPUT_CHARS = get_settings().jobs.max_output_chars
 WARMUP_S = get_settings().jobs.warmup_s
 _OWNER_SETTING = get_settings().jobs.owner
-MANAGER_SOCKET = get_settings().jobs.socket_path
+MANAGER_SOCKET = cast(Path, get_settings().jobs.socket_path)
+if MANAGER_SOCKET is None:
+    raise RuntimeError("host composition did not resolve the jobs socket")
 
 JobGone = job_store.JobGone
 
@@ -62,7 +68,6 @@ STOP_SIGKILL_GRACE_S = 2.0  # wait for the forced exit to be recorded
 # start_job call _prune(), whose direct/test callers are protected too.
 _STORE_LOCK = job_store.STORE_LOCK
 
-# stdout+stderr merge, interactivity neutered (Gemini's env hygiene set).
 _ENV_OVERRIDES = {
     "PAGER": "cat",
     "GIT_PAGER": "cat",
@@ -425,7 +430,17 @@ def job_state(job_id: str) -> dict | None:
 
 
 def job_processes(pgid: int, max_cmd_chars: int = 200) -> list[dict]:
+    """Historical Linux diagnostic helper; do not call from generic Commands."""
     return _PROCESS_BACKEND.processes(pgid, max_cmd_chars)
+
+
+def processes_for_job(job_id: str, max_cmd_chars: int = 200) -> list[dict]:
+    """Inspect only a job bound to validated native process identity."""
+    record = _read_meta(job_id)
+    identity = _PROCESS_BACKEND.identity_from_record(record or {})
+    if identity is None:
+        return []
+    return _PROCESS_BACKEND.inspect_job(identity, max_cmd_chars)
 
 
 def list_jobs() -> list[dict]:
@@ -459,40 +474,25 @@ def await_exit(job_id: str, timeout: float) -> dict | None:
 
 
 def stop_job_embedded(job_id: str) -> dict | None:
-    """Original signal/process-tree stop path, used by the stable owner process."""
-    state = job_state(job_id)
-    if state is None:
-        return None
-    if state["state"] != "running":
-        if state["state"] == "unknown":
-            meta = _read_meta(job_id)
-            if meta is not None and meta.get("stop_requested"):
-                return await_exit(job_id, STOP_SIGKILL_GRACE_S)
-        return state
-    pgid = state["pgid"]
-    # Collect descendants BEFORE signaling: a setsid()'d child is outside the
-    # group and only findable through its parent's ppid link while the
-    # parent lives. Group members are covered by killpg already.
-    group = {p["pid"] for p in job_processes(pgid)}
-    strays = _PROCESS_BACKEND.descendants(state["pid"]) - group
+    """Persist partial native delivery before it can be mistaken for success."""
+    job_stop.raise_if_partial_signal(_read_meta(job_id))
     try:
-        _PROCESS_BACKEND.signal_job(pgid, strays, "terminate")
-    except ProcessLookupError:
-        return await_exit(job_id, STOP_SIGKILL_GRACE_S)
-    # Wait for the recorded exit, not just for the pid to disappear: the
-    # reaper writes the exit (signal 15) a moment after the process dies, and
-    # returning before that would report a false "unknown".
-    st = await_exit(job_id, STOP_SIGTERM_GRACE_S)
-    if st is None or st["state"] == "exited":
-        return st
-    logger.warning(
-        "event=job_stop_escalate job_id=%s call=%s signal=SIGKILL grace_s=%s",
-        job_id,
-        current_call.get(),
-        STOP_SIGTERM_GRACE_S,
-    )
-    try:
-        _PROCESS_BACKEND.signal_job(pgid, strays, "kill")
-    except ProcessLookupError:
-        pass
-    return await_exit(job_id, STOP_SIGKILL_GRACE_S)
+        return job_stop.stop_embedded(
+            job_id,
+            process_backend=_PROCESS_BACKEND,
+            job_state=job_state,
+            read_meta=_read_meta,
+            await_exit=await_exit,
+            stop_sigterm_grace_s=STOP_SIGTERM_GRACE_S,
+            stop_sigkill_grace_s=STOP_SIGKILL_GRACE_S,
+            current_call_id=current_call.get,
+            logger=logger,
+            on_partial=lambda exc: job_stop.persist_partial_or_raise(
+                lambda: job_store.mark_signal_delivery_partial(JOBS_DIR, job_id)
+            ),
+        )
+    except JobSignalDeliveryError:
+        job_stop.persist_partial_or_raise(
+            lambda: job_store.mark_signal_delivery_partial(JOBS_DIR, job_id)
+        )
+        raise

@@ -1,0 +1,81 @@
+{
+  "task_id": "BINNACLE-OS-STAGE1-IMPLEMENT-20261009",
+  "tested_source_sha": "a326682b11acfc98f2de7c8d077f6f559d494eea",
+  "recorded_at_utc": "2026-10-09T22:37:59.289919+00:00",
+  "locally_qualified": true,
+  "latest_codex_p2_storage_failure_reviewed_sha": "8000c74d9ce170359f21330eb83cf137b91e23bd",
+  "latest_codex_finding_comment_id": 4234988402,
+  "qualification": {
+    "full_suite": {
+      "command": "uv run python scripts/run_test_suite.py --suite full --seed 12345",
+      "exit_code": 0,
+      "log_path": "docs/os-independent-stage1-evidence/os7-storage-p2-final-managed-20261010.log",
+      "sha256": "6afd0353c704d2af1fce4d09e9ac3adb36c53dbd645c406fe8d69766b8f75b90",
+      "result_indicators": [
+        "2550 passed, 3 skipped",
+        "2 passed, 2553 deselected",
+        "total elapsed: 65.38s"
+      ]
+    },
+    "coverage": {
+      "command": "uv run tox -e coverage-policy -- --seed 12345",
+      "exit_code": 0,
+      "log_path": "docs/os-independent-stage1-evidence/os7-storage-p2-final-coverage-20261010.log",
+      "sha256": "5170dde897262450f5de7370ac8f3d0694d5a63452ea374bd78aed399bf67fe9",
+      "result_indicators": [
+        "coverage-policy: 131 production modules, 48 script modules; 3 below final target, 0 errors",
+        "congratulations :)"
+      ]
+    },
+    "python_compat": {
+      "command": "env BINNACLE_TEST_WORKERS=4 uv run tox run",
+      "exit_code": 0,
+      "log_path": "docs/os-independent-stage1-evidence/os7-storage-p2-final-python-matrix-20261010.log",
+      "sha256": "8327eaba74ecb2e6c8332180572e004466bcbed85c0dc371ea93bd0afb7f9923",
+      "result_indicators": [
+        "py310: OK",
+        "py311: OK",
+        "py312: OK",
+        "py313: OK",
+        "py314: OK",
+        "congratulations :)"
+      ]
+    },
+    "package": {
+      "command": "uv run pytest -q --randomly-seed=12345 tests/integration/test_wheel_artifact.py",
+      "exit_code": 0,
+      "log_path": "docs/os-independent-stage1-evidence/os7-storage-p2-final-package-20261010.log",
+      "sha256": "edb45dd9f02006dc555f85a9a3b48a5961557c6160abc6a5375a12ffec36254a",
+      "result_indicators": [
+        "1 passed in 5.19s"
+      ]
+    },
+    "precommit": {
+      "command": "uv run pre-commit run --all-files",
+      "exit_code": 0,
+      "log_path": "docs/os-independent-stage1-evidence/os7-storage-p2-final-precommit-20261010.log",
+      "sha256": "bc0e444f1a2beb87d5a8ab318be5aa7da3bd7f99b27807a0741574a6b7002fe3",
+      "result_indicators": [
+        "architecture boundaries",
+        "import architecture contracts",
+        "Passed"
+      ]
+    },
+    "prepush": {
+      "command": "uv run pre-commit run --hook-stage pre-push --all-files",
+      "exit_code": 0,
+      "log_path": "docs/os-independent-stage1-evidence/os7-storage-p2-final-prepush-20261010.log",
+      "sha256": "37a3870a992283a9118e1cf753c85bacb014466bfd69186ac26d8639ee79779a",
+      "result_indicators": [
+        "fast unit and contract tests",
+        "Passed"
+      ]
+    }
+  },
+  "pending": [
+    "Final evidence commit and exact-head GitHub CI",
+    "Independent re-review of corrected source, particularly storage unavailability",
+    "Protected safety/deployment review and guarded production deployment"
+  ],
+  "production_unchanged": true
+}

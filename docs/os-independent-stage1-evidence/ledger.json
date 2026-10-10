@@ -1,0 +1,579 @@
+{
+  "active_jobs": [],
+  "baseline_sha": "02f4bab9bc7562668ffc41d622c4274449933768",
+  "branch": "refactor/os-independent-stage1-implementation-20261009",
+  "candidate_sha": "a326682b11acfc98f2de7c8d077f6f559d494eea",
+  "ci_status": "Final source a326682 local-only; preceding PR 8000c74 CI 17/17 passed but is not acceptance evidence for changed code",
+  "completed": [
+    "Plan read in full, 517 lines; repository instructions read",
+    "Independent canonical worktree bootstrapped with locked uv 0.12.24",
+    "Full tracked-source SHA-256 and per-module ownership/import inventory",
+    "OS0 accepted: 143 production modules and 47 scripts classified; 596 SHA-256 manifest entries",
+    "OS0 exact raw four-profile MCP wire: 8/6/6/8, root-local empty, raw provider multiplicity each one",
+    "OS0 original Linux systemd unit template bytes/managed-unit previews and CLI help frozen",
+    "OS0 two persisted spool fixtures + RPC version 1 captured; Linux import blocker probes confirmed",
+    "OS0 symlink alias denial characterized as expected pre-existing defect for OS5",
+    "OS0 static gates passed and focused tests passed: 229 and durable 130",
+    "OS1 static negative OI01-OI02 tests: 23 passed (1 initial synthetic unsupported getattr import resolved by using supported literal importlib alias); source tree architecture check 0 violations",
+    "OS2 centralized single Linux host resolver rejects unknown OS before adapters; 36 factory and platform tests passed",
+    "OS2 pure FastMCP tree resides at binnacle.application to satisfy top-level acyclic imports; synthetic blocked-Linux end-to-end fake four-domain tests passed",
+    "OS2 lazy generic Settings socket path, Linux effective default composed via get_settings; 58 config/manager/factory tests passed",
+    "OS5 canonical alias path security: 8 path/alias tests passed",
+    "OS5 journal acquisition deferred; pure parser import without Linux; 35 regression tests passed and 1 new fixture mismatch repaired",
+    "OS0 reference submitted to source commit c79afdadbe9dee983b405fb79e2ed5a1b6683258; normal hooks all passed",
+    "OS1 capture all five untouched Protocol signatures/hashes, existing Linux PGID signal limitation",
+    "OS1 negative import tests: 23 passed, AST architecture 145 modules 0 failures, Import Linter 21 kept/0 broken",
+    "OS2 static/fake app and Linux default selection tests passed, root imports not cyclical",
+    "OS5 canonical paths, deferred journald, configured root telemetry hashes and no privacy changes",
+    "Exact OS0-v1.0.1 four-profile raw MCP wire comparison: two tests passed; extra privacy+logging tests 40 passed",
+    "Mypy check: no issues in 145 source files",
+    "Module-size ratchet: initial jobs.py 501 line error repaired to 500; 401 modules 0 errors",
+    "OS4 Linux unit ExecStart/procfs/systemctl interpretation isolated into deployment.linux adapter; generic plan_write/markers remain importable with all Linux modules blocked",
+    "OS4 product-level PlannedUnit and UnitProvisioner protocol replaces CLI concrete Linux type import; existing Linux class remains compatible",
+    "OS4 systemd readiness socket notification moved from generic durable manager into platform.linux.notify_systemd",
+    "OS4 exact baseline unit rendering verified, including original insertion order in systemd provenance marker",
+    "OS5 Linux-specific service/boot/journal check functions moved from generic doctor.py into diagnostics.linux_checks; existing wrappers and text contract preserved",
+    "OS5 pure import test covers doctor/results/log parser with every Linux package blocked",
+    "OS3 Core no longer sends Linux PGID directly: command_status -> CommandBackend.job_processes(job_id) -> native identity / verified adapter",
+    "OS3 OS-neutral job_stop.stop_embedded verifies one opaque owner identity and uses pinned Linux pidfd signal lease for TERM and KILL",
+    "OS3 Linux pidfd pinning tests cover boot/PID reuse, disappeared descendants, reparenting, wrong process ownership, lease close and no unrelated signal",
+    "OS3 initial 6 failures diagnosed; fixture fake boot tokens and legacy PGID assertions repaired without modifying dated spool fixtures",
+    "OS3 full focused matrix on 18 modules: 339 passed, 0 failed, seed 12345",
+    "OS3 old manager + new client and new manager + old client both passed against git archived v1.0.1 source; old on-disk record and cursor retained",
+    "OS5 configured canonical root authority now frozen per FastMCP application generation; symlink alias target retarget is refused, explicit config field mutation rebinds roots",
+    "OS5 alias retarget, nested symlink, permission and case-sensitive tests plus existing path/config/Files tests: 58 passed",
+    "OS6 current 152 production modules + 49 Python scripts with KEEP/BOUNDARY/LINUX decisions, all module imports/hashes; original 143 modules retained and 11 approved split modules added",
+    "OS6 all 21 Import Linter contracts pass; AST scanner and direct/alias/dynamic negative test cases pass; no shadow MCP registry; three native child mounts",
+    "OS6 updated README, AGENTS.md, CLAUDE.md, DEVELOPMENT.md, docs/testing.md, docs/quality-gates.md and separate architecture/Darwin backlog",
+    "OS6 four bound source/contract/native tests and prior negative/parity/path suite 40 passed",
+    "OS7 first official full two-lane run: parallel 2530 passed, 3 skipped, 2 fail (G6 outdated module list); ordinary lane 2 passed",
+    "G6 legacy ownership manifest expanded with nine newly split source modules and their native-domain groups; no lowering of coverage assertions",
+    "Gate A root health check upgraded to verify actual pure factory route and delegated Linux bootstrap, with negative tests",
+    "Focused old G6/GateA/OS6 manifest tests repaired: 17 passed",
+    "OS7 full managed suite converged: 2536 passed, 3 skipped; both lanes green",
+    "OS7 coverage-policy passed (131 production and 48 scripts tracked, 0 hard errors; three existing future-target script debts disclosed)",
+    "OS7 pre-commit --all-files and pre-push --all-files hooks passed",
+    "OS7 full tox py310/py311/py312/py313/py314 Python matrix 5/5 passed",
+    "OS7 wheel-from-sdist, locked hashes and clean install smoke passed (1 explicit package acceptance test)",
+    "Previous ae1232bb GitHub PR #18: 17 CI checks passed, code quality, Python matrix, coverage, packaging and CodeQL",
+    "Independent Codex P2 on ae1232bb: repeat stop could conceal partial EPERM descendant signal delivery",
+    "P2 repair: optional durable stop_signal_partial marker under existing spool lock; native callback writes marker before await_exit",
+    "P2 new manager and embedded paths reject retries and old metadata remains readable",
+    "P2 134 focused tests passed initially and 14 final affected tests passed; source mypy/architecture/import/size green",
+    "P2 follow-up architecture test is corrected: 158 tests pass; source committed 3797ffc with normal Git hooks",
+    "Latest candidate managed two-lane full suite: 2548 passed, 3 skipped, no failures, 69.13s",
+    "Latest candidate coverage-policy: 131 production modules, 48 script modules, 0 hard errors; 3 previously documented script-level debts",
+    "Exact 3797ffc Python 3.10, 3.11, 3.12, 3.13, 3.14 full compatibility matrix: all five pass",
+    "Exact 3797ffc clean artifact (sdist -> wheel -> hashed locked install -> smoke): 1 passed",
+    "Exact 3797ffc full repository pre-commit: 35 hooks pass; pre-push fast unit/contract test gate passes",
+    "Final source-bound local acceptance checksum index, reviewer handoff and nonimplemented Darwin backlog prepared",
+    "Codex P2 at 8000c74 reviewed: callback marker OSError/False controlled and retried, source commit a326682",
+    "a326682 final two-lane full 2552 passed, 3 skipped; 131 production/48 scripts coverage gate 0 errors",
+    "a326682 all five Python 3.10-3.14 tox green, wheel/sdist clean install green, full pre-commit and pre-push green",
+    "Persistent store permanently unavailable after failed retry is reported as unproven (cannot promise future crash-durable retry)"
+  ],
+  "deployment_status": "NOT_STARTED: production/master v1.0.1 unchanged; active durable manager must not restart",
+  "evidence": [
+    "docs/os-independent-stage1-evidence/os0-source-inventory.json",
+    "docs/os-independent-stage1-evidence/os0-manifest.sha256",
+    "docs/os-independent-stage1-evidence/os0-risk-register.md",
+    "docs/os-independent-stage1-evidence/os0-raw-mcp-surface.json",
+    "docs/os-independent-stage1-evidence/os0-host-baseline.json",
+    "docs/os-independent-stage1-evidence/os0-focused-tests.log",
+    "docs/os-independent-stage1-evidence/os0-durable-tests.log",
+    "docs/os-independent-stage1-evidence/os7-final-local-acceptance-20261010.json",
+    "docs/os-independent-stage1-evidence/os7-local-final-review-handoff-20261010.md",
+    "docs/os-independent-stage1-evidence/os7-darwin-stage2-backlog-20261010.md",
+    "docs/os-independent-stage1-evidence/os7-storage-p2-local-acceptance-20261010.json",
+    "docs/os-independent-stage1-evidence/os7-codex-p2-storage-response-20261010.md"
+  ],
+  "failures_and_repairs": [
+    {
+      "failure": "pre-commit hook B101 assert_used + ruff PIE810 + autoformat/trailing whitespace",
+      "resolution": "Changed evidence script to explicit fail-closed RuntimeError; merged startswith; accepted hook autoformat only in evidence scripts",
+      "retest": "normal git commit with hooks",
+      "stage": "OS0"
+    },
+    {
+      "failure": "Normal git add+commit command received platform tool safety refusal: This tool call was blocked by OpenAI because we couldn't determine the safety status of the request.",
+      "next_action": "Do not bypass safety review. Preserve staged OS0 evidence and progress with independent OS5 file policy work.",
+      "stage": "OS0 commit",
+      "status": "BLOCKED_POLICY_FOR_COMMIT"
+    },
+    {
+      "failure": "Import Linter top-level acyclic broken by placing application module under binnacle.mcp",
+      "resolution": "Moved pure FastMCP application factory to binnacle.application, verified all 20 linter contracts",
+      "stage": "OS2"
+    },
+    {
+      "failure": "check_architecture.py imported scripts package incorrectly when run as direct file",
+      "resolution": "Conditional relative/top-level import with both modes covered",
+      "stage": "OS1"
+    },
+    {
+      "failure": "New fake logstats fixture asserted nonexistent Stats.job_starts property",
+      "resolution": "Use existing Stats.job_exits property; focused rerun passed",
+      "stage": "OS5"
+    },
+    {
+      "failure": "markdownlint MD060 found unspaced table separator; gitleaks 7 false positives on repetitive filename-keyed SHA-256 JSON mapping",
+      "resolution": "Corrected table separator, removed redundant file→hash JSON dictionary; exact all-file SHA-256 preserved in dedicated os0-manifest.sha256, inventory array retains its hashes, source captured unchanged",
+      "stage": "OS0 commit"
+    },
+    {
+      "failure": "mypy passed but source module-size cap failed at 501 lines jobs.py",
+      "resolution": "Simplified conditional check preserving the same runtime guard; recheck now 500 lines and 0 errors",
+      "stage": "OS1"
+    },
+    {
+      "failure": "direct uv run markdownlint-cli2 executable unavailable",
+      "resolution": "Use pre-commit's pinned markdownlint-cli2 hook, no arbitrary download or version change",
+      "stage": "OS1"
+    },
+    {
+      "failure": "mypy errors in job_owner.py: MANAGER_SOCKET typed Path|None; mypy+deptry could not resolve direct scripts/os_independence import",
+      "resolution": "Runtime-checked manager socket now explicitly typed Path; check_architecture imports its local package through known repository root; source mypy/deptry and static checks pass",
+      "stage": "OS1/OS2 code commit"
+    },
+    {
+      "failure": "Six early OS3 test failures: unreviewed synthetic boot ids rejected by validated Linux process-generation check and mock backends asserted legacy signal_job call",
+      "resolution": "Use actual boot_id in live manager fixtures and update isolated test-only fake lease; kept old spool data unchanged; 339 matrix passed.",
+      "stage": "OS3"
+    },
+    {
+      "failure": "Git archive included a parent 'src/' directory record which fixture validation rejected",
+      "resolution": "Validated and skipped only the parent directory record; immutable archived source and 2-way RPC test passed.",
+      "stage": "OS3 cross-version"
+    },
+    {
+      "failure": "tests/scripts/test_gate_a_report.py: module registry omitted all nine new Stage1 production Python files; companion.operational_http_surface used obsolete same-file FastMCP create_server AST assumption",
+      "hook_note": "Normal trailing-whitespace hook removed purely blank trailing spaces in saved text evidence; original unmodified full log remains as os7-managed-full.log in owned workspace.",
+      "log_path": "docs/os-independent-stage1-evidence/os7-managed-first-failure.txt",
+      "resolution": "Update actual G6 manifest owners for all nine (root, commands, platform, diagnostics, deployment); verify native create_application root route and server->application delegation with positive/negative AST tests; targeted 17 passed",
+      "sha256": "57df2f0552c745c6697288c825a22a3fd82e6b53df8bd144f21335a5973f2bbf",
+      "stage": "OS7 first managed full suite"
+    },
+    {
+      "failure": "Independent Codex review 5473022114 comment 4232561690: partial EPERM signal was not persisted for retries",
+      "resolution": "Atomically write optional marker immediately on native error; enforce failure in both owner and manager RPC paths",
+      "stage": "OS7 P2"
+    },
+    {
+      "failure": "First P2 candidate callback mypy mismatch and module-size 501 lines",
+      "resolution": "Use object-returning callback and concise controlled persistence error; mypy/size pass",
+      "stage": "OS7 P2"
+    },
+    {
+      "failure": "Synthetic concurrency fake missing alive method",
+      "resolution": "Supply explicit fake alive semantics; targeted test passes",
+      "stage": "OS7 P2"
+    },
+    {
+      "command": "uv run scripts/run_test_suite.py --suite full --seed 12345",
+      "failure": "tests/unit/core/test_platform_architecture.py::test_platform_dependencies[job_owner] and [job_manager] reject new allowed Core job_stop.raise_if_partial_signal imports, though 21 Import Linter contracts and earlier architecture scanner pass",
+      "result": "2544 passed, 3 skipped, 2 failed, total 66.23s",
+      "stage": "OS7 P2 full managed suite",
+      "status": "FOCUSED_REPAIR_PENDING",
+      "test_sha": "14ea285d0b4778bbed3455205df52efe70118504"
+    },
+    {
+      "failure": "A tool call to update the static test dependencies was rejected: This tool call was blocked by OpenAI because we couldn't determine the safety status of the request.",
+      "resolution": "After explicit renewed user permission, narrow core-neutral job_stop import ownership update applied with a real patch; AST suite 158 passed, normal Git hooks passed (3797ffc). No forbidden Linux boundary was relaxed.",
+      "stage": "OS7 P2 focused repair",
+      "status": "BLOCKED_POLICY"
+    }
+  ],
+  "gates": {
+    "OS0": "ACCEPTED_COMMITTED_c79afda",
+    "OS1": "STATIC_PASS_21_CONTRACTS_REVIEW_PENDING",
+    "OS2": "MOCK_AND_RAW_WIRE_FOCUSED_PASS_REVIEW_PENDING",
+    "OS3": "339_FOCUSED_PASS_2_CROSS_VERSION_PASS_INDEPENDENT_REVIEW_PENDING",
+    "OS4": "UNIT_PROVISIONING_AND_READINESS_FOCUSED_PASS_UNREVIEWED",
+    "OS5": "PATH_ALIAS_LOG_DIAGNOSTIC_FOCUSED_PASS; CANONICAL_ANCESTOR_TOCTOU_DOCUMENTED",
+    "OS6": "152_MODULE_49_SCRIPT_OWNERSHIP_COMPLETE; STATIC_40_TESTS_PASS; REVIEW_PENDING",
+    "OS7": "LOCAL_PASS_SOURCE_a326682_2552_PASS_3_SKIP_COVERAGE_0_ERRORS_PY310_314_5_OF_5_PACKAGE_HOOKS_GREEN_CI_REVIEW_DEPLOY_PENDING"
+  },
+  "known_baseline_defects": [
+    "Symlink allowed-root canonicalization falsely rejects canonical target",
+    "Linux import-blocking cannot currently import pure server/jobs/logstats"
+  ],
+  "last_committed_sha": "a326682b11acfc98f2de7c8d077f6f559d494eea",
+  "next_action": "Commit checked new evidence-only document, push with normal pre-push hooks, require exact HEAD CI and independent source-bound re-review; production unchanged until separately required protected approval and quiet window",
+  "owner": "single ChatGPT implementation integrator",
+  "plan_sha": "19a3cf1e43755ed4aee3837c25ea63188058a26e",
+  "remaining_dependencies": [
+    "Normal evidence commit/push; latest actual source-head GitHub CI",
+    "New independent source-bound reviewer disposition on callback metadata storage failure; require explicit persistent-failure risk decision",
+    "Independent architecture/OS3 process safety/OS4 systemd/OS7 review plus protected human deployment disposition",
+    "Guarded production deployment, live smoke and rollback verification only when policy gates pass"
+  ],
+  "review_status": "New Codex P2 finding 4234988402 addressed at a326682; re-review not yet received. Persistent storage totally unavailable after retry remains an explicitly documented unprovable guarantee.",
+  "reviews": [],
+  "stage": "OS7 newest Codex P2 callback persistence error repaired and locally qualified; exact-head CI and independent safety disposition pending",
+  "status": "REVIEW_PENDING",
+  "task_id": "BINNACLE-OS-STAGE1-IMPLEMENT-20261009",
+  "tested_source_sha": "a326682b11acfc98f2de7c8d077f6f559d494eea",
+  "tests": [
+    {
+      "command": "uv run pytest [six baseline platform/server/doctor test files] -q --randomly-seed=12345",
+      "exit_code": 0,
+      "log_path": "docs/os-independent-stage1-evidence/os0-focused-tests.log",
+      "result": "229 passed",
+      "stage": "OS0"
+    },
+    {
+      "command": "uv run pytest [eight baseline job/resource/contract test files] -q --randomly-seed=12345",
+      "exit_code": 0,
+      "log_path": "docs/os-independent-stage1-evidence/os0-durable-tests.log",
+      "result": "130 passed",
+      "stage": "OS0"
+    },
+    {
+      "command": ".venv/bin/python scripts/check_architecture.py",
+      "exit_code": 0,
+      "log_path": "docs/os-independent-stage1-evidence/os0-architecture.txt",
+      "stage": "OS0"
+    },
+    {
+      "command": ".venv/bin/lint-imports --no-logo",
+      "exit_code": 0,
+      "log_path": "docs/os-independent-stage1-evidence/os0-import-linter.txt",
+      "stage": "OS0"
+    },
+    {
+      "command": "uv run pytest tests/scripts/test_os_architecture.py -q --randomly-seed=12345",
+      "exit_code": 0,
+      "result": "23 passed",
+      "stage": "OS1"
+    },
+    {
+      "command": "uv run python scripts/check_architecture.py && uv run lint-imports --no-logo",
+      "exit_code": 0,
+      "result": "0 architecture violations, 20 Import Linter contracts kept",
+      "stage": "OS1"
+    },
+    {
+      "command": "uv run pytest tests/unit/core/test_platform_activation.py tests/unit/core/test_runtime_paths.py tests/unit/core/test_deployment_platform_architecture.py tests/unit/core/test_os_host_composition.py -q",
+      "exit_code": 0,
+      "result": "36 passed",
+      "stage": "OS2"
+    },
+    {
+      "command": "uv run pytest tests/integration/test_root_settings.py tests/integration/test_command_domain.py tests/integration/test_commands_settings.py -q",
+      "exit_code": 0,
+      "result": "15 passed",
+      "stage": "OS2"
+    },
+    {
+      "command": "uv run pytest tests/integration/test_os_pure_application.py tests/unit/core/test_config_loading.py tests/unit/core/test_runtime_paths.py tests/integration/test_job_manager.py -q",
+      "exit_code": 0,
+      "result": "58 passed",
+      "stage": "OS2"
+    },
+    {
+      "command": "uv run pytest tests/unit/core/test_paths_settings.py tests/unit/core/test_os_independence_paths.py -q",
+      "exit_code": 0,
+      "result": "8 passed",
+      "stage": "OS5"
+    },
+    {
+      "command": "uv run pytest tests/unit/core/test_os_log_import_isolation.py -q",
+      "exit_code": 0,
+      "result": "1 passed (after fixing new fixture assertion)",
+      "stage": "OS5"
+    },
+    {
+      "command": "uv run pytest tests/unit/core/test_os_log_path_root.py tests/unit/core/test_log_safety.py tests/integration/test_logging.py tests/integration/test_log_privacy.py tests/contracts/test_os_stage1_wire_parity.py -q --randomly-seed=12345",
+      "exit_code": 0,
+      "result": "40 passed",
+      "stage": "OS5/FM08"
+    },
+    {
+      "command": "uv run mypy src/binnacle",
+      "exit_code": 0,
+      "log_path": "docs/os-independent-stage1-evidence/os1-mypy-candidate.log",
+      "result": "no issues found in 145 source files",
+      "stage": "OS1/OS2"
+    },
+    {
+      "command": "uv run python scripts/check_module_size.py",
+      "exit_code": 0,
+      "log_path": "docs/os-independent-stage1-evidence/os1-module-size.log",
+      "result": "second run 401 modules 0 errors, 22 warnings (old modules)",
+      "stage": "OS1/OS2"
+    },
+    {
+      "command": "uv run lint-imports --no-logo",
+      "exit_code": 0,
+      "result": "21 contracts kept, 0 broken",
+      "stage": "OS1/OS2"
+    },
+    {
+      "command": "uv run python scripts/check_architecture.py",
+      "exit_code": 0,
+      "result": "145 modules checked, 0 violations",
+      "stage": "OS1/OS2"
+    },
+    {
+      "command": "uv run pytest -q --randomly-seed=12345 tests/contracts/test_os_stage1_wire_parity.py tests/integration/test_os_pure_application.py tests/unit/core/test_os_* tests/scripts/test_os_architecture.py tests/integration/test_job_manager.py tests/contracts/test_server_composition.py",
+      "exit_code": 0,
+      "log_path": "docs/os-independent-stage1-evidence/os1-os2-os5-focused-validation.log",
+      "sha256": "7f953f4db0fe3c5901d233b78ef6e7a0d25efceec8eb7039e114423dafa7d48b",
+      "stage": "OS1/OS2/OS5"
+    },
+    {
+      "command": "uv run pytest -q --randomly-seed=12345 [eleven named OS4/OS5/manager/CLI/system/architecture test files]",
+      "exit_code": 0,
+      "log_path": "docs/os-independent-stage1-evidence/os4-os5-focused-validation.log",
+      "log_sha256": "105f0e805f28d985455edc0ec318935e4d7b0f5d09afdc4fd126895da845f688",
+      "result": "173 passed in 5.20s",
+      "stage": "OS4/OS5"
+    },
+    {
+      "command": "uv run pytest -q --randomly-seed=12345 [18 OS3 job/process/backend/spool/architecture contract test files]",
+      "exit_code": 0,
+      "log_path": "docs/os-independent-stage1-evidence/os3-combined-focused-repair.txt",
+      "result": "339 passed in 22.69s",
+      "sha256": "05c18c07b389020e64f51d531fc43c113168e0dd3fc677248d7047c16ab9192b",
+      "stage": "OS3"
+    },
+    {
+      "command": "uv run pytest -q --randomly-seed=12345 tests/integration/test_os_job_rpc_cross_version.py",
+      "exit_code": 0,
+      "log_path": "docs/os-independent-stage1-evidence/os3-cross-version-rpc.txt",
+      "result": "2 passed in 15.81s; old owner/new client and new owner/old client",
+      "sha256": "153b07d9a129c65f22b307f28d939ac20d423267737b29e835b3ed4f22cf4f6d",
+      "stage": "OS3"
+    },
+    {
+      "command": "uv run pytest -q --randomly-seed=12345 tests/unit/core/test_os_independence_paths.py tests/unit/core/test_paths_settings.py tests/integration/test_root_settings.py tests/integration/test_files_settings.py tests/unit/core/test_config_loading.py",
+      "exit_code": 0,
+      "result": "58 passed",
+      "stage": "OS5"
+    },
+    {
+      "command": "uv run pytest -q --randomly-seed=12345 tests/scripts/test_os_stage1_native_boundaries.py tests/scripts/test_os_stage1_inventory.py tests/scripts/test_os_architecture.py tests/contracts/test_os_stage1_wire_parity.py tests/unit/core/test_os_independence_paths.py",
+      "exit_code": 0,
+      "result": "40 passed",
+      "stage": "OS6"
+    },
+    {
+      "command": "uv run python -m scripts.os_stage1_inventory --check",
+      "exit_code": 0,
+      "result": "152 production, 49 scripts, 11 additions, 0 deleted, 0 architecture violations",
+      "stage": "OS6"
+    },
+    {
+      "command": "uv run python scripts/run_test_suite.py --seed 12345",
+      "exit_code": 1,
+      "log_path": "docs/os-independent-stage1-evidence/os7-managed-first-failure.txt",
+      "result": "first run: 2532 passed, 3 skipped, 2 failed; fixes applied",
+      "stage": "OS7"
+    },
+    {
+      "command": "managed_full",
+      "exit_code": 0,
+      "log_path": "docs/os-independent-stage1-evidence/os7-managed-full.log",
+      "result": "2536 passed, 3 skipped; no failures",
+      "sha256": "5c275c3afda88535cb7011bc8c80ecee45f482351870f81e110db5f19f8ce487",
+      "source_sha": "02879e8e34215515500209f80ba24aaa7438aadc",
+      "stage": "OS7"
+    },
+    {
+      "command": "coverage_policy",
+      "exit_code": 0,
+      "log_path": "docs/os-independent-stage1-evidence/os7-coverage-policy.log",
+      "result": "131 production and 48 script coverage modules; 0 hard errors",
+      "sha256": "abbb9b3130caeb7a39235aa4332378763e4ef0339913ea81646be08f188672c0",
+      "source_sha": "02879e8e34215515500209f80ba24aaa7438aadc",
+      "stage": "OS7"
+    },
+    {
+      "command": "pre_commit_all",
+      "exit_code": 0,
+      "log_path": "docs/os-independent-stage1-evidence/os7-pre-commit-all.log",
+      "result": "35 pre-commit checks passed",
+      "sha256": "bc0e444f1a2beb87d5a8ab318be5aa7da3bd7f99b27807a0741574a6b7002fe3",
+      "source_sha": "02879e8e34215515500209f80ba24aaa7438aadc",
+      "stage": "OS7"
+    },
+    {
+      "command": "pre_push",
+      "exit_code": 0,
+      "log_path": "docs/os-independent-stage1-evidence/os7-pre-push-all.log",
+      "result": "fast unit + contract test gate passed",
+      "sha256": "37a3870a992283a9118e1cf753c85bacb014466bfd69186ac26d8639ee79779a",
+      "source_sha": "02879e8e34215515500209f80ba24aaa7438aadc",
+      "stage": "OS7"
+    },
+    {
+      "command": "python_matrix",
+      "exit_code": 0,
+      "log_path": "docs/os-independent-stage1-evidence/os7-python-matrix.log",
+      "result": "py310 py311 py312 py313 py314: 5 of 5 passed",
+      "sha256": "05a8894c3f497aac5fe55039d907624de4b6123b3ea06a3cd124ddeaa26054c3",
+      "source_sha": "02879e8e34215515500209f80ba24aaa7438aadc",
+      "stage": "OS7"
+    },
+    {
+      "command": "packaging",
+      "exit_code": 0,
+      "log_path": "docs/os-independent-stage1-evidence/os7-package-clean-install.log",
+      "result": "sdist -> wheel -> hashed locked clean installation/smoke; 1 passed",
+      "sha256": "473b225733d5a1f4aca58fc5163f3e1949e12487a2063ea5599850f01efcae83",
+      "source_sha": "02879e8e34215515500209f80ba24aaa7438aadc",
+      "stage": "OS7"
+    },
+    {
+      "command": "uv run pytest [13 relevant job-manager, old-spool and MCP-wire test files] --randomly-seed=12345",
+      "exit_code": 0,
+      "result": "134 passed, 1 optional PySocks warning",
+      "stage": "OS7 P2"
+    },
+    {
+      "command": "uv run pytest -q --randomly-seed=12345 tests/unit/core/test_os_job_partial_persistence.py tests/unit/core/test_os_job_stop_policy.py tests/integration/test_job_manager.py::test_durable_partial_stop_rejected_via_real_unix_rpc_after_leader_exit",
+      "exit_code": 0,
+      "result": "14 passed",
+      "stage": "OS7 P2"
+    },
+    {
+      "stage": "OS7 P2 verified repair",
+      "command": "uv run pytest -q --randomly-seed=12345 tests/unit/core/test_platform_architecture.py",
+      "exit_code": 0,
+      "result": "158 passed",
+      "source_sha": "3797ffc2e044d88e3fc8768e93775a23029ff6ad"
+    },
+    {
+      "stage": "OS7 final",
+      "command": "uv run python scripts/run_test_suite.py --suite full --seed 12345",
+      "exit_code": 0,
+      "log_path": "docs/os-independent-stage1-evidence/os7-final-P2-fixed-managed-full.log",
+      "result": "parallel-safe 2546 passed, 3 skipped; ordinary-process 2 passed; combined 2548 passed, 3 skipped; 69.13s",
+      "source_sha": "3797ffc2e044d88e3fc8768e93775a23029ff6ad"
+    },
+    {
+      "stage": "OS7 final",
+      "command": "uv run tox -e coverage-policy -- --seed 12345",
+      "exit_code": 0,
+      "log_path": "docs/os-independent-stage1-evidence/os7-final-P2-fixed-coverage.log",
+      "result": "131 production modules, 48 scripts, 0 hard errors, three existing script debts",
+      "source_sha": "3797ffc2e044d88e3fc8768e93775a23029ff6ad"
+    },
+    {
+      "stage": "OS7 final",
+      "command": "env BINNACLE_TEST_WORKERS=4 uv run tox run",
+      "exit_code": 0,
+      "result": "py310: OK; py311: OK; py312: OK; py313: OK; py314: OK; congratulations :)",
+      "source_sha": "3797ffc2e044d88e3fc8768e93775a23029ff6ad",
+      "sha256": "d39a1ae6b52f8e6f80c8810906b531744ed8628cf80c3eaabeb8845d27ebe28a",
+      "log_path": "docs/os-independent-stage1-evidence/os7-final-P2-fixed-python-matrix.log"
+    },
+    {
+      "stage": "OS7 final",
+      "command": "uv run pytest -q --randomly-seed=12345 tests/integration/test_wheel_artifact.py",
+      "exit_code": 0,
+      "result": "1 passed in 5.69s",
+      "source_sha": "3797ffc2e044d88e3fc8768e93775a23029ff6ad",
+      "sha256": "9773bff50db8c7e20ce38d8622be736ece24b8bcd75b924ee4a2c8fbad0ec9be",
+      "log_path": "docs/os-independent-stage1-evidence/os7-final-P2-fixed-package.log"
+    },
+    {
+      "stage": "OS7 final",
+      "command": "uv run pre-commit run --all-files",
+      "exit_code": 0,
+      "result": "architecture boundaries; import architecture contracts; Passed",
+      "source_sha": "3797ffc2e044d88e3fc8768e93775a23029ff6ad",
+      "sha256": "bc0e444f1a2beb87d5a8ab318be5aa7da3bd7f99b27807a0741574a6b7002fe3",
+      "log_path": "docs/os-independent-stage1-evidence/os7-final-P2-fixed-precommit.log"
+    },
+    {
+      "stage": "OS7 final",
+      "command": "uv run pre-commit run --hook-stage pre-push --all-files",
+      "exit_code": 0,
+      "result": "fast unit and contract tests; Passed",
+      "source_sha": "3797ffc2e044d88e3fc8768e93775a23029ff6ad",
+      "sha256": "37a3870a992283a9118e1cf753c85bacb014466bfd69186ac26d8639ee79779a",
+      "log_path": "docs/os-independent-stage1-evidence/os7-final-P2-fixed-prepush.log"
+    },
+    {
+      "stage": "OS7 P2 storage final",
+      "source_sha": "a326682b11acfc98f2de7c8d077f6f559d494eea",
+      "command": "uv run python scripts/run_test_suite.py --suite full --seed 12345",
+      "exit_code": 0,
+      "log_path": "docs/os-independent-stage1-evidence/os7-storage-p2-final-managed-20261010.log",
+      "sha256": "6afd0353c704d2af1fce4d09e9ac3adb36c53dbd645c406fe8d69766b8f75b90",
+      "result_indicators": [
+        "2550 passed, 3 skipped",
+        "2 passed, 2553 deselected",
+        "total elapsed: 65.38s"
+      ]
+    },
+    {
+      "stage": "OS7 P2 storage final",
+      "source_sha": "a326682b11acfc98f2de7c8d077f6f559d494eea",
+      "command": "uv run tox -e coverage-policy -- --seed 12345",
+      "exit_code": 0,
+      "log_path": "docs/os-independent-stage1-evidence/os7-storage-p2-final-coverage-20261010.log",
+      "sha256": "5170dde897262450f5de7370ac8f3d0694d5a63452ea374bd78aed399bf67fe9",
+      "result_indicators": [
+        "coverage-policy: 131 production modules, 48 script modules; 3 below final target, 0 errors",
+        "congratulations :)"
+      ]
+    },
+    {
+      "stage": "OS7 P2 storage final",
+      "source_sha": "a326682b11acfc98f2de7c8d077f6f559d494eea",
+      "command": "env BINNACLE_TEST_WORKERS=4 uv run tox run",
+      "exit_code": 0,
+      "log_path": "docs/os-independent-stage1-evidence/os7-storage-p2-final-python-matrix-20261010.log",
+      "sha256": "8327eaba74ecb2e6c8332180572e004466bcbed85c0dc371ea93bd0afb7f9923",
+      "result_indicators": [
+        "py310: OK",
+        "py311: OK",
+        "py312: OK",
+        "py313: OK",
+        "py314: OK",
+        "congratulations :)"
+      ]
+    },
+    {
+      "stage": "OS7 P2 storage final",
+      "source_sha": "a326682b11acfc98f2de7c8d077f6f559d494eea",
+      "command": "uv run pytest -q --randomly-seed=12345 tests/integration/test_wheel_artifact.py",
+      "exit_code": 0,
+      "log_path": "docs/os-independent-stage1-evidence/os7-storage-p2-final-package-20261010.log",
+      "sha256": "edb45dd9f02006dc555f85a9a3b48a5961557c6160abc6a5375a12ffec36254a",
+      "result_indicators": [
+        "1 passed in 5.19s"
+      ]
+    },
+    {
+      "stage": "OS7 P2 storage final",
+      "source_sha": "a326682b11acfc98f2de7c8d077f6f559d494eea",
+      "command": "uv run pre-commit run --all-files",
+      "exit_code": 0,
+      "log_path": "docs/os-independent-stage1-evidence/os7-storage-p2-final-precommit-20261010.log",
+      "sha256": "bc0e444f1a2beb87d5a8ab318be5aa7da3bd7f99b27807a0741574a6b7002fe3",
+      "result_indicators": [
+        "architecture boundaries",
+        "import architecture contracts",
+        "Passed"
+      ]
+    },
+    {
+      "stage": "OS7 P2 storage final",
+      "source_sha": "a326682b11acfc98f2de7c8d077f6f559d494eea",
+      "command": "uv run pre-commit run --hook-stage pre-push --all-files",
+      "exit_code": 0,
+      "log_path": "docs/os-independent-stage1-evidence/os7-storage-p2-final-prepush-20261010.log",
+      "sha256": "37a3870a992283a9118e1cf753c85bacb014466bfd69186ac26d8639ee79779a",
+      "result_indicators": [
+        "fast unit and contract tests",
+        "Passed"
+      ]
+    }
+  ],
+  "updated_utc": "2026-10-09T22:37:59.290452+00:00",
+  "worktree_dirty": true,
+  "worktree_path": "/home/grammy-jiang/Projects/binnacle-os-independent-stage1-impl"
+}

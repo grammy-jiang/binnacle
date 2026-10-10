@@ -26,6 +26,7 @@ import json
 import logging
 import time
 import uuid
+from pathlib import Path
 from typing import Any
 
 from fastmcp.exceptions import ToolError
@@ -221,7 +222,7 @@ def _compact_json(value: Any) -> str:
     return json.dumps(value, separators=(",", ":"), ensure_ascii=False, default=str)
 
 
-def _args_json(arguments: Any) -> tuple[int, str]:
+def _args_json(arguments: Any, *, root: Path | None = None) -> tuple[int, str]:
     """Compact JSON of the call arguments and its full length.
 
     Non-string values come first and strings follow shortest first, so the
@@ -232,7 +233,7 @@ def _args_json(arguments: Any) -> tuple[int, str]:
     original = dict(arguments or {})
     # Preserve historical full payload-size accounting, not the raw values.
     full = len(_compact_json(original))
-    items = list(safe_arguments(original).items())
+    items = list(safe_arguments(original, root=root).items())
     items.sort(
         key=lambda kv: (
             isinstance(kv[1], str),
@@ -318,8 +319,10 @@ class ToolLoggingMiddleware(Middleware):
         identity: ClientIdentity,
         *,
         tokenizer: TokenizerTelemetrySettings | None = None,
+        path_root: Path | None = None,
     ) -> None:
         self._identity = identity
+        self._path_root = path_root
         self._logger = logging.getLogger("binnacle.results")
         tokenizer = (
             get_settings().telemetry.tokenizer if tokenizer is None else tokenizer
@@ -368,7 +371,7 @@ class ToolLoggingMiddleware(Middleware):
         if proof is not None:
             who["smoke"] = proof
         arguments = getattr(context.message, "arguments", None) or {}
-        args_chars, args_text = _args_json(arguments)
+        args_chars, args_text = _args_json(arguments, root=self._path_root)
         self._log(
             "tool_call",
             logging.INFO,

@@ -37,8 +37,6 @@ from pydantic_settings import (
     TomlConfigSettingsSource,
 )
 
-from binnacle.platform.deployment_platform import create_runtime_paths
-
 CONFIG_FILE_ENV = "BINNACLE_CONFIG_FILE"
 DEFAULT_CONFIG_FILE = Path.home() / ".config" / "binnacle" / "config.toml"
 
@@ -55,9 +53,27 @@ class RootsSettings(BaseModel):
         description="Additional allowed roots beside default_root.",
     )
 
+    _canonical_source: tuple[Path, ...] | None = PrivateAttr(default=None)
+    _canonical_snapshot: tuple[Path, ...] | None = PrivateAttr(default=None)
+
     @property
     def allowed(self) -> tuple[Path, ...]:
         return (self.default_root, *self.extra_roots)
+
+    @property
+    def canonical_allowed(self) -> tuple[Path, ...]:
+        """Bind root aliases on first use; symlink retargeting is not new authority.
+
+        A model field mutation intentionally defines new root configuration and
+        invalidates the snapshot. Changing a symlink without changing the
+        configured path does not. Factory settings are copied independently.
+        """
+        configured = self.allowed
+        if self._canonical_snapshot is None or configured != self._canonical_source:
+            resolved = tuple(root.expanduser().resolve() for root in configured)
+            self._canonical_snapshot = resolved
+            self._canonical_source = configured
+        return self._canonical_snapshot
 
 
 class AuthSettings(BaseModel):
@@ -273,10 +289,6 @@ class RunCommandSettings(BaseModel):
         return self.match_auto_background(client, command) is not None
 
 
-def _default_jobs_socket() -> Path:
-    return create_runtime_paths().jobs_socket
-
-
 class JobsSettings(BaseModel):
     """Disk-backed job store and local ownership backend."""
 
@@ -288,9 +300,9 @@ class JobsSettings(BaseModel):
             "embedded remains the rollback/test path."
         ),
     )
-    socket_path: Path = Field(
-        default_factory=_default_jobs_socket,
-        description="Private AF_UNIX socket for binnacle-jobs.service.",
+    socket_path: Path | None = Field(
+        None,
+        description="Private AF_UNIX socket for binnacle-jobs.service; resolved at Linux host composition.",
     )
     dir: Path = Field(
         default_factory=lambda: Path.home() / ".local" / "state" / "binnacle" / "jobs",
@@ -425,4 +437,10 @@ class Settings(BaseSettings):
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
-    return Settings()
+    """Compose the configured native default when building a host application."""
+    settings = Settings()
+    if settings.jobs.socket_path is None:
+        from binnacle.platform.composition import create_runtime_paths
+
+        settings.jobs.socket_path = create_runtime_paths().jobs_socket
+    return settings

@@ -29,6 +29,7 @@ from scripts.g7_legacy_gate import (
 from scripts.gate_a_evidence import build_payload
 from scripts.gate_a_manifest import manifest_coverage, manifest_groups
 from scripts.gate_a_source import (
+    has_delegated_root_health_route,
     has_root_health_route,
     imported_names_from,
     imports_for,
@@ -114,7 +115,10 @@ def companion_modules() -> tuple[str, ...]:
 
 
 def has_custom_route() -> bool:
-    return has_root_health_route(SRC / "server.py")
+    server = SRC / "server.py"
+    return has_root_health_route(server) or has_delegated_root_health_route(
+        server, SRC / "application.py"
+    )
 
 
 def clean_snapshot() -> str | None:

@@ -42,6 +42,29 @@ rerun bootstrap. `[tool.uv].required-version` is deliberately a compatible
 It does not install operating-system packages, configure systemd services,
 change Binnacle host configuration, or deploy the server.
 
+## Stage 1 platform architecture and acceptance
+
+Follow the [OS-independent architecture](docs/os-independent-stage1-architecture.md)
+and the committed OS0–OS7 plan when modifying Core or Linux adapters.
+The product still runs on Linux only. Never replace the durable Job
+Manager with FastMCP Tasks or build an independent Provider router.
+
+After a source-boundary change regenerate and verify the complete
+module/script ownership inventory:
+
+~~~bash
+uv run python -m scripts.os_stage1_inventory
+uv run python -m scripts.os_stage1_inventory --check
+uv run python scripts/check_architecture.py
+uv run lint-imports --no-logo
+~~~
+
+Root alias authorization is captured for each application generation;
+a configured root retarget requires a new configuration generation.
+Do not claim OS1/OS3/OS4/OS7 independent approval from the author's
+local tests; use exact-SHA independent review and the existing CI and
+quiet-window guarded deployment gates.
+
 ## Development doctor
 
 Run the read-only environment check at any time:

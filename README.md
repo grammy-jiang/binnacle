@@ -36,6 +36,11 @@ For managed services, configuration, bearer token provisioning and the optional
 tunnel companion, follow the Quick start and configuration guidance below.
 Installation does **not** automatically start or expose an MCP server.
 
+Stage 1 separates portable Core architecture from Linux host mechanisms;
+it **does not add macOS support**. The design, acceptance gates and
+bounded Darwin backlog are in
+[OS-independent architecture](docs/os-independent-stage1-architecture.md).
+
 ## Quick start
 
 Requirements: Linux with systemd user services, bash, ripgrep (rg), Git, and

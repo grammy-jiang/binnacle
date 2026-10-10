@@ -60,6 +60,33 @@ A regression test belongs beside the behaviour it protects. Historical context
 may be kept in the test docstring when it explains a non-obvious requirement,
 but dates are not a directory structure.
 
+## OS independence / FastMCP Native Architecture acceptance
+
+The accepted Stage 1 plan defines OI-01–OI-12 and FM-01–FM-08.
+During implementation run focused dependent tests only; at OS7 run
+the normal two-lane complete suite, coverage, compatibility, CI and
+package gates. Reuse the immutable OS0 raw MCP baseline rather than
+rewriting goldens when an assertion differs.
+
+- `tests/integration/test_os_pure_application.py` verifies three child
+  servers and eight tools against a fake Commands backend with Linux
+  imports deliberately rejected.
+- `tests/contracts/test_os_stage1_wire_parity.py` compares exact wire
+  schemas, raw aggregate ownership and four client visibility profiles.
+- `tests/integration/test_os_job_rpc_cross_version.py` exercises the
+  original Git v1.0.1 manager versus current client, then the reverse.
+- `tests/unit/core/test_os_job_identity.py` checks pidfd-owned native
+  signals, boot/PID/descendant reuse, target membership and fail-closed
+  errors; OS-neutral `job_stop` also runs with a fake lease.
+- `tests/unit/core/test_os_independence_paths.py` covers root aliases,
+  changes to canonical aliases, escapes and permission errors.
+- `tests/scripts/test_os_stage1_inventory.py` proves all current
+  production Python modules and scripts have assigned ownership.
+
+See `docs/os-independent-stage1-architecture.md` for deliberate
+filesystem TOCTOU and platform capability limitations. The tests
+do not authorize an unattended production Job Manager restart.
+
 ## Normal commands
 
 ### FastMCP composition contracts

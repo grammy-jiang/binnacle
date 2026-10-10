@@ -123,3 +123,12 @@ Historical incident/experiment notes from the former long agent guide are
 archived at `docs/archive/claude-agent-guide-history-2026-10-02.md`. They are
 evidence, not current instructions; do not use old version/status statements
 from that archive as present-day truth.
+
+## Stage 1 OS independence
+
+Consult `docs/os-independent-stage1-architecture.md` and
+`DEVELOPMENT.md` for stage-specific source boundaries and quality
+gates. FastMCP remains the only MCP framework; Linux platform
+adapters own OS operations and the existing durable Job Manager
+survives MCP lifetime. Do not bypass real independent reviews,
+production CI, quiet-window deployment or stable active jobs.

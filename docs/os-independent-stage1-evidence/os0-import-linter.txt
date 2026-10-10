@@ -1,0 +1,30 @@
+
+---------
+Contracts
+---------
+
+Analyzed 143 files, 366 dependencies.
+-------------------------------------
+
+Commands MCP tools are imported only by their focused server KEPT
+Files MCP tools are imported only by the Files server KEPT
+Files MCP tool modules are independent KEPT
+Search MCP tools are imported only by the Search server KEPT
+Focused MCP servers are independent KEPT
+Watchdog internals are isolated from Binnacle core KEPT
+Server composition root is not a dependency KEPT
+Commands MCP adapters remain independent KEPT
+Watchdog internals remain acyclic KEPT
+Top-level Binnacle modules remain acyclic KEPT
+Commands adapters use the command domain instead of job internals KEPT
+Command use cases do not select or import a durable engine KEPT
+Platform contracts do not select engines or concrete adapters KEPT
+Linux process and accounting adapters remain independent KEPT
+Linux adapters do not own job lifecycle or storage KEPT
+Job orchestration does not directly import Linux adapters KEPT
+Only job engine and manager select platform defaults KEPT
+Job storage does not import process or accounting lifecycle KEPT
+Companions consume neutral diagnostics instead of aggregate shells KEPT
+Only the resource history composition selects Webmin KEPT
+
+Contracts: 20 kept, 0 broken.

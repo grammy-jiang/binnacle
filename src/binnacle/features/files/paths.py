@@ -13,6 +13,11 @@ from binnacle.config import RootsSettings, get_settings
 from binnacle.errors import CodedToolError
 
 
+def _canonical_roots(roots: RootsSettings) -> tuple[Path, ...]:
+    """Resolve configured aliases exactly as candidate paths are resolved."""
+    return roots.canonical_allowed
+
+
 def resolve_path(raw: str, *, roots: RootsSettings | None = None) -> Path:
     """Sanitize a model-supplied path and resolve it inside the allowed roots."""
     roots = get_settings().roots if roots is None else roots
@@ -24,6 +29,7 @@ def resolve_path(raw: str, *, roots: RootsSettings | None = None) -> Path:
         if not candidate.is_absolute():
             candidate = roots.default_root / candidate
         resolved = candidate.resolve()
+        allowed_roots = _canonical_roots(roots)
     except (RuntimeError, OSError) as e:
         # expanduser() raises RuntimeError for `~nosuchuser`; resolve() can
         # raise OSError on pathological names. Found by the property test
@@ -31,7 +37,7 @@ def resolve_path(raw: str, *, roots: RootsSettings | None = None) -> Path:
         raise CodedToolError(
             "path_resolve_failed", f"Cannot resolve path {raw!r}: {e}"
         ) from None
-    if not any(resolved.is_relative_to(root) for root in roots.allowed):
+    if not any(resolved.is_relative_to(root) for root in allowed_roots):
         allowed = ", ".join(str(r) for r in roots.allowed)
         raise CodedToolError(
             "path_outside_root", f"Path outside allowed roots ({allowed}): {resolved}"
@@ -157,10 +163,15 @@ def nearby_hint(parent: Path, *, roots: RootsSettings | None = None) -> str:
     """Not-found helper: up to 10 sibling names, when the parent is browsable."""
     roots = get_settings().roots if roots is None else roots
     try:
-        if not any(parent.is_relative_to(root) for root in roots.allowed):
+        canonical_parent = parent.expanduser().resolve()
+        if not any(
+            canonical_parent.is_relative_to(root) for root in _canonical_roots(roots)
+        ):
             return ""
-        names = sorted(p.name + ("/" if p.is_dir() else "") for p in parent.iterdir())
-    except OSError:
+        names = sorted(
+            p.name + ("/" if p.is_dir() else "") for p in canonical_parent.iterdir()
+        )
+    except (RuntimeError, OSError):
         return ""
     if not names:
         return f" Directory {parent} is empty."

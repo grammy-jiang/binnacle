@@ -1,0 +1,120 @@
+parallel-safe lane command: /home/grammy-jiang/Projects/binnacle-os-independent-stage1-impl/.venv/bin/python -m pytest tests -q -m 'not no_xdist' -n 4 --dist=worksteal --randomly-seed=12345
+bringing up nodes...
+bringing up nodes...
+
+........................................................................ [  2%]
+........................................................................ [  5%]
+........................................................................ [  8%]
+........................................................................ [ 11%]
+........................................................................ [ 14%]
+........................................................................ [ 17%]
+........................................................................ [ 19%]
+........................................................................ [ 22%]
+........................................................................ [ 25%]
+..............................................sss....................... [ 28%]
+........................................................................ [ 31%]
+........................................................................ [ 34%]
+........................................................................ [ 36%]
+........................................................................ [ 39%]
+........................................................................ [ 42%]
+........................................................................ [ 45%]
+........................................................................ [ 48%]
+........................................................................ [ 51%]
+........................................................................ [ 53%]
+........................................................................ [ 56%]
+........................................................................ [ 59%]
+........................................................................ [ 62%]
+........................F......................F........................ [ 65%]
+........................................................................ [ 68%]
+........................................................................ [ 71%]
+........................................................................ [ 73%]
+........................................................................ [ 76%]
+........................................................................ [ 79%]
+........................................................................ [ 82%]
+........................................................................ [ 85%]
+........................................................................ [ 88%]
+........................................................................ [ 90%]
+........................................................................ [ 93%]
+........................................................................ [ 96%]
+........................................................................ [ 99%]
+...............                                                          [100%]
+=================================== FAILURES ===================================
+____________ test_g6_manifest_classifies_every_current_module_once _____________
+[gw2] linux -- Python 3.13.5 /home/grammy-jiang/Projects/binnacle-os-independent-stage1-impl/.venv/bin/python
+
+    def test_g6_manifest_classifies_every_current_module_once():
+        unclassified, duplicate = gate_a.manifest_coverage()
+>       assert unclassified == []
+E       AssertionError: assert ['application...stop.py', ...] == []
+E
+E         Left contains 9 more items, first extra item: 'application.py'
+E
+E         Full diff:
+E         - []
+E         + [
+E         +     'application.py',
+E         +     'deployment/linux/__init__.py',
+E         +     'deployment/linux/unit_inspection.py',
+E         +     'deployment/provisioning_contracts.py',
+E         +     'diagnostics/linux_checks.py',
+E         +     'features/commands/job_stop.py',
+E         +     'platform/composition.py',
+E         +     'platform/linux/job_identity.py',
+E         +     'platform/linux/notify_systemd.py',
+E         + ]
+
+tests/scripts/test_gate_a_report.py:57: AssertionError
+_______________ test_current_report_confirms_g5_boundary_closure _______________
+[gw2] linux -- Python 3.13.5 /home/grammy-jiang/Projects/binnacle-os-independent-stage1-impl/.venv/bin/python
+
+    def test_current_report_confirms_g5_boundary_closure():
+        cells = {cell.id: cell for cell in gate_a.report()}
+
+        assert cells["composition.stable_fastmcp_4"].status == "PASS"
+        assert cells["composition.explicit_root_construction"].status == "PASS"
+        assert cells["composition.files_focused_child"].status == "PASS"
+        assert cells["composition.search_focused_child"].status == "PASS"
+        assert cells["composition.commands_focused_child"].status == "PASS"
+        assert cells["composition.hardcoded_registry_removed"].status == "PASS"
+        assert cells["composition.no_duplicate_framework"].status == "PENDING"
+        assert cells["architecture.fastmcp_boundary"].status == "PENDING"
+        assert cells["architecture.package_convergence"].status == "PENDING"
+>       assert cells["architecture.g6_manifest_coverage"].status == "PASS"
+E       AssertionError: assert 'FAIL' == 'PASS'
+E
+E         - PASS
+E         + FAIL
+
+tests/scripts/test_gate_a_report.py:20: AssertionError
+=========================== short test summary info ============================
+FAILED tests/scripts/test_gate_a_report.py::test_g6_manifest_classifies_every_current_module_once - AssertionError: assert ['application...stop.py', ...] == []
+
+  Left contains 9 more items, first extra item: 'application.py'
+
+  Full diff:
+  - []
+  + [
+  +     'application.py',
+  +     'deployment/linux/__init__.py',
+  +     'deployment/linux/unit_inspection.py',
+  +     'deployment/provisioning_contracts.py',
+  +     'diagnostics/linux_checks.py',
+  +     'features/commands/job_stop.py',
+  +     'platform/composition.py',
+  +     'platform/linux/job_identity.py',
+  +     'platform/linux/notify_systemd.py',
+  + ]
+FAILED tests/scripts/test_gate_a_report.py::test_current_report_confirms_g5_boundary_closure - AssertionError: assert 'FAIL' == 'PASS'
+
+  - PASS
+  + FAIL
+2 failed, 2530 passed, 3 skipped in 66.54s (0:01:06)
+parallel-safe lane exit code: 1
+parallel-safe lane elapsed: 67.27s
+ordinary-process lane command: /home/grammy-jiang/Projects/binnacle-os-independent-stage1-impl/.venv/bin/python -m pytest tests -q -m no_xdist --randomly-seed=12345
+..                                                                       [100%]
+2 passed, 2535 deselected in 3.33s
+ordinary-process lane exit code: 0
+ordinary-process lane elapsed: 4.88s
+total elapsed: 72.15s
+resolved workers: 4

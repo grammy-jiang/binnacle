@@ -1,0 +1,18 @@
+Usage: binnacle setup [ARGS]
+
+Provision the server side: token, MCP unit, and stable jobs unit.
+
+╭─ Parameters ─────────────────────────────────────────────────────────────────╮
+│ DEV --dev                 Path to a binnacle git checkout: the unit runs it  │
+│                           with auto-reload (development mode). Without it    │
+│                           the unit runs the installed binnacle serve         │
+│                           (production mode).                                 │
+│ PORT --port               Local port the server binds; the tunnel forwards   │
+│                           to it. [default: 8000]                             │
+│ DRY-RUN --dry-run         Print every action, and the unit diff, instead of  │
+│   --no-dry-run            performing them. [default: False]                  │
+│ ADOPT --adopt --no-adopt  Take over a unit file no binnacle setup command    │
+│                           wrote (a hand-written one), after reviewing the    │
+│                           diff --dry-run shows. It is backed up first.       │
+│                           [default: False]                                   │
+╰──────────────────────────────────────────────────────────────────────────────╯

@@ -1,0 +1,81 @@
+{
+  "task_id": "BINNACLE-OS-STAGE1-IMPLEMENT-20261009",
+  "source_commit_sha": "3797ffc2e044d88e3fc8768e93775a23029ff6ad",
+  "verified_at_utc": "2026-10-09T22:11:14.775249+00:00",
+  "baseline_sha": "02f4bab9bc7562668ffc41d622c4274449933768",
+  "branch": "refactor/os-independent-stage1-implementation-20261009",
+  "local_gates": {
+    "managed_full": {
+      "command": "uv run python scripts/run_test_suite.py --suite full --seed 12345",
+      "exit_code": 0,
+      "log_path": "docs/os-independent-stage1-evidence/os7-final-P2-fixed-managed-full.log",
+      "sha256": "fca03fe75fcd5595674e830fd8f91cac25aecde13f97c08797a9655460999d62",
+      "proof_markers": [
+        "2546 passed, 3 skipped",
+        "2 passed, 2549 deselected",
+        "total elapsed: 69.13s"
+      ]
+    },
+    "coverage_policy": {
+      "command": "uv run tox -e coverage-policy -- --seed 12345",
+      "exit_code": 0,
+      "log_path": "docs/os-independent-stage1-evidence/os7-final-P2-fixed-coverage.log",
+      "sha256": "b2b043b11d2e0c6ae8c06ab79bd415c2331900bfdf5acc8091e6fc0b6fac0c92",
+      "proof_markers": [
+        "coverage-policy: 131 production modules, 48 script modules; 3 below final target, 0 errors",
+        "congratulations :)"
+      ]
+    },
+    "python_matrix": {
+      "command": "env BINNACLE_TEST_WORKERS=4 uv run tox run",
+      "exit_code": 0,
+      "log_path": "docs/os-independent-stage1-evidence/os7-final-P2-fixed-python-matrix.log",
+      "sha256": "d39a1ae6b52f8e6f80c8810906b531744ed8628cf80c3eaabeb8845d27ebe28a",
+      "proof_markers": [
+        "py310: OK",
+        "py311: OK",
+        "py312: OK",
+        "py313: OK",
+        "py314: OK",
+        "congratulations :)"
+      ]
+    },
+    "package_clean_install": {
+      "command": "uv run pytest -q --randomly-seed=12345 tests/integration/test_wheel_artifact.py",
+      "exit_code": 0,
+      "log_path": "docs/os-independent-stage1-evidence/os7-final-P2-fixed-package.log",
+      "sha256": "9773bff50db8c7e20ce38d8622be736ece24b8bcd75b924ee4a2c8fbad0ec9be",
+      "proof_markers": [
+        "1 passed in 5.69s"
+      ]
+    },
+    "precommit_all": {
+      "command": "uv run pre-commit run --all-files",
+      "exit_code": 0,
+      "log_path": "docs/os-independent-stage1-evidence/os7-final-P2-fixed-precommit.log",
+      "sha256": "bc0e444f1a2beb87d5a8ab318be5aa7da3bd7f99b27807a0741574a6b7002fe3",
+      "proof_markers": [
+        "architecture boundaries",
+        "import architecture contracts",
+        "Passed"
+      ]
+    },
+    "prepush_all": {
+      "command": "uv run pre-commit run --hook-stage pre-push --all-files",
+      "exit_code": 0,
+      "log_path": "docs/os-independent-stage1-evidence/os7-final-P2-fixed-prepush.log",
+      "sha256": "37a3870a992283a9118e1cf753c85bacb014466bfd69186ac26d8639ee79779a",
+      "proof_markers": [
+        "fast unit and contract tests",
+        "Passed"
+      ]
+    }
+  },
+  "raw_wire_baseline_hash": "0d4ee93dafe1c6eb2bb1966b6c7bdac6fd25d54ec4e973b2cbab695a2c372cfb",
+  "os6_inventory_hash": "f875f12046a4ccdf2faaaa8faf950657eda9ddb0955bad2847dbed4edae75741",
+  "source_local_result": "LOCAL_QUALIFIED",
+  "independent_review": "PENDING",
+  "exact_final_head_github_ci": "PENDING",
+  "live_deployment": "NOT_STARTED",
+  "production_status": "v1.0.1 unchanged; both systemd user services active, 0 restarts at evidence time"
+}

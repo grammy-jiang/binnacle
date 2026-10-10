@@ -1,0 +1,112 @@
+{
+  "baseline_sha": "02f4bab9bc7562668ffc41d622c4274449933768",
+  "fixture_log_sha256": {
+    "tests/contracts/fixtures/job_spool/2026-09-28/3f9a1c2b7d10/out.log": "6d98a7e67105d50986567bebc6cc7ad6a05a8227cab09ecd3a4f953780d472df",
+    "tests/contracts/fixtures/job_spool/2026-09-28/8e2d4f6a1b3c/out.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "fixture_meta": {
+    "tests/contracts/fixtures/job_spool/2026-09-28/3f9a1c2b7d10/meta.json": {
+      "boot_id": "4b2f3c1d-8e7a-4f60-9d1c-2b3a4c5d6e7f",
+      "call_id": "0a1b2c3d4e5f",
+      "command": "printf 'fixture: finished job\\n'",
+      "command_hash": "c8d17c2a0db5",
+      "ended_at": 1790500001.75,
+      "exit_code": 0,
+      "owner": "manager",
+      "owner_instance_id": "6d3c1f0e9b8a47d2a1c0f9e8d7c6b5a4",
+      "pgid": 4194304,
+      "pid": 4194304,
+      "schema_version": 2,
+      "started_at": 1790500000.25,
+      "starttime": 12345678,
+      "termination_reason": "normal_exit",
+      "workdir": "/tmp/binnacle-spool-fixture"
+    },
+    "tests/contracts/fixtures/job_spool/2026-09-28/8e2d4f6a1b3c/meta.json": {
+      "boot_id": "4b2f3c1d-8e7a-4f60-9d1c-2b3a4c5d6e7f",
+      "call_id": "5f4e3d2c1b0a",
+      "command": "sleep 3600",
+      "command_hash": "8d2295448f27",
+      "owner": "manager",
+      "owner_instance_id": "6d3c1f0e9b8a47d2a1c0f9e8d7c6b5a4",
+      "pgid": 4194305,
+      "pid": 4194305,
+      "schema_version": 2,
+      "started_at": 1790500100.5,
+      "starttime": 12345999,
+      "workdir": "/tmp/binnacle-spool-fixture"
+    }
+  },
+  "linux_import_block_probe": [
+    {
+      "exit": 0,
+      "module": "binnacle.config",
+      "stderr_last_12_lines": "",
+      "stdout": "IMPORT_OK"
+    },
+    {
+      "exit": 1,
+      "module": "binnacle.observability.logstats",
+      "stderr_last_12_lines": "  File \"<frozen importlib._bootstrap>\", line 1360, in _find_and_load\n  File \"<frozen importlib._bootstrap>\", line 1331, in _find_and_load_unlocked\n  File \"<frozen importlib._bootstrap>\", line 935, in _load_unlocked\n  File \"<frozen importlib._bootstrap_external>\", line 1026, in exec_module\n  File \"<frozen importlib._bootstrap>\", line 488, in _call_with_frames_removed\n  File \"/home/grammy-jiang/Projects/binnacle-os-independent-stage1-impl/src/binnacle/observability/logstats.py\", line 23, in <module>\n    from binnacle.observability.logstats_io import fetch_journal\n  File \"/home/grammy-jiang/Projects/binnacle-os-independent-stage1-impl/src/binnacle/observability/logstats_io.py\", line 5, in <module>\n    from binnacle.platform.linux.service_journal import JournalServiceLogSource\n  File \"<string>\", line 6, in find_spec\n    raise ImportError('blocked Linux adapter: '+fullname)\nImportError: blocked Linux adapter: binnacle.platform.linux",
+      "stdout": ""
+    },
+    {
+      "exit": 1,
+      "module": "binnacle.features.commands.jobs",
+      "stderr_last_12_lines": "  File \"<frozen importlib._bootstrap>\", line 1360, in _find_and_load\n  File \"<frozen importlib._bootstrap>\", line 1331, in _find_and_load_unlocked\n  File \"<frozen importlib._bootstrap>\", line 935, in _load_unlocked\n  File \"<frozen importlib._bootstrap_external>\", line 1026, in exec_module\n  File \"<frozen importlib._bootstrap>\", line 488, in _call_with_frames_removed\n  File \"/home/grammy-jiang/Projects/binnacle-os-independent-stage1-impl/src/binnacle/features/commands/jobs.py\", line 52, in <module>\n    _PROCESS_BACKEND = create_process_backend()\n  File \"/home/grammy-jiang/Projects/binnacle-os-independent-stage1-impl/src/binnacle/platform/job_platform.py\", line 8, in create_process_backend\n    from binnacle.platform.linux.job_process import LinuxProcessBackend\n  File \"<string>\", line 6, in find_spec\n    raise ImportError('blocked Linux adapter: '+fullname)\nImportError: blocked Linux adapter: binnacle.platform.linux",
+      "stdout": ""
+    },
+    {
+      "exit": 1,
+      "module": "binnacle.server",
+      "stderr_last_12_lines": "  File \"<frozen importlib._bootstrap>\", line 935, in _load_unlocked\n  File \"<frozen importlib._bootstrap_external>\", line 1026, in exec_module\n  File \"<frozen importlib._bootstrap>\", line 488, in _call_with_frames_removed\n  File \"/home/grammy-jiang/Projects/binnacle-os-independent-stage1-impl/src/binnacle/server.py\", line 17, in <module>\n    from binnacle.features.commands import jobs\n  File \"/home/grammy-jiang/Projects/binnacle-os-independent-stage1-impl/src/binnacle/features/commands/jobs.py\", line 52, in <module>\n    _PROCESS_BACKEND = create_process_backend()\n  File \"/home/grammy-jiang/Projects/binnacle-os-independent-stage1-impl/src/binnacle/platform/job_platform.py\", line 8, in create_process_backend\n    from binnacle.platform.linux.job_process import LinuxProcessBackend\n  File \"<string>\", line 6, in find_spec\n    raise ImportError('blocked Linux adapter: '+fullname)\nImportError: blocked Linux adapter: binnacle.platform.linux",
+      "stdout": ""
+    }
+  ],
+  "recorded_unit_parameters": {
+    "mcp_dev": {
+      "host": "127.0.0.1",
+      "jobs_owner": "manager",
+      "mode": "dev",
+      "port": "8000",
+      "repo": "/tmp/binnacle-os0-reference"
+    },
+    "mcp_prod": {
+      "binnacle": "/usr/local/bin/binnacle",
+      "host": "127.0.0.1",
+      "jobs_owner": "manager",
+      "mode": "prod",
+      "port": "8000"
+    }
+  },
+  "rendered_linux_units": {
+    "jobs_dev": "# Managed by binnacle (binnacle setup): mode=dev jobs=/tmp/binnacle-os0-reference/.venv/bin/binnacle-jobs\n[Unit]\nDescription=Binnacle command job manager\n\n[Service]\nType=notify\nNotifyAccess=main\nExecStart=/tmp/binnacle-os0-reference/.venv/bin/binnacle-jobs\nTimeoutStartSec=30\nRestart=always\nRestartSec=1\nKillMode=control-group\n# Binnacle creates per-job child cgroups for accounting only; no limits are set.\nDelegate=cpu memory pids\nDelegateSubgroup=binnacle-manager\nRuntimeDirectory=binnacle\nRuntimeDirectoryMode=0700\nUMask=0077\n\n[Install]\nWantedBy=default.target\n",
+    "jobs_prod": "# Managed by binnacle (binnacle setup): mode=prod jobs=/usr/local/bin/binnacle-jobs\n[Unit]\nDescription=Binnacle command job manager\n\n[Service]\nType=notify\nNotifyAccess=main\nExecStart=/usr/local/bin/binnacle-jobs\nTimeoutStartSec=30\nRestart=always\nRestartSec=1\nKillMode=control-group\n# Binnacle creates per-job child cgroups for accounting only; no limits are set.\nDelegate=cpu memory pids\nDelegateSubgroup=binnacle-manager\nRuntimeDirectory=binnacle\nRuntimeDirectoryMode=0700\nUMask=0077\n\n[Install]\nWantedBy=default.target\n",
+    "mcp_dev": "# Managed by binnacle (binnacle setup): mode=dev host=127.0.0.1 port=8000 jobs_owner=manager repo=/tmp/binnacle-os0-reference\n[Unit]\nDescription=Binnacle FastMCP server (development: checkout with auto-reload)\nAfter=network.target binnacle-jobs.service\nWants=binnacle-jobs.service\n\n[Service]\nType=simple\nWorkingDirectory=/tmp/binnacle-os0-reference\nExecStart=/tmp/binnacle-os0-reference/.venv/bin/uvicorn binnacle.server:app --host 127.0.0.1 --port 8000 --reload --reload-dir /tmp/binnacle-os0-reference/src --loop uvloop --http httptools\n# Hold the unit in \"activating\" until the port answers, so After= dependents\n# (the tunnel) and `systemctl restart` callers see a server that is listening.\nExecStartPost=/bin/bash -c 'for i in $(seq 1 300); do (exec 3<>/dev/tcp/127.0.0.1/8000) 2>/dev/null && exit 0; sleep 0.1; done; echo \"binnacle: port 8000 not listening after 30 s\" >&2; exit 1'\nRestart=on-failure\nRestartSec=2\nEnvironment=BINNACLE_MANAGED_DEPLOYMENT=1\nUMask=0077\n\n[Install]\nWantedBy=default.target\n",
+    "mcp_prod": "# Managed by binnacle (binnacle setup): mode=prod host=127.0.0.1 port=8000 jobs_owner=manager binnacle=/usr/local/bin/binnacle\n[Unit]\nDescription=Binnacle FastMCP server (production: installed package, no reload)\nAfter=network.target binnacle-jobs.service\nWants=binnacle-jobs.service\n\n[Service]\nType=simple\nExecStart=/usr/local/bin/binnacle serve --host 127.0.0.1 --port 8000\n# Hold the unit in \"activating\" until the port answers, so After= dependents\n# (the tunnel) and `systemctl restart` callers see a server that is listening.\nExecStartPost=/bin/bash -c 'for i in $(seq 1 300); do (exec 3<>/dev/tcp/127.0.0.1/8000) 2>/dev/null && exit 0; sleep 0.1; done; echo \"binnacle: port 8000 not listening after 30 s\" >&2; exit 1'\nRestart=always\nRestartSec=2\nEnvironment=BINNACLE_MANAGED_DEPLOYMENT=1\nUMask=0077\n\n[Install]\nWantedBy=default.target\n"
+  },
+  "required_job_meta_fields": [
+    "command",
+    "workdir",
+    "pid",
+    "started_at"
+  ],
+  "rpc_version": 1,
+  "setup_write_preview": {
+    "absent": {
+      "action": "create",
+      "diff": "",
+      "reason": ""
+    },
+    "foreign": {
+      "action": "refuse",
+      "diff": "--- binnacle-mcp.service (on disk)\n+++ binnacle-mcp.service (setup would write)\n@@ -1,2 +1,20 @@\n+# Managed by binnacle (binnacle setup): mode=dev host=127.0.0.1 port=8000 jobs_owner=manager repo=/tmp/binnacle-os0-reference\n [Unit]\n-Description=foreign\n+Description=Binnacle FastMCP server (development: checkout with auto-reload)\n+After=network.target binnacle-jobs.service\n+Wants=binnacle-jobs.service\n+\n+[Service]\n+Type=simple\n+WorkingDirectory=/tmp/binnacle-os0-reference\n+ExecStart=/tmp/binnacle-os0-reference/.venv/bin/uvicorn binnacle.server:app --host 127.0.0.1 --port 8000 --reload --reload-dir /tmp/binnacle-os0-reference/src --loop uvloop --http httptools\n+# Hold the unit in \"activating\" until the port answers, so After= dependents\n+# (the tunnel) and `systemctl restart` callers see a server that is listening.\n+ExecStartPost=/bin/bash -c 'for i in $(seq 1 300); do (exec 3<>/dev/tcp/127.0.0.1/8000) 2>/dev/null && exit 0; sleep 0.1; done; echo \"binnacle: port 8000 not listening after 30 s\" >&2; exit 1'\n+Restart=on-failure\n+RestartSec=2\n+Environment=BINNACLE_MANAGED_DEPLOYMENT=1\n+UMask=0077\n+\n+[Install]\n+WantedBy=default.target",
+      "reason": "refusing to overwrite /tmp/binnacle-os0-units-0dyxh2fm/binnacle-mcp.service: no binnacle setup command wrote it (no marker line). Review the diff, then pass --adopt to take it over, or move it away."
+    },
+    "own": {
+      "action": "unchanged",
+      "diff": "",
+      "reason": ""
+    }
+  }
+}
