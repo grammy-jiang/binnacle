@@ -83,14 +83,27 @@ def _delimiter(line: str, start: int) -> tuple[str | None, int]:
     return "".join(chars), i
 
 
-def _code_line(line: str) -> tuple[str, list[tuple[str, bool]]]:
-    """Find here-doc declarations outside quotes/comments on a shell line."""
+def _code_line(
+    line: str, arithmetic_depth: int = 0
+) -> tuple[str, list[tuple[str, bool]], int]:
+    """Find here-doc declarations outside quotes/comments/arithmetic."""
     visible = list(line)
     here_docs: list[tuple[str, bool]] = []
     quote: str | None = None
     i = 0
     while i < len(line):
         ch = line[i]
+        if arithmetic_depth:
+            # `<<` inside `((expr))` or `$((expr))` is shift, not a
+            # heredoc declaration. Track ordinary nested parentheses and
+            # preserve this context across physical newline boundaries.
+            visible[i] = ch if ch in "\r\n" else " "
+            if ch == "(":
+                arithmetic_depth += 1
+            elif ch == ")":
+                arithmetic_depth -= 1
+            i += 1
+            continue
         if ch == "\\" and quote != "'":
             i += 2
             continue
@@ -102,6 +115,12 @@ def _code_line(line: str) -> tuple[str, list[tuple[str, bool]]]:
         if ch in "\"'":
             quote = ch
             i += 1
+            continue
+        if line.startswith("$((", i) or line.startswith("((", i):
+            width = 3 if line.startswith("$((", i) else 2
+            visible[i : i + width] = " " * width
+            arithmetic_depth = 2
+            i += width
             continue
         if ch == "#" and (i == 0 or line[i - 1] in " \t;|&(){}"):
             visible[i:] = _blank(line[i:])
@@ -156,7 +175,7 @@ def _code_line(line: str) -> tuple[str, list[tuple[str, bool]]]:
         here_docs.append((delimiter, strip_tabs))
         visible[i:end] = " " * (end - i)
         i = end
-    return "".join(visible), here_docs
+    return "".join(visible), here_docs, arithmetic_depth
 
 
 def shell_policy_code(script: str) -> str:
@@ -169,6 +188,7 @@ def shell_policy_code(script: str) -> str:
     pending: deque[tuple[str, bool]] = deque()
     result: list[str] = []
     continued = False
+    arithmetic_depth = 0
     for line in script.splitlines(keepends=True):
         if pending and not continued:
             delimiter, strip_tabs = pending[0]
@@ -177,12 +197,14 @@ def shell_policy_code(script: str) -> str:
                 pending.popleft()
             result.append(_blank(line))
         else:
-            visible, declarations = _code_line(line)
+            visible, declarations, arithmetic_depth = _code_line(line, arithmetic_depth)
             result.append(visible)
             pending.extend(declarations)
             # Bash joins an unquoted, escaped physical newline before it
             # starts reading pending here-doc bodies. Honor continued lines.
             tail = visible.rstrip("\r\n")
             slash_count = len(tail) - len(tail.rstrip("\\"))
-            continued = bool(line.endswith("\n") and slash_count % 2 == 1)
+            continued = bool(
+                arithmetic_depth or (line.endswith("\n") and slash_count % 2 == 1)
+            )
     return "".join(result)

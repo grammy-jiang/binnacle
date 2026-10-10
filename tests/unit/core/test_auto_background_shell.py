@@ -234,3 +234,29 @@ def test_unsupported_ansi_c_escape_is_not_masked_as_an_invented_delimiter():
 
     parsed, _ = _delimiter(r"$'E\x46'", 0)
     assert parsed is None
+
+
+@pytest.mark.parametrize(
+    "script",
+    [
+        "echo $(( 1 << 2 ))\nuv run pytest -q\n",
+        "(( total = base << shift ))\nuv run pytest -q\n",
+        "echo $(( (a << b) + (c << d) ))\nuv run pytest -q\n",
+        "((total = base <<\n shift))\nuv run pytest -q\n",
+        "cat <<'EOF' $(( 1 << 2 ))\nsource input\nEOF\nuv run pytest -q\n",
+    ],
+)
+def test_copilot_p2_arithmetic_shifts_never_consume_later_commands(script):
+    import subprocess
+
+    parsed = subprocess.run(
+        ["bash", "-n"], input=script, text=True, capture_output=True, check=False
+    )
+    assert parsed.returncode == 0, parsed.stderr
+    result = match(script)
+    assert result is not None
+    assert result.match_start == script.rindex("pytest")
+
+
+def test_arithmetic_variable_named_pytest_is_not_a_command_trigger():
+    assert match("echo $((pytest << 2))\nprintf done\n") is None

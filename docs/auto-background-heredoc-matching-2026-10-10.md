@@ -122,3 +122,15 @@ original character offsets for evidence and behavior-fingerprint version 2.
 The resulting focused shell-matching tests reached **100% branch-inclusive
 coverage** after the review repairs. As before, this remains a conservative
 filter rather than an exhaustive Bash parser.
+
+## Copilot P2 follow-up on original PR source
+
+Review `4235585444` correctly observed that an ordinary Bash arithmetic
+left-shift (`<<`) inside `((...))` or `$((...))` can be misclassified as a
+heredoc, hiding all following real executable commands. The follow-up patch
+tracks nested arithmetic parentheses across physical lines, masks arithmetic
+expression data, and does not create a pending here-document from a shift.
+Regression cases include one-line arithmetic, nested arithmetic, multiline
+shifts, and mixed real heredoc/arithmetic before executable `pytest`.
+The snippets are checked as valid using `bash -n`; the production command
+remains byte-identical and the original evidence offsets remain stable.
